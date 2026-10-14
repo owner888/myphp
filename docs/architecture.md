@@ -48,17 +48,73 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
 - A PHP closure passed as a C function pointer is backed by a libffi
   closure that dies with its CData. Keep every callback in a struct field
   held for the life of the process (`ObjC::$keep`).
+- A pointer returned by a function of another FFI instance does not stay
+  valid as a CData: on PHP 8.5.11 `MTLCreateSystemDefaultDevice()`'s result
+  read as a `float` (and `var_dump` bus-errored) by the next method call,
+  with the instance kept alive in a property. `ObjC::import($p)` rebuilds
+  the pointer from its integer address as a fresh CData in the ObjC scope;
+  every foreign pointer goes through it before being stored.
+- `FFI::cast` from a pointer CData to a scalar, struct or array type
+  dereferences the pointer (that is how `cast('float[n]', $buffer)` writes
+  into GPU memory). So `cast('unsigned long', $obj)` reads the object's first
+  word, the isa, not its address; `ObjC::addr()` goes through a `void*[1]`
+  slot instead.
+- There is no pointer arithmetic on CData (`$p + 1` is a TypeError), and
+  the static `FFI::new()/cast()` forms are deprecated in PHP 8.5. `Native\Mem`
+  works on integer addresses: `addr()` reads a pointer's value through the
+  slot trick, `copy()` casts `int` back to `unsigned char*` for `FFI::memcpy`.
 - Callbacks run only on the main thread. PHP's engine is not re-entrant
   from another thread: CoreAudio render callbacks, CVDisplayLink and
   dispatch queues must not call into PHP. Use NSTimer / run-loop sources.
 - Intel Macs return NSRect through `objc_msgSend_stret`; unsupported for
   now, the bridge refuses to boot there.
 
+## Metal path
+
+`Native\Metal` compiles one MSL library at startup (rect vertex/fragment
+pair with a rounded-rect SDF for anti-aliased corners), builds one pipeline
+with source-alpha blending, and allocates a ring of four shared
+`MTLBuffer`s. `DisplayList` writes 12 floats per rect straight into the
+current buffer's `contents` cast to `float[]`; `present` encodes one
+instanced triangle-strip draw (4 vertices × n instances) and commits. The
+viewport size goes in through `setVertexBytes:` as two floats, in points,
+so coordinates are in points on any backing scale.
+
+## Text path
+
+`Native\CoreText::shape` builds a CFAttributedString with the system UI
+font and a CTLine, then reads each run's glyph ids, positions and the font
+CoreText actually chose (fallback fonts included, so CJK works without any
+font list of ours). `rasterize` draws one glyph with `CTFontDrawGlyphs` into
+an alpha-only CGBitmapContext at the backing scale and flips the rows.
+`UI\GlyphAtlas` shelf-packs those into a 2048² R8 image; `Native\Metal`
+re-uploads the whole image when it is dirty (a few times at startup).
+`UI\Text` caches a shaped line as a list of glyph quads in points,
+snapped to the device-pixel grid; `measure()` feeds `Context::text`, and
+`paint()` appends `kind = 1` quads to the display list. The Metal fragment
+shader samples the atlas for those and runs the rounded-rect SDF for the
+rest, in one pipeline and one draw per frame.
+
+Two things bit on the way: a CGBitmapContext's first row in memory is the
+top of the image although its coordinates run y-up, so no flip is needed
+when copying into a top-down atlas (flipping the CTM as well rendered every
+glyph upside down); and in a PHP double-quoted string `"$i："` swallows the
+full-width colon into the variable name, since identifiers may contain
+bytes ≥ 0x80 — write `{$i}` before any CJK punctuation.
+
+Measured with text (`examples/native 1000`, 9 006 nodes, ~1 200 quads of
+which ~1 000 glyphs): 4.9–5.5 ms per frame at 60 fps; one 23 fps second
+when a whole screen of new strings is shaped and rasterized at once.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never
   ticked after `addToRunLoop:forMode:`; NSTimer at 1/60 s is used meanwhile.
-- Text sizes are estimated (`Context::text`); CoreText shaping with a glyph
-  atlas replaces them.
-- Painting goes through CoreGraphics, one FFI call per rect; the Metal
-  renderer takes a display list in one buffer per frame.
+- The atlas never evicts and is re-uploaded whole; text is rasterized at
+  the main screen's backing scale at startup and not again on a change.
+- A screen of never-seen strings costs a shaping burst (one dropped-frame
+  second at 1000 rows); the shaped-line cache grows without bound (46 MB
+  resident for 3 000 lines). mygo bounds its text cache per frame.
+- The CoreGraphics + NSTimer path (since deleted) ran 50–58 fps for its
+  first seconds and 60 after, with identical PHP time per frame: NSTimer is
+  not locked to the display. MTKView pacing fixed it.

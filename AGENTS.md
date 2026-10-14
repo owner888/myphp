@@ -38,12 +38,19 @@ and keep the semantics; rename to PHP conventions, do not redesign.
 ## Layout
 
 ```
-src/Native/ObjC.php   Objective-C runtime bridge (macOS, Apple Silicon)
-src/UI/Node.php       one element of a frame's tree
-src/UI/Context.php    tree building: column/row/text/button/box
-src/UI/Layout.php     flex layout: measure (bottom-up), arrange (top-down)
-examples/native/      native window, immediate mode at 60 fps, prints stats
-examples/webview/     WKWebView window with a JS <-> PHP bridge
+src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
+src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
+src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
+src/Native/Mem.php      calloc/free, integer addresses, memcpy by address (no pointer arithmetic in FFI)
+src/UI/Node.php         one element of a frame's tree
+src/UI/Context.php      tree building: column/row/text/button/box
+src/UI/Layout.php       flex layout: measure (bottom-up), arrange (top-down)
+src/UI/DisplayList.php  a frame's quads (rects and glyphs), written into the GPU buffer
+src/UI/Text.php         shaped-line cache; measure() for layout, paint() to the list
+src/UI/GlyphAtlas.php   8-bit shelf-packed glyph atlas the renderer uploads when dirty
+src/UI/TextMetrics.php  what Context needs from a text engine
+examples/native/        native window on Metal, immediate mode, real text, prints stats
+examples/webview/       WKWebView window with a JS <-> PHP bridge
 run.sh                runs an example with the right php -d flags
 docs/architecture.md  design notes and measurements
 ```
@@ -59,13 +66,18 @@ they run without Composer.
   due. Lists are virtualized so the per-frame node count is what is visible.
 - **Nodes have no parent pointers.** A frame's tree is acyclic, reference
   counting frees it, the cycle collector never runs mid-frame. Keep it so.
-- **The GPU gets one buffer per frame.** Paint writes a display list into
-  an FFI `float[]`; the renderer uploads it once. No per-rect FFI calls in
-  the final renderer (the CoreGraphics path in `examples/native` is a stand-in).
+- **The GPU gets one buffer per frame.** Paint writes a `DisplayList`
+  straight into a shared `MTLBuffer` (cast to `float[]`), four buffers in a
+  ring; one instanced draw call per frame. No per-rect FFI calls.
+- **Frames are paced by MTKView**, which calls `drawInMTKView:` on the main
+  thread at the display's rate. No NSTimer, no CVDisplayLink into PHP.
 - **Text goes through the OS shaper** (CoreText on macOS) with a glyph atlas,
-  cached by font, size and string; a cache hit costs nothing per frame.
+  cached by size and string (`UI\Text`); a cache hit is one array lookup.
+  Glyph quads and rects share one pipeline and one draw call (`params.y`
+  picks the branch), so draw order is the list order.
 - **One FFI instance per OS bridge**, holding all its types: structs from
-  different instances are incompatible.
+  different instances are incompatible, and a pointer another instance
+  returned is stored only after `ObjC::import()` rebuilt it in this scope.
 - **Callbacks on the main thread only.** PHP must never be entered from
   another thread (no CoreAudio/CVDisplayLink/dispatch callbacks into PHP).
 - **`objc_msgSend` is cast per signature, never declared variadic** (arm64
@@ -94,9 +106,10 @@ not the bottleneck, the architecture is what keeps it that way.
 
 ## Roadmap
 
-1. Metal renderer: CAMetalLayer, rect/rounded-rect/texture pipelines,
-   display list in one vertex buffer per frame (mygo: `internal/gpu/metal`).
-2. CoreText text: shaping + glyph atlas (mygo: `internal/text`, `internal/scene/atlas.go`).
+1. Metal renderer: rects, rounded rects and glyph atlas done; images and
+   clipping next (mygo: `internal/gpu/metal`).
+2. CoreText text: shaping + atlas done; atlas eviction, dirty-rect uploads,
+   and re-rasterizing on a backing-scale change remain (mygo: `internal/text`).
 3. Input: mouse, keyboard, scroll wheel from NSView into hit testing.
 4. Window/app API shaped like mygo's `App`, `NewWindow`, `WindowOptions`.
 5. Webview IPC: bind PHP services, generate a TypeScript client from them.

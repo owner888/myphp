@@ -29,6 +29,10 @@ final class Node
         public float $fh,
         public int $grow,
         public ?string $text,
-        public int $color,
+        /** Fill color as 0xRRGGBB; null paints no background. */
+        public ?int $color,
+        /** For text: font size in points and text color. */
+        public float $fontSize = 0,
+        public int $fg = 0,
     ) {}
 }

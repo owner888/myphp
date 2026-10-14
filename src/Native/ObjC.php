@@ -26,10 +26,14 @@ final class ObjC
     /** Holders of PHP callbacks, kept alive for the life of the process. */
     private static array $keep = [];
     private static $msgSend;
+    /** One void* slot and an integer view of the same bytes, for addr(). */
+    private static $slot;
+    private static $slotInt;
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
-        'i' => 'int', 'b' => 'bool', 'r' => 'NSRect', 's' => 'const char*', 'v' => 'void',
+        'i' => 'int', 'b' => 'bool', 'r' => 'NSRect', 'z' => 'CGSize', 'k' => 'MTLClearColor', 'R' => 'MTLRegion',
+        's' => 'const char*', 'v' => 'void',
     ];
 
     public static function boot(array $frameworks = ['Foundation', 'AppKit']): void
@@ -40,6 +44,9 @@ final class ObjC
         }
         self::$c = FFI::cdef("
             typedef struct { double x, y, w, h; } NSRect;
+            typedef struct { double w, h; } CGSize;
+            typedef struct { double r, g, b, a; } MTLClearColor;
+            typedef struct { unsigned long x, y, z, w, h, d; } MTLRegion;
             void* dlopen(const char*, int);
             void* dlsym(void*, const char*);
             void* objc_getClass(const char*);
@@ -54,6 +61,8 @@ final class ObjC
             }
         }
         self::$msgSend = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSend');
+        self::$slot = self::$c->new('void*[1]');
+        self::$slotInt = self::$c->cast('unsigned long[1]', self::$slot);
     }
 
     public static function cls(string $name)
@@ -93,6 +102,33 @@ final class ObjC
         $r = self::$c->new('NSRect');
         $r->x = $x; $r->y = $y; $r->w = $w; $r->h = $h;
         return $r;
+    }
+
+    /**
+     * The integer value of a pointer, for use as an array key.
+     * Not FFI::cast('unsigned long', $p): casting a pointer CData to a scalar
+     * dereferences it (for an object that reads the isa, whose inline
+     * refcount bits change). Storing the pointer in a void* slot and reading
+     * the slot's bytes as an integer gives the pointer itself.
+     */
+    public static function addr($p): int
+    {
+        if ($p === null) {
+            return 0;
+        }
+        self::$slot[0] = $p;
+        return self::$slotInt[0];
+    }
+
+    /**
+     * A fresh void* CData in this bridge's scope holding the same address.
+     * Pointers returned by another FFI instance must pass through here: a
+     * CData keeps a type pointer into the instance that made it, and such
+     * pointers turned invalid after the creating call returned (PHP 8.5.11).
+     */
+    public static function import($p)
+    {
+        return self::$c->cast('void*', self::addr($p));
     }
 
     public static function str(string $s)
