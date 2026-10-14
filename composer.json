@@ -1,0 +1,14 @@
+{
+    "name": "myphp/myphp",
+    "description": "Desktop apps in PHP, with native UI or a web frontend, over ext-ffi.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "ext-ffi": "*"
+    },
+    "autoload": {
+        "psr-4": { "MyPHP\\": "src/" }
+    },
+    "config": { "sort-packages": true }
+}

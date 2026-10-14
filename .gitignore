@@ -1,0 +1,16 @@
+# dependencies / build
+/vendor/
+/build/
+/dist/
+composer.lock
+
+# tooling
+/.phpunit.cache/
+/.php-cs-fixer.cache
+/.idea/
+/.vscode/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
