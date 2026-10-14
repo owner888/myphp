@@ -32,6 +32,21 @@ final class GlyphAtlas
         return $this->slots[$key] ?? null;
     }
 
+    /** Whether a w*h bitmap still fits. */
+    public function fits(int $w, int $h): bool
+    {
+        $y = $this->shelfX + $w > $this->w ? $this->shelfY + $this->shelfH : $this->shelfY;
+        return $y + $h <= $this->h;
+    }
+
+    /** Forgets every glyph; the lines that used them must be shaped again. */
+    public function reset(): void
+    {
+        $this->slots = [];
+        $this->shelfX = $this->shelfY = $this->shelfH = 0;
+        $this->dirty = true;
+    }
+
     /** Copies a w*h bitmap (top row first) at integer address $src into a free slot. */
     public function add(string $key, int $w, int $h, int $src): array
     {

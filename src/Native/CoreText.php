@@ -25,7 +25,7 @@ final class CoreText
     private $valueCallbacks;  // &kCFTypeDictionaryValueCallBacks
     /** @var array<string, CData> CTFont by "size" */
     private array $fonts = [];
-    /** @var array<int, CData> fonts a run used, retained, by address */
+    /** @var array<int, CData> fonts runs used, retained, by CFHash */
     private array $runFonts = [];
 
     public function __construct(public float $scale)
@@ -46,6 +46,7 @@ final class CoreText
             void* CFArrayGetValueAtIndex(void*, long);
             void* CFRetain(void*);
             void  CFRelease(void*);
+            unsigned long CFHash(void*);
             void* CTFontCreateUIFontForLanguage(unsigned int, double, void*);
             double CTFontGetAscent(void*);
             double CTFontGetDescent(void*);
@@ -110,8 +111,10 @@ final class CoreText
             if ($n === 0) {
                 continue;
             }
+            // Fallback fonts (PingFang for CJK, say) are new objects per line,
+            // so fonts are told apart by CFHash, which equal fonts share.
             $runFont = $c->CFDictionaryGetValue($c->CTRunGetAttributes($run), $this->fontKey);
-            $fontId = ObjC::addr($runFont);
+            $fontId = $c->CFHash($runFont);
             if (!isset($this->runFonts[$fontId])) {
                 $this->runFonts[$fontId] = $c->CFRetain($runFont);
             }

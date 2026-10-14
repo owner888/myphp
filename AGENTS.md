@@ -38,6 +38,9 @@ and keep the semantics; rename to PHP conventions, do not redesign.
 ## Layout
 
 ```
+src/App.php             the application: whenReady(), run(), quit(); shared Metal device and text engine
+src/Window.php          a native-UI window: NSWindow + View, per-window Runtime/Input, frame = build/layout/paint
+src/WindowOptions.php   title, size, position, hidden, disableResize, content
 src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
 src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
 src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
@@ -52,8 +55,12 @@ src/UI/GlyphAtlas.php   8-bit shelf-packed glyph atlas the renderer uploads when
 src/UI/TextMetrics.php  what Context needs from a text engine
 src/UI/Input.php        events since the last frame, mouse position
 src/UI/Runtime.php      last frame's rects by node id; clicked()/hovered(); scroll routing; rebuild passes
+src/UI/Scrollable.php   what the wheel drives: ScrollState (offset) or ListState (anchor row)
 src/UI/ScrollState.php  a scrolling container's offset, owned by the app
-examples/native/        native window on Metal, immediate mode, real text, prints stats
+src/UI/ListState.php    a virtualized list's anchor row, offset, measured heights and estimate
+src/UI/Content.php      Content::view(fn(Context)) — what a window shows
+src/UI/Painter.php      tree -> display list: fills, labels (centered in buttons), scroll clips
+examples/native/        an inbox: App::whenReady -> new Window(WindowOptions(content: Content::view(...)))
 examples/webview/       WKWebView window with a JS <-> PHP bridge
 run.sh                runs an example with the right php -d flags
 docs/architecture.md  design notes and measurements
@@ -68,6 +75,11 @@ they run without Composer.
   the tree, `Layout` measures and arranges it, paint emits drawing commands.
   Frames run on demand: an event calls `Metal::requestFrame`, nothing else
   draws. Lists are virtualized so the per-frame node count is what is visible.
+- **Lists are virtualized** (`Context::list`, as mygo's `List`): the app's
+  `ListState` holds the anchor row and the view's offset below its top;
+  only rows for 1.5 views of estimated height are built, heights are
+  learned from layout, unknown rows count as the average. The per-frame
+  cost of a million-row list is the rows in view.
 - **Interaction answers from last frame's layout**: `Runtime` keeps rects by
   node id (creation order); `clicked()`/`hovered()` hit-test against them
   while this frame builds. A click that changed state re-runs the build, up
@@ -121,6 +133,10 @@ not the bottleneck, the architecture is what keeps it that way.
    and re-rasterizing on a backing-scale change remain (mygo: `internal/text`).
 3. Input: mouse, wheel, keys and clipping done; keyboard focus, text
    editing, stable ids for conditional UI, scroll glide remain.
-4. Window/app API shaped like mygo's `App`, `NewWindow`, `WindowOptions`.
-5. Webview IPC: bind PHP services, generate a TypeScript client from them.
-6. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+4. App/Window API: whenReady/run/quit, WindowOptions subset, show/hide/
+   close/setTitle/center/size done; menus, dialogs, tray, events (OnClose,
+   OnResize), window state, more options remain.
+5. Virtualized lists: done; keys for rows that come and go, FollowEnd,
+   selection, keyboard navigation and a scroll bar remain.
+6. Webview IPC: bind PHP services, generate a TypeScript client from them.
+7. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

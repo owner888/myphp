@@ -42,11 +42,25 @@ final class Layout
         foreach ($kids as $k) { $used += $n->dir === Node::ROW ? $k->mw : $k->mh; $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
         $cx = $x + $n->pad; $cy = $y + $n->pad; $cw = $w - 2 * $n->pad; $ch = $h - 2 * $n->pad;
-        if ($n->scroll !== null) {
+        if ($n->scroll instanceof ScrollState) {
             $content = $used + $n->gap * ($cnt - 1);
             $n->scroll->maxY = max(0.0, $content - $ch);
             $n->scroll->y = min($n->scroll->y, $n->scroll->maxY);
             $cy -= $n->scroll->y;
+            $extra = 0.0;
+        } elseif ($n->scroll instanceof ListState) {
+            $s = $n->scroll;
+            $s->viewport = $ch;
+            foreach ($kids as $i => $k) {
+                $s->measured($s->first + $i, $k->mh);
+            }
+            // The view's top lies $offset below the anchor's top; built rows
+            // short of the view's bottom leave a gap this frame.
+            $cy -= $s->offset;
+            $s->gap = max(0.0, $ch - ($used + $n->gap * ($cnt - 1) - $s->offset));
+            if ($s->first + $cnt >= $s->count) {
+                $s->gap = 0.0;
+            }
             $extra = 0.0;
         }
         if ($n->dir === Node::ROW) {

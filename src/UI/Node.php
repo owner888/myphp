@@ -16,7 +16,7 @@ final class Node
     /** Order of creation in the build; the key Runtime remembers rects by. */
     public int $id = 0;
     /** Set on a container that scrolls its children vertically. */
-    public ?ScrollState $scroll = null;
+    public ?Scrollable $scroll = null;
     /** @var Node[] */
     public array $kids = [];
     /** Laid-out rectangle. */
@@ -41,7 +41,7 @@ final class Node
     ) {}
 
     /** Makes this container scroll its children, keeping the offset in $state. */
-    public function scroll(ScrollState $state): static
+    public function scroll(Scrollable $state): static
     {
         $this->scroll = $state;
         return $this;

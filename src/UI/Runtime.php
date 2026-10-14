@@ -16,8 +16,10 @@ final class Runtime
 {
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
     private array $rects = [];
-    /** @var array<int, ScrollState> id => scroll state, from last frame */
+    /** @var array<int, Scrollable> id => scroll state, from last frame */
     private array $scrolls = [];
+    /** Set by a frame that needs another one right after (a list left a gap). */
+    public bool $needsFrame = false;
     private array $clicks = [];     // [x, y] of mouse-ups this frame
     private bool $consumed = false;
     public int $passes = 0;
@@ -51,6 +53,7 @@ final class Runtime
         }
         $this->rects = [];
         $this->scrolls = [];
+        $this->needsFrame = false;
         $this->record($root);
         return $root;
     }
@@ -60,6 +63,9 @@ final class Runtime
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
+            if ($n->scroll instanceof ListState && $n->scroll->gap > 0) {
+                $this->needsFrame = true;
+            }
         }
         foreach ($n->kids as $k) {
             $this->record($k);
@@ -101,8 +107,6 @@ final class Runtime
                 $best = $state; $bestArea = $r[2] * $r[3];
             }
         }
-        if ($best !== null) {
-            $best->y = max(0.0, min($best->maxY, $best->y - $dy));
-        }
+        $best?->scrollBy(-$dy);
     }
 }

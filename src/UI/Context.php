@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
+
 /** Builds a frame's tree. The view function calls these in order, as code. */
 final class Context
 {
@@ -11,7 +13,8 @@ final class Context
     /** @var Node[] */
     private array $stack;
 
-    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null)
+    /** $width and $height are the room the tree will be laid out in. */
+    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0)
     {
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, null);
         $this->stack = [$this->root];
@@ -52,6 +55,29 @@ final class Context
     public function end(): void
     {
         array_pop($this->stack);
+    }
+
+    /**
+     * A virtualized list of $count rows: $row($i) builds row $i, and only
+     * the rows in view are built, from the anchor $state keeps. Row heights
+     * come from what layout measured last frame, so the list builds rows
+     * for 1.5 views' worth of estimated height, and asks for another frame
+     * if that fell short.
+     */
+    public function list(ListState $state, int $count, Closure $row): Node
+    {
+        $state->count = $count;
+        $state->row = min($state->row, max(0, $count - 1));
+        $node = $this->column(0, 0, 1)->scroll($state);
+        $state->first = $state->row;
+        $y = -$state->offset;
+        $limit = max($state->viewport, $this->height) * 1.5;
+        for ($i = $state->row; $i < $count && $y < $limit; $i++) {
+            $row($i);
+            $y += $state->height($i);
+        }
+        $this->end();
+        return $node;
     }
 
     public function text(string $s, float $size = 14, int $color = 0x1d1d1f): Node

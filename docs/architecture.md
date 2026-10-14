@@ -95,6 +95,14 @@ snapped to the device-pixel grid; `measure()` feeds `Context::text`, and
 shader samples the atlas for those and runs the rounded-rect SDF for the
 rest, in one pipeline and one draw per frame.
 
+CoreText hands each CTLine new CTFont objects for its fallback fonts, so a
+font's identity is its `CFHash` (equal fonts hash alike), not its address:
+keyed by address, every line of CJK put fresh copies of the same glyphs in
+the atlas until it filled, and retained a font per line. The shaped-line
+cache is swept every 15 frames of lines unused for 30 frames; a line is a
+flat float list (6 values per glyph), since a nested array per glyph made a
+line ~6 KB and fast scrolling through a million rows reached 60 MB.
+
 Two things bit on the way: a CGBitmapContext's first row in memory is the
 top of the image although its coordinates run y-up, so no flip is needed
 when copying into a top-down atlas (flipping the CTM as well rendered every
@@ -120,6 +128,21 @@ container under the cursor; `Layout` clamps the offset and shifts children;
 paint pushes the container's rect as a clip, which travels with each quad
 into the shader (`float4 clip`, discard outside). An NSTrackingArea with
 `mouseMoved` keeps hover state current.
+
+## Lists
+
+`Context::list($state, $count, $row)` is the virtualized list. `ListState`
+keeps the anchor row and how far the view's top is below the anchor's top,
+as mygo's `ListState` does, so a row growing or rows appearing above do not
+move what is in view. Building, the list makes rows from the anchor until
+their known-or-estimated heights reach 1.5 views (Context carries the
+window size for this); laying out, `Layout` records each built row's
+measured height in the state and computes the gap, if any, between the
+last built row and the view's bottom; a gap sets `Runtime::$needsFrame`
+and the next frame, with better estimates, fills it. The wheel moves the
+offset and renormalizes it across row boundaries; past the end it pulls
+back so the last rows fill the view. mygo instead builds the missing rows
+during layout, so it never shows a gap; that is the remaining difference.
 
 ## Open items
 
