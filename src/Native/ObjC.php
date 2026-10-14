@@ -32,7 +32,8 @@ final class ObjC
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
-        'i' => 'int', 'b' => 'bool', 'r' => 'NSRect', 'z' => 'CGSize', 'k' => 'MTLClearColor', 'R' => 'MTLRegion',
+        'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
+        'k' => 'MTLClearColor', 'R' => 'MTLRegion',
         's' => 'const char*', 'v' => 'void',
     ];
 
@@ -44,6 +45,7 @@ final class ObjC
         }
         self::$c = FFI::cdef("
             typedef struct { double x, y, w, h; } NSRect;
+            typedef struct { double x, y; } NSPoint;
             typedef struct { double w, h; } CGSize;
             typedef struct { double r, g, b, a; } MTLClearColor;
             typedef struct { unsigned long x, y, z, w, h, d; } MTLRegion;

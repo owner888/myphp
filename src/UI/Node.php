@@ -13,6 +13,10 @@ final class Node
     public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3;
     public const ROW = 0, COLUMN = 1;
 
+    /** Order of creation in the build; the key Runtime remembers rects by. */
+    public int $id = 0;
+    /** Set on a container that scrolls its children vertically. */
+    public ?ScrollState $scroll = null;
     /** @var Node[] */
     public array $kids = [];
     /** Laid-out rectangle. */
@@ -35,4 +39,11 @@ final class Node
         public float $fontSize = 0,
         public int $fg = 0,
     ) {}
+
+    /** Makes this container scroll its children, keeping the offset in $state. */
+    public function scroll(ScrollState $state): static
+    {
+        $this->scroll = $state;
+        return $this;
+    }
 }

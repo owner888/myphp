@@ -11,7 +11,7 @@ final class Context
     /** @var Node[] */
     private array $stack;
 
-    public function __construct(private TextMetrics $metrics)
+    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null)
     {
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, null);
         $this->stack = [$this->root];
@@ -20,8 +20,19 @@ final class Context
     private function add(Node $n): Node
     {
         $this->stack[count($this->stack) - 1]->kids[] = $n;
-        $this->count++;
+        $n->id = ++$this->count;
         return $n;
+    }
+
+    /** Whether the node just built was clicked (a mouse-up on where it was last frame). */
+    public function clicked(Node $n): bool
+    {
+        return $this->runtime?->clicked($n->id) ?? false;
+    }
+
+    public function hovered(Node $n): bool
+    {
+        return $this->runtime?->hovered($n->id) ?? false;
     }
 
     public function column(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node

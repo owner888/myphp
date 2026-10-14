@@ -42,6 +42,7 @@ src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
 src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
 src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
 src/Native/Mem.php      calloc/free, integer addresses, memcpy by address (no pointer arithmetic in FFI)
+src/Native/View.php     MTKView subclass: mouse/scroll/key events as PHP closures into UI\Input
 src/UI/Node.php         one element of a frame's tree
 src/UI/Context.php      tree building: column/row/text/button/box
 src/UI/Layout.php       flex layout: measure (bottom-up), arrange (top-down)
@@ -49,6 +50,9 @@ src/UI/DisplayList.php  a frame's quads (rects and glyphs), written into the GPU
 src/UI/Text.php         shaped-line cache; measure() for layout, paint() to the list
 src/UI/GlyphAtlas.php   8-bit shelf-packed glyph atlas the renderer uploads when dirty
 src/UI/TextMetrics.php  what Context needs from a text engine
+src/UI/Input.php        events since the last frame, mouse position
+src/UI/Runtime.php      last frame's rects by node id; clicked()/hovered(); scroll routing; rebuild passes
+src/UI/ScrollState.php  a scrolling container's offset, owned by the app
 examples/native/        native window on Metal, immediate mode, real text, prints stats
 examples/webview/       WKWebView window with a JS <-> PHP bridge
 run.sh                runs an example with the right php -d flags
@@ -62,8 +66,13 @@ they run without Composer.
 
 - **Immediate mode**, as mygo's `ui`: every frame the view function rebuilds
   the tree, `Layout` measures and arranges it, paint emits drawing commands.
-  Frames are requested only when something changed, or a timer/animation is
-  due. Lists are virtualized so the per-frame node count is what is visible.
+  Frames run on demand: an event calls `Metal::requestFrame`, nothing else
+  draws. Lists are virtualized so the per-frame node count is what is visible.
+- **Interaction answers from last frame's layout**: `Runtime` keeps rects by
+  node id (creation order); `clicked()`/`hovered()` hit-test against them
+  while this frame builds. A click that changed state re-runs the build, up
+  to three passes, as mygo does. Scrolling containers (`->scroll($state)`)
+  get wheel deltas routed by hit test and clip their children.
 - **Nodes have no parent pointers.** A frame's tree is acyclic, reference
   counting frees it, the cycle collector never runs mid-frame. Keep it so.
 - **The GPU gets one buffer per frame.** Paint writes a `DisplayList`
@@ -110,7 +119,8 @@ not the bottleneck, the architecture is what keeps it that way.
    clipping next (mygo: `internal/gpu/metal`).
 2. CoreText text: shaping + atlas done; atlas eviction, dirty-rect uploads,
    and re-rasterizing on a backing-scale change remain (mygo: `internal/text`).
-3. Input: mouse, keyboard, scroll wheel from NSView into hit testing.
+3. Input: mouse, wheel, keys and clipping done; keyboard focus, text
+   editing, stable ids for conditional UI, scroll glide remain.
 4. Window/app API shaped like mygo's `App`, `NewWindow`, `WindowOptions`.
 5. Webview IPC: bind PHP services, generate a TypeScript client from them.
 6. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

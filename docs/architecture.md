@@ -106,12 +106,30 @@ Measured with text (`examples/native 1000`, 9 006 nodes, ~1 200 quads of
 which ~1 000 glyphs): 4.9–5.5 ms per frame at 60 fps; one 23 fps second
 when a whole screen of new strings is shaped and rasterized at once.
 
+## Input path
+
+`Native\View` subclasses MTKView; `mouseDown:` and friends, `scrollWheel:`
+and `keyDown:` are PHP closures that convert the event point into the
+flipped view's coordinates, append to `UI\Input` and call
+`setNeedsDisplay:`. The view is paused with `enableSetNeedsDisplay`, so a
+frame happens only after an event or an explicit `Metal::requestFrame`.
+`UI\Runtime::frame` drains the events, runs the build (again if a click
+changed state, at most three times), and records every node's rect by id
+for the next frame's hit tests. Wheel deltas go to the smallest scrolling
+container under the cursor; `Layout` clamps the offset and shifts children;
+paint pushes the container's rect as a clip, which travels with each quad
+into the shader (`float4 clip`, discard outside). An NSTrackingArea with
+`mouseMoved` keeps hover state current.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never
   ticked after `addToRunLoop:forMode:`; NSTimer at 1/60 s is used meanwhile.
 - The atlas never evicts and is re-uploaded whole; text is rasterized at
   the main screen's backing scale at startup and not again on a change.
+- Node ids are creation order, so UI that appears conditionally shifts the
+  ids after it and a click can land on the wrong node for one frame; mygo
+  keys elements. Keyboard events are queued but nothing consumes them yet.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache grows without bound (46 MB
   resident for 3 000 lines). mygo bounds its text cache per frame.

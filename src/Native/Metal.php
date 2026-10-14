@@ -27,9 +27,9 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; };   // params: radius, kind, u, v
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v
     struct Uniforms { float2 viewport; float2 atlas; float scale; float pad; };
-    struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; };
+    struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; };
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                          const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]]) {
         Inst i = in[iid];
@@ -43,9 +43,13 @@ final class Metal
         o.color = i.color;
         o.radius = i.params.x;
         o.kind = i.params.y;
+        o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
         return o;
     }
     fragment float4 quad_fragment(V v [[stage_in]], texture2d<float> atlas [[texture(0)]]) {
+        if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
+            discard_fragment();
+        }
         if (v.kind > 0.5) {
             constexpr sampler s(filter::linear);
             return float4(v.color.rgb, v.color.a * atlas.sample(s, v.uv).r);
@@ -124,13 +128,17 @@ final class Metal
     }
 
     /**
-     * An MTKView that calls $draw(view, DisplayList) at the display's rate.
+     * An MTKView (or a subclass, $class) that calls $draw(view, DisplayList)
+     * for each frame. On demand, a frame follows setNeedsDisplay: only (what
+     * requestFrame() sends); otherwise frames run at the display's rate.
      * The callback fills the list; this presents it.
      */
-    public function createView($frame, Closure $draw, int $fps = 60, array $clear = [1, 1, 1, 1])
+    public function createView($frame, Closure $draw, bool $onDemand = true, string $class = 'MTKView', int $fps = 60, array $clear = [1, 1, 1, 1])
     {
         self::$delegate ??= self::defineDelegate();
-        $view = ObjC::msg('p:rp', ObjC::alloc('MTKView'), 'initWithFrame:device:', $frame, $this->device);
+        $view = ObjC::msg('p:rp', ObjC::alloc($class), 'initWithFrame:device:', $frame, $this->device);
+        ObjC::msg('v:b', $view, 'setPaused:', $onDemand);
+        ObjC::msg('v:b', $view, 'setEnableSetNeedsDisplay:', $onDemand);
         ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_BGRA8);
         $c = ObjC::$c->new('MTLClearColor');
         [$c->r, $c->g, $c->b, $c->a] = $clear;
@@ -145,6 +153,12 @@ final class Metal
             $this->frame++;
         };
         return $view;
+    }
+
+    /** Asks an on-demand view for a frame. */
+    public static function requestFrame($view): void
+    {
+        ObjC::msg('v:b', $view, 'setNeedsDisplay:', true);
     }
 
     private static function defineDelegate()

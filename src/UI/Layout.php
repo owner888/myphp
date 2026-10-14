@@ -25,6 +25,9 @@ final class Layout
         }
         $main += $n->gap * max(0, $cnt - 1) + 2 * $n->pad;
         $cross += 2 * $n->pad;
+        if ($n->scroll !== null) {
+            $main = 2 * $n->pad; // a scrolling container takes the room it is given, not its content's
+        }
         if ($n->dir === Node::ROW) { $n->mw = $main; $n->mh = $cross; } else { $n->mw = $cross; $n->mh = $main; }
     }
 
@@ -39,6 +42,13 @@ final class Layout
         foreach ($kids as $k) { $used += $n->dir === Node::ROW ? $k->mw : $k->mh; $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
         $cx = $x + $n->pad; $cy = $y + $n->pad; $cw = $w - 2 * $n->pad; $ch = $h - 2 * $n->pad;
+        if ($n->scroll !== null) {
+            $content = $used + $n->gap * ($cnt - 1);
+            $n->scroll->maxY = max(0.0, $content - $ch);
+            $n->scroll->y = min($n->scroll->y, $n->scroll->maxY);
+            $cy -= $n->scroll->y;
+            $extra = 0.0;
+        }
         if ($n->dir === Node::ROW) {
             foreach ($kids as $k) { $kw = $k->mw + $extra * $k->grow; self::arrange($k, $cx, $cy, $kw, $ch); $cx += $kw + $n->gap; }
         } else {

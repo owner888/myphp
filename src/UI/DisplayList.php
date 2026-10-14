@@ -8,19 +8,47 @@ use RuntimeException;
 
 /**
  * A frame's drawing commands, written straight into a GPU buffer's memory.
- * One quad is 12 floats: x y w h, r g b a, then radius, kind, u, v.
+ * One quad is 16 floats: x y w h, r g b a, radius kind u v, clip x y w h.
  * kind 0 is a filled (rounded) rect; kind 1 samples the glyph atlas at u, v.
+ * The clip rect is the innermost pushClip() in effect; fragments outside
+ * it are discarded.
  */
 final class DisplayList
 {
-    public const FLOATS_PER_RECT = 12;
+    public const FLOATS_PER_RECT = 16;
+    private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
+    private array $clip = self::NO_CLIP;
+    private array $clips = [];
 
     public function __construct(public CData $buf, public int $capacity) {}
 
     public function reset(): void
     {
         $this->n = 0;
+        $this->clip = self::NO_CLIP;
+        $this->clips = [];
+    }
+
+    /** Clips what follows to the intersection of the current clip and this rect. */
+    public function pushClip(float $x, float $y, float $w, float $h): void
+    {
+        $this->clips[] = $c = $this->clip;
+        $x0 = max($c[0], $x); $y0 = max($c[1], $y);
+        $x1 = min($c[0] + $c[2], $x + $w); $y1 = min($c[1] + $c[3], $y + $h);
+        $this->clip = [$x0, $y0, max(0, $x1 - $x0), max(0, $y1 - $y0)];
+    }
+
+    public function popClip(): void
+    {
+        $this->clip = array_pop($this->clips);
+    }
+
+    /** Whether a rect lies entirely outside the current clip (nothing to draw). */
+    public function clipped(float $x, float $y, float $w, float $h): bool
+    {
+        $c = $this->clip;
+        return $x >= $c[0] + $c[2] || $y >= $c[1] + $c[3] || $x + $w <= $c[0] || $y + $h <= $c[1];
     }
 
     public function rect(float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0, float $radius = 0.0): void
@@ -28,10 +56,11 @@ final class DisplayList
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} rects)");
         }
-        $b = $this->buf; $k = $this->n * 12;
+        $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
         $b[$k + 8] = $radius; $b[$k + 9] = 0.0;
+        $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }
 
@@ -41,10 +70,11 @@ final class DisplayList
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} quads)");
         }
-        $b = $this->buf; $k = $this->n * 12;
+        $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
         $b[$k + 8] = 0.0; $b[$k + 9] = 1.0; $b[$k + 10] = $u; $b[$k + 11] = $v;
+        $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }
 }
