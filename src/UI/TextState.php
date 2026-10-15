@@ -22,8 +22,12 @@ final class TextState
     public bool $submitted = false;
     /** A text area: Enter inserts a line, Up/Down and line ends go by the wrapped lines (Runtime handles them). */
     public bool $multiline = false;
-    /** How far a text area is scrolled to keep its caret in view; the painter keeps it. */
+    /** How far a text area is scrolled; the wheel moves it, the painter clamps it and brings a moved caret into view. */
     public float $scrollY = 0;
+    /** How far through its text a text area is scrolled, 0..1 (the painter sets it), for anything that follows it. */
+    public float $scrollFraction = 0;
+    /** The caret the painter last brought into view: text length and cursor. */
+    public array $caretSeen = [-1, -1];
     private const UNDO_DEPTH = 200;
     /** @var list<array{0: string, 1: int, 2: int}> */
     private array $undo = [];

@@ -366,7 +366,12 @@ the caret's x and hit-test the neighbouring line. The painter keeps
 `scrollY` so the caret's line is in view, paints only the lines that
 show, and the selection per line (a stub past a line's end stands for its
 newline). `Input::caretAt`, set by Runtime for a focused area, gives the
-input method the caret rectangle by line.
+input method the caret rectangle by line. The wheel over an area moves
+`scrollY` (Runtime lists areas with the scroll containers), the painter
+clamps it and brings the caret into view only when the caret moved
+(`caretSeen`), so scrolling away from the caret sticks; `scrollFraction`
+is how far through the text the area is, for a preview that follows it.
+A width or height of 0 makes the area grow into its container's room.
 
 Undo lives in `TextState`: `insert()` and `setMarked()` snapshot text and
 selection before changing them; consecutive typing (or deleting) within a

@@ -218,13 +218,17 @@ final class Painter
         $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $inset;
         $layout = $s->layout($text, $n->fontSize, $innerW);
         $lh = $layout->lineHeight;
-        // Keep the caret's line in view; never scroll past the text.
-        $s->scrollY = max(0.0, min($s->scrollY, $layout->height() - $innerH));
-        if ($n->focused) {
+        // Never scroll past the text; bring the caret into view when it moved (not while the wheel scrolls away from it).
+        $range = max(0.0, $layout->height() - $innerH);
+        $s->scrollY = max(0.0, min($s->scrollY, $range));
+        $caret = [strlen($display), $s->displayCaret()];
+        if ($n->focused && $caret !== $s->caretSeen) {
+            $s->caretSeen = $caret;
             [, $cy] = $layout->caret($text, $s->displayCaret());
             if ($cy < $s->scrollY) { $s->scrollY = $cy; }
             if ($cy + $lh > $s->scrollY + $innerH) { $s->scrollY = $cy + $lh - $innerH; }
         }
+        $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
         $tx = $n->x + $inset; $ty = $n->y + $inset - $s->scrollY;
         $list->pushClip($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4);
         if ($display === '' && $n->text !== null && $n->text !== '') {

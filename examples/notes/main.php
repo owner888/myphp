@@ -3,7 +3,8 @@
 // folder (~/Library/Application Support/Notes/notes, or the folder on the
 // command line); a list on the left, the editor in the middle, a live
 // preview on the right. Edits save themselves half a second after you stop
-// typing. Cmd+N makes a note, Cmd+Backspace deletes the chosen one.
+// typing (Cmd+S saves now). Cmd+N makes a note, Cmd+Backspace deletes the
+// chosen one. The preview scrolls along with the editor.
 // Run: ./run.sh notes [folder]
 declare(strict_types=1);
 
@@ -24,6 +25,8 @@ final class Notes
     private string $saved = '';
     private int $edit = 0;
     public ?Window $window = null;
+    /** The editor scroll share the preview was last moved to. */
+    public float $followed = 0;
 
     public function __construct(public readonly string $dir)
     {
@@ -195,10 +198,15 @@ function view(Context $c, Notes $notes): void
         if ($notes->open === null) {
             $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
         } else {
-            $c->textarea($notes->editor, 'Write Markdown…', $editorW, $c->height, 14);
+            $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the column
         }
       $c->end();
       // Preview
+      // The preview follows the editor: scrolled the same share of the way through.
+      if ($notes->editor->scrollFraction !== $notes->followed) {
+          $notes->followed = $notes->editor->scrollFraction;
+          $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
+      }
       $c->column(16, 10, 0, $t->background)->size($previewW)->scroll($notes->preview);
         Markdown::render($c, $notes->editor->text, $previewW - 32, $notes->dir);
       $c->end();
@@ -215,6 +223,7 @@ App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
     new MenuItem('File', submenu: [
         new MenuItem('New Note', function () use ($notes) { $notes->create(); $notes->window?->update(); }, 'CmdOrCtrl+N'),
+        new MenuItem('Save', function () use ($notes) { $notes->save(); $notes->window?->update(); }, 'CmdOrCtrl+S'),
         new MenuItem('Delete Note', $confirmDelete, 'CmdOrCtrl+Backspace'),
         MenuItem::separator(), new MenuItem(role: 'close'),
     ]),

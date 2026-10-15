@@ -20,6 +20,8 @@ final class Runtime
     private array $scrolls = [];
     /** @var array<int, array{0: bool, 1: bool}> id => scrolls horizontally, vertically */
     private array $scrollAxes = [];
+    /** @var array<int, TextState> text areas by id, from last frame: the wheel scrolls them too */
+    private array $areas = [];
     /** Set by a frame that needs another one right after (a list left a gap). */
     public bool $needsFrame = false;
     private array $clicks = [];     // [x, y] of left mouse-ups this frame
@@ -143,6 +145,7 @@ final class Runtime
         $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
+        $this->areas = [];
         $this->focusables = [];
         $this->fields = [];
         $this->lists = [];
@@ -211,6 +214,7 @@ final class Runtime
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
             $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
+            $this->areas[$n->id] = $n->edit;
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
             $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + self::FIELD_INSET, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
         }
@@ -498,7 +502,17 @@ final class Runtime
                 $best = $state; $bestArea = $r[2] * $r[3]; $axes = $this->scrollAxes[$id];
             }
         }
+        foreach ($this->areas as $id => $state) { // a text area inside a scrolling container takes the wheel over it
+            $r = $this->rects[$id];
+            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+                $best = $state; $bestArea = $r[2] * $r[3];
+            }
+        }
         if ($best === null) {
+            return;
+        }
+        if ($best instanceof TextState) {
+            $best->scrollY = max(0.0, $best->scrollY - $dy); // the painter clamps it to the text
             return;
         }
         $best->stop();
