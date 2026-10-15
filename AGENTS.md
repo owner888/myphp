@@ -41,8 +41,8 @@ bin/myphp          CLI: init (templates), dev (run, restart on change, TS client
 src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after), Window (+ on(event), CloseEvent,
                    FileDropEvent, WindowState),
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
-                   Notification (+ Options), Ipc (bound services, window controls), Channel (+ ChannelClosed:
-                   streaming to pages), TypeScript (client), autoload.php (PSR-4)
+                   Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
+                   window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), autoload.php
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Carbon (hot
                    keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
@@ -61,8 +61,8 @@ src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbo
                    Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
-                   photos (real tools — a log viewer, Markdown notes, a photo browser — the API's proving
-                   ground), glass (Liquid Glass over a photo), widgets (the small controls)
+                   photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
+                   over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls)
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
@@ -153,4 +153,4 @@ glides, keys and selection; text areas (wrapping, undo, caret blink);
 theme; images; rich text (bold/italic/mono, spans); checkbox, radio, switch, slider, select, stepper, segmented, tabs, collapsible, progress, spinner, badge, link, tooltips; soft shadows, rings, Liquid Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; file drops; CLI + .app.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
-bridges; what building real apps turns up (see examples/logview, notes, photos).
+bridges; what building real apps turns up (see examples/logview, notes, photos, http).

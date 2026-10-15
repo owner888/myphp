@@ -522,6 +522,13 @@ Support/<name>): captured on move and resize while not minimized or full
 screen, applied with `setFrame:display:` after creation, saved when a
 window closes and in `applicationWillTerminate:`.
 
+`Process` runs a child without blocking the UI, which has no threads: a
+`proc_open` with non-blocking pipes, polled every 16 ms with
+`App::after` (stdin written as the pipe takes it, stdout and stderr read
+as they come), and `$done(out, err, code)` once it ends; `kill()` stops
+it. Network and other slow work go through it — `examples/http` sends
+requests with curl this way and stays live while they are in flight.
+
 ## Theme
 
 `UI\Theme` carries mygo's palette (background, surface and its hover and

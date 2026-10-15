@@ -488,7 +488,7 @@ final class Context
             $n->text = $options[$index];
             $n->changed = true;
         }
-        if ($rt?->clicked($n->id)) {
+        if ($rt?->clicked($n->id) || ($n->id === $rt?->focus && $this->shortcut(Key::DOWN))) { // a click, Enter, Space or Down while focused, as a menu button's
             $window ??= Window::key();
             $items = [];
             $id = $n->id;
@@ -504,14 +504,15 @@ final class Context
 
     /**
      * A single-line text field editing $state. Click or Tab gives it the
-     * keyboard; the text input client of the window then edits $state.
+     * keyboard; the text input client of the window then edits $state. A
+     * $width of 0 fills what the row has left.
      */
     public function input(TextState $state, string $placeholder = '', float $width = 200, ?float $size = null): Node
     {
         $t = $this->theme;
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), 0, $placeholder, $t->background, $size, $t->text));
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->background, $size, $t->text)); // 0: fills the row's remaining width
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
