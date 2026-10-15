@@ -45,10 +45,11 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    keys), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
-                   (dark/light, accent), Pasteboard, Mem (calloc/free, address-based memcpy)
-src/UI/            Node, Context (column/row/text/muted/button/input/textarea/box/list), Layout (flex), DisplayList
-                   (quads with clip), Painter (tree -> list), Text + GlyphAtlas + TextMetrics, TextState (editing
-                   model, undo), TextLayout (wrapped lines of a text area),
+                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
+src/UI/            Node, Context (column/row/text/muted/button/input/textarea/image/box/list), Layout (flex),
+                   DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
+                   + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
+                   undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
                    Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (text fields, IME), desktop (menus, dialogs), webview (Notes service + myphp.ts)
@@ -121,10 +122,10 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; tray, global shortcuts, notifications, window events + state; CLI + .app.
+theme; images; tray, global shortcuts, notifications, window events + state; CLI + .app.
 Remaining, in rough order:
 1. FollowEnd for lists; horizontal scrolling.
-2. Images in the renderer; atlas eviction and re-rasterizing on a
+2. Atlas eviction (images and glyphs) and re-rasterizing on a
    backing-scale change; rich text.
 3. IPC channels (streaming), page-side window controls, preload script.
 4. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

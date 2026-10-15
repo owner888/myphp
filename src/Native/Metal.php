@@ -6,7 +6,7 @@ namespace MyPHP\Native;
 use Closure;
 use FFI;
 use MyPHP\UI\DisplayList;
-use MyPHP\UI\GlyphAtlas;
+use MyPHP\UI\Atlas;
 use RuntimeException;
 
 /**
@@ -20,14 +20,14 @@ final class Metal
 {
     private const PIXEL_FORMAT_BGRA8 = 80;
     private const BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
-    private const PIXEL_FORMAT_R8 = 10;
+    private const PIXEL_FORMAT_R8 = 10, PIXEL_FORMAT_RGBA8 = 70;
     private const PRIMITIVE_TRIANGLE_STRIP = 4; // MTLPrimitiveType: point 0, line 1, lineStrip 2, triangle 3, triangleStrip 4
     private const RING = 4;
 
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels
     struct Uniforms { float2 viewport; float2 atlas; float scale; float pad; };
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; };
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -39,19 +39,26 @@ final class Metal
         o.pos = float4(p.x / u.viewport.x * 2.0 - 1.0, 1.0 - p.y / u.viewport.y * 2.0, 0.0, 1.0);
         o.local = (corner - 0.5) * i.rect.zw;
         o.extent = i.rect.zw * 0.5;
-        o.uv = (i.params.zw + corner * i.rect.zw * u.scale) / u.atlas;
+        o.uv = (i.params.zw + corner * (i.params.y > 1.5 ? i.color.xy : i.rect.zw * u.scale)) / u.atlas;
         o.color = i.color;
         o.radius = i.params.x;
         o.kind = i.params.y;
         o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
         return o;
     }
-    fragment float4 quad_fragment(V v [[stage_in]], texture2d<float> atlas [[texture(0)]]) {
+    fragment float4 quad_fragment(V v [[stage_in]], texture2d<float> atlas [[texture(0)]], texture2d<float> images [[texture(1)]]) {
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
+        constexpr sampler s(filter::linear);
+        if (v.kind > 1.5) {
+            float4 c = images.sample(s, v.uv);   // premultiplied; the blend expects straight alpha
+            float2 q = abs(v.local) - (v.extent - v.radius);
+            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
+            float a = 1.0 - smoothstep(-0.5, 0.5, d);
+            return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
+        }
         if (v.kind > 0.5) {
-            constexpr sampler s(filter::linear);
             return float4(v.color.rgb, v.color.a * atlas.sample(s, v.uv).r);
         }
         float2 q = abs(v.local) - (v.extent - v.radius);
@@ -68,9 +75,11 @@ final class Metal
     private array $lists = [];
     private int $frame = 0;
     private $uniforms;
-    private ?GlyphAtlas $atlas = null;
+    private ?Atlas $atlas = null;
     private $atlasTexture = null;
     private $atlasRegion = null;
+    private ?Atlas $images = null;
+    private $imagesTexture = null;
     /** @var array<int, Closure> draw callbacks by view address */
     private static array $onDraw = [];
     private static $delegate = null;
@@ -91,7 +100,7 @@ final class Metal
     }
 
     /** The glyph atlas text draws from; uploaded whenever it is dirty. */
-    public function attachAtlas(GlyphAtlas $atlas, float $scale): void
+    public function attachAtlas(Atlas $atlas, float $scale): void
     {
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
             self::PIXEL_FORMAT_R8, $atlas->w, $atlas->h, false);
@@ -101,6 +110,19 @@ final class Metal
         $this->atlasRegion->w = $atlas->w; $this->atlasRegion->h = $atlas->h; $this->atlasRegion->d = 1;
         $this->atlas = $atlas;
         $this->uniforms[2] = $atlas->w; $this->uniforms[3] = $atlas->h; $this->uniforms[4] = $scale;
+    }
+
+    /** The image atlas; it must be the glyph atlas's size, as the shader divides by one size. */
+    public function attachImages(Atlas $images): void
+    {
+        if ($images->w !== $this->atlas->w || $images->h !== $this->atlas->h) {
+            throw new RuntimeException('the image atlas must be the glyph atlas\'s size');
+        }
+        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
+            self::PIXEL_FORMAT_RGBA8, $images->w, $images->h, false);
+        $this->imagesTexture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
+            ?? throw new RuntimeException('image atlas texture');
+        $this->images = $images;
     }
 
     private function buildPipeline()
@@ -201,6 +223,13 @@ final class Metal
         ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $this->uniforms, 24, 1);
         if ($this->atlasTexture !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);
+        }
+        if ($this->imagesTexture !== null) {
+            if ($this->images->dirty) {
+                ObjC::msg('v:RLpL', $this->imagesTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $this->atlasRegion, 0, $this->images->pix, $this->images->w * 4);
+                $this->images->dirty = false;
+            }
+            ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->imagesTexture, 1);
         }
         if ($list->n > 0) {
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $list->n);

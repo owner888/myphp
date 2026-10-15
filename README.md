@@ -49,6 +49,7 @@ Early. What works today, on macOS / Apple Silicon:
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
 | Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
+| Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded | works (`examples/native`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus | works (`examples/form`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
@@ -160,6 +161,7 @@ App::run();
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
 | 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
+| 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明 | 可用（`examples/native`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点 | 可用（`examples/form`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |

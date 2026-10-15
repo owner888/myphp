@@ -20,7 +20,7 @@ final class Context
     private array $scopes = [null];
 
     /** $width and $height are the room the tree will be laid out in. */
-    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null)
+    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null, public float $scale = 1.0)
     {
         $this->theme ??= Theme::light();
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, null);
@@ -212,6 +212,21 @@ final class Context
             return true;
         }
         return false;
+    }
+
+    /** An image at $w × $h points (its own size when 0), corners rounded by $radius; $alpha fades it. */
+    public function image(Image $image, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
+    {
+        if ($w <= 0 && $h <= 0) {
+            $w = $image->w / $this->scale; $h = $image->h / $this->scale;
+        } elseif ($w <= 0) {
+            $w = $h * $image->w / $image->h;
+        } elseif ($h <= 0) {
+            $h = $w * $image->h / $image->w;
+        }
+        $n = $this->add(new Node(Node::IMAGE, 0, 0, 0, $w, $h, 0, null, null));
+        $n->image = $image; $n->radius = $radius; $n->alpha = $alpha;
+        return $n;
     }
 
     public function box(float $w, float $h, int $color): Node

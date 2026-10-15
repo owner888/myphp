@@ -87,13 +87,26 @@ font and a CTLine, then reads each run's glyph ids, positions and the font
 CoreText actually chose (fallback fonts included, so CJK works without any
 font list of ours). `rasterize` draws one glyph with `CTFontDrawGlyphs` into
 an alpha-only CGBitmapContext at the backing scale and flips the rows.
-`UI\GlyphAtlas` shelf-packs those into a 2048² R8 image; `Native\Metal`
+`UI\Atlas` shelf-packs those into a 2048² R8 image; `Native\Metal`
 re-uploads the whole image when it is dirty (a few times at startup).
 `UI\Text` caches a shaped line as a list of glyph quads in points,
 snapped to the device-pixel grid; `measure()` feeds `Context::text`, and
 `paint()` appends `kind = 1` quads to the display list. The Metal fragment
 shader samples the atlas for those and runs the rounded-rect SDF for the
 rest, in one pipeline and one draw per frame.
+
+Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
+atlas's size so the shader divides by one size) is texture 1, and a
+`kind = 2` quad carries its slot origin in `u, v` and the slot's pixel
+size in the color's `r, g` (the vertex shader scales the uv by that
+instead of the quad size, so an image stretches to its node). The
+fragment un-premultiplies what CG produced, applies the quad's alpha and
+the same SDF for rounded corners. `Native\ImageIO` decodes anything
+ImageIO reads (PNG, JPEG, HEIC, ICNS…) through a CGBitmapContext, scaled
+down to fit `$max` pixels on a side; `UI\Image` keeps the pixels until
+the first paint puts them in the atlas, then frees them. The image atlas
+has no eviction yet: it is for an app's icons and avatars, not a photo
+grid.
 
 CoreText hands each CTLine new CTFont objects for its fallback fonts, so a
 font's identity is its `CFHash` (equal fonts hash alike), not its address:

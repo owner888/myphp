@@ -25,7 +25,7 @@ final class Text implements TextMetrics
     /** How many times the atlas filled and was rebuilt; a diagnostic. */
     public int $resets = 0;
 
-    public function __construct(private CoreText $ct, public GlyphAtlas $atlas) {}
+    public function __construct(private CoreText $ct, public Atlas $atlas, public Atlas $images) {}
 
     /** Call once per frame: ages the cache and sweeps stale lines now and then. */
     public function beginFrame(): void

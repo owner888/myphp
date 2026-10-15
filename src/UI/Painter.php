@@ -21,6 +21,11 @@ final class Painter
             self::paintArea($n, $list, $text, $t, $rt);
             return;
         }
+        if ($n->kind === Node::IMAGE) {
+            $s = $n->image->slot($text->images);
+            $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
+            return;
+        }
         if ($n->focused) { // a focus ring around a button
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }

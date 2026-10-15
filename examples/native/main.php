@@ -6,12 +6,15 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, ListState};
+use MyPHP\UI\{Content, Context, Image, ListState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => ''];
 $state['list']->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
+// Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept.
+$state['avatars'] = array_map(fn($p) => Image::fromFile($p, 64), array_slice(glob('/System/Applications/*.app/Contents/Resources/AppIcon.icns'), 0, 12));
+$state['avatars'] !== [] || throw new RuntimeException('no app icons under /System/Applications');
 
 function inbox(Context $c, array &$s): void
 {
@@ -29,7 +32,7 @@ function inbox(Context $c, array &$s): void
       if ($s['list']->submitted()) { $s['last'] = "opened row {$s['list']->selected}"; }
       $c->list($s['list'], $s['rows'], function (int $i) use ($c, $t, &$s) { // only the rows in view are built; each row's nodes are keyed by $i
             $c->row(10, 12, 0, ($i & 1) ? $t->surface : $t->background);
-              $c->box(36, 36, ($i * 2654435761) & 0xffffff);
+              $c->image($s['avatars'][$i % count($s['avatars'])], 36, 36, 8); // an image quad from the atlas
               $c->column(0, 2, 1);
                 $c->row(0, 6); $c->text("Sender $i", 14); $c->text("主题 {$i}：Subject line number $i is here", 14); $c->end();
                 $c->muted("Preview of the message body, truncated to one line of text $i", 12);
