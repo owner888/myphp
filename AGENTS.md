@@ -71,6 +71,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   node id (creation order, or xxh64 of the key path under `Context::key`;
   list rows are keyed by index); `clicked()/hovered()/focused()` hit-test
   them while building; a click that changed state re-runs the build (≤3 passes).
+  `rich(..., wrap: true)` wraps at last frame's width (a frame follows when
+  it differs); `->focusable()` puts any node in the Tab order.
 - **Scrolling on either axis**: `->scroll($state, horizontal:, vertical:)`;
   a container takes the room it is given on the axes it scrolls and its
   content's size on the other; wheel dx/dy, thumbs and drags per axis.
@@ -141,7 +143,5 @@ focus, single-line fields with input methods; App/Window, menus, dialogs
 glides, keys and selection; text areas (wrapping, undo, caret blink);
 theme; images; rich text (bold/italic/mono, spans); tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; file drops; CLI + .app.
-Remaining, in rough order:
-1. Wrapping by the layout's width (rich text wraps at a width the app
-   passes today); hover and keyboard focus for plain containers.
-2. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
+bridges; what building real apps turns up (see examples/logview).

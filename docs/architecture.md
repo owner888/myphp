@@ -107,8 +107,18 @@ chunks are runs of spaces, single CJK characters or other runs, placed
 greedily, a chunk wider than a line broken by character, newlines
 honored; adjacent chunks of one span on a line merge into one piece so
 they shape as one run. The width is the app's to pass (`$c->width` minus
-its paddings): the flex layout measures before it arranges, so a node
-cannot yet wrap at the width its container gives it.
+its paddings), or, with `wrap: true`, the width the layout gave the node
+last frame (`Runtime::widthOf`, the window's width on the first frame):
+the flex layout measures before it arranges, so a node cannot know its
+width while it is built, and the frame-old width is the immediate-mode
+answer; `Runtime::record` asks for another frame when this frame's width
+differs, so a resize reflows one frame late. That suits nodes a column
+stretches; in a row, pass the width.
+
+Any node can take the keyboard focus with `->focusable()`: `Runtime`
+lists it with the buttons and fields (Tab order, the innermost under a
+press), marks it focused in `record` so the painter draws the ring, and
+Enter or Space on it counts as a click, as for a button.
 
 Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
 atlas's size so the shader divides by one size) is texture 1, and a
