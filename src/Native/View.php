@@ -32,6 +32,7 @@ final class View
         self::define();
         $view = $metal->createView($frame, $draw, true, 'MyPHPView');
         self::$inputs[ObjC::addr($view)] = $input;
+        Drop::register($view);
         $area = ObjC::msg('p:rLpp', ObjC::alloc('NSTrackingArea'), 'initWithRect:options:owner:userInfo:',
             ObjC::rect(0, 0, 0, 0), self::TRACKING, $view, null);
         ObjC::msg('v:p', $view, 'addTrackingArea:', $area);
@@ -183,7 +184,7 @@ final class View
                 }
                 Metal::requestFrame($self);
             }],
-        ], ['NSTextInputClient']);
+        ] + Drop::methods(true), ['NSTextInputClient', 'NSDraggingDestination']);
     }
 
     /** Asks for a frame $seconds from now; a later call replaces an earlier one. */

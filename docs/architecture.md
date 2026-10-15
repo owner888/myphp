@@ -377,6 +377,17 @@ is delivered) shows banners while the app is frontmost and reports clicks
 to `App::onNotificationClick`, calling the handed-in completion blocks
 with `ObjC::callBlock`. Those delegate methods arrive on the main thread.
 
+File drops: `Native\Drop::methods` are the `NSDraggingDestination`
+methods both view classes get (`MyPHPView`, and `MyPHPWebView`, a
+WKWebView subclass made for this), `Drop::register` the
+`registerForDraggedTypes:` with `public.file-url`. `performDragOperation:`
+reads the pasteboard's file URLs (`readObjectsForClasses:options:` with
+`NSPasteboardURLReadingFileURLsOnlyKey`), converts the drop point into
+the view (flipped for the Metal view, from the bottom for the web view)
+and hands `Window` a `FileDropEvent` for its 'fileDrop' listeners. On a
+page window the drop goes to PHP, not to the page's own drop events, which
+could not see paths anyway.
+
 Window events come from `NSWindowDelegate` (one shared delegate, the
 window found by the notification's object): `windowShouldClose:` runs the
 'close' listeners with a `CloseEvent` whose `cancel()` keeps the window,

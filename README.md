@@ -57,7 +57,7 @@ Early. What works today, on macOS / Apple Silicon:
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
-| Tray icon, global shortcuts, notifications (from a built .app), window events, remembered window frames | works (`examples/desktop`) |
+| Tray icon, global shortcuts, notifications (from a built .app), window events, file drops, remembered window frames | works (`examples/desktop`) |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
@@ -171,7 +171,7 @@ App::run();
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
-| 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、记住窗口位置 | 可用（`examples/desktop`） |
+| 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 

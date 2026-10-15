@@ -38,12 +38,13 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
-src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after), Window (+ on(event), CloseEvent, WindowState),
+src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after), Window (+ on(event), CloseEvent,
+                   FileDropEvent, WindowState),
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
                    Notification (+ Options), Ipc (bound services, window controls), Channel (+ ChannelClosed:
                    streaming to pages), TypeScript (client), autoload.php (PSR-4)
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Carbon (hot
-                   keys), Metal (MTKView, one quad pipeline,
+                   keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
@@ -136,8 +137,8 @@ focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
 theme; images; rich text (bold/italic/mono, spans); tray, global shortcuts, notifications, window events + state;
-channels, page window controls, preload; CLI + .app.
+channels, page window controls, preload; file drops; CLI + .app.
 Remaining, in rough order:
-1. Horizontal scrolling; file drop onto windows; wrapping by the layout's
-   width (rich text wraps at a width the app passes today).
+1. Horizontal scrolling; wrapping by the layout's width (rich text wraps
+   at a width the app passes today).
 2. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

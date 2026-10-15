@@ -9,7 +9,7 @@
 // Run: ./run.sh desktop
 declare(strict_types=1);
 
-use MyPHP\{App, CloseEvent, Dialog, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
+use MyPHP\{App, CloseEvent, Dialog, FileDropEvent, FileFilter, GlobalShortcut, Menu, MenuItem, MessageOptions, Notification, NotificationOptions, OpenDialogOptions, SaveDialogOptions, Tray, TrayOptions, Window, WindowOptions};
 use MyPHP\UI\{Content, Context};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -96,6 +96,7 @@ App::whenReady(function () use (&$s, $open, $save, $ask, $context, $notify, $log
     foreach (['focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'] as $event) {
         $w->on($event, function (Window $w) use ($event, $log) { [$width, $height] = $w->size(); $log("$event ({$width}×{$height})"); });
     }
+    $w->on('fileDrop', fn(FileDropEvent $e) => $log('dropped ' . implode(', ', array_map('basename', $e->paths)) . " at {$e->x},{$e->y}"));
     $w->on('close', function (CloseEvent $e) use (&$s, $log) {
         if (!($s['closing'] ?? false)) { $s['closing'] = true; $e->cancel(); $log('close canceled once; close again to quit'); }
     });

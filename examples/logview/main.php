@@ -2,11 +2,12 @@
 // A log viewer, the first real tool on MyPHP: open a log (File > Open…, or
 // a path on the command line), follow it as it grows, filter lines as you
 // type, levels in color, matches highlighted, long lines wrapped,
-// Cmd+Shift+C copies the chosen line. The window remembers its frame.
+// Cmd+Shift+C copies the chosen line, a file dropped on the window opens.
+// The window remembers its frame.
 // Run: ./run.sh logview [file]    (try /var/log/system.log or a file you append to)
 declare(strict_types=1);
 
-use MyPHP\{App, Dialog, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
+use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
 use MyPHP\UI\{Content, Context, Font, ListState, Span, TextState};
 
@@ -179,6 +180,7 @@ App::setName('Logs');
 App::whenReady(function () use ($log, $argv) {
     $log->window = new Window(new WindowOptions(title: 'Logs', width: 960, height: 600, stateKey: 'logs',
         content: Content::view(fn(Context $c) => view($c, $log))));
+    $log->window->on('fileDrop', fn(FileDropEvent $e) => $log->open($e->paths[0])); // drop a file onto the window
     if (isset($argv[1])) {
         $log->open($argv[1]);
     }

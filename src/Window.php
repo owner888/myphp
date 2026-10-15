@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Metal, ObjC, View, WebView};
+use MyPHP\Native\{Drop, Metal, ObjC, View, WebView};
 use MyPHP\UI\{Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
@@ -40,7 +40,9 @@ final class Window
     private string $stateKey = '';
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
-    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'];
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
+    /** @var array<int, Window> by content view address, for drops */
+    private static array $byView = [];
 
     public function __construct(WindowOptions $o)
     {
@@ -99,6 +101,17 @@ final class Window
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
         ObjC::msg('v:p', $this->ns, 'setDelegate:', self::delegate());
         self::$open[ObjC::addr($this->ns)] = $this;
+        self::$byView[ObjC::addr($this->view)] = $this;
+        Drop::handle(function ($view, array $paths, float $x, float $y) {
+            $w = self::$byView[ObjC::addr($view)] ?? null;
+            if ($w === null) {
+                return;
+            }
+            $e = new FileDropEvent($w, $paths, $x, $y);
+            foreach ($w->listeners['fileDrop'] ?? [] as $fn) {
+                $fn($e);
+            }
+        });
         if ($saved === null && $o->x === 0 && $o->y === 0) {
             $this->center();
         }
@@ -266,6 +279,7 @@ final class Window
                     $w = self::$open[ObjC::addr($ns)] ?? null;
                     unset(self::$open[ObjC::addr($ns)]);
                     if ($w !== null) {
+                        unset(self::$byView[ObjC::addr($w->view)]);
                         $w->dropChannels();
                         $w->captureState();
                         WindowState::save();
@@ -292,7 +306,8 @@ final class Window
     /**
      * Calls $fn on $event, one of EVENTS: close (with a CloseEvent to
      * cancel), closed, focus, blur, resize, move, minimize, restore,
-     * enterFullScreen, leaveFullScreen. Returns a function that removes it.
+     * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent).
+     * Returns a function that removes it.
      */
     public function on(string $event, \Closure $fn): \Closure
     {

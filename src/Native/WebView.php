@@ -37,7 +37,8 @@ final class WebView
             $pre = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($preload), self::INJECT_AT_DOCUMENT_START, true);
             ObjC::msg('v:p', $ucc, 'addUserScript:', $pre);
         }
-        $self->ns = ObjC::msg('p:rp', ObjC::alloc('WKWebView'), 'initWithFrame:configuration:', $frame, $wk);
+        $self->ns = ObjC::msg('p:rp', ObjC::alloc('MyPHPWebView'), 'initWithFrame:configuration:', $frame, $wk);
+        Drop::register($self->ns);
         ObjC::msg('v:L', $self->ns, 'setAutoresizingMask:', self::AUTORESIZE_WIDTH_HEIGHT);
         self::$views[ObjC::addr($self->ns)] = $self;
         return $self;
@@ -49,6 +50,8 @@ final class WebView
             return;
         }
         self::$defined = true;
+        // A WKWebView that hands dropped files to PHP (the page's own drop events do not see paths).
+        ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods(false), ['NSDraggingDestination']);
         ObjC::defineClass('MyPHPScriptHandler', 'NSObject', [
             'userContentController:didReceiveScriptMessage:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $ucc, $message) {
                 $view = self::$views[ObjC::addr(ObjC::msg('p:', $message, 'webView'))] ?? null;
