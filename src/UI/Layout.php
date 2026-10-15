@@ -59,6 +59,7 @@ final class Layout
             // short of the view's bottom leave a gap this frame.
             $cy -= $s->offset;
             $s->gap = max(0.0, $ch - ($used + $n->gap * ($cnt - 1) - $s->offset));
+            $s->atEnd = $s->first + $cnt >= $s->count && $used + $n->gap * ($cnt - 1) - $s->offset <= $ch + 0.5;
             if ($s->first + $cnt >= $s->count) {
                 $s->gap = 0.0;
             }

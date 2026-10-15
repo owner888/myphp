@@ -108,6 +108,20 @@ the first paint puts them in the atlas, then frees them. The image atlas
 has no eviction yet: it is for an app's icons and avatars, not a photo
 grid.
 
+Either atlas may fill: the glyph atlas when an app has shown more distinct
+glyphs than fit, the image atlas when more images than fit have been drawn.
+Both start over (`Atlas::reset`) at the first bitmap that does not fit and
+set `Text::$repaint`; `Window` then clears the display list and paints the
+frame again, so the quads painted before the reset, which name slots that
+are gone, never reach the GPU. `Image` keeps its pixels for this. A change
+of backing scale — a window dragged to another display — arrives as
+`windowDidChangeBackingProperties:`; `App::rescale()` picks the largest
+scale among the open windows, `Text::rescale` resets the glyph atlas and
+the line cache at it, and `Uniforms` carry two scales: `scale`, the drawn
+view's pixels per point (clip rects, set per frame from its window), and
+`atlasScale`, what the glyphs were rasterized at (uv extents); a window on
+a lesser display samples the sharper glyphs down.
+
 CoreText hands each CTLine new CTFont objects for its fallback fonts, so a
 font's identity is its `CFHash` (equal fonts hash alike), not its address:
 keyed by address, every line of CJK put fresh copies of the same glyphs in
@@ -179,7 +193,11 @@ pointer point. `scrollTo` on either state glides with an exponential ease
 when the end pulls back); a list more than four views away first jumps to
 three views short so a million-row jump does not walk every row. Trackpad
 momentum is the system's: AppKit keeps sending `scrollWheel:` events after
-the fingers lift, so the list needs no inertia of its own.
+the fingers lift, so the list needs no inertia of its own. `followEnd`
+(mygo's FollowEnd): Layout notes each frame whether the last row's bottom
+is in view (`atEnd`); when it was and the count grew, `Context::list` calls
+`end()` before building, so appended rows keep the end in view, and the
+user scrolling up (atEnd false) stops that until they return to the end.
 
 ## Page path
 

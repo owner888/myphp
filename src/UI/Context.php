@@ -116,6 +116,10 @@ final class Context
      */
     public function list(ListState $state, int $count, Closure $row): Node
     {
+        if ($state->followEnd && $state->atEnd && $count > $state->count && !$state->moving()) {
+            $state->count = $count;
+            $state->end(); // rows came: stay at the end
+        }
         $state->count = $count;
         $state->row = min($state->row, max(0, $count - 1));
         $node = $this->column(0, 0, 1)->scroll($state);

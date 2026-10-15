@@ -29,6 +29,10 @@ final class ListState implements Scrollable
     public float $gap = 0;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
+    /** A list showing its end keeps showing it as rows are appended (a chat, a log), until the user scrolls up. */
+    public bool $followEnd = false;
+    /** Set by Layout each frame: the last row's bottom is in view. */
+    public bool $atEnd = false;
     private bool $didChange = false;
     private bool $didSubmit = false;
     private ?int $target = null;
@@ -95,6 +99,15 @@ final class ListState implements Scrollable
         $this->target = null;
         $this->row = $row;
         $this->offset = 0;
+        $this->scrollBy(0);
+    }
+
+    /** Shows the end: the last rows fill the view. */
+    public function end(): void
+    {
+        $this->target = null;
+        $this->row = max(0, $this->count - 1);
+        $this->offset = $this->height($this->row) - $this->viewport;
         $this->scrollBy(0);
     }
 

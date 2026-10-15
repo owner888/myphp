@@ -22,7 +22,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::IMAGE) {
-            $s = $n->image->slot($text->images);
+            $s = $text->imageSlot($n->image);
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
             return;
         }

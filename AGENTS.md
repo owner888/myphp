@@ -70,10 +70,15 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   anchor row + offset; rows for 1.5 views of estimated height are built,
   heights learned from layout. A million rows cost the rows in view.
   `selected` (-1) turns on click/arrow/Home/End choice; `scrollTo` glides
-  (`Glide::TAU`), thumbs show on hover and drag; bar geometry in `Scrollbar`.
+  (`Glide::TAU`), thumbs show on hover and drag; bar geometry in `Scrollbar`;
+  `followEnd` keeps a list at its end as rows are appended (chat, log).
 - **One GPU buffer per frame**: `DisplayList` writes 16 floats per quad into
   a shared `MTLBuffer` (ring of four); rects and glyphs share one pipeline
   and one instanced draw, so draw order is list order; clip rect per quad.
+- **Atlases start over when full** (glyphs or images): `Text::$repaint` makes
+  `Window` paint the frame again, so nothing points at slots that are gone;
+  `App::rescale()` (windowDidChangeBackingProperties) re-rasterizes glyphs
+  at the largest backing scale among open windows (`Uniforms.atlasScale`).
 - **Text through CoreText** with a glyph atlas; shaped lines cached by size
   and string (`UI\Text`), swept by frame age; fonts keyed by `CFHash`.
 - **Keys through `interpretKeyEvents:`**: the input context calls
@@ -124,8 +129,6 @@ focus, single-line fields with input methods; App/Window, menus, dialogs
 glides, keys and selection; text areas (wrapping, undo, caret blink);
 theme; images; tray, global shortcuts, notifications, window events + state; CLI + .app.
 Remaining, in rough order:
-1. FollowEnd for lists; horizontal scrolling.
-2. Atlas eviction (images and glyphs) and re-rasterizing on a
-   backing-scale change; rich text.
-3. IPC channels (streaming), page-side window controls, preload script.
-4. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+1. Horizontal scrolling; rich text (runs of size/color/weight in one line).
+2. IPC channels (streaming), page-side window controls, preload script.
+3. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

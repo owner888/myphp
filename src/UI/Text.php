@@ -25,7 +25,42 @@ final class Text implements TextMetrics
     /** How many times the atlas filled and was rebuilt; a diagnostic. */
     public int $resets = 0;
 
+    /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
+    public bool $repaint = false;
+
     public function __construct(private CoreText $ct, public Atlas $atlas, public Atlas $images) {}
+
+    /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
+    public function rescale(float $scale): void
+    {
+        if ($scale === $this->ct->scale) {
+            return;
+        }
+        $this->ct->scale = $scale;
+        $this->atlas->reset();
+        $this->lines = [];
+        $this->offsets = [];
+        $this->repaint = true;
+    }
+
+    public function scale(): float
+    {
+        return $this->ct->scale;
+    }
+
+    /** The image atlas slot of $image, added on first use; a full atlas starts over with this frame's images. */
+    public function imageSlot(Image $image): array
+    {
+        $slot = $this->images->get($image->key);
+        if ($slot === null) {
+            if (!$this->images->fits($image->w, $image->h)) {
+                $this->images->reset();
+                $this->repaint = true;
+            }
+            $slot = $this->images->add($image->key, $image->w, $image->h, $image->addr);
+        }
+        return $slot;
+    }
 
     /** Call once per frame: ages the cache and sweeps stale lines now and then. */
     public function beginFrame(): void
@@ -115,6 +150,7 @@ final class Text implements TextMetrics
                     $this->lines = [];
                     $this->offsets = [];
                     $this->resets++;
+                    $this->repaint = true;
                 }
                 $slot = $this->atlas->add($key, $bitmap['w'], $bitmap['h'], $bitmap['addr']);
                 Mem::free($bitmap['rows']);

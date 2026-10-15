@@ -28,7 +28,7 @@ final class Metal
     #include <metal_stdlib>
     using namespace metal;
     struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels
-    struct Uniforms { float2 viewport; float2 atlas; float scale; float pad; };
+    struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; };
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                          const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]]) {
@@ -39,7 +39,7 @@ final class Metal
         o.pos = float4(p.x / u.viewport.x * 2.0 - 1.0, 1.0 - p.y / u.viewport.y * 2.0, 0.0, 1.0);
         o.local = (corner - 0.5) * i.rect.zw;
         o.extent = i.rect.zw * 0.5;
-        o.uv = (i.params.zw + corner * (i.params.y > 1.5 ? i.color.xy : i.rect.zw * u.scale)) / u.atlas;
+        o.uv = (i.params.zw + corner * (i.params.y > 1.5 ? i.color.xy : i.rect.zw * u.atlasScale)) / u.atlas;
         o.color = i.color;
         o.radius = i.params.x;
         o.kind = i.params.y;
@@ -96,7 +96,7 @@ final class Metal
             $this->buffers[] = $buf;
             $this->lists[] = new DisplayList(ObjC::$c->cast("float[$floats]", ObjC::msg('p:', $buf, 'contents')), $capacity);
         }
-        $this->uniforms = ObjC::$c->new('float[6]'); // viewport.xy, atlas.xy, scale, pad
+        $this->uniforms = ObjC::$c->new('float[6]'); // viewport.xy, atlas.xy, scale, atlasScale
     }
 
     /** The glyph atlas text draws from; uploaded whenever it is dirty. */
@@ -109,7 +109,13 @@ final class Metal
         $this->atlasRegion = ObjC::$c->new('MTLRegion');
         $this->atlasRegion->w = $atlas->w; $this->atlasRegion->h = $atlas->h; $this->atlasRegion->d = 1;
         $this->atlas = $atlas;
-        $this->uniforms[2] = $atlas->w; $this->uniforms[3] = $atlas->h; $this->uniforms[4] = $scale;
+        $this->uniforms[2] = $atlas->w; $this->uniforms[3] = $atlas->h; $this->uniforms[5] = $scale;
+    }
+
+    /** The scale glyphs are rasterized at changed (the atlas was reset at the new one). */
+    public function setAtlasScale(float $scale): void
+    {
+        $this->uniforms[5] = $scale;
     }
 
     /** The image atlas; it must be the glyph atlas's size, as the shader divides by one size. */
@@ -212,6 +218,8 @@ final class Metal
         $bounds = ObjC::msg('r:', $view, 'bounds');
         $this->uniforms[0] = $bounds->w;
         $this->uniforms[1] = $bounds->h;
+        $window = ObjC::msg('p:', $view, 'window');
+        $this->uniforms[4] = $window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor');
         if ($this->atlas !== null && $this->atlas->dirty) {
             ObjC::msg('v:RLpL', $this->atlasTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $this->atlasRegion, 0, $this->atlas->pix, $this->atlas->w);
             $this->atlas->dirty = false;

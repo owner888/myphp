@@ -122,6 +122,12 @@ final class Window
                     return $c->root;
                 });
                 Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                if ($text->repaint) {
+                    // An atlas started over during the paint: what was painted before points at slots that are gone.
+                    $text->repaint = false;
+                    $list->reset();
+                    Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                }
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
                 }
@@ -225,6 +231,7 @@ final class Window
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
+                'windowDidChangeBackingProperties:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { App::rescale(); }],
             ], ['NSWindowDelegate']);
         }
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');

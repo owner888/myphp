@@ -12,6 +12,7 @@ spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\
 
 $state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => ''];
 $state['list']->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
+$state['list']->followEnd = true; // at the end, Compose (a new last row) keeps the end in view, as a chat does
 // Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept.
 $state['avatars'] = array_map(fn($p) => Image::fromFile($p, 64), array_slice(glob('/System/Applications/*.app/Contents/Resources/AppIcon.icns'), 0, 12));
 $state['avatars'] !== [] || throw new RuntimeException('no app icons under /System/Applications');

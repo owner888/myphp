@@ -219,6 +219,28 @@ final class App
         return self::$scale;
     }
 
+    /**
+     * A window's display changed: glyphs are rasterized at the largest
+     * backing scale among the open windows (a window on a lesser display
+     * samples them down), so a change there remakes the atlas.
+     */
+    public static function rescale(): void
+    {
+        $scale = 1.0;
+        foreach (Window::all() as $w) {
+            $scale = max($scale, ObjC::msg('d:', $w->native(), 'backingScaleFactor'));
+        }
+        if ($scale === self::$scale) {
+            return;
+        }
+        self::$scale = $scale;
+        self::$text->rescale($scale);
+        self::$metal->setAtlasScale($scale);
+        foreach (Window::all() as $w) {
+            $w->update();
+        }
+    }
+
     /** The one Metal device, shared by every window. */
     public static function metal(): Metal
     {
