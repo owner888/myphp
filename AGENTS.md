@@ -51,7 +51,8 @@ src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
 src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
 src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
 src/Native/Mem.php      calloc/free, integer addresses, memcpy by address (no pointer arithmetic in FFI)
-src/Native/View.php     MTKView subclass: mouse/scroll/key events as PHP closures into UI\Input
+src/Native/View.php     MTKView subclass: mouse/scroll/key events into UI\Input; NSTextInputClient over the focused field
+src/Native/Pasteboard.php the general pasteboard, plain text
 src/Native/WebView.php  WKWebView with the bridge user script and script message handler
 src/Native/bridge.js    window.myphp in every page: call(), on(), __deliver(); mygo's message shapes
 src/UI/Node.php         one element of a frame's tree
@@ -61,7 +62,8 @@ src/UI/DisplayList.php  a frame's quads (rects and glyphs), written into the GPU
 src/UI/Text.php         shaped-line cache; measure() for layout, paint() to the list
 src/UI/GlyphAtlas.php   8-bit shelf-packed glyph atlas the renderer uploads when dirty
 src/UI/TextMetrics.php  what Context needs from a text engine
-src/UI/Input.php        events since the last frame, mouse position
+src/UI/Input.php        events since the last frame, mouse position, the focused field for the text input client
+src/UI/TextState.php    a field's text, selection and composition; byte offsets; the text system's commands
 src/UI/Runtime.php      last frame's rects by node id; clicked()/hovered(); scroll routing; rebuild passes
 src/UI/Scrollable.php   what the wheel drives: ScrollState (offset) or ListState (anchor row)
 src/UI/ScrollState.php  a scrolling container's offset, owned by the app
@@ -89,6 +91,12 @@ they run without Composer.
   only rows for 1.5 views of estimated height are built, heights are
   learned from layout, unknown rows count as the average. The per-frame
   cost of a million-row list is the rows in view.
+- **Keys go through `interpretKeyEvents:`**, never parsed by hand: the input
+  context calls `insertText:`, `setMarkedText:` and `doCommandBySelector:`
+  on the view, which edits `Input::$focus` (the focused field's TextState)
+  at once and answers `selectedRange`/`markedRange`/`firstRectForCharacterRange:`
+  from it, so input methods compose in place with their candidate window
+  at the caret. Focus moves in Runtime: click, Tab/Shift-Tab, Escape.
 - **Interaction answers from last frame's layout**: `Runtime` keeps rects by
   node id (creation order); `clicked()`/`hovered()` hit-test against them
   while this frame builds. A click that changed state re-runs the build, up
@@ -150,8 +158,9 @@ not the bottleneck, the architecture is what keeps it that way.
    clipping next (mygo: `internal/gpu/metal`).
 2. CoreText text: shaping + atlas done; atlas eviction, dirty-rect uploads,
    and re-rasterizing on a backing-scale change remain (mygo: `internal/text`).
-3. Input: mouse, wheel, keys and clipping done; keyboard focus, text
-   editing, stable ids for conditional UI, scroll glide remain.
+3. Input: mouse, wheel, clipping, keyboard focus, single-line text fields
+   with input methods and the Edit menu done; multi-line text, undo,
+   caret blink, stable ids for conditional UI, scroll glide remain.
 4. App/Window API: whenReady/run/quit, WindowOptions subset, show/hide/
    close/setTitle/center/size, menu bar and context menus with roles and
    accelerators, open/save/message dialogs (as sheets too), page evaluate

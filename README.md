@@ -48,6 +48,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Objective-C bridge (`objc_msgSend`, classes with PHP methods) | works |
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
+| Text fields with input methods, selection, Edit menu, Tab focus | works (`examples/form`) |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
@@ -81,6 +82,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh webview          # Notes: a page calling a bound PHP service, with events
 ./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
 ./run.sh desktop          # menus and dialogs
+./run.sh form             # text fields, input methods
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
 ```
@@ -143,6 +145,7 @@ App::run();
 | Objective-C 桥（`objc_msgSend`、方法为 PHP 闭包的类） | 可用 |
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
+| 文本框：输入法、选区、Edit 菜单、Tab 焦点 | 可用（`examples/form`） |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
@@ -174,6 +177,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh webview          # Notes：页面调用绑定的 PHP 服务，带事件
 ./run.sh gen              # 生成 examples/webview/myphp.ts（TypeScript client）
 ./run.sh desktop          # 菜单和对话框
+./run.sh form             # 文本框、输入法
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
 ```

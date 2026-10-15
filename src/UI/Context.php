@@ -94,7 +94,32 @@ final class Context
     public function button(string $s, float $size = 13): Node
     {
         [$w, $h] = $this->metrics->measure($s, $size);
-        return $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + 24, $h + 10, 0, $s, 0x3377ff, $size, 0xffffff));
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + 24, $h + 10, 0, $s, 0x3377ff, $size, 0xffffff));
+        $n->focused = $this->runtime?->focused($n->id) ?? false;
+        return $n;
+    }
+
+    /**
+     * A single-line text field editing $state. Click or Tab gives it the
+     * keyboard; the text input client of the window then edits $state.
+     */
+    public function input(TextState $state, string $placeholder = '', float $width = 200, float $size = 14): Node
+    {
+        [, $h] = $this->metrics->measure('X', $size);
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + 12, 0, $placeholder, 0xffffff, $size, 0x1d1d1f));
+        $n->edit = $state;
+        $n->focused = $this->runtime?->focused($n->id) ?? false;
+        return $n;
+    }
+
+    /** Whether the field's Enter was pressed this frame (resets the flag). */
+    public function submitted(Node $n): bool
+    {
+        if ($n->edit !== null && $n->edit->submitted) {
+            $n->edit->submitted = false;
+            return true;
+        }
+        return false;
     }
 
     public function box(float $w, float $h, int $color): Node

@@ -52,6 +52,28 @@ final class Text implements TextMetrics
         return [$l['w'], $l['h']];
     }
 
+    public function xForIndex(string $text, float $size, int $byte): float
+    {
+        $carets = $this->line($text, $size)['carets'];
+        $u = TextState::utf16Index($text, $byte);
+        // Inside a ligature or cluster there is no caret; use the nearest before.
+        while ($u > 0 && !isset($carets[$u])) {
+            $u--;
+        }
+        return $carets[$u] ?? 0.0;
+    }
+
+    public function indexForX(string $text, float $size, float $x): int
+    {
+        $best = 0; $bestD = INF;
+        foreach ($this->line($text, $size)['carets'] as $u => $cx) {
+            if (($d = abs($cx - $x)) < $bestD) {
+                $bestD = $d; $best = $u;
+            }
+        }
+        return TextState::byteIndex($text, $best);
+    }
+
     /** Paints $text with its top-left corner at ($x, $y), in points. */
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0): void
     {
@@ -106,7 +128,7 @@ final class Text implements TextMetrics
         }
         return [
             'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],
-            'ascent' => $shaped['ascent'], 'quads' => $quads, 'gen' => $this->gen,
+            'ascent' => $shaped['ascent'], 'quads' => $quads, 'carets' => $shaped['carets'], 'gen' => $this->gen,
         ];
     }
 }

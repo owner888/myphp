@@ -8,11 +8,21 @@ final class Painter
 {
     private const BUTTON_RADIUS = 6.0;
     private const BOX_RADIUS = 18.0;
+    private const ACCENT = 0x3377ff;
+    private const FIELD_BORDER = 0xc8c8c8, FIELD_RADIUS = 5.0;
+    private const SELECTION = 0xb4d5ff, PLACEHOLDER = 0x9a9a9a, MARKED = 0x1d1d1f;
 
     public static function paint(Node $n, DisplayList $list, Text $text): void
     {
         if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
             return;
+        }
+        if ($n->kind === Node::INPUT) {
+            self::paintField($n, $list, $text);
+            return;
+        }
+        if ($n->focused) { // a focus ring around a button
+            $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, self::ACCENT, 0.4, self::BUTTON_RADIUS + 2);
         }
         if ($n->color !== null) {
             $radius = match ($n->kind) { Node::BUTTON => self::BUTTON_RADIUS, Node::BOX => self::BOX_RADIUS, default => 0.0 };
@@ -35,5 +45,45 @@ final class Painter
         if ($n->scroll !== null) {
             $list->popClip();
         }
+    }
+
+    /** A text field: border, selection, text or placeholder, composition underline, caret. */
+    private static function paintField(Node $n, DisplayList $list, Text $text): void
+    {
+        $s = $n->edit;
+        $inset = Runtime::FIELD_INSET;
+        $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? self::ACCENT : self::FIELD_BORDER, 1.0, self::FIELD_RADIUS);
+        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? 0xffffff, 1.0, self::FIELD_RADIUS - 1);
+        $display = $s->display();
+        [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
+        $ty = $n->y + ($n->h - $lh) / 2;
+        $inner = $n->w - 2 * $inset;
+        // Keep the caret in view when the text is wider than the field.
+        $caretX = $text->xForIndex($display, $n->fontSize, $s->displayCaret());
+        $shift = max(0.0, $caretX - $inner);
+        $tx = $n->x + $inset - $shift;
+        $list->pushClip($n->x + 2, $n->y, $n->w - 4, $n->h);
+        if ($display === '') {
+            if ($n->text !== null && $n->text !== '') {
+                $text->paint($list, $n->text, $n->fontSize, $tx, $ty, self::PLACEHOLDER);
+            }
+        } else {
+            if ($n->focused && $s->hasSelection() && $s->marked === null) {
+                [$a, $b] = $s->selection();
+                $xa = $text->xForIndex($display, $n->fontSize, $a);
+                $xb = $text->xForIndex($display, $n->fontSize, $b);
+                $list->rect($tx + $xa, $ty, $xb - $xa, $lh, self::SELECTION);
+            }
+            $text->paint($list, $display, $n->fontSize, $tx, $ty, $n->fg);
+            if ($s->marked !== null) {
+                $xa = $text->xForIndex($display, $n->fontSize, $s->cursor);
+                $xb = $text->xForIndex($display, $n->fontSize, $s->cursor + strlen($s->marked));
+                $list->rect($tx + $xa, $ty + $lh - 1, $xb - $xa, 1.5, self::MARKED);
+            }
+        }
+        if ($n->focused) {
+            $list->rect($tx + $caretX, $ty, 1.0, $lh, self::MARKED);
+        }
+        $list->popClip();
     }
 }

@@ -58,6 +58,7 @@ final class CoreText
             long  CTRunGetGlyphCount(void*);
             void  CTRunGetGlyphs(void*, CFRange, CGGlyph*);
             void  CTRunGetPositions(void*, CFRange, CGPoint*);
+            void  CTRunGetStringIndices(void*, CFRange, long*);
             void* CTRunGetAttributes(void*);
             void* CGBitmapContextCreate(void*, unsigned long, unsigned long, unsigned long, unsigned long, void*, unsigned int);
             void* CGBitmapContextGetData(void*);
@@ -85,7 +86,10 @@ final class CoreText
      * Shapes $text at $size. Positions are in points from the pen origin on
      * the baseline, y up as CoreText gives them.
      *
-     * @return array{width: float, ascent: float, descent: float, glyphs: list<array{font: int, glyph: int, x: float, y: float}>}
+     * carets maps each UTF-16 index at a glyph boundary to the x of the
+     * caret before it; the end of the string maps to the width.
+     *
+     * @return array{width: float, ascent: float, descent: float, glyphs: list<array{font: int, glyph: int, x: float, y: float}>, carets: array<int, float>}
      */
     public function shape(string $text, float $size): array
     {
@@ -102,6 +106,7 @@ final class CoreText
         $width = $c->CTLineGetTypographicBounds($line, FFI::addr($asc), FFI::addr($desc), FFI::addr($lead));
 
         $glyphs = [];
+        $carets = [0 => 0.0];
         $runs = $c->CTLineGetGlyphRuns($line);
         $runCount = $c->CFArrayGetCount($runs);
         $range = $c->new('CFRange'); // {0, 0} means the whole run
@@ -120,17 +125,26 @@ final class CoreText
             }
             $ids = $c->new("CGGlyph[$n]");
             $pos = $c->new("CGPoint[$n]");
+            $idx = $c->new("long[$n]");
             $c->CTRunGetGlyphs($run, $range, $ids);
             $c->CTRunGetPositions($run, $range, $pos);
+            $c->CTRunGetStringIndices($run, $range, $idx);
             for ($i = 0; $i < $n; $i++) {
                 $glyphs[] = ['font' => $fontId, 'glyph' => $ids[$i], 'x' => $pos[$i]->x, 'y' => $pos[$i]->y];
+                $carets[$idx[$i]] = $pos[$i]->x;
             }
         }
         $c->CFRelease($line);
         $c->CFRelease($attributed);
         $c->CFRelease($attrs);
         $c->CFRelease($str);
-        return ['width' => $width, 'ascent' => $asc->cdata, 'descent' => $desc->cdata, 'glyphs' => $glyphs];
+        $carets[self::utf16Length($text)] = $width;
+        return ['width' => $width, 'ascent' => $asc->cdata, 'descent' => $desc->cdata, 'glyphs' => $glyphs, 'carets' => $carets];
+    }
+
+    private static function utf16Length(string $s): int
+    {
+        return intdiv(strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')), 2);
     }
 
     /**

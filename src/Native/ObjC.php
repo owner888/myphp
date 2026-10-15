@@ -40,13 +40,13 @@ final class ObjC
     private const ENCODING = [
         'p' => '@', 'd' => 'd', 'f' => 'f', 'l' => 'q', 'L' => 'Q', 'i' => 'i', 'S' => 'S', 'b' => 'B',
         's' => '*', 'v' => 'v', 'r' => '{CGRect={CGPoint=dd}{CGSize=dd}}', 'q' => '{CGPoint=dd}', 'z' => '{CGSize=dd}',
-        'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}',
+        'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}', 'n' => '{_NSRange=QQ}',
     ];
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
         'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
-        'k' => 'MTLClearColor', 'R' => 'MTLRegion',
+        'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange',
         's' => 'const char*', 'v' => 'void',
     ];
 
@@ -62,15 +62,19 @@ final class ObjC
             typedef struct { double w, h; } CGSize;
             typedef struct { double r, g, b, a; } MTLClearColor;
             typedef struct { unsigned long x, y, z, w, h, d; } MTLRegion;
+            typedef struct { unsigned long location, length; } NSRange;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
             void* dlopen(const char*, int);
             void* dlsym(void*, const char*);
             void* objc_getClass(const char*);
             void* sel_registerName(const char*);
+            const char* sel_getName(void*);
             void* objc_allocateClassPair(void*, const char*, size_t);
             void  objc_registerClassPair(void*);
             bool  class_addMethod(void*, void*, void*, const char*);
+            void* objc_getProtocol(const char*);
+            bool  class_addProtocol(void*, void*);
         ", '/usr/lib/libobjc.A.dylib');
         foreach ($frameworks as $f) {
             if (self::$c->dlopen("/System/Library/Frameworks/$f.framework/$f", 2) === null) {
@@ -93,6 +97,18 @@ final class ObjC
     public static function sel(string $name)
     {
         return self::$sel[$name] ??= self::$c->sel_registerName($name);
+    }
+
+    public static function selName($sel): string
+    {
+        return self::$c->sel_getName($sel); // a const char* return arrives as a PHP string
+    }
+
+    public static function range(int $location, int $length)
+    {
+        $r = self::$c->new('NSRange');
+        $r->location = $location; $r->length = $length;
+        return $r;
     }
 
     public static function msg(string $sig, $recv, string $sel, ...$args)
@@ -207,10 +223,16 @@ final class ObjC
      * Defines an Objective-C class whose methods are PHP closures.
      * $methods: selector => [objc type encoding, C signature such as 'v(ppr)', closure].
      * Closures receive (self, _cmd, ...args) as CData and run on the main thread only.
+     * $protocols the class declares, for frameworks that check conformance
+     * (AppKit creates a text input context only for an NSTextInputClient).
      */
-    public static function defineClass(string $name, string $super, array $methods)
+    public static function defineClass(string $name, string $super, array $methods, array $protocols = [])
     {
         $cls = self::$c->objc_allocateClassPair(self::cls($super), $name, 0);
+        foreach ($protocols as $protocol) {
+            $p = self::$c->objc_getProtocol($protocol) ?? throw new RuntimeException("no protocol $protocol");
+            self::$c->class_addProtocol($cls, $p);
+        }
         foreach ($methods as $sel => [$enc, $csig, $fn]) {
             preg_match('/^(\w)\((\w*)\)$/', $csig, $m);
             $params = [];

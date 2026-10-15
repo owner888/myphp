@@ -46,7 +46,7 @@ final class Window
         }
         $this->id = self::$nextId++;
         $this->input = $o->content === null ? null : new Input();
-        $this->runtime = $o->content === null ? null : new Runtime($this->input);
+        $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
 
         $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
         $style = self::TITLED | self::CLOSABLE | self::MINIATURIZABLE | ($o->disableResize ? 0 : self::RESIZABLE);

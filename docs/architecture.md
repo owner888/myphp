@@ -191,6 +191,36 @@ kept; a `once` block is dropped at the next `block()` call after it fired,
 never from inside its own invocation. Verified on Linux with a C shim
 calling `invoke` directly before use on macOS.
 
+## Text input
+
+`Native\View::keyDown:` records the key for apps and hands the event to
+`interpretKeyEvents:`. The input context answers through the
+NSTextInputClient methods the view implements over `Input::$focus`, the
+`TextState` of the field Runtime focused last frame: `insertText:` commits
+text (with a replacement range when the input method asks),
+`setMarkedText:` holds the composition in `$marked` (shown at the cursor,
+underlined, not yet in `$text`), `unmarkText` commits it, and
+`doCommandBySelector:` gets the key bindings as selectors
+(`moveLeft:`, `deleteBackward:`, `insertNewline:`...), which
+`TextState::command` applies; the rest (`insertTab:`, `cancelOperation:`)
+go to Runtime for focus. The client's ranges are UTF-16 while TextState
+uses bytes; `TextState::utf16Index/byteIndex` convert. Caret geometry
+comes from CoreText (`CTRunGetStringIndices` with glyph positions give a
+caret x per UTF-16 index), so `firstRectForCharacterRange:` can place the
+candidate window, converted view -> window -> screen. The Edit menu's
+`copy:`/`cut:`/`paste:`/`selectAll:` reach the view as first responder
+and use `Native\Pasteboard`.
+
+Two things the methods alone did not give: AppKit creates a view's
+`inputContext` only when the class *declares* the protocol
+(`class_addProtocol`, now `defineClass`'s fourth argument), and without
+one `interpretKeyEvents:` still routes special keys to
+`doCommandBySelector:` but sends characters to NSResponder's one-argument
+`insertText:`, so letters vanished while Enter worked; and a function
+declared to return `const char*` (`sel_getName`) already arrives as a PHP
+string, not a CData. PHP callbacks returning structs by value
+(NSRange, NSRect) work through libffi, verified with a C shim first.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never
