@@ -21,6 +21,10 @@ final class Painter
             self::paintArea($n, $list, $text, $t, $rt);
             return;
         }
+        if ($n->kind === Node::RICH) {
+            self::paintRich($n, $list, $text);
+            return;
+        }
         if ($n->kind === Node::IMAGE) {
             $s = $text->imageSlot($n->image);
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
@@ -42,7 +46,7 @@ final class Painter
                 [$tw, $th] = $text->measure($n->text, $n->fontSize);
                 $x += ($n->w - $tw) / 2; $y += ($n->h - $th) / 2;
             }
-            $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg);
+            $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
@@ -59,6 +63,34 @@ final class Painter
                     $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
                 }
             }
+        }
+    }
+
+    /** Rich text: the spans in a row on one baseline, with their backgrounds, underlines and strikes. */
+    private static function paintRich(Node $n, DisplayList $list, Text $text): void
+    {
+        $ascent = 0.0;
+        foreach ($n->spans as $sp) {
+            $ascent = max($ascent, $text->ascent($sp->size ?? $n->fontSize, $sp->style));
+        }
+        $x = $n->x;
+        $baseline = $n->y + $ascent;
+        foreach ($n->spans as $sp) {
+            $size = $sp->size ?? $n->fontSize;
+            [$w, $h] = $text->measure($sp->text, $size, $sp->style);
+            $top = $baseline - $text->ascent($size, $sp->style);
+            if ($sp->background !== null) {
+                $list->rect($x - 2, $top, $w + 4, $h, $sp->background, 1.0, 3.0);
+            }
+            $color = $sp->color ?? $n->fg;
+            $text->paint($list, $sp->text, $size, $x, $top, $color, 1.0, $sp->style);
+            if ($sp->underline) {
+                $list->rect($x, $baseline + 1, $w, 1.0, $color);
+            }
+            if ($sp->strikethrough) {
+                $list->rect($x, $baseline - $size * 0.3, $w, 1.0, $color);
+            }
+            $x += $w;
         }
     }
 

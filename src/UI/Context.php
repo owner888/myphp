@@ -151,12 +151,32 @@ final class Context
         return $node;
     }
 
-    /** Text in the theme's text color, or $color. */
-    public function text(string $s, ?float $size = null, ?int $color = null): Node
+    /** Text in the theme's text color, or $color; $style is Font bits (BOLD, ITALIC, MONO). */
+    public function text(string $s, ?float $size = null, ?int $color = null, int $style = 0): Node
     {
         $size ??= $this->theme->fontSize;
-        [$w, $h] = $this->metrics->measure($s, $size);
-        return $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $this->theme->text));
+        [$w, $h] = $this->metrics->measure($s, $size, $style);
+        $n = $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $this->theme->text));
+        $n->style = $style;
+        return $n;
+    }
+
+    /**
+     * One line of spans that differ in style over $size and $color (the
+     * theme's by default), baselines aligned, as mygo's RichText.
+     * @param Span[] $spans
+     */
+    public function rich(array $spans, ?float $size = null, ?int $color = null): Node
+    {
+        $size ??= $this->theme->fontSize;
+        $w = 0.0; $h = 0.0;
+        foreach ($spans as $sp) {
+            [$sw, $sh] = $this->metrics->measure($sp->text, $sp->size ?? $size, $sp->style);
+            $w += $sw; $h = max($h, $sh);
+        }
+        $n = $this->add(new Node(Node::RICH, 0, 0, 0, $w, $h, 0, null, null, $size, $color ?? $this->theme->text));
+        $n->spans = $spans;
+        return $n;
     }
 
     /** Secondary text, in the theme's muted color. */

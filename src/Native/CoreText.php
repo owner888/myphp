@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
+use MyPHP\UI\Font;
 use FFI;
 use FFI\CData;
 use RuntimeException;
@@ -17,6 +18,8 @@ final class CoreText
 {
     private const UTF8 = 0x08000100;         // kCFStringEncodingUTF8
     private const UI_FONT_SYSTEM = 2;        // kCTFontUIFontSystem
+    private const UI_FONT_USER_FIXED_PITCH = 1;
+    private const TRAIT_ITALIC = 1 << 0, TRAIT_BOLD = 1 << 1; // CTFontSymbolicTraits
     private const ALPHA_ONLY = 7;            // kCGImageAlphaOnly
 
     public FFI $c;
@@ -48,6 +51,7 @@ final class CoreText
             void  CFRelease(void*);
             unsigned long CFHash(void*);
             void* CTFontCreateUIFontForLanguage(unsigned int, double, void*);
+            void* CTFontCreateCopyWithSymbolicTraits(void*, double, const void*, unsigned int, unsigned int);
             double CTFontGetAscent(void*);
             double CTFontGetDescent(void*);
             CGRect CTFontGetBoundingRectsForGlyphs(void*, unsigned int, const CGGlyph*, CGRect*, long);
@@ -76,10 +80,21 @@ final class CoreText
         $this->valueCallbacks = $this->c->dlsym($cf, 'kCFTypeDictionaryValueCallBacks');
     }
 
-    private function font(float $size)
+    /** The system font (or the fixed-pitch one) at $size with UI\Font style bits. */
+    private function font(float $size, int $style)
     {
-        return $this->fonts["$size"] ??= $this->c->CTFontCreateUIFontForLanguage(self::UI_FONT_SYSTEM, $size, null)
-            ?? throw new RuntimeException('system font');
+        $key = "$size:$style";
+        if (isset($this->fonts[$key])) {
+            return $this->fonts[$key];
+        }
+        $kind = $style & Font::MONO ? self::UI_FONT_USER_FIXED_PITCH : self::UI_FONT_SYSTEM;
+        $font = $this->c->CTFontCreateUIFontForLanguage($kind, $size, null) ?? throw new RuntimeException('system font');
+        $traits = ($style & Font::BOLD ? self::TRAIT_BOLD : 0) | ($style & Font::ITALIC ? self::TRAIT_ITALIC : 0);
+        if ($traits !== 0) {
+            // A font without the variant (no italic fixed-pitch, say) gives null: it stays as it is.
+            $font = $this->c->CTFontCreateCopyWithSymbolicTraits($font, 0.0, null, $traits, $traits) ?? $font;
+        }
+        return $this->fonts[$key] = $font;
     }
 
     /**
@@ -91,10 +106,10 @@ final class CoreText
      *
      * @return array{width: float, ascent: float, descent: float, glyphs: list<array{font: int, glyph: int, x: float, y: float}>, carets: array<int, float>}
      */
-    public function shape(string $text, float $size): array
+    public function shape(string $text, float $size, int $style = 0): array
     {
         $c = $this->c;
-        $font = $this->font($size);
+        $font = $this->font($size, $style);
         $str = $c->CFStringCreateWithCString(null, $text, self::UTF8) ?? throw new RuntimeException('CFString');
         $keys = $c->new('void*[1]'); $keys[0] = $this->fontKey;
         $values = $c->new('void*[1]'); $values[0] = $font;

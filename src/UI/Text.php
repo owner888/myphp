@@ -81,10 +81,15 @@ final class Text implements TextMetrics
         return count($this->lines);
     }
 
-    public function measure(string $text, float $size): array
+    public function measure(string $text, float $size, int $style = 0): array
     {
-        $l = $this->line($text, $size);
+        $l = $this->line($text, $size, $style);
         return [$l['w'], $l['h']];
+    }
+
+    public function ascent(float $size, int $style = 0): float
+    {
+        return $this->line('X', $size, $style)['ascent'];
     }
 
     public function xForIndex(string $text, float $size, int $byte): float
@@ -110,9 +115,9 @@ final class Text implements TextMetrics
     }
 
     /** Paints $text with its top-left corner at ($x, $y), in points. */
-    public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0): void
+    public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
     {
-        $l = $this->line($text, $size);
+        $l = $this->line($text, $size, $style);
         $baseline = $y + $l['ascent'];
         $q = $l['quads'];
         for ($i = 0, $n = count($q); $i < $n; $i += 6) {
@@ -120,21 +125,21 @@ final class Text implements TextMetrics
         }
     }
 
-    private function line(string $text, float $size): array
+    private function line(string $text, float $size, int $style = 0): array
     {
-        $key = "$size\0$text";
+        $key = "$size:$style\0$text";
         $l = &$this->lines[$key];
         if ($l === null) {
-            $l = $this->shape($text, $size);
+            $l = $this->shape($text, $size, $style);
         }
         $l['gen'] = $this->gen;
         return $l;
     }
 
-    private function shape(string $text, float $size): array
+    private function shape(string $text, float $size, int $style): array
     {
         $s = $this->ct->scale;
-        $shaped = $this->ct->shape($text, $size);
+        $shaped = $this->ct->shape($text, $size, $style);
         $quads = [];
         foreach ($shaped['glyphs'] as $g) {
             $key = $g['font'] . ':' . $g['glyph'];

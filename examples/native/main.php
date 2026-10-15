@@ -6,15 +6,17 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Image, ListState};
+use MyPHP\UI\{Content, Context, Font, Image, ListState, Span};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => ''];
 $state['list']->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
 $state['list']->followEnd = true; // at the end, Compose (a new last row) keeps the end in view, as a chat does
-// Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept.
-$state['avatars'] = array_map(fn($p) => Image::fromFile($p, 64), array_slice(glob('/System/Applications/*.app/Contents/Resources/AppIcon.icns'), 0, 12));
+// Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept. Apps whose
+// icon lives in Assets.car ship a tiny, fully transparent icns as a placeholder: those are skipped by size.
+$icons = array_filter(glob('/System/Applications/*.app/Contents/Resources/AppIcon.icns'), fn($p) => filesize($p) > 20000);
+$state['avatars'] = array_map(fn($p) => Image::fromFile($p, 64), array_slice(array_values($icons), 0, 12));
 $state['avatars'] !== [] || throw new RuntimeException('no app icons under /System/Applications');
 
 function inbox(Context $c, array &$s): void
@@ -22,7 +24,8 @@ function inbox(Context $c, array &$s): void
     $t = $c->theme; // light or dark after the system, accent from its settings
     $c->column(0, 0, 1);
       $c->row(12, 8, 0, $t->surface);
-        $c->text('Inbox', 20);
+        $c->rich([new Span('Inbox ', 20, Font::BOLD), new Span(number_format($s['rows']) . ' messages', color: $t->textMuted),
+            new Span('  every third unread', style: Font::ITALIC, color: $t->textMuted)]);
         if ($c->clicked($c->button('Compose'))) { $s['rows']++; $s['last'] = "composed row {$s['rows']}"; }
         if ($c->clicked($c->button('Refresh'))) { $s['replied'] = []; $s['last'] = 'refreshed'; }
         if ($c->clicked($c->button('Top'))) { $s['list']->scrollTo(0); }           // glides there
@@ -35,10 +38,11 @@ function inbox(Context $c, array &$s): void
             $c->row(10, 12, 0, ($i & 1) ? $t->surface : $t->background);
               $c->image($s['avatars'][$i % count($s['avatars'])], 36, 36, 8); // an image quad from the atlas
               $c->column(0, 2, 1);
-                $c->row(0, 6); $c->text("Sender $i", 14); $c->text("主题 {$i}：Subject line number $i is here", 14); $c->end();
+                $unread = $i % 3 === 0 ? Font::BOLD : 0; // bold, as unread mail is
+                $c->row(0, 6); $c->text("Sender $i", 14, style: $unread); $c->text("主题 {$i}：Subject line number $i is here", 14, style: $unread); $c->end();
                 $c->muted("Preview of the message body, truncated to one line of text $i", 12);
               $c->end();
-              $c->muted(sprintf('%02d:%02d', $i % 24, ($i * 7) % 60), 12);
+              $c->text(sprintf('%02d:%02d', $i % 24, ($i * 7) % 60), 12, $t->textMuted, Font::MONO);
               $b = $c->button(isset($s['replied'][$i]) ? 'Replied' : 'Reply');
               if (isset($s['replied'][$i])) { $b->color = $t->success; }
               if ($c->clicked($b)) { $s['replied'][$i] = true; $s['last'] = "replied to $i"; }

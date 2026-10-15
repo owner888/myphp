@@ -10,7 +10,7 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7;
     public const ROW = 0, COLUMN = 1;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
@@ -23,6 +23,10 @@ final class Node
     public bool $focused = false;
     /** Whether this node is a list's chosen row, painted in the selection color. */
     public bool $selected = false;
+    /** For text: Font style bits; for rich text: its spans. */
+    public int $style = 0;
+    /** @var Span[] */
+    public array $spans = [];
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;

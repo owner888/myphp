@@ -30,6 +30,7 @@ final class ImageIO
                 void  CFRelease(void*);
                 void* CGImageSourceCreateWithData(void*, void*);
                 void* CGImageSourceCreateImageAtIndex(void*, unsigned long, void*);
+                unsigned long CGImageSourceGetCount(void*);
                 unsigned long CGImageGetWidth(void*);
                 unsigned long CGImageGetHeight(void*);
                 void  CGImageRelease(void*);
@@ -58,12 +59,25 @@ final class ImageIO
         if ($source === null) {
             throw new RuntimeException('not an image ImageIO can read');
         }
-        $image = $c->CGImageSourceCreateImageAtIndex($source, 0, null);
+        // A file may hold several images (an ICNS its sizes): take the largest.
+        $image = null; $iw = 0; $ih = 0;
+        for ($i = 0, $n = $c->CGImageSourceGetCount($source); $i < $n; $i++) {
+            $candidate = $c->CGImageSourceCreateImageAtIndex($source, $i, null);
+            if ($candidate === null) {
+                continue;
+            }
+            $cw = $c->CGImageGetWidth($candidate); $chh = $c->CGImageGetHeight($candidate);
+            if ($cw * $chh > $iw * $ih) {
+                if ($image !== null) { $c->CGImageRelease($image); }
+                $image = $candidate; $iw = $cw; $ih = $chh;
+            } else {
+                $c->CGImageRelease($candidate);
+            }
+        }
         $c->CFRelease($source);
         if ($image === null) {
             throw new RuntimeException('the image cannot be decoded');
         }
-        $iw = $c->CGImageGetWidth($image); $ih = $c->CGImageGetHeight($image);
         $k = min(1.0, $max / max($iw, $ih));
         $w = max(1, (int)round($iw * $k)); $h = max(1, (int)round($ih * $k));
         $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w * 4, self::$colorSpace, self::RGBA_PREMULTIPLIED_BIG)

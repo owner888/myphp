@@ -47,7 +47,8 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
-src/UI/            Node, Context (column/row/text/muted/button/input/textarea/image/box/list), Layout (flex),
+src/UI/            Node, Context (column/row/text/muted/rich/button/input/textarea/image/box/list), Font (style
+                   bits), Span (rich text run), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo), TextLayout (wrapped lines of a text area),
@@ -132,8 +133,8 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; images; tray, global shortcuts, notifications, window events + state;
+theme; images; rich text (bold/italic/mono, spans); tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; CLI + .app.
 Remaining, in rough order:
-1. Horizontal scrolling; rich text (runs of size/color/weight in one line).
+1. Horizontal scrolling; wrapping rich text (spans are one line today).
 2. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

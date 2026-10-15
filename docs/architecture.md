@@ -95,6 +95,15 @@ snapped to the device-pixel grid; `measure()` feeds `Context::text`, and
 shader samples the atlas for those and runs the rounded-rect SDF for the
 rest, in one pipeline and one draw per frame.
 
+Styles: `UI\Font` bits (BOLD, ITALIC, MONO) reach `CoreText::font`, which
+takes the system or fixed-pitch UI font and applies the bold/italic
+symbolic traits with `CTFontCreateCopyWithSymbolicTraits` (a font without
+the variant keeps the base); fonts and shaped lines are keyed by size and
+style. `Context::rich` lays spans (`UI\Span`: text, size, style, color,
+underline, strikethrough, background) on one baseline, the tallest
+ascent setting it; the painter draws each span's background, glyphs and
+lines. Spans do not wrap yet.
+
 Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
 atlas's size so the shader divides by one size) is texture 1, and a
 `kind = 2` quad carries its slot origin in `u, v` and the slot's pixel
