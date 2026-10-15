@@ -189,8 +189,12 @@ the caret blink.
 
 Any node can take the keyboard focus with `->focusable()`: `Runtime`
 lists it with the buttons and fields (Tab order, the innermost under a
-press), marks it focused in `record` so the painter draws the ring, and
-Enter or Space on it counts as a click, as for a button.
+press), marks it focused in `record`, and Enter or Space on it counts as
+a click, as for a button. The ring shows only while the focus came from
+the keyboard (mygo's `focusVisible`: Tab, the arrows, Enter, Space set
+it; a press that moves the focus clears it), so a click leaves no ring
+but Tabbing to a control shows one; `Node::$focusVisible` is what the
+painter rings by, while fields keep their focused look either way.
 
 Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
 atlas's size so the shader divides by one size) is texture 1, and a

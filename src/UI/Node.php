@@ -27,6 +27,8 @@ final class Node
     public ?TextState $edit = null;
     /** Whether this node has the keyboard focus this frame. */
     public bool $focused = false;
+    /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
+    public bool $focusVisible = false;
     /** Whether this node is a list's chosen row, painted in the selection color. */
     public bool $selected = false;
     /** For text: Font style bits; for rich text: its spans. */

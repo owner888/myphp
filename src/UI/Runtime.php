@@ -60,6 +60,8 @@ final class Runtime
 
     /** Keyboard focus: the node id, the ids that can take it (last frame, in order) and the fields. */
     public ?int $focus = null;
+    /** Whether the focus came from the keyboard (Tab, the arrows, Enter, Space) and so shows a ring, as mygo's focusVisible; a press hides it. */
+    private bool $focusVisible = false;
     private array $focusables = [];
     /** @var array<int, array{0: TextState, 1: float, 2: float, 3: float, 4: float, 5: float}> id => state, text x, text y, line h, size, inner width (text areas) */
     private array $fields = [];
@@ -156,6 +158,7 @@ final class Runtime
                 case 'insert':
                     if ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus])) {
                         $this->activated = $this->focus; // space presses a focused button
+                        $this->focusVisible = true;
                     }
                     break;
             }
@@ -261,8 +264,11 @@ final class Runtime
         if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) {
             $this->focusables[] = $n->id;
             if ($n->focusable && $n->id === $this->focus) {
-                $n->focused = true; // the painter shows the ring; buttons and fields set this while building
+                $n->focused = true; // buttons and fields set this while building
             }
+        }
+        if ($n->focused && $n->id === $this->focus) {
+            $n->focusVisible = $this->focusVisible; // the painter rings it
         }
         if ($n->kind === Node::SLIDER) {
             $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h];
@@ -321,7 +327,10 @@ final class Runtime
         if ($best === null) {
             return;
         }
-        $this->focus = $best;
+        if ($best !== $this->focus) {
+            $this->focus = $best;
+            $this->focusVisible = false;
+        }
         if (isset($this->fields[$best])) {
             $this->placeCaret($best, $x, $y, false);
         }
@@ -415,6 +424,9 @@ final class Runtime
         if ($this->areaCommand($selector)) {
             return;
         }
+        if ($this->focus !== null && !isset($this->fields[$this->focus])) {
+            $this->focusVisible = true; // a key on a focused control: the ring shows
+        }
         if ($this->focus !== null && isset($this->lists[$this->focus])) {
             $l = $this->lists[$this->focus];
             $page = max(1, (int)($l->viewport / max(1.0, $l->estimate)) - 1);
@@ -462,6 +474,7 @@ final class Runtime
         $i = $this->focus === null ? -1 : (int)array_search($this->focus, $this->focusables, true);
         $n = count($this->focusables);
         $this->focus = $this->focusables[(($i + $dir) % $n + $n) % $n];
+        $this->focusVisible = true;
         if (isset($this->fields[$this->focus])) {
             $this->fields[$this->focus][0]->selectAll();
         }

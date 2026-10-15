@@ -61,7 +61,7 @@ final class Painter
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
             return;
         }
-        if ($n->focused && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
+        if ($n->focusVisible && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }
         if ($n->material instanceof Blur) {
@@ -115,7 +115,7 @@ final class Painter
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
-        if ($n->focused && $n->color === null) { // a list or other background-less node: four edges over its children
+        if ($n->focusVisible && $n->color === null) { // a list or other background-less node: four edges over its children
             $list->rect($n->x, $n->y, $n->w, 2, $t->focus, $t->focusAlpha);
             $list->rect($n->x, $n->y + $n->h - 2, $n->w, 2, $t->focus, $t->focusAlpha);
             $list->rect($n->x, $n->y, 2, $n->h, $t->focus, $t->focusAlpha);
@@ -192,7 +192,7 @@ final class Painter
         $box = $t->space(4);
         $y = $n->y + ($n->h - $box) / 2;
         $radius = $n->kind === Node::RADIO ? $box / 2 : $t->radius - 2;
-        if ($n->focused) {
+        if ($n->focusVisible) {
             $list->rect($n->x - 2, $y - 2, $box + 4, $box + 4, $t->focus, $t->focusAlpha, $radius + 2);
         }
         $hovered = $rt?->hovered($n->id) ?? false;
@@ -240,7 +240,7 @@ final class Painter
     {
         $tw = $t->space(7.5); $th = $t->space(4.5); $knob = $th - 4;
         $y = $n->y + ($n->h - $th) / 2;
-        if ($n->focused) {
+        if ($n->focusVisible) {
             $list->ring($n->x - 2, $y - 2, $tw + 4, $th + 4, $t->focus, $t->focusAlpha, $th / 2 + 2, 2.0);
         }
         $hovered = $rt?->hovered($n->id) ?? false;
@@ -280,7 +280,7 @@ final class Painter
             $list->shadow($x, $y, $w, $h, 0x000000, 0.10, $r, 7, 0, 1.5);   // a soft one lifts it
             $list->rect($x, $y, $w, $h, $face, 1.0, $r);
         }
-        if ($n->focused) {
+        if ($n->focusVisible) {
             $list->ring($x - 2, $y - 2, $w + 4, $h + 4, $t->focus, $t->focusAlpha, $r + 2, 2.0);
         }
     }
