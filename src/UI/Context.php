@@ -14,8 +14,9 @@ final class Context
     private array $stack;
 
     /** $width and $height are the room the tree will be laid out in. */
-    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0)
+    public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null)
     {
+        $this->theme ??= Theme::light();
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, null);
         $this->stack = [$this->root];
     }
@@ -85,17 +86,31 @@ final class Context
         return $node;
     }
 
-    public function text(string $s, float $size = 14, int $color = 0x1d1d1f): Node
+    /** Text in the theme's text color, or $color. */
+    public function text(string $s, ?float $size = null, ?int $color = null): Node
     {
+        $size ??= $this->theme->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
-        return $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color));
+        return $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $this->theme->text));
     }
 
-    public function button(string $s, float $size = 13): Node
+    /** Secondary text, in the theme's muted color. */
+    public function muted(string $s, ?float $size = null): Node
     {
+        return $this->text($s, $size, $this->theme->textMuted);
+    }
+
+    /** A primary button: accent face, lighter hovered, darker pressed. */
+    public function button(string $s, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + 24, $h + 10, 0, $s, 0x3377ff, $size, 0xffffff));
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space(6), $h + $t->space(2.5), 0, $s, $t->accent, $size, $t->accentText));
         $n->focused = $this->runtime?->focused($n->id) ?? false;
+        if ($this->runtime?->hovered($n->id)) {
+            $n->color = $this->runtime->input->mouseDown ? $t->accentPressed : $t->accentHover;
+        }
         return $n;
     }
 
@@ -103,10 +118,12 @@ final class Context
      * A single-line text field editing $state. Click or Tab gives it the
      * keyboard; the text input client of the window then edits $state.
      */
-    public function input(TextState $state, string $placeholder = '', float $width = 200, float $size = 14): Node
+    public function input(TextState $state, string $placeholder = '', float $width = 200, ?float $size = null): Node
     {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + 12, 0, $placeholder, 0xffffff, $size, 0x1d1d1f));
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), 0, $placeholder, $t->background, $size, $t->text));
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;

@@ -155,6 +155,14 @@ final class Metal
         return $view;
     }
 
+    /** Sets what the view clears to before each frame. */
+    public static function setClearColor($view, int $rgb): void
+    {
+        $c = ObjC::$c->new('MTLClearColor');
+        $c->r = (($rgb >> 16) & 255) / 255; $c->g = (($rgb >> 8) & 255) / 255; $c->b = ($rgb & 255) / 255; $c->a = 1.0;
+        ObjC::msg('v:k', $view, 'setClearColor:', $c);
+    }
+
     /** Asks an on-demand view for a frame. */
     public static function requestFrame($view): void
     {

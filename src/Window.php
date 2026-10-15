@@ -81,6 +81,7 @@ final class Window
             }
         } else {
             $this->view = $this->nativeView($o);
+            Metal::setClearColor($this->view, App::theme()->background);
         }
         ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
@@ -104,13 +105,13 @@ final class Window
                 $t0 = hrtime(true);
                 $text->beginFrame();
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
-                    $c = new Context($text, $this->runtime, $bounds->w, $bounds->h);
+                    $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme());
                     ($content->view)($c);
                     Layout::measure($c->root);
                     Layout::arrange($c->root, 0, 0, $bounds->w, $bounds->h);
                     return $c->root;
                 });
-                Painter::paint($root, $list, $text);
+                Painter::paint($root, $list, $text, App::theme());
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
                 }
@@ -179,6 +180,15 @@ final class Window
             ]);
         }
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');
+    }
+
+    /** The theme changed: native UI clears to its background and redraws. */
+    public function themeChanged(): void
+    {
+        if ($this->page === null) {
+            Metal::setClearColor($this->view, App::theme()->background);
+            $this->update();
+        }
     }
 
     /** Asks for a frame after state changed outside the view function (native UI). */

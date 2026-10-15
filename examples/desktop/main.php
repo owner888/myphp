@@ -59,9 +59,9 @@ App::whenReady(function () use (&$s, $open, $save, $ask, $context) {
                 if ($c->clicked($c->button('Save As…'))) $save();
                 if ($c->clicked($c->button('Ask…'))) $ask();
               $c->end();
-              $area = $c->column(12, 4, 1, 0xf5f5f7);
+              $area = $c->column(12, 4, 1, $c->theme->surface);
                 foreach (array_slice($s['log'], -12) as $line) {
-                    $c->text($line, 13, 0x444444);
+                    $c->text($line);
                 }
               $c->end();
               if ($c->rightClicked($area)) $context->popup($w);

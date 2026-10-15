@@ -221,6 +221,41 @@ declared to return `const char*` (`sel_getName`) already arrives as a PHP
 string, not a CData. PHP callbacks returning structs by value
 (NSRange, NSRect) work through libffi, verified with a C shim first.
 
+## Theme
+
+`UI\Theme` carries mygo's palette (background, surface and its hover and
+pressed shades, border, text and muted text, accent with shades and its
+text, danger/warning/success, translucent selection and focus, radius,
+spacing, font size) with `light()` and `dark()` defaults. `App::theme()`
+builds it from `Native\Appearance`: dark when NSApp's
+`effectiveAppearance` best-matches DarkAqua, the accent from
+`NSColor.controlAccentColor` converted to sRGB under that appearance,
+with hover/pressed shades derived by scaling. The app delegate observes
+`effectiveAppearance` by KVO and every window re-clears to the new
+background and redraws. `App::setTheme` fixes one instead.
+`NSArray arrayWithObjects:` is variadic and so off limits to the bridge
+(stack-passed on arm64); build arrays with `NSMutableArray addObject:`.
+
+## Packaging
+
+A macOS app bundle runs `Contents/MacOS/<Name>` with no arguments, and a
+PHP script needs an interpreter and a path, so the executable has to be
+one of two things. For development, `myphp build` compiles a 30-line C
+launcher (needs the command line tools) that finds the bundle from its
+own path with `_NSGetExecutablePath`, chdirs to `Resources/app` and execs
+the php that built it with the same flags `dev` uses; the Dock entry is
+the app's, but the process image is Homebrew's php, so `NSBundle
+mainBundle` is not the bundle and the TSM/IMK log lines stay. For release,
+`--launcher micro` packs `Resources/app` (project plus the framework's
+`src`) into a phar whose stub requires the entry, and `spc micro:combine`
+appends it to phpmicro, a static PHP with ext-ffi, with `ffi.enable=1`
+and the JIT settings embedded as INI (`-I`): one Mach-O, a proper main
+bundle, signable and notarizable. Inside the phar, `boot.php` finds
+`./myphp` and the autoloader; `bridge.js` is read through the phar
+stream; `dlopen` only touches system frameworks, so nothing needs to be
+on disk. `DirectoryIterator` returned nothing on the container's mount
+during testing while `scandir` worked, so the CLI walks with `scandir`.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never

@@ -18,7 +18,7 @@ function form(Context $c, array &$s): void
       $c->text('Profile', 20);
       foreach (['name' => 'Name', 'city' => 'City（试试中文输入法）', 'note' => 'Note'] as $key => $label) {
           $c->row(0, 12);
-            $c->column(0, 0); $c->text($label, 13, 0x666666); $c->end();
+            $c->column(0, 0); $c->muted($label); $c->end();
             $field = $c->input($s[$key], $label, 320);
             if ($c->submitted($field)) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
           $c->end();
@@ -29,7 +29,7 @@ function form(Context $c, array &$s): void
       $c->end();
       $c->text($s['greeting'] === '' ? 'Submit, or press Enter in a field.' : $s['greeting'] . " (#{$s['submits']})", 15);
       $n = $s['name'];
-      $c->text(sprintf('name: %d bytes, cursor %d, anchor %d%s', strlen($n->text), $n->cursor, $n->anchor, $n->marked !== null ? ", composing \"{$n->marked}\"" : ''), 12, 0x999999);
+      $c->muted(sprintf('name: %d bytes, cursor %d, anchor %d%s', strlen($n->text), $n->cursor, $n->anchor, $n->marked !== null ? ", composing \"{$n->marked}\"" : ''), 12);
     $c->end();
 }
 

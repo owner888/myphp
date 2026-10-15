@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{CoreText, Metal, ObjC};
-use MyPHP\UI\{GlyphAtlas, Text};
+use MyPHP\Native\{Appearance, CoreText, Metal, ObjC};
+use MyPHP\UI\{GlyphAtlas, Text, Theme};
 use RuntimeException;
 
 /**
@@ -22,6 +22,8 @@ final class App
     private static bool $running = false;
     private static ?string $name = null;
     private static ?Menu $menu = null;
+    private static ?Theme $theme = null;
+    private static bool $themeFixed = false;
     private static $nsApp = null;
     private static ?Metal $metal = null;
     private static ?Text $text = null;
@@ -62,6 +64,11 @@ final class App
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', 0); // regular app, with a Dock icon
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
+            'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
+                if (ObjC::phpStr($keyPath) === 'effectiveAppearance') {
+                    self::themeChanged();
+                }
+            }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
                 self::installMenu(self::$menu ?? Menu::default());
@@ -73,8 +80,46 @@ final class App
                 }
             }],
         ]);
-        ObjC::msg('v:p', self::$nsApp, 'setDelegate:', ObjC::msg('p:', ObjC::alloc('MyPHPAppDelegate'), 'init'));
+        $delegate = ObjC::msg('p:', ObjC::alloc('MyPHPAppDelegate'), 'init');
+        ObjC::msg('v:p', self::$nsApp, 'setDelegate:', $delegate);
+        ObjC::msg('v:ppLp', self::$nsApp, 'addObserver:forKeyPath:options:context:', $delegate, ObjC::str('effectiveAppearance'), 0, null);
         ObjC::msg('v:', self::$nsApp, 'run');
+    }
+
+    /**
+     * The theme windows draw with: light or dark after the system's
+     * appearance, with its accent color, unless setTheme() fixed one.
+     */
+    public static function theme(): Theme
+    {
+        if (self::$theme === null) {
+            self::$theme = self::$nsApp === null ? Theme::light() : self::systemTheme();
+        }
+        return self::$theme;
+    }
+
+    /** Fixes the theme; null returns to following the system. */
+    public static function setTheme(?Theme $theme): void
+    {
+        self::$theme = $theme;
+        self::$themeFixed = $theme !== null;
+        self::themeChanged();
+    }
+
+    private static function systemTheme(): Theme
+    {
+        $dark = Appearance::isDark(self::$nsApp);
+        return ($dark ? Theme::dark() : Theme::light())->withAccent(Appearance::accent(self::$nsApp));
+    }
+
+    private static function themeChanged(): void
+    {
+        if (!self::$themeFixed) {
+            self::$theme = self::$nsApp === null ? null : self::systemTheme();
+        }
+        foreach (Window::all() as $w) {
+            $w->themeChanged();
+        }
     }
 
     /** The menu bar; Menu::default() unless set. Can be set before or after run(). */

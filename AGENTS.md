@@ -38,6 +38,8 @@ and keep the semantics; rename to PHP conventions, do not redesign.
 ## Layout
 
 ```
+bin/myphp               the CLI: init (templates), dev (run + restart on change + TS client), build (.app), micro (setup notes)
+src/autoload.php        PSR-4 for MyPHP\ without Composer; projects require it through their boot.php
 src/App.php             the application: whenReady(), run(), quit(); shared Metal device and text engine
 src/Window.php          a native-UI window: NSWindow + View, per-window Runtime/Input, frame = build/layout/paint
 src/WindowOptions.php   title, size, position, hidden, disableResize, content | html | url
@@ -68,6 +70,8 @@ src/UI/Runtime.php      last frame's rects by node id; clicked()/hovered(); scro
 src/UI/Scrollable.php   what the wheel drives: ScrollState (offset) or ListState (anchor row)
 src/UI/ScrollState.php  a scrolling container's offset, owned by the app
 src/UI/ListState.php    a virtualized list's anchor row, offset, measured heights and estimate
+src/UI/Theme.php        colors and metrics widgets draw with; light()/dark(); withAccent()
+src/Native/Appearance.php dark-or-light and the accent color from NSApp's effectiveAppearance
 src/UI/Content.php      Content::view(fn(Context)) — what a window shows
 src/UI/Painter.php      tree -> display list: fills, labels (centered in buttons), scroll clips
 examples/native/        an inbox: App::whenReady -> new Window(WindowOptions(content: Content::view(...)))
@@ -91,6 +95,11 @@ they run without Composer.
   only rows for 1.5 views of estimated height are built, heights are
   learned from layout, unknown rows count as the average. The per-frame
   cost of a million-row list is the rows in view.
+- **Colors come from the theme**, never literals in widgets or examples:
+  `$c->theme` (App::theme()) is light or dark after the system with its
+  accent color, re-read on the `effectiveAppearance` KVO; `Context::text`
+  defaults to `theme->text`, `muted()` to `textMuted`, buttons to the
+  accent with hover/pressed shades. A window clears to `theme->background`.
 - **Keys go through `interpretKeyEvents:`**, never parsed by hand: the input
   context calls `insertText:`, `setMarkedText:` and `doCommandBySelector:`
   on the view, which edits `Input::$focus` (the focused field's TextState)
@@ -136,10 +145,20 @@ Measured on an M-series Mac: 9 000 nodes rebuilt + laid out + painted in
 ~4 ms per frame at 60 fps, memory flat. Budget is 16.6 ms; the language is
 not the bottleneck, the architecture is what keeps it that way.
 
+## Projects and bundles
+
+`myphp init` writes myphp.json, boot.php (framework from `./myphp` in a
+built app, else the checkout) and app.php; `myphp build` makes `<Name>.app`
+with a C launcher that execs this php (development) or, `--launcher micro`,
+a phar combined with phpmicro by static-php-cli (release, one static
+binary). Details in docs/architecture.md, Packaging. static-php-cli is the
+one outside tool, for release builds only.
+
 ## Working on it
 
-- PHP ≥ 8.3 with `ext-ffi`; run examples with `./run.sh native|webview`,
-  which sets `ffi.enable=1` and OPcache JIT (`opcache.jit=1255`).
+- PHP ≥ 8.3 with `ext-ffi`; run examples with `./run.sh native|webview|...`
+  and projects with `bin/myphp dev`; both set `ffi.enable=1` and OPcache
+  JIT (`opcache.jit=1255`). `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on every changed file; run pure-PHP checks
   in `tests/` if they exist for the area; ask the developer to run GUI
   examples and paste the stats line.

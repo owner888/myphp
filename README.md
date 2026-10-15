@@ -49,6 +49,8 @@ Early. What works today, on macOS / Apple Silicon:
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
 | Text fields with input methods, selection, Edit menu, Tab focus | works (`examples/form`) |
+| Theme: light/dark after the system, its accent color, live switching | works |
+| `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
@@ -58,6 +60,15 @@ Early. What works today, on macOS / Apple Silicon:
 Measured in `examples/native 1000` on an M-series Mac: 9 000 nodes rebuilt,
 laid out and painted per frame in about 6 ms with real text, 60 fps while
 scrolling; frames are only built when something changes.
+
+### The command line
+
+```sh
+bin/myphp init my-app              # a native-UI project (--template web for a page calling PHP)
+cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerates the TS client
+../myphp/bin/myphp build           # dist/MyApp.app, a launcher that execs this machine's php
+../myphp/bin/myphp build --launcher micro   # one static binary via static-php-cli (see `myphp micro`)
+```
 
 ### Requirements
 
@@ -90,7 +101,8 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ### Layout
 
 ```
-src/          App, Window, WindowOptions
+bin/myphp     the command line: init, dev, build, micro
+src/          App, Window, WindowOptions, Menu, Dialog, Ipc, TypeScript
 src/Native/   OS bridges: ObjC runtime, Metal, CoreText, the event view
 src/UI/       the toolkit: Context (tree building), Layout (flex), Text, Runtime (input), Painter
 examples/     runnable apps
@@ -146,6 +158,8 @@ App::run();
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
 | 文本框：输入法、选区、Edit 菜单、Tab 焦点 | 可用（`examples/form`） |
+| 主题：跟随系统明暗和强调色，实时切换 | 可用 |
+| `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
@@ -153,6 +167,15 @@ App::run();
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
 在 M 系列 Mac 上用 `examples/native 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
+
+### 命令行
+
+```sh
+bin/myphp init my-app              # 原生 UI 项目（--template web 是调用 PHP 的网页项目）
+cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重新生成 TS client
+../myphp/bin/myphp build           # dist/MyApp.app，启动器 exec 本机的 php
+../myphp/bin/myphp build --launcher micro   # 用 static-php-cli 打成单个静态二进制（见 `myphp micro`）
+```
 
 ### 环境要求
 
@@ -185,7 +208,8 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ### 目录
 
 ```
-src/          App、Window、WindowOptions
+bin/myphp     命令行：init、dev、build、micro
+src/          App、Window、WindowOptions、Menu、Dialog、Ipc、TypeScript
 src/Native/   操作系统桥接：ObjC 运行时、Metal、CoreText、事件视图
 src/UI/       工具包：Context（建树）、Layout（flex）、Text、Runtime（输入）、Painter
 examples/     可运行的示例

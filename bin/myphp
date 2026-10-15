@@ -1,0 +1,397 @@
+#!/usr/bin/env php
+<?php
+// The MyPHP command line, as mygo's: init a project, run it while developing,
+// build an app bundle. Pure PHP, no dependencies.
+//
+//   myphp init <dir> [--template native|web]   scaffold a project
+//   myphp dev [dir]                            run it, restart on changes, regenerate the TS client
+//   myphp build [dir] [--launcher exec|micro] [--out dist]   build <Name>.app
+//   myphp micro                                how to get static-php-cli and micro.sfx
+declare(strict_types=1);
+
+const FRAMEWORK = __DIR__ . '/..';
+const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
+
+function fail(string $msg): never
+{
+    fwrite(STDERR, "myphp: $msg\n");
+    exit(1);
+}
+
+function option(array &$args, string $name, ?string $default = null): ?string
+{
+    foreach ($args as $i => $a) {
+        if ($a === "--$name" && isset($args[$i + 1])) {
+            $v = $args[$i + 1];
+            array_splice($args, $i, 2);
+            return $v;
+        }
+        if (str_starts_with($a, "--$name=")) {
+            array_splice($args, $i, 1);
+            return substr($a, strlen($name) + 3);
+        }
+    }
+    return $default;
+}
+
+/** @return array{dir: string, config: array} */
+function project(array $args): array
+{
+    $dir = realpath($args[0] ?? '.') ?: fail('no such directory');
+    $file = "$dir/myphp.json";
+    is_file($file) || fail("$dir has no myphp.json; run `myphp init` first");
+    $config = json_decode(file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
+    isset($config['name'], $config['entry']) || fail('myphp.json needs "name" and "entry"');
+    return ['dir' => $dir, 'config' => $config];
+}
+
+function sh(array $cmd, ?string $cwd = null): int
+{
+    $p = proc_open($cmd, [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $cwd);
+    return proc_close($p);
+}
+
+// ---- init ---------------------------------------------------------------
+function init(array $args): void
+{
+    $template = option($args, 'template', 'native');
+    $dir = $args[0] ?? fail('usage: myphp init <dir> [--template native|web]');
+    in_array($template, ['native', 'web'], true) || fail("unknown template $template");
+    !file_exists($dir) || fail("$dir exists");
+    mkdir($dir, 0755, true);
+    $name = ucfirst(preg_replace('/[^A-Za-z0-9]+/', '', basename($dir))) ?: 'App';
+    $id = 'com.example.' . strtolower($name);
+    file_put_contents("$dir/myphp.json", json_encode([
+        'name' => $name,
+        'bundleId' => $id,
+        'version' => '0.1.0',
+        'entry' => 'app.php',
+        'framework' => realpath(FRAMEWORK),
+        'bindings' => $template === 'web' ? 'src/myphp.ts' : null,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    file_put_contents("$dir/boot.php", <<<'PHP'
+    <?php
+    // Loads MyPHP: from ./myphp inside a built app, else from the framework
+    // checkout myphp.json points at (or $MYPHP_HOME).
+    declare(strict_types=1);
+
+    $framework = is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp'
+        : (getenv('MYPHP_HOME') ?: json_decode(file_get_contents(__DIR__ . '/myphp.json'), true)['framework']);
+    require $framework . '/src/autoload.php';
+
+    PHP);
+    file_put_contents("$dir/.gitignore", "/dist/\n/vendor/\n.DS_Store\n");
+    if ($template === 'native') {
+        file_put_contents("$dir/app.php", <<<PHP
+        <?php
+        declare(strict_types=1);
+
+        use MyPHP\\{App, Window, WindowOptions};
+        use MyPHP\\UI\\{Content, Context};
+
+        require __DIR__ . '/boot.php';
+
+        \$state = ['count' => 0];
+
+        App::setName('$name');
+        App::whenReady(function () use (&\$state) {
+            new Window(new WindowOptions(title: '$name', width: 420, height: 260,
+                content: Content::view(function (Context \$c) use (&\$state) {
+                    \$c->column(24, 12, 1);
+                      \$c->text("Count: {\$state['count']}", 24);
+                      \$c->row(0, 8);
+                        if (\$c->clicked(\$c->button('Increment'))) { \$state['count']++; }
+                        if (\$c->clicked(\$c->button('Reset'))) { \$state['count'] = 0; }
+                      \$c->end();
+                      \$c->muted('Native UI drawn by MyPHP on the GPU. Edit app.php and save: myphp dev restarts it.');
+                    \$c->end();
+                })));
+        });
+        App::run();
+
+        PHP);
+    } else {
+        mkdir("$dir/src");
+        file_put_contents("$dir/app.php", <<<PHP
+        <?php
+        declare(strict_types=1);
+
+        use MyPHP\\{App, Ipc, Window, WindowOptions};
+
+        require __DIR__ . '/boot.php';
+
+        /** Greeter says hello. */
+        final class Greeter
+        {
+            /** Greet returns a greeting. */
+            public function greet(string \$name): string
+            {
+                return "Hello, \$name";
+            }
+        }
+
+        Ipc::bind(new Greeter());
+
+        App::setName('$name');
+        App::whenReady(function () {
+            new Window(new WindowOptions(title: '$name', width: 640, height: 420,
+                url: 'file://' . __DIR__ . '/src/index.html'));
+        });
+        App::run();
+
+        PHP);
+        file_put_contents("$dir/src/index.html", <<<HTML
+        <!doctype html><meta charset="utf-8">
+        <body style="font: 15px -apple-system, system-ui; padding: 24px">
+        <h2>$name</h2>
+        <p id="out">…</p>
+        <script>
+          // The typed client, src/myphp.ts, is regenerated by `myphp dev`; plain JS uses window.myphp.
+          myphp.call("Greeter.greet", "Ada").then(s => out.textContent = s);
+        </script>
+
+        HTML);
+    }
+    echo "created $dir ($template)\n  cd $dir && " . basename($_SERVER['argv'][0]) . " dev\n";
+}
+
+// ---- dev ----------------------------------------------------------------
+/** @return array<string, int> path => mtime of the files a change of which restarts the app */
+function snapshot(string $dir, array $config): array
+{
+    $files = [];
+    $skip = ['dist', 'vendor', 'node_modules', '.git'];
+    $bindings = "$dir/" . ($config['bindings'] ?? '');
+    $walk = function (string $root) use (&$walk, &$files, $skip, $bindings): void {
+        foreach (scandir($root) ?: [] as $name) {
+            if ($name === '.' || $name === '..' || in_array($name, $skip, true)) {
+                continue;
+            }
+            $path = "$root/$name";
+            if (is_dir($path)) {
+                $walk($path);
+            } elseif (preg_match('/\.(php|html|js|css|json)$/', $name) && $path !== $bindings) {
+                $files[$path] = filemtime($path);
+            }
+        }
+    };
+    $walk($dir);
+    $walk((is_dir("$dir/myphp") ? "$dir/myphp" : ($config['framework'] ?? FRAMEWORK)) . '/src');
+    return $files;
+}
+
+function generateBindings(string $dir, array $config): void
+{
+    if (empty($config['bindings'])) {
+        return;
+    }
+    $out = "$dir/{$config['bindings']}";
+    @mkdir(dirname($out), 0755, true);
+    $p = proc_open([PHP_BINARY, ...PHP_FLAGS, "$dir/{$config['entry']}"], [2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_GENERATE' => $out] + getenv());
+    proc_close($p);
+    echo "myphp: wrote {$config['bindings']}\n";
+}
+
+function dev(array $args): void
+{
+    $watch = option($args, 'watch', '1') !== '0';
+    ['dir' => $dir, 'config' => $c] = project($args);
+    $entry = "$dir/{$c['entry']}";
+    while (true) {
+        generateBindings($dir, $c);
+        $seen = snapshot($dir, $c);
+        $proc = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_DEV' => '1'] + getenv());
+        echo "myphp: running {$c['entry']}" . ($watch ? ', restarts on change' : '') . "\n";
+        $changed = false;
+        while (proc_get_status($proc)['running']) {
+            usleep(500_000);
+            if ($watch && snapshot($dir, $c) !== $seen) {
+                $changed = true;
+                echo "myphp: change detected, restarting\n";
+                proc_terminate($proc, 15);
+                break;
+            }
+        }
+        $code = proc_close($proc);
+        if (!$changed) {
+            exit($code);
+        }
+    }
+}
+
+// ---- build --------------------------------------------------------------
+function build(array $args): void
+{
+    $launcher = option($args, 'launcher', 'exec');
+    $outDir = option($args, 'out', 'dist');
+    $icon = option($args, 'icon', null);
+    ['dir' => $dir, 'config' => $c] = project($args);
+    in_array($launcher, ['exec', 'micro'], true) || fail("--launcher is exec or micro");
+    // Check what the launcher needs before touching dist, so a failed build leaves the last one.
+    if ($launcher === 'exec') {
+        trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
+    } else {
+        $spc = trim((string)shell_exec('command -v spc')) ?: fail("spc not found; see `myphp micro`");
+        $micro = getenv('MYPHP_MICRO') ?: (getenv('HOME') . '/.myphp/micro.sfx');
+        is_file($micro) || fail("no micro.sfx at $micro; see `myphp micro`");
+    }
+    $name = $c['name'];
+    $app = (str_starts_with($outDir, '/') ? $outDir : "$dir/$outDir") . "/$name.app";
+    $contents = "$app/Contents";
+    if (is_dir($app)) {
+        sh(['rm', '-rf', $app]);
+    }
+    foreach (["$contents/MacOS", "$contents/Resources/app/myphp"] as $d) {
+        mkdir($d, 0755, true);
+    }
+    // The app's files and the framework's src, as the bundle's Resources/app.
+    copyTree($dir, "$contents/Resources/app", ['dist', 'vendor', 'node_modules', '.git', 'myphp', '.DS_Store']);
+    copyTree(realpath($c['framework'] ?? FRAMEWORK) . '/src', "$contents/Resources/app/myphp/src", []);
+    $iconFile = $icon ?? ($c['icon'] ?? null);
+    if ($iconFile !== null) {
+        $iconFile = str_starts_with($iconFile, '/') ? $iconFile : "$dir/$iconFile";
+        is_file($iconFile) && str_ends_with($iconFile, '.icns') || fail("icon must be an .icns file: $iconFile");
+        copy($iconFile, "$contents/Resources/$name.icns");
+    }
+    file_put_contents("$contents/Info.plist", plist([
+        'CFBundleName' => $name,
+        'CFBundleDisplayName' => $name,
+        'CFBundleIdentifier' => $c['bundleId'] ?? 'com.example.' . strtolower($name),
+        'CFBundleVersion' => $c['version'] ?? '0.1.0',
+        'CFBundleShortVersionString' => $c['version'] ?? '0.1.0',
+        'CFBundleExecutable' => $name,
+        'CFBundlePackageType' => 'APPL',
+        'CFBundleInfoDictionaryVersion' => '6.0',
+        'LSMinimumSystemVersion' => '11.0',
+        'NSHighResolutionCapable' => true,
+        'NSPrincipalClass' => 'NSApplication',
+        'LSApplicationCategoryType' => 'public.app-category.utilities',
+    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : [])));
+    file_put_contents("$contents/PkgInfo", 'APPL????');
+    if ($launcher === 'exec') {
+        buildExecLauncher("$contents/MacOS/$name", $c['entry']);
+    } else {
+        buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $spc, $micro);
+    }
+    echo "built $app ($launcher launcher)\n  open \"$app\"\n";
+}
+
+function copyTree(string $from, string $to, array $skip): void
+{
+    @mkdir($to, 0755, true);
+    foreach (scandir($from) ?: fail("cannot read $from") as $name) {
+        if ($name === '.' || $name === '..' || in_array($name, $skip, true)) {
+            continue;
+        }
+        is_dir("$from/$name") ? copyTree("$from/$name", "$to/$name", $skip) : copy("$from/$name", "$to/$name");
+    }
+}
+
+function plist(array $kv): string
+{
+    $x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n";
+    foreach ($kv as $k => $v) {
+        $x .= "\t<key>$k</key>\n\t" . (is_bool($v) ? ($v ? '<true/>' : '<false/>') : '<string>' . htmlspecialchars($v, ENT_XML1) . '</string>') . "\n";
+    }
+    return $x . "</dict>\n</plist>\n";
+}
+
+/**
+ * A small C program as the executable: it execs the php this build found
+ * (or $MYPHP_PHP) on Resources/app/<entry>. For development: the app then
+ * depends on that php being installed, and the process is php's, not the
+ * bundle's. Needs a C compiler (Xcode command line tools).
+ */
+function buildExecLauncher(string $out, string $entry): void
+{
+    $php = PHP_BINARY;
+    $flags = implode(', ', array_map(fn($f) => '"' . $f . '"', PHP_FLAGS));
+    $src = <<<C
+    #include <mach-o/dyld.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <unistd.h>
+    #include <limits.h>
+    int main(void) {
+        char exe[PATH_MAX], real[PATH_MAX], app[PATH_MAX], entry[PATH_MAX];
+        uint32_t n = sizeof exe;
+        if (_NSGetExecutablePath(exe, &n) != 0 || realpath(exe, real) == NULL) { perror("launcher"); return 1; }
+        char *slash = strrchr(real, '/'); *slash = 0;      /* Contents/MacOS */
+        slash = strrchr(real, '/'); *slash = 0;            /* Contents */
+        snprintf(app, sizeof app, "%s/Resources/app", real);
+        snprintf(entry, sizeof entry, "%s/%s", app, "$entry");
+        const char *php = getenv("MYPHP_PHP"); if (php == NULL) php = "$php";
+        chdir(app);
+        execl(php, php, $flags, entry, (char *)0);
+        perror("launcher: exec php");
+        return 1;
+    }
+
+    C;
+    $cFile = tempnam(sys_get_temp_dir(), 'myphp') . '.c';
+    file_put_contents($cFile, $src);
+    $code = sh(['cc', '-O2', '-Wall', '-o', $out, $cFile]);
+    unlink($cFile);
+    $code === 0 || fail('compiling the launcher failed (is Xcode\'s command line tools installed? xcode-select --install)');
+}
+
+/**
+ * The app as one static binary: the project packed as a phar, combined
+ * with phpmicro by static-php-cli (`spc micro:combine`), the INI the app
+ * needs embedded. Needs spc on PATH and micro.sfx (see `myphp micro`).
+ */
+function buildMicroLauncher(string $out, string $appDir, string $entry, string $spc, string $micro): void
+{
+    $phar = sys_get_temp_dir() . '/myphp-' . getmypid() . '.phar';
+    @unlink($phar);
+    $code = sh([PHP_BINARY, '-d', 'phar.readonly=0', '-r', <<<PHP
+    \$p = new Phar('$phar'); \$p->buildFromDirectory('$appDir');
+    \$p->setStub("<?php Phar::mapPhar('app.phar'); require 'phar://app.phar/$entry'; __HALT_COMPILER();");
+    PHP]);
+    $code === 0 || fail('building the phar failed');
+    $ini = [];
+    foreach (array_chunk(PHP_FLAGS, 2) as [, $setting]) {
+        $ini[] = '-I';
+        $ini[] = $setting;
+    }
+    $code = sh([$spc, 'micro:combine', $phar, '-M', $micro, '-O', $out, ...$ini]);
+    unlink($phar);
+    $code === 0 || fail('spc micro:combine failed');
+    chmod($out, 0755);
+}
+
+// ---- micro --------------------------------------------------------------
+function micro(): void
+{
+    echo <<<TXT
+    A release build (myphp build --launcher micro) needs static-php-cli and a
+    phpmicro built with the ffi extension. Once, on this Mac:
+
+      # 1. static-php-cli (spc), a static PHP builder: https://static-php.dev
+      curl -fsSL -o /usr/local/bin/spc https://dl.static-php.dev/static-php-cli/spc-bin/nightly/spc-macos-aarch64
+      chmod +x /usr/local/bin/spc
+      spc doctor --auto-fix
+
+      # 2. a micro.sfx with the extensions MyPHP uses (several minutes the first time)
+      spc download --for-extensions=ffi,mbstring,ctype,opcache,phar,json --with-php=8.4
+      spc build --build-micro ffi,mbstring,ctype,opcache,phar,json
+      mkdir -p ~/.myphp && cp buildroot/bin/micro.sfx ~/.myphp/micro.sfx
+
+    Then `myphp build --launcher micro` packs the app as a phar and combines
+    it with micro.sfx into Contents/MacOS/<Name>, INI embedded. \$MYPHP_MICRO
+    overrides the micro.sfx path.
+
+    TXT;
+}
+
+// ---- main ---------------------------------------------------------------
+$args = array_slice($_SERVER['argv'], 1);
+$cmd = array_shift($args) ?? '';
+match ($cmd) {
+    'init' => init($args),
+    'dev' => dev($args),
+    'build' => build($args),
+    'micro' => micro(),
+    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] | micro"),
+};
