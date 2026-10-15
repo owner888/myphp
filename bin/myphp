@@ -6,7 +6,7 @@
 //   myphp init <dir> [--template native|web]   scaffold a project
 //   myphp dev [dir]                            run it, restart on changes, regenerate the TS client
 //   myphp build [dir] [--launcher exec|micro] [--out dist]   build <Name>.app
-//   myphp micro                                how to get static-php-cli and micro.sfx
+//   myphp micro [--php 8.4] [--manual]         get static-php-cli and build micro.sfx (once), or print the steps
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
@@ -231,9 +231,7 @@ function build(array $args): void
     if ($launcher === 'exec') {
         trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
     } else {
-        $spc = trim((string)shell_exec('command -v spc')) ?: fail("spc not found; see `myphp micro`");
-        $micro = getenv('MYPHP_MICRO') ?: (getenv('HOME') . '/.myphp/micro.sfx');
-        is_file($micro) || fail("no micro.sfx at $micro; see `myphp micro`");
+        [$spc, $micro] = ensureMicro(option($args, 'php', null));
     }
     $name = $c['name'];
     $app = (str_starts_with($outDir, '/') ? $outDir : "$dir/$outDir") . "/$name.app";
@@ -351,7 +349,7 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
     PHP]);
     $code === 0 || fail('building the phar failed');
     $ini = [];
-    foreach (array_chunk(PHP_FLAGS, 2) as [, $setting]) {
+    foreach (MICRO_INI as $setting) {
         $ini[] = '-I';
         $ini[] = $setting;
     }
@@ -362,27 +360,86 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
 }
 
 // ---- micro --------------------------------------------------------------
-function micro(): void
+// No opcache in the static launcher: the micro SAPI's opcache crashes on
+// phar:// timestamps (SIGBUS in zend_get_file_handle_timestamp) and its JIT
+// segfaults on arm64 macOS, so the micro build runs the plain interpreter.
+const MICRO_INI = ['ffi.enable=1', 'memory_limit=512M'];
+const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json';
+const MICRO_PHP = '8.4';
+const SPC_NIGHTLY = 'https://dl.static-php.dev/static-php-cli/spc-bin/nightly/';
+
+/** The spc binary: on PATH, or downloaded once to ~/.myphp/spc. */
+function ensureSpc(): string
 {
-    echo <<<TXT
-    A release build (myphp build --launcher micro) needs static-php-cli and a
-    phpmicro built with the ffi extension. Once, on this Mac:
+    $found = trim((string)shell_exec('command -v spc'));
+    if ($found !== '') {
+        return $found;
+    }
+    $home = getenv('HOME') . '/.myphp';
+    $spc = "$home/spc";
+    if (is_file($spc)) {
+        return $spc;
+    }
+    @mkdir($home, 0755, true);
+    $arch = php_uname('m') === 'arm64' ? 'aarch64' : 'x86_64';
+    $url = SPC_NIGHTLY . "spc-macos-$arch";
+    echo "myphp: downloading static-php-cli from $url\n";
+    sh(['curl', '-fsSL', '-o', $spc, $url]) === 0 || fail("downloading spc failed; see `myphp micro --manual`");
+    chmod($spc, 0755);
+    return $spc;
+}
 
-      # 1. static-php-cli (spc), a static PHP builder: https://static-php.dev
-      curl -fsSL -o /usr/local/bin/spc https://dl.static-php.dev/static-php-cli/spc-bin/nightly/spc-macos-aarch64
-      chmod +x /usr/local/bin/spc
-      spc doctor --auto-fix
+/**
+ * spc and a micro.sfx with MyPHP's extensions, building the latter once
+ * (minutes: it compiles PHP). $MYPHP_MICRO points at a micro.sfx of your own.
+ *
+ * @return array{0: string, 1: string} spc path, micro.sfx path
+ */
+function ensureMicro(?string $phpVersion = null): array
+{
+    $spc = ensureSpc();
+    $micro = getenv('MYPHP_MICRO') ?: (getenv('HOME') . '/.myphp/micro.sfx');
+    if (is_file($micro)) {
+        return [$spc, $micro];
+    }
+    $php = $phpVersion ?? getenv('MYPHP_PHP_VERSION') ?: MICRO_PHP;
+    $build = getenv('HOME') . '/.myphp/build';
+    @mkdir($build, 0755, true);
+    // doctor unpacks tools (pkg-config) into its working directory, which download and build must share.
+    sh([$spc, 'doctor', '--auto-fix'], $build) === 0 || fail('spc doctor found problems it could not fix');
+    echo "myphp: building phpmicro $php with " . MICRO_EXTENSIONS . " in $build (once; this compiles PHP and takes a while)\n";
+    sh([$spc, 'download', '--for-extensions=' . MICRO_EXTENSIONS, "--with-php=$php"], $build) === 0 || fail('spc download failed');
+    sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro'], $build) === 0 || fail('spc build failed');
+    $built = "$build/buildroot/bin/micro.sfx";
+    is_file($built) || fail("spc built nothing at $built");
+    copy($built, $micro);
+    chmod($micro, 0755);
+    echo "myphp: micro.sfx ready at $micro\n";
+    return [$spc, $micro];
+}
 
-      # 2. a micro.sfx with the extensions MyPHP uses (several minutes the first time)
-      spc download --for-extensions=ffi,mbstring,ctype,opcache,phar,json --with-php=8.4
-      spc build --build-micro ffi,mbstring,ctype,opcache,phar,json
-      mkdir -p ~/.myphp && cp buildroot/bin/micro.sfx ~/.myphp/micro.sfx
+function micro(array $args): void
+{
+    if (option($args, 'manual', null) !== null || in_array('--manual', $args, true)) {
+        $ext = MICRO_EXTENSIONS; $php = MICRO_PHP; $url = SPC_NIGHTLY . 'spc-macos-aarch64';
+        echo <<<TXT
+        What `myphp micro` does, by hand:
 
-    Then `myphp build --launcher micro` packs the app as a phar and combines
-    it with micro.sfx into Contents/MacOS/<Name>, INI embedded. \$MYPHP_MICRO
-    overrides the micro.sfx path.
+          curl -fsSL -o ~/.myphp/spc $url && chmod +x ~/.myphp/spc
+          mkdir -p ~/.myphp/build && cd ~/.myphp/build   # doctor, download and build share this directory
+          ~/.myphp/spc doctor --auto-fix
+          ~/.myphp/spc download --for-extensions=$ext --with-php=$php
+          ~/.myphp/spc build $ext --build-micro
+          cp buildroot/bin/micro.sfx ~/.myphp/micro.sfx
 
-    TXT;
+        \$MYPHP_MICRO points `myphp build --launcher micro` at another micro.sfx,
+        \$MYPHP_PHP_VERSION or --php picks the PHP version to build.
+
+        TXT;
+        return;
+    }
+    [$spc, $micro] = ensureMicro(option($args, 'php', null));
+    echo "spc: $spc\nmicro.sfx: $micro\n";
 }
 
 // ---- main ---------------------------------------------------------------
@@ -392,6 +449,6 @@ match ($cmd) {
     'init' => init($args),
     'dev' => dev($args),
     'build' => build($args),
-    'micro' => micro(),
-    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] | micro"),
+    'micro' => micro($args),
+    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual]"),
 };

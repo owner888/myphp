@@ -249,8 +249,13 @@ mainBundle` is not the bundle and the TSM/IMK log lines stay. For release,
 `--launcher micro` packs `Resources/app` (project plus the framework's
 `src`) into a phar whose stub requires the entry, and `spc micro:combine`
 appends it to phpmicro, a static PHP with ext-ffi, with `ffi.enable=1`
-and the JIT settings embedded as INI (`-I`): one Mach-O, a proper main
-bundle, signable and notarizable. Inside the phar, `boot.php` finds
+and `memory_limit` embedded as INI (`-I`): one Mach-O, a proper main
+bundle, signable and notarizable. The micro build carries no opcache: in
+the micro SAPI opcache's `zend_get_file_handle_timestamp` takes a
+`phar://` path as a pointer (SIGBUS at an ASCII address) and its JIT
+segfaults on arm64 even on a plain file, so the static launcher runs the
+interpreter without JIT; `dev` and the exec launcher keep the JIT flags
+on the Homebrew php. Inside the phar, `boot.php` finds
 `./myphp` and the autoloader; `bridge.js` is read through the phar
 stream; `dlopen` only touches system frameworks, so nothing needs to be
 on disk. `DirectoryIterator` returned nothing on the container's mount
