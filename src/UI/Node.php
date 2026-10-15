@@ -10,8 +10,12 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11, PROGRESS = 12;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11, PROGRESS = 12, SWITCH = 13, SPINNER = 14;
     public const ROW = 0, COLUMN = 1;
+    /** Alignments for align(), alignSelf() and justify(); AUTO is a row's CENTER and a column's STRETCH across, START along. */
+    public const AUTO = -1, START = 0, CENTER = 1, END = 2, STRETCH = 3;
+    /** How this container places its children across its axis (align) and along it when none grows (justify), and how it sits across its parent's (self). */
+    public int $align = self::AUTO, $self = self::AUTO, $justify = self::START;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
     public int $id = 0;
@@ -53,7 +57,7 @@ final class Node
     public Glass|Blur|ScrollEdge|null $material = null;
     /** Whether the pointer is pressing this node (for interactive glass); Context sets it on material nodes. */
     public bool $pressed = false;
-    /** For an image node: what it shows, its corner radius and opacity. */
+    /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;
     public float $alpha = 1;
@@ -106,6 +110,34 @@ final class Node
     public function tooltip(string $text): static
     {
         $this->tooltip = $text;
+        return $this;
+    }
+
+    /** Places this container's children across its axis: a row's vertically, a column's horizontally (mygo's AlignItems); rows center by default, columns stretch. */
+    public function align(int $align): static
+    {
+        $this->align = $align;
+        return $this;
+    }
+
+    /** Places this node across its parent's axis, over the parent's align() (mygo's AlignSelf). */
+    public function alignSelf(int $align): static
+    {
+        $this->self = $align;
+        return $this;
+    }
+
+    /** Places this container's children along its axis when none grows: packed at the START, in the CENTER, or at the END (mygo's Justify). */
+    public function justify(int $justify): static
+    {
+        $this->justify = $justify;
+        return $this;
+    }
+
+    /** Centers this container's children along and across its axis (mygo's Center). */
+    public function center(): static
+    {
+        $this->justify = self::CENTER; $this->align = self::CENTER;
         return $this;
     }
 

@@ -45,6 +45,13 @@ final class Runtime
     /** The pointer the window should show over the hovered node: 'arrow' or 'pointer' (links). */
     public string $cursor = 'arrow';
     private bool $animating = false;
+    /** Steppers built this frame, by id, for the arrow keys. */
+    private array $steppers = [];
+    /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
+    private array $jumps = [];
+    /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper], or null. */
+    private ?array $hold = null;
+    private const HOLD_DELAY = 0.4, HOLD_RATE = 0.08;
     /** A thumb being dragged: its state, the pointer's last y and content points per thumb point. */
     private ?array $drag = null;
     private int $lastFrame = 0;
@@ -84,6 +91,7 @@ final class Runtime
         $this->doubleClicks = [];
         $this->slid = [];
         $this->steps = [];
+        $this->jumps = [];
         $this->activated = null;
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
@@ -111,6 +119,7 @@ final class Runtime
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
                     $this->pressAt($e[1], $e[2]);
+                    $this->hold = [$e[1], $e[2], $now / 1e9, 0, false];
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
@@ -121,6 +130,7 @@ final class Runtime
                 case 'up':
                     $this->input->mouseDown = false;
                     $this->sliding = null;
+                    $this->hold = null;
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
                     } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2]]; }
@@ -151,6 +161,7 @@ final class Runtime
             }
         }
         $this->input->events = [];
+        $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         for ($pass = 0; $pass < 3; $pass++) {
             $this->consumed = false;
             $root = $build();
@@ -175,7 +186,7 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->record($root);
-        $this->needsFrame = $this->needsFrame || $this->animating;
+        $this->needsFrame = $this->needsFrame || $this->animating || ($this->hold[4] ?? false); // a held stepper keeps stepping
         // A tip: the pointer rested on a node with one for TIP_DELAY.
         $over = null;
         foreach ($this->tips as $id => $text) {
@@ -262,8 +273,8 @@ final class Runtime
         if ($n->url !== null && $this->hovered($n->id)) {
             $this->cursor = 'pointer';
         }
-        if ($n->kind === Node::PROGRESS && $n->fraction < 0) {
-            $this->animating = true; // an indeterminate bar moves every frame
+        if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
+            $this->animating = true; // an indeterminate bar or a spinner moves every frame
         }
         if ($n->wrapWidth !== null && abs($n->w - $n->wrapWidth) > 0.5) {
             $this->needsFrame = true; // wrapped at last frame's width; this frame's differs
@@ -423,6 +434,14 @@ final class Runtime
                 case 'moveRight:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return;
             }
         }
+        if ($this->focus !== null && isset($this->steppers[$this->focus])) {
+            switch ($selector) {
+                case 'moveUp:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return;
+                case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return;
+                case 'moveToBeginningOfDocument:': $this->jumps[$this->focus] = -1; return;
+                case 'moveToEndOfDocument:': $this->jumps[$this->focus] = 1; return;
+            }
+        }
         switch ($selector) {
             case 'insertTab:': $this->moveFocus(1); break;
             case 'insertBacktab:': $this->moveFocus(-1); break;
@@ -551,6 +570,50 @@ final class Runtime
     public function stepped(int $id): int
     {
         return $this->steps[$id] ?? 0;
+    }
+
+    /**
+     * Registers stepper $id for the keys and reports its steps this frame:
+     * the arrow keys', plus a press on its upper (up) or lower (down)
+     * half, repeated while held — after HOLD_DELAY, one every HOLD_RATE,
+     * as AppKit's.
+     */
+    public function stepper(int $id): int
+    {
+        $this->steppers[$id] = true;
+        $n = $this->steps[$id] ?? 0;
+        unset($this->steps[$id]); // given once, whatever passes the frame builds
+        $dir = $this->holding($id);
+        if ($dir !== 0) {
+            $held = hrtime(true) / 1e9 - $this->hold[2];
+            $due = 1 + ($held > self::HOLD_DELAY ? (int)(($held - self::HOLD_DELAY) / self::HOLD_RATE) : 0);
+            $n += ($due - $this->hold[3]) * $dir;
+            $this->hold[3] = $due;
+            $this->hold[4] = true;
+        }
+        return $n;
+    }
+
+    /** Which half of stepper $id the mouse is held down on: 1 the upper, -1 the lower, 0 neither. */
+    public function holding(int $id): int
+    {
+        $r = $this->rects[$id] ?? null;
+        if ($this->hold === null || $r === null) {
+            return 0;
+        }
+        [$x, $y] = $this->hold;
+        if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+            return 0;
+        }
+        return $y < $r[1] + $r[3] / 2 ? 1 : -1;
+    }
+
+    /** Home (-1) or End (1) pressed on focused stepper $id this frame, or 0. */
+    public function jumped(int $id): int
+    {
+        $j = $this->jumps[$id] ?? 0;
+        unset($this->jumps[$id]);
+        return $j;
     }
 
     private function slideTo(int $id, float $x): void

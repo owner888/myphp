@@ -93,10 +93,34 @@ final class Layout
             }
             $extra = 0.0;
         }
-        if ($n->dir === Node::ROW) {
-            foreach ($kids as $k) { $kw = $k->mw + $extra * $k->grow; self::arrange($k, $cx, $cy, $kw, $ch); $cx += $kw + $n->gap; }
-        } else {
-            foreach ($kids as $k) { $kh = $k->mh + $extra * $k->grow; self::arrange($k, $cx, $cy, $cw, $kh); $cy += $kh + $n->gap; }
+        $align = $n->align === Node::AUTO ? ($n->dir === Node::ROW ? Node::CENTER : Node::STRETCH) : $n->align;
+        if ($grow === 0 && $n->scroll === null) { // nothing grows: justify packs the children along the axis
+            $free = max(0.0, $avail - $used);
+            if ($n->justify === Node::CENTER) { $cx += $n->dir === Node::ROW ? $free / 2 : 0; $cy += $n->dir === Node::ROW ? 0 : $free / 2; }
+            if ($n->justify === Node::END) { $cx += $n->dir === Node::ROW ? $free : 0; $cy += $n->dir === Node::ROW ? 0 : $free; }
         }
+        foreach ($kids as $k) {
+            $a = $k->self === Node::AUTO ? $align : $k->self;
+            if ($n->dir === Node::ROW ? $k->mh <= 0 : $k->mw <= 0) {
+                $a = Node::STRETCH; // no size of its own across (a text area given 0, an empty box): it takes the room
+            }
+            if ($n->dir === Node::ROW) {
+                $kw = $k->mw + $extra * $k->grow;
+                $kh = $a === Node::STRETCH ? $ch : $k->mh;
+                self::arrange($k, $cx, $cy + self::across($a, $ch, $kh), $kw, $kh);
+                $cx += $kw + $n->gap;
+            } else {
+                $kh = $k->mh + $extra * $k->grow;
+                $kw = $a === Node::STRETCH ? $cw : $k->mw;
+                self::arrange($k, $cx + self::across($a, $cw, $kw), $cy, $kw, $kh);
+                $cy += $kh + $n->gap;
+            }
+        }
+    }
+
+    /** Where a child of $size sits across $room: at the start, in the middle, or at the end. */
+    private static function across(int $align, float $room, float $size): float
+    {
+        return match ($align) { Node::CENTER => ($room - $size) / 2, Node::END => $room - $size, default => 0.0 };
     }
 }

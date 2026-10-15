@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, ListState, Span, TextState};
+use MyPHP\UI\{Content, Context, Font, ListState, Node, Span, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -144,7 +144,7 @@ function view(Context $c, Log $log): void
           $i = $log->shown[$r];
           $line = $log->lines[$i];
           $color = str_contains($line, 'ERROR') ? $t->danger : (str_contains($line, 'WARN') ? $t->warning : $t->text);
-          $c->row(6, 10, 0, ($r & 1) ? $t->surface : null);
+          $c->row(6, 10, 0, ($r & 1) ? $t->surface : null)->align(Node::START); // the number beside a wrapped line's first row
             $c->text(str_pad((string)($i + 1), 6, ' ', STR_PAD_LEFT), 12, $t->textMuted, Font::MONO);
             // The matched part of the line is highlighted; long lines wrap at the window's width.
             $spans = [];

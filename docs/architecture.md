@@ -158,7 +158,12 @@ stretches; in a row, pass the width.
 
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
-`slider(&$value, $min, $max)`, `select($options, &$index)`;
+`switch($label, &$bool)`, `slider(&$value, $min, $max)`,
+`select($options, &$index)`, `stepper(&$value, $min, $max, $step)` (a
+press steps once and keeps stepping while held, as AppKit's; `Runtime::stepper`
+gives the frame's steps from the hold and the arrow keys),
+`segmented($options, &$index)`, `tabs($labels, &$index)`,
+`collapsible($title, &$open)` (returns $open; build the body in an if);
 `Context::changed($node)` says whether this frame changed it (mygo's
 Changed). The toggles are focusable nodes whose click flips the value;
 the slider is set from `Runtime`, which records presses and drags inside
@@ -247,6 +252,13 @@ container under the cursor; `Layout` clamps the offset and shifts children;
 paint pushes the container's rect as a clip, which travels with each quad
 into the shader (`float4 clip`, discard outside). An NSTrackingArea with
 `mouseMoved` keeps hover state current.
+
+`Layout` places children across a container's axis as mygo does: a row
+centers them vertically, a column stretches them to its width;
+`Node::align()` changes that for a container's children (START, CENTER,
+END, STRETCH), `alignSelf()` for one child, `justify()` packs them along
+the axis when none grows, and `center()` does both. A child with no size
+of its own across (a text area given 0) takes the room.
 
 A `ScrollState` container scrolls on the axes `Node::scroll()` names:
 `Layout::measure` gives it 2×pad on a scrolled axis (it takes the room it

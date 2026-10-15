@@ -48,9 +48,11 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
-src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbox/radio/slider/select/progress/
-                   input/textarea/image/box/list; clicked/changed/hovered/focused; ->tooltip()/at()/round()/
-                   material()), Glass / Blur / ScrollEdge (backdrop materials), Font (style
+src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbox/radio/switch/slider/
+                   select/stepper/segmented/tabs/collapsible/progress/spinner/badge/divider/spacer/
+                   input/textarea/image/box/list; clicked/changed/hovered/focused; ->tooltip()/at()/
+                   round()/material()/align()/alignSelf()/justify()/center(); rows center across,
+                   columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
@@ -148,7 +150,7 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; images; rich text (bold/italic/mono, spans); checkbox, radio, slider, select, link, progress, tooltips; soft shadows, rings, Liquid Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window events + state;
+theme; images; rich text (bold/italic/mono, spans); checkbox, radio, switch, slider, select, stepper, segmented, tabs, collapsible, progress, spinner, badge, link, tooltips; soft shadows, rings, Liquid Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; file drops; CLI + .app.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes).

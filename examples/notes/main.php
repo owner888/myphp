@@ -9,7 +9,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, Menu, MenuItem, MessageOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Image, ListState, ScrollState, Span, TextState, Theme};
+use MyPHP\UI\{Content, Context, Font, Image, ListState, Node, ScrollState, Span, TextState, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -144,7 +144,7 @@ final class Markdown
                 }
             } elseif (preg_match('/^\s*[-*]\s+(.*)$/', $line, $m)) {
                 $flush();
-                $c->row(0, 6); $c->text('•', 14, $t->textMuted); $c->rich(self::inline($m[1], $t), 14, width: $width - 16); $c->end();
+                $c->row(0, 6)->align(Node::START); $c->text('•', 14, $t->textMuted); $c->rich(self::inline($m[1], $t), 14, width: $width - 16); $c->end();
             } elseif (trim($line) === '') {
                 $flush();
             } else {
@@ -180,7 +180,7 @@ function view(Context $c, Notes $notes): void
     $listW = 220.0; $gap = 1.0;
     $editorW = floor(($c->width - $listW - 2 * $gap) / 2);
     $previewW = $c->width - $listW - $editorW - 2 * $gap;
-    $c->row(0, $gap, 1, $t->border);
+    $c->row(0, $gap, 1, $t->border)->align(Node::STRETCH); // the panes fill the height; a row centers by default
       // Notes
       $c->column(0, 0, 0, $t->surface)->size($listW);
         $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->button('New'))) { $notes->create(); } $c->end();

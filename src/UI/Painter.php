@@ -29,6 +29,14 @@ final class Painter
             self::paintToggle($n, $list, $text, $t, $rt);
             return;
         }
+        if ($n->kind === Node::SWITCH) {
+            self::paintSwitch($n, $list, $text, $t, $rt);
+            return;
+        }
+        if ($n->kind === Node::SPINNER) {
+            self::paintSpinner($n, $list, $t);
+            return;
+        }
         if ($n->kind === Node::SLIDER) {
             self::paintSlider($n, $list, $t);
             return;
@@ -79,7 +87,7 @@ final class Painter
                 $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
                 $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
             } else {
-                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha, $radius);
             }
         }
         if ($n->selected) {
@@ -202,6 +210,47 @@ final class Painter
         }
         [, $lh] = $text->measure($n->text, $n->fontSize);
         $text->paint($list, $n->text, $n->fontSize, $n->x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+    }
+
+    /**
+     * A spinner, as mygo's: twelve spokes, a twelfth of a turn on every
+     * twelfth of 0.9 s, fading behind the one leading. A spoke is a run
+     * of overlapping dots, the list having no rotated quads.
+     */
+    private static function paintSpinner(Node $n, DisplayList $list, Theme $t): void
+    {
+        $spokes = 12; $turn = 0.9;
+        $lead = (int)(fmod(hrtime(true) / 1e9, $turn) / $turn * $spokes);
+        $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2;
+        $in = $n->w * 0.22; $out = $n->w * 0.46; $w = max(1.5, $n->w * 0.09);
+        $dots = 4;
+        for ($i = 0; $i < $spokes; $i++) {
+            $a = $i / $spokes * 2 * M_PI - M_PI / 2;
+            $age = ($lead - $i + $spokes) % $spokes;
+            $alpha = 1 - $age / $spokes * 0.85;
+            for ($d = 0; $d < $dots; $d++) {
+                $r = $in + ($out - $in) * $d / ($dots - 1);
+                $list->rect($cx + cos($a) * $r - $w / 2, $cy + sin($a) * $r - $w / 2, $w, $w, $t->textMuted, $alpha, $w / 2);
+            }
+        }
+    }
+
+    /** A switch: a track that is the accent when on, a knob at the end it is on, the label beside it. */
+    private static function paintSwitch(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    {
+        $tw = $t->space(7.5); $th = $t->space(4.5); $knob = $th - 4;
+        $y = $n->y + ($n->h - $th) / 2;
+        if ($n->focused) {
+            $list->ring($n->x - 2, $y - 2, $tw + 4, $th + 4, $t->focus, $t->focusAlpha, $th / 2 + 2, 2.0);
+        }
+        $hovered = $rt?->hovered($n->id) ?? false;
+        $track = $n->on ? ($hovered ? $t->accentHover : $t->accent) : ($hovered ? $t->surfaceHover : $t->border);
+        $list->rect($n->x, $y, $tw, $th, $track, 1.0, $th / 2);
+        $kx = $n->on ? $n->x + $tw - $knob - 2 : $n->x + 2;
+        $list->shadow($kx, $y + 2, $knob, $knob, 0x000000, 0.2, $knob / 2, 2, 0, 1);
+        $list->rect($kx, $y + 2, $knob, $knob, 0xffffff, 1.0, $knob / 2);
+        [, $lh] = $text->measure($n->text, $n->fontSize);
+        $text->paint($list, $n->text, $n->fontSize, $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**

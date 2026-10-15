@@ -260,6 +260,155 @@ final class Context
         return $n;
     }
 
+    /** A switch with a label, toggling $on, as mygo's Switch; changed() reports it. */
+    public function switch(string $label, bool &$on, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
+        [$w, $h] = $this->metrics->measure($label, $size);
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $w + $t->space(9.5), max($h, $t->space(5)), 0, $label, null, $size, $t->text));
+        $n->focusable = true;
+        if ($this->runtime?->clicked($n->id)) {
+            $on = !$on;
+            $n->changed = true;
+        }
+        $n->on = $on;
+        return $n;
+    }
+
+    /** A line across the container: horizontal in a column, vertical in a row ($vertical). */
+    public function divider(bool $vertical = false): Node
+    {
+        return $this->add(new Node(Node::BOX, 0, 0, 0, $vertical ? 1 : 0, $vertical ? 0 : 1, 0, null, $this->theme->border));
+    }
+
+    /** Empty room that grows to take what the container has left, pushing what follows to the end. */
+    public function spacer(): Node
+    {
+        return $this->add(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1, null, null));
+    }
+
+    /** A spinner showing activity of unknown length, as mygo's: spokes turning, as high as the font size, in the muted text color. */
+    public function spinner(): Node
+    {
+        $size = $this->theme->fontSize * 1.25;
+        return $this->add(new Node(Node::SPINNER, 0, 0, 0, $size, $size, 0, null, null));
+    }
+
+    /** A short text in a pill, as mygo's Badge: a count beside a sidebar's item, in the text color at a tenth. */
+    public function badge(string $text): Node
+    {
+        $t = $this->theme;
+        $size = $t->fontSize - 2;
+        [$w, $h] = $this->metrics->measure($text, $size);
+        $n = $this->column(0, 0, 0, $t->text)->round($h / 2)->size($w + $t->space(3), $h)->center(); // Space(1.5) a side
+        $n->alpha = 0.1;
+          $this->text($text, $size, $t->text);
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * Segments to choose one of, as mygo's Segmented: $options' labels in a
+     * row, the chosen one raised; changed() reports a choice.
+     * @param list<string> $options
+     */
+    public function segmented(array $options, int &$index): Node
+    {
+        $t = $this->theme;
+        $index = max(0, min($index, count($options) - 1));
+        $n = $this->row(1, 0, 0, $t->border)->round($t->radius); // the track: a border around a surface
+          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH);
+          foreach ($options as $i => $label) {
+              $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->round($t->radius - 1)->focusable()->center();
+              if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
+              [$w, $h] = $this->metrics->measure($label, $t->fontSize);
+              $seg->size($w + $t->space(4), $h + $t->space(1.5));
+                $this->text($label, $t->fontSize, $t->text);
+              $this->end();
+              if ($this->clicked($seg) && $i !== $index) {
+                  $index = $i;
+                  $n->changed = true;
+              }
+          }
+          $this->end();
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * Tabs, as mygo's Tabs: the labels in a row, the chosen one underlined
+     * in the accent; the caller builds the chosen tab's content after it.
+     * changed() reports a choice.
+     * @param list<string> $labels
+     */
+    public function tabs(array $labels, int &$index): Node
+    {
+        $t = $this->theme;
+        $n = $this->row(0, $t->space(4));
+        foreach ($labels as $i => $label) {
+            $tab = $this->column(0, $t->space(1))->focusable();
+            $this->text($label, $t->fontSize, $i === $index ? $t->text : ($this->hovered($tab) ? $t->text : $t->textMuted), $i === $index ? Font::BOLD : 0);
+            $this->box(0, 2, $t->accent)->alpha = $i === $index ? 1.0 : 0.0; // the underline, kept for the height
+            $this->end();
+            if ($this->clicked($tab) && $i !== $index) {
+                $index = $i;
+                $n->changed = true;
+            }
+        }
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * A collapsible section's header: a chevron and $title; clicking it
+     * toggles $open. Returns whether it is open, so the caller builds the
+     * body inside an if.
+     */
+    public function collapsible(string $title, bool &$open): bool
+    {
+        $t = $this->theme;
+        $head = $this->row(0, $t->space(1.5))->focusable();
+        $this->text($open ? '▾' : '▸', $t->fontSize, $t->textMuted);
+        $this->text($title, $t->fontSize, $t->text, Font::BOLD);
+        $this->end();
+        if ($this->clicked($head)) {
+            $open = !$open;
+            $head->changed = true;
+        }
+        return $open;
+    }
+
+    /**
+     * A stepper, as mygo's and AppKit's beside a field: a bordered column
+     * of an up and a down arrow stepping $value by $step within [$min,
+     * $max]; a press steps at once and keeps stepping while held, Up and
+     * Down step while it has the focus, Home and End go to the ends.
+     * changed() reports a new value.
+     */
+    public function stepper(int|float &$value, float $min, float $max, float $step = 1): Node
+    {
+        $t = $this->theme;
+        $n = $this->column(1, 1, 0, $t->border)->round($t->radius)->focusable();
+        $n->size($t->space(5), $t->space(7));
+        $ticks = $this->runtime?->stepper($n->id) ?? 0;
+        $jump = $this->runtime?->jumped($n->id) ?? 0;
+        $holding = $this->runtime?->holding($n->id) ?? 0;
+        $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
+        foreach ([1 => '▴', -1 => '▾'] as $dir => $arrow) {
+            $can = $dir > 0 ? $v < $max : $v > $min;
+            $this->column(0, 0, 1, $holding === $dir ? $t->surfacePressed : $t->surface)->round($t->radius - 1)->center();
+              $this->text($arrow, $t->fontSize - 2, $can ? $t->text : $t->textMuted);
+            $this->end();
+        }
+        $this->end();
+        if ($v != $value) {
+            $value = is_int($value) ? (int)round($v) : $v;
+            $n->changed = true;
+        }
+        return $n;
+    }
+
     /** A radio button with a label: on while $value is $option, and sets it when chosen; changed() reports it. */
     public function radio(string $label, mixed &$value, mixed $option, ?float $size = null): Node
     {
