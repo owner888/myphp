@@ -85,6 +85,9 @@ HTML;
 
 App::setName('Notes');
 App::whenReady(function () use ($html) {
-    new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html));
+    $w = new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html));
+    // PHP -> page -> PHP: run a script once the DOM is ready and read its value back.
+    $w->whenPageReady(fn() => $w->evaluate('document.querySelector("h2").firstChild.textContent.trim() + " / " + navigator.userAgent.split(" ").pop()',
+        fn(?string $value, ?string $error) => printf("[PHP] page says: %s\n", $error ?? $value)));
 });
 App::run();

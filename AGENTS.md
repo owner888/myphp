@@ -43,7 +43,7 @@ src/Window.php          a native-UI window: NSWindow + View, per-window Runtime/
 src/WindowOptions.php   title, size, position, hidden, disableResize, content | html | url
 src/Menu.php            menu bar and context menus: roles, accelerators, clicks by tag -> PHP closure
 src/MenuItem.php        an item: label, click, accelerator, role, checkbox, submenu; set* update the native item
-src/Dialog.php          open/save panels and message boxes (app-modal runModal; sheets need a block)
+src/Dialog.php          open/save panels and message boxes: sheets of a parent window, else app-modal
 src/*DialogOptions.php  FileFilter, Open/Save/MessageOptions, MessageResult
 src/Ipc.php             bound services: bind(), handle() one bridge message, emit() events to pages
 src/TypeScript.php      the generated client (MYPHP_GENERATE=path): services, interfaces, events
@@ -116,6 +116,10 @@ they run without Composer.
   events are `{t:"event", n, p}`. Every window has its own secret `k`.
   `App::run` with `MYPHP_GENERATE=path` writes the TypeScript client and
   returns, as `mygo generate` does; `./run.sh gen` runs it for the example.
+- **Blocks are `ObjC::block('lp', fn)`**: a global block literal whose invoke
+  is a PHP closure, for completion handlers. An API that only delivers its
+  result through a block is made synchronous with `App::wait(fn() => ...)`,
+  which runs the run loop until the block fired (Dialog sheets do this).
 - **`objc_msgSend` is cast per signature, never declared variadic** (arm64
   calling convention). Signatures are "ret:args" letter strings, see
   `ObjC::MAP`. Struct returns (NSRect) use plain `objc_msgSend` on arm64.
@@ -150,9 +154,9 @@ not the bottleneck, the architecture is what keeps it that way.
    editing, stable ids for conditional UI, scroll glide remain.
 4. App/Window API: whenReady/run/quit, WindowOptions subset, show/hide/
    close/setTitle/center/size, menu bar and context menus with roles and
-   accelerators, open/save/message dialogs done; dialog sheets (need an
-   ObjC block), tray, notifications, global shortcuts, window events
-   (OnClose, OnResize), window state, more options remain.
+   accelerators, open/save/message dialogs (as sheets too), page evaluate
+   with results, whenPageReady done; tray, notifications, global
+   shortcuts, window events (OnClose, OnResize), window state remain.
 5. Virtualized lists: done; keys for rows that come and go, FollowEnd,
    selection, keyboard navigation and a scroll bar remain.
 6. Webview IPC: bind, call, reply, events, TypeScript client done;

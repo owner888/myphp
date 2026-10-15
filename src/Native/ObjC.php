@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
+use Closure;
 use FFI;
 use RuntimeException;
 
@@ -26,9 +27,21 @@ final class ObjC
     /** Holders of PHP callbacks, kept alive for the life of the process. */
     private static array $keep = [];
     private static $msgSend;
+    private static $globalBlockIsa;
+    /** @var array<int, array> live blocks by address: literal, descriptor, holder, signature */
+    private static array $blocks = [];
+    /** @var list<int> once-blocks that fired and can go at the next block() */
+    private static array $spentBlocks = [];
     /** One void* slot and an integer view of the same bytes, for addr(). */
     private static $slot;
     private static $slotInt;
+
+    /** Objective-C type encodings of the MAP letters, for block signatures. */
+    private const ENCODING = [
+        'p' => '@', 'd' => 'd', 'f' => 'f', 'l' => 'q', 'L' => 'Q', 'i' => 'i', 'S' => 'S', 'b' => 'B',
+        's' => '*', 'v' => 'v', 'r' => '{CGRect={CGPoint=dd}{CGSize=dd}}', 'q' => '{CGPoint=dd}', 'z' => '{CGSize=dd}',
+        'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}',
+    ];
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
@@ -49,6 +62,8 @@ final class ObjC
             typedef struct { double w, h; } CGSize;
             typedef struct { double r, g, b, a; } MTLClearColor;
             typedef struct { unsigned long x, y, z, w, h, d; } MTLRegion;
+            typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
+            typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
             void* dlopen(const char*, int);
             void* dlsym(void*, const char*);
             void* objc_getClass(const char*);
@@ -63,6 +78,8 @@ final class ObjC
             }
         }
         self::$msgSend = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSend');
+        self::$globalBlockIsa = self::$c->dlsym(self::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), '_NSConcreteGlobalBlock')
+            ?? throw new RuntimeException('_NSConcreteGlobalBlock');
         self::$slot = self::$c->new('void*[1]');
         self::$slotInt = self::$c->cast('unsigned long[1]', self::$slot);
     }
@@ -92,6 +109,48 @@ final class ObjC
             $params[] = self::MAP[$ch];
         }
         return self::$c->cast(self::MAP[$ret] . '(*)(' . implode(',', $params) . ')', self::$msgSend);
+    }
+
+    /**
+     * An Objective-C block whose body is a PHP closure, for completion
+     * handlers. $args are the block's parameter letters (MAP), without the
+     * block itself: block('lp', fn($response, $obj) => ...). A global block
+     * (never copied or freed by the runtime); a once block is released
+     * after it fires, otherwise it lives for the process.
+     */
+    public static function block(string $args, Closure $fn, bool $once = true)
+    {
+        foreach (self::$spentBlocks as $addr) {
+            unset(self::$blocks[$addr]);
+        }
+        self::$spentBlocks = [];
+        $params = ['void*'];
+        $encoding = 'v@?';
+        foreach (str_split($args) as $ch) {
+            $params[] = self::MAP[$ch];
+            $encoding .= self::ENCODING[$ch];
+        }
+        $type = 'void(*)(' . implode(',', $params) . ')';
+        $holder = self::$c->new('struct { ' . str_replace('(*)', '(*fn)', $type) . '; }');
+        $literal = self::$c->new('BlockLiteral');
+        $addr = self::addr(FFI::addr($literal));
+        $holder->fn = function ($block, ...$a) use ($fn, $once, $addr) {
+            if ($once) {
+                self::$spentBlocks[] = $addr;
+            }
+            $fn(...$a);
+        };
+        $sig = self::$c->new('char[' . (strlen($encoding) + 1) . ']');
+        FFI::memcpy($sig, $encoding, strlen($encoding));
+        $descriptor = self::$c->new('BlockDescriptor');
+        $descriptor->size = FFI::sizeof(self::$c->type('BlockLiteral'));
+        $descriptor->signature = self::$c->cast('char*', $sig);
+        $literal->isa = self::$globalBlockIsa;
+        $literal->flags = (1 << 28) | (1 << 30); // BLOCK_IS_GLOBAL | BLOCK_HAS_SIGNATURE
+        $literal->invoke = self::$c->cast('void*', $holder->fn);
+        $literal->descriptor = FFI::addr($descriptor);
+        self::$blocks[$addr] = [$literal, $descriptor, $holder, $sig];
+        return self::$c->cast('void*', $addr);
     }
 
     public static function alloc(string $cls)

@@ -7,8 +7,8 @@ use MyPHP\Native\ObjC;
 
 /**
  * System dialogs, as mygo's Dialog module: open and save panels and
- * message boxes. They run app-modal and return when closed; a parent
- * window only positions them for now (sheets need an ObjC block).
+ * message boxes. With a parent window they show as its sheet, otherwise
+ * app-modal; either way the call returns when the dialog closes.
  */
 final class Dialog
 {
@@ -26,7 +26,7 @@ final class Dialog
         ObjC::msg('v:b', $panel, 'setShowsHiddenFiles:', $o->showHiddenFiles);
         ObjC::msg('v:b', $panel, 'setCanCreateDirectories:', $o->createDirectories);
         self::common($panel, $o->title, $o->message, $o->buttonLabel, $o->defaultPath, $o->filters);
-        if (ObjC::msg('l:', $panel, 'runModal') !== self::MODAL_OK) {
+        if (self::run($panel, $o->parent) !== self::MODAL_OK) {
             return [];
         }
         $urls = ObjC::msg('p:', $panel, 'URLs');
@@ -47,10 +47,23 @@ final class Dialog
             ObjC::msg('v:p', $panel, 'setNameFieldLabel:', ObjC::str($o->nameFieldLabel));
         }
         self::common($panel, $o->title, $o->message, $o->buttonLabel, $o->defaultPath, $o->filters);
-        if (ObjC::msg('l:', $panel, 'runModal') !== self::MODAL_OK) {
+        if (self::run($panel, $o->parent) !== self::MODAL_OK) {
             return '';
         }
         return ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', $panel, 'URL'), 'path'));
+    }
+
+    /** Shows a panel or alert as the parent's sheet, or app-modal, and returns its response. */
+    private static function run($panel, ?Window $parent): int
+    {
+        if ($parent === null) {
+            return ObjC::msg('l:', $panel, 'runModal');
+        }
+        $response = null;
+        ObjC::msg('v:pp', $panel, 'beginSheetModalForWindow:completionHandler:', $parent->native(),
+            ObjC::block('l', function (int $r) use (&$response) { $response = $r; }));
+        App::wait(fn() => $response !== null);
+        return $response;
     }
 
     private static function common($panel, string $title, string $message, string $button, string $defaultPath, array $filters): void
@@ -110,7 +123,7 @@ final class Dialog
             ObjC::msg('v:p', $box, 'setTitle:', ObjC::str($o->checkboxLabel));
             ObjC::msg('v:l', $box, 'setState:', $o->checkboxChecked ? 1 : 0);
         }
-        $code = ObjC::msg('l:', $alert, 'runModal');
+        $code = self::run($alert, $o->parent);
         $checked = $o->checkboxLabel !== '' && ObjC::msg('l:', ObjC::msg('p:', $alert, 'suppressionButton'), 'state') === 1;
         return new MessageResult($code - self::FIRST_BUTTON, $checked);
     }

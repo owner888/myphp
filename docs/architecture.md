@@ -172,10 +172,24 @@ target's `menuClicked:` looks the item up and calls the closure with the
 key window. Accelerators are parsed from mygo's "CmdOrCtrl+Shift+Z" form
 into a key equivalent and an NSEvent modifier mask. Menus are built with
 `setAutoenablesItems:NO`, so enabled state is what the item says.
-Dialogs use NSOpenPanel/NSSavePanel/NSAlert with `runModal`, which blocks
-the PHP call until the panel closes; a parent window is accepted but not
-yet used, since a sheet's completion handler is an ObjC block, and blocks
-are a struct this bridge does not build yet.
+Dialogs use NSOpenPanel/NSSavePanel/NSAlert: `runModal` without a parent,
+else `beginSheetModalForWindow:completionHandler:` with a block, and
+`App::wait` spins the run loop until the block has delivered the
+response, so the PHP call stays synchronous either way.
+
+## Blocks
+
+An Objective-C block is a struct the caller lays out: `{isa, flags,
+reserved, invoke, descriptor}` with a descriptor `{reserved, size,
+signature}`. `ObjC::block` fills one with `isa = &_NSConcreteGlobalBlock`
+(dlsym from libSystem), `flags = BLOCK_IS_GLOBAL | BLOCK_HAS_SIGNATURE`,
+`invoke` = a PHP closure through the usual holder struct (its first
+argument is the block, dropped before the PHP closure sees the rest), and
+the type encoding built from the signature letters. A global block is
+never copied or freed by the runtime, so the CData behind it can simply be
+kept; a `once` block is dropped at the next `block()` call after it fired,
+never from inside its own invocation. Verified on Linux with a C shim
+calling `invoke` directly before use on macOS.
 
 ## Open items
 

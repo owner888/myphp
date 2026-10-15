@@ -28,6 +28,9 @@ final class Window
     private $view = null;
     private ?WebView $page = null;
     private string $secret = '';
+    private bool $pageReady = false;
+    /** @var list<\Closure> */
+    private array $whenPageReady = [];
     public readonly int $id;
     public readonly ?Input $input;
     public readonly ?Runtime $runtime;
@@ -56,6 +59,15 @@ final class Window
             $this->page = WebView::create(ObjC::rect(0, 0, $o->width, $o->height),
                 ['platform' => 'darwin', 'windowId' => $this->id, 'version' => App::VERSION, 'secret' => $this->secret],
                 function (string $raw) {
+                    if ($raw === '{"t":"dom-ready"}') {
+                        $this->pageReady = true;
+                        $callbacks = $this->whenPageReady;
+                        $this->whenPageReady = [];
+                        foreach ($callbacks as $fn) {
+                            $fn();
+                        }
+                        return;
+                    }
                     $reply = Ipc::handle($raw, $this->secret);
                     if ($reply !== null) {
                         $this->page->deliver($reply);
@@ -120,9 +132,36 @@ final class Window
         $this->page?->deliver(['t' => 'event', 'n' => $name, 'p' => $payload]);
     }
 
-    public function evaluate(string $js): void
+    /**
+     * Runs JavaScript in the page. With $then, it gets the script's value
+     * as the page's description of it (a string, "42", null) and the error
+     * message if it threw: $then(?string $value, ?string $error).
+     */
+    public function evaluate(string $js, ?\Closure $then = null): void
     {
-        $this->page?->evaluate($js);
+        if ($this->page === null) {
+            return;
+        }
+        if ($then === null) {
+            $this->page->evaluate($js);
+            return;
+        }
+        $this->page->evaluate($js, ObjC::block('pp', function ($result, $error) use ($then) {
+            $then(
+                $result === null ? null : ObjC::phpStr(ObjC::msg('p:', $result, 'description')),
+                $error === null ? null : ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')),
+            );
+        }));
+    }
+
+    /** Calls $fn once the page's DOM is ready (at once if it already is). */
+    public function whenPageReady(\Closure $fn): void
+    {
+        if ($this->pageReady) {
+            $fn();
+            return;
+        }
+        $this->whenPageReady[] = $fn;
     }
 
     private static function delegate()

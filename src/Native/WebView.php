@@ -76,9 +76,10 @@ final class WebView
         ObjC::msg('p:p', $this->ns, 'loadRequest:', ObjC::msg('p:p', ObjC::cls('NSURLRequest'), 'requestWithURL:', $nsurl));
     }
 
-    public function evaluate(string $js): void
+    /** Runs JavaScript; $completion is an ObjC block (id result, NSError* error) or null. */
+    public function evaluate(string $js, $completion = null): void
     {
-        ObjC::msg('v:pp', $this->ns, 'evaluateJavaScript:completionHandler:', ObjC::str($js), null);
+        ObjC::msg('v:pp', $this->ns, 'evaluateJavaScript:completionHandler:', ObjC::str($js), $completion);
     }
 
     /** Hands a bridge message (reply or event) to the page. */

@@ -96,6 +96,26 @@ final class App
         ObjC::msg('v:p', self::$nsApp, 'setMainMenu:', $menu->build());
     }
 
+    /**
+     * Runs the event loop until $until() is true, for a call that must
+     * return a result an asynchronous API delivers later (a sheet's
+     * completion handler). Events keep flowing meanwhile.
+     */
+    public static function wait(Closure $until): void
+    {
+        // NSRunLoop alone does not dispatch AppKit events (NSApp's run does),
+        // so pull and send them here, as a modal session would.
+        $mode = ObjC::str('kCFRunLoopDefaultMode');
+        while (!$until()) {
+            $date = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', 0.05);
+            $event = ObjC::msg('p:Lppb', self::$nsApp, 'nextEventMatchingMask:untilDate:inMode:dequeue:', PHP_INT_MAX, $date, $mode, true);
+            if ($event !== null) {
+                ObjC::msg('v:p', self::$nsApp, 'sendEvent:', $event);
+            }
+            ObjC::msg('v:', self::$nsApp, 'updateWindows');
+        }
+    }
+
     public static function quit(): void
     {
         ObjC::msg('v:p', self::$nsApp, 'terminate:', null);
