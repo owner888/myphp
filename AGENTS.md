@@ -54,7 +54,7 @@ src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbo
                    round()/material()/align()/alignSelf()/justify()/center(); rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
-                   DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
+                   DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
@@ -94,7 +94,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   order is list order; clip rect per quad. A backdrop quad (glass, blur,
   hard scroll edge) splits the draw: what is below it is copied and blurred
   (half size, two passes) into the backdrop it samples, then the pass resumes.
-- **Atlases start over when full** (glyphs or images): `Text::$repaint` makes
+- **Atlases start over when full** (the glyph atlas; an image page): `Text::$repaint` makes
   `Window` paint the frame again, so nothing points at slots that are gone;
   `App::rescale()` (windowDidChangeBackingProperties) re-rasterizes glyphs
   at the largest backing scale among open windows (`Uniforms.atlasScale`).

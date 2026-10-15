@@ -58,7 +58,7 @@ final class Painter
         }
         if ($n->kind === Node::IMAGE) {
             $s = $text->imageSlot($n->image);
-            $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
+            $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], $n->alpha, $n->radius);
             return;
         }
         if ($n->focusVisible && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim

@@ -28,7 +28,7 @@ final class Text implements TextMetrics
     /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
     public bool $repaint = false;
 
-    public function __construct(private CoreText $ct, public Atlas $atlas, public Atlas $images) {}
+    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images) {}
 
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
@@ -48,16 +48,15 @@ final class Text implements TextMetrics
         return $this->ct->scale;
     }
 
-    /** The image atlas slot of $image, added on first use; a full atlas starts over with this frame's images. */
+    /** The image atlas slot of $image, added to a page on first use; a page emptied for it has this frame painted again. */
     public function imageSlot(Image $image): array
     {
         $slot = $this->images->get($image->key);
         if ($slot === null) {
-            if (!$this->images->fits($image->w, $image->h)) {
-                $this->images->reset();
+            [$slot, $emptied] = $this->images->add($image->key, $image->w, $image->h, $image->addr);
+            if ($emptied) {
                 $this->repaint = true;
             }
-            $slot = $this->images->add($image->key, $image->w, $image->h, $image->addr);
         }
         return $slot;
     }
@@ -66,6 +65,7 @@ final class Text implements TextMetrics
     public function beginFrame(): void
     {
         $this->gen++;
+        $this->images->beginFrame();
         if ($this->gen % self::SWEEP_EVERY === 0) {
             $limit = $this->gen - self::KEEP_FRAMES;
             foreach ($this->lines as $key => $l) {

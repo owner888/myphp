@@ -12,12 +12,17 @@ spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\
 
 final class Photos
 {
-    public const THUMB = 160, FULL = 1536, GAP = 12; // pixels for FULL: the image atlas is 2048², and the image must fit it
+    public const THUMB = 160, FULL = 2048, GAP = 12; // pixels for FULL: an image atlas page is 2048², and a full-size image takes one
     public string $dir = '';
     /** @var list<string> */
     public array $files = [];
-    /** @var array<string, Image> thumbnails by path, decoded a few per frame */
+    /** @var array<string, Image> thumbnails by path, least recently shown first, at most KEEP of them */
     public array $thumbs = [];
+    public const KEEP = 200;
+    /** @var list<string> files in view whose thumbnails are wanted, in order; decoded one a run-loop turn */
+    public array $wanted = [];
+    private bool $decoding = false;
+    public int $thumbPixels = 160;
     /** @var array<string, Image> full-size images by path: the one shown and its neighbors */
     public array $full = [];
     public int $selected = 0;
@@ -42,7 +47,7 @@ final class Photos
         }
         natcasesort($files);
         $this->dir = $path; $this->files = array_values($files);
-        $this->thumbs = []; $this->full = []; $this->prefetched = -1;
+        $this->thumbs = []; $this->wanted = []; $this->full = []; $this->prefetched = -1;
         $this->selected = $select === null ? 0 : max(0, (int)array_search($select, $this->files, true));
         $this->viewing = $select !== null;
         $this->grid->scrollTo(0, false);
@@ -53,6 +58,42 @@ final class Photos
     public function select(int $i): void
     {
         $this->selected = max(0, min(count($this->files) - 1, $i));
+    }
+
+    /** Decodes the wanted thumbnails one a run-loop turn, between frames, and shows each as it comes. */
+    public function decode(): void
+    {
+        if ($this->decoding) {
+            return;
+        }
+        $this->decoding = true;
+        App::later($next = function () use (&$next) {
+            while ($this->wanted !== [] && isset($this->thumbs[$this->wanted[0]])) {
+                array_shift($this->wanted);
+            }
+            if ($this->wanted === []) {
+                $this->decoding = false;
+                return;
+            }
+            $f = array_shift($this->wanted);
+            $this->thumbs[$f] = Image::fromFile($f, $this->thumbPixels);
+            while (count($this->thumbs) > self::KEEP) {
+                unset($this->thumbs[array_key_first($this->thumbs)]);
+            }
+            $this->window->update();
+            App::later($next);
+        });
+    }
+
+    /** The thumbnail of $f if it is decoded, moved to the recent end of the cache. */
+    public function thumb(string $f): ?Image
+    {
+        $img = $this->thumbs[$f] ?? null;
+        if ($img !== null) {
+            unset($this->thumbs[$f]);
+            $this->thumbs[$f] = $img;
+        }
+        return $img;
     }
 
     /** The full-size image of file $i, decoded now if need be. */
@@ -93,17 +134,19 @@ function grid(Context $c, Photos $p): void
 {
     $t = $c->theme; $s = Photos::THUMB; $g = Photos::GAP;
     $cols = max(1, (int)floor(($c->width - $g) / ($s + $g)));
-    // Only the rows in view need their thumbnails; decode a few of those each frame, and come back for the rest.
+    // Only the rows in view need their thumbnails: they are wanted, in order, and decode between frames.
     $first = (int)floor($p->grid->y / ($s + $g)) * $cols;
     $last = min(count($p->files), $first + ($cols + 1) * (int)ceil($c->height / ($s + $g)) + $cols);
-    $pending = 0;
+    $p->wanted = [];
     for ($i = $first; $i < $last; $i++) {
-        $f = $p->files[$i];
-        if (!isset($p->thumbs[$f])) {
-            if ($pending++ < 2) { $p->thumbs[$f] = Image::fromFile($f, (int)($s * $c->scale)); } // decoded at the screen's pixels
+        if (!isset($p->thumbs[$p->files[$i]])) {
+            $p->wanted[] = $p->files[$i];
         }
     }
-    if ($pending > 2) { App::later(fn() => $p->window->update()); }
+    if ($p->wanted !== []) {
+        $p->thumbPixels = (int)($s * $c->scale); // the screen's pixels
+        $p->decode();
+    }
     // Keys: the arrows move the choice, Enter or Space open it.
     if ($c->shortcut(Key::LEFT)) { $p->select($p->selected - 1); }
     if ($c->shortcut(Key::RIGHT)) { $p->select($p->selected + 1); }
@@ -118,8 +161,7 @@ function grid(Context $c, Photos $p): void
                 $on = $i === $p->selected;
                 $cell = $c->column(2, 0, 0, $on ? $t->accent : null)->round($t->radius + 2)->tooltip(basename($f));
                   $c->column(0, 0, 0, $t->surface)->size($s, $s)->round($t->radius)->center();
-                    if (isset($p->thumbs[$f])) {
-                        $img = $p->thumbs[$f];
+                    if (($img = $p->thumb($f)) !== null) {
                         $k = min($s / $img->w, $s / $img->h); // the longer side fills the square
                         $c->image($img, $img->w * $k, $img->h * $k, $t->radius);
                     }

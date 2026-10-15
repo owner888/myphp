@@ -5,7 +5,7 @@ namespace MyPHP;
 
 use Closure;
 use MyPHP\Native\{Appearance, CoreText, Metal, ObjC};
-use MyPHP\UI\{Atlas, Text, Theme};
+use MyPHP\UI\{Atlas, Text, Theme, ImageAtlas};
 use RuntimeException;
 
 /**
@@ -300,7 +300,7 @@ final class App
     {
         if (self::$metal === null) {
             self::$scale = ObjC::msg('d:', ObjC::msg('p:', ObjC::cls('NSScreen'), 'mainScreen'), 'backingScaleFactor');
-            self::$text = new Text(new CoreText(self::$scale), new Atlas(), new Atlas(bpp: 4));
+            self::$text = new Text(new CoreText(self::$scale), new Atlas(), new ImageAtlas());
             self::$metal = new Metal();
             self::$metal->attachAtlas(self::$text->atlas, self::$scale);
             self::$metal->attachImages(self::$text->images);

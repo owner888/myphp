@@ -207,23 +207,28 @@ has) and counts as consumed input, so the frame builds again and what
 the key changed shows at once, not on the next event. `Key` holds the codes of the keys without characters and the
 modifier masks.
 
-Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
-atlas's size so the shader divides by one size) is texture 1, and a
-`kind = 2` quad carries its slot origin in `u, v` and the slot's pixel
-size in the color's `r, g` (the vertex shader scales the uv by that
-instead of the quad size, so an image stretches to its node). The
-fragment un-premultiplies what CG produced, applies the quad's alpha and
-the same SDF for rounded corners. `Native\ImageIO` decodes anything
-ImageIO reads (PNG, JPEG, HEIC, ICNS…) through a CGBitmapContext, scaled
-down to fit `$max` pixels on a side; `UI\Image` keeps the pixels until
-the first paint puts them in the atlas, then frees them. The image atlas
-has no eviction yet: it is for an app's icons and avatars, not a photo
-grid.
+Images ride the same draw: `ImageAtlas` packs them into pages, each an
+RGBA `Atlas` the glyph atlas's size (so the shader divides by one size)
+and a slice of a `texture2d_array` at texture 1 (`ImageAtlas::MAX`
+slices allocated up front; a page's pixels are allocated when it opens
+and uploaded with `replaceRegion:…slice:…` while dirty). A `kind = 2`
+quad carries its slot origin in `u, v`, the slot's pixel size in the
+color's `r, g` and the page in `b` (the vertex shader scales the uv by
+the slot size instead of the quad size, so an image stretches to its
+node). The fragment un-premultiplies what CG produced, applies the
+quad's alpha and the same SDF for rounded corners. `Native\ImageIO`
+decodes anything ImageIO reads (PNG, JPEG, HEIC, ICNS…) through a
+CGBitmapContext, scaled down to fit `$max` pixels on a side; `UI\Image`
+keeps the pixels until the first paint puts them in a page, then frees
+them. An image goes on the first page with room, a new page opens while
+there are fewer than MAX (an image up to a page's size has one to
+itself), and past that the page drawn from least recently is emptied, so
+a grid of thumbnails and a full-size photo stop evicting each other.
 
-Either atlas may fill: the glyph atlas when an app has shown more distinct
-glyphs than fit, the image atlas when more images than fit have been drawn.
-Both start over (`Atlas::reset`) at the first bitmap that does not fit and
-set `Text::$repaint`; `Window` then clears the display list and paints the
+The glyph atlas may fill when an app has shown more distinct glyphs
+than fit, and the image pages when more images than fit were drawn.
+The glyph atlas starts over (`Atlas::reset`) at the first bitmap that
+does not fit, an image page is emptied, and either sets `Text::$repaint`; `Window` then clears the display list and paints the
 frame again, so the quads painted before the reset, which name slots that
 are gone, never reach the GPU. `Image` keeps its pixels for this. A change
 of backing scale — a window dragged to another display — arrives as

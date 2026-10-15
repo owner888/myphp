@@ -6,7 +6,7 @@ namespace MyPHP\Native;
 use Closure;
 use FFI;
 use MyPHP\UI\DisplayList;
-use MyPHP\UI\Atlas;
+use MyPHP\UI\{Atlas, ImageAtlas};
 use RuntimeException;
 
 /**
@@ -27,7 +27,7 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -111,7 +111,7 @@ final class Metal
         }
         return float4(c, 1.0 - smoothstep(-0.5, 0.5, sd));
     }
-    fragment float4 quad_fragment(V v [[stage_in]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
+    fragment float4 quad_fragment(V v [[stage_in]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d_array<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
@@ -151,7 +151,7 @@ final class Metal
             return float4(v.color.rgb, v.color.a * a);
         }
         if (v.kind > 1.5) {
-            float4 c = images.sample(s, v.uv);   // premultiplied; the blend expects straight alpha
+            float4 c = images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
             float a = 1.0 - smoothstep(-0.5, 0.5, d);
@@ -202,8 +202,9 @@ final class Metal
     private ?Atlas $atlas = null;
     private $atlasTexture = null;
     private $atlasRegion = null;
-    private ?Atlas $images = null;
+    private ?ImageAtlas $images = null;
     private $imagesTexture = null;
+    private const TEXTURE_2D_ARRAY = 3; // MTLTextureType
     /** @var array<int, Closure> draw callbacks by view address */
     private static array $onDraw = [];
     private static $delegate = null;
@@ -249,14 +250,16 @@ final class Metal
         $this->uniforms[5] = $scale;
     }
 
-    /** The image atlas; it must be the glyph atlas's size, as the shader divides by one size. */
-    public function attachImages(Atlas $images): void
+    /** The image atlas: a texture array of ImageAtlas::MAX slices, each the glyph atlas's size (the shader divides by one size). */
+    public function attachImages(ImageAtlas $images): void
     {
         if ($images->w !== $this->atlas->w || $images->h !== $this->atlas->h) {
             throw new RuntimeException('the image atlas must be the glyph atlas\'s size');
         }
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
             self::PIXEL_FORMAT_RGBA8, $images->w, $images->h, false);
+        ObjC::msg('v:L', $desc, 'setTextureType:', self::TEXTURE_2D_ARRAY);
+        ObjC::msg('v:L', $desc, 'setArrayLength:', ImageAtlas::MAX);
         $this->imagesTexture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
             ?? throw new RuntimeException('image atlas texture');
         $this->images = $images;
@@ -362,9 +365,14 @@ final class Metal
             ObjC::msg('v:RLpL', $this->atlasTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $this->atlasRegion, 0, $this->atlas->pix, $this->atlas->w);
             $this->atlas->dirty = false;
         }
-        if ($this->imagesTexture !== null && $this->images->dirty) {
-            ObjC::msg('v:RLpL', $this->imagesTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $this->atlasRegion, 0, $this->images->pix, $this->images->w * 4);
-            $this->images->dirty = false;
+        if ($this->imagesTexture !== null) {
+            foreach ($this->images->pages as $i => $page) {
+                if ($page->dirty) {
+                    ObjC::msg('v:RLLpLL', $this->imagesTexture, 'replaceRegion:mipmapLevel:slice:withBytes:bytesPerRow:bytesPerImage:',
+                        $this->atlasRegion, 0, $i, $page->pix, $page->w * 4, $page->w * $page->h * 4);
+                    $page->dirty = false;
+                }
+            }
         }
         $cb = ObjC::msg('p:', $this->queue, 'commandBuffer');
         $texture = ObjC::msg('p:', $drawable, 'texture');
