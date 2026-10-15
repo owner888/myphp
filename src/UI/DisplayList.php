@@ -12,8 +12,11 @@ use RuntimeException;
  * kind 0 is a filled (rounded) rect; kind 1 samples the glyph atlas at u, v;
  * kind 2 samples the image atlas, with the slot's pixel size in r, g;
  * kind 3 is a soft shadow (u = blur), kind 4 a ring (u = thickness), kind 5
- * Liquid Glass (u = style, color = tint), which reads what was drawn before
- * it, blurred: the renderer splits the frame's draw at each glass quad.
+ * Liquid Glass (u = style, color = tint), kind 6 a vertical alpha gradient
+ * (color.a at the top, u at the bottom), kind 7 a backdrop blur and 8 the
+ * hard scroll edge's (mixed with the color by its alpha, shown from u at
+ * the top to v at the bottom). Kinds 5, 7 and 8 read what was drawn before
+ * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
  */
@@ -78,6 +81,23 @@ final class DisplayList
         $this->quad($x, $y, $w, $h, $tint, $tintAlpha, $radius, 5.0, (float)$style);
     }
 
+    /** A vertical gradient of $rgb from $alphaTop to $alphaBottom. */
+    public function gradient(float $x, float $y, float $w, float $h, int $rgb, float $alphaTop, float $alphaBottom, float $radius = 0.0): void
+    {
+        $this->quad($x, $y, $w, $h, $rgb, $alphaTop, $radius, 6.0, $alphaBottom);
+    }
+
+    /**
+     * What was drawn before, blurred by $sigma pixels, mixed with $rgb by
+     * $mix, shown from $top to $bottom (0..1) down the quad; $hard tones it
+     * as macOS's hard scroll edge does.
+     */
+    public function blur(float $x, float $y, float $w, float $h, float $radius, float $sigma, int $rgb, float $mix, float $top, float $bottom, bool $hard = false): void
+    {
+        $this->glass[] = [$this->n, $sigma];
+        $this->quad($x, $y, $w, $h, $rgb, $mix, $radius, $hard ? 8.0 : 7.0, $top, $bottom);
+    }
+
     /** A soft shadow of a rounded rect, offset by (dx, dy), its edge feathered over $blur points each way. */
     public function shadow(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $blur, float $dx = 0, float $dy = 0): void
     {
@@ -90,7 +110,7 @@ final class DisplayList
         $this->quad($x, $y, $w, $h, $rgb, $alpha, $radius, 4.0, $thickness);
     }
 
-    private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u): void
+    private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u, float $v = 0.0): void
     {
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} quads)");
@@ -98,7 +118,7 @@ final class DisplayList
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
-        $b[$k + 8] = $radius; $b[$k + 9] = $kind; $b[$k + 10] = $u; $b[$k + 11] = 0.0;
+        $b[$k + 8] = $radius; $b[$k + 9] = $kind; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }

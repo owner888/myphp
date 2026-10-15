@@ -108,8 +108,18 @@ coverage is the rounded rect's own SDF. Interactive glass grows 1.1 × 0.45
 points while pressed. The theme's darkness reaches the shader through
 `Uniforms.dark`. Nodes overlap through `->at(x, y)`, which takes a node
 out of the flow and places it from its parent's top left, painted in
-child order. mygo's ScrollEdge and Blur materials use the same backdrop
-and are not ported yet.
+child order.
+
+`UI\Blur` and `UI\ScrollEdge` ride the same backdrop (kinds 7 and 8, with
+kind 6 a vertical alpha gradient): a blur quad samples the backdrop at
+the pixel, mixes a color in by its alpha and shows by a weight that runs
+from `u` at the quad's top to `v` at its bottom — a fading Blur mixes the
+blurred and the sharp content, where mygo stacks blur levels, which reads
+a little truer. The hard scroll edge saturates the sample by 1.25 and
+lifts it 0.03 in the shader, under the theme's background toned (0.947
+saturation, +0.03) at 82.45 %, with a half-point hairline along the other
+edge; the soft one is only the background's gradient, 85 % to nothing, as
+measured from macOS 27 by mygo.
 
 ## Text path
 
@@ -154,8 +164,11 @@ Changed). The toggles are focusable nodes whose click flips the value;
 the slider is set from `Runtime`, which records presses and drags inside
 slider rects as a share of their width (`slid`) and Left/Right on a
 focused slider as steps (`stepped`); the select pops an `NSMenu` under
-the node's last-frame rect (`Menu::popupAt`), whose item clicks set the
-index before the popup returns, since the popup runs its own loop.
+the node's last-frame rect (`Menu::popupAt`); the popup runs its own loop
+but AppKit sends the chosen item's action on a later run-loop turn, after
+the popup returned, so the action records the choice in `Runtime`
+(`chose`) and asks for a frame, and the next build's `select()` takes it
+(`chosen`).
 
 `link()` is accent text with an underline whose click calls
 `Runtime::$openURL` (App::openURL → `NSWorkspace openURL:`); while it is

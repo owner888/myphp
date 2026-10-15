@@ -39,7 +39,8 @@ function form(Context $c, array &$s): void
       $c->row(0, 16);
         $c->checkbox('Subscribe', $s['subscribe']);
         $c->radio('Light', $s['mode'], 'light'); $c->radio('Dark', $s['mode'], 'dark');
-        $c->slider($s['volume'], 0, 100, 140); $c->muted(sprintf('%.0f%%', $s['volume']));
+        $c->slider($s['volume'], 0, 100, 140);
+        $c->column(0, 0)->size(40); $c->muted(sprintf('%.0f%%', $s['volume'])); $c->end(); // a fixed width, so the number does not push the select about
         $c->select(['English', '中文', 'Español'], $s['lang']);
       $c->end();
       // A focusable card: Tab reaches it, Enter or a click activates it, hover tints it; the text wraps at the card's width.

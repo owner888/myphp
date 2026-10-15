@@ -50,7 +50,7 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
 src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbox/radio/slider/select/progress/
                    input/textarea/image/box/list; clicked/changed/hovered/focused; ->tooltip()/at()/round()/
-                   material()), Glass (Liquid Glass material), Font (style
+                   material()), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
@@ -88,10 +88,10 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   `followEnd` keeps a list at its end as rows are appended (chat, log).
 - **One GPU buffer per frame**: `DisplayList` writes 16 floats per quad into
   a shared `MTLBuffer` (ring of four); rects, glyphs, images, shadows, rings
-  and glass share one pipeline and one instanced draw (kind 0–5), so draw
-  order is list order; clip rect per quad. A glass quad splits the draw:
-  what is below it is copied and blurred (half size, two passes) into the
-  backdrop it samples, then the pass resumes from it.
+  and glass share one pipeline and one instanced draw (kind 0–8), so draw
+  order is list order; clip rect per quad. A backdrop quad (glass, blur,
+  hard scroll edge) splits the draw: what is below it is copied and blurred
+  (half size, two passes) into the backdrop it samples, then the pass resumes.
 - **Atlases start over when full** (glyphs or images): `Text::$repaint` makes
   `Window` paint the frame again, so nothing points at slots that are gone;
   `App::rescale()` (windowDidChangeBackingProperties) re-rasterizes glyphs
@@ -148,8 +148,7 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; images; rich text (bold/italic/mono, spans); checkbox, radio, slider, select, link, progress, tooltips; soft shadows, rings, Liquid Glass; tray, global shortcuts, notifications, window events + state;
+theme; images; rich text (bold/italic/mono, spans); checkbox, radio, slider, select, link, progress, tooltips; soft shadows, rings, Liquid Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; file drops; CLI + .app.
-Remaining: mygo's ScrollEdge and Blur materials (same backdrop path as
-Glass); Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
+Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes).

@@ -56,7 +56,13 @@ final class Painter
         if ($n->focused && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }
-        if ($n->material !== null) {
+        if ($n->material instanceof Blur) {
+            $b = $n->material;
+            [$top, $bottom] = $b->fade ? ($b->fromBottom ? [0.0, 1.0] : [1.0, 0.0]) : [1.0, 1.0];
+            $list->blur($n->x, $n->y, $n->w, $n->h, $n->radius, $b->radius * $text->scale(), 0, 0.0, $top, $bottom);
+        } elseif ($n->material instanceof ScrollEdge) {
+            self::paintScrollEdge($n, $list, $text, $t);
+        } elseif ($n->material !== null) {
             $g = $n->material;
             $x = $n->x; $y = $n->y; $w = $n->w; $h = $n->h; $r = $n->radius;
             if ($g->interactive && $rt !== null && $rt->input->mouseDown && $rt->hovered($n->id)) {
@@ -122,6 +128,32 @@ final class Painter
                 }
             }
         }
+    }
+
+    /**
+     * macOS's scroll edge over content under a bar: soft, the background
+     * fading from 85% at the bar's edge to nothing; hard, the content
+     * blurred by 6.4 points and saturated under 82% of the background
+     * (toned as AppKit's), with a hairline along the other edge.
+     */
+    private static function paintScrollEdge(Node $n, DisplayList $list, Text $text, Theme $t): void
+    {
+        $e = $n->material;
+        $bg = $e->background ?? $t->background;
+        if (!$e->hard) {
+            [$a0, $a1] = $e->bottom ? [0.0, 0.85] : [0.85, 0.0];
+            $list->gradient($n->x, $n->y, $n->w, $n->h, $bg, $a0, $a1, $n->radius);
+            return;
+        }
+        // The background toned: desaturated to 0.947 and lightened by 0.03, as AppKit's background replay.
+        $r = (($bg >> 16) & 255) / 255; $g = (($bg >> 8) & 255) / 255; $b = ($bg & 255) / 255;
+        $l = 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
+        $tone = fn(float $c) => (int)round(max(0.0, min(1.0, $l + ($c - $l) * 0.947 + 0.03)) * 255);
+        $toned = ($tone($r) << 16) | ($tone($g) << 8) | $tone($b);
+        $list->blur($n->x, $n->y, $n->w, $n->h, $n->radius, 6.4 * $text->scale(), $toned, 0.8245, 1.0, 1.0, true);
+        // The hairline along the other edge, outside it: black at 10% in light mode, white at 7% in dark.
+        $y = $e->bottom ? $n->y - 0.5 : $n->y + $n->h;
+        $list->rect($n->x, $y, $n->w, 0.5, $t->dark ? 0xffffff : 0x000000, $t->dark ? 0.07 : 0.1);
     }
 
     /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */

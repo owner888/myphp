@@ -321,20 +321,21 @@ final class Context
         if ($this->runtime?->hovered($n->id)) {
             $n->color = $t->surfaceHover;
         }
-        if ($this->runtime?->clicked($n->id)) {
+        $rt = $this->runtime;
+        if ($rt !== null && ($chosen = $rt->chosen($n->id)) !== null && $chosen !== $index && isset($options[$chosen])) {
+            $index = $chosen; // the menu's action arrived after the popup returned, on a later run-loop turn
+            $n->text = $options[$index];
+            $n->changed = true;
+        }
+        if ($rt?->clicked($n->id)) {
             $window ??= Window::key();
-            $chosen = null;
             $items = [];
+            $id = $n->id;
             foreach ($options as $i => $o) {
-                $items[] = new MenuItem($o, function () use (&$chosen, $i) { $chosen = $i; }, checked: $i === $index, type: MenuItem::CHECKBOX);
+                $items[] = new MenuItem($o, function (MenuItem $it, ?Window $w) use ($rt, $id, $i) { $rt->chose($id, $i); $w?->update(); }, checked: $i === $index, type: MenuItem::CHECKBOX);
             }
             if ($window !== null) {
-                (new Menu($items))->popupAt($window, $n->id, $this->runtime);
-            }
-            if ($chosen !== null && $chosen !== $index) {
-                $index = $chosen;
-                $n->text = $options[$index];
-                $n->changed = true;
+                (new Menu($items))->popupAt($window, $n->id, $rt);
             }
         }
         return $n;

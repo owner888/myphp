@@ -518,6 +518,23 @@ final class Runtime
     /** @var array<int, int> id => arrow steps on a focused slider this frame */
     private array $steps = [];
 
+    /** @var array<int, int> choices menus made for selects, by node id, until the select reads them */
+    private array $choices = [];
+
+    /** A select's menu chose option $i (called from the menu's action, after the popup returned). */
+    public function chose(int $id, int $i): void
+    {
+        $this->choices[$id] = $i;
+    }
+
+    /** The option a select's menu chose since it last asked, or null. */
+    public function chosen(int $id): ?int
+    {
+        $i = $this->choices[$id] ?? null;
+        unset($this->choices[$id]);
+        return $i;
+    }
+
     /** Whether slider $id is being held (pressed, dragging). */
     public function sliding(int $id): bool
     {

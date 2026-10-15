@@ -2,18 +2,20 @@
 // Liquid Glass in native UI: a photo and a strip of colors scroll under a
 // glass toolbar and a glass pill that a slider moves, so the blur, the
 // bend near the edge and the lit rim show; Regular or Clear, tinted or not,
-// and an interactive glass button that grows while pressed.
+// and an interactive glass button that grows while pressed. A hard scroll
+// edge at the bottom (macOS's, under a bar of controls) and a fading blur
+// band in the middle use the same backdrop.
 // Run: ./run.sh glass
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Glass, Image, ScrollState, Span};
+use MyPHP\UI\{Blur, Content, Context, Font, Glass, Image, ScrollEdge, ScrollState, Span};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $pictures = array_values(array_filter(glob('/System/Library/Desktop Pictures/*.heic') ?: [], fn($p) => filesize($p) < 30_000_000));
 $pictures !== [] || throw new RuntimeException('no pictures under /System/Library/Desktop Pictures');
-$s = ['photo' => Image::fromFile($pictures[0], 1600), 'x' => 40.0, 'clear' => false, 'tinted' => false, 'scroll' => new ScrollState, 'presses' => 0];
+$s = ['photo' => Image::fromFile($pictures[0], 1600), 'x' => 40.0, 'clear' => false, 'tinted' => false, 'scroll' => new ScrollState, 'presses' => 0, 'hard' => true];
 
 function view(Context $c, array &$s): void
 {
@@ -45,6 +47,15 @@ function view(Context $c, array &$s): void
       // A pill the slider moves across the photo: the lens bends what shows near its edge.
       $c->row(14, 8)->at($s['x'], 120)->round(28)->material($glass());
         $c->rich([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
+      $c->end();
+      // A blur fading from full at its top to nothing at its bottom (a progressive blur), across the window.
+      $c->column(12, 0)->at(0, 300)->size($c->width, 90)->material(new Blur(10, fade: true));
+        $c->text('Blur, fading downward', 13, style: Font::BOLD);
+      $c->end();
+      // The scroll edge at the bottom: a bar of controls stands out from what scrolls under it.
+      $c->row(16, 12)->at(0, $c->height - 64)->size($c->width, 64)->material(new ScrollEdge(hard: $s['hard'], bottom: true));
+        $c->checkbox('Hard scroll edge', $s['hard']);
+        $c->muted('scroll the content: it blurs and fades under this bar', 12);
       $c->end();
     $c->end();
 }

@@ -49,8 +49,8 @@ final class Node
     /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
     public bool $absolute = false;
     public float $ax = 0, $ay = 0;
-    /** A material painted in place of the color: Liquid Glass. */
-    public ?Glass $material = null;
+    /** A material painted in place of the color: Glass, Blur or ScrollEdge. */
+    public Glass|Blur|ScrollEdge|null $material = null;
     /** Whether the pointer is pressing this node (for interactive glass); Context sets it on material nodes. */
     public bool $pressed = false;
     /** For an image node: what it shows, its corner radius and opacity. */
@@ -88,10 +88,10 @@ final class Node
         return $this;
     }
 
-    /** Fills this container with Liquid Glass instead of a color, shaped by round(). */
-    public function material(Glass $glass): static
+    /** Fills this container with a material instead of a color (Glass, Blur, ScrollEdge), shaped by round(). */
+    public function material(Glass|Blur|ScrollEdge $material): static
     {
-        $this->material = $glass;
+        $this->material = $material;
         return $this;
     }
 
