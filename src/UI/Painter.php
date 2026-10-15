@@ -62,9 +62,14 @@ final class Painter
         }
         if ($n->scroll !== null) {
             $list->popClip();
-            // The thumb shows while the pointer is over the container or drags it.
+            // The thumbs show while the pointer is over the container or drags one.
             if ($rt !== null && ($rt->dragging($n->scroll) || $rt->hovered($n->id))) {
-                $thumb = Scrollbar::thumb([$n->x, $n->y, $n->w, $n->h], $n->scroll->extent(), $t->scrollbarWidth);
+                $r = [$n->x, $n->y, $n->w, $n->h];
+                $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth) : null;
+                if ($thumb !== null) {
+                    $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
+                }
+                $thumb = $n->scrollX ? Scrollbar::thumb($r, $n->scroll->extentX(), $t->scrollbarWidth, true) : null;
                 if ($thumb !== null) {
                     $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
                 }

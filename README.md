@@ -47,7 +47,7 @@ Early. What works today, on macOS / Apple Silicon:
 |---|---|
 | Objective-C bridge (`objc_msgSend`, classes with PHP methods) | works |
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
-| Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
+| Native UI: Metal renderer, CoreText text, flex layout, scrolling on either axis, clicks, hover | works (`examples/native`, `form`) |
 | Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
 | Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded | works (`examples/native`) |
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
@@ -161,7 +161,7 @@ App::run();
 |---|---|
 | Objective-C 桥（`objc_msgSend`、方法为 PHP 闭包的类） | 可用 |
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
-| 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
+| 原生 UI：Metal 渲染、CoreText 文字、flex 布局、横竖滚动、点击、hover | 可用（`examples/native`、`form`） |
 | 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
 | 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明 | 可用（`examples/native`） |
 | 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/native`、`logview`） |

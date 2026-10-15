@@ -15,24 +15,26 @@ final class Scrollbar
      * or null when the content fits the view.
      * @return array{0: float, 1: float, 2: float, 3: float}|null
      */
-    public static function thumb(array $r, array $extent, float $width): ?array
+    public static function thumb(array $r, array $extent, float $width, bool $horizontal = false): ?array
     {
         [$offset, $range, $view] = $extent;
         if ($range <= 0 || $view <= 0) {
             return null;
         }
-        $inner = $r[3] - 4;
+        $inner = ($horizontal ? $r[2] : $r[3]) - 4;
         $thumb = min(max($inner * $view / ($view + $range), self::MIN_THUMB), $inner);
         $travel = $inner - $thumb;
         $at = max(0.0, min($travel, $travel * $offset / $range));
-        return [$r[0] + $r[2] - $width - 2, $r[1] + 2 + $at, $width, $thumb];
+        return $horizontal
+            ? [$r[0] + 2 + $at, $r[1] + $r[3] - $width - 2, $thumb, $width]
+            : [$r[0] + $r[2] - $width - 2, $r[1] + 2 + $at, $width, $thumb];
     }
 
     /** How far the content moves when the thumb moves one point. */
-    public static function pointsPerThumbPoint(array $r, array $extent): float
+    public static function pointsPerThumbPoint(array $r, array $extent, bool $horizontal = false): float
     {
         [, $range, $view] = $extent;
-        $inner = $r[3] - 4;
+        $inner = ($horizontal ? $r[2] : $r[3]) - 4;
         $thumb = min(max($inner * $view / ($view + $range), self::MIN_THUMB), $inner);
         $travel = $inner - $thumb;
         return $travel > 0 ? $range / $travel : 0.0;

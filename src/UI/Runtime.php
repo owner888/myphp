@@ -18,6 +18,8 @@ final class Runtime
     private array $rects = [];
     /** @var array<int, Scrollable> id => scroll state, from last frame */
     private array $scrolls = [];
+    /** @var array<int, array{0: bool, 1: bool}> id => scrolls horizontally, vertically */
+    private array $scrollAxes = [];
     /** Set by a frame that needs another one right after (a list left a gap). */
     public bool $needsFrame = false;
     private array $clicks = [];     // [x, y] of left mouse-ups this frame
@@ -93,14 +95,19 @@ final class Runtime
                     break;
                 case 'drag':
                     if ($this->drag !== null) {
-                        [$state, $lastY, $ratio] = $this->drag;
-                        $state->scrollBy(($e[2] - $lastY) * $ratio);
-                        $this->drag[1] = $e[2];
+                        [$state, $last, $ratio, $horizontal] = $this->drag;
+                        if ($horizontal) {
+                            $state->scrollByX(($e[1] - $last) * $ratio);
+                            $this->drag[1] = $e[1];
+                        } else {
+                            $state->scrollBy(($e[2] - $last) * $ratio);
+                            $this->drag[1] = $e[2];
+                        }
                     } elseif ($this->focus !== null && isset($this->fields[$this->focus]) && $this->input->mouseDown) {
                         $this->placeCaret($this->focus, $e[1], $e[2], true);
                     }
                     break;
-                case 'scroll': $this->scrollAt($e[1], $e[2], $e[4]); break;
+                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
                 case 'command': $this->command($e[1]); break;
                 case 'insert':
                     if ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus])) {
@@ -123,6 +130,7 @@ final class Runtime
         }
         $this->rects = [];
         $this->scrolls = [];
+        $this->scrollAxes = [];
         $this->focusables = [];
         $this->fields = [];
         $this->lists = [];
@@ -175,8 +183,14 @@ final class Runtime
     private function record(Node $n): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
-        if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) {
+        if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) {
             $this->focusables[] = $n->id;
+            if ($n->focusable && $n->id === $this->focus) {
+                $n->focused = true; // the painter shows the ring; buttons and fields set this while building
+            }
+        }
+        if ($n->wrapWidth !== null && abs($n->w - $n->wrapWidth) > 0.5) {
+            $this->needsFrame = true; // wrapped at last frame's width; this frame's differs
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
@@ -187,6 +201,7 @@ final class Runtime
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
+            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY];
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
                 $this->needsFrame = true;
             }
@@ -227,16 +242,21 @@ final class Runtime
     /** A press on a scroll bar's thumb starts dragging it; the thumb takes a few points around it. */
     private function grabThumb(float $x, float $y): bool
     {
+        $g = Scrollbar::GRAB;
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
-            $t = Scrollbar::thumb($r, $state->extent(), $this->scrollbarWidth);
-            if ($t === null) {
-                continue;
-            }
-            $g = Scrollbar::GRAB;
-            if ($x >= $t[0] - $g && $x < $t[0] + $t[2] + $g && $y >= $t[1] - $g && $y < $t[1] + $t[3] + $g) {
+            [$horizontal, $vertical] = $this->scrollAxes[$id];
+            foreach ([[false, $vertical], [true, $horizontal]] as [$axis, $on]) {
+                if (!$on) {
+                    continue;
+                }
+                $extent = $axis ? $state->extentX() : $state->extent();
+                $t = Scrollbar::thumb($r, $extent, $this->scrollbarWidth, $axis);
+                if ($t === null || $x < $t[0] - $g || $x >= $t[0] + $t[2] + $g || $y < $t[1] - $g || $y >= $t[1] + $t[3] + $g) {
+                    continue;
+                }
                 $state->stop();
-                $this->drag = [$state, $y, Scrollbar::pointsPerThumbPoint($r, $state->extent())];
+                $this->drag = [$state, $axis ? $x : $y, Scrollbar::pointsPerThumbPoint($r, $extent, $axis), $axis];
                 return true;
             }
         }
@@ -401,6 +421,12 @@ final class Runtime
         return false;
     }
 
+    /** The width this node had last frame, for text that wraps at the width the layout gives it. */
+    public function widthOf(int $id): ?float
+    {
+        return isset($this->rects[$id]) ? $this->rects[$id][2] : null;
+    }
+
     public function hovered(int $id): bool
     {
         $r = $this->rects[$id] ?? null;
@@ -409,17 +435,25 @@ final class Runtime
             && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3];
     }
 
-    /** Scrolls the innermost scrolling container under (x, y) by dy points. */
-    private function scrollAt(float $x, float $y, float $dy): void
+    /** Scrolls the innermost scrolling container under (x, y) by the wheel's dx and dy points, on the axes it scrolls. */
+    private function scrollAt(float $x, float $y, float $dx, float $dy): void
     {
-        $best = null; $bestArea = INF;
+        $best = null; $bestArea = INF; $axes = [false, true];
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
             if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
-                $best = $state; $bestArea = $r[2] * $r[3];
+                $best = $state; $bestArea = $r[2] * $r[3]; $axes = $this->scrollAxes[$id];
             }
         }
-        $best?->stop();
-        $best?->scrollBy(-$dy);
+        if ($best === null) {
+            return;
+        }
+        $best->stop();
+        if ($axes[1] && $dy != 0) {
+            $best->scrollBy(-$dy);
+        }
+        if ($axes[0] && $dx != 0) {
+            $best->scrollByX(-$dx);
+        }
     }
 }

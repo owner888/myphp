@@ -171,6 +171,17 @@ paint pushes the container's rect as a clip, which travels with each quad
 into the shader (`float4 clip`, discard outside). An NSTrackingArea with
 `mouseMoved` keeps hover state current.
 
+A `ScrollState` container scrolls on the axes `Node::scroll()` names:
+`Layout::measure` gives it 2×pad on a scrolled axis (it takes the room it
+is given) and its content's size on the other; `arrange` computes the
+content size on both axes (main: the sum plus gaps; cross: the largest
+child), sets `maxX`/`maxY` and the viewports, offsets the children, and
+lets children keep their own size across a scrolled cross axis (a row
+scrolling vertically gives its children the content height). `Runtime`
+routes the wheel's dx and dy to the axes the container scrolls, and
+thumbs (`Scrollbar::thumb` with `$horizontal`) sit along the right and
+bottom edges, each draggable.
+
 ## Lists
 
 `Context::list($state, $count, $row)` is the virtualized list. `ListState`

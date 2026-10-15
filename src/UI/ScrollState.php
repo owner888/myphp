@@ -3,18 +3,32 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-/** Offset of a scrolling container, kept by the app across frames. */
+/** Offsets of a scrolling container, kept by the app across frames: y down, and x right when it scrolls horizontally. */
 final class ScrollState implements Scrollable
 {
     public float $y = 0;
-    /** Set by layout each frame: content height minus viewport height, and the viewport. */
+    public float $x = 0;
+    /** Set by layout each frame: content minus viewport on each axis, and the viewport. */
     public float $maxY = 0;
+    public float $maxX = 0;
     public float $viewport = 0;
+    public float $viewportW = 0;
     private ?float $target = null;
 
     public function scrollBy(float $dy): void
     {
         $this->y = max(0.0, min($this->maxY, $this->y + $dy));
+    }
+
+    public function scrollByX(float $dx): void
+    {
+        $this->x = max(0.0, min($this->maxX, $this->x + $dx));
+    }
+
+    /** How far it is scrolled right, how far it can go and the view's width. */
+    public function extentX(): array
+    {
+        return [$this->x, $this->maxX, $this->viewportW];
     }
 
     /** Scrolls to $y points (INF is the end), gliding there over the next frames unless $smooth is false. */

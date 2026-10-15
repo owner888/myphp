@@ -15,8 +15,10 @@ final class Node
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
     public int $id = 0;
-    /** Set on a container that scrolls its children vertically. */
+    /** Set on a container that scrolls its children, on the axes scrollX/scrollY say. */
     public ?Scrollable $scroll = null;
+    public bool $scrollX = false;
+    public bool $scrollY = true;
     /** For an input field: its text and selection. */
     public ?TextState $edit = null;
     /** Whether this node has the keyboard focus this frame. */
@@ -27,8 +29,11 @@ final class Node
     public int $style = 0;
     /** @var Span[] */
     public array $spans = [];
-    /** For rich text: its lines, wrapped at the width Context::rich was given. */
+    /** For rich text: its lines, wrapped at the width Context::rich was given, or at last frame's width ($wrapWidth). */
     public ?RichLayout $rich = null;
+    public ?float $wrapWidth = null;
+    /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
+    public bool $focusable = false;
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;
@@ -56,10 +61,19 @@ final class Node
         public int $fg = 0,
     ) {}
 
-    /** Makes this container scroll its children, keeping the offset in $state. */
-    public function scroll(Scrollable $state): static
+    /** Lets this node take the keyboard focus like a button: Tab reaches it, a click gives it, Enter and Space click it, a ring shows it. */
+    public function focusable(): static
+    {
+        $this->focusable = true;
+        return $this;
+    }
+
+    /** Makes this container scroll its children, keeping the offsets in $state: vertically, horizontally (a ScrollState), or both. */
+    public function scroll(Scrollable $state, bool $horizontal = false, bool $vertical = true): static
     {
         $this->scroll = $state;
+        $this->scrollX = $horizontal && $state instanceof ScrollState;
+        $this->scrollY = $vertical;
         return $this;
     }
 }

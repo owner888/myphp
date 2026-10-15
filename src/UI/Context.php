@@ -168,18 +168,31 @@ final class Context
      * Spans that differ in style over $size and $color (the theme's by
      * default), baselines aligned per line, as mygo's RichText. With a
      * $width the text wraps there (at spaces, between CJK characters, by
-     * character when a word is wider) and at newlines; without one it is
-     * one line. The node is as wide as its widest line.
+     * character when a word is wider) and at newlines; with $wrap it
+     * wraps at the width the layout gave this node last frame (the
+     * window's width the first time, and a frame follows when it differs);
+     * otherwise it is one line. The node is as wide as its widest line.
      * @param Span[] $spans
      */
-    public function rich(array $spans, ?float $size = null, ?int $color = null, ?float $width = null): Node
+    public function rich(array $spans, ?float $size = null, ?int $color = null, ?float $width = null, bool $wrap = false): Node
     {
         $size ??= $this->theme->fontSize;
+        $n = $this->add(new Node(Node::RICH, 0, 0, 0, 0, 0, 0, null, null, $size, $color ?? $this->theme->text));
+        if ($wrap && $width === null) {
+            $width = $this->runtime?->widthOf($n->id) ?? $this->width;
+            $n->wrapWidth = $width;
+        }
         $layout = RichLayout::wrap($this->metrics, $spans, $size, $width ?? INF);
-        $n = $this->add(new Node(Node::RICH, 0, 0, 0, $layout->w, $layout->h, 0, null, null, $size, $color ?? $this->theme->text));
+        $n->fw = $layout->w; $n->fh = $layout->h;
         $n->spans = $spans;
         $n->rich = $layout;
         return $n;
+    }
+
+    /** Whether the node just built has the keyboard focus (buttons, fields, lists and nodes made focusable()). */
+    public function focused(Node $n): bool
+    {
+        return $this->runtime?->focused($n->id) ?? false;
     }
 
     /** Secondary text, in the theme's muted color. */
