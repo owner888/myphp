@@ -66,6 +66,13 @@ final class Node
         public int $fg = 0,
     ) {}
 
+    /** Fixes a container's width and/or height (points) instead of its content's size; 0 leaves one to the content. */
+    public function size(float $w = 0, float $h = 0): static
+    {
+        $this->fw = $w; $this->fh = $h;
+        return $this;
+    }
+
     /** Lets this node take the keyboard focus like a button: Tab reaches it, a click gives it, Enter and Space click it, a ring shows it. */
     public function focusable(): static
     {

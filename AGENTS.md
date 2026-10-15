@@ -57,8 +57,8 @@ src/UI/            Node, Context (column/row/text/muted/rich/button/checkbox/rad
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
                    Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
-                   shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview (a real tool:
-                   follows a log, filters, highlights — the API's proving ground)
+                   shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview and notes
+                   (real tools — a log viewer, Markdown notes with preview — the API's proving ground)
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
@@ -73,7 +73,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   list rows are keyed by index); `clicked()/hovered()/focused()` hit-test
   them while building; a click that changed state re-runs the build (≤3 passes).
   `rich(..., wrap: true)` wraps at last frame's width (a frame follows when
-  it differs); `->focusable()` puts any node in the Tab order.
+  it differs); `->focusable()` puts any node in the Tab order; `->size(w, h)`
+  fixes a container's size over its content's.
 - **Scrolling on either axis**: `->scroll($state, horizontal:, vertical:)`;
   a container takes the room it is given on the axes it scrolls and its
   content's size on the other; wheel dx/dy, thumbs and drags per axis.

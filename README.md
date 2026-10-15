@@ -99,6 +99,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh desktop          # menus and dialogs
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: follows the file, filters, highlights
+./run.sh notes            # Markdown notes: list, editor, live preview, autosave
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
 ```
@@ -211,6 +212,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh desktop          # 菜单和对话框
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮
+./run.sh notes            # Markdown 笔记：列表、编辑器、实时预览、自动保存
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
 ```
