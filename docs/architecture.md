@@ -144,6 +144,23 @@ offset and renormalizes it across row boundaries; past the end it pulls
 back so the last rows fill the view. mygo instead builds the missing rows
 during layout, so it never shows a gap; that is the remaining difference.
 
+## Page path
+
+`Native\WebView` builds a WKWebViewConfiguration with a user script
+(`bridge.js` with the window's config spliced in, injected at document
+start) and a script message handler named `myphp`. The page's
+`window.myphp.call` posts `{t:"call", id, k, m, a}` as JSON; the handler
+closure hands the body to `Ipc::handle`, which checks the secret, finds
+"Service.method" among the bound services, calls it with the JSON
+arguments and returns `{t:"reply", id, k, ok, v|e}`; `WebView::deliver`
+evaluates `window.myphp.__deliver(...)` with it. Events are the same in
+the other direction. Unlike mygo, calls run on the main thread one after
+another: a slow method stalls the UI, so slow work belongs in a subprocess
+or a later message. `TypeScript::generate` reflects the services: PHP
+types map to TS (int/float → number, class → interface of its public
+properties, PHPDoc `Note[]`/`list<T>`/`array<K,V>` for arrays), docblocks
+become TSDoc, declared events get typed listeners.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never

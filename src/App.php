@@ -15,6 +15,7 @@ use RuntimeException;
  */
 final class App
 {
+    public const VERSION = '0.4.0-dev';
     /** @var list<Closure> */
     private static array $whenReady = [];
     private static bool $ready = false;
@@ -41,13 +42,22 @@ final class App
         return self::$ready;
     }
 
+    /**
+     * Starts the event loop and blocks until the app quits. With
+     * MYPHP_GENERATE set to a path, writes the TypeScript client for the
+     * bound services there instead and returns, as mygo generate does.
+     */
     public static function run(): void
     {
         if (self::$running) {
             throw new RuntimeException('App::run called twice');
         }
         self::$running = true;
-        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText']);
+        if (($out = getenv('MYPHP_GENERATE')) !== false && $out !== '') {
+            file_put_contents($out, TypeScript::generate());
+            return;
+        }
+        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit']);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', 0); // regular app, with a Dock icon
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [

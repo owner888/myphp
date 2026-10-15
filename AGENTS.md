@@ -40,12 +40,16 @@ and keep the semantics; rename to PHP conventions, do not redesign.
 ```
 src/App.php             the application: whenReady(), run(), quit(); shared Metal device and text engine
 src/Window.php          a native-UI window: NSWindow + View, per-window Runtime/Input, frame = build/layout/paint
-src/WindowOptions.php   title, size, position, hidden, disableResize, content
+src/WindowOptions.php   title, size, position, hidden, disableResize, content | html | url
+src/Ipc.php             bound services: bind(), handle() one bridge message, emit() events to pages
+src/TypeScript.php      the generated client (MYPHP_GENERATE=path): services, interfaces, events
 src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
 src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
 src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
 src/Native/Mem.php      calloc/free, integer addresses, memcpy by address (no pointer arithmetic in FFI)
 src/Native/View.php     MTKView subclass: mouse/scroll/key events as PHP closures into UI\Input
+src/Native/WebView.php  WKWebView with the bridge user script and script message handler
+src/Native/bridge.js    window.myphp in every page: call(), on(), __deliver(); mygo's message shapes
 src/UI/Node.php         one element of a frame's tree
 src/UI/Context.php      tree building: column/row/text/button/box
 src/UI/Layout.php       flex layout: measure (bottom-up), arrange (top-down)
@@ -61,7 +65,7 @@ src/UI/ListState.php    a virtualized list's anchor row, offset, measured height
 src/UI/Content.php      Content::view(fn(Context)) — what a window shows
 src/UI/Painter.php      tree -> display list: fills, labels (centered in buttons), scroll clips
 examples/native/        an inbox: App::whenReady -> new Window(WindowOptions(content: Content::view(...)))
-examples/webview/       WKWebView window with a JS <-> PHP bridge
+examples/webview/       Notes: a bound service, a page calling it, an event; myphp.ts is its generated client
 run.sh                runs an example with the right php -d flags
 docs/architecture.md  design notes and measurements
 ```
@@ -101,6 +105,12 @@ they run without Composer.
   returned is stored only after `ObjC::import()` rebuilt it in this scope.
 - **Callbacks on the main thread only.** PHP must never be entered from
   another thread (no CoreAudio/CVDisplayLink/dispatch callbacks into PHP).
+- **Pages talk to PHP as in mygo**: the bridge posts `{t:"call", id, k, m, a}`
+  through a WKScriptMessageHandler, `Ipc::handle` runs the method on the
+  main thread and `WebView::deliver` evaluates `window.myphp.__deliver(reply)`;
+  events are `{t:"event", n, p}`. Every window has its own secret `k`.
+  `App::run` with `MYPHP_GENERATE=path` writes the TypeScript client and
+  returns, as `mygo generate` does; `./run.sh gen` runs it for the example.
 - **`objc_msgSend` is cast per signature, never declared variadic** (arm64
   calling convention). Signatures are "ret:args" letter strings, see
   `ObjC::MAP`. Struct returns (NSRect) use plain `objc_msgSend` on arm64.
@@ -138,5 +148,7 @@ not the bottleneck, the architecture is what keeps it that way.
    OnResize), window state, more options remain.
 5. Virtualized lists: done; keys for rows that come and go, FollowEnd,
    selection, keyboard navigation and a scroll bar remain.
-6. Webview IPC: bind PHP services, generate a TypeScript client from them.
+6. Webview IPC: bind, call, reply, events, TypeScript client done;
+   channels (streaming), a dev server/front-end toolchain, window controls
+   from the page, the preload script remain.
 7. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

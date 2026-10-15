@@ -22,5 +22,8 @@ final class WindowOptions
         public bool $disableResize = false,
         /** Native UI drawn by MyPHP: make it with Content::view(). */
         public ?Content $content = null,
+        /** A web page instead: HTML to show, or a URL to load (http(s) or file:). */
+        public ?string $html = null,
+        public ?string $url = null,
     ) {}
 }

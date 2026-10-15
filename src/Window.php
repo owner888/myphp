@@ -3,14 +3,16 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Metal, ObjC, View};
+use MyPHP\Native\{Metal, ObjC, View, WebView};
 use MyPHP\UI\{Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
 /**
- * A window showing native UI. Create it from App::whenReady(). Each frame
- * runs the content's view function through the window's Runtime, lays the
- * tree out to the window's size and paints it; frames happen on demand.
+ * A window showing native UI or a web page. Create it from App::whenReady().
+ * With native content, each frame runs the view function through the
+ * window's Runtime, lays the tree out to the window's size and paints it;
+ * frames happen on demand. With a page, the window holds a WebView whose
+ * bridge routes calls to Ipc and events back.
  */
 final class Window
 {
@@ -20,10 +22,15 @@ final class Window
     private static array $open = [];
     private static bool $delegateDefined = false;
 
+    private static int $nextId = 1;
+
     private $ns;
-    private $view;
-    public readonly Input $input;
-    public readonly Runtime $runtime;
+    private $view = null;
+    private ?WebView $page = null;
+    private string $secret = '';
+    public readonly int $id;
+    public readonly ?Input $input;
+    public readonly ?Runtime $runtime;
     private array $stats = ['frames' => 0, 'ms' => 0, 'since' => 0];
 
     public function __construct(WindowOptions $o)
@@ -31,11 +38,12 @@ final class Window
         if (!App::isReady()) {
             throw new RuntimeException('create windows from App::whenReady()');
         }
-        if ($o->content === null) {
-            throw new RuntimeException('WindowOptions::content is required (web pages are not done yet)');
+        if ($o->content === null && $o->html === null && $o->url === null) {
+            throw new RuntimeException('WindowOptions needs content, html or url');
         }
-        $this->input = new Input();
-        $this->runtime = new Runtime($this->input);
+        $this->id = self::$nextId++;
+        $this->input = $o->content === null ? null : new Input();
+        $this->runtime = $o->content === null ? null : new Runtime($this->input);
 
         $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
         $style = self::TITLED | self::CLOSABLE | self::MINIATURIZABLE | ($o->disableResize ? 0 : self::RESIZABLE);
@@ -43,9 +51,42 @@ final class Window
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
         $this->setTitle($o->title ?? App::name());
 
+        if ($o->content === null) {
+            $this->secret = bin2hex(random_bytes(16));
+            $this->page = WebView::create(ObjC::rect(0, 0, $o->width, $o->height),
+                ['platform' => 'darwin', 'windowId' => $this->id, 'version' => App::VERSION, 'secret' => $this->secret],
+                function (string $raw) {
+                    $reply = Ipc::handle($raw, $this->secret);
+                    if ($reply !== null) {
+                        $this->page->deliver($reply);
+                    }
+                });
+            $this->view = $this->page->ns;
+            if ($o->html !== null) {
+                $this->page->loadHTML($o->html);
+            } else {
+                $this->page->loadURL($o->url);
+            }
+        } else {
+            $this->view = $this->nativeView($o);
+        }
+        ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
+        ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
+        ObjC::msg('v:p', $this->ns, 'setDelegate:', self::delegate());
+        self::$open[ObjC::addr($this->ns)] = $this;
+        if ($o->x === 0 && $o->y === 0) {
+            $this->center();
+        }
+        if (!$o->hidden) {
+            $this->show();
+        }
+    }
+
+    private function nativeView(WindowOptions $o)
+    {
         $content = $o->content;
         $text = App::text();
-        $this->view = View::create(App::metal(), ObjC::rect(0, 0, $o->width, $o->height), $this->input,
+        return View::create(App::metal(), ObjC::rect(0, 0, $o->width, $o->height), $this->input,
             function ($view, DisplayList $list) use ($content, $text) {
                 $bounds = ObjC::msg('r:', $view, 'bounds');
                 $t0 = hrtime(true);
@@ -65,16 +106,23 @@ final class Window
                     $this->stat($t0, $list);
                 }
             });
-        ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
-        ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
-        ObjC::msg('v:p', $this->ns, 'setDelegate:', self::delegate());
-        self::$open[ObjC::addr($this->ns)] = $this;
-        if ($o->x === 0 && $o->y === 0) {
-            $this->center();
-        }
-        if (!$o->hidden) {
-            $this->show();
-        }
+    }
+
+    /** The window's web page, or null for native UI. */
+    public function page(): ?WebView
+    {
+        return $this->page;
+    }
+
+    /** Sends an event to the window's page; nothing for native UI. */
+    public function send(string $name, mixed $payload = null): void
+    {
+        $this->page?->deliver(['t' => 'event', 'n' => $name, 'p' => $payload]);
+    }
+
+    public function evaluate(string $js): void
+    {
+        $this->page?->evaluate($js);
     }
 
     private static function delegate()
@@ -94,10 +142,12 @@ final class Window
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');
     }
 
-    /** Asks for a frame after state changed outside the view function. */
+    /** Asks for a frame after state changed outside the view function (native UI). */
     public function update(): void
     {
-        Metal::requestFrame($this->view);
+        if ($this->page === null) {
+            Metal::requestFrame($this->view);
+        }
     }
 
     public function show(): void

@@ -1,51 +1,90 @@
 <?php
-// A WKWebView window whose page calls PHP and gets an answer back.
-// Run: php -d ffi.enable=1 examples/webview/main.php
+// A web page that calls PHP: Notes is a bound service, its methods are
+// `Notes.add` and `Notes.list` in the page, and PHP pushes an "added" event.
+// Run: ./run.sh webview
+// TypeScript client: MYPHP_GENERATE=examples/webview/myphp.ts ./run.sh webview
 declare(strict_types=1);
 
-use MyPHP\Native\ObjC;
+use MyPHP\{App, Ipc, TypeScript, Window, WindowOptions};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
-ObjC::boot(['Foundation', 'AppKit', 'WebKit']);
 
-$app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
-ObjC::msg('b:l', $app, 'setActivationPolicy:', 0);
-$webview = null;
+/** Note is a note. */
+final class Note
+{
+    public function __construct(public int $id, public string $title, public ?string $body = null) {}
+}
 
-ObjC::defineClass('MyPHPBridge', 'NSObject', [
-    'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($app) {
-        ObjC::msg('v:p', $app, 'terminate:', null);
-    }],
-    'userContentController:didReceiveScriptMessage:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $ucc, $msg) use (&$webview) {
-        $body = ObjC::phpStr(ObjC::msg('p:', $msg, 'body'));
-        printf("[PHP] JS says: %s\n", $body);
-        $reply = json_encode("PHP got \"$body\" at " . date('H:i:s'));
-        ObjC::msg('v:pp', $webview, 'evaluateJavaScript:completionHandler:', ObjC::str("document.getElementById('out').textContent = $reply;"), null);
-    }],
-]);
-$bridge = ObjC::msg('p:', ObjC::alloc('MyPHPBridge'), 'init');
+/** Notes stores the user's notes. */
+final class Notes
+{
+    /** @var Note[] */
+    private array $items = [];
 
-$config = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
-ObjC::msg('v:pp', ObjC::msg('p:', $config, 'userContentController'), 'addScriptMessageHandler:name:', $bridge, ObjC::str('php'));
+    /** Add creates a note and returns it. */
+    public function add(string $title, ?string $body = null): Note
+    {
+        if ($title === '') {
+            throw new InvalidArgumentException('a note needs a title');
+        }
+        $note = new Note(count($this->items) + 1, $title, $body);
+        $this->items[] = $note;
+        Ipc::emit('added', $note);
+        return $note;
+    }
 
-$rect = ObjC::rect(0, 0, 640, 420);
-$win = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $rect, 15, 2, false);
-ObjC::msg('v:p', $win, 'setTitle:', ObjC::str('MyPHP + WKWebView'));
-ObjC::msg('v:p', $win, 'setDelegate:', $bridge);
-$webview = ObjC::msg('p:rp', ObjC::alloc('WKWebView'), 'initWithFrame:configuration:', $rect, $config);
-ObjC::msg('v:p', $win, 'setContentView:', $webview);
+    /**
+     * List returns all notes.
+     * @return Note[]
+     */
+    public function list(): array
+    {
+        return $this->items;
+    }
+
+    /** Count returns how many notes there are. */
+    public function count(): int
+    {
+        return count($this->items);
+    }
+}
+
+Ipc::bind(new Notes());
+TypeScript::event('added', Note::class);
 
 $html = <<<'HTML'
 <!doctype html><meta charset="utf-8">
-<body style="font: 15px -apple-system; padding: 24px">
-<h2>WKWebView driven by PHP</h2>
-<button onclick="window.webkit.messageHandlers.php.postMessage('hello ' + (++n))">Call PHP</button>
-<p id="out">(click the button)</p>
-<script>let n = 0;</script>
+<style>
+  body { font: 15px -apple-system, system-ui; margin: 0; padding: 24px; color: #1d1d1f; }
+  form { display: flex; gap: 8px; margin-bottom: 16px; }
+  input { flex: 1; font: inherit; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; }
+  button { font: inherit; padding: 6px 14px; border: 0; border-radius: 6px; background: #3377ff; color: #fff; }
+  li { padding: 6px 0; border-bottom: 1px solid #eee; }
+  #err { color: #c33; min-height: 1.2em; }
+  #count { color: #888; }
+</style>
+<h2>Notes <span id="count"></span></h2>
+<form id="f"><input id="t" placeholder="Title" autofocus><button>Add</button></form>
+<div id="err"></div>
+<ul id="list"></ul>
+<script>
+  const { call, on } = { call: (m, ...a) => myphp.call(m, ...a), on: (n, fn) => myphp.on(n, fn) };
+  const render = (notes) => {
+    list.innerHTML = notes.map(n => `<li>#${n.id} ${n.title}</li>`).join('');
+    call('Notes.count').then(c => count.textContent = `(${c})`);
+  };
+  f.onsubmit = async (e) => {
+    e.preventDefault(); err.textContent = '';
+    try { await call('Notes.add', t.value); t.value = ''; }
+    catch (x) { err.textContent = myphp.isCallError(x) ? x.message + ' — from ' + x.method : x; }
+  };
+  on('added', (note) => console.log('event added', note) || call('Notes.list').then(render));
+  call('Notes.list').then(render);
+</script>
 HTML;
-ObjC::msg('p:pp', $webview, 'loadHTMLString:baseURL:', ObjC::str($html), null);
 
-ObjC::msg('v:', $win, 'center');
-ObjC::msg('v:p', $win, 'makeKeyAndOrderFront:', null);
-ObjC::msg('v:b', $app, 'activateIgnoringOtherApps:', true);
-ObjC::msg('v:', $app, 'run');
+App::setName('Notes');
+App::whenReady(function () use ($html) {
+    new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html));
+});
+App::run();

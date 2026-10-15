@@ -49,7 +49,8 @@ Early. What works today, on macOS / Apple Silicon:
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
-| Menus, dialogs, tray, notifications; virtualized lists; webview IPC | next |
+| Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, generated TypeScript client | works (`examples/webview`) |
+| Menus, dialogs, tray, notifications; streaming channels; Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
 Measured in `examples/native 1000` on an M-series Mac: 9 000 nodes rebuilt,
@@ -61,10 +62,23 @@ scrolling; frames are only built when something changes.
 - PHP ≥ 8.3 with `ext-ffi` (Homebrew's `php` has it), OPcache JIT recommended
 - macOS on Apple Silicon for now
 
+A window with a web page, whose frontend calls PHP:
+
+```php
+/** Greeter says hello. */
+final class Greeter { public function greet(string $name): string { return "Hello, $name"; } }
+
+Ipc::bind(new Greeter());
+App::whenReady(fn() => new Window(new WindowOptions(title: 'Hello', html: '<script>
+    myphp.call("Greeter.greet", "Ada").then(s => document.body.textContent = s)</script>')));
+App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client instead
+```
+
 ### Try it
 
 ```sh
-./run.sh webview          # a WKWebView window driven by PHP
+./run.sh webview          # Notes: a page calling a bound PHP service, with events
+./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
 ```
@@ -128,7 +142,8 @@ App::run();
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
-| 菜单、对话框、托盘、通知；虚拟化列表；webview IPC | 下一步 |
+| 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，生成 TypeScript client | 可用（`examples/webview`） |
+| 菜单、对话框、托盘、通知；流式 channel；Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
 在 M 系列 Mac 上用 `examples/native 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
@@ -138,10 +153,23 @@ App::run();
 - PHP ≥ 8.3，带 `ext-ffi`（Homebrew 的 `php` 自带），建议开 OPcache JIT
 - 目前仅支持 Apple Silicon 的 macOS
 
+一个网页窗口，前端直接调用 PHP：
+
+```php
+/** Greeter says hello. */
+final class Greeter { public function greet(string $name): string { return "Hello, $name"; } }
+
+Ipc::bind(new Greeter());
+App::whenReady(fn() => new Window(new WindowOptions(title: 'Hello', html: '<script>
+    myphp.call("Greeter.greet", "Ada").then(s => document.body.textContent = s)</script>')));
+App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型的 client
+```
+
 ### 运行
 
 ```sh
-./run.sh webview          # PHP 驱动的 WKWebView 窗口
+./run.sh webview          # Notes：页面调用绑定的 PHP 服务，带事件
+./run.sh gen              # 生成 examples/webview/myphp.ts（TypeScript client）
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
 ```
