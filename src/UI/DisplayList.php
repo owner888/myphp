@@ -11,7 +11,9 @@ use RuntimeException;
  * One quad is 16 floats: x y w h, r g b a, radius kind u v, clip x y w h.
  * kind 0 is a filled (rounded) rect; kind 1 samples the glyph atlas at u, v;
  * kind 2 samples the image atlas, with the slot's pixel size in r, g;
- * kind 3 is a soft shadow (u = blur), kind 4 a ring (u = thickness).
+ * kind 3 is a soft shadow (u = blur), kind 4 a ring (u = thickness), kind 5
+ * Liquid Glass (u = style, color = tint), which reads what was drawn before
+ * it, blurred: the renderer splits the frame's draw at each glass quad.
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
  */
@@ -20,6 +22,8 @@ final class DisplayList
     public const FLOATS_PER_RECT = 16;
     private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
+    /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
+    public array $glass = [];
     private array $clip = self::NO_CLIP;
     private array $clips = [];
 
@@ -28,6 +32,7 @@ final class DisplayList
     public function reset(): void
     {
         $this->n = 0;
+        $this->glass = [];
         $this->clip = self::NO_CLIP;
         $this->clips = [];
     }
@@ -64,6 +69,13 @@ final class DisplayList
         $b[$k + 8] = $radius; $b[$k + 9] = 0.0;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
+    }
+
+    /** A pane of Liquid Glass over what was drawn before it: $style 0 regular, 1 clear; tinted by $tint at $tintAlpha; blurred by $sigma pixels. */
+    public function glass(float $x, float $y, float $w, float $h, float $radius, int $style, int $tint, float $tintAlpha, float $sigma): void
+    {
+        $this->glass[] = [$this->n, $sigma];
+        $this->quad($x, $y, $w, $h, $tint, $tintAlpha, $radius, 5.0, (float)$style);
     }
 
     /** A soft shadow of a rounded rect, offset by (dx, dy), its edge feathered over $blur points each way. */

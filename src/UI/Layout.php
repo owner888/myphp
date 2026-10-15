@@ -16,6 +16,9 @@ final class Layout
         $main = 0.0; $cross = 0.0; $cnt = 0;
         foreach ($n->kids as $k) {
             self::measure($k);
+            if ($k->absolute) {
+                continue; // out of the flow: it takes no room
+            }
             $cnt++;
             if ($n->dir === Node::ROW) {
                 $main += $k->mw; if ($k->mh > $cross) $cross = $k->mh;
@@ -38,7 +41,15 @@ final class Layout
     {
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
         if ($n->kind !== Node::CONTAINER) return;
-        $kids = $n->kids; $cnt = count($kids);
+        $kids = [];
+        foreach ($n->kids as $k) {
+            if ($k->absolute) {
+                self::arrange($k, $x + $n->pad + $k->ax, $y + $n->pad + $k->ay, $k->mw, $k->mh);
+            } else {
+                $kids[] = $k;
+            }
+        }
+        $cnt = count($kids);
         if ($cnt === 0) return;
         $avail = ($n->dir === Node::ROW ? $w : $h) - 2 * $n->pad - $n->gap * ($cnt - 1);
         $used = 0.0; $grow = 0; $crossMax = 0.0;

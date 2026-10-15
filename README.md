@@ -51,6 +51,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
 | Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded | works (`examples/native`) |
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
+| Soft shadows, rings, Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive) | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
@@ -100,6 +101,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: follows the file, filters, highlights
 ./run.sh notes            # Markdown notes: list, editor, live preview, autosave
+./run.sh glass            # Liquid Glass over a photo
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
 ```
@@ -166,6 +168,7 @@ App::run();
 | 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
 | 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明 | 可用（`examples/native`） |
 | 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/native`、`logview`） |
+| 软阴影、描边环、Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大） | 可用（`examples/glass`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
@@ -213,6 +216,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮
 ./run.sh notes            # Markdown 笔记：列表、编辑器、实时预览、自动保存
+./run.sh glass            # 照片上的 Liquid Glass
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
 ```

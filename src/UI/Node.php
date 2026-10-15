@@ -46,6 +46,13 @@ final class Node
     public bool $underline = false;
     /** For a link: where it goes; the pointer shows a hand over it. */
     public ?string $url = null;
+    /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
+    public bool $absolute = false;
+    public float $ax = 0, $ay = 0;
+    /** A material painted in place of the color: Liquid Glass. */
+    public ?Glass $material = null;
+    /** Whether the pointer is pressing this node (for interactive glass); Context sets it on material nodes. */
+    public bool $pressed = false;
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;
@@ -72,6 +79,28 @@ final class Node
         public float $fontSize = 0,
         public int $fg = 0,
     ) {}
+
+    /** Takes this node out of its parent's flow and puts it at ($x, $y) from the parent's top left, at its own size (or size()). Later siblings paint over earlier ones. */
+    public function at(float $x, float $y): static
+    {
+        $this->absolute = true;
+        $this->ax = $x; $this->ay = $y;
+        return $this;
+    }
+
+    /** Fills this container with Liquid Glass instead of a color, shaped by round(). */
+    public function material(Glass $glass): static
+    {
+        $this->material = $glass;
+        return $this;
+    }
+
+    /** Rounds this container's corners by $radius (containers are square by default). */
+    public function round(float $radius): static
+    {
+        $this->radius = $radius;
+        return $this;
+    }
 
     /** Shows $text in a tip when the pointer rests on this node for a moment. */
     public function tooltip(string $text): static

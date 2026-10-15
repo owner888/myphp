@@ -56,8 +56,19 @@ final class Painter
         if ($n->focused && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }
-        if ($n->color !== null) {
-            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => 0.0 };
+        if ($n->material !== null) {
+            $g = $n->material;
+            $x = $n->x; $y = $n->y; $w = $n->w; $h = $n->h; $r = $n->radius;
+            if ($g->interactive && $rt !== null && $rt->input->mouseDown && $rt->hovered($n->id)) {
+                // Pressed: grown as macOS's, by about 1.1 points left and right and 0.45 above and below.
+                $x -= 1.1; $w += 2.2; $y -= 0.45; $h += 0.9; $r += $r > 0 ? 0.45 : 0;
+            }
+            $scale = $text->scale();
+            $m = min($w, $h);
+            $sigma = $g->style === Glass::CLEAR ? $scale : min(max($m * 0.035, 1), 10) * $scale;
+            $list->glass($x, $y, $w, $h, $r, $g->style, $g->tint ?? 0, $g->tint === null ? 0.0 : $g->tintAlpha * 0.88, $sigma);
+        } elseif ($n->color !== null) {
+            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => $n->radius };
             if ($n->kind === Node::SELECT) { // a bordered face
                 $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
                 $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);

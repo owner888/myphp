@@ -80,6 +80,37 @@ instanced triangle-strip draw (4 vertices × n instances) and commits. The
 viewport size goes in through `setVertexBytes:` as two floats, in points,
 so coordinates are in points on any backing scale.
 
+## Liquid Glass
+
+`UI\Glass` is a material a container takes with `->material()`, shaped
+by `->round()`, ported from mygo's `plugins/glass` (itself measured from
+macOS 26's NSGlassEffectView). The painter emits a `kind = 5` quad (tint
+in the color, style in `u`) and `DisplayList` notes its index and blur
+sigma (`min(max(min(w,h)·0.035, 1), 10)` pixels; Clear: 1 pixel).
+`Metal::present` then draws in passes: the quads before the glass, a
+blit of the drawable into a snapshot texture (`framebufferOnly` is off
+for this), two fullscreen passes of a 1-D Gaussian (horizontal into a
+half-size texture, vertical into the backdrop; `blur_vertex` is a
+fullscreen triangle), and the quads from the glass on, with the backdrop
+as texture 2 and the render pass's load action switched to Load. Frames
+without glass take the single pass they always did.
+
+The fragment (`glass()` in the shader) is mygo's effect: `t`, the
+distance inside the edge; within the bezel (36 points, at most half the
+pane) the sample point moves toward the middle by
+`refraction·glassLens(t)` along the smoothed edge normal (`glassNormal`,
+corners half again as round), mirroring what is just inside the bezel;
+the sample is toned by its luminance (`glassTone`: black and white map
+to 54 % and 100 % in light mode, 15 % and 51 % in dark, Clear adds an
+eighth, saturation kept or raised), tinted by the tint's alpha (× 0.88),
+and lit along a one-pixel rim by how much the edge faces up or down;
+coverage is the rounded rect's own SDF. Interactive glass grows 1.1 × 0.45
+points while pressed. The theme's darkness reaches the shader through
+`Uniforms.dark`. Nodes overlap through `->at(x, y)`, which takes a node
+out of the flow and places it from its parent's top left, painted in
+child order. mygo's ScrollEdge and Blur materials use the same backdrop
+and are not ported yet.
+
 ## Text path
 
 `Native\CoreText::shape` builds a CFAttributedString with the system UI

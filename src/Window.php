@@ -133,6 +133,7 @@ final class Window
                 $t0 = hrtime(true);
                 $text->beginFrame();
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
+                App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
                     ($content->view)($c);
