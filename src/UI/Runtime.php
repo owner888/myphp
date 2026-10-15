@@ -518,6 +518,12 @@ final class Runtime
     /** @var array<int, int> id => arrow steps on a focused slider this frame */
     private array $steps = [];
 
+    /** Whether slider $id is being held (pressed, dragging). */
+    public function sliding(int $id): bool
+    {
+        return $this->sliding === $id;
+    }
+
     /** Where the pointer put slider $id this frame, 0..1, or null. */
     public function slid(int $id): ?float
     {

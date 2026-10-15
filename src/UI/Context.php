@@ -299,6 +299,7 @@ final class Context
             }
         }
         $n->fraction = $max > $min ? ($value - $min) / ($max - $min) : 0.0;
+        $n->held = $this->runtime?->sliding($n->id) ?? false;
         return $n;
     }
 

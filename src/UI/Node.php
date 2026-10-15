@@ -34,9 +34,10 @@ final class Node
     public ?float $wrapWidth = null;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
     public bool $focusable = false;
-    /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range. */
+    /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
     public float $fraction = 0;
+    public bool $held = false;
     /** Whether a control changed its value this frame: Context::changed(). */
     public bool $changed = false;
     /** Shown in a tip when the pointer rests on the node: tooltip(). */

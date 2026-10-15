@@ -10,7 +10,8 @@ use RuntimeException;
  * A frame's drawing commands, written straight into a GPU buffer's memory.
  * One quad is 16 floats: x y w h, r g b a, radius kind u v, clip x y w h.
  * kind 0 is a filled (rounded) rect; kind 1 samples the glyph atlas at u, v;
- * kind 2 samples the image atlas, with the slot's pixel size in r, g.
+ * kind 2 samples the image atlas, with the slot's pixel size in r, g;
+ * kind 3 is a soft shadow (u = blur), kind 4 a ring (u = thickness).
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
  */
@@ -61,6 +62,31 @@ final class DisplayList
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
         $b[$k + 8] = $radius; $b[$k + 9] = 0.0;
+        $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
+        $this->n++;
+    }
+
+    /** A soft shadow of a rounded rect, offset by (dx, dy), its edge feathered over $blur points each way. */
+    public function shadow(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $blur, float $dx = 0, float $dy = 0): void
+    {
+        $this->quad($x + $dx - $blur, $y + $dy - $blur, $w + 2 * $blur, $h + 2 * $blur, $rgb, $alpha, $radius, 3.0, $blur);
+    }
+
+    /** A ring: the rounded rect's outline, $thickness points wide inside its edge. */
+    public function ring(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $thickness): void
+    {
+        $this->quad($x, $y, $w, $h, $rgb, $alpha, $radius, 4.0, $thickness);
+    }
+
+    private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u): void
+    {
+        if ($this->n === $this->capacity) {
+            throw new RuntimeException("display list full ({$this->capacity} quads)");
+        }
+        $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
+        $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
+        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
+        $b[$k + 8] = $radius; $b[$k + 9] = $kind; $b[$k + 10] = $u; $b[$k + 11] = 0.0;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }

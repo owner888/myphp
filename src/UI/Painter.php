@@ -33,17 +33,17 @@ final class Painter
             self::paintSlider($n, $list, $t);
             return;
         }
-        if ($n->kind === Node::PROGRESS) {
-            $r = $n->h / 2;
-            $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $r);
+        if ($n->kind === Node::PROGRESS) { // a bar of fixed thickness, centered in the node (a row stretches it to the row's height)
+            $h = $t->space(1.5); $y = $n->y + ($n->h - $h) / 2; $r = $h / 2;
+            $list->rect($n->x, $y, $n->w, $h, $t->border, 1.0, $r);
             if ($n->fraction >= 0) {
-                $list->rect($n->x, $n->y, $n->w * min(1.0, $n->fraction), $n->h, $t->accent, 1.0, $r);
+                $list->rect($n->x, $y, $n->w * min(1.0, $n->fraction), $h, $t->accent, 1.0, $r);
             } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
                 $phase = fmod(hrtime(true) / 1.5e9, 1.0);
                 $bar = $n->w / 3;
                 $x = $n->x - $bar + $phase * ($n->w + $bar);
-                $list->pushClip($n->x, $n->y, $n->w, $n->h);
-                $list->rect($x, $n->y, $bar, $n->h, $t->accent, 1.0, $r);
+                $list->pushClip($n->x, $y, $n->w, $h);
+                $list->rect($x, $y, $bar, $h, $t->accent, 1.0, $r);
                 $list->popClip();
             }
             return;
@@ -129,6 +129,7 @@ final class Painter
         if ($y + $h > $root->y + $root->h) {
             $y = $my - $h - 6;
         }
+        $list->shadow($x, $y, $w, $h, 0x000000, $t->dark ? 0.4 : 0.18, $t->radius, 8, 0, 3);
         $list->rect($x, $y, $w, $h, $t->border, 1.0, $t->radius);
         $list->rect($x + 1, $y + 1, $w - 2, $h - 2, $t->surface, 1.0, $t->radius - 1);
         $text->paint($list, $tip, $size, $x + $pad, $y + $pad * 0.6, $t->text);
@@ -160,21 +161,36 @@ final class Painter
         $text->paint($list, $n->text, $n->fontSize, $n->x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
-    /** A slider: the track, the part up to the value in the accent, and the knob. */
+    /**
+     * A slider: the track, the part up to the value in the accent, and the
+     * knob, a capsule that sits on a soft shadow and, while held, grows
+     * into a lens the track shows through, rimmed and lit inside, as
+     * AppKit's does (mygo's paintKnob).
+     */
     private static function paintSlider(Node $n, DisplayList $list, Theme $t): void
     {
-        $knob = $t->space(4);
+        $kw = $t->space(5); $kh = $t->space(4);
         $trackH = $t->space(1);
         $cy = $n->y + $n->h / 2;
-        $x0 = $n->x + $knob / 2; $x1 = $n->x + $n->w - $knob / 2;
+        $x0 = $n->x + $kw / 2; $x1 = $n->x + $n->w - $kw / 2;
         $kx = $x0 + ($x1 - $x0) * $n->fraction;
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
         $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
-        if ($n->focused) {
-            $list->rect($kx - $knob / 2 - 2, $cy - $knob / 2 - 2, $knob + 4, $knob + 4, $t->focus, $t->focusAlpha, $knob / 2 + 2);
+        $g = $n->held ? 1.35 : 1.0;
+        $w = $kw * $g; $h = $kh * $g; $x = $kx - $w / 2; $y = $cy - $h / 2; $r = $h / 2;
+        [$face, $rim] = $t->dark ? [0xe0e1e1, 0x000000] : [0xffffff, 0x000000];
+        if ($n->held) {
+            $list->shadow($x, $y, $w, $h, 0x000000, $t->dark ? 0.3 : 0.14, $r, 14, 0, 8);
+            $list->ring($x, $y, $w, $h, $rim, $t->dark ? 0.7 : 0.22, $r, 1.0);                  // the lens's rim,
+            $list->ring($x + 1, $y + 1, $w - 2, $h - 2, 0xffffff, 0.25, $r - 1, 1.0);          // lit on the inside
+        } else {
+            $list->shadow($x, $y, $w, $h, 0x000000, 0.08, $r, 1, 0, 0.5);   // a tight shadow edges the knob,
+            $list->shadow($x, $y, $w, $h, 0x000000, 0.10, $r, 7, 0, 1.5);   // a soft one lifts it
+            $list->rect($x, $y, $w, $h, $face, 1.0, $r);
         }
-        $list->rect($kx - $knob / 2, $cy - $knob / 2, $knob, $knob, $t->border, 1.0, $knob / 2);
-        $list->rect($kx - $knob / 2 + 1, $cy - $knob / 2 + 1, $knob - 2, $knob - 2, $t->background, 1.0, $knob / 2 - 1);
+        if ($n->focused) {
+            $list->ring($x - 2, $y - 2, $w + 4, $h + 4, $t->focus, $t->focusAlpha, $r + 2, 2.0);
+        }
     }
 
     /** Rich text: its wrapped lines, each on one baseline, with the spans' backgrounds, underlines and strikes. */
