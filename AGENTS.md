@@ -38,7 +38,7 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
-src/               App (whenReady/run/quit/theme/menu/userDataPath), Window (+ on(event), CloseEvent, WindowState),
+src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after), Window (+ on(event), CloseEvent, WindowState),
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
                    Notification (+ Options), Ipc (bound services, window controls), Channel (+ ChannelClosed:
                    streaming to pages), TypeScript (client), autoload.php (PSR-4)
@@ -48,13 +48,15 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
 src/UI/            Node, Context (column/row/text/muted/rich/button/input/textarea/image/box/list), Font (style
-                   bits), Span (rich text run), Layout (flex),
+                   bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8, images RGBA)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
                    Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
-examples/          native (inbox over a million rows), form (text fields, IME), desktop (menus, dialogs), webview (Notes service + myphp.ts)
+examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
+                   shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview (a real tool:
+                   follows a log, filters, highlights — the API's proving ground)
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
@@ -136,5 +138,6 @@ glides, keys and selection; text areas (wrapping, undo, caret blink);
 theme; images; rich text (bold/italic/mono, spans); tray, global shortcuts, notifications, window events + state;
 channels, page window controls, preload; CLI + .app.
 Remaining, in rough order:
-1. Horizontal scrolling; wrapping rich text (spans are one line today).
+1. Horizontal scrolling; file drop onto windows; wrapping by the layout's
+   width (rich text wraps at a width the app passes today).
 2. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

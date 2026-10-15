@@ -102,7 +102,13 @@ the variant keeps the base); fonts and shaped lines are keyed by size and
 style. `Context::rich` lays spans (`UI\Span`: text, size, style, color,
 underline, strikethrough, background) on one baseline, the tallest
 ascent setting it; the painter draws each span's background, glyphs and
-lines. Spans do not wrap yet.
+lines. With a `$width`, `RichLayout::wrap` breaks the spans into lines:
+chunks are runs of spaces, single CJK characters or other runs, placed
+greedily, a chunk wider than a line broken by character, newlines
+honored; adjacent chunks of one span on a line merge into one piece so
+they shape as one run. The width is the app's to pass (`$c->width` minus
+its paddings): the flex layout measures before it arranges, so a node
+cannot yet wrap at the width its container gives it.
 
 Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
 atlas's size so the shader divides by one size) is texture 1, and a

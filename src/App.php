@@ -206,6 +206,12 @@ final class App
                         $fn();
                     }
                 }],
+                'fire:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $number) {
+                    $id = ObjC::msg('l:', $number, 'longValue');
+                    $fn = self::$timers[$id] ?? null;
+                    unset(self::$timers[$id]);
+                    $fn?->__invoke();
+                }],
             ]);
             self::$laterTarget = ObjC::msg('p:', ObjC::alloc('MyPHPLater'), 'init');
         }
@@ -213,6 +219,19 @@ final class App
         if (count(self::$later) === 1) {
             ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('tick:'), null, 0.0);
         }
+    }
+
+    /** @var array<int, Closure> pending timers by id */
+    private static array $timers = [];
+    private static int $nextTimer = 0;
+
+    /** Runs $fn once, $seconds from now, on the main thread (mygo's After). */
+    public static function after(float $seconds, Closure $fn): void
+    {
+        self::later(fn() => null); // defines MyPHPLater
+        $id = ++self::$nextTimer;
+        self::$timers[$id] = $fn;
+        ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('fire:'), ObjC::msg('p:l', ObjC::cls('NSNumber'), 'numberWithLong:', $id), $seconds);
     }
 
     /** Brings the app to the front, as a click on its Dock icon does. */

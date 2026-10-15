@@ -122,6 +122,9 @@ final class Context
         }
         $state->count = $count;
         $state->row = min($state->row, max(0, $count - 1));
+        // The place may have been set before the view's size was known (end() at
+        // startup, say) or the rows changed under it: keep it within the rows.
+        $state->scrollBy(0);
         $node = $this->column(0, 0, 1)->scroll($state);
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $state->first = $state->row;
@@ -162,20 +165,20 @@ final class Context
     }
 
     /**
-     * One line of spans that differ in style over $size and $color (the
-     * theme's by default), baselines aligned, as mygo's RichText.
+     * Spans that differ in style over $size and $color (the theme's by
+     * default), baselines aligned per line, as mygo's RichText. With a
+     * $width the text wraps there (at spaces, between CJK characters, by
+     * character when a word is wider) and at newlines; without one it is
+     * one line. The node is as wide as its widest line.
      * @param Span[] $spans
      */
-    public function rich(array $spans, ?float $size = null, ?int $color = null): Node
+    public function rich(array $spans, ?float $size = null, ?int $color = null, ?float $width = null): Node
     {
         $size ??= $this->theme->fontSize;
-        $w = 0.0; $h = 0.0;
-        foreach ($spans as $sp) {
-            [$sw, $sh] = $this->metrics->measure($sp->text, $sp->size ?? $size, $sp->style);
-            $w += $sw; $h = max($h, $sh);
-        }
-        $n = $this->add(new Node(Node::RICH, 0, 0, 0, $w, $h, 0, null, null, $size, $color ?? $this->theme->text));
+        $layout = RichLayout::wrap($this->metrics, $spans, $size, $width ?? INF);
+        $n = $this->add(new Node(Node::RICH, 0, 0, 0, $layout->w, $layout->h, 0, null, null, $size, $color ?? $this->theme->text));
         $n->spans = $spans;
+        $n->rich = $layout;
         return $n;
     }
 

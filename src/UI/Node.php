@@ -27,6 +27,8 @@ final class Node
     public int $style = 0;
     /** @var Span[] */
     public array $spans = [];
+    /** For rich text: its lines, wrapped at the width Context::rich was given. */
+    public ?RichLayout $rich = null;
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;

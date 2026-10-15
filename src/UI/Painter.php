@@ -30,7 +30,7 @@ final class Painter
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
             return;
         }
-        if ($n->focused) { // a focus ring around a button
+        if ($n->focused && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }
         if ($n->color !== null) {
@@ -54,6 +54,12 @@ final class Painter
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
+        if ($n->focused && $n->color === null) { // a list or other background-less node: four edges over its children
+            $list->rect($n->x, $n->y, $n->w, 2, $t->focus, $t->focusAlpha);
+            $list->rect($n->x, $n->y + $n->h - 2, $n->w, 2, $t->focus, $t->focusAlpha);
+            $list->rect($n->x, $n->y, 2, $n->h, $t->focus, $t->focusAlpha);
+            $list->rect($n->x + $n->w - 2, $n->y, 2, $n->h, $t->focus, $t->focusAlpha);
+        }
         if ($n->scroll !== null) {
             $list->popClip();
             // The thumb shows while the pointer is over the container or drags it.
@@ -66,31 +72,32 @@ final class Painter
         }
     }
 
-    /** Rich text: the spans in a row on one baseline, with their backgrounds, underlines and strikes. */
+    /** Rich text: its wrapped lines, each on one baseline, with the spans' backgrounds, underlines and strikes. */
     private static function paintRich(Node $n, DisplayList $list, Text $text): void
     {
-        $ascent = 0.0;
-        foreach ($n->spans as $sp) {
-            $ascent = max($ascent, $text->ascent($sp->size ?? $n->fontSize, $sp->style));
-        }
-        $x = $n->x;
-        $baseline = $n->y + $ascent;
-        foreach ($n->spans as $sp) {
-            $size = $sp->size ?? $n->fontSize;
-            [$w, $h] = $text->measure($sp->text, $size, $sp->style);
-            $top = $baseline - $text->ascent($size, $sp->style);
-            if ($sp->background !== null) {
-                $list->rect($x - 2, $top, $w + 4, $h, $sp->background, 1.0, 3.0);
+        $y = $n->y;
+        foreach ($n->rich->lines as $line) {
+            $baseline = $y + $line['ascent'];
+            foreach ($line['pieces'] as [$sp, $piece, $px, $w]) {
+                $size = $sp->size ?? $n->fontSize;
+                $x = $n->x + $px;
+                $top = $baseline - $text->ascent($size, $sp->style);
+                if ($sp->background !== null) {
+                    [, $h] = $text->measure('X', $size, $sp->style);
+                    $list->rect($x - 2, $top, $w + 4, $h, $sp->background, 1.0, 3.0);
+                }
+                $color = $sp->color ?? $n->fg;
+                if (trim($piece) !== '') {
+                    $text->paint($list, $piece, $size, $x, $top, $color, 1.0, $sp->style);
+                }
+                if ($sp->underline) {
+                    $list->rect($x, $baseline + 1, $w, 1.0, $color);
+                }
+                if ($sp->strikethrough) {
+                    $list->rect($x, $baseline - $size * 0.3, $w, 1.0, $color);
+                }
             }
-            $color = $sp->color ?? $n->fg;
-            $text->paint($list, $sp->text, $size, $x, $top, $color, 1.0, $sp->style);
-            if ($sp->underline) {
-                $list->rect($x, $baseline + 1, $w, 1.0, $color);
-            }
-            if ($sp->strikethrough) {
-                $list->rect($x, $baseline - $size * 0.3, $w, 1.0, $color);
-            }
-            $x += $w;
+            $y += $line['h'];
         }
     }
 
