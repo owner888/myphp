@@ -116,6 +116,10 @@ final class Window
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
                 }
+                $blink = $this->runtime->nextBlink();
+                if ($blink !== null) {
+                    View::wake($view, $blink);
+                }
                 if (getenv('MYPHP_STATS')) {
                     $this->stat($t0, $list);
                 }

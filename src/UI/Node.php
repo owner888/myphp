@@ -10,7 +10,7 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5;
     public const ROW = 0, COLUMN = 1;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */

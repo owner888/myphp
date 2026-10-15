@@ -36,8 +36,14 @@ final class Runtime
     /** Keyboard focus: the node id, the ids that can take it (last frame, in order) and the fields. */
     public ?int $focus = null;
     private array $focusables = [];
-    /** @var array<int, array{0: TextState, 1: float, 2: float, 3: float, 4: float}> id => state, text x, text y, line h, size */
+    /** @var array<int, array{0: TextState, 1: float, 2: float, 3: float, 4: float, 5: float}> id => state, text x, text y, line h, size, inner width (text areas) */
     private array $fields = [];
+    /** Caret blinking: when it last restarted, and what the focused field looked like then. */
+    private float $blinkStart = 0;
+    private ?array $blinkSeen = null;
+    public const BLINK = 0.5;
+    /** After this long without edits the caret stays on and stops asking for frames. */
+    public const BLINK_FOR = 30.0;
     private ?int $activated = null;
     /** Text drawn in a field starts this far from its left edge. */
     public const FIELD_INSET = 8.0;
@@ -91,7 +97,7 @@ final class Runtime
                         $state->scrollBy(($e[2] - $lastY) * $ratio);
                         $this->drag[1] = $e[2];
                     } elseif ($this->focus !== null && isset($this->fields[$this->focus]) && $this->input->mouseDown) {
-                        $this->placeCaret($this->focus, $e[1], true);
+                        $this->placeCaret($this->focus, $e[1], $e[2], true);
                     }
                     break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[4]); break;
@@ -126,23 +132,58 @@ final class Runtime
             $this->focus = null; // the focused node was not built this frame
         }
         $this->input->focus = null;
+        $this->input->caretAt = null;
         if ($this->focus !== null && isset($this->fields[$this->focus])) {
-            [$state, $tx, $ty, $lh, $size] = $this->fields[$this->focus];
+            [$state, $tx, $ty, $lh, $size, $width] = $this->fields[$this->focus];
             $this->input->focus = $state;
             $this->input->focusText = [$tx, $ty, $lh, $size];
+            if ($state->multiline && $this->metrics !== null) {
+                $m = $this->metrics;
+                $this->input->caretAt = function (int $byte) use ($state, $m, $size, $width, $tx, $ty, $lh): array {
+                    [$x, $y] = $state->layout($m, $size, $width)->caret($m, $byte);
+                    return [$tx + $x, $ty + $y - $state->scrollY, 1.0, $lh];
+                };
+            }
+            $seen = [$state, $state->text, $state->cursor, $state->anchor, $state->marked];
+            if ($this->blinkSeen !== $seen) {
+                $this->blinkSeen = $seen;
+                $this->blinkStart = $now / 1e9;
+            }
+        } else {
+            $this->blinkSeen = null;
         }
         return $root;
+    }
+
+    /** Whether the focused field's caret is in the shown half of its blink (always, once it has rested a while). */
+    public function caretVisible(): bool
+    {
+        $phase = hrtime(true) / 1e9 - $this->blinkStart;
+        return $phase >= self::BLINK_FOR || ((int)floor($phase / self::BLINK)) % 2 === 0;
+    }
+
+    /** Seconds until the caret next toggles, or null when nothing blinks. */
+    public function nextBlink(): ?float
+    {
+        if ($this->blinkSeen === null) {
+            return null;
+        }
+        $phase = hrtime(true) / 1e9 - $this->blinkStart;
+        return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
     private function record(Node $n): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
-        if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT) {
+        if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) {
             $this->focusables[] = $n->id;
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
-            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize];
+            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
+        } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
+            [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
+            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + self::FIELD_INSET, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
@@ -179,7 +220,7 @@ final class Runtime
         }
         $this->focus = $best;
         if (isset($this->fields[$best])) {
-            $this->placeCaret($best, $x, false);
+            $this->placeCaret($best, $x, $y, false);
         }
     }
 
@@ -208,19 +249,64 @@ final class Runtime
         return $this->drag !== null && $this->drag[0] === $state;
     }
 
-    private function placeCaret(int $id, float $x, bool $extend): void
+    private function placeCaret(int $id, float $x, float $y, bool $extend): void
     {
-        [$state, $tx, , , $size] = $this->fields[$id];
+        [$state, $tx, $ty, , $size, $width] = $this->fields[$id];
         if ($this->metrics === null) {
             return;
         }
-        $byte = $this->metrics->indexForX($state->text, $size, $x - $tx);
+        if ($state->multiline) {
+            $byte = $state->layout($this->metrics, $size, $width)->hit($this->metrics, $x - $tx, $y - $ty + $state->scrollY);
+        } else {
+            $byte = $this->metrics->indexForX($state->text, $size, $x - $tx);
+        }
         $state->setCursor($byte, $extend);
+    }
+
+    /** Line-wise commands of a focused text area: moves by wrapped lines, Enter inserts a line. */
+    private function areaCommand(string $selector): bool
+    {
+        if ($this->focus === null || !isset($this->fields[$this->focus]) || $this->metrics === null) {
+            return false;
+        }
+        [$state, , , $lh, $size, $width] = $this->fields[$this->focus];
+        if (!$state->multiline) {
+            return false;
+        }
+        $extend = str_ends_with($selector, 'AndModifySelection:');
+        $base = $extend ? substr($selector, 0, -strlen('AndModifySelection:')) . ':' : $selector;
+        if (!in_array($base, TextState::BY_LINE, true)) {
+            return false;
+        }
+        $m = $this->metrics;
+        $layout = $state->layout($m, $size, $width);
+        $line = $layout->lineOf($state->cursor);
+        [$a, $b] = $layout->lines[$line];
+        $end = $b > $a && $state->text[$b - 1] === "\n" ? $b - 1 : $b;
+        $page = max(1, (int)(($this->rects[$this->focus][3] - 2 * self::FIELD_INSET) / $lh) - 1);
+        $toLine = function (int $l) use ($state, $layout, $m, $extend) {
+            [$x, ] = $layout->caret($m, $state->cursor);
+            $state->setCursor($layout->hit($m, $x, ($l + 0.5) * $layout->lineHeight), $extend);
+        };
+        switch ($base) {
+            case 'insertNewline:': $state->insert("\n"); break;
+            case 'moveUp:': if ($line === 0) { $state->setCursor(0, $extend); } else { $toLine($line - 1); } break;
+            case 'moveDown:': if ($line === count($layout->lines) - 1) { $state->setCursor(strlen($state->text), $extend); } else { $toLine($line + 1); } break;
+            case 'pageUp:': $toLine(max(0, $line - $page)); break;
+            case 'pageDown:': $toLine(min(count($layout->lines) - 1, $line + $page)); break;
+            case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': $state->setCursor($a, $extend); break;
+            case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': $state->setCursor($end, $extend); break;
+            case 'deleteToBeginningOfLine:': if (!$state->hasSelection()) { $state->anchor = $a; } $state->insert(''); break;
+        }
+        return true;
     }
 
     /** Text system commands the field did not take: focus moves, activation, list navigation. */
     private function command(string $selector): void
     {
+        if ($this->areaCommand($selector)) {
+            return;
+        }
         if ($this->focus !== null && isset($this->lists[$this->focus])) {
             $l = $this->lists[$this->focus];
             $page = max(1, (int)($l->viewport / max(1.0, $l->estimate)) - 1);

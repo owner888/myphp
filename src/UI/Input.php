@@ -22,6 +22,8 @@ final class Input
     /** Where the focused field's text starts (x, y), its line height and font size. */
     public array $focusText = [0.0, 0.0, 0.0, 14.0];
     public ?TextMetrics $metrics = null;
+    /** For a focused text area: the caret rectangle of a byte of display(), set by Runtime. */
+    public ?\Closure $caretAt = null;
 
     public function mouse(float $x, float $y): void
     {
@@ -41,6 +43,10 @@ final class Input
             return [$x, $y, 1.0, $h];
         }
         $display = $this->focus->display();
-        return [$x + $this->metrics->xForIndex($display, $size, TextState::byteIndex($display, $u16)), $y, 1.0, $h];
+        $byte = TextState::byteIndex($display, $u16);
+        if ($this->caretAt !== null) {
+            return ($this->caretAt)($byte);
+        }
+        return [$x + $this->metrics->xForIndex($display, $size, $byte), $y, 1.0, $h];
     }
 }

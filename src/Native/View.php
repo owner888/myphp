@@ -106,8 +106,20 @@ final class View
             }],
             'paste:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null) { $f->insert(str_replace(["\r\n", "\n", "\r"], ' ', Pasteboard::text())); Metal::requestFrame($self); }
+                if ($f !== null) {
+                    $s = str_replace(["\r\n", "\r"], "\n", Pasteboard::text());
+                    $f->insert($f->multiline ? $s : str_replace("\n", ' ', $s));
+                    Metal::requestFrame($self);
+                }
             }],
+            'undo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                self::$inputs[ObjC::addr($self)]->focus?->undo(); Metal::requestFrame($self);
+            }],
+            'redo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                self::$inputs[ObjC::addr($self)]->focus?->redo(); Metal::requestFrame($self);
+            }],
+            // A frame some time from now (caret blink): see wake().
+            'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self); }],
             'selectAll:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null) { $f->selectAll(); Metal::requestFrame($self); }
@@ -172,6 +184,13 @@ final class View
                 Metal::requestFrame($self);
             }],
         ], ['NSTextInputClient']);
+    }
+
+    /** Asks for a frame $seconds from now; a later call replaces an earlier one. */
+    public static function wake($view, float $seconds): void
+    {
+        ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('wake:'), null);
+        ObjC::msg('v:ppd', $view, 'performSelector:withObject:afterDelay:', ObjC::sel('wake:'), null, $seconds);
     }
 
     private static function insertText($self, $text, int $location, int $length): void

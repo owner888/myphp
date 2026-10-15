@@ -190,6 +190,20 @@ final class Context
         return $n;
     }
 
+    /**
+     * A text area editing $state: wraps at $width, scrolls to keep the caret
+     * in view, Enter inserts a line, Up/Down move by wrapped lines, Cmd+Z undoes.
+     */
+    public function textarea(TextState $state, string $placeholder = '', float $width = 320, float $height = 120, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $state->multiline = true;
+        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, 0, $placeholder, $t->background, $size ?? $t->fontSize, $t->text));
+        $n->edit = $state;
+        $n->focused = $this->runtime?->focused($n->id) ?? false;
+        return $n;
+    }
+
     /** Whether the field's Enter was pressed this frame (resets the flag). */
     public function submitted(Node $n): bool
     {

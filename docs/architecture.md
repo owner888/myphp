@@ -245,6 +245,34 @@ declared to return `const char*` (`sel_getName`) already arrives as a PHP
 string, not a CData. PHP callbacks returning structs by value
 (NSRange, NSRect) work through libffi, verified with a C shim first.
 
+### Text areas
+
+`Context::textarea` edits the same `TextState` with `$multiline` set.
+`TextLayout::wrap` breaks `display()` into byte ranges: paragraphs at
+`\n` (the newline belongs to the line it ends), then greedy lines found
+by binary search over `xForIndex` of the whole paragraph (one shaped
+line per paragraph, cached by `Text`), backed off to the last space, or
+between characters where there is none, so CJK wraps too. The layout is
+cached on the state while text, size and width stay. `TextState::BY_LINE`
+lists the commands `TextState::command` declines for a text area
+(`moveUp:`, line ends, `insertNewline:`, paging) so they reach
+`Runtime::areaCommand`, which answers from the layout: up and down keep
+the caret's x and hit-test the neighbouring line. The painter keeps
+`scrollY` so the caret's line is in view, paints only the lines that
+show, and the selection per line (a stub past a line's end stands for its
+newline). `Input::caretAt`, set by Runtime for a focused area, gives the
+input method the caret rectangle by line.
+
+Undo lives in `TextState`: `insert()` and `setMarked()` snapshot text and
+selection before changing them; consecutive typing (or deleting) within a
+second is one step, 200 steps deep; `undo:`/`redo:` arrive from the Edit
+menu through the view, like `copy:`. The caret blinks from `Runtime`:
+it restarts whenever the focused field's text or selection changes, the
+painter asks `caretVisible()`, and `Window` schedules the next toggle
+with `View::wake` (`performSelector:withObject:afterDelay:`, cancelling
+the previous request) — no timer runs while nothing blinks, and after 30
+seconds at rest the caret stays on and the frames stop, as in mygo.
+
 ## Theme
 
 `UI\Theme` carries mygo's palette (background, surface and its hover and

@@ -8,7 +8,8 @@ namespace MyPHP\UI;
  * frames. Offsets are bytes into UTF-8 $text; the cursor is the moving end
  * of the selection and the anchor the fixed one (equal when nothing is
  * selected). While an input method composes, $marked holds the text under
- * composition, shown at the cursor but not yet in $text.
+ * composition, shown at the cursor but not yet in $text. Edits are
+ * undoable: typing within a second coalesces into one step.
  */
 final class TextState
 {
@@ -19,6 +20,17 @@ final class TextState
     public int $markedCaret = 0;
     /** Set for a frame when Enter was pressed in the field. */
     public bool $submitted = false;
+    /** A text area: Enter inserts a line, Up/Down and line ends go by the wrapped lines (Runtime handles them). */
+    public bool $multiline = false;
+    /** How far a text area is scrolled to keep its caret in view; the painter keeps it. */
+    public float $scrollY = 0;
+    private const UNDO_DEPTH = 200;
+    /** @var list<array{0: string, 1: int, 2: int}> */
+    private array $undo = [];
+    private array $redo = [];
+    private string $lastEdit = '';
+    private float $lastEditAt = 0;
+    private ?TextLayout $layout = null;
 
     public function __construct(public string $text = '')
     {
@@ -58,6 +70,7 @@ final class TextState
     {
         $this->marked = null;
         [$a, $b] = $this->selection();
+        $this->snapshot($s === '' ? 'delete' : ($a === $b && !str_contains($s, "\n") ? 'type' : 'edit'));
         $this->text = substr($this->text, 0, $a) . $s . substr($this->text, $b);
         $this->cursor = $this->anchor = $a + strlen($s);
     }
@@ -66,6 +79,7 @@ final class TextState
     {
         if ($this->hasSelection()) {
             [$a, $b] = $this->selection();
+            $this->snapshot('edit');
             $this->text = substr($this->text, 0, $a) . substr($this->text, $b);
             $this->cursor = $this->anchor = $a;
         }
@@ -88,12 +102,71 @@ final class TextState
         }
     }
 
+    /** Remembers the text before an edit of kind $kind; consecutive typing or deleting within a second is one step. */
+    private function snapshot(string $kind): void
+    {
+        $now = microtime(true);
+        if ($kind !== 'edit' && $kind === $this->lastEdit && $now - $this->lastEditAt < 1.0) {
+            $this->lastEditAt = $now;
+            return;
+        }
+        $this->undo[] = [$this->text, $this->cursor, $this->anchor];
+        if (count($this->undo) > self::UNDO_DEPTH) {
+            array_shift($this->undo);
+        }
+        $this->redo = [];
+        $this->lastEdit = $kind;
+        $this->lastEditAt = $now;
+    }
+
+    public function undo(): void
+    {
+        if ($this->undo === []) {
+            return;
+        }
+        $this->redo[] = [$this->text, $this->cursor, $this->anchor];
+        [$this->text, $this->cursor, $this->anchor] = array_pop($this->undo);
+        $this->marked = null;
+        $this->lastEdit = '';
+    }
+
+    public function redo(): void
+    {
+        if ($this->redo === []) {
+            return;
+        }
+        $this->undo[] = [$this->text, $this->cursor, $this->anchor];
+        [$this->text, $this->cursor, $this->anchor] = array_pop($this->redo);
+        $this->marked = null;
+        $this->lastEdit = '';
+    }
+
+    /** The wrapped lines of display() at $width, kept while the text, size and width stay. */
+    public function layout(TextMetrics $m, float $size, float $width): TextLayout
+    {
+        $display = $this->display();
+        $l = $this->layout;
+        if ($l === null || $l->text !== $display || $l->size !== $size || $l->width !== $width) {
+            $l = $this->layout = TextLayout::wrap($m, $display, $size, $width);
+        }
+        return $l;
+    }
+
     /** Applies a text system command (doCommandBySelector:). Returns whether it was one. */
     public function command(string $selector): bool
     {
         $extend = str_ends_with($selector, 'AndModifySelection:');
         $base = $extend ? substr($selector, 0, -strlen('AndModifySelection:')) . ':' : $selector;
+        if ($this->multiline && in_array($base, self::BY_LINE, true)) {
+            return false; // Runtime answers these from the wrapped lines
+        }
         switch ($base) {
+            case 'moveToBeginningOfParagraph:':
+                $nl = strrpos(substr($this->text, 0, $this->cursor), "\n");
+                $this->setCursor($nl === false ? 0 : $nl + 1, $extend); return true;
+            case 'moveToEndOfParagraph:':
+                $nl = strpos($this->text, "\n", $this->cursor);
+                $this->setCursor($nl === false ? strlen($this->text) : $nl, $extend); return true;
             case 'moveLeft:': case 'moveBackward:':
                 if (!$extend && $this->hasSelection()) { $this->setCursor($this->selection()[0]); } else { $this->setCursor($this->prev($this->cursor), $extend); }
                 return true;
@@ -102,9 +175,9 @@ final class TextState
                 return true;
             case 'moveWordLeft:': case 'moveWordBackward:': $this->setCursor($this->wordLeft($this->cursor), $extend); return true;
             case 'moveWordRight:': case 'moveWordForward:': $this->setCursor($this->wordRight($this->cursor), $extend); return true;
-            case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': case 'moveToBeginningOfDocument:': case 'moveToBeginningOfParagraph:': case 'moveUp:':
+            case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': case 'moveToBeginningOfDocument:': case 'moveUp:':
                 $this->setCursor(0, $extend); return true;
-            case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': case 'moveToEndOfDocument:': case 'moveToEndOfParagraph:': case 'moveDown:':
+            case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': case 'moveToEndOfDocument:': case 'moveDown:':
                 $this->setCursor(strlen($this->text), $extend); return true;
             case 'deleteBackward:':
                 if (!$this->hasSelection()) { $this->anchor = $this->prev($this->cursor); }
@@ -126,6 +199,9 @@ final class TextState
         }
         return false;
     }
+
+    /** Commands a text area leaves to Runtime, which knows its wrapped lines. */
+    public const BY_LINE = ['moveUp:', 'moveDown:', 'moveToBeginningOfLine:', 'moveToLeftEndOfLine:', 'moveToEndOfLine:', 'moveToRightEndOfLine:', 'deleteToBeginningOfLine:', 'insertNewline:', 'pageUp:', 'pageDown:'];
 
     /** Byte offset of the previous UTF-8 character boundary. */
     public function prev(int $i): int

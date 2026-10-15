@@ -44,8 +44,9 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block, addr/import), 
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, Mem (calloc/free, address-based memcpy)
-src/UI/            Node, Context (column/row/text/muted/button/input/box/list), Layout (flex), DisplayList (quads with
-                   clip), Painter (tree -> list), Text + GlyphAtlas + TextMetrics, TextState (field editing model),
+src/UI/            Node, Context (column/row/text/muted/button/input/textarea/box/list), Layout (flex), DisplayList
+                   (quads with clip), Painter (tree -> list), Text + GlyphAtlas + TextMetrics, TextState (editing
+                   model, undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
                    Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (text fields, IME), desktop (menus, dialogs), webview (Notes service + myphp.ts)
@@ -117,11 +118,12 @@ static-php-cli is the one outside tool, for release builds only.
 Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
-glides, keys and selection; theme; CLI + .app.
+glides, keys and selection; text areas (wrapping, undo, caret blink);
+theme; CLI + .app.
 Remaining, in rough order:
 1. FollowEnd for lists; horizontal scrolling.
-2. Multi-line text, undo, caret blink; images in the renderer; atlas
-   eviction and re-rasterizing on a backing-scale change.
+2. Images in the renderer; atlas eviction and re-rasterizing on a
+   backing-scale change; rich text.
 3. Tray, notifications, global shortcuts, window events and state.
 4. IPC channels (streaming), page-side window controls, preload script.
 5. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

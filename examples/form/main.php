@@ -1,7 +1,8 @@
 <?php
-// Text fields in native UI: click or Tab to focus, type (input methods
-// included: try Pinyin), select with the mouse or Shift+arrows, Cmd+A/C/X/V
-// through the Edit menu, Enter submits. The view is a function of $state.
+// Text fields and a text area in native UI: click or Tab to focus, type
+// (input methods included: try Pinyin), select with the mouse or Shift+arrows,
+// Cmd+A/C/X/V/Z through the Edit menu, Enter submits a field. The view is a
+// function of $state.
 // Run: ./run.sh form
 declare(strict_types=1);
 
@@ -16,13 +17,17 @@ function form(Context $c, array &$s): void
 {
     $c->column(24, 14, 1);
       $c->text('Profile', 20);
-      foreach (['name' => 'Name', 'city' => 'City（试试中文输入法）', 'note' => 'Note'] as $key => $label) {
+      foreach (['name' => 'Name', 'city' => 'City（试试中文输入法）'] as $key => $label) {
           $c->row(0, 12);
             $c->column(0, 0); $c->muted($label); $c->end();
             $field = $c->input($s[$key], $label, 320);
             if ($c->submitted($field)) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
           $c->end();
       }
+      $c->row(0, 12);
+        $c->column(0, 0); $c->muted('Note'); $c->end();
+        $c->textarea($s['note'], 'A few lines: Enter breaks, Up/Down move, Cmd+Z undoes', 320, 96); // wraps at the width
+      $c->end();
       $c->row(0, 8);
         if ($c->clicked($c->button('Submit'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
         if ($c->clicked($c->button('Clear'))) { foreach (['name', 'city', 'note'] as $k) { $s[$k]->text = ''; $s[$k]->setCursor(0); } $s['greeting'] = ''; }
@@ -35,7 +40,7 @@ function form(Context $c, array &$s): void
 
 App::setName('Form');
 App::whenReady(function () use (&$s) {
-    new Window(new WindowOptions(title: 'MyPHP native — text input', width: 560, height: 360,
+    new Window(new WindowOptions(title: 'MyPHP native — text input', width: 560, height: 440,
         content: Content::view(function (Context $c) use (&$s) { form($c, $s); })));
 });
 App::run();

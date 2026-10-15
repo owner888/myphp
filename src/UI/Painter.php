@@ -14,7 +14,11 @@ final class Painter
             return;
         }
         if ($n->kind === Node::INPUT) {
-            self::paintField($n, $list, $text, $t);
+            self::paintField($n, $list, $text, $t, $rt);
+            return;
+        }
+        if ($n->kind === Node::TEXTAREA) {
+            self::paintArea($n, $list, $text, $t, $rt);
             return;
         }
         if ($n->focused) { // a focus ring around a button
@@ -54,7 +58,7 @@ final class Painter
     }
 
     /** A text field: border, selection, text or placeholder, composition underline, caret. */
-    private static function paintField(Node $n, DisplayList $list, Text $text, Theme $t): void
+    private static function paintField(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET;
@@ -87,8 +91,60 @@ final class Painter
                 $list->rect($tx + $xa, $ty + $lh - 1, $xb - $xa, 1.5, $n->fg);
             }
         }
-        if ($n->focused) {
+        if ($n->focused && ($rt === null || $rt->caretVisible())) {
             $list->rect($tx + $caretX, $ty, 1.0, $lh, $n->fg);
+        }
+        $list->popClip();
+    }
+
+    /** A text area: border, wrapped lines scrolled to the caret, selection across lines, composition underline, caret. */
+    private static function paintArea(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    {
+        $s = $n->edit;
+        $inset = Runtime::FIELD_INSET;
+        $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
+        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->background, 1.0, $t->radius - 1);
+        $display = $s->display();
+        $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $inset;
+        $layout = $s->layout($text, $n->fontSize, $innerW);
+        $lh = $layout->lineHeight;
+        // Keep the caret's line in view; never scroll past the text.
+        $s->scrollY = max(0.0, min($s->scrollY, $layout->height() - $innerH));
+        if ($n->focused) {
+            [, $cy] = $layout->caret($text, $s->displayCaret());
+            if ($cy < $s->scrollY) { $s->scrollY = $cy; }
+            if ($cy + $lh > $s->scrollY + $innerH) { $s->scrollY = $cy + $lh - $innerH; }
+        }
+        $tx = $n->x + $inset; $ty = $n->y + $inset - $s->scrollY;
+        $list->pushClip($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4);
+        if ($display === '' && $n->text !== null && $n->text !== '') {
+            $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);
+        }
+        [$selA, $selB] = $n->focused && $s->hasSelection() && $s->marked === null ? $s->selection() : [0, 0];
+        $first = max(0, (int)floor($s->scrollY / $lh));
+        $last = min(count($layout->lines) - 1, (int)floor(($s->scrollY + $innerH) / $lh));
+        for ($i = $first; $i <= $last; $i++) {
+            [$a, $b] = $layout->lines[$i];
+            $line = $layout->lineText($i);
+            $y = $ty + $i * $lh;
+            if ($selB > $selA && $selB > $a && $selA < $b) {
+                $xa = $selA > $a ? $text->xForIndex($line, $n->fontSize, $selA - $a) : 0.0;
+                $xb = $selB < $b ? $text->xForIndex($line, $n->fontSize, min($selB - $a, strlen($line))) : $text->xForIndex($line, $n->fontSize, strlen($line)) + ($selB > $b ? $n->fontSize * 0.3 : 0);
+                $list->rect($tx + $xa, $y, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
+            }
+            if ($line !== '') {
+                $text->paint($list, $line, $n->fontSize, $tx, $y, $n->fg);
+            }
+        }
+        if ($s->marked !== null) {
+            [$xa, $ya] = $layout->caret($text, $s->cursor);
+            [$xb, $yb] = $layout->caret($text, $s->cursor + strlen($s->marked));
+            if ($yb !== $ya) { $xb = $innerW; }
+            $list->rect($tx + $xa, $ty + $ya + $lh - 1, $xb - $xa, 1.5, $n->fg);
+        }
+        if ($n->focused && ($rt === null || $rt->caretVisible())) {
+            [$cx, $cy] = $layout->caret($text, $s->displayCaret());
+            $list->rect($tx + $cx, $ty + $cy, 1.0, $lh, $n->fg);
         }
         $list->popClip();
     }
