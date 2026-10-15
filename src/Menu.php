@@ -203,6 +203,21 @@ final class Menu
     }
 
     /** Shows the menu as a context menu at the mouse position in $window. */
+    /** Shows the menu under the node $id had last frame (a select), in $window. */
+    public function popupAt(Window $window, int $id, \MyPHP\UI\Runtime $runtime): void
+    {
+        $r = $runtime->rectOf($id);
+        if ($r === null) {
+            $this->popup($window);
+            return;
+        }
+        $native = $this->build();
+        $view = ObjC::msg('p:', $window->native(), 'contentView');
+        $p = ObjC::$c->new('NSPoint');
+        $p->x = $r[0]; $p->y = $r[1] + $r[3] + 2; // the content view is flipped: y runs down
+        ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
+    }
+
     public function popup(Window $window): void
     {
         $native = $this->build();

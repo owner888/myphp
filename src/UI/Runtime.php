@@ -65,6 +65,8 @@ final class Runtime
         $this->clicks = [];
         $this->rightClicks = [];
         $this->doubleClicks = [];
+        $this->slid = [];
+        $this->steps = [];
         $this->activated = null;
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
@@ -86,15 +88,24 @@ final class Runtime
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
                     $this->pressAt($e[1], $e[2]);
+                    foreach ($this->sliders as $id => $r) {
+                        if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
+                            $this->sliding = $id;
+                            $this->slideTo($id, $e[1]);
+                        }
+                    }
                     break;
                 case 'up':
                     $this->input->mouseDown = false;
+                    $this->sliding = null;
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
                     } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2]]; }
                     break;
                 case 'drag':
-                    if ($this->drag !== null) {
+                    if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
+                        $this->slideTo($this->sliding, $e[1]);
+                    } elseif ($this->drag !== null) {
                         [$state, $last, $ratio, $horizontal] = $this->drag;
                         if ($horizontal) {
                             $state->scrollByX(($e[1] - $last) * $ratio);
@@ -129,6 +140,7 @@ final class Runtime
             $this->doubleClicks = [];
         }
         $this->rects = [];
+        $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
         $this->focusables = [];
@@ -188,6 +200,9 @@ final class Runtime
             if ($n->focusable && $n->id === $this->focus) {
                 $n->focused = true; // the painter shows the ring; buttons and fields set this while building
             }
+        }
+        if ($n->kind === Node::SLIDER) {
+            $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
         if ($n->wrapWidth !== null && abs($n->w - $n->wrapWidth) > 0.5) {
             $this->needsFrame = true; // wrapped at last frame's width; this frame's differs
@@ -340,6 +355,12 @@ final class Runtime
                 case 'insertNewline:': if ($l->selected >= 0) { $l->submit(); } return;
             }
         }
+        if ($this->focus !== null && isset($this->sliders[$this->focus])) {
+            switch ($selector) {
+                case 'moveLeft:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return;
+                case 'moveRight:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return;
+            }
+        }
         switch ($selector) {
             case 'insertTab:': $this->moveFocus(1); break;
             case 'insertBacktab:': $this->moveFocus(-1); break;
@@ -419,6 +440,38 @@ final class Runtime
             }
         }
         return false;
+    }
+
+    /** The rect this node had last frame: x, y, w, h. */
+    public function rectOf(int $id): ?array
+    {
+        return $this->rects[$id] ?? null;
+    }
+
+    /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> sliders by id, from last frame */
+    private array $sliders = [];
+    private ?int $sliding = null;
+    /** @var array<int, float> id => where the pointer set a slider this frame, as a share of its width */
+    private array $slid = [];
+    /** @var array<int, int> id => arrow steps on a focused slider this frame */
+    private array $steps = [];
+
+    /** Where the pointer put slider $id this frame, 0..1, or null. */
+    public function slid(int $id): ?float
+    {
+        return $this->slid[$id] ?? null;
+    }
+
+    /** How many steps the arrow keys moved slider $id this frame. */
+    public function stepped(int $id): int
+    {
+        return $this->steps[$id] ?? 0;
+    }
+
+    private function slideTo(int $id, float $x): void
+    {
+        $r = $this->sliders[$id];
+        $this->slid[$id] = max(0.0, min(1.0, ($x - $r[0]) / max(1.0, $r[2])));
     }
 
     /** The width this node had last frame, for text that wraps at the width the layout gives it. */

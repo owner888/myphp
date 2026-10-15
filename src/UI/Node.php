@@ -10,7 +10,7 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11;
     public const ROW = 0, COLUMN = 1;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
@@ -34,6 +34,11 @@ final class Node
     public ?float $wrapWidth = null;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
     public bool $focusable = false;
+    /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range. */
+    public bool $on = false;
+    public float $fraction = 0;
+    /** Whether a control changed its value this frame: Context::changed(). */
+    public bool $changed = false;
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;

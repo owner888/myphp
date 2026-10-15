@@ -115,6 +115,17 @@ answer; `Runtime::record` asks for another frame when this frame's width
 differs, so a resize reflows one frame late. That suits nodes a column
 stretches; in a row, pass the width.
 
+Controls write straight into the app's variables, by reference:
+`checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
+`slider(&$value, $min, $max)`, `select($options, &$index)`;
+`Context::changed($node)` says whether this frame changed it (mygo's
+Changed). The toggles are focusable nodes whose click flips the value;
+the slider is set from `Runtime`, which records presses and drags inside
+slider rects as a share of their width (`slid`) and Left/Right on a
+focused slider as steps (`stepped`); the select pops an `NSMenu` under
+the node's last-frame rect (`Menu::popupAt`), whose item clicks set the
+index before the popup returns, since the popup runs its own loop.
+
 Any node can take the keyboard focus with `->focusable()`: `Runtime`
 lists it with the buttons and fields (Tab order, the innermost under a
 press), marks it focused in `record` so the painter draws the ring, and

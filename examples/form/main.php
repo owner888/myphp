@@ -11,7 +11,8 @@ use MyPHP\UI\{Content, Context, Font, ScrollState, Span, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState];
+$s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
+      'subscribe' => false, 'mode' => 'light', 'volume' => 40.0, 'lang' => 0];
 
 function form(Context $c, array &$s): void
 {
@@ -34,6 +35,13 @@ function form(Context $c, array &$s): void
             $c->column(6, 2, 0, $c->theme->background); $c->text("Tag $i"); $c->muted(sprintf('#%06x', ($i * 2654435761) & 0xffffff), 11); $c->end();
         }
       $c->end();
+      // Controls: a checkbox, radios, a slider and a select, each writing straight into $s.
+      $c->row(0, 16);
+        $c->checkbox('Subscribe', $s['subscribe']);
+        $c->radio('Light', $s['mode'], 'light'); $c->radio('Dark', $s['mode'], 'dark');
+        $c->slider($s['volume'], 0, 100, 140); $c->muted(sprintf('%.0f%%', $s['volume']));
+        $c->select(['English', '中文', 'Español'], $s['lang']);
+      $c->end();
       // A focusable card: Tab reaches it, Enter or a click activates it, hover tints it; the text wraps at the card's width.
       $card = $c->column(10, 4, 0, $c->theme->surface)->focusable();
         if ($c->hovered($card)) { $card->color = $c->theme->surfaceHover; }
@@ -53,7 +61,7 @@ function form(Context $c, array &$s): void
 
 App::setName('Form');
 App::whenReady(function () use (&$s) {
-    new Window(new WindowOptions(title: 'MyPHP native — text input', width: 560, height: 520,
+    new Window(new WindowOptions(title: 'MyPHP native — text input', width: 600, height: 560,
         content: Content::view(function (Context $c) use (&$s) { form($c, $s); })));
 });
 App::run();

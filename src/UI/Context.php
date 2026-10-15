@@ -4,6 +4,9 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
+use MyPHP\Menu;
+use MyPHP\MenuItem;
+use MyPHP\Window;
 
 /** Builds a frame's tree. The view function calls these in order, as code. */
 final class Context
@@ -211,6 +214,107 @@ final class Context
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         if ($this->runtime?->hovered($n->id)) {
             $n->color = $this->runtime->input->mouseDown ? $t->accentPressed : $t->accentHover;
+        }
+        return $n;
+    }
+
+    /** Whether the control just built changed its value this frame (checkbox, radio, slider, select), as mygo's Changed. */
+    public function changed(Node $n): bool
+    {
+        return $n->changed;
+    }
+
+    /** A checkbox with a label, toggling $checked; changed() reports it. */
+    public function checkbox(string $label, bool &$checked, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
+        [$w, $h] = $this->metrics->measure($label, $size);
+        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $w + $t->space(6), max($h, $t->space(4)), 0, $label, null, $size, $t->text));
+        $n->focusable = true;
+        if ($this->runtime?->clicked($n->id)) {
+            $checked = !$checked;
+            $n->changed = true;
+        }
+        $n->on = $checked;
+        return $n;
+    }
+
+    /** A radio button with a label: on while $value is $option, and sets it when chosen; changed() reports it. */
+    public function radio(string $label, mixed &$value, mixed $option, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
+        [$w, $h] = $this->metrics->measure($label, $size);
+        $n = $this->add(new Node(Node::RADIO, 0, 0, 0, $w + $t->space(6), max($h, $t->space(4)), 0, $label, null, $size, $t->text));
+        $n->focusable = true;
+        if ($this->runtime?->clicked($n->id) && $value !== $option) {
+            $value = $option;
+            $n->changed = true;
+        }
+        $n->on = $value === $option;
+        return $n;
+    }
+
+    /**
+     * A slider over [$min, $max] moving $value: a press or drag sets it
+     * where the pointer is, Left/Right move it by a hundredth of the range
+     * while it has the focus; changed() reports it.
+     */
+    public function slider(float &$value, float $min = 0, float $max = 1, float $width = 160): Node
+    {
+        $t = $this->theme;
+        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $t->space(5), 0, null, null, $t->fontSize, $t->text));
+        $n->focusable = true;
+        if ($this->runtime !== null) {
+            $f = $this->runtime->slid($n->id);
+            if ($f !== null) {
+                $value = $min + $f * ($max - $min);
+                $n->changed = true;
+            }
+            $step = $this->runtime->stepped($n->id);
+            if ($step !== 0) {
+                $value = max($min, min($max, $value + $step * ($max - $min) / 100));
+                $n->changed = true;
+            }
+        }
+        $n->fraction = $max > $min ? ($value - $min) / ($max - $min) : 0.0;
+        return $n;
+    }
+
+    /**
+     * A popup choosing among $options (labels) into $index: clicking it
+     * shows the options as a menu at the control; changed() reports a
+     * choice. Needs the window the control is in (the key window by default).
+     * @param list<string> $options
+     */
+    public function select(array $options, int &$index, ?float $width = null, ?Window $window = null): Node
+    {
+        $t = $this->theme;
+        $size = $t->fontSize;
+        $label = $options[$index] ?? '';
+        $w = $width ?? max(array_map(fn($o) => $this->metrics->measure($o, $size)[0], $options ?: [''])) + $t->space(10);
+        [, $h] = $this->metrics->measure('X', $size);
+        $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(2.5), 0, $label, $t->surface, $size, $t->text));
+        $n->focusable = true;
+        if ($this->runtime?->hovered($n->id)) {
+            $n->color = $t->surfaceHover;
+        }
+        if ($this->runtime?->clicked($n->id)) {
+            $window ??= Window::key();
+            $chosen = null;
+            $items = [];
+            foreach ($options as $i => $o) {
+                $items[] = new MenuItem($o, function () use (&$chosen, $i) { $chosen = $i; }, checked: $i === $index, type: MenuItem::CHECKBOX);
+            }
+            if ($window !== null) {
+                (new Menu($items))->popupAt($window, $n->id, $this->runtime);
+            }
+            if ($chosen !== null && $chosen !== $index) {
+                $index = $chosen;
+                $n->text = $options[$index];
+                $n->changed = true;
+            }
         }
         return $n;
     }

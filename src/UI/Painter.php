@@ -25,6 +25,14 @@ final class Painter
             self::paintRich($n, $list, $text);
             return;
         }
+        if ($n->kind === Node::CHECKBOX || $n->kind === Node::RADIO) {
+            self::paintToggle($n, $list, $text, $t, $rt);
+            return;
+        }
+        if ($n->kind === Node::SLIDER) {
+            self::paintSlider($n, $list, $t);
+            return;
+        }
         if ($n->kind === Node::IMAGE) {
             $s = $text->imageSlot($n->image);
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
@@ -34,8 +42,13 @@ final class Painter
             $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
         }
         if ($n->color !== null) {
-            $radius = match ($n->kind) { Node::BUTTON => $t->radius, Node::BOX => self::BOX_RADIUS, default => 0.0 };
-            $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
+            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => 0.0 };
+            if ($n->kind === Node::SELECT) { // a bordered face
+                $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
+                $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
+            } else {
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
+            }
         }
         if ($n->selected) {
             $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha);
@@ -45,6 +58,11 @@ final class Painter
             if ($n->kind === Node::BUTTON) { // the label sits centered in the button's padding
                 [$tw, $th] = $text->measure($n->text, $n->fontSize);
                 $x += ($n->w - $tw) / 2; $y += ($n->h - $th) / 2;
+            } elseif ($n->kind === Node::SELECT) { // the choice at the left, a chevron at the right
+                [, $th] = $text->measure($n->text, $n->fontSize);
+                [$aw, $ah] = $text->measure('⌄', $n->fontSize);
+                $x += $t->space(2.5); $y += ($n->h - $th) / 2;
+                $text->paint($list, '⌄', $n->fontSize, $n->x + $n->w - $aw - $t->space(2.5), $n->y + ($n->h - $ah) / 2 - 2, $t->textMuted);
             }
             $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
         }
@@ -75,6 +93,49 @@ final class Painter
                 }
             }
         }
+    }
+
+    /** A checkbox (square, a check mark when on) or radio (circle, a dot when on) with its label; the ring marks the focus. */
+    private static function paintToggle(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    {
+        $box = $t->space(4);
+        $y = $n->y + ($n->h - $box) / 2;
+        $radius = $n->kind === Node::RADIO ? $box / 2 : $t->radius - 2;
+        if ($n->focused) {
+            $list->rect($n->x - 2, $y - 2, $box + 4, $box + 4, $t->focus, $t->focusAlpha, $radius + 2);
+        }
+        $hovered = $rt?->hovered($n->id) ?? false;
+        if ($n->on) {
+            $list->rect($n->x, $y, $box, $box, $hovered ? $t->accentHover : $t->accent, 1.0, $radius);
+            if ($n->kind === Node::RADIO) {
+                $list->rect($n->x + $box * 0.3, $y + $box * 0.3, $box * 0.4, $box * 0.4, $t->accentText, 1.0, $box * 0.2);
+            } else {
+                [$cw, $ch] = $text->measure('✓', $n->fontSize, Font::BOLD);
+                $text->paint($list, '✓', $n->fontSize, $n->x + ($box - $cw) / 2, $y + ($box - $ch) / 2, $t->accentText, 1.0, Font::BOLD);
+            }
+        } else {
+            $list->rect($n->x, $y, $box, $box, $t->border, 1.0, $radius);
+            $list->rect($n->x + 1, $y + 1, $box - 2, $box - 2, $hovered ? $t->surfaceHover : $t->surface, 1.0, $radius - 1);
+        }
+        [, $lh] = $text->measure($n->text, $n->fontSize);
+        $text->paint($list, $n->text, $n->fontSize, $n->x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+    }
+
+    /** A slider: the track, the part up to the value in the accent, and the knob. */
+    private static function paintSlider(Node $n, DisplayList $list, Theme $t): void
+    {
+        $knob = $t->space(4);
+        $trackH = $t->space(1);
+        $cy = $n->y + $n->h / 2;
+        $x0 = $n->x + $knob / 2; $x1 = $n->x + $n->w - $knob / 2;
+        $kx = $x0 + ($x1 - $x0) * $n->fraction;
+        $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
+        $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
+        if ($n->focused) {
+            $list->rect($kx - $knob / 2 - 2, $cy - $knob / 2 - 2, $knob + 4, $knob + 4, $t->focus, $t->focusAlpha, $knob / 2 + 2);
+        }
+        $list->rect($kx - $knob / 2, $cy - $knob / 2, $knob, $knob, $t->border, 1.0, $knob / 2);
+        $list->rect($kx - $knob / 2 + 1, $cy - $knob / 2 + 1, $knob - 2, $knob - 2, $t->background, 1.0, $knob / 2 - 1);
     }
 
     /** Rich text: its wrapped lines, each on one baseline, with the spans' backgrounds, underlines and strikes. */
