@@ -7,12 +7,12 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, ScrollState, Span, TextState};
+use MyPHP\UI\{Content, Context, Font, ScrollState, Span, TextState, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
-      'subscribe' => false, 'mode' => 'light', 'volume' => 40.0, 'lang' => 0];
+      'subscribe' => false, 'mode' => 'system', 'applied' => 'system', 'volume' => 40.0, 'lang' => 0];
 
 function form(Context $c, array &$s): void
 {
@@ -38,7 +38,12 @@ function form(Context $c, array &$s): void
       // Controls: a checkbox, radios, a slider and a select, each writing straight into $s.
       $c->row(0, 16);
         $c->checkbox('Subscribe', $s['subscribe']);
-        $c->radio('Light', $s['mode'], 'light'); $c->radio('Dark', $s['mode'], 'dark');
+        // The theme: fixed light or dark, or following the system (with its accent).
+        $c->radio('Light', $s['mode'], 'light'); $c->radio('Dark', $s['mode'], 'dark'); $c->radio('System', $s['mode'], 'system');
+        if ($s['mode'] !== $s['applied']) { // a radio changed it: the theme follows on the next frame
+            $s['applied'] = $s['mode'];
+            App::setTheme(match ($s['mode']) { 'light' => Theme::light(), 'dark' => Theme::dark(), default => null });
+        }
         $c->slider($s['volume'], 0, 100, 140);
         $c->column(0, 0)->size(40); $c->muted(sprintf('%.0f%%', $s['volume'])); $c->end(); // a fixed width, so the number does not push the select about
         $c->select(['English', '中文', 'Español'], $s['lang']);
