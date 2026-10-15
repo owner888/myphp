@@ -43,7 +43,14 @@ final class TypeScript
                     $params[] = $p->getName() . ($p->isOptional() ? '?' : '') . ': ' . self::type($p->getType(), $doc);
                     $names[] = $p->getName();
                 }
-                $ret = self::type($m->getReturnType(), self::docTag($m, 'return'));
+                $retDoc = self::docTag($m, 'return');
+                $rt = $m->getReturnType();
+                if ($rt instanceof ReflectionNamedType && $rt->getName() === \Generator::class) {
+                    // A streaming method: the reply is the generator's return value, @return names it (not Generator<...>).
+                    $ret = $retDoc === null || str_starts_with($retDoc, 'Generator') || str_starts_with($retDoc, '\\Generator') ? 'void' : self::docType($retDoc);
+                } else {
+                    $ret = self::type($rt, $retDoc);
+                }
                 $methods .= self::tsdoc($m->getDocComment(), '  ')
                     . "  $mname(" . implode(', ', $params) . "): Promise<$ret> {\n"
                     . "    return call(\"$name.$mname\"" . ($names ? ', ' . implode(', ', $names) : '') . ");\n  },\n";
@@ -59,7 +66,15 @@ final class TypeScript
             . "declare global {\n  interface Window {\n    myphp: {\n"
             . "      call<T = unknown>(method: string, ...args: unknown[]): Promise<T>;\n"
             . "      on(name: string, fn: (payload: unknown) => void): () => void;\n"
-            . "      isCallError(e: unknown): boolean;\n      platform: string;\n      windowId: number;\n      version: string;\n    };\n  }\n}\n\n"
+            . "      isCallError(e: unknown): boolean;\n      platform: string;\n      windowId: number;\n      version: string;\n"
+            . "      Channel: new <T = unknown>() => Channel<T>;\n"
+            . "      window: { minimize(): Promise<void>; maximize(): Promise<void>; unmaximize(): Promise<void>; toggleMaximize(): Promise<void>;"
+            . " isMaximized(): Promise<boolean>; toggleFullScreen(): Promise<void>; close(): Promise<void>; setTitle(title: string): Promise<void> };\n"
+            . "    };\n  }\n}\n\n"
+            . "/** A stream of values from a PHP method: pass one for a Channel parameter, then iterate it or set onmessage. */\n"
+            . "export interface Channel<T> {\n  onmessage: ((value: T) => void) | null;\n  onclose: (() => void) | null;\n  readonly closed: boolean;\n"
+            . "  /** Stops the method's sending; breaking out of a for-await loop does the same. */\n  close(): void;\n  [Symbol.asyncIterator](): AsyncIterator<T>;\n}\n"
+            . "export const Channel = window.myphp.Channel;\n"
             . "const call = <T,>(method: string, ...args: unknown[]): Promise<T> => window.myphp.call<T>(method, ...args);\n"
             . "const on = (name: string, fn: (payload: unknown) => void) => window.myphp.on(name, fn);\n"
             . "export const isCallError = (e: unknown): boolean => window.myphp.isCallError(e);\n";
@@ -100,6 +115,7 @@ final class TypeScript
             'void' => 'void',
             'null' => 'null',
             'array', 'mixed', 'object' => 'unknown',
+            Channel::class => 'Channel<unknown>',
             'self', 'static' => 'unknown',
             default => self::interface($php),
         };
@@ -117,6 +133,9 @@ final class TypeScript
         }
         if (str_ends_with($doc, '[]')) {
             return self::docType(substr($doc, 0, -2)) . '[]';
+        }
+        if (preg_match('/^(\\\\?MyPHP\\\\)?Channel<\s*(.+)\s*>$/', $doc, $m)) {
+            return 'Channel<' . self::docType($m[2]) . '>';
         }
         if (preg_match('/^(list|array|iterable)<\s*([^,>]+)\s*>$/', $doc, $m)) {
             return self::docType($m[2]) . '[]';

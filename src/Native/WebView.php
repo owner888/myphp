@@ -23,7 +23,7 @@ final class WebView
 
     private function __construct(private Closure $onMessage) {}
 
-    public static function create($frame, array $config, Closure $onMessage): self
+    public static function create($frame, array $config, Closure $onMessage, string $preload = ''): self
     {
         self::define();
         $self = new self($onMessage);
@@ -33,6 +33,10 @@ final class WebView
         $source = str_replace('__CONFIG__', json_encode($config, JSON_THROW_ON_ERROR), file_get_contents(__DIR__ . '/bridge.js'));
         $script = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($source), self::INJECT_AT_DOCUMENT_START, true);
         ObjC::msg('v:p', $ucc, 'addUserScript:', $script);
+        if ($preload !== '') {
+            $pre = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($preload), self::INJECT_AT_DOCUMENT_START, true);
+            ObjC::msg('v:p', $ucc, 'addUserScript:', $pre);
+        }
         $self->ns = ObjC::msg('p:rp', ObjC::alloc('WKWebView'), 'initWithFrame:configuration:', $frame, $wk);
         ObjC::msg('v:L', $self->ns, 'setAutoresizingMask:', self::AUTORESIZE_WIDTH_HEIGHT);
         self::$views[ObjC::addr($self->ns)] = $self;

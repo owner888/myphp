@@ -9,10 +9,22 @@ declare global {
       platform: string;
       windowId: number;
       version: string;
+      Channel: new <T = unknown>() => Channel<T>;
+      window: { minimize(): Promise<void>; maximize(): Promise<void>; unmaximize(): Promise<void>; toggleMaximize(): Promise<void>; isMaximized(): Promise<boolean>; toggleFullScreen(): Promise<void>; close(): Promise<void>; setTitle(title: string): Promise<void> };
     };
   }
 }
 
+/** A stream of values from a PHP method: pass one for a Channel parameter, then iterate it or set onmessage. */
+export interface Channel<T> {
+  onmessage: ((value: T) => void) | null;
+  onclose: (() => void) | null;
+  readonly closed: boolean;
+  /** Stops the method's sending; breaking out of a for-await loop does the same. */
+  close(): void;
+  [Symbol.asyncIterator](): AsyncIterator<T>;
+}
+export const Channel = window.myphp.Channel;
 const call = <T,>(method: string, ...args: unknown[]): Promise<T> => window.myphp.call<T>(method, ...args);
 const on = (name: string, fn: (payload: unknown) => void) => window.myphp.on(name, fn);
 export const isCallError = (e: unknown): boolean => window.myphp.isCallError(e);
@@ -37,6 +49,14 @@ export const Notes = {
   /** Count returns how many notes there are. */
   count(): Promise<number> {
     return call("Notes.count");
+  },
+} as const;
+
+/** Clock streams. */
+export const Clock = {
+  /** Ticks sends $n timestamps, one every 300 ms, and returns how many it sent. */
+  ticks(n: number, out: Channel<string>): Promise<number> {
+    return call("Clock.ticks", n, out);
   },
 } as const;
 

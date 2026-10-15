@@ -38,6 +38,8 @@ final class Window
     /** @var array<string, list<\Closure>> listeners by event */
     private array $listeners = [];
     private string $stateKey = '';
+    /** @var array<int, Channel> open channels by the page's id */
+    private array $channels = [];
     public const EVENTS = ['close', 'closed', 'focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'];
 
     public function __construct(WindowOptions $o)
@@ -70,6 +72,7 @@ final class Window
                 function (string $raw) {
                     if ($raw === '{"t":"dom-ready"}') {
                         $this->pageReady = true;
+                        $this->dropChannels(); // a new page: the old one's channels are gone
                         $callbacks = $this->whenPageReady;
                         $this->whenPageReady = [];
                         foreach ($callbacks as $fn) {
@@ -77,11 +80,11 @@ final class Window
                         }
                         return;
                     }
-                    $reply = Ipc::handle($raw, $this->secret);
+                    $reply = Ipc::handle($raw, $this->secret, $this);
                     if ($reply !== null) {
                         $this->page->deliver($reply);
                     }
-                });
+                }, $o->preload);
             $this->view = $this->page->ns;
             if ($o->html !== null) {
                 $this->page->loadHTML($o->html);
@@ -139,6 +142,54 @@ final class Window
                     $this->stat($t0, $list);
                 }
             });
+    }
+
+    /** The channel the page numbered $id, for a call just made (Ipc). */
+    public function openChannel(int $id, string $secret): Channel
+    {
+        return $this->channels[$id] = new Channel($this, $id, $secret);
+    }
+
+    public function channel(int $id): ?Channel
+    {
+        return $this->channels[$id] ?? null;
+    }
+
+    public function forgetChannel(int $id): void
+    {
+        unset($this->channels[$id]);
+    }
+
+    /** The page went away: every channel is closed on its side. */
+    private function dropChannels(): void
+    {
+        foreach ($this->channels as $ch) {
+            $ch->closedByPage();
+        }
+        $this->channels = [];
+    }
+
+    public function minimize(): void
+    {
+        ObjC::msg('v:p', $this->ns, 'miniaturize:', null);
+    }
+
+    /** Whether the window is zoomed to fill the screen (macOS's maximize). */
+    public function isMaximized(): bool
+    {
+        return ObjC::msg('b:', $this->ns, 'isZoomed');
+    }
+
+    public function setMaximized(bool $on): void
+    {
+        if ($this->isMaximized() !== $on) {
+            ObjC::msg('v:p', $this->ns, 'zoom:', null);
+        }
+    }
+
+    public function toggleFullScreen(): void
+    {
+        ObjC::msg('v:p', $this->ns, 'toggleFullScreen:', null);
     }
 
     /** The window's web page, or null for native UI. */
@@ -215,6 +266,7 @@ final class Window
                     $w = self::$open[ObjC::addr($ns)] ?? null;
                     unset(self::$open[ObjC::addr($ns)]);
                     if ($w !== null) {
+                        $w->dropChannels();
                         $w->captureState();
                         WindowState::save();
                         $w->emit('closed');

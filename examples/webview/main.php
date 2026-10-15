@@ -1,11 +1,14 @@
 <?php
 // A web page that calls PHP: Notes is a bound service, its methods are
 // `Notes.add` and `Notes.list` in the page, and PHP pushes an "added" event.
+// Clock.ticks streams through a Channel (a generator: the window stays live
+// between ticks), the page drives its window (myphp.window.setTitle), and a
+// preload script runs before the page's own.
 // Run: ./run.sh webview
 // TypeScript client: MYPHP_GENERATE=examples/webview/myphp.ts ./run.sh webview
 declare(strict_types=1);
 
-use MyPHP\{App, Ipc, TypeScript, Window, WindowOptions};
+use MyPHP\{App, Channel, ChannelClosed, Ipc, TypeScript, Window, WindowOptions};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -49,7 +52,30 @@ final class Notes
     }
 }
 
+/** Clock streams. */
+final class Clock
+{
+    /**
+     * Ticks sends $n timestamps, one every 300 ms, and returns how many it sent.
+     * @param Channel<string> $out
+     * @return int
+     */
+    public function ticks(int $n, Channel $out): Generator
+    {
+        for ($i = 1; $i <= $n; $i++) {
+            usleep(300_000);
+            try {
+                yield date('H:i:s') . " tick $i";
+            } catch (ChannelClosed) {
+                return $i - 1; // the page stopped listening
+            }
+        }
+        return $n;
+    }
+}
+
 Ipc::bind(new Notes());
+Ipc::bind(new Clock());
 TypeScript::event('added', Note::class);
 
 $html = <<<'HTML'
@@ -65,6 +91,7 @@ $html = <<<'HTML'
 </style>
 <h2>Notes <span id="count"></span></h2>
 <form id="f"><input id="t" placeholder="Title" autofocus><button>Add</button></form>
+<p><button id="stream" type="button">Stream 5 ticks</button> <button id="stop" type="button">Stop</button> <span id="ticks"></span></p>
 <div id="err"></div>
 <ul id="list"></ul>
 <script>
@@ -80,12 +107,22 @@ $html = <<<'HTML'
   };
   on('added', (note) => console.log('event added', note) || call('Notes.list').then(render));
   call('Notes.list').then(render);
+  let ch = null;
+  stream.onclick = async () => {
+    ch?.close(); ch = new myphp.Channel(); ticks.textContent = '';
+    const done = call('Clock.ticks', 5, ch);            // the channel rides along as an argument
+    for await (const line of ch) ticks.textContent += line + ' · ';
+    ticks.textContent += 'sent ' + await done;
+    myphp.window.setTitle('Notes — ' + PRELOADED + ' streamed');   // PRELOADED comes from the preload script
+  };
+  stop.onclick = () => ch?.close();
 </script>
 HTML;
 
 App::setName('Notes');
 App::whenReady(function () use ($html) {
-    $w = new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html));
+    $w = new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html,
+        preload: 'window.PRELOADED = "v' . App::VERSION . '";'));
     // PHP -> page -> PHP: run a script once the DOM is ready and read its value back.
     $w->whenPageReady(fn() => $w->evaluate('document.querySelector("h2").firstChild.textContent.trim() + " / " + navigator.userAgent.split(" ").pop()',
         fn(?string $value, ?string $error) => printf("[PHP] page says: %s\n", $error ?? $value)));

@@ -40,7 +40,8 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
 src/               App (whenReady/run/quit/theme/menu/userDataPath), Window (+ on(event), CloseEvent, WindowState),
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
-                   Notification (+ Options), Ipc (bound services), TypeScript (client), autoload.php (PSR-4)
+                   Notification (+ Options), Ipc (bound services, window controls), Channel (+ ChannelClosed:
+                   streaming to pages), TypeScript (client), autoload.php (PSR-4)
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Carbon (hot
                    keys), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
@@ -90,6 +91,10 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
 - **Pages talk as in mygo**: `{t:"call", id, k, m, a}` via a
   WKScriptMessageHandler, `Ipc::handle` on the main thread, reply through
   `window.myphp.__deliver`; events `{t:"event", n, p}`; per-window secret.
+  A `Channel` parameter streams `{t:"chan", c, k, p|end}` (page: `new
+  myphp.Channel()`, `chan-close` back); a Generator return streams each
+  yield one run-loop turn apart (`App::later`). `myphp:window.*` calls are
+  the page's window controls; `WindowOptions::$preload` runs before the page.
   `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client.
 - **FFI discipline**: one FFI instance per bridge (structs are not shared
   across instances; foreign pointers pass `ObjC::import`); `objc_msgSend`
@@ -127,8 +132,8 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; images; tray, global shortcuts, notifications, window events + state; CLI + .app.
+theme; images; tray, global shortcuts, notifications, window events + state;
+channels, page window controls, preload; CLI + .app.
 Remaining, in rough order:
 1. Horizontal scrolling; rich text (runs of size/color/weight in one line).
-2. IPC channels (streaming), page-side window controls, preload script.
-3. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+2. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

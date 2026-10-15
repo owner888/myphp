@@ -190,6 +190,31 @@ final class App
         return $dir;
     }
 
+    /** @var list<Closure> */
+    private static array $later = [];
+    private static $laterTarget = null;
+
+    /** Runs $fn on the next turn of the run loop, after the current event; events in between are handled first. */
+    public static function later(Closure $fn): void
+    {
+        if (self::$laterTarget === null) {
+            ObjC::defineClass('MyPHPLater', 'NSObject', [
+                'tick:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                    $queue = self::$later;
+                    self::$later = [];
+                    foreach ($queue as $fn) {
+                        $fn();
+                    }
+                }],
+            ]);
+            self::$laterTarget = ObjC::msg('p:', ObjC::alloc('MyPHPLater'), 'init');
+        }
+        self::$later[] = $fn;
+        if (count(self::$later) === 1) {
+            ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('tick:'), null, 0.0);
+        }
+    }
+
     /** Brings the app to the front, as a click on its Dock icon does. */
     public static function activate(): void
     {

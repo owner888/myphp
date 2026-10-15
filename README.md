@@ -54,10 +54,10 @@ Early. What works today, on macOS / Apple Silicon:
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
-| Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, generated TypeScript client | works (`examples/webview`) |
+| Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | Tray icon, global shortcuts, notifications (from a built .app), window events, remembered window frames | works (`examples/desktop`) |
-| Streaming channels; Linux and Windows | next |
+| Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
 Measured in `examples/native 1000` on an M-series Mac: 9 000 nodes rebuilt,
@@ -166,10 +166,10 @@ App::run();
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
-| 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，生成 TypeScript client | 可用（`examples/webview`） |
+| 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、记住窗口位置 | 可用（`examples/desktop`） |
-| 流式 channel；Linux 和 Windows | 下一步 |
+| Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
 在 M 系列 Mac 上用 `examples/native 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。

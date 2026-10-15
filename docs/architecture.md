@@ -211,10 +211,37 @@ arguments and returns `{t:"reply", id, k, ok, v|e}`; `WebView::deliver`
 evaluates `window.myphp.__deliver(...)` with it. Events are the same in
 the other direction. Unlike mygo, calls run on the main thread one after
 another: a slow method stalls the UI, so slow work belongs in a subprocess
-or a later message. `TypeScript::generate` reflects the services: PHP
+or a generator (below). `TypeScript::generate` reflects the services: PHP
 types map to TS (int/float → number, class → interface of its public
 properties, PHPDoc `Note[]`/`list<T>`/`array<K,V>` for arrays), docblocks
 become TSDoc, declared events get typed listeners.
+
+Channels follow mygo's wire format. The page makes `new myphp.Channel()`
+and passes it as an argument; `call()` numbers it (`toJSON` gives the
+number) and `Ipc::handle` turns the number back into a `Channel` for each
+parameter typed `MyPHP\Channel`. `send()` delivers `{t:"chan", c, k, p}`
+at once, `close()` `{..., end: true}`, and the page's `chan-close`
+(from `close()` or breaking out of `for await`) marks the channel closed
+so the next `send()` throws `ChannelClosed`; a new page (`dom-ready`) or
+the window closing closes them all. `chan-ack` is accepted and ignored:
+mygo's back-pressure makes the sender wait, which the main thread cannot.
+A method returning a `Generator` is pumped by `Ipc::pump`: one yield per
+turn of the run loop through `App::later` (`performSelector:...afterDelay:
+0` on a helper object, batching what was queued), each yield sent on the
+first channel parameter, a closed channel thrown into the generator at its
+yield, the generator's return value as the reply. Between yields the
+window handles events, so a long stream does not freeze the UI the way a
+plain method does. `TypeScript` writes `Channel<T>` from a
+`@param Channel<T>` docblock and types a generator method's result from
+`@return` (void without one).
+
+`window.myphp.window` (minimize, maximize, unmaximize, toggleMaximize,
+isMaximized, toggleFullScreen, close, setTitle) are calls to
+`myphp:window.<Name>` that `Ipc::handle` routes to the window the message
+came from, mygo's names; macOS's maximize is `zoom:`.
+`WindowOptions::$preload` is a second WKUserScript at document start,
+after the bridge, so it sees `window.myphp` and the page's scripts see
+what it defines.
 
 ## Menus and dialogs
 
