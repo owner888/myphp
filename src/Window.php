@@ -196,6 +196,19 @@ final class Window
         return array_values(self::$open);
     }
 
+    /** The window that has the keyboard, or null. */
+    public static function key(): ?Window
+    {
+        $ns = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'keyWindow');
+        return $ns === null ? null : (self::$open[ObjC::addr($ns)] ?? null);
+    }
+
+    /** The NSWindow, for native code that needs it. */
+    public function native()
+    {
+        return $this->ns;
+    }
+
     private function stat(int $t0, DisplayList $list): void
     {
         $t1 = hrtime(true);

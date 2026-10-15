@@ -161,6 +161,22 @@ types map to TS (int/float → number, class → interface of its public
 properties, PHPDoc `Note[]`/`list<T>`/`array<K,V>` for arrays), docblocks
 become TSDoc, declared events get typed listeners.
 
+## Menus and dialogs
+
+`Menu::build` turns MenuItems into NSMenuItems. An item with a role gets
+the system selector sent down the responder chain with a nil target
+(`copy:`, `performClose:`, `terminate:`...), so Edit works in web views
+and the standard windows menu is NSApp's. An item with a click closure
+gets the shared `MyPHPMenuTarget` and its uid as the item's tag; the
+target's `menuClicked:` looks the item up and calls the closure with the
+key window. Accelerators are parsed from mygo's "CmdOrCtrl+Shift+Z" form
+into a key equivalent and an NSEvent modifier mask. Menus are built with
+`setAutoenablesItems:NO`, so enabled state is what the item says.
+Dialogs use NSOpenPanel/NSSavePanel/NSAlert with `runModal`, which blocks
+the PHP call until the panel closes; a parent window is accepted but not
+yet used, since a sheet's completion handler is an ObjC block, and blocks
+are a struct this bridge does not build yet.
+
 ## Open items
 
 - `-[NSView displayLinkWithTarget:selector:]` returned a link that never

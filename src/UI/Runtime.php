@@ -20,7 +20,8 @@ final class Runtime
     private array $scrolls = [];
     /** Set by a frame that needs another one right after (a list left a gap). */
     public bool $needsFrame = false;
-    private array $clicks = [];     // [x, y] of mouse-ups this frame
+    private array $clicks = [];     // [x, y] of left mouse-ups this frame
+    private array $rightClicks = []; // [x, y] of right mouse-ups this frame
     private bool $consumed = false;
     public int $passes = 0;
 
@@ -34,10 +35,14 @@ final class Runtime
     public function frame(callable $build): Node
     {
         $this->clicks = [];
+        $this->rightClicks = [];
         foreach ($this->input->events as $e) {
             switch ($e[0]) {
                 case 'down': $this->input->mouseDown = true; break;
-                case 'up': $this->input->mouseDown = false; $this->clicks[] = [$e[1], $e[2]]; break;
+                case 'up':
+                    $this->input->mouseDown = false;
+                    if ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2]]; }
+                    break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[4]); break;
             }
         }
@@ -50,6 +55,7 @@ final class Runtime
                 break;
             }
             $this->clicks = [];
+            $this->rightClicks = [];
         }
         $this->rects = [];
         $this->scrolls = [];
@@ -82,6 +88,23 @@ final class Runtime
         foreach ($this->clicks as $i => [$x, $y]) {
             if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
                 unset($this->clicks[$i]);
+                $this->consumed = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a right mouse-up this frame landed on the node this id had last frame. */
+    public function rightClicked(int $id): bool
+    {
+        $r = $this->rects[$id] ?? null;
+        if ($r === null) {
+            return false;
+        }
+        foreach ($this->rightClicks as $i => [$x, $y]) {
+            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+                unset($this->rightClicks[$i]);
                 $this->consumed = true;
                 return true;
             }

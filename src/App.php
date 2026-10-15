@@ -21,6 +21,7 @@ final class App
     private static bool $ready = false;
     private static bool $running = false;
     private static ?string $name = null;
+    private static ?Menu $menu = null;
     private static $nsApp = null;
     private static ?Metal $metal = null;
     private static ?Text $text = null;
@@ -57,12 +58,13 @@ final class App
             file_put_contents($out, TypeScript::generate());
             return;
         }
-        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit']);
+        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers']);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', 0); // regular app, with a Dock icon
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
+                self::installMenu(self::$menu ?? Menu::default());
                 ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
                 $callbacks = self::$whenReady;
                 self::$whenReady = [];
@@ -73,6 +75,25 @@ final class App
         ]);
         ObjC::msg('v:p', self::$nsApp, 'setDelegate:', ObjC::msg('p:', ObjC::alloc('MyPHPAppDelegate'), 'init'));
         ObjC::msg('v:', self::$nsApp, 'run');
+    }
+
+    /** The menu bar; Menu::default() unless set. Can be set before or after run(). */
+    public static function setMenu(Menu $menu): void
+    {
+        self::$menu = $menu;
+        if (self::$ready) {
+            self::installMenu($menu);
+        }
+    }
+
+    public static function menu(): ?Menu
+    {
+        return self::$menu;
+    }
+
+    private static function installMenu(Menu $menu): void
+    {
+        ObjC::msg('v:p', self::$nsApp, 'setMainMenu:', $menu->build());
     }
 
     public static function quit(): void

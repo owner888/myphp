@@ -50,7 +50,8 @@ Early. What works today, on macOS / Apple Silicon:
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, generated TypeScript client | works (`examples/webview`) |
-| Menus, dialogs, tray, notifications; streaming channels; Linux and Windows | next |
+| Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
+| Tray, notifications, global shortcuts; streaming channels; Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
 Measured in `examples/native 1000` on an M-series Mac: 9 000 nodes rebuilt,
@@ -79,6 +80,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ```sh
 ./run.sh webview          # Notes: a page calling a bound PHP service, with events
 ./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
+./run.sh desktop          # menus and dialogs
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
 ```
@@ -143,7 +145,8 @@ App::run();
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，生成 TypeScript client | 可用（`examples/webview`） |
-| 菜单、对话框、托盘、通知；流式 channel；Linux 和 Windows | 下一步 |
+| 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
+| 托盘、通知、全局快捷键；流式 channel；Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
 在 M 系列 Mac 上用 `examples/native 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
@@ -170,6 +173,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ```sh
 ./run.sh webview          # Notes：页面调用绑定的 PHP 服务，带事件
 ./run.sh gen              # 生成 examples/webview/myphp.ts（TypeScript client）
+./run.sh desktop          # 菜单和对话框
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
 ```

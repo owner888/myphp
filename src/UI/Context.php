@@ -33,6 +33,11 @@ final class Context
         return $this->runtime?->clicked($n->id) ?? false;
     }
 
+    public function rightClicked(Node $n): bool
+    {
+        return $this->runtime?->rightClicked($n->id) ?? false;
+    }
+
     public function hovered(Node $n): bool
     {
         return $this->runtime?->hovered($n->id) ?? false;
