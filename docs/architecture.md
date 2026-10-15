@@ -273,6 +273,46 @@ with `View::wake` (`performSelector:withObject:afterDelay:`, cancelling
 the previous request) — no timer runs while nothing blinks, and after 30
 seconds at rest the caret stays on and the frames stop, as in mygo.
 
+## System integration
+
+`Tray` is an `NSStatusItem`: with a menu, `setMenu:` shows it on click;
+without one, the item's button gets a PHP target with `sendActionOn:`
+left and right mouse-up, and `NSApp currentEvent` tells which. Icons are
+PNG bytes through `NSData dataWithBytes:length:` (a `const char*`
+argument takes the PHP string directly) into `NSImage`, template or not.
+
+`GlobalShortcut` goes through Carbon's `RegisterEventHotKey` (its own
+`FFI::cdef` against Carbon.framework in `Native\Carbon`), as mygo does:
+no accessibility permission, and the handler installed with
+`InstallEventHandler` runs on the main thread inside NSApplication's
+loop, so a PHP closure can be the handler (held in a struct field, as
+`defineClass` holds methods). `EventHotKeyID` is passed by value; the
+handler reads it back with `GetEventParameter`. Key names map to ANSI
+virtual key codes; "Plus" is Shift+=.
+
+`Notification` uses `UNUserNotificationCenter`, which serves only
+processes running from a bundle with an identifier — `supported()`
+checks `NSBundle mainBundle bundleIdentifier`, so `myphp dev` and the
+exec launcher (whose process is the system php) report false and a built
+bundle true. Its completion handlers run on a background queue, where
+PHP must not run, so they get `ObjC::noopBlock()`: a global block whose
+invoke is `getpid`, a C function that ignores its arguments. The first
+`show()` asks for permission; the system drops notifications given
+before the user answers. `MyPHPNotificationDelegate` (attached in
+`applicationDidFinishLaunching:`, before the click that launched the app
+is delivered) shows banners while the app is frontmost and reports clicks
+to `App::onNotificationClick`, calling the handed-in completion blocks
+with `ObjC::callBlock`. Those delegate methods arrive on the main thread.
+
+Window events come from `NSWindowDelegate` (one shared delegate, the
+window found by the notification's object): `windowShouldClose:` runs the
+'close' listeners with a `CloseEvent` whose `cancel()` keeps the window,
+the rest map one to one. `WindowOptions::$stateKey` keeps the frame in
+`window-state.json` under `App::userDataPath()` (~/Library/Application
+Support/<name>): captured on move and resize while not minimized or full
+screen, applied with `setFrame:display:` after creation, saved when a
+window closes and in `applicationWillTerminate:`.
+
 ## Theme
 
 `UI\Theme` carries mygo's palette (background, surface and its hover and

@@ -1,0 +1,128 @@
+<?php
+declare(strict_types=1);
+
+namespace MyPHP;
+
+use Closure;
+use MyPHP\Native\ObjC;
+use RuntimeException;
+
+/**
+ * An icon in the menu bar (NSStatusItem), as mygo's Tray. Create it from
+ * App::whenReady(). With a menu, clicking shows the menu; without one,
+ * clicks reach onClick() and onRightClick().
+ */
+final class Tray
+{
+    private const VARIABLE_LENGTH = -1.0;
+    private const LEFT_UP = 1 << 2, RIGHT_UP = 1 << 4; // NSEventMask bits
+    private const RIGHT_MOUSE_UP = 4; // NSEventType
+    private static bool $defined = false;
+    /** @var array<int, Tray> by status bar button address */
+    private static array $byButton = [];
+    private $item;
+    private $menu = null; // the built NSMenu, kept alive
+    private array $onClick = [];
+    private array $onRightClick = [];
+
+    public function __construct(TrayOptions $o)
+    {
+        if (!App::isReady()) {
+            throw new RuntimeException('create trays from App::whenReady()');
+        }
+        $bar = ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar');
+        $this->item = ObjC::msg('p:d', $bar, 'statusItemWithLength:', self::VARIABLE_LENGTH);
+        if ($o->icon !== null) {
+            $this->setIcon($o->icon, $o->iconIsTemplate);
+        }
+        if ($o->title !== '') {
+            $this->setTitle($o->title);
+        }
+        if ($o->toolTip !== '') {
+            ObjC::msg('v:p', $this->button(), 'setToolTip:', ObjC::str($o->toolTip));
+        }
+        if ($o->menu !== null) {
+            $this->setMenu($o->menu);
+        } else {
+            self::define();
+            $button = $this->button();
+            self::$byButton[ObjC::addr($button)] = $this;
+            ObjC::msg('v:p', $button, 'setTarget:', self::$target);
+            ObjC::msg('v:p', $button, 'setAction:', ObjC::sel('trayClicked:'));
+            ObjC::msg('l:L', $button, 'sendActionOn:', self::LEFT_UP | self::RIGHT_UP);
+        }
+    }
+
+    private static $target = null;
+
+    private static function define(): void
+    {
+        if (self::$defined) {
+            return;
+        }
+        self::$defined = true;
+        ObjC::defineClass('MyPHPTrayTarget', 'NSObject', [
+            'trayClicked:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                $tray = self::$byButton[ObjC::addr($sender)] ?? null;
+                if ($tray === null) {
+                    return;
+                }
+                $event = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
+                $right = $event !== null && ObjC::msg('L:', $event, 'type') === self::RIGHT_MOUSE_UP;
+                foreach ($right ? $tray->onRightClick : $tray->onClick as $fn) {
+                    $fn();
+                }
+            }],
+        ]);
+        self::$target = ObjC::msg('p:', ObjC::alloc('MyPHPTrayTarget'), 'init');
+    }
+
+    private function button()
+    {
+        return ObjC::msg('p:', $this->item, 'button');
+    }
+
+    /** Replaces the icon with a PNG image. */
+    public function setIcon(string $png, bool $template = false): void
+    {
+        $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $png, strlen($png));
+        $image = ObjC::msg('p:p', ObjC::alloc('NSImage'), 'initWithData:', $data);
+        if ($image === null) {
+            throw new RuntimeException('the tray icon is not an image');
+        }
+        ObjC::msg('v:b', $image, 'setTemplate:', $template);
+        ObjC::msg('v:p', $this->button(), 'setImage:', $image);
+    }
+
+    /** The text next to the icon. */
+    public function setTitle(string $title): void
+    {
+        ObjC::msg('v:p', $this->button(), 'setTitle:', ObjC::str($title));
+    }
+
+    public function setMenu(Menu $menu): void
+    {
+        $this->menu = $menu->build();
+        ObjC::msg('v:p', $this->item, 'setMenu:', $this->menu);
+    }
+
+    /** Called on a left click, when the tray has no menu. Returns a function that removes the listener. */
+    public function onClick(Closure $fn): Closure
+    {
+        $this->onClick[] = $fn;
+        return function () use ($fn) { $this->onClick = array_values(array_filter($this->onClick, fn($f) => $f !== $fn)); };
+    }
+
+    public function onRightClick(Closure $fn): Closure
+    {
+        $this->onRightClick[] = $fn;
+        return function () use ($fn) { $this->onRightClick = array_values(array_filter($this->onRightClick, fn($f) => $f !== $fn)); };
+    }
+
+    /** Takes the icon out of the menu bar. */
+    public function remove(): void
+    {
+        unset(self::$byButton[ObjC::addr($this->button())]);
+        ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar'), 'removeStatusItem:', $this->item);
+    }
+}

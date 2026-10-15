@@ -25,5 +25,7 @@ final class WindowOptions
         /** A web page instead: HTML to show, or a URL to load (http(s) or file:). */
         public ?string $html = null,
         public ?string $url = null,
+        /** Remembers the window's position and size under this key across runs (WindowState). */
+        public string $stateKey = '',
     ) {}
 }

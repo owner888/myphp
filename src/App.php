@@ -60,7 +60,7 @@ final class App
             file_put_contents($out, TypeScript::generate());
             return;
         }
-        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers']);
+        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', 0); // regular app, with a Dock icon
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
@@ -69,8 +69,12 @@ final class App
                     self::themeChanged();
                 }
             }],
+            'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                WindowState::save();
+            }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
+                Notification::attachDelegate(); // before the click that launched the app is delivered
                 self::installMenu(self::$menu ?? Menu::default());
                 ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
                 $callbacks = self::$whenReady;
@@ -159,6 +163,37 @@ final class App
             }
             ObjC::msg('v:', self::$nsApp, 'updateWindows');
         }
+    }
+
+    /** Calls $fn with the notification's id when the user clicks one, also one shown by an earlier run. */
+    public static function onNotificationClick(Closure $fn): void
+    {
+        self::$onNotificationClick[] = $fn;
+    }
+
+    private static array $onNotificationClick = [];
+
+    public static function notificationClicked(string $id): void
+    {
+        foreach (self::$onNotificationClick as $fn) {
+            $fn($id);
+        }
+    }
+
+    /** Where the app keeps its data: ~/Library/Application Support/<name>, made on first use. */
+    public static function userDataPath(): string
+    {
+        $dir = getenv('HOME') . '/Library/Application Support/' . self::name();
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            throw new RuntimeException("cannot create $dir");
+        }
+        return $dir;
+    }
+
+    /** Brings the app to the front, as a click on its Dock icon does. */
+    public static function activate(): void
+    {
+        ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
     }
 
     public static function quit(): void

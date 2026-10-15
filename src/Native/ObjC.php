@@ -169,6 +169,39 @@ final class ObjC
         return self::$c->cast('void*', $addr);
     }
 
+    /**
+     * A block that does nothing, for completion handlers the system calls
+     * on another thread, where PHP cannot run: its invoke is getpid, which
+     * ignores its arguments.
+     */
+    public static function noopBlock()
+    {
+        static $literal = null, $descriptor = null;
+        if ($literal === null) {
+            $literal = self::$c->new('BlockLiteral');
+            $descriptor = self::$c->new('BlockDescriptor');
+            $descriptor->size = FFI::sizeof(self::$c->type('BlockLiteral'));
+            $literal->isa = self::$globalBlockIsa;
+            $literal->flags = 1 << 28; // BLOCK_IS_GLOBAL
+            $literal->invoke = self::$c->dlsym(self::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), 'getpid');
+            $literal->descriptor = FFI::addr($descriptor);
+        }
+        return self::$c->cast('void*', FFI::addr($literal));
+    }
+
+    /** Calls a block the system handed us (a completion handler) with $args as msg()'s letters, $sig "ret:args". */
+    public static function callBlock(string $sig, $block, ...$args)
+    {
+        [$ret, $letters] = explode(':', $sig);
+        $params = ['void*'];
+        foreach (str_split($letters) as $ch) {
+            $params[] = self::MAP[$ch];
+        }
+        $literal = self::$c->cast('BlockLiteral*', $block);
+        $fn = self::$c->cast(self::MAP[$ret] . '(*)(' . implode(',', $params) . ')', $literal->invoke);
+        return $fn($block, ...$args);
+    }
+
     public static function alloc(string $cls)
     {
         return self::msg('p:', self::cls($cls), 'alloc');

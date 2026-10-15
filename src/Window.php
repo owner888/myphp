@@ -16,7 +16,7 @@ use RuntimeException;
  */
 final class Window
 {
-    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8;
+    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14;
     private const BACKING_BUFFERED = 2;
     /** @var array<int, Window> open windows by NSWindow address */
     private static array $open = [];
@@ -35,6 +35,10 @@ final class Window
     public readonly ?Input $input;
     public readonly ?Runtime $runtime;
     private array $stats = ['frames' => 0, 'ms' => 0, 'since' => 0];
+    /** @var array<string, list<\Closure>> listeners by event */
+    private array $listeners = [];
+    private string $stateKey = '';
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'];
 
     public function __construct(WindowOptions $o)
     {
@@ -48,10 +52,15 @@ final class Window
         $this->input = $o->content === null ? null : new Input();
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
 
+        $this->stateKey = $o->stateKey;
         $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
+        $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
         $style = self::TITLED | self::CLOSABLE | self::MINIATURIZABLE | ($o->disableResize ? 0 : self::RESIZABLE);
         $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $rect, $style, self::BACKING_BUFFERED, false);
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
+        if ($saved !== null) {
+            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
+        }
         $this->setTitle($o->title ?? App::name());
 
         if ($o->content === null) {
@@ -87,7 +96,7 @@ final class Window
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
         ObjC::msg('v:p', $this->ns, 'setDelegate:', self::delegate());
         self::$open[ObjC::addr($this->ns)] = $this;
-        if ($o->x === 0 && $o->y === 0) {
+        if ($saved === null && $o->x === 0 && $o->y === 0) {
             $this->center();
         }
         if (!$o->hidden) {
@@ -174,17 +183,84 @@ final class Window
     {
         if (!self::$delegateDefined) {
             self::$delegateDefined = true;
+            $fire = fn(string $event) => function ($self, $cmd, $note) use ($event) {
+                $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                if ($w !== null) {
+                    $w->emit($event);
+                    if ($event === 'resize' || $event === 'move') {
+                        $w->captureState();
+                    }
+                }
+            };
             ObjC::defineClass('MyPHPWindowDelegate', 'NSObject', [
+                'windowShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $sender) {
+                    $w = self::$open[ObjC::addr($sender)] ?? null;
+                    if ($w === null) {
+                        return true;
+                    }
+                    $e = new CloseEvent($w);
+                    foreach ($w->listeners['close'] ?? [] as $fn) {
+                        $fn($e);
+                    }
+                    return !$e->canceled;
+                }],
                 'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                     $ns = ObjC::msg('p:', $note, 'object');
+                    $w = self::$open[ObjC::addr($ns)] ?? null;
                     unset(self::$open[ObjC::addr($ns)]);
+                    if ($w !== null) {
+                        $w->captureState();
+                        WindowState::save();
+                        $w->emit('closed');
+                    }
                     if (self::$open === [] && App::$quitOnLastWindowClosed) {
                         App::quit();
                     }
                 }],
-            ]);
+                'windowDidBecomeKey:' => ['v@:@', 'v(ppp)', $fire('focus')],
+                'windowDidResignKey:' => ['v@:@', 'v(ppp)', $fire('blur')],
+                'windowDidResize:' => ['v@:@', 'v(ppp)', $fire('resize')],
+                'windowDidMove:' => ['v@:@', 'v(ppp)', $fire('move')],
+                'windowDidMiniaturize:' => ['v@:@', 'v(ppp)', $fire('minimize')],
+                'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
+                'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
+                'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
+            ], ['NSWindowDelegate']);
         }
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');
+    }
+
+    /**
+     * Calls $fn on $event, one of EVENTS: close (with a CloseEvent to
+     * cancel), closed, focus, blur, resize, move, minimize, restore,
+     * enterFullScreen, leaveFullScreen. Returns a function that removes it.
+     */
+    public function on(string $event, \Closure $fn): \Closure
+    {
+        if (!in_array($event, self::EVENTS, true)) {
+            throw new RuntimeException("no window event \"$event\"");
+        }
+        $this->listeners[$event][] = $fn;
+        return function () use ($event, $fn) {
+            $this->listeners[$event] = array_values(array_filter($this->listeners[$event] ?? [], fn($f) => $f !== $fn));
+        };
+    }
+
+    private function emit(string $event): void
+    {
+        foreach ($this->listeners[$event] ?? [] as $fn) {
+            $fn($this);
+        }
+    }
+
+    /** Remembers the frame under the state key, while not full screen or minimized. */
+    private function captureState(): void
+    {
+        if ($this->stateKey === '' || ObjC::msg('b:', $this->ns, 'isMiniaturized') || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) {
+            return;
+        }
+        $r = ObjC::msg('r:', $this->ns, 'frame');
+        WindowState::set($this->stateKey, $r->x, $r->y, $r->w, $r->h);
     }
 
     /** The theme changed: native UI clears to its background and redraws. */

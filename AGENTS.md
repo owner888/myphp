@@ -38,9 +38,11 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
-src/               App (whenReady/run/quit/theme/menu), Window, WindowOptions, Menu, MenuItem, Dialog + *Options,
-                   Ipc (bound services), TypeScript (generated client), autoload.php (PSR-4 without Composer)
-src/Native/        ObjC (runtime bridge: msg, defineClass, block, addr/import), Metal (MTKView, one quad pipeline,
+src/               App (whenReady/run/quit/theme/menu/userDataPath), Window (+ on(event), CloseEvent, WindowState),
+                   WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
+                   Notification (+ Options), Ipc (bound services), TypeScript (client), autoload.php (PSR-4)
+src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Carbon (hot
+                   keys), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, Mem (calloc/free, address-based memcpy)
@@ -119,11 +121,10 @@ Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
 focus, single-line fields with input methods; App/Window, menus, dialogs
 (sheets), pages with IPC + TS client; virtualized lists with scroll bars,
 glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; CLI + .app.
+theme; tray, global shortcuts, notifications, window events + state; CLI + .app.
 Remaining, in rough order:
 1. FollowEnd for lists; horizontal scrolling.
 2. Images in the renderer; atlas eviction and re-rasterizing on a
    backing-scale change; rich text.
-3. Tray, notifications, global shortcuts, window events and state.
-4. IPC channels (streaming), page-side window controls, preload script.
-5. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+3. IPC channels (streaming), page-side window controls, preload script.
+4. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
