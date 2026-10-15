@@ -51,6 +51,8 @@ final class Runtime
     private array $jumps = [];
     /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper], or null. */
     private ?array $hold = null;
+    /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
+    private array $keys = [];
     private const HOLD_DELAY = 0.4, HOLD_RATE = 0.08;
     /** A thumb being dragged: its state, the pointer's last y and content points per thumb point. */
     private ?array $drag = null;
@@ -94,6 +96,7 @@ final class Runtime
         $this->slid = [];
         $this->steps = [];
         $this->jumps = [];
+        $this->keys = [];
         $this->activated = null;
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
@@ -154,11 +157,19 @@ final class Runtime
                     }
                     break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
-                case 'command': $this->command($e[1]); break;
+                case 'key': $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false]; break;
+                case 'command': // what the text system made of the key just pushed; a focused control taking it keeps it from shortcut()
+                    if ($this->command($e[1]) && $this->keys !== []) {
+                        $this->keys[array_key_last($this->keys)][3] = true;
+                    }
+                    break;
                 case 'insert':
-                    if ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus])) {
+                    if ($this->focus !== null && isset($this->fields[$this->focus]) && $this->keys !== []) {
+                        $this->keys[array_key_last($this->keys)][3] = true; // typed into the field
+                    } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus])) {
                         $this->activated = $this->focus; // space presses a focused button
                         $this->focusVisible = true;
+                        if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     }
                     break;
             }
@@ -419,10 +430,10 @@ final class Runtime
     }
 
     /** Text system commands the field did not take: focus moves, activation, list navigation. */
-    private function command(string $selector): void
+    private function command(string $selector): bool
     {
         if ($this->areaCommand($selector)) {
-            return;
+            return true;
         }
         if ($this->focus !== null && !isset($this->fields[$this->focus])) {
             $this->focusVisible = true; // a key on a focused control: the ring shows
@@ -431,39 +442,40 @@ final class Runtime
             $l = $this->lists[$this->focus];
             $page = max(1, (int)($l->viewport / max(1.0, $l->estimate)) - 1);
             switch ($selector) {
-                case 'moveUp:': $l->choose(max(0, $l->selected - 1)); return;
-                case 'moveDown:': $l->choose($l->selected + 1); return;
-                case 'pageUp:': case 'scrollPageUp:': $l->choose(max(0, $l->selected - $page)); return;
-                case 'pageDown:': case 'scrollPageDown:': $l->choose($l->selected + $page); return;
-                case 'moveToBeginningOfDocument:': case 'scrollToBeginningOfDocument:': $l->choose(0); return;
-                case 'moveToEndOfDocument:': case 'scrollToEndOfDocument:': $l->choose($l->count - 1); return;
-                case 'insertNewline:': if ($l->selected >= 0) { $l->submit(); } return;
+                case 'moveUp:': $l->choose(max(0, $l->selected - 1)); return true;
+                case 'moveDown:': $l->choose($l->selected + 1); return true;
+                case 'pageUp:': case 'scrollPageUp:': $l->choose(max(0, $l->selected - $page)); return true;
+                case 'pageDown:': case 'scrollPageDown:': $l->choose($l->selected + $page); return true;
+                case 'moveToBeginningOfDocument:': case 'scrollToBeginningOfDocument:': $l->choose(0); return true;
+                case 'moveToEndOfDocument:': case 'scrollToEndOfDocument:': $l->choose($l->count - 1); return true;
+                case 'insertNewline:': if ($l->selected >= 0) { $l->submit(); } return true;
             }
         }
         if ($this->focus !== null && isset($this->sliders[$this->focus])) {
             switch ($selector) {
-                case 'moveLeft:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return;
-                case 'moveRight:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return;
+                case 'moveLeft:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
+                case 'moveRight:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return true;
             }
         }
         if ($this->focus !== null && isset($this->steppers[$this->focus])) {
             switch ($selector) {
-                case 'moveUp:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return;
-                case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return;
-                case 'moveToBeginningOfDocument:': $this->jumps[$this->focus] = -1; return;
-                case 'moveToEndOfDocument:': $this->jumps[$this->focus] = 1; return;
+                case 'moveUp:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return true;
+                case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
+                case 'moveToBeginningOfDocument:': $this->jumps[$this->focus] = -1; return true;
+                case 'moveToEndOfDocument:': $this->jumps[$this->focus] = 1; return true;
             }
         }
         switch ($selector) {
-            case 'insertTab:': $this->moveFocus(1); break;
-            case 'insertBacktab:': $this->moveFocus(-1); break;
-            case 'cancelOperation:': $this->focus = null; break;
+            case 'insertTab:': $this->moveFocus(1); return true;
+            case 'insertBacktab:': $this->moveFocus(-1); return true;
+            case 'cancelOperation:': $this->focus = null; return false; // Escape is still the window's
             case 'insertNewline:':
                 if ($this->focus !== null && !isset($this->fields[$this->focus])) {
                     $this->activated = $this->focus;
+                    return true;
                 }
-                break;
         }
+        return false;
     }
 
     private function moveFocus(int $dir): void
@@ -619,6 +631,32 @@ final class Runtime
             return 0;
         }
         return $y < $r[1] + $r[3] / 2 ? 1 : -1;
+    }
+
+    /**
+     * Whether $key (a Key code, or a character such as 'a') was pressed
+     * this frame with exactly $mods (Key::SHIFT|CONTROL|OPTION|COMMAND),
+     * wherever the focus is, unless a focused control took it first (a
+     * field its typing and moves, a button Enter and Space, a list the
+     * arrows), as mygo's Context.Shortcut.
+     */
+    public function shortcut(int|string $key, int $mods = 0): bool
+    {
+        $field = $this->focus !== null && isset($this->fields[$this->focus]);
+        foreach ($this->keys as $i => $k) {
+            if ($k[3] || $k[2] !== $mods) {
+                continue;
+            }
+            if ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && $k[1] !== Key::ESCAPE) {
+                continue; // the text system had it: typing, moves, deletes; Escape stays the window's
+            }
+            if (is_int($key) ? $k[1] === $key : strtolower($k[0]) === strtolower($key)) {
+                $this->keys[$i][3] = true; // one taker, as a click has; what it changed shows in this frame's next pass
+                $this->consumed = true;
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Home (-1) or End (1) pressed on focused stepper $id this frame, or 0. */

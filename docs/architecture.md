@@ -196,6 +196,17 @@ it; a press that moves the focus clears it), so a click leaves no ring
 but Tabbing to a control shows one; `Node::$focusVisible` is what the
 painter rings by, while fields keep their focused look either way.
 
+`Context::shortcut($key, $mods)` is mygo's window-level Shortcut: the
+view pushes every `keyDown:` as a `key` event (characters, key code,
+modifiers) before `interpretKeyEvents:` turns it into a `command` or
+`insert`; `Runtime` keeps the frame's keys and marks one taken when a
+focused control handled what followed it (a field's typing and moves, a
+button's Enter and Space, a list's arrows), so `shortcut` reports only
+the rest. A shortcut that fires takes its key (one taker, as a click
+has) and counts as consumed input, so the frame builds again and what
+the key changed shows at once, not on the next event. `Key` holds the codes of the keys without characters and the
+modifier masks.
+
 Images ride the same draw: a second `Atlas` (RGBA, `bpp` 4, the glyph
 atlas's size so the shader divides by one size) is texture 1, and a
 `kind = 2` quad carries its slot origin in `u, v` and the slot's pixel

@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | gen [out.ts]
+# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -13,6 +13,7 @@ case "$1" in
   notes)   exec $PHP $OPTS examples/notes/main.php ${2:+"$2"} ;;
   glass)   exec $PHP $OPTS examples/glass/main.php ;;
   widgets) exec $PHP $OPTS examples/widgets/main.php ;;
+  photos)  exec $PHP $OPTS examples/photos/main.php ${2:+"$2"} ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | gen [out.ts]"; exit 1 ;;
 esac

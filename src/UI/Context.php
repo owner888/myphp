@@ -81,6 +81,12 @@ final class Context
         return $this->runtime?->clicked($n->id) ?? false;
     }
 
+    /** Whether a double click's second press landed on $n this frame (its last-frame rect); the click reports too. */
+    public function doubleClicked(Node $n): bool
+    {
+        return $this->runtime?->doubleClicked($n->id) ?? false;
+    }
+
     public function rightClicked(Node $n): bool
     {
         return $this->runtime?->rightClicked($n->id) ?? false;
@@ -236,6 +242,12 @@ final class Context
             $n->color = $this->runtime->input->mouseDown ? $t->accentPressed : $t->accentHover;
         }
         return $n;
+    }
+
+    /** Whether $key (a Key code or a character) was pressed this frame with exactly $mods, unless a focused control took it (mygo's Shortcut). */
+    public function shortcut(int|string $key, int $mods = 0): bool
+    {
+        return $this->runtime?->shortcut($key, $mods) ?? false;
     }
 
     /** Whether the control just built changed its value this frame (checkbox, radio, slider, select), as mygo's Changed. */
