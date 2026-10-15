@@ -45,6 +45,7 @@ final class Layout
         if ($n->scroll instanceof ScrollState) {
             $content = $used + $n->gap * ($cnt - 1);
             $n->scroll->maxY = max(0.0, $content - $ch);
+            $n->scroll->viewport = $ch;
             $n->scroll->y = min($n->scroll->y, $n->scroll->maxY);
             $cy -= $n->scroll->y;
             $extra = 0.0;

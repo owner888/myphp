@@ -8,7 +8,7 @@ final class Painter
 {
     private const BOX_RADIUS = 18.0;
 
-    public static function paint(Node $n, DisplayList $list, Text $text, Theme $t): void
+    public static function paint(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt = null): void
     {
         if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
             return;
@@ -24,6 +24,9 @@ final class Painter
             $radius = match ($n->kind) { Node::BUTTON => $t->radius, Node::BOX => self::BOX_RADIUS, default => 0.0 };
             $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
         }
+        if ($n->selected) {
+            $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha);
+        }
         if ($n->text !== null) {
             $x = $n->x; $y = $n->y;
             if ($n->kind === Node::BUTTON) { // the label sits centered in the button's padding
@@ -36,10 +39,17 @@ final class Painter
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
         }
         foreach ($n->kids as $k) {
-            self::paint($k, $list, $text, $t);
+            self::paint($k, $list, $text, $t, $rt);
         }
         if ($n->scroll !== null) {
             $list->popClip();
+            // The thumb shows while the pointer is over the container or drags it.
+            if ($rt !== null && ($rt->dragging($n->scroll) || $rt->hovered($n->id))) {
+                $thumb = Scrollbar::thumb([$n->x, $n->y, $n->w, $n->h], $n->scroll->extent(), $t->scrollbarWidth);
+                if ($thumb !== null) {
+                    $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
+                }
+            }
         }
     }
 

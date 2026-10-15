@@ -1,149 +1,95 @@
 # AGENTS.md — MyPHP
 
 Entry point for coding agents and contributors. `docs/architecture.md` has
-the reasoning and the numbers behind the rules here.
+the reasoning, the numbers and the pitfalls behind the rules here.
 
 ## Rules
 
 1. **This file stays under 200 lines.** Check with `wc -l AGENTS.md` after
-   editing it; move detail to `docs/` rather than growing it.
-2. No third-party packages without asking the developer first. Small things
-   are written here instead of pulled in. `composer.json` has no `require`
-   beyond `php` and `ext-ffi`, and that is the intent.
-3. Git is the developer's: do not commit, push, branch, tag or export
-   patches. Change files, run checks, report which files changed.
-4. Files that go into git never carry the developer's name. Write "the
-   developer" (English) or 「开发者」 (Chinese) when a reference is needed.
-5. Do not run GUI examples from a sandbox or container: they need a
-   display and the Apple frameworks. Ask the developer to run them and
-   report the output; `php -l` and pure-PHP tests can run anywhere.
-6. Keep the codebase small and literal. No speculative abstractions,
-   no silent fallbacks, no magic numbers chosen to make a symptom go away.
-   When something is unclear, ask before changing.
-7. Delete dead code when you touch it; do not comment it out.
+   editing. When it nears the limit, first condense what is here; only
+   when nothing more can be condensed, move detail to `docs/`.
+2. No third-party packages without asking the developer first; small
+   things are written here instead. `composer.json` requires only `php` and
+   `ext-ffi`, and that is the intent.
+3. Git is the developer's: no commit, push, branch, tag or patch export.
+   Change files, run checks, report which files changed.
+4. Files that go into git never carry the developer's name: write "the
+   developer" / 「开发者」 when a reference is needed.
+5. GUI examples run only on the developer's Mac (display, Apple
+   frameworks): ask them to run and paste output. `php -l` and pure-PHP
+   checks run anywhere.
+6. Small and literal: no speculative abstractions, no silent fallbacks, no
+   magic numbers that make a symptom go away. Unclear? Ask before changing.
+7. Delete dead code when you touch it; never comment it out.
+8. `bin/myphp` stays executable: after any change, `chmod 755 bin/myphp`
+   and check `ls -l` before handing back (file syncs drop the bit).
 
 ## What this is
 
-A port of the ideas in mygo (`github.com/egoist/mygo`, a pure-Go desktop
-framework) to PHP 8.3+: windows with either a system webview or native UI
-drawn by us on the GPU, reaching the OS through `ext-ffi` only. mygo's
-`purego` role is played by `FFI::cdef` / `FFI::cast` / PHP closures as
-callbacks. There is no C extension of our own and there will not be one.
-
-Reference checkout of mygo, if present: `../../other/mygo` relative to this
-repo (`AGENTS.md`, `docs/architecture.md`, `ui/runtime.go` are the parts
-worth reading first). When porting a behaviour, read mygo's version first
-and keep the semantics; rename to PHP conventions, do not redesign.
+mygo (`github.com/egoist/mygo`, a pure-Go desktop framework) ported in
+spirit to PHP 8.3+: windows with a system webview or native UI we draw on
+the GPU, reaching the OS through `ext-ffi` only (`FFI::cdef`/`cast` and PHP
+closures play `purego`'s part). No C extension of our own, ever.
+Reference checkout: `../../other/mygo` (read its `AGENTS.md`,
+`docs/architecture.md`, `ui/runtime.go` first). Port behaviour by reading
+mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ## Layout
 
 ```
-bin/myphp               the CLI: init (templates), dev (run + restart on change + TS client), build (.app), micro (setup notes)
-src/autoload.php        PSR-4 for MyPHP\ without Composer; projects require it through their boot.php
-src/App.php             the application: whenReady(), run(), quit(); shared Metal device and text engine
-src/Window.php          a native-UI window: NSWindow + View, per-window Runtime/Input, frame = build/layout/paint
-src/WindowOptions.php   title, size, position, hidden, disableResize, content | html | url
-src/Menu.php            menu bar and context menus: roles, accelerators, clicks by tag -> PHP closure
-src/MenuItem.php        an item: label, click, accelerator, role, checkbox, submenu; set* update the native item
-src/Dialog.php          open/save panels and message boxes: sheets of a parent window, else app-modal
-src/*DialogOptions.php  FileFilter, Open/Save/MessageOptions, MessageResult
-src/Ipc.php             bound services: bind(), handle() one bridge message, emit() events to pages
-src/TypeScript.php      the generated client (MYPHP_GENERATE=path): services, interfaces, events
-src/Native/ObjC.php     Objective-C runtime bridge (macOS, Apple Silicon)
-src/Native/Metal.php    Metal renderer: MTKView, one quad pipeline, buffer ring, atlas texture
-src/Native/CoreText.php text shaping (CTLine) and glyph rasterization (CTFontDrawGlyphs)
-src/Native/Mem.php      calloc/free, integer addresses, memcpy by address (no pointer arithmetic in FFI)
-src/Native/View.php     MTKView subclass: mouse/scroll/key events into UI\Input; NSTextInputClient over the focused field
-src/Native/Pasteboard.php the general pasteboard, plain text
-src/Native/WebView.php  WKWebView with the bridge user script and script message handler
-src/Native/bridge.js    window.myphp in every page: call(), on(), __deliver(); mygo's message shapes
-src/UI/Node.php         one element of a frame's tree
-src/UI/Context.php      tree building: column/row/text/button/box
-src/UI/Layout.php       flex layout: measure (bottom-up), arrange (top-down)
-src/UI/DisplayList.php  a frame's quads (rects and glyphs), written into the GPU buffer
-src/UI/Text.php         shaped-line cache; measure() for layout, paint() to the list
-src/UI/GlyphAtlas.php   8-bit shelf-packed glyph atlas the renderer uploads when dirty
-src/UI/TextMetrics.php  what Context needs from a text engine
-src/UI/Input.php        events since the last frame, mouse position, the focused field for the text input client
-src/UI/TextState.php    a field's text, selection and composition; byte offsets; the text system's commands
-src/UI/Runtime.php      last frame's rects by node id; clicked()/hovered(); scroll routing; rebuild passes
-src/UI/Scrollable.php   what the wheel drives: ScrollState (offset) or ListState (anchor row)
-src/UI/ScrollState.php  a scrolling container's offset, owned by the app
-src/UI/ListState.php    a virtualized list's anchor row, offset, measured heights and estimate
-src/UI/Theme.php        colors and metrics widgets draw with; light()/dark(); withAccent()
-src/Native/Appearance.php dark-or-light and the accent color from NSApp's effectiveAppearance
-src/UI/Content.php      Content::view(fn(Context)) — what a window shows
-src/UI/Painter.php      tree -> display list: fills, labels (centered in buttons), scroll clips
-examples/native/        an inbox: App::whenReady -> new Window(WindowOptions(content: Content::view(...)))
-examples/desktop/       menu bar with roles and custom items, context menu, the three dialogs
-examples/webview/       Notes: a bound service, a page calling it, an event; myphp.ts is its generated client
-run.sh                runs an example with the right php -d flags
-docs/architecture.md  design notes and measurements
+bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
+src/               App (whenReady/run/quit/theme/menu), Window, WindowOptions, Menu, MenuItem, Dialog + *Options,
+                   Ipc (bound services), TypeScript (generated client), autoload.php (PSR-4 without Composer)
+src/Native/        ObjC (runtime bridge: msg, defineClass, block, addr/import), Metal (MTKView, one quad pipeline,
+                   buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
+                   events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
+                   (dark/light, accent), Pasteboard, Mem (calloc/free, address-based memcpy)
+src/UI/            Node, Context (column/row/text/muted/button/input/box/list), Layout (flex), DisplayList (quads with
+                   clip), Painter (tree -> list), Text + GlyphAtlas + TextMetrics, TextState (field editing model),
+                   Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
+                   Scrollable + ScrollState + ListState (anchor, selection, scrollTo), Scrollbar, Glide, Theme, Content
+examples/          native (inbox over a million rows), form (text fields, IME), desktop (menus, dialogs), webview (Notes service + myphp.ts)
+run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
-
-Namespace `MyPHP\`, PSR-4 from `src/`. Examples use a two-line autoloader so
-they run without Composer.
 
 ## Architecture, in short
 
-- **Immediate mode**, as mygo's `ui`: every frame the view function rebuilds
-  the tree, `Layout` measures and arranges it, paint emits drawing commands.
-  Frames run on demand: an event calls `Metal::requestFrame`, nothing else
-  draws. Lists are virtualized so the per-frame node count is what is visible.
-- **Lists are virtualized** (`Context::list`, as mygo's `List`): the app's
-  `ListState` holds the anchor row and the view's offset below its top;
-  only rows for 1.5 views of estimated height are built, heights are
-  learned from layout, unknown rows count as the average. The per-frame
-  cost of a million-row list is the rows in view.
-- **Colors come from the theme**, never literals in widgets or examples:
-  `$c->theme` (App::theme()) is light or dark after the system with its
-  accent color, re-read on the `effectiveAppearance` KVO; `Context::text`
-  defaults to `theme->text`, `muted()` to `textMuted`, buttons to the
-  accent with hover/pressed shades. A window clears to `theme->background`.
-- **Keys go through `interpretKeyEvents:`**, never parsed by hand: the input
-  context calls `insertText:`, `setMarkedText:` and `doCommandBySelector:`
-  on the view, which edits `Input::$focus` (the focused field's TextState)
-  at once and answers `selectedRange`/`markedRange`/`firstRectForCharacterRange:`
-  from it, so input methods compose in place with their candidate window
-  at the caret. Focus moves in Runtime: click, Tab/Shift-Tab, Escape.
-- **Interaction answers from last frame's layout**: `Runtime` keeps rects by
-  node id (creation order); `clicked()`/`hovered()` hit-test against them
-  while this frame builds. A click that changed state re-runs the build, up
-  to three passes, as mygo does. Scrolling containers (`->scroll($state)`)
-  get wheel deltas routed by hit test and clip their children.
-- **Nodes have no parent pointers.** A frame's tree is acyclic, reference
-  counting frees it, the cycle collector never runs mid-frame. Keep it so.
-- **The GPU gets one buffer per frame.** Paint writes a `DisplayList`
-  straight into a shared `MTLBuffer` (cast to `float[]`), four buffers in a
-  ring; one instanced draw call per frame. No per-rect FFI calls.
-- **Frames are paced by MTKView**, which calls `drawInMTKView:` on the main
-  thread at the display's rate. No NSTimer, no CVDisplayLink into PHP.
-- **Text goes through the OS shaper** (CoreText on macOS) with a glyph atlas,
-  cached by size and string (`UI\Text`); a cache hit is one array lookup.
-  Glyph quads and rects share one pipeline and one draw call (`params.y`
-  picks the branch), so draw order is the list order.
-- **One FFI instance per OS bridge**, holding all its types: structs from
-  different instances are incompatible, and a pointer another instance
-  returned is stored only after `ObjC::import()` rebuilt it in this scope.
-- **Callbacks on the main thread only.** PHP must never be entered from
-  another thread (no CoreAudio/CVDisplayLink/dispatch callbacks into PHP).
-- **Pages talk to PHP as in mygo**: the bridge posts `{t:"call", id, k, m, a}`
-  through a WKScriptMessageHandler, `Ipc::handle` runs the method on the
-  main thread and `WebView::deliver` evaluates `window.myphp.__deliver(reply)`;
-  events are `{t:"event", n, p}`. Every window has its own secret `k`.
-  `App::run` with `MYPHP_GENERATE=path` writes the TypeScript client and
-  returns, as `mygo generate` does; `./run.sh gen` runs it for the example.
-- **Blocks are `ObjC::block('lp', fn)`**: a global block literal whose invoke
-  is a PHP closure, for completion handlers. An API that only delivers its
-  result through a block is made synchronous with `App::wait(fn() => ...)`,
-  which runs the run loop until the block fired (Dialog sheets do this).
-- **`objc_msgSend` is cast per signature, never declared variadic** (arm64
-  calling convention). Signatures are "ret:args" letter strings, see
-  `ObjC::MAP`. Struct returns (NSRect) use plain `objc_msgSend` on arm64.
+- **Immediate mode**, as mygo's `ui`: each frame rebuilds the tree, `Layout`
+  measures and arranges, `Painter` emits quads. Frames run on demand
+  (`Metal::requestFrame`), paced by MTKView on the main thread; no NSTimer
+  or CVDisplayLink into PHP. Nodes have no parent pointers (acyclic: no GC).
+- **Last frame answers this frame's questions**: `Runtime` keeps rects by
+  node id (creation order, or xxh64 of the key path under `Context::key`;
+  list rows are keyed by index); `clicked()/hovered()/focused()` hit-test
+  them while building; a click that changed state re-runs the build (≤3 passes).
+- **Lists are virtualized** (`Context::list`, mygo's `List`): `ListState` =
+  anchor row + offset; rows for 1.5 views of estimated height are built,
+  heights learned from layout. A million rows cost the rows in view.
+  `selected` (-1) turns on click/arrow/Home/End choice; `scrollTo` glides
+  (`Glide::TAU`), thumbs show on hover and drag; bar geometry in `Scrollbar`.
+- **One GPU buffer per frame**: `DisplayList` writes 16 floats per quad into
+  a shared `MTLBuffer` (ring of four); rects and glyphs share one pipeline
+  and one instanced draw, so draw order is list order; clip rect per quad.
+- **Text through CoreText** with a glyph atlas; shaped lines cached by size
+  and string (`UI\Text`), swept by frame age; fonts keyed by `CFHash`.
+- **Keys through `interpretKeyEvents:`**: the input context calls
+  `insertText:`/`setMarkedText:`/`doCommandBySelector:` on the view, which
+  edits `Input::$focus` (the focused `TextState`) at once and answers the
+  NSTextInputClient queries from it (the class declares the protocol).
+- **Theme, never literals**: `$c->theme` is light/dark after the system with
+  its accent (KVO on `effectiveAppearance`); widgets default to it.
+- **Pages talk as in mygo**: `{t:"call", id, k, m, a}` via a
+  WKScriptMessageHandler, `Ipc::handle` on the main thread, reply through
+  `window.myphp.__deliver`; events `{t:"event", n, p}`; per-window secret.
+  `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client.
+- **FFI discipline**: one FFI instance per bridge (structs are not shared
+  across instances; foreign pointers pass `ObjC::import`); `objc_msgSend`
+  cast per "ret:args" signature (`ObjC::MAP`), never variadic; callbacks
+  kept alive in holder structs; blocks via `ObjC::block`; `App::wait` makes a
+  block-delivered result synchronous; PHP is entered on the main thread only.
 
-Measured on an M-series Mac: 9 000 nodes rebuilt + laid out + painted in
-~4 ms per frame at 60 fps, memory flat. Budget is 16.6 ms; the language is
-not the bottleneck, the architecture is what keeps it that way.
+Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
+~4–6 ms per frame at 60 fps; a million-row list ~1.3 ms, 8 MB flat.
 
 ## Projects and bundles
 
@@ -151,43 +97,31 @@ not the bottleneck, the architecture is what keeps it that way.
 built app, else the checkout) and app.php; `myphp build` makes `<Name>.app`
 with a C launcher that execs this php (development) or, `--launcher micro`,
 a phar combined with phpmicro by static-php-cli (release, one static
-binary). Details in docs/architecture.md, Packaging. static-php-cli is the
-one outside tool, for release builds only.
+binary); `myphp micro` fetches spc into ~/.myphp and builds micro.sfx once.
+static-php-cli is the one outside tool, for release builds only.
 
 ## Working on it
 
-- PHP ≥ 8.3 with `ext-ffi`; run examples with `./run.sh native|webview|...`
-  and projects with `bin/myphp dev`; both set `ffi.enable=1` and OPcache
-  JIT (`opcache.jit=1255`). `bin/myphp` stays dependency-free PHP.
-- Before handing back: `php -l` on every changed file; run pure-PHP checks
-  in `tests/` if they exist for the area; ask the developer to run GUI
-  examples and paste the stats line.
-- When adding an ObjC call, find the selector and argument types in Apple's
-  headers, add the signature letters, and pass structs created by
-  `ObjC::$c->new(...)` or `ObjC::rect(...)`, never from another FFI instance.
-- Keep every PHP callback alive: `ObjC::defineClass` does this for class
-  methods; any other function pointer handed to C needs the same holder.
-- Record a problem you hit and solved in `docs/architecture.md` under
-  "Open items" or "Rules that fell out of the PoC", one paragraph, so the
-  next session does not rediscover it.
+- PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set
+  `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
+- Before handing back: `php -l` on every changed file; pure-PHP checks
+  where they exist; ask the developer to run GUI examples.
+- New ObjC calls: selector and types from Apple's headers, signature letters
+  in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
+  methods (`arrayWithObjects:`) avoided.
+- Record each solved problem in `docs/architecture.md` (one paragraph) so
+  the next session does not rediscover it.
 
 ## Roadmap
 
-1. Metal renderer: rects, rounded rects and glyph atlas done; images and
-   clipping next (mygo: `internal/gpu/metal`).
-2. CoreText text: shaping + atlas done; atlas eviction, dirty-rect uploads,
-   and re-rasterizing on a backing-scale change remain (mygo: `internal/text`).
-3. Input: mouse, wheel, clipping, keyboard focus, single-line text fields
-   with input methods and the Edit menu done; multi-line text, undo,
-   caret blink, stable ids for conditional UI, scroll glide remain.
-4. App/Window API: whenReady/run/quit, WindowOptions subset, show/hide/
-   close/setTitle/center/size, menu bar and context menus with roles and
-   accelerators, open/save/message dialogs (as sheets too), page evaluate
-   with results, whenPageReady done; tray, notifications, global
-   shortcuts, window events (OnClose, OnResize), window state remain.
-5. Virtualized lists: done; keys for rows that come and go, FollowEnd,
-   selection, keyboard navigation and a scroll bar remain.
-6. Webview IPC: bind, call, reply, events, TypeScript client done;
-   channels (streaming), a dev server/front-end toolchain, window controls
-   from the page, the preload script remain.
-7. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.
+Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
+focus, single-line fields with input methods; App/Window, menus, dialogs
+(sheets), pages with IPC + TS client; virtualized lists with scroll bars,
+glides, keys and selection; theme; CLI + .app.
+Remaining, in rough order:
+1. FollowEnd for lists; horizontal scrolling.
+2. Multi-line text, undo, caret blink; images in the renderer; atlas
+   eviction and re-rasterizing on a backing-scale change.
+3. Tray, notifications, global shortcuts, window events and state.
+4. IPC channels (streaming), page-side window controls, preload script.
+5. Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11) bridges.

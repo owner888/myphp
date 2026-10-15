@@ -104,6 +104,7 @@ final class Window
                 $bounds = ObjC::msg('r:', $view, 'bounds');
                 $t0 = hrtime(true);
                 $text->beginFrame();
+                $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme());
                     ($content->view)($c);
@@ -111,7 +112,7 @@ final class Window
                     Layout::arrange($c->root, 0, 0, $bounds->w, $bounds->h);
                     return $c->root;
                 });
-                Painter::paint($root, $list, $text, App::theme());
+                Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
                 }

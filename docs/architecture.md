@@ -144,6 +144,30 @@ offset and renormalizes it across row boundaries; past the end it pulls
 back so the last rows fill the view. mygo instead builds the missing rows
 during layout, so it never shows a gap; that is the remaining difference.
 
+Each row is built under a key scope (`/L<list id>/<row>`), so the nodes of
+row 7 keep their ids whatever the anchor is: a Reply button clicked while
+a glide or momentum scroll moves the rows still lands on its own row. The
+same mechanism serves `Context::key()`: inside a keyed container ids are
+`xxh64` of the key path plus the node's order within it, unkeyed nodes
+keep creation order, and the two never collide in practice (small ints
+against 64-bit hashes).
+
+With `ListState::$selected` set (−1 for none), a click on a row's first
+node chooses it (`choose()` also reveals it), the list joins the focus
+order so Up/Down/Page/Home/End move the choice through
+`doCommandBySelector:` (`moveUp:` and friends), Enter and a double click
+(`clickCount` from the press event) set `submitted()`. The chosen row is
+painted with the selection color over its background. Scroll bars draw
+only while the container is hovered or its thumb dragged (as mygo); the
+thumb is the view's share of the content, estimated for lists from the
+average row height, and dragging it scrolls by `range / travel` points per
+pointer point. `scrollTo` on either state glides with an exponential ease
+(`Glide::TAU` = 80 ms, frame-time based, stops when within half a point or
+when the end pulls back); a list more than four views away first jumps to
+three views short so a million-row jump does not walk every row. Trackpad
+momentum is the system's: AppKit keeps sending `scrollWheel:` events after
+the fingers lift, so the list needs no inertia of its own.
+
 ## Page path
 
 `Native\WebView` builds a WKWebViewConfiguration with a user script

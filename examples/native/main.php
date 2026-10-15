@@ -1,6 +1,7 @@
 <?php
 // A scrolling inbox in native UI: the view is a function of $state, rebuilt
-// on every frame, and frames happen when something changes.
+// on every frame, and frames happen when something changes. Hover the list
+// for its scroll bar (drag the thumb); click a row to choose it.
 // Run: ./run.sh native [rows]   (MYPHP_STATS=1 prints per-second frame stats; try 1000000 rows)
 declare(strict_types=1);
 
@@ -10,6 +11,7 @@ use MyPHP\UI\{Content, Context, ListState};
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => ''];
+$state['list']->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
 
 function inbox(Context $c, array &$s): void
 {
@@ -19,9 +21,13 @@ function inbox(Context $c, array &$s): void
         $c->text('Inbox', 20);
         if ($c->clicked($c->button('Compose'))) { $s['rows']++; $s['last'] = "composed row {$s['rows']}"; }
         if ($c->clicked($c->button('Refresh'))) { $s['replied'] = []; $s['last'] = 'refreshed'; }
+        if ($c->clicked($c->button('Top'))) { $s['list']->scrollTo(0); }           // glides there
+        if ($c->clicked($c->button('End'))) { $s['list']->scrollTo($s['rows'] - 1); }
         $c->muted($s['last']);
       $c->end();
-      $c->list($s['list'], $s['rows'], function (int $i) use ($c, $t, &$s) { // only the rows in view are built
+      if ($s['list']->changed()) { $s['last'] = "chose row {$s['list']->selected}"; }
+      if ($s['list']->submitted()) { $s['last'] = "opened row {$s['list']->selected}"; }
+      $c->list($s['list'], $s['rows'], function (int $i) use ($c, $t, &$s) { // only the rows in view are built; each row's nodes are keyed by $i
             $c->row(10, 12, 0, ($i & 1) ? $t->surface : $t->background);
               $c->box(36, 36, ($i * 2654435761) & 0xffffff);
               $c->column(0, 2, 1);

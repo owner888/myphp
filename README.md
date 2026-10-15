@@ -48,6 +48,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Objective-C bridge (`objc_msgSend`, classes with PHP methods) | works |
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling, clicks, hover | works (`examples/native`) |
+| Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
 | Text fields with input methods, selection, Edit menu, Tab focus | works (`examples/form`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
@@ -67,7 +68,7 @@ scrolling; frames are only built when something changes.
 bin/myphp init my-app              # a native-UI project (--template web for a page calling PHP)
 cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerates the TS client
 ../myphp/bin/myphp build           # dist/MyApp.app, a launcher that execs this machine's php
-../myphp/bin/myphp build --launcher micro   # one static binary via static-php-cli (see `myphp micro`)
+../myphp/bin/myphp build --launcher micro   # one static binary: fetches static-php-cli and builds phpmicro the first time
 ```
 
 ### Requirements
@@ -157,6 +158,7 @@ App::run();
 | Objective-C 桥（`objc_msgSend`、方法为 PHP 闭包的类） | 可用 |
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、滚动、点击、hover | 可用（`examples/native`） |
+| 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
 | 文本框：输入法、选区、Edit 菜单、Tab 焦点 | 可用（`examples/form`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
@@ -174,7 +176,7 @@ App::run();
 bin/myphp init my-app              # 原生 UI 项目（--template web 是调用 PHP 的网页项目）
 cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重新生成 TS client
 ../myphp/bin/myphp build           # dist/MyApp.app，启动器 exec 本机的 php
-../myphp/bin/myphp build --launcher micro   # 用 static-php-cli 打成单个静态二进制（见 `myphp micro`）
+../myphp/bin/myphp build --launcher micro   # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
 ```
 
 ### 环境要求

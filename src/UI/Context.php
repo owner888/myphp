@@ -12,6 +12,12 @@ final class Context
     public int $count = 0;
     /** @var Node[] */
     private array $stack;
+    /** Identity for the next node, from key(); and the key path of the innermost keyed container with its node count. */
+    private string|int|null $nextKey = null;
+    private string $scope = '';
+    private int $ordinal = 0;
+    /** @var list<array{0: string, 1: int}|null> per open container: the scope it replaced, or null */
+    private array $scopes = [null];
 
     /** $width and $height are the room the tree will be laid out in. */
     public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null)
@@ -24,7 +30,45 @@ final class Context
     private function add(Node $n): Node
     {
         $this->stack[count($this->stack) - 1]->kids[] = $n;
-        $n->id = ++$this->count;
+        if ($this->nextKey !== null) {
+            $n->id = self::hash($this->scope . '/' . $this->nextKey);
+        } elseif ($this->scope !== '') {
+            $n->id = self::hash($this->scope . '#' . ++$this->ordinal);
+        } else {
+            $n->id = ++$this->count;
+        }
+        return $n;
+    }
+
+    /**
+     * Gives the next node an identity that holds across frames whatever
+     * is built before it, so conditional UI keeps its clicks, hover and
+     * focus straight; the nodes inside a keyed container are keyed by
+     * their order within it. A list keys each row by its index.
+     */
+    public function key(string|int $key): static
+    {
+        $this->nextKey = $key;
+        return $this;
+    }
+
+    private static function hash(string $path): int
+    {
+        return unpack('q', hash('xxh64', $path, true))[1];
+    }
+
+    private function open(Node $n): Node
+    {
+        $this->add($n);
+        $this->stack[] = $n;
+        if ($this->nextKey !== null) {
+            $this->scopes[] = [$this->scope, $this->ordinal];
+            $this->scope .= '/' . $this->nextKey;
+            $this->ordinal = 0;
+            $this->nextKey = null;
+        } else {
+            $this->scopes[] = null;
+        }
         return $n;
     }
 
@@ -46,21 +90,21 @@ final class Context
 
     public function column(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
     {
-        $n = $this->add(new Node(Node::CONTAINER, Node::COLUMN, $pad, $gap, 0, 0, $grow, null, $color));
-        $this->stack[] = $n;
-        return $n;
+        return $this->open(new Node(Node::CONTAINER, Node::COLUMN, $pad, $gap, 0, 0, $grow, null, $color));
     }
 
     public function row(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
     {
-        $n = $this->add(new Node(Node::CONTAINER, Node::ROW, $pad, $gap, 0, 0, $grow, null, $color));
-        $this->stack[] = $n;
-        return $n;
+        return $this->open(new Node(Node::CONTAINER, Node::ROW, $pad, $gap, 0, 0, $grow, null, $color));
     }
 
     public function end(): void
     {
         array_pop($this->stack);
+        $saved = array_pop($this->scopes);
+        if ($saved !== null) {
+            [$this->scope, $this->ordinal] = $saved;
+        }
     }
 
     /**
@@ -75,13 +119,30 @@ final class Context
         $state->count = $count;
         $state->row = min($state->row, max(0, $count - 1));
         $node = $this->column(0, 0, 1)->scroll($state);
+        $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $state->first = $state->row;
         $y = -$state->offset;
         $limit = max($state->viewport, $this->height) * 1.5;
+        [$scope, $ordinal] = [$this->scope, $this->ordinal];
         for ($i = $state->row; $i < $count && $y < $limit; $i++) {
+            $this->scope = "$scope/L{$node->id}/$i"; // the row's nodes are keyed by its index
+            $this->ordinal = 0;
+            $k = count($node->kids);
             $row($i);
             $y += $state->height($i);
+            if ($state->selected === null || !isset($node->kids[$k])) {
+                continue;
+            }
+            $first = $node->kids[$k];
+            $first->selected = $i === $state->selected;
+            if ($this->runtime !== null && $this->runtime->doubleClicked($first->id)) {
+                $state->choose($i);
+                $state->submit();
+            } elseif ($this->runtime !== null && $this->runtime->clicked($first->id)) {
+                $state->choose($i);
+            }
         }
+        [$this->scope, $this->ordinal] = [$scope, $ordinal];
         $this->end();
         return $node;
     }

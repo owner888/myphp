@@ -53,7 +53,7 @@ final class View
             [$x, $y] = $point($self, $event);
             $input->mouse($x, $y);
             if ($kind !== 'move') {
-                $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber')]);
+                $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber'), ObjC::msg('l:', $event, 'clickCount')]);
             }
             Metal::requestFrame($self);
         };

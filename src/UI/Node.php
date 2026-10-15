@@ -13,7 +13,7 @@ final class Node
     public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4;
     public const ROW = 0, COLUMN = 1;
 
-    /** Order of creation in the build; the key Runtime remembers rects by. */
+    /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
     public int $id = 0;
     /** Set on a container that scrolls its children vertically. */
     public ?Scrollable $scroll = null;
@@ -21,6 +21,8 @@ final class Node
     public ?TextState $edit = null;
     /** Whether this node has the keyboard focus this frame. */
     public bool $focused = false;
+    /** Whether this node is a list's chosen row, painted in the selection color. */
+    public bool $selected = false;
     /** @var Node[] */
     public array $kids = [];
     /** Laid-out rectangle. */
