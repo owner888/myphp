@@ -55,6 +55,9 @@ final class Window
         $this->id = self::$nextId++;
         $this->input = $o->content === null ? null : new Input();
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
+        if ($this->runtime !== null) {
+            $this->runtime->openURL = App::openURL(...);
+        }
 
         $this->stateKey = $o->stateKey;
         $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
@@ -138,18 +141,21 @@ final class Window
                     return $c->root;
                 });
                 Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 if ($text->repaint) {
                     // An atlas started over during the paint: what was painted before points at slots that are gone.
                     $text->repaint = false;
                     $list->reset();
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                    Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 }
+                $this->showCursor($this->runtime->cursor);
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
                 }
-                $blink = $this->runtime->nextBlink();
-                if ($blink !== null) {
-                    View::wake($view, $blink);
+                $wake = $this->runtime->nextWake();
+                if ($wake !== null) {
+                    View::wake($view, $wake);
                 }
                 if (getenv('MYPHP_STATS')) {
                     $this->stat($t0, $list);
@@ -335,6 +341,18 @@ final class Window
         }
         $r = ObjC::msg('r:', $this->ns, 'frame');
         WindowState::set($this->stateKey, $r->x, $r->y, $r->w, $r->h);
+    }
+
+    private string $cursorShown = 'arrow';
+
+    /** The pointer over the content: the arrow, or the hand over links. */
+    private function showCursor(string $cursor): void
+    {
+        if ($cursor === $this->cursorShown) {
+            return;
+        }
+        $this->cursorShown = $cursor;
+        ObjC::msg('v:', ObjC::msg('p:', ObjC::cls('NSCursor'), $cursor === 'pointer' ? 'pointingHandCursor' : 'arrowCursor'), 'set');
     }
 
     /** The theme changed: native UI clears to its background and redraws. */

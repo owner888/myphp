@@ -49,8 +49,14 @@ function form(Context $c, array &$s): void
         $c->rich([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
             . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')], wrap: true);
       $c->end();
+      // A link, a determinate bar following the slider, an indeterminate one; the Submit button has a tip.
+      $c->row(0, 12);
+        $c->link('mygo on GitHub', 'https://github.com/egoist/mygo');
+        $c->progress($s['volume'] / 100, 140)->tooltip('follows the slider');
+        $c->progress(-1, 100)->tooltip('indeterminate: animates');
+      $c->end();
       $c->row(0, 8);
-        if ($c->clicked($c->button('Submit'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
+        if ($c->clicked($c->button('Submit')->tooltip('Sends the form; Enter in a field does too'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
         if ($c->clicked($c->button('Clear'))) { foreach (['name', 'city', 'note'] as $k) { $s[$k]->text = ''; $s[$k]->setCursor(0); } $s['greeting'] = ''; }
       $c->end();
       $c->text($s['greeting'] === '' ? 'Submit, or press Enter in a field.' : $s['greeting'] . " (#{$s['submits']})", 15);

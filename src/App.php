@@ -234,6 +234,16 @@ final class App
         ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('fire:'), ObjC::msg('p:l', ObjC::cls('NSNumber'), 'numberWithLong:', $id), $seconds);
     }
 
+    /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenURL. */
+    public static function openURL(string $url): void
+    {
+        $nsurl = ObjC::msg('p:p', ObjC::cls('NSURL'), 'URLWithString:', ObjC::str($url));
+        if ($nsurl === null) {
+            throw new RuntimeException("not a URL: $url");
+        }
+        ObjC::msg('b:p', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'openURL:', $nsurl);
+    }
+
     /** Brings the app to the front, as a click on its Dock icon does. */
     public static function activate(): void
     {

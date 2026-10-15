@@ -126,6 +126,18 @@ focused slider as steps (`stepped`); the select pops an `NSMenu` under
 the node's last-frame rect (`Menu::popupAt`), whose item clicks set the
 index before the popup returns, since the popup runs its own loop.
 
+`link()` is accent text with an underline whose click calls
+`Runtime::$openURL` (App::openURL → `NSWorkspace openURL:`); while it is
+hovered `Runtime::$cursor` is 'pointer' and `Window::showCursor` sets
+`NSCursor pointingHandCursor`. `progress()` fills a share of its width,
+or, below zero, sweeps a third of the bar across every 1.5 s, asking for
+a frame each time (`Runtime::$animating`). `->tooltip()` on any node:
+`Runtime` notes when the pointer last moved, and once it rested on a node
+with a tip for `TIP_DELAY` (0.6 s) sets `$tip`, which `Painter::tooltip`
+draws last, below-right of the pointer and inside the root; the frame
+that will show it is scheduled through `nextWake()`, which also carries
+the caret blink.
+
 Any node can take the keyboard focus with `->focusable()`: `Runtime`
 lists it with the buttons and fields (Tab order, the innermost under a
 press), marks it focused in `record` so the painter draws the ring, and

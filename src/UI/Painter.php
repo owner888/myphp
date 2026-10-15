@@ -33,6 +33,21 @@ final class Painter
             self::paintSlider($n, $list, $t);
             return;
         }
+        if ($n->kind === Node::PROGRESS) {
+            $r = $n->h / 2;
+            $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $r);
+            if ($n->fraction >= 0) {
+                $list->rect($n->x, $n->y, $n->w * min(1.0, $n->fraction), $n->h, $t->accent, 1.0, $r);
+            } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
+                $phase = fmod(hrtime(true) / 1.5e9, 1.0);
+                $bar = $n->w / 3;
+                $x = $n->x - $bar + $phase * ($n->w + $bar);
+                $list->pushClip($n->x, $n->y, $n->w, $n->h);
+                $list->rect($x, $n->y, $bar, $n->h, $t->accent, 1.0, $r);
+                $list->popClip();
+            }
+            return;
+        }
         if ($n->kind === Node::IMAGE) {
             $s = $text->imageSlot($n->image);
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $n->alpha, $n->radius);
@@ -65,6 +80,9 @@ final class Painter
                 $text->paint($list, '⌄', $n->fontSize, $n->x + $n->w - $aw - $t->space(2.5), $n->y + ($n->h - $ah) / 2 - 2, $t->textMuted);
             }
             $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
+            if ($n->underline) {
+                $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
+            }
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
@@ -93,6 +111,27 @@ final class Painter
                 }
             }
         }
+    }
+
+    /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */
+    public static function tooltip(Node $root, DisplayList $list, Text $text, Theme $t, Runtime $rt): void
+    {
+        if ($rt->tip === null) {
+            return;
+        }
+        [$tip, $mx, $my] = $rt->tip;
+        $size = $t->fontSize - 1;
+        [$tw, $th] = $text->measure($tip, $size);
+        $pad = $t->space(2);
+        $w = $tw + 2 * $pad; $h = $th + 2 * $pad * 0.6;
+        $x = min($mx + 12, $root->x + $root->w - $w - 4);
+        $y = $my + 18;
+        if ($y + $h > $root->y + $root->h) {
+            $y = $my - $h - 6;
+        }
+        $list->rect($x, $y, $w, $h, $t->border, 1.0, $t->radius);
+        $list->rect($x + 1, $y + 1, $w - 2, $h - 2, $t->surface, 1.0, $t->radius - 1);
+        $text->paint($list, $tip, $size, $x + $pad, $y + $pad * 0.6, $t->text);
     }
 
     /** A checkbox (square, a check mark when on) or radio (circle, a dot when on) with its label; the ring marks the focus. */

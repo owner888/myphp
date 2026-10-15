@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
+
 /**
  * Frame-to-frame state for immediate mode: last frame's rectangles by node
  * id, so that this frame's build can answer clicked()/hovered() before it
@@ -31,6 +33,18 @@ final class Runtime
     public int $passes = 0;
     /** The theme's scroll bar width, for hit-testing thumbs; Window sets it. */
     public float $scrollbarWidth = 6;
+    /** Opens a URL with the system, for links; App sets it (App::openURL). */
+    public Closure $openURL;
+    /** @var array<int, string> nodes with tooltips by id, from last frame */
+    private array $tips = [];
+    /** When the pointer last moved, and the tip to show: text, x, y (set once the pointer rested on a node). */
+    private float $pointerRestAt = 0;
+    private array $lastPointer = [-1.0, -1.0];
+    public ?array $tip = null;
+    public const TIP_DELAY = 0.6;
+    /** The pointer the window should show over the hovered node: 'arrow' or 'pointer' (links). */
+    public string $cursor = 'arrow';
+    private bool $animating = false;
     /** A thumb being dragged: its state, the pointer's last y and content points per thumb point. */
     private ?array $drag = null;
     private int $lastFrame = 0;
@@ -55,6 +69,7 @@ final class Runtime
     public function __construct(public Input $input, private ?TextMetrics $metrics = null)
     {
         $input->metrics = $metrics;
+        $this->openURL = fn(string $url) => null;
     }
 
     /**
@@ -73,6 +88,12 @@ final class Runtime
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
+        $pointer = [$this->input->mouseX, $this->input->mouseY];
+        if ($pointer !== $this->lastPointer) {
+            $this->lastPointer = $pointer;
+            $this->pointerRestAt = $now / 1e9;
+            $this->tip = null;
+        }
         foreach ($this->scrolls as $state) {
             $state->glide($dt);
         }
@@ -146,11 +167,26 @@ final class Runtime
         $this->scrolls = [];
         $this->scrollAxes = [];
         $this->areas = [];
+        $this->tips = [];
+        $this->cursor = 'arrow';
+        $this->animating = false;
         $this->focusables = [];
         $this->fields = [];
         $this->lists = [];
         $this->needsFrame = false;
         $this->record($root);
+        $this->needsFrame = $this->needsFrame || $this->animating;
+        // A tip: the pointer rested on a node with one for TIP_DELAY.
+        $over = null;
+        foreach ($this->tips as $id => $text) {
+            if ($this->hovered($id)) {
+                $over = [$id, $text];
+            }
+        }
+        if ($over !== null && $this->tip === null && $now / 1e9 - $this->pointerRestAt >= self::TIP_DELAY) {
+            $this->tip = [$over[1], $this->input->mouseX, $this->input->mouseY];
+        }
+        $this->tipPending = $over !== null && $this->tip === null;
         if ($this->focus !== null && !isset($this->rects[$this->focus])) {
             $this->focus = null; // the focused node was not built this frame
         }
@@ -185,6 +221,19 @@ final class Runtime
         return $phase >= self::BLINK_FOR || ((int)floor($phase / self::BLINK)) % 2 === 0;
     }
 
+    private bool $tipPending = false;
+
+    /** Seconds until the window should draw a frame of its own accord (a caret toggle, a tip due), or null. */
+    public function nextWake(): ?float
+    {
+        $blink = $this->nextBlink();
+        if (!$this->tipPending) {
+            return $blink;
+        }
+        $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
+        return $blink === null ? $tip : min($blink, $tip);
+    }
+
     /** Seconds until the caret next toggles, or null when nothing blinks. */
     public function nextBlink(): ?float
     {
@@ -206,6 +255,15 @@ final class Runtime
         }
         if ($n->kind === Node::SLIDER) {
             $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        }
+        if ($n->tooltip !== null) {
+            $this->tips[$n->id] = $n->tooltip;
+        }
+        if ($n->url !== null && $this->hovered($n->id)) {
+            $this->cursor = 'pointer';
+        }
+        if ($n->kind === Node::PROGRESS && $n->fraction < 0) {
+            $this->animating = true; // an indeterminate bar moves every frame
         }
         if ($n->wrapWidth !== null && abs($n->w - $n->wrapWidth) > 0.5) {
             $this->needsFrame = true; // wrapped at last frame's width; this frame's differs

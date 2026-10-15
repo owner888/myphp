@@ -198,6 +198,26 @@ final class Context
         return $this->runtime?->focused($n->id) ?? false;
     }
 
+    /** A link: accent text, underlined, a hand pointer; clicking opens $url with the system (App::openURL). */
+    public function link(string $s, string $url, ?float $size = null): Node
+    {
+        $n = $this->text($s, $size, $this->theme->accent);
+        $n->underline = true;
+        $n->url = $url;
+        if ($this->runtime?->clicked($n->id)) {
+            ($this->runtime->openURL)($url);
+        }
+        return $n;
+    }
+
+    /** A progress bar: $fraction 0..1 of its width filled; below 0 it is indeterminate and animates. */
+    public function progress(float $fraction, float $width = 160): Node
+    {
+        $n = $this->add(new Node(Node::PROGRESS, 0, 0, 0, $width, $this->theme->space(1.5), 0, null, null));
+        $n->fraction = $fraction;
+        return $n;
+    }
+
     /** Secondary text, in the theme's muted color. */
     public function muted(string $s, ?float $size = null): Node
     {

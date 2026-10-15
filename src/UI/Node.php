@@ -10,7 +10,7 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11, PROGRESS = 12;
     public const ROW = 0, COLUMN = 1;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
@@ -39,6 +39,12 @@ final class Node
     public float $fraction = 0;
     /** Whether a control changed its value this frame: Context::changed(). */
     public bool $changed = false;
+    /** Shown in a tip when the pointer rests on the node: tooltip(). */
+    public ?string $tooltip = null;
+    /** For text: an underline (links). */
+    public bool $underline = false;
+    /** For a link: where it goes; the pointer shows a hand over it. */
+    public ?string $url = null;
     /** For an image node: what it shows, its corner radius and opacity. */
     public ?Image $image = null;
     public float $radius = 0;
@@ -65,6 +71,13 @@ final class Node
         public float $fontSize = 0,
         public int $fg = 0,
     ) {}
+
+    /** Shows $text in a tip when the pointer rests on this node for a moment. */
+    public function tooltip(string $text): static
+    {
+        $this->tooltip = $text;
+        return $this;
+    }
 
     /** Fixes a container's width and/or height (points) instead of its content's size; 0 leaves one to the content. */
     public function size(float $w = 0, float $h = 0): static
