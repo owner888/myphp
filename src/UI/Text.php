@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-use MyPHP\Native\{CoreGraphics, CoreText, Mem};
+use MyPHP\Native\{CoreText, Mem};
 
 /**
  * Shaped lines, cached by size and string, painted as glyph quads from the
@@ -28,7 +28,10 @@ final class Text implements TextPainter
     /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
     public bool $repaint = false;
 
-    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images, private ?CoreGraphics $cg = null) {}
+    /** @var array<string, Image> SVGs drawn in their own colors, by SVG, size and color, and the frame each was last drawn */
+    private array $pictures = [], $pictureUsed = [];
+
+    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images) {}
 
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
@@ -37,7 +40,6 @@ final class Text implements TextPainter
             return;
         }
         $this->ct->scale = $scale;
-        if ($this->cg !== null) { $this->cg->scale = $scale; }
         $this->atlas->reset();
         $this->lines = [];
         $this->offsets = [];
@@ -62,6 +64,51 @@ final class Text implements TextPainter
         return $slot;
     }
 
+    public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array
+    {
+        $s = $this->ct->scale;
+        $dx = round($x * $s) / $s; $dy = round($y * $s) / $s; // snapped to the device grid
+        $pw = (int)round($w * $s); $ph = (int)round($h * $s);
+        if ($pw <= 0 || $ph <= 0 || $pw > 4096 || $ph > 4096) { return null; }
+        // Turned by a sixteenth of a degree at the finest, in a mask as large as it then covers, around the same center.
+        $rotate = fmod($rotate, 360); if ($rotate < 0) { $rotate += 360; }
+        $rotate = round($rotate * 16) / 16; if ($rotate == 360) { $rotate = 0.0; }
+        $cw = $pw; $ch = $ph;
+        if ($rotate != 0) {
+            $sin = abs(sin($rotate * M_PI / 180)); $cos = abs(cos($rotate * M_PI / 180));
+            $cw = (int)ceil($pw * $cos + $ph * $sin) + 2; $ch = (int)ceil($pw * $sin + $ph * $cos) + 2;
+            $cw += ($cw - $pw) & 1; $ch += ($ch - $ph) & 1; // of the same parity, so that the center stays on the grid
+        }
+        $key = "s{$svg->id}/{$pw}x{$ph}/$rotate";
+        $slot = $this->atlas->get($key);
+        if ($slot === null) {
+            if (!$this->atlas->fits($cw, $ch)) {
+                $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
+            }
+            $pix = $rotate != 0 ? $svg->doc->rotated($pw, $ph, $cw, $ch, $rotate) : $svg->doc->pixels($pw, $ph);
+            $mask = ''; // the coverage of the SVG, whatever its colors: its alpha
+            for ($i = 3, $n = count($pix); $i < $n; $i += 4) { $mask .= chr($pix[$i]); }
+            $rows = Mem::alloc($cw * $ch);
+            \FFI::memcpy($rows, $mask, $cw * $ch);
+            $slot = $this->atlas->add($key, $cw, $ch, Mem::addr($rows));
+            Mem::free($rows);
+        }
+        return [$dx - ($cw - $pw) / 2 / $s, $dy - ($ch - $ph) / 2 / $s, $cw / $s, $ch / $s, $slot['u'], $slot['v']];
+    }
+
+    public function svgSlot(SVG $svg, int $w, int $h, int $current): array
+    {
+        $key = "p{$svg->id}/{$w}x{$h}/" . ($svg->doc->usesCurrentColor ? $current : ''); // the color matters only where currentColor is drawn
+        $pic = $this->pictures[$key] ?? null;
+        if ($pic === null) {
+            $pix = $svg->doc->pixels($w, $h, [($current >> 16 & 255) / 255, ($current >> 8 & 255) / 255, ($current & 255) / 255, 1.0], true);
+            $pic = Image::fromPixels($w, $h, pack('C*', ...$pix));
+            $this->pictures[$key] = $pic;
+        }
+        $this->pictureUsed[$key] = $this->gen;
+        return $this->imageSlot($pic);
+    }
+
     /**
      * The glyph quad of $path filled, or stroked $width points wide (round
      * joins and caps), from a mask cached in the atlas by the shape, as
@@ -73,7 +120,7 @@ final class Text implements TextPainter
     public function pathQuad(Path $path, float $width): ?array
     {
         $b = $path->bounds();
-        if ($b === null || $this->cg === null) { return null; }
+        if ($b === null) { return null; }
         $s = $this->ct->scale; $hw = max($width, 0) / 2;
         $x0 = floor(($b[0] - $hw) * $s) / $s; $y0 = floor(($b[1] - $hw) * $s) / $s; // on the device grid
         $w = (int)ceil(($b[2] + $hw - $x0) * $s) + 1; $h = (int)ceil(($b[3] + $hw - $y0) * $s) + 1;
@@ -89,9 +136,10 @@ final class Text implements TextPainter
             if (!$this->atlas->fits($w, $h)) {
                 $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
             }
-            $m = $this->cg->mask($path, $width, $w, $h, $x0, $y0);
-            $slot = $this->atlas->add($key, $m['w'], $m['h'], $m['addr']);
-            Mem::free($m['rows']);
+            $rows = Mem::alloc($w * $h);
+            \FFI::memcpy($rows, Svg\Mask::of($path, $width, $s, $x0, $y0, $w, $h), $w * $h);
+            $slot = $this->atlas->add($key, $w, $h, Mem::addr($rows));
+            Mem::free($rows);
         }
         return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];
     }
@@ -109,6 +157,9 @@ final class Text implements TextPainter
                 } elseif ($l['gen'] < $this->gen - 1 && isset($l['hot'])) {
                     unset($this->lines[$key]['hot']); // out of view: the packed quads are enough until it shows again
                 }
+            }
+            foreach ($this->pictureUsed as $key => $used) { // the pictures no frame drew for a while are forgotten (mygo's prunePictures)
+                if ($used < $limit) { unset($this->pictures[$key], $this->pictureUsed[$key]); }
             }
         }
     }

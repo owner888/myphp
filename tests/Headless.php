@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use Closure;
-use MyPHP\UI\{Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Path, Runtime, TextPainter, Theme};
+use MyPHP\UI\{Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Path, Runtime, SVG, TextPainter, Theme};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Tests\\') && (require __DIR__ . '/../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'));
 
@@ -24,6 +24,8 @@ final class Metrics implements TextPainter
         for ($i = 0, $n = mb_strlen($text); $i < $n; $i++) { $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); }
     }
     public function imageSlot(Image $image): array { return ['u' => 0, 'v' => 0, 'w' => 1, 'h' => 1, 'page' => 0]; }
+    public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return [$x, $y, $w, $h, 0, 0]; }
+    public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return ['u' => 0, 'v' => 0, 'w' => $w, 'h' => $h, 'page' => 0]; }
     public function scale(): float { return 1.0; }
 }
 

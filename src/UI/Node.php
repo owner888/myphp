@@ -110,6 +110,10 @@ final class Node
     public bool $pressed = false;
     /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
     public ?Image $image = null;
+    /** For an image node, an SVG shown in its own colors instead; for an icon, the SVG it shows. */
+    public ?SVG $svg = null;
+    /** Degrees an icon's artwork is turned clockwise around its center (Node::rotate). */
+    public float $rotation = 0;
     public float $radius = 0;
     public float $alpha = 1;
     /** @var Node[] */
@@ -157,7 +161,7 @@ final class Node
         return $this;
     }
 
-    /** Paints this node with $fn(DisplayList $list, Node $n, Theme $t) once laid out, before its children: a mark the list's rects, rings and lines draw. */
+    /** Paints this node with $fn(DisplayList $list, Node $n, Theme $t, TextPainter $text) once laid out, before its children: a mark the list's rects, rings and lines draw; $text for what the atlas holds (an icon's mask). */
     public function draw(\Closure $fn): static
     {
         $this->draw = $fn;
@@ -188,6 +192,17 @@ final class Node
     public function basis(float $basis): static
     {
         $this->basis = $basis;
+        return $this;
+    }
+
+    /**
+     * Turns an icon's artwork clockwise around its center by $degrees, which
+     * changes no layout sizes, as mygo's Rotate: a spinner keeps turning
+     * its SVG with `$spin->rotate($c->animate(...) * 360)`.
+     */
+    public function rotate(float $degrees): static
+    {
+        $this->rotation = $degrees;
         return $this;
     }
 

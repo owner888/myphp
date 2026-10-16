@@ -51,8 +51,11 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
-                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), CoreGraphics (path masks), Mem (calloc/free, address memcpy)
-src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
+                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
+src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
+                   Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
+                   Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
+src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Context (column/row/grid/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
@@ -74,7 +77,7 @@ examples/          native (inbox over a million rows), form (fields, text area, 
                    photo), widgets (the small controls), titlebar
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
                    view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
-                   (check()/same() assertions, no PHPUnit); php tests/bench.php [frames] times build/layout/record/paint
+                   (check()/same() assertions, no PHPUnit; svg_test reads the renderer's pixels); php tests/bench.php [frames] times build/layout/record/paint
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, GridState, Key, ListState, Node, Path, Selection, SVG, TextState};
+use MyPHP\UI\{Context, GridState, Key, ListState, Node, Selection, SVG, TextState};
 
 // Combobox: a click opens the options with the choice selected, typing filters, Down/Up/Enter choose, blur reverts; autocomplete suggests while typed.
 $sel = 'Banana'; $ac = new TextState(''); $n = []; $ev = [];
@@ -194,12 +194,9 @@ $h->rt->dragWindow = function (int $clicks) use (&$drags) { $drags[] = $clicks; 
 $h->frame(); $h->click(100, 14); same([1], $drags, 'a press on the bar drags the window'); $h->click(100, 14, 0, 2); same([1, 2], $drags, 'a double click zooms');
 $h->clickOn($n['btn']); same([1, 2], $drags, 'a button in the bar keeps its press'); same(1, $count, 'and clicks'); $h->click(100, 100); same([1, 2], $drags, 'the body is no handle');
 
-// SVG: the shapes read, a bad path refused; an icon fits the font size.
+// SVG: an icon fits the font size and paints its mask in full; the renderer is tested in svg_test.
 $search = SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M14.5 14.5L20 20m-4-10a6 6 0 1 1-12 0a6 6 0 0 1 12 0Z"/></svg>');
-same([1, 2.0, 8], [count($search->shapes), $search->shapes[0][1], count($search->shapes[0][0]->cmds)], 'a stroked path with arcs as cubics');
-$mixed = SVG::parse('<svg width="32" height="16"><g fill="red"><rect x="1" y="2" width="10" height="5"/><circle cx="20" cy="8" r="4" fill="none" stroke="#000" stroke-width="1.5"/></g><polygon points="0,0 4,0 2,3"/><path d="M1 1 h3 v3 H1 z M10 10 Q 12 0 14 10 T 18 10 C 1 2 3 4 5 6 S 7 8 9 10"/></svg>');
-same([0.0, 1.5, 0.0, 0.0], array_map(fn($s) => $s[1], $mixed->shapes), 'rect filled, circle stroked, polygon and path filled');
-try { SVG::parse('<svg viewBox="0 0 10 10"><path d="M1 1 X"/></svg>'); check(false, 'an unknown path command is an error'); } catch (\RuntimeException $e) { same('svg: path command X', $e->getMessage(), 'an unknown path command is an error'); }
+same([24.0, 24.0, true], [$search->w, $search->h, $search->doc->usesCurrentColor], 'the size from the viewBox; it draws currentColor');
 $seen = []; $n = [];
 $h = new Headless(function (Context $c) use (&$n, $search) { $c->row(0, 8); $n['i'] = $c->icon($search); $n['a'] = $c->avatar('Ada Lovelace'); $c->end(); }, 300, 100);
 $h->frame(); same([13.0, 13.0], [$n['i']->w, $n['i']->h], 'an icon is as high as the font size, square for a square viewBox');
@@ -207,14 +204,7 @@ $list = $h->paint(); $quads = []; for ($q = 0; $q < $list->n; $q++) { $quads[] =
 $icon = array_values(array_filter($quads, fn($q) => $q[3] === 0.0 && $q[0] >= 0 && $q[0] < 13)); // glyph quads (kind 0) within the icon
 check($icon !== [] && $icon[0][2] === 1.0, 'the icon paints its paths in full (not the box\'s alpha)');
 same(['AL', 29.25, 14.625], [$n['a']->kids[0]->text, $n['a']->w, $n['a']->radius], 'an avatar: the initials, 2.25 × fontSize, round');
+$art = SVG::parse('<svg viewBox="0 0 20 10"><rect width="20" height="10" fill="red"/></svg>');
+$h = new Headless(function (Context $c) use (&$n, $art, $search) { $c->row(0, 8); $n['p'] = $c->image($art); $n['h'] = $c->image($art, 0, 5); $n['r'] = $c->icon($search)->rotate(45); $c->end(); }, 300, 100);
+$h->frame(); same([20.0, 10.0, 10.0, 5.0, $art, 45.0], [$n['p']->w, $n['p']->h, $n['h']->w, $n['h']->h, $n['h']->svg, $n['r']->rotation], 'an SVG as an image: its own size, or scaled to a height; an icon turned');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');
-
-// SVG transforms: applied to the points as they are read, nested, the stroke width scaled; a list in error transforms nothing.
-$t = SVG::parse('<svg viewBox="0 0 100 100"><g transform="translate(10 20)"><rect x="0" y="0" width="10" height="10" transform="scale(2)"/><line x1="0" y1="0" x2="10" y2="0" stroke="#000" stroke-width="2" transform="rotate(90)"/></g><rect x="1" y="1" width="1" height="1" transform="bogus(1)"/><rect x="0" y="0" width="2" height="2" transform="rotate(90 1 1)"/></svg>');
-$pts = fn(Path $p) => array_map(fn($c) => [round($c[1], 3), round($c[2], 3)], array_filter($p->cmds, fn($c) => $c[0] !== Path::CLOSE));
-same([[10.0, 20.0], [30.0, 20.0], [30.0, 40.0], [10.0, 40.0]], array_values($pts($t->shapes[0][0])), 'translate then scale, nested');
-same([[10.0, 20.0], [10.0, 30.0]], array_values($pts($t->shapes[1][0])), 'a line rotated 90°'); same(2.0, $t->shapes[1][1], 'a rotation keeps the stroke width');
-same([[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]], array_values($pts($t->shapes[2][0])), 'a transform in error transforms nothing');
-same([[2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]], array_values($pts($t->shapes[3][0])), 'rotate(90 1 1) turns the square about its center');
-$t = SVG::parse('<svg viewBox="0 0 10 10"><path fill="none" d="M0 0 L1 0" stroke="#000" stroke-width="1" transform="scale(3 1)"/><path fill="none" d="M0 0 L1 0" stroke="#000" stroke-width="1" transform="matrix(1 0 0 1 5 5) skewX(45)"/></svg>');
-same(3.0, $t->shapes[0][1], 'scale(3 1) stretches a stroke by 3'); same([[5.0, 5.0], [6.0, 5.0]], array_values($pts($t->shapes[1][0])), 'matrix() and skewX compose in order');

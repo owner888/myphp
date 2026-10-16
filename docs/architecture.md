@@ -27,7 +27,7 @@ mygo rebuilds the element tree, lays it out and paints every frame it needs
 animated drawings moved. The worry for PHP was per-frame object churn.
 Measured in `examples/native` on an M-series Mac, NSTimer at 60 Hz:
 
-| nodes per frame | build | layout | paint (CoreGraphics) | total |
+| nodes per frame | build | layout | paint (CoreGraphics, the PoC) | total |
 |---|---|---|---|---|
 | 2 706 | 1.8 ms | 0.7 ms | 0.4 ms | ~3 ms |
 | 9 006 | 2.8 ms | 1.1 ms | 0.2 ms | ~4.2 ms |
@@ -547,21 +547,46 @@ zero winding) or strokes it $width wide with round joins and caps, drawn
 as one glyph quad from a mask `Text::pathQuad` keeps in the glyph atlas,
 keyed by the shape relative to the pixel grid in quarters of a pixel
 (a path looks the same wherever it is) and by the stroke's half width;
-`Native\CoreGraphics` rasterizes the mask in an alpha-only
-CGBitmapContext at the backing scale, the CTM flipped so the first row
-is the top, as CoreText does glyphs. A pure-PHP rasterizer for the other
-platforms is an open item. `UI\SVG::parse` reads path (d: M L H V C S Q T
-A Z, arcs as cubics), rect, circle, ellipse, line, polyline and polygon,
-in groups, each filled unless fill is none (a line has no area) and
-stroked at stroke-width where a stroke is set, in viewBox units, with
-`transform` attributes (matrix, translate, scale, rotate, skewX, skewY,
-composed in order and nested through groups; a list in error
-transforms nothing, as in browsers — mygo's parseTransform) applied to
-the points as they are read, the stroke width by the most the
-transform lengthens a line (mygo's stretch); `Context::icon($svg, $size,
-$color)` is mygo's Icon, a box as high as the font size keeping the
-SVG's aspect ratio, `Painter::icon` scaling each shape into it and its
-stroke width with it, in the text's color. `avatar($name, $image)` is
+`Svg\Mask` rasterizes the mask in PHP with the SVG renderer's
+rasterizer and stroker (below), so a path looks the same on every
+platform and CoreGraphics is not needed. `UI\SVG` is mygo's SVG over
+`Svg\Doc`, a port of mygo's internal/svg in `src/UI/Svg/`: `Elem`
+parses the XML (XMLReader, non-strict) and cascades the style sheets
+(type, class and id selectors, by specificity, then the style
+attribute); `Style` computes each element's properties (fill, stroke,
+opacities, rules, widths, caps, joins, dashes, color, display,
+visibility, paint-order, clip-path, mask, stops; lengths with units and
+percentages; colors by name, hex, rgb(), hsl()); `Compiler` turns the
+elements into `Node`s — `Shape`s with their paints resolved (`Gradient`
+linear or radial, objectBoundingBox or userSpaceOnUse, spread, href
+chains), groups, nested svg (clipped to its viewport), use and symbol
+(no self-use), `ClipDef`s and `MaskDef`s; `Path` parses path data (M L
+H V C S Q T A Z, arcs as cubics, up to the first error) and the basic
+shapes, with bounds and `flatten` (lines within a tenth of a pixel);
+`Matrix` the transforms; `Stroker` outlines polylines (miter, round,
+bevel joins; butt, round, square caps; dashes) as same-winding
+polygons; `Rasterizer` is mygo's vec, font-rs's signed-area
+accumulation into coverage (non-zero or even-odd); `Renderer` paints
+coverage with colors and gradients (a LUT of 256) into `Layer`s of
+premultiplied RGBA ints, groups with opacity, clips and masks through
+layers of their own. `Doc::pixels($w, $h, $current, $stretch)` fits the
+viewBox as preserveAspectRatio says; `rotated()` turns it in a larger
+canvas. Text, embedded images, patterns, markers and filters are not
+drawn (convert text to paths). `Context::icon($svg, $size, $color)` is
+mygo's Icon, a box as high as the font size keeping the SVG's aspect
+ratio, painted as one glyph from the coverage of the whole SVG (its
+alpha, whatever its colors) that `Text::iconQuad` keeps in the atlas by
+SVG, pixel size and turn — `->rotate($degrees)` turns the artwork
+around its center in a mask as large as it then covers, to a sixteenth
+of a degree — so the GPU draws it in any color without drawing the
+shapes again; `Context::image($svg, $w, $h)` shows it in its own colors
+(currentColor the text color) as a picture `Text::svgSlot` draws at the
+node's pixel size into an `Image` (`Image::fromPixels`) kept in the
+image atlas while frames draw it, and forgotten 30 frames after the
+last (mygo's pictures). On PHP 8.3 the renderer draws a 24-point icon's
+mask at 2× in 0.2 ms, at 96 px in 1 ms, a 256-px picture with a
+gradient, a clip and a dashed stroke in ~65 ms — once, then cached.
+`avatar($name, $image)` is
 mygo's Avatar: 2.25 × fontSize round, the image cropped to it
 (`Node::$cover`, the painter sampling the centered part of the slot in
 the box's proportions) or the initials (first letters of the first and
@@ -1073,7 +1098,9 @@ and the cursor; `layout_test` the grid, wrapping and a split;
 token field, date, calendar and time inputs, color picker and well,
 form and find bar, checkbox group, breadcrumbs, alert, grid view, the
 selection of several, rows and items dragged, the title bar's handle,
-SVG icons and avatars; `files_test` the files example on a folder it
+SVG icons and avatars; `svg_test` the SVG renderer by the pixels it
+leaves — shapes, path commands, transforms, the cascade, gradients,
+strokes, opacity, clips, masks, use and symbol, path masks; `files_test` the files example on a folder it
 makes — opening and going up, the find bar filtering, the table's sort
 keeping the choice, Delete… asking. `Headless::example()` loads an
 example's file up to its window in a namespace of its own, so each
@@ -1091,6 +1118,8 @@ paint — for the examples' views; on PHP 8.3 with the JIT, two cores:
 | widgets Advanced | 0.85 | 0.18 | 0.08 | 0.15 | 1.3 | 296 |
 | files, 2000 entries, icons | 1.53 | 0.51 | 0.26 | 0.48 | 2.8 | 587 |
 | files, 2000 entries, table | 1.21 | 0.41 | 0.21 | 0.50 | 2.3 | 644 |
+| svg: folder icon, 32 / 96 px | | | | | 0.2 / 1.0 (to draw once) | |
+| svg: gradient, clip, dashes, 256 px | | | | | 65 (to draw once) | |
 | list, a million rows | 0.14 | 0.04 | 0.03 | 0.10 | 0.3 | 342 |
 | list, a million rows, 1440p | 0.26 | 0.08 | 0.06 | 0.20 | 0.6 | 710 |
 | table, a million rows × 5 | 0.60 | 0.21 | 0.14 | 0.21 | 1.2 | 626 |
@@ -1142,11 +1171,12 @@ and the nodes with local state.
   a child process. Apps decode between frames (`App::later`) meanwhile.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
-- Path masks come from CoreGraphics; a pure-PHP scanline rasterizer
-  (mygo's vec: non-zero winding with coverage) would serve Linux and
-  Windows, where it is wanted, at the cost of a slower first frame.
-- `SVG` reads shapes and transforms only: no gradients, masks, clips,
-  style sheets or text (convert text to paths); mygo reads all but text.
+- `image($svg)` stretches the SVG to the node's box (mygo's FillBox);
+  Contain, Cover, ScaleDown and NaturalSize fits, and Grayscale, are not
+  ported for SVGs. An icon turned every frame rasterizes a mask a frame
+  (mygo does too); the atlas starts over when it fills.
+- Text glyphs still come from CoreText: the SVG renderer could draw
+  fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no JustifyItems or automatic margins: a child fills its area
   across, and its `alignSelf` places it down.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax

@@ -1778,7 +1778,8 @@ final class Context
         $t = $this->theme;
         $h = $size ?? $t->fontSize;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
-        $n->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::icon($list, $svg, $a->x, $a->y, $a->w, $a->h, $color ?? $t->text, $a->alpha));
+        $n->svg = $svg;
+        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::icon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $color ?? $t->text, $a->alpha, $a->rotation));
         return $n;
     }
 
@@ -2565,9 +2566,15 @@ final class Context
         return false;
     }
 
-    /** An image at $w × $h points (its own size when 0), corners rounded by $radius; $alpha fades it. */
-    public function image(Image $image, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
+    /** An image, or an SVG in its own colors (currentColor the text color), at $w × $h points (its own size when 0), corners rounded by $radius; $alpha fades it. */
+    public function image(Image|SVG $image, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
     {
+        if ($image instanceof SVG) {
+            if ($w <= 0 && $h <= 0) { $w = $image->w; $h = $image->h; } elseif ($w <= 0) { $w = $h * $image->w / $image->h; } elseif ($h <= 0) { $h = $w * $image->h / $image->w; }
+            $n = $this->add(new Node(Node::IMAGE, 0, 0, 0, $w, $h, 0, null, null));
+            $n->svg = $image; $n->radius = $radius; $n->alpha = $alpha;
+            return $n;
+        }
         if ($w <= 0 && $h <= 0) {
             $w = $image->w / $this->scale; $h = $image->h / $this->scale;
         } elseif ($w <= 0) {

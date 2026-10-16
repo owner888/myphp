@@ -38,7 +38,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::SLIDER) {
-            if ($n->draw !== null) { ($n->draw)($list, $n, $t); } else { self::paintSlider($n, $list, $t); } // a draw of its own (a color picker's channel) paints the whole slider
+            if ($n->draw !== null) { ($n->draw)($list, $n, $t, $text); } else { self::paintSlider($n, $list, $t); } // a draw of its own (a color picker's channel) paints the whole slider
             return;
         }
         if ($n->kind === Node::PROGRESS) { // a bar as thick as the node was made (a column stretches the node), in the accent or the color given (a meter's level)
@@ -57,7 +57,8 @@ final class Painter
             return;
         }
         if ($n->kind === Node::IMAGE) {
-            $s = $text->imageSlot($n->image);
+            $scale = $text->scale();
+            $s = $n->svg !== null ? $text->svgSlot($n->svg, max(1, (int)round($n->w * $scale)), max(1, (int)round($n->h * $scale)), $n->fg !== 0 ? $n->fg : $t->text) : $text->imageSlot($n->image);
             $u = $s['u']; $v = $s['v']; $sw = $s['w']; $sh = $s['h'];
             if ($n->cover && $n->w > 0 && $n->h > 0) { // the part of the image in the box's proportions, centered
                 $k = min($sw / $n->w, $sh / $n->h); $cw = (int)round($n->w * $k); $ch = (int)round($n->h * $k);
@@ -126,7 +127,7 @@ final class Painter
             }
         }
         if ($n->draw !== null) {
-            ($n->draw)($list, $n, $t); // over the node's own face, under its children
+            ($n->draw)($list, $n, $t, $text); // over the node's own face, under its children, with the text painter for what needs the atlas
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
@@ -207,18 +208,13 @@ final class Painter
         $list->popClip();
     }
 
-    /** Draws the shapes of $svg fitted in the rect (contain, centered), as mygo's Painter.Icon: each path scaled from the viewBox, filled or stroked at its width scaled, from a mask cached by the shape. */
-    public static function icon(DisplayList $list, SVG $svg, float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0): void
+    /** Draws the shapes of $svg fitted in the rect (contain, centered) in $rgb, turned by $rotate degrees around its center, as mygo's Painter.Icon: from a mask the text system caches in its atlas, so the GPU draws the icon in any color without drawing its shapes again. */
+    public static function icon(DisplayList $list, TextPainter $text, SVG $svg, float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0, float $rotate = 0.0): void
     {
+        if ($svg->w <= 0 || $svg->h <= 0 || $alpha <= 0) { return; }
         $k = min($w / $svg->w, $h / $svg->h);
-        $ox = $x + ($w - $svg->w * $k) / 2 - $svg->x * $k; $oy = $y + ($h - $svg->h * $k) / 2 - $svg->y * $k;
-        foreach ($svg->shapes as [$path, $width]) {
-            $p = new Path;
-            foreach ($path->cmds as $c) {
-                $p->cmds[] = [$c[0], $ox + $c[1] * $k, $oy + $c[2] * $k, $ox + $c[3] * $k, $oy + $c[4] * $k, $ox + $c[5] * $k, $oy + $c[6] * $k];
-            }
-            $list->path($p, $rgb, $alpha, $width * $k);
-        }
+        $q = $text->iconQuad($svg, $x + ($w - $svg->w * $k) / 2, $y + ($h - $svg->h * $k) / 2, $svg->w * $k, $svg->h * $k, $rotate);
+        if ($q !== null && !$list->clipped($q[0], $q[1], $q[2], $q[3])) { $list->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]); }
     }
 
     /** mygo's inputBorder: the accent while focused, the border a quarter toward the text under the pointer, the border otherwise. */

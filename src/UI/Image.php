@@ -35,6 +35,16 @@ final class Image
         return new self(ImageIO::decode($bytes, $max));
     }
 
+    /** An image of $w × $h premultiplied RGBA pixels, four bytes a pixel, top row first. */
+    public static function fromPixels(int $w, int $h, string $rgba): self
+    {
+        $n = $w * $h * 4;
+        if (strlen($rgba) !== $n) { throw new RuntimeException("image {$w}x{$h} needs $n bytes, got " . strlen($rgba)); }
+        $pix = Mem::alloc($n);
+        \FFI::memcpy($pix, $rgba, $n);
+        return new self(['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => Mem::addr($pix)]);
+    }
+
     public static function fromFile(string $path, int $max = 1024): self
     {
         $bytes = @file_get_contents($path);

@@ -10,6 +10,7 @@ namespace MyPHP\Tests;
 
 use Closure;
 use MyPHP\UI\{Context, Input, Layout, ListState, Runtime, ScrollState, TableColumn, TextState};
+use MyPHP\UI\Svg\Doc;
 
 require __DIR__ . '/Headless.php';
 
@@ -60,4 +61,13 @@ foreach (['the end' => strlen($ta->text), 'the start' => 0] as $where => $at) {
     $ta->setCursor($at); $t0 = hrtime(true);
     for ($i = 0; $i < $frames; $i++) { $hl->input->push(['key', 'x', 0, 0]); $ta->insert('x'); $hl->frame(1); $hl->paint(); }
     printf("%-30s %5.2f ms/frame typing at %s\n", 'textarea, 2000 lines', (hrtime(true) - $t0) / 1e6 / $frames, $where);
+}
+
+// The SVG renderer, pure PHP: an icon's mask at the sizes icons show at, a picture with a gradient, clip and stroke at an image's size (drawn once, then cached).
+$folder = new Doc(file_get_contents(__DIR__ . '/../examples/files/icons/folder.svg'));
+$art = new Doc('<svg viewBox="0 0 100 100"><defs><linearGradient id="g"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient><clipPath id="c"><circle cx="50" cy="50" r="45"/></clipPath></defs><rect width="100" height="100" fill="url(#g)" clip-path="url(#c)"/><path d="M20 50 C 30 10 70 10 80 50 S 70 90 50 80" fill="none" stroke="#fff" stroke-width="6" stroke-dasharray="8 4"/></svg>');
+foreach ([['folder icon', $folder, 32], ['folder icon', $folder, 96], ['gradient, clip, dashes', $art, 256]] as [$name, $doc, $size]) {
+    $n = max(1, intdiv(20, max(1, intdiv($size, 32)))); $t0 = hrtime(true);
+    for ($i = 0; $i < $n; $i++) { $doc->pixels($size, $size); }
+    printf("%-30s %6.2f ms to draw at %d px\n", "svg: $name", (hrtime(true) - $t0) / 1e6 / $n, $size);
 }
