@@ -16,7 +16,8 @@ use RuntimeException;
  */
 final class Window
 {
-    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14;
+    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15;
+    private bool $hiddenTitleBar = false;
     private const BACKING_BUFFERED = 2;
     /** @var array<int, Window> open windows by NSWindow address */
     private static array $open = [];
@@ -57,14 +58,26 @@ final class Window
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
         if ($this->runtime !== null) {
             $this->runtime->openURL = App::openURL(...);
+            $this->runtime->dragWindow = $this->dragWindow(...);
         }
 
         $this->stateKey = $o->stateKey;
         $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
         $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
         $style = self::TITLED | self::CLOSABLE | self::MINIATURIZABLE | ($o->disableResize ? 0 : self::RESIZABLE);
+        $this->hiddenTitleBar = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
+        if ($this->hiddenTitleBar) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
         $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $rect, $style, self::BACKING_BUFFERED, false);
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
+        if ($this->hiddenTitleBar) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
+            ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
+            ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
+            if ($o->titleBarStyle === 'hiddenInset') {
+                $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
+                ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
+                ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
+            }
+        }
         if ($saved !== null) {
             ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
         }
@@ -137,6 +150,7 @@ final class Window
                 App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
+                    $c->titleBar = $this->titleBar();
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
                     Layout::measure($c->root);
@@ -207,6 +221,40 @@ final class Window
         if ($this->isMaximized() !== $on) {
             ObjC::msg('v:p', $this->ns, 'zoom:', null);
         }
+    }
+
+    /**
+     * The room the window controls take in a window with a hidden title
+     * bar (WindowOptions::$titleBarStyle), as mygo's Context.TitleBar:
+     * height, left (to the right edge of the zoom button) and right, in
+     * points; all zero in other windows and in full screen, where the
+     * controls hide. The view keeps clear of them and drags the window by
+     * its own title bar (Node::dragWindow).
+     * @return array{height: float, left: float, right: float}
+     */
+    public function titleBar(): array
+    {
+        if (!$this->hiddenTitleBar || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) {
+            return ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
+        }
+        $zoom = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 2);
+        $z = ObjC::msg('r:', $zoom, 'frame');
+        $frame = ObjC::msg('r:', $this->ns, 'frame');
+        $content = ObjC::msg('r:', $this->ns, 'contentLayoutRect');
+        return ['height' => round($frame->h - $content->y - $content->h), 'left' => ceil($z->x + $z->w), 'right' => 0.0];
+    }
+
+    /** Moves the window with the mouse from the press on a drag handle (mygo's StartDrag), or on a double click zooms or minimizes it as macOS is set to. */
+    private function dragWindow(int $clicks): void
+    {
+        if ($clicks === 2) { // AppleActionOnDoubleClick: Maximize (the default), Minimize or None
+            $defaults = ObjC::msg('p:', ObjC::cls('NSUserDefaults'), 'standardUserDefaults');
+            $action = ObjC::msg('p:p', $defaults, 'stringForKey:', ObjC::str('AppleActionOnDoubleClick'));
+            match ($action === null ? '' : ObjC::phpStr($action)) { 'None' => null, 'Minimize' => ObjC::msg('v:p', $this->ns, 'performMiniaturize:', null), default => ObjC::msg('v:p', $this->ns, 'performZoom:', null) };
+            return;
+        }
+        $event = ObjC::msg('p:', $this->ns, 'currentEvent');
+        if ($event !== null) { ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $event); }
     }
 
     public function toggleFullScreen(): void

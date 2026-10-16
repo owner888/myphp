@@ -29,5 +29,7 @@ final class WindowOptions
         public string $preload = '',
         /** Remembers the window's position and size under this key across runs (WindowState). */
         public string $stateKey = '',
+        /** 'default', or 'hidden' / 'hiddenInset' (mygo's TitleBarStyle): the title bar hides but the traffic lights stay, over the view, which draws its own title bar under them (Context::titleBar, Node::dragWindow); hiddenInset lowers the lights as a toolbar would. */
+        public string $titleBarStyle = 'default',
     ) {}
 }

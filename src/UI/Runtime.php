@@ -35,6 +35,10 @@ final class Runtime
     public float $scrollbarWidth = 6;
     /** Opens a URL with the system, for links; App sets it (App::openURL). */
     public Closure $openURL;
+    /** Moves the window with the mouse (1 click) or zooms or minimizes it (2) for a press on a Node::dragWindow handle; the window sets it. */
+    public ?Closure $dragWindow = null;
+    /** The drag handles of last frame (id => rect), and the links (ids), which keep their presses from a handle. */
+    private array $handles = [], $links = [];
     /** @var array<int, string> nodes with tooltips by id, from last frame */
     private array $tips = [];
     /** When the pointer last moved, and the tip to show: text, x, y (set once the pointer rested on a node). */
@@ -138,6 +142,10 @@ final class Runtime
                     if ($this->grabThumb($e[1], $e[2])) {
                         break;
                     }
+                    if ($this->handles !== [] && $this->dragWindow !== null && $this->onHandle($e[1], $e[2])) {
+                        ($this->dragWindow)($e[4]); // a title bar the view draws: the window moves, or zooms on a double click
+                        break;
+                    }
                     if ($e[4] >= 2) {
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
@@ -216,7 +224,7 @@ final class Runtime
         $this->typed = '';
         $this->rects = [];
         $this->order = [];
-        $this->barrier = 0; $this->counter = 0; $this->overlays = [];
+        $this->barrier = 0; $this->counter = 0; $this->overlays = []; $this->handles = []; $this->links = [];
         $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
@@ -359,6 +367,9 @@ final class Runtime
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         $this->order[$n->id] = ++$this->counter;
+        if ($n->dragsWindow) {
+            $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        }
         if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1) { // placed at the root: over what was built before it
             $this->overlays[] = [$this->counter, $n->x, $n->y, $n->w, $n->h];
         }
@@ -388,6 +399,7 @@ final class Runtime
         if ($n->tooltip !== null) {
             $this->tips[$n->id] = $n->tooltip;
         }
+        if ($n->url !== null) { $this->links[] = $n->id; }
         if ($n->url !== null && $this->hovered($n->id)) {
             $this->cursor = 'pointer';
         } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $this->hovered($n->id)) {
@@ -919,6 +931,19 @@ final class Runtime
     public function reachable(int $id): bool
     {
         return ($this->order[$id] ?? 0) >= $this->barrier;
+    }
+
+    /** Whether a press at (x, y) is a drag handle's: on one, and on no focusable, slider, scroll or link inside it (those keep their presses, as mygo's interactive flags). */
+    private function onHandle(float $x, float $y): bool
+    {
+        $on = false;
+        foreach ($this->handles as $id => $r) { if ($this->under($id, $x, $y)) { $on = true; break; } }
+        if (!$on) { return false; }
+        foreach ($this->focusables as $id) { if ($this->under($id, $x, $y)) { return false; } }
+        foreach ($this->sliders as $id => $r) { if ($this->under($id, $x, $y)) { return false; } }
+        foreach ($this->scrolls as $id => $st) { if ($this->under($id, $x, $y)) { return false; } }
+        foreach ($this->links as $id) { if ($this->under($id, $x, $y)) { return false; } }
+        return true;
     }
 
     /** Whether (x, y) is on the node this id had last frame: in its rect, reachable, and not under an overlay built after it. */

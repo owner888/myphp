@@ -539,6 +539,22 @@ the box's proportions) or the initials (first letters of the first and
 last words) at 0.4 × size, bold, white on the hue of the name's FNV-1a
 hash at saturation 0.45 and lightness 0.55 (`Context::hsl`).
 
+`WindowOptions::$titleBarStyle` 'hidden' and 'hiddenInset' are mygo's
+TitleBarStyle: the window gets NSWindowStyleMaskFullSizeContentView, a
+transparent title bar and a hidden title (hiddenInset also an empty
+NSToolbar, which lowers the traffic lights as mygo does).
+`Window::titleBar()`, handed to the Context each frame
+(`Context::titleBar()`), is mygo's: the title bar's height (the frame
+less the contentLayoutRect) and the right edge of the zoom button, zero
+in other windows and in full screen. `Node::dragWindow()` is mygo's
+DragWindow: the runtime records such handles, and a press on one that
+lands on no focusable, slider, scrolling container or link inside it
+goes to the window instead of the view — `performWindowDragWithEvent:`
+with the window's current event, or on a double click the zoom or
+minimize macOS's AppleActionOnDoubleClick asks for (mygo's StartDrag and
+TitleBarDoubleClicked). `examples/titlebar` draws such a bar.
+TrafficLightPosition is not ported.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above

@@ -35,6 +35,22 @@ final class Context
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
     private array $trees = [];
 
+    /** The room the window controls take in a window with a hidden title bar (Window::titleBar): height, left, right; zero elsewhere. */
+    public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
+
+    /**
+     * The room the window controls take in a window with a hidden title
+     * bar (WindowOptions::$titleBarStyle), as mygo's Context.TitleBar:
+     * height, left and right in points, all zero in other windows and in
+     * full screen. Keep clear of the controls and let the bar drag the
+     * window: `$c->row(...)->size(0, max($bar['height'], 32))->dragWindow()`.
+     * @return array{height: float, left: float, right: float}
+     */
+    public function titleBar(): array
+    {
+        return $this->titleBar;
+    }
+
     /** $width and $height are the room the tree will be laid out in. */
     public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null, public float $scale = 1.0)
     {

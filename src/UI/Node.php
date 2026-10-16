@@ -76,6 +76,9 @@ final class Node
     public bool $focusable = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
+    /** A press on this node (not on a control inside it) drags the window, a double click zooms or minimizes it as macOS is set to (mygo's DragWindow): a view's own title bar. */
+    public bool $dragsWindow = false;
+
     /** An image that covers its box: scaled so the shorter side fills it, the rest cropped (mygo's Fit(Cover)); it is stretched otherwise. */
     public bool $cover = false;
 
@@ -187,6 +190,13 @@ final class Node
     public function inset(float $left, float $right = 0): static
     {
         $this->insetL = $left; $this->insetR = $right;
+        return $this;
+    }
+
+    /** Makes this node a handle that moves the window, as a title bar the view draws (mygo's DragWindow); controls inside it keep their presses. */
+    public function dragWindow(): static
+    {
+        $this->dragsWindow = true;
         return $this;
     }
 

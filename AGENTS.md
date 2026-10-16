@@ -53,11 +53,11 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), CoreGraphics (path masks), Mem (calloc/free, address memcpy)
 src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
-                   select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/modal/popover/
+                   select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/single()/
-                   min()/focusGroup()/wrap()/grid();
+                   min()/focusGroup()/wrap()/grid()/dragWindow();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
@@ -69,7 +69,7 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
-                   over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls)
+                   over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls), titlebar
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
