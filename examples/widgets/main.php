@@ -1,7 +1,7 @@
 <?php
 // The smaller widgets in one window: switch, segmented control, tabs with
 // their content, a collapsible section, a stepper, a combobox, an
-// autocomplete, a token field, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
+// autocomplete, a token field, a date and a time input, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
@@ -10,7 +10,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'last' => 'nothing yet'];
 const FRUITS = ['Apple', 'Banana', 'Cherry', 'Grape', 'Mango', 'Orange', 'Peach', 'Pear', 'Pineapple', 'Plum'];
 const CITIES = ['Beijing', 'Berlin', 'Boston', 'Chengdu', 'Chicago', 'Guangzhou', 'Hangzhou', 'London', 'Paris', 'Shanghai', 'Shenzhen', 'Tokyo'];
 const TAGS = ['php', 'ui', 'metal', 'ffi', 'layout', 'text', 'input', 'native'];
@@ -48,6 +48,7 @@ function view(Context $c, array &$s): void
             $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, 80, 95); $c->muted("{$s['count']}0 % used"); $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
+            $c->row(0, 10)->align(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($s['when']))) { $s['last'] = 'date ' . $s['when']->format('Y-m-d'); } if ($c->changed($c->timeInput($s['when']))) { $s['last'] = 'time ' . $s['when']->format('H:i'); } $c->end();
             $c->row(0, 10)->align(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($s['tags'], TAGS))) { $s['last'] = 'tags ' . implode(', ', $s['tags']); } $c->end();
             if ($c->collapsible('More options', $s['more'])) {
                 $c->column(12, 6);
@@ -68,6 +69,8 @@ function view(Context $c, array &$s): void
                 $item('examples', function () use ($item) { $item('examples/widgets'); });
                 $item('README.md');
             });
+            // A calendar: a click or the arrows choose a day, Page Up and Page Down move by months.
+            $c->row(0, 10)->align(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
         } else {
             $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
             $c->row(0, 10); $c->text('Rating'); if ($c->changed($c->rating($s['stars']))) { $s['last'] = "stars {$s['stars']}"; } $c->end();

@@ -362,6 +362,42 @@ focusing and the wheel — says no for a point inside an overlay to any
 node built before it, so a click on an option does not reach the field
 under the popup.
 
+`dateInput(&$date)`, `calendar(&$date)` and `timeInput(&$time)` take a
+`DateTimeImmutable` and port mygo's `date.go` and `timeinput.go` with
+en-US formats fixed where mygo asks its i18n package (1/5/2026, English
+month and weekday names, weeks from Sunday, the 12-hour cycle with
+AM/PM after the hours): regional formats are an open item. The date
+input is a plain button's face (a bordered surface row padded Space(1.5)
+by Space(3.5), at least Space(32.5) wide, focusable, shaded as a button
+under the pointer) holding the date and a Space(3.5) calendar-page icon
+at its ends; a click opens a `popover` holding `calendarGrid`, which
+takes the focus as it opens (mygo's AutoFocus) and gives it back to the
+button when a day is chosen. The grid is a focusable column, gap
+Space(0.5), ringing itself (`ownRing`, `Painter::focusRing` in its
+`draw`): a header row (‹ and › plain buttons padded Space(0.5) by
+Space(2.5), the month bold and centered in the room between), the
+weekday names in Space(8) boxes at fontSize − 2 muted, and six rows of
+Space(8) by Space(7) cells at the theme's radius, the chosen day in the
+accent, the cursor's in surfaceHover (as is the one under the pointer),
+today bordered in the accent, neighbors' days muted. Its keys are
+`shortcut`s while it has the focus (the arrows by a day and a week,
+Page Up and Down by a month via `addMonths`, which normalizes as Go's
+AddDate, Home and End), Enter or Space `Runtime::activated` — the
+keyboard half of `clicked`, so a click on a cell is not also a choice
+of the cursor. `calendar` is the grid with the date as its cursor
+(every move chooses). The time input is a bordered surface row padded
+Space(1.5) by Space(2) whose three segments (hours, minutes, AM/PM) are
+focusable boxes padded Space(0.5) at radius Space(1), the focused one in
+the accent (`ownRing`, no ring) and the row's border the accent while
+any is; `:` sits between the first two padded 1 point, a Space(1) box
+before the third. Up and Down step the segment focused (the hours round
+their half of the day), Left and Right move the focus (`Runtime::focusOn`
+with the ring), and digits typed — `Runtime::typed($id)`, what the text
+system inserted while a control that is no field had the focus, taken
+once — set it as mygo's rules do: a second digit makes two, or starts
+anew past the top, and two digits (or one that can't begin two) move
+on to the minutes; A or P at the third segment chooses the half.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -786,6 +822,8 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
 - Image decoding (`ImageIO`) runs on the main thread: a 12 MP HEIC takes
   a frame or two; `Process` is the only way off the thread, and it costs
   a child process. Apps decode between frames (`App::later`) meanwhile.
+- `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
+  takes them from the user's region and the window's language.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

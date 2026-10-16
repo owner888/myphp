@@ -88,6 +88,8 @@ final class Runtime
     /** After this long without edits the caret stays on and stops asking for frames. */
     public const BLINK_FOR = 30.0;
     private ?int $activated = null;
+    /** What was typed this frame at a focused control that is no field. */
+    private string $typed = '';
     /** Text drawn in a field starts this far from its left edge. */
     /** A field's padding, mygo's Padding(Space(1.5), Space(2.5)): FIELD_INSET at the sides, FIELD_INSET_Y above and below the text of an area. */
     public const FIELD_INSET = 10.0, FIELD_INSET_Y = 6.0;
@@ -189,6 +191,9 @@ final class Runtime
                         $this->activated = $this->focus; // space presses a focused button
                         $this->focusVisible = true;
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
+                    } elseif ($this->focus !== null && !isset($this->fields[$this->focus])) {
+                        $this->typed .= $e[1]; // typed at a focused control: a time input's segment takes digits (typed())
+                        if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     }
                     break;
             }
@@ -207,6 +212,7 @@ final class Runtime
             $this->doubleClicks = [];
         }
         $this->activated = null; // taken by clicked() during the build, or dropped
+        $this->typed = '';
         $this->rects = [];
         $this->order = [];
         $this->barrier = 0; $this->counter = 0; $this->overlays = [];
@@ -664,6 +670,29 @@ final class Runtime
             }
         }
         return false;
+    }
+
+    /** What was typed this frame while node $id had the focus, for a control that is no field (a time input's segment); nothing otherwise. */
+    public function typed(int $id): string
+    {
+        if ($this->focus !== $id || $this->typed === '') { return ''; }
+        $this->consumed = true;
+        $typed = $this->typed; $this->typed = ''; // one taker, once; the pass that follows sees what it did
+        return $typed;
+    }
+
+    /** Whether Enter or Space pressed the focused node $id this frame (a click from the keyboard, not the mouse); clicked() reports both. */
+    public function activated(int $id): bool
+    {
+        if ($this->activated === $id) { $this->activated = null; $this->consumed = true; return true; }
+        return false;
+    }
+
+    /** Gives node $id the focus from code, as mygo's Focus; the ring shows when $visible, as after a key. */
+    public function focusOn(int $id, bool $visible = false): void
+    {
+        $this->focus = $id;
+        if ($visible) { $this->focusVisible = true; }
     }
 
     /** Whether the mouse went down this frame on the node this id had last frame (mygo's Pressed, at the press). */

@@ -937,6 +937,216 @@ final class Context
         return $f;
     }
 
+    /**
+     * A field showing the day of $date, as mygo's DateInput: a plain
+     * button of the date (en-US, 1/5/2026) and a calendar page, which a
+     * click, Enter or Space opens a calendar below; there a click chooses
+     * a day, as the arrows and Enter do, Page Up and Page Down or its
+     * buttons move by months, and Escape closes it. changed() reports a
+     * new date, which keeps the time of day and the zone of $date.
+     */
+    public function dateInput(\DateTimeImmutable &$date): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->border()->focusable()->align(Node::CENTER)->min($t->space(32.5), 0); // a plain button's face, its text and a page icon at its ends (Justify(SpaceBetween))
+        if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
+          $this->text($date->format('n/j/Y'), $t->fontSize, $t->text)->single();
+          $this->row(0, 0, 1); $this->end();
+          $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
+          $page->draw(function (DisplayList $list, Node $a, Theme $t) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
+              $list->rect($a->x + 1, $a->y + 2, $a->w - 2, $a->h - 3, $t->textMuted, 1.0, 2.0); $list->rect($a->x + 2.2, $a->y + 3.2, $a->w - 4.4, $a->h - 5.4, $b->color, 1.0, 1.0);
+              $list->rect($a->x + 1, $a->y + 5, $a->w - 2, 1.2, $t->textMuted, 1.0, 0.0);
+          });
+        $this->end();
+        $make = fn() => (object)['open' => false, 'cursor' => $date];
+        $local = $rt?->local($b->id, $make) ?? $make();
+        if ($this->clicked($b)) { $local->open = !$local->open; $local->cursor = $date; }
+        $this->popover($b, $local->open, function () use (&$date, $local, $b, $rt) {
+            $grid = $this->calendarGrid($date, $local->cursor, false, function (\DateTimeImmutable $d) use (&$date, $local, $b, $rt) {
+                if (self::setDay($date, $d)) { $b->changed = true; }
+                $local->open = false;
+                $rt?->focusOn($b->id);
+            });
+            if ($rt !== null && $rt->focus === $b->id && $local->open) { $rt->focusOn($grid->id); } // AutoFocus: the calendar takes the keys as it opens
+        });
+        return $b;
+    }
+
+    /**
+     * A month's calendar choosing the day of $date, as mygo's Calendar: a
+     * click chooses a day, as the arrows do while the calendar has the
+     * focus, Page Up and Page Down or its buttons move by months, Home
+     * and End go to the month's first and last day. changed() reports a
+     * new date, which keeps the time of day and the zone of $date. The
+     * names and the first weekday are en-US.
+     */
+    public function calendar(\DateTimeImmutable &$date): Node
+    {
+        $changed = false;
+        $g = $this->calendarGrid($date, $date, true, function (\DateTimeImmutable $d) use (&$date, &$changed) {
+            if (self::setDay($date, $d)) { $changed = true; }
+        });
+        $g->changed = $changed;
+        return $g;
+    }
+
+    /** Sets the day of $date to $d's, keeping its time of day and zone; whether it changed. */
+    private static function setDay(\DateTimeImmutable &$date, \DateTimeImmutable $d): bool
+    {
+        $next = $date->setDate((int)$d->format('Y'), (int)$d->format('n'), (int)$d->format('j'));
+        if ($next == $date) { return false; }
+        $date = $next;
+        return true;
+    }
+
+    /**
+     * mygo's calendarGrid: the month around $cursor, the day the keys move,
+     * with $date chosen; $choose chooses a day, as a click and Enter do,
+     * and every move does with $moveChooses. Cells Space(8) by Space(7),
+     * the chosen in the accent, the cursor's surfaceHover, today ringed
+     * in the accent, the month's neighbors' days muted.
+     */
+    private function calendarGrid(\DateTimeImmutable $date, \DateTimeImmutable &$cursor, bool $moveChooses, Closure $choose): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $cur = $cursor;
+        $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
+        $title = $month->format('F Y');
+        $grid = $this->column(0, $t->space(0.5))->focusable(); $grid->ownRing = true;
+        $visible = $rt?->focusVisible($grid->id) ?? false;
+        $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::focusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
+        $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
+        if ($rt?->focus === $grid->id) {
+            if ($this->shortcut(Key::LEFT)) { $move($cur->modify('-1 day')); }
+            elseif ($this->shortcut(Key::RIGHT)) { $move($cur->modify('+1 day')); }
+            elseif ($this->shortcut(Key::UP)) { $move($cur->modify('-7 days')); }
+            elseif ($this->shortcut(Key::DOWN)) { $move($cur->modify('+7 days')); }
+            elseif ($this->shortcut(Key::PAGE_UP)) { $move(self::addMonths($cur, -1)); }
+            elseif ($this->shortcut(Key::PAGE_DOWN)) { $move(self::addMonths($cur, 1)); }
+            elseif ($this->shortcut(Key::HOME)) { $move($cur->modify('first day of this month')); }
+            elseif ($this->shortcut(Key::END)) { $move($cur->modify('last day of this month')); }
+            elseif ($rt->activated($grid->id)) { $choose($cur); }
+        }
+          $this->row(0, $t->space(1))->align(Node::CENTER);
+            $prev = $this->button('‹')->padding($t->space(0.5), $t->space(2.5));
+            if ($this->clicked($prev)) { $move(self::addMonths($cur, -1)); }
+            $this->row(0, 0, 1)->justify(Node::CENTER); $this->text($title, $t->fontSize, $t->text, Font::BOLD); $this->end();
+            $next = $this->button('›')->padding($t->space(0.5), $t->space(2.5));
+            if ($this->clicked($next)) { $move(self::addMonths($cur, 1)); }
+          $this->end();
+          $this->row(0, 0);
+            foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $name) {
+                $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($name, $t->fontSize - 2, $t->textMuted); $this->end();
+            }
+          $this->end();
+          $start = $month->modify('-' . $month->format('w') . ' days'); // six weeks from the Sunday on or before the first
+          $today = (new \DateTimeImmutable('today', $date->getTimezone()))->format('Y-m-d');
+          for ($w = 0; $w < 6; $w++) {
+              $this->row(0, 0);
+              for ($d = 0; $d < 7; $d++) {
+                  $day = $start->modify('+' . ($w * 7 + $d) . ' days');
+                  $ymd = $day->format('Y-m-d');
+                  $chosen = $ymd === $date->format('Y-m-d'); $atCursor = $ymd === $cur->format('Y-m-d');
+                  $cell = $this->key($ymd)->row(0, 0)->size($t->space(8), $t->space(7))->center()->round($t->radius);
+                  $fg = $day->format('n') !== $month->format('n') ? $t->textMuted : $t->text;
+                  if ($chosen) { $cell->color = $t->accent; $fg = $t->accentText; }
+                  elseif ($atCursor || $this->hovered($cell)) { $cell->color = $t->surfaceHover; }
+                  if ($ymd === $today && !$chosen) { $cell->border($t->accent); }
+                    $this->text($day->format('j'), $t->fontSize, $fg);
+                  $this->end();
+                  if ($this->clicked($cell)) { $choose($day); if (!$moveChooses) { $cursor = $day; } } // with moveChooses the cursor is the date, which choose set
+              }
+              $this->end();
+          }
+        $this->end();
+        return $grid;
+    }
+
+    /** $d moved $n months, as Go's AddDate normalizes: the 31st of a 30-day month lands in the month after. */
+    private static function addMonths(\DateTimeImmutable $d, int $n): \DateTimeImmutable
+    {
+        return $d->setDate((int)$d->format('Y'), (int)$d->format('n') + $n, (int)$d->format('j'));
+    }
+
+    /**
+     * A field of the time of day of $time, as mygo's TimeInput in the
+     * 12-hour cycle of en-US: 3:04 PM. The hours, the minutes and the half
+     * of the day each take the focus: Up and Down step the one focused
+     * round the clock, digits typed set it, going on to the minutes once
+     * the hours are typed, A or P chooses the half, Left and Right move
+     * between them. changed() reports a new time, which keeps the date and
+     * the zone of $time.
+     */
+    public function timeInput(\DateTimeImmutable &$time): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER);
+        $h = (int)$time->format('G'); $m = (int)$time->format('i');
+        $set = function (int $nh, int $nm) use (&$time, $f) {
+            $next = $time->setTime($nh, $nm, (int)$time->format('s'), (int)$time->format('u'));
+            if ($next != $time) { $time = $next; $f->changed = true; }
+        };
+        $segs = []; $focused = [];
+        $texts = [0 => (string)(($h + 11) % 12 + 1), 1 => sprintf('%02d', $m), 2 => $h >= 12 ? 'PM' : 'AM'];
+          foreach ([0, 1, 2] as $i => $k) {
+              if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text(':', $t->fontSize, $t->textMuted); $this->end(); }
+              elseif ($i > 0) { $this->box($t->space(1), 0, 0)->color = null; }
+              $seg = $this->key("seg$k")->row(0, 0)->padding(0, $t->space(0.5))->round($t->space(1))->focusable(); $seg->ownRing = true;
+              $focused[$k] = $rt?->focused($seg->id) ?? false;
+              if ($focused[$k]) { $seg->color = $t->accent; }
+                $this->text($texts[$k], $t->fontSize, $focused[$k] ? $t->accentText : $t->text);
+              $this->end();
+              $segs[$k] = $seg;
+          }
+        $this->end();
+        if (in_array(true, $focused, true)) { $f->borderColor = $t->accent; }
+        $make = fn() => (object)['typed' => '']; // the digits typed at the segment focused, until they set it or the focus leaves
+        $local = $rt?->local($f->id, $make) ?? $make();
+        if (!in_array(true, $focused, true)) { $local->typed = ''; }
+        foreach ([0, 1, 2] as $i => $k) {
+            $seg = $segs[$k];
+            if (!$focused[$k] || $rt === null) { continue; }
+            $step = 0;
+            if ($this->shortcut(Key::UP)) { $step = 1; }
+            elseif ($this->shortcut(Key::DOWN)) { $step = -1; }
+            elseif ($i + 1 < 3 && $this->shortcut(Key::RIGHT)) { $rt->focusOn($segs[$k + 1]->id, true); $local->typed = ''; }
+            elseif ($i > 0 && $this->shortcut(Key::LEFT)) { $rt->focusOn($segs[$k - 1]->id, true); $local->typed = ''; }
+            $local->typed .= $rt->typed($seg->id);
+            if ($k === 2) { // the half of the day: Up and Down switch it, as does the first letter of the other's name
+                $pmNow = $h >= 12; $want = $step !== 0 ? !$pmNow : $pmNow;
+                if ($local->typed !== '') {
+                    $r = strtolower(mb_substr($local->typed, -1));
+                    if ($r === 'p') { $want = true; } elseif ($r === 'a') { $want = false; }
+                    $local->typed = '';
+                }
+                if ($want !== $pmNow) { $set($want ? $h + 12 : $h - 12, $m); }
+                continue;
+            }
+            $top = $k === 0 ? 24 : 60;
+            if ($step !== 0) {
+                if ($k === 0) { $h = intdiv($h, 12) * 12 + ($h % 12 + $step + 12) % 12; } // round the twelve hours of the same half of the day
+                else { $m = ($m + $step + $top) % $top; }
+                $set($h, $m);
+            }
+            if ($local->typed !== '') { // digits: the first sets the segment, a second makes two digits of them, or starts anew past the top; both typed, or one that can't begin two, go on to the minutes
+                if ($k === 0) { $top = 13; }
+                $typed = $local->typed;
+                $n = ctype_digit($typed) ? (int)$typed : null;
+                if ($n === null || strlen($typed) > 2 || $n >= $top) { $typed = substr($typed, -1); $n = ctype_digit($typed) ? (int)$typed : null; $local->typed = $typed; }
+                if ($n !== null) {
+                    if ($k === 0 && $n === 0) { /* the first digit of 01 to 09 */ }
+                    elseif ($k === 0) { $h = intdiv($h, 12) * 12 + $n % 12; $set($h, $m); }
+                    else { $m = $n; $set($h, $m); }
+                    if ((strlen($typed) === 2 || $n * 10 >= $top) && $k === 0) { $local->typed = ''; $rt->focusOn($segs[1]->id, true); }
+                } else { $local->typed = ''; }
+            }
+        }
+        return $f;
+    }
+
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */
     public static function matching(array $options, string $query): array
     {

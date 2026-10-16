@@ -212,7 +212,7 @@ final class Painter
     }
 
     /** mygo's Painter.FocusRing: a 2-point ring of the focus color a point outside the rect. */
-    private static function focusRing(DisplayList $list, float $x, float $y, float $w, float $h, float $radius, Theme $t): void
+    public static function focusRing(DisplayList $list, float $x, float $y, float $w, float $h, float $radius, Theme $t): void
     {
         $list->ring($x - 3, $y - 3, $w + 6, $h + 6, $t->focus, $t->focusAlpha, $radius + 3, 2.0);
     }
