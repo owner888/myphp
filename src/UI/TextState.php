@@ -20,6 +20,8 @@ final class TextState
     public int $markedCaret = 0;
     /** Set for a frame when Enter was pressed in the field. */
     public bool $submitted = false;
+    /** What a search field saw last frame, to report a change. */
+    public ?string $seen = null;
     /** A text area: Enter inserts a line, Up/Down and line ends go by the wrapped lines (Runtime handles them). */
     public bool $multiline = false;
     /** How far a text area is scrolled; the wheel moves it, the painter clamps it and brings a moved caret into view. */

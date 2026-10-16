@@ -26,7 +26,7 @@ function inbox(Context $c, array &$s): void
       $c->row(12, 8, 0, $t->surface);
         $c->rich([new Span('Inbox ', 20, Font::BOLD), new Span(number_format($s['rows']) . ' messages', color: $t->textMuted),
             new Span('  every third unread', style: Font::ITALIC, color: $t->textMuted)]);
-        if ($c->clicked($c->button('Compose'))) { $s['rows']++; $s['last'] = "composed row {$s['rows']}"; }
+        if ($c->clicked($c->primaryButton('Compose'))) { $s['rows']++; $s['last'] = "composed row {$s['rows']}"; }
         if ($c->clicked($c->button('Refresh'))) { $s['replied'] = []; $s['last'] = 'refreshed'; }
         if ($c->clicked($c->button('Top'))) { $s['list']->scrollTo(0); }           // glides there
         if ($c->clicked($c->button('End'))) { $s['list']->scrollTo($s['rows'] - 1); }

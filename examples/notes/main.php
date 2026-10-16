@@ -182,7 +182,7 @@ function view(Context $c, Notes $notes): void
     // Three panes the dividers resize: notes | editor | preview.
     $c->split($notes->listW, function () use ($c, $t, $notes) {
         $c->column(0, 0, 1, $t->surface);
-          $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->button('New'))) { $notes->create(); } $c->end();
+          $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->primaryButton('New'))) { $notes->create(); } $c->end();
           $c->list($notes->list, count($notes->items), function (int $i) use ($c, $t, $notes) {
               $it = $notes->items[$i];
               $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0);

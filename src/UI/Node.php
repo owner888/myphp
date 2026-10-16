@@ -29,6 +29,10 @@ final class Node
     public bool $focused = false;
     /** Makes what was built before this node inert to the pointer and the keys while it shows (a modal's backdrop). */
     public bool $blocks = false;
+    /** For a field: room kept clear of the text at its left and right, beyond the usual inset (a search field's glass and clear button). */
+    public float $insetL = 0, $insetR = 0;
+    /** A one-point border in the theme's border color around this colored node (a plain button, a select). */
+    public bool $bordered = false;
     /** A soft shadow under this container: [dy, blur, alpha], or null. */
     public ?array $shadow = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
@@ -111,6 +115,20 @@ final class Node
     public function round(float $radius): static
     {
         $this->radius = $radius;
+        return $this;
+    }
+
+    /** Keeps $left and $right points at a field's ends clear of its text, for what is drawn over them. */
+    public function inset(float $left, float $right = 0): static
+    {
+        $this->insetL = $left; $this->insetR = $right;
+        return $this;
+    }
+
+    /** Draws a one-point border in the theme's border color around this colored container. */
+    public function border(): static
+    {
+        $this->bordered = true;
         return $this;
     }
 

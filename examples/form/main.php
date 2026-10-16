@@ -62,7 +62,7 @@ function form(Context $c, array &$s): void
         $c->progress(-1, 100)->tooltip('indeterminate: animates');
       $c->end();
       $c->row(0, 8);
-        if ($c->clicked($c->button('Submit')->tooltip('Sends the form; Enter in a field does too'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
+        if ($c->clicked($c->primaryButton('Submit')->tooltip('Sends the form; Enter in a field does too'))) { $s['submits']++; $s['greeting'] = "Hello, {$s['name']->text} from {$s['city']->text}"; }
         if ($c->clicked($c->button('Clear'))) { foreach (['name', 'city', 'note'] as $k) { $s[$k]->text = ''; $s[$k]->setCursor(0); } $s['greeting'] = ''; }
       $c->end();
       $c->text($s['greeting'] === '' ? 'Submit, or press Enter in a field.' : $s['greeting'] . " (#{$s['submits']})", 15);

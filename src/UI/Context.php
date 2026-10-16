@@ -233,13 +233,27 @@ final class Context
     /** A primary button: accent face, lighter hovered, darker pressed. */
     public function button(string $s, ?float $size = null): Node
     {
+        return $this->makeButton($s, $size, false);
+    }
+
+    /** A button in the accent color, for the main action (mygo's PrimaryButton). */
+    public function primaryButton(string $s, ?float $size = null): Node
+    {
+        return $this->makeButton($s, $size, true);
+    }
+
+    /** As mygo's styleButton: padding Space(1.5) by Space(3.5), a bordered surface face, or the accent without a border when primary; hover and press shade it. */
+    private function makeButton(string $s, ?float $size, bool $primary): Node
+    {
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space(6), $h + $t->space(2.5), 0, $s, $t->accent, $size, $t->accentText));
+        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space(7), $h + $t->space(3), 0, $s, $base, $size, $fg));
+        $n->bordered = !$primary;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         if ($this->runtime?->hovered($n->id)) {
-            $n->color = $this->runtime->input->mouseDown ? $t->accentPressed : $t->accentHover;
+            $n->color = $this->runtime->input->mouseDown ? $pressed : $hover;
         }
         return $n;
     }
@@ -285,6 +299,89 @@ final class Context
             $n->changed = true;
         }
         $n->on = $on;
+        return $n;
+    }
+
+    /**
+     * A panel built by $fn below $anchor (a node built this frame) while
+     * $open, as mygo's Popover: a press outside the panel and the anchor,
+     * or Escape, sets $open false, which changed() reports; the press goes
+     * on to what is under it. Where there is no room below, the panel
+     * shows above. It is built over everything else, at the window's root.
+     */
+    public function popover(Node $anchor, bool &$open, Closure $fn): ?Node
+    {
+        if (!$open) {
+            return null;
+        }
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $r = $rt?->rectOf($anchor->id) ?? [0, 0, 0, 0];
+        $margin = $t->space(1);
+        $saved = $this->stack; $this->stack = [$this->root]; // at the root: over the view, placed in the window
+        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)->at($r[0], $r[1] + $r[3] + $margin);
+          $fn();
+        $this->end();
+        $this->stack = $saved;
+        $last = $rt?->rectOf($panel->id);
+        if ($last !== null && $r[1] + $r[3] + $margin + $last[3] > $this->height && $r[1] - $margin - $last[3] >= 0) {
+            $panel->at($r[0], $r[1] - $margin - $last[3]); // no room below: above, as high as it was last frame
+        }
+        if ($rt !== null && ($this->shortcut(Key::ESCAPE) || ($rt->pressedAnywhere() && !$rt->pressed($panel->id) && !$rt->pressed($anchor->id)))) {
+            $open = false;
+            $panel->changed = true;
+        }
+        return $panel;
+    }
+
+    /**
+     * A plain button with a chevron that drops a menu of $items below it
+     * when pressed, or for Enter, Space or Down while it has the focus, as
+     * mygo's MenuButton. $items: label => Closure, each run when chosen.
+     * @param array<string, Closure> $items
+     */
+    public function menuButton(string $label, array $items, ?Window $window = null): Node
+    {
+        $n = $this->button($label . '  ⌄');
+        $rt = $this->runtime;
+        if ($rt !== null && ($this->clicked($n) || ($n->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
+            $window ??= Window::key();
+            $menu = [];
+            foreach ($items as $text => $fn) {
+                $menu[] = new MenuItem($text, function (MenuItem $it, ?Window $w) use ($fn) { $fn(); $w?->update(); });
+            }
+            if ($window !== null) {
+                (new Menu($menu))->popupAt($window, $n->id, $rt);
+            }
+        }
+        return $n;
+    }
+
+    /**
+     * A field for a search, as mygo's SearchField: a glass at its left,
+     * "Search" while empty, and a button clearing it at its right while it
+     * holds any, as Escape does while it has the focus. changed() reports
+     * a change of its text, $state->submitted Enter.
+     */
+    public function searchField(TextState $state, float $width = 200, ?float $size = null): Node
+    {
+        $t = $this->theme;
+        $size ??= $t->fontSize;
+        $glass = $t->space(4.5); $clear = $t->space(4.5);
+        $this->row(0, 0);
+          $n = $this->input($state, 'Search', $width, $size)->inset($glass, $state->text === '' ? 0 : $clear);
+          [$gw, $gh] = $this->metrics->measure('⌕', $size + 2);
+          $this->text('⌕', $size + 2, $t->textMuted)->at(($glass + Runtime::FIELD_INSET - $gw) / 2 + 2, ($n->fh - $gh) / 2);
+          if ($state->text !== '') {
+              [$xw, $xh] = $this->metrics->measure('×', $size + 2);
+              $x = $this->text('×', $size + 2, $t->textMuted)->at($width - $clear + ($clear - $xw) / 2, ($n->fh - $xh) / 2)->cursor('pointer');
+              if ($this->clicked($x) || ($this->runtime?->focus === $n->id && $this->shortcut(Key::ESCAPE))) {
+                  $state->text = ''; $state->setCursor(0);
+              }
+          }
+        $this->end();
+        $n->changed = $state->seen !== null && $state->seen !== $state->text;
+        $state->seen = $state->text;
         return $n;
     }
 
@@ -648,6 +745,7 @@ final class Context
         $w = $width ?? max(array_map(fn($o) => $this->metrics->measure($o, $size)[0], $options ?: [''])) + $t->space(10);
         [, $h] = $this->metrics->measure('X', $size);
         $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(2.5), 0, $label, $t->surface, $size, $t->text));
+        $n->bordered = true;
         $n->focusable = true;
         if ($this->runtime?->hovered($n->id)) {
             $n->color = $t->surfaceHover;

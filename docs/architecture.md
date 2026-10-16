@@ -158,6 +158,11 @@ answer; `Runtime::record` asks for another frame when this frame's width
 differs, so a resize reflows one frame late. That suits nodes a column
 stretches; in a row, pass the width.
 
+Buttons follow mygo's styleButton: `button()` is plain — a surface face
+with a one-point border (`Node::border()`), the text color, shaded on
+hover and press — and `primaryButton()` is the accent without a border,
+for the main action; both pad Space(1.5) by Space(3.5).
+
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
 `switch($label, &$bool)`, `slider(&$value, $min, $max)`,
@@ -208,6 +213,19 @@ before it is inert, as mygo's overlays make it, and a focus left behind
 is dropped so Tab goes into the modal. Escape or a click on the backdrop
 outside the panel sets `$open` false (`changed()`). `Node::shadow()` is a
 soft shadow under a colored container, which the panel and toasts use.
+
+`Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
+panel built at the window's root (the stack is swapped for the root
+while it builds) and placed below the anchor's last-frame rect, or above
+it when the room below is short of the panel's last-frame height; a
+press outside it and the anchor (`Runtime::pressed`, from the frame's
+mouse-downs) or Escape closes it, and the press goes on to what is under
+it — it does not block. `menuButton($label, $items)` drops an `NSMenu`
+of closures under a plain button, on a click or Down while focused.
+`searchField($state)` is an `input` with `Node::inset()` keeping room at
+its ends for a glass and, while it holds text, a clear button, both
+absolute texts over it; Escape clears it while it has the focus, which a
+field now keeps on Escape (a control lets it go).
 
 `Context::toast($message)` is mygo's Toast: `Runtime` keeps the newest
 three with the seconds each has left; `Window` calls `Context::toasts()`

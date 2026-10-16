@@ -120,7 +120,7 @@ function view(Context $c, Http $h): void
         $c->row(0, 8);
           $c->select(Http::METHODS, $h->method, 90);
           $c->input($h->url, 'https://…', 0); // 0: the rest of the row
-          $send = $c->button($h->inFlight === null ? 'Send' : 'Sending…')->tooltip('Cmd+Enter');
+          $send = $c->primaryButton($h->inFlight === null ? 'Send' : 'Sending…')->tooltip('Cmd+Enter');
           if ($c->clicked($send)) { $h->send(); }
         $c->end();
         $c->row(0, 10)->align(Node::STRETCH);

@@ -83,7 +83,7 @@ final class Painter
             $list->glass($x, $y, $w, $h, $r, $g->style, $g->tint ?? 0, $g->tint === null ? 0.0 : $g->tintAlpha * 0.88, $sigma);
         } elseif ($n->color !== null) {
             $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => $n->radius };
-            if ($n->kind === Node::SELECT) { // a bordered face
+            if ($n->bordered) { // a bordered face: a plain button, a select
                 $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
                 $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
             } else {
@@ -322,18 +322,18 @@ final class Painter
     private static function paintField(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
-        $inset = Runtime::FIELD_INSET;
+        $inset = Runtime::FIELD_INSET + $n->insetL;
         $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
         $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->background, 1.0, $t->radius - 1);
         $display = $s->display();
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
         $ty = $n->y + ($n->h - $lh) / 2;
-        $inner = $n->w - 2 * $inset;
+        $inner = $n->w - $inset - Runtime::FIELD_INSET - $n->insetR;
         // Keep the caret in view when the text is wider than the field.
         $caretX = $text->xForIndex($display, $n->fontSize, $s->displayCaret());
         $shift = max(0.0, $caretX - $inner);
         $tx = $n->x + $inset - $shift;
-        $list->pushClip($n->x + 2, $n->y, $n->w - 4, $n->h);
+        $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
                 $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);

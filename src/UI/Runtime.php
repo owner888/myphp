@@ -51,6 +51,8 @@ final class Runtime
     private array $jumps = [];
     /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper, last x, last y dragged() reported], or null. */
     private ?array $hold = null;
+    /** Where the mouse went down this frame, for pressed(); a popover closes on a press outside it. */
+    private array $presses = [];
     /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
     private array $keys = [];
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
@@ -103,6 +105,7 @@ final class Runtime
         $this->steps = [];
         $this->jumps = [];
         $this->keys = [];
+        $this->presses = [];
         $this->activated = null;
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
@@ -129,6 +132,7 @@ final class Runtime
                     if ($e[4] >= 2) {
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
+                    $this->presses[] = [$e[1], $e[2]];
                     $this->pressAt($e[1], $e[2]);
                     if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
                         $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
@@ -361,7 +365,7 @@ final class Runtime
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
-            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
+            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET - $n->insetL - $n->insetR];
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
             $this->areas[$n->id] = $n->edit;
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
@@ -534,7 +538,9 @@ final class Runtime
         switch ($selector) {
             case 'insertTab:': $this->moveFocus(1); return true;
             case 'insertBacktab:': $this->moveFocus(-1); return true;
-            case 'cancelOperation:': $this->focus = null; return false; // Escape is still the window's
+            case 'cancelOperation:': // Escape: a control lets the focus go; a field keeps it (a search field clears on it); the window still gets the key
+                if ($this->focus !== null && !isset($this->fields[$this->focus])) { $this->focus = null; }
+                return false;
             case 'insertNewline:':
                 if ($this->focus !== null && !isset($this->fields[$this->focus])) {
                     $this->activated = $this->focus;
@@ -582,6 +588,27 @@ final class Runtime
             }
         }
         return false;
+    }
+
+    /** Whether the mouse went down this frame on the node this id had last frame (mygo's Pressed, at the press). */
+    public function pressed(int $id): bool
+    {
+        $r = $this->rects[$id] ?? null;
+        if ($r === null || !$this->reachable($id)) {
+            return false;
+        }
+        foreach ($this->presses as [$x, $y]) {
+            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the mouse went down anywhere in the window this frame. */
+    public function pressedAnywhere(): bool
+    {
+        return $this->presses !== [];
     }
 
     /** Whether a second press of a double click this frame landed on the node this id had last frame. */

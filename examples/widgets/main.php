@@ -6,17 +6,21 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Node};
+use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'last' => 'nothing yet'];
 
 function view(Context $c, array &$s): void
 {
     $t = $c->theme;
     $c->column(20, 14, 1);
-      $c->row(0, 10); $c->text('Widgets', 20, style: Font::BOLD); $c->spacer(); $c->spinner(); $c->muted('working…'); $c->end();
+      $c->row(0, 10);
+        $c->text('Widgets', 20, style: Font::BOLD);
+        if ($c->changed($c->searchField($s['query'], 180))) { $s['last'] = 'search ' . json_encode($s['query']->text); }
+        $c->spacer(); $c->spinner(); $c->muted('working…');
+      $c->end();
       $c->divider();
       $c->row(0, 16);
         if ($c->changed($c->switch('Wi-Fi', $s['wifi']))) { $s['last'] = 'Wi-Fi ' . ($s['wifi'] ? 'on' : 'off'); }
@@ -42,9 +46,19 @@ function view(Context $c, array &$s): void
         }
       $c->end();
       $c->row(0, 8);
-        if ($c->clicked($c->button('Save'))) { $c->toast('Saved'); $s['last'] = 'saved'; }
+        if ($c->clicked($c->primaryButton('Save'))) { $c->toast('Saved'); $s['last'] = 'saved'; }
         if ($c->clicked($c->button('Delete…'))) { $s['asking'] = true; }
+        $c->menuButton('Sort by', ['Name' => function () use (&$s) { $s['sort'] = 'Name'; $s['last'] = 'sort by name'; }, 'Date' => function () use (&$s) { $s['sort'] = 'Date'; $s['last'] = 'sort by date'; }]);
+        $anchor = $c->button('Options');
+        if ($c->clicked($anchor)) { $s['options'] = !$s['options']; }
       $c->end();
+      // A popover below the Options button: a press elsewhere closes it.
+      $c->popover($anchor, $s['options'], function () use ($c, &$s) {
+          $c->column(8, 8);
+            $c->checkbox('Bold titles', $s['bold']);
+            $c->muted('Sorted by ' . $s['sort'], 11);
+          $c->end();
+      });
       $c->spacer();
       $c->divider();
       $c->muted('last change: ' . $s['last'], 12);
@@ -55,7 +69,7 @@ function view(Context $c, array &$s): void
         $c->muted("You can't undo this.");
         $c->row(0, 8)->justify(Node::END);
           if ($c->clicked($c->button('Cancel'))) { $s['asking'] = false; }
-          if ($c->clicked($c->button('Delete'))) { $s['asking'] = false; $c->toast('Draft deleted'); $s['last'] = 'deleted'; }
+          if ($c->clicked($c->primaryButton('Delete'))) { $s['asking'] = false; $c->toast('Draft deleted'); $s['last'] = 'deleted'; }
         $c->end();
     });
     if ($modal !== null && $c->changed($modal)) { $s['last'] = 'dismissed'; }
