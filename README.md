@@ -102,7 +102,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh desktop          # menus and dialogs
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: follows the file, filters, highlights
-./run.sh notes            # Markdown notes: list, editor, live preview, autosave
+./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -222,7 +222,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh desktop          # 菜单和对话框
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮
-./run.sh notes            # Markdown 笔记：列表、编辑器、实时预览、自动保存
+./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass

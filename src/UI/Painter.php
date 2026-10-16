@@ -61,8 +61,8 @@ final class Painter
             $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], $n->alpha, $n->radius);
             return;
         }
-        if ($n->focusVisible && $n->color !== null) { // a ring around a button: a filled rect its own face covers but for the rim
-            $list->rect($n->x - 2, $n->y - 2, $n->w + 4, $n->h + 4, $t->focus, $t->focusAlpha, $t->radius + 2);
+        if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
+            self::focusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
         }
         if ($n->material instanceof Blur) {
             $b = $n->material;
@@ -98,19 +98,21 @@ final class Painter
         }
         if ($n->text !== null) {
             $x = $n->x; $y = $n->y;
-            if ($n->kind === Node::BUTTON) { // the label sits centered in the button's padding
+            if ($n->kind === Node::BUTTON || $n->kind === Node::SELECT) { // the label centered in the padding; a select's at the start, its chevron at the end (mygo's Justify(SpaceBetween))
                 [$tw, $th] = $text->measure($n->text, $n->fontSize);
-                $x += ($n->w - $tw) / 2; $y += ($n->h - $th) / 2;
-            } elseif ($n->kind === Node::SELECT) { // the choice at the left, a chevron at the right
-                [, $th] = $text->measure($n->text, $n->fontSize);
-                [$aw, $ah] = $text->measure('⌄', $n->fontSize);
-                $x += $t->space(2.5); $y += ($n->h - $th) / 2;
-                $text->paint($list, '⌄', $n->fontSize, $n->x + $n->w - $aw - $t->space(2.5), $n->y + ($n->h - $ah) / 2 - 2, $t->textMuted);
+                $cw = $n->chevron ? $t->space(2.5) + $t->space(1.5) : 0;
+                $x += $n->kind === Node::SELECT ? $t->space(3.5) : ($n->w - $tw - $cw) / 2; $y += ($n->h - $th) / 2;
+                if ($n->chevron) {
+                    self::chevron($list, $n->kind === Node::SELECT ? $n->x + $n->w - $t->space(3.5) - $t->space(2.5) : $x + $tw + $t->space(1.5), $n->y + ($n->h - $t->space(2.5)) / 2, $t->space(2.5), $t->textMuted);
+                }
             }
             $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
             if ($n->underline) {
                 $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
             }
+        }
+        if ($n->draw !== null) {
+            ($n->draw)($list, $n, $t); // over the node's own face, under its children
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
@@ -118,11 +120,8 @@ final class Painter
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
-        if ($n->focusVisible && $n->color === null) { // a list or other background-less node: four edges over its children
-            $list->rect($n->x, $n->y, $n->w, 2, $t->focus, $t->focusAlpha);
-            $list->rect($n->x, $n->y + $n->h - 2, $n->w, 2, $t->focus, $t->focusAlpha);
-            $list->rect($n->x, $n->y, 2, $n->h, $t->focus, $t->focusAlpha);
-            $list->rect($n->x + $n->w - 2, $n->y, 2, $n->h, $t->focus, $t->focusAlpha);
+        if ($n->focusVisible && $n->color === null) { // a list or other background-less node: the ring just inside its edge, over its children (outside, a list filling the window would lose it)
+            $list->ring($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $t->focus, $t->focusAlpha, max(0.0, $n->radius - 1), 2.0);
         }
         if ($n->scroll !== null) {
             $list->popClip();
@@ -174,46 +173,68 @@ final class Painter
         if ($rt->tip === null) {
             return;
         }
-        [$tip, $mx, $my] = $rt->tip;
+        [$tip, $ax, $ay, $aw, $ah] = $rt->tip; // the anchor's rect
         $size = $t->fontSize - 1;
         [$tw, $th] = $text->measure($tip, $size);
-        $pad = $t->space(2);
-        $w = $tw + 2 * $pad; $h = $th + 2 * $pad * 0.6;
-        $x = min($mx + 12, $root->x + $root->w - $w - 4);
-        $y = $my + 18;
-        if ($y + $h > $root->y + $root->h) {
-            $y = $my - $h - 6;
+        $px = $t->space(2); $py = $t->space(1.25); $radius = $t->space(1.25); $apart = $t->space(1.5);
+        $w = min($tw + 2 * $px, $t->space(80)); $h = $th + 2 * $py;
+        $x = max($root->x, min($ax + ($aw - $w) / 2, $root->x + $root->w - $w)); // centered over the anchor, kept in the window
+        $y = $ay - $apart - $h; // above it; below when there is no room
+        if ($y < $root->y) {
+            $y = $ay + $ah + $apart;
         }
-        $list->shadow($x, $y, $w, $h, 0x000000, $t->dark ? 0.4 : 0.18, $t->radius, 8, 0, 3);
-        $list->rect($x, $y, $w, $h, $t->border, 1.0, $t->radius);
-        $list->rect($x + 1, $y + 1, $w - 2, $h - 2, $t->surface, 1.0, $t->radius - 1);
-        $text->paint($list, $tip, $size, $x + $pad, $y + $pad * 0.6, $t->text);
+        $list->shadow($x, $y, $w, $h, 0x000000, 0.2, $radius, 8, 0, 2);
+        $list->rect($x, $y, $w, $h, $t->text, 1.0, $radius);
+        $list->pushClip($x, $y, $w, $h);
+        $text->paint($list, $tip, $size, $x + $px, $y + $py, $t->background);
+        $list->popClip();
     }
 
-    /** A checkbox (square, a check mark when on) or radio (circle, a dot when on) with its label; the ring marks the focus. */
+    /** mygo's chevron: a down-pointing angle in a $d-square box at (x, y), stroked 1.5. */
+    public static function chevron(DisplayList $list, float $x, float $y, float $d, int $color): void
+    {
+        $list->line($x + $d * 0.1, $y + $d * 0.3, $x + $d * 0.5, $y + $d * 0.7, $color, 1.0, 1.5);
+        $list->line($x + $d * 0.5, $y + $d * 0.7, $x + $d * 0.9, $y + $d * 0.3, $color, 1.0, 1.5);
+    }
+
+    /** mygo's Painter.FocusRing: a 2-point ring of the focus color a point outside the rect. */
+    private static function focusRing(DisplayList $list, float $x, float $y, float $w, float $h, float $radius, Theme $t): void
+    {
+        $list->ring($x - 3, $y - 3, $w + 6, $h + 6, $t->focus, $t->focusAlpha, $radius + 3, 2.0);
+    }
+
+    /**
+     * A checkbox or radio with its label, as mygo's: a Space(4) box
+     * (radius Space(1)) or disc, the background with a border a quarter
+     * toward the text — the accent under the pointer — or the accent
+     * with a check stroked Space(0.5) in the accent's text (a dot Space(1.5)
+     * for a radio); the label Space(2) after.
+     */
     private static function paintToggle(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
     {
         $box = $t->space(4);
-        $y = $n->y + ($n->h - $box) / 2;
-        $radius = $n->kind === Node::RADIO ? $box / 2 : $t->radius - 2;
-        if ($n->focusVisible) {
-            $list->rect($n->x - 2, $y - 2, $box + 4, $box + 4, $t->focus, $t->focusAlpha, $radius + 2);
-        }
+        $x = $n->x; $y = $n->y + ($n->h - $box) / 2;
+        $radius = $n->kind === Node::RADIO ? $t->space(2) : $t->space(1);
         $hovered = $rt?->hovered($n->id) ?? false;
         if ($n->on) {
-            $list->rect($n->x, $y, $box, $box, $hovered ? $t->accentHover : $t->accent, 1.0, $radius);
+            $list->rect($x, $y, $box, $box, $t->accent, 1.0, $radius);
             if ($n->kind === Node::RADIO) {
-                $list->rect($n->x + $box * 0.3, $y + $box * 0.3, $box * 0.4, $box * 0.4, $t->accentText, 1.0, $box * 0.2);
-            } else {
-                [$cw, $ch] = $text->measure('✓', $n->fontSize, Font::BOLD);
-                $text->paint($list, '✓', $n->fontSize, $n->x + ($box - $cw) / 2, $y + ($box - $ch) / 2, $t->accentText, 1.0, Font::BOLD);
+                $d = $t->space(1.5);
+                $list->rect($x + ($box - $d) / 2, $y + ($box - $d) / 2, $d, $d, $t->accentText, 1.0, $d / 2);
+            } else { // mygo's checkPath
+                $w = $t->space(0.5);
+                $list->line($x + $box * 0.22, $y + $box * 0.52, $x + $box * 0.42, $y + $box * 0.71, $t->accentText, 1.0, $w);
+                $list->line($x + $box * 0.42, $y + $box * 0.71, $x + $box * 0.78, $y + $box * 0.31, $t->accentText, 1.0, $w);
             }
         } else {
-            $list->rect($n->x, $y, $box, $box, $t->border, 1.0, $radius);
-            $list->rect($n->x + 1, $y + 1, $box - 2, $box - 2, $hovered ? $t->surfaceHover : $t->surface, 1.0, $radius - 1);
+            $list->rect($x, $y, $box, $box, $hovered ? $t->accent : Theme::mix($t->border, $t->text, 0.25), 1.0, $radius);
+            $list->rect($x + 1, $y + 1, $box - 2, $box - 2, $t->background, 1.0, $radius - 1);
+        }
+        if ($n->focusVisible) {
+            self::focusRing($list, $x, $y, $box, $box, $radius, $t);
         }
         [, $lh] = $text->measure($n->text, $n->fontSize);
-        $text->paint($list, $n->text, $n->fontSize, $n->x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+        $text->paint($list, $n->text, $n->fontSize, $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**
@@ -239,20 +260,23 @@ final class Painter
         }
     }
 
-    /** A switch: a track that is the accent when on, a knob at the end it is on, the label beside it. */
+    /**
+     * A switch, as mygo's: Space(9) by Space(5), radius Space(2.5), the
+     * border a sixth toward the text when off and the accent when on; the
+     * knob white, inset Space(0.5), on a shadow (0, 1, 3, 0.25); the label
+     * Space(2) after.
+     */
     private static function paintSwitch(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
     {
-        $tw = $t->space(7.5); $th = $t->space(4.5); $knob = $th - 4;
+        $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
+        $list->rect($n->x, $y, $tw, $th, $n->on ? $t->accent : Theme::mix($t->border, $t->text, 0.15), 1.0, $th / 2);
+        $kx = $n->x + $in + ($n->on ? $tw - $th : 0);
+        $list->shadow($kx, $y + $in, $d, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
+        $list->rect($kx, $y + $in, $d, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {
-            $list->ring($n->x - 2, $y - 2, $tw + 4, $th + 4, $t->focus, $t->focusAlpha, $th / 2 + 2, 2.0);
+            self::focusRing($list, $n->x, $y, $tw, $th, $th / 2, $t);
         }
-        $hovered = $rt?->hovered($n->id) ?? false;
-        $track = $n->on ? ($hovered ? $t->accentHover : $t->accent) : ($hovered ? $t->surfaceHover : $t->border);
-        $list->rect($n->x, $y, $tw, $th, $track, 1.0, $th / 2);
-        $kx = $n->on ? $n->x + $tw - $knob - 2 : $n->x + 2;
-        $list->shadow($kx, $y + 2, $knob, $knob, 0x000000, 0.2, $knob / 2, 2, 0, 1);
-        $list->rect($kx, $y + 2, $knob, $knob, 0xffffff, 1.0, $knob / 2);
         [, $lh] = $text->measure($n->text, $n->fontSize);
         $text->paint($list, $n->text, $n->fontSize, $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
@@ -266,8 +290,8 @@ final class Painter
     private static function paintSlider(Node $n, DisplayList $list, Theme $t): void
     {
         $kw = $t->space(5); $kh = $t->space(4);
-        $trackH = $t->space(1);
-        $cy = $n->y + $n->h / 2;
+        $trackH = $t->space(1.5); // as thick as Progress
+        $cy = $n->y + $t->space(2.5);
         $x0 = $n->x + $kw / 2; $x1 = $n->x + $n->w - $kw / 2;
         $kx = $x0 + ($x1 - $x0) * $n->fraction;
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
@@ -285,7 +309,7 @@ final class Painter
             $list->rect($x, $y, $w, $h, $face, 1.0, $r);
         }
         if ($n->focusVisible) {
-            $list->ring($x - 2, $y - 2, $w + 4, $h + 4, $t->focus, $t->focusAlpha, $r + 2, 2.0);
+            self::focusRing($list, $x, $y, $w, $h, $r, $t);
         }
     }
 
@@ -324,7 +348,7 @@ final class Painter
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET + $n->insetL;
         $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
-        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->background, 1.0, $t->radius - 1);
+        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
         $display = $s->display();
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
         $ty = $n->y + ($n->h - $lh) / 2;
@@ -362,11 +386,11 @@ final class Painter
     private static function paintArea(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
-        $inset = Runtime::FIELD_INSET;
+        $inset = Runtime::FIELD_INSET; $insetY = Runtime::FIELD_INSET_Y;
         $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
-        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->background, 1.0, $t->radius - 1);
+        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
         $display = $s->display();
-        $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $inset;
+        $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $insetY;
         $layout = $s->layout($text, $n->fontSize, $innerW);
         $lh = $layout->lineHeight;
         // Never scroll past the text; bring the caret into view when it moved (not while the wheel scrolls away from it).
@@ -380,7 +404,7 @@ final class Painter
             if ($cy + $lh > $s->scrollY + $innerH) { $s->scrollY = $cy + $lh - $innerH; }
         }
         $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
-        $tx = $n->x + $inset; $ty = $n->y + $inset - $s->scrollY;
+        $tx = $n->x + $inset; $ty = $n->y + $insetY - $s->scrollY;
         $list->pushClip($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4);
         if ($display === '' && $n->text !== null && $n->text !== '') {
             $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);

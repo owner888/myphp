@@ -26,11 +26,12 @@ final class Layout
                 $main += $k->mh; if ($k->mw > $cross) $cross = $k->mw;
             }
         }
-        $main += $n->gap * max(0, $cnt - 1) + 2 * $n->pad;
-        $cross += 2 * $n->pad;
+        [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padX(), $n->padY()] : [$n->padY(), $n->padX()];
+        $main += $n->gap * max(0, $cnt - 1) + 2 * $padMain;
+        $cross += 2 * $padCross;
         if ($n->scroll !== null) { // a scrolling container takes the room it is given on the axes it scrolls
-            if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) { $main = 2 * $n->pad; }
-            if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = 2 * $n->pad; }
+            if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) { $main = 2 * $padMain; }
+            if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = 2 * $padCross; }
         }
         if ($n->dir === Node::ROW) { $n->mw = $main; $n->mh = $cross; } else { $n->mw = $cross; $n->mh = $main; }
         if ($n->fw > 0) { $n->mw = $n->fw; } // a container given a size (Node::size) takes it over its content's
@@ -44,18 +45,19 @@ final class Layout
         $kids = [];
         foreach ($n->kids as $k) {
             if ($k->absolute) {
-                self::arrange($k, $x + $n->pad + $k->ax, $y + $n->pad + $k->ay, $k->mw, $k->mh);
+                self::arrange($k, $x + $n->padX() + $k->ax, $y + $n->padY() + $k->ay, $k->mw, $k->mh);
             } else {
                 $kids[] = $k;
             }
         }
         $cnt = count($kids);
         if ($cnt === 0) return;
-        $avail = ($n->dir === Node::ROW ? $w : $h) - 2 * $n->pad - $n->gap * ($cnt - 1);
+        $px = $n->padX(); $py = $n->padY();
+        $avail = ($n->dir === Node::ROW ? $w - 2 * $px : $h - 2 * $py) - $n->gap * ($cnt - 1);
         $used = 0.0; $grow = 0; $crossMax = 0.0;
         foreach ($kids as $k) { $used += $n->dir === Node::ROW ? $k->mw : $k->mh; $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
-        $cx = $x + $n->pad; $cy = $y + $n->pad; $cw = $w - 2 * $n->pad; $ch = $h - 2 * $n->pad;
+        $cx = $x + $px; $cy = $y + $py; $cw = $w - 2 * $px; $ch = $h - 2 * $py;
         if ($n->scroll instanceof ScrollState) {
             $s = $n->scroll;
             $contentMain = $used + $n->gap * ($cnt - 1);

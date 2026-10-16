@@ -49,7 +49,7 @@ final class Runtime
     private array $steppers = [];
     /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
     private array $jumps = [];
-    /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper, last x, last y dragged() reported], or null. */
+    /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper, last x, last y dragged() reported, (7) the node being dragged], or null. */
     private ?array $hold = null;
     /** Where the mouse went down this frame, for pressed(); a popover closes on a press outside it. */
     private array $presses = [];
@@ -85,7 +85,8 @@ final class Runtime
     public const BLINK_FOR = 30.0;
     private ?int $activated = null;
     /** Text drawn in a field starts this far from its left edge. */
-    public const FIELD_INSET = 8.0;
+    /** A field's padding, mygo's Padding(Space(1.5), Space(2.5)): FIELD_INSET at the sides, FIELD_INSET_Y above and below the text of an area. */
+    public const FIELD_INSET = 10.0, FIELD_INSET_Y = 6.0;
 
     public function __construct(public Input $input, private ?TextMetrics $metrics = null)
     {
@@ -229,7 +230,7 @@ final class Runtime
             }
         }
         if ($over !== null && $this->tip === null && $now / 1e9 - $this->pointerRestAt >= self::TIP_DELAY) {
-            $this->tip = [$over[1], $this->input->mouseX, $this->input->mouseY];
+            $this->tip = [$over[1], ...$this->rects[$over[0]]]; // the text and the anchor's rect
         }
         $this->tipPending = $over !== null && $this->tip === null;
         if ($this->focus !== null && !isset($this->rects[$this->focus])) {
@@ -377,7 +378,7 @@ final class Runtime
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
             $this->areas[$n->id] = $n->edit;
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
-            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + self::FIELD_INSET, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
+            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + self::FIELD_INSET_Y, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
@@ -489,7 +490,7 @@ final class Runtime
         $line = $layout->lineOf($state->cursor);
         [$a, $b] = $layout->lines[$line];
         $end = $b > $a && $state->text[$b - 1] === "\n" ? $b - 1 : $b;
-        $page = max(1, (int)(($this->rects[$this->focus][3] - 2 * self::FIELD_INSET) / $lh) - 1);
+        $page = max(1, (int)(($this->rects[$this->focus][3] - 2 * self::FIELD_INSET_Y) / $lh) - 1);
         $toLine = function (int $l) use ($state, $layout, $m, $extend) {
             [$x, ] = $layout->caret($m, $state->cursor);
             $state->setCursor($layout->hit($m, $x, ($l + 0.5) * $layout->lineHeight), $extend);
@@ -733,13 +734,19 @@ final class Runtime
      */
     public function dragged(int $id): ?array
     {
-        $r = $this->rects[$id] ?? null;
-        if ($this->hold === null || $r === null || !$this->reachable($id)) {
+        if ($this->hold === null) {
             return null;
         }
-        [$x, $y] = $this->hold;
-        if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
-            return null;
+        if (($this->hold[7] ?? null) !== $id) { // not bound to this node yet: bind the press to the first node asked for whose rect holds it
+            if (isset($this->hold[7])) {
+                return null; // another node's drag
+            }
+            $r = $this->rects[$id] ?? null;
+            [$x, $y] = $this->hold;
+            if ($r === null || !$this->reachable($id) || $x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+                return null;
+            }
+            $this->hold[7] = $id; // the drag stays this node's as it moves out from under the press
         }
         $d = [$this->input->mouseX - $this->hold[5], $this->input->mouseY - $this->hold[6]];
         $this->hold[5] = $this->input->mouseX; $this->hold[6] = $this->input->mouseY;

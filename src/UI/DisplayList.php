@@ -110,6 +110,13 @@ final class DisplayList
         $this->quad($x, $y, $w, $h, $rgb, $alpha, $radius, 4.0, $thickness);
     }
 
+    /** A line from (x0, y0) to (x1, y1), $thickness points wide with round ends: a capsule across the corners of its bounding rect. */
+    public function line(float $x0, float $y0, float $x1, float $y1, int $rgb, float $alpha, float $thickness): void
+    {
+        $r = $thickness / 2;
+        $this->quad(min($x0, $x1) - $r, min($y0, $y1) - $r, abs($x1 - $x0) + $thickness, abs($y1 - $y0) + $thickness, $rgb, $alpha, $r, 9.0, $x1 >= $x0 ? 1.0 : -1.0, $y1 >= $y0 ? 1.0 : -1.0);
+    }
+
     private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u, float $v = 0.0): void
     {
         if ($this->n === $this->capacity) {

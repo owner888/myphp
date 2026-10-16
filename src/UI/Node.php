@@ -31,10 +31,16 @@ final class Node
     public bool $blocks = false;
     /** For a field: room kept clear of the text at its left and right, beyond the usual inset (a search field's glass and clear button). */
     public float $insetL = 0, $insetR = 0;
+    /** For a button or select: a chevron (mygo's, a Space(2.5) box stroked 1.5) after the label, Space(1.5) apart. */
+    public bool $chevron = false;
     /** A one-point border in the theme's border color around this colored node (a plain button, a select). */
     public bool $bordered = false;
     /** A soft shadow under this container: [dy, blur, alpha], or null. */
     public ?array $shadow = null;
+    /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
+    public ?float $padY = null, $padX = null;
+    /** Paints this node itself, given the display list, the node (laid out) and the theme, before its children (mygo's Draw): icons, custom marks. */
+    public ?\Closure $draw = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
     public ?string $cursor = null;
     /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
@@ -118,6 +124,13 @@ final class Node
         return $this;
     }
 
+    /** Paints this node with $fn(DisplayList $list, Node $n, Theme $t) once laid out, before its children: a mark the list's rects, rings and lines draw. */
+    public function draw(\Closure $fn): static
+    {
+        $this->draw = $fn;
+        return $this;
+    }
+
     /** Keeps $left and $right points at a field's ends clear of its text, for what is drawn over them. */
     public function inset(float $left, float $right = 0): static
     {
@@ -159,6 +172,17 @@ final class Node
         $this->tooltip = $text;
         return $this;
     }
+
+    /** Pads this container $y points at its top and bottom and $x at its left and right (mygo's Padding(y, x)); row()/column()'s $pad is both. */
+    public function padding(float $y, float $x): static
+    {
+        $this->padY = $y; $this->padX = $x;
+        return $this;
+    }
+
+    /** The padding at the top and bottom, and at the left and right. */
+    public function padY(): float { return $this->padY ?? $this->pad; }
+    public function padX(): float { return $this->padX ?? $this->pad; }
 
     /** Places this container's children across its axis: a row's vertically, a column's horizontally (mygo's AlignItems); rows center by default, columns stretch. */
     public function align(int $align): static

@@ -8,7 +8,7 @@
 // Run: ./run.sh notes [folder]
 declare(strict_types=1);
 
-use MyPHP\{App, Dialog, Menu, MenuItem, MessageOptions, Window, WindowOptions};
+use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, Image, ListState, Node, ScrollState, Span, TextState, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -23,12 +23,23 @@ final class Notes
     public ScrollState $preview;
     public ?string $open = null;
     private string $saved = '';
+
+    /** The text as last written to the file. */
+    public function savedText(): string
+    {
+        return $this->saved;
+    }
     private int $edit = 0;
     public ?Window $window = null;
     /** The editor scroll share the preview was last moved to. */
     public float $followed = 0;
     /** The panes' widths, as the dividers leave them. */
     public float $listW = 220, $editorW = 380;
+    /** The search: what is typed, and the items whose titles match it, as indexes into $items. */
+    public TextState $query;
+    /** @var list<int> */
+    public array $shown = [];
+    public bool $previewing = true, $asking = false;
 
     public function __construct(public readonly string $dir)
     {
@@ -38,7 +49,28 @@ final class Notes
         $this->editor = new TextState();
         $this->editor->multiline = true;
         $this->preview = new ScrollState();
+        $this->query = new TextState();
         $this->scan();
+    }
+
+    /** The items the search shows, in order, with the list's choice on the open one. */
+    public function filter(): void
+    {
+        $q = trim($this->query->text);
+        $this->shown = [];
+        foreach ($this->items as $i => $it) {
+            if ($q === '' || stripos($it['title'], $q) !== false) { $this->shown[] = $i; }
+        }
+        $this->list->selected = -1;
+        foreach ($this->shown as $row => $i) {
+            if ($this->items[$i]['path'] === $this->open) { $this->list->selected = $row; }
+        }
+    }
+
+    /** Characters in the editor: letters and digits of any script, each one; spaces, punctuation and Markdown marks are none. */
+    public function chars(): int
+    {
+        return preg_match_all('/[\p{L}\p{N}]/u', $this->editor->text);
     }
 
     public function scan(): void
@@ -49,11 +81,6 @@ final class Notes
             $this->items[] = ['path' => $path, 'title' => trim(ltrim((string)$first, '# ')) ?: basename($path, '.md'), 'mtime' => filemtime($path)];
         }
         usort($this->items, fn($a, $b) => $b['mtime'] <=> $a['mtime']);
-        $this->list->count = count($this->items);
-        $this->list->selected = -1;
-        foreach ($this->items as $i => $it) {
-            if ($it['path'] === $this->open) { $this->list->selected = $i; }
-        }
     }
 
     /** Opens the note at $path in the editor, saving the one before. */
@@ -179,27 +206,46 @@ function view(Context $c, Notes $notes): void
 {
     $t = $c->theme;
     $notes->tick();
-    // Three panes the dividers resize: notes | editor | preview.
+    $notes->filter();
+    // Three panes the dividers resize: notes | editor | preview (while previewing).
     $c->split($notes->listW, function () use ($c, $t, $notes) {
         $c->column(0, 0, 1, $t->surface);
-          $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->primaryButton('New'))) { $notes->create(); } $c->end();
-          $c->list($notes->list, count($notes->items), function (int $i) use ($c, $t, $notes) {
-              $it = $notes->items[$i];
+          $c->column(8, 6);
+            $c->searchField($notes->query, $notes->listW - 16);
+            $c->toolbar(function () use ($c, $notes) {
+                if ($c->clicked($c->button('New'))) { $notes->create(); }
+                if ($c->clicked($c->button('Delete…')) && $notes->open !== null) { $notes->asking = true; }
+                $c->spacer();
+                $c->toggle($notes->previewing, 'Preview');
+            });
+          $c->end();
+          $c->divider();
+          $c->list($notes->list, count($notes->shown), function (int $row) use ($c, $t, $notes) {
+              $it = $notes->items[$notes->shown[$row]];
               $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0);
                 $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
           });
-          if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->list->selected]['path'] !== $notes->open) {
-              $notes->choose($notes->items[$notes->list->selected]['path']);
+          if ($notes->shown === [] && $notes->query->text !== '') { $c->column(10, 0); $c->muted('No note matches.', 12); $c->end(); }
+          if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->shown[$notes->list->selected]]['path'] !== $notes->open) {
+              $notes->choose($notes->items[$notes->shown[$notes->list->selected]]['path']);
           }
         $c->end();
     }, function () use ($c, $t, $notes) {
-        $c->split($notes->editorW, function () use ($c, $notes) {
-            if ($notes->open === null) {
-                $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
-            } else {
-                $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
-            }
-        }, function () use ($c, $t, $notes) {
+        $editor = function () use ($c, $t, $notes) {
+            $c->column(0, 0, 1);
+              if ($notes->open === null) {
+                  $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
+              } else {
+                  $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
+                  $c->row(8, 8)->align(Node::CENTER);
+                    $c->muted($notes->chars() . ' 字', 11); $c->spacer();
+                    $c->badge($notes->editor->text === $notes->savedText() ? 'saved' : 'editing');
+                  $c->end();
+              }
+            $c->end();
+        };
+        if (!$notes->previewing) { $editor(); return; }
+        $c->split($notes->editorW, $editor, function () use ($c, $t, $notes) {
             // The preview follows the editor: scrolled the same share of the way through.
             if ($notes->editor->scrollFraction !== $notes->followed) {
                 $notes->followed = $notes->editor->scrollFraction;
@@ -211,13 +257,19 @@ function view(Context $c, Notes $notes): void
             $c->end();
         });
     });
+    // Deleting asks first.
+    $c->modal($notes->asking, function () use ($c, $notes) {
+        $c->text('Delete this note?', 15, style: Font::BOLD);
+        $c->muted(basename((string)$notes->open) . " goes to nowhere: there is no undo.");
+        $c->row(0, 8)->justify(Node::END);
+          if ($c->clicked($c->button('Cancel'))) { $notes->asking = false; }
+          if ($c->clicked($c->primaryButton('Delete'))) { $notes->asking = false; $notes->delete(); $c->toast('Note deleted'); }
+        $c->end();
+    });
 }
 
-$confirmDelete = function () use ($notes) {
-    if ($notes->open === null) { return; }
-    $r = Dialog::message(new MessageOptions(parent: Window::key(), type: 'warning', message: 'Delete this note?',
-        detail: basename($notes->open), buttons: ['Delete', 'Cancel'], cancelButton: 1));
-    if ($r->button === 0) { $notes->delete(); $notes->window?->update(); }
+$confirmDelete = function () use ($notes) { // the same modal the toolbar's Delete… opens
+    if ($notes->open !== null) { $notes->asking = true; $notes->window?->update(); }
 };
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),

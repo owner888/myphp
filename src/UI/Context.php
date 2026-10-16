@@ -214,7 +214,7 @@ final class Context
     public function link(string $s, string $url, ?float $size = null): Node
     {
         $n = $this->text($s, $size, $this->theme->accent);
-        $n->underline = true;
+        $n->underline = $this->hovered($n); // underlined under the pointer, as mygo's
         $n->url = $url;
         if ($this->runtime?->clicked($n->id)) {
             ($this->runtime->openURL)($url);
@@ -384,7 +384,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $w + $t->space(9.5), max($h, $t->space(5)), 0, $label, null, $size, $t->text));
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $w + $t->space(11), max($h, $t->space(5)), 0, $label, null, $size, $t->text)); // the track Space(9), the gap Space(2)
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;
@@ -505,10 +505,14 @@ final class Context
         $parent = $this->stack[count($this->stack) - 1];
         $n = $this->column(0, $t->space(0.5));
           if (count($parent->kids) > 1) { $this->column(0, 0)->size(0, $t->space(2.5)); $this->end(); } // apart from the section above
-          $head = $this->row($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER);
+          $head = $this->row(0, 0)->padding($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER);
             $this->text($title, $t->fontSize - 1, $t->textMuted, Font::BOLD);
             $this->spacer();
-            if ($open !== null && $this->hovered($head)) { $this->text($open ? '▾' : '▸', $t->fontSize - 2, $t->textMuted); }
+            if ($open !== null) { // the disclosure arrow, shown as the pointer rests on the title
+                $hovered = $this->hovered($head); $shown = $open;
+                $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
+                if ($hovered) { $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $shown ? 90 : 0, $t->textMuted)); }
+            }
           $this->end();
           if ($open !== null && $this->clicked($head)) { $open = !$open; }
           if ($open === null || $open) { $fn(); }
@@ -529,7 +533,7 @@ final class Context
         $chosen = $sb['selected'] === $id;
         $focused = $this->focused($sb['node']);
         $sb['items'][] = $id;
-        $n = $this->key("item:$id")->row($t->space(1.5), $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->round($t->radius)->align(Node::CENTER);
+        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->padding($t->space(1.5), $t->space(2))->round($t->radius)->align(Node::CENTER);
         if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
           if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
@@ -584,7 +588,9 @@ final class Context
      */
     public function menuButton(string $label, array $items, ?Window $window = null): Node
     {
-        $n = $this->button($label . '  ⌄');
+        $n = $this->button($label);
+        $n->fw += $this->theme->space(1.5) + $this->theme->space(2.5); // room for the chevron
+        $n->chevron = true;
         $rt = $this->runtime;
         if ($rt !== null && ($this->clicked($n) || ($n->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
             $window ??= Window::key();
@@ -609,14 +615,25 @@ final class Context
     {
         $t = $this->theme;
         $size ??= $t->fontSize;
-        $glass = $t->space(4.5); $clear = $t->space(4.5);
+        // mygo's field(): padding Space(1.5) by Space(2), the glass, the input and the clear button Space(1.5) apart.
+        $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2); $gap = $t->space(1.5);
         $this->row(0, 0);
-          $n = $this->input($state, 'Search', $width, $size)->inset($glass, $state->text === '' ? 0 : $clear);
-          [$gw, $gh] = $this->metrics->measure('⌕', $size + 2);
-          $this->text('⌕', $size + 2, $t->textMuted)->at(($glass + Runtime::FIELD_INSET - $gw) / 2 + 2, ($n->fh - $gh) / 2);
-          if ($state->text !== '') {
-              [$xw, $xh] = $this->metrics->measure('×', $size + 2);
-              $x = $this->text('×', $size + 2, $t->textMuted)->at($width - $clear + ($clear - $xw) / 2, ($n->fh - $xh) / 2)->cursor('pointer');
+          $n = $this->input($state, 'Search', $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
+          // The magnifying glass, as mygo's (MingCute's search icon): a ring and a handle, stroked in the muted color.
+          $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(function (DisplayList $list, Node $g, Theme $t) {
+              $k = $g->w / 24; $stroke = 2 * $k;
+              $list->ring($g->x + 2 * $k, $g->y + 2 * $k, 12 * $k, 12 * $k, $t->textMuted, 1.0, 6 * $k, $stroke);
+              $list->line($g->x + 14.5 * $k, $g->y + 14.5 * $k, $g->x + 20 * $k, $g->y + 20 * $k, $t->textMuted, 1.0, $stroke);
+          })->alpha = 0.0;
+          if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
+              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($width - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')
+                  ->draw(function (DisplayList $list, Node $b, Theme $t) {
+                      $k = $b->w * 0.3;
+                      $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
+                      $list->line($b->x + $b->w - $k, $b->y + $k, $b->x + $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
+                  });
+              $x->alpha = 0.5;
+              $this->end();
               if ($this->clicked($x) || ($this->runtime?->focus === $n->id && $this->shortcut(Key::ESCAPE))) {
                   $state->text = ''; $state->setCursor(0);
               }
@@ -687,7 +704,7 @@ final class Context
      * the rows are a list's (only those in view are built, $state keeps
      * the place and the choice, the keys move it), $cell($row, $col)
      * builds a cell's content, usually a text. Rows are Space(8) high,
-     * cells padded Space(1.5). The user resizes a column by dragging the
+     * cells padded Space(1.5) by Space(2.5). The user resizes a column by dragging the
      * right edge of its header ($state->columnWidths keeps it) and sorts
      * by a sortable column by clicking its header ($state->sort; the app
      * sorts its rows and sortChanged() reports a click).
@@ -696,14 +713,14 @@ final class Context
     public function table(ListState $state, array $columns, int $count, Closure $cell): Node
     {
         $t = $this->theme;
-        $rowH = $t->space(8); $pad = $t->space(1.5); $flexMin = $t->space(15);
+        $rowH = $t->space(8); $flexMin = $t->space(15);
         $rt = $this->runtime;
         $n = $this->column(0, 0, 1);
-        $cells = function (Closure $fill) use ($columns, $state, $pad, $flexMin) {
+        $cells = function (Closure $fill) use ($columns, $state, $t, $flexMin) {
             $boxes = [];
             foreach ($columns as $j => $col) {
                 $w = $state->columnWidths[$col->id()] ?? $col->width;
-                $box = $this->key('c' . $col->id())->row($pad, 0, $w > 0 ? 0 : 1)->align(Node::CENTER)->justify($col->align);
+                $box = $this->key('c' . $col->id())->row(0, 0, $w > 0 ? 0 : 1)->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->justify($col->align);
                 $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0);
                   $fill($j);
                 $this->end();
@@ -841,10 +858,8 @@ final class Context
         $n = $this->row(1, 0, 0, $t->border)->round($t->radius); // the track: a border around a surface
           $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH);
           foreach ($options as $i => $label) {
-              $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->round($t->radius - 1)->focusable()->center();
+              $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->round(max($t->radius - $t->space(0.5), 0))->focusable()->center();
               if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
-              [$w, $h] = $this->metrics->measure($label, $t->fontSize);
-              $seg->size($w + $t->space(4), $h + $t->space(1.5));
                 $this->text($label, $t->fontSize, $t->text);
               $this->end();
               if ($this->clicked($seg) && $i !== $index) {
@@ -866,13 +881,19 @@ final class Context
     public function tabs(array $labels, int &$index): Node
     {
         $t = $this->theme;
-        $n = $this->row(0, $t->space(4));
+        $n = $this->row(0, $t->space(1));
         foreach ($labels as $i => $label) {
-            $tab = $this->column(0, $t->space(1))->focusable();
-            $this->text($label, $t->fontSize, $i === $index ? $t->text : ($this->hovered($tab) ? $t->text : $t->textMuted), $i === $index ? Font::BOLD : 0);
-            $this->box(0, 2, $t->accent)->alpha = $i === $index ? 1.0 : 0.0; // the underline, kept for the height
+            $on = $i === $index;
+            $tab = $this->column(0, 0)->padding($t->space(2), $t->space(3))->round($t->radius)->focusable()
+                ->draw(function (DisplayList $list, Node $tab, Theme $t) use ($on) {
+                    if ($on) { // the underline, Space(0.5) high, Space(1.5) in from the ends
+                        $in = $t->space(1.5); $h = $t->space(0.5);
+                        $list->rect($tab->x + $in, $tab->y + $tab->h - $h, $tab->w - 2 * $in, $h, $t->accent, 1.0, $h / 2);
+                    }
+                });
+            $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted, $on ? Font::BOLD : 0);
             $this->end();
-            if ($this->clicked($tab) && $i !== $index) {
+            if ($this->clicked($tab) && !$on) {
                 $index = $i;
                 $n->changed = true;
             }
@@ -889,15 +910,30 @@ final class Context
     public function collapsible(string $title, bool &$open): bool
     {
         $t = $this->theme;
-        $head = $this->row(0, $t->space(1.5))->focusable();
-        $this->text($open ? '▾' : '▸', $t->fontSize, $t->textMuted);
-        $this->text($title, $t->fontSize, $t->text, Font::BOLD);
+        $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->focusable();
+        if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
+          $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
+          $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
+          $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 90 : 0, $t->textMuted));
+          $this->text($title, $t->fontSize, $t->text);
+          $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
         $this->end();
         if ($this->clicked($head)) {
             $open = !$open;
             $head->changed = true;
         }
         return $open;
+    }
+
+    /** mygo's disclosurePath: a chevron pointing right in box $a, turned $deg clockwise, stroked 1.5 in $color. */
+    public static function disclosure(DisplayList $list, Node $a, float $deg, int $color): void
+    {
+        $cx = $a->x + $a->w / 2; $cy = $a->y + $a->h / 2; $d = $a->w / 8;
+        $r = deg2rad($deg); $cos = cos($r); $sin = sin($r);
+        $at = fn(float $x, float $y) => [$cx + $x * $cos - $y * $sin, $cy + $x * $sin + $y * $cos];
+        [$x0, $y0] = $at(-$d, -2 * $d); [$x1, $y1] = $at($d, 0); [$x2, $y2] = $at(-$d, 2 * $d);
+        $list->line($x0, $y0, $x1, $y1, $color, 1.0, 1.5);
+        $list->line($x1, $y1, $x2, $y2, $color, 1.0, 1.5);
     }
 
     /**
@@ -984,10 +1020,11 @@ final class Context
         $t = $this->theme;
         $size = $t->fontSize;
         $label = $options[$index] ?? '';
-        $w = $width ?? max(array_map(fn($o) => $this->metrics->measure($o, $size)[0], $options ?: [''])) + $t->space(10);
+        // A plain button's look (padding Space(1.5) by Space(3.5)), the label and a chevron Space(1.5) apart, at least Space(35) wide.
+        $w = $width ?? max($t->space(35), max(array_map(fn($o) => $this->metrics->measure($o, $size)[0], $options ?: [''])) + 2 * $t->space(3.5) + $t->space(1.5) + $t->space(2.5));
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(2.5), 0, $label, $t->surface, $size, $t->text));
-        $n->bordered = true;
+        $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(3), 0, $label, $t->surface, $size, $t->text));
+        $n->bordered = true; $n->chevron = true;
         $n->focusable = true;
         if ($this->runtime?->hovered($n->id)) {
             $n->color = $t->surfaceHover;
@@ -1022,7 +1059,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->background, $size, $t->text)); // 0: fills the row's remaining width
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills the row's remaining width
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
@@ -1038,7 +1075,7 @@ final class Context
     {
         $t = $this->theme;
         $state->multiline = true;
-        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $width <= 0 || $height <= 0 ? 1 : 0, $placeholder, $t->background, $size ?? $t->fontSize, $t->text));
+        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $width <= 0 || $height <= 0 ? 1 : 0, $placeholder, $t->surface, $size ?? $t->fontSize, $t->text));
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;

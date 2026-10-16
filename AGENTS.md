@@ -23,6 +23,10 @@ the reasoning, the numbers and the pitfalls behind the rules here.
 7. Delete dead code when you touch it; never comment it out.
 8. `bin/myphp` stays executable: after any change, `chmod 755 bin/myphp`
    and check `ls -l` before handing back (file syncs drop the bit).
+9. **UI is 1:1 with mygo** (the developer's rule): every size — padding,
+   gap, height, icon, stroke, radius, color role — comes from mygo's
+   source (`t.Space(n)`, the SVG viewBox), never guessed or approximated.
+   Before drawing a control, read its mygo function and copy the numbers.
 
 ## What this is
 
@@ -52,7 +56,7 @@ src/UI/            Node, Context (column/row/text/muted/rich/link/button/primary
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block();
+                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
@@ -92,7 +96,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   `followEnd` keeps a list at its end as rows are appended (chat, log).
 - **One GPU buffer per frame**: `DisplayList` writes 16 floats per quad into
   a shared `MTLBuffer` (ring of four); rects, glyphs, images, shadows, rings
-  and glass share one pipeline and one instanced draw (kind 0–8), so draw
+  and glass share one pipeline and one instanced draw (kind 0–9), so draw
   order is list order; clip rect per quad. A backdrop quad (glass, blur,
   hard scroll edge) splits the draw: what is below it is copied and blurred
   (half size, two passes) into the backdrop it samples, then the pass resumes.

@@ -80,6 +80,17 @@ instanced triangle-strip draw (4 vertices × n instances) and commits. The
 viewport size goes in through `setVertexBytes:` as two floats, in points,
 so coordinates are in points on any backing scale.
 
+The quad kinds, by `params.y`: 0 a rounded rect, 1 a glyph, 2 an image,
+3 a soft shadow (the rect inset by the blur, feathered over it), 4 a ring
+(the band inside the edge), 5 glass, 6 a vertical alpha gradient, 7 a
+backdrop blur, 8 the hard scroll edge, 9 a line: a capsule between
+opposite corners of its bounding rect, inset by half the thickness,
+`u, v` the signs of its direction (`DisplayList::line`). `Node::draw`
+hands a node's face to a closure given the list, the laid-out node and
+the theme, painted over the node's own face and under its children
+(mygo's Draw): the search field's magnifying glass is a ring and a line
+drawn that way, at mygo's MingCute proportions.
+
 ## Liquid Glass
 
 `UI\Glass` is a material a container takes with `->material()`, shaped
@@ -169,6 +180,19 @@ row, gap and padding Space(1), whose buttons and toggles take no face
 until hovered (padding Space(1.5) by Space(2.5), no border). Not ported:
 the toolbar as one Tab stop with Left and Right moving inside it, and
 the overflow menu for controls that do not fit.
+
+Every control's numbers are mygo's (AGENTS.md rule 9); `Node::padding(y,
+x)` is mygo's Padding(y, x) where the two differ (`row()`/`column()`'s
+one value is both). Fields pad Space(1.5) by Space(2.5) on the surface
+(`Runtime::FIELD_INSET`, `FIELD_INSET_Y`); checkbox and radio are a
+Space(4) box or disc with a Space(0.5) check or Space(1.5) dot; a
+switch is Space(9) by Space(5) with a Space(0.5) inset knob; tabs pad
+Space(2) by Space(3), Space(1) apart, underlined Space(0.5) high and
+Space(1.5) in; a select is a plain button at least Space(35) wide with
+mygo's chevron (a Space(2.5) box stroked 1.5); a tooltip pads Space(1.25)
+by Space(2), radius Space(1.25), in the inverse colors, Space(1.5) above
+its anchor (below when there is no room); the focus ring is 2 points
+wide a point outside the node, as `Painter.FocusRing`.
 
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
