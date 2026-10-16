@@ -56,7 +56,8 @@ src/UI/            Node, Context (column/row/text/muted/rich/link/button/primary
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/single();
+                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/single()/
+                   min()/focusGroup();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),

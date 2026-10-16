@@ -31,6 +31,12 @@ final class Node
     public bool $blocks = false;
     /** For a field: room kept clear of the text at its left and right, beyond the usual inset (a search field's glass and clear button). */
     public float $insetL = 0, $insetR = 0;
+    /** A focus group's orientation: the arrows that move the focus inside it (HORIZONTAL, VERTICAL or both); 0 for no group. And whether moving the focus chooses the member (a radio group's, a tab list's). */
+    public int $focusGroup = 0;
+    public bool $groupSelects = false;
+    public const HORIZONTAL = 1, VERTICAL = 2;
+    /** The least width and height this node measures to (mygo's MinWidth, MinHeight); 0 for none. */
+    public float $minW = 0, $minH = 0;
     /** A text kept to one line: it shrinks to the room its row or column has and ends in an ellipsis where cut (mygo's SingleLine). */
     public bool $single = false;
     /** For a button or select: a chevron (mygo's, a Space(2.5) box stroked 1.5) after the label, Space(1.5) apart. */
@@ -130,6 +136,28 @@ final class Node
     public function draw(\Closure $fn): static
     {
         $this->draw = $fn;
+        return $this;
+    }
+
+    /**
+     * Makes the focusable nodes inside this one a single stop of Tab, as a
+     * toolbar's controls, a radio group or a tab list are (mygo's
+     * FocusGroup): Tab moves into the group, to the member that had the
+     * focus last (else the one on, else the first), and on out of it; the
+     * arrows $orientation names move among the members, round from the
+     * last to the first, Home and End to the first and the last; with
+     * $selects, moving chooses the member it moves to, as a radio does.
+     */
+    public function focusGroup(int $orientation, bool $selects = false): static
+    {
+        $this->focusGroup = $orientation; $this->groupSelects = $selects;
+        return $this;
+    }
+
+    /** Keeps this node at least $w wide and $h high, whatever its content measures (mygo's MinWidth and MinHeight); 0 leaves one to the content. */
+    public function min(float $w = 0, float $h = 0): static
+    {
+        $this->minW = $w; $this->minH = $h;
         return $this;
     }
 

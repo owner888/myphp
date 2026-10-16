@@ -161,13 +161,17 @@ chunks are runs of spaces, single CJK characters or other runs, placed
 greedily, a chunk wider than a line broken by character, newlines
 honored; adjacent chunks of one span on a line merge into one piece so
 they shape as one run. The width is the app's to pass (`$c->width` minus
-its paddings), or, with `wrap: true`, the width the layout gave the node
-last frame (`Runtime::widthOf`, the window's width on the first frame):
-the flex layout measures before it arranges, so a node cannot know its
-width while it is built, and the frame-old width is the immediate-mode
-answer; `Runtime::record` asks for another frame when this frame's width
-differs, so a resize reflows one frame late. That suits nodes a column
-stretches; in a row, pass the width.
+its paddings), or, with `wrap: true`, the room its container had last
+frame inside the container's padding (`Runtime::widthOf` of the parent,
+the window's width on the first frame): the flex layout measures before
+it arranges, so a node cannot know its width while it is built, and the
+frame-old width is the immediate-mode answer; `Runtime::record` asks for
+another frame when this frame's room differs, so a resize reflows one
+frame late. The container's room, not the node's own width, is what to
+wrap at: a node's width follows its lines, so wrapping at it never
+narrows. A table cell's text wraps at the cell this way; `Node::min(w,
+h)` is mygo's MinWidth/MinHeight, and a table row is at least Space(8)
+high and as high as its tallest cell.
 
 Buttons follow mygo's styleButton: `button()` is plain — a surface face
 with a one-point border (`Node::border()`), the text color, shaded on
@@ -182,8 +186,17 @@ not fit the toolbar's last-frame width go, from the last, into a menu
 under a » button at its end (mygo's layoutToolbar: the controls are
 built and measured, then dropped from the row); choosing one calls
 `Runtime::press($id)`, which makes `clicked()` report it in the next
-frame's build, so the control's own code runs. Not ported: the toolbar
-as one Tab stop with Left and Right moving inside it.
+frame's build, so the control's own code runs.
+
+`Node::focusGroup($orientation, $selects)` is mygo's FocusGroup:
+`Runtime::record` notes each focusable's group (groups inside a group
+are part of it) and the member that is on; `moveFocus` treats a group
+as one stop of Tab at its first member's place and enters it at the
+member focused last, else the one on, else the first; inside, the arrows
+the orientation names move among the members round, Home and End to the
+ends, and with `$selects` the move activates the member, so a segmented
+control or a tab list chooses as a radio group does. Toolbars are
+horizontal groups; segmented controls and tabs select.
 
 Every control's numbers are mygo's (AGENTS.md rule 9); `Node::padding(y,
 x)` is mygo's Padding(y, x) where the two differ (`row()`/`column()`'s

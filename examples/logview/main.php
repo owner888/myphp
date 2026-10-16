@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, ListState, Node, Span, TextState};
+use MyPHP\UI\{Content, Context, Font, ListState, Node, Span, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -26,6 +26,8 @@ final class Log
     /** @var list<int> indexes of the lines the filter shows */
     public array $shown = [];
     public ListState $list;
+    /** @var list<TableColumn> */
+    public array $columns;
     public ?Window $window = null;
     public array $counts = ['ERROR' => 0, 'WARN' => 0];
 
@@ -35,6 +37,7 @@ final class Log
         $this->list = new ListState();
         $this->list->selected = -1;
         $this->list->followEnd = true;
+        $this->columns = [new TableColumn('#', 72, align: Node::END), new TableColumn('Line')];
     }
 
     public function open(string $path): void
@@ -140,23 +143,24 @@ function view(Context $c, Log $log): void
                new Span('  WARN ' . $log->counts['WARN'], color: $t->warning, style: Font::BOLD)]);
       $c->end();
       $needle = $log->filter->text;
-      $c->list($log->list, count($log->shown), function (int $r) use ($c, $t, $log, $needle) {
+      // A table: the number column and the line, which wraps at the column's width; the header's edge resizes it.
+      $c->table($log->list, $log->columns, count($log->shown), function (int $r, int $col) use ($c, $t, $log, $needle) {
           $i = $log->shown[$r];
+          if ($col === 0) {
+              $c->text((string)($i + 1), 12, $t->textMuted, Font::MONO);
+              return;
+          }
           $line = $log->lines[$i];
           $color = str_contains($line, 'ERROR') ? $t->danger : (str_contains($line, 'WARN') ? $t->warning : $t->text);
-          $c->row(6, 10, 0, ($r & 1) ? $t->surface : null)->align(Node::START); // the number beside a wrapped line's first row
-            $c->text(str_pad((string)($i + 1), 6, ' ', STR_PAD_LEFT), 12, $t->textMuted, Font::MONO);
-            // The matched part of the line is highlighted; long lines wrap at the window's width.
-            $spans = [];
-            if ($needle !== '' && ($at = stripos($line, $needle)) !== false) {
-                $spans[] = new Span(substr($line, 0, $at), style: Font::MONO, color: $color);
-                $spans[] = new Span(substr($line, $at, strlen($needle)), style: Font::MONO, color: 0x1d1d1f, background: $t->warning);
-                $spans[] = new Span(substr($line, $at + strlen($needle)), style: Font::MONO, color: $color);
-            } else {
-                $spans[] = new Span($line, style: Font::MONO, color: $color);
-            }
-            $c->rich($spans, 12, width: $c->width - 90); // 90: paddings, the number column, the gap
-          $c->end();
+          $spans = []; // the matched part highlighted
+          if ($needle !== '' && ($at = stripos($line, $needle)) !== false) {
+              $spans[] = new Span(substr($line, 0, $at), style: Font::MONO, color: $color);
+              $spans[] = new Span(substr($line, $at, strlen($needle)), style: Font::MONO, color: 0x1d1d1f, background: $t->warning);
+              $spans[] = new Span(substr($line, $at + strlen($needle)), style: Font::MONO, color: $color);
+          } else {
+              $spans[] = new Span($line, style: Font::MONO, color: $color);
+          }
+          $c->rich($spans, 12, wrap: true); // at the width the cell had last frame
       });
     $c->end();
 }

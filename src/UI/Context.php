@@ -184,8 +184,8 @@ final class Context
      * default), baselines aligned per line, as mygo's RichText. With a
      * $width the text wraps there (at spaces, between CJK characters, by
      * character when a word is wider) and at newlines; with $wrap it
-     * wraps at the width the layout gave this node last frame (the
-     * window's width the first time, and a frame follows when it differs);
+     * wraps at the width its container had last frame, inside its padding
+     * (the window's width the first time, and a frame follows when it differs);
      * otherwise it is one line. The node is as wide as its widest line.
      * @param Span[] $spans
      */
@@ -193,8 +193,10 @@ final class Context
     {
         $size ??= $this->theme->fontSize;
         $n = $this->add(new Node(Node::RICH, 0, 0, 0, 0, 0, 0, null, null, $size, $color ?? $this->theme->text));
-        if ($wrap && $width === null) {
-            $width = $this->runtime?->widthOf($n->id) ?? $this->width;
+        if ($wrap && $width === null) { // the room its container had last frame, inside the padding
+            $parent = $this->stack[count($this->stack) - 1];
+            $pw = $this->runtime?->widthOf($parent->id);
+            $width = $pw === null ? $this->width : max(1.0, $pw - 2 * $parent->padX());
             $n->wrapWidth = $width;
         }
         $layout = RichLayout::wrap($this->metrics, $spans, $size, $width ?? INF);
@@ -343,7 +345,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER);
+        $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER)->focusGroup(Node::HORIZONTAL); // one stop of Tab; Left and Right move inside
         $this->toolbars++;
           $fn();
           // Controls that do not fit go, from the last, into a menu at the end (mygo's layoutToolbar): the room is the toolbar's last-frame width.
@@ -757,8 +759,8 @@ final class Context
      * A table of $count rows under a header of $columns, as mygo's Table:
      * the rows are a list's (only those in view are built, $state keeps
      * the place and the choice, the keys move it), $cell($row, $col)
-     * builds a cell's content, usually a text. Rows are Space(8) high,
-     * cells padded Space(1.5) by Space(2.5). The user resizes a column by dragging the
+     * builds a cell's content, usually a text. Rows are as high as their
+     * tallest cell and at least Space(8); cells pad Space(1.5) by Space(2.5). The user resizes a column by dragging the
      * right edge of its header ($state->columnWidths keeps it) and sorts
      * by a sortable column by clicking its header ($state->sort; the app
      * sorts its rows and sortChanged() reports a click).
@@ -775,7 +777,7 @@ final class Context
             foreach ($columns as $j => $col) {
                 $w = $state->columnWidths[$col->id()] ?? $col->width;
                 $box = $this->key('c' . $col->id())->row(0, 0, $w > 0 ? 0 : 1)->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->justify($col->align);
-                $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0);
+                $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0); // a shared column measures its least width and grows: its content does not push it (mygo's Shrink(1))
                   $fill($j);
                 $this->end();
                 $boxes[] = $box;
@@ -811,7 +813,7 @@ final class Context
         $this->end();
         $this->divider();
         $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
-            $row = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH);
+            $row = $this->row(0, 0)->align(Node::STRETCH)->min(0, $rowH); // as high as its tallest cell, at least the header
             if ($state->selected === null && $this->hovered($row)) { $row->color = $t->surfaceHover; } // chosen rows show the pointer already
               $cells(fn(int $j) => $cell($i, $j));
             $this->end();
@@ -910,9 +912,10 @@ final class Context
         $t = $this->theme;
         $index = max(0, min($index, count($options) - 1));
         $n = $this->row(1, 0, 0, $t->border)->round($t->radius); // the track: a border around a surface
-          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH);
+          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH)->focusGroup(Node::HORIZONTAL, selects: true); // a radio group: the arrows choose
           foreach ($options as $i => $label) {
               $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->round(max($t->radius - $t->space(0.5), 0))->focusable()->center();
+              $seg->on = $i === $index; // Tab enters the group at the one chosen
               if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
                 $this->text($label, $t->fontSize, $t->text);
               $this->end();
@@ -935,7 +938,7 @@ final class Context
     public function tabs(array $labels, int &$index): Node
     {
         $t = $this->theme;
-        $n = $this->row(0, $t->space(1));
+        $n = $this->row(0, $t->space(1))->focusGroup(Node::HORIZONTAL, selects: true); // a tab list: one stop of Tab, the arrows choose
         foreach ($labels as $i => $label) {
             $on = $i === $index;
             $tab = $this->column(0, 0)->padding($t->space(2), $t->space(3))->round($t->radius)->focusable()
@@ -945,6 +948,7 @@ final class Context
                         $list->rect($tab->x + $in, $tab->y + $tab->h - $h, $tab->w - 2 * $in, $h, $t->accent, 1.0, $h / 2);
                     }
                 });
+            $tab->on = $on;
             $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted, $on ? Font::BOLD : 0);
             $this->end();
             if ($this->clicked($tab) && !$on) {

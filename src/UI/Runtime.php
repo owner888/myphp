@@ -58,6 +58,8 @@ final class Runtime
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
     private array $order = [];
     private int $barrier = 0, $counter = 0;
+    /** Focus groups: each focusable's group id, the groups' orientation, selects flag and member on, and the member each group focused last. */
+    private array $memberOf = [], $groups = [], $groupLast = [];
     /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state. */
     private array $locals = [];
     /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
@@ -214,6 +216,7 @@ final class Runtime
         $this->cursor = 'arrow';
         $this->animating = false;
         $this->focusables = [];
+        $this->memberOf = []; $this->groups = [];
         $this->fields = [];
         $this->lists = [];
         $this->needsFrame = false;
@@ -343,15 +346,23 @@ final class Runtime
         return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
-    private function record(Node $n): void
+    private function record(Node $n, ?Node $parent = null, int $group = 0): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         $this->order[$n->id] = ++$this->counter;
         if ($n->blocks) {
             $this->barrier = $this->counter;
         }
+        if ($n->focusGroup !== 0 && $group === 0) { // groups inside a group are part of it
+            $group = $n->id;
+            $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null];
+        }
         if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) {
             $this->focusables[] = $n->id;
+            if ($group !== 0) {
+                $this->memberOf[$n->id] = $group;
+                if ($n->on && $this->groups[$group]['on'] === null) { $this->groups[$group]['on'] = $n->id; }
+            }
             if ($n->focusable && $n->id === $this->focus) {
                 $n->focused = true; // buttons and fields set this while building
             }
@@ -375,8 +386,8 @@ final class Runtime
         if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
             $this->animating = true; // an indeterminate bar or a spinner moves every frame
         }
-        if ($n->wrapWidth !== null && abs($n->w - $n->wrapWidth) > 0.5) {
-            $this->needsFrame = true; // wrapped at last frame's width; this frame's differs
+        if ($n->wrapWidth !== null && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5) {
+            $this->needsFrame = true; // wrapped at the room its container had last frame; this frame's differs
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
@@ -398,7 +409,7 @@ final class Runtime
             }
         }
         foreach ($n->kids as $k) {
-            $this->record($k);
+            $this->record($k, $n, $group);
         }
     }
 
@@ -550,6 +561,9 @@ final class Runtime
                 case 'moveToEndOfDocument:': $this->jumps[$this->focus] = 1; return true;
             }
         }
+        if ($this->focus !== null && $this->groupKey($selector)) {
+            return true;
+        }
         switch ($selector) {
             case 'insertTab:': $this->moveFocus(1); return true;
             case 'insertBacktab:': $this->moveFocus(-1); return true;
@@ -574,13 +588,59 @@ final class Runtime
         if ($reachable === []) {
             return;
         }
-        $i = $this->focus === null ? -1 : (int)array_search($this->focus, $reachable, true);
-        $n = count($reachable);
-        $this->focus = $reachable[(($i + $dir) % $n + $n) % $n];
-        $this->focusVisible = true;
-        if (isset($this->fields[$this->focus])) {
-            $this->fields[$this->focus][0]->selectAll();
+        // The stops of Tab: a focusable on its own, or a focus group as one at its first member's place.
+        $stops = [];
+        foreach ($reachable as $id) {
+            $g = $this->memberOf[$id] ?? 0;
+            if ($g === 0) { $stops[] = $id; } elseif (!in_array($g, $stops, true)) { $stops[] = $g; }
         }
+        $at = $this->focus === null ? 0 : ($this->memberOf[$this->focus] ?? $this->focus);
+        $i = (int)array_search($at, $stops, true);
+        if ($this->focus === null) { $i = -1; }
+        $n = count($stops);
+        $to = $stops[(($i + $dir) % $n + $n) % $n];
+        if (isset($this->groups[$to])) { // into a group: the member that had the focus last, else the one on, else the first
+            $last = $this->groupLast[$to] ?? null;
+            $to = $last !== null && ($this->memberOf[$last] ?? 0) === $to ? $last : ($this->groups[$to]['on'] ?? $this->firstMember($to, $reachable));
+        }
+        $this->focusTo($to);
+    }
+
+    private function firstMember(int $group, array $reachable): int
+    {
+        foreach ($reachable as $id) { if (($this->memberOf[$id] ?? 0) === $group) { return $id; } }
+        return $group;
+    }
+
+    /** Gives the keyboard focus to $id, visibly, remembering it for its group. */
+    private function focusTo(int $id): void
+    {
+        $this->focus = $id;
+        $this->focusVisible = true;
+        if (isset($this->memberOf[$id])) { $this->groupLast[$this->memberOf[$id]] = $id; }
+        if (isset($this->fields[$id])) {
+            $this->fields[$id][0]->selectAll();
+        }
+    }
+
+    /** The arrows, Home and End inside a focus group: among its members, round; with selects, the move clicks the member. */
+    private function groupKey(string $selector): bool
+    {
+        $g = $this->memberOf[$this->focus] ?? 0;
+        if ($g === 0) { return false; }
+        $o = $this->groups[$g]['orient'];
+        $dir = match ($selector) {
+            'moveLeft:' => $o & Node::HORIZONTAL ? -1 : 0, 'moveRight:' => $o & Node::HORIZONTAL ? 1 : 0,
+            'moveUp:' => $o & Node::VERTICAL ? -1 : 0, 'moveDown:' => $o & Node::VERTICAL ? 1 : 0,
+            'moveToBeginningOfDocument:' => -INF, 'moveToEndOfDocument:' => INF, default => 0,
+        };
+        if ($dir === 0) { return false; }
+        $members = array_values(array_filter($this->focusables, fn($id) => ($this->memberOf[$id] ?? 0) === $g && $this->reachable($id)));
+        $n = count($members); $i = (int)array_search($this->focus, $members, true);
+        $to = $members[is_infinite($dir) ? ($dir < 0 ? 0 : $n - 1) : (($i + $dir) % $n + $n) % $n];
+        $this->focusTo($to);
+        if ($this->groups[$g]['selects']) { $this->activated = $to; }
+        return true;
     }
 
     /** Whether a mouse-up this frame landed on the node this id had last frame, or Enter/Space pressed it while focused. */

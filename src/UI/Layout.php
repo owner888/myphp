@@ -36,6 +36,7 @@ final class Layout
         if ($n->dir === Node::ROW) { $n->mw = $main; $n->mh = $cross; } else { $n->mw = $cross; $n->mh = $main; }
         if ($n->fw > 0) { $n->mw = $n->fw; } // a container given a size (Node::size) takes it over its content's
         if ($n->fh > 0) { $n->mh = $n->fh; }
+        $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
     }
 
     public static function arrange(Node $n, float $x, float $y, float $w, float $h): void

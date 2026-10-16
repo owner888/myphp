@@ -101,7 +101,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
 ./run.sh desktop          # menus and dialogs
 ./run.sh form             # text fields, input methods
-./run.sh logview /var/log/system.log   # a log viewer: follows the file, filters, highlights
+./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
