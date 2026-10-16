@@ -83,8 +83,8 @@ final class Painter
             $list->glass($x, $y, $w, $h, $r, $g->style, $g->tint ?? 0, $g->tint === null ? 0.0 : $g->tintAlpha * 0.88, $sigma);
         } elseif ($n->color !== null) {
             $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => $n->radius };
-            if ($n->bordered) { // a bordered face: a plain button, a select
-                $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
+            if ($n->bordered) { // a bordered face: a plain button, a select, a field's box
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
                 $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
             } else {
                 if ($n->shadow !== null) {
@@ -196,6 +196,12 @@ final class Painter
         $list->pushClip($x, $y, $w, $h);
         $text->paint($list, $tip, $size, $x + $px, $y + $py, $t->background);
         $list->popClip();
+    }
+
+    /** mygo's inputBorder: the accent while focused, the border a quarter toward the text under the pointer, the border otherwise. */
+    public static function inputBorder(Node $n, Theme $t, ?Runtime $rt): int
+    {
+        return $n->focused ? $t->accent : (($rt?->hovered($n->id) ?? false) ? Theme::mix($t->border, $t->text, 0.25) : $t->border);
     }
 
     /** mygo's chevron: a down-pointing angle in a $d-square box at (x, y), stroked 1.5. */
@@ -362,8 +368,10 @@ final class Painter
     {
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET + $n->insetL;
-        $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
-        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+        if ($n->bordered) { // its own box; a combobox's input sits in a field box drawn around it
+            $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
+            $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+        }
         $display = $s->display();
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
         $ty = $n->y + ($n->h - $lh) / 2;
@@ -402,7 +410,7 @@ final class Painter
     {
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET; $insetY = Runtime::FIELD_INSET_Y;
-        $list->rect($n->x, $n->y, $n->w, $n->h, $n->focused ? $t->accent : $t->border, 1.0, $t->radius);
+        $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
         $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
         $display = $s->display();
         $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $insetY;

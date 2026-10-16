@@ -41,8 +41,9 @@ final class Node
     public bool $single = false;
     /** For a button or select: a chevron (mygo's, a Space(2.5) box stroked 1.5) after the label, Space(1.5) apart. */
     public bool $chevron = false;
-    /** A one-point border in the theme's border color around this colored node (a plain button, a select). */
+    /** A one-point border around this colored node (a plain button, a select, a field), in $borderColor or the theme's border color. */
     public bool $bordered = false;
+    public ?int $borderColor = null;
     /** A soft shadow under this container: [dy, blur, alpha], or null. */
     public ?array $shadow = null;
     /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
@@ -64,6 +65,8 @@ final class Node
     /** For rich text: its lines, wrapped at the width Context::rich was given, or at last frame's width ($wrapWidth). */
     public ?RichLayout $rich = null;
     public ?float $wrapWidth = null;
+    /** A row that wraps its children onto more lines where they overflow $wrapWidth (mygo's Wrap), the width it had last frame. */
+    public bool $wraps = false;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
     public bool $focusable = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
@@ -177,10 +180,17 @@ final class Node
         return $this;
     }
 
-    /** Draws a one-point border in the theme's border color around this colored container. */
-    public function border(): static
+    /** Wraps this row's children onto more lines where they overflow $width, the width it had last frame (Runtime::rectOf); a frame follows when its width differs. */
+    public function wrap(float $width): static
     {
-        $this->bordered = true;
+        $this->wraps = true; $this->wrapWidth = $width;
+        return $this;
+    }
+
+    /** Draws a one-point border around this colored container, in $color or the theme's border color. */
+    public function border(?int $color = null): static
+    {
+        $this->bordered = true; $this->borderColor = $color;
         return $this;
     }
 

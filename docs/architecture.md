@@ -318,6 +318,50 @@ shared with the slider), a press on the track or a knob dragging the
 knob nearest, the arrows moving the one focused by the step (a
 hundredth of the range when 0).
 
+`combobox(&$selected, $options)`, `autocomplete($state, $suggestions)`
+and `tokenField(&$tokens, $suggestions)` share mygo's `comboboxBase`
+(`Context::comboPopup`): a per-field object in `Runtime::local` holds
+open, typed, highlight and the values shown, and the options are a
+column built at the root under the field's last-frame rect, at most
+Space(70) high and scrolling, items padded Space(1.5) by Space(2.5), the
+highlight in the accent; typing opens them filtered (`matching`: prefix
+matches first, then containing), Down and Up open or move, Enter with a
+highlight chooses (`TextState::$submitted` is left for the caller
+otherwise), Escape closes, the focus leaving closes. The combobox and
+token field are mygo's `field`: a bordered surface row padded Space(1.5)
+by Space(2.5), gap Space(1.5), holding an unframed `Node::INPUT` (no
+`bordered`, insets of −FIELD_INSET, the text's own height) and, for the
+combobox, a Space(2.5) chevron that toggles the options; the row's
+`Node::$borderColor` is mygo's `inputBorder` (accent focused, border
+mixed a quarter toward the text under the pointer). A click in the text
+opening the options selects the choice, so the next key replaces it; a
+chosen option becomes the text, selected; text matching no option goes
+back to the choice on blur. The autocomplete is a framed `input` whose
+suggestions show only while typed and non-empty, less one equal to the
+text. The token field's chips are rows padded Space(0.25), Space(2) at
+the start and Space(1) at the end (zero-width columns and the gap make
+the asymmetry), surfacePressed, radius, holding the text and a
+Space(3.5) box with a 1.25-point cross taking the token out; the field
+wraps (`Node::wrap($width)`, below), Enter or a comma adds what was
+typed, Backspace in an empty input takes out the last token
+(`TextState::$leaveEmptyBackspace` leaves the key to `shortcut`).
+
+`Node::wrap($width)` is mygo's Wrap for a row: `Layout::lines` breaks
+the children where one would overflow `$width`, the width the row had
+last frame (`Runtime::rectOf`); `measure` sizes the row by its lines and
+`arrange` lays each line as a row of its own (growers share the line's
+slack, the row's alignment applies per line), the lines stacked by the
+gap. A width other than the one wrapped at asks for a frame, as rich
+text does.
+
+Overlays: a node placed with `at()` directly under the root (a popover,
+a menu, the options above) is recorded in `Runtime::$overlays`, and
+`Runtime::under` — the one hit test of `clicked`, `pressed`,
+`doubleClicked`, `rightClicked`, `hovered`, `dragged`, the press
+focusing and the wheel — says no for a point inside an overlay to any
+node built before it, so a click on an option does not reach the field
+under the popup.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above

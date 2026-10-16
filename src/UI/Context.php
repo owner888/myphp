@@ -751,6 +751,206 @@ final class Context
     }
 
     /**
+     * The popup of a combobox or autocomplete, mygo's comboboxBase and
+     * styleOptions: $options below $anchor while open, at most Space(70)
+     * high and scrolling, each item padded Space(1.5) by Space(2.5), the
+     * one highlighted in the accent; Up and Down move the highlight, Enter
+     * or a click chooses, Escape closes, as does the input losing the
+     * focus. Returns the option chosen this frame, or null. $local keeps
+     * open, typed, highlight and values across frames.
+     * @param list<string> $options
+     */
+    private function comboPopup(Node $in, Node $anchor, TextState $state, object $local, array $options, bool $firstTyped, bool $typedOnly, bool $clicked = false): ?string
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        if ($rt === null) { return null; }
+        $chosen = null;
+        $focused = $rt->focus === $in->id;
+        $typed = $local->seen !== null && $local->seen !== $state->text;
+        $local->seen = $state->text;
+        $open = function (bool $o, bool $typed, int $highlight) use ($local) { $local->open = $o; $local->typed = $typed; $local->highlight = $highlight; };
+        $n = count($local->values);
+        if (!$focused) { if ($local->open) { $open(false, false, -1); } }
+        elseif ($typed) { $open(true, true, $firstTyped ? 0 : -1); }
+        elseif ($clicked && !$local->open) { $open(true, false, -1); }
+        if ($focused) {
+            if ($this->shortcut(Key::DOWN)) { if (!$local->open) { $open(true, $local->typed, 0); } elseif ($n > 0) { $local->highlight = min($local->highlight + 1, $n - 1); } }
+            if ($this->shortcut(Key::UP)) { if (!$local->open) { $open(true, $local->typed, -2); } elseif ($n > 0) { $local->highlight = max($local->highlight - 1, 0); } } // -2: the last, once known
+            if ($local->open && $this->shortcut(Key::ESCAPE)) { $open(false, false, -1); }
+            if ($state->submitted && $local->open && $local->highlight >= 0 && $local->highlight < $n) { // Enter chooses the highlight; the caller sees submitted otherwise
+                $chosen = $local->values[$local->highlight]; $state->submitted = false;
+            }
+        }
+        $shown = $local->open && (!$typedOnly || $local->typed) ? $options : [];
+        $local->values = $shown;
+        if ($local->highlight === -2 || $local->highlight >= count($shown)) { $local->highlight = count($shown) - 1; }
+        if ($shown !== [] && $local->open) {
+            $r = $rt->rectOf($anchor->id) ?? [0, 0, 0, 0];
+            $saved = $this->stack; $this->stack = [$this->root];
+            $panel = $this->key('combo:' . $in->id)->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)
+                ->at($r[0], $r[1] + $r[3] + $t->space(1))->size($r[2], 0)->scroll($local->scroll);
+            $panel->size($r[2], min($t->space(70), count($shown) * ($t->space(3) + $this->metrics->measure('X', $t->fontSize)[1]) + 2 * $t->space(1)));
+              foreach ($shown as $i => $opt) {
+                  $hl = $i === $local->highlight;
+                  $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius);
+                    $this->text($opt, $t->fontSize, $hl ? $t->accentText : $t->text)->single();
+                  $this->end();
+                  if ($this->hovered($item) && $rt->pressedAnywhere() === false) { $local->highlight = $i; }
+                  if ($this->clicked($item)) { $chosen = $opt; }
+              }
+            $this->end();
+            $this->stack = $saved;
+        }
+        if ($chosen !== null) { $open(false, false, -1); }
+        return $chosen;
+    }
+
+    /**
+     * A combobox choosing $selected among $options, as mygo's Combobox: a
+     * field showing the choice, whose text filters the options below it
+     * as the user types, those starting with it first, while a click or
+     * Down shows them all; Up and Down move among them and Enter chooses,
+     * as does a click; Escape closes them, and the text goes back to the
+     * choice when the field loses the focus. changed() reports a new
+     * choice.
+     * @param list<string> $options
+     */
+    public function combobox(string &$selected, array $options, float $width = 0): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam'); // mygo's field: as wide as its content in a row, stretched in a column
+        if ($width > 0) { $f->size($width, 0); }
+        $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
+        $local = $rt?->local($f->id, $make) ?? $make();
+        $state = $local->text;
+          [, $h] = $this->metrics->measure('X', $t->fontSize);
+          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, in the field's box
+          $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
+          $in->focused = $rt?->focused($in->id) ?? false;
+          $arrow = $this->box($t->space(2.5), $t->space(2.5), 0); $arrow->color = null;
+          $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::chevron($list, $a->x, $a->y, $a->w, $t->textMuted));
+        $this->end();
+        $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
+        $click = false; // the input's own click, which opens the options while they are closed
+        $focus = false;
+        if ($this->clicked($arrow)) { // the chevron toggles them, the choice selected as a click in the text opening them does
+            $local->open = !$local->open; $local->typed = false; $local->highlight = -1; $focus = true;
+            if ($local->open) { $state->selectAll(); }
+        } elseif ($this->clicked($in)) {
+            $click = true; $focus = true;
+            if (!$local->open) { $state->selectAll(); } // a click opening them selects the choice, for the next key to replace and filter; clicks while they show place the caret
+        } elseif ($this->clicked($f)) { $focus = true; } // the box's padding: the input takes the focus
+        if ($focus && $rt !== null) { $rt->focus = $in->id; $in->focused = true; }
+        $shown = $local->typed ? self::matching($options, $state->text) : $options;
+        $chosen = $this->comboPopup($in, $f, $state, $local, $shown, true, false, $click);
+        $state->submitted = false; // Enter on no highlight is nothing to a combobox
+        if ($chosen !== null) {
+            if ($selected !== $chosen) { $selected = $chosen; $f->changed = true; }
+            $state->text = $chosen; $state->selectAll(); $local->seen = $chosen;
+        } elseif (!$local->open && $rt?->focus !== $in->id && $state->text !== $selected) {
+            $state->text = $selected; $state->setCursor(strlen($selected)); $local->seen = $selected; // what was typed matched no choice
+        }
+        return $f;
+    }
+
+    /**
+     * A text field editing $value which suggests below it those of
+     * $suggestions containing what was typed, those starting with it
+     * first, as mygo's Autocomplete: Up and Down move among them and Enter
+     * takes one, as does a click, while Enter on none is $state->submitted.
+     * changed() reports a change, typed or taken.
+     * @param list<string> $suggestions
+     */
+    public function autocomplete(TextState $state, array $suggestions, string $placeholder = '', float $width = 200): Node
+    {
+        $rt = $this->runtime;
+        $in = $this->input($state, $placeholder, $width);
+        $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'was' => $state->text];
+        $local = $rt?->local($in->id, $make) ?? $make();
+        $shown = [];
+        if (($q = trim($state->text)) !== '') {
+            foreach (self::matching($suggestions, $q) as $sug) { if (strcasecmp($sug, $state->text) !== 0) { $shown[] = $sug; } }
+        }
+        $chosen = $this->comboPopup($in, $in, $state, $local, $shown, false, true);
+        if ($chosen !== null) { $state->text = $chosen; $state->setCursor(strlen($chosen)); $local->seen = $chosen; }
+        $in->changed = $state->text !== $local->was;
+        $local->was = $state->text;
+        return $in;
+    }
+
+    /**
+     * A field of tokens, as of tags or a mail's recipients, as mygo's
+     * TokenField: $tokens show as chips, each with a button taking it out,
+     * before an input where Enter or a comma adds what was typed and
+     * Backspace while empty takes out the last; the $suggestions containing
+     * what was typed show below, those not tokens yet, Up and Down moving
+     * among them and Enter or a click adding one. The field wraps its
+     * chips onto more lines. changed() reports a change.
+     * @param list<string> $tokens
+     * @param list<string> $suggestions
+     */
+    public function tokenField(array &$tokens, array $suggestions = [], float $width = 0): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam'); // mygo's field: as wide as its content in a row, stretched in a column
+        if ($width > 0) { $f->size($width, 0); }
+        $f->wrap($rt?->rectOf($f->id)[2] ?? 0.0);
+        $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
+        $local = $rt?->local($f->id, $make) ?? $make();
+        $state = $local->text; $state->leaveEmptyBackspace = true;
+        $changed = false;
+        $add = function (string $s) use (&$tokens, &$changed) { $s = trim($s); if ($s !== '' && !in_array($s, $tokens, true)) { $tokens[] = $s; $changed = true; } };
+          foreach ($tokens as $i => $tok) {
+              $chip = $this->key($tok)->row(0, $t->space(1), 0, $t->surfacePressed)->padding($t->space(0.25), 0)->round($t->radius)->align(Node::CENTER)->cursor('arrow');
+                $this->column(0, 0)->size($t->space(1), 0); $this->end(); // with the gap: PaddingStart(Space(2))
+                $this->text($tok, $t->fontSize)->single();
+                $x = $this->box($t->space(3.5), $t->space(3.5), 0)->round($t->space(1)); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
+                $x->draw(function (DisplayList $list, Node $b, Theme $t) { $k = $b->w * 0.3; $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); $list->line($b->x + $b->w - $k, $b->y + $k, $b->x + $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); });
+                $this->column(0, 0); $this->end(); // with the gap: PaddingEnd(Space(1))
+              $this->end();
+              if ($this->clicked($x)) { array_splice($tokens, $i, 1); $changed = true; }
+          }
+          [, $h] = $this->metrics->measure('X', $t->fontSize);
+          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips, keeping its identity whatever they are
+          $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
+          $in->focused = $rt?->focused($in->id) ?? false;
+        $this->end();
+        $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
+        if ($this->clicked($f) && $rt !== null) { $rt->focus = $in->id; $in->focused = true; }
+        if ($in->focused && $tokens !== [] && $state->text === '' && $this->shortcut(Key::DELETE)) { array_pop($tokens); $changed = true; }
+        $shown = [];
+        if (($q = trim($state->text)) !== '') {
+            foreach (self::matching($suggestions, $q) as $sug) { if (!in_array($sug, $tokens, true)) { $shown[] = $sug; } }
+        }
+        $chosen = $this->comboPopup($in, $f, $state, $local, $shown, false, true);
+        if (str_contains($state->text, ',')) {
+            $parts = explode(',', $state->text);
+            foreach (array_slice($parts, 0, -1) as $part) { $add($part); }
+            $state->text = end($parts); $state->setCursor(strlen($state->text)); $local->seen = $state->text;
+        }
+        if ($chosen !== null) { $add($chosen); $state->text = ''; $state->setCursor(0); $local->seen = ''; }
+        elseif ($state->submitted) { $state->submitted = false; $add($state->text); $state->text = ''; $state->setCursor(0); $local->seen = ''; }
+        if ($changed) { $f->changed = true; }
+        return $f;
+    }
+
+    /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */
+    public static function matching(array $options, string $query): array
+    {
+        $q = strtolower(trim($query));
+        if ($q === '') { return $options; }
+        $starts = []; $contains = [];
+        foreach ($options as $o) {
+            $l = strtolower($o);
+            if (str_starts_with($l, $q)) { $starts[] = $o; } elseif (str_contains($l, $q)) { $contains[] = $o; }
+        }
+        return array_merge($starts, $contains);
+    }
+
+    /**
      * A panel built by $fn below $anchor (a node built this frame) while
      * $open, as mygo's Popover: a press outside the panel and the anchor,
      * or Escape, sets $open false, which changed() reports; the press goes
@@ -1267,6 +1467,7 @@ final class Context
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
         $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills the row's remaining width
+        $n->bordered = true;
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;

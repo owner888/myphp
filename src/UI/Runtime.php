@@ -58,6 +58,8 @@ final class Runtime
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
     private array $order = [];
     private int $barrier = 0, $counter = 0;
+    /** The overlays of the frame (a popover, a menu, a combobox's options: nodes placed at the root with Node::at), as [order, x, y, w, h]: a point in one reaches no node built before it. */
+    private array $overlays = [];
     /** Focus groups: each focusable's group id, the groups' orientation, selects flag and member on, and the member each group focused last. */
     private array $memberOf = [], $groups = [], $groupLast = [];
     /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state. */
@@ -207,7 +209,7 @@ final class Runtime
         $this->activated = null; // taken by clicked() during the build, or dropped
         $this->rects = [];
         $this->order = [];
-        $this->barrier = 0; $this->counter = 0;
+        $this->barrier = 0; $this->counter = 0; $this->overlays = [];
         $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
@@ -350,6 +352,9 @@ final class Runtime
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         $this->order[$n->id] = ++$this->counter;
+        if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1) { // placed at the root: over what was built before it
+            $this->overlays[] = [$this->counter, $n->x, $n->y, $n->w, $n->h];
+        }
         if ($n->blocks) {
             $this->barrier = $this->counter;
         }
@@ -386,8 +391,8 @@ final class Runtime
         if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
             $this->animating = true; // an indeterminate bar or a spinner moves every frame
         }
-        if ($n->wrapWidth !== null && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5) {
-            $this->needsFrame = true; // wrapped at the room its container had last frame; this frame's differs
+        if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapWidth !== null && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
+            $this->needsFrame = true; // wrapped at the width it, or its container, had last frame; this frame's differs
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
@@ -424,7 +429,7 @@ final class Runtime
         $best = null; $bestArea = INF;
         foreach ($this->focusables as $id) {
             $r = $this->rects[$id];
-            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) {
                 $best = $id; $bestArea = $r[2] * $r[3];
             }
         }
@@ -651,12 +656,8 @@ final class Runtime
             $this->consumed = true;
             return true;
         }
-        $r = $this->rects[$id] ?? null;
-        if ($r === null || !$this->reachable($id)) {
-            return false;
-        }
         foreach ($this->clicks as $i => [$x, $y]) {
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+            if ($this->under($id, $x, $y)) {
                 unset($this->clicks[$i]);
                 $this->consumed = true;
                 return true;
@@ -668,12 +669,8 @@ final class Runtime
     /** Whether the mouse went down this frame on the node this id had last frame (mygo's Pressed, at the press). */
     public function pressed(int $id): bool
     {
-        $r = $this->rects[$id] ?? null;
-        if ($r === null || !$this->reachable($id)) {
-            return false;
-        }
         foreach ($this->presses as [$x, $y]) {
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+            if ($this->under($id, $x, $y)) {
                 return true;
             }
         }
@@ -689,12 +686,8 @@ final class Runtime
     /** Whether a second press of a double click this frame landed on the node this id had last frame. */
     public function doubleClicked(int $id): bool
     {
-        $r = $this->rects[$id] ?? null;
-        if ($r === null || !$this->reachable($id)) {
-            return false;
-        }
         foreach ($this->doubleClicks as $i => [$x, $y]) {
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+            if ($this->under($id, $x, $y)) {
                 unset($this->doubleClicks[$i]);
                 $this->consumed = true;
                 return true;
@@ -706,12 +699,8 @@ final class Runtime
     /** Whether a right mouse-up this frame landed on the node this id had last frame. */
     public function rightClicked(int $id): bool
     {
-        $r = $this->rects[$id] ?? null;
-        if ($r === null) {
-            return false;
-        }
         foreach ($this->rightClicks as $i => [$x, $y]) {
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3]) {
+            if ($this->under($id, $x, $y)) {
                 unset($this->rightClicks[$i]);
                 $this->consumed = true;
                 return true;
@@ -807,9 +796,8 @@ final class Runtime
             if (isset($this->hold[7])) {
                 return null; // another node's drag
             }
-            $r = $this->rects[$id] ?? null;
             [$x, $y] = $this->hold;
-            if ($r === null || !$this->reachable($id) || $x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+            if (!$this->under($id, $x, $y)) {
                 return null;
             }
             $this->hold[7] = $id; // the drag stays this node's as it moves out from under the press
@@ -847,6 +835,7 @@ final class Runtime
     {
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
         $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE] : [Key::ESCAPE, Key::UP, Key::DOWN]; // what a focused field leaves: a single line has no use for Up and Down
+        if ($field && $this->fields[$this->focus][0]->leaveEmptyBackspace && $this->fields[$this->focus][0]->text === '') { $free[] = Key::DELETE; }
         foreach ($this->keys as $i => $k) {
             if ($k[3] || $k[2] !== $mods) {
                 continue;
@@ -895,12 +884,25 @@ final class Runtime
         return ($this->order[$id] ?? 0) >= $this->barrier;
     }
 
-    public function hovered(int $id): bool
+    /** Whether (x, y) is on the node this id had last frame: in its rect, reachable, and not under an overlay built after it. */
+    private function under(int $id, float $x, float $y): bool
     {
         $r = $this->rects[$id] ?? null;
-        $x = $this->input->mouseX; $y = $this->input->mouseY;
-        return $r !== null && $this->input->mouseInside && $this->reachable($id)
-            && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3];
+        if ($r === null || !$this->reachable($id) || $x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+            return false;
+        }
+        $o = $this->order[$id];
+        foreach ($this->overlays as [$at, $ox, $oy, $ow, $oh]) {
+            if ($at > $o && $x >= $ox && $x < $ox + $ow && $y >= $oy && $y < $oy + $oh) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public function hovered(int $id): bool
+    {
+        return $this->input->mouseInside && $this->under($id, $this->input->mouseX, $this->input->mouseY);
     }
 
     /** Scrolls the innermost scrolling container under (x, y) by the wheel's dx and dy points, on the axes it scrolls. */
@@ -909,13 +911,13 @@ final class Runtime
         $best = null; $bestArea = INF; $axes = [false, true];
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
-            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) {
                 $best = $state; $bestArea = $r[2] * $r[3]; $axes = $this->scrollAxes[$id];
             }
         }
         foreach ($this->areas as $id => $state) { // a text area inside a scrolling container takes the wheel over it
             $r = $this->rects[$id];
-            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) {
                 $best = $state; $bestArea = $r[2] * $r[3];
             }
         }

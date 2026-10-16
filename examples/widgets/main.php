@@ -1,7 +1,7 @@
 <?php
 // The smaller widgets in one window: switch, segmented control, tabs with
-// their content, a collapsible section, a stepper, badges, a spinner,
-// dividers and spacers. Each writes into $s and reports with changed().
+// their content, a collapsible section, a stepper, a combobox, an
+// autocomplete, a token field, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
@@ -10,7 +10,10 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'last' => 'nothing yet'];
+const FRUITS = ['Apple', 'Banana', 'Cherry', 'Grape', 'Mango', 'Orange', 'Peach', 'Pear', 'Pineapple', 'Plum'];
+const CITIES = ['Beijing', 'Berlin', 'Boston', 'Chengdu', 'Chicago', 'Guangzhou', 'Hangzhou', 'London', 'Paris', 'Shanghai', 'Shenzhen', 'Tokyo'];
+const TAGS = ['php', 'ui', 'metal', 'ffi', 'layout', 'text', 'input', 'native'];
 
 function view(Context $c, array &$s): void
 {
@@ -43,6 +46,9 @@ function view(Context $c, array &$s): void
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
             $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();
             $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, 80, 95); $c->muted("{$s['count']}0 % used"); $c->end();
+            $c->row(0, 10)->align(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();
+            $c->row(0, 10)->align(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
+            $c->row(0, 10)->align(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($s['tags'], TAGS))) { $s['last'] = 'tags ' . implode(', ', $s['tags']); } $c->end();
             if ($c->collapsible('More options', $s['more'])) {
                 $c->column(12, 6);
                   $c->muted('Shown while the section is open; the header toggles it.');

@@ -29,6 +29,14 @@ final class Layout
         [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padX(), $n->padY()] : [$n->padY(), $n->padX()];
         $main += $n->gap * max(0, $cnt - 1) + 2 * $padMain;
         $cross += 2 * $padCross;
+        if ($n->wraps && $n->wrapWidth > 0) { // a wrapping row: as wide as its widest line, as high as its lines
+            $main = 0.0; $cross = 2 * $padCross;
+            foreach (self::lines($n, $n->wrapWidth - 2 * $padMain) as $i => $line) {
+                $lw = $n->gap * (count($line) - 1); $lh = 0.0;
+                foreach ($line as $k) { $lw += $k->mw; $lh = max($lh, $k->mh); }
+                $main = max($main, $lw + 2 * $padMain); $cross += $lh + ($i > 0 ? $n->gap : 0);
+            }
+        }
         if ($n->scroll !== null) { // a scrolling container takes the room it is given on the axes it scrolls
             if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) { $main = 2 * $padMain; }
             if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = 2 * $padCross; }
@@ -54,6 +62,15 @@ final class Layout
         $cnt = count($kids);
         if ($cnt === 0) return;
         $px = $n->padX(); $py = $n->padY();
+        if ($n->wraps) { // each line is arranged as a row of its own, the lines stacked
+            $cy = $y + $py;
+            foreach (self::lines($n, $w - 2 * $px) as $line) {
+                $lh = 0.0; foreach ($line as $k) { $lh = max($lh, $k->mh); }
+                self::arrangeRow($n, $line, $x + $px, $cy, $w - 2 * $px, $lh);
+                $cy += $lh + $n->gap;
+            }
+            return;
+        }
         $avail = ($n->dir === Node::ROW ? $w - 2 * $px : $h - 2 * $py) - $n->gap * ($cnt - 1);
         $used = 0.0; $grow = 0; $crossMax = 0.0;
         foreach ($kids as $k) { $used += $n->dir === Node::ROW ? $k->mw : $k->mh; $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
@@ -127,6 +144,36 @@ final class Layout
                 self::arrange($k, $cx + self::across($a, $cw, $kw), $cy, $kw, $kh);
                 $cy += $kh + $n->gap;
             }
+        }
+    }
+
+    /** The children of a wrapping row by line: a child overflowing $avail starts the next (mygo's flex wrap). */
+    private static function lines(Node $n, float $avail): array
+    {
+        $lines = []; $line = []; $used = 0.0;
+        foreach ($n->kids as $k) {
+            if ($k->absolute) { continue; }
+            if ($line !== [] && $used + $n->gap + $k->mw > $avail) { $lines[] = $line; $line = []; $used = 0.0; }
+            $used += ($line === [] ? 0 : $n->gap) + $k->mw; $line[] = $k;
+        }
+        if ($line !== []) { $lines[] = $line; }
+        return $lines;
+    }
+
+    /** Arranges one line of a wrapping row across ($x, $y, $w, $h): growing children share what is left, the rest sit as the row aligns them. */
+    private static function arrangeRow(Node $n, array $line, float $x, float $y, float $w, float $h): void
+    {
+        $used = 0.0; $grow = 0;
+        foreach ($line as $k) { $used += $k->mw; $grow += $k->grow; }
+        $extra = $grow > 0 ? max(0, $w - $n->gap * (count($line) - 1) - $used) / $grow : 0.0;
+        $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
+        $cx = $x;
+        foreach ($line as $k) {
+            $a = $k->self === Node::AUTO ? $align : $k->self;
+            if ($k->mh <= 0) { $a = Node::STRETCH; }
+            $kw = $k->mw + $extra * $k->grow; $kh = $a === Node::STRETCH ? $h : $k->mh;
+            self::arrange($k, $cx, $y + self::across($a, $h, $kh), $kw, $kh);
+            $cx += $kw + $n->gap;
         }
     }
 
