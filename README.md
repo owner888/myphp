@@ -62,6 +62,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Tray icon, global shortcuts, notifications (from a built .app), window events, file drops, remembered window frames | works (`examples/desktop`) |
 | Child processes without blocking the UI (`Process`): curl, scripts, tools | works (`examples/http`) |
 | SVG: icons as masks in any color (turned by `rotate`), pictures in their own colors — paths, shapes, transforms, gradients, strokes and dashes, opacity, clip paths, masks, style sheets — drawn by a renderer in PHP, which also rasterizes path masks (no CoreGraphics) | works (`examples/widgets`, `files`) |
+| Languages and regional formats: the app's language from the user's (or `App::setLocale`, kept in its defaults), MyPHP's own strings and menus in it (en, zh-Hans, zh-Hant), dates, calendars and times in the region's formats and the language's names (ICU through `ext-intl`) | works (`examples/widgets`) |
 | A file manager: sidebar of places, breadcrumbs, the folder as icons or a sortable table sharing one selection, find bar, image preview, Trash through Finder | works (`examples/files`) |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
@@ -81,7 +82,7 @@ cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerate
 
 ### Requirements
 
-- PHP ≥ 8.3 with `ext-ffi` (Homebrew's `php` has it), OPcache JIT recommended
+- PHP ≥ 8.3 with `ext-ffi` and `ext-intl` (Homebrew's `php` has both), OPcache JIT recommended
 - macOS on Apple Silicon for now
 
 A window with a web page, whose frontend calls PHP:
@@ -190,6 +191,7 @@ App::run();
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
 | 不阻塞界面的子进程（`Process`）：curl、脚本、命令行工具 | 可用（`examples/http`） |
 | SVG：图标按蒙版任意着色（`rotate` 可旋转），图片按自身颜色绘制——路径、基本图形、变换、渐变、描边与虚线、不透明度、裁剪、遮罩、样式表——由纯 PHP 渲染器绘制，路径蒙版也由它栅格化（不再用 CoreGraphics） | 可用（`examples/widgets`、`files`） |
+| 语言与地区格式：应用语言随用户设置（或 `App::setLocale`，记在应用 defaults 里），MyPHP 自带文案和菜单跟着切换（en、zh-Hans、zh-Hant），日期、日历、时间按地区格式与语言名称显示（通过 `ext-intl` 用 ICU） | 可用（`examples/widgets`） |
 | 文件管理器：常用位置侧栏、路径面包屑、目录以图标或可排序表格显示且共用一个选择、查找条、图片预览、经 Finder 移到废纸篓 | 可用（`examples/files`） |
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
@@ -207,7 +209,7 @@ cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重�
 
 ### 环境要求
 
-- PHP ≥ 8.3，带 `ext-ffi`（Homebrew 的 `php` 自带），建议开 OPcache JIT
+- PHP ≥ 8.3，带 `ext-ffi` 和 `ext-intl`（Homebrew 的 `php` 都自带），建议开 OPcache JIT
 - 目前仅支持 Apple Silicon 的 macOS
 
 一个网页窗口，前端直接调用 PHP：

@@ -108,6 +108,12 @@ function view(Context $c, array &$s): void
             $crumbs = ['Macintosh HD', 'Users', 'developer', 'Documents', 'Widgets']; // a path: the items but the last are links
             if ($c->changed($c->breadcrumbs(array_slice($crumbs, 0, $s['crumb'] + 1), $s['crumb']))) { $s['last'] = 'went to ' . $crumbs[$s['crumb']]; }
             $c->row(0, 10)->align(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($s['color'], $s['alpha']))) { $s['last'] = 'color ' . Context::hexOf($s['color'], $s['alpha']); } $c->muted(Context::hexOf($s['color'], $s['alpha'])); $c->end();
+            // The language the app shows: MyPHP's own strings (the search field, the find bar, the menus) and the date and time formats follow it.
+            $c->row(0, 10)->align(Node::CENTER); $c->text('Language');
+              $langs = ['en' => 'English', 'zh-Hans' => '简体中文', 'zh-Hant' => '繁體中文']; $lang = array_search(App::locale(), array_keys($langs), true) ?: 0;
+              if ($c->changed($c->segmented(array_values($langs), $lang))) { App::setLocale(array_keys($langs)[$lang]); $s['last'] = 'language ' . App::locale(); }
+              $c->muted('region ' . (App::region()->locale ?: '—') . ', ' . App::region()->hourCycle . 'h');
+            $c->end();
             $c->row(0, 10); $c->text('Rating'); if ($c->changed($c->rating($s['stars']))) { $s['last'] = "stars {$s['stars']}"; } $c->end();
             $c->row(0, 10); $c->text('Range'); if ($c->changed($c->rangeSlider($s['low'], $s['high'], 0, 100, 5, 240))) { $s['last'] = sprintf('range %d–%d', $s['low'], $s['high']); } $c->muted(sprintf('%d–%d', $s['low'], $s['high'])); $c->end();
             // An accordion: sections in a bordered box, Up and Down between their headers.
@@ -155,6 +161,7 @@ function view(Context $c, array &$s): void
 }
 
 App::setName('Widgets');
+App::setLanguages('en', 'zh-Hans', 'zh-Hant'); // the languages the example is written in: MyPHP's own strings are in them; the example's own stay English
 App::whenReady(function () use (&$s) {
     new Window(new WindowOptions(title: 'MyPHP native — widgets', width: 560, height: 420,
         content: Content::view(function (Context $c) use (&$s) { view($c, $s); })));

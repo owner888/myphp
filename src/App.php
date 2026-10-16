@@ -72,8 +72,11 @@ final class App
             'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 WindowState::save();
             }],
+            'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
+                Locales::start(); // the language the app shows and the user's formats, before the menus and windows show them
+                ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('localeChanged:'), ObjC::str('NSCurrentLocaleDidChangeNotification'), null);
                 Notification::attachDelegate(); // before the click that launched the app is delivered
                 self::installMenu(self::$menu ?? Menu::default());
                 ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
@@ -124,6 +127,34 @@ final class App
         foreach (Window::all() as $w) {
             $w->themeChanged();
         }
+    }
+
+    /** The language the app shows (Locales::locale), a tag of the languages it is written in. */
+    public static function locale(): string { return Locales::locale(); }
+
+    /** Makes the app show the language of $tag, or '' to follow the user's languages again (Locales::setLocale). */
+    public static function setLocale(string $tag): void { Locales::setLocale($tag); }
+
+    /** The languages the app is written in, its own first (Locales::setLanguages). */
+    public static function setLanguages(string ...$tags): void { Locales::setLanguages(...$tags); }
+
+    /** @return list<string> */
+    public static function languages(): array { return Locales::languages(); }
+
+    /** The languages the user reads, most preferred first (Locales::preferredLanguages). @return list<string> */
+    public static function preferredLanguages(): array { return Locales::preferredLanguages(); }
+
+    public static function onLocaleChanged(Closure $fn): Closure { return Locales::onLocaleChanged($fn); }
+
+    /** The user's regional formats (Locales::region). */
+    public static function region(): Region { return Locales::region(); }
+
+    public static function onRegionChanged(Closure $fn): Closure { return Locales::onRegionChanged($fn); }
+
+    /** Says the menus' items in the language the app shows: the menu bar is installed again with its roles' labels in it. */
+    public static function relabelMenus(): void
+    {
+        if (self::$ready) { self::installMenu(self::$menu ?? Menu::default()); }
     }
 
     /** The menu bar; Menu::default() unless set. Can be set before or after run(). */

@@ -12,7 +12,7 @@ $w = Headless::widgets(); $view = $w[0]; $s = &$w[1]; // by reference: the view 
 $h = new Headless($view, 900, 700);
 
 // Tab goes round every control once; groups (toolbar, segmented, tabs, accordion) are one stop; every stop shows its focus.
-foreach ([0 => 25, 1 => 22, 2 => 18] as $tab => $count) {
+foreach ([0 => 25, 1 => 22, 2 => 19] as $tab => $count) {
     $s['tab'] = $tab; $s['more'] = true; $h->rt->focus = null; $h->frame();
     $stops = $h->tabStops();
     same($count, count($stops), "tab $tab: stops (" . implode(' → ', $stops) . ')');

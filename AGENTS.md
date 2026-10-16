@@ -46,8 +46,12 @@ src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after),
                    FileDropEvent, WindowState),
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
                    Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
-                   window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), autoload.php
-src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), Carbon (hot
+                   window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), autoload.php,
+                   Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
+                   region/on*Changed), Region, I18n (tags, patterns, dates, numbers, names — over ext-intl), L10n
+                   (MyPHP's own strings, src/l10n/<tag>.json: mygo's catalogs in en, zh-Hans, zh-Hant)
+src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale
+                   (AppleLanguages, the current locale's formats), Carbon (hot
                    keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance

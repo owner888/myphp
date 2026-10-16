@@ -372,10 +372,12 @@ node built before it, so a click on an option does not reach the field
 under the popup.
 
 `dateInput(&$date)`, `calendar(&$date)` and `timeInput(&$time)` take a
-`DateTimeImmutable` and port mygo's `date.go` and `timeinput.go` with
-en-US formats fixed where mygo asks its i18n package (1/5/2026, English
-month and weekday names, weeks from Sunday, the 12-hour cycle with
-AM/PM after the hours): regional formats are an open item. The date
+`DateTimeImmutable` and port mygo's `date.go` and `timeinput.go`,
+writing the user's regional formats where mygo asks its i18n package
+(`Context::formats`, below: 1/5/2026 or 05/01/2026, the language's
+month and weekday names, weeks from the region's first day, the hour
+cycle of the region with the language's names of the halves of the day,
+before the hours where the language writes them so — 下午3:04). The date
 input is a plain button's face (a bordered surface row padded Space(1.5)
 by Space(3.5), at least Space(32.5) wide, focusable, shaded as a button
 under the pointer) holding the date and a Space(3.5) calendar-page icon
@@ -1046,6 +1048,55 @@ as they come), and `$done(out, err, code)` once it ends; `kill()` stops
 it. Network and other slow work go through it — `examples/http` sends
 requests with curl this way and stays live while they are in flight.
 
+## Locale and formats
+
+mygo's locale model (locale.go) is `Locales`, behind `App::locale()`,
+`setLocale()`, `setLanguages()`, `languages()`, `preferredLanguages()`,
+`region()`, `onLocaleChanged()` and `onRegionChanged()`: the one
+language the app shows, which MyPHP's controls and menus follow, and
+the regional formats, a setting of their own. The language is the
+user's preferred languages (`Native\SystemLocale`: AppleLanguages of
+the global domain, else NSLocale's), or the language the app chose
+(`setLocale`, kept as AppleLanguages of the app's own defaults domain
+— the process name when php runs unbundled — which System Settings
+shows; MYPHP_LOCALE for one run), matched against the languages the
+app is written in (`setLanguages`, English alone by default) — `I18n::match`,
+ICU's lookup, then the same language in its likely script (zh-TW finds
+zh-Hant) — and the app's own where none matches. The formats are the
+current locale (its `@rg=` keyword moved into the region: en_US@rg=gbzzzz
+is en-GB), the calendar's first weekday and the hour cycle of the
+skeleton "j" in the locale's date formats, filled in from CLDR for the
+locale where the system says nothing; NSCurrentLocaleDidChangeNotification
+reads them again, and a change redraws the windows, relabels the menus
+and calls the listeners. Without a running app (the tests) the
+language is English, the preferred languages none and the region the
+zero one.
+
+`I18n` is mygo's package i18n over ext-intl: tags normalized
+(`Locale::canonicalize`) and matched, right-to-left scripts,
+`firstWeekday` and `hourCycle` of a locale, the pattern of a skeleton
+(IntlDatePatternGenerator, with an hour cycle as the "hc" key of the
+extension), dates, numbers (without grouping, in the locale's digits),
+weekdays and day periods in a width, each formatter kept by locale and
+options and what they wrote cached (1024 entries, as mygo's fmtCache),
+since the controls write the same dates and numbers frame after frame.
+`Region::formatLocale($lang)` puts the language and the formats
+together as Apple's Locale.current does ("en-GB-u-fw-mon-hc-h23");
+`Context::formats()` is mygo's: the system's region when it names an
+hour cycle, else CLDR's for the language.
+
+`L10n` is mygo's internal/l10n: MyPHP's own strings — the controls'
+(Search, Find, "3 of 12", No matches, Done…) and the menu roles' — in
+`src/l10n/<tag>.json`, mygo's catalogs copied (English the source with
+the translators' descriptions, zh-Hans and zh-Hant), `L10n::in($lang)`
+the best match of the languages they are in, `get($key, $args)` through
+ICU's MessageFormatter (placeholders, plural, select, number skeletons);
+`L10n::add($lang, $messages)` lets an app change them or translate them
+further. `Menu::ROLES` holds the keys ("menuUndo"), the labels taken at
+build in the language the app shows with the app's name ("Quit Widgets"),
+and `App::relabelMenus` installs the bar again on a change.
+`examples/widgets` switches among English, 简体中文 and 繁體中文.
+
 ## Theme
 
 `UI\Theme` carries mygo's palette (background, surface and its hover and
@@ -1191,8 +1242,9 @@ and the nodes with local state.
 - Image decoding (`ImageIO`) runs on the main thread: a 12 MP HEIC takes
   a frame or two; `Process` is the only way off the thread, and it costs
   a child process. Apps decode between frames (`App::later`) meanwhile.
-- `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
-  takes them from the user's region and the window's language.
+- Apps have no catalogs of their own strings yet (mygo's i18n.NewCatalog
+  and `mygo generate`): an app translates its texts itself, by
+  `App::locale()`; `L10n::add` changes MyPHP's own.
 - An icon turned every frame rasterizes a mask a frame (mygo does too);
   the atlas starts over when it fills.
 - Text glyphs still come from CoreText: the SVG renderer could draw

@@ -4,8 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
-use MyPHP\Menu;
-use MyPHP\MenuItem;
+use MyPHP\{App, I18n, L10n, Menu, MenuItem, Region};
 use MyPHP\Window;
 
 /** Builds a frame's tree. The view function calls these in order, as code. */
@@ -80,6 +79,38 @@ final class Context
         if ($this->scope !== '') { return self::hash($this->scope . '#' . ($this->ordinal + 1)); }
         return $this->count + 1;
     }
+
+    /** The language the app shows (App::locale), a BCP 47 tag such as "en" or "zh-Hans", for what the view says in it. */
+    public function locale(): string { return App::locale(); }
+
+    /** The user's regional formats (App::region): the locale of the formats, the first day of the week and the hour cycle, which dates and times follow. */
+    public function region(): Region { return App::region(); }
+
+    /** MyPHP's own strings in the language the app shows (L10n), which an app changes with L10n::add. */
+    public function texts(): L10n { return L10n::in($this->locale()); }
+
+    /**
+     * The regional formats the controls write dates and times in, and the
+     * locale that puts them together with the app's language
+     * (Region::formatLocale), as mygo's formats: where the system says
+     * nothing of them, as without a running app (the tests), they are
+     * those CLDR gives the language.
+     * @return array{0: Region, 1: string}
+     */
+    public function formats(): array
+    {
+        $lang = $this->locale() ?: 'en'; $sys = $this->region();
+        $key = "$lang/{$sys->locale}/{$sys->firstWeekday}/{$sys->hourCycle}";
+        if (self::$formatsKey !== $key) {
+            $r = $sys->hourCycle === 12 || $sys->hourCycle === 24 ? $sys : new Region('', I18n::firstWeekday($lang), I18n::hourCycle($lang));
+            self::$formats = [$r, $r->formatLocale($lang)]; self::$formatsKey = $key;
+        }
+        return self::$formats;
+    }
+
+    /** The regional formats last worked out, by language and system formats, since they hold frame after frame. */
+    private static ?string $formatsKey = null;
+    private static array $formats = [];
 
     /**
      * Gives the next node an identity that holds across frames whatever
@@ -1103,7 +1134,8 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $b = $this->buttonFace($t->space(1.5), $t->space(3.5))->min($t->space(32.5), 0); // its text and a page icon at its ends (Justify(SpaceBetween))
-          $this->text($date->format('n/j/Y'), $t->fontSize, $t->text)->single();
+          [, $locale] = $this->formats();
+          $this->text(I18n::formatDate($locale, $date, 'yMd'), $t->fontSize, $t->text)->single();
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
           $page->draw(function (DisplayList $list, Node $a, Theme $t) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
@@ -1172,9 +1204,11 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
+        [$region, $locale] = $this->formats();
         $cur = $cursor;
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
-        $title = $month->format('F Y');
+        $title = I18n::formatDate($locale, $month, 'yMMMM');
+        $first = $region->firstWeekday;
         $grid = $this->column(0, $t->space(0.5))->focusable(); $grid->ownRing = true;
         $visible = $rt?->focusVisible($grid->id) ?? false;
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::focusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
@@ -1198,11 +1232,12 @@ final class Context
             if ($this->clicked($next)) { $move(self::addMonths($cur, 1)); }
           $this->end();
           $this->row(0, 0);
-            foreach (['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as $name) {
-                $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($name, $t->fontSize - 2, $t->textMuted); $this->end();
+            $names = I18n::weekdays($locale, I18n::SHORT, true);
+            for ($i = 0; $i < 7; $i++) {
+                $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($names[($first + $i) % 7], $t->fontSize - 2, $t->textMuted); $this->end();
             }
           $this->end();
-          $start = $month->modify('-' . $month->format('w') . ' days'); // six weeks from the Sunday on or before the first
+          $start = $month->modify('-' . (((int)$month->format('w') - $first + 7) % 7) . ' days'); // six weeks from the first day of the week on or before the first
           $today = (new \DateTimeImmutable('today', $date->getTimezone()))->format('Y-m-d');
           for ($w = 0; $w < 6; $w++) {
               $this->row(0, 0);
@@ -1215,7 +1250,7 @@ final class Context
                   if ($chosen) { $cell->color = $t->accent; $fg = $t->accentText; }
                   elseif ($atCursor || $this->hovered($cell)) { $cell->color = $t->surfaceHover; }
                   if ($ymd === $today && !$chosen) { $cell->border($t->accent); }
-                    $this->text($day->format('j'), $t->fontSize, $fg);
+                    $this->text(I18n::formatNumber($locale, (int)$day->format('j')), $t->fontSize, $fg);
                   $this->end();
                   if ($this->clicked($cell)) { $choose($day); if (!$moveChooses) { $cursor = $day; } } // with moveChooses the cursor is the date, which choose set
               }
@@ -1244,6 +1279,12 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
+        [$region, $locale] = $this->formats();
+        $twelve = $region->hourCycle === 12;
+        // The order of the segments and what separates the hours from the minutes, as the locale's pattern of hours and minutes writes them.
+        [$sep, $periodFirst] = self::timeLayout(I18n::pattern($locale, 'jmm', $twelve ? 12 : 24));
+        [$am, $pm] = I18n::dayPeriods($locale, I18n::ABBREVIATED);
+        $order = $twelve ? ($periodFirst ? [2, 0, 1] : [0, 1, 2]) : [0, 1];
         $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER);
         $h = (int)$time->format('G'); $m = (int)$time->format('i');
         $set = function (int $nh, int $nm) use (&$time, $f) {
@@ -1251,9 +1292,9 @@ final class Context
             if ($next != $time) { $time = $next; $f->changed = true; }
         };
         $segs = []; $focused = [];
-        $texts = [0 => (string)(($h + 11) % 12 + 1), 1 => sprintf('%02d', $m), 2 => $h >= 12 ? 'PM' : 'AM'];
-          foreach ([0, 1, 2] as $i => $k) {
-              if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text(':', $t->fontSize, $t->textMuted); $this->end(); }
+        $texts = [0 => $twelve ? I18n::formatNumber($locale, ($h + 11) % 12 + 1) : I18n::formatNumber($locale, $h, 2), 1 => I18n::formatNumber($locale, $m, 2), 2 => $h >= 12 ? $pm : $am];
+          foreach ($order as $i => $k) {
+              if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text($sep, $t->fontSize, $t->textMuted); $this->end(); }
               elseif ($i > 0) { $this->box($t->space(1), 0, 0)->color = null; }
               $seg = $this->key("seg$k")->row(0, 0)->padding(0, $t->space(0.5))->round($t->space(1))->focusable(); $seg->ownRing = true;
               $focused[$k] = $rt?->focused($seg->id) ?? false;
@@ -1267,20 +1308,20 @@ final class Context
         $make = fn() => (object)['typed' => '']; // the digits typed at the segment focused, until they set it or the focus leaves
         $local = $rt?->local($f->id, $make) ?? $make();
         if (!in_array(true, $focused, true)) { $local->typed = ''; }
-        foreach ([0, 1, 2] as $i => $k) {
+        foreach ($order as $i => $k) {
             $seg = $segs[$k];
             if (!$focused[$k] || $rt === null) { continue; }
             $step = 0;
             if ($this->shortcut(Key::UP)) { $step = 1; }
             elseif ($this->shortcut(Key::DOWN)) { $step = -1; }
-            elseif ($i + 1 < 3 && $this->shortcut(Key::RIGHT)) { $rt->focusOn($segs[$k + 1]->id, true); $local->typed = ''; }
-            elseif ($i > 0 && $this->shortcut(Key::LEFT)) { $rt->focusOn($segs[$k - 1]->id, true); $local->typed = ''; }
+            elseif ($i + 1 < count($order) && $this->shortcut(Key::RIGHT)) { $rt->focusOn($segs[$order[$i + 1]]->id, true); $local->typed = ''; }
+            elseif ($i > 0 && $this->shortcut(Key::LEFT)) { $rt->focusOn($segs[$order[$i - 1]]->id, true); $local->typed = ''; }
             $local->typed .= $rt->typed($seg->id);
             if ($k === 2) { // the half of the day: Up and Down switch it, as does the first letter of the other's name
                 $pmNow = $h >= 12; $want = $step !== 0 ? !$pmNow : $pmNow;
                 if ($local->typed !== '') {
-                    $r = strtolower(mb_substr($local->typed, -1));
-                    if ($r === 'p') { $want = true; } elseif ($r === 'a') { $want = false; }
+                    $r = mb_strtolower(mb_substr($local->typed, -1));
+                    if ($r === mb_strtolower(mb_substr($pm, 0, 1))) { $want = true; } elseif ($r === mb_strtolower(mb_substr($am, 0, 1))) { $want = false; }
                     $local->typed = '';
                 }
                 if ($want !== $pmNow) { $set($want ? $h + 12 : $h - 12, $m); }
@@ -1288,24 +1329,59 @@ final class Context
             }
             $top = $k === 0 ? 24 : 60;
             if ($step !== 0) {
-                if ($k === 0) { $h = intdiv($h, 12) * 12 + ($h % 12 + $step + 12) % 12; } // round the twelve hours of the same half of the day
+                if ($k === 0 && $twelve) { $h = intdiv($h, 12) * 12 + ($h % 12 + $step + 12) % 12; } // round the twelve hours of the same half of the day
+                elseif ($k === 0) { $h = ($h + $step + 24) % 24; }
                 else { $m = ($m + $step + $top) % $top; }
                 $set($h, $m);
             }
             if ($local->typed !== '') { // digits: the first sets the segment, a second makes two digits of them, or starts anew past the top; both typed, or one that can't begin two, go on to the minutes
-                if ($k === 0) { $top = 13; }
+                if ($k === 0 && $twelve) { $top = 13; }
                 $typed = $local->typed;
                 $n = ctype_digit($typed) ? (int)$typed : null;
                 if ($n === null || strlen($typed) > 2 || $n >= $top) { $typed = substr($typed, -1); $n = ctype_digit($typed) ? (int)$typed : null; $local->typed = $typed; }
                 if ($n !== null) {
-                    if ($k === 0 && $n === 0) { /* the first digit of 01 to 09 */ }
-                    elseif ($k === 0) { $h = intdiv($h, 12) * 12 + $n % 12; $set($h, $m); }
+                    if ($k === 0 && $n === 0 && $twelve) { /* the first digit of 01 to 09 */ }
+                    elseif ($k === 0 && $twelve) { $h = intdiv($h, 12) * 12 + $n % 12; $set($h, $m); }
+                    elseif ($k === 0) { $h = $n; $set($h, $m); }
                     else { $m = $n; $set($h, $m); }
                     if ((strlen($typed) === 2 || $n * 10 >= $top) && $k === 0) { $local->typed = ''; $rt->focusOn($segs[1]->id, true); }
                 } else { $local->typed = ''; }
             }
         }
         return $f;
+    }
+
+    /**
+     * What separates the hours from the minutes in a time pattern, and
+     * whether the day period comes before the hours (mygo's timeLayout):
+     * the fields (a letter repeated, outside quotes) and the literal text
+     * between them.
+     * @return array{0: string, 1: bool}
+     */
+    private static function timeLayout(string $pattern): array
+    {
+        $items = []; $lit = ''; $quoted = false; $n = strlen($pattern);
+        for ($i = 0; $i < $n; $i++) {
+            $c = $pattern[$i];
+            if ($c === "'") {
+                if ($i + 1 < $n && $pattern[$i + 1] === "'") { $lit .= "'"; $i++; } else { $quoted = !$quoted; }
+            } elseif (!$quoted && ctype_alpha($c)) {
+                $items[] = ['', $lit]; $lit = '';
+                while ($i + 1 < $n && $pattern[$i + 1] === $c) { $i++; }
+                $items[] = [$c, ''];
+            } else {
+                $lit .= $c;
+            }
+        }
+        $hour = $minute = $period = -1;
+        foreach ($items as $i => [$field]) {
+            if (($field === 'h' || $field === 'H' || $field === 'k' || $field === 'K') && $hour < 0) { $hour = $i; }
+            elseif ($field === 'm' && $minute < 0) { $minute = $i; }
+            elseif (($field === 'a' || $field === 'b' || $field === 'B') && $period < 0) { $period = $i; }
+        }
+        $sep = ':';
+        if ($hour >= 0 && $minute > $hour) { $sep = implode('', array_map(fn($it) => $it[1], array_slice($items, $hour + 1, $minute - $hour - 1))); }
+        return [$sep, $period >= 0 && $hour >= 0 && $period < $hour];
     }
 
     /** mygo's swatches: the colors a picker offers, by name. */
@@ -1919,7 +1995,7 @@ final class Context
         $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2); $gap = $t->space(1.5);
         $parent = $this->stack[count($this->stack) - 1];
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
-          $n = $this->input($state, 'Search', $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
+          $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
@@ -1982,7 +2058,7 @@ final class Context
           $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam');
             $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
             [, $h] = $this->metrics->measure('X', $t->fontSize);
-            $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, 'Find', null, $t->fontSize, $t->text));
+            $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $this->texts()->get('find'), null, $t->fontSize, $t->text));
             $in->edit = $query; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
             $in->focused = $rt?->focused($in->id) ?? false;
           $this->end();
@@ -1993,7 +2069,7 @@ final class Context
           if ($local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($in->id); $in->focused = true; $query->selectAll(); }
           if ($query->submitted) { $query->submitted = false; $step(($rt?->submitMods() ?? 0) & Key::SHIFT ? -1 : 1); }
           if ($in->focused && $this->shortcut(Key::ESCAPE)) { $open = false; }
-          $status = $query->text === '' ? '' : ($matches > 0 ? ($current + 1) . ' of ' . $matches : 'No matches');
+          $status = $query->text === '' ? '' : ($matches > 0 ? $this->texts()->get('matches', ['current' => $current + 1, 'total' => $matches]) : $this->texts()->get('noMatches'));
           $this->row(0, 0)->min($t->space(18), 0); $this->text($status, $t->fontSize, $t->textMuted); $this->end();
           foreach ([-1, 1] as $d) { // previous and next: a chevron up or down, Space(3), stroked 1.5
               $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2));
@@ -2006,7 +2082,7 @@ final class Context
               $this->end();
               if ($matches > 0 && $this->clicked($btn)) { $step($d); }
           }
-          $done = $this->button('Done');
+          $done = $this->button($this->texts()->get('done'));
           if ($this->clicked($done)) { $open = false; }
         $this->end();
         return $bar;

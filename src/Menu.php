@@ -15,26 +15,26 @@ final class Menu
 {
     private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_ALT = 1 << 19, MOD_CMD = 1 << 20;
 
-    /** role => [label, accelerator, selector sent down the responder chain] */
+    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain] */
     public const ROLES = [
-        'undo' => ['Undo', 'CmdOrCtrl+Z', 'undo:'],
-        'redo' => ['Redo', 'CmdOrCtrl+Shift+Z', 'redo:'],
-        'cut' => ['Cut', 'CmdOrCtrl+X', 'cut:'],
-        'copy' => ['Copy', 'CmdOrCtrl+C', 'copy:'],
-        'paste' => ['Paste', 'CmdOrCtrl+V', 'paste:'],
-        'pasteAndMatchStyle' => ['Paste and Match Style', 'CmdOrCtrl+Shift+V', 'pasteAsPlainText:'],
-        'delete' => ['Delete', '', 'delete:'],
-        'selectAll' => ['Select All', 'CmdOrCtrl+A', 'selectAll:'],
-        'togglefullscreen' => ['Toggle Full Screen', 'Ctrl+Cmd+F', 'toggleFullScreen:'],
-        'minimize' => ['Minimize', 'CmdOrCtrl+M', 'performMiniaturize:'],
-        'zoom' => ['Zoom', '', 'performZoom:'],
-        'close' => ['Close Window', 'CmdOrCtrl+W', 'performClose:'],
-        'quit' => ['Quit', 'CmdOrCtrl+Q', 'terminate:'],
-        'about' => ['About', '', 'orderFrontStandardAboutPanel:'],
-        'hide' => ['Hide', 'CmdOrCtrl+H', 'hide:'],
-        'hideOthers' => ['Hide Others', 'Cmd+Alt+H', 'hideOtherApplications:'],
-        'unhide' => ['Show All', '', 'unhideAllApplications:'],
-        'front' => ['Bring All to Front', '', 'arrangeInFront:'],
+        'undo' => ['menuUndo', 'CmdOrCtrl+Z', 'undo:'],
+        'redo' => ['menuRedo', 'CmdOrCtrl+Shift+Z', 'redo:'],
+        'cut' => ['menuCut', 'CmdOrCtrl+X', 'cut:'],
+        'copy' => ['menuCopy', 'CmdOrCtrl+C', 'copy:'],
+        'paste' => ['menuPaste', 'CmdOrCtrl+V', 'paste:'],
+        'pasteAndMatchStyle' => ['menuPasteAndMatchStyle', 'CmdOrCtrl+Shift+V', 'pasteAsPlainText:'],
+        'delete' => ['menuDelete', '', 'delete:'],
+        'selectAll' => ['menuSelectAll', 'CmdOrCtrl+A', 'selectAll:'],
+        'togglefullscreen' => ['menuToggleFullScreen', 'Ctrl+Cmd+F', 'toggleFullScreen:'],
+        'minimize' => ['menuMinimize', 'CmdOrCtrl+M', 'performMiniaturize:'],
+        'zoom' => ['menuZoom', '', 'performZoom:'],
+        'close' => ['menuCloseWindow', 'CmdOrCtrl+W', 'performClose:'],
+        'quit' => ['menuQuitApp', 'CmdOrCtrl+Q', 'terminate:'],
+        'about' => ['menuAbout', '', 'orderFrontStandardAboutPanel:'],
+        'hide' => ['menuHide', 'CmdOrCtrl+H', 'hide:'],
+        'hideOthers' => ['menuHideOthers', 'Cmd+Alt+H', 'hideOtherApplications:'],
+        'unhide' => ['menuShowAll', '', 'unhideAllApplications:'],
+        'front' => ['menuBringAllToFront', '', 'arrangeInFront:'],
     ];
 
     private const KEYS = [
@@ -108,12 +108,11 @@ final class Menu
             return $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
         }
         $label = $it->label; $accel = $it->accelerator; $selector = null;
-        if ($it->role !== '') {
-            [$it->label, $it->submenu] = self::expandRole($it->role, $it->label, $it->submenu);
-            $label = $it->label;
+        if ($it->role !== '') { // a role's label is in the language the app shows, so that relabelMenus can say it again
+            [$label, $it->submenu] = self::expandRole($it->role, $it->label, $it->submenu);
             if (isset(self::ROLES[$it->role])) {
-                [$rl, $ra, $selector] = self::ROLES[$it->role];
-                $label = $label !== '' ? $label : $rl;
+                [$key, $ra, $selector] = self::ROLES[$it->role];
+                $label = $label !== '' ? $label : L10n::in(App::locale())->get($key, ['app' => App::name()]);
                 $accel = $accel !== '' ? $accel : $ra;
             }
         }
@@ -147,13 +146,14 @@ final class Menu
     private static function expandRole(string $role, string $label, array $submenu): array
     {
         $r = fn(string $role) => new MenuItem(role: $role);
+        $t = L10n::in(App::locale());
         return match ($role) {
             'appMenu' => [$label !== '' ? $label : App::name(), $submenu ?: [
                 $r('about'), MenuItem::separator(), $r('hide'), $r('hideOthers'), $r('unhide'), MenuItem::separator(), $r('quit')]],
-            'fileMenu' => [$label !== '' ? $label : 'File', $submenu ?: [$r('close')]],
-            'editMenu' => [$label !== '' ? $label : 'Edit', $submenu ?: [
+            'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: [$r('close')]],
+            'editMenu' => [$label !== '' ? $label : $t->get('menuEdit'), $submenu ?: [
                 $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('pasteAndMatchStyle'), $r('delete'), $r('selectAll')]],
-            'windowMenu' => [$label !== '' ? $label : 'Window', $submenu ?: [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')]],
+            'windowMenu' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu ?: [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')]],
             default => [$label, $submenu],
         };
     }
