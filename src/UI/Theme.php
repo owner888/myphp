@@ -85,6 +85,13 @@ final class Theme
     }
 
     /** $a mixed with $b by $k (0 all $a, 1 all $b), as mygo's Color.Mix. */
+    /** The gray of the same lightness as $rgb (BT.709 luminance), for what is drawn in shades of gray. */
+    public static function luminance(int $rgb): int
+    {
+        $l = (int)round(0.2126 * ($rgb >> 16 & 255) + 0.7152 * ($rgb >> 8 & 255) + 0.0722 * ($rgb & 255));
+        return $l << 16 | $l << 8 | $l;
+    }
+
     public static function mix(int $a, int $b, float $k): int
     {
         $ch = fn(int $x, int $y) => max(0, min(255, (int)round($x + ($y - $x) * $k)));

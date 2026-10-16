@@ -586,10 +586,17 @@ image atlas while frames draw it, and forgotten 30 frames after the
 last (mygo's pictures). On PHP 8.3 the renderer draws a 24-point icon's
 mask at 2× in 0.2 ms, at 96 px in 1 ms, a 256-px picture with a
 gradient, a clip and a dashed stroke in ~65 ms — once, then cached.
-`avatar($name, $image)` is
-mygo's Avatar: 2.25 × fontSize round, the image cropped to it
-(`Node::$cover`, the painter sampling the centered part of the slot in
-the box's proportions) or the initials (first letters of the first and
+`Node::fit()` is mygo's Fit for images and SVGs alike —
+CONTAIN (the default: letterboxed, keeping the aspect ratio), COVER
+(cropped to fill), FILL_BOX (stretched), SCALE_DOWN (its own size, or
+contain when larger), NATURAL_SIZE (its own size, centered and cropped) —
+`Painter::fitIn` giving the rect shown and the fraction of the picture
+in it, which the painter samples from the slot (an SVG is drawn at the
+fitted size, then cropped); `->grayscale()` draws an image through quad
+kind 12, the image kind whose shader takes the BT.709 luminance, and an
+icon in the gray of its color's luminance (`Theme::luminance`).
+`avatar($name, $image)` is mygo's Avatar: 2.25 × fontSize round, the
+image cropped to it (fit COVER) or the initials (first letters of the first and
 last words) at 0.4 × size, bold, white on the hue of the name's FNV-1a
 hash at saturation 0.45 and lightness 0.55 (`Context::hsl`).
 
@@ -1171,10 +1178,9 @@ and the nodes with local state.
   a child process. Apps decode between frames (`App::later`) meanwhile.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
-- `image($svg)` stretches the SVG to the node's box (mygo's FillBox);
-  Contain, Cover, ScaleDown and NaturalSize fits, and Grayscale, are not
-  ported for SVGs. An icon turned every frame rasterizes a mask a frame
-  (mygo does too); the atlas starts over when it fills.
+- An icon turned every frame rasterizes a mask a frame (mygo does too);
+  the atlas starts over when it fills. Bitmaps shown far smaller than
+  their pixels are not mipmapped (mygo's `smaller`): they alias.
 - Text glyphs still come from CoreText: the SVG renderer could draw
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no JustifyItems or automatic margins: a child fills its area

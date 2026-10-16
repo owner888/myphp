@@ -1779,7 +1779,7 @@ final class Context
         $h = $size ?? $t->fontSize;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
         $n->svg = $svg;
-        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::icon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $color ?? $t->text, $a->alpha, $a->rotation));
+        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::icon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($color ?? $t->text) : ($color ?? $t->text), $a->alpha, $a->rotation));
         return $n;
     }
 
@@ -1794,7 +1794,7 @@ final class Context
         $size = $t->fontSize * 2.25;
         if ($image !== null) {
             $e = $this->image($image, $size, $size, $size / 2)->tooltip($name);
-            $e->cover = true; // Fit(Cover): the shorter side fills the circle, the rest is cropped
+            $e->fit = Node::COVER; // the shorter side fills the circle, the rest is cropped
             return $e;
         }
         $h = 2166136261; // the hue of the name's FNV-1a hash

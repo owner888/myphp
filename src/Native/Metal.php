@@ -27,7 +27,7 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
@@ -39,8 +39,9 @@ final class Metal
         o.pos = float4(p.x / u.viewport.x * 2.0 - 1.0, 1.0 - p.y / u.viewport.y * 2.0, 0.0, 1.0);
         o.local = (corner - 0.5) * i.rect.zw;
         o.extent = i.rect.zw * 0.5;
-        o.uv = i.params.y > 2.5 ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade
-             : (i.params.zw + corner * (i.params.y > 1.5 ? i.color.xy : i.rect.zw * u.atlasScale)) / u.atlas;
+        bool image = i.params.y > 1.5 && (i.params.y < 2.5 || i.params.y > 11.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
+        o.uv = i.params.y > 2.5 && !image ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade
+             : (i.params.zw + corner * (image ? i.color.xy : i.rect.zw * u.atlasScale)) / u.atlas;
         o.color = i.color;
         o.radius = i.params.x;
         o.kind = i.params.y;
@@ -115,6 +116,14 @@ final class Metal
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
+        if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color
+            float4 c = images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
+            if (v.kind > 11.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
+            float2 q = abs(v.local) - (v.extent - v.radius);
+            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
+            float a = 1.0 - smoothstep(-0.5, 0.5, d);
+            return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
+        }
         if (v.kind > 9.5) {   // a two-color gradient across (10) or down (11) the rounded rect; u packs the other color's rgb, v is its alpha
             uint p = uint(v.uv.x + 0.5);
             float4 to = float4(float((p >> 16) & 255u), float((p >> 8) & 255u), float(p & 255u), 0.0) / 255.0;
@@ -167,13 +176,6 @@ final class Metal
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
             float a = 1.0 - smoothstep(-blur, blur, d);
             return float4(v.color.rgb, v.color.a * a);
-        }
-        if (v.kind > 1.5) {
-            float4 c = images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
-            float2 q = abs(v.local) - (v.extent - v.radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            float a = 1.0 - smoothstep(-0.5, 0.5, d);
-            return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
         }
         if (v.kind > 0.5) {
             return float4(v.color.rgb, v.color.a * atlas.sample(s, v.uv).r);

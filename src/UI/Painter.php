@@ -57,14 +57,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::IMAGE) {
-            $scale = $text->scale();
-            $s = $n->svg !== null ? $text->svgSlot($n->svg, max(1, (int)round($n->w * $scale)), max(1, (int)round($n->h * $scale)), $n->fg !== 0 ? $n->fg : $t->text) : $text->imageSlot($n->image);
-            $u = $s['u']; $v = $s['v']; $sw = $s['w']; $sh = $s['h'];
-            if ($n->cover && $n->w > 0 && $n->h > 0) { // the part of the image in the box's proportions, centered
-                $k = min($sw / $n->w, $sh / $n->h); $cw = (int)round($n->w * $k); $ch = (int)round($n->h * $k);
-                $u += intdiv($sw - $cw, 2); $v += intdiv($sh - $ch, 2); $sw = $cw; $sh = $ch;
-            }
-            $list->image($n->x, $n->y, $n->w, $n->h, $u, $v, $sw, $sh, $s['page'], $n->alpha, $n->radius);
+            self::image($n, $list, $text, $t);
             return;
         }
         if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
@@ -215,6 +208,39 @@ final class Painter
         $k = min($w / $svg->w, $h / $svg->h);
         $q = $text->iconQuad($svg, $x + ($w - $svg->w * $k) / 2, $y + ($h - $svg->h * $k) / 2, $svg->w * $k, $svg->h * $k, $rotate);
         if ($q !== null && !$list->clipped($q[0], $q[1], $q[2], $q[3])) { $list->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]); }
+    }
+
+    /** Draws an image, or an SVG in its own colors, in the node's box as its fit says (mygo's Painter.image: fitIn, drawBitmap, drawSVG), rounded, faded, gray if asked. */
+    private static function image(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
+    {
+        $scale = $text->scale();
+        // The picture's own size in points: a bitmap's pixels as the image laid it out, an SVG's size.
+        [$iw, $ih] = $n->svg !== null ? [$n->svg->w, $n->svg->h] : [$n->image->w / $scale, $n->image->h / $scale];
+        if ($iw <= 0 || $ih <= 0) { return; }
+        [$dst, $frac, $fw, $fh] = self::fitIn($n->x, $n->y, $n->w, $n->h, $iw, $ih, $n->fit);
+        if ($dst[2] <= 0 || $dst[3] <= 0) { return; }
+        $s = $n->svg !== null ? $text->svgSlot($n->svg, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $n->fg !== 0 ? $n->fg : $t->text) : $text->imageSlot($n->image);
+        $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box
+        $u = $s['u'] + (int)round($frac[0] * $sw); $v = $s['v'] + (int)round($frac[1] * $sh);
+        $cw = max(1, (int)round($frac[2] * $sw)); $ch = max(1, (int)round($frac[3] * $sh));
+        $list->image($dst[0], $dst[1], $dst[2], $dst[3], $u, $v, $cw, $ch, $s['page'], $n->alpha, $n->radius, $n->gray);
+    }
+
+    /**
+     * Where a picture $w × $h points goes in the box as $fit says, and which
+     * part of it shows there, as fractions of its size: [the rect shown,
+     * [x, y, w, h] fractions, the picture's full width and height], mygo's fitIn.
+     */
+    public static function fitIn(float $bx, float $by, float $bw, float $bh, float $w, float $h, int $fit): array
+    {
+        if ($fit === Node::FILL_BOX) { return [[$bx, $by, $bw, $bh], [0.0, 0.0, 1.0, 1.0], $bw, $bh]; }
+        $k = match ($fit) { Node::CONTAIN => min($bw / $w, $bh / $h), Node::COVER => max($bw / $w, $bh / $h), Node::SCALE_DOWN => min($bw / $w, $bh / $h, 1.0), default => 1.0 };
+        $dw = $w * $k; $dh = $h * $k;
+        $dx = $bx + ($bw - $dw) / 2; $dy = $by + ($bh - $dh) / 2;
+        // Only what falls in the box shows.
+        $x0 = max($dx, $bx); $y0 = max($dy, $by); $x1 = min($dx + $dw, $bx + $bw); $y1 = min($dy + $dh, $by + $bh);
+        if ($x1 <= $x0 || $y1 <= $y0) { return [[$x0, $y0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], $dw, $dh]; }
+        return [[$x0, $y0, $x1 - $x0, $y1 - $y0], [($x0 - $dx) / $dw, ($y0 - $dy) / $dh, ($x1 - $x0) / $dw, ($y1 - $y0) / $dh], $dw, $dh];
     }
 
     /** mygo's inputBorder: the accent while focused, the border a quarter toward the text under the pointer, the border otherwise. */

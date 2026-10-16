@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, GridState, Key, ListState, Node, Selection, SVG, TextState};
+use MyPHP\UI\{Context, GridState, Key, ListState, Node, Painter, Selection, SVG, TextState};
 
 // Combobox: a click opens the options with the choice selected, typing filters, Down/Up/Enter choose, blur reverts; autocomplete suggests while typed.
 $sel = 'Banana'; $ac = new TextState(''); $n = []; $ev = [];
@@ -207,4 +207,15 @@ same(['AL', 29.25, 14.625], [$n['a']->kids[0]->text, $n['a']->w, $n['a']->radius
 $art = SVG::parse('<svg viewBox="0 0 20 10"><rect width="20" height="10" fill="red"/></svg>');
 $h = new Headless(function (Context $c) use (&$n, $art, $search) { $c->row(0, 8); $n['p'] = $c->image($art); $n['h'] = $c->image($art, 0, 5); $n['r'] = $c->icon($search)->rotate(45); $c->end(); }, 300, 100);
 $h->frame(); same([20.0, 10.0, 10.0, 5.0, $art, 45.0], [$n['p']->w, $n['p']->h, $n['h']->w, $n['h']->h, $n['h']->svg, $n['r']->rotation], 'an SVG as an image: its own size, or scaled to a height; an icon turned');
+// Fit: where a 20 × 10 picture goes in a 10 × 10 box, and what part of it shows.
+$fit = fn(int $f) => array_map(fn($v) => is_array($v) ? array_map(fn($x) => round($x, 3), $v) : round($v, 3), Painter::fitIn(0, 0, 10, 10, 20, 10, $f));
+same([[0.0, 2.5, 10.0, 5.0], [0.0, 0.0, 1.0, 1.0], 10.0, 5.0], $fit(Node::CONTAIN), 'contain: letterboxed, all of it');
+same([[0.0, 0.0, 10.0, 10.0], [0.25, 0.0, 0.5, 1.0], 20.0, 10.0], $fit(Node::COVER), 'cover: the box, the middle half of the picture');
+same([[0.0, 0.0, 10.0, 10.0], [0.0, 0.0, 1.0, 1.0], 10.0, 10.0], $fit(Node::FILL_BOX), 'fill: stretched');
+same([[0.0, 2.5, 10.0, 5.0], [0.0, 0.0, 1.0, 1.0], 10.0, 5.0], $fit(Node::SCALE_DOWN), 'scale down: as contain when larger than the box');
+same([[4.0, 4.5, 2.0, 1.0], [0.0, 0.0, 1.0, 1.0], 2.0, 1.0], array_map(fn($v) => is_array($v) ? array_map(fn($x) => round($x, 3), $v) : round($v, 3), Painter::fitIn(0, 0, 10, 10, 2, 1, Node::SCALE_DOWN)), 'scale down: its own size when smaller, centered');
+same([[0.0, 0.0, 10.0, 10.0], [0.25, 0.0, 0.5, 1.0], 20.0, 10.0], $fit(Node::NATURAL_SIZE), 'natural size: centered, cropped');
+$h = new Headless(function (Context $c) use (&$n, $art) { $n['g'] = $c->image($art, 20, 10)->grayscale(); $n['c'] = $c->image($art, 10, 10)->fit(Node::COVER); }, 300, 100);
+$h->frame(); $list = $h->paint(); same([12.0, 2.0], [$list->buf[9], $list->buf[16 + 9]], 'a gray image is quad kind 12, a colored one 2');
+same([5.0, 10.0, 10.0], [$list->buf[16 + 10], $list->buf[16 + 4], $list->buf[16 + 5]], 'cover shows the middle half of the slot, from u = 5 (fake slots are the pixel size, 20 × 10)');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');

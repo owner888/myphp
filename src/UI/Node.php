@@ -86,8 +86,11 @@ final class Node
     /** A press on this node (not on a control inside it) drags the window, a double click zooms or minimizes it as macOS is set to (mygo's DragWindow): a view's own title bar. */
     public bool $dragsWindow = false;
 
-    /** An image that covers its box: scaled so the shorter side fills it, the rest cropped (mygo's Fit(Cover)); it is stretched otherwise. */
-    public bool $cover = false;
+    /** How an image or SVG fills its box (Node::fit): CONTAIN scales it to fit inside, keeping its aspect ratio; COVER scales it to cover the box, cropping it; FILL_BOX stretches it; SCALE_DOWN shows it at its own size, or as CONTAIN does where that is smaller; NATURAL_SIZE shows it at its own size, centered and cropped. mygo's Fit. */
+    public const CONTAIN = 0, COVER = 1, FILL_BOX = 2, SCALE_DOWN = 3, NATURAL_SIZE = 4;
+    public int $fit = self::CONTAIN;
+    /** An image or icon drawn in shades of gray (mygo's Grayscale). */
+    public bool $gray = false;
 
     /** A check box over a group of them, some but not all checked: a bar instead of a check (mygo's mixed state). */
     public bool $mixed = false;
@@ -203,6 +206,20 @@ final class Node
     public function rotate(float $degrees): static
     {
         $this->rotation = $degrees;
+        return $this;
+    }
+
+    /** How this node's image or SVG fills its box: one of Node::CONTAIN, COVER, FILL_BOX, SCALE_DOWN, NATURAL_SIZE (mygo's Fit). */
+    public function fit(int $fit): static
+    {
+        $this->fit = $fit;
+        return $this;
+    }
+
+    /** Draws this node's image, or icon, in shades of gray (mygo's Grayscale). */
+    public function grayscale(): static
+    {
+        $this->gray = true;
         return $this;
     }
 
