@@ -317,6 +317,12 @@ final class Runtime
     }
 
     /** The state kept for node $id across frames, made by $make the first time. */
+    /** How many nodes keep local state: a diagnostic. */
+    public function localCount(): int
+    {
+        return count($this->locals);
+    }
+
     public function local(int $id, Closure $make): mixed
     {
         return $this->locals[$id] ??= $make();

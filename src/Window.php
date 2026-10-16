@@ -494,9 +494,10 @@ final class Window
         $s['frames']++; $s['ms'] += ($t1 - $t0) / 1e6;
         if ($t1 - $s['since'] >= 1e9) {
             $text = App::text();
-            printf("%3d frames this second | %5.2f ms/frame (%d pass%s) | %4d quads | %4d lines cached, %d atlas resets | mem %.1f MB\n",
+            $gc = gc_status();
+            printf("%3d frames this second | %5.2f ms/frame (%d pass%s) | %4d quads | %4d lines cached, %d glyphs, %d atlas resets | mem %.1f MB live, %.1f MB held | gc %d runs, %d freed | locals %d\n",
                 $s['frames'], $s['ms'] / $s['frames'], $this->runtime->passes, $this->runtime->passes > 1 ? 'es' : '',
-                $list->n, $text->lineCount(), $text->resets, memory_get_usage(true) / 1048576);
+                $list->n, $text->lineCount(), $text->glyphCount(), $text->resets, memory_get_usage() / 1048576, memory_get_usage(true) / 1048576, $gc['runs'], $gc['collected'], $this->runtime->localCount());
             $s = ['frames' => 0, 'ms' => 0, 'since' => $t1];
         }
     }

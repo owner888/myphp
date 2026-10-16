@@ -17,7 +17,7 @@ final class Text implements TextPainter
     private const KEEP_FRAMES = 30;
     private const SWEEP_EVERY = 15;
 
-    /** @var array<string, array{w: float, h: float, ascent: float, quads: list<float|int>, gen: int}> quads: x y w h u v per glyph, flat */
+    /** @var array<string, array{key: string, w: float, h: float, ascent: float, quads: string, carets: ?array<int, float>, hot?: array, gen: int}> quads: x y w h u v per glyph, float32s packed (a kilobyte a line, not nine), unpacked in hot while the line is in view; carets only once a field asked */
     private array $lines = [];
     /** @var array<string, array{0: int, 1: int}> bitmap offsets by glyph key, in device pixels */
     private array $offsets = [];
@@ -106,9 +106,17 @@ final class Text implements TextPainter
             foreach ($this->lines as $key => $l) {
                 if ($l['gen'] < $limit) {
                     unset($this->lines[$key]);
+                } elseif ($l['gen'] < $this->gen - 1 && isset($l['hot'])) {
+                    unset($this->lines[$key]['hot']); // out of view: the packed quads are enough until it shows again
                 }
             }
         }
+    }
+
+    /** How many glyph bitmaps the atlas holds: a diagnostic. */
+    public function glyphCount(): int
+    {
+        return count($this->offsets);
     }
 
     public function lineCount(): int
@@ -129,7 +137,7 @@ final class Text implements TextPainter
 
     public function xForIndex(string $text, float $size, int $byte): float
     {
-        $carets = $this->line($text, $size)['carets'];
+        $carets = $this->carets($text, $size);
         $u = TextState::utf16Index($text, $byte);
         // Inside a ligature or cluster there is no caret; use the nearest before.
         while ($u > 0 && !isset($carets[$u])) {
@@ -141,7 +149,7 @@ final class Text implements TextPainter
     public function indexForX(string $text, float $size, float $x): int
     {
         $best = 0; $bestD = INF;
-        foreach ($this->line($text, $size)['carets'] as $u => $cx) {
+        foreach ($this->carets($text, $size) as $u => $cx) {
             if (($d = abs($cx - $x)) < $bestD) {
                 $bestD = $d; $best = $u;
             }
@@ -154,9 +162,10 @@ final class Text implements TextPainter
     {
         $l = $this->line($text, $size, $style);
         $baseline = $y + $l['ascent'];
-        $q = $l['quads'];
-        for ($i = 0, $n = count($q); $i < $n; $i += 6) {
-            $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, $q[$i + 4], $q[$i + 5]);
+        if ($l['quads'] === '') { return; }
+        $q = $this->lines[$l['key']]['hot'] ??= unpack('g*', $l['quads']); // unpacked once for the lines in view (1-based), dropped by the sweep once they leave it
+        for ($i = 1, $n = count($q); $i <= $n; $i += 6) {
+            $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, (int)$q[$i + 4], (int)$q[$i + 5]);
         }
     }
 
@@ -171,11 +180,23 @@ final class Text implements TextPainter
         return $l;
     }
 
-    private function shape(string $text, float $size, int $style): array
+    /** The carets of $text at $size: the x of the caret before each UTF-16 index at a glyph boundary; kept with the line once a field asks (most lines are never edited). @return array<int, float> */
+    private function carets(string $text, float $size): array
+    {
+        $key = "$size:0\0$text";
+        $l = &$this->lines[$key];
+        if ($l === null || $l['carets'] === null) {
+            $l = $this->shape($text, $size, 0, true);
+        }
+        $l['gen'] = $this->gen;
+        return $l['carets'];
+    }
+
+    private function shape(string $text, float $size, int $style, bool $carets = false): array
     {
         $s = $this->ct->scale;
         $shaped = $this->ct->shape($text, $size, $style);
-        $quads = [];
+        $quads = '';
         foreach ($shaped['glyphs'] as $g) {
             $key = $g['font'] . ':' . $g['glyph'];
             $slot = $this->atlas->get($key);
@@ -200,11 +221,11 @@ final class Text implements TextPainter
             // Snap the pen to device pixels so the bitmap lands on its own grid.
             $px = round($g['x'] * $s) / $s;
             $py = round(-$g['y'] * $s) / $s;
-            array_push($quads, $px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']);
+            $quads .= pack('g6', $px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']);
         }
         return [
-            'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],
-            'ascent' => $shaped['ascent'], 'quads' => $quads, 'carets' => $shaped['carets'], 'gen' => $this->gen,
+            'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],
+            'ascent' => $shaped['ascent'], 'quads' => $quads, 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
         ];
     }
 }

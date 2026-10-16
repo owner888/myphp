@@ -1088,6 +1088,16 @@ default, a bit per row measured (mygo's blocks keep a float32 a row;
 a million rows are 125 KB here) and an entry only for rows of another
 height, so a list of rows all one height stores nothing per row;
 `forgetHeights()` drops them when the rows change under the list.
+The second run, with live memory and the GC in the stats line, showed
+the climb was no leak but the line cache itself: live memory followed
+"lines cached" at some 9 KB a line (a PHP array of six floats a glyph,
+and the carets), 1900 lines at the fastest scrolling. A cached line
+now holds its quads as packed float32s (`pack('g6')`, 24 bytes a
+glyph), unpacked once into `hot` while the line is painted and dropped
+by the sweep once it leaves the view, and its carets only once a field
+asked for them: under 2 KB a line. The stats line (`MYPHP_STATS=1`)
+prints live and held memory, the glyphs in the atlas, the GC's runs
+and the nodes with local state.
 
 ## Open items
 
