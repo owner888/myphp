@@ -13,6 +13,7 @@ final class Layout
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
             $n->mh = $n->fh;
+            $n->minMw = $n->single ? $n->minW : $n->fw; // a single-line text shrinks to its min width (and shows an ellipsis); other leaves keep their size
             return;
         }
         if ($n->gridCols !== null) { // a grid: its tracks at the size their content asks
@@ -25,7 +26,7 @@ final class Layout
             $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
             return;
         }
-        $main = 0.0; $cross = 0.0; $cnt = 0;
+        $main = 0.0; $cross = 0.0; $cnt = 0; $least = 0.0; // least: the min-content width, the automatic minimum a row shrinks this node to
         foreach ($n->kids as $k) {
             self::measure($k);
             if ($k->absolute) {
@@ -34,10 +35,13 @@ final class Layout
             $cnt++;
             if ($n->dir === Node::ROW) {
                 $main += $k->basis ?? $k->mw; if ($k->mh > $cross) $cross = $k->mh;
+                $least += $k->minMw;
             } else {
                 $main += $k->basis ?? $k->mh; if ($k->mw > $cross) $cross = $k->mw;
+                $least = max($least, $k->minMw);
             }
         }
+        $n->minMw = ($n->dir === Node::ROW ? $least + $n->gap * max(0, $cnt - 1) : $least) + 2 * $n->padX();
         [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padX(), $n->padY()] : [$n->padY(), $n->padX()];
         $main += $n->gap * max(0, $cnt - 1) + 2 * $padMain;
         $cross += 2 * $padCross;
@@ -54,9 +58,11 @@ final class Layout
             if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = 2 * $padCross; }
         }
         if ($n->dir === Node::ROW) { $n->mw = $main; $n->mh = $cross; } else { $n->mw = $cross; $n->mh = $main; }
-        if ($n->fw > 0) { $n->mw = $n->fw; } // a container given a size (Node::size) takes it over its content's
+        if ($n->fw > 0) { $n->mw = $n->fw; $n->minMw = min($n->minMw, $n->fw); } // a container given a size (Node::size) takes it over its content's
         if ($n->fh > 0) { $n->mh = $n->fh; }
+        if ($n->scrollX || $n->wraps) { $n->minMw = 2 * $n->padX(); } // what scrolls or wraps across has no least width
         $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
+        $n->minMw = max(min($n->minMw, $n->mw), $n->minW);
     }
 
     public static function arrange(Node $n, float $x, float $y, float $w, float $h): void
@@ -147,15 +153,7 @@ final class Layout
             if ($n->justify === Node::CENTER) { $cx += $n->dir === Node::ROW ? $free / 2 : 0; $cy += $n->dir === Node::ROW ? 0 : $free / 2; }
             if ($n->justify === Node::END) { $cx += $n->dir === Node::ROW ? $free : 0; $cy += $n->dir === Node::ROW ? 0 : $free; }
         }
-        // Single-line texts shrink, between them, by what the row's children overflow (mygo's flex shrink on SingleLine).
-        $shrink = [];
-        if ($n->dir === Node::ROW && $extra === 0.0 && $n->scroll === null) {
-            $over = $used + $n->gap * ($cnt - 1) - ($w - 2 * $px); $room = 0.0;
-            foreach ($kids as $k) { if ($k->single) { $room += $k->mw; } }
-            if ($over > 0 && $room > 0) {
-                foreach ($kids as $i => $k) { if ($k->single) { $shrink[$i] = min(max(0.0, $k->mw - $k->minW), $over * $k->mw / $room); } } // not below its min width
-            }
-        }
+        $shrink = $n->dir === Node::ROW && $extra === 0.0 && $n->scroll === null ? self::shrink($kids, $used + $n->gap * ($cnt - 1) - ($w - 2 * $px)) : [];
         foreach ($kids as $i => $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($n->dir === Node::ROW ? $k->mh <= 0 : $k->mw <= 0) {
@@ -313,15 +311,46 @@ final class Layout
         $used = 0.0; $grow = 0;
         foreach ($line as $k) { $used += $k->mw; $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $w - $n->gap * (count($line) - 1) - $used) / $grow : 0.0;
+        $shrink = $extra === 0.0 ? self::shrink($line, $used + $n->gap * (count($line) - 1) - $w) : [];
         $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
         $cx = $x;
-        foreach ($line as $k) {
+        foreach ($line as $i => $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($k->mh <= 0) { $a = Node::STRETCH; }
-            $kw = $k->mw + $extra * $k->grow; $kh = $a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh;
+            $kw = $k->mw + $extra * $k->grow - ($shrink[$i] ?? 0.0); $kh = $a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh;
             self::arrange($k, $cx, $y + self::across($a, $h, $kh), $kw, $kh);
             $cx += $kw + $n->gap;
         }
+    }
+
+    /**
+     * How much each child of a row gives up when they overflow it by $over
+     * (CSS flexbox's shrink, as mygo resolves it, every child's shrink
+     * factor 1): in proportion to their widths, none below its least width
+     * (Node::$minMw), what the frozen ones cannot give going round again.
+     * A single-line text shrunk shows an ellipsis; a container shrunk
+     * arranges its children in the width left, which shrinks theirs.
+     * @param list<Node> $kids
+     * @return array<int, float> by index into $kids
+     */
+    private static function shrink(array $kids, float $over): array
+    {
+        if ($over <= 0) { return []; }
+        $give = []; $frozen = [];
+        for ($pass = 0; $pass <= count($kids); $pass++) {
+            $sum = 0.0; $taken = 0.0;
+            foreach ($kids as $i => $k) { if (isset($frozen[$i])) { $taken += $give[$i]; } else { $sum += $k->mw; } }
+            $left = $over - $taken; // what the children not yet at their least width share
+            if ($sum <= 0) { break; }
+            $violation = false;
+            foreach ($kids as $i => $k) {
+                if (isset($frozen[$i])) { continue; }
+                $give[$i] = max(0.0, $left) * $k->mw / $sum;
+                if ($give[$i] > $k->mw - $k->minMw) { $give[$i] = max(0.0, $k->mw - $k->minMw); $frozen[$i] = true; $violation = true; } // no further than its least width
+            }
+            if (!$violation) { break; }
+        }
+        return $give;
     }
 
     /** Where a child of $size sits across $room: at the start, in the middle, or at the end. */
