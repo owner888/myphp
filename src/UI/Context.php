@@ -201,16 +201,115 @@ final class Context
             }
             $first = $node->kids[$k];
             $first->selected = $state->chosen($i);
-            if ($this->runtime !== null && $this->runtime->doubleClicked($first->id)) {
+            $rt = $this->runtime;
+            if ($rt !== null && $state->reorder !== null) { // a press on the row, moved 4 points, drags it (and the rows chosen with it)
+                $d = $rt->dragged($first->id);
+                if ($d !== null) {
+                    if ($state->drag === null) {
+                        $r = $rt->rectOf($first->id) ?? [0, 0, 0, 0];
+                        $state->drag = ['rows' => $state->draggedRows($i), 'row' => $i, 'ox' => $rt->input->mouseX - $r[0], 'oy' => $rt->input->mouseY - $r[1], 'dist' => 0.0, 'far' => false];
+                    }
+                    $state->drag['dist'] += hypot($d[0], $d[1]);
+                    $state->drag['far'] = $state->drag['far'] || $state->drag['dist'] >= 4; // mygo's dragStart
+                }
+                if ($state->drag !== null && $state->drag['far'] && in_array($i, $state->drag['rows'], true)) {
+                    self::fade($first, 0.4); // where the row was, as it moves with the pointer
+                }
+            }
+            if ($rt !== null && $state->drag !== null && $state->drag['far']) {
+                $rt->clicked($first->id); // the release that ends a drag is no click
+            } elseif ($rt !== null && $rt->doubleClicked($first->id)) {
                 $state->choose($i);
                 $state->submit();
-            } elseif ($this->runtime !== null && $this->runtime->clicked($first->id)) {
-                $state->click($i, $this->runtime->clickMods); // Cmd and Shift choose several, with a selection
+            } elseif ($rt !== null && $rt->clicked($first->id)) {
+                $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
             }
         }
         [$this->scope, $this->ordinal] = [$scope, $ordinal];
         $this->end();
+        if ($state->drag !== null && $this->runtime !== null) {
+            $this->reorderRows($state, $node, $count);
+        }
         return $node;
+    }
+
+    /**
+     * The rows of $list being dragged (ListState::$drag): shows where they
+     * would go, a copy of the row under the pointer with how many go with
+     * it, scrolls the list near its edges, and as they drop calls
+     * ListState::$reorder with them and the row they go before, as mygo's
+     * listFrame.reorder.
+     */
+    private function reorderRows(ListState $state, Node $list, int $count): void
+    {
+        $rt = $this->runtime; $t = $this->theme;
+        $drag = &$state->drag;
+        $x = $rt->input->mouseX; $y = $rt->input->mouseY;
+        // The row before which the rows dropped at $y go: that of the row of the last frame whose middle is below it, the count past the last (dropAt).
+        $to = -1; $below = -1;
+        foreach ($list->kids as $k => $kid) {
+            $r = $rt->rectOf($kid->id);
+            if ($r === null) { continue; }
+            $row = $state->first + $k;
+            if ($y < $r[1] + $r[3] / 2) { if ($to < 0 || $row < $to) { $to = $row; } } elseif ($row > $below) { $below = $row; }
+        }
+        if ($to < 0) { $to = min($below + 1, $count); }
+        if (!$rt->held()) { // dropped: rows already there stay
+            if ($drag['far'] && !(count($drag['rows']) === 1 && ($to === $drag['rows'][0] || $to === $drag['rows'][0] + 1))) {
+                ($state->reorder)($drag['rows'], $to);
+            }
+            $drag = null;
+            return;
+        }
+        if (!$drag['far']) { return; }
+        $first = $state->first;
+        $list->drawOver(function (DisplayList $dl, Node $l, Theme $t) use ($to, $first) { // the line where they would go: at the top of row $to, or under the last
+            $k = $to - $first;
+            if (isset($l->kids[$k])) { $y = $l->kids[$k]->y - max($l->gap, 0) / 2; }
+            elseif (isset($l->kids[$k - 1])) { $y = $l->kids[$k - 1]->y + $l->kids[$k - 1]->h + max($l->gap, 0) / 2; }
+            else { return; }
+            $x = $l->x + $l->padX();
+            $dl->rect($x + 4, $y - 1, $l->w - 2 * $l->padX() - 4, 2, $t->accent, 1.0, 1.0);
+            $dl->rect($x, $y - 4, 8, 8, $t->accent, 1.0, 4.0);
+        });
+        $lr = $rt->rectOf($list->id);
+        if ($lr !== null) { // near an edge, the list scrolls, faster nearer to it (mygo's dragScroll)
+            $edge = 32; $dy = 0.0;
+            if ($y - $lr[1] < $edge) { $dy = -($edge - ($y - $lr[1])) / 2; } elseif ($lr[1] + $lr[3] - $y < $edge) { $dy = ($edge - ($lr[1] + $lr[3] - $y)) / 2; }
+            if ($dy != 0) { $state->scrollBy($dy); $rt->animate(); }
+        }
+        // A copy of the row pressed under the pointer, at three quarters, with how many go with it; at the root, over everything.
+        $k = $drag['row'] - $first;
+        if (!isset($list->kids[$k])) { return; }
+        $ghost = self::copy($list->kids[$k]);
+        self::fade($ghost, 0.75);
+        $ghost->at($x - $drag['ox'] - $this->root->padX(), $y - $drag['oy'] - $this->root->padY());
+        $this->root->kids[] = $ghost;
+        if (count($drag['rows']) > 1) {
+            $saved = $this->stack; $this->stack = [$this->root];
+            [$tw, $th] = $this->metrics->measure((string)count($drag['rows']), $t->fontSize - 2);
+            $this->row(0, 0, 0, $t->accent)->size(max($tw + 10, $th + 4), $th + 4)->round(($th + 4) / 2)->center()->at($x + 10 - $this->root->padX(), $y - $th - 14 - $this->root->padY());
+              $this->text((string)count($drag['rows']), $t->fontSize - 2, $t->accentText, Font::BOLD);
+            $this->end();
+            $this->stack = $saved;
+        }
+    }
+
+    /** A copy of $n and its children, with ids of their own (not those of the nodes copied, which keep their clicks and hover). */
+    private static function copy(Node $n): Node
+    {
+        $c = clone $n;
+        $c->id = self::hash('copy/' . $n->id);
+        $c->draw = null; $c->drawOver = null; $c->tooltip = null; $c->focusable = false;
+        $c->kids = array_map(self::copy(...), $n->kids);
+        return $c;
+    }
+
+    /** Sets $n's and its children's alpha. */
+    private static function fade(Node $n, float $alpha): void
+    {
+        $n->alpha = $alpha;
+        foreach ($n->kids as $k) { self::fade($k, $alpha); }
     }
 
     /** Text in the theme's text color, or $color; $style is Font bits (BOLD, ITALIC, MONO). */

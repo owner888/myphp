@@ -864,6 +864,18 @@ final class Runtime
         return $d;
     }
 
+    /** Whether the left button is held down (a press that has not ended). */
+    public function held(): bool
+    {
+        return $this->hold !== null;
+    }
+
+    /** Asks for the next frame as an animation would (a list scrolling under a drag near its edge). */
+    public function animate(): void
+    {
+        $this->animating = true;
+    }
+
     /** Which half of stepper $id the mouse is held down on: 1 the upper, -1 the lower, 0 neither. */
     public function holding(int $id): int
     {

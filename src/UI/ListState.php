@@ -33,6 +33,10 @@ final class ListState implements Scrollable
     public ?int $selected = null;
     /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
     public ?Selection $selection = null;
+    /** Set, lets the user drag rows to another place (mygo's ListState.Reorder): called with the rows dragged (those chosen, when the row dragged is one, else that row), in order, and the row they go before (the count for the end); move them there. The list shows where they would go and scrolls near its edges. */
+    public ?Closure $reorder = null;
+    /** The rows being dragged: rows, row (the one pressed), ox, oy (the press in it), dist (how far the pointer went), far (past 4 points: a drag, not a click). */
+    public ?array $drag = null;
     /** An identity for row $i (Closure(int): int|string), for the selection to follow its items as rows come, go and move; the index without one. */
     public ?Closure $key = null;
     /** A list showing its end keeps showing it as rows are appended (a chat, a log), until the user scrolls up. */
@@ -202,6 +206,15 @@ final class ListState implements Scrollable
     public function selectAll(): void
     {
         if ($this->selection !== null && $this->selection->selectAll($this->count, $this->keyOf(...))) { $this->didChange = true; }
+    }
+
+    /** The rows a drag from row $i moves: those chosen when it is one of them, else row $i (mygo's listFrame.dragged). @return list<int> */
+    public function draggedRows(int $i): array
+    {
+        if ($this->selection === null || !$this->chosen($i)) { return [$i]; }
+        $rows = [];
+        for ($j = 0; $j < $this->count; $j++) { if ($this->chosen($j)) { $rows[] = $j; } }
+        return $rows;
     }
 
     /** Whether row $row is chosen: in the selection, or the one selected. */

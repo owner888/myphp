@@ -76,6 +76,9 @@ final class Node
     public bool $focusable = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
+    /** Drawn over the children (mygo's DrawOver): a list's drop line. */
+    public ?\Closure $drawOver = null;
+
     /** A press on this node (not on a control inside it) drags the window, a double click zooms or minimizes it as macOS is set to (mygo's DragWindow): a view's own title bar. */
     public bool $dragsWindow = false;
 
@@ -190,6 +193,13 @@ final class Node
     public function inset(float $left, float $right = 0): static
     {
         $this->insetL = $left; $this->insetR = $right;
+        return $this;
+    }
+
+    /** Paints over this node's children with $fn (list, node, theme), as mygo's DrawOver. */
+    public function drawOver(\Closure $fn): static
+    {
+        $this->drawOver = $fn;
         return $this;
     }
 

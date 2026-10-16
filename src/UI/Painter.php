@@ -134,6 +134,9 @@ final class Painter
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
+        if ($n->drawOver !== null) {
+            ($n->drawOver)($list, $n, $t); // over the children, inside a scrolling container's clip (mygo's DrawOver)
+        }
         if ($n->focusVisible && $n->color === null) { // a list or other background-less node: the ring just inside its edge, over its children (outside, a list filling the window would lose it)
             $list->ring($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $t->focus, $t->focusAlpha, max(0.0, $n->radius - 1), 2.0);
         }

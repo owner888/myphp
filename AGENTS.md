@@ -56,7 +56,7 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/single()/
+                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/drawOver()/single()/
                    min()/focusGroup()/wrap()/grid()/dragWindow();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
@@ -65,7 +65,7 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
-                   Scrollable + ScrollState + ListState (anchor, choice, scrollTo), Selection (several rows, by key), GridState (a grid view), Scrollbar, Glide, Theme, Content
+                   Scrollable + ScrollState + ListState (anchor, choice, reorder, scrollTo), Selection (several rows, by key), GridState (a grid view), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client

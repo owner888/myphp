@@ -571,6 +571,25 @@ the AppKit selectors with `AndModifySelection:` for Shift and
 as shortcuts. A grid cell the keys moved to without choosing rings
 itself inset by 3. `examples/native` chooses several rows.
 
+`ListState::$reorder` is mygo's Reorder, done inside `Context::list`
+(`reorderRows`) with no drag-and-drop framework: a press on a row bound
+by `Runtime::dragged` that goes 4 points (mygo's dragStart) drags the
+rows chosen when the row is one of them, else that row
+(`ListState::draggedRows`), kept in `ListState::$drag`; the rows fade
+to 0.4 where they were, a copy of the row pressed (`Context::copy`, new
+ids so the originals keep their clicks and hover) rides under the
+pointer at 0.75 as an absolute node at the root, with an accent pill of
+how many go with it when more than one (fontSize − 2, bold, 10 points
+right and 14 above the pointer, as mygo's paintDrag), the drop line — a
+2-point accent line with an 8-point dot — shows at the top of the row
+the rows would go before (`dropAt`: the first row of last frame whose
+middle is below the pointer, or past the last) through
+`Node::drawOver`, which paints after the children (mygo's DrawOver),
+and within 32 points of the list's edges it scrolls, faster nearer to
+them (mygo's dragScroll, `Runtime::animate` keeping the frames coming).
+The release calls $reorder with the rows and the row they go before,
+unless a single row would land where it is, and is no click.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -1004,7 +1023,8 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   sheets or text (convert text to paths); mygo reads all but text.
 - `grid` places children row by row only: mygo's ColumnStart/RowStart,
   spans and JustifyItems are not ported.
-- `gridView`'s Reorder (dragging items to another place) is not ported.
+- `gridView`'s Reorder (dragging items to another place) is not ported;
+  the list's is.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
