@@ -42,3 +42,18 @@ $size = 200.0;
 $h = new Headless(function (Context $c) use (&$size) { $c->split($size, function () use ($c) { $c->text('left'); }, function () use ($c) { $c->text('right'); }); }, 600, 300);
 $h->frame(); $h->hover(200, 150); same('resizeEW', $h->rt->cursor, 'the split handle cursor');
 $h->press(200, 150); $h->drag(240, 150); $h->release(240, 150); same(240.0, $size, 'dragging the handle resizes');
+
+// Basis(0) with grow: the children share the row equally whatever they hold, and never widen their parent.
+$n = [];
+$h = new Headless(function (Context $c) use (&$n) {
+    $c->row(0, 0, 1);
+      $n['a'] = $c->column(0, 0, 1)->basis(0); $c->text('x'); $c->end();
+      $n['b'] = $c->column(0, 0, 1)->basis(0); $n['r'] = $c->row(0, 0);
+        $n['c'] = $c->column(0, 0, 1)->basis(0); $c->text(str_repeat('wide', 20)); $c->end();
+        $n['d'] = $c->column(0, 0, 1)->basis(0); $c->text('y'); $c->end();
+      $c->end(); $c->end();
+    $c->end();
+}, 600, 100);
+$h->frame(); $r = fn($k) => $h->rect($k);
+same([300.0, 300.0], [$r($n['a'])[2], $r($n['b'])[2]], 'the long text does not widen its column: half each');
+same([150.0, 150.0], [$r($n['c'])[2], $r($n['d'])[2]], 'the two of basis 0 share it equally');

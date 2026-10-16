@@ -90,7 +90,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   them while building; a click that changed state re-runs the build (≤3 passes).
   `rich(..., wrap: true)` wraps at last frame's width (a frame follows when
   it differs); `->focusable()` puts any node in the Tab order; `->size(w, h)`
-  fixes a container's size over its content's.
+  fixes a container's size over its content's; `->basis(0)` with grow shares
+  the room equally and keeps content from widening the parent (mygo's Basis).
 - **Scrolling on either axis**: `->scroll($state, horizontal:, vertical:)`;
   a container takes the room it is given on the axes it scrolls and its
   content's size on the other; wheel dx/dy, thumbs and drags per axis.

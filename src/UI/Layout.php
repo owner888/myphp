@@ -33,9 +33,9 @@ final class Layout
             }
             $cnt++;
             if ($n->dir === Node::ROW) {
-                $main += $k->mw; if ($k->mh > $cross) $cross = $k->mh;
+                $main += $k->basis ?? $k->mw; if ($k->mh > $cross) $cross = $k->mh;
             } else {
-                $main += $k->mh; if ($k->mw > $cross) $cross = $k->mw;
+                $main += $k->basis ?? $k->mh; if ($k->mw > $cross) $cross = $k->mw;
             }
         }
         [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padX(), $n->padY()] : [$n->padY(), $n->padX()];
@@ -99,7 +99,7 @@ final class Layout
         }
         $avail = ($n->dir === Node::ROW ? $w - 2 * $px : $h - 2 * $py) - $n->gap * ($cnt - 1);
         $used = 0.0; $grow = 0; $crossMax = 0.0;
-        foreach ($kids as $k) { $used += $n->dir === Node::ROW ? $k->mw : $k->mh; $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
+        foreach ($kids as $k) { $used += $k->basis ?? ($n->dir === Node::ROW ? $k->mw : $k->mh); $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
         $cx = $x + $px; $cy = $y + $py; $cw = $w - 2 * $px; $ch = $h - 2 * $py;
         if ($n->scroll instanceof ScrollState) {
@@ -160,12 +160,12 @@ final class Layout
                 $a = Node::STRETCH; // no size of its own across (a text area given 0, an empty box): it takes the room
             }
             if ($n->dir === Node::ROW) {
-                $kw = $k->mw + $extra * $k->grow - ($shrink[$i] ?? 0.0);
+                $kw = ($k->basis ?? $k->mw) + $extra * $k->grow - ($shrink[$i] ?? 0.0);
                 $kh = $a === Node::STRETCH && $k->fh <= 0 ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
                 self::arrange($k, $cx, $cy + self::across($a, $ch, $kh), $kw, $kh);
                 $cx += $kw + $n->gap;
             } else {
-                $kh = $k->mh + $extra * $k->grow;
+                $kh = ($k->basis ?? $k->mh) + $extra * $k->grow;
                 $kw = $a === Node::STRETCH && $k->fw <= 0 ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
                 self::arrange($k, $cx + self::across($a, $cw, $kw), $cy, $kw, $kh);
                 $cy += $kh + $n->gap;

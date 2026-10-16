@@ -1648,14 +1648,13 @@ final class Context
         }
         $s->cols = $cols; $s->started = true;
         $rows = intdiv($n + $cols - 1, $cols);
-        $cw = ($width - $gap * ($cols - 1)) / $cols; // the items share the width (Grow(1).Basis(0))
         $focused = $s->selects && ($rt?->focused($id) ?? false);
         $changed = false; $submitted = false;
-        $grid = $this->list($s->rows, $rows, function (int $r) use ($s, $n, $cols, $cw, $gap, $height, $item, $t, $rt, $focused, &$changed, &$submitted, $id) {
+        $grid = $this->list($s->rows, $rows, function (int $r) use ($s, $n, $cols, $rows, $gap, $height, $item, $t, $rt, $focused, &$changed, &$submitted, $id) {
             $this->row(0, $gap)->padding($gap / 2, 0)->align(Node::STRETCH);
               for ($i = $r * $cols; $i < min($n, ($r + 1) * $cols); $i++) {
                   // A border, clear unless chosen, keeps the content in place as it is.
-                  $cell = $this->key($i)->column(0, 0)->padding(2, 2)->size($cw, $height)->round($t->radius);
+                  $cell = $this->key($i)->column(0, 0, 1)->basis(0)->padding(2, 2)->size(0, $height)->round($t->radius); // the items share the width (Grow(1).Basis(0).MinWidth(0))
                   if ($s->selects) {
                       $chosen = $s->chosen($i);
                       if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border($t->accent, 2.0); } // Accent.Alpha(0.2)
@@ -1686,6 +1685,7 @@ final class Context
                       if ($this->clicked($cell)) { $changed = $this->gridChoose($s, $i, $n, $rt->clickMods) || $changed; $rt->focusOn($id); }
                   }
               }
+              for ($k = $n; $k < ($r + 1) * $cols && $r === $rows - 1; $k++) { $this->spacer(); } // empty places keep the last row's items as wide as the others
             $this->end();
         });
         if ($s->selects) { $grid->focusable = true; }
@@ -1777,9 +1777,8 @@ final class Context
     {
         $t = $this->theme;
         $h = $size ?? $t->fontSize;
-        $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null;
+        $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
         $n->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::icon($list, $svg, $a->x, $a->y, $a->w, $a->h, $color ?? $t->text, $a->alpha));
-        $n->alpha = 0.0; // the box paints nothing itself
         return $n;
     }
 

@@ -173,7 +173,14 @@ frame late. The container's room, not the node's own width, is what to
 wrap at: a node's width follows its lines, so wrapping at it never
 narrows. A table cell's text wraps at the cell this way; `Node::min(w,
 h)` is mygo's MinWidth/MinHeight, and a table row is at least Space(8)
-high and as high as its tallest cell.
+high and as high as its tallest cell. `Node::basis(b)` is mygo's Basis:
+along the parent's axis the node counts as $b wide (or high) before the
+room left is shared by grow, instead of its content's size — so children
+of basis 0 and grow 1 share a row equally whatever they hold, and their
+content never widens the parent. Without it the grid view's rows, built
+at the window's width the first frame, widened their column for good and
+the grid could never narrow (the file manager's grid ran under the
+window's right edge).
 
 Buttons follow mygo's styleButton: `button()` is plain — a surface face
 with a one-point border (`Node::border()`), the text color, shaded on
@@ -489,7 +496,8 @@ in the list node's width last frame (`Context::nextId` gives the id
 before the node is built; the window's width the first frame), Space(2)
 apart; the rows go through `list`, so only those in view are built, each
 a row padded gap/2 above and below with the cells sharing the width
-(fixed to (width − gaps) / cols, mygo's Grow(1).Basis(0)) at $height,
+(grow 1, basis 0, as mygo's Grow(1).Basis(0).MinWidth(0); spacers fill
+the last row's empty places so its items are as wide) at $height,
 padded 2 for a border that shows only chosen (accent 2 on the accent
 mixed to a fifth over the background while the grid has the focus, the
 border color on surfacePressed otherwise; surfaceHover under the
@@ -502,7 +510,10 @@ within a second and takes Space as a letter then instead of a press
 (mygo's typePause). Columns changing keep the first row in view on the
 same items; Cmd and Shift choose several (`GridState::$selection`) and
 items drag to reorder (`$reorder`). `examples/photos` is on it: only the
-cells built want thumbnails. `examples/files` is the file manager on
+cells built want thumbnails. An `icon()` is a box with no face of its own whose draw paints the SVG's
+paths at the node's alpha, so `fade()` dims it with the rest of a dragged
+cell; it was built with alpha 0 at first, which painted nothing, the
+headless paint check now reads the quad. `examples/files` is the file manager on
 the grid and the table at once: both states share one `Selection` keyed
 by path (`ListState::$key`, `GridState::$key`), so the choice follows
 the entries through a sort, a filter by the find bar and the switch of

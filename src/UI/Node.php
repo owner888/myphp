@@ -37,6 +37,8 @@ final class Node
     public const HORIZONTAL = 1, VERTICAL = 2;
     /** The least width and height this node measures to (mygo's MinWidth, MinHeight); 0 for none. */
     public float $minW = 0, $minH = 0;
+    /** The flex basis along the parent's axis (Node::basis), or null for the content's size. */
+    public ?float $basis = null;
     /** A text kept to one line: it shrinks to the room its row or column has and ends in an ellipsis where cut (mygo's SingleLine). */
     public bool $single = false;
     /** For a button or select: a chevron (mygo's, a Space(2.5) box stroked 1.5) after the label, Space(1.5) apart. */
@@ -174,6 +176,18 @@ final class Node
     public function focusGroup(int $orientation, bool $selects = false): static
     {
         $this->focusGroup = $orientation; $this->groupSelects = $selects;
+        return $this;
+    }
+
+    /**
+     * The size this node starts from along its parent's axis before the room
+     * left is shared out by grow, as mygo's Basis: 0 with grow makes the
+     * children share the room equally, whatever their content measures,
+     * and keeps the content from widening the parent; null is the content's size.
+     */
+    public function basis(float $basis): static
+    {
+        $this->basis = $basis;
         return $this;
     }
 

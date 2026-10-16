@@ -151,7 +151,8 @@ $h->clickOn($row(8), Key::COMMAND); $h->down(Key::SHIFT); same([2, 3, 4, 8, 9], 
 $h->key(0, 'selectAll:', Key::COMMAND, 'a'); same(20, $ls->selection->count(), 'Cmd+A chooses all');
 $cell = fn(int $i) => $n['g']->kids[intdiv($i, $gs->cols)]->kids[$i % $gs->cols];
 $h->clickOn($cell(1)); $h->clickOn($cell(4), Key::SHIFT); same([1, 2, 3, 4], $gs->selection->all(), 'Shift-click in the grid'); $h->clickOn($cell(7), Key::COMMAND); $h->down(Key::SHIFT);
-same(range(1, 4) + [4 => 7, 5 => 8, 6 => 9, 7 => 10, 8 => 11, 9 => 12, 10 => 13, 11 => 14], $gs->selection->all(), 'Shift+Down in the grid extends a row down from the pivot');
+same(3, $gs->cols, 'the grid shares the row with the list, half each: three columns'); // Basis(0): its rows never widen it
+same([1, 2, 3, 4, 7, 8, 9, 10], $gs->selection->all(), 'Shift+Down in the grid extends a row down from the pivot');
 $h->shortcut('a', Key::COMMAND); same(30, $gs->selection->count(), 'Cmd+A in the grid');
 
 // Rows and items dragged to another place.
@@ -202,6 +203,9 @@ try { SVG::parse('<svg viewBox="0 0 10 10"><path d="M1 1 X"/></svg>'); check(fal
 $seen = []; $n = [];
 $h = new Headless(function (Context $c) use (&$n, $search) { $c->row(0, 8); $n['i'] = $c->icon($search); $n['a'] = $c->avatar('Ada Lovelace'); $c->end(); }, 300, 100);
 $h->frame(); same([13.0, 13.0], [$n['i']->w, $n['i']->h], 'an icon is as high as the font size, square for a square viewBox');
+$list = $h->paint(); $quads = []; for ($q = 0; $q < $list->n; $q++) { $quads[] = [$list->buf[$q * 16], $list->buf[$q * 16 + 2], $list->buf[$q * 16 + 7], $list->buf[$q * 16 + 8]]; }
+$icon = array_values(array_filter($quads, fn($q) => $q[3] === 0.0 && $q[0] >= 0 && $q[0] < 13)); // glyph quads (kind 0) within the icon
+check($icon !== [] && $icon[0][2] === 1.0, 'the icon paints its paths in full (not the box\'s alpha)');
 same(['AL', 29.25, 14.625], [$n['a']->kids[0]->text, $n['a']->w, $n['a']->radius], 'an avatar: the initials, 2.25 × fontSize, round');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');
 
