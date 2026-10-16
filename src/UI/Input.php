@@ -14,7 +14,7 @@ final class Input
     public float $mouseX = -1, $mouseY = -1;
     public bool $mouseInside = false;
     public bool $mouseDown = false;
-    /** @var list<array> ['down'|'up'|'drag'|'scroll'|'key'|'command'|'insert', ...] in arrival order; down and up carry x, y, button, click count */
+    /** @var list<array> ['down'|'up'|'drag'|'scroll'|'key'|'command'|'insert', ...] in arrival order; down and up carry x, y, button, click count, modifier flags */
     public array $events = [];
 
     /** The focused text field's state, or null when no field has the keyboard. */

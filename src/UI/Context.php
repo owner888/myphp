@@ -200,12 +200,12 @@ final class Context
                 continue;
             }
             $first = $node->kids[$k];
-            $first->selected = $i === $state->selected;
+            $first->selected = $state->chosen($i);
             if ($this->runtime !== null && $this->runtime->doubleClicked($first->id)) {
                 $state->choose($i);
                 $state->submit();
             } elseif ($this->runtime !== null && $this->runtime->clicked($first->id)) {
-                $state->choose($i);
+                $state->click($i, $this->runtime->clickMods); // Cmd and Shift choose several, with a selection
             }
         }
         [$this->scope, $this->ordinal] = [$scope, $ordinal];
@@ -1541,31 +1541,37 @@ final class Context
                   // A border, clear unless chosen, keeps the content in place as it is.
                   $cell = $this->key($i)->column(0, 0)->padding(2, 2)->size($cw, $height)->round($t->radius);
                   if ($s->selects) {
-                      $chosen = $i === $s->selected;
+                      $chosen = $s->chosen($i);
                       if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border($t->accent, 2.0); } // Accent.Alpha(0.2)
                       elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border($t->border, 2.0); }
                       elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
+                      if ($i === $s->selected && $s->selection !== null && !$chosen && $rt?->focusVisible($id)) { // where the keys moved without choosing
+                          $cell->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::focusRing($list, $a->x + 3, $a->y + 3, $a->w - 6, $a->h - 6, $a->radius, $t));
+                      }
                   }
                     $item($i);
                   $this->end();
                   if ($s->selects && $rt !== null) {
                       if ($this->doubleClicked($cell)) { $submitted = true; }
-                      if ($this->clicked($cell)) { if ($s->selected !== $i) { $s->selected = $i; $changed = true; } $rt->focusOn($id); }
+                      if ($this->clicked($cell)) { $changed = $this->gridChoose($s, $i, $n, $rt->clickMods) || $changed; $rt->focusOn($id); }
                   }
               }
             $this->end();
         });
         if ($s->selects) { $grid->focusable = true; }
         if ($s->selects && $rt !== null && $rt->focus === $grid->id && $n > 0) { // the keys: the arrows in two dimensions, Home, End, Enter, the first letters
-            $at = $s->selected; $in = $at >= 0 && $at < $n; $to = -1;
+            $at = $s->selected; $in = $at >= 0 && $at < $n; $to = -1; $extend = false;
             foreach ([[Key::RIGHT, 1], [Key::LEFT, -1], [Key::DOWN, $cols], [Key::UP, -$cols]] as [$key, $d]) {
-                if (!$this->shortcut($key)) { continue; }
+                $plain = $this->shortcut($key); $shift = $s->selection !== null && $this->shortcut($key, Key::SHIFT);
+                if (!$plain && !$shift) { continue; }
+                $extend = $shift;
                 if (!$in) { $to = 0; }
                 elseif ($at + $d >= 0 && $at + $d < $n) { $to = $at + $d; }
                 elseif ($d === $cols && intdiv($at, $cols) < intdiv($n - 1, $cols)) { $to = $n - 1; } // the last row, shorter
             }
             if ($this->shortcut(Key::HOME)) { $to = 0; }
             if ($this->shortcut(Key::END)) { $to = $n - 1; }
+            if ($s->selection !== null && $this->shortcut('a', Key::COMMAND) && $s->selection->selectAll($n, $s->keyOf(...))) { $changed = true; }
             if ($rt->activated($grid->id) && $in) { $submitted = true; }
             if ($s->label !== null && ($typed = $rt->typed($grid->id)) !== '') {
                 $now = hrtime(true) / 1e9;
@@ -1577,7 +1583,13 @@ final class Context
                 }
             }
             if ($to >= 0) {
-                if ($s->selected !== $to) { $s->selected = $to; $changed = true; }
+                if ($extend) {
+                    if ($s->selection->pivot < 0 || !$in) { $s->selection->pivot = max($at, 0); $s->selection->span = 0; }
+                    $changed = $s->selection->extend($to, $n, $s->keyOf(...)) || $changed;
+                    $s->selected = $to;
+                } else {
+                    $changed = $this->gridChoose($s, $to, $n, 0) || $changed;
+                }
                 $s->reveal($to);
             }
         }
@@ -1642,6 +1654,15 @@ final class Context
         $c = (1 - abs(2 * $l - 1)) * $s; $x = $c * (1 - abs(fmod($h / 60, 2) - 1)); $m = $l - $c / 2;
         [$r, $g, $b] = match (true) { $h < 60 => [$c, $x, 0], $h < 120 => [$x, $c, 0], $h < 180 => [0, $c, $x], $h < 240 => [0, $x, $c], $h < 300 => [$x, 0, $c], default => [$c, 0, $x] };
         return ((int)(($r + $m) * 255) << 16) | ((int)(($g + $m) * 255) << 8) | (int)(($b + $m) * 255);
+    }
+
+    /** Chooses item $i of a grid as a click with $mods does (mygo's GridState.click); whether the choice changed. */
+    private function gridChoose(GridState $s, int $i, int $n, int $mods): bool
+    {
+        if ($s->selection !== null) { return $s->selection->click($i, $mods, $n, $s->keyOf(...), $s->selected); }
+        if ($s->selected === $i) { return false; }
+        $s->selected = $i;
+        return true;
     }
 
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */

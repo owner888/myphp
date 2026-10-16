@@ -16,6 +16,10 @@ final class GridState
     /** Whether a click chooses an item, as the arrows do while the grid has the focus: then $selected is the item chosen, -1 for none. */
     public bool $selects = false;
     public int $selected = -1;
+    /** Set, lets the user choose several items, held by their keys, as a ListState's: Cmd-click adds or takes out, Shift-click and Shift with the arrows choose from the item last chosen, Cmd+A chooses all; $selected is then the item last chosen. */
+    public ?Selection $selection = null;
+    /** An identity for item $i (Closure(int): int|string), for the selection to follow its items; the index without one. */
+    public ?Closure $key = null;
     /** The text of item $i (Closure(int): string): typing its first letters while the grid has the focus chooses it. */
     public ?Closure $label = null;
     /** How many columns the items took in the last frame. */
@@ -28,6 +32,17 @@ final class GridState
     public function __construct()
     {
         $this->rows = new ListState;
+    }
+
+    /** Whether item $i is chosen: in the selection, or the one selected. */
+    public function chosen(int $i): bool
+    {
+        return $this->selection !== null ? $this->selection->has($this->keyOf($i)) : $i === $this->selected;
+    }
+
+    public function keyOf(int $i): int|string
+    {
+        return $this->key === null ? $i : ($this->key)($i);
     }
 
     /** Scrolls the grid to show item $item at the top. */

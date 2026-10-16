@@ -26,7 +26,9 @@ final class Runtime
     private array $areas = [];
     /** Set by a frame that needs another one right after (a list left a gap). */
     public bool $needsFrame = false;
-    private array $clicks = [];     // [x, y] of left mouse-ups this frame
+    private array $clicks = [];     // [x, y, mods] of left mouse-ups this frame
+    /** The modifiers of the click clicked() last took (mygo's ClickModifiers): Shift, Command. */
+    public int $clickMods = 0;
     private array $rightClicks = []; // [x, y] of right mouse-ups this frame
     private array $doubleClicks = []; // [x, y] of second presses this frame
     private bool $consumed = false;
@@ -168,7 +170,7 @@ final class Runtime
                     $this->hold = null;
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
-                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2]]; }
+                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
                     break;
                 case 'drag':
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
@@ -561,15 +563,17 @@ final class Runtime
         if ($this->focus !== null && isset($this->lists[$this->focus])) {
             $l = $this->lists[$this->focus];
             $page = max(1, (int)($l->viewport / max(1.0, $l->estimate)) - 1);
-            switch ($selector) {
-                case 'moveUp:': $l->choose(max(0, $l->selected - 1)); return true;
-                case 'moveDown:': $l->choose($l->selected + 1); return true;
-                case 'pageUp:': case 'scrollPageUp:': $l->choose(max(0, $l->selected - $page)); return true;
-                case 'pageDown:': case 'scrollPageDown:': $l->choose($l->selected + $page); return true;
-                case 'moveToBeginningOfDocument:': case 'scrollToBeginningOfDocument:': $l->choose(0); return true;
-                case 'moveToEndOfDocument:': case 'scrollToEndOfDocument:': $l->choose($l->count - 1); return true;
-                case 'insertNewline:': if ($l->selected >= 0) { $l->submit(); } return true;
-            }
+            $extend = $l->selection !== null && str_ends_with($selector, 'AndModifySelection:'); // Shift with the keys: the choice extends
+            $base = $extend ? substr($selector, 0, -strlen('AndModifySelection:')) . ':' : $selector;
+            $to = match ($base) {
+                'moveUp:' => max(0, $l->selected - 1), 'moveDown:' => $l->selected + 1,
+                'pageUp:', 'scrollPageUp:' => max(0, $l->selected - $page), 'pageDown:', 'scrollPageDown:' => $l->selected + $page,
+                'moveToBeginningOfDocument:', 'scrollToBeginningOfDocument:' => 0, 'moveToEndOfDocument:', 'scrollToEndOfDocument:' => $l->count - 1,
+                default => null,
+            };
+            if ($to !== null) { $extend ? $l->extendTo($to) : $l->choose($to); return true; }
+            if ($selector === 'selectAll:' && $l->selection !== null) { $l->selectAll(); return true; }
+            if ($selector === 'insertNewline:') { if ($l->selected >= 0) { $l->submit(); } return true; }
         }
         if ($this->focus !== null && isset($this->sliders[$this->focus])) {
             switch ($selector) {
@@ -675,10 +679,11 @@ final class Runtime
             $this->consumed = true;
             return true;
         }
-        foreach ($this->clicks as $i => [$x, $y]) {
+        foreach ($this->clicks as $i => [$x, $y, $mods]) {
             if ($this->under($id, $x, $y)) {
                 unset($this->clicks[$i]);
                 $this->consumed = true;
+                $this->clickMods = $mods;
                 return true;
             }
         }

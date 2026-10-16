@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
+
 /**
  * A virtualized list's place among its rows, kept by the app: the anchor
  * row at the top of the view and how far the view's top is below the
@@ -29,6 +31,10 @@ final class ListState implements Scrollable
     public float $gap = 0;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
+    /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
+    public ?Selection $selection = null;
+    /** An identity for row $i (Closure(int): int|string), for the selection to follow its items as rows come, go and move; the index without one. */
+    public ?Closure $key = null;
     /** A list showing its end keeps showing it as rows are appended (a chat, a log), until the user scrolls up. */
     public bool $followEnd = false;
     /** Set by Layout each frame: the last row's bottom is in view. */
@@ -157,10 +163,13 @@ final class ListState implements Scrollable
         }
     }
 
-    /** Chooses row $row (clamped; -1 for none) and brings it into view. */
+    /** Chooses row $row (clamped; -1 for none) and brings it into view; with a selection, alone. */
     public function choose(int $row): void
     {
         $row = max(-1, min($this->count - 1, $row));
+        if ($this->selection !== null && $row >= 0 && $this->selection->choose($row, $this->keyOf(...))) {
+            $this->didChange = true;
+        }
         if ($row !== $this->selected) {
             $this->selected = $row;
             $this->didChange = true;
@@ -168,6 +177,43 @@ final class ListState implements Scrollable
         if ($row >= 0) {
             $this->reveal($row);
         }
+    }
+
+    /** Chooses row $row as a click with $mods (Key::SHIFT, Key::COMMAND) does: choose() without a selection. */
+    public function click(int $row, int $mods): void
+    {
+        if ($this->selection === null) { $this->choose($row); return; }
+        $row = max(0, min($this->count - 1, $row));
+        if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->didChange = true; }
+        $this->reveal($row);
+    }
+
+    /** Extends the choice from the pivot to $row with Shift and the keys; choose() without a selection. */
+    public function extendTo(int $row): void
+    {
+        if ($this->selection === null) { $this->choose($row); return; }
+        $row = max(0, min($this->count - 1, $row));
+        if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; }
+        $this->selected = $row;
+        $this->reveal($row);
+    }
+
+    /** Chooses every row (Cmd+A), with a selection. */
+    public function selectAll(): void
+    {
+        if ($this->selection !== null && $this->selection->selectAll($this->count, $this->keyOf(...))) { $this->didChange = true; }
+    }
+
+    /** Whether row $row is chosen: in the selection, or the one selected. */
+    public function chosen(int $row): bool
+    {
+        return $this->selection !== null ? $this->selection->has($this->keyOf($row)) : $row === $this->selected;
+    }
+
+    /** The key of row $row: $key's, or the index. */
+    public function keyOf(int $row): int|string
+    {
+        return $this->key === null ? $row : ($this->key)($row);
     }
 
     /** Whether the choice changed since last asked. */

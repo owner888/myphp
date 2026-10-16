@@ -555,6 +555,22 @@ minimize macOS's AppleActionOnDoubleClick asks for (mygo's StartDrag and
 TitleBarDoubleClicked). `examples/titlebar` draws such a bar.
 TrafficLightPosition is not ported.
 
+`UI\Selection` is mygo's Selection for a list, table or grid that lets
+the user choose several rows (`ListState::$selection`,
+`GridState::$selection`): the keys of the items chosen
+(`ListState::$key` / `GridState::$key` give a row its key; the index
+without), with the pivot Shift extends from and the span it last
+extended, as mygo's macOS rule: Shift chooses from the pivot to the row
+in place of those it last chose, Cmd-click adds a row or takes it out
+(the pivot moves there), a plain click or the keys choose alone, Cmd+A
+all; `$selected` stays the row the keys move from. Mouse events carry
+the modifier flags, `Runtime::$clickMods` is the modifiers of the click
+`clicked()` last took (mygo's ClickModifiers), and the list's keys read
+the AppKit selectors with `AndModifySelection:` for Shift and
+`selectAll:` for Cmd+A; the grid takes Shift with the arrows and Cmd+A
+as shortcuts. A grid cell the keys moved to without choosing rings
+itself inset by 3. `examples/native` chooses several rows.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -988,8 +1004,7 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   sheets or text (convert text to paths); mygo reads all but text.
 - `grid` places children row by row only: mygo's ColumnStart/RowStart,
   spans and JustifyItems are not ported.
-- `gridView` chooses one item; mygo's Selection (several, Cmd and Shift
-  clicks) and Reorder (dragging items) are not ported, nor is ListState's.
+- `gridView`'s Reorder (dragging items to another place) is not ported.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
