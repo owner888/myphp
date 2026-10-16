@@ -2620,13 +2620,23 @@ final class Context
      * A text area editing $state: wraps at its width, scrolls with the wheel
      * and to keep the caret in view, Enter inserts a line, Up/Down move by
      * wrapped lines, Cmd+Z undoes. A $width or $height of 0 fills the room
-     * its container has left along that axis (grow).
+     * its container has left along that axis (grow). With $maxLines, the
+     * area is as high as its text wrapped at its width, from $minLines up
+     * to $maxLines, past which it scrolls, as a message field grows with
+     * what is typed (mygo's Lines): $height is then the least it is.
      */
-    public function textarea(TextState $state, string $placeholder = '', float $width = 320, float $height = 120, ?float $size = null): Node
+    public function textarea(TextState $state, string $placeholder = '', float $width = 320, float $height = 120, ?float $size = null, int $minLines = 0, int $maxLines = 0): Node
     {
         $t = $this->theme;
         $state->multiline = true;
-        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $width <= 0 || $height <= 0 ? 1 : 0, $placeholder, $t->surface, $size ?? $t->fontSize, $t->text));
+        $size ??= $t->fontSize;
+        if ($maxLines > 0) { // as high as its lines, between min and max: wrapped at the width it had last frame when it grows
+            $id = $this->nextId();
+            $w = $width > 0 ? $width : ($this->runtime?->rectOf($id)[2] ?? $this->width);
+            $lines = $state->layout($this->metrics, $size, $w - 2 * Runtime::FIELD_INSET);
+            $height = max($height, max($minLines, min($maxLines, count($lines->lines))) * $lines->lineHeight + 2 * Runtime::FIELD_INSET_Y);
+        }
+        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $width <= 0 || $height <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text));
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;

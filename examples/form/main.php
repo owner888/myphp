@@ -7,12 +7,13 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, ScrollState, Span, TextState, Theme};
+use MyPHP\UI\{Content, Context, Font, Key, ScrollState, Span, TextState, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
+$s = ['name' => new TextState('Ada'), 'city' => new TextState, 'note' => new TextState, 'draft' => new TextState, 'log' => new TextState, 'greeting' => '', 'submits' => 0, 'strip' => new ScrollState,
       'subscribe' => false, 'mode' => 'system', 'applied' => 'system', 'volume' => 40.0, 'lang' => 0];
+$s['log']->readOnly = true;
 
 function form(Context $c, array &$s): void
 {
@@ -28,6 +29,21 @@ function form(Context $c, array &$s): void
       $c->row(0, 12);
         $c->column(0, 0); $c->muted('Note'); $c->end();
         $c->textarea($s['note'], 'A few lines: Enter breaks, Up/Down move, Cmd+Z undoes', 320, 96); // wraps at the width
+      $c->end();
+      // A message field: one line that grows with what is typed, up to four, Enter sends it (the key taken before the field sees it), Shift+Enter breaks a line; the log below is read-only, selectable and copyable.
+      $c->row(0, 12);
+        $c->column(0, 0); $c->muted('Message'); $c->end();
+        $s['draft']->onTextKey = function (int $code, string $chars, int $mods, TextState $d) use (&$s): bool {
+            if ($code !== Key::RETURN || $mods & Key::SHIFT) { return false; }
+            if (trim($d->text) !== '') { $s['log']->text .= ($s['log']->text === '' ? '' : "\n") . trim($d->text); $s['log']->setCursor(strlen($s['log']->text)); }
+            $d->selectAll(); $d->insert('');
+            return true;
+        };
+        $c->textarea($s['draft'], 'Enter sends, Shift+Enter breaks a line', 320, 0, null, 1, 4);
+      $c->end();
+      $c->row(0, 12);
+        $c->column(0, 0); $c->muted('Sent'); $c->end();
+        $c->textarea($s['log'], 'Nothing sent yet', 320, 64);
       $c->end();
       // A strip wider than the window: scrolls sideways with the trackpad or its thumb.
       $c->row(8, 8, 0, $t = $c->theme->surface)->scroll($s['strip'], horizontal: true, vertical: false);

@@ -62,7 +62,7 @@ src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + st
 src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Context (column/row/grid/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
-                   textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
+                   textarea(minLines, maxLines)/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/drawOver()/single()/
                    min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
@@ -70,7 +70,7 @@ src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), 
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
-                   undo), TextLayout (wrapped lines of a text area),
+                   undo, readOnly, onPaste/onTextKey hooks), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
                    TextMetrics/TextPainter (what layout, then the painter, need of a text engine), Scrollable + ScrollState + ListState (anchor, choice, reorder, scrollTo), Selection (several rows, by key), GridState (a grid view: choice, reorder), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,

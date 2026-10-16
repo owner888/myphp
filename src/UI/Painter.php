@@ -219,7 +219,12 @@ final class Painter
         if ($iw <= 0 || $ih <= 0) { return; }
         [$dst, $frac, $fw, $fh] = self::fitIn($n->x, $n->y, $n->w, $n->h, $iw, $ih, $n->fit);
         if ($dst[2] <= 0 || $dst[3] <= 0) { return; }
-        $s = $n->svg !== null ? $text->svgSlot($n->svg, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $n->fg !== 0 ? $n->fg : $t->text) : $text->imageSlot($n->image);
+        if ($n->svg !== null) {
+            $s = $text->svgSlot($n->svg, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $n->fg !== 0 ? $n->fg : $t->text);
+        } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
+            $shrink = min($frac[2] * $n->image->w / ($dst[2] * $scale), $frac[3] * $n->image->h / ($dst[3] * $scale));
+            $s = $text->imageSlot($n->image->smaller($shrink));
+        }
         $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box
         $u = $s['u'] + (int)round($frac[0] * $sw); $v = $s['v'] + (int)round($frac[1] * $sh);
         $cw = max(1, (int)round($frac[2] * $sw)); $ch = max(1, (int)round($frac[3] * $sh));
@@ -446,7 +451,7 @@ final class Painter
                 $list->rect($tx + $xa, $ty + $lh - 1, $xb - $xa, 1.5, $n->fg);
             }
         }
-        if ($n->focused && ($rt === null || $rt->caretVisible())) {
+        if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) { // read-only: selected and copied, without a caret
             $list->rect($tx + $caretX, $ty, 1.0, $lh, $n->fg);
         }
         $list->popClip();
@@ -501,7 +506,7 @@ final class Painter
             if ($yb !== $ya) { $xb = $innerW; }
             $list->rect($tx + $xa, $ty + $ya + $lh - 1, $xb - $xa, 1.5, $n->fg);
         }
-        if ($n->focused && ($rt === null || $rt->caretVisible())) {
+        if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) {
             [$cx, $cy] = $layout->caret($text, $s->displayCaret());
             $list->rect($tx + $cx, $ty + $cy, 1.0, $lh, $n->fg);
         }

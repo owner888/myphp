@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Native;
 
 use Closure;
-use MyPHP\UI\{Input, TextState};
+use MyPHP\UI\{Input, Key, TextState};
 
 /**
  * The window's content view: an MTKView subclass whose event methods are
@@ -91,8 +91,13 @@ final class View
             }],
             'keyDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $input = self::$inputs[ObjC::addr($self)];
-                $input->push(['key', ObjC::phpStr(ObjC::msg('p:', $event, 'characters')),
-                    ObjC::msg('S:', $event, 'keyCode'), ObjC::msg('L:', $event, 'modifierFlags')]);
+                $chars = ObjC::phpStr(ObjC::msg('p:', $event, 'characters')); $code = ObjC::msg('S:', $event, 'keyCode'); $mods = ObjC::msg('L:', $event, 'modifierFlags');
+                $f = $input->focus;
+                if ($f?->onTextKey !== null && ($f->onTextKey)($code, $chars, $mods & Key::MODIFIERS, $f)) { // the app took the key: the field and the view see nothing of it
+                    Metal::requestFrame($self);
+                    return;
+                }
+                $input->push(['key', $chars, $code, $mods]);
                 ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
                 Metal::requestFrame($self);
             }],
@@ -109,7 +114,7 @@ final class View
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null) {
                     $s = str_replace(["\r\n", "\r"], "\n", Pasteboard::text());
-                    $f->insert($f->multiline ? $s : str_replace("\n", ' ', $s));
+                    if ($f->onPaste === null || !($f->onPaste)($s)) { $f->insert($f->multiline ? $s : str_replace("\n", ' ', $s)); } // the app may take the paste
                     Metal::requestFrame($self);
                 }
             }],

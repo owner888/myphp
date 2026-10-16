@@ -960,6 +960,19 @@ string, not a CData. PHP callbacks returning structs by value
 ### Text areas
 
 `Context::textarea` edits the same `TextState` with `$multiline` set.
+With `$minLines` and `$maxLines` it is as high as its text wrapped at
+its width, between the two, past which it scrolls (mygo's Lines: a
+message field growing with what is typed); the width it grows at is
+last frame's when it fills its row. `TextState::$readOnly` is mygo's
+ReadOnly: the text is shown, selected and copied, from the keyboard
+too, but `insert`, composition, undo and redo change nothing and no
+caret is painted. `$onPaste` (fn(text): bool) sees a paste before it
+is inserted and may take it; `$onTextKey` (fn(keyCode, chars, mods,
+state): bool) sees a key in the view's keyDown before the text system
+and the runtime see it, and a key taken reaches neither — Enter that
+sends, Tab that accepts a completion (mygo's OnPaste, OnTextKey).
+`examples/form` has a message field of one to four lines whose Enter
+sends into a read-only log.
 `TextLayout::wrap` breaks `display()` into byte ranges: paragraphs at
 `\n` (the newline belongs to the line it ends), then greedy lines found
 by binary search over `xForIndex` of the whole paragraph (one shaped
@@ -1251,7 +1264,8 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- `textarea` is a plain editor: no Tab indent, line numbers or syntax
-  coloring; `rich` is read-only.
+- mygo's CodeEditor (ui/editor: a code editor with syntax coloring, line
+  numbers, folding, completions, a diff viewer), RichText editor,
+  Markdown view and Terminal are not ported; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
   fps with identical PHP time per frame); MTKView pacing is what gives 60.

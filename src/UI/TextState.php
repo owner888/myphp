@@ -26,6 +26,25 @@ final class TextState
     public bool $multiline = false;
     /** Leaves Backspace to shortcut() while the text is empty (a token field takes out its last token on it). */
     public bool $leaveEmptyBackspace = false;
+    /** Shows the text without letting the user change it (mygo's ReadOnly): still selected and copied, from the keyboard too, as it takes the focus, without a caret. */
+    public bool $readOnly = false;
+    /**
+     * Sees a paste into the field, by Cmd+V or a Paste menu item, before
+     * it is inserted, as mygo's OnPaste: fn(string $text): bool with the
+     * clipboard's text ('' when it holds none, as with an image, which the
+     * app reads itself), reporting whether it took the paste; one taken
+     * inserts nothing.
+     */
+    public ?\Closure $onPaste = null;
+    /**
+     * Sees a key pressed in the field before the field takes it, as mygo's
+     * OnTextKey: fn(int $keyCode, string $chars, int $mods, TextState $s):
+     * bool — Enter that sends a message, Up that edits the last one, Tab
+     * that accepts a completion, Escape that cancels, Cmd+Enter. One taken
+     * changes nothing but what fn set: a text area inserts no newline,
+     * a single-line input does not submit, Tab does not move the focus.
+     */
+    public ?\Closure $onTextKey = null;
     /** How far a text area is scrolled; the wheel moves it, the painter clamps it and brings a moved caret into view. */
     public float $scrollY = 0;
     /** How far through its text a text area is scrolled, 0..1 (the painter sets it), for anything that follows it. */
@@ -77,6 +96,7 @@ final class TextState
     public function insert(string $s): void
     {
         $this->marked = null;
+        if ($this->readOnly) { return; }
         [$a, $b] = $this->selection();
         $this->snapshot($s === '' ? 'delete' : ($a === $b && !str_contains($s, "\n") ? 'type' : 'edit'));
         $this->text = substr($this->text, 0, $a) . $s . substr($this->text, $b);
@@ -85,6 +105,7 @@ final class TextState
 
     public function setMarked(string $s, int $caretBytes): void
     {
+        if ($this->readOnly) { return; }
         if ($this->hasSelection()) {
             [$a, $b] = $this->selection();
             $this->snapshot('edit');
@@ -129,7 +150,7 @@ final class TextState
 
     public function undo(): void
     {
-        if ($this->undo === []) {
+        if ($this->undo === [] || $this->readOnly) {
             return;
         }
         $this->redo[] = [$this->text, $this->cursor, $this->anchor];
@@ -140,7 +161,7 @@ final class TextState
 
     public function redo(): void
     {
-        if ($this->redo === []) {
+        if ($this->redo === [] || $this->readOnly) {
             return;
         }
         $this->undo[] = [$this->text, $this->cursor, $this->anchor];

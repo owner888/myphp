@@ -228,3 +228,13 @@ $half = $img->smaller(2.5); same([2, 1], [$half->w, $half->h], 'twice as small: 
 $buf = Mem::alloc(8); Mem::copy(Mem::addr($buf), $half->addr, 8);
 same([50, 0, 0, 255, 200, 0, 0, 255], array_values(unpack('C8', \FFI::string($buf, 8))), 'the averages: (0+100)/2, the last column twice'); Mem::free($buf);
 check($img->smaller(4) === $img->smaller(5.9) && $img->smaller(4) !== $half, 'four times: the next level, kept');
+
+// A text area that grows with its lines (mygo's Lines); a read-only field keeps its text and takes no caret.
+$draft = new TextState; $log = new TextState("kept\nas is"); $log->readOnly = true; $n = [];
+$h = new Headless(function (Context $c) use (&$n, $draft, $log) { $c->column(0, 8); $n['d'] = $c->textarea($draft, '', 200, 0, null, 1, 3); $n['l'] = $c->textarea($log, '', 200, 60); $c->end(); }, 400, 300);
+$h->frame(); same(16.0 + 12, $n['d']->h, 'one line: a line plus the insets');
+$draft->insert("a\nb\nc\nd\ne"); $h->frame(); same(16.0 * 3 + 12, $n['d']->h, 'five lines: three at most, then it scrolls');
+$h->clickOn($n['l']); $h->type('x'); $h->key(Key::DELETE, 'deleteBackward:'); same("kept\nas is", $log->text, 'read-only: typing and deleting change nothing');
+$h->key(0, 'selectAll:', Key::COMMAND, 'a'); same("kept\nas is", $log->selectedText(), 'but the text is selected');
+$list = $h->paint(); $carets = 0; for ($q = 0; $q < $list->n; $q++) { if ($list->buf[$q * 16 + 2] === 1.0 && $list->buf[$q * 16 + 3] === 16.0) { $carets++; } }
+same(0, $carets, 'and no caret shows');
