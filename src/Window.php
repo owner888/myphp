@@ -157,12 +157,14 @@ final class Window
                     Layout::arrange($c->root, 0, 0, $bounds->w, $bounds->h);
                     return $c->root;
                 });
+                $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                 Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                 Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 if ($text->repaint) {
                     // An atlas started over during the paint: what was painted before points at slots that are gone.
                     $text->repaint = false;
                     $list->reset();
+                    $list->pushClip(0, 0, $bounds->w, $bounds->h);
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 }
