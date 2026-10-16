@@ -55,7 +55,7 @@ function view(Context $c, array &$s): void
       $c->end();
       $c->divider();
       if ($c->changed($c->tabs(['General', 'Advanced', 'About'], $s['tab']))) { $s['last'] = 'tab ' . $s['tab']; }
-      $c->column(12, 10, 0, $t->surface)->round($t->radius);
+      $c->key('tab' . $s['tab'])->column(12, 10, 0, $t->surface)->round($t->radius); // keyed by tab: each tab's controls keep their own state (hover, focus, locals) apart from the others'
         if ($s['tab'] === 0) {
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
             $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();

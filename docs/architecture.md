@@ -504,17 +504,23 @@ same items. Multiple selection and reordering by drag are open items.
 `examples/photos` is on it: only the cells built want thumbnails.
 
 `Context::grid($cols, $gap, $rows)` / `Node::grid()` is mygo's Grid
-(grid.go) for children placed cell by cell, row by row: `Track::fixed`,
-`fr` and `fit` size the columns and the rows set (`Layout::sizeTracks`,
-mygo's sizeTracks for single-cell items: fixed tracks their points, fit
-tracks the largest content in them, fr tracks sharing what is left of
-the room — the largest share any child asks when the grid's size is not
-set, as a grid in a row — and fit tracks sharing it when there are no fr
+(grid.go): `Layout::gridPlace` is mygo's gridPlace, placing the children
+as CSS does — those given both a column and a row (`Node::columnStart`,
+`rowStart`, from 1) first, then those given a row, then the rest in
+order with a cursor going row by row past the cells taken, each
+spanning `columnSpan` / `rowSpan` cells (negative: to the last line; a
+span past the columns set widens the grid). `Track::fixed`, `fr` and
+`fit` size the columns and the rows set (`Layout::sizeTracks`, mygo's
+sizeTracks with an item's min and max content the one size our nodes
+have: fixed tracks their points, fit tracks what the items spanning one
+alone ask, then items spanning several fit tracks and no fr spreading
+what they lack over them, fr tracks sharing what is left of the room —
+or, when the grid's size is not set, as a grid in a row, the largest
+share any item asks — and fit tracks sharing it when there are no fr
 ones), the rows beyond fitting their content. A child is stretched
-across its cell, or placed vertically as its `alignSelf` says. The color
+across its area, or placed down it as its `alignSelf` says. The color
 picker's swatches are such a grid of six fr columns. Not ported:
-explicit placement and spans (ColumnStart, RowSpan), justifyItems and
-automatic margins.
+justifyItems and automatic margins.
 
 Paths and icons follow mygo's path.go and svg.go: `UI\Path` holds
 moveTo/lineTo/quadTo/cubeTo/close (and `circle`, four cubic arcs) in
@@ -1010,6 +1016,14 @@ stream; `dlopen` only touches system frameworks, so nothing needs to be
 on disk. `DirectoryIterator` returned nothing on the container's mount
 during testing while `scandir` worked, so the CLI walks with `scandir`.
 
+Local state and ids: `Runtime::local` keys a control's state (a
+combobox's popup, a picker's HSV, an alert's opening) by its node's id,
+and an unkeyed node's id is its place in the build order, so content
+that comes and goes before such a control must be keyed (`key()`), or
+the control inherits the state another node left under the same id;
+`modal`, `alertDialog` and `findBar` key themselves, and the widgets
+example keys each tab's content by the tab.
+
 ## Open items
 
 - The glyph atlas starts over when full and is re-rasterized whole; an
@@ -1028,8 +1042,8 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   Windows, where it is wanted, at the cost of a slower first frame.
 - `SVG` reads shapes only: no transforms, gradients, masks, clips, style
   sheets or text (convert text to paths); mygo reads all but text.
-- `grid` places children row by row only: mygo's ColumnStart/RowStart,
-  spans and JustifyItems are not ported.
+- `grid` has no JustifyItems or automatic margins: a child fills its area
+  across, and its `alignSelf` places it down.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

@@ -57,7 +57,7 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/drawOver()/single()/
-                   min()/focusGroup()/wrap()/grid()/dragWindow();
+                   min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),

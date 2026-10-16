@@ -74,16 +74,17 @@ final class Layout
         $cnt = count($kids);
         if ($cnt === 0) return;
         $px = $n->padX(); $py = $n->padY();
-        if ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched across its cell, or placed across it as its alignSelf says
-            [$cols, $rows] = self::gridTracks($n, $w - 2 * $px, $h - 2 * $py);
-            $nc = count($cols); $cx = $x + $px; $cy = $y + $py;
-            foreach ($kids as $i => $k) {
-                $c = $i % $nc; $r = intdiv($i, $nc);
-                if ($c === 0 && $i > 0) { $cx = $x + $px; $cy += $rows[$r - 1] + $n->gap; }
+        if ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched across its area, or placed down it as its alignSelf says
+            [$cols, $rows, $items] = self::gridTracks($n, $w - 2 * $px, $h - 2 * $py);
+            $colAt = []; $rowAt = []; // where each track starts
+            for ($c = 0, $p = $x + $px; $c < count($cols); $c++) { $colAt[$c] = $p; $p += $cols[$c] + $n->gap; }
+            for ($r = 0, $p = $y + $py; $r < count($rows); $r++) { $rowAt[$r] = $p; $p += $rows[$r] + $n->gap; }
+            foreach ($items as [$k, $c, $r, $cs, $rs]) {
+                $aw = $n->gap * ($cs - 1); for ($j = $c; $j < $c + $cs; $j++) { $aw += $cols[$j]; }
+                $ah = $n->gap * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
                 $a = $k->self === Node::AUTO ? Node::STRETCH : $k->self;
-                $kh = $a === Node::STRETCH ? $rows[$r] : $k->mh;
-                self::arrange($k, $cx, $cy + self::across($a, $rows[$r], $kh), $cols[$c], $kh);
-                $cx += $cols[$c] + $n->gap;
+                $kh = $a === Node::STRETCH ? $ah : $k->mh;
+                self::arrange($k, $colAt[$c], $rowAt[$r] + self::across($a, $ah, $kh), $aw, $kh);
             }
             return;
         }
@@ -182,34 +183,109 @@ final class Layout
      */
     private static function gridTracks(Node $n, float $availW, float $availH): array
     {
-        $nc = max(1, count($n->gridCols));
-        $kids = array_values(array_filter($n->kids, fn(Node $k) => !$k->absolute));
-        $nr = max(count($n->gridRows), intdiv(count($kids) + $nc - 1, $nc));
-        $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gap, $kids, fn(int $i) => $i % $nc, fn(Node $k) => $k->mw);
-        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gap, $kids, fn(int $i) => intdiv($i, $nc), fn(Node $k) => $k->mh);
-        return [$cols, $rows];
+        [$items, $nc, $nr] = self::gridPlace($n);
+        $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gap, array_map(fn($it) => [$it[1], $it[3], $it[0]->mw], $items));
+        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gap, array_map(fn($it) => [$it[2], $it[4], $it[0]->mh], $items));
+        return [$cols, $rows, $items];
     }
 
-    /** @param list<Track> $tracks @return list<float> */
-    private static function sizeTracks(array $tracks, int $count, float $avail, float $gap, array $kids, Closure $trackOf, Closure $sizeOf): array
+    /**
+     * Places the in-flow children of a grid in its cells, mygo's gridPlace
+     * as CSS does: those placed in both directions first, then those given
+     * a row, then the others in order, a cursor going row by row and
+     * skipping cells taken (a span wider than the grid's columns widens it).
+     * @return array{0: list<array{0: Node, 1: int, 2: int, 3: int, 4: int}>, 1: int, 2: int} items (node, col, row, colSpan, rowSpan, from 0), columns, rows
+     */
+    private static function gridPlace(Node $n): array
+    {
+        $nc = max(count($n->gridCols), 1); $nr = 0;
+        $items = [];
+        foreach ($n->kids as $k) {
+            if ($k->absolute) { continue; }
+            $cs = $k->colSpan < 0 ? max(count($n->gridCols) - max($k->cellCol - 1, 0), 1) : max($k->colSpan, 1);
+            $rs = $k->rowSpan < 0 ? max(count($n->gridRows) - max($k->cellRow - 1, 0), 1) : max($k->rowSpan, 1);
+            $nc = max($nc, max($k->cellCol - 1, 0) + $cs);
+            $items[] = [$k, $k->cellCol - 1, $k->cellRow - 1, $cs, $rs];
+        }
+        $occ = [];
+        $fits = function (array $it, int $r, int $c) use (&$occ, $nc): bool {
+            for ($rr = $r; $rr < $r + $it[4]; $rr++) { for ($cc = $c; $cc < $c + $it[3]; $cc++) { if (!empty($occ[$rr * $nc + $cc])) { return false; } } }
+            return true;
+        };
+        $mark = function (array &$it, int $r, int $c) use (&$occ, &$nr, $nc): void {
+            $it[1] = $c; $it[2] = $r;
+            for ($rr = $r; $rr < $r + $it[4]; $rr++) { for ($cc = $c; $cc < $c + $it[3]; $cc++) { $occ[$rr * $nc + $cc] = true; } }
+            $nr = max($nr, $r + $it[4]);
+        };
+        foreach ($items as &$it) { if ($it[2] >= 0 && $it[1] >= 0) { $mark($it, $it[2], $it[1]); } }
+        unset($it);
+        foreach ($items as &$it) { // in a row given: the first column it fits in
+            if ($it[2] < 0 || $it[1] >= 0) { continue; }
+            $c = 0; while ($c + $it[3] < $nc && !$fits($it, $it[2], $c)) { $c++; }
+            $mark($it, $it[2], $c);
+        }
+        unset($it);
+        $cr = 0; $cc = 0;
+        foreach ($items as &$it) {
+            if ($it[2] >= 0) { continue; }
+            if ($it[1] >= 0) { // a column given: the next row down it fits in
+                if ($it[1] < $cc) { $cr++; }
+                $cc = $it[1];
+                while (!$fits($it, $cr, $cc)) { $cr++; }
+                $mark($it, $cr, $cc);
+                continue;
+            }
+            while (true) {
+                while ($cc + $it[3] <= $nc && !$fits($it, $cr, $cc)) { $cc++; }
+                if ($cc + $it[3] <= $nc) { break; }
+                $cr++; $cc = 0;
+            }
+            $mark($it, $cr, $cc);
+            $cc += $it[3];
+        }
+        unset($it);
+        return [$items, $nc, max($nr, count($n->gridRows))];
+    }
+
+    /**
+     * Sizes $count tracks along an axis, of which $tracks are set, with the
+     * room $avail (INF when unknown) and $gap between them, from what the
+     * items ask: [start, span, size] each — mygo's sizeTracks, with an
+     * item's min and max content the same size. Fit tracks take what the
+     * items spanning one alone ask, then items spanning several fit
+     * tracks (none fr) spread what they lack over them; fr tracks share
+     * what is left, or, with no room known, the largest share any item
+     * asks; with no fr tracks the fit ones share the room left (stretch).
+     * @param list<Track> $tracks @param list<array{0: int, 1: int, 2: float}> $asks @return list<float>
+     */
+    private static function sizeTracks(array $tracks, int $count, float $avail, float $gap, array $asks): array
     {
         $kind = fn(int $i) => $i < count($tracks) ? $tracks[$i]->kind : Track::FIT;
         $sizes = []; $frSum = 0.0;
         for ($i = 0; $i < $count; $i++) { $sizes[$i] = $kind($i) === Track::FIXED ? $tracks[$i]->v : 0.0; if ($kind($i) === Track::FR) { $frSum += $tracks[$i]->v; } }
-        $unit = 0.0; // the largest share an fr track's content asks, for a grid with no room set
-        foreach ($kids as $i => $k) {
-            $t = $trackOf($i);
-            if ($kind($t) === Track::FIT) { $sizes[$t] = max($sizes[$t], $sizeOf($k)); }
-            elseif ($kind($t) === Track::FR && $tracks[$t]->v > 0) { $unit = max($unit, $sizeOf($k) / $tracks[$t]->v); }
+        $spans = function (array $a, int $k) use ($kind): int { $n = 0; for ($i = $a[0]; $i < $a[0] + $a[1]; $i++) { if ($kind($i) === $k) { $n++; } } return $n; };
+        foreach ($asks as $a) { if ($a[1] === 1 && $kind($a[0]) === Track::FIT) { $sizes[$a[0]] = max($sizes[$a[0]], $a[2]); } }
+        foreach ($asks as $a) {
+            if ($a[1] === 1 || $spans($a, Track::FR) > 0) { continue; }
+            $fits = $spans($a, Track::FIT);
+            if ($fits === 0) { continue; }
+            $sum = $gap * ($a[1] - 1); for ($i = $a[0]; $i < $a[0] + $a[1]; $i++) { $sum += $sizes[$i]; }
+            if ($a[2] > $sum) { for ($i = $a[0]; $i < $a[0] + $a[1]; $i++) { if ($kind($i) === Track::FIT) { $sizes[$i] += ($a[2] - $sum) / $fits; } } }
         }
-        if (!is_finite($avail)) {
+        if (!is_finite($avail)) { // as large as the content asks: fr tracks by the largest share any item asks
+            $unit = 0.0;
+            foreach ($asks as $a) {
+                $fr = 0.0; $other = 0.0;
+                for ($i = $a[0]; $i < $a[0] + $a[1]; $i++) { if ($kind($i) === Track::FR) { $fr += $tracks[$i]->v; } else { $other += $sizes[$i]; } }
+                if ($fr > 0) { $unit = max($unit, ($a[2] - $other - $gap * ($a[1] - 1)) / $fr); }
+            }
             for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FR) { $sizes[$i] = $unit * $tracks[$i]->v; } }
             return $sizes;
         }
         $free = max(0.0, $avail - $gap * max(0, $count - 1) - array_sum($sizes));
         if ($frSum > 0) {
             for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FR) { $sizes[$i] = $free / $frSum * $tracks[$i]->v; } }
-        } elseif ($free > 0) { // no fr tracks: the fit tracks share the room left (mygo's stretch)
+        } elseif ($free > 0) {
             $fits = 0; for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FIT) { $fits++; } }
             for ($i = 0; $i < $count; $i++) { if ($fits > 0 && $kind($i) === Track::FIT) { $sizes[$i] += $free / $fits; } }
         }

@@ -1593,7 +1593,7 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $chosen = -1;
-        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
+        $back = $this->key('alert')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes, and its state must not be another node's
         $back->alpha = 0.4;
           $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3);
             $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
@@ -2121,7 +2121,7 @@ final class Context
             return null;
         }
         $t = $this->theme;
-        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
+        $back = $this->key('modal')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes
         $back->alpha = 0.4;
           $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(10, 30, 0.3);
             $fn();

@@ -69,6 +69,8 @@ final class Node
     /** A grid's column tracks and its first rows' (Track); null for a flex container. The rows beyond fit their content. */
     public ?array $gridCols = null;
     public array $gridRows = [];
+    /** Where this node goes in its grid (mygo's gridCell): lines from 1, 0 for automatic placement, and spans, 0 for 1 and negative to the last line. */
+    public int $cellCol = 0, $cellRow = 0, $colSpan = 0, $rowSpan = 0;
 
     /** A row that wraps its children onto more lines where they overflow $wrapWidth (mygo's Wrap), the width it had last frame. */
     public bool $wraps = false;
@@ -209,6 +211,15 @@ final class Node
         $this->dragsWindow = true;
         return $this;
     }
+
+    /** Puts this node in column $n of its grid, counting from 1 (mygo's ColumnStart). */
+    public function columnStart(int $n): static { $this->cellCol = max($n, 1); return $this; }
+    /** Puts this node in row $n of its grid, counting from 1 (mygo's RowStart). */
+    public function rowStart(int $n): static { $this->cellRow = max($n, 1); return $this; }
+    /** Makes this node span $n columns of its grid, or, for a negative $n, to the last column (mygo's ColumnSpan). */
+    public function columnSpan(int $n): static { $this->colSpan = $n; return $this; }
+    /** Makes this node span $n rows of its grid, or, for a negative $n, to the last row set (mygo's RowSpan). */
+    public function rowSpan(int $n): static { $this->rowSpan = $n; return $this; }
 
     /** Lays this container's children out in a grid, as mygo's Grid: cell by cell, row by row, in columns sized by $cols and rows by $rows (those beyond fit their content); gap between tracks. @param list<Track> $cols @param list<Track> $rows */
     public function grid(array $cols, array $rows = []): static
