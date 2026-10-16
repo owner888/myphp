@@ -163,6 +163,13 @@ with a one-point border (`Node::border()`), the text color, shaded on
 hover and press — and `primaryButton()` is the accent without a border,
 for the main action; both pad Space(1.5) by Space(3.5).
 
+`toggle(&$on, $label)` is a button kept pressed (`surfacePressed`) while
+on, mygo's Toggle; `toolbar($fn)` is mygo's Toolbar's look: a centered
+row, gap and padding Space(1), whose buttons and toggles take no face
+until hovered (padding Space(1.5) by Space(2.5), no border). Not ported:
+the toolbar as one Tab stop with Left and Right moving inside it, and
+the overflow menu for controls that do not fit.
+
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
 `switch($label, &$bool)`, `slider(&$value, $min, $max)`,
@@ -213,6 +220,38 @@ before it is inert, as mygo's overlays make it, and a focus left behind
 is dropped so Tab goes into the modal. Escape or a click on the backdrop
 outside the panel sets `$open` false (`changed()`). `Node::shadow()` is a
 soft shadow under a colored container, which the panel and toasts use.
+
+`Context::sidebar(&$selected, $fn, $width)` is mygo's Sidebar: a
+focusable scrolling surface column (its `ScrollState` and the item ids
+it built last frame live in `Runtime::local`, state a composite keeps by
+its node's id, as mygo's local state); `sidebarSection($title, &$open,
+$fn)` is a muted bold title whose click shows and hides its items, with
+the arrow showing under the pointer; `sidebarItem($id, $label, $icon,
+$trailing)` is a keyed row, the accent while chosen in a focused sidebar
+and `surfacePressed` when chosen without the focus, as AppKit's; a click
+chooses it and focuses the sidebar, and Up, Down, Home and End choose
+among last frame's items while it has the focus. Not ported: typing the
+first letters of an item.
+
+`Context::tree($fn)` and `treeItem($label, &$open, $children, $selected)`
+are mygo's Tree: items are focusable rows Space(7) high, indented
+Space(1 + 4·depth), with an arrow box Space(4) square whose click opens
+or closes a branch (the click is taken there, so `clicked()` on the item
+reports a click elsewhere on it); last frame's item ids and parents
+live in `Runtime::local`, and the focused item moves the focus with Up
+and Down, opens with Right (or goes to its first child), closes with
+Left (or goes to its parent). `$selected` paints it the accent.
+
+`meter($value, $lo, $hi, $warning, $critical)` is mygo's Meter: a
+PROGRESS node Space(2) thick (the painter takes the thickness from the
+node's own height now) filled with the success color, or warning and
+danger past the levels, low ones bad when critical is below warning.
+`numberInput(&$value, $lo, $hi, $step)` is mygo's NumberInput: a
+Space(20) field over a `TextState` in `Runtime::local`, − and + beside
+it; typing applies once numeric and in range, Up and Down step while it
+has the focus (a focused single-line field leaves Up and Down to
+`shortcut`, a text area only Escape), and the text shows the value
+rounded to the step's decimals once the focus leaves.
 
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root

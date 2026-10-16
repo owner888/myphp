@@ -21,6 +21,12 @@ final class Context
     private int $ordinal = 0;
     /** @var list<array{0: string, 1: int}|null> per open container: the scope it replaced, or null */
     private array $scopes = [null];
+    /** The sidebar being built, innermost last: its node, the chosen id (by reference), the items built so far. */
+    private array $sidebars = [];
+    /** How many toolbars enclose what is being built: their buttons take no face until hovered. */
+    private int $toolbars = 0;
+    /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
+    private array $trees = [];
 
     /** $width and $height are the room the tree will be laid out in. */
     public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null, public float $scale = 1.0)
@@ -224,6 +230,59 @@ final class Context
         return $n;
     }
 
+    /**
+     * A bar showing $value between $lo and $hi, as mygo's Meter (AppKit's
+     * level indicator): the success color, or warning from $warning and
+     * danger from $critical (null for neither); a $critical below $warning
+     * makes low values the bad ones, as a battery's.
+     */
+    public function meter(float $value, float $lo, float $hi, ?float $warning = null, ?float $critical = null, float $width = 160): Node
+    {
+        $t = $this->theme;
+        $n = $this->add(new Node(Node::PROGRESS, 0, 0, 0, $width, $t->space(2), 0, null, $t->success));
+        $n->fraction = $hi > $lo ? max(0.0, min(1.0, ($value - $lo) / ($hi - $lo))) : 0.0;
+        if ($warning !== null && $critical !== null && $warning !== $critical) {
+            $low = $critical < $warning;
+            if ($low ? $value <= $critical : $value >= $critical) { $n->color = $t->danger; }
+            elseif ($low ? $value <= $warning : $value >= $warning) { $n->color = $t->warning; }
+        }
+        return $n;
+    }
+
+    /**
+     * A field holding a number between $lo and $hi, as mygo's NumberInput:
+     * the arrows Up and Down, and the − and + beside it, step it by $step;
+     * what is typed applies as soon as it is a number in range, and shows
+     * rounded to the decimals of $step once the field loses the focus.
+     * changed() reports a new value.
+     */
+    public function numberInput(int|float &$value, float $lo, float $hi, float $step = 1): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $decimals = ($s = rtrim(rtrim(sprintf('%.10F', $step), '0'), '.')) !== '' && str_contains($s, '.') ? strlen($s) - strpos($s, '.') - 1 : 0;
+        $format = fn(float $v) => number_format($v, $decimals, '.', '');
+        $n = $this->row(0, $t->space(1))->align(Node::CENTER);
+        $text = $rt?->local($n->id, fn() => new TextState($format($value))) ?? new TextState($format($value));
+        $set = function (float $v) use (&$value, $lo, $hi, $decimals, $n) {
+            $v = round(max($lo, min($hi, $v)), $decimals);
+            if ($v != $value) { $value = is_int($value) ? (int)$v : $v; $n->changed = true; }
+        };
+          $in = $this->input($text, '', $t->space(20));
+          if ($rt !== null && $rt->focus === $in->id) {
+              if (is_numeric(trim($text->text)) && (float)$text->text >= $lo && (float)$text->text <= $hi) { $set((float)$text->text); }
+              if ($this->shortcut(Key::UP)) { $set($value + $step); $text->text = $format($value); $text->setCursor(strlen($text->text)); }
+              if ($this->shortcut(Key::DOWN)) { $set($value - $step); $text->text = $format($value); $text->setCursor(strlen($text->text)); }
+          } elseif ($text->text !== $format($value)) {
+              $text->text = $format($value); $text->setCursor(strlen($text->text)); // what the app set, or what was typed, shown in full
+          }
+          $minus = $this->button('−'); $plus = $this->button('+');
+        $this->end();
+        if ($this->clicked($minus) && $value > $lo) { $set($value - $step); }
+        if ($this->clicked($plus) && $value < $hi) { $set($value + $step); }
+        return $n;
+    }
+
     /** Secondary text, in the theme's muted color. */
     public function muted(string $s, ?float $size = null): Node
     {
@@ -242,19 +301,52 @@ final class Context
         return $this->makeButton($s, $size, true);
     }
 
-    /** As mygo's styleButton: padding Space(1.5) by Space(3.5), a bordered surface face, or the accent without a border when primary; hover and press shade it. */
-    private function makeButton(string $s, ?float $size, bool $primary): Node
+    /**
+     * As mygo's styleButton: padding Space(1.5) by Space(3.5), a bordered
+     * surface face, or the accent without a border when primary, or in a
+     * toolbar no face until hovered (padding Space(1.5) by Space(2.5));
+     * hover and press shade it, and $on (a toggle) keeps it pressed.
+     */
+    private function makeButton(string $s, ?float $size, bool $primary, bool $on = false): Node
     {
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
-        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space(7), $h + $t->space(3), 0, $s, $base, $size, $fg));
-        $n->bordered = !$primary;
+        $toolbar = $this->toolbars > 0 && !$primary;
+        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($toolbar ? 5 : 7), $h + $t->space(3), 0, $s, $on ? $pressed : $base, $size, $fg));
+        $n->bordered = !$primary && !$toolbar;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
-        if ($this->runtime?->hovered($n->id)) {
+        if (!$on && $this->runtime?->hovered($n->id)) {
             $n->color = $this->runtime->input->mouseDown ? $pressed : $hover;
         }
+        return $n;
+    }
+
+    /** A button that stays pressed while $on, as Bold in an editor's toolbar (mygo's Toggle): a click presses it or lets it go, as does Space while it has the focus; changed() reports it. */
+    public function toggle(bool &$on, string $label, ?float $size = null): Node
+    {
+        $n = $this->makeButton($label, $size, false, $on);
+        if ($this->clicked($n)) {
+            $on = !$on;
+            $n->changed = true;
+        }
+        return $n;
+    }
+
+    /**
+     * A row of controls across the top of a window, as mygo's Toolbar:
+     * buttons, toggles, segmented controls and menu buttons built by $fn,
+     * which take no face of their own until hovered.
+     */
+    public function toolbar(Closure $fn): Node
+    {
+        $t = $this->theme;
+        $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER);
+        $this->toolbars++;
+          $fn();
+        $this->toolbars--;
+        $this->end();
         return $n;
     }
 
@@ -299,6 +391,156 @@ final class Context
             $n->changed = true;
         }
         $n->on = $on;
+        return $n;
+    }
+
+    /**
+     * A tree of items $fn builds with treeItem, as mygo's Tree: while an
+     * item has the keyboard focus, Up and Down move it to the items
+     * around, Right opens the item or moves to its first child, and Left
+     * closes it or moves to its parent.
+     */
+    public function tree(Closure $fn): Node
+    {
+        $n = $this->column(0, 0);
+        $local = $this->runtime?->local($n->id, fn() => (object)['items' => [], 'parents' => []]);
+        $this->trees[] = ['local' => $local, 'items' => [], 'parents' => [], 'open' => []];
+          $fn();
+        $built = array_pop($this->trees);
+        $this->end();
+        if ($local !== null) { $local->items = $built['items']; $local->parents = $built['parents']; }
+        return $n;
+    }
+
+    /**
+     * An item of a tree showing $label, inside the item it is built in, as
+     * mygo's TreeItem: $children builds the items inside it, shown while
+     * $open; null children or a null $open makes a leaf. A click on its
+     * arrow opens or closes it; clicked() reports a click elsewhere on it,
+     * or Enter, for choosing it, which $selected shows.
+     */
+    public function treeItem(string $label, ?bool &$open, ?Closure $children, bool $selected = false): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $tb = &$this->trees[count($this->trees) - 1];
+        $depth = count($tb['open']);
+        $branch = $children !== null && $open !== null;
+        $n = $this->row(0, $t->space(0.5), 0, $selected ? $t->accent : null)->round($t->radius)->align(Node::CENTER)->focusable()->size(0, $t->space(7));
+        $id = $n->id;
+        $tb['items'][] = $id;
+        $tb['parents'][$id] = $tb['open'][$depth - 1] ?? null;
+        if (!$selected && $this->hovered($n)) { $n->color = $t->surfaceHover; }
+        if ($rt !== null && $rt->focus === $id) { // the keys, among last frame's items
+            $last = $tb['local']->items; $at = array_search($id, $last, true); $to = null;
+            if ($this->shortcut(Key::DOWN) && $at !== false && $at + 1 < count($last)) { $to = $last[$at + 1]; }
+            if ($this->shortcut(Key::UP) && $at !== false && $at > 0) { $to = $last[$at - 1]; }
+            if ($this->shortcut(Key::RIGHT)) {
+                if ($branch && !$open) { $open = true; } elseif ($branch && $at !== false && $at + 1 < count($last)) { $to = $last[$at + 1]; }
+            }
+            if ($this->shortcut(Key::LEFT)) {
+                if ($branch && $open) { $open = false; } else { $to = $tb['local']->parents[$id] ?? null; }
+            }
+            if ($to !== null) { $rt->focus = $to; }
+        }
+        $fg = $selected ? $t->accentText : $t->text;
+          $this->column(0, 0)->size($t->space(1 + 4 * $depth), 0); $this->end(); // the indent
+          $arrow = $this->column(0, 0)->size($t->space(4), $t->space(4))->center();
+            if ($branch) { $this->text($open ? '▾' : '▸', $t->fontSize - 1, $selected ? $t->accentText : $t->textMuted); }
+          $this->end();
+          $this->text($label, $t->fontSize, $fg);
+          $this->column(0, 0)->size($t->space(2), 0); $this->end();
+        $this->end();
+        if ($branch && $this->clicked($arrow)) { $open = !$open; }
+        if ($branch && $open) {
+            $tb['open'][] = $id;
+            $children();
+            array_pop($tb['open']);
+        }
+        return $n;
+    }
+
+    /**
+     * A sidebar of items in sections, as mygo's Sidebar (Finder's,
+     * Mail's), $width wide, scrolling when they do not fit: a click
+     * chooses an item, whose id $selected holds, and while the sidebar has
+     * the focus Up, Down, Home and End choose among its items; it is one
+     * stop of Tab, and changed() reports a new choice.
+     */
+    public function sidebar(string &$selected, Closure $fn, float $width = 200): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $n = $this->column($t->space(2.5), $t->space(0.5), 0, $t->surface)->size($width)->focusable();
+        if ($rt !== null) {
+            $local = $rt->local($n->id, fn() => (object)['scroll' => new ScrollState, 'items' => []]);
+            $n->scroll($local->scroll);
+            // The keys choose among last frame's items, in their order.
+            $items = $local->items; $at = array_search($selected, $items, true); $to = null;
+            if ($rt->focus === $n->id && $items !== []) {
+                if ($this->shortcut(Key::DOWN)) { $to = $at === false ? 0 : min($at + 1, count($items) - 1); }
+                if ($this->shortcut(Key::UP)) { $to = $at === false ? 0 : max($at - 1, 0); }
+                if ($this->shortcut(Key::HOME)) { $to = 0; }
+                if ($this->shortcut(Key::END)) { $to = count($items) - 1; }
+            }
+            if ($to !== null && $items[$to] !== $selected) { $selected = $items[$to]; $n->changed = true; }
+        }
+        $this->sidebars[] = ['node' => $n, 'selected' => &$selected, 'items' => []];
+          $fn();
+        $built = array_pop($this->sidebars);
+        $this->end();
+        if (isset($local)) { $local->items = $built['items']; }
+        return $n;
+    }
+
+    /**
+     * A section of a sidebar titled $title, as mygo's SidebarSection: the
+     * items $fn builds while $open (null keeps it open); a click on the
+     * title shows and hides them, its arrow showing as the pointer rests
+     * on it.
+     */
+    public function sidebarSection(string $title, ?bool &$open, Closure $fn): Node
+    {
+        $t = $this->theme;
+        $parent = $this->stack[count($this->stack) - 1];
+        $n = $this->column(0, $t->space(0.5));
+          if (count($parent->kids) > 1) { $this->column(0, 0)->size(0, $t->space(2.5)); $this->end(); } // apart from the section above
+          $head = $this->row($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER);
+            $this->text($title, $t->fontSize - 1, $t->textMuted, Font::BOLD);
+            $this->spacer();
+            if ($open !== null && $this->hovered($head)) { $this->text($open ? '▾' : '▸', $t->fontSize - 2, $t->textMuted); }
+          $this->end();
+          if ($open !== null && $this->clicked($head)) { $open = !$open; }
+          if ($open === null || $open) { $fn(); }
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * An item of a sidebar choosing $id, showing $label after $icon (a
+     * glyph, or null), as mygo's SidebarItem; $trailing builds what sits at
+     * its end, a badge say. Chosen, it is the accent while the sidebar has
+     * the focus and gray otherwise, as AppKit's.
+     */
+    public function sidebarItem(string $id, string $label, ?string $icon = null, ?Closure $trailing = null): Node
+    {
+        $t = $this->theme;
+        $sb = &$this->sidebars[count($this->sidebars) - 1];
+        $chosen = $sb['selected'] === $id;
+        $focused = $this->focused($sb['node']);
+        $sb['items'][] = $id;
+        $n = $this->key("item:$id")->row($t->space(1.5), $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->round($t->radius)->align(Node::CENTER);
+        if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
+        $fg = $chosen && $focused ? $t->accentText : $t->text;
+          if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
+          $this->text($label, $t->fontSize, $fg);
+          if ($trailing !== null) { $this->spacer(); $trailing(); }
+        $this->end();
+        if ($this->clicked($n) && $sb['selected'] !== $id) {
+            $sb['selected'] = $id;
+            $sb['node']->changed = true;
+            if ($this->runtime !== null) { $this->runtime->focus = $sb['node']->id; } // a click chooses and focuses the sidebar, as a list's row does
+        }
         return $n;
     }
 

@@ -41,11 +41,11 @@ final class Painter
             self::paintSlider($n, $list, $t);
             return;
         }
-        if ($n->kind === Node::PROGRESS) { // a bar of fixed thickness, centered in the node (a row stretches it to the row's height)
-            $h = $t->space(1.5); $y = $n->y + ($n->h - $h) / 2; $r = $h / 2;
+        if ($n->kind === Node::PROGRESS) { // a bar as thick as the node was made (a column stretches the node), in the accent or the color given (a meter's level)
+            $h = $n->fh; $y = $n->y + ($n->h - $h) / 2; $r = $h / 2;
             $list->rect($n->x, $y, $n->w, $h, $t->border, 1.0, $r);
             if ($n->fraction >= 0) {
-                $list->rect($n->x, $y, $n->w * min(1.0, $n->fraction), $h, $t->accent, 1.0, $r);
+                $list->rect($n->x, $y, $n->w * min(1.0, $n->fraction), $h, $n->color ?? $t->accent, 1.0, $r);
             } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
                 $phase = fmod(hrtime(true) / 1.5e9, 1.0);
                 $bar = $n->w / 3;

@@ -6,11 +6,11 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Image, ListState, Span};
+use MyPHP\UI\{Node, Content, Context, Font, Image, ListState, Span};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => ''];
+$state = ['rows' => (int)($argv[1] ?? 300), 'replied' => [], 'list' => new ListState, 'last' => '', 'mailbox' => 'inbox', 'favorites' => true, 'local' => true];
 $state['list']->selected = -1; // rows can be chosen: click, Up/Down, Home/End; double click or Enter opens
 $state['list']->followEnd = true; // at the end, Compose (a new last row) keeps the end in view, as a chat does
 // Avatars: a few system app icons (ICNS, decoded by ImageIO at 64 px), made once and kept. Apps whose
@@ -22,6 +22,20 @@ $state['avatars'] !== [] || throw new RuntimeException('no app icons under /Syst
 function inbox(Context $c, array &$s): void
 {
     $t = $c->theme; // light or dark after the system, accent from its settings
+    $c->row(0, 0, 1)->align(Node::STRETCH);
+    // Mailboxes: a sidebar, as Mail's; the arrows choose while it has the focus.
+    $side = $c->sidebar($s['mailbox'], function () use ($c, &$s) {
+        $c->sidebarSection('Favorites', $s['favorites'], function () use ($c, &$s) {
+            $c->sidebarItem('inbox', 'Inbox', '✉', fn() => $c->badge(number_format($s['rows'])));
+            $c->sidebarItem('flagged', 'Flagged', '⚑');
+            $c->sidebarItem('drafts', 'Drafts', '✎');
+        });
+        $c->sidebarSection('On My Mac', $s['local'], function () use ($c) {
+            $c->sidebarItem('archive', 'Archive', '▤');
+            $c->sidebarItem('trash', 'Trash', '✕');
+        });
+    }, 180);
+    if ($c->changed($side)) { $s['last'] = "mailbox {$s['mailbox']}"; }
     $c->column(0, 0, 1);
       $c->row(12, 8, 0, $t->surface);
         $c->rich([new Span('Inbox ', 20, Font::BOLD), new Span(number_format($s['rows']) . ' messages', color: $t->textMuted),
@@ -44,10 +58,11 @@ function inbox(Context $c, array &$s): void
               $c->end();
               $c->text(sprintf('%02d:%02d', $i % 24, ($i * 7) % 60), 12, $t->textMuted, Font::MONO);
               $b = $c->button(isset($s['replied'][$i]) ? 'Replied' : 'Reply');
-              if (isset($s['replied'][$i])) { $b->color = $t->success; }
+              if (isset($s['replied'][$i])) { $b->color = $t->success; $b->fg = $t->accentText; $b->bordered = false; }
               if ($c->clicked($b)) { $s['replied'][$i] = true; $s['last'] = "replied to $i"; }
             $c->end();
       });
+    $c->end();
     $c->end();
 }
 

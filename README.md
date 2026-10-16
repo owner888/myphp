@@ -53,7 +53,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
 | Soft shadows, rings, Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), backdrop blur, scroll edge | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
-| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), modal dialogs, popovers, menu buttons, toasts, search field, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
+| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
@@ -175,7 +175,7 @@ App::run();
 | 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/native`、`logview`） |
 | 软阴影、描边环、Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大）、背景模糊、滚动边缘 | 可用（`examples/glass`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
-| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、加载指示、徽标、分隔线、占位 | 可用（`examples/widgets`、`notes`、`http`） |
+| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位 | 可用（`examples/widgets`、`notes`、`http`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | App / Window API（whenReady、run、WindowOptions、show/hide/close/setTitle） | 可用，mygo 的子集 |

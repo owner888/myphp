@@ -10,7 +10,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'last' => 'nothing yet'];
 
 function view(Context $c, array &$s): void
 {
@@ -22,6 +22,14 @@ function view(Context $c, array &$s): void
         $c->spacer(); $c->spinner(); $c->muted('working…');
       $c->end();
       $c->divider();
+      // A toolbar: toggles and buttons without a face until hovered.
+      $c->toolbar(function () use ($c, &$s) {
+          if ($c->changed($c->toggle($s['bold'], 'Bold'))) { $s['last'] = 'bold ' . ($s['bold'] ? 'on' : 'off'); }
+          $c->toggle($s['italic'], 'Italic');
+          $c->divider(true);
+          if ($c->clicked($c->button('Share'))) { $c->toast('Shared'); }
+          $c->menuButton('View', ['Icons' => fn() => $s['last'] = 'icons', 'List' => fn() => $s['last'] = 'list']);
+      });
       $c->row(0, 16);
         if ($c->changed($c->switch('Wi-Fi', $s['wifi']))) { $s['last'] = 'Wi-Fi ' . ($s['wifi'] ? 'on' : 'off'); }
         $c->badge($s['wifi'] ? 'connected' : 'off');
@@ -33,6 +41,8 @@ function view(Context $c, array &$s): void
       $c->column(12, 10, 0, $t->surface)->round($t->radius);
         if ($s['tab'] === 0) {
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
+            $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();
+            $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, 80, 95); $c->muted("{$s['count']}0 % used"); $c->end();
             if ($c->collapsible('More options', $s['more'])) {
                 $c->column(12, 6);
                   $c->muted('Shown while the section is open; the header toggles it.');
@@ -40,7 +50,18 @@ function view(Context $c, array &$s): void
                 $c->end();
             }
         } elseif ($s['tab'] === 1) {
-            $c->text('Advanced settings would go here.');
+            // A tree: the arrows open and close, Up/Down/Left/Right move the focus, a click chooses.
+            $c->tree(function () use ($c, &$s) {
+                $item = function (string $path, ?Closure $kids = null) use ($c, &$s, &$item) {
+                    $name = basename($path);
+                    if ($kids === null) { $leaf = null; $n = $c->treeItem($name, $leaf, null, $s['chosen'] === $path); }
+                    else { $s['open'][$path] ??= $path === 'src'; $n = $c->treeItem($name, $s['open'][$path], $kids, $s['chosen'] === $path); }
+                    if ($c->clicked($n)) { $s['chosen'] = $path; $s['last'] = "chose $path"; }
+                };
+                $item('src', function () use ($item) { $item('src/App.php'); $item('src/UI', function () use ($item) { $item('src/UI/Context.php'); $item('src/UI/Node.php'); }); });
+                $item('examples', function () use ($item) { $item('examples/widgets'); });
+                $item('README.md');
+            });
         } else {
             $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
         }

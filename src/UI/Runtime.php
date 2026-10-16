@@ -58,6 +58,8 @@ final class Runtime
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
     private array $order = [];
     private int $barrier = 0, $counter = 0;
+    /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state. */
+    private array $locals = [];
     /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
     private array $toasts = [];
     public const TOASTS = 3, TOAST_FOR = 4.0;
@@ -278,6 +280,12 @@ final class Runtime
             $wake = $wake === null ? $t[1] : min($wake, $t[1]);
         }
         return $wake;
+    }
+
+    /** The state kept for node $id across frames, made by $make the first time. */
+    public function local(int $id, Closure $make): mixed
+    {
+        return $this->locals[$id] ??= $make();
     }
 
     /** Shows $message as a toast for TOAST_FOR seconds (mygo's Toast): one already showing shows anew; others stack above it, TOASTS at most. */
@@ -765,12 +773,13 @@ final class Runtime
     public function shortcut(int|string $key, int $mods = 0): bool
     {
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
+        $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE] : [Key::ESCAPE, Key::UP, Key::DOWN]; // what a focused field leaves: a single line has no use for Up and Down
         foreach ($this->keys as $i => $k) {
             if ($k[3] || $k[2] !== $mods) {
                 continue;
             }
-            if ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && $k[1] !== Key::ESCAPE) {
-                continue; // the text system had it: typing, moves, deletes; Escape stays the window's
+            if ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && !in_array($k[1], $free, true)) {
+                continue; // the text system had it: typing, moves, deletes
             }
             if (is_int($key) ? $k[1] === $key : strtolower($k[0]) === strtolower($key)) {
                 $this->keys[$i][3] = true; // one taker, as a click has; what it changed shows in this frame's next pass
