@@ -598,7 +598,11 @@ in it, which the painter samples from the slot (an SVG is drawn at the
 fitted size, then cropped); `->grayscale()` draws an image through quad
 kind 12, the image kind whose shader takes the BT.709 luminance, and an
 icon in the gray of its color's luminance (`Theme::luminance`).
-`avatar($name, $image)` is mygo's Avatar: 2.25 × fontSize round, the
+A bitmap shown at least twice smaller than its pixels is drawn from a
+halving of it (`Image::smaller`, mygo's levels: each pixel the average
+of the 2 × 2 it covers, made once and kept), so it samples smooth
+instead of aliasing; the painter picks the level from how far the part
+shown shrinks. `avatar($name, $image)` is mygo's Avatar: 2.25 × fontSize round, the
 image cropped to it (fit COVER) or the initials (first letters of the first and
 last words) at 0.4 × size, bold, white on the hue of the name's FNV-1a
 hash at saturation 0.45 and lightness 0.55 (`Context::hsl`).
@@ -1190,8 +1194,7 @@ and the nodes with local state.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
 - An icon turned every frame rasterizes a mask a frame (mygo does too);
-  the atlas starts over when it fills. Bitmaps shown far smaller than
-  their pixels are not mipmapped (mygo's `smaller`): they alias.
+  the atlas starts over when it fills.
 - Text glyphs still come from CoreText: the SVG renderer could draw
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child

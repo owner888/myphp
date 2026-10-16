@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, GridState, Key, ListState, Node, Painter, Selection, SVG, TextState};
+use MyPHP\Native\Mem;
+use MyPHP\UI\{Context, GridState, Image, Key, ListState, Node, Painter, Selection, SVG, TextState};
 
 // Combobox: a click opens the options with the choice selected, typing filters, Down/Up/Enter choose, blur reverts; autocomplete suggests while typed.
 $sel = 'Banana'; $ac = new TextState(''); $n = []; $ev = [];
@@ -219,3 +220,11 @@ $h = new Headless(function (Context $c) use (&$n, $art) { $n['g'] = $c->image($a
 $h->frame(); $list = $h->paint(); same([12.0, 2.0], [$list->buf[9], $list->buf[16 + 9]], 'a gray image is quad kind 12, a colored one 2');
 same([5.0, 10.0, 10.0], [$list->buf[16 + 10], $list->buf[16 + 4], $list->buf[16 + 5]], 'cover shows the middle half of the slot, from u = 5 (fake slots are the pixel size, 20 × 10)');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');
+
+// Images shown far smaller than their pixels come from a halving: each pixel the average of the 2 × 2 it covers; an odd last column counts twice.
+$img = Image::fromPixels(3, 2, pack('C*', 0, 0, 0, 255, 100, 0, 0, 255, 200, 0, 0, 255, 0, 0, 0, 255, 100, 0, 0, 255, 200, 0, 0, 255));
+check($img->smaller(1.5) === $img, 'less than twice as small: the image itself');
+$half = $img->smaller(2.5); same([2, 1], [$half->w, $half->h], 'twice as small: half as large, rounded up');
+$buf = Mem::alloc(8); Mem::copy(Mem::addr($buf), $half->addr, 8);
+same([50, 0, 0, 255, 200, 0, 0, 255], array_values(unpack('C8', \FFI::string($buf, 8))), 'the averages: (0+100)/2, the last column twice'); Mem::free($buf);
+check($img->smaller(4) === $img->smaller(5.9) && $img->smaller(4) !== $half, 'four times: the next level, kept');
