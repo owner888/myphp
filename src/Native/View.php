@@ -61,6 +61,11 @@ final class View
         ObjC::defineClass('MyPHPView', 'MTKView', [
             'isFlipped' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
             'acceptsFirstResponder' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
+            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => true],
+            // A press in the title bar region of a hidden title bar reaches the view, not AppKit's window move and double-click zoom: Node::dragWindow handles do those.
+            'mouseDownCanMoveWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
+            // The layer's changes are not animated, as layers do by default (mygo's fit): a resize would show the last frame stretched to the new size, catching up over the animation.
+            'actionForLayer:forKey:' => ['@@:@@', 'p(pppp)', fn($self, $cmd, $layer, $key) => ObjC::msg('p:', ObjC::cls('NSNull'), 'null')],
             'mouseDown:' => ['v@:@', 'v(ppp)', $mouse('down')],
             'mouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
             'rightMouseDown:' => ['v@:@', 'v(ppp)', $mouse('down')],

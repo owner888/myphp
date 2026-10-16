@@ -212,6 +212,8 @@ final class Metal
     /** The textures the glass reads: a copy of the drawable, the half-size blur in progress, the blurred backdrop. */
     private $snapshot = null, $blurTemp = null, $backdrop = null;
     private array $backdropSize = [0, 0];
+    /** @var array<int, string> each view's drawable size as its last frame drew it: a frame for a new size presents with the transaction */
+    private array $drawn = [];
     private $blurParams;
     private $queue;
     private $pipeline;
@@ -368,6 +370,15 @@ final class Metal
 
     private function present($view, DisplayList $list): void
     {
+        // A frame for a new size presents with the Core Animation transaction, as mygo's: the window's new frame and the
+        // view's content show together, or the layer would stretch the last frame while the window zooms or resizes.
+        // Others present as soon as the GPU has them, sparing a commit of the transaction for each. The view is told
+        // (MTKView sets its layer from its own property) before it hands out the drawable, which presents as set then.
+        $ds = ObjC::msg('z:', $view, 'drawableSize');
+        $size = "{$ds->w}x{$ds->h}";
+        $sync = ($this->drawn[ObjC::addr($view)] ?? '') !== $size;
+        $this->drawn[ObjC::addr($view)] = $size;
+        ObjC::msg('v:b', $view, 'setPresentsWithTransaction:', $sync);
         $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
         $drawable = ObjC::msg('p:', $view, 'currentDrawable');
         if ($pass === null || $drawable === null) {
@@ -400,8 +411,15 @@ final class Metal
             $start = $at;
         }
         $this->pass($cb, $pass, $start, $list->n - $start, $start === 0);
-        ObjC::msg('v:p', $cb, 'presentDrawable:', $drawable);
-        ObjC::msg('v:', $cb, 'commit');
+        if ($sync) {
+            ObjC::msg('v:', $cb, 'commit');
+            ObjC::msg('v:', $cb, 'waitUntilScheduled');
+            ObjC::msg('v:', $drawable, 'present');
+            ObjC::msg('v:', ObjC::cls('CATransaction'), 'flush'); // committed now, with the layer's new size, not at the end of the pass: a live resize commits its step before the view displays
+        } else {
+            ObjC::msg('v:p', $cb, 'presentDrawable:', $drawable);
+            ObjC::msg('v:', $cb, 'commit');
+        }
     }
 
     private const LOAD_LOAD = 1; // MTLLoadAction: dontCare 0, load 1, clear 2

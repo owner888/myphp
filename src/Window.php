@@ -118,8 +118,17 @@ final class Window
         }
         ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
-        ObjC::msg('v:p', $this->ns, 'setDelegate:', self::delegate());
+        $delegate = self::delegate();
+        ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
         self::$open[ObjC::addr($this->ns)] = $this;
+        if ($this->page === null) { // a frame at the new size as soon as the view has it, drawn with the window's own display of it, as mygo's setFrameSize: asks: a frame after the resize is committed would come a step late, the layer stretching the last one meanwhile
+            ObjC::msg('v:b', $this->view, 'setPostsFrameChangedNotifications:', true);
+            ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('viewResized:'), ObjC::str('NSViewFrameDidChangeNotification'), $this->view);
+        }
+        if ($this->trafficLights !== null && ($container = $this->titleBarContainer()) !== null) { // AppKit lays the title bar out at each step of a zoom's animation: the lights follow each
+            ObjC::msg('v:b', $container, 'setPostsFrameChangedNotifications:', true);
+            ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('titleBarLaidOut:'), ObjC::str('NSViewFrameDidChangeNotification'), $container);
+        }
         self::$byView[ObjC::addr($this->view)] = $this;
         Drop::handle(function ($view, array $paths, float $x, float $y) {
             $w = self::$byView[ObjC::addr($view)] ?? null;
@@ -266,19 +275,26 @@ final class Window
     {
         if ($this->trafficLights === null || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) { return; }
         [$px, $py] = $this->trafficLights;
-        $close = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0);
-        if ($close === null) { return; }
-        $container = ObjC::msg('p:', ObjC::msg('p:', $close, 'superview'), 'superview');
+        $container = $this->titleBarContainer();
         if ($container === null) { return; }
-        $b = ObjC::msg('r:', $close, 'frame');
+        $b = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'frame');
         $height = $b->h + 2 * $py;
         $win = ObjC::msg('r:', $this->ns, 'frame');
         $cf = ObjC::msg('r:', $container, 'frame');
-        ObjC::msg('v:r', $container, 'setFrame:', ObjC::rect($cf->x, $win->h - $height, $cf->w, $height));
+        if ($cf->y !== $win->h - $height || $cf->h !== $height) { // only when AppKit moved it: its frame change is observed, and setting it posts one
+            ObjC::msg('v:r', $container, 'setFrame:', ObjC::rect($cf->x, $win->h - $height, $cf->w, $height));
+        }
         $gap = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 1), 'frame')->x - $b->x;
         for ($i = 0; $i < 3; $i++) {
             ObjC::msg('v:q', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setFrameOrigin:', ObjC::point($px + $i * $gap, $py));
         }
+    }
+
+    /** The view that holds the title bar and its buttons (NSTitlebarContainerView), or null before the window has one. */
+    private function titleBarContainer()
+    {
+        $close = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0);
+        return $close === null ? null : ObjC::msg('p:', ObjC::msg('p:', $close, 'superview'), 'superview');
     }
 
     /** Moves the window with the mouse from the press on a drag handle (mygo's StartDrag), or on a double click zooms or minimizes it as macOS is set to. */
@@ -393,6 +409,11 @@ final class Window
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
                 'windowDidChangeBackingProperties:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { App::rescale(); }],
+                'viewResized:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Metal::requestFrame(ObjC::msg('p:', $note, 'object')); }],
+                'titleBarLaidOut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // the title bar container's frame changed: AppKit laid it out
+                    $w = self::$open[ObjC::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
+                    $w?->layoutTrafficLights();
+                }],
             ], ['NSWindowDelegate']);
         }
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');

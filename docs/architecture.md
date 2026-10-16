@@ -78,7 +78,17 @@ with source-alpha blending, and allocates a ring of four shared
 current buffer's `contents` cast to `float[]`; `present` encodes one
 instanced triangle-strip draw (4 vertices × n instances) and commits. The
 viewport size goes in through `setVertexBytes:` as two floats, in points,
-so coordinates are in points on any backing scale.
+so coordinates are in points on any backing scale. A frame for a new
+drawable size presents with the Core Animation transaction, as mygo's
+renderer does (`setPresentsWithTransaction:` on the MTKView before it
+hands out the drawable, then commit, `waitUntilScheduled`, `present` and
+`CATransaction flush`), so the window's new size and the content drawn
+for it reach the screen together; other frames present as soon as the
+GPU has them. The window asks for that frame the moment the view's frame
+changes (`NSViewFrameDidChangeNotification`, as mygo's `setFrameSize:`
+asks), inside the same step of a live resize or a zoom's animation —
+asked later, from `windowDidResize:`, it would land in the next step's
+commit and the layer would stretch the last frame meanwhile.
 
 The quad kinds, by `params.y`: 0 a rounded rect, 1 a glyph, 2 an image,
 3 a soft shadow (the rect inset by the blur, feathered over it), 4 a ring
@@ -637,10 +647,16 @@ close button's top-left corner there and the other two after it at
 AppKit's own gap, in a title-bar container (the button's
 superview's superview) as high as the button plus twice y, so the bar
 leaves as much room below the lights as above; AppKit lays the bar out
-again on a resize, a title change and an appearance change, so it runs
-after each (the resize delegate, setTitle, themeChanged), and
-`titleBar()` then reports height = button + 2y and left = x + the zoom
-button's right edge. `examples/titlebar [style] [x,y]` draws such a bar.
+again on a resize (at each step of a zoom's animation), a title change
+and an appearance change, so it runs after each: the window delegate
+observes the container's `NSViewFrameDidChangeNotification`, besides
+`windowDidResize:`, setTitle and themeChanged, and the method sets the
+container's frame only when AppKit moved it. `titleBar()` then reports
+height = button + 2y and left = x + the zoom button's right edge. The
+view answers `mouseDownCanMoveWindow` with NO and `acceptsFirstMouse:`
+with YES, as mygo's surface view: a press in the title bar's region over
+a control reaches the control, not AppKit's window move and double-click
+zoom. `examples/titlebar [style] [x,y]` draws such a bar.
 
 `UI\Selection` is mygo's Selection for a list, table or grid that lets
 the user choose several rows (`ListState::$selection`,

@@ -138,9 +138,9 @@ function grid(Context $c, Photos $p): void
     $p->grid->selected = $p->selected;
     $grid = $c->gridView($p->grid, count($p->files), $s, $s, function (int $i) use ($c, $t, $p, $s) {
         $f = $p->files[$i];
-        $c->column(0, 0, 0, $t->surface)->size(0, $s)->round($t->radius)->center()->tooltip(basename($f)); // as wide as the cell, which the cells share (Basis(0)): the thumbnail centered in it
+        $c->column(0, 0, 1, $t->surface)->size(0, 0)->round($t->radius)->center()->tooltip(basename($f)); // fills the cell inside its border of 2 (mygo's Image.Fit(Contain).Grow(1)): the thumbnail centered in it
           if (($img = $p->thumb($f)) !== null) {
-              $k = min($s / $img->w, $s / $img->h); // the longer side fills the square
+              $k = min(($s - 4) / $img->w, ($s - 4) / $img->h); // the longer side fills the cell's height inside the border
               $c->image($img, $img->w * $k, $img->h * $k, $t->radius);
           } else {
               $p->wanted[] = $f;
