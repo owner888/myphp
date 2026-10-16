@@ -70,6 +70,8 @@ examples/          native (inbox over a million rows), form (fields, text area, 
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
                    over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls), titlebar
+tests/             headless tests: php tests/run.php [name] — Headless.php (fake metrics, events as the view sends them,
+                   the widgets example loaded without its window), *_test.php (check()/same() assertions, no PHPUnit)
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
@@ -144,7 +146,9 @@ static-php-cli is the one outside tool, for release builds only.
 - PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set
   `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on every changed file; pure-PHP checks
-  where they exist; ask the developer to run GUI examples.
+  where they exist; ask the developer to run GUI examples. php tests/run.php
+  runs the headless tests (Layout, Runtime, Context: no window): run them
+  after changing src/UI, and add a check when fixing a bug there.
 - New ObjC calls: selector and types from Apple's headers, signature letters
   in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
   methods (`arrayWithObjects:`) avoided.

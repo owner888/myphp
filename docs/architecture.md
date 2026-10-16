@@ -1027,6 +1027,26 @@ example keys each tab's content by the tab. A key is the one node's:
 pass its key to the next node built — which once gave the accordion
 after a range slider the high knob's id, and Tab skipped the knob.
 
+Focus and overlays: as an overlay opens (a node placed at the root with
+`at()`, or one that `block`s) the runtime notes who had the focus, and
+when the overlay is gone with the focus inside it, gives the focus back
+to that node if it is still built — mygo's openers and restoreFocus: a
+calendar closed by Escape leaves the date input focused, so Tab goes on
+from there.
+
+A node given a size of its own (`size()`, a `Node` built with a width or
+height) keeps it across a container that stretches its children (a
+column's width, a row's height), as mygo keeps an explicit Width or
+Height; only nodes with no size of their own across are stretched.
+
+Tests: `php tests/run.php` runs the `*_test.php` files in `tests/` with
+`Headless` (fake metrics of 7 × 16 a character, a Runtime fed events as
+the view would send them — a key event then its selector, the selector
+taken by the focused field's TextState first, as the view does — and the
+widgets example loaded without its window). `widgets_test` sweeps the
+Tab order, what the keys do at each kind of control, the alert's focus
+and the cursor; `layout_test` the grid, wrapping and a split.
+
 ## Open items
 
 - The glyph atlas starts over when full and is re-rasterized whole; an

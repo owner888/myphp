@@ -83,7 +83,7 @@ final class Layout
                 $aw = $n->gap * ($cs - 1); for ($j = $c; $j < $c + $cs; $j++) { $aw += $cols[$j]; }
                 $ah = $n->gap * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
                 $a = $k->self === Node::AUTO ? Node::STRETCH : $k->self;
-                $kh = $a === Node::STRETCH ? $ah : $k->mh;
+                $kh = $a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
                 self::arrange($k, $colAt[$c], $rowAt[$r] + self::across($a, $ah, $kh), $aw, $kh);
             }
             return;
@@ -161,12 +161,12 @@ final class Layout
             }
             if ($n->dir === Node::ROW) {
                 $kw = $k->mw + $extra * $k->grow - ($shrink[$i] ?? 0.0);
-                $kh = $a === Node::STRETCH ? $ch : $k->mh;
+                $kh = $a === Node::STRETCH && $k->fh <= 0 ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
                 self::arrange($k, $cx, $cy + self::across($a, $ch, $kh), $kw, $kh);
                 $cx += $kw + $n->gap;
             } else {
                 $kh = $k->mh + $extra * $k->grow;
-                $kw = $a === Node::STRETCH ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
+                $kw = $a === Node::STRETCH && $k->fw <= 0 ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
                 self::arrange($k, $cx + self::across($a, $cw, $kw), $cy, $kw, $kh);
                 $cy += $kh + $n->gap;
             }
@@ -316,7 +316,7 @@ final class Layout
         foreach ($line as $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($k->mh <= 0) { $a = Node::STRETCH; }
-            $kw = $k->mw + $extra * $k->grow; $kh = $a === Node::STRETCH ? $h : $k->mh;
+            $kw = $k->mw + $extra * $k->grow; $kh = $a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh;
             self::arrange($k, $cx, $y + self::across($a, $h, $kh), $kw, $kh);
             $cx += $kw + $n->gap;
         }

@@ -103,6 +103,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
 ./run.sh titlebar                      # a hidden title bar: the view draws its own under the traffic lights and drags the window by it
+php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets example
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
@@ -224,6 +225,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
 ./run.sh titlebar                      # 隐藏标题栏：视图在红绿灯下自己画标题栏，拖它移动窗口
+php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 例子
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色

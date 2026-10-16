@@ -66,6 +66,8 @@ final class Runtime
     private int $barrier = 0, $counter = 0;
     /** The overlays of the frame (a popover, a menu, a combobox's options: nodes placed at the root with Node::at), as [order, x, y, w, h]: a point in one reaches no node built before it. */
     private array $overlays = [];
+    /** The overlays built last frame (a popover, a menu, a modal: ids), and for each overlay the node that had the focus as it opened, to give it back as the overlay closes with the focus inside (mygo's openers and restoreFocus). */
+    private array $overlayIds = [], $openers = [];
     /** Focus groups: each focusable's group id, the groups' orientation, selects flag and member on, and the member each group focused last. */
     private array $memberOf = [], $groups = [], $groupLast = [];
     /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state. */
@@ -211,6 +213,7 @@ final class Runtime
         }
         $this->input->events = [];
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
+        $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
         for ($pass = 0; $pass < 3; $pass++) {
             $this->consumed = false;
             $root = $build();
@@ -255,6 +258,14 @@ final class Runtime
             $this->tip = [$over[1], ...$this->rects[$over[0]]]; // the text and the anchor's rect
         }
         $this->tipPending = $over !== null && $this->tip === null;
+        foreach ($this->overlayIds as $id => $_) { // an overlay born this frame notes who had the focus
+            if (!isset($lastOverlays[$id]) && !isset($this->openers[$id])) { $this->openers[$id] = $wasFocus; }
+        }
+        foreach ($this->openers as $id => $opener) { // one gone with the focus inside gives it back
+            if (isset($this->overlayIds[$id])) { continue; }
+            unset($this->openers[$id]);
+            if (($this->focus === null || !isset($this->rects[$this->focus])) && $opener !== null && isset($this->rects[$opener])) { $this->focus = $opener; }
+        }
         if ($this->focus !== null && !isset($this->rects[$this->focus])) {
             $this->focus = null; // the focused node was not built this frame
         }
@@ -374,6 +385,9 @@ final class Runtime
         }
         if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1) { // placed at the root: over what was built before it
             $this->overlays[] = [$this->counter, $n->x, $n->y, $n->w, $n->h];
+        }
+        if ($n->blocks || ($n->absolute && $parent !== null && $this->order[$parent->id] === 1)) {
+            $this->overlayIds[$n->id] = true;
         }
         if ($n->blocks) {
             $this->barrier = $this->counter;
