@@ -10,7 +10,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'last' => 'nothing yet'];
 
 function view(Context $c, array &$s): void
 {
@@ -64,6 +64,14 @@ function view(Context $c, array &$s): void
             });
         } else {
             $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
+            $c->row(0, 10); $c->text('Rating'); if ($c->changed($c->rating($s['stars']))) { $s['last'] = "stars {$s['stars']}"; } $c->end();
+            $c->row(0, 10); $c->text('Range'); if ($c->changed($c->rangeSlider($s['low'], $s['high'], 0, 100, 5, 240))) { $s['last'] = sprintf('range %d–%d', $s['low'], $s['high']); } $c->muted(sprintf('%d–%d', $s['low'], $s['high'])); $c->end();
+            // An accordion: sections in a bordered box, Up and Down between their headers.
+            $c->accordion(function () use ($c, &$s) {
+                $c->accordionItem('Appearance', $s['acc'][0], function () use ($c) { $c->muted('Theme, accent, text size.'); });
+                $c->accordionItem('Shortcuts', $s['acc'][1], function () use ($c) { $c->muted('Cmd+N new, Cmd+S save.'); });
+                $c->accordionItem('About', $s['acc'][2], function () use ($c) { $c->muted('The widgets example.'); });
+            });
         }
       $c->end();
       $c->row(0, 8);

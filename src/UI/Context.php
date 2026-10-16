@@ -25,6 +25,8 @@ final class Context
     private array $sidebars = [];
     /** How many toolbars enclose what is being built: their buttons take no face until hovered. */
     private int $toolbars = 0;
+    /** The accordion being built, innermost last: how many items it has so far (the second on gets a line above). */
+    private array $accordions = [];
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
     private array $trees = [];
 
@@ -444,6 +446,153 @@ final class Context
             $n->changed = true;
         }
         $n->on = $on;
+        return $n;
+    }
+
+    /**
+     * Sections one above the other in a bordered box, that $fn builds with
+     * accordionItem, as mygo's Accordion: each opens and closes on its own;
+     * Up and Down move the focus between their headers, Home and End too.
+     */
+    public function accordion(Closure $fn): Node
+    {
+        $t = $this->theme;
+        $n = $this->column(0, 0, 0, $t->background)->round($t->radius)->border()->focusGroup(Node::VERTICAL);
+        $this->accordions[] = 0;
+          $fn();
+        array_pop($this->accordions);
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * A section of an accordion titled $title, whose content $fn builds
+     * while $open, as mygo's AccordionItem: a click on the header, or Enter
+     * or Space while it has the focus, opens and closes it; changed()
+     * reports it.
+     */
+    public function accordionItem(string $title, bool &$open, Closure $fn): Node
+    {
+        $t = $this->theme;
+        $k = count($this->accordions) - 1;
+        $n = $this->column(0, 0);
+          if ($this->accordions[$k]++ > 0) { $this->divider(); } // a line above all but the first
+          $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable();
+          if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
+            $this->text($title, $t->fontSize, $t->text, Font::BOLD)->single();
+            $this->spacer();
+            $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
+            $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 270 : 90, $t->textMuted)); // down, or up while open
+          $this->end();
+          if ($this->clicked($head)) { $open = !$open; $n->changed = true; }
+          if ($open) {
+              $this->column(0, $t->space(2))->padding(0, $t->space(3));
+                $fn();
+                $this->column(0, 0)->size(0, $t->space(3)); $this->end(); // Padding(0, Space(3), Space(3)): the bottom
+              $this->end();
+          }
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * A row of $max stars of which $value are filled, as mygo's Rating
+     * (AppKit's rating level indicator): a click on a star sets it, a click
+     * on the star set clears it, and the arrows, Home and End change it
+     * while the rating has the focus; the stars the pointer would set show
+     * as it rests on them. changed() reports a new value.
+     */
+    public function rating(int &$value, int $max = 5): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $n = $this->row(0, $t->space(0.5))->focusable();
+        $set = function (int $v) use (&$value, $max, $n) { $v = max(0, min($max, $v)); if ($v !== $value) { $value = $v; $n->changed = true; } };
+        if ($rt !== null && $rt->focus === $n->id) {
+            if ($this->shortcut(Key::RIGHT) || $this->shortcut(Key::UP)) { $set($value + 1); }
+            if ($this->shortcut(Key::LEFT) || $this->shortcut(Key::DOWN)) { $set($value - 1); }
+            if ($this->shortcut(Key::HOME)) { $set(0); }
+            if ($this->shortcut(Key::END)) { $set($max); }
+        }
+        $size = $t->fontSize * 1.25; $stars = []; $hover = -1;
+          for ($i = 0; $i < $max; $i++) {
+              $stars[$i] = $this->box($size, $size, 0); $stars[$i]->color = null; // a glyph alone
+              if ($this->hovered($stars[$i])) { $hover = $i; }
+          }
+        $this->end();
+        foreach ($stars as $i => $star) {
+            if ($this->clicked($star)) { $set($value === $i + 1 ? 0 : $i + 1); if ($rt !== null) { $rt->focus = $n->id; } }
+            $filled = $i < $value; $color = $t->warning; $alpha = 1.0;
+            if ($hover >= 0) { $filled = $i <= $hover; $alpha = 0.6; }
+            // A star glyph in place of mygo's star path: filled in the warning color, or outlined in the muted color.
+            $star->text = $filled ? '★' : '☆'; $star->fontSize = $size; $star->fg = $filled ? $color : $t->textMuted; $star->alpha = $alpha;
+        }
+        return $n;
+    }
+
+    /**
+     * Two knobs on one track choosing the range $low to $high between $lo
+     * and $hi, as mygo's RangeSlider: a press drags the knob nearest, the
+     * arrows, Home and End move the knob with the focus by $step (a
+     * hundredth of the range when 0, which also leaves values unsnapped),
+     * and changed() reports a move. Space(5) high, at least Space(25) wide.
+     */
+    public function rangeSlider(float &$low, float &$high, float $lo, float $hi, float $step = 0, float $width = 0): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $kw = $t->space(5);
+        $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
+        $n = $this->row(0, 0, $width <= 0 ? 1 : 0)->padding(0, $kw / 2)->min($t->space(25), $t->space(5));
+        if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
+        $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
+        $snap = fn(float $v) => $step > 0 ? round(($v - $lo) / $step) * $step + $lo : $v;
+        $set = function (string $which, float $to) use (&$low, &$high, $lo, $hi, $snap, $n) {
+            [$from, $until] = $which === 'low' ? [$lo, $high] : [$low, $hi];
+            $to = $snap(max($from, min($until, $to)));
+            if ($to != ($which === 'low' ? $low : $high)) { if ($which === 'low') { $low = $to; } else { $high = $to; } $n->changed = true; }
+        };
+        $local = $rt?->local($n->id, fn() => (object)['dragging' => null]);
+        $r = $rt?->rectOf($n->id);
+        $knobs = [];
+          foreach (['low', 'high'] as $k => $which) { // the knobs: focusable, placed over the track; the arrows move the one focused
+              $v = $which === 'low' ? $low : $high;
+              $frac = $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
+              $knob = $this->key($which)->box(0, 0, 0)->size($kw, $t->space(5))->at(($r === null ? 0 : ($r[2] - $kw)) * $frac - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in
+              $knob->color = null; $knob->ownRing = true; // the knob is painted, ring and all, by the slider's draw
+              $knobs[$which] = $knob;
+              if ($rt !== null && $rt->focus === $knob->id) {
+                  if ($this->shortcut(Key::LEFT) || $this->shortcut(Key::DOWN)) { $set($which, $v - $keyStep); }
+                  if ($this->shortcut(Key::RIGHT) || $this->shortcut(Key::UP)) { $set($which, $v + $keyStep); }
+                  if ($this->shortcut(Key::HOME)) { $set($which, $which === 'low' ? $lo : $low); }
+                  if ($this->shortcut(Key::END)) { $set($which, $which === 'low' ? $high : $hi); }
+              }
+          }
+        $this->end();
+        // A press on the track or a knob drags the knob nearest to it, and gives it the focus.
+        if ($rt !== null && $r !== null && $local !== null) {
+            $d = $rt->dragged($n->id) ?? $rt->dragged($knobs['low']->id) ?? $rt->dragged($knobs['high']->id);
+            if ($d !== null) {
+                $x = $lo + max(0.0, min(1.0, ($rt->input->mouseX - $r[0] - $kw / 2) / max(1.0, $r[2] - $kw))) * ($hi - $lo);
+                if ($local->dragging === null) { $local->dragging = abs($x - $high) < abs($x - $low) || $x > $high ? 'high' : 'low'; }
+                $set($local->dragging, $x);
+                $rt->focus = $knobs[$local->dragging]->id;
+            } else {
+                $local->dragging = null;
+            }
+        }
+        $dragging = $local->dragging ?? null;
+        $focusLow = $rt !== null && $rt->focus === $knobs['low']->id && $rt->focusVisible($knobs['low']->id);
+        $focusHigh = $rt !== null && $rt->focus === $knobs['high']->id && $rt->focusVisible($knobs['high']->id);
+        $n->draw(function (DisplayList $list, Node $e, Theme $t) use ($low, $high, $lo, $hi, $kw, $dragging, $focusLow, $focusHigh) {
+            $h = $t->space(1.5); $cy = $e->y + $t->space(2.5);
+            $f = fn(float $v) => $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
+            $x0 = $e->x + $kw / 2 + ($e->w - $kw) * $f($low); $x1 = $e->x + $kw / 2 + ($e->w - $kw) * $f($high);
+            $list->rect($e->x, $cy - $h / 2, $e->w, $h, $t->border, 1.0, $h / 2);
+            $list->rect(min($x0, $x1), $cy - $h / 2, abs($x1 - $x0), $h, $t->accent, 1.0, $h / 2);
+            Painter::knob($list, $t, $x0, $cy, $dragging === 'low', $focusLow);
+            Painter::knob($list, $t, $x1, $cy, $dragging === 'high', $focusHigh);
+        });
         return $n;
     }
 

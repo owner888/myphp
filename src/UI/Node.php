@@ -51,6 +51,8 @@ final class Node
     public ?\Closure $draw = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
     public ?string $cursor = null;
+    /** This node paints its own focus ring (a slider's knob): the painter's generic ring stays off it. */
+    public bool $ownRing = false;
     /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
     public bool $focusVisible = false;
     /** Whether this node is a list's chosen row, painted in the selection color. */

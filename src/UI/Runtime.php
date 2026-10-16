@@ -368,7 +368,7 @@ final class Runtime
             }
         }
         if ($n->focused && $n->id === $this->focus) {
-            $n->focusVisible = $this->focusVisible; // the painter rings it
+            $n->focusVisible = $this->focusVisible && !$n->ownRing; // the painter rings it, unless it rings itself
         }
         if ($n->kind === Node::SLIDER) {
             $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h];
@@ -881,6 +881,12 @@ final class Runtime
     public function widthOf(int $id): ?float
     {
         return isset($this->rects[$id]) ? $this->rects[$id][2] : null;
+    }
+
+    /** Whether node $id has the focus and it shows (came from the keyboard). */
+    public function focusVisible(int $id): bool
+    {
+        return $this->focus === $id && $this->focusVisible;
     }
 
     /** Whether the pointer and the keys reach node $id: nothing blocks it (a modal built after it does). */

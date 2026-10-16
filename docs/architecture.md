@@ -301,6 +301,23 @@ has the focus (a focused single-line field leaves Up and Down to
 `shortcut`, a text area only Escape), and the text shows the value
 rounded to the step's decimals once the focus leaves.
 
+`accordion($fn)` / `accordionItem($title, &$open, $fn)` are mygo's
+Accordion: a bordered box, headers padded Space(2.5) by Space(3) with
+the disclosure arrow pointing down (up while open), a line above all
+but the first, the panel padded Space(3) at the sides and bottom; the
+box is a vertical focus group, so Up and Down move between headers.
+`rating(&$value, $max)` is mygo's Rating: stars fontSize × 1.25,
+Space(0.5) apart, a click sets or clears, the arrows and Home and End
+move while it has the focus, the pointer previews at 0.6; the star is
+the font's ★/☆ glyph rather than mygo's path, there being no polygon
+fill. `rangeSlider(&$low, &$high, $lo, $hi, $step)` is mygo's
+RangeSlider: Space(5) high, at least Space(25) wide, padded kw/2, two
+focusable knob boxes placed over the drawn knobs (`Node::$ownRing`
+keeps the painter's generic ring off them; `Painter::knob` draws them,
+shared with the slider), a press on the track or a knob dragging the
+knob nearest, the arrows moving the one focused by the step (a
+hundredth of the range when 0).
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above

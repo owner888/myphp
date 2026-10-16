@@ -114,7 +114,7 @@ final class Painter
                     $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $n->w - $ew))) . '…';
                 }
             }
-            $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
+            $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
             if ($n->underline) {
                 $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
             }
@@ -304,10 +304,17 @@ final class Painter
         $kx = $x0 + ($x1 - $x0) * $n->fraction;
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
         $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
-        $g = $n->held ? 1.35 : 1.0;
+        self::knob($list, $t, $kx, $cy, $n->held, $n->focusVisible);
+    }
+
+    /** A slider's knob at (x, cy), mygo's paintKnob: a Space(5) by Space(4) capsule, white, that grows into a lens of glass while held. */
+    public static function knob(DisplayList $list, Theme $t, float $kx, float $cy, bool $held, bool $focus): void
+    {
+        $kw = $t->space(5); $kh = $t->space(4);
+        $g = $held ? 1.35 : 1.0;
         $w = $kw * $g; $h = $kh * $g; $x = $kx - $w / 2; $y = $cy - $h / 2; $r = $h / 2;
         [$face, $rim] = $t->dark ? [0xe0e1e1, 0x000000] : [0xffffff, 0x000000];
-        if ($n->held) {
+        if ($held) {
             $list->shadow($x, $y, $w, $h, 0x000000, $t->dark ? 0.3 : 0.14, $r, 14, 0, 8);
             $list->ring($x, $y, $w, $h, $rim, $t->dark ? 0.7 : 0.22, $r, 1.0);                  // the lens's rim,
             $list->ring($x + 1, $y + 1, $w - 2, $h - 2, 0xffffff, 0.25, $r - 1, 1.0);          // lit on the inside
@@ -316,7 +323,7 @@ final class Painter
             $list->shadow($x, $y, $w, $h, 0x000000, 0.10, $r, 7, 0, 1.5);   // a soft one lifts it
             $list->rect($x, $y, $w, $h, $face, 1.0, $r);
         }
-        if ($n->focusVisible) {
+        if ($focus) {
             self::focusRing($list, $x, $y, $w, $h, $r, $t);
         }
     }
