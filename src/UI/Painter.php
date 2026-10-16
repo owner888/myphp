@@ -124,15 +124,16 @@ final class Painter
         if ($n->scroll !== null) {
             $list->popClip();
             // The thumbs show while the pointer is over the container or drags one.
-            if ($rt !== null && ($rt->dragging($n->scroll) || $rt->hovered($n->id))) {
+            if ($rt !== null && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
                 $r = [$n->x, $n->y, $n->w, $n->h];
+                $grow = $dragging ? 2.0 : 0.0; // the thumb being dragged thickens, as mygo's
                 $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth) : null;
                 if ($thumb !== null) {
-                    $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
+                    $list->rect($thumb[0] - $grow, $thumb[1], $thumb[2] + $grow, $thumb[3], $t->scrollbar, $t->scrollbarAlpha, ($thumb[2] + $grow) / 2);
                 }
                 $thumb = $n->scrollX ? Scrollbar::thumb($r, $n->scroll->extentX(), $t->scrollbarWidth, true) : null;
                 if ($thumb !== null) {
-                    $list->rect($thumb[0], $thumb[1], $thumb[2], $thumb[3], $t->scrollbar, $t->scrollbarAlpha, $t->scrollbarWidth / 2);
+                    $list->rect($thumb[0], $thumb[1] - $grow, $thumb[2], $thumb[3] + $grow, $t->scrollbar, $t->scrollbarAlpha, ($thumb[3] + $grow) / 2);
                 }
             }
         }

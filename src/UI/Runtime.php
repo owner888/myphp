@@ -49,7 +49,7 @@ final class Runtime
     private array $steppers = [];
     /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
     private array $jumps = [];
-    /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper], or null. */
+    /** The press the mouse is still down from: [x, y, start seconds, ticks given, on a stepper, last x, last y dragged() reported], or null. */
     private ?array $hold = null;
     /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
     private array $keys = [];
@@ -124,7 +124,10 @@ final class Runtime
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
                     $this->pressAt($e[1], $e[2]);
-                    $this->hold = [$e[1], $e[2], $now / 1e9, 0, false];
+                    if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
+                        $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
+                    }
+                    $this->hold = [$e[1], $e[2], $now / 1e9, 0, false, $e[1], $e[2]];
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
@@ -289,6 +292,10 @@ final class Runtime
         }
         if ($n->url !== null && $this->hovered($n->id)) {
             $this->cursor = 'pointer';
+        } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $this->hovered($n->id)) {
+            $this->cursor = 'ibeam';
+        } elseif ($n->cursor !== null && $this->hovered($n->id)) {
+            $this->cursor = $n->cursor;
         }
         if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
             $this->animating = true; // an indeterminate bar or a spinner moves every frame
@@ -617,6 +624,31 @@ final class Runtime
             $this->hold[4] = true;
         }
         return $n;
+    }
+
+    /**
+     * How far the pointer moved since this was last asked while the mouse
+     * is down from a press on node $id (its last-frame rect): [dx, dy] in
+     * points, or null when it is not being dragged (mygo's Dragged). A
+     * drag counts as consumed input: the frame builds again with what it
+     * moved.
+     */
+    public function dragged(int $id): ?array
+    {
+        $r = $this->rects[$id] ?? null;
+        if ($this->hold === null || $r === null) {
+            return null;
+        }
+        [$x, $y] = $this->hold;
+        if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+            return null;
+        }
+        $d = [$this->input->mouseX - $this->hold[5], $this->input->mouseY - $this->hold[6]];
+        $this->hold[5] = $this->input->mouseX; $this->hold[6] = $this->input->mouseY;
+        if ($d[0] != 0 || $d[1] != 0) {
+            $this->consumed = true;
+        }
+        return $d;
     }
 
     /** Which half of stepper $id the mouse is held down on: 1 the upper, -1 the lower, 0 neither. */

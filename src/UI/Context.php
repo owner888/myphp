@@ -288,6 +288,120 @@ final class Context
         return $n;
     }
 
+    /**
+     * A table of $count rows under a header of $columns, as mygo's Table:
+     * the rows are a list's (only those in view are built, $state keeps
+     * the place and the choice, the keys move it), $cell($row, $col)
+     * builds a cell's content, usually a text. Rows are Space(8) high,
+     * cells padded Space(1.5). The user resizes a column by dragging the
+     * right edge of its header ($state->columnWidths keeps it) and sorts
+     * by a sortable column by clicking its header ($state->sort; the app
+     * sorts its rows and sortChanged() reports a click).
+     * @param list<TableColumn> $columns
+     */
+    public function table(ListState $state, array $columns, int $count, Closure $cell): Node
+    {
+        $t = $this->theme;
+        $rowH = $t->space(8); $pad = $t->space(1.5); $flexMin = $t->space(15);
+        $rt = $this->runtime;
+        $n = $this->column(0, 0, 1);
+        $cells = function (Closure $fill) use ($columns, $state, $pad, $flexMin) {
+            $boxes = [];
+            foreach ($columns as $j => $col) {
+                $w = $state->columnWidths[$col->id()] ?? $col->width;
+                $box = $this->key('c' . $col->id())->row($pad, 0, $w > 0 ? 0 : 1)->align(Node::CENTER)->justify($col->align);
+                $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0);
+                  $fill($j);
+                $this->end();
+                $boxes[] = $box;
+            }
+            return $boxes;
+        };
+        // The header: a click sorts by a sortable column; a drag at a header's right edge resizes it.
+        $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH);
+        $headRect = $rt?->rectOf($head->id);
+        $heads = $cells(function (int $j) use ($columns, $state, $t) {
+            $col = $columns[$j];
+            $this->text($col->title, $t->fontSize, $t->textMuted, Font::BOLD);
+            if ($state->sort !== null && $state->sort[0] === $col->id()) {
+                $this->text($state->sort[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted);
+            }
+        });
+        foreach ($columns as $j => $col) {
+            $h = $heads[$j];
+            if ($col->sortable && $this->hovered($h)) { $h->color = $t->surfaceHover; }
+            if ($col->sortable && $this->clicked($h)) { $state->sortBy($col->id()); }
+            $r = $rt?->rectOf($h->id);
+            if ($r === null || $headRect === null) {
+                continue;
+            }
+            $grip = $this->key('g' . $col->id())->box(0, 0, 0)->at($r[0] - $headRect[0] + $r[2] - 3, 0)->size(6, $rowH)->cursor('resizeEW');
+            $grip->alpha = 0.0;
+            $d = $rt->dragged($grip->id);
+            if ($d !== null) {
+                $state->columnWidths[$col->id()] = max($col->minWidth, $flexMin, $r[2] + $d[0]);
+            }
+        }
+        $this->end();
+        $this->divider();
+        $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
+            $row = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH);
+            if ($state->selected === null && $this->hovered($row)) { $row->color = $t->surfaceHover; } // chosen rows show the pointer already
+              $cells(fn(int $j) => $cell($i, $j));
+            $this->end();
+        });
+        $this->end();
+        return $n;
+    }
+
+    /**
+     * Two panes side by side (or $vertical: one above the other) with a
+     * divider between them the user drags, or moves with the arrows once
+     * it has the focus, as mygo's Split: $size is the first pane's width
+     * (height), kept Space(10) from either edge; $first and $second build
+     * the panes. changed() reports a move.
+     */
+    public function split(float &$size, Closure $first, Closure $second, bool $vertical = false): Node
+    {
+        $t = $this->theme;
+        $minPane = $t->space(10); $grip = $t->space(1.5); $step = $t->space(2.5);
+        $n = $vertical ? $this->column(0, 0, 1)->align(Node::STRETCH) : $this->row(0, 0, 1)->align(Node::STRETCH);
+        $rt = $this->runtime;
+        $r = $rt?->rectOf($n->id);
+        $total = $r === null ? 0.0 : ($vertical ? $r[3] : $r[2]); // the room to share, as the last frame laid it out
+        $set = function (float $v) use (&$size, $total, $minPane, $n) {
+            if ($total > 0) { $v = min($v, $total - 1 - $minPane); }
+            $v = max($v, $minPane);
+            if ($v != $size) { $size = $v; $n->changed = true; }
+        };
+          $a = $this->column(0, 0);
+          $vertical ? $a->size(0, $size) : $a->size($size, 0);
+            $first();
+          $this->end();
+          $div = $this->box($vertical ? 0 : 1, $vertical ? 1 : 0, $t->border)->focusable(); // the line takes the focus between the panes
+          $b = $this->column(0, 0, 1);
+            $second();
+          $this->end();
+          // The handle the pointer drags spans a few points over either pane, above them.
+          $handle = $this->box(0, 0, 0)->at($vertical ? 0 : $size - ($grip - 1) / 2, $vertical ? $size - ($grip - 1) / 2 : 0)
+              ->size($vertical ? ($r[2] ?? 0) : $grip, $vertical ? $grip : ($r[3] ?? 0))->cursor($vertical ? 'resizeNS' : 'resizeEW');
+          $handle->alpha = 0.0;
+        $this->end();
+        if ($rt !== null) {
+            $held = $rt->dragged($handle->id);
+            if ($held !== null) {
+                $rt->focus = $div->id; // a press there focuses the line, as a press on it would
+                $set($size + ($vertical ? $held[1] : $held[0]));
+            }
+            if ($rt->focus === $div->id) {
+                if ($this->shortcut($vertical ? Key::UP : Key::LEFT)) { $set($size - $step); }
+                if ($this->shortcut($vertical ? Key::DOWN : Key::RIGHT)) { $set($size + $step); }
+            }
+            if ($held !== null || $rt->hovered($handle->id)) { $div->color = $t->accent; }
+        }
+        return $n;
+    }
+
     /** A line across the container: horizontal in a column, vertical in a row ($vertical). */
     public function divider(bool $vertical = false): Node
     {

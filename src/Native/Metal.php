@@ -201,7 +201,6 @@ final class Metal
     private $uniforms;
     private ?Atlas $atlas = null;
     private $atlasTexture = null;
-    private $atlasRegion = null;
     private ?ImageAtlas $images = null;
     private $imagesTexture = null;
     private const TEXTURE_2D_ARRAY = 3; // MTLTextureType
@@ -231,15 +230,13 @@ final class Metal
         $this->uniforms[6] = $dark ? 1.0 : 0.0;
     }
 
-    /** The glyph atlas text draws from; uploaded whenever it is dirty. */
+    /** The glyph atlas text draws from; the rows that changed are uploaded whenever it is dirty. */
     public function attachAtlas(Atlas $atlas, float $scale): void
     {
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
             self::PIXEL_FORMAT_R8, $atlas->w, $atlas->h, false);
         $this->atlasTexture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
             ?? throw new RuntimeException('atlas texture');
-        $this->atlasRegion = ObjC::$c->new('MTLRegion');
-        $this->atlasRegion->w = $atlas->w; $this->atlasRegion->h = $atlas->h; $this->atlasRegion->d = 1;
         $this->atlas = $atlas;
         $this->uniforms[2] = $atlas->w; $this->uniforms[3] = $atlas->h; $this->uniforms[5] = $scale;
     }
@@ -362,15 +359,12 @@ final class Metal
         $window = ObjC::msg('p:', $view, 'window');
         $this->uniforms[4] = $window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor');
         if ($this->atlas !== null && $this->atlas->dirty) {
-            ObjC::msg('v:RLpL', $this->atlasTexture, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $this->atlasRegion, 0, $this->atlas->pix, $this->atlas->w);
-            $this->atlas->dirty = false;
+            $this->upload($this->atlasTexture, 0, $this->atlas);
         }
         if ($this->imagesTexture !== null) {
             foreach ($this->images->pages as $i => $page) {
                 if ($page->dirty) {
-                    ObjC::msg('v:RLLpLL', $this->imagesTexture, 'replaceRegion:mipmapLevel:slice:withBytes:bytesPerRow:bytesPerImage:',
-                        $this->atlasRegion, 0, $i, $page->pix, $page->w * 4, $page->w * $page->h * 4);
-                    $page->dirty = false;
+                    $this->upload($this->imagesTexture, $i, $page);
                 }
             }
         }
@@ -416,6 +410,18 @@ final class Metal
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $count);
         }
         ObjC::msg('v:', $enc, 'endEncoding');
+    }
+
+    /** Uploads the rows of $atlas that changed since the last upload into slice $slice of $texture. */
+    private function upload($texture, int $slice, Atlas $atlas): void
+    {
+        $from = $atlas->dirtyFrom; $rows = $atlas->dirtyTo - $from;
+        $region = ObjC::$c->new('MTLRegion');
+        $region->w = $atlas->w; $region->h = $rows; $region->d = 1; $region->y = $from;
+        $bytes = ObjC::$c->cast('char*', $atlas->pix) + $from * $atlas->w * $atlas->bpp;
+        ObjC::msg('v:RLLpLL', $texture, 'replaceRegion:mipmapLevel:slice:withBytes:bytesPerRow:bytesPerImage:',
+            $region, 0, $slice, $bytes, $atlas->w * $atlas->bpp, $rows * $atlas->w * $atlas->bpp);
+        $atlas->dirty = false;
     }
 
     private const TEXTURE_SHADER_READ = 1, TEXTURE_RENDER_TARGET = 4; // MTLTextureUsage

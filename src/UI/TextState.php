@@ -225,6 +225,23 @@ final class TextState
         return $i;
     }
 
+    /** Selects the word at the caret (a run without spaces), as a double click does. */
+    public function selectWord(): void
+    {
+        $n = strlen($this->text); $a = $b = $this->cursor;
+        while ($a > 0 && !ctype_space($this->text[$a - 1])) { $a--; }
+        while ($b < $n && !ctype_space($this->text[$b])) { $b++; }
+        $this->anchor = $a; $this->cursor = $b;
+    }
+
+    /** Selects the line at the caret (between newlines), as a triple click does. */
+    public function selectLine(): void
+    {
+        $a = strrpos(substr($this->text, 0, $this->cursor), "\n");
+        $b = strpos($this->text, "\n", $this->cursor);
+        $this->anchor = $a === false ? 0 : $a + 1; $this->cursor = $b === false ? strlen($this->text) : $b;
+    }
+
     private function wordLeft(int $i): int
     {
         while ($i > 0 && ctype_space($this->text[$i - 1])) { $i--; }

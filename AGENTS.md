@@ -49,9 +49,9 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
 src/UI/            Node, Context (column/row/text/muted/rich/link/button/checkbox/radio/switch/slider/
-                   select/stepper/segmented/tabs/collapsible/progress/spinner/badge/divider/spacer/
+                   select/stepper/segmented/tabs/collapsible/split/progress/spinner/badge/divider/spacer/
                    input/textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center(); rows center across,
+                   round()/material()/align()/alignSelf()/justify()/center()/cursor(); rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
                    bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
@@ -147,10 +147,15 @@ static-php-cli is the one outside tool, for release builds only.
 ## Roadmap
 
 Done: Metal rects/glyphs/clipping; CoreText shaping + atlas; mouse, wheel,
-focus, single-line fields with input methods; App/Window, menus, dialogs
-(sheets), pages with IPC + TS client; virtualized lists with scroll bars,
-glides, keys and selection; text areas (wrapping, undo, caret blink);
-theme; images; rich text (bold/italic/mono, spans); checkbox, radio, switch, slider, select, stepper, segmented, tabs, collapsible, progress, spinner, badge, link, tooltips; soft shadows, rings, Liquid Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window events + state;
-channels, page window controls, preload; file drops; CLI + .app.
+focus (ring on keyboard focus only), shortcuts, single-line fields with
+input methods; App/Window, menus, dialogs (sheets), pages with IPC + TS
+client; virtualized lists with scroll bars, glides, keys and selection;
+text areas (wrapping, undo, caret blink); theme; images (paged atlas);
+rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
+radio, switch, slider, select, stepper, segmented, tabs, collapsible, split,
+progress, spinner, badge, link, tooltips; soft shadows, rings, Liquid
+Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
+events + state; child processes; channels, page window controls, preload;
+file drops; CLI + .app.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

@@ -27,6 +27,8 @@ final class Node
     public ?TextState $edit = null;
     /** Whether this node has the keyboard focus this frame. */
     public bool $focused = false;
+    /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
+    public ?string $cursor = null;
     /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
     public bool $focusVisible = false;
     /** Whether this node is a list's chosen row, painted in the selection color. */
@@ -105,6 +107,13 @@ final class Node
     public function round(float $radius): static
     {
         $this->radius = $radius;
+        return $this;
+    }
+
+    /** Shows $cursor ('pointer', 'ibeam', 'resizeEW', 'resizeNS') while the pointer is over this node. */
+    public function cursor(string $cursor): static
+    {
+        $this->cursor = $cursor;
         return $this;
     }
 

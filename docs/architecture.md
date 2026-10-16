@@ -128,8 +128,10 @@ font and a CTLine, then reads each run's glyph ids, positions and the font
 CoreText actually chose (fallback fonts included, so CJK works without any
 font list of ours). `rasterize` draws one glyph with `CTFontDrawGlyphs` into
 an alpha-only CGBitmapContext at the backing scale and flips the rows.
-`UI\Atlas` shelf-packs those into a 2048² R8 image; `Native\Metal`
-re-uploads the whole image when it is dirty (a few times at startup).
+`UI\Atlas` shelf-packs those into a 2048² R8 image and remembers the
+rows it changed (`dirtyFrom`, `dirtyTo`); `Native\Metal::upload` sends
+those rows only (`replaceRegion:` from a row offset into the pixels), so
+one new glyph costs a shelf's rows, not the 4 MB image.
 `UI\Text` caches a shaped line as a list of glyph quads in points,
 snapped to the device-pixel grid; `measure()` feeds `Context::text`, and
 `paint()` appends `kind = 1` quads to the display list. The Metal fragment
@@ -195,6 +197,15 @@ the keyboard (mygo's `focusVisible`: Tab, the arrows, Enter, Space set
 it; a press that moves the focus clears it), so a click leaves no ring
 but Tabbing to a control shows one; `Node::$focusVisible` is what the
 painter rings by, while fields keep their focused look either way.
+
+`Context::split(&$size, $first, $second, $vertical)` is mygo's Split: two
+panes and a one-point line between them, with an invisible handle a few
+points wide placed absolutely over the line; `Runtime::dragged($id)`
+(mygo's Dragged) reports how far the pointer moved since last asked
+while the mouse is down from a press on that node, and the split moves
+the line by it, clamped Space(10) from either edge; the line is
+focusable and the arrows move it. `Node::cursor()` names the pointer
+to show over a node (resize arrows here; links and fields set theirs).
 
 `Context::shortcut($key, $mods)` is mygo's window-level Shortcut: the
 view pushes every `keyDown:` as a `key` event (characters, key code,
@@ -571,16 +582,16 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
 
 ## Open items
 
-- `-[NSView displayLinkWithTarget:selector:]` returned a link that never
-  ticked after `addToRunLoop:forMode:`; NSTimer at 1/60 s is used meanwhile.
-- The atlas never evicts and is re-uploaded whole; text is rasterized at
-  the main screen's backing scale at startup and not again on a change.
-- Node ids are creation order, so UI that appears conditionally shifts the
-  ids after it and a click can land on the wrong node for one frame; mygo
-  keys elements. Keyboard events are queued but nothing consumes them yet.
+- The glyph atlas starts over when full and is re-rasterized whole; an
+  image page is emptied whole. Eviction per glyph or image would avoid
+  the restart, at the cost of free-space bookkeeping the shelves lack.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
-  second at 1000 rows); the shaped-line cache grows without bound (46 MB
-  resident for 3 000 lines). mygo bounds its text cache per frame.
-- The CoreGraphics + NSTimer path (since deleted) ran 50–58 fps for its
-  first seconds and 60 after, with identical PHP time per frame: NSTimer is
-  not locked to the display. MTKView pacing fixed it.
+  second at 1000 rows); the shaped-line cache is swept by age but the
+  burst itself is CoreText's.
+- Image decoding (`ImageIO`) runs on the main thread: a 12 MP HEIC takes
+  a frame or two; `Process` is the only way off the thread, and it costs
+  a child process. Apps decode between frames (`App::later`) meanwhile.
+- `textarea` is a plain editor: no Tab indent, line numbers or syntax
+  coloring; `rich` is read-only.
+- NSTimer is not locked to the display (the CoreGraphics path ran 50–58
+  fps with identical PHP time per frame); MTKView pacing is what gives 60.

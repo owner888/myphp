@@ -27,6 +27,8 @@ final class Notes
     public ?Window $window = null;
     /** The editor scroll share the preview was last moved to. */
     public float $followed = 0;
+    /** The panes' widths, as the dividers leave them. */
+    public float $listW = 220, $editorW = 380;
 
     public function __construct(public readonly string $dir)
     {
@@ -177,40 +179,38 @@ function view(Context $c, Notes $notes): void
 {
     $t = $c->theme;
     $notes->tick();
-    $listW = 220.0; $gap = 1.0;
-    $editorW = floor(($c->width - $listW - 2 * $gap) / 2);
-    $previewW = $c->width - $listW - $editorW - 2 * $gap;
-    $c->row(0, $gap, 1, $t->border)->align(Node::STRETCH); // the panes fill the height; a row centers by default
-      // Notes
-      $c->column(0, 0, 0, $t->surface)->size($listW);
-        $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->button('New'))) { $notes->create(); } $c->end();
-        $c->list($notes->list, count($notes->items), function (int $i) use ($c, $t, $notes) {
-            $it = $notes->items[$i];
-            $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0);
-              $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
+    // Three panes the dividers resize: notes | editor | preview.
+    $c->split($notes->listW, function () use ($c, $t, $notes) {
+        $c->column(0, 0, 1, $t->surface);
+          $c->row(10, 8); $c->text('Notes', 15, style: Font::BOLD); if ($c->clicked($c->button('New'))) { $notes->create(); } $c->end();
+          $c->list($notes->list, count($notes->items), function (int $i) use ($c, $t, $notes) {
+              $it = $notes->items[$i];
+              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0);
+                $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
+          });
+          if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->list->selected]['path'] !== $notes->open) {
+              $notes->choose($notes->items[$notes->list->selected]['path']);
+          }
+        $c->end();
+    }, function () use ($c, $t, $notes) {
+        $c->split($notes->editorW, function () use ($c, $notes) {
+            if ($notes->open === null) {
+                $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
+            } else {
+                $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
+            }
+        }, function () use ($c, $t, $notes) {
+            // The preview follows the editor: scrolled the same share of the way through.
+            if ($notes->editor->scrollFraction !== $notes->followed) {
+                $notes->followed = $notes->editor->scrollFraction;
+                $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
+            }
+            $previewW = $c->width - $notes->listW - $notes->editorW - 2;
+            $c->column(16, 10, 1, $t->background)->scroll($notes->preview);
+              Markdown::render($c, $notes->editor->text, $previewW - 32, $notes->dir);
+            $c->end();
         });
-        if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->list->selected]['path'] !== $notes->open) {
-            $notes->choose($notes->items[$notes->list->selected]['path']);
-        }
-      $c->end();
-      // Editor
-      $c->column(0, 0, 0, $t->background)->size($editorW);
-        if ($notes->open === null) {
-            $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
-        } else {
-            $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the column
-        }
-      $c->end();
-      // Preview
-      // The preview follows the editor: scrolled the same share of the way through.
-      if ($notes->editor->scrollFraction !== $notes->followed) {
-          $notes->followed = $notes->editor->scrollFraction;
-          $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
-      }
-      $c->column(16, 10, 0, $t->background)->size($previewW)->scroll($notes->preview);
-        Markdown::render($c, $notes->editor->text, $previewW - 32, $notes->dir);
-      $c->end();
-    $c->end();
+    });
 }
 
 $confirmDelete = function () use ($notes) {

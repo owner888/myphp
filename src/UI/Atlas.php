@@ -16,7 +16,9 @@ final class Atlas
 {
     /** The image, w*h*bpp bytes, row-major from the top. */
     public CData $pix;
+    /** Whether something changed since the last upload, and the rows it spans: [first, past the last], so the renderer uploads those rows only. */
     public bool $dirty = false;
+    public int $dirtyFrom = 0, $dirtyTo = 0;
     private int $base;
     private int $shelfX = 0, $shelfY = 0, $shelfH = 0;
     /** @var array<string, array{u: int, v: int, w: int, h: int}> */
@@ -45,6 +47,17 @@ final class Atlas
     {
         $this->slots = [];
         $this->shelfX = $this->shelfY = $this->shelfH = 0;
+        $this->touch(0, $this->h);
+    }
+
+    /** Rows $from to $to changed: widen what the next upload covers. */
+    private function touch(int $from, int $to): void
+    {
+        if (!$this->dirty) {
+            $this->dirtyFrom = $from; $this->dirtyTo = $to;
+        } else {
+            $this->dirtyFrom = min($this->dirtyFrom, $from); $this->dirtyTo = max($this->dirtyTo, $to);
+        }
         $this->dirty = true;
     }
 
@@ -66,7 +79,7 @@ final class Atlas
         }
         $this->shelfX += $w + 1;
         $this->shelfH = max($this->shelfH, $h + 1);
-        $this->dirty = true;
+        $this->touch($v, $v + $h);
         return $this->slots[$key] = ['u' => $u, 'v' => $v, 'w' => $w, 'h' => $h];
     }
 }

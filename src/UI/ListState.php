@@ -34,6 +34,26 @@ final class ListState implements Scrollable
     /** Set by Layout each frame: the last row's bottom is in view. */
     public bool $atEnd = false;
     private bool $didChange = false;
+    /** For a table: the widths the user dragged its columns to, by column id. */
+    public array $columnWidths = [];
+    /** For a table: [column id, descending] the rows are sorted by, chosen by header clicks, or null; the app sorts its rows by it. */
+    public ?array $sort = null;
+    private bool $didSort = false;
+
+    /** Whether a table's sort changed since last asked. */
+    public function sortChanged(): bool
+    {
+        $s = $this->didSort;
+        $this->didSort = false;
+        return $s;
+    }
+
+    /** Sorts by column $id, or reverses when already by it. */
+    public function sortBy(string $id): void
+    {
+        $this->sort = [$id, $this->sort !== null && $this->sort[0] === $id && !$this->sort[1]];
+        $this->didSort = true;
+    }
     private bool $didSubmit = false;
     private ?int $target = null;
 
