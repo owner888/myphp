@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
+
 /** Flex layout in two passes: measure bottom-up, arrange top-down. */
 final class Layout
 {
@@ -11,6 +13,16 @@ final class Layout
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
             $n->mh = $n->fh;
+            return;
+        }
+        if ($n->gridCols !== null) { // a grid: its tracks at the size their content asks
+            foreach ($n->kids as $k) { self::measure($k); }
+            [$cols, $rows] = self::gridTracks($n, INF, INF);
+            $n->mw = array_sum($cols) + $n->gap * max(0, count($cols) - 1) + 2 * $n->padX();
+            $n->mh = array_sum($rows) + $n->gap * max(0, count($rows) - 1) + 2 * $n->padY();
+            if ($n->fw > 0) { $n->mw = $n->fw; }
+            if ($n->fh > 0) { $n->mh = $n->fh; }
+            $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
             return;
         }
         $main = 0.0; $cross = 0.0; $cnt = 0;
@@ -62,6 +74,19 @@ final class Layout
         $cnt = count($kids);
         if ($cnt === 0) return;
         $px = $n->padX(); $py = $n->padY();
+        if ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched across its cell, or placed across it as its alignSelf says
+            [$cols, $rows] = self::gridTracks($n, $w - 2 * $px, $h - 2 * $py);
+            $nc = count($cols); $cx = $x + $px; $cy = $y + $py;
+            foreach ($kids as $i => $k) {
+                $c = $i % $nc; $r = intdiv($i, $nc);
+                if ($c === 0 && $i > 0) { $cx = $x + $px; $cy += $rows[$r - 1] + $n->gap; }
+                $a = $k->self === Node::AUTO ? Node::STRETCH : $k->self;
+                $kh = $a === Node::STRETCH ? $rows[$r] : $k->mh;
+                self::arrange($k, $cx, $cy + self::across($a, $rows[$r], $kh), $cols[$c], $kh);
+                $cx += $cols[$c] + $n->gap;
+            }
+            return;
+        }
         if ($n->wraps) { // each line is arranged as a row of its own, the lines stacked
             $cy = $y + $py;
             foreach (self::lines($n, $w - 2 * $px) as $line) {
@@ -145,6 +170,50 @@ final class Layout
                 $cy += $kh + $n->gap;
             }
         }
+    }
+
+    /**
+     * The sizes of a grid's columns and rows, mygo's sizeTracks for children
+     * placed row by row, each in one cell: fixed tracks their points, fit
+     * tracks the largest content in them, fr tracks sharing what is left of
+     * $availW (or $availH) — or, with no room known (INF), the largest share
+     * any child asks. The rows beyond those set fit their content.
+     * @return array{0: list<float>, 1: list<float>}
+     */
+    private static function gridTracks(Node $n, float $availW, float $availH): array
+    {
+        $nc = max(1, count($n->gridCols));
+        $kids = array_values(array_filter($n->kids, fn(Node $k) => !$k->absolute));
+        $nr = max(count($n->gridRows), intdiv(count($kids) + $nc - 1, $nc));
+        $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gap, $kids, fn(int $i) => $i % $nc, fn(Node $k) => $k->mw);
+        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gap, $kids, fn(int $i) => intdiv($i, $nc), fn(Node $k) => $k->mh);
+        return [$cols, $rows];
+    }
+
+    /** @param list<Track> $tracks @return list<float> */
+    private static function sizeTracks(array $tracks, int $count, float $avail, float $gap, array $kids, Closure $trackOf, Closure $sizeOf): array
+    {
+        $kind = fn(int $i) => $i < count($tracks) ? $tracks[$i]->kind : Track::FIT;
+        $sizes = []; $frSum = 0.0;
+        for ($i = 0; $i < $count; $i++) { $sizes[$i] = $kind($i) === Track::FIXED ? $tracks[$i]->v : 0.0; if ($kind($i) === Track::FR) { $frSum += $tracks[$i]->v; } }
+        $unit = 0.0; // the largest share an fr track's content asks, for a grid with no room set
+        foreach ($kids as $i => $k) {
+            $t = $trackOf($i);
+            if ($kind($t) === Track::FIT) { $sizes[$t] = max($sizes[$t], $sizeOf($k)); }
+            elseif ($kind($t) === Track::FR && $tracks[$t]->v > 0) { $unit = max($unit, $sizeOf($k) / $tracks[$t]->v); }
+        }
+        if (!is_finite($avail)) {
+            for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FR) { $sizes[$i] = $unit * $tracks[$i]->v; } }
+            return $sizes;
+        }
+        $free = max(0.0, $avail - $gap * max(0, $count - 1) - array_sum($sizes));
+        if ($frSum > 0) {
+            for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FR) { $sizes[$i] = $free / $frSum * $tracks[$i]->v; } }
+        } elseif ($free > 0) { // no fr tracks: the fit tracks share the room left (mygo's stretch)
+            $fits = 0; for ($i = 0; $i < $count; $i++) { if ($kind($i) === Track::FIT) { $fits++; } }
+            for ($i = 0; $i < $count; $i++) { if ($fits > 0 && $kind($i) === Track::FIT) { $sizes[$i] += $free / $fits; } }
+        }
+        return $sizes;
     }
 
     /** The children of a wrapping row by line: a child overflowing $avail starts the next (mygo's flex wrap). */

@@ -118,6 +118,19 @@ final class Context
         return $this->runtime?->hovered($n->id) ?? false;
     }
 
+    /**
+     * A grid, as mygo's Grid: its children fill its cells row by row, in
+     * columns sized by $cols (Track::fixed, fr, fit) and rows that fit
+     * their content, or by $rows; $gap between tracks. An int $cols gives
+     * that many columns of equal width (mygo's Columns(n)).
+     * @param int|list<Track> $cols @param list<Track> $rows
+     */
+    public function grid(int|array $cols, float $gap = 0, array $rows = [], float $pad = 0, int $grow = 0, ?int $color = null): Node
+    {
+        if (is_int($cols)) { $cols = array_fill(0, max(1, $cols), Track::fr()); }
+        return $this->open(new Node(Node::CONTAINER, Node::ROW, $pad, $gap, 0, 0, $grow, null, $color))->grid($cols, $rows);
+    }
+
     public function column(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
     {
         return $this->open(new Node(Node::CONTAINER, Node::COLUMN, $pad, $gap, 0, 0, $grow, null, $color));
@@ -1256,18 +1269,15 @@ final class Context
             }
             if (!$in->focused && $st->hex->text !== self::hexOf($rgb, $alpha)) { $st->hex->text = self::hexOf($rgb, $alpha); $st->hex->seen = $st->hex->text; }
           $this->end();
-          // Swatches: six to a row, Space(1.5) apart, Space(5) high, the chosen bordered 2 in the text color.
-          $i = 0;
-          foreach (array_chunk(self::SWATCHES, 6, true) as $chunk) {
-              $this->row(0, $t->space(1.5));
-              foreach ($chunk as $name => $color) {
-                  $b = $this->key("sw$i")->row(0, 0, 1, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name); $i++;
-                  if ($rgb === $color && $alpha === 1.0) { $b->border($t->text, 2.0); }
-                  $this->end();
-                  if ($this->clicked($b)) { [$ph, $ps, $pv] = self::toHSV($color); $set($ph, $ps, $pv, 1.0); }
-              }
-              $this->end();
-          }
+          // Swatches: a grid of six columns, Space(1.5) apart, Space(5) high, the chosen bordered 2 in the text color.
+          $this->grid(6, $t->space(1.5));
+            foreach (self::SWATCHES as $name => $color) {
+                $b = $this->key($name)->row(0, 0, 0, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name);
+                if ($rgb === $color && $alpha === 1.0) { $b->border($t->text, 2.0); }
+                $this->end();
+                if ($this->clicked($b)) { [$ph, $ps, $pv] = self::toHSV($color); $set($ph, $ps, $pv, 1.0); }
+            }
+          $this->end();
         $this->end();
         return $panel;
     }

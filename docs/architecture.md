@@ -503,6 +503,19 @@ within a second and takes Space as a letter then instead of a press
 same items. Multiple selection and reordering by drag are open items.
 `examples/photos` is on it: only the cells built want thumbnails.
 
+`Context::grid($cols, $gap, $rows)` / `Node::grid()` is mygo's Grid
+(grid.go) for children placed cell by cell, row by row: `Track::fixed`,
+`fr` and `fit` size the columns and the rows set (`Layout::sizeTracks`,
+mygo's sizeTracks for single-cell items: fixed tracks their points, fit
+tracks the largest content in them, fr tracks sharing what is left of
+the room — the largest share any child asks when the grid's size is not
+set, as a grid in a row — and fit tracks sharing it when there are no fr
+ones), the rows beyond fitting their content. A child is stretched
+across its cell, or placed vertically as its `alignSelf` says. The color
+picker's swatches are such a grid of six fr columns. Not ported:
+explicit placement and spans (ColumnStart, RowSpan), justifyItems and
+automatic margins.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -929,6 +942,8 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   a child process. Apps decode between frames (`App::later`) meanwhile.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
+- `grid` places children row by row only: mygo's ColumnStart/RowStart,
+  spans and JustifyItems are not ported.
 - `gridView` chooses one item; mygo's Selection (several, Cmd and Shift
   clicks) and Reorder (dragging items) are not ported, nor is ListState's.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax

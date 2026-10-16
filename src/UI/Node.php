@@ -66,6 +66,10 @@ final class Node
     /** For rich text: its lines, wrapped at the width Context::rich was given, or at last frame's width ($wrapWidth). */
     public ?RichLayout $rich = null;
     public ?float $wrapWidth = null;
+    /** A grid's column tracks and its first rows' (Track); null for a flex container. The rows beyond fit their content. */
+    public ?array $gridCols = null;
+    public array $gridRows = [];
+
     /** A row that wraps its children onto more lines where they overflow $wrapWidth (mygo's Wrap), the width it had last frame. */
     public bool $wraps = false;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
@@ -180,6 +184,13 @@ final class Node
     public function inset(float $left, float $right = 0): static
     {
         $this->insetL = $left; $this->insetR = $right;
+        return $this;
+    }
+
+    /** Lays this container's children out in a grid, as mygo's Grid: cell by cell, row by row, in columns sized by $cols and rows by $rows (those beyond fit their content); gap between tracks. @param list<Track> $cols @param list<Track> $rows */
+    public function grid(array $cols, array $rows = []): static
+    {
+        $this->gridCols = $cols; $this->gridRows = $rows;
         return $this;
     }
 
