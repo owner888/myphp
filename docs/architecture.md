@@ -198,6 +198,35 @@ it; a press that moves the focus clears it), so a click leaves no ring
 but Tabbing to a control shows one; `Node::$focusVisible` is what the
 painter rings by, while fields keep their focused look either way.
 
+`Context::modal(&$open, $fn)` is mygo's Modal: an absolute column over
+the window, black at 0.4, centering a panel `$fn` fills; it is a
+blocking node (`Node::block()`): `Runtime::record` numbers nodes in
+order and remembers the number of the last blocker, and `hovered`,
+`clicked`, `doubleClicked`, a press, the wheel, a thumb grab, a drag and
+Tab reach only nodes numbered from the blocker on — what was built
+before it is inert, as mygo's overlays make it, and a focus left behind
+is dropped so Tab goes into the modal. Escape or a click on the backdrop
+outside the panel sets `$open` false (`changed()`). `Node::shadow()` is a
+soft shadow under a colored container, which the panel and toasts use.
+
+`Context::toast($message)` is mygo's Toast: `Runtime` keeps the newest
+three with the seconds each has left; `Window` calls `Context::toasts()`
+after the view, which ages them (their time stops while the pointer
+rests on one), drops the spent and builds the rest at the bottom of the
+window; `nextWake` wakes the window when the next one goes.
+
+`Context::table($state, $columns, $count, $cell)` is mygo's Table's core: a
+header row of `TableColumn`s (title, width or a share of the room, min
+width, alignment, sortable) over a `list()` whose rows are Space(8) high
+and hold one padded cell a column, keyed by column id; a click on a
+sortable header sets `ListState::$sort` ([id, descending], `sortBy`
+reverses on a second click, `sortChanged()` reports it) and the app sorts
+its rows; an invisible grip at each header's right edge takes
+`Runtime::dragged` and keeps the width in `ListState::$columnWidths`.
+Not ported: moving columns, fitting one to its cells, section headers,
+the header's context menu, sideways scrolling of a table wider than its
+room.
+
 `Context::split(&$size, $first, $second, $vertical)` is mygo's Split: two
 panes and a one-point line between them, with an invisible handle a few
 points wide placed absolutely over the line; `Runtime::dragged($id)`

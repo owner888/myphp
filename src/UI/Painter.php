@@ -87,6 +87,9 @@ final class Painter
                 $list->rect($n->x, $n->y, $n->w, $n->h, $t->border, 1.0, $radius);
                 $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
             } else {
+                if ($n->shadow !== null) {
+                    $list->shadow($n->x, $n->y, $n->w, $n->h, 0x000000, $n->shadow[2], $radius, $n->shadow[1], 0, $n->shadow[0]);
+                }
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha, $radius);
             }
         }

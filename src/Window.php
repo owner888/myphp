@@ -137,6 +137,7 @@ final class Window
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
                     ($content->view)($c);
+                    $c->toasts(); // over everything the view built
                     Layout::measure($c->root);
                     Layout::arrange($c->root, 0, 0, $bounds->w, $bounds->h);
                     return $c->root;

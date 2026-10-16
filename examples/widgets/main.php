@@ -6,11 +6,11 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font};
+use MyPHP\UI\{Content, Context, Font, Node};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'last' => 'nothing yet'];
 
 function view(Context $c, array &$s): void
 {
@@ -41,10 +41,24 @@ function view(Context $c, array &$s): void
             $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
         }
       $c->end();
+      $c->row(0, 8);
+        if ($c->clicked($c->button('Save'))) { $c->toast('Saved'); $s['last'] = 'saved'; }
+        if ($c->clicked($c->button('Delete…'))) { $s['asking'] = true; }
+      $c->end();
       $c->spacer();
       $c->divider();
       $c->muted('last change: ' . $s['last'], 12);
     $c->end();
+    // A modal over it all: what is behind is inert until it closes.
+    $modal = $c->modal($s['asking'], function () use ($c, &$s) {
+        $c->text('Delete the draft?', 15, style: Font::BOLD);
+        $c->muted("You can't undo this.");
+        $c->row(0, 8)->justify(Node::END);
+          if ($c->clicked($c->button('Cancel'))) { $s['asking'] = false; }
+          if ($c->clicked($c->button('Delete'))) { $s['asking'] = false; $c->toast('Draft deleted'); $s['last'] = 'deleted'; }
+        $c->end();
+    });
+    if ($modal !== null && $c->changed($modal)) { $s['last'] = 'dismissed'; }
 }
 
 App::setName('Widgets');

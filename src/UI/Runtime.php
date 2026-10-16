@@ -53,6 +53,12 @@ final class Runtime
     private ?array $hold = null;
     /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
     private array $keys = [];
+    /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
+    private array $order = [];
+    private int $barrier = 0, $counter = 0;
+    /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
+    private array $toasts = [];
+    public const TOASTS = 3, TOAST_FOR = 4.0;
     private const HOLD_DELAY = 0.4, HOLD_RATE = 0.08;
     /** A thumb being dragged: its state, the pointer's last y and content points per thumb point. */
     private ?array $drag = null;
@@ -191,6 +197,8 @@ final class Runtime
             $this->doubleClicks = [];
         }
         $this->rects = [];
+        $this->order = [];
+        $this->barrier = 0; $this->counter = 0;
         $this->sliders = [];
         $this->scrolls = [];
         $this->scrollAxes = [];
@@ -203,6 +211,9 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->record($root);
+        if ($this->focus !== null && !$this->reachable($this->focus)) {
+            $this->focus = null; // the focus was behind what now blocks it: Tab goes into that
+        }
         $this->needsFrame = $this->needsFrame || $this->animating || ($this->hold[4] ?? false); // a held stepper keeps stepping
         // A tip: the pointer rested on a node with one for TIP_DELAY.
         $over = null;
@@ -251,15 +262,56 @@ final class Runtime
 
     private bool $tipPending = false;
 
-    /** Seconds until the window should draw a frame of its own accord (a caret toggle, a tip due), or null. */
+    /** Seconds until the window should draw a frame of its own accord (a caret toggle, a tip due, a toast going), or null. */
     public function nextWake(): ?float
     {
-        $blink = $this->nextBlink();
-        if (!$this->tipPending) {
-            return $blink;
+        $wake = $this->nextBlink();
+        if ($this->tipPending) {
+            $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
+            $wake = $wake === null ? $tip : min($wake, $tip);
         }
-        $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
-        return $blink === null ? $tip : min($blink, $tip);
+        foreach ($this->toasts as $t) {
+            $wake = $wake === null ? $t[1] : min($wake, $t[1]);
+        }
+        return $wake;
+    }
+
+    /** Shows $message as a toast for TOAST_FOR seconds (mygo's Toast): one already showing shows anew; others stack above it, TOASTS at most. */
+    public function toast(string $message): void
+    {
+        $now = hrtime(true) / 1e9;
+        foreach ($this->toasts as $i => $t) {
+            if ($t[0] === $message) {
+                $this->toasts[$i] = [$message, self::TOAST_FOR, $now];
+                return;
+            }
+        }
+        $this->toasts[] = [$message, self::TOAST_FOR, $now];
+        $this->toasts = array_slice($this->toasts, -self::TOASTS);
+    }
+
+    /**
+     * The toasts showing, oldest first, aged by the time since they were
+     * last asked for — unless $paused (the pointer rests on one), when
+     * their time stops.
+     * @return list<string>
+     */
+    public function toasts(bool $paused): array
+    {
+        $now = hrtime(true) / 1e9;
+        foreach ($this->toasts as $i => $t) {
+            if (!$paused) {
+                $t[1] -= $now - $t[2];
+            }
+            $t[2] = $now;
+            if ($t[1] <= 0) {
+                unset($this->toasts[$i]);
+            } else {
+                $this->toasts[$i] = $t;
+            }
+        }
+        $this->toasts = array_values($this->toasts);
+        return array_column($this->toasts, 0);
     }
 
     /** Seconds until the caret next toggles, or null when nothing blinks. */
@@ -275,6 +327,10 @@ final class Runtime
     private function record(Node $n): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        $this->order[$n->id] = ++$this->counter;
+        if ($n->blocks) {
+            $this->barrier = $this->counter;
+        }
         if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) {
             $this->focusables[] = $n->id;
             if ($n->focusable && $n->id === $this->focus) {
@@ -338,7 +394,7 @@ final class Runtime
         $best = null; $bestArea = INF;
         foreach ($this->focusables as $id) {
             $r = $this->rects[$id];
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
                 $best = $id; $bestArea = $r[2] * $r[3];
             }
         }
@@ -359,6 +415,9 @@ final class Runtime
     {
         $g = Scrollbar::GRAB;
         foreach ($this->scrolls as $id => $state) {
+            if (!$this->reachable($id)) {
+                continue;
+            }
             $r = $this->rects[$id];
             [$horizontal, $vertical] = $this->scrollAxes[$id];
             foreach ([[false, $vertical], [true, $horizontal]] as [$axis, $on]) {
@@ -490,9 +549,13 @@ final class Runtime
         if ($this->focusables === []) {
             return;
         }
-        $i = $this->focus === null ? -1 : (int)array_search($this->focus, $this->focusables, true);
-        $n = count($this->focusables);
-        $this->focus = $this->focusables[(($i + $dir) % $n + $n) % $n];
+        $reachable = array_values(array_filter($this->focusables, $this->reachable(...)));
+        if ($reachable === []) {
+            return;
+        }
+        $i = $this->focus === null ? -1 : (int)array_search($this->focus, $reachable, true);
+        $n = count($reachable);
+        $this->focus = $reachable[(($i + $dir) % $n + $n) % $n];
         $this->focusVisible = true;
         if (isset($this->fields[$this->focus])) {
             $this->fields[$this->focus][0]->selectAll();
@@ -508,7 +571,7 @@ final class Runtime
             return true;
         }
         $r = $this->rects[$id] ?? null;
-        if ($r === null) {
+        if ($r === null || !$this->reachable($id)) {
             return false;
         }
         foreach ($this->clicks as $i => [$x, $y]) {
@@ -525,7 +588,7 @@ final class Runtime
     public function doubleClicked(int $id): bool
     {
         $r = $this->rects[$id] ?? null;
-        if ($r === null) {
+        if ($r === null || !$this->reachable($id)) {
             return false;
         }
         foreach ($this->doubleClicks as $i => [$x, $y]) {
@@ -636,7 +699,7 @@ final class Runtime
     public function dragged(int $id): ?array
     {
         $r = $this->rects[$id] ?? null;
-        if ($this->hold === null || $r === null) {
+        if ($this->hold === null || $r === null || !$this->reachable($id)) {
             return null;
         }
         [$x, $y] = $this->hold;
@@ -655,7 +718,7 @@ final class Runtime
     public function holding(int $id): int
     {
         $r = $this->rects[$id] ?? null;
-        if ($this->hold === null || $r === null) {
+        if ($this->hold === null || $r === null || !$this->reachable($id)) {
             return 0;
         }
         [$x, $y] = $this->hold;
@@ -711,11 +774,17 @@ final class Runtime
         return isset($this->rects[$id]) ? $this->rects[$id][2] : null;
     }
 
+    /** Whether the pointer and the keys reach node $id: nothing blocks it (a modal built after it does). */
+    public function reachable(int $id): bool
+    {
+        return ($this->order[$id] ?? 0) >= $this->barrier;
+    }
+
     public function hovered(int $id): bool
     {
         $r = $this->rects[$id] ?? null;
         $x = $this->input->mouseX; $y = $this->input->mouseY;
-        return $r !== null && $this->input->mouseInside
+        return $r !== null && $this->input->mouseInside && $this->reachable($id)
             && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3];
     }
 
@@ -725,13 +794,13 @@ final class Runtime
         $best = null; $bestArea = INF; $axes = [false, true];
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
                 $best = $state; $bestArea = $r[2] * $r[3]; $axes = $this->scrollAxes[$id];
             }
         }
         foreach ($this->areas as $id => $state) { // a text area inside a scrolling container takes the wheel over it
             $r = $this->rects[$id];
-            if ($x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
+            if ($this->reachable($id) && $x >= $r[0] && $x < $r[0] + $r[2] && $y >= $r[1] && $y < $r[1] + $r[3] && $r[2] * $r[3] < $bestArea) {
                 $best = $state; $bestArea = $r[2] * $r[3];
             }
         }

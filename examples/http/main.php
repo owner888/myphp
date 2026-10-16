@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Process, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TextState, Theme};
+use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TableColumn, TextState, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -18,10 +18,13 @@ final class Http
     public const SHOW = 256 * 1024; // bytes of a body shown; the rest is counted
     public int $method = 0;
     public TextState $url, $headers, $body;
-    /** @var list<array{method: string, url: string, status: ?int, time: float, headers: string, body: string, error: string, at: int, lines: list<array{string, string}>}> newest first; lines: what the response pane lists, [kind, text] */
+    /** @var list<array{id: int, method: string, url: string, status: ?int, time: float, headers: string, body: string, error: string, at: int, lines: list<array{string, string}>}> newest first; lines: what the response pane lists, [kind, text] */
     public array $history = [];
     public ListState $list, $lines;
+    /** @var list<TableColumn> */
+    public array $columns;
     public ?Process $inFlight = null;
+    private int $nextId = 0;
     public ?Window $window = null;
 
     public function __construct()
@@ -30,6 +33,19 @@ final class Http
         $this->headers = new TextState("Accept: application/json");
         $this->body = new TextState('');
         $this->list = new ListState; $this->lines = new ListState;
+        $this->columns = [new TableColumn('Method', 64, sortable: true), new TableColumn('Status', 56, sortable: true), new TableColumn('Time', 60, align: Node::END, sortable: true), new TableColumn('URL', minWidth: 120)];
+    }
+
+    /** Reorders the history by the table's sort, keeping the chosen request chosen. */
+    public function sort(): void
+    {
+        [$by, $desc] = $this->list->sort;
+        $chosen = $this->history[$this->list->selected ?? -1] ?? null;
+        $key = fn(array $r) => match ($by) { 'Method' => $r['method'], 'Status' => $r['status'] ?? -1, 'Time' => $r['time'], default => $r['url'] };
+        usort($this->history, fn($a, $b) => $desc ? $key($b) <=> $key($a) : $key($a) <=> $key($b));
+        if ($chosen !== null) {
+            $this->list->choose((int)array_search($chosen, $this->history, true));
+        }
     }
 
     public function send(): void
@@ -48,12 +64,13 @@ final class Http
             $argv[] = '--data-binary'; $argv[] = '@-'; $stdin = $this->body->text;
         }
         $argv[] = $url;
-        array_unshift($this->history, ['method' => $method, 'url' => $url, 'status' => null, 'time' => 0.0, 'headers' => '', 'body' => '', 'error' => '', 'at' => time(), 'lines' => []]);
+        $id = ++$this->nextId;
+        array_unshift($this->history, ['id' => $id, 'method' => $method, 'url' => $url, 'status' => null, 'time' => 0.0, 'headers' => '', 'body' => '', 'error' => '', 'at' => time(), 'lines' => []]);
         $this->list->choose(0);
         $this->lines->scrollTo(0, false);
-        $this->inFlight = Process::run($argv, $stdin, function (string $out, string $err, int $code) {
+        $this->inFlight = Process::run($argv, $stdin, function (string $out, string $err, int $code) use ($id) {
             $this->inFlight = null;
-            $r = &$this->history[0];
+            $r = &$this->history[array_search($id, array_column($this->history, 'id'), true)]; // the table may have sorted it away from the top
             if ($code !== 0) {
                 $r['error'] = trim($err) !== '' ? trim($err) : "curl exited with $code";
             } else {
@@ -81,20 +98,21 @@ function view(Context $c, Http $h): void
     if ($c->shortcut(Key::RETURN, Key::COMMAND) || $h->url->submitted) { $h->url->submitted = false; $h->send(); }
     $c->row(0, 1, 1, $t->border)->align(Node::STRETCH);
       // History
-      $c->column(0, 0, 0, $t->surface)->size(280);
+      $c->column(0, 0, 0, $t->surface)->size(320);
         $c->row(10, 8); $c->text('Requests', 15, style: Font::BOLD); $c->spacer(); $c->muted(count($h->history) . ''); $c->end();
-        $c->list($h->list, count($h->history), function (int $i) use ($c, $t, $h) {
+        // A table of the requests: the headers sort them, their edges resize the columns.
+        if ($h->list->sortChanged()) { $h->sort(); }
+        $c->table($h->list, $h->columns, count($h->history), function (int $i, int $j) use ($c, $t, $h) {
             $r = $h->history[$i];
-            $color = $r['error'] !== '' ? $t->danger : ($r['status'] === null ? $t->textMuted : ($r['status'] < 400 ? $t->success : $t->danger));
-            $c->column(10, 2);
-              $c->row(0, 8);
-                $c->text($r['method'], 12, $t->textMuted, Font::BOLD | Font::MONO);
-                $c->text($r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'], 12, $color, Font::BOLD | Font::MONO);
-                $c->spacer();
-                $c->muted($r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : date('H:i:s', $r['at']), 11);
-              $c->end();
-              $c->rich([new Span(preg_replace('#^https?://#', '', $r['url']), color: $t->text)], 12, width: 260);
-            $c->end();
+            switch ($j) {
+                case 0: $c->text($r['method'], 12, $t->textMuted, Font::BOLD | Font::MONO); break;
+                case 1:
+                    $color = $r['error'] !== '' ? $t->danger : ($r['status'] === null ? $t->textMuted : ($r['status'] < 400 ? $t->success : $t->danger));
+                    $c->text($r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'], 12, $color, Font::BOLD | Font::MONO);
+                    break;
+                case 2: $c->muted($r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '', 11); break;
+                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->tooltip($r['url']);
+            }
         });
       $c->end();
       // Request and response
@@ -129,7 +147,7 @@ function response(Context $c, Http $h): void
         $c->row(0, 8); $c->spinner(); $c->muted('waiting for ' . $r['url']); $c->end();
         return;
     }
-    $width = $c->width - 280 - 1 - 32;
+    $width = $c->width - 320 - 1 - 32;
     // The response is listed line by line, so a body of any size scrolls at frame rate: only the lines in view are shaped.
     $c->list($h->lines, count($r['lines']), function (int $n) use ($c, $t, $h, $r, $width) {
         [$kind, $text] = $r['lines'][$n];

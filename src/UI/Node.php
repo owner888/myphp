@@ -27,6 +27,10 @@ final class Node
     public ?TextState $edit = null;
     /** Whether this node has the keyboard focus this frame. */
     public bool $focused = false;
+    /** Makes what was built before this node inert to the pointer and the keys while it shows (a modal's backdrop). */
+    public bool $blocks = false;
+    /** A soft shadow under this container: [dy, blur, alpha], or null. */
+    public ?array $shadow = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
     public ?string $cursor = null;
     /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
@@ -107,6 +111,20 @@ final class Node
     public function round(float $radius): static
     {
         $this->radius = $radius;
+        return $this;
+    }
+
+    /** Casts a soft shadow under this container, $blur points wide, $dy points down, at $alpha. */
+    public function shadow(float $dy = 6, float $blur = 20, float $alpha = 0.18): static
+    {
+        $this->shadow = [$dy, $blur, $alpha];
+        return $this;
+    }
+
+    /** Makes what was built before this node inert while it shows: the pointer and Tab reach only it, what is inside it and what comes after (mygo's overlays). */
+    public function block(): static
+    {
+        $this->blocks = true;
         return $this;
     }
 

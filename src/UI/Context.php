@@ -289,6 +289,61 @@ final class Context
     }
 
     /**
+     * A dialog built by $fn over the dimmed window while $open, as mygo's
+     * Modal: what is behind it is inert, Tab goes round what is inside;
+     * a click outside the panel or Escape sets $open false, which
+     * changed() reports.
+     */
+    public function modal(bool &$open, Closure $fn): ?Node
+    {
+        if (!$open) {
+            return null;
+        }
+        $t = $this->theme;
+        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
+        $back->alpha = 0.4;
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(10, 30, 0.3);
+            $fn();
+          $this->end();
+        $this->end();
+        if ($this->shortcut(Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) {
+            $open = false;
+            $back->changed = true;
+        }
+        return $back;
+    }
+
+    /** Shows $message near the bottom of the window for a few seconds, as mygo's Toast: the outcome of what the user just did. */
+    public function toast(string $message): void
+    {
+        $this->runtime?->toast($message);
+    }
+
+    /** The toasts' viewport, built by Window after the view: the toasts showing, stacked at the bottom, their time stopped while the pointer rests on one. */
+    public function toasts(): void
+    {
+        if ($this->runtime === null) {
+            return;
+        }
+        $t = $this->theme;
+        $paused = false;
+        foreach ($this->runtime->toasts(true) as $i => $m) { // last frame's toasts, for the hover
+            $paused = $paused || $this->runtime->hovered(self::hash($this->scope . "/toast/$i"));
+        }
+        $messages = $this->runtime->toasts($paused);
+        if ($messages === []) {
+            return;
+        }
+        $this->column($t->space(4), $t->space(2))->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->align(Node::CENTER);
+          foreach ($messages as $i => $m) {
+              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(4, 12, 0.18);
+                $this->text($m);
+              $this->end();
+          }
+        $this->end();
+    }
+
+    /**
      * A table of $count rows under a header of $columns, as mygo's Table:
      * the rows are a list's (only those in view are built, $state keeps
      * the place and the choice, the keys move it), $cell($row, $col)
@@ -338,8 +393,9 @@ final class Context
             $grip = $this->key('g' . $col->id())->box(0, 0, 0)->at($r[0] - $headRect[0] + $r[2] - 3, 0)->size(6, $rowH)->cursor('resizeEW');
             $grip->alpha = 0.0;
             $d = $rt->dragged($grip->id);
-            if ($d !== null) {
-                $state->columnWidths[$col->id()] = max($col->minWidth, $flexMin, $r[2] + $d[0]);
+            if ($d !== null) { // from the width it has (a shared column's as laid out last frame), by what the pointer moved
+                $w = $state->columnWidths[$col->id()] ?? ($col->width > 0 ? $col->width : $r[2]);
+                $state->columnWidths[$col->id()] = max($col->minWidth, $flexMin, $w + $d[0]);
             }
         }
         $this->end();
