@@ -31,6 +31,8 @@ final class Node
     public bool $blocks = false;
     /** For a field: room kept clear of the text at its left and right, beyond the usual inset (a search field's glass and clear button). */
     public float $insetL = 0, $insetR = 0;
+    /** A text kept to one line: it shrinks to the room its row or column has and ends in an ellipsis where cut (mygo's SingleLine). */
+    public bool $single = false;
     /** For a button or select: a chevron (mygo's, a Space(2.5) box stroked 1.5) after the label, Space(1.5) apart. */
     public bool $chevron = false;
     /** A one-point border in the theme's border color around this colored node (a plain button, a select). */
@@ -128,6 +130,13 @@ final class Node
     public function draw(\Closure $fn): static
     {
         $this->draw = $fn;
+        return $this;
+    }
+
+    /** Keeps this text to one line: where its row or column is short of its width it shrinks and ends in "…" (mygo's SingleLine). */
+    public function single(): static
+    {
+        $this->single = true;
         return $this;
     }
 

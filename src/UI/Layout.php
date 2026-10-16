@@ -101,19 +101,28 @@ final class Layout
             if ($n->justify === Node::CENTER) { $cx += $n->dir === Node::ROW ? $free / 2 : 0; $cy += $n->dir === Node::ROW ? 0 : $free / 2; }
             if ($n->justify === Node::END) { $cx += $n->dir === Node::ROW ? $free : 0; $cy += $n->dir === Node::ROW ? 0 : $free; }
         }
-        foreach ($kids as $k) {
+        // Single-line texts shrink, between them, by what the row's children overflow (mygo's flex shrink on SingleLine).
+        $shrink = [];
+        if ($n->dir === Node::ROW && $extra === 0.0 && $n->scroll === null) {
+            $over = $used + $n->gap * ($cnt - 1) - ($w - 2 * $px); $room = 0.0;
+            foreach ($kids as $k) { if ($k->single) { $room += $k->mw; } }
+            if ($over > 0 && $room > 0) {
+                foreach ($kids as $i => $k) { if ($k->single) { $shrink[$i] = min($k->mw, $over * $k->mw / $room); } }
+            }
+        }
+        foreach ($kids as $i => $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($n->dir === Node::ROW ? $k->mh <= 0 : $k->mw <= 0) {
                 $a = Node::STRETCH; // no size of its own across (a text area given 0, an empty box): it takes the room
             }
             if ($n->dir === Node::ROW) {
-                $kw = $k->mw + $extra * $k->grow;
+                $kw = $k->mw + $extra * $k->grow - ($shrink[$i] ?? 0.0);
                 $kh = $a === Node::STRETCH ? $ch : $k->mh;
                 self::arrange($k, $cx, $cy + self::across($a, $ch, $kh), $kw, $kh);
                 $cx += $kw + $n->gap;
             } else {
                 $kh = $k->mh + $extra * $k->grow;
-                $kw = $a === Node::STRETCH ? $cw : $k->mw;
+                $kw = $a === Node::STRETCH ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
                 self::arrange($k, $cx + self::across($a, $cw, $kw), $cy, $kw, $kh);
                 $cy += $kh + $n->gap;
             }

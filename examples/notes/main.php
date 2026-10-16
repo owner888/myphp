@@ -211,7 +211,7 @@ function view(Context $c, Notes $notes): void
     $c->split($notes->listW, function () use ($c, $t, $notes) {
         $c->column(0, 0, 1, $t->surface);
           $c->column(8, 6);
-            $c->searchField($notes->query, $notes->listW - 16);
+            $c->searchField($notes->query, 0); // as wide as the pane
             $c->toolbar(function () use ($c, $notes) {
                 if ($c->clicked($c->button('New'))) { $notes->create(); }
                 if ($c->clicked($c->button('Delete…')) && $notes->open !== null) { $notes->asking = true; }
@@ -222,7 +222,7 @@ function view(Context $c, Notes $notes): void
           $c->divider();
           $c->list($notes->list, count($notes->shown), function (int $row) use ($c, $t, $notes) {
               $it = $notes->items[$notes->shown[$row]];
-              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0);
+              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0)->single();
                 $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
           });
           if ($notes->shown === [] && $notes->query->text !== '') { $c->column(10, 0); $c->muted('No note matches.', 12); $c->end(); }

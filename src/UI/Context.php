@@ -342,12 +342,63 @@ final class Context
     public function toolbar(Closure $fn): Node
     {
         $t = $this->theme;
+        $rt = $this->runtime;
         $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER);
         $this->toolbars++;
           $fn();
+          // Controls that do not fit go, from the last, into a menu at the end (mygo's layoutToolbar): the room is the toolbar's last-frame width.
+          $cw = ($rt?->rectOf($n->id)[2] ?? INF) - 2 * $t->space(1);
+          $items = $n->kids; $gap = $t->space(1); $moreW = $t->space(3) + 2 * $t->space(2.5);
+          $total = 0.0;
+          foreach ($items as $i => $k) { Layout::measure($k); $total += $k->mw + ($i > 0 ? $gap : 0); }
+          $fits = count($items);
+          if ($total > $cw + 0.5) {
+              $room = $cw - $moreW - $gap; $used = 0.0;
+              for ($fits = 0; $fits < count($items); $fits++) {
+                  $w = $items[$fits]->mw + ($fits > 0 ? $gap : 0);
+                  if ($used + $w > $room + 0.5) { break; }
+                  $used += $w;
+              }
+          }
+          if ($fits < count($items)) {
+              $n->kids = array_slice($items, 0, $fits);
+              $overflow = array_slice($items, $fits);
+              $more = $this->key('more')->column(0, 0)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->focusable()->center()
+                  ->draw(function (DisplayList $list, Node $b, Theme $t) { // mygo's chevrons: »
+                      $d = $t->space(3); $x = $b->x + ($b->w - $d) / 2; $y = $b->y + ($b->h - $d) / 2;
+                      foreach ([0.2, 0.5] as $k) {
+                          $list->line($x + $d * $k, $y + $d * 0.25, $x + $d * ($k + 0.25), $y + $d * 0.5, $t->text, 1.0, 1.5);
+                          $list->line($x + $d * ($k + 0.25), $y + $d * 0.5, $x + $d * $k, $y + $d * 0.75, $t->text, 1.0, 1.5);
+                      }
+                  });
+              $more->size($moreW, $t->space(3) + 2 * $t->space(1.5));
+              if ($this->hovered($more)) { $more->color = $t->surfaceHover; }
+              $this->end();
+              if ($rt !== null && ($this->clicked($more) || ($more->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
+                  $window = Window::key();
+                  $menu = [];
+                  foreach ($overflow as $k) { // choosing an item does what clicking the control does; a divider is a separator
+                      $label = $k->text ?? self::labelOf($k);
+                      if ($label === null) { $menu[] = MenuItem::separator(); continue; }
+                      $id = $k->id;
+                      $menu[] = new MenuItem($label, function (MenuItem $it, ?Window $w) use ($rt, $id) { $rt->press($id); $w?->update(); });
+                  }
+                  if ($window !== null) { (new Menu($menu))->popupAt($window, $more->id, $rt); }
+              }
+          }
         $this->toolbars--;
         $this->end();
         return $n;
+    }
+
+    /** The first text inside a composite control, for naming it in a menu. */
+    private static function labelOf(Node $n): ?string
+    {
+        foreach ($n->kids as $k) {
+            if ($k->text !== null && $k->text !== '') { return $k->text; }
+            if (($l = self::labelOf($k)) !== null) { return $l; }
+        }
+        return null;
     }
 
     /** Whether $key (a Key code or a character) was pressed this frame with exactly $mods, unless a focused control took it (mygo's Shortcut). */
@@ -448,7 +499,7 @@ final class Context
           $arrow = $this->column(0, 0)->size($t->space(4), $t->space(4))->center();
             if ($branch) { $this->text($open ? '▾' : '▸', $t->fontSize - 1, $selected ? $t->accentText : $t->textMuted); }
           $this->end();
-          $this->text($label, $t->fontSize, $fg);
+          $this->text($label, $t->fontSize, $fg)->single();
           $this->column(0, 0)->size($t->space(2), 0); $this->end();
         $this->end();
         if ($branch && $this->clicked($arrow)) { $open = !$open; }
@@ -537,7 +588,7 @@ final class Context
         if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
           if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
-          $this->text($label, $t->fontSize, $fg);
+          $this->text($label, $t->fontSize, $fg)->single();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();
         if ($this->clicked($n) && $sb['selected'] !== $id) {
@@ -609,7 +660,8 @@ final class Context
      * A field for a search, as mygo's SearchField: a glass at its left,
      * "Search" while empty, and a button clearing it at its right while it
      * holds any, as Escape does while it has the focus. changed() reports
-     * a change of its text, $state->submitted Enter.
+     * a change of its text, $state->submitted Enter. A $width of 0 fills
+     * what the row has left.
      */
     public function searchField(TextState $state, float $width = 200, ?float $size = null): Node
     {
@@ -617,8 +669,10 @@ final class Context
         $size ??= $t->fontSize;
         // mygo's field(): padding Space(1.5) by Space(2), the glass, the input and the clear button Space(1.5) apart.
         $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2); $gap = $t->space(1.5);
-        $this->row(0, 0);
+        $parent = $this->stack[count($this->stack) - 1];
+        $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, 'Search', $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
+          $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           // The magnifying glass, as mygo's (MingCute's search icon): a ring and a handle, stroked in the muted color.
           $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(function (DisplayList $list, Node $g, Theme $t) {
               $k = $g->w / 24; $stroke = 2 * $k;
@@ -626,7 +680,7 @@ final class Context
               $list->line($g->x + 14.5 * $k, $g->y + 14.5 * $k, $g->x + 20 * $k, $g->y + 20 * $k, $t->textMuted, 1.0, $stroke);
           })->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
-              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($width - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')
+              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')
                   ->draw(function (DisplayList $list, Node $b, Theme $t) {
                       $k = $b->w * 0.3;
                       $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
@@ -915,7 +969,7 @@ final class Context
           $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
           $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
           $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 90 : 0, $t->textMuted));
-          $this->text($title, $t->fontSize, $t->text);
+          $this->text($title, $t->fontSize, $t->text)->single();
           $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
         $this->end();
         if ($this->clicked($head)) {

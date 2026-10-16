@@ -109,7 +109,6 @@ final class Runtime
         $this->jumps = [];
         $this->keys = [];
         $this->presses = [];
-        $this->activated = null;
         $now = hrtime(true);
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
@@ -203,6 +202,7 @@ final class Runtime
             $this->rightClicks = [];
             $this->doubleClicks = [];
         }
+        $this->activated = null; // taken by clicked() during the build, or dropped
         $this->rects = [];
         $this->order = [];
         $this->barrier = 0; $this->counter = 0;
@@ -287,6 +287,12 @@ final class Runtime
     public function local(int $id, Closure $make): mixed
     {
         return $this->locals[$id] ??= $make();
+    }
+
+    /** Presses node $id as a click would, from outside a build (a toolbar's overflow menu choosing it): clicked($id) reports it next frame. */
+    public function press(int $id): void
+    {
+        $this->activated = $id;
     }
 
     /** Shows $message as a toast for TOAST_FOR seconds (mygo's Toast): one already showing shows anew; others stack above it, TOASTS at most. */

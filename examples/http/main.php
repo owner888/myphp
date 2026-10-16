@@ -111,7 +111,7 @@ function view(Context $c, Http $h): void
                     $c->text($r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'], 12, $color, Font::BOLD | Font::MONO);
                     break;
                 case 2: $c->muted($r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '', 11); break;
-                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->tooltip($r['url']);
+                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->single()->tooltip($r['url']);
             }
         });
       $c->end();

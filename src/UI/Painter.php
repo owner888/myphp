@@ -106,7 +106,15 @@ final class Painter
                     self::chevron($list, $n->kind === Node::SELECT ? $n->x + $n->w - $t->space(3.5) - $t->space(2.5) : $x + $tw + $t->space(1.5), $n->y + ($n->h - $t->space(2.5)) / 2, $t->space(2.5), $t->textMuted);
                 }
             }
-            $text->paint($list, $n->text, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
+            $shown = $n->text;
+            if ($n->single && $n->kind === Node::TEXT) {
+                [$tw] = $text->measure($shown, $n->fontSize, $n->style);
+                if ($tw > $n->w + 0.5) { // cut to the room, ending in an ellipsis
+                    [$ew] = $text->measure('…', $n->fontSize, $n->style);
+                    $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $n->w - $ew))) . '…';
+                }
+            }
+            $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, 1.0, $n->style);
             if ($n->underline) {
                 $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
             }

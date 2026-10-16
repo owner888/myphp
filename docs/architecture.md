@@ -175,11 +175,15 @@ hover and press — and `primaryButton()` is the accent without a border,
 for the main action; both pad Space(1.5) by Space(3.5).
 
 `toggle(&$on, $label)` is a button kept pressed (`surfacePressed`) while
-on, mygo's Toggle; `toolbar($fn)` is mygo's Toolbar's look: a centered
-row, gap and padding Space(1), whose buttons and toggles take no face
-until hovered (padding Space(1.5) by Space(2.5), no border). Not ported:
-the toolbar as one Tab stop with Left and Right moving inside it, and
-the overflow menu for controls that do not fit.
+on, mygo's Toggle; `toolbar($fn)` is mygo's Toolbar: a centered row, gap
+and padding Space(1), whose buttons and toggles take no face until
+hovered (padding Space(1.5) by Space(2.5), no border). Controls that do
+not fit the toolbar's last-frame width go, from the last, into a menu
+under a » button at its end (mygo's layoutToolbar: the controls are
+built and measured, then dropped from the row); choosing one calls
+`Runtime::press($id)`, which makes `clicked()` report it in the next
+frame's build, so the control's own code runs. Not ported: the toolbar
+as one Tab stop with Left and Right moving inside it.
 
 Every control's numbers are mygo's (AGENTS.md rule 9); `Node::padding(y,
 x)` is mygo's Padding(y, x) where the two differ (`row()`/`column()`'s
@@ -193,6 +197,13 @@ mygo's chevron (a Space(2.5) box stroked 1.5); a tooltip pads Space(1.25)
 by Space(2), radius Space(1.25), in the inverse colors, Space(1.5) above
 its anchor (below when there is no room); the focus ring is 2 points
 wide a point outside the node, as `Painter.FocusRing`.
+
+`Node::single()` is mygo's SingleLine: in a row, single-line texts shrink
+between them by what the row's children overflow (mygo's flex shrink);
+in a column one is clamped to the column's width; and the painter cuts
+what no longer fits at `indexForX` and ends it in "…". Sidebar items,
+collapsible and tree labels are single; apps mark list titles and table
+cells.
 
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,
