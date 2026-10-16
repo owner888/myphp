@@ -426,6 +426,40 @@ with the picker. Gradients are quad kinds 10 (across) and 11 (down),
 packed into u (exact in a float's 24-bit mantissa) and its alpha in v.
 `checkers` is rects, Space(1.5) or Space(1.25) squares.
 
+`findBar(&$open, $query, $matches, &$current)` is mygo's FindBar: a
+keyed surface row padded Space(1.5) by Space(3), gap Space(2), a 1-point
+border below (its `draw`), holding mygo's `field` with a magnifier and an
+unframed input grown to at most Space(90) (the bar's width last frame
+caps it), a status at least Space(18) wide ("3 of 12", "No matches"),
+previous and next (`buttonFace` padded Space(1.5) by Space(2) around a
+Space(3) chevron stroked 1.5; at half alpha and not focusable without
+matches) and Done. Its local state holds `opening`, true as it opens:
+the field takes the focus with the query selected. Enter steps forward,
+Shift+Enter back (`Runtime::submitMods`, the modifiers of this frame's
+Return), as do Cmd+G and Shift+Cmd+G; Escape in the field or Done close
+it. Closed, it builds an empty box out of the flow under the same key
+(so its state starts over as it opens) and returns null. `buttonFace`
+is the plain button's look as a row — bordered surface, radius, shaded
+under the pointer and while pressed, focusable — for buttons holding
+more than a label (the date input, these).
+
+`form($fn)`, `field($label, $fn, $description, $error)` and
+`fieldset($legend, $fn)` are mygo's form.go: a form is a column, gap
+Space(3), whose fields are rows (gap Space(3), aligned at the start) of
+a right-justified label box and a column of the control and its texts;
+the boxes are made as wide as the widest label as the form ends (labels
+are measured as built), and each as high as its control was last frame
+(mygo levels the label with the control's first line by baselines; this
+centers it on the control). Outside a form a field is a column, gap
+Space(1.5), the label bold (mygo's weight 500: bold is the one weight
+besides regular). The control is the first focusable or focus group
+inside; a click on the label focuses it (`focusIn`: in a group, the
+member on, else the first), and presses a check box, switch or radio
+(`Runtime::press`, mygo's clickLater). The description shows muted at
+fontSize − 1, the error in the danger color, which an input then
+borders in. A fieldset is a column, gap Space(3), under a bold legend,
+Space(3) below what is above it.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above

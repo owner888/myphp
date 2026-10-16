@@ -25,6 +25,9 @@ final class Context
     private array $sidebars = [];
     /** How many toolbars enclose what is being built: their buttons take no face until hovered. */
     private int $toolbars = 0;
+    /** The form being built (Context::form): its labels' boxes and the widest label, for them all to be as wide. */
+    private ?object $form = null;
+
     /** The accordion being built, innermost last: how many items it has so far (the second on gets a line above). */
     private array $accordions = [];
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
@@ -949,8 +952,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->border()->focusable()->align(Node::CENTER)->min($t->space(32.5), 0); // a plain button's face, its text and a page icon at its ends (Justify(SpaceBetween))
-        if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
+        $b = $this->buttonFace($t->space(1.5), $t->space(3.5))->min($t->space(32.5), 0); // its text and a page icon at its ends (Justify(SpaceBetween))
           $this->text($date->format('n/j/Y'), $t->fontSize, $t->text)->single();
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
@@ -970,6 +972,15 @@ final class Context
             });
             if ($rt !== null && $rt->focus === $b->id && $local->open) { $rt->focusOn($grid->id); } // AutoFocus: the calendar takes the keys as it opens
         });
+        return $b;
+    }
+
+    /** A plain button's face as a row holding what follows, mygo's styleButton on coreButton: a bordered surface, the theme's radius, shaded under the pointer and while pressed, focusable (ringed by the painter). */
+    private function buttonFace(float $padY, float $padX): Node
+    {
+        $t = $this->theme;
+        $b = $this->row(0, 0, 0, $t->surface)->padding($padY, $padX)->round($t->radius)->border()->focusable()->align(Node::CENTER);
+        if ($this->hovered($b)) { $b->color = $this->runtime->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
         return $b;
     }
 
@@ -1442,12 +1453,7 @@ final class Context
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, 'Search', $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
-          // The magnifying glass, as mygo's (MingCute's search icon): a ring and a handle, stroked in the muted color.
-          $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(function (DisplayList $list, Node $g, Theme $t) {
-              $k = $g->w / 24; $stroke = 2 * $k;
-              $list->ring($g->x + 2 * $k, $g->y + 2 * $k, 12 * $k, 12 * $k, $t->textMuted, 1.0, 6 * $k, $stroke);
-              $list->line($g->x + 14.5 * $k, $g->y + 14.5 * $k, $g->x + 20 * $k, $g->y + 20 * $k, $t->textMuted, 1.0, $stroke);
-          })->alpha = 0.0;
+          $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
               $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')
                   ->draw(function (DisplayList $list, Node $b, Theme $t) {
@@ -1465,6 +1471,181 @@ final class Context
         $n->changed = $state->seen !== null && $state->seen !== $state->text;
         $state->seen = $state->text;
         return $n;
+    }
+
+    /** The magnifying glass of a field for searching, as mygo's (MingCute's search icon, Apache 2.0): a ring and a handle stroked 2 on its 24 grid, in the muted color. */
+    private static function magnifier(DisplayList $list, Node $g, Theme $t): void
+    {
+        $k = $g->w / 24; $stroke = 2 * $k;
+        $list->ring($g->x + 2 * $k, $g->y + 2 * $k, 12 * $k, 12 * $k, $t->textMuted, 1.0, 6 * $k, $stroke);
+        $list->line($g->x + 14.5 * $k, $g->y + 14.5 * $k, $g->x + 20 * $k, $g->y + 20 * $k, $t->textMuted, 1.0, $stroke);
+    }
+
+    /**
+     * A bar for finding text while $open, as mygo's FindBar after Safari's
+     * and Xcode's: a field of $query, which takes the focus as the bar
+     * opens with what was found before selected, how many $matches there
+     * are, previous and next buttons choosing $current among them, and
+     * Done. Enter in the field goes to the next match, Shift+Enter to the
+     * previous, as do Cmd+G and Shift+Cmd+G; Escape and Done close the
+     * bar. The app finds: it counts the matches of $query and shows match
+     * $current, which changed() reports moving. Closed, it builds nothing
+     * and returns null.
+     */
+    public function findBar(bool &$open, TextState $query, int $matches, int &$current): ?Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $bar = $this->key('find bar')->row(0, $t->space(2), 0, $t->surface)->padding($t->space(1.5), $t->space(3))->align(Node::CENTER);
+        $make = fn() => (object)['opening' => true]; // its state goes as it closes: true in the frame it opens
+        $local = $rt?->local($bar->id, $make) ?? $make();
+        if (!$open) { // nothing: an empty box out of the flow, keeping the bar's key for its state to start over as it opens
+            $local->opening = true;
+            $bar->at(0, 0)->size(0, 0); $bar->color = null; $bar->padding(0, 0);
+            $this->end();
+            return null;
+        }
+        $bar->draw(function (DisplayList $list, Node $b, Theme $t) { $list->rect($b->x, $b->y + $b->h - 1, $b->w, 1, $t->border); }); // BorderWidth(0, 0, 1, 0)
+        $current = max(0, min($current, $matches - 1));
+        $step = function (int $d) use (&$current, $matches, $bar) { if ($matches > 0) { $current = ($current + $d + $matches) % $matches; $bar->changed = true; } };
+        if ($this->shortcut('g', Key::COMMAND)) { $step(1); } elseif ($this->shortcut('g', Key::SHIFT | Key::COMMAND)) { $step(-1); }
+          // The field: mygo's field() with a magnifier and the input, grown to at most Space(90).
+          $glass = $t->space(3.75);
+          $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam');
+            $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
+            [, $h] = $this->metrics->measure('X', $t->fontSize);
+            $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, 'Find', null, $t->fontSize, $t->text));
+            $in->edit = $query; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
+            $in->focused = $rt?->focused($in->id) ?? false;
+          $this->end();
+          $fw = $rt?->rectOf($bar->id)[2] ?? 0.0;
+          if ($fw > 0) { $f->size(min($t->space(90), $fw), 0); $f->grow = 0; } // MaxWidth(Space(90)): at most that of the bar's width last frame
+          $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
+          if ($this->clicked($f) && $rt !== null) { $rt->focusOn($in->id); $in->focused = true; }
+          if ($local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($in->id); $in->focused = true; $query->selectAll(); }
+          if ($query->submitted) { $query->submitted = false; $step(($rt?->submitMods() ?? 0) & Key::SHIFT ? -1 : 1); }
+          if ($in->focused && $this->shortcut(Key::ESCAPE)) { $open = false; }
+          $status = $query->text === '' ? '' : ($matches > 0 ? ($current + 1) . ' of ' . $matches : 'No matches');
+          $this->row(0, 0)->min($t->space(18), 0); $this->text($status, $t->fontSize, $t->textMuted); $this->end();
+          foreach ([-1, 1] as $d) { // previous and next: a chevron up or down, Space(3), stroked 1.5
+              $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2));
+              if ($matches === 0) { $btn->alpha = 0.5; $btn->focusable = false; }
+                $this->box($t->space(3), $t->space(3), 0)->draw(function (DisplayList $list, Node $a, Theme $t) use ($d) {
+                    $cx = $a->x + $a->w / 2; $cy = $a->y + $a->h / 2; $k = $a->w / 4; $s = $d < 0 ? 1 : -1;
+                    $list->line($cx - $k, $cy + $s * $k / 2, $cx, $cy - $s * $k / 2, $t->text, 1.0, 1.5);
+                    $list->line($cx, $cy - $s * $k / 2, $cx + $k, $cy + $s * $k / 2, $t->text, 1.0, 1.5);
+                })->alpha = 0.0;
+              $this->end();
+              if ($matches > 0 && $this->clicked($btn)) { $step($d); }
+          }
+          $done = $this->button('Done');
+          if ($this->clicked($done)) { $open = false; }
+        $this->end();
+        return $bar;
+    }
+
+    /**
+     * A column of the fields $fn builds (field, fieldset), gap Space(3),
+     * whose labels sit in a column of their own beside the controls, as
+     * macOS's forms: aligned to the right, as wide as the widest, and
+     * centered on their control's first child (mygo levels them with its
+     * first line).
+     */
+    public function form(Closure $fn): Node
+    {
+        $f = $this->column(0, $this->theme->space(3));
+        $saved = $this->form; $this->form = (object)['labels' => [], 'width' => 0.0];
+          $fn();
+          foreach ($this->form->labels as $box) { $box->size($this->form->width, $box->fh); } // as wide as the widest, measured as they were built
+        $this->form = $saved;
+        $this->end();
+        return $f;
+    }
+
+    /**
+     * A field, as mygo's Field: $label above the control $fn builds, or
+     * beside it in a form; a click on the label focuses the control (or
+     * clicks a check box, switch or radio button). $description shows
+     * below the control muted, $error in the danger color, which an input
+     * then borders in. The control is the first focusable $fn builds.
+     */
+    public function field(string $label, Closure $fn, string $description = '', string $error = ''): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $inForm = $this->form !== null;
+        $f = $inForm ? $this->row(0, $t->space(3))->align(Node::START) : $this->column(0, $t->space(1.5));
+          if ($inForm) {
+              [$lw] = $this->metrics->measure($label, $t->fontSize);
+              $this->form->width = max($this->form->width, $lw);
+              $box = $this->row(0, 0)->justify(Node::END)->align(Node::CENTER); $this->form->labels[] = $box;
+                $l = $this->text($label, $t->fontSize, $t->text);
+              $this->end();
+          } else {
+              $l = $this->text($label, $t->fontSize, $t->text, Font::BOLD); // FontWeight(500): bold, the one weight besides regular
+          }
+          $content = $this->column(0, $t->space(1.5), $inForm ? 1 : 0); // in a form: the rest of the row
+            $fn();
+            if ($description !== '') { $this->text($description, $t->fontSize - 1, $t->textMuted); }
+            if ($error !== '') { $this->text($error, $t->fontSize - 1, $t->danger); }
+          $this->end();
+        $this->end();
+        $ctrl = self::fieldControl($content);
+        if ($ctrl === null) { return $f; }
+        if ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
+        if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
+        $l->cursor = 'arrow';
+        if ($this->clicked($l) && $rt !== null) {
+            $to = self::focusIn($ctrl);
+            if ($to !== null) { $rt->focusOn($to->id); }
+            if (in_array($ctrl->kind, [Node::CHECKBOX, Node::SWITCH, Node::RADIO], true)) { $rt->press($ctrl->id); } // clicked next frame, as mygo's clickLater
+        }
+        return $f;
+    }
+
+    /** The control of a field: the first node inside $e that takes the focus, or a group of them (a focus group). */
+    private static function fieldControl(Node $e): ?Node
+    {
+        foreach ($e->kids as $k) {
+            if ($k->focusGroup !== 0) { return $k; }
+            if ($k->focusable || $k->kind === Node::BUTTON || $k->kind === Node::INPUT || $k->kind === Node::TEXTAREA || $k->kind === Node::SLIDER) { return $k; }
+            if (($c = self::fieldControl($k)) !== null) { return $c; }
+        }
+        return null;
+    }
+
+    /** What a click on the label of a field focuses: its control, or in a group of them, the one on, else the first. */
+    private static function focusIn(Node $e): ?Node
+    {
+        if ($e->focusable || $e->kind === Node::BUTTON || $e->kind === Node::INPUT || $e->kind === Node::TEXTAREA || $e->kind === Node::SLIDER) { return $e; }
+        $first = null; $chosen = null;
+        $walk = function (Node $e) use (&$walk, &$first, &$chosen) {
+            foreach ($e->kids as $k) {
+                if ($chosen !== null) { return; }
+                if ($k->focusable || $k->kind === Node::BUTTON) { $first ??= $k; if ($k->on) { $chosen = $k; } }
+                $walk($k);
+            }
+        };
+        $walk($e);
+        return $chosen ?? $first;
+    }
+
+    /**
+     * A group of the fields $fn builds under $legend (bold), as mygo's
+     * Fieldset: gap Space(3), and Space(3) apart from what is above it, as
+     * a section. In a form, its fields' labels line up with the others'.
+     */
+    public function fieldset(string $legend, Closure $fn): Node
+    {
+        $t = $this->theme;
+        $parent = $this->stack[count($this->stack) - 1];
+        $above = $parent->kids !== [];
+        if ($above) { $this->column(0, 0)->size(0, $t->space(3)); $this->end(); } // Margin(Space(3), 0, 0, 0)
+        $g = $this->column(0, $t->space(3));
+          $this->text($legend, $t->fontSize, $t->text, Font::BOLD); // FontWeight(600)
+          $fn();
+        $this->end();
+        return $g;
     }
 
     /**

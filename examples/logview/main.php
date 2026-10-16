@@ -2,14 +2,15 @@
 // A log viewer, the first real tool on MyPHP: open a log (File > Open…, or
 // a path on the command line), follow it as it grows, filter lines as you
 // type, levels in color, matches highlighted, long lines wrapped,
-// Cmd+Shift+C copies the chosen line, a file dropped on the window opens.
+// Cmd+F finds among them, Cmd+Shift+C copies the chosen line, a file
+// dropped on the window opens.
 // The window remembers its frame.
 // Run: ./run.sh logview [file]    (try /var/log/system.log or a file you append to)
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
 use MyPHP\Native\Pasteboard;
-use MyPHP\UI\{Content, Context, Font, ListState, Node, Span, TableColumn, TextState};
+use MyPHP\UI\{Content, Context, Font, Key, ListState, Node, Span, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -22,6 +23,10 @@ final class Log
     private int $read = 0;
     private string $rest = '';
     public TextState $filter;
+    /** The find bar (Cmd+F): open, its query, and which of the lines matching it is shown. */
+    public bool $finding = false;
+    public TextState $find;
+    public int $found = 0;
     private string $applied = '';
     /** @var list<int> indexes of the lines the filter shows */
     public array $shown = [];
@@ -34,6 +39,7 @@ final class Log
     public function __construct()
     {
         $this->filter = new TextState();
+        $this->find = new TextState;
         $this->list = new ListState();
         $this->list->selected = -1;
         $this->list->followEnd = true;
@@ -133,6 +139,17 @@ function view(Context $c, Log $log): void
     $t = $c->theme;
     $log->refilter();
     $c->column(0, 0, 1);
+      // The find bar: Cmd+F opens it; Enter, the arrows and Cmd+G step through the shown lines holding the query, choosing each.
+      if ($c->shortcut('f', Key::COMMAND)) { $log->finding = true; }
+      $hits = [];
+      if ($log->finding && $log->find->text !== '') {
+          foreach ($log->shown as $r => $i) { if (stripos($log->lines[$i], $log->find->text) !== false) { $hits[] = $r; } }
+      }
+      $bar = $c->findBar($log->finding, $log->find, count($hits), $log->found);
+      if ($bar !== null && $hits !== [] && ($c->changed($bar) || $log->find->seen !== $log->find->text)) {
+          $log->list->choose($hits[$log->found]); $log->list->scrollTo($hits[$log->found]);
+      }
+      $log->find->seen = $log->find->text;
       $c->row(10, 10, 0, $t->surface);
         $c->input($log->filter, 'Filter lines (type to search)', 320);
         $c->rich($log->path === ''

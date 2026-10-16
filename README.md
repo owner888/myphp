@@ -53,7 +53,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
 | Soft shadows, rings, Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), backdrop blur, scroll edge | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
-| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
+| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | App / Window API (whenReady, run, WindowOptions, show/hide/close/setTitle) | works, a subset of mygo's |
@@ -101,7 +101,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh gen              # writes examples/webview/myphp.ts, the TypeScript client
 ./run.sh desktop          # menus and dialogs
 ./run.sh form             # text fields, input methods
-./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights
+./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
@@ -221,7 +221,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh gen              # 生成 examples/webview/myphp.ts（TypeScript client）
 ./run.sh desktop          # 菜单和对话框
 ./run.sh form             # 文本框、输入法
-./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮
+./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色

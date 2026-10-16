@@ -672,6 +672,13 @@ final class Runtime
         return false;
     }
 
+    /** The modifiers of the Return or Enter key pressed this frame (a field's Enter with Shift: a find bar's previous match), 0 when none was. */
+    public function submitMods(): int
+    {
+        foreach ($this->keys as $k) { if ($k[1] === Key::RETURN || $k[1] === Key::ENTER) { return $k[2]; } }
+        return 0;
+    }
+
     /** What was typed this frame while node $id had the focus, for a control that is no field (a time input's segment); nothing otherwise. */
     public function typed(int $id): string
     {

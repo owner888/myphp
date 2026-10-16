@@ -1,7 +1,7 @@
 <?php
 // The smaller widgets in one window: switch, segmented control, tabs with
 // their content, a collapsible section, a stepper, a combobox, an
-// autocomplete, a token field, a date and a time input, a color well, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
+// autocomplete, a token field, a date and a time input, a color well, a form, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
@@ -10,7 +10,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'color' => 0x3b82f6, 'alpha' => 1.0, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'color' => 0x3b82f6, 'alpha' => 1.0, 'name' => new TextState, 'size' => 1, 'notify' => true, 'last' => 'nothing yet'];
 const FRUITS = ['Apple', 'Banana', 'Cherry', 'Grape', 'Mango', 'Orange', 'Peach', 'Pear', 'Pineapple', 'Plum'];
 const CITIES = ['Beijing', 'Berlin', 'Boston', 'Chengdu', 'Chicago', 'Guangzhou', 'Hangzhou', 'London', 'Paris', 'Shanghai', 'Shenzhen', 'Tokyo'];
 const TAGS = ['php', 'ui', 'metal', 'ffi', 'layout', 'text', 'input', 'native'];
@@ -68,6 +68,14 @@ function view(Context $c, array &$s): void
                 $item('src', function () use ($item) { $item('src/App.php'); $item('src/UI', function () use ($item) { $item('src/UI/Context.php'); $item('src/UI/Node.php'); }); });
                 $item('examples', function () use ($item) { $item('examples/widgets'); });
                 $item('README.md');
+            });
+            // A form: labels in a column of their own, right-aligned, level with their controls; a click on one focuses its control.
+            $c->form(function () use ($c, &$s) {
+                $c->field('Name', function () use ($c, &$s) { $c->input($s['name'], 'Jane Doe', 0); }, 'Shown on receipts.', trim($s['name']->text) === '' ? 'Required' : '');
+                $c->field('Size', function () use ($c, &$s) { $c->select(['Small', 'Medium', 'Large'], $s['size']); });
+                $c->fieldset('Notifications', function () use ($c, &$s) {
+                    $c->field('Mail', function () use ($c, &$s) { if ($c->changed($c->checkbox('Send me mail', $s['notify']))) { $s['last'] = 'notify ' . ($s['notify'] ? 'on' : 'off'); } });
+                });
             });
             // A calendar: a click or the arrows choose a day, Page Up and Page Down move by months.
             $c->row(0, 10)->align(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
