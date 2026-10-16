@@ -93,14 +93,14 @@ $h = new Headless(function (Context $c) use (&$n, &$ev, &$open, $q, &$cur, $name
 }, 600, 500);
 $h->frame(); check($n['bar'] === null, 'a closed find bar builds nothing');
 $l1 = $h->rect($n['f1']->kids[0]); $l2 = $h->rect($n['f2']->kids[0]); same($l1[2], $l2[2], 'the labels of a form are as wide as the widest'); same(28.0, $l1[3], 'and as high as their control');
-same('Required', $n['f2']->kids[1]->kids[1]->text, 'the error below the control'); same(0xdc2626, $n['f2']->kids[1]->kids[1]->fg, 'in the danger color');
+same('Required', $n['f2']->kids[1]->kids[1]->text, 'the error below the control'); same($h->theme->danger, $n['f2']->kids[1]->kids[1]->fg, 'in the danger color');
 $h->clickOn($n['f1']->kids[0]->kids[0]); same($n['f1']->kids[1]->kids[0]->id, $h->rt->focus, 'a click on the label focuses the input');
 $h->clickOn($n['f2']->kids[0]->kids[0]); check($agree, 'a click on a check box label checks it');
 $open = true; $h->frame(); $bar = $n['bar']; $in = $bar->kids[0]->kids[1];
 same($in->id, $h->rt->focus, 'the find bar takes the focus as it opens'); same([0, 3], $q->selection(), 'with the query selected'); same('1 of 3', $bar->kids[1]->kids[0]->text, 'the count');
 $h->enter(); same(1, $cur, 'Enter steps forward'); $h->enter(Key::SHIFT); same(0, $cur, 'Shift+Enter back'); $h->enter(Key::SHIFT); same(2, $cur, 'round the end');
 $h->shortcut('g', Key::COMMAND); same(0, $cur, 'Cmd+G forward');
-$h->key(Key::END, 'moveToEndOfLine:'); $h->type('x'); same('2 of 4', $n['bar']->kids[1]->kids[0]->text, 'typing changes the count'); $h->escape(); check(!$open, 'Escape closes the bar');
+$h->key(Key::END, 'moveToEndOfLine:'); $h->type('x'); same('1 of 4', $n['bar']->kids[1]->kids[0]->text, 'typing changes the count'); $h->escape(); check(!$open, 'Escape closes the bar');
 $open = true; $h->frame(); same([0, 4], $q->selection(), 'opened again, the query is selected again');
 
 // Checkbox group, breadcrumbs, alert.

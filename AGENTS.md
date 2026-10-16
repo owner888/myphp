@@ -65,13 +65,14 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo), TextLayout (wrapped lines of a text area),
                    Input, Runtime (last frame's rects, clicks/hover/focus, scroll routing, thumb drag, passes),
-                   Scrollable + ScrollState + ListState (anchor, choice, reorder, scrollTo), Selection (several rows, by key), GridState (a grid view: choice, reorder), Scrollbar, Glide, Theme, Content
+                   TextMetrics/TextPainter (what layout, then the painter, need of a text engine), Scrollable + ScrollState + ListState (anchor, choice, reorder, scrollTo), Selection (several rows, by key), GridState (a grid view: choice, reorder), Scrollbar, Glide, Theme, Content
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
                    over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls), titlebar
-tests/             headless tests: php tests/run.php [name] — Headless.php (fake metrics, events as the view sends them,
-                   the widgets example loaded without its window), *_test.php (check()/same() assertions, no PHPUnit)
+tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
+                   view sends them, paint into an FFI buffer, the widgets example without its window), *_test.php
+                   (check()/same() assertions, no PHPUnit); php tests/bench.php [frames] times build/layout/record/paint
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```
 
@@ -147,8 +148,10 @@ static-php-cli is the one outside tool, for release builds only.
   `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on every changed file; pure-PHP checks
   where they exist; ask the developer to run GUI examples. php tests/run.php
-  runs the headless tests (Layout, Runtime, Context: no window): run them
-  after changing src/UI, and add a check when fixing a bug there.
+  runs the headless tests (Layout, Runtime, Context, Painter: no window):
+  run them after changing src/UI, and add a check when fixing a bug there;
+  php tests/bench.php after a change that could cost per frame, against
+  the numbers in docs/architecture.md.
 - New ObjC calls: selector and types from Apple's headers, signature letters
   in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
   methods (`arrayWithObjects:`) avoided.

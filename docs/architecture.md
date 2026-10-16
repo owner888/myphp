@@ -1052,6 +1052,30 @@ form and find bar, checkbox group, breadcrumbs, alert, grid view, the
 selection of several, rows and items dragged, the title bar's handle,
 SVG icons and avatars.
 
+`Painter` takes a `TextPainter` (`TextMetrics` plus `paint`, `imageSlot`
+and `scale`), which `Text` implements and the tests fake, so a frame can
+be painted into an FFI buffer without CoreText or Metal. `php
+tests/bench.php` times the PHP half of a frame — build, layout, record,
+paint — for the examples' views; on PHP 8.3 with the JIT, two cores:
+
+| view | build | layout | record | paint | ms/frame | quads |
+|---|---|---|---|---|---|---|
+| widgets General | 0.86 | 0.21 | 0.11 | 0.39 | 1.6 | 391 |
+| widgets Advanced | 0.85 | 0.18 | 0.08 | 0.15 | 1.3 | 296 |
+| list, a million rows | 0.14 | 0.04 | 0.03 | 0.10 | 0.3 | 342 |
+| list, a million rows, 1440p | 0.26 | 0.08 | 0.06 | 0.20 | 0.6 | 710 |
+| table, a million rows × 5 | 0.60 | 0.21 | 0.14 | 0.21 | 1.2 | 626 |
+| 2000 texts, not virtualized | 1.86 | 0.92 | 1.36 | 0.89 | 5.0 | 1970 |
+| textarea, 2000 lines, typing | | | | | 1.4–1.7 | 3.6k |
+
+A node costs about 4 µs to build (`new Node` 0.4 µs for its 78
+properties, a keyed id's xxh64 0.2 µs), 0.5 µs to lay out and 0.7 µs to
+record; a frame of the examples is 0.3–1.6 ms, which leaves the 16.7 ms
+budget to CoreText (shaping is cached by line) and Metal. The display
+list is clipped to the window before the paint, so what lies outside
+costs nothing. What the benchmark cannot time is the Mac's half:
+`MYPHP_STATS=1 ./run.sh native 1000000` prints it a second at a time.
+
 ## Open items
 
 - The glyph atlas starts over when full and is re-rasterized whole; an

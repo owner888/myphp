@@ -8,7 +8,7 @@ final class Painter
 {
     private const BOX_RADIUS = 18.0;
 
-    public static function paint(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt = null): void
+    public static function paint(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt = null): void
     {
         if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
             return;
@@ -164,7 +164,7 @@ final class Painter
      * blurred by 6.4 points and saturated under 82% of the background
      * (toned as AppKit's), with a hairline along the other edge.
      */
-    private static function paintScrollEdge(Node $n, DisplayList $list, Text $text, Theme $t): void
+    private static function paintScrollEdge(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
     {
         $e = $n->material;
         $bg = $e->background ?? $t->background;
@@ -185,7 +185,7 @@ final class Painter
     }
 
     /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */
-    public static function tooltip(Node $root, DisplayList $list, Text $text, Theme $t, Runtime $rt): void
+    public static function tooltip(Node $root, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {
         if ($rt->tip === null) {
             return;
@@ -247,7 +247,7 @@ final class Painter
      * with a check stroked Space(0.5) in the accent's text (a dot Space(1.5)
      * for a radio); the label Space(2) after.
      */
-    private static function paintToggle(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    private static function paintToggle(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $box = $t->space(4);
         $x = $n->x; $y = $n->y + ($n->h - $box) / 2;
@@ -305,7 +305,7 @@ final class Painter
      * knob white, inset Space(0.5), on a shadow (0, 1, 3, 0.25); the label
      * Space(2) after.
      */
-    private static function paintSwitch(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    private static function paintSwitch(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
@@ -360,7 +360,7 @@ final class Painter
     }
 
     /** Rich text: its wrapped lines, each on one baseline, with the spans' backgrounds, underlines and strikes. */
-    private static function paintRich(Node $n, DisplayList $list, Text $text): void
+    private static function paintRich(Node $n, DisplayList $list, TextPainter $text): void
     {
         $y = $n->y;
         foreach ($n->rich->lines as $line) {
@@ -389,7 +389,7 @@ final class Painter
     }
 
     /** A text field: border, selection, text or placeholder, composition underline, caret. */
-    private static function paintField(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    private static function paintField(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET + $n->insetL;
@@ -431,7 +431,7 @@ final class Painter
     }
 
     /** A text area: border, wrapped lines scrolled to the caret, selection across lines, composition underline, caret. */
-    private static function paintArea(Node $n, DisplayList $list, Text $text, Theme $t, ?Runtime $rt): void
+    private static function paintArea(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
         $inset = Runtime::FIELD_INSET; $insetY = Runtime::FIELD_INSET_Y;

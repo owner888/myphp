@@ -12,7 +12,7 @@ use MyPHP\Native\{CoreGraphics, CoreText, Mem};
  * strings keeps only what it showed lately. When the atlas fills, it and
  * the line cache start over: one frame re-shapes what is in view.
  */
-final class Text implements TextMetrics
+final class Text implements TextPainter
 {
     private const KEEP_FRAMES = 30;
     private const SWEEP_EVERY = 15;
