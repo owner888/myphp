@@ -231,9 +231,11 @@ final class Painter
         $x = $n->x; $y = $n->y + ($n->h - $box) / 2;
         $radius = $n->kind === Node::RADIO ? $t->space(2) : $t->space(1);
         $hovered = $rt?->hovered($n->id) ?? false;
-        if ($n->on) {
+        if ($n->on || $n->mixed) {
             $list->rect($x, $y, $box, $box, $t->accent, 1.0, $radius);
-            if ($n->kind === Node::RADIO) {
+            if ($n->mixed) { // a bar: some of a group checked
+                $list->rect($x + $box * 0.25, $y + $box / 2 - 1, $box * 0.5, 2, $t->accentText, 1.0, 1.0);
+            } elseif ($n->kind === Node::RADIO) {
                 $d = $t->space(1.5);
                 $list->rect($x + ($box - $d) / 2, $y + ($box - $d) / 2, $d, $d, $t->accentText, 1.0, $d / 2);
             } else { // mygo's checkPath

@@ -27,6 +27,8 @@ final class Context
     private int $toolbars = 0;
     /** The form being built (Context::form): its labels' boxes and the widest label, for them all to be as wide. */
     private ?object $form = null;
+    /** The checkbox group being built (Context::checkboxGroup): references to its check boxes' values, or null outside one. */
+    private ?array $checks = null;
 
     /** The accordion being built, innermost last: how many items it has so far (the second on gets a line above). */
     private array $accordions = [];
@@ -433,6 +435,7 @@ final class Context
             $n->changed = true;
         }
         $n->on = $checked;
+        if ($this->checks !== null) { $this->checks[] = &$checked; } // in a group: the head checks or clears it
         return $n;
     }
 
@@ -1364,6 +1367,109 @@ final class Context
             8 => [(int)hexdec(substr($s, 0, 6)), hexdec(substr($s, 6)) / 255],
             default => null,
         };
+    }
+
+    /**
+     * A check box over the check boxes $fn builds, indented below it, as
+     * mygo's CheckboxGroup (a list of permissions): checked when they all
+     * are, mixed when some are, and a click, or Space while it has the
+     * focus, checks them all, or none when they all are. changed() reports
+     * a click.
+     */
+    public function checkboxGroup(string $label, Closure $fn): Node
+    {
+        $t = $this->theme;
+        $g = $this->column(0, $t->space(2));
+          $dummy = false; $head = $this->checkbox($label, $dummy); // its click is read below, its state set from the boxes
+          $saved = $this->checks; $this->checks = [];
+          $this->row(0, 0);
+            $this->column(0, 0)->size($t->space(6), 0); $this->end(); // PaddingStart(Space(6))
+            $this->column(0, $t->space(2), 1); $fn(); $this->end();
+          $this->end();
+          $boxes = $this->checks; $this->checks = $saved;
+          $on = 0; foreach ($boxes as $b) { if ($b) { $on++; } }
+          $all = $on === count($boxes) && $on > 0;
+          if ($head->changed) { // its click, as checkbox() took it
+              foreach ($boxes as &$b) { $b = !$all; } unset($b);
+              $g->changed = true; $head->changed = false;
+              $all = !$all; $on = $all ? count($boxes) : 0;
+          }
+          $head->on = $all; $head->mixed = !$all && $on > 0;
+        $this->end();
+        return $g;
+    }
+
+    /**
+     * A path of $items separated by chevrons, as mygo's Breadcrumbs after
+     * Finder's path bar: the items but the last are links, which a click
+     * chooses, as Enter does, setting $chosen to its index, which
+     * changed() reports. Long items shorten with an ellipsis as room runs
+     * short.
+     * @param list<string> $items
+     */
+    public function breadcrumbs(array $items, int &$chosen): Node
+    {
+        $t = $this->theme;
+        $e = $this->row(0, $t->space(0.5))->align(Node::CENTER);
+          $n = count($items);
+          foreach ($items as $i => $item) {
+              if ($i > 0) { // a chevron pointing along the path, stroked 1.2 in the muted color
+                  $this->box($t->space(3), $t->space(3), 0)->draw(function (DisplayList $list, Node $a, Theme $t) {
+                      $cx = $a->x + $a->w / 2; $cy = $a->y + $a->h / 2; $d = $a->w / 6;
+                      $list->line($cx - $d, $cy - 2 * $d, $cx + $d, $cy, $t->textMuted, 1.0, 1.2);
+                      $list->line($cx + $d, $cy, $cx - $d, $cy + 2 * $d, $t->textMuted, 1.0, 1.2);
+                  })->alpha = 0.0;
+              }
+              $last = $i === $n - 1;
+              $b = $this->key($i)->row(0, 0)->padding($t->space(0.5), $t->space(1.5))->round($t->radius)->min($t->space(6), 0)->single(); // shrinks with the others as room runs short
+              if (!$last) { $b->focusable(); if ($this->hovered($b)) { $b->color = $t->surfaceHover; } }
+                $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted, $last ? Font::BOLD : 0)->single(); // the last, where the path is: no link, weight 500 (bold here)
+              $this->end();
+              if (!$last && $this->clicked($b)) { $chosen = $i; $e->changed = true; }
+          }
+        $this->end();
+        return $e;
+    }
+
+    /** What alertDialog returns in the frame Escape closes the alert, choosing no button. */
+    public const ALERT_DISMISSED = -2;
+
+    /**
+     * An alert over the window while $open, as mygo's AlertDialog after
+     * AppKit's: $title, $message and $buttons, the last the default, in
+     * the accent with the focus, which Enter clicks. Escape closes it
+     * choosing no button, whatever the buttons say; a click outside does
+     * nothing. Returns the index of the button clicked in the frame it
+     * is, which closes the alert, ALERT_DISMISSED in the frame Escape
+     * closes it, and -1 otherwise. An alert that must be answered sets
+     * $open back to true on ALERT_DISMISSED.
+     */
+    public function alertDialog(bool &$open, string $title, string $message, string ...$buttons): int
+    {
+        if (!$open) { return -1; }
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $chosen = -1;
+        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
+        $back->alpha = 0.4;
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3);
+            $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
+            if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
+            $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
+            $this->row(0, $t->space(2))->justify(Node::END);
+              $make = fn() => (object)['opening' => true];
+              $local = $rt?->local($panel->id, $make) ?? $make();
+              foreach ($buttons as $i => $label) {
+                  $b = $i === count($buttons) - 1 ? $this->primaryButton($label) : $this->button($label);
+                  if ($i === count($buttons) - 1 && $local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($b->id); } // AutoFocus: the default, which Enter clicks
+                  if ($this->clicked($b)) { $chosen = $i; }
+              }
+            $this->end();
+          $this->end();
+        $this->end();
+        if ($chosen < 0 && $this->shortcut(Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; }
+        if ($chosen !== -1) { $open = false; $local->opening = true; }
+        return $chosen;
     }
 
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */

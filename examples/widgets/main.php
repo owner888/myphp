@@ -1,7 +1,8 @@
 <?php
 // The smaller widgets in one window: switch, segmented control, tabs with
 // their content, a collapsible section, a stepper, a combobox, an
-// autocomplete, a token field, a date and a time input, a color well, a form, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
+// autocomplete, a token field, a date and a time input, a color well, a form,
+// a checkbox group, breadcrumbs, an alert, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
@@ -10,7 +11,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'color' => 0x3b82f6, 'alpha' => 1.0, 'name' => new TextState, 'size' => 1, 'notify' => true, 'last' => 'nothing yet'];
+$s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'asking' => false, 'options' => false, 'bold' => false, 'sort' => 'Name', 'query' => new TextState, 'open' => [], 'chosen' => '', 'scale' => 1.0, 'italic' => false, 'stars' => 3, 'low' => 20.0, 'high' => 70.0, 'acc' => [true, false, false], 'fruit' => 'Banana', 'city' => new TextState, 'tags' => ['php', 'ui'], 'when' => new DateTimeImmutable('today 09:30'), 'color' => 0x3b82f6, 'alpha' => 1.0, 'name' => new TextState, 'size' => 1, 'notify' => true, 'resetting' => false, 'mail' => true, 'calendar' => false, 'crumb' => 3, 'last' => 'nothing yet'];
 const FRUITS = ['Apple', 'Banana', 'Cherry', 'Grape', 'Mango', 'Orange', 'Peach', 'Pear', 'Pineapple', 'Plum'];
 const CITIES = ['Beijing', 'Berlin', 'Boston', 'Chengdu', 'Chicago', 'Guangzhou', 'Hangzhou', 'London', 'Paris', 'Shanghai', 'Shenzhen', 'Tokyo'];
 const TAGS = ['php', 'ui', 'metal', 'ffi', 'layout', 'text', 'input', 'native'];
@@ -54,6 +55,8 @@ function view(Context $c, array &$s): void
                 $c->column(12, 6);
                   $c->muted('Shown while the section is open; the header toggles it.');
                   $c->row(0, 8); $c->badge('new'); $c->badge('3'); $c->badge('beta'); $c->end();
+                  // A check box over check boxes: mixed while some are checked; its click checks or clears them all.
+                  if ($c->changed($c->checkboxGroup('Notifications', function () use ($c, &$s) { $c->checkbox('Mail', $s['mail']); $c->checkbox('Calendar', $s['calendar']); }))) { $s['last'] = 'notifications ' . (int)$s['mail'] . (int)$s['calendar']; }
                 $c->end();
             }
         } elseif ($s['tab'] === 1) {
@@ -81,6 +84,8 @@ function view(Context $c, array &$s): void
             $c->row(0, 10)->align(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
         } else {
             $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
+            $crumbs = ['Macintosh HD', 'Users', 'developer', 'Documents', 'Widgets']; // a path: the items but the last are links
+            if ($c->changed($c->breadcrumbs(array_slice($crumbs, 0, $s['crumb'] + 1), $s['crumb']))) { $s['last'] = 'went to ' . $crumbs[$s['crumb']]; }
             $c->row(0, 10)->align(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($s['color'], $s['alpha']))) { $s['last'] = 'color ' . Context::hexOf($s['color'], $s['alpha']); } $c->muted(Context::hexOf($s['color'], $s['alpha'])); $c->end();
             $c->row(0, 10); $c->text('Rating'); if ($c->changed($c->rating($s['stars']))) { $s['last'] = "stars {$s['stars']}"; } $c->end();
             $c->row(0, 10); $c->text('Range'); if ($c->changed($c->rangeSlider($s['low'], $s['high'], 0, 100, 5, 240))) { $s['last'] = sprintf('range %d–%d', $s['low'], $s['high']); } $c->muted(sprintf('%d–%d', $s['low'], $s['high'])); $c->end();
@@ -95,6 +100,7 @@ function view(Context $c, array &$s): void
       $c->row(0, 8);
         if ($c->clicked($c->primaryButton('Save'))) { $c->toast('Saved'); $s['last'] = 'saved'; }
         if ($c->clicked($c->button('Delete…'))) { $s['asking'] = true; }
+        if ($c->clicked($c->button('Reset…'))) { $s['resetting'] = true; }
         $c->menuButton('Sort by', ['Name' => function () use (&$s) { $s['sort'] = 'Name'; $s['last'] = 'sort by name'; }, 'Date' => function () use (&$s) { $s['sort'] = 'Date'; $s['last'] = 'sort by date'; }]);
         $anchor = $c->button('Options');
         if ($c->clicked($anchor)) { $s['options'] = !$s['options']; }
@@ -120,6 +126,11 @@ function view(Context $c, array &$s): void
         $c->end();
     });
     if ($modal !== null && $c->changed($modal)) { $s['last'] = 'dismissed'; }
+    // An alert: the last button is the default, Enter clicks it, Escape chooses none.
+    switch ($c->alertDialog($s['resetting'], 'Reset all settings?', 'Every control goes back to how it started.', 'Cancel', 'Reset')) {
+        case 1: $s['last'] = 'reset'; $c->toast('Settings reset'); break;
+        case Context::ALERT_DISMISSED: $s['last'] = 'reset dismissed'; break;
+    }
 }
 
 App::setName('Widgets');

@@ -53,7 +53,7 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
 src/UI/            Node, Context (column/row/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
-                   select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/modal/popover/
+                   select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/single()/
@@ -160,7 +160,7 @@ client; virtualized lists with scroll bars, glides, keys and selection;
 text areas (wrapping, undo, caret blink); theme; images (paged atlas);
 rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
-sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
+sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
 events + state; child processes; channels, page window controls, preload;
 file drops; CLI + .app.

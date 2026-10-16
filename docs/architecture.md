@@ -460,6 +460,28 @@ fontSize − 1, the error in the danger color, which an input then
 borders in. A fieldset is a column, gap Space(3), under a bold legend,
 Space(3) below what is above it.
 
+`checkboxGroup($label, $fn)`, `breadcrumbs($items, &$chosen)` and
+`alertDialog(&$open, $title, $message, ...$buttons)` are the rest of
+mygo's feedback.go. The group is a column, gap Space(2): a check box
+head (`Node::$mixed` paints a 2-point bar in place of the check while
+some but not all are checked) over the boxes $fn builds, padded
+Space(6) at the start; `checkbox()` appends a reference to its value to
+`Context::$checks` while a group is being built, and the head's click
+sets them all. Breadcrumbs are a row, gap Space(0.5), of items padded
+Space(0.5) by Space(1.5) at the radius, at least Space(6) wide, marked
+`single` so they shrink together with an ellipsis as room runs short
+(`Layout` now stops a single-line shrink at the node's min width),
+Space(3) chevrons stroked 1.2 between them; the items but the last are
+focusable links, muted, surfaceHover under the pointer; the last is
+bold (mygo's weight 500). The alert is a `block`ing backdrop at 0.4
+holding a Space(75) panel (the window less Space(10) at most) padded
+Space(5), gap Space(3), radius Space(2.5), shadow (10, 30, 0.3): the
+title bold at fontSize + 1, the message muted, a Space(2) margin and
+the buttons justified to the end, gap Space(2), the last primary and
+focused as the alert opens; it returns the button's index the frame it
+is clicked, `ALERT_DISMISSED` (−2) the frame Escape closes it, −1
+otherwise, and a click outside does nothing.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above

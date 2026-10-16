@@ -125,7 +125,7 @@ final class Layout
             $over = $used + $n->gap * ($cnt - 1) - ($w - 2 * $px); $room = 0.0;
             foreach ($kids as $k) { if ($k->single) { $room += $k->mw; } }
             if ($over > 0 && $room > 0) {
-                foreach ($kids as $i => $k) { if ($k->single) { $shrink[$i] = min($k->mw, $over * $k->mw / $room); } }
+                foreach ($kids as $i => $k) { if ($k->single) { $shrink[$i] = min(max(0.0, $k->mw - $k->minW), $over * $k->mw / $room); } } // not below its min width
             }
         }
         foreach ($kids as $i => $k) {

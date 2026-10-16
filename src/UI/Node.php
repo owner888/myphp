@@ -72,6 +72,8 @@ final class Node
     public bool $focusable = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
+    /** A check box over a group of them, some but not all checked: a bar instead of a check (mygo's mixed state). */
+    public bool $mixed = false;
     public float $fraction = 0;
     public bool $held = false;
     /** Whether a control changed its value this frame: Context::changed(). */
