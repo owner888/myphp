@@ -207,6 +207,13 @@ final class ObjC
         return self::msg('p:', self::cls($cls), 'alloc');
     }
 
+    public static function point(float $x, float $y)
+    {
+        $p = self::$c->new('NSPoint');
+        $p->x = $x; $p->y = $y;
+        return $p;
+    }
+
     public static function rect(float $x, float $y, float $w, float $h)
     {
         $r = self::$c->new('NSRect');

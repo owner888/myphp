@@ -104,7 +104,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh desktop          # menus and dialogs
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
-./run.sh titlebar                      # a hidden title bar: the view draws its own under the traffic lights and drags the window by it
+./run.sh titlebar [hidden|hiddenInset] [x,y]   # a hidden title bar: the view draws its own under the traffic lights (moved to x,y) and drags the window by it
 ./run.sh files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
 php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
@@ -230,7 +230,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh desktop          # 菜单和对话框
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
-./run.sh titlebar                      # 隐藏标题栏：视图在红绿灯下自己画标题栏，拖它移动窗口
+./run.sh titlebar [hidden|hiddenInset] [x,y]   # 隐藏标题栏：视图在红绿灯下自己画标题栏（x,y 可挪红绿灯），拖它移动窗口
 ./run.sh files [目录]                   # 文件管理器：常用位置、路径面包屑、图标或可排序表格、Cmd+F 查找、空格预览、Delete… 移到废纸篓
 php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 和 files 例子
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时

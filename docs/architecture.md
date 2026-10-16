@@ -616,8 +616,16 @@ lands on no focusable, slider, scrolling container or link inside it
 goes to the window instead of the view — `performWindowDragWithEvent:`
 with the window's current event, or on a double click the zoom or
 minimize macOS's AppleActionOnDoubleClick asks for (mygo's StartDrag and
-TitleBarDoubleClicked). `examples/titlebar` draws such a bar.
-TrafficLightPosition is not ported.
+TitleBarDoubleClicked). `WindowOptions::$trafficLightPosition` [x, y]
+is mygo's TrafficLightPosition: `Window::layoutTrafficLights` puts the
+close button's top-left corner there and the other two after it at
+AppKit's own gap, in a title-bar container (the button's
+superview's superview) as high as the button plus twice y, so the bar
+leaves as much room below the lights as above; AppKit lays the bar out
+again on a resize, a title change and an appearance change, so it runs
+after each (the resize delegate, setTitle, themeChanged), and
+`titleBar()` then reports height = button + 2y and left = x + the zoom
+button's right edge. `examples/titlebar [style] [x,y]` draws such a bar.
 
 `UI\Selection` is mygo's Selection for a list, table or grid that lets
 the user choose several rows (`ListState::$selection`,

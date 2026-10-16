@@ -3,7 +3,7 @@
 // bar the view draws itself, which drags the window (double-click zooms),
 // keeping clear of the lights; a toggle moves to the inset style. In full
 // screen the lights hide and the bar's room goes to zero.
-// Run: ./run.sh titlebar [hidden|hiddenInset]
+// Run: ./run.sh titlebar [hidden|hiddenInset] [x,y]   — x,y moves the traffic lights (their top-left corner from the window's)
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
@@ -12,6 +12,7 @@ use MyPHP\UI\{Content, Context, Font, Node, TextState};
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $style = $argv[1] ?? 'hidden';
+$lights = isset($argv[2]) ? array_map('floatval', explode(',', $argv[2])) : null;
 $s = ['count' => 0, 'query' => new TextState];
 
 function view(Context $c, array &$s, string $style): void
@@ -37,12 +38,13 @@ function view(Context $c, array &$s, string $style): void
     $c->end();
 }
 
-App::whenReady(function () use (&$s, $style) {
+App::whenReady(function () use (&$s, $style, $lights) {
     new Window(new WindowOptions(
         title: 'MyPHP — title bar',
         width: 720,
         height: 420,
         titleBarStyle: $style,
+        trafficLightPosition: $lights,
         content: Content::view(function (Context $c) use (&$s, $style) { view($c, $s, $style); }),
     ));
 });

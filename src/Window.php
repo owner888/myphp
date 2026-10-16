@@ -18,6 +18,8 @@ final class Window
 {
     private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15;
     private bool $hiddenTitleBar = false;
+    /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
+    private ?array $trafficLights = null;
     private const BACKING_BUFFERED = 2;
     /** @var array<int, Window> open windows by NSWindow address */
     private static array $open = [];
@@ -81,6 +83,7 @@ final class Window
         if ($saved !== null) {
             ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
         }
+        $this->trafficLights = $o->trafficLightPosition;
         $this->setTitle($o->title ?? App::name());
 
         if ($o->content === null) {
@@ -241,9 +244,41 @@ final class Window
         }
         $zoom = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 2);
         $z = ObjC::msg('r:', $zoom, 'frame');
+        if ($this->trafficLights !== null) { // where layoutTrafficLights puts them, which may not have run yet
+            [$px, $py] = $this->trafficLights;
+            $c = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0), 'frame');
+            return ['height' => round($c->h + 2 * $py), 'left' => ceil($px + $z->x - $c->x + $z->w), 'right' => 0.0];
+        }
         $frame = ObjC::msg('r:', $this->ns, 'frame');
         $content = ObjC::msg('r:', $this->ns, 'contentLayoutRect');
         return ['height' => round($frame->h - $content->y - $content->h), 'left' => ceil($z->x + $z->w), 'right' => 0.0];
+    }
+
+    /**
+     * Puts the top-left corner of the close button where
+     * WindowOptions::$trafficLightPosition says, and the other buttons
+     * after it, in a title bar that leaves as much room below them as
+     * above, as mygo's layoutTrafficLights. AppKit lays the title bar out
+     * again when the window resizes, its title changes or the appearance
+     * changes, so this runs after each of them.
+     */
+    public function layoutTrafficLights(): void
+    {
+        if ($this->trafficLights === null || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) { return; }
+        [$px, $py] = $this->trafficLights;
+        $close = ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 0);
+        if ($close === null) { return; }
+        $container = ObjC::msg('p:', ObjC::msg('p:', $close, 'superview'), 'superview');
+        if ($container === null) { return; }
+        $b = ObjC::msg('r:', $close, 'frame');
+        $height = $b->h + 2 * $py;
+        $win = ObjC::msg('r:', $this->ns, 'frame');
+        $cf = ObjC::msg('r:', $container, 'frame');
+        ObjC::msg('v:r', $container, 'setFrame:', ObjC::rect($cf->x, $win->h - $height, $cf->w, $height));
+        $gap = ObjC::msg('r:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 1), 'frame')->x - $b->x;
+        for ($i = 0; $i < 3; $i++) {
+            ObjC::msg('v:q', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setFrameOrigin:', ObjC::point($px + $i * $gap, $py));
+        }
     }
 
     /** Moves the window with the mouse from the press on a drag handle (mygo's StartDrag), or on a double click zooms or minimizes it as macOS is set to. */
@@ -315,6 +350,7 @@ final class Window
             $fire = fn(string $event) => function ($self, $cmd, $note) use ($event) {
                 $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
                 if ($w !== null) {
+                    if ($event === 'resize') { $w->layoutTrafficLights(); }
                     $w->emit($event);
                     if ($event === 'resize' || $event === 'move') {
                         $w->captureState();
@@ -411,6 +447,7 @@ final class Window
     /** The theme changed: native UI clears to its background and redraws. */
     public function themeChanged(): void
     {
+        $this->layoutTrafficLights(); // AppKit lays the title bar out again with the appearance
         if ($this->page === null) {
             Metal::setClearColor($this->view, App::theme()->background);
             $this->update();
@@ -449,6 +486,7 @@ final class Window
     public function setTitle(string $title): void
     {
         ObjC::msg('v:p', $this->ns, 'setTitle:', ObjC::str($title));
+        $this->layoutTrafficLights();
     }
 
     /** @return array{0: int, 1: int} content size in points */

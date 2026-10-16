@@ -31,5 +31,7 @@ final class WindowOptions
         public string $stateKey = '',
         /** 'default', or 'hidden' / 'hiddenInset' (mygo's TitleBarStyle): the title bar hides but the traffic lights stay, over the view, which draws its own title bar under them (Context::titleBar, Node::dragWindow); hiddenInset lowers the lights as a toolbar would. */
         public string $titleBarStyle = 'default',
+        /** Moves the window controls of a window with a hidden title bar (mygo's TrafficLightPosition): [x, y] points from the window's top-left corner to the close button's; the bar leaves as much room below them as above. */
+        public ?array $trafficLightPosition = null,
     ) {}
 }
