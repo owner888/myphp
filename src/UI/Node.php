@@ -44,6 +44,7 @@ final class Node
     /** A one-point border around this colored node (a plain button, a select, a field), in $borderColor or the theme's border color. */
     public bool $bordered = false;
     public ?int $borderColor = null;
+    public float $borderWidth = 1.0;
     /** A soft shadow under this container: [dy, blur, alpha], or null. */
     public ?array $shadow = null;
     /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
@@ -188,9 +189,9 @@ final class Node
     }
 
     /** Draws a one-point border around this colored container, in $color or the theme's border color. */
-    public function border(?int $color = null): static
+    public function border(?int $color = null, float $width = 1.0): static
     {
-        $this->bordered = true; $this->borderColor = $color;
+        $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
         return $this;
     }
 

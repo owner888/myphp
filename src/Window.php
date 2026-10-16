@@ -354,7 +354,7 @@ final class Window
             return;
         }
         $this->cursorShown = $cursor;
-        ObjC::msg('v:', ObjC::msg('p:', ObjC::cls('NSCursor'), match ($cursor) { 'pointer' => 'pointingHandCursor', 'ibeam' => 'IBeamCursor', 'resizeEW' => 'resizeLeftRightCursor', 'resizeNS' => 'resizeUpDownCursor', default => 'arrowCursor' }), 'set');
+        ObjC::msg('v:', ObjC::msg('p:', ObjC::cls('NSCursor'), match ($cursor) { 'pointer' => 'pointingHandCursor', 'ibeam' => 'IBeamCursor', 'resizeEW' => 'resizeLeftRightCursor', 'resizeNS' => 'resizeUpDownCursor', 'crosshair' => 'crosshairCursor', default => 'arrowCursor' }), 'set');
     }
 
     /** The theme changed: native UI clears to its background and redraws. */

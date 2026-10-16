@@ -85,7 +85,9 @@ The quad kinds, by `params.y`: 0 a rounded rect, 1 a glyph, 2 an image,
 (the band inside the edge), 5 glass, 6 a vertical alpha gradient, 7 a
 backdrop blur, 8 the hard scroll edge, 9 a line: a capsule between
 opposite corners of its bounding rect, inset by half the thickness,
-`u, v` the signs of its direction (`DisplayList::line`). `Node::draw`
+`u, v` the signs of its direction (`DisplayList::line`), 10 and 11 a
+gradient between two colors across or down the quad (the color picker).
+`Node::draw`
 hands a node's face to a closure given the list, the laid-out node and
 the theme, painted over the node's own face and under its children
 (mygo's Draw): the search field's magnifying glass is a ring and a line
@@ -397,6 +399,32 @@ system inserted while a control that is no field had the focus, taken
 once — set it as mygo's rules do: a second digit makes two, or starts
 anew past the top, and two digits (or one that can't begin two) move
 on to the minutes; A or P at the third segment chooses the half.
+
+`colorPicker(&$rgb, &$alpha)` and `colorWell(&$rgb, &$alpha)` port
+mygo's `colorpicker.go` on an int rgb and a float alpha, the color kept
+as hue, saturation and value in `Runtime::local` (a gray has no hue of
+its own; `toHSV`/`fromHSV`/`hexOf`/`parseHex` are mygo's functions).
+The picker is a Space(60)-wide column, gap Space(2.5): a Space(40)-high
+focusable square (white→hue across, transparent→black down, the choice
+ringed white 2 at Space(3.5) and black 0.3 outside, a crosshair cursor;
+a press or drag — `dragged` binds the press — sets saturation and value
+from the pointer, the arrows by a hundredth), two `channelSlider`s
+(`slider` nodes Space(4) high with a `draw` of their own, which the
+painter then uses instead of its slider: a track the closure paints in a
+clip, a Space(3) white round knob with a 0.3 shadow of blur 3 that grows
+a fifth while held, ringed when focused) for the hue (six gradients
+between the pure hues) and the opacity (checkers under a gradient of the
+color), a row of the color in a Space(7) bordered box over checkers and
+an `input` of its hex (a parsable change sets the color, keeping the
+text as typed; blur restores the hex), and twelve swatches in two rows
+of six (`row`s with grow, Space(5) high, bordered 2 in the text color
+when chosen — `Node::border($color, $width)`). The well is a focusable
+bordered surface row padded Space(1) around a Space(9) by Space(5) swatch
+at radius Space(1) over checkers, opening a `popover` padded to Space(3)
+with the picker. Gradients are quad kinds 10 (across) and 11 (down),
+`DisplayList::gradient2`: the quad's color at one end, the other's rgb
+packed into u (exact in a float's 24-bit mantissa) and its alpha in v.
+`checkers` is rects, Space(1.5) or Space(1.25) squares.
 
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root

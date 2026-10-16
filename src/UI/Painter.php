@@ -38,7 +38,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::SLIDER) {
-            self::paintSlider($n, $list, $t);
+            if ($n->draw !== null) { ($n->draw)($list, $n, $t); } else { self::paintSlider($n, $list, $t); } // a draw of its own (a color picker's channel) paints the whole slider
             return;
         }
         if ($n->kind === Node::PROGRESS) { // a bar as thick as the node was made (a column stretches the node), in the accent or the color given (a meter's level)
@@ -84,8 +84,9 @@ final class Painter
         } elseif ($n->color !== null) {
             $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => $n->radius };
             if ($n->bordered) { // a bordered face: a plain button, a select, a field's box
+                $bw = $n->borderWidth;
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
-                $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color, 1.0, $radius - 1);
+                $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color, 1.0, $radius - $bw);
             } else {
                 if ($n->shadow !== null) {
                     $list->shadow($n->x, $n->y, $n->w, $n->h, 0x000000, $n->shadow[2], $radius, $n->shadow[1], 0, $n->shadow[0]);

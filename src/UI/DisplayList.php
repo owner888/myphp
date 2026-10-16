@@ -15,7 +15,9 @@ use RuntimeException;
  * Liquid Glass (u = style, color = tint), kind 6 a vertical alpha gradient
  * (color.a at the top, u at the bottom), kind 7 a backdrop blur and 8 the
  * hard scroll edge's (mixed with the color by its alpha, shown from u at
- * the top to v at the bottom). Kinds 5, 7 and 8 read what was drawn before
+ * the top to v at the bottom), kinds 10 and 11 a gradient between two
+ * colors across (10) or down (11) the quad: the color, and u the other's
+ * rgb packed as a float, v its alpha. Kinds 5, 7 and 8 read what was drawn before
  * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
@@ -85,6 +87,12 @@ final class DisplayList
     public function gradient(float $x, float $y, float $w, float $h, int $rgb, float $alphaTop, float $alphaBottom, float $radius = 0.0): void
     {
         $this->quad($x, $y, $w, $h, $rgb, $alphaTop, $radius, 6.0, $alphaBottom);
+    }
+
+    /** A gradient from $from at $fromAlpha to $to at $toAlpha, across the quad, or down it when $vertical. */
+    public function gradient2(float $x, float $y, float $w, float $h, int $from, float $fromAlpha, int $to, float $toAlpha, bool $vertical = false, float $radius = 0.0): void
+    {
+        $this->quad($x, $y, $w, $h, $from, $fromAlpha, $radius, $vertical ? 11.0 : 10.0, (float)($to & 0xffffff), $toAlpha);
     }
 
     /**

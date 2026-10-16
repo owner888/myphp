@@ -1147,6 +1147,214 @@ final class Context
         return $f;
     }
 
+    /** mygo's swatches: the colors a picker offers, by name. */
+    private const SWATCHES = ['red' => 0xef4444, 'orange' => 0xf97316, 'yellow' => 0xeab308, 'green' => 0x22c55e, 'teal' => 0x14b8a6, 'blue' => 0x3b82f6,
+        'indigo' => 0x6366f1, 'purple' => 0xa855f7, 'pink' => 0xec4899, 'brown' => 0x92400e, 'gray' => 0x71717a, 'black' => 0x000000];
+
+    /**
+     * A picker of $rgb at $alpha, as mygo's ColorPicker after AppKit's
+     * color panel: a square choosing the saturation, across, and the
+     * brightness, up, of the hue its slider chooses below it, a slider of
+     * opacity, the color in hex, which the user edits, and swatches of
+     * common colors. The arrows move across the square while it has the
+     * focus. changed() reports a new color.
+     */
+    public function colorPicker(int &$rgb, float &$alpha): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $panel = $this->column(0, $t->space(2.5))->size($t->space(60), 0);
+        $make = fn() => (object)['hsv' => self::toHSV($rgb), 'last' => [$rgb, $alpha], 'hex' => new TextState(self::hexOf($rgb, $alpha)), 'hue' => 0.0, 'opacity' => 0.0];
+        $st = $rt?->local($panel->id, $make) ?? $make();
+        if ($st->last !== [$rgb, $alpha]) { // the app set another color
+            $st->hsv = self::toHSV($rgb); $st->last = [$rgb, $alpha]; $st->hex->text = self::hexOf($rgb, $alpha);
+        }
+        $set = function (float $h, float $sat, float $v, float $a) use (&$rgb, &$alpha, $st, $panel) {
+            $sat = max(0.0, min(1.0, $sat)); $v = max(0.0, min(1.0, $v)); $a = max(0.0, min(1.0, $a));
+            $st->hsv = [$h, $sat, $v];
+            $next = self::fromHSV($h, $sat, $v);
+            if ($next !== $rgb || $a !== $alpha) { $rgb = $next; $alpha = $a; $panel->changed = true; }
+            $st->last = [$rgb, $alpha]; $st->hex->text = self::hexOf($rgb, $alpha);
+        };
+        [$h, $sat, $v] = $st->hsv;
+          // The square of saturation and brightness.
+          $sq = $this->box(0, $t->space(40), 0)->round($t->radius)->focusable()->cursor('crosshair'); $sq->color = null; $sq->ownRing = true;
+          if ($rt !== null) {
+              if ($rt->dragged($sq->id) !== null && ($r = $rt->rectOf($sq->id)) !== null && $r[2] > 0 && $r[3] > 0) {
+                  $set($h, ($rt->input->mouseX - $r[0]) / $r[2], 1 - ($rt->input->mouseY - $r[1]) / $r[3], $alpha);
+              }
+              if ($rt->focus === $sq->id) {
+                  if ($this->shortcut(Key::RIGHT)) { $set($h, $sat + 0.01, $v, $alpha); }
+                  elseif ($this->shortcut(Key::LEFT)) { $set($h, $sat - 0.01, $v, $alpha); }
+                  elseif ($this->shortcut(Key::UP)) { $set($h, $sat, $v + 0.01, $alpha); }
+                  elseif ($this->shortcut(Key::DOWN)) { $set($h, $sat, $v - 0.01, $alpha); }
+              }
+          }
+          [$h, $sat, $v] = $st->hsv;
+          $hue = self::fromHSV($h, 1, 1);
+          $ring = $rt?->focusVisible($sq->id) ?? false;
+          $sq->draw(function (DisplayList $list, Node $a, Theme $t) use ($hue, $sat, $v, $ring) {
+              $list->gradient2($a->x, $a->y, $a->w, $a->h, 0xffffff, 1.0, $hue, 1.0, false, $t->radius);
+              $list->gradient2($a->x, $a->y, $a->w, $a->h, 0x000000, 0.0, 0x000000, 1.0, true, $t->radius);
+              $cx = $a->x + $a->w * $sat; $cy = $a->y + $a->h * (1 - $v); $d = $t->space(3.5); // the color chosen, ringed
+              $list->ring($cx - $d / 2, $cy - $d / 2, $d, $d, 0xffffff, 1.0, $d / 2, 2.0);
+              $list->ring($cx - $d / 2 - 1, $cy - $d / 2 - 1, $d + 2, $d + 2, 0x000000, 0.3, $d / 2 + 1, 1.0);
+              if ($ring) { Painter::focusRing($list, $a->x, $a->y, $a->w, $a->h, $t->radius, $t); }
+          });
+          // The hue, and the opacity.
+          $st->hue = $h; $st->opacity = $alpha;
+          $hs = $this->channelSlider($st->hue, 360, function (DisplayList $list, float $x, float $y, float $w, float $h) {
+              $hues = [0xff0000, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff, 0xff0000];
+              $sw = $w / 6;
+              for ($i = 0; $i < 6; $i++) { $list->gradient2($x + $sw * $i, $y, $sw + 0.5, $h, $hues[$i], 1.0, $hues[$i + 1], 1.0); }
+          });
+          if ($hs->changed) { $set($st->hue, $sat, $v, $alpha); }
+          $opaque = self::fromHSV($h, $sat, $v);
+          $as = $this->channelSlider($st->opacity, 1, function (DisplayList $list, float $x, float $y, float $w, float $h) use ($opaque, $t) {
+              self::checkers($list, $x, $y, $w, $h, $t->space(1.5));
+              $list->gradient2($x, $y, $w, $h, $opaque, 0.0, $opaque, 1.0);
+          });
+          if ($as->changed) { $set($h, $sat, $v, $st->opacity); }
+          // The color, and its hex.
+          $this->row(0, $t->space(2))->align(Node::CENTER);
+            $now = $rgb; $nowA = $alpha;
+            $well = $this->box($t->space(7), $t->space(7), 0)->round($t->radius)->border(); $well->color = $t->surface;
+            $well->draw(function (DisplayList $list, Node $a, Theme $t) use ($now, $nowA) {
+                $list->pushClip($a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2);
+                self::checkers($list, $a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2, $t->space(1.5));
+                $list->rect($a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2, $now, $nowA, $t->radius - 1);
+                $list->popClip();
+            });
+            $in = $this->input($st->hex, '', 0);
+            $typed = $st->hex->seen !== null && $st->hex->seen !== $st->hex->text; $st->hex->seen = $st->hex->text;
+            if ($typed && ($parsed = self::parseHex($st->hex->text)) !== null) {
+                $hex = $st->hex->text;
+                [$ph, $ps, $pv] = self::toHSV($parsed[0]); $set($ph, $ps, $pv, $parsed[1]);
+                $st->hex->text = $hex; $st->hex->seen = $hex; // as typed
+            }
+            if (!$in->focused && $st->hex->text !== self::hexOf($rgb, $alpha)) { $st->hex->text = self::hexOf($rgb, $alpha); $st->hex->seen = $st->hex->text; }
+          $this->end();
+          // Swatches: six to a row, Space(1.5) apart, Space(5) high, the chosen bordered 2 in the text color.
+          $i = 0;
+          foreach (array_chunk(self::SWATCHES, 6, true) as $chunk) {
+              $this->row(0, $t->space(1.5));
+              foreach ($chunk as $name => $color) {
+                  $b = $this->key("sw$i")->row(0, 0, 1, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name); $i++;
+                  if ($rgb === $color && $alpha === 1.0) { $b->border($t->text, 2.0); }
+                  $this->end();
+                  if ($this->clicked($b)) { [$ph, $ps, $pv] = self::toHSV($color); $set($ph, $ps, $pv, 1.0); }
+              }
+              $this->end();
+          }
+        $this->end();
+        return $panel;
+    }
+
+    /** mygo's channelSlider: a slider of a picker's channel from 0 to $max, Space(4) high, padded by half its Space(3) knob, whose track $track paints in the rect it is given. */
+    private function channelSlider(float &$v, float $max, Closure $track): Node
+    {
+        $t = $this->theme;
+        $s = $this->slider($v, 0, $max, 0);
+        $s->grow = 1; $s->fh = $t->space(4); $s->ownRing = true;
+        $frac = $max > 0 ? $v / $max : 0.0; $held = $s->held; $ring = $this->runtime?->focusVisible($s->id) ?? false;
+        $s->draw(function (DisplayList $list, Node $n, Theme $t) use ($track, $frac, $held, $ring) {
+            $kw = $t->space(3);
+            $bx = $n->x; $by = $n->y + $t->space(0.5); $bw = $n->w; $bh = $n->h - $t->space(1);
+            $list->pushClip($bx, $by, $bw, $bh); $track($list, $bx, $by, $bw, $bh); $list->popClip(); // the track, in a capsule's clip were there one; the gradients fill the rect
+            $x = $n->x + $kw / 2 + ($n->w - $kw) * $frac;
+            $g = 1 + ($held ? 0.2 : 0.0); $w = $kw * $g; $h = $n->h * $g; $kx = $x - $w / 2; $ky = $n->y + $n->h / 2 - $h / 2;
+            $list->shadow($kx, $ky, $w, $h, 0x000000, 0.3, $w / 2, 3, 0, 1);
+            $list->rect($kx, $ky, $w, $h, 0xffffff, 1.0, $w / 2);
+            if ($ring) { Painter::focusRing($list, $kx, $ky, $w, $h, $w / 2, $t); }
+        });
+        return $s;
+    }
+
+    /** mygo's checkers: the gray squares, $size wide, that show transparency, over white. */
+    public static function checkers(DisplayList $list, float $x, float $y, float $w, float $h, float $size): void
+    {
+        $list->rect($x, $y, $w, $h, 0xffffff);
+        for ($yy = $y, $row = 0; $yy < $y + $h; $yy += $size, $row++) {
+            for ($xx = $x, $col = 0; $xx < $x + $w; $xx += $size, $col++) {
+                if (($row + $col) % 2 === 0) { $list->rect($xx, $yy, min($size, $x + $w - $xx), min($size, $y + $h - $yy), 0xcccccc); }
+            }
+        }
+    }
+
+    /**
+     * A swatch of $rgb at $alpha that opens a colorPicker below it, as
+     * mygo's ColorWell after AppKit's: a click, Enter or Space opens it,
+     * Escape or a click outside closes it. changed() reports a new color.
+     */
+    public function colorWell(int &$rgb, float &$alpha): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1), $t->space(1))->round($t->radius)->border()->focusable();
+        if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
+          $now = $rgb; $nowA = $alpha;
+          $sw = $this->box($t->space(9), $t->space(5), 0)->round($t->space(1)); $sw->color = null;
+          $sw->draw(function (DisplayList $list, Node $a, Theme $t) use ($now, $nowA) {
+              $list->pushClip($a->x, $a->y, $a->w, $a->h);
+              self::checkers($list, $a->x, $a->y, $a->w, $a->h, $t->space(1.25));
+              $list->rect($a->x, $a->y, $a->w, $a->h, $now, $nowA, $t->space(1));
+              $list->popClip();
+          });
+        $this->end();
+        $make = fn() => (object)['open' => false];
+        $local = $rt?->local($b->id, $make) ?? $make();
+        if ($this->clicked($b)) { $local->open = !$local->open; }
+        $this->popover($b, $local->open, function () use (&$rgb, &$alpha, $b, $t) {
+            $this->column(0, 0)->padding($t->space(3) - $t->space(1), $t->space(3) - $t->space(1)); // the panel's Space(1) and this: Padding(Space(3))
+              if ($this->colorPicker($rgb, $alpha)->changed) { $b->changed = true; }
+            $this->end();
+        });
+        return $b;
+    }
+
+    /** The hue (0..360), saturation and value (0..1) of $rgb, mygo's toHSVA. */
+    public static function toHSV(int $rgb): array
+    {
+        $r = (($rgb >> 16) & 255) / 255; $g = (($rgb >> 8) & 255) / 255; $b = ($rgb & 255) / 255;
+        $hi = max($r, $g, $b); $lo = min($r, $g, $b); $d = $hi - $lo;
+        $h = 0.0;
+        if ($d == 0) { }
+        elseif ($hi == $r) { $h = 60 * fmod(($g - $b) / $d, 6); }
+        elseif ($hi == $g) { $h = 60 * (($b - $r) / $d + 2); }
+        else { $h = 60 * (($r - $g) / $d + 4); }
+        if ($h < 0) { $h += 360; }
+        return [$h, $hi > 0 ? $d / $hi : 0.0, $hi];
+    }
+
+    /** The color of a hue, saturation and value, mygo's hsva.color. */
+    public static function fromHSV(float $h, float $s, float $v): int
+    {
+        $c = $v * $s; $hh = fmod($h, 360) / 60; $y = $c * (1 - abs(fmod($hh, 2) - 1));
+        [$r, $g, $b] = match (true) { $hh < 1 => [$c, $y, 0], $hh < 2 => [$y, $c, 0], $hh < 3 => [0, $c, $y], $hh < 4 => [0, $y, $c], $hh < 5 => [$y, 0, $c], default => [$c, 0, $y] };
+        $m = $v - $c;
+        $byte = fn(float $x) => (int)round(max(0, min(1, $x)) * 255);
+        return ($byte($r + $m) << 16) | ($byte($g + $m) << 8) | $byte($b + $m);
+    }
+
+    /** $rgb as #rrggbb, or #rrggbbaa when not opaque. */
+    public static function hexOf(int $rgb, float $alpha): string
+    {
+        return $alpha >= 1.0 ? sprintf('#%06x', $rgb) : sprintf('#%06x%02x', $rgb, (int)round($alpha * 255));
+    }
+
+    /** The [rgb, alpha] of #rgb, #rrggbb or #rrggbbaa (the # optional), or null. */
+    public static function parseHex(string $s): ?array
+    {
+        $s = ltrim(trim($s), '#');
+        if (!ctype_xdigit($s)) { return null; }
+        return match (strlen($s)) {
+            3 => [(int)hexdec($s[0] . $s[0] . $s[1] . $s[1] . $s[2] . $s[2]), 1.0],
+            6 => [(int)hexdec($s), 1.0],
+            8 => [(int)hexdec(substr($s, 0, 6)), hexdec(substr($s, 6)) / 255],
+            default => null,
+        };
+    }
+
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */
     public static function matching(array $options, string $query): array
     {
