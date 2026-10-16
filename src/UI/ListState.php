@@ -20,8 +20,12 @@ final class ListState implements Scrollable
 {
     public int $row = 0;
     public float $offset = 0;
-    /** @var array<int, float> measured heights by row */
-    public array $heights = [];
+    /** @var array<int, float> the measured heights that differ from the first one measured ($default), by row: a list of rows all one height stores none; forgetHeights() clears them */
+    private array $heights = [];
+    /** The first height measured, the height of every measured row not in $heights; the rows measured, a bit each (a million rows: 125 KB). */
+    private ?float $default = null;
+    private string $known = '';
+    private int $measuredCount = 0;
     /** Average of measured heights, the estimate for the rest. */
     public float $estimate = 40;
     /** Set by Context::list and Layout each frame. */
@@ -69,16 +73,33 @@ final class ListState implements Scrollable
 
     public function height(int $row): float
     {
-        return $this->heights[$row] ?? $this->estimate;
+        return $this->heights[$row] ?? ($this->isMeasured($row) ? $this->default : $this->estimate);
     }
 
+    /** Row $row was laid out $h high: known from now on; the estimate for the rest is the average of what was measured. */
     public function measured(int $row, float $h): void
     {
-        if (!isset($this->heights[$row])) {
-            $n = count($this->heights);
-            $this->estimate = ($this->estimate * $n + $h) / ($n + 1);
+        if (!$this->isMeasured($row)) {
+            $this->estimate = ($this->estimate * $this->measuredCount + $h) / ($this->measuredCount + 1);
+            $this->measuredCount++;
+            $byte = $row >> 3;
+            if ($byte >= strlen($this->known)) { $this->known .= str_repeat("\0", $byte + 1 - strlen($this->known)); }
+            $this->known[$byte] = chr(ord($this->known[$byte]) | (1 << ($row & 7)));
         }
-        $this->heights[$row] = $h;
+        $this->default ??= $h;
+        if ($h === $this->default) { unset($this->heights[$row]); } else { $this->heights[$row] = $h; }
+    }
+
+    /** Forgets every height measured: the rows changed under the list (a log reopened). */
+    public function forgetHeights(): void
+    {
+        $this->heights = []; $this->known = ''; $this->default = null; $this->measuredCount = 0;
+    }
+
+    private function isMeasured(int $row): bool
+    {
+        $byte = $row >> 3;
+        return $byte < strlen($this->known) && (ord($this->known[$byte]) & (1 << ($row & 7))) !== 0;
     }
 
     public function scrollBy(float $dy): void

@@ -1076,6 +1076,19 @@ list is clipped to the window before the paint, so what lies outside
 costs nothing. What the benchmark cannot time is the Mac's half:
 `MYPHP_STATS=1 ./run.sh native 1000000` prints it a second at a time.
 
+The Mac's half, measured by the developer (`MYPHP_STATS=1 ./run.sh
+native 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
+frame, rising to 3–4 ms as faster scrolling shows more never-seen
+strings a second (CoreText shapes each new line once; the line cache
+sweeps by age and stays near 300–2000 lines). What that run also showed
+was memory climbing 2 MB a second: `ListState` kept every measured row
+height in a PHP array (some 32 bytes a row, a million rows scrolled
+through would be 32 MB). It now keeps the first height measured as the
+default, a bit per row measured (mygo's blocks keep a float32 a row;
+a million rows are 125 KB here) and an entry only for rows of another
+height, so a list of rows all one height stores nothing per row;
+`forgetHeights()` drops them when the rows change under the list.
+
 ## Open items
 
 - The glyph atlas starts over when full and is re-rasterized whole; an

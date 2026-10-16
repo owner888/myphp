@@ -56,7 +56,7 @@ final class Log
         $this->counts = ['ERROR' => 0, 'WARN' => 0];
         $this->list->row = 0;
         $this->list->offset = 0;
-        $this->list->heights = [];
+        $this->list->forgetHeights();
         $this->list->selected = -1;
         $this->poll();
         $this->list->count = count($this->shown);
