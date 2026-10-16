@@ -537,8 +537,11 @@ or, when the grid's size is not set, as a grid in a row, the largest
 share any item asks — and fit tracks sharing it when there are no fr
 ones), the rows beyond fitting their content. A child is stretched
 across its area, or placed down it as its `alignSelf` says. The color
-picker's swatches are such a grid of six fr columns. Not ported:
-justifyItems and automatic margins.
+picker's swatches are such a grid of six fr columns. `justifyItems()` on
+the grid and `justifySelf()` on a child place a child in its cell across
+(START, CENTER, END; STRETCH the default) as `alignSelf` does down —
+mygo's gridJustify; a text counts as having no size of its own, so it
+stretches too. Not ported: automatic margins.
 
 Paths and icons follow mygo's path.go and svg.go: `UI\Path` holds
 moveTo/lineTo/quadTo/cubeTo/close (and `circle`, four cubic arcs) in
@@ -1183,8 +1186,8 @@ and the nodes with local state.
   their pixels are not mipmapped (mygo's `smaller`): they alias.
 - Text glyphs still come from CoreText: the SVG renderer could draw
   fonts' outlines on Linux and Windows once a font parser exists.
-- `grid` has no JustifyItems or automatic margins: a child fills its area
-  across, and its `alignSelf` places it down.
+- `grid` has no automatic margins (nodes have no margins here); a child
+  fills its area across unless `justifyItems`/`justifySelf` place it.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

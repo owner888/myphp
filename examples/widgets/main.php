@@ -7,7 +7,6 @@
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
-use Closure, DateTimeImmutable;
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, ListState, Node, Selection, SVG, TextState};
 

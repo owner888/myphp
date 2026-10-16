@@ -16,6 +16,8 @@ final class Node
     public const AUTO = -1, START = 0, CENTER = 1, END = 2, STRETCH = 3;
     /** How this container places its children across its axis (align) and along it when none grows (justify), and how it sits across its parent's (self). */
     public int $align = self::AUTO, $self = self::AUTO, $justify = self::START;
+    /** How a grid places its children in their cells across (Node::justifyItems), and how this child is placed over that (justifySelf): STRETCH unless said. */
+    public int $justifyItems = self::AUTO, $justifySelf = self::AUTO;
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
     public int $id = 0;
@@ -335,6 +337,20 @@ final class Node
     }
 
     /** Places this node across its parent's axis, over the parent's align() (mygo's AlignSelf). */
+    /** Places the children of a grid in their cells horizontally: STRETCH (the default), START, CENTER or END, as mygo's JustifyItems. */
+    public function justifyItems(int $align): static
+    {
+        $this->justifyItems = $align;
+        return $this;
+    }
+
+    /** Places this node in its grid cell horizontally, overriding its grid's justifyItems (mygo's JustifySelf). */
+    public function justifySelf(int $align): static
+    {
+        $this->justifySelf = $align;
+        return $this;
+    }
+
     public function alignSelf(int $align): static
     {
         $this->self = $align;

@@ -116,6 +116,7 @@ final class Metal
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
+        constexpr sampler s(filter::linear);
         if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color
             float4 c = images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             if (v.kind > 11.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
@@ -163,7 +164,6 @@ final class Metal
             return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * (1.0 - smoothstep(-0.5, 0.5, d)));
         }
         if (v.kind > 4.5) { return glass(v, u, backdrop); }
-        constexpr sampler s(filter::linear);
         if (v.kind > 3.5) {   // a ring: the band between the rect's edge and thickness inside it
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;

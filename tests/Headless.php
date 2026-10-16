@@ -232,7 +232,8 @@ final class Headless
         $path = __DIR__ . "/../examples/$name/main.php";
         $src = file_get_contents($path) ?: throw new \RuntimeException($path);
         $src = substr($src, 0, strpos($src, $stop) ?: throw new \RuntimeException($stop));
-        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . ucfirst($name) . ';', var_export(dirname($path), true)], $src);
+        // In a namespace of its own, the global classes the examples use (functions and constants fall back on their own) must be named.
+        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . ucfirst($name) . '; use Closure, DateTimeImmutable;', var_export(dirname($path), true)], $src);
         $src = preg_replace('/^const (\w+) = (.*);$/m', 'defined(\'$1\') || define(\'$1\', $2);', $src);
         $argv = [$path, ...$args];
         (static function () use ($src, $argv, &$state) { eval('?>' . $src); $state = $s ?? $files; })();

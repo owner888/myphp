@@ -74,7 +74,7 @@ final class Layout
         $cnt = count($kids);
         if ($cnt === 0) return;
         $px = $n->padX(); $py = $n->padY();
-        if ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched across its area, or placed down it as its alignSelf says
+        if ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched over its area or placed in it as justifyItems/justifySelf (across) and alignSelf (down) say
             [$cols, $rows, $items] = self::gridTracks($n, $w - 2 * $px, $h - 2 * $py);
             $colAt = []; $rowAt = []; // where each track starts
             for ($c = 0, $p = $x + $px; $c < count($cols); $c++) { $colAt[$c] = $p; $p += $cols[$c] + $n->gap; }
@@ -83,8 +83,10 @@ final class Layout
                 $aw = $n->gap * ($cs - 1); for ($j = $c; $j < $c + $cs; $j++) { $aw += $cols[$j]; }
                 $ah = $n->gap * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
                 $a = $k->self === Node::AUTO ? Node::STRETCH : $k->self;
+                $j = $k->justifySelf !== Node::AUTO ? $k->justifySelf : ($n->justifyItems !== Node::AUTO ? $n->justifyItems : Node::STRETCH); // mygo's gridJustify
                 $kh = $a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
-                self::arrange($k, $colAt[$c], $rowAt[$r] + self::across($a, $ah, $kh), $aw, $kh);
+                $kw = $j === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT) ? $aw : $k->mw; // a text's fw is what it measured, not a size given
+                self::arrange($k, $colAt[$c] + self::across($j, $aw, $kw), $rowAt[$r] + self::across($a, $ah, $kh), $kw, $kh);
             }
             return;
         }

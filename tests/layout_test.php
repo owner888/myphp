@@ -57,3 +57,15 @@ $h = new Headless(function (Context $c) use (&$n) {
 $h->frame(); $r = fn($k) => $h->rect($k);
 same([300.0, 300.0], [$r($n['a'])[2], $r($n['b'])[2]], 'the long text does not widen its column: half each');
 same([150.0, 150.0], [$r($n['c'])[2], $r($n['d'])[2]], 'the two of basis 0 share it equally');
+
+// A grid's justifyItems places its children in their cells across; justifySelf overrides it; stretch is the default.
+$n = [];
+$h = new Headless(function (Context $c) use (&$n) {
+    $n['g'] = $c->grid([Track::fixed(100), Track::fixed(100)], 0)->justifyItems(Node::CENTER);
+      $n['a'] = $c->text('ab'); $n['b'] = $c->text('cd')->justifySelf(Node::END); $n['c'] = $c->text('ef')->justifySelf(Node::STRETCH); $n['d'] = $c->text('gh')->justifySelf(Node::START);
+    $c->end();
+}, 300, 100);
+$h->frame(); $r = fn($k) => $h->rect($k);
+same([43.0, 14.0], [$r($n['a'])[0], $r($n['a'])[2]], 'centered in a 100 column: its own width');
+same(186.0, $r($n['b'])[0], 'justifySelf end: at the right of the second column');
+same([0.0, 100.0], [$r($n['c'])[0], $r($n['c'])[2]], 'justifySelf stretch fills the cell'); same(100.0, $r($n['d'])[0], 'start');
