@@ -590,6 +590,13 @@ them (mygo's dragScroll, `Runtime::animate` keeping the frames coming).
 The release calls $reorder with the rows and the row they go before,
 unless a single row would land where it is, and is no click.
 
+`GridState::$reorder` does the same for a grid (`reorderItems`, mygo's
+GridState.reorder and dropAt): the drop goes before the cell under the
+pointer, or after it past its middle, the nearest cell in that row when
+between cells, past the last item below them; the line is vertical,
+2 points wide, inset 4 at the top and bottom of the cell, in the gap
+beside it. `dragGhost` and `dragScroll` are shared with the list.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -1023,8 +1030,6 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   sheets or text (convert text to paths); mygo reads all but text.
 - `grid` places children row by row only: mygo's ColumnStart/RowStart,
   spans and JustifyItems are not ported.
-- `gridView`'s Reorder (dragging items to another place) is not ported;
-  the list's is.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

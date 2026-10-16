@@ -272,27 +272,37 @@ final class Context
             $dl->rect($x + 4, $y - 1, $l->w - 2 * $l->padX() - 4, 2, $t->accent, 1.0, 1.0);
             $dl->rect($x, $y - 4, 8, 8, $t->accent, 1.0, 4.0);
         });
-        $lr = $rt->rectOf($list->id);
-        if ($lr !== null) { // near an edge, the list scrolls, faster nearer to it (mygo's dragScroll)
-            $edge = 32; $dy = 0.0;
-            if ($y - $lr[1] < $edge) { $dy = -($edge - ($y - $lr[1])) / 2; } elseif ($lr[1] + $lr[3] - $y < $edge) { $dy = ($edge - ($lr[1] + $lr[3] - $y)) / 2; }
-            if ($dy != 0) { $state->scrollBy($dy); $rt->animate(); }
-        }
-        // A copy of the row pressed under the pointer, at three quarters, with how many go with it; at the root, over everything.
+        $this->dragScroll($list, $state, $y);
         $k = $drag['row'] - $first;
-        if (!isset($list->kids[$k])) { return; }
-        $ghost = self::copy($list->kids[$k]);
+        if (isset($list->kids[$k])) { $this->dragGhost($list->kids[$k], count($drag['rows']), $x - $drag['ox'], $y - $drag['oy']); }
+    }
+
+    /** A copy of $src under the pointer at three quarters, at ($gx, $gy), with an accent pill of how many go with it when more than one; at the root, over everything (mygo's paintDrag). */
+    private function dragGhost(Node $src, int $count, float $gx, float $gy): void
+    {
+        $t = $this->theme; $x = $this->runtime->input->mouseX; $y = $this->runtime->input->mouseY;
+        $ghost = self::copy($src);
         self::fade($ghost, 0.75);
-        $ghost->at($x - $drag['ox'] - $this->root->padX(), $y - $drag['oy'] - $this->root->padY());
+        $ghost->at($gx - $this->root->padX(), $gy - $this->root->padY());
         $this->root->kids[] = $ghost;
-        if (count($drag['rows']) > 1) {
+        if ($count > 1) {
             $saved = $this->stack; $this->stack = [$this->root];
-            [$tw, $th] = $this->metrics->measure((string)count($drag['rows']), $t->fontSize - 2);
+            [$tw, $th] = $this->metrics->measure((string)$count, $t->fontSize - 2);
             $this->row(0, 0, 0, $t->accent)->size(max($tw + 10, $th + 4), $th + 4)->round(($th + 4) / 2)->center()->at($x + 10 - $this->root->padX(), $y - $th - 14 - $this->root->padY());
-              $this->text((string)count($drag['rows']), $t->fontSize - 2, $t->accentText, Font::BOLD);
+              $this->text((string)$count, $t->fontSize - 2, $t->accentText, Font::BOLD);
             $this->end();
             $this->stack = $saved;
         }
+    }
+
+    /** The scrolling container $node scrolls while a drag is within 32 points of its top or bottom, faster nearer to it (mygo's dragScroll). */
+    private function dragScroll(Node $node, Scrollable $state, float $y): void
+    {
+        $lr = $this->runtime->rectOf($node->id);
+        if ($lr === null) { return; }
+        $edge = 32; $dy = 0.0;
+        if ($y - $lr[1] < $edge) { $dy = -($edge - ($y - $lr[1])) / 2; } elseif ($lr[1] + $lr[3] - $y < $edge) { $dy = ($edge - ($lr[1] + $lr[3] - $y)) / 2; }
+        if ($dy != 0) { $state->scrollBy($dy); $this->runtime->animate(); }
     }
 
     /** A copy of $n and its children, with ids of their own (not those of the nodes copied, which keep their clicks and hover). */
@@ -1650,7 +1660,21 @@ final class Context
                   }
                     $item($i);
                   $this->end();
-                  if ($s->selects && $rt !== null) {
+                  if ($rt !== null && $s->reorder !== null) { // a press on the cell, moved 4 points, drags it (and the items chosen with it)
+                      $d = $rt->dragged($cell->id);
+                      if ($d !== null) {
+                          if ($s->drag === null) {
+                              $cr = $rt->rectOf($cell->id) ?? [0, 0, 0, 0];
+                              $s->drag = ['items' => $s->draggedItems($i, $n), 'item' => $i, 'ox' => $rt->input->mouseX - $cr[0], 'oy' => $rt->input->mouseY - $cr[1], 'dist' => 0.0, 'far' => false];
+                          }
+                          $s->drag['dist'] += hypot($d[0], $d[1]);
+                          $s->drag['far'] = $s->drag['far'] || $s->drag['dist'] >= 4;
+                      }
+                      if ($s->drag !== null && $s->drag['far'] && in_array($i, $s->drag['items'], true)) { self::fade($cell, 0.4); }
+                  }
+                  if ($rt !== null && $s->drag !== null && $s->drag['far']) {
+                      $rt->clicked($cell->id); // the release that ends a drag is no click
+                  } elseif ($s->selects && $rt !== null) {
                       if ($this->doubleClicked($cell)) { $submitted = true; }
                       if ($this->clicked($cell)) { $changed = $this->gridChoose($s, $i, $n, $rt->clickMods) || $changed; $rt->focusOn($id); }
                   }
@@ -1694,7 +1718,46 @@ final class Context
         }
         $grid->changed = $changed;
         if ($submitted) { $s->rows->submit(); }
+        if ($s->drag !== null && $rt !== null) { $this->reorderItems($s, $grid, $n, $cols, $gap); }
         return $grid;
+    }
+
+    /** The items of a grid being dragged (GridState::$drag), as reorderRows does a list's rows: the line beside the cell they would go before, the ghost, the scrolling, the drop (mygo's GridState.reorder and dropAt). */
+    private function reorderItems(GridState $s, Node $grid, int $n, int $cols, float $gap): void
+    {
+        $rt = $this->runtime;
+        $drag = &$s->drag;
+        $x = $rt->input->mouseX; $y = $rt->input->mouseY;
+        // The item before which the items dropped go, and the cell of last frame the line goes beside, on which side: the cell under the pointer, or the nearest in its row; below the cells, past the last.
+        $best = -1; $dist = INF; $cellK = null; $cellR = null;
+        foreach ($grid->kids as $rk => $row) {
+            foreach ($row->kids as $ck => $cell) {
+                $r = $rt->rectOf($cell->id);
+                if ($r === null || $y < $r[1] || $y >= $r[1] + $r[3]) { continue; }
+                $d = abs($x - ($r[0] + $r[2] / 2));
+                if ($d < $dist) { $best = ($s->rows->first + $rk) * $cols + $ck; $dist = $d; $cellK = [$rk, $ck]; $cellR = $r; }
+            }
+        }
+        if ($best < 0) { $to = $n; $after = true; $last = $n - 1; $cellK = [intdiv($last, $cols) - $s->rows->first, $last % $cols]; }
+        else { $after = $x >= $cellR[0] + $cellR[2] / 2; $to = $after ? $best + 1 : $best; }
+        if (!$rt->held()) { // dropped: an item already there stays
+            if ($drag['far'] && !(count($drag['items']) === 1 && ($to === $drag['items'][0] || $to === $drag['items'][0] + 1))) {
+                ($s->reorder)($drag['items'], $to);
+            }
+            $drag = null;
+            return;
+        }
+        if (!$drag['far']) { return; }
+        $grid->drawOver(function (DisplayList $dl, Node $g, Theme $t) use ($cellK, $after, $gap) {
+            $cell = $g->kids[$cellK[0]]->kids[$cellK[1]] ?? null;
+            if ($cell === null) { return; }
+            $lx = $after ? $cell->x + $cell->w + $gap / 2 : $cell->x - $gap / 2;
+            $dl->rect($lx - 1, $cell->y + 4, 2, $cell->h - 8, $t->accent, 1.0, 1.0);
+        });
+        $this->dragScroll($grid, $s->rows, $y);
+        $k = $drag['item'] - $s->rows->first * $cols;
+        $src = $grid->kids[intdiv($k, $cols)]->kids[$k % $cols] ?? null;
+        if ($src !== null && $k >= 0) { $this->dragGhost($src, count($drag['items']), $x - $drag['ox'], $y - $drag['oy']); }
     }
 
     /**

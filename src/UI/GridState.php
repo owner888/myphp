@@ -22,6 +22,10 @@ final class GridState
     public ?Closure $key = null;
     /** The text of item $i (Closure(int): string): typing its first letters while the grid has the focus chooses it. */
     public ?Closure $label = null;
+    /** Set, lets the user drag items to another place (mygo's GridState.Reorder): called with the items dragged (those chosen, when the item dragged is one, else that item), in order, and the item they go before (the count for the end); move them there. */
+    public ?Closure $reorder = null;
+    /** The items being dragged: items, item (the one pressed), ox, oy, dist, far — as ListState::$drag. */
+    public ?array $drag = null;
     /** How many columns the items took in the last frame. */
     public int $cols = 0;
     public bool $started = false;
@@ -32,6 +36,15 @@ final class GridState
     public function __construct()
     {
         $this->rows = new ListState;
+    }
+
+    /** The items a drag from item $i moves: those chosen when it is one of them, else item $i. @return list<int> */
+    public function draggedItems(int $i, int $n): array
+    {
+        if ($this->selection === null || !$this->chosen($i)) { return [$i]; }
+        $items = [];
+        for ($j = 0; $j < $n; $j++) { if ($this->chosen($j)) { $items[] = $j; } }
+        return $items;
     }
 
     /** Whether item $i is chosen: in the selection, or the one selected. */
