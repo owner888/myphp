@@ -132,6 +132,7 @@ final class Window
                 $bounds = ObjC::msg('r:', $view, 'bounds');
                 $t0 = hrtime(true);
                 $text->beginFrame();
+                $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
                 App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {

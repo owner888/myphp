@@ -76,6 +76,9 @@ final class Node
     public bool $focusable = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
+    /** An image that covers its box: scaled so the shorter side fills it, the rest cropped (mygo's Fit(Cover)); it is stretched otherwise. */
+    public bool $cover = false;
+
     /** A check box over a group of them, some but not all checked: a bar instead of a check (mygo's mixed state). */
     public bool $mixed = false;
     public float $fraction = 0;

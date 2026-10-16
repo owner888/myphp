@@ -58,7 +58,12 @@ final class Painter
         }
         if ($n->kind === Node::IMAGE) {
             $s = $text->imageSlot($n->image);
-            $list->image($n->x, $n->y, $n->w, $n->h, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], $n->alpha, $n->radius);
+            $u = $s['u']; $v = $s['v']; $sw = $s['w']; $sh = $s['h'];
+            if ($n->cover && $n->w > 0 && $n->h > 0) { // the part of the image in the box's proportions, centered
+                $k = min($sw / $n->w, $sh / $n->h); $cw = (int)round($n->w * $k); $ch = (int)round($n->h * $k);
+                $u += intdiv($sw - $cw, 2); $v += intdiv($sh - $ch, 2); $sw = $cw; $sh = $ch;
+            }
+            $list->image($n->x, $n->y, $n->w, $n->h, $u, $v, $sw, $sh, $s['page'], $n->alpha, $n->radius);
             return;
         }
         if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
@@ -197,6 +202,20 @@ final class Painter
         $list->pushClip($x, $y, $w, $h);
         $text->paint($list, $tip, $size, $x + $px, $y + $py, $t->background);
         $list->popClip();
+    }
+
+    /** Draws the shapes of $svg fitted in the rect (contain, centered), as mygo's Painter.Icon: each path scaled from the viewBox, filled or stroked at its width scaled, from a mask cached by the shape. */
+    public static function icon(DisplayList $list, SVG $svg, float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0): void
+    {
+        $k = min($w / $svg->w, $h / $svg->h);
+        $ox = $x + ($w - $svg->w * $k) / 2 - $svg->x * $k; $oy = $y + ($h - $svg->h * $k) / 2 - $svg->y * $k;
+        foreach ($svg->shapes as [$path, $width]) {
+            $p = new Path;
+            foreach ($path->cmds as $c) {
+                $p->cmds[] = [$c[0], $ox + $c[1] * $k, $oy + $c[2] * $k, $ox + $c[3] * $k, $oy + $c[4] * $k, $ox + $c[5] * $k, $oy + $c[6] * $k];
+            }
+            $list->path($p, $rgb, $alpha, $width * $k);
+        }
     }
 
     /** mygo's inputBorder: the accent while focused, the border a quarter toward the text under the pointer, the border otherwise. */

@@ -516,6 +516,29 @@ picker's swatches are such a grid of six fr columns. Not ported:
 explicit placement and spans (ColumnStart, RowSpan), justifyItems and
 automatic margins.
 
+Paths and icons follow mygo's path.go and svg.go: `UI\Path` holds
+moveTo/lineTo/quadTo/cubeTo/close (and `circle`, four cubic arcs) in
+points; `DisplayList::path($path, $rgb, $alpha, $width)` fills it (non-
+zero winding) or strokes it $width wide with round joins and caps, drawn
+as one glyph quad from a mask `Text::pathQuad` keeps in the glyph atlas,
+keyed by the shape relative to the pixel grid in quarters of a pixel
+(a path looks the same wherever it is) and by the stroke's half width;
+`Native\CoreGraphics` rasterizes the mask in an alpha-only
+CGBitmapContext at the backing scale, the CTM flipped so the first row
+is the top, as CoreText does glyphs. A pure-PHP rasterizer for the other
+platforms is an open item. `UI\SVG::parse` reads path (d: M L H V C S Q T
+A Z, arcs as cubics), rect, circle, ellipse, line, polyline and polygon,
+in groups, each filled unless fill is none and stroked at stroke-width
+where a stroke is set, in viewBox units; `Context::icon($svg, $size,
+$color)` is mygo's Icon, a box as high as the font size keeping the
+SVG's aspect ratio, `Painter::icon` scaling each shape into it and its
+stroke width with it, in the text's color. `avatar($name, $image)` is
+mygo's Avatar: 2.25 × fontSize round, the image cropped to it
+(`Node::$cover`, the painter sampling the centered part of the slot in
+the box's proportions) or the initials (first letters of the first and
+last words) at 0.4 × size, bold, white on the hue of the name's FNV-1a
+hash at saturation 0.45 and lightness 0.55 (`Context::hsl`).
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -942,6 +965,11 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   a child process. Apps decode between frames (`App::later`) meanwhile.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
+- Path masks come from CoreGraphics; a pure-PHP scanline rasterizer
+  (mygo's vec: non-zero winding with coverage) would serve Linux and
+  Windows, where it is wanted, at the cost of a slower first frame.
+- `SVG` reads shapes only: no transforms, gradients, masks, clips, style
+  sheets or text (convert text to paths); mygo reads all but text.
 - `grid` places children row by row only: mygo's ColumnStart/RowStart,
   spans and JustifyItems are not ported.
 - `gridView` chooses one item; mygo's Selection (several, Cmd and Shift

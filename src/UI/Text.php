@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-use MyPHP\Native\{CoreText, Mem};
+use MyPHP\Native\{CoreGraphics, CoreText, Mem};
 
 /**
  * Shaped lines, cached by size and string, painted as glyph quads from the
@@ -28,7 +28,7 @@ final class Text implements TextMetrics
     /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
     public bool $repaint = false;
 
-    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images) {}
+    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images, private ?CoreGraphics $cg = null) {}
 
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
@@ -37,6 +37,7 @@ final class Text implements TextMetrics
             return;
         }
         $this->ct->scale = $scale;
+        if ($this->cg !== null) { $this->cg->scale = $scale; }
         $this->atlas->reset();
         $this->lines = [];
         $this->offsets = [];
@@ -59,6 +60,40 @@ final class Text implements TextMetrics
             }
         }
         return $slot;
+    }
+
+    /**
+     * The glyph quad of $path filled, or stroked $width points wide (round
+     * joins and caps), from a mask cached in the atlas by the shape, as
+     * mygo's drawPath: x, y, w, h in points and the slot's u, v, or null
+     * for an empty path. The key covers the shape relative to the pixel
+     * grid in quarters of a pixel, so a path looks the same wherever it is.
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int}|null
+     */
+    public function pathQuad(Path $path, float $width): ?array
+    {
+        $b = $path->bounds();
+        if ($b === null || $this->cg === null) { return null; }
+        $s = $this->ct->scale; $hw = max($width, 0) / 2;
+        $x0 = floor(($b[0] - $hw) * $s) / $s; $y0 = floor(($b[1] - $hw) * $s) / $s; // on the device grid
+        $w = (int)ceil(($b[2] + $hw - $x0) * $s) + 1; $h = (int)ceil(($b[3] + $hw - $y0) * $s) + 1;
+        if ($w > 4096 || $h > 4096) { return null; }
+        $key = 'p' . $hw;
+        foreach ($path->cmds as $c) {
+            $key .= chr($c[0]);
+            $n = match ($c[0]) { Path::MOVE, Path::LINE => 1, Path::QUAD => 2, Path::CUBE => 3, default => 0 };
+            for ($i = 0; $i < $n; $i++) { $key .= pack('vv', (int)round(($c[1 + 2 * $i] - $x0) * $s * 4), (int)round(($c[2 + 2 * $i] - $y0) * $s * 4)); }
+        }
+        $slot = $this->atlas->get($key);
+        if ($slot === null) {
+            if (!$this->atlas->fits($w, $h)) {
+                $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
+            }
+            $m = $this->cg->mask($path, $width, $w, $h, $x0, $y0);
+            $slot = $this->atlas->add($key, $m['w'], $m['h'], $m['addr']);
+            Mem::free($m['rows']);
+        }
+        return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];
     }
 
     /** Call once per frame: ages the cache and sweeps stale lines now and then. */

@@ -32,7 +32,19 @@ final class DisplayList
     private array $clip = self::NO_CLIP;
     private array $clips = [];
 
+    /** Text::pathQuad, for path(): the glyph quad of a path from its mask in the atlas. Set by the window; null leaves paths undrawn (a headless list). */
+    public ?\Closure $pathQuad = null;
+
     public function __construct(public CData $buf, public int $capacity) {}
+
+    /** Fills $path in $rgb (non-zero winding), or with $width > 0 strokes it that wide with round joins and caps, as mygo's FillPath and StrokePath: drawn as a glyph from a cached mask. */
+    public function path(Path $path, int $rgb, float $alpha = 1.0, float $width = 0.0): void
+    {
+        $q = $this->pathQuad === null ? null : ($this->pathQuad)($path, $width);
+        if ($q !== null && !$this->clipped($q[0], $q[1], $q[2], $q[3])) {
+            $this->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]);
+        }
+    }
 
     public function reset(): void
     {

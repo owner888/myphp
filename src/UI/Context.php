@@ -1570,6 +1570,64 @@ final class Context
         return $grid;
     }
 
+    /**
+     * An SVG as an icon, as mygo's Icon: its shapes in the color of the
+     * text (or $color), whatever colors the SVG has, as high as the font
+     * size (or $size), keeping its aspect ratio. Parse the SVG once, not
+     * in the view.
+     */
+    public function icon(SVG $svg, ?float $size = null, ?int $color = null): Node
+    {
+        $t = $this->theme;
+        $h = $size ?? $t->fontSize;
+        $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null;
+        $n->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::icon($list, $svg, $a->x, $a->y, $a->w, $a->h, $color ?? $t->text, $a->alpha));
+        $n->alpha = 0.0; // the box paints nothing itself
+        return $n;
+    }
+
+    /**
+     * A picture of a person or a thing named $name, as mygo's Avatar: the
+     * $image cropped to a circle, or the initials of $name on a color it
+     * picks from it, 2.25 times the font size high.
+     */
+    public function avatar(string $name, ?Image $image = null): Node
+    {
+        $t = $this->theme;
+        $size = $t->fontSize * 2.25;
+        if ($image !== null) {
+            $e = $this->image($image, $size, $size, $size / 2)->tooltip($name);
+            $e->cover = true; // Fit(Cover): the shorter side fills the circle, the rest is cropped
+            return $e;
+        }
+        $h = 2166136261; // the hue of the name's FNV-1a hash
+        for ($i = 0, $n = strlen($name); $i < $n; $i++) { $h = (($h ^ ord($name[$i])) * 16777619) & 0xffffffff; }
+        $e = $this->column(0, 0, 0, self::hsl($h % 360, 0.45, 0.55))->size($size, $size)->round($size / 2)->center()->tooltip($name);
+          $this->text(self::initials($name), $size * 0.4, 0xffffff, Font::BOLD)->single(); // FontWeight(600)
+        $this->end();
+        return $e;
+    }
+
+    /** The first letters of the first and last words of $name, upper case. */
+    public static function initials(string $name): string
+    {
+        $first = ''; $last = ''; $inWord = false;
+        foreach (mb_str_split($name) as $r) {
+            $letter = preg_match('/[\p{L}\p{N}]/u', $r) === 1;
+            if ($letter && !$inWord) { if ($first === '') { $first = mb_strtoupper($r); } else { $last = mb_strtoupper($r); } }
+            $inWord = $letter;
+        }
+        return $first . $last;
+    }
+
+    /** A color of hue (0..360), saturation and lightness (0..1), mygo's hslColor. */
+    public static function hsl(float $h, float $s, float $l): int
+    {
+        $c = (1 - abs(2 * $l - 1)) * $s; $x = $c * (1 - abs(fmod($h / 60, 2) - 1)); $m = $l - $c / 2;
+        [$r, $g, $b] = match (true) { $h < 60 => [$c, $x, 0], $h < 120 => [$x, $c, 0], $h < 180 => [0, $c, $x], $h < 240 => [0, $x, $c], $h < 300 => [$x, 0, $c], default => [$c, 0, $x] };
+        return ((int)(($r + $m) * 255) << 16) | ((int)(($g + $m) * 255) << 8) | (int)(($b + $m) * 255);
+    }
+
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */
     public static function matching(array $options, string $query): array
     {

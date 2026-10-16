@@ -2,12 +2,12 @@
 // The smaller widgets in one window: switch, segmented control, tabs with
 // their content, a collapsible section, a stepper, a combobox, an
 // autocomplete, a token field, a date and a time input, a color well, a form,
-// a checkbox group, breadcrumbs, an alert, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
+// a checkbox group, breadcrumbs, an alert, icons, avatars, badges, a spinner, dividers and spacers. Each writes into $s and reports with changed().
 // Run: ./run.sh widgets
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Node, TextState};
+use MyPHP\UI\{Content, Context, Font, Node, SVG, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -15,6 +15,8 @@ $s = ['wifi' => true, 'view' => 0, 'tab' => 0, 'more' => false, 'count' => 3, 'a
 const FRUITS = ['Apple', 'Banana', 'Cherry', 'Grape', 'Mango', 'Orange', 'Peach', 'Pear', 'Pineapple', 'Plum'];
 const CITIES = ['Beijing', 'Berlin', 'Boston', 'Chengdu', 'Chicago', 'Guangzhou', 'Hangzhou', 'London', 'Paris', 'Shanghai', 'Shenzhen', 'Tokyo'];
 const TAGS = ['php', 'ui', 'metal', 'ffi', 'layout', 'text', 'input', 'native'];
+// Icons are parsed once, not in the view.
+$s['icons'] = ['check' => SVG::fromFile(__DIR__ . '/icons/check.svg'), 'star' => SVG::fromFile(__DIR__ . '/icons/star.svg'), 'bell' => SVG::fromFile(__DIR__ . '/icons/bell.svg')];
 
 function view(Context $c, array &$s): void
 {
@@ -47,6 +49,8 @@ function view(Context $c, array &$s): void
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
             $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();
             $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, 80, 95); $c->muted("{$s['count']}0 % used"); $c->end();
+            // Icons in the text's color at the font size, or a size and color of their own; avatars from names.
+            $c->row(0, 10)->align(Node::CENTER); $c->text('Icons'); $c->icon($s['icons']['check']); $c->icon($s['icons']['star'], 20, $t->warning); $c->icon($s['icons']['bell'], 28); $c->avatar('Ada Lovelace'); $c->avatar('Grace Hopper'); $c->avatar('Linus'); $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($s['when']))) { $s['last'] = 'date ' . $s['when']->format('Y-m-d'); } if ($c->changed($c->timeInput($s['when']))) { $s['last'] = 'time ' . $s['when']->format('H:i'); } $c->end();
