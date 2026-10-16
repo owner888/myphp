@@ -1590,11 +1590,17 @@ final class Context
      */
     public function alertDialog(bool &$open, string $title, string $message, string ...$buttons): int
     {
-        if (!$open) { return -1; }
-        $t = $this->theme;
         $rt = $this->runtime;
+        $this->key('alert'); // keyed: it comes and goes, and its state must not be another node's
+        if (!$open) { // closed, by a button, Escape or the app: the next opening focuses the default again
+            $local = $rt?->local($this->nextId(), fn() => (object)['opening' => true]);
+            if ($local !== null) { $local->opening = true; }
+            $this->nextKey = null;
+            return -1;
+        }
+        $t = $this->theme;
         $chosen = -1;
-        $back = $this->key('alert')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes, and its state must not be another node's
+        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
         $back->alpha = 0.4;
           $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3);
             $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
@@ -1602,7 +1608,7 @@ final class Context
             $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
             $this->row(0, $t->space(2))->justify(Node::END);
               $make = fn() => (object)['opening' => true];
-              $local = $rt?->local($panel->id, $make) ?? $make();
+              $local = $rt?->local($back->id, $make) ?? $make();
               foreach ($buttons as $i => $label) {
                   $b = $i === count($buttons) - 1 ? $this->primaryButton($label) : $this->button($label);
                   if ($i === count($buttons) - 1 && $local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($b->id); } // AutoFocus: the default, which Enter clicks
@@ -1612,7 +1618,7 @@ final class Context
           $this->end();
         $this->end();
         if ($chosen < 0 && $this->shortcut(Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; }
-        if ($chosen !== -1) { $open = false; $local->opening = true; }
+        if ($chosen !== -1) { $open = false; }
         return $chosen;
     }
 
