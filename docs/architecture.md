@@ -220,12 +220,21 @@ by Space(2), radius Space(1.25), in the inverse colors, Space(1.5) above
 its anchor (below when there is no room); the focus ring is 2 points
 wide a point outside the node, as `Painter.FocusRing`.
 
-`Node::single()` is mygo's SingleLine: in a row, single-line texts shrink
-between them by what the row's children overflow (mygo's flex shrink);
-in a column one is clamped to the column's width; and the painter cuts
-what no longer fits at `indexForX` and ends it in "…". Sidebar items,
-collapsible and tree labels are single; apps mark list titles and table
-cells.
+`Node::single()` is mygo's SingleLine: the painter cuts what no longer
+fits at `indexForX` and ends it in "…"; in a column one is clamped to
+the column's width. A row that overflows shrinks its children as CSS
+flexbox and mygo's resolveFlexible do (`Layout::shrink`, every child's
+shrink factor 1): each gives up width in proportion to its own, none
+below its least width — `Node::$minMw`, the min-content width `measure`
+works out: a single-line text's minW (0 unless `min()` set one), a
+leaf's own size, a row's children's least widths plus gaps, a column's
+widest, zero for what scrolls or wraps across — and what the frozen
+ones cannot give the others share, round again. A container shrunk
+arranges its children in the width left, which shrinks theirs: a table
+cell holding a row of an icon and a single-line name truncates the
+name (the file manager's long names ran into the next column before).
+Sidebar items, collapsible and tree labels are single; apps mark list
+titles and table cells.
 
 Controls write straight into the app's variables, by reference:
 `checkbox($label, &$bool)`, `radio($label, &$value, $option)`,

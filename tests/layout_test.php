@@ -69,3 +69,18 @@ $h->frame(); $r = fn($k) => $h->rect($k);
 same([43.0, 14.0], [$r($n['a'])[0], $r($n['a'])[2]], 'centered in a 100 column: its own width');
 same(186.0, $r($n['b'])[0], 'justifySelf end: at the right of the second column');
 same([0.0, 100.0], [$r($n['c'])[0], $r($n['c'])[2]], 'justifySelf stretch fills the cell'); same(100.0, $r($n['d'])[0], 'start');
+
+// Flex shrink: children of a row that overflows it give up width in proportion, none below its least width — a single-line text's minW, a leaf's own size, a container's children's least widths (nested rows shrink their texts).
+$n = [];
+$h = new Headless(function (Context $c) use (&$n) {
+    $n['r'] = $c->row(0, 0);
+      $n['box'] = $c->box(50, 10, 0);
+      $n['in'] = $c->row(0, 4); $c->box(16, 16, 0); $n['t'] = $c->text(str_repeat('x', 100))->single(); $c->end(); // 16 + 4 + 700 = 720
+      $n['u'] = $c->text(str_repeat('y', 30))->single(); // 210
+    $c->end();
+}, 400, 100);
+$h->frame(); $r = fn($k) => $h->rect($k);
+same(50.0, $r($n['box'])[2], 'a box keeps its size');
+same(400.0 - 50, $r($n['in'])[2] + $r($n['u'])[2], 'the rows and the text share what is left');
+check(abs($r($n['in'])[2] / $r($n['u'])[2] - 720 / 210) < 0.01, 'in proportion to their widths');
+same(round($r($n['in'])[2] - 20, 6), round($r($n['t'])[2], 6), 'the nested row shrinks its own text');

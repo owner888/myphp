@@ -127,6 +127,8 @@ final class Node
     public float $x = 0, $y = 0, $w = 0, $h = 0;
     /** Measured intrinsic size. */
     public float $mw = 0, $mh = 0;
+    /** The least width the node shrinks to in a row (Layout: its min-content width, mygo's automatic minimum): a single-line text's minW, a container's children's least widths, a leaf's own width. */
+    public float $minMw = 0;
 
     public function __construct(
         public int $kind,
