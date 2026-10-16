@@ -1022,7 +1022,10 @@ and an unkeyed node's id is its place in the build order, so content
 that comes and goes before such a control must be keyed (`key()`), or
 the control inherits the state another node left under the same id;
 `modal`, `alertDialog` and `findBar` key themselves, and the widgets
-example keys each tab's content by the tab.
+example keys each tab's content by the tab. A key is the one node's:
+`add` consumes it, so a keyed leaf (a range slider's knob) does not
+pass its key to the next node built — which once gave the accordion
+after a range slider the high knob's id, and Tab skipped the knob.
 
 ## Open items
 

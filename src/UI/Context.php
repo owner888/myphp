@@ -64,6 +64,7 @@ final class Context
         $this->stack[count($this->stack) - 1]->kids[] = $n;
         if ($this->nextKey !== null) {
             $n->id = self::hash($this->scope . '/' . $this->nextKey);
+            $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
         } elseif ($this->scope !== '') {
             $n->id = self::hash($this->scope . '#' . ++$this->ordinal);
         } else {
@@ -99,13 +100,13 @@ final class Context
 
     private function open(Node $n): Node
     {
+        $key = $this->nextKey;
         $this->add($n);
         $this->stack[] = $n;
-        if ($this->nextKey !== null) {
+        if ($key !== null) { // a keyed container scopes the nodes inside it
             $this->scopes[] = [$this->scope, $this->ordinal];
-            $this->scope .= '/' . $this->nextKey;
+            $this->scope .= '/' . $key;
             $this->ordinal = 0;
-            $this->nextKey = null;
         } else {
             $this->scopes[] = null;
         }
