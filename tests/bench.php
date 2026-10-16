@@ -35,6 +35,13 @@ $phases = function (string $name, Closure $view, float $w, float $h) use ($frame
 $w = Headless::widgets(); $view = $w[0]; $s = &$w[1];
 foreach ([0 => 'General', 1 => 'Advanced', 2 => 'About'] as $tab => $name) { $s['tab'] = $tab; $s['more'] = true; $phases("widgets $name", $view, 900, 700); }
 
+$dir = sys_get_temp_dir() . '/myphp-bench-' . getmypid(); mkdir($dir);
+for ($i = 0; $i < 2000; $i++) { file_put_contents("$dir/file-$i.txt", ''); }
+[$view, $files] = Headless::files($dir);
+$phases('files, 2000 entries, icons', $view, 960, 640);
+$files->view = 1; $phases('files, 2000 entries, table', $view, 960, 640);
+array_map('unlink', glob("$dir/*")); rmdir($dir);
+
 $ls = new ListState; $ls->selected = -1;
 $rows = function (Context $c) use ($ls) { $c->column(0, 0, 1); $c->list($ls, 1000000, function (int $i) use ($c) { $c->row(8, 8)->size(0, 32); $c->text("Row $i"); $c->muted('a subtitle'); $c->end(); }); $c->end(); };
 $phases('list, a million rows', $rows, 900, 700);

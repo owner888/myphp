@@ -69,9 +69,11 @@ src/UI/            Node, Track, Path, SVG, Context (column/row/grid/text/muted/r
 examples/          native (inbox over a million rows), form (fields, text area, IME), desktop (menus, dialogs, tray,
                    shortcuts, notifications), webview (Notes service, channels, myphp.ts), logview, notes,
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
-                   over curl — the API's proving ground), glass (Liquid Glass over a photo), widgets (the small controls), titlebar
+                   over curl — the API's proving ground), files (a file manager: sidebar, breadcrumbs, grid or table of
+                   the folder, one Selection shared by both, find bar, image preview, Trash), glass (Liquid Glass over a
+                   photo), widgets (the small controls), titlebar
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
-                   view sends them, paint into an FFI buffer, the widgets example without its window), *_test.php
+                   view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
                    (check()/same() assertions, no PHPUnit); php tests/bench.php [frames] times build/layout/record/paint
 run.sh             runs an example with the php -d flags; docs/architecture.md  design notes, measurements, pitfalls
 ```

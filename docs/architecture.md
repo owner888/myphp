@@ -500,8 +500,15 @@ Space submit (`rows->submitted()`), and letters typed choose the next
 item whose label starts with them — `Runtime::typed`, which adds up
 within a second and takes Space as a letter then instead of a press
 (mygo's typePause). Columns changing keep the first row in view on the
-same items. Multiple selection and reordering by drag are open items.
-`examples/photos` is on it: only the cells built want thumbnails.
+same items; Cmd and Shift choose several (`GridState::$selection`) and
+items drag to reorder (`$reorder`). `examples/photos` is on it: only the
+cells built want thumbnails. `examples/files` is the file manager on
+the grid and the table at once: both states share one `Selection` keyed
+by path (`ListState::$key`, `GridState::$key`), so the choice follows
+the entries through a sort, a filter by the find bar and the switch of
+view; the folder's entries are read once per change (open, sort, query)
+and kept, and the chosen ones are found by the choice's keys through an
+index by path, not a pass over the entries each frame.
 
 `Context::grid($cols, $gap, $rows)` / `Node::grid()` is mygo's Grid
 (grid.go): `Layout::gridPlace` is mygo's gridPlace, placing the children
@@ -1055,7 +1062,11 @@ and the cursor; `layout_test` the grid, wrapping and a split;
 token field, date, calendar and time inputs, color picker and well,
 form and find bar, checkbox group, breadcrumbs, alert, grid view, the
 selection of several, rows and items dragged, the title bar's handle,
-SVG icons and avatars.
+SVG icons and avatars; `files_test` the files example on a folder it
+makes — opening and going up, the find bar filtering, the table's sort
+keeping the choice, Delete… asking. `Headless::example()` loads an
+example's file up to its window in a namespace of its own, so each
+can declare `view()`.
 
 `Painter` takes a `TextPainter` (`TextMetrics` plus `paint`, `imageSlot`
 and `scale`), which `Text` implements and the tests fake, so a frame can
@@ -1067,6 +1078,8 @@ paint — for the examples' views; on PHP 8.3 with the JIT, two cores:
 |---|---|---|---|---|---|---|
 | widgets General | 0.86 | 0.21 | 0.11 | 0.39 | 1.6 | 391 |
 | widgets Advanced | 0.85 | 0.18 | 0.08 | 0.15 | 1.3 | 296 |
+| files, 2000 entries, icons | 1.53 | 0.51 | 0.26 | 0.48 | 2.8 | 587 |
+| files, 2000 entries, table | 1.21 | 0.41 | 0.21 | 0.50 | 2.3 | 644 |
 | list, a million rows | 0.14 | 0.04 | 0.03 | 0.10 | 0.3 | 342 |
 | list, a million rows, 1440p | 0.26 | 0.08 | 0.06 | 0.20 | 0.6 | 710 |
 | table, a million rows × 5 | 0.60 | 0.21 | 0.14 | 0.21 | 1.2 | 626 |
@@ -1075,7 +1088,8 @@ paint — for the examples' views; on PHP 8.3 with the JIT, two cores:
 
 A node costs about 4 µs to build (`new Node` 0.4 µs for its 78
 properties, a keyed id's xxh64 0.2 µs), 0.5 µs to lay out and 0.7 µs to
-record; a frame of the examples is 0.3–1.6 ms, which leaves the 16.7 ms
+record; a frame of the examples is 0.3–2.8 ms (the file manager's grid
+of 63 cells, ten builder calls each, is the dearest), which leaves the 16.7 ms
 budget to CoreText (shaping is cached by line) and Metal. The display
 list is clipped to the window before the paint, so what lies outside
 costs nothing. What the benchmark cannot time is the Mac's half:

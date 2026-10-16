@@ -8,16 +8,23 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use Closure;
-use MyPHP\UI\{Context, Input, Key, Layout, Node, Runtime, TextMetrics};
+use MyPHP\UI\{Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Runtime, TextPainter, Theme};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Tests\\') && (require __DIR__ . '/../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'));
 
-final class Metrics implements TextMetrics
+/** A text engine of 7 × 16 cells: a glyph quad a character, images one atlas pixel, the scale 1. */
+final class Metrics implements TextPainter
 {
     public function ascent(float $size, int $style = 0): float { return 12.0; }
     public function measure(string $s, float $size, int $style = 0): array { return [mb_strlen($s) * 7.0, 16.0]; }
     public function xForIndex(string $s, float $size, int $i): float { return $i * 7.0; }
     public function indexForX(string $s, float $size, float $x): int { return (int)($x / 7); }
+    public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
+    {
+        for ($i = 0, $n = mb_strlen($text); $i < $n; $i++) { $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); }
+    }
+    public function imageSlot(Image $image): array { return ['u' => 0, 'v' => 0, 'w' => 1, 'h' => 1, 'page' => 0]; }
+    public function scale(): float { return 1.0; }
 }
 
 final class Headless
@@ -26,6 +33,8 @@ final class Headless
     public Runtime $rt;
     public Metrics $metrics;
     public ?Node $root = null;
+    public Theme $theme;
+    private ?DisplayList $list = null;
     private Closure $view;
 
     /** $view builds the UI with the Context given; $w and $h are the window's size. */
@@ -35,6 +44,7 @@ final class Headless
         $this->input = new Input;
         $this->input->mouseInside = true;
         $this->rt = new Runtime($this->input, $this->metrics);
+        $this->theme = Theme::dark();
         $this->view = $view;
     }
 
@@ -43,7 +53,7 @@ final class Headless
     {
         for ($i = 0; $i < $n; $i++) {
             $this->root = $this->rt->frame(function () {
-                $c = new Context($this->metrics, $this->rt, $this->w, $this->h);
+                $c = new Context($this->metrics, $this->rt, $this->w, $this->h, $this->theme);
                 ($this->view)($c);
                 Layout::measure($c->root);
                 Layout::arrange($c->root, 0, 0, $this->w, $this->h);
@@ -51,6 +61,16 @@ final class Headless
             });
         }
         return $this->root;
+    }
+
+    /** Paints the root into a display list over an FFI buffer of $capacity quads, clipped to the window as the Window does, and returns the list (its ->n is the quad count). */
+    public function paint(int $capacity = 65536): DisplayList
+    {
+        $this->list ??= new DisplayList(\FFI::new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity);
+        $this->list->reset();
+        $this->list->pushClip(0, 0, $this->w, $this->h);
+        Painter::paint($this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
+        return $this->list;
     }
 
     /** A left click (down and up) at ($x, $y), with $mods (Key::SHIFT, Key::COMMAND) and $clicks (2 for a double click). */
@@ -182,14 +202,37 @@ final class Headless
      */
     public static function widgets(): array
     {
-        $path = __DIR__ . '/../examples/widgets/main.php';
-        $src = file_get_contents($path) ?: throw new \RuntimeException($path);
-        $src = substr($src, 0, strpos($src, 'App::whenReady') ?: throw new \RuntimeException('App::whenReady'));
-        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['', var_export(dirname($path), true)], $src);
-        $src = preg_replace('/^const (\w+) = (.*);$/m', 'defined(\'$1\') || define(\'$1\', $2);', $src);
         $s = null;
-        (static function () use ($src, &$s) { eval('?>' . $src); })();
-        return [static function (Context $c) use (&$s) { view($c, $s); }, &$s];
+        self::example('widgets', 'App::whenReady', [], $s);
+        return [static function (Context $c) use (&$s) { \MyPHP\Examples\Widgets\view($c, $s); }, &$s];
+    }
+
+    /**
+     * The files example on folder $folder, loaded without its window and
+     * menu: [$view (Closure(Context)), $files (its Files)].
+     */
+    public static function files(string $folder): array
+    {
+        $files = null;
+        self::example('files', 'App::setMenu', [$folder], $files);
+        return [static function (Context $c) use ($files) { \MyPHP\Examples\Files\view($c, $files); }, $files];
+    }
+
+    /**
+     * Runs example $name's file up to $stop, with $args as its arguments, its
+     * constants defined, its folder as __DIR__ and its functions in
+     * MyPHP\Examples\<Name> (each example declares a view()); $state gets the
+     * variable the file leaves ($s for widgets, $files for files).
+     */
+    private static function example(string $name, string $stop, array $args, mixed &$state): void
+    {
+        $path = __DIR__ . "/../examples/$name/main.php";
+        $src = file_get_contents($path) ?: throw new \RuntimeException($path);
+        $src = substr($src, 0, strpos($src, $stop) ?: throw new \RuntimeException($stop));
+        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . ucfirst($name) . ';', var_export(dirname($path), true)], $src);
+        $src = preg_replace('/^const (\w+) = (.*);$/m', 'defined(\'$1\') || define(\'$1\', $2);', $src);
+        $argv = [$path, ...$args];
+        (static function () use ($src, $argv, &$state) { eval('?>' . $src); $state = $s ?? $files; })();
     }
 }
 

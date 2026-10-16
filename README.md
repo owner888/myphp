@@ -61,6 +61,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | Tray icon, global shortcuts, notifications (from a built .app), window events, file drops, remembered window frames | works (`examples/desktop`) |
 | Child processes without blocking the UI (`Process`): curl, scripts, tools | works (`examples/http`) |
+| A file manager: sidebar of places, breadcrumbs, the folder as icons or a sortable table sharing one selection, find bar, image preview, Trash through Finder | works (`examples/files`) |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
@@ -103,7 +104,8 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh form             # text fields, input methods
 ./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
 ./run.sh titlebar                      # a hidden title bar: the view draws its own under the traffic lights and drags the window by it
-php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets example
+./run.sh files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
+php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
@@ -186,6 +188,7 @@ App::run();
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
 | 不阻塞界面的子进程（`Process`）：curl、脚本、命令行工具 | 可用（`examples/http`） |
+| 文件管理器：常用位置侧栏、路径面包屑、目录以图标或可排序表格显示且共用一个选择、查找条、图片预览、经 Finder 移到废纸篓 | 可用（`examples/files`） |
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
@@ -226,7 +229,8 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh form             # 文本框、输入法
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
 ./run.sh titlebar                      # 隐藏标题栏：视图在红绿灯下自己画标题栏，拖它移动窗口
-php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 例子
+./run.sh files [目录]                   # 文件管理器：常用位置、路径面包屑、图标或可排序表格、Cmd+F 查找、空格预览、Delete… 移到废纸篓
+php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 和 files 例子
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
