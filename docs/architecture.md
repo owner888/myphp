@@ -482,6 +482,27 @@ focused as the alert opens; it returns the button's index the frame it
 is clicked, `ALERT_DISMISSED` (−2) the frame Escape closes it, −1
 otherwise, and a click outside does nothing.
 
+`gridView($s, $n, $minWidth, $height, $item)` is mygo's GridView on a
+`GridState` (a `ListState` of rows, `selects`, `selected`, `label`, the
+columns): the columns are as many as fit items at least $minWidth wide
+in the list node's width last frame (`Context::nextId` gives the id
+before the node is built; the window's width the first frame), Space(2)
+apart; the rows go through `list`, so only those in view are built, each
+a row padded gap/2 above and below with the cells sharing the width
+(fixed to (width − gaps) / cols, mygo's Grow(1).Basis(0)) at $height,
+padded 2 for a border that shows only chosen (accent 2 on the accent
+mixed to a fifth over the background while the grid has the focus, the
+border color on surfacePressed otherwise; surfaceHover under the
+pointer). The grid is focusable while it selects: a click chooses and
+focuses it; the arrows move by one and by a row (Down from a row above
+the shorter last lands on the last item), Home and End, Enter and
+Space submit (`rows->submitted()`), and letters typed choose the next
+item whose label starts with them — `Runtime::typed`, which adds up
+within a second and takes Space as a letter then instead of a press
+(mygo's typePause). Columns changing keep the first row in view on the
+same items. Multiple selection and reordering by drag are open items.
+`examples/photos` is on it: only the cells built want thumbnails.
+
 `Context::popover($anchor, &$open, $fn)` is mygo's Popover: a bordered
 panel built at the window's root (the stack is swapped for the root
 while it builds) and placed below the anchor's last-frame rect, or above
@@ -908,6 +929,8 @@ during testing while `scandir` worked, so the CLI walks with `scandir`.
   a child process. Apps decode between frames (`App::later`) meanwhile.
 - `dateInput`, `calendar` and `timeInput` write en-US formats; mygo
   takes them from the user's region and the window's language.
+- `gridView` chooses one item; mygo's Selection (several, Cmd and Shift
+  clicks) and Reorder (dragging items) are not ported, nor is ListState's.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax
   coloring; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

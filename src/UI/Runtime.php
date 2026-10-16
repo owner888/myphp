@@ -90,6 +90,7 @@ final class Runtime
     private ?int $activated = null;
     /** What was typed this frame at a focused control that is no field. */
     private string $typed = '';
+    private float $typedAt = 0.0;
     /** Text drawn in a field starts this far from its left edge. */
     /** A field's padding, mygo's Padding(Space(1.5), Space(2.5)): FIELD_INSET at the sides, FIELD_INSET_Y above and below the text of an area. */
     public const FIELD_INSET = 10.0, FIELD_INSET_Y = 6.0;
@@ -187,8 +188,8 @@ final class Runtime
                 case 'insert':
                     if ($this->focus !== null && isset($this->fields[$this->focus]) && $this->keys !== []) {
                         $this->keys[array_key_last($this->keys)][3] = true; // typed into the field
-                    } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus])) {
-                        $this->activated = $this->focus; // space presses a focused button
+                    } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus]) && hrtime(true) / 1e9 - $this->typedAt >= 1.0) {
+                        $this->activated = $this->focus; // space presses a focused button; within a second of letters typed at it, it is typed too (mygo's typePause)
                         $this->focusVisible = true;
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     } elseif ($this->focus !== null && !isset($this->fields[$this->focus])) {
@@ -684,7 +685,7 @@ final class Runtime
     {
         if ($this->focus !== $id || $this->typed === '') { return ''; }
         $this->consumed = true;
-        $typed = $this->typed; $this->typed = ''; // one taker, once; the pass that follows sees what it did
+        $typed = $this->typed; $this->typed = ''; $this->typedAt = hrtime(true) / 1e9; // one taker, once; the pass that follows sees what it did
         return $typed;
     }
 

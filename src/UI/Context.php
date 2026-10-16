@@ -56,6 +56,14 @@ final class Context
         return $n;
     }
 
+    /** The id add() will give the next node, for what is computed from its last-frame rect before it is built (a grid's columns). */
+    private function nextId(): int
+    {
+        if ($this->nextKey !== null) { return self::hash($this->scope . '/' . $this->nextKey); }
+        if ($this->scope !== '') { return self::hash($this->scope . '#' . ($this->ordinal + 1)); }
+        return $this->count + 1;
+    }
+
     /**
      * Gives the next node an identity that holds across frames whatever
      * is built before it, so conditional UI keeps its clicks, hover and
@@ -1470,6 +1478,86 @@ final class Context
         if ($chosen < 0 && $this->shortcut(Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; }
         if ($chosen !== -1) { $open = false; $local->opening = true; }
         return $chosen;
+    }
+
+    /**
+     * A scroll container of $n items in a grid, as mygo's GridView after
+     * Photos' library and Finder's icon view, built with $item($i): as
+     * many columns as fit items at least $minWidth wide, which share the
+     * width left, and rows $height high, built only as they show, so
+     * grids of millions of items are as fast as small ones; Space(2)
+     * spaces the items. With $s->selects, a click chooses an item, as the
+     * arrows do in two dimensions while the grid has the focus, with Home,
+     * End and the first letters of an item's $s->label; changed() reports
+     * a new choice, submitted() a double click or Enter.
+     */
+    public function gridView(GridState $s, int $n, float $minWidth, float $height, Closure $item): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $n = max($n, 0);
+        $gap = $t->space(2);
+        $id = $this->nextId(); // the list's node, built below: its width last frame gives the columns
+        $width = $rt?->rectOf($id)[2] ?? 0.0;
+        if ($width <= 0) { $width = $this->width; }
+        $cols = max(1, (int)floor(($width + $gap) / ($minWidth + $gap)));
+        if ($s->cols !== $cols && $s->cols > 0 && $s->started) { // keep the rows in view on the same items
+            $s->rows->scrollTo(intdiv($s->rows->row * $s->cols, $cols), false);
+        }
+        $s->cols = $cols; $s->started = true;
+        $rows = intdiv($n + $cols - 1, $cols);
+        $cw = ($width - $gap * ($cols - 1)) / $cols; // the items share the width (Grow(1).Basis(0))
+        $focused = $s->selects && ($rt?->focused($id) ?? false);
+        $changed = false; $submitted = false;
+        $grid = $this->list($s->rows, $rows, function (int $r) use ($s, $n, $cols, $cw, $gap, $height, $item, $t, $rt, $focused, &$changed, &$submitted, $id) {
+            $this->row(0, $gap)->padding($gap / 2, 0)->align(Node::STRETCH);
+              for ($i = $r * $cols; $i < min($n, ($r + 1) * $cols); $i++) {
+                  // A border, clear unless chosen, keeps the content in place as it is.
+                  $cell = $this->key($i)->column(0, 0)->padding(2, 2)->size($cw, $height)->round($t->radius);
+                  if ($s->selects) {
+                      $chosen = $i === $s->selected;
+                      if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border($t->accent, 2.0); } // Accent.Alpha(0.2)
+                      elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border($t->border, 2.0); }
+                      elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
+                  }
+                    $item($i);
+                  $this->end();
+                  if ($s->selects && $rt !== null) {
+                      if ($this->doubleClicked($cell)) { $submitted = true; }
+                      if ($this->clicked($cell)) { if ($s->selected !== $i) { $s->selected = $i; $changed = true; } $rt->focusOn($id); }
+                  }
+              }
+            $this->end();
+        });
+        if ($s->selects) { $grid->focusable = true; }
+        if ($s->selects && $rt !== null && $rt->focus === $grid->id && $n > 0) { // the keys: the arrows in two dimensions, Home, End, Enter, the first letters
+            $at = $s->selected; $in = $at >= 0 && $at < $n; $to = -1;
+            foreach ([[Key::RIGHT, 1], [Key::LEFT, -1], [Key::DOWN, $cols], [Key::UP, -$cols]] as [$key, $d]) {
+                if (!$this->shortcut($key)) { continue; }
+                if (!$in) { $to = 0; }
+                elseif ($at + $d >= 0 && $at + $d < $n) { $to = $at + $d; }
+                elseif ($d === $cols && intdiv($at, $cols) < intdiv($n - 1, $cols)) { $to = $n - 1; } // the last row, shorter
+            }
+            if ($this->shortcut(Key::HOME)) { $to = 0; }
+            if ($this->shortcut(Key::END)) { $to = $n - 1; }
+            if ($rt->activated($grid->id) && $in) { $submitted = true; }
+            if ($s->label !== null && ($typed = $rt->typed($grid->id)) !== '') {
+                $now = hrtime(true) / 1e9;
+                if ($now - $s->typedAt >= 1.0) { $s->typed = ''; }
+                $s->typed .= $typed; $s->typedAt = $now;
+                for ($k = 1; $k <= $n; $k++) { // from the next item, or this one once more than a letter is typed
+                    $j = (max($at, 0) + $k - (mb_strlen($s->typed) > 1 ? 1 : 0) + $n) % $n;
+                    if (str_starts_with(mb_strtolower(($s->label)($j)), mb_strtolower($s->typed))) { $to = $j; break; }
+                }
+            }
+            if ($to >= 0) {
+                if ($s->selected !== $to) { $s->selected = $to; $changed = true; }
+                $s->reveal($to);
+            }
+        }
+        $grid->changed = $changed;
+        if ($submitted) { $s->rows->submit(); }
+        return $grid;
     }
 
     /** mygo's matching: the options starting with $query (ignoring case) first, then those containing it; all for an empty query. */

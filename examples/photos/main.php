@@ -6,13 +6,13 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Image, Key, ScrollState};
+use MyPHP\UI\{Content, Context, Font, GridState, Image, Key};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 final class Photos
 {
-    public const THUMB = 160, FULL = 2048, GAP = 12; // pixels for FULL: an image atlas page is 2048², and a full-size image takes one
+    public const THUMB = 160, FULL = 2048; // pixels for FULL: an image atlas page is 2048², and a full-size image takes one
     public string $dir = '';
     /** @var list<string> */
     public array $files = [];
@@ -29,10 +29,10 @@ final class Photos
     public bool $viewing = false;
     /** The selection whose neighbors were last queued for decoding, so each frame of the viewer does not queue them again. */
     public int $prefetched = -1;
-    public ScrollState $grid;
+    public GridState $grid;
     public ?Window $window = null;
 
-    public function __construct() { $this->grid = new ScrollState; }
+    public function __construct() { $this->grid = new GridState; $this->grid->selects = true; $this->grid->label = fn(int $i) => basename($this->files[$i]); }
 
     public function open(string $path, ?string $select = null): void
     {
@@ -50,7 +50,7 @@ final class Photos
         $this->thumbs = []; $this->wanted = []; $this->full = []; $this->prefetched = -1;
         $this->selected = $select === null ? 0 : max(0, (int)array_search($select, $this->files, true));
         $this->viewing = $select !== null;
-        $this->grid->scrollTo(0, false);
+        $this->grid->scrollTo(0);
         $this->window?->setTitle(basename($path));
         $this->window?->update();
     }
@@ -132,47 +132,28 @@ function view(Context $c, Photos $p): void
 
 function grid(Context $c, Photos $p): void
 {
-    $t = $c->theme; $s = Photos::THUMB; $g = Photos::GAP;
-    $cols = max(1, (int)floor(($c->width - $g) / ($s + $g)));
-    // Only the rows in view need their thumbnails: they are wanted, in order, and decode between frames.
-    $first = (int)floor($p->grid->y / ($s + $g)) * $cols;
-    $last = min(count($p->files), $first + ($cols + 1) * (int)ceil($c->height / ($s + $g)) + $cols);
+    $t = $c->theme; $s = Photos::THUMB;
+    // A grid view: rows are built only as they show, so only their thumbnails are wanted; they decode between frames, in order.
     $p->wanted = [];
-    for ($i = $first; $i < $last; $i++) {
-        if (!isset($p->thumbs[$p->files[$i]])) {
-            $p->wanted[] = $p->files[$i];
-        }
-    }
+    $p->grid->selected = $p->selected;
+    $grid = $c->gridView($p->grid, count($p->files), $s, $s, function (int $i) use ($c, $t, $p, $s) {
+        $f = $p->files[$i];
+        $c->column(0, 0, 0, $t->surface)->size($s, $s)->round($t->radius)->center()->tooltip(basename($f));
+          if (($img = $p->thumb($f)) !== null) {
+              $k = min($s / $img->w, $s / $img->h); // the longer side fills the square
+              $c->image($img, $img->w * $k, $img->h * $k, $t->radius);
+          } else {
+              $p->wanted[] = $f;
+          }
+        $c->end();
+    });
+    $p->select($p->grid->selected);
+    if ($p->grid->rows->submitted()) { $p->viewing = true; } // a double click, Enter
+    if ($c->shortcut(Key::SPACE)) { $p->viewing = true; }
     if ($p->wanted !== []) {
         $p->thumbPixels = (int)($s * $c->scale); // the screen's pixels
         $p->decode();
     }
-    // Keys: the arrows move the choice, Enter or Space open it.
-    if ($c->shortcut(Key::LEFT)) { $p->select($p->selected - 1); }
-    if ($c->shortcut(Key::RIGHT)) { $p->select($p->selected + 1); }
-    if ($c->shortcut(Key::UP)) { $p->select($p->selected - $cols); }
-    if ($c->shortcut(Key::DOWN)) { $p->select($p->selected + $cols); }
-    if ($c->shortcut(Key::RETURN) || $c->shortcut(Key::SPACE)) { $p->viewing = true; }
-    $c->column($g, $g, 1)->scroll($p->grid);
-      for ($r = 0, $n = count($p->files); $r * $cols < $n; $r++) {
-          $c->row(0, $g);
-            for ($i = $r * $cols; $i < min($n, ($r + 1) * $cols); $i++) {
-                $f = $p->files[$i];
-                $on = $i === $p->selected;
-                $cell = $c->column(2, 0, 0, $on ? $t->accent : null)->round($t->radius + 2)->tooltip(basename($f));
-                  $c->column(0, 0, 0, $t->surface)->size($s, $s)->round($t->radius)->center();
-                    if (($img = $p->thumb($f)) !== null) {
-                        $k = min($s / $img->w, $s / $img->h); // the longer side fills the square
-                        $c->image($img, $img->w * $k, $img->h * $k, $t->radius);
-                    }
-                  $c->end();
-                $c->end();
-                if ($c->clicked($cell)) { $p->select($i); }
-                if ($c->doubleClicked($cell)) { $p->select($i); $p->viewing = true; }
-            }
-          $c->end();
-      }
-    $c->end();
 }
 
 function viewer(Context $c, Photos $p): void
