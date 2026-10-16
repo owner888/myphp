@@ -534,8 +534,13 @@ CGBitmapContext at the backing scale, the CTM flipped so the first row
 is the top, as CoreText does glyphs. A pure-PHP rasterizer for the other
 platforms is an open item. `UI\SVG::parse` reads path (d: M L H V C S Q T
 A Z, arcs as cubics), rect, circle, ellipse, line, polyline and polygon,
-in groups, each filled unless fill is none and stroked at stroke-width
-where a stroke is set, in viewBox units; `Context::icon($svg, $size,
+in groups, each filled unless fill is none (a line has no area) and
+stroked at stroke-width where a stroke is set, in viewBox units, with
+`transform` attributes (matrix, translate, scale, rotate, skewX, skewY,
+composed in order and nested through groups; a list in error
+transforms nothing, as in browsers — mygo's parseTransform) applied to
+the points as they are read, the stroke width by the most the
+transform lengthens a line (mygo's stretch); `Context::icon($svg, $size,
 $color)` is mygo's Icon, a box as high as the font size keeping the
 SVG's aspect ratio, `Painter::icon` scaling each shape into it and its
 stroke width with it, in the text's color. `avatar($name, $image)` is
@@ -1115,8 +1120,8 @@ and the nodes with local state.
 - Path masks come from CoreGraphics; a pure-PHP scanline rasterizer
   (mygo's vec: non-zero winding with coverage) would serve Linux and
   Windows, where it is wanted, at the cost of a slower first frame.
-- `SVG` reads shapes only: no transforms, gradients, masks, clips, style
-  sheets or text (convert text to paths); mygo reads all but text.
+- `SVG` reads shapes and transforms only: no gradients, masks, clips,
+  style sheets or text (convert text to paths); mygo reads all but text.
 - `grid` has no JustifyItems or automatic margins: a child fills its area
   across, and its `alignSelf` places it down.
 - `textarea` is a plain editor: no Tab indent, line numbers or syntax

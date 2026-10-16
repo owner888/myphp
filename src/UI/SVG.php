@@ -10,8 +10,10 @@ use RuntimeException;
  * text, as mygo's SVG: its path, rect, circle, ellipse, line, polyline and
  * polygon elements, in groups, filled (non-zero winding) or stroked where
  * fill is none and a stroke is set, in the box its viewBox (or width and
- * height) gives. Transforms, gradients, masks, clips, styles and text are
- * not read (an open item): convert such art to plain paths first.
+ * height) gives; transform attributes (matrix, translate, scale, rotate,
+ * skewX, skewY) are applied to the points as they are read. Gradients,
+ * masks, clips, styles and text are not read (an open item): convert
+ * such art to plain paths first.
  */
 final class SVG
 {
@@ -34,7 +36,7 @@ final class SVG
             $s->w = (float)($doc['width'] ?? 0); $s->h = (float)($doc['height'] ?? 0);
         }
         if ($s->w <= 0 || $s->h <= 0) { throw new RuntimeException('svg: no size'); }
-        $s->element($doc, ['fill' => 'black', 'stroke' => 'none', 'stroke-width' => 1.0]);
+        $s->element($doc, ['fill' => 'black', 'stroke' => 'none', 'stroke-width' => 1.0], self::IDENTITY);
         return $s;
     }
 
@@ -43,10 +45,13 @@ final class SVG
         return self::parse(file_get_contents($path) ?: throw new RuntimeException("svg: $path"));
     }
 
-    /** Reads an element and its children, with the paint $style inherited. */
-    private function element(\SimpleXMLElement $e, array $style): void
+    private const IDENTITY = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+    /** Reads an element and its children, with the paint $style inherited and $m, the transform of its ancestors, applied to its points. */
+    private function element(\SimpleXMLElement $e, array $style, array $m): void
     {
         foreach (['fill', 'stroke', 'stroke-width'] as $k) { if (isset($e[$k])) { $style[$k] = $k === 'stroke-width' ? (float)$e[$k] : trim((string)$e[$k]); } }
+        if (isset($e['transform'])) { $m = self::mul($m, self::transform((string)$e['transform'])); }
         $p = new Path;
         switch ($e->getName()) {
             case 'path': self::d((string)$e['d'], $p); break;
@@ -61,10 +66,60 @@ final class SVG
                 break;
         }
         if ($p->cmds !== []) {
-            if ($style['fill'] !== 'none') { $this->shapes[] = [$p, 0.0]; }
-            if ($style['stroke'] !== 'none') { $this->shapes[] = [$p, $style['stroke-width']]; }
+            if ($m !== self::IDENTITY) {
+                foreach ($p->cmds as &$c) { for ($i = 1; $i <= 5; $i += 2) { [$c[$i], $c[$i + 1]] = [$m[0] * $c[$i] + $m[2] * $c[$i + 1] + $m[4], $m[1] * $c[$i] + $m[3] * $c[$i + 1] + $m[5]]; } }
+                unset($c);
+            }
+            if ($style['fill'] !== 'none' && $e->getName() !== 'line') { $this->shapes[] = [$p, 0.0]; } // a line has no area to fill
+            if ($style['stroke'] !== 'none') { $this->shapes[] = [$p, $style['stroke-width'] * self::stretch($m)]; } // the width by the most the transform lengthens a line, as mygo strokes
         }
-        foreach ($e->children() as $child) { $this->element($child, $style); }
+        foreach ($e->children() as $child) { $this->element($child, $style, $m); }
+    }
+
+    /** The transform applying $n, then $m (mygo's matrix.mul): a, b, c, d, e, f as SVG's matrix(). */
+    private static function mul(array $m, array $n): array
+    {
+        return [$m[0] * $n[0] + $m[2] * $n[1], $m[1] * $n[0] + $m[3] * $n[1], $m[0] * $n[2] + $m[2] * $n[3], $m[1] * $n[2] + $m[3] * $n[3], $m[0] * $n[4] + $m[2] * $n[5] + $m[4], $m[1] * $n[4] + $m[3] * $n[5] + $m[5]];
+    }
+
+    /** The most $m lengthens a line: its largest singular value (mygo's stretch). */
+    private static function stretch(array $m): float
+    {
+        [$a, $b, $c, $d] = $m;
+        $e = $a * $a + $b * $b - $c * $c - $d * $d; $f = $a * $c + $b * $d;
+        return sqrt(($a * $a + $b * $b + $c * $c + $d * $d + sqrt($e * $e + 4 * $f * $f)) / 2);
+    }
+
+    /** Reads a transform list, as "translate(10 20) rotate(45)" (mygo's parseTransform); a list in error transforms nothing, as in browsers. */
+    private static function transform(string $s): array
+    {
+        $m = self::IDENTITY;
+        preg_match_all('/([a-zA-Z]+)\s*\(([^)]*)\)/', $s, $calls, PREG_SET_ORDER);
+        if ($calls === [] && trim($s) !== '') { return self::IDENTITY; }
+        foreach ($calls as [, $name, $args]) {
+            $a = $args === '' || trim($args) === '' ? [] : array_map(floatval(...), preg_split('/[\s,]+/', trim($args)));
+            $n = count($a);
+            $t = match (true) {
+                $name === 'matrix' && $n === 6 => $a,
+                $name === 'translate' && ($n === 1 || $n === 2) => [1.0, 0.0, 0.0, 1.0, $a[0], $a[1] ?? 0.0],
+                $name === 'scale' && $n === 1 => [$a[0], 0.0, 0.0, $a[0], 0.0, 0.0],
+                $name === 'scale' && $n === 2 => [$a[0], 0.0, 0.0, $a[1], 0.0, 0.0],
+                $name === 'rotate' && $n === 1 => self::rotation($a[0]),
+                $name === 'rotate' && $n === 3 => self::mul(self::mul([1.0, 0.0, 0.0, 1.0, $a[1], $a[2]], self::rotation($a[0])), [1.0, 0.0, 0.0, 1.0, -$a[1], -$a[2]]),
+                $name === 'skewX' && $n === 1 => [1.0, 0.0, tan(deg2rad($a[0])), 1.0, 0.0, 0.0],
+                $name === 'skewY' && $n === 1 => [1.0, tan(deg2rad($a[0])), 0.0, 1.0, 0.0, 0.0],
+                default => null,
+            };
+            if ($t === null) { return self::IDENTITY; }
+            $m = self::mul($m, $t);
+        }
+        return $m;
+    }
+
+    private static function rotation(float $deg): array
+    {
+        $r = deg2rad($deg);
+        return [cos($r), sin($r), -sin($r), cos($r), 0.0, 0.0];
     }
 
     private static function ellipse(Path $p, float $cx, float $cy, float $rx, float $ry): void

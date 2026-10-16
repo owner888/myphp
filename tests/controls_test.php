@@ -204,3 +204,13 @@ $h = new Headless(function (Context $c) use (&$n, $search) { $c->row(0, 8); $n['
 $h->frame(); same([13.0, 13.0], [$n['i']->w, $n['i']->h], 'an icon is as high as the font size, square for a square viewBox');
 same(['AL', 29.25, 14.625], [$n['a']->kids[0]->text, $n['a']->w, $n['a']->radius], 'an avatar: the initials, 2.25 × fontSize, round');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');
+
+// SVG transforms: applied to the points as they are read, nested, the stroke width scaled; a list in error transforms nothing.
+$t = SVG::parse('<svg viewBox="0 0 100 100"><g transform="translate(10 20)"><rect x="0" y="0" width="10" height="10" transform="scale(2)"/><line x1="0" y1="0" x2="10" y2="0" stroke="#000" stroke-width="2" transform="rotate(90)"/></g><rect x="1" y="1" width="1" height="1" transform="bogus(1)"/><rect x="0" y="0" width="2" height="2" transform="rotate(90 1 1)"/></svg>');
+$pts = fn(Path $p) => array_map(fn($c) => [round($c[1], 3), round($c[2], 3)], array_filter($p->cmds, fn($c) => $c[0] !== Path::CLOSE));
+same([[10.0, 20.0], [30.0, 20.0], [30.0, 40.0], [10.0, 40.0]], array_values($pts($t->shapes[0][0])), 'translate then scale, nested');
+same([[10.0, 20.0], [10.0, 30.0]], array_values($pts($t->shapes[1][0])), 'a line rotated 90°'); same(2.0, $t->shapes[1][1], 'a rotation keeps the stroke width');
+same([[1.0, 1.0], [2.0, 1.0], [2.0, 2.0], [1.0, 2.0]], array_values($pts($t->shapes[2][0])), 'a transform in error transforms nothing');
+same([[2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]], array_values($pts($t->shapes[3][0])), 'rotate(90 1 1) turns the square about its center');
+$t = SVG::parse('<svg viewBox="0 0 10 10"><path fill="none" d="M0 0 L1 0" stroke="#000" stroke-width="1" transform="scale(3 1)"/><path fill="none" d="M0 0 L1 0" stroke="#000" stroke-width="1" transform="matrix(1 0 0 1 5 5) skewX(45)"/></svg>');
+same(3.0, $t->shapes[0][1], 'scale(3 1) stretches a stroke by 3'); same([[5.0, 5.0], [6.0, 5.0]], array_values($pts($t->shapes[1][0])), 'matrix() and skewX compose in order');
