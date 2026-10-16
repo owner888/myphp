@@ -1045,7 +1045,12 @@ the view would send them — a key event then its selector, the selector
 taken by the focused field's TextState first, as the view does — and the
 widgets example loaded without its window). `widgets_test` sweeps the
 Tab order, what the keys do at each kind of control, the alert's focus
-and the cursor; `layout_test` the grid, wrapping and a split.
+and the cursor; `layout_test` the grid, wrapping and a split;
+`controls_test` each control on its own state — combobox, autocomplete,
+token field, date, calendar and time inputs, color picker and well,
+form and find bar, checkbox group, breadcrumbs, alert, grid view, the
+selection of several, rows and items dragged, the title bar's handle,
+SVG icons and avatars.
 
 ## Open items
 
