@@ -57,7 +57,7 @@ final class DiffSeparator
               $c->text($s->header, $s->fontSize() - 1, $t->textMuted, $s->fontStyle())->single();
           } else {
               $chevron = function (int $dir, string $label, \Closure $fn) use ($c, $t, $ct, $s) {
-                  $b = $c->key($label)->row()->size(20, 20)->round(4)->tooltip($label)->cursor('pointer');
+                  $b = $c->key($label)->row()->size(20, 20)->round(4)->label($label)->tooltip($label)->cursor('pointer')->focusable();
                   if ($c->hovered($b)) { $b->color = $ct->c['text'][0]; $b->alpha = $ct->c['text'][1] * 0.08; }
                   $b->drawOver(function (DisplayList $list, Node $r, UITheme $th) use ($dir) {
                       $cx = $r->x + $r->w / 2; $cy = $r->y + $r->h / 2; $d = 3.5;
@@ -86,7 +86,7 @@ final class DiffSeparator
                   $chevron(-1, $tx->get('expandUp'), $s->expandUp(...));
               }
               $label = $tx->get('unmodifiedLines', ['n' => $s->lines]);
-              $b = $c->key('all')->row()->padding($t->space(0.5), $t->space(1))->round(4)->cursor('pointer')->tooltip($tx->get('expand', ['what' => $label]));
+              $b = $c->key('all')->row()->padding($t->space(0.5), $t->space(1))->round(4)->cursor('pointer')->focusable()->label($tx->get('expand', ['what' => $label]));
                 $c->text($label, max($t->fontSize - 1, 11), $t->textMuted);
               $c->end();
               if ($c->clicked($b)) { $s->expandAll(); }

@@ -1,12 +1,12 @@
 <?php
 // The widgets example, headless: its Tab order, what the keys do at each
-// kind of control, the pointer's cursor. Numbers are read off the example
-// as it is; change them when it changes.
+// kind of control, the pointer's cursor, what assistive technology sees.
+// Numbers are read off the example as it is; change them when it changes.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Key, Node};
+use MyPHP\UI\{AccessNode, Key, Node, Role};
 
 $w = Headless::widgets(); $view = $w[0]; $s = &$w[1]; // by reference: the view reads the state the test sets
 $h = new Headless($view, 900, 700);
@@ -84,3 +84,22 @@ foreach ($nodes as $n) {
     if ($h->rt->cursor === 'ibeam') { $ibeam++; } elseif ($h->rt->cursor !== 'arrow') { $other[] = $h->rt->cursor; }
 }
 check($ibeam >= 5, "an I-beam over the fields ($ibeam)"); same([], $other, 'no other cursor in the widgets');
+
+// The widgets example, each of its tabs: what assistive technology sees of every kind of control.
+$t = new Headless($view, 900, 700);
+$t->frame();
+$t->input->push(['accessOn']); $t->frame();
+$roles = [];
+foreach ([0, 1, 2] as $tab) {
+    $s['tab'] = $tab; $s['more'] = true; $t->frame();
+    foreach ($t->rt->accessTree->nodes as $n) { $roles[$n->role] = true; }
+}
+foreach (['TOOLBAR' => Role::TOOLBAR, 'TAB_LIST' => Role::TAB_LIST, 'TAB' => Role::TAB, 'RADIO_GROUP' => Role::RADIO_GROUP, 'SLIDER' => Role::SLIDER,
+    'TEXT_FIELD' => Role::TEXT_FIELD, 'BUTTON' => Role::BUTTON, 'CHECK_BOX' => Role::CHECK_BOX, 'POP_UP_BUTTON' => Role::POP_UP_BUTTON] as $name => $r) {
+    check(isset($roles[$r]), "the widgets example shows a node of role $name");
+}
+$unnamed = [];
+foreach ($t->rt->accessTree->nodes as $n) {
+    if (in_array($n->role, [Role::BUTTON, Role::CHECK_BOX, Role::RADIO, Role::SWITCH, Role::TAB, Role::LINK, Role::MENU_BUTTON], true) && $n->label === '') { $unnamed[] = $n->role; }
+}
+same([], $unnamed, 'every button, check box, radio button, switch, tab and link of the last tab is named');

@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Editor;
 
 use MyPHP\{Menu, MenuItem, Window};
-use MyPHP\UI\{Context, DisplayList, InputEvent, Node, TextPainter, Theme as UITheme};
+use MyPHP\UI\{AccessNode, Context, DisplayList, InputEvent, Node, Role, TextPainter, Theme as UITheme};
 
 /** Building an editor's element and its parts for a frame (mygo's build.go, and parts.go's placing of its parts). */
 trait EditorBuild
@@ -49,6 +49,8 @@ trait EditorBuild
                 $this->unmarkText();
             }
         }
+        $e->role(Role::TEXT_FIELD)->label($o->label !== '' ? $o->label : $this->texts->get(match ($o->diffSide) { Options::DIFF_NEW => 'newText', Options::DIFF_OLD => 'oldText', default => 'codeEditor' }))
+            ->access($this->accessibility(...));
         $e->handleInput(fn(InputEvent $ev) => $this->input($ev));
         $e->cursor($this->region === self::REGION_TEXT ? 'ibeam' : 'arrow');
         $e->draw(function (DisplayList $list, Node $n, UITheme $t, TextPainter $text) { $this->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
@@ -183,7 +185,7 @@ trait EditorBuild
         if ($f->queryField->text !== $f->query) { $f->queryField->text = $f->query; $f->queryField->setCursor(strlen($f->query)); }
         if ($f->replaceField->text !== $f->replace) { $f->replaceField->text = $f->replace; $f->replaceField->setCursor(strlen($f->replace)); }
         // Over the top right corner: as wide as it was last frame.
-        $bar = $c->key('code find')->row()->cursor('arrow')->handleInput(self::shield(...));
+        $bar = $c->key('code find')->row()->cursor('arrow')->handleInput(self::shield(...))->role(Role::TOOLBAR)->label($c->texts()->get('find'));
         $last = $c->runtime?->rectOf($bar->id);
         $bar->at(max(0.0, $this->r[2] - $t->space(4) - ($last[2] ?? 0.0)), $t->space(1));
         ($this->o->renderFindBar ?? FindBar::default(...))($c, $bar, new FindBar($c, $this));
@@ -204,7 +206,7 @@ trait EditorBuild
     {
         $t = $c->theme;
         $g = $this->goTo;
-        $bar = $c->key('code go to line')->row()->cursor('arrow')->handleInput(self::shield(...));
+        $bar = $c->key('code go to line')->row()->cursor('arrow')->handleInput(self::shield(...))->role(Role::DIALOG)->label($c->texts()->get('goToLine'));
         $last = $c->runtime?->rectOf($bar->id);
         $bar->at(max(0.0, ($this->r[2] - ($last[2] ?? 0.0)) / 2), $t->space(1));
         ($this->o->renderGoToLine ?? GoToLineBar::default(...))($c, $bar, new GoToLineBar($c, $this));
@@ -224,7 +226,8 @@ trait EditorBuild
     {
         $cc = $this->complete;
         $c->overlay(function () use ($c, $cc, $anchor) {
-            $panel = $c->key('code completions')->column()->at($anchor[0], $anchor[1] + $anchor[3])->cursor('arrow')->keepFocus()->handleInput(self::shield(...));
+            $panel = $c->key('code completions')->column()->at($anchor[0], $anchor[1] + $anchor[3])->cursor('arrow')->keepFocus()->handleInput(self::shield(...))
+                ->role(Role::LIST)->label($c->texts()->get('completions'));
             $m = new CompletionMenu($c, $this);
             ($this->o->renderCompletions ?? CompletionMenu::default(...))($c, $panel, $m);
             $c->end();
@@ -247,7 +250,7 @@ trait EditorBuild
         if (!$h->shown || $h->build === null && $h->text === '' && ($h->diags ?? []) === []) { return; }
         $c->overlay(function () use ($c, $h, $anchor) {
             // The hover takes the keyboard as it is pressed, for its text to be selected and copied; Escape gives it back to the editor.
-            $panel = $c->key('code hover')->column()->handleInput(self::shield(...));
+            $panel = $c->key('code hover')->column()->handleInput(self::shield(...))->role(Role::TOOLTIP);
             $rt = $c->runtime;
             $last = $rt?->rectOf($panel->id);
             $panel->at($anchor[0], $anchor[1] - ($last[3] ?? 0.0) - $c->theme->space(1));
@@ -257,6 +260,24 @@ trait EditorBuild
             ($this->o->renderHover ?? HoverCard::default(...))($c, $panel, new HoverCard($c, $this));
             $c->end();
         });
+    }
+
+    /** What assistive technology sees of the editor beyond its role and name (mygo's accessibility): its text, of many lines, and the newest selection. */
+    private function accessibility(AccessNode $n): void
+    {
+        $n->states |= AccessNode::MULTILINE;
+        if ($this->o->readOnly) { $n->states |= AccessNode::READ_ONLY; }
+        $r = $this->view->text;
+        if ($r->len() > 4 << 20) {
+            // Assistive technology gets the lines in view of a very large text.
+            $n->value = $this->slice($r->lineStart($this->anchorLine), $r->lineEnd(min($r->lineCount() - 1, $this->anchorLine + 200)));
+            return;
+        }
+        $n->value = (string)$r;
+        $p = $this->primary();
+        $n->selStart = mb_strlen(substr($n->value, 0, min($p->start(), strlen($n->value))), 'UTF-8');
+        $n->selEnd = $n->selStart + mb_strlen(substr($n->value, min($p->start(), strlen($n->value)), max(0, min($p->end(), strlen($n->value)) - min($p->start(), strlen($n->value)))), 'UTF-8');
+        if ($n->placeholder === '') { $n->placeholder = $this->o->placeholder; }
     }
 
     /** Whether rect $a lies within rect $b. */

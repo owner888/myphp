@@ -449,4 +449,116 @@ final class Node
         $this->scrollY = $vertical;
         return $this;
     }
+
+    // What assistive technology, such as screen readers, sees of the node (mygo's access.go): its role and name, and the states of a widget of the app's own, as ARIA's on the web.
+
+    /** A Role: AUTO finds it from what the node does. */
+    public int $role = Role::AUTO;
+    /** Names the node to assistive technology, as an icon button's (mygo's Label); a control with no label of its own is named by its text. */
+    public string $label = '';
+    /** Whether a check box, switch, radio button, toggle button or menu item is on: 0 unsaid, 1 off, 2 on, 3 partly on (mixed). */
+    public int $checked = 0;
+    /** Whether what the node opens shows, and whether it is an item of a tree with children, which expanding shows. */
+    public bool $expanded = false, $expandable = false;
+    /** What assistive technology reads as the node's value, as the choice a pop-up button shows. */
+    public string $accValue = '';
+    /** @var ?array{0: float, 1: float, 2: float} the range and the value of a slider, progress bar, meter or stepper: lo, hi, value */
+    public ?array $accRange = null;
+    /** How far the keys move the value of a range. */
+    public float $accStep = 0.0;
+    /** The rank of a heading, or how deep an item of a tree is, from 1; 0 for neither. */
+    public int $level = 0;
+    /** Tells more about the node than its name, read after it, as help: its tooltip unless set. */
+    public ?string $description = null;
+    /** The node that has the keyboard focus while this one does (activeDescendant). */
+    public ?Node $activeDescendant = null;
+    /** A segment of a segmented control; a slider going up; a text field for searching; a control whose value is not valid. */
+    public bool $segment = false, $vertical = false, $search = false, $invalid = false;
+    /** The header of the column a table's rows are sorted by: 1 ascending, 2 descending, 0 neither. */
+    public int $sort = 0;
+    /** Which option of how many the node is, from 1, 0 for unsaid; a popup whose options are chosen; a list choosing several of its items. */
+    public int $setPos = 0, $setSize = 0;
+    public bool $choosesItems = false, $chooseMany = false;
+    /** An item its container chooses as it takes the focus, as a sidebar's: assistive technology focusing it chooses it. */
+    public bool $choosable = false;
+    /** Names the node when it has no label of its own, or before it ($nameJoin): a range slider names its knobs "minimum" and "maximum" of its own name. */
+    public ?Node $nameFrom = null;
+    public bool $nameJoin = false;
+        /** @var array<int, int> for a list's node: the rows its children start, child index => row index, which assistive technology sees a node of each around (RuntimeAccess) */
+    public array $rowStarts = [];
+    /** The role of those rows: LIST_ITEM, or a table's ROW. */
+    public int $rowRole = Role::LIST_ITEM;
+    /** Fills in the node of the tree for the node, after the rest (mygo's Access): what it tells that the node does not. @var ?\Closure(AccessNode): void */
+    public ?\Closure $accFill = null;
+
+    /** Sets what the node is to assistive technology (a Role), for a node drawn as a widget it is not built from, such as a toggle of the app's own. */
+    public function role(int $r): static
+    {
+        $this->role = $r;
+        return $this;
+    }
+
+    /** Names the node to assistive technology (mygo's Label), as a button showing only an icon. */
+    public function label(string $s): static
+    {
+        $this->label = $s;
+        return $this;
+    }
+
+    /** Tells assistive technology whether the node, as a check box, switch, radio button, toggle button or menu item of the app's own, is on. */
+    public function checked(bool $on): static
+    {
+        $this->checked = $on ? 2 : 1;
+        return $this;
+    }
+
+    /** Tells assistive technology that the node, a check box, is partly on, as one checking a group whose boxes differ. */
+    public function mixed(): static
+    {
+        $this->checked = 3;
+        return $this;
+    }
+
+    /** Tells assistive technology whether what the node opens shows, as the popup of a button or the section below a header. */
+    public function expanded(bool $open): static
+    {
+        $this->expanded = $open;
+        return $this;
+    }
+
+    /** Sets what assistive technology reads as the node's value, as the choice a button opening a popup shows. */
+    public function value(string $s): static
+    {
+        $this->accValue = $s;
+        return $this;
+    }
+
+    /** Tells assistive technology the range and the value of a slider, progress bar, meter or stepper of the app's own: $value, from $lo to $hi; $step how far the keys move it. */
+    public function range(float $lo, float $hi, float $value, float $step = 0.0): static
+    {
+        $this->accRange = [$lo, $hi, $value];
+        if ($step > 0) { $this->accStep = $step; }
+        return $this;
+    }
+
+    /** Tells assistive technology the rank of a heading, from 1 for the highest, or how deep an item of a tree is, from 1 at the top. */
+    public function level(int $n): static
+    {
+        $this->level = max($n, 0);
+        return $this;
+    }
+
+    /** Tells assistive technology that $d has the keyboard focus while this node does: the option the arrows are on in a list or a menu that keeps the focus itself, as a combobox's input does. */
+    public function activeDescendant(Node $d): static
+    {
+        $this->activeDescendant = $d;
+        return $this;
+    }
+
+    /** Has $fn fill in the node of the tree for this node, after the rest (mygo's Access), with what the node does not tell. @param \Closure(AccessNode): void $fn */
+    public function access(\Closure $fn): static
+    {
+        $this->accFill = $fn;
+        return $this;
+    }
 }

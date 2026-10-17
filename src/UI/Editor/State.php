@@ -65,6 +65,8 @@ final class State
     public bool $fitContent = false;
     /** Shows while the buffer is empty. */
     public string $placeholder = '';
+    /** Names the editor for assistive technology. */
+    public string $label = '';
     /** Colors the editor; Theme::defaults of the window's theme when null. */
     public ?Theme $theme = null;
     /** @var list<Binding> key bindings added, or replacing the default ones for their keys (Keymap::defaults) */
@@ -146,7 +148,7 @@ final class State
         $o->lineNumbers = $this->lineNumbers; $o->whitespace = $this->whitespace; $o->wrapGuides = $this->wrapGuides;
         $o->indentGuides = !$this->noIndentGuides; $o->scrollPastEnd = !$this->noScrollPastEnd && !$this->fitContent;
         $o->autoClose = !$this->noAutoClose; $o->folding = !$this->noFolding; $o->activeLine = !$this->noActiveLine;
-        $o->cursorShape = $this->cursorShape; $o->fitContent = $this->fitContent; $o->placeholder = $this->placeholder;
+        $o->cursorShape = $this->cursorShape; $o->fitContent = $this->fitContent; $o->placeholder = $this->placeholder; $o->label = $this->label;
         $o->theme = $this->theme; $o->bindings = $this->bindings; $o->gutterMarks = $this->gutterMarks; $o->backgrounds = $this->lineBackgrounds;
         $o->diffBase = $this->diffBase; $o->onCompletion = $this->onCompletion; $o->onHover = $this->onHover; $o->onDefinition = $this->onDefinition;
         $o->onGutterClick = $this->onGutterClick; $o->contextMenu = $this->contextMenu; $o->onInput = $this->onInput; $o->noInputMethod = $this->noInputMethod;

@@ -230,7 +230,7 @@ final class Context
         // The place may have been set before the view's size was known (end() at
         // startup, say) or the rows changed under it: keep it within the rows.
         $state->scrollBy(0);
-        $node = $this->column(0, 0, 1)->scroll($state);
+        $node = $this->column(0, 0, 1)->scroll($state)->role(Role::LIST);
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $state->first = $state->row;
         $y = -$state->offset;
@@ -241,6 +241,7 @@ final class Context
             $this->ordinal = 0;
             $k = count($node->kids);
             $row($i);
+            if (isset($node->kids[$k])) { $node->rowStarts[$k] = $i; } // assistive technology sees row $i around its nodes
             $y += $state->height($i);
             if ($state->selected === null || !isset($node->kids[$k])) {
                 continue;
@@ -417,6 +418,7 @@ final class Context
         $n = $this->text($s, $size, $this->theme->accent);
         $n->underline = $this->hovered($n); // underlined under the pointer, as mygo's
         $n->url = $url;
+        $n->role = Role::LINK;
         if ($this->runtime?->clicked($n->id)) {
             ($this->runtime->openURL)($url);
         }
@@ -428,6 +430,7 @@ final class Context
     {
         $n = $this->add(new Node(Node::PROGRESS, 0, 0, 0, $width, $this->theme->space(1.5), 0, null, null));
         $n->fraction = $fraction;
+        $n->role(Role::PROGRESS)->range(0, 1, $fraction); // below 0: of unknown length
         return $n;
     }
 
@@ -442,6 +445,7 @@ final class Context
         $t = $this->theme;
         $n = $this->add(new Node(Node::PROGRESS, 0, 0, 0, $width, $t->space(2), 0, null, $t->success));
         $n->fraction = $hi > $lo ? max(0.0, min(1.0, ($value - $lo) / ($hi - $lo))) : 0.0;
+        $n->role(Role::METER)->range($lo, $hi, $value);
         if ($warning !== null && $critical !== null && $warning !== $critical) {
             $low = $critical < $warning;
             if ($low ? $value <= $critical : $value >= $critical) { $n->color = $t->danger; }
@@ -477,7 +481,7 @@ final class Context
           } elseif ($text->text !== $format($value)) {
               $text->text = $format($value); $text->setCursor(strlen($text->text)); // what the app set, or what was typed, shown in full
           }
-          $minus = $this->button('−'); $plus = $this->button('+');
+          $minus = $this->button('−')->label('Decrease'); $plus = $this->button('+')->label('Increase');
         $this->end();
         if ($this->clicked($minus) && $value > $lo) { $set($value - $step); }
         if ($this->clicked($plus) && $value < $hi) { $set($value + $step); }
@@ -528,10 +532,12 @@ final class Context
     public function toggle(bool &$on, string $label, ?float $size = null): Node
     {
         $n = $this->makeButton($label, $size, false, $on);
+        $n->role = Role::TOGGLE_BUTTON;
         if ($this->clicked($n)) {
             $on = !$on;
             $n->changed = true;
         }
+        $n->checked($on);
         return $n;
     }
 
@@ -544,7 +550,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER)->focusGroup(Node::HORIZONTAL); // one stop of Tab; Left and Right move inside
+        $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER)->focusGroup(Node::HORIZONTAL)->role(Role::TOOLBAR); // one stop of Tab; Left and Right move inside
         $this->toolbars++;
           $fn();
           // Controls that do not fit go, from the last, into a menu at the end (mygo's layoutToolbar): the room is the toolbar's last-frame width.
@@ -564,7 +570,7 @@ final class Context
           if ($fits < count($items)) {
               $n->kids = array_slice($items, 0, $fits);
               $overflow = array_slice($items, $fits);
-              $more = $this->key('more')->column(0, 0)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->focusable()->center()
+              $more = $this->key('more')->column(0, 0)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->focusable()->center()->role(Role::MENU_BUTTON)->label($this->texts()->get('more'))
                   ->draw(function (DisplayList $list, Node $b, Theme $t) { // mygo's chevrons: »
                       $d = $t->space(3); $x = $b->x + ($b->w - $d) / 2; $y = $b->y + ($b->h - $d) / 2;
                       foreach ([0.2, 0.5] as $k) {
@@ -627,6 +633,7 @@ final class Context
             $n->changed = true;
         }
         $n->on = $checked;
+        $n->role(Role::CHECK_BOX)->checked($checked);
         if ($this->checks !== null) { $this->checks[] = &$checked; } // in a group: the head checks or clears it
         return $n;
     }
@@ -644,6 +651,7 @@ final class Context
             $n->changed = true;
         }
         $n->on = $on;
+        $n->role(Role::SWITCH)->checked($on);
         return $n;
     }
 
@@ -675,7 +683,7 @@ final class Context
         $k = count($this->accordions) - 1;
         $n = $this->column(0, 0);
           if ($this->accordions[$k]++ > 0) { $this->divider(); } // a line above all but the first
-          $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable();
+          $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
             $this->text($title, $t->fontSize, $t->text, Font::BOLD)->single();
             $this->spacer();
@@ -683,6 +691,7 @@ final class Context
             $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 270 : 90, $t->textMuted)); // down, or up while open
           $this->end();
           if ($this->clicked($head)) { $open = !$open; $n->changed = true; }
+          $head->expanded($open);
           if ($open) {
               $this->column(0, $t->space(2))->padding(0, $t->space(3));
                 $fn();
@@ -704,7 +713,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->row(0, $t->space(0.5))->focusable();
+        $n = $this->row(0, $t->space(0.5))->focusable()->role(Role::SLIDER);
         $set = function (int $v) use (&$value, $max, $n) { $v = max(0, min($max, $v)); if ($v !== $value) { $value = $v; $n->changed = true; } };
         if ($rt !== null && $rt->focus === $n->id) {
             if ($this->shortcut(Key::RIGHT) || $this->shortcut(Key::UP)) { $set($value + 1); }
@@ -714,7 +723,7 @@ final class Context
         }
         $size = $t->fontSize * 1.25; $stars = []; $hover = -1;
           for ($i = 0; $i < $max; $i++) {
-              $stars[$i] = $this->box($size, $size, 0); $stars[$i]->color = null; // a glyph alone
+              $stars[$i] = $this->box($size, $size, 0)->role(Role::NONE); $stars[$i]->color = null; // a glyph alone
               if ($this->hovered($stars[$i])) { $hover = $i; }
           }
         $this->end();
@@ -725,6 +734,7 @@ final class Context
             // A star glyph in place of mygo's star path: filled in the warning color, or outlined in the muted color.
             $star->text = $filled ? '★' : '☆'; $star->fontSize = $size; $star->fg = $filled ? $color : $t->textMuted; $star->alpha = $alpha;
         }
+        $n->range(0, $max, $value, 1);
         return $n;
     }
 
@@ -741,7 +751,7 @@ final class Context
         $rt = $this->runtime;
         $kw = $t->space(5);
         $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
-        $n = $this->row(0, 0, $width <= 0 ? 1 : 0)->padding(0, $kw / 2)->min($t->space(25), $t->space(5));
+        $n = $this->row(0, 0, $width <= 0 ? 1 : 0)->padding(0, $kw / 2)->min($t->space(25), $t->space(5))->role(Role::GROUP);
         if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
         $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
         $snap = fn(float $v) => $step > 0 ? round(($v - $lo) / $step) * $step + $lo : $v;
@@ -758,6 +768,8 @@ final class Context
               $frac = $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
               $knob = $this->key($which)->box(0, 0, 0)->size($kw, $t->space(5))->at(($r === null ? 0 : ($r[2] - $kw)) * $frac - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in
               $knob->color = null; $knob->ownRing = true; // the knob is painted, ring and all, by the slider's draw
+              $knob->role(Role::SLIDER)->range($lo, $hi, $v, $keyStep)->label(['minimum', 'maximum'][$k]);
+              $knob->nameFrom = $n; $knob->nameJoin = true; // "Price minimum", of a slider labeled Price
               $knobs[$which] = $knob;
               if ($rt !== null && $rt->focus === $knob->id) {
                   if ($this->shortcut(Key::LEFT) || $this->shortcut(Key::DOWN)) { $set($which, $v - $keyStep); }
@@ -802,7 +814,7 @@ final class Context
      */
     public function tree(Closure $fn): Node
     {
-        $n = $this->column(0, 0);
+        $n = $this->column(0, 0)->role(Role::TREE);
         $local = $this->runtime?->local($n->id, fn() => (object)['items' => [], 'parents' => []]);
         $this->trees[] = ['local' => $local, 'items' => [], 'parents' => [], 'open' => []];
           $fn();
@@ -826,7 +838,7 @@ final class Context
         $tb = &$this->trees[count($this->trees) - 1];
         $depth = count($tb['open']);
         $branch = $children !== null && $open !== null;
-        $n = $this->row(0, $t->space(0.5), 0, $selected ? $t->accent : null)->round($t->radius)->align(Node::CENTER)->focusable()->size(0, $t->space(7));
+        $n = $this->row(0, $t->space(0.5), 0, $selected ? $t->accent : null)->round($t->radius)->align(Node::CENTER)->focusable()->size(0, $t->space(7))->role(Role::TREE_ITEM);
         $id = $n->id;
         $tb['items'][] = $id;
         $tb['parents'][$id] = $tb['open'][$depth - 1] ?? null;
@@ -843,10 +855,13 @@ final class Context
             }
             if ($to !== null) { $rt->focus = $to; }
         }
+        if ($branch && $rt !== null && ($e = $rt->expanded($id)) !== 0) { $open = $e > 0; } // assistive technology opening or closing it
+        $n->expanded = $branch && $open; $n->expandable = $branch; $n->level = $depth + 1;
+        if ($selected) { $n->checked(true); }
         $fg = $selected ? $t->accentText : $t->text;
           $this->column(0, 0)->size($t->space(1 + 4 * $depth), 0); $this->end(); // the indent
           $arrow = $this->column(0, 0)->size($t->space(4), $t->space(4))->center();
-            if ($branch) { $this->text($open ? '▾' : '▸', $t->fontSize - 1, $selected ? $t->accentText : $t->textMuted); }
+            if ($branch) { $this->text($open ? '▾' : '▸', $t->fontSize - 1, $selected ? $t->accentText : $t->textMuted)->role(Role::NONE); }
           $this->end();
           $this->text($label, $t->fontSize, $fg)->single();
           $this->column(0, 0)->size($t->space(2), 0); $this->end();
@@ -871,7 +886,8 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $n = $this->column($t->space(2.5), $t->space(0.5), 0, $t->surface)->size($width)->focusable();
+        $n = $this->column($t->space(2.5), $t->space(0.5), 0, $t->surface)->size($width)->focusable()->role(Role::TREE);
+        $n->choosesItems = true; // whose sections hold their items
         if ($rt !== null) {
             $local = $rt->local($n->id, fn() => (object)['scroll' => new ScrollState, 'items' => []]);
             $n->scroll($local->scroll);
@@ -885,10 +901,11 @@ final class Context
             }
             if ($to !== null && $items[$to] !== $selected) { $selected = $items[$to]; $n->changed = true; }
         }
-        $this->sidebars[] = ['node' => $n, 'selected' => &$selected, 'items' => []];
+        $this->sidebars[] = ['node' => $n, 'selected' => &$selected, 'items' => [], 'depth' => 0, 'chosen' => null];
           $fn();
         $built = array_pop($this->sidebars);
         $this->end();
+        if ($built['chosen'] !== null) { $n->activeDescendant($built['chosen']); } // the item chosen has the focus for assistive technology, as a list's row chosen does
         if (isset($local)) { $local->items = $built['items']; }
         return $n;
     }
@@ -903,9 +920,11 @@ final class Context
     {
         $t = $this->theme;
         $parent = $this->stack[count($this->stack) - 1];
+        $alone = ['depth' => 0]; // a section out of a sidebar
+        if ($this->sidebars === []) { $sb = &$alone; } else { $sb = &$this->sidebars[count($this->sidebars) - 1]; }
         $n = $this->column(0, $t->space(0.5));
           if (count($parent->kids) > 1) { $this->column(0, 0)->size(0, $t->space(2.5)); $this->end(); } // apart from the section above
-          $head = $this->row(0, 0)->padding($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER);
+          $head = $this->row(0, 0)->padding($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER)->role(Role::TREE_ITEM)->level(1);
             $this->text($title, $t->fontSize - 1, $t->textMuted, Font::BOLD);
             $this->spacer();
             if ($open !== null) { // the disclosure arrow, shown as the pointer rests on the title
@@ -915,7 +934,9 @@ final class Context
             }
           $this->end();
           if ($open !== null && $this->clicked($head)) { $open = !$open; }
-          if ($open === null || $open) { $fn(); }
+          if ($open !== null && ($e = $this->runtime?->expanded($head->id) ?? 0) !== 0) { $open = $e > 0; } // assistive technology opening or closing it
+          if ($open !== null) { $head->expandable = true; $head->expanded = $open; }
+          if ($open === null || $open) { $sb['depth']++; $fn(); $sb['depth']--; }
         $this->end();
         return $n;
     }
@@ -933,10 +954,13 @@ final class Context
         $chosen = $sb['selected'] === $id;
         $focused = $this->focused($sb['node']);
         $sb['items'][] = $id;
-        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->padding($t->space(1.5), $t->space(2))->round($t->radius)->align(Node::CENTER);
+        $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->padding($t->space(1.5), $t->space(2))->round($t->radius)->align(Node::CENTER)
+            ->role(Role::TREE_ITEM)->level($sb['depth'] + 1)->checked($chosen);
+        $n->choosable = true;
+        if ($chosen) { $sb['chosen'] = $n; }
         if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
-          if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
+          if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
           $this->text($label, $t->fontSize, $fg)->single();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();
@@ -987,11 +1011,14 @@ final class Context
             $r = $rt->rectOf($anchor->id) ?? [0, 0, 0, 0];
             $saved = $this->stack; $this->stack = [$this->root];
             $panel = $this->key('combo:' . $in->id)->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)
-                ->at($r[0], $r[1] + $r[3] + $t->space(1))->size($r[2], 0)->scroll($local->scroll);
+                ->at($r[0], $r[1] + $r[3] + $t->space(1))->size($r[2], 0)->scroll($local->scroll)->role(Role::LIST);
+            $panel->choosesItems = true;
             $panel->size($r[2], min($t->space(70), count($shown) * ($t->space(3) + $this->metrics->measure('X', $t->fontSize)[1]) + 2 * $t->space(1)));
               foreach ($shown as $i => $opt) {
                   $hl = $i === $local->highlight;
-                  $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius);
+                  $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->role(Role::LIST_ITEM);
+                  $item->setPos = $i + 1; $item->setSize = count($shown); $item->choosable = true;
+                  if ($hl) { $in->activeDescendant($item); } // the input has the focus for the option its arrows are on
                     $this->text($opt, $t->fontSize, $hl ? $t->accentText : $t->text)->single();
                   $this->end();
                   if ($this->hovered($item) && $rt->pressedAnywhere() === false) { $local->highlight = $i; }
@@ -1018,7 +1045,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam'); // mygo's field: as wide as its content in a row, stretched in a column
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
         $local = $rt?->local($f->id, $make) ?? $make();
@@ -1027,6 +1054,7 @@ final class Context
           $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, in the field's box
           $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
+          $in->role = Role::COMBO_BOX; $in->nameFrom = $f;
           $arrow = $this->box($t->space(2.5), $t->space(2.5), 0); $arrow->color = null;
           $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::chevron($list, $a->x, $a->y, $a->w, $t->textMuted));
         $this->end();
@@ -1064,7 +1092,7 @@ final class Context
     public function autocomplete(TextState $state, array $suggestions, string $placeholder = '', float $width = 200): Node
     {
         $rt = $this->runtime;
-        $in = $this->input($state, $placeholder, $width);
+        $in = $this->input($state, $placeholder, $width)->role(Role::COMBO_BOX);
         $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'was' => $state->text];
         $local = $rt?->local($in->id, $make) ?? $make();
         $shown = [];
@@ -1093,7 +1121,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam'); // mygo's field: as wide as its content in a row, stretched in a column
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $f->wrap($rt?->rectOf($f->id)[2] ?? 0.0);
         $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
@@ -1105,7 +1133,7 @@ final class Context
               $chip = $this->key($tok)->row(0, $t->space(1), 0, $t->surfacePressed)->padding($t->space(0.25), 0)->round($t->radius)->align(Node::CENTER)->cursor('arrow');
                 $this->column(0, 0)->size($t->space(1), 0); $this->end(); // with the gap: PaddingStart(Space(2))
                 $this->text($tok, $t->fontSize)->single();
-                $x = $this->box($t->space(3.5), $t->space(3.5), 0)->round($t->space(1)); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
+                $x = $this->box($t->space(3.5), $t->space(3.5), 0)->round($t->space(1))->role(Role::BUTTON)->label($this->texts()->get('removeToken', ['token' => $tok])); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
                 $x->draw(function (DisplayList $list, Node $b, Theme $t) { $k = $b->w * 0.3; $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); $list->line($b->x + $b->w - $k, $b->y + $k, $b->x + $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); });
                 $this->column(0, 0); $this->end(); // with the gap: PaddingEnd(Space(1))
               $this->end();
@@ -1115,6 +1143,8 @@ final class Context
           $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips, keeping its identity whatever they are
           $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
+          $in->nameFrom = $f;
+          if ($suggestions !== []) { $in->role = Role::COMBO_BOX; } // else a text field
         $this->end();
         $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
         if ($this->clicked($f) && $rt !== null) { $rt->focus = $in->id; $in->focused = true; }
@@ -1223,7 +1253,7 @@ final class Context
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
         $title = I18n::formatDate($locale, $month, 'yMMMM');
         $first = $region->firstWeekday;
-        $grid = $this->column(0, $t->space(0.5))->focusable(); $grid->ownRing = true;
+        $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
         $visible = $rt?->focusVisible($grid->id) ?? false;
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::focusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
         $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
@@ -1239,27 +1269,28 @@ final class Context
             elseif ($rt->activated($grid->id)) { $choose($cur); }
         }
           $this->row(0, $t->space(1))->align(Node::CENTER);
-            $prev = $this->button('‹')->padding($t->space(0.5), $t->space(2.5));
+            $prev = $this->button('‹')->padding($t->space(0.5), $t->space(2.5))->label($this->texts()->get('previousMonth'));
             if ($this->clicked($prev)) { $move(self::addMonths($cur, -1)); }
             $this->row(0, 0, 1)->justify(Node::CENTER); $this->text($title, $t->fontSize, $t->text, Font::BOLD); $this->end();
-            $next = $this->button('›')->padding($t->space(0.5), $t->space(2.5));
+            $next = $this->button('›')->padding($t->space(0.5), $t->space(2.5))->label($this->texts()->get('nextMonth'));
             if ($this->clicked($next)) { $move(self::addMonths($cur, 1)); }
           $this->end();
           $this->row(0, 0);
             $names = I18n::weekdays($locale, I18n::SHORT, true);
             for ($i = 0; $i < 7; $i++) {
-                $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($names[($first + $i) % 7], $t->fontSize - 2, $t->textMuted); $this->end();
+                $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($names[($first + $i) % 7], $t->fontSize - 2, $t->textMuted)->role(Role::COLUMN_HEADER); $this->end();
             }
           $this->end();
           $start = $month->modify('-' . (((int)$month->format('w') - $first + 7) % 7) . ' days'); // six weeks from the first day of the week on or before the first
           $today = (new \DateTimeImmutable('today', $date->getTimezone()))->format('Y-m-d');
           for ($w = 0; $w < 6; $w++) {
-              $this->row(0, 0);
+              $this->row(0, 0)->role(Role::ROW);
               for ($d = 0; $d < 7; $d++) {
                   $day = $start->modify('+' . ($w * 7 + $d) . ' days');
                   $ymd = $day->format('Y-m-d');
                   $chosen = $ymd === $date->format('Y-m-d'); $atCursor = $ymd === $cur->format('Y-m-d');
-                  $cell = $this->key($ymd)->row(0, 0)->size($t->space(8), $t->space(7))->center()->round($t->radius);
+                  $cell = $this->key($ymd)->row(0, 0)->size($t->space(8), $t->space(7))->center()->round($t->radius)->role(Role::BUTTON)->label(I18n::formatDate($locale, $day, 'yMMMMd'))->checked($chosen);
+                  if ($atCursor) { $grid->activeDescendant($cell); } // assistive technology reads the day the keys are on
                   $fg = $day->format('n') !== $month->format('n') ? $t->textMuted : $t->text;
                   if ($chosen) { $cell->color = $t->accent; $fg = $t->accentText; }
                   elseif ($atCursor || $this->hovered($cell)) { $cell->color = $t->surfaceHover; }
@@ -1299,7 +1330,7 @@ final class Context
         [$sep, $periodFirst] = self::timeLayout(I18n::pattern($locale, 'jmm', $twelve ? 12 : 24));
         [$am, $pm] = I18n::dayPeriods($locale, I18n::ABBREVIATED);
         $order = $twelve ? ($periodFirst ? [2, 0, 1] : [0, 1, 2]) : [0, 1];
-        $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER);
+        $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER)->role(Role::GROUP);
         $h = (int)$time->format('G'); $m = (int)$time->format('i');
         $set = function (int $nh, int $nm) use (&$time, $f) {
             $next = $time->setTime($nh, $nm, (int)$time->format('s'), (int)$time->format('u'));
@@ -1308,9 +1339,15 @@ final class Context
         $segs = []; $focused = [];
         $texts = [0 => $twelve ? I18n::formatNumber($locale, ($h + 11) % 12 + 1) : I18n::formatNumber($locale, $h, 2), 1 => I18n::formatNumber($locale, $m, 2), 2 => $h >= 12 ? $pm : $am];
           foreach ($order as $i => $k) {
-              if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text($sep, $t->fontSize, $t->textMuted); $this->end(); }
+              if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text($sep, $t->fontSize, $t->textMuted)->role(Role::NONE); $this->end(); }
               elseif ($i > 0) { $this->box($t->space(1), 0, 0)->color = null; }
-              $seg = $this->key("seg$k")->row(0, 0)->padding(0, $t->space(0.5))->round($t->space(1))->focusable(); $seg->ownRing = true;
+              $seg = $this->key("seg$k")->row(0, 0)->padding(0, $t->space(0.5))->round($t->space(1))->focusable()->role(Role::STEPPER); $seg->ownRing = true;
+              $seg->nameFrom = $f; $seg->nameJoin = true; // "Alarm hours", of a time input labeled Alarm
+              match ($k) {
+                  0 => $seg->label($this->texts()->get('hours'))->range($twelve ? 1 : 0, $twelve ? 12 : 23, $twelve ? ($h + 11) % 12 + 1 : $h, 1),
+                  1 => $seg->label($this->texts()->get('minutes'))->range(0, 59, $m, 1),
+                  2 => $seg->label($this->texts()->get('dayPeriod'))->value($texts[2]),
+              };
               $focused[$k] = $rt?->focused($seg->id) ?? false;
               if ($focused[$k]) { $seg->color = $t->accent; }
                 $this->text($texts[$k], $t->fontSize, $focused[$k] ? $t->accentText : $t->text);
@@ -1429,7 +1466,7 @@ final class Context
         };
         [$h, $sat, $v] = $st->hsv;
           // The square of saturation and brightness.
-          $sq = $this->box(0, $t->space(40), 0)->round($t->radius)->focusable()->cursor('crosshair'); $sq->color = null; $sq->ownRing = true;
+          $sq = $this->box(0, $t->space(40), 0)->round($t->radius)->focusable()->cursor('crosshair')->role(Role::SLIDER)->label($this->texts()->get('saturation')); $sq->color = null; $sq->ownRing = true;
           if ($rt !== null) {
               if ($rt->dragged($sq->id) !== null && ($r = $rt->rectOf($sq->id)) !== null && $r[2] > 0 && $r[3] > 0) {
                   $set($h, ($rt->input->mouseX - $r[0]) / $r[2], 1 - ($rt->input->mouseY - $r[1]) / $r[3], $alpha);
@@ -1442,6 +1479,7 @@ final class Context
               }
           }
           [$h, $sat, $v] = $st->hsv;
+          $sq->range(0, 100, round($sat * 100), 1)->value($this->texts()->get('colorValue', ['saturation' => round($sat * 100) / 100, 'brightness' => round($v * 100) / 100]));
           $hue = self::fromHSV($h, 1, 1);
           $ring = $rt?->focusVisible($sq->id) ?? false;
           $sq->draw(function (DisplayList $list, Node $a, Theme $t) use ($hue, $sat, $v, $ring) {
@@ -1454,14 +1492,14 @@ final class Context
           });
           // The hue, and the opacity.
           $st->hue = $h; $st->opacity = $alpha;
-          $hs = $this->channelSlider($st->hue, 360, function (DisplayList $list, float $x, float $y, float $w, float $h) {
+          $hs = $this->channelSlider($st->hue, 360, 'Hue', function (DisplayList $list, float $x, float $y, float $w, float $h) {
               $hues = [0xff0000, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff, 0xff0000];
               $sw = $w / 6;
               for ($i = 0; $i < 6; $i++) { $list->gradient2($x + $sw * $i, $y, $sw + 0.5, $h, $hues[$i], 1.0, $hues[$i + 1], 1.0); }
           });
           if ($hs->changed) { $set($st->hue, $sat, $v, $alpha); }
           $opaque = self::fromHSV($h, $sat, $v);
-          $as = $this->channelSlider($st->opacity, 1, function (DisplayList $list, float $x, float $y, float $w, float $h) use ($opaque, $t) {
+          $as = $this->channelSlider($st->opacity, 1, 'Opacity', function (DisplayList $list, float $x, float $y, float $w, float $h) use ($opaque, $t) {
               self::checkers($list, $x, $y, $w, $h, $t->space(1.5));
               $list->gradient2($x, $y, $w, $h, $opaque, 0.0, $opaque, 1.0);
           });
@@ -1469,14 +1507,14 @@ final class Context
           // The color, and its hex.
           $this->row(0, $t->space(2))->align(Node::CENTER);
             $now = $rgb; $nowA = $alpha;
-            $well = $this->box($t->space(7), $t->space(7), 0)->round($t->radius)->border(); $well->color = $t->surface;
+            $well = $this->box($t->space(7), $t->space(7), 0)->round($t->radius)->border()->role(Role::NONE); $well->color = $t->surface;
             $well->draw(function (DisplayList $list, Node $a, Theme $t) use ($now, $nowA) {
                 $list->pushClip($a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2);
                 self::checkers($list, $a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2, $t->space(1.5));
                 $list->rect($a->x + 1, $a->y + 1, $a->w - 2, $a->h - 2, $now, $nowA, $t->radius - 1);
                 $list->popClip();
             });
-            $in = $this->input($st->hex, '', 0);
+            $in = $this->input($st->hex, '', 0)->label($this->texts()->get('hex'));
             $typed = $st->hex->seen !== null && $st->hex->seen !== $st->hex->text; $st->hex->seen = $st->hex->text;
             if ($typed && ($parsed = self::parseHex($st->hex->text)) !== null) {
                 $hex = $st->hex->text;
@@ -1488,7 +1526,7 @@ final class Context
           // Swatches: a grid of six columns, Space(1.5) apart, Space(5) high, the chosen bordered 2 in the text color.
           $this->grid(6, $t->space(1.5));
             foreach (self::SWATCHES as $name => $color) {
-                $b = $this->key($name)->row(0, 0, 0, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name);
+                $b = $this->key($name)->row(0, 0, 0, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name)->label($name);
                 if ($rgb === $color && $alpha === 1.0) { $b->border($t->text, 2.0); }
                 $this->end();
                 if ($this->clicked($b)) { [$ph, $ps, $pv] = self::toHSV($color); $set($ph, $ps, $pv, 1.0); }
@@ -1498,11 +1536,11 @@ final class Context
         return $panel;
     }
 
-    /** mygo's channelSlider: a slider of a picker's channel from 0 to $max, Space(4) high, padded by half its Space(3) knob, whose track $track paints in the rect it is given. */
-    private function channelSlider(float &$v, float $max, Closure $track): Node
+    /** mygo's channelSlider: a slider of a picker's channel from 0 to $max named $name, Space(4) high, padded by half its Space(3) knob, whose track $track paints in the rect it is given. */
+    private function channelSlider(float &$v, float $max, string $name, Closure $track): Node
     {
         $t = $this->theme;
-        $s = $this->slider($v, 0, $max, 0);
+        $s = $this->slider($v, 0, $max, 0)->label($name);
         $s->grow = 1; $s->fh = $t->space(4); $s->ownRing = true;
         $frac = $max > 0 ? $v / $max : 0.0; $held = $s->held; $ring = $this->runtime?->focusVisible($s->id) ?? false;
         $s->draw(function (DisplayList $list, Node $n, Theme $t) use ($track, $frac, $held, $ring) {
@@ -1538,10 +1576,12 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1), $t->space(1))->round($t->radius)->border()->focusable();
+        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1), $t->space(1))->round($t->radius)->border()->focusable()
+            ->role(Role::COLOR_WELL)->value(self::hexOf($rgb, $alpha));
+        $b->description = self::hexOf($rgb, $alpha); // read as its value where buttons have none
         if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
           $now = $rgb; $nowA = $alpha;
-          $sw = $this->box($t->space(9), $t->space(5), 0)->round($t->space(1)); $sw->color = null;
+          $sw = $this->box($t->space(9), $t->space(5), 0)->round($t->space(1))->role(Role::NONE); $sw->color = null;
           $sw->draw(function (DisplayList $list, Node $a, Theme $t) use ($now, $nowA) {
               $list->pushClip($a->x, $a->y, $a->w, $a->h);
               self::checkers($list, $a->x, $a->y, $a->w, $a->h, $t->space(1.25));
@@ -1552,6 +1592,7 @@ final class Context
         $make = fn() => (object)['open' => false];
         $local = $rt?->local($b->id, $make) ?? $make();
         if ($this->clicked($b)) { $local->open = !$local->open; }
+        $b->expanded($local->open);
         $this->popover($b, $local->open, function () use (&$rgb, &$alpha, $b, $t) {
             $this->column(0, 0)->padding($t->space(3) - $t->space(1), $t->space(3) - $t->space(1)); // the panel's Space(1) and this: Padding(Space(3))
               if ($this->colorPicker($rgb, $alpha)->changed) { $b->changed = true; }
@@ -1618,7 +1659,7 @@ final class Context
           $saved = $this->checks; $this->checks = [];
           $this->row(0, 0);
             $this->column(0, 0)->size($t->space(6), 0); $this->end(); // PaddingStart(Space(6))
-            $this->column(0, $t->space(2), 1); $fn(); $this->end();
+            $this->column(0, $t->space(2), 1)->role(Role::GROUP)->label($label); $fn(); $this->end();
           $this->end();
           $boxes = $this->checks; $this->checks = $saved;
           $on = 0; foreach ($boxes as $b) { if ($b) { $on++; } }
@@ -1629,6 +1670,7 @@ final class Context
               $all = !$all; $on = $all ? count($boxes) : 0;
           }
           $head->on = $all; $head->mixed = !$all && $on > 0;
+          $head->checked = $all ? 2 : ($on > 0 ? 3 : 1);
         $this->end();
         return $g;
     }
@@ -1644,7 +1686,7 @@ final class Context
     public function breadcrumbs(array $items, int &$chosen): Node
     {
         $t = $this->theme;
-        $e = $this->row(0, $t->space(0.5))->align(Node::CENTER);
+        $e = $this->row(0, $t->space(0.5))->align(Node::CENTER)->role(Role::GROUP);
           $n = count($items);
           foreach ($items as $i => $item) {
               if ($i > 0) { // a chevron pointing along the path, stroked 1.2 in the muted color
@@ -1656,7 +1698,7 @@ final class Context
               }
               $last = $i === $n - 1;
               $b = $this->key($i)->row(0, 0)->padding($t->space(0.5), $t->space(1.5))->round($t->radius)->min($t->space(6), 0)->single(); // shrinks with the others as room runs short
-              if (!$last) { $b->focusable(); if ($this->hovered($b)) { $b->color = $t->surfaceHover; } }
+              if (!$last) { $b->focusable()->role(Role::LINK); if ($this->hovered($b)) { $b->color = $t->surfaceHover; } }
                 $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted, $last ? Font::BOLD : 0)->single(); // the last, where the path is: no link, weight 500 (bold here)
               $this->end();
               if (!$last && $this->clicked($b)) { $chosen = $i; $e->changed = true; }
@@ -1692,7 +1734,9 @@ final class Context
         $chosen = -1;
         $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
         $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3);
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3)
+              ->role(Role::ALERT_DIALOG)->label($title);
+          $panel->description = $message;
             $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
             if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
             $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
@@ -1740,13 +1784,18 @@ final class Context
         $rows = intdiv($n + $cols - 1, $cols);
         $focused = $s->selects && ($rt?->focused($id) ?? false);
         $changed = false; $submitted = false;
-        $grid = $this->list($s->rows, $rows, function (int $r) use ($s, $n, $cols, $rows, $gap, $height, $item, $t, $rt, $focused, &$changed, &$submitted, $id) {
-            $this->row(0, $gap)->padding($gap / 2, 0)->align(Node::STRETCH);
+        $cursor = null; // the item chosen, which has the focus for assistive technology
+        $grid = $this->list($s->rows, $rows, function (int $r) use ($s, $n, $cols, $rows, $gap, $height, $item, $t, $rt, $focused, &$changed, &$submitted, $id, &$cursor) {
+            $this->row(0, $gap)->padding($gap / 2, 0)->align(Node::STRETCH)->role(Role::NONE);
               for ($i = $r * $cols; $i < min($n, ($r + 1) * $cols); $i++) {
                   // A border, clear unless chosen, keeps the content in place as it is.
-                  $cell = $this->key($i)->column(0, 0, 1)->basis(0)->padding(2, 2)->size(0, $height)->round($t->radius); // the items share the width (Grow(1).Basis(0).MinWidth(0))
+                  $cell = $this->key($i)->column(0, 0, 1)->basis(0)->padding(2, 2)->size(0, $height)->round($t->radius)->role(Role::LIST_ITEM); // the items share the width (Grow(1).Basis(0).MinWidth(0))
+                  $cell->setPos = $i + 1; $cell->setSize = $n;
+                  if ($s->label !== null) { $cell->label(($s->label)($i)); }
                   if ($s->selects) {
                       $chosen = $s->chosen($i);
+                      $cell->checked($chosen); $cell->choosable = true;
+                      if ($i === $s->selected) { $cursor = $cell; }
                       if ($chosen && $focused) { $cell->color = Theme::mix($t->accent, $t->background, 0.8); $cell->border($t->accent, 2.0); } // Accent.Alpha(0.2)
                       elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border($t->border, 2.0); }
                       elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
@@ -1778,7 +1827,9 @@ final class Context
               for ($k = $n; $k < ($r + 1) * $cols && $r === $rows - 1; $k++) { $this->spacer(); } // empty places keep the last row's items as wide as the others
             $this->end();
         });
-        if ($s->selects) { $grid->focusable = true; }
+        if ($s->selects) { $grid->focusable = true; $grid->choosesItems = true; }
+        $grid->rowRole = Role::NONE; $grid->setSize = $n; $grid->chooseMany = $s->selection !== null; // its items, not its rows, are the list's
+        if ($cursor !== null) { $grid->activeDescendant($cursor); }
         if ($s->selects && $rt !== null && $rt->focus === $grid->id && $n > 0) { // the keys: the arrows in two dimensions, Home, End, Enter, the first letters
             $at = $s->selected; $in = $at >= 0 && $at < $n; $to = -1; $extend = false;
             foreach ([[Key::RIGHT, 1], [Key::LEFT, -1], [Key::DOWN, $cols], [Key::UP, -$cols]] as [$key, $d]) {
@@ -1868,7 +1919,7 @@ final class Context
         $t = $this->theme;
         $h = $size ?? $t->fontSize;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
-        $n->svg = $svg;
+        $n->svg = $svg; // an image to assistive technology once labeled; else decoration
         $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::icon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($color ?? $t->text) : ($color ?? $t->text), $a->alpha, $a->rotation));
         return $n;
     }
@@ -1883,13 +1934,13 @@ final class Context
         $t = $this->theme;
         $size = $t->fontSize * 2.25;
         if ($image !== null) {
-            $e = $this->image($image, $size, $size, $size / 2)->tooltip($name);
+            $e = $this->image($image, $size, $size, $size / 2)->tooltip($name)->role(Role::IMAGE)->label($name);
             $e->fit = Node::COVER; // the shorter side fills the circle, the rest is cropped
             return $e;
         }
         $h = 2166136261; // the hue of the name's FNV-1a hash
         for ($i = 0, $n = strlen($name); $i < $n; $i++) { $h = (($h ^ ord($name[$i])) * 16777619) & 0xffffffff; }
-        $e = $this->column(0, 0, 0, self::hsl($h % 360, 0.45, 0.55))->size($size, $size)->round($size / 2)->center()->tooltip($name);
+        $e = $this->column(0, 0, 0, self::hsl($h % 360, 0.45, 0.55))->size($size, $size)->round($size / 2)->center()->tooltip($name)->role(Role::IMAGE)->label($name);
           $this->text(self::initials($name), $size * 0.4, 0xffffff, Font::BOLD)->single(); // FontWeight(600)
         $this->end();
         return $e;
@@ -1954,7 +2005,7 @@ final class Context
         $r = $rt?->rectOf($anchor->id) ?? [0, 0, 0, 0];
         $margin = $t->space(1);
         $saved = $this->stack; $this->stack = [$this->root]; // at the root: over the view, placed in the window
-        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)->at($r[0], $r[1] + $r[3] + $margin);
+        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)->at($r[0], $r[1] + $r[3] + $margin)->role(Role::POPUP);
           $fn();
         $this->end();
         $this->stack = $saved;
@@ -1977,7 +2028,7 @@ final class Context
      */
     public function menuButton(string $label, array $items, ?Window $window = null): Node
     {
-        $n = $this->button($label);
+        $n = $this->button($label)->role(Role::MENU_BUTTON);
         $n->fw += $this->theme->space(1.5) + $this->theme->space(2.5); // room for the chevron
         $n->chevron = true;
         $rt = $this->runtime;
@@ -2010,10 +2061,11 @@ final class Context
         $parent = $this->stack[count($this->stack) - 1];
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
+          $n->search = true;
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
-              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')
+              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')->role(Role::BUTTON)->label($this->texts()->get('clear'))
                   ->draw(function (DisplayList $list, Node $b, Theme $t) {
                       $k = $b->w * 0.3;
                       $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
@@ -2054,7 +2106,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $bar = $this->key('find bar')->row(0, $t->space(2), 0, $t->surface)->padding($t->space(1.5), $t->space(3))->align(Node::CENTER);
+        $bar = $this->key('find bar')->row(0, $t->space(2), 0, $t->surface)->padding($t->space(1.5), $t->space(3))->align(Node::CENTER)->role(Role::TOOLBAR)->label($this->texts()->get('find'));
         $make = fn() => (object)['opening' => true]; // its state goes as it closes: true in the frame it opens
         $local = $rt?->local($bar->id, $make) ?? $make();
         if (!$open) { // nothing: an empty box out of the flow, keeping the bar's key for its state to start over as it opens
@@ -2069,12 +2121,13 @@ final class Context
         if ($this->shortcut('g', Key::COMMAND)) { $step(1); } elseif ($this->shortcut('g', Key::SHIFT | Key::COMMAND)) { $step(-1); }
           // The field: mygo's field() with a magnifier and the input, grown to at most Space(90).
           $glass = $t->space(3.75);
-          $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam');
+          $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE)->label($this->texts()->get('find'));
             $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
             [, $h] = $this->metrics->measure('X', $t->fontSize);
             $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $this->texts()->get('find'), null, $t->fontSize, $t->text));
             $in->edit = $query; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
             $in->focused = $rt?->focused($in->id) ?? false;
+            $in->search = true; $in->nameFrom = $f;
           $this->end();
           $fw = $rt?->rectOf($bar->id)[2] ?? 0.0;
           if ($fw > 0) { $f->size(min($t->space(90), $fw), 0); $f->grow = 0; } // MaxWidth(Space(90)): at most that of the bar's width last frame
@@ -2084,9 +2137,9 @@ final class Context
           if ($query->submitted) { $query->submitted = false; $step(($rt?->submitMods() ?? 0) & Key::SHIFT ? -1 : 1); }
           if ($in->focused && $this->shortcut(Key::ESCAPE)) { $open = false; }
           $status = $query->text === '' ? '' : ($matches > 0 ? $this->texts()->get('matches', ['current' => $current + 1, 'total' => $matches]) : $this->texts()->get('noMatches'));
-          $this->row(0, 0)->min($t->space(18), 0); $this->text($status, $t->fontSize, $t->textMuted); $this->end();
+          $this->row(0, 0)->min($t->space(18), 0); $this->text($status, $t->fontSize, $t->textMuted)->role(Role::STATUS); $this->end();
           foreach ([-1, 1] as $d) { // previous and next: a chevron up or down, Space(3), stroked 1.5
-              $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2));
+              $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2))->role(Role::BUTTON)->label($this->texts()->get($d < 0 ? 'previous' : 'next'));
               if ($matches === 0) { $btn->alpha = 0.5; $btn->focusable = false; }
                 $this->box($t->space(3), $t->space(3), 0)->draw(function (DisplayList $list, Node $a, Theme $t) use ($d) {
                     $cx = $a->x + $a->w / 2; $cy = $a->y + $a->h / 2; $k = $a->w / 4; $s = $d < 0 ? 1 : -1;
@@ -2150,6 +2203,10 @@ final class Context
         $this->end();
         $ctrl = self::fieldControl($content);
         if ($ctrl === null) { return $f; }
+        // A control that names itself, as a check box, names the field's group; others are named by the label.
+        if (self::namesItself($ctrl)) { $f->role(Role::GROUP)->label($label); } elseif ($ctrl->nameFrom === null || $ctrl->nameFrom->label === '') { $ctrl->nameFrom = $l; }
+        if ($error !== '' || $description !== '') { $ctrl->description = implode("\n", array_filter([$error, $description], fn(string $s) => $s !== '')); } // the error first, as what to read first
+        if ($error !== '') { $ctrl->invalid = true; }
         if ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
         if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
         $l->cursor = 'arrow';
@@ -2159,6 +2216,17 @@ final class Context
             if (in_array($ctrl->kind, [Node::CHECKBOX, Node::SWITCH, Node::RADIO], true)) { $rt->press($ctrl->id); } // clicked next frame, as mygo's clickLater
         }
         return $f;
+    }
+
+    /** Whether a field's control names itself to assistive technology, by its label or its text (mygo's namesItself). */
+    private static function namesItself(Node $e): bool
+    {
+        if ($e->label !== '') { return true; }
+        return match ($e->role) {
+            Role::BUTTON, Role::LINK, Role::CHECK_BOX, Role::RADIO, Role::SWITCH, Role::TOGGLE_BUTTON, Role::MENU_BUTTON, Role::TAB, Role::DISCLOSURE => Runtime::innerText($e) !== '',
+            Role::AUTO => $e->kind === Node::BUTTON && Runtime::innerText($e) !== '',
+            default => false,
+        };
     }
 
     /** The control of a field: the first node inside $e that takes the focus, or a group of them (a focus group). */
@@ -2199,7 +2267,7 @@ final class Context
         $parent = $this->stack[count($this->stack) - 1];
         $above = $parent->kids !== [];
         if ($above) { $this->column(0, 0)->size(0, $t->space(3)); $this->end(); } // Margin(Space(3), 0, 0, 0)
-        $g = $this->column(0, $t->space(3));
+        $g = $this->column(0, $t->space(3))->role(Role::GROUP)->label($legend);
           $this->text($legend, $t->fontSize, $t->text, Font::BOLD); // FontWeight(600)
           $fn();
         $this->end();
@@ -2220,7 +2288,7 @@ final class Context
         $t = $this->theme;
         $back = $this->key('modal')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes
         $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(10, 30, 0.3);
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(10, 30, 0.3)->role(Role::DIALOG);
             $fn();
           $this->end();
         $this->end();
@@ -2229,6 +2297,17 @@ final class Context
             $back->changed = true;
         }
         return $back;
+    }
+
+    /**
+     * Asks screen readers to read $text out once, after what they are
+     * reading, for news the keyboard focus does not bring, as a search
+     * done or a file saved (mygo's Announce): a toast announces its text.
+     * It does nothing while no assistive technology reads the window.
+     */
+    public function announce(string $text): void
+    {
+        $this->runtime?->announce($text);
     }
 
     /** Shows $message near the bottom of the window for a few seconds, as mygo's Toast: the outcome of what the user just did. */
@@ -2254,7 +2333,7 @@ final class Context
         }
         $this->column($t->space(4), $t->space(2))->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->align(Node::CENTER);
           foreach ($messages as $i => $m) {
-              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(4, 12, 0.18);
+              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(4, 12, 0.18)->role(Role::STATUS);
                 $this->text($m);
               $this->end();
           }
@@ -2277,13 +2356,14 @@ final class Context
         $t = $this->theme;
         $rowH = $t->space(8); $flexMin = $t->space(15);
         $rt = $this->runtime;
-        $n = $this->column(0, 0, 1);
-        $cells = function (Closure $fill) use ($columns, $state, $t, $flexMin) {
+        $n = $this->column(0, 0, 1)->role(Role::TABLE);
+        $cells = function (Closure $fill, int $role) use ($columns, $state, $t, $flexMin) {
             $boxes = [];
             foreach ($columns as $j => $col) {
                 $w = $state->columnWidths[$col->id()] ?? $col->width;
                 $box = $this->key('c' . $col->id())->row(0, 0, $w > 0 ? 0 : 1)->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->justify($col->align);
                 $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0); // a shared column measures its least width and grows: its content does not push it (mygo's Shrink(1))
+                $box->role = $role;
                   $fill($j);
                 $this->end();
                 $boxes[] = $box;
@@ -2291,7 +2371,7 @@ final class Context
             return $boxes;
         };
         // The header: a click sorts by a sortable column; a drag at a header's right edge resizes it.
-        $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH);
+        $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH)->role(Role::ROW);
         $headRect = $rt?->rectOf($head->id);
         $heads = $cells(function (int $j) use ($columns, $state, $t) {
             $col = $columns[$j];
@@ -2299,9 +2379,11 @@ final class Context
             if ($state->sort !== null && $state->sort[0] === $col->id()) {
                 $this->text($state->sort[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted);
             }
-        });
+        }, Role::COLUMN_HEADER);
         foreach ($columns as $j => $col) {
             $h = $heads[$j];
+            $h->label = $col->title; // the title alone, not the arrow beside it
+            if ($col->sortable && $state->sort !== null) { $h->sort = $state->sort[0] === $col->id() ? ($state->sort[1] ? 2 : 1) : 0; }
             if ($col->sortable && $this->hovered($h)) { $h->color = $t->surfaceHover; }
             if ($col->sortable && $this->clicked($h)) { $state->sortBy($col->id()); }
             $r = $rt?->rectOf($h->id);
@@ -2318,12 +2400,13 @@ final class Context
         }
         $this->end();
         $this->divider();
-        $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
-            $row = $this->row(0, 0)->align(Node::STRETCH)->min(0, $rowH); // as high as its tallest cell, at least the header
+        $list = $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
+            $row = $this->row(0, 0)->align(Node::STRETCH)->min(0, $rowH)->role(Role::NONE); // as high as its tallest cell, at least the header; the list's row holds its cells
             if ($state->selected === null && $this->hovered($row)) { $row->color = $t->surfaceHover; } // chosen rows show the pointer already
-              $cells(fn(int $j) => $cell($i, $j));
+              $cells(fn(int $j) => $cell($i, $j), Role::CELL);
             $this->end();
         });
+        $list->role = Role::NONE; $list->rowRole = Role::ROW; // the table's rows, under it
         $this->end();
         return $n;
     }
@@ -2352,7 +2435,7 @@ final class Context
           $vertical ? $a->size(0, $size) : $a->size($size, 0);
             $first();
           $this->end();
-          $div = $this->box($vertical ? 0 : 1, $vertical ? 1 : 0, $t->border)->focusable(); // the line takes the focus between the panes
+          $div = $this->box($vertical ? 0 : 1, $vertical ? 1 : 0, $t->border)->focusable()->role(Role::SPLITTER)->label($this->texts()->get('divider')); // the line takes the focus between the panes
           $b = $this->column(0, 0, 1);
             $second();
           $this->end();
@@ -2392,7 +2475,7 @@ final class Context
     public function spinner(): Node
     {
         $size = $this->theme->fontSize * 1.25;
-        return $this->add(new Node(Node::SPINNER, 0, 0, 0, $size, $size, 0, null, null));
+        return $this->add(new Node(Node::SPINNER, 0, 0, 0, $size, $size, 0, null, null))->role(Role::PROGRESS)->range(0, 1, -1); // of unknown length
     }
 
     /** A short text in a pill, as mygo's Badge: a count beside a sidebar's item, in the text color at a tenth. */
@@ -2418,10 +2501,11 @@ final class Context
         $t = $this->theme;
         $index = max(0, min($index, count($options) - 1));
         $n = $this->row(1, 0, 0, $t->border)->round($t->radius); // the track: a border around a surface
-          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH)->focusGroup(Node::HORIZONTAL, selects: true); // a radio group: the arrows choose
+          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP); // a radio group: the arrows choose
           foreach ($options as $i => $label) {
               $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->round(max($t->radius - $t->space(0.5), 0))->focusable()->center();
               $seg->on = $i === $index; // Tab enters the group at the one chosen
+              $seg->role(Role::RADIO)->checked($seg->on); $seg->segment = true;
               if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
                 $this->text($label, $t->fontSize, $t->text);
               $this->end();
@@ -2444,7 +2528,7 @@ final class Context
     public function tabs(array $labels, int &$index): Node
     {
         $t = $this->theme;
-        $n = $this->row(0, $t->space(1))->focusGroup(Node::HORIZONTAL, selects: true); // a tab list: one stop of Tab, the arrows choose
+        $n = $this->row(0, $t->space(1))->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::TAB_LIST); // a tab list: one stop of Tab, the arrows choose
         foreach ($labels as $i => $label) {
             $on = $i === $index;
             $tab = $this->column(0, 0)->padding($t->space(2), $t->space(3))->round($t->radius)->focusable()
@@ -2455,6 +2539,7 @@ final class Context
                     }
                 });
             $tab->on = $on;
+            $tab->role(Role::TAB)->checked($on);
             $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted, $on ? Font::BOLD : 0);
             $this->end();
             if ($this->clicked($tab) && !$on) {
@@ -2474,7 +2559,7 @@ final class Context
     public function collapsible(string $title, bool &$open): bool
     {
         $t = $this->theme;
-        $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->focusable();
+        $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
         if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
           $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
           $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
@@ -2486,6 +2571,7 @@ final class Context
             $open = !$open;
             $head->changed = true;
         }
+        $head->expanded($open);
         return $open;
     }
 
@@ -2510,7 +2596,7 @@ final class Context
     public function stepper(int|float &$value, float $min, float $max, float $step = 1): Node
     {
         $t = $this->theme;
-        $n = $this->column(1, 1, 0, $t->border)->round($t->radius)->focusable();
+        $n = $this->column(1, 1, 0, $t->border)->round($t->radius)->focusable()->role(Role::STEPPER);
         $n->size($t->space(5), $t->space(7));
         $ticks = $this->runtime?->stepper($n->id) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
@@ -2519,7 +2605,7 @@ final class Context
         foreach ([1 => '▴', -1 => '▾'] as $dir => $arrow) {
             $can = $dir > 0 ? $v < $max : $v > $min;
             $this->column(0, 0, 1, $holding === $dir ? $t->surfacePressed : $t->surface)->round($t->radius - 1)->center();
-              $this->text($arrow, $t->fontSize - 2, $can ? $t->text : $t->textMuted);
+              $this->text($arrow, $t->fontSize - 2, $can ? $t->text : $t->textMuted)->role(Role::NONE);
             $this->end();
         }
         $this->end();
@@ -2527,6 +2613,7 @@ final class Context
             $value = is_int($value) ? (int)round($v) : $v;
             $n->changed = true;
         }
+        $n->range($min, $max, $value, $step);
         return $n;
     }
 
@@ -2543,6 +2630,7 @@ final class Context
             $n->changed = true;
         }
         $n->on = $value === $option;
+        $n->role(Role::RADIO)->checked($n->on);
         return $n;
     }
 
@@ -2570,6 +2658,7 @@ final class Context
         }
         $n->fraction = $max > $min ? ($value - $min) / ($max - $min) : 0.0;
         $n->held = $this->runtime?->sliding($n->id) ?? false;
+        $n->role(Role::SLIDER)->range($min, $max, $value, ($max - $min) / 100); // the arrows move a hundredth of the range
         return $n;
     }
 
@@ -2590,6 +2679,7 @@ final class Context
         $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(3), 0, $label, $t->surface, $size, $t->text));
         $n->bordered = true; $n->chevron = true;
         $n->focusable = true;
+        $n->role(Role::POP_UP_BUTTON)->value($label);
         if ($this->runtime?->hovered($n->id)) {
             $n->color = $t->surfaceHover;
         }
@@ -2597,6 +2687,7 @@ final class Context
         if ($rt !== null && ($chosen = $rt->chosen($n->id)) !== null && $chosen !== $index && isset($options[$chosen])) {
             $index = $chosen; // the menu's action arrived after the popup returned, on a later run-loop turn
             $n->text = $options[$index];
+            $n->accValue = $n->text;
             $n->changed = true;
         }
         if ($rt?->clicked($n->id) || ($n->id === $rt?->focus && $this->shortcut(Key::DOWN))) { // a click, Enter, Space or Down while focused, as a menu button's

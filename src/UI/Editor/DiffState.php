@@ -5,7 +5,7 @@ namespace MyPHP\UI\Editor;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\UI\{Context, DisplayList, Font, Node, TextPainter, Theme as UITheme};
+use MyPHP\UI\{Context, DisplayList, Font, Node, Role, TextPainter, Theme as UITheme};
 
 /**
  * A diff viewer's state, kept by the app across frames (mygo's
@@ -295,6 +295,7 @@ final class DiffState
         $o->renderFindBar = $this->renderFindBar; $o->renderGoToLine = $this->renderGoToLine;
         // What a code editor has that the sides have not.
         $o->indentGuides = false; $o->scrollPastEnd = false; $o->folding = false; $o->activeLine = false;
+        $o->diffSide = $old ? Options::DIFF_OLD : Options::DIFF_NEW; // which names it
         return $o;
     }
 
@@ -686,7 +687,8 @@ final class DiffState
             } else {
                 return;
             }
-            $sep = $c->key($key)->column()->at(0, $top - $ed->scrollY)->size($width, $b->height)
+            $label = $s->lines > 0 ? $c->texts()->get('unmodifiedLines', ['n' => $s->lines]) : $s->header;
+            $sep = $c->key($key)->column()->at(0, $top - $ed->scrollY)->size($width, $b->height)->role(Role::GROUP)->label($label)
                 ->cursor('arrow')->keepFocus()->handleInput(Editor::shield(...));
             $render($c, $sep, $s);
             $c->end();
@@ -697,7 +699,7 @@ final class DiffState
     public static function defaultGutterButton(Context $c, Node $btn, DiffLineRange $r): void
     {
         $t = $c->theme;
-        $btn->round(4);
+        $btn->round(4)->label($c->texts()->get('line', ['n' => $r->start + 1]));
         $btn->color = $t->accent;
         $btn->drawOver(function (DisplayList $list, Node $b, UITheme $th) {
             $cx = $b->x + $b->w / 2; $cy = $b->y + $b->h / 2;

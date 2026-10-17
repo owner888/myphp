@@ -22,7 +22,7 @@ final class DiffHunkActions
         $tx = $c->texts();
         $bar->gap = $t->space(1);
         foreach ([['revert', $tx->get('revert'), $a->revert(...)], ['keep', $tx->get('keep'), $a->keep(...)]] as [$key, $label, $fn]) {
-            $btn = $c->key($key)->button($label, max(11.0, $t->fontSize - 2))->tooltip($tx->get('hunkAction', ['action' => $label]));
+            $btn = $c->key($key)->button($label, max(11.0, $t->fontSize - 2))->label($tx->get('hunkAction', ['action' => $label]));
             if ($c->clicked($btn)) { $fn(); }
         }
     }

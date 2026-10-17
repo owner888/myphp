@@ -26,7 +26,8 @@ final class ObjC
     private static array $cls = [];
     /** Holders of PHP callbacks, kept alive for the life of the process. */
     private static array $keep = [];
-    private static $msgSend;
+    private static $msgSend, $msgSendSuper;
+    private static array $sendSuper = [];
     private static $globalBlockIsa;
     /** @var array<int, array> live blocks by address: literal, descriptor, holder, signature */
     private static array $blocks = [];
@@ -65,6 +66,7 @@ final class ObjC
             typedef struct { unsigned long location, length; } NSRange;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
+            typedef struct { void* receiver; void* super_class; } objc_super;
             void* dlopen(const char*, int);
             void* dlsym(void*, const char*);
             void* objc_getClass(const char*);
@@ -82,6 +84,7 @@ final class ObjC
             }
         }
         self::$msgSend = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSend');
+        self::$msgSendSuper = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSendSuper');
         self::$globalBlockIsa = self::$c->dlsym(self::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), '_NSConcreteGlobalBlock')
             ?? throw new RuntimeException('_NSConcreteGlobalBlock');
         self::$slot = self::$c->new('void*[1]');
@@ -117,14 +120,23 @@ final class ObjC
         return $fn($recv, self::sel($sel), ...$args);
     }
 
-    private static function sender(string $sig)
+    /** Sends $sel to $recv as an instance of its class's superclass $super would answer it: what an overriding method of a class defineClass made calls (objc_msgSendSuper). */
+    public static function msgSuper(string $sig, $recv, string $super, string $sel, ...$args)
+    {
+        $fn = self::$sendSuper[$sig] ??= self::sender($sig, true);
+        $s = self::$c->new('objc_super');
+        $s->receiver = $recv; $s->super_class = self::cls($super);
+        return $fn(FFI::addr($s), self::sel($sel), ...$args);
+    }
+
+    private static function sender(string $sig, bool $super = false)
     {
         [$ret, $args] = explode(':', $sig);
-        $params = ['void*', 'void*'];
+        $params = [$super ? 'objc_super*' : 'void*', 'void*'];
         foreach (str_split($args) as $ch) {
             $params[] = self::MAP[$ch];
         }
-        return self::$c->cast(self::MAP[$ret] . '(*)(' . implode(',', $params) . ')', self::$msgSend);
+        return self::$c->cast(self::MAP[$ret] . '(*)(' . implode(',', $params) . ')', $super ? self::$msgSendSuper : self::$msgSend);
     }
 
     /**

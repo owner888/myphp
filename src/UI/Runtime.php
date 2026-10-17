@@ -16,6 +16,8 @@ use Closure;
  */
 final class Runtime
 {
+    use RuntimeAccess;
+
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
     private array $rects = [];
     /** @var array<int, Scrollable> id => scroll state, from last frame */
@@ -239,9 +241,12 @@ final class Runtime
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     }
                     break;
+                case 'accessOn': $this->accessibilityOn(); break; // assistive technology asked for the window
+                case 'access': $this->accessAction($e[1], $e[2], $e[3] ?? '', $e[4] ?? 0, $e[5] ?? 0); break; // ['access', id, AccessNode action, text, from, to]
             }
         }
         $this->input->events = [];
+        $this->clickable = []; // this frame's build asks again
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
         for ($pass = 0; $pass < 3; $pass++) {
@@ -322,6 +327,8 @@ final class Runtime
         } else {
             $this->blinkSeen = null;
         }
+        $this->root = $root;
+        $this->describe();
         return $root;
     }
 
@@ -374,6 +381,7 @@ final class Runtime
     public function toast(string $message): void
     {
         $now = hrtime(true) / 1e9;
+        $this->announce($message); // and screen readers read it out
         foreach ($this->toasts as $i => $t) {
             if ($t[0] === $message) {
                 $this->toasts[$i] = [$message, self::TOAST_FOR, $now];
@@ -829,6 +837,7 @@ final class Runtime
     /** Whether a mouse-up this frame landed on the node this id had last frame, or Enter/Space pressed it while focused. */
     public function clicked(int $id): bool
     {
+        $this->clickable[$id] = true; // assistive technology presses it
         if ($this->activated === $id) {
             $this->activated = null;
             $this->consumed = true;

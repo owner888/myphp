@@ -16,7 +16,8 @@ use MyPHP\UI\{TextInputRange, Input, Key, TextState};
  * setMarkedText: and doCommandBySelector:. The view is an
  * NSTextInputClient over Input::$focus, the field that has the keyboard;
  * those methods edit it at once, since the input method reads back
- * selectedRange/markedRange right after.
+ * selectedRange/markedRange right after. It contains the elements
+ * assistive technology sees of its frames (Access).
  */
 final class View
 {
@@ -32,6 +33,7 @@ final class View
         self::define();
         $view = $metal->createView($frame, $draw, 'MyPHPView');
         self::$inputs[ObjC::addr($view)] = $input;
+        Access::attach($view, $input); // the container of the elements assistive technology sees
         Drop::register($view);
         $area = ObjC::msg('p:rLpp', ObjC::alloc('NSTrackingArea'), 'initWithRect:options:owner:userInfo:',
             ObjC::rect(0, 0, 0, 0), self::TRACKING, $view, null);
@@ -242,7 +244,7 @@ final class View
                 }
                 Metal::requestFrame($self);
             }],
-        ] + Drop::methods(true), ['NSTextInputClient', 'NSDraggingDestination']);
+        ] + Drop::methods(true) + Access::viewMethods(), ['NSTextInputClient', 'NSDraggingDestination']);
     }
 
     /** Asks for a frame $seconds from now; a later call replaces an earlier one. */

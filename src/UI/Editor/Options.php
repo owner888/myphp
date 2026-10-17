@@ -33,6 +33,10 @@ final class Options
     public int $cursorShape = State::CURSOR_BAR;
     public bool $fitContent = false;
     public string $placeholder = '';
+    /** Names the editor for assistive technology; or the side of a diff viewer it shows names it ($diffSide, DIFF_NEW or DIFF_OLD); else it is a code editor. */
+    public string $label = '';
+    public int $diffSide = 0;
+    public const DIFF_NEW = 1, DIFF_OLD = 2;
     public ?Theme $theme = null;
     /** @var list<Binding> */
     public array $bindings = [];

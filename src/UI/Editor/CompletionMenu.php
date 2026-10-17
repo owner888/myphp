@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
-use MyPHP\UI\{Context, Font, Node, ScrollState, Span};
+use MyPHP\UI\{Context, Font, Node, Role, ScrollState, Span};
 
 /**
  * An editor's list of completions, as State::$renderCompletions builds it
@@ -43,7 +43,7 @@ final class CompletionMenu
     public function item(int $i, ScrollState $scroll, float $h): Node
     {
         $cc = $this->ed->complete;
-        $row = $this->c->key("item$i")->row();
+        $row = $this->c->key("item$i")->row()->role(Role::LIST_ITEM)->label($cc->items[$cc->filtered[$i]]->label)->checked($i === $cc->selected);
         $row->selected = false;
         if ($i === $cc->selected && $cc->scrollTo) {
             $top = $i * $h;

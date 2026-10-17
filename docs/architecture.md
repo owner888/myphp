@@ -1240,8 +1240,11 @@ the API (`state.go`): options as properties, `view($c)` builds the
 editor. Before its first frame a state measures with `Editor::$text`, the
 app's text engine (a headless test's own). Regular expressions are PCRE,
 their replacements' `$1` and `${name}` expanded as Go's Expand does. Not
-ported: assistive technology's description (myphp has none), and text in
-hovers is not selectable.
+ported: text in hovers is not selectable. The editor is a text field of
+many lines to assistive technology, named by `State::$label`, or as the
+side of a diff it shows, with its text and its newest selection
+(`accessibility`, mygo's).
+
 The diff viewer is `diffview.go`, `difflayout.go`, `diffside.go`,
 `diffparts.go` and `patch.go`: `DiffState` is the API (`view($c)` builds
 it), two editors side by side sharing their scroll (`SharedScroll`) or
@@ -1262,6 +1265,37 @@ apply git's unified diffs; `setPatch` shows one without its files.
 Regular expressions are PCRE, which matches nothing in a text with a byte
 that is not UTF-8, as an edit splitting a character leaves: the finder
 searches a copy with such bytes as \x1a, where Go reads U+FFFD.
+
+## Accessibility
+
+VoiceOver reads native content as mygo's does (`ui/access.go`,
+`internal/darwin/access.go`). Once AppKit first asks the window's view for
+its children, the view pushes `['accessOn']`, and from then on each frame
+describes itself (`RuntimeAccess`, a trait of `Runtime`): an `AccessTree`
+of `AccessNode`s, a parent before its children, which `Native\Access`
+gives AppKit as `NSAccessibilityElement`s of its own class, kept by node
+ID from frame to frame and set again only where they changed. A node's
+`Role` is the one its widget sets (`Node::role`), or one found from what
+it does: a field is a text field, a text a text, a button or a node that
+is focusable and asked whether it was clicked (`Runtime::clicked` notes
+it) a button, a scroll container a scroll area, a labeled or focusable
+node a group. Controls are named by their text (`Runtime::innerText`),
+or `Node::label`; the states and values of mygo's (`checked`, `expanded`,
+`range`, `level`, `value`, `activeDescendant`, `nameFrom`, a tooltip as
+the description) are `Node`'s fields and methods. What is behind a modal
+is inert (not `reachable`). A list's rows are nodes of their own around
+the list's children that each row built (`Node::$rowStarts`), as mygo
+builds each row in a box: "row 5 of 10,000" from their index and the
+count, built or not, chosen by focusing them; a table's rows are `ROW`s
+of `CELL`s, a grid's items its list's items. Actions come back as
+`['access', id, action, …]` events and act as the pointer and the keys
+would: a press is a click (`activated`), an increment the arrow key with
+its selector, setting a field's value selects all and inserts, expanding
+a tree's item is `Runtime::expanded` for the tree to read. Toasts and
+`Context::announce` are read out. Not ported, there being nothing of
+them here: web pages inside native content, links inside rich text, the
+formats of a rich text editor's runs, disabled controls and menus drawn
+in the window.
 
 ## Packaging
 
@@ -1404,5 +1438,7 @@ and the nodes with local state.
   fills its area across unless `justifyItems`/`justifySelf` place it.
 - mygo's CodeEditor and diff viewer (ui/editor) are in; the RichText
   editor, Markdown view and Terminal are not ported; `rich` is read-only.
+- VoiceOver is in (Accessibility above); Linux's and Windows's assistive
+  technology come with those platforms.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
   fps with identical PHP time per frame); MTKView pacing is what gives 60.

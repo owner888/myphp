@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use Closure;
-use MyPHP\UI\{Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Path, Runtime, SVG, TextPainter, Theme};
+use MyPHP\UI\{AccessTree, Context, DisplayList, Image, Input, Key, Layout, Node, Painter, Path, Runtime, SVG, TextPainter, Theme};
 
 spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_with($c, 'MyPHP\\Tests\\') && (require __DIR__ . '/../src/' . str_replace('\\', '/', substr($c, 6)) . '.php'));
 
@@ -54,7 +54,11 @@ final class Headless
         \MyPHP\UI\Editor\Editor::$text = $this->metrics;
         $this->theme = Theme::dark();
         $this->view = $view;
+        $this->rt->onAccess = function (AccessTree $t) { array_push($this->told, ...$t->announcements); };
     }
+
+    /** @var list<string> what the trees for assistive technology announced (mygo's told) */
+    public array $told = [];
 
     /** Whether each frame is painted too, as a window paints it: for what works out its state as it paints, as a code editor. */
     public bool $paints = false;

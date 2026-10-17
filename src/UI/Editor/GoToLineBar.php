@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
-use MyPHP\UI\{Context, Key, Node, TextState};
+use MyPHP\UI\{Context, Key, Node, Role, TextState};
 
 /**
  * An editor's go to line bar, as State::$renderGoToLine builds it (mygo's
@@ -67,7 +67,7 @@ final class GoToLineBar
         $tx = $c->texts();
         $bar->dir = Node::ROW; $bar->gap = $t->space(2); $bar->align(Node::CENTER)->padding($t->space(1.5), $t->space(2));
         $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(2, 8, 0.18);
-        $g->input($c->input($g->text(), $tx->get('lineRange', ['lines' => $g->lineCount()]), $t->space(60)));
+        $g->input($c->input($g->text(), $tx->get('lineRange', ['lines' => $g->lineCount()]), $t->space(60))->label($tx->get('goToLine')));
         $cur = $g->cursor();
         $c->text($tx->get('currentLine', ['line' => $cur->line + 1, 'lines' => $g->lineCount(), 'column' => $cur->col + 1]), $t->fontSize - 2, $t->textMuted);
     }

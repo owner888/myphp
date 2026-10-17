@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Drop, Metal, ObjC, Pasteboard, View, WebView};
-use MyPHP\UI\{Context, DisplayList, Input, Layout, Painter, Runtime};
+use MyPHP\Native\{Access, Drop, Metal, ObjC, Pasteboard, View, WebView};
+use MyPHP\UI\{AccessTree, Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
 /**
@@ -117,6 +117,8 @@ final class Window
         } else {
             $this->view = $this->nativeView($o);
             Metal::setClearColor($this->view, App::theme()->background);
+            $view = $this->view;
+            $this->runtime->onAccess = fn(AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
         }
         ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
@@ -392,6 +394,7 @@ final class Window
                     unset(self::$open[ObjC::addr($ns)]);
                     if ($w !== null) {
                         unset(self::$byView[ObjC::addr($w->view)]);
+                        if ($w->runtime !== null) { Access::detach($w->view); }
                         $w->dropChannels();
                         $w->captureState();
                         WindowState::save();

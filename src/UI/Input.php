@@ -14,7 +14,7 @@ final class Input
     public float $mouseX = -1, $mouseY = -1;
     public bool $mouseInside = false;
     public bool $mouseDown = false;
-    /** @var list<array> ['down'|'up'|'move'|'drag'|'scroll'|'key'|'command'|'insert', ...] in arrival order; down and up carry x, y, button, click count, modifier flags */
+    /** @var list<array> ['down'|'up'|'move'|'drag'|'scroll'|'key'|'command'|'insert'|'accessOn'|'access', ...] in arrival order; down and up carry x, y, button, click count, modifier flags; access an action of assistive technology: id, AccessNode action, text, from, to */
     public array $events = [];
 
     /** The focused text field's state, or null when no field has the keyboard. */
