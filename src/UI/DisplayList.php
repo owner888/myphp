@@ -68,6 +68,12 @@ final class DisplayList
         $this->clip = array_pop($this->clips);
     }
 
+    /** The current clip: x, y, w, h (mygo's Painter.Visible). @return array{0: float, 1: float, 2: float, 3: float} */
+    public function visible(): array
+    {
+        return $this->clip;
+    }
+
     /** Whether a rect lies entirely outside the current clip (nothing to draw). */
     public function clipped(float $x, float $y, float $w, float $h): bool
     {

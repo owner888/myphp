@@ -104,7 +104,7 @@ final class CoreText
      * carets maps each UTF-16 index at a glyph boundary to the x of the
      * caret before it; the end of the string maps to the width.
      *
-     * @return array{width: float, ascent: float, descent: float, glyphs: list<array{font: int, glyph: int, x: float, y: float}>, carets: array<int, float>}
+     * @return array{width: float, ascent: float, descent: float, glyphs: list<array{font: int, glyph: int, x: float, y: float, index: int}>, carets: array<int, float>} index is the UTF-16 index of the glyph's cluster
      */
     public function shape(string $text, float $size, int $style = 0): array
     {
@@ -145,7 +145,7 @@ final class CoreText
             $c->CTRunGetPositions($run, $range, $pos);
             $c->CTRunGetStringIndices($run, $range, $idx);
             for ($i = 0; $i < $n; $i++) {
-                $glyphs[] = ['font' => $fontId, 'glyph' => $ids[$i], 'x' => $pos[$i]->x, 'y' => $pos[$i]->y];
+                $glyphs[] = ['font' => $fontId, 'glyph' => $ids[$i], 'x' => $pos[$i]->x, 'y' => $pos[$i]->y, 'index' => $idx[$i]];
                 $carets[$idx[$i]] = $pos[$i]->x;
             }
         }

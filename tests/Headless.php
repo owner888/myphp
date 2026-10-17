@@ -17,11 +17,16 @@ final class Metrics implements TextPainter
 {
     public function ascent(float $size, int $style = 0): float { return 12.0; }
     public function measure(string $s, float $size, int $style = 0): array { return [mb_strlen($s) * 7.0, 16.0]; }
-    public function xForIndex(string $s, float $size, int $i): float { return $i * 7.0; }
-    public function indexForX(string $s, float $size, float $x): int { return (int)($x / 7); }
+    public function xForIndex(string $s, float $size, int $i, int $style = 0): float { return mb_strlen(substr($s, 0, $i)) * 7.0; }
+    public function indexForX(string $s, float $size, float $x, int $style = 0): int { return strlen(mb_substr($s, 0, max(0, min((int)round($x / 7), mb_strlen($s))))); }
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
     {
         for ($i = 0, $n = mb_strlen($text); $i < $n; $i++) { $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); }
+    }
+    public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void
+    {
+        $byte = 0;
+        foreach (mb_str_split($text) as $i => $r) { [$rgb, $alpha] = $colorAt($byte); $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); $byte += strlen($r); }
     }
     public function imageSlot(Image $image): array { return ['u' => 0, 'v' => 0, 'w' => 1, 'h' => 1, 'page' => 0]; }
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return [$x, $y, $w, $h, 0, 0]; }
@@ -46,9 +51,13 @@ final class Headless
         $this->input = new Input;
         $this->input->mouseInside = true;
         $this->rt = new Runtime($this->input, $this->metrics);
+        \MyPHP\UI\Editor\Editor::$text = $this->metrics;
         $this->theme = Theme::dark();
         $this->view = $view;
     }
+
+    /** Whether each frame is painted too, as a window paints it: for what works out its state as it paints, as a code editor. */
+    public bool $paints = false;
 
     /** Runs $n frames (two by default: one takes the events, the next shows what they changed) and returns the root. */
     public function frame(int $n = 2): Node
@@ -61,6 +70,7 @@ final class Headless
                 Layout::arrange($c->root, 0, 0, $this->w, $this->h);
                 return $c->root;
             });
+            if ($this->paints) { $this->paint(); }
         }
         return $this->root;
     }
@@ -118,7 +128,11 @@ final class Headless
     /** A key as the view sends it: the key event, then the text system's selector — taken by the focused field's TextState first, as the view does, else pushed as a command. */
     public function key(int $code, string $selector, int $mods = 0, string $chars = ''): Node
     {
-        $this->input->push(['key', $chars, $code, $mods]);
+        if ($this->input->push(['key', $chars, $code, $mods])) { return $this->frame(); } // taken as it came
+        if ($this->input->client !== null) { // to a text input client, which the view gives no commands; with input methods off, the key types its characters
+            if (!$this->input->inputMethod && $chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f) { $this->input->client->replaceText(null, $chars); }
+            return $this->frame();
+        }
         if (!($this->input->focus?->command($selector) ?? false)) {
             $this->input->push(['command', $selector]);
         }
@@ -135,8 +149,21 @@ final class Headless
     /** Text typed: into the focused field's TextState, as the view does, else inserted at the focused control. */
     public function type(string $s): Node
     {
-        $this->input->push(['key', $s, 0, 0]);
-        if ($this->input->focus !== null) { $this->input->focus->insert($s); } else { $this->input->push(['insert', $s]); }
+        if ($this->input->push(['key', $s, 0, 0])) { return $this->frame(); }
+        if ($this->input->client !== null) {
+            $this->input->client->replaceText(null, $s); // the view's text input client
+        } elseif ($this->input->focus !== null) {
+            $this->input->focus->insert($s);
+        } else {
+            $this->input->push(['insert', $s]);
+        }
+        return $this->frame();
+    }
+
+    /** An input method composing $s, its caret at UTF-16 unit $caret, as the view's text input client gets it: nothing while input methods are off. */
+    public function compose(string $s, int $caret): Node
+    {
+        if ($this->input->client !== null && $this->input->inputMethod) { $this->input->client->setMarkedText(null, $s, new \MyPHP\UI\TextInputRange($caret, $caret)); }
         return $this->frame();
     }
 
@@ -169,6 +196,31 @@ final class Headless
         if ($from->id === $id) { return $from; }
         foreach ($from->kids as $k) { if (($r = $this->find($id, $k)) !== null) { return $r; } }
         return null;
+    }
+
+    /** The texts the tree shows, in order: of texts, buttons and the like. @return list<string> */
+    public function texts(?Node $from = null): array
+    {
+        $from ??= $this->root;
+        $out = $from?->text !== null && $from->text !== '' ? [$from->text] : [];
+        foreach ($from?->kids ?? [] as $k) { array_push($out, ...$this->texts($k)); }
+        return $out;
+    }
+
+    /** The first node showing $text, or null. */
+    public function byText(string $text, ?Node $from = null): ?Node
+    {
+        $from ??= $this->root;
+        if ($from === null) { return null; }
+        if ($from->text === $text) { return $from; }
+        foreach ($from->kids as $k) { if (($r = $this->byText($text, $k)) !== null) { return $r; } }
+        return null;
+    }
+
+    /** A click in the middle of the node showing $text, which must be there. */
+    public function clickText(string $text): Node
+    {
+        return $this->clickOn($this->byText($text) ?? throw new \RuntimeException("no $text in " . json_encode($this->texts(), JSON_UNESCAPED_UNICODE)));
     }
 
     /** The focused node, or null. */

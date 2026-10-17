@@ -16,7 +16,8 @@ namespace MyPHP\UI\Editor;
 final class TokenHighlighter implements Highlighter
 {
     /** Leaves longer lines plain, as Pierre's tokenizeMaxLineLength does. */
-    private const MAX_TOKENIZE = 10000;
+    /** Lines longer than this are not tokenized: plain text. */
+    public const MAX_TOKENIZE = 10000;
 
     /** @var list<int> the state line i starts in */
     private array $states = [0];

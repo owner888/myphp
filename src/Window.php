@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Drop, Metal, ObjC, View, WebView};
+use MyPHP\Native\{Drop, Metal, ObjC, Pasteboard, View, WebView};
 use MyPHP\UI\{Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
@@ -61,6 +61,8 @@ final class Window
         if ($this->runtime !== null) {
             $this->runtime->openURL = App::openURL(...);
             $this->runtime->dragWindow = $this->dragWindow(...);
+            $this->runtime->writeClipboard = Pasteboard::setText(...);
+            $this->runtime->readClipboard = Pasteboard::text(...);
         }
 
         $this->stateKey = $o->stateKey;

@@ -186,9 +186,9 @@ final class Text implements TextPainter
         return $this->line('X', $size, $style)['ascent'];
     }
 
-    public function xForIndex(string $text, float $size, int $byte): float
+    public function xForIndex(string $text, float $size, int $byte, int $style = 0): float
     {
-        $carets = $this->carets($text, $size);
+        $carets = $this->carets($text, $size, $style);
         $u = TextState::utf16Index($text, $byte);
         // Inside a ligature or cluster there is no caret; use the nearest before.
         while ($u > 0 && !isset($carets[$u])) {
@@ -197,10 +197,10 @@ final class Text implements TextPainter
         return $carets[$u] ?? 0.0;
     }
 
-    public function indexForX(string $text, float $size, float $x): int
+    public function indexForX(string $text, float $size, float $x, int $style = 0): int
     {
         $best = 0; $bestD = INF;
-        foreach ($this->carets($text, $size) as $u => $cx) {
+        foreach ($this->carets($text, $size, $style) as $u => $cx) {
             if (($d = abs($cx - $x)) < $bestD) {
                 $bestD = $d; $best = $u;
             }
@@ -215,7 +215,27 @@ final class Text implements TextPainter
         $baseline = $y + $l['ascent'];
         if ($l['quads'] === '') { return; }
         $q = $this->lines[$l['key']]['hot'] ??= unpack('g*', $l['quads']); // unpacked once for the lines in view (1-based), dropped by the sweep once they leave it
-        for ($i = 1, $n = count($q); $i <= $n; $i += 6) {
+        for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
+            $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, (int)$q[$i + 4], (int)$q[$i + 5]);
+        }
+    }
+
+    public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void
+    {
+        $l = $this->line($text, $size, $style);
+        $baseline = $y + $l['ascent'];
+        if ($l['quads'] === '') { return; }
+        $q = $this->lines[$l['key']]['hot'] ??= unpack('g*', $l['quads']);
+        $bytes = null; // the byte each UTF-16 index starts at, for text beyond ASCII
+        if (preg_match('/[\x80-\xFF]/', $text) === 1) {
+            $bytes = []; $b = 0;
+            foreach (mb_str_split($text, 1, 'UTF-8') as $r) { $bytes[] = $b; if (strlen($r) === 4) { $bytes[] = $b; } $b += strlen($r); }
+            $bytes[] = $b;
+        }
+        $lastU = -1; $rgb = 0; $alpha = 1.0;
+        for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
+            $u = (int)$q[$i + 6];
+            if ($u !== $lastU) { [$rgb, $alpha] = $colorAt($bytes === null ? $u : $bytes[$u]); $lastU = $u; }
             $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, (int)$q[$i + 4], (int)$q[$i + 5]);
         }
     }
@@ -232,12 +252,12 @@ final class Text implements TextPainter
     }
 
     /** The carets of $text at $size: the x of the caret before each UTF-16 index at a glyph boundary; kept with the line once a field asks (most lines are never edited). @return array<int, float> */
-    private function carets(string $text, float $size): array
+    private function carets(string $text, float $size, int $style = 0): array
     {
-        $key = "$size:0\0$text";
+        $key = "$size:$style\0$text";
         $l = &$this->lines[$key];
         if ($l === null || $l['carets'] === null) {
-            $l = $this->shape($text, $size, 0, true);
+            $l = $this->shape($text, $size, $style, true);
         }
         $l['gen'] = $this->gen;
         return $l['carets'];
@@ -272,7 +292,7 @@ final class Text implements TextPainter
             // Snap the pen to device pixels so the bitmap lands on its own grid.
             $px = round($g['x'] * $s) / $s;
             $py = round(-$g['y'] * $s) / $s;
-            $quads .= pack('g6', $px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']);
+            $quads .= pack('g7', $px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v'], $g['index']);
         }
         return [
             'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],

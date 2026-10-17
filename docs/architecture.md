@@ -826,6 +826,24 @@ paint pushes the container's rect as a clip, which travels with each quad
 into the shader (`float4 clip`, discard outside). An NSTrackingArea with
 `mouseMoved` keeps hover state current.
 
+A node that takes its input as it comes (`Node::handleInput`, mygo's
+HandleInput: the code editor) gets it as it arrives, not at the next
+frame: `Input::push` hands each event to `Runtime::deliver` first, which
+turns it into an `InputEvent` relative to the node's last-frame rect and
+gives it to the node under the pointer, the one a press went to (its
+moves and release follow it wherever they are) or the one with the
+focus (keys and Edit menu commands); only what the node leaves is queued
+for the frame. The order of keys and of the text the input methods
+commit through the node's `TextInputClient` (`Node::handleTextInput`)
+is so kept: a key the node takes never reaches `interpretKeyEvents`, and
+with `Node::inputMethod(false)` a key's characters go to the client as
+typed. A press first focuses the innermost focusable node under it, as
+mygo's does, unless it lands on a node that keeps the focus
+(`Node::keepFocus`: a popup's rows). The runtime's clipboard
+(`writeClipboard`, `readClipboard`) is the pasteboard in a window and its
+own in tests; `after()` and `animationFrame()` ask for a frame later or
+at once from a build or a paint (mygo's After and AnimationFrame).
+
 `Layout` places children across a container's axis as mygo does: a row
 centers them vertically, a column stretches them to its width;
 `Node::align()` changes that for a container's children (START, CENTER,
@@ -1196,11 +1214,35 @@ their indent patterns as PCRE; `Highlighter` with `SyntaxSelector`,
 the state the line before ends in, an edit tokenizing the lines after it
 again until one starts as it did, a frame's budget (seconds) at a time;
 `Buffer::highlighter()` keeps the buffer's and feeds it the log's
-entries. Still to come: `theme.go` (with the view, whose colors it is),
-the editor itself (`editor.go`, `view.go`, `display.go`, `edit.go`,
-`commands.go`, `lines.go`, `multicursor.go`, `brackets.go`, `fold.go`,
-`input.go`, `paint.go`, `build.go`), its parts (`find.go`, `parts.go`,
-`lsp.go`) and the diff viewer (`diff*.go`, `patch.go`, `gitdiff.go`).
+entries.
+The view is in: `Theme` (`theme.go`, colors as [rgb, alpha]), `View`,
+`LineLayout`, `Heights`, `WrapRows`, `LineGeometry` and `Block` are
+`view.go` and `display.go`: lines laid out as they show, tabs expanded
+and inlays inserted (segments map the displayed text to the line's),
+soft wraps measured by summing cached advances as Zed's LineWrapper,
+long rows shaped in pieces of 2 KB, and the heights of rows, folds and
+blocks in Fenwick trees, so a million lines scroll as ten. `Editor` is
+`editor.go`, its other files a trait each: `EditorEdit` (edit.go),
+`EditorCommands`, `EditorLines`, `EditorMulticursor`, `EditorBrackets`,
+`EditorFold`, `EditorLsp`, `EditorInput` (input.go: pointer gestures,
+scroll bars, the gutter, and the `TextInputClient` methods), `EditorPaint`,
+`EditorBuild` and `EditorGitDiff`; `Finder`, `GoToLine`, `Completions`,
+`Hover` and `Gesture` are its parts' states, `DiffModel` and `GitDiff`
+the changes against `State::$diffBase` (`diffmodel.go`, `gitdiff.go`).
+Selections are values in mygo and objects here: what Go copied
+(`slices.Clone`) is cloned (`Editor::cloneSels`), and `primary()` gives a
+copy. The editor draws itself in a `Node::draw` closure and takes its
+input as it comes (Input path above); its find bar and go to line bar are
+nodes inside it, its completions and hover nodes over everything
+(`Context::overlay`), each built by the app's render function
+(`State::$renderFindBar`…) or its own (`FindBar::default`…). `State` is
+the API (`state.go`): options as properties, `view($c)` builds the
+editor. Before its first frame a state measures with `Editor::$text`, the
+app's text engine (a headless test's own). Regular expressions are PCRE,
+their replacements' `$1` and `${name}` expanded as Go's Expand does. Not
+ported: assistive technology's description (myphp has none), and text in
+hovers is not selectable. Still to come: the diff viewer (`diff*.go`,
+`patch.go`) and the example's Changes page.
 
 ## Packaging
 
@@ -1341,9 +1383,8 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- mygo's CodeEditor (ui/editor) is being ported: its model and syntax
-  are in (Code editor above), the editor view, its parts and the diff
-  viewer are not; the RichText editor, Markdown view and Terminal are not
-  ported; `rich` is read-only.
+- mygo's CodeEditor (ui/editor) is in but its diff viewer (Code editor
+  above); the RichText editor, Markdown view and Terminal are not ported;
+  `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
   fps with identical PHP time per frame); MTKView pacing is what gives 60.

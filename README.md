@@ -64,7 +64,7 @@ Early. What works today, on macOS / Apple Silicon:
 | SVG: icons as masks in any color (turned by `rotate`), pictures in their own colors — paths, shapes, transforms, gradients, strokes and dashes, opacity, clip paths, masks, style sheets — drawn by a renderer in PHP, which also rasterizes path masks (no CoreGraphics) | works (`examples/widgets`, `files`) |
 | Languages and regional formats: the app's language from the user's (or `App::setLocale`, kept in its defaults), MyPHP's own strings and menus in it (en, zh-Hans, zh-Hant), dates, calendars and times in the region's formats and the language's names (ICU through `ext-intl`) | works (`examples/widgets`) |
 | A file manager: sidebar of places, breadcrumbs, the folder as icons or a sortable table sharing one selection, find bar, image preview, Trash through Finder | works (`examples/files`) |
-| Code editor model and syntax (mygo's ui/editor): rope text, undo transactions, change log, line diff, selections, words and graphemes, commands and key bindings; 28 languages' tokenizers and the incremental token highlighter | works (headless; the view is next) |
+| Code editor (mygo's ui/editor): rope text, undo, several carets and selections, soft wraps, folding, find and replace (PCRE), go to line, completions, hovers, diagnostics, inlay hints and suggestions, the changes against a base in the gutter, Zed's commands and key bindings, input methods at every caret; 28 languages highlighted incrementally; only the lines in view laid out | works (`examples/code-editor`; the diff viewer is next) |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
@@ -108,6 +108,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh logview /var/log/system.log   # a log viewer: a table that follows the file, filters, highlights, Cmd+F finds
 ./run.sh titlebar [hidden|hiddenInset] [x,y]   # a hidden title bar: the view draws its own under the traffic lights (moved to x,y) and drags the window by it
 ./run.sh files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
+./run.sh code-editor                   # a code editor: files of several languages, completions of their words, hovers, TODO diagnostics, changes in the gutter
 php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave

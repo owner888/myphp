@@ -9,6 +9,9 @@ interface TextPainter extends TextMetrics
     /** Paints $text at $size from ($x, $y), the line's top left, in $rgb at $alpha; $style is Font bits. */
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void;
 
+    /** Paints $text as paint does, each glyph in the color $colorAt(int $byte): array{0: int, 1: float} gives for the byte of $text its cluster starts at (mygo's TextLine with a color a cluster). */
+    public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void;
+
     /** The image atlas slot of $image: u, v, w, h in pixels and its page. @return array{u: int, v: int, w: int, h: int, page: int} */
     public function imageSlot(Image $image): array;
 

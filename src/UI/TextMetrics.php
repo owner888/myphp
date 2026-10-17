@@ -13,8 +13,8 @@ interface TextMetrics
     public function ascent(float $size, int $style = 0): float;
 
     /** The x of the caret before byte offset $byte of $text, in points from its left. */
-    public function xForIndex(string $text, float $size, int $byte): float;
+    public function xForIndex(string $text, float $size, int $byte, int $style = 0): float;
 
     /** The byte offset whose caret is nearest to $x points from the left. */
-    public function indexForX(string $text, float $size, float $x): int;
+    public function indexForX(string $text, float $size, float $x, int $style = 0): int;
 }

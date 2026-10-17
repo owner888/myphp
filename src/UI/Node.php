@@ -57,6 +57,9 @@ final class Node
     public ?\Closure $draw = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
     public ?string $cursor = null;
+    /** Takes this node's input as it comes (handleInput), and the client its text comes to from the system's input methods (handleTextInput). */
+    public ?\Closure $input = null;
+    public ?TextInputClient $textClient = null;
     /** This node paints its own focus ring (a slider's knob): the painter's generic ring stays off it. */
     public bool $ownRing = false;
     /** Focused from the keyboard, so the painter rings it (mygo's FocusVisible); a press focuses without a ring. */
@@ -380,10 +383,61 @@ final class Node
         return $this;
     }
 
+    /** A press on this node, or inside it, leaves the keyboard focus where it is (mygo's KeepFocus): a popup's rows, which the field or editor it completes keeps typing at. */
+    public bool $keepFocus = false;
+
+    public function keepFocus(): static
+    {
+        $this->keepFocus = true;
+        return $this;
+    }
+
     /** Lets this node take the keyboard focus like a button: Tab reaches it, a click gives it, Enter and Space click it, a ring shows it. */
     public function focusable(): static
     {
         $this->focusable = true;
+        return $this;
+    }
+
+    /**
+     * Has $fn(InputEvent): bool take the node's input as it comes, before
+     * the next frame is built (mygo's HandleInput): keys, text and edit
+     * commands while the node has the keyboard focus, the pointer pressed
+     * on it, moving over it or scrolling over it. $fn reports whether it
+     * took the event; one it leaves goes on as it would without $fn, to
+     * shortcuts, Tab and scroll containers. A frame follows the events
+     * $fn takes. For widgets that need every key as it is pressed, as a
+     * code editor or a terminal; most widgets ask about their input as
+     * they are built instead (clicked, shortcut, dragged).
+     */
+    public function handleInput(\Closure $fn): static
+    {
+        $this->input = $fn;
+        return $this;
+    }
+
+    /** Whether the system's input methods compose text for the node while it has the focus (inputMethod). */
+    public bool $inputMethod = true;
+
+    /**
+     * Sets whether the system's input methods compose text for the node
+     * while it has the keyboard focus, as they do by default for one that
+     * takes text (mygo's InputMethod). Turned off, keys type the
+     * characters of the keyboard's layout, which come to its client as
+     * text, and nothing is composed: a mode that reads letters as
+     * commands, as Vim's normal mode, gets j as j with a Chinese input
+     * method on.
+     */
+    public function inputMethod(bool $on): static
+    {
+        $this->inputMethod = $on;
+        return $this;
+    }
+
+    /** Connects the node to the system's text-input services (mygo's HandleTextInput): $client takes what input methods compose and commit while the node has the focus, and places their candidate windows. */
+    public function handleTextInput(TextInputClient $client): static
+    {
+        $this->textClient = $client;
         return $this;
     }
 

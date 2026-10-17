@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Native;
 
 use Closure;
-use MyPHP\UI\{Input, Key, TextState};
+use MyPHP\UI\{TextInputRange, Input, Key, TextState};
 
 /**
  * The window's content view: an MTKView subclass whose event methods are
@@ -53,7 +53,9 @@ final class View
             $input = self::$inputs[ObjC::addr($self)];
             [$x, $y] = $point($self, $event);
             $input->mouse($x, $y);
-            if ($kind !== 'move') {
+            if ($kind === 'move') {
+                $input->push(['move', $x, $y]); // to a node taking its input as it comes, under the pointer
+            } else {
                 $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber'), ObjC::msg('l:', $event, 'clickCount'), ObjC::msg('L:', $event, 'modifierFlags')]);
             }
             Metal::requestFrame($self);
@@ -91,7 +93,7 @@ final class View
                     $dx *= 10; $dy *= 10; // mouse wheel steps are in lines
                 }
                 $input->mouse($x, $y);
-                $input->push(['scroll', $x, $y, $dx, $dy]);
+                $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas')]);
                 Metal::requestFrame($self);
             }],
             'keyDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
@@ -102,20 +104,27 @@ final class View
                     Metal::requestFrame($self);
                     return;
                 }
-                $input->push(['key', $chars, $code, $mods]);
-                ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
+                if ($input->push(['key', $chars, $code, $mods])) { // a node taking its input as it comes took the key: the text system sees nothing of it
+                } elseif ($input->client !== null && !$input->inputMethod) { // input methods off: the key types the characters of the layout
+                    if ($chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/[\x{F700}-\x{F8FF}]/u', $chars) !== 1) { $input->client->replaceText(null, $chars); }
+                } else {
+                    ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
+                }
                 Metal::requestFrame($self);
             }],
-            // Edit menu roles reach the first responder: the focused field.
+            // Edit menu roles reach the first responder: the focused field, or as commands the node taking its input (mygo's SurfaceCommand).
             'copy:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'copy')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null && $f->hasSelection()) { Pasteboard::setText($f->selectedText()); }
             }],
             'cut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'cut')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null && $f->hasSelection()) { Pasteboard::setText($f->selectedText()); $f->insert(''); Metal::requestFrame($self); }
             }],
             'paste:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'paste')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null) {
                     $s = str_replace(["\r\n", "\r"], "\n", Pasteboard::text());
@@ -124,29 +133,47 @@ final class View
                 }
             }],
             'undo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'undo')) { return; }
                 self::$inputs[ObjC::addr($self)]->focus?->undo(); Metal::requestFrame($self);
             }],
             'redo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'redo')) { return; }
                 self::$inputs[ObjC::addr($self)]->focus?->redo(); Metal::requestFrame($self);
             }],
+            'delete:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { self::edit($self, 'delete'); }],
             // A frame some time from now (caret blink): see wake().
             'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self); }],
             'selectAll:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
+                if (self::edit($self, 'selectAll')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f !== null) { $f->selectAll(); Metal::requestFrame($self); }
             }],
             'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => true],
             // NSTextInputClient
-            'hasMarkedText' => ['B@:', 'b(pp)', fn($self, $cmd) => (self::$inputs[ObjC::addr($self)]->focus?->marked ?? null) !== null],
+            'hasMarkedText' => ['B@:', 'b(pp)', function ($self, $cmd) {
+                $input = self::$inputs[ObjC::addr($self)];
+                if ($input->client !== null) { return $input->client->markedRange() !== null; }
+                return ($input->focus?->marked ?? null) !== null;
+            }],
             'markedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
-                $f = self::$inputs[ObjC::addr($self)]->focus;
+                $input = self::$inputs[ObjC::addr($self)];
+                if ($input->client !== null) {
+                    $r = $input->client->markedRange()?->normalized();
+                    return $r === null ? ObjC::range(self::NOT_FOUND, 0) : ObjC::range($r->start, $r->end - $r->start);
+                }
+                $f = $input->focus;
                 if ($f === null || $f->marked === null) {
                     return ObjC::range(self::NOT_FOUND, 0);
                 }
                 return ObjC::range(TextState::utf16Index($f->text, $f->cursor), TextState::utf16Index($f->marked, strlen($f->marked)));
             }],
             'selectedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
-                $f = self::$inputs[ObjC::addr($self)]->focus;
+                $input = self::$inputs[ObjC::addr($self)];
+                if ($input->client !== null) {
+                    $r = $input->client->selection()->range->normalized();
+                    return ObjC::range($r->start, $r->end - $r->start);
+                }
+                $f = $input->focus;
                 if ($f === null) {
                     return ObjC::range(self::NOT_FOUND, 0);
                 }
@@ -158,16 +185,24 @@ final class View
                 return ObjC::range($ua, TextState::utf16Index($f->text, $b) - $ua);
             }],
             'setMarkedText:selectedRange:replacementRange:' => ['v@:@{_NSRange=QQ}{_NSRange=QQ}', 'v(pppnn)', function ($self, $cmd, $text, $selected, $replacement) {
-                $f = self::$inputs[ObjC::addr($self)]->focus;
+                $input = self::$inputs[ObjC::addr($self)];
+                $s = self::plainString($text);
+                if ($input->client !== null) {
+                    $input->client->setMarkedText(self::clientRange($replacement), $s, new TextInputRange((int)$selected->location, (int)$selected->location + (int)$selected->length));
+                    Metal::requestFrame($self);
+                    return;
+                }
+                $f = $input->focus;
                 if ($f === null) {
                     return;
                 }
-                $s = self::plainString($text);
                 $f->setMarked($s, TextState::byteIndex($s, (int)$selected->location));
                 Metal::requestFrame($self);
             }],
             'unmarkText' => ['v@:', 'v(pp)', function ($self, $cmd) {
-                $f = self::$inputs[ObjC::addr($self)]->focus;
+                $input = self::$inputs[ObjC::addr($self)];
+                if ($input->client !== null) { $input->client->unmarkText(); Metal::requestFrame($self); return; }
+                $f = $input->focus;
                 if ($f !== null && $f->marked !== null) { $f->insert($f->marked); Metal::requestFrame($self); }
             }],
             'insertText:replacementRange:' => ['v@:@{_NSRange=QQ}', 'v(pppn)', function ($self, $cmd, $text, $replacement) {
@@ -177,17 +212,30 @@ final class View
             'insertText:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $text) {
                 self::insertText($self, $text, self::NOT_FOUND, 0);
             }],
-            'attributedSubstringForProposedRange:actualRange:' => ['@@:{_NSRange=QQ}^{_NSRange=QQ}', 'p(ppnp)', fn($self, $cmd, $range, $actual) => null],
+            'attributedSubstringForProposedRange:actualRange:' => ['@@:{_NSRange=QQ}^{_NSRange=QQ}', 'p(ppnp)', function ($self, $cmd, $range, $actual) {
+                $client = self::$inputs[ObjC::addr($self)]->client;
+                if ($client === null) { return null; }
+                [$text, $used] = $client->textForRange(new TextInputRange(min((int)$range->location, 1 << 31), min((int)$range->location + (int)$range->length, 1 << 31)));
+                self::setRange($actual, $used);
+                return ObjC::msg('p:p', ObjC::alloc('NSAttributedString'), 'initWithString:', ObjC::str($text));
+            }],
             'validAttributesForMarkedText' => ['@@:', 'p(pp)', fn($self, $cmd) => ObjC::msg('p:', ObjC::cls('NSArray'), 'array')],
             'firstRectForCharacterRange:actualRange:' => ['{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}^{_NSRange=QQ}', 'r(ppnp)', function ($self, $cmd, $range, $actual) {
                 $input = self::$inputs[ObjC::addr($self)];
-                [$x, $y, $w, $h] = $input->caretRect((int)$range->location);
+                if ($input->client !== null) {
+                    $b = $input->client->boundsForRange(new TextInputRange((int)$range->location, (int)$range->location + (int)$range->length));
+                    [$x, $y, $w, $h] = $b === null ? [$input->clientOrigin[0], $input->clientOrigin[1], 0.0, 0.0] : [$input->clientOrigin[0] + $b[0][0], $input->clientOrigin[1] + $b[0][1], $b[0][2], $b[0][3]];
+                    if ($b !== null) { self::setRange($actual, $b[1]); }
+                } else {
+                    [$x, $y, $w, $h] = $input->caretRect((int)$range->location);
+                }
                 $inWindow = ObjC::msg('r:rp', $self, 'convertRect:toView:', ObjC::rect($x, $y, $w, $h), null);
                 return ObjC::msg('r:r', ObjC::msg('p:', $self, 'window'), 'convertRectToScreen:', $inWindow);
             }],
             'characterIndexForPoint:' => ['Q@:{CGPoint=dd}', 'L(ppq)', fn($self, $cmd, $p) => self::NOT_FOUND],
             'doCommandBySelector:' => ['v@::', 'v(ppp)', function ($self, $cmd, $selector) {
                 $input = self::$inputs[ObjC::addr($self)];
+                if ($input->client !== null) { return; } // the keys go to the node taking its input, as mygo's surface leaves them
                 $name = ObjC::selName($selector);
                 if ($input->focus === null || !$input->focus->command($name)) {
                     $input->push(['command', $name]);
@@ -204,10 +252,40 @@ final class View
         ObjC::msg('v:ppd', $view, 'performSelector:withObject:afterDelay:', ObjC::sel('wake:'), null, $seconds);
     }
 
+    /** An edit command of the menus to the node taking its input, when one has the focus (mygo's SurfaceCommand); reports whether one does. */
+    private static function edit($self, string $command): bool
+    {
+        $input = self::$inputs[ObjC::addr($self)];
+        if ($input->client === null) { return false; }
+        $input->push(['edit', $command]);
+        Metal::requestFrame($self);
+        return true;
+    }
+
+    /** Writes a range to an NSRange the text system passed a pointer to (an actualRange:), when it passed one. */
+    private static function setRange($pointer, TextInputRange $r): void
+    {
+        if ($pointer === null) { return; }
+        $out = ObjC::$c->cast('NSRange*', $pointer);
+        $out->location = $r->start; $out->length = max(0, $r->end - $r->start);
+    }
+
+    /** A replacement range of the text input client, or null for NSNotFound: the marked range, else the selection. */
+    private static function clientRange($range): ?TextInputRange
+    {
+        if ((int)$range->location === self::NOT_FOUND) { return null; }
+        return new TextInputRange(min((int)$range->location, 1 << 31), min((int)$range->location + (int)$range->length, 1 << 31));
+    }
+
     private static function insertText($self, $text, int $location, int $length): void
     {
         $input = self::$inputs[ObjC::addr($self)];
         $s = self::plainString($text);
+        if ($input->client !== null) {
+            $input->client->replaceText($location === self::NOT_FOUND ? null : new TextInputRange($location, $location + $length), $s);
+            Metal::requestFrame($self);
+            return;
+        }
         $f = $input->focus;
         if ($f === null) {
             $input->push(['insert', $s]); // a focused button takes Space from here

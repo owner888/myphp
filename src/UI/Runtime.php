@@ -89,6 +89,13 @@ final class Runtime
     private array $focusables = [];
     /** @var array<int, array{0: TextState, 1: float, 2: float, 3: float, 4: float, 5: float}> id => state, text x, text y, line h, size, inner width (text areas) */
     private array $fields = [];
+    /** @var array<int, Closure> the nodes taking their input as it comes (Node::handleInput), from last frame, and the one that took a press, which the pointer's moves and release go to wherever they are */
+    private array $inputs = [];
+    private ?int $captured = null;
+    /** @var array<int, true> the nodes a press on which leaves the focus where it is (Node::keepFocus), from last frame */
+    private array $keepers = [];
+    /** @var array<int, array{0: TextInputClient, 1: bool}> the nodes taking text from the input methods (Node::handleTextInput), and whether the input methods compose for them */
+    private array $textClients = [];
     /** Caret blinking: when it last restarted, and what the focused field looked like then. */
     private float $blinkStart = 0;
     private ?array $blinkSeen = null;
@@ -106,7 +113,29 @@ final class Runtime
     public function __construct(public Input $input, private ?TextMetrics $metrics = null)
     {
         $input->metrics = $metrics;
+        $input->direct = $this->deliver(...);
         $this->openURL = fn(string $url) => null;
+        $clip = '';
+        $this->writeClipboard = function (string $s) use (&$clip) { $clip = $s; };
+        $this->readClipboard = function () use (&$clip): string { return $clip; };
+    }
+
+    /** Write text to the clipboard and read it (mygo's Services' WriteClipboard and ReadClipboard), for what edits text itself, as a code editor: the window sets them to the system's pasteboard; without one, a clipboard of the runtime's own. */
+    public Closure $writeClipboard, $readClipboard;
+    /** When a frame is due of its own accord, as asked by after(): seconds of hrtime, or null. */
+    private ?float $wakeAt = null;
+
+    /** Asks for a frame $seconds from now, for what changes then, as a caret's blink or a hover's delay (mygo's Context.After and Painter.After): the earliest asked since the last frame began. */
+    public function after(float $seconds): void
+    {
+        $at = hrtime(true) / 1e9 + max(0.0, $seconds);
+        if ($this->wakeAt === null || $at < $this->wakeAt) { $this->wakeAt = $at; }
+    }
+
+    /** Asks, while painting, for the next frame as soon as the display can show it, for a drawing that moves (mygo's Painter.AnimationFrame). */
+    public function animationFrame(): void
+    {
+        $this->needsFrame = true;
     }
 
     /**
@@ -136,7 +165,8 @@ final class Runtime
         foreach ($this->scrolls as $state) {
             $state->glide($dt);
         }
-        foreach ($this->input->events as $e) {
+        $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
+        foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
             switch ($e[0]) {
                 case 'down':
                     $this->input->mouseDown = true;
@@ -236,10 +266,10 @@ final class Runtime
         $this->areas = [];
         $this->tips = [];
         $this->cursor = 'arrow';
-        $this->animating = false;
         $this->focusables = [];
         $this->memberOf = []; $this->groups = [];
         $this->fields = [];
+        $this->inputs = []; $this->textClients = []; $this->keepers = [];
         $this->lists = [];
         $this->needsFrame = false;
         $this->record($root);
@@ -271,6 +301,8 @@ final class Runtime
         }
         $this->input->focus = null;
         $this->input->caretAt = null;
+        [$this->input->client, $this->input->inputMethod] = $this->focus !== null && isset($this->textClients[$this->focus]) ? $this->textClients[$this->focus] : [null, true];
+        if ($this->input->client !== null) { $this->input->clientOrigin = [$this->rects[$this->focus][0], $this->rects[$this->focus][1]]; }
         if ($this->focus !== null && isset($this->fields[$this->focus])) {
             [$state, $tx, $ty, $lh, $size, $width] = $this->fields[$this->focus];
             $this->input->focus = $state;
@@ -306,6 +338,10 @@ final class Runtime
     public function nextWake(): ?float
     {
         $wake = $this->nextBlink();
+        if ($this->wakeAt !== null) {
+            $at = max(0.0, $this->wakeAt - hrtime(true) / 1e9);
+            $wake = $wake === null ? $at : min($wake, $at);
+        }
         if ($this->tipPending) {
             $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
             $wake = $wake === null ? $tip : min($wake, $tip);
@@ -435,6 +471,9 @@ final class Runtime
         if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapWidth !== null && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
             $this->needsFrame = true; // wrapped at the width it, or its container, had last frame; this frame's differs
         }
+        if ($n->keepFocus) { $this->keepers[$n->id] = true; }
+        if ($n->input !== null) { $this->inputs[$n->id] = $n->input; }
+        if ($n->textClient !== null) { $this->textClients[$n->id] = [$n->textClient, $n->inputMethod]; }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
             $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET - $n->insetL - $n->insetR];
@@ -464,9 +503,105 @@ final class Runtime
         return $this->focus === $id;
     }
 
+    /**
+     * Gives an event to the node that takes its input as it comes
+     * (Node::handleInput) as it arrives, before the next frame is built
+     * (Input::push): a press on it, which has its moves and release
+     * follow, the pointer moving over it, the wheel over it, and keys and
+     * edit commands while it has the focus. A press focuses what it lands
+     * on first, as any press does. Reports whether the node took it; what
+     * it left goes on to the frame, as it would without it.
+     */
+    private function deliver(array $e): bool
+    {
+        $id = null; $ev = null;
+        switch ($e[0]) {
+            case 'down':
+                $id = $this->inputAt($e[1], $e[2]);
+                if ($id === null) { return false; }
+                if ($e[3] === 0) { $this->focusAt($e[1], $e[2]); }
+                $ev = new InputEvent(InputEvent::POINTER_DOWN, mods: $e[5] & Key::MODIFIERS, button: $e[3], clicks: max(1, $e[4]));
+                break;
+            case 'move':
+                if ($this->captured !== null) { return true; } // the press's node takes the moves, as drags
+                $id = $this->inputAt($e[1], $e[2]);
+                $ev = new InputEvent(InputEvent::POINTER_MOVE, button: -1);
+                break;
+            case 'drag':
+                $id = $this->captured;
+                $ev = new InputEvent(InputEvent::POINTER_MOVE, button: 0);
+                break;
+            case 'up':
+                $id = $this->captured;
+                $ev = new InputEvent(InputEvent::POINTER_UP, mods: ($e[5] ?? 0) & Key::MODIFIERS, button: $e[3], clicks: max(1, $e[4] ?? 1));
+                break;
+            case 'scroll':
+                $id = $this->inputAt($e[1], $e[2]);
+                $ev = new InputEvent(InputEvent::SCROLL, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
+                break;
+            case 'key':
+                $id = $this->focus;
+                $ev = new InputEvent(InputEvent::KEY_DOWN, key: $e[2], mods: $e[3] & Key::MODIFIERS, text: $e[1]);
+                break;
+            case 'edit':
+                $id = $this->focus;
+                $ev = new InputEvent(InputEvent::COMMAND, text: $e[1]);
+                break;
+            default:
+                return false;
+        }
+        if ($id === null || !isset($this->inputs[$id])) { return $e[0] === 'move'; }
+        if ($ev->kind !== InputEvent::KEY_DOWN && $ev->kind !== InputEvent::COMMAND) {
+            [$rx, $ry] = $this->rects[$id];
+            $ev->x = $e[1] - $rx; $ev->y = $e[2] - $ry;
+        }
+        $took = (bool)($this->inputs[$id])($ev);
+        if ($ev->kind === InputEvent::POINTER_DOWN) {
+            $this->input->mouseDown = $took || $this->input->mouseDown;
+            $this->captured = $took ? $id : null;
+        } elseif ($ev->kind === InputEvent::POINTER_UP) {
+            $this->input->mouseDown = false;
+            $this->captured = null;
+        }
+        if ($took) { $this->needsFrame = true; }
+        // The release of a press the node took is its own, as its drags are; the pointer's moves go nowhere else.
+        return $took || $e[0] === 'move' || $e[0] === 'drag' || $e[0] === 'up';
+    }
+
+    /** A press at a point focuses the innermost focusable node under it, or nothing, as mygo's pointerDown does before the node pressed hears of it. */
+    private function focusAt(float $x, float $y): void
+    {
+        if ($this->keepsFocus($x, $y)) { return; }
+        $best = null; $bestArea = INF;
+        foreach ($this->focusables as $fid) {
+            $r = $this->rects[$fid];
+            if ($this->under($fid, $x, $y) && $r[2] * $r[3] < $bestArea) { $best = $fid; $bestArea = $r[2] * $r[3]; }
+        }
+        if ($best !== null && $best !== $this->focus) { $this->focus = $best; $this->focusVisible = false; }
+    }
+
+    /** Whether a press at a point leaves the focus where it is, being on a node that keeps it (Node::keepFocus). */
+    private function keepsFocus(float $x, float $y): bool
+    {
+        foreach ($this->keepers as $id => $_) { if ($this->under($id, $x, $y)) { return true; } }
+        return false;
+    }
+
+    /** The innermost reachable node taking its input under a point. */
+    private function inputAt(float $x, float $y): ?int
+    {
+        $best = null; $bestArea = INF;
+        foreach ($this->inputs as $id => $_) {
+            $r = $this->rects[$id] ?? null;
+            if ($r !== null && $this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) { $best = $id; $bestArea = $r[2] * $r[3]; }
+        }
+        return $best;
+    }
+
     /** A left press: focuses the innermost field, button or list under it, placing the caret in a field. */
     private function pressAt(float $x, float $y): void
     {
+        if ($this->keepsFocus($x, $y)) { return; }
         $best = null; $bestArea = INF;
         foreach ($this->focusables as $id) {
             $r = $this->rects[$id];
@@ -890,7 +1025,7 @@ final class Runtime
         return $this->hold !== null;
     }
 
-    /** Asks for the next frame as an animation would (a list scrolling under a drag near its edge). */
+    /** Asks, while building, for the next frame as an animation would (a list scrolling under a drag near its edge), or for what the build changed to show (mygo's Invalidate). */
     public function animate(): void
     {
         $this->animating = true;

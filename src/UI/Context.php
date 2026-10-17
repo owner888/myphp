@@ -144,6 +144,20 @@ final class Context
         return $n;
     }
 
+    /** The text engine the view is measured with. */
+    public function metrics(): TextMetrics
+    {
+        return $this->metrics;
+    }
+
+    /** Builds what $fn builds over everything else, at the window's root, wherever the build is (mygo's Overlay): popups placed with Node::at in the window's coordinates. */
+    public function overlay(Closure $fn): void
+    {
+        $saved = $this->stack; $this->stack = [$this->root];
+        $fn();
+        $this->stack = $saved;
+    }
+
     /** Whether the node just built was clicked (a mouse-up on where it was last frame). */
     public function clicked(Node $n): bool
     {
