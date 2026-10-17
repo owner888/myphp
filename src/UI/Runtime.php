@@ -77,6 +77,8 @@ final class Runtime
     public array $timelines = [];
     /** The pass of the frame's build being built, from 0: a click that changed state builds the frame again (mygo's pass). */
     public int $pass = 0;
+    /** @var array<int, Affine> the maps from the layout of last frame's transformed nodes to the window, by id (Node::$world): for the pointer */
+    private array $worlds = [];
     /** @var array<int, true> the nodes some of which showed in the window last frame, within the scrolling containers and clips around them (Context::inView) */
     private array $shown = [];
     /** Steppers built this frame, by id, for the arrow keys. */
@@ -306,7 +308,7 @@ final class Runtime
         $this->inputs = []; $this->textClients = []; $this->keepers = [];
         $this->lists = [];
         $this->needsFrame = false;
-        $this->shown = [];
+        $this->shown = []; $this->worlds = [];
         $this->record($root);
         foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
@@ -463,15 +465,20 @@ final class Runtime
     private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        $n->world = $parent === null ? $n->transformAt() : $parent->world->mul($n->transformAt()); // its transform after its ancestors' (mygo's world)
+        if ($n->world->set) {
+            $this->worlds[$n->id] = $n->world;
+        }
+        [$bx, $by, $bw, $bh] = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows in the window
         $clip ??= [$n->x, $n->y, $n->x + $n->w, $n->y + $n->h]; // the root: the window
-        if (min($n->x + $n->w, $clip[2]) > max($n->x, $clip[0]) && min($n->y + $n->h, $clip[3]) > max($n->y, $clip[1])) {
+        if (min($bx + $bw, $clip[2]) > max($bx, $clip[0]) && min($by + $bh, $clip[3]) > max($by, $clip[1]) && !($n->backface && $n->transform->facesAway())) {
             $this->shown[$n->id] = true;
         }
         if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
-            $clip[0] = max($clip[0], $n->x); $clip[2] = min($clip[2], $n->x + $n->w);
+            $clip[0] = max($clip[0], $bx); $clip[2] = min($clip[2], $bx + $bw);
         }
         if ($n->scroll !== null || ($n->clip & Node::CLIP_Y) !== 0) {
-            $clip[1] = max($clip[1], $n->y); $clip[3] = min($clip[3], $n->y + $n->h);
+            $clip[1] = max($clip[1], $by); $clip[3] = min($clip[3], $by + $bh);
         }
         $this->order[$n->id] = ++$this->counter;
         if ($n->dragsWindow) {
@@ -550,6 +557,33 @@ final class Runtime
         }
     }
 
+    /** The window's point (x, y) in last frame's layout of node $id, from its top left, through its transform (mygo's WindowToLocal); null for a singular transform. @return ?array{0: float, 1: float} */
+    public function toLocal(int $id, float $x, float $y): ?array
+    {
+        $r = $this->rects[$id] ?? [0.0, 0.0];
+        if (isset($this->worlds[$id])) {
+            $inv = $this->worlds[$id]->inverse();
+            if ($inv === null) {
+                return null;
+            }
+            [$x, $y] = $inv->point($x, $y);
+        }
+        return [$x - $r[0], $y - $r[1]];
+    }
+
+    /** The map from the layout of node $id to the window in the last frame. */
+    public function worldOf(int $id): Affine
+    {
+        return $this->worlds[$id] ?? Affine::identity();
+    }
+
+    /** The point (x, y) of last frame's layout of node $id, from its top left, in the window, through its transform (mygo's LocalToWindow). @return array{0: float, 1: float} */
+    public function toWindow(int $id, float $x, float $y): array
+    {
+        $r = $this->rects[$id] ?? [0.0, 0.0];
+        return ($this->worlds[$id] ?? Affine::identity())->point($r[0] + $x, $r[1] + $y);
+    }
+
     /** Whether Context::disableAnimations made this frame's values go to their targets at once. */
     public function instant(): bool
     {
@@ -616,8 +650,7 @@ final class Runtime
         }
         if ($id === null || !isset($this->inputs[$id])) { return $e[0] === 'move'; }
         if ($ev->kind !== InputEvent::KEY_DOWN && $ev->kind !== InputEvent::COMMAND) {
-            [$rx, $ry] = $this->rects[$id];
-            $ev->x = $e[1] - $rx; $ev->y = $e[2] - $ry;
+            [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
         }
         $took = (bool)($this->inputs[$id])($ev);
         if ($ev->kind === InputEvent::POINTER_DOWN) {
@@ -1187,7 +1220,17 @@ final class Runtime
     private function under(int $id, float $x, float $y): bool
     {
         $r = $this->rects[$id] ?? null;
-        if ($r === null || !$this->reachable($id) || $x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
+        if ($r === null || !$this->reachable($id) || !isset($this->shown[$id]) && isset($this->worlds[$id])) {
+            return false; // a node turned away from the viewer takes no pointer
+        }
+        if (isset($this->worlds[$id])) { // the point in the node's layout, through its transform
+            $inv = $this->worlds[$id]->inverse();
+            if ($inv === null) {
+                return false; // a singular transform, which shows nothing, takes no pointer
+            }
+            [$x, $y] = $inv->point($x, $y);
+        }
+        if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
             return false;
         }
         $o = $this->order[$id];

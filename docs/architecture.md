@@ -74,7 +74,7 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
 `Native\Metal` compiles one MSL library at startup (rect vertex/fragment
 pair with a rounded-rect SDF for anti-aliased corners), builds one pipeline
 with source-alpha blending, and allocates a ring of four shared
-`MTLBuffer`s. `DisplayList` writes 12 floats per rect straight into the
+`MTLBuffer`s. `DisplayList` writes 16 floats per quad straight into the
 current buffer's `contents` cast to `float[]`; `present` encodes one
 instanced triangle-strip draw (4 vertices × n instances) and commits. The
 viewport size goes in through `setVertexBytes:` as two floats, in points,
@@ -99,7 +99,7 @@ run loop in its common modes (coalesced), and `windowDidResize:` calls
 `draw` directly; a frame asked for while one is drawing (waiting) is drawn
 after it.
 
-The quad kinds, by `params.y`: 0 a rounded rect, 1 a glyph, 2 an image,
+The quad kinds, by `params.y` (less the transform's entry, below): 0 a rounded rect, 1 a glyph, 2 an image,
 3 a soft shadow (the rect inset by the blur, feathered over it), 4 a ring
 (the band inside the edge), 5 glass, 6 a vertical alpha gradient, 7 a
 backdrop blur, 8 the hard scroll edge, 9 a line: a capsule between
@@ -111,6 +111,40 @@ hands a node's face to a closure given the list, the laid-out node and
 the theme, painted over the node's own face and under its children
 (mygo's Draw): the search field's magnifying glass is a ring and a line
 drawn that way, at mygo's MingCute proportions.
+
+### Transforms and opacity
+
+A node's visual transform is mygo's transform.go: `Transform` composes
+translation, scaling, rotation, skewing and, in 3D, `rotationX`,
+`rotationY` and `perspective`, flattened into its parent's plane as an
+`Affine` (mygo's `scene.Affine`: an affine map, or a projective one, with
+`g` and `h`, in perspective); `Node::transform`, `translate`, `scale`,
+`rotate` (an icon's artwork turns, any other node turns as a whole),
+`skew`, `rotateX`, `rotateY`, `perspective`, around `transformOrigin`
+(the box's center by default), and `backfaceHidden`. `Runtime::record`
+works out each node's `world`, its transform after its ancestors', and
+keeps those of the transformed nodes: the pointer reaches a node through
+the inverse of its world (a singular one, as a scale of zero, takes none,
+nor does a face turned away), its input is in its layout's coordinates,
+and assistive technology and `inView` see its bounds as it shows.
+`Context::layoutBounds`, `bounds`, `localToWindow` and `windowToLocal`
+are mygo's.
+
+The GPU draws each quad through a map, from a second buffer of eight
+floats an entry (`DisplayList::$xforms`, entry 0 the identity): the quad's
+kind carries its entry, as kind + 16 × entry, so a quad drawn as laid out
+costs no more floats than before. The vertex shader maps the quad's
+corners and puts the projective divisor in `w`, so the rounded rect's
+distance field, worked out in the quad's own coordinates, is
+perspective-correct; a transformed shape's quad grows by a point, for its
+smoothed edge. `Painter` sets the node's world before it paints it
+(`DisplayList::setWorld`, an entry written once a frame for each map) and
+`DisplayList::transform($t, $ox, $oy, $fn)` draws through more, around a
+point, for a draw closure (mygo's Painter.Transform). A clip pushed through
+a transform is its bounds, as mygo's, and `visible()` is the clip in the
+coordinates of what is drawn. `Node::opacity` makes a node and its
+children translucent: each quad's alpha times the opacity in effect
+(`DisplayList::setOpacity`); a node that is transparent paints nothing.
 
 ## Liquid Glass
 

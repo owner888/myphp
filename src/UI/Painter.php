@@ -8,7 +8,31 @@ final class Painter
 {
     private const BOX_RADIUS = 18.0;
 
+    /**
+     * Paints $n and its children through the node's world (its transform
+     * after its ancestors', as Runtime::record worked it out) at its
+     * opacity times its ancestors', as mygo's Painter.element: a node turned
+     * away with backfaceHidden, or transparent, paints nothing.
+     */
     public static function paint(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt = null): void
+    {
+        if ($n->backface && $n->transform->facesAway()) {
+            return;
+        }
+        $world = $list->world(); $opacity = $list->opacity();
+        if ($n->opacity < 1) {
+            if ($opacity * $n->opacity <= 0.001) {
+                return;
+            }
+            $list->setOpacity($opacity * $n->opacity);
+        }
+        $list->setWorld($n->world);
+        self::node($n, $list, $text, $t, $rt);
+        $list->setWorld($world);
+        $list->setOpacity($opacity);
+    }
+
+    private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
             return;
@@ -124,9 +148,8 @@ final class Painter
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
-        } elseif ($n->clip !== 0) {
-            [$vx, $vy, $vw, $vh] = $list->visible();
-            $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : $vx, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : $vy, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : $vw, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : $vh);
+        } elseif ($n->clip !== 0) { // an axis not clipped reaches as far as the clip around it does
+            $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : -1e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : -1e6, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : 2e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : 2e6);
         }
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);

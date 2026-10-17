@@ -21,10 +21,19 @@ use RuntimeException;
  * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
+ *
+ * What a quad is drawn through, the map from its coordinates to the
+ * window (setWorld, mygo's Painter transform), is an entry of a second
+ * buffer, $xforms, of FLOATS_PER_TRANSFORM floats each: a b c d, x y g h
+ * of an Affine, entry 0 the identity. The quad's kind carries the entry,
+ * as kind + KIND_STRIDE * entry, so that a quad drawn as it is laid out
+ * costs no more floats. The opacity of what is drawn (setOpacity, mygo's
+ * Painter opacity) multiplies each quad's alpha.
  */
 final class DisplayList
 {
-    public const FLOATS_PER_RECT = 16;
+    public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 8;
+    public const KIND_STRIDE = 16.0;
     private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
@@ -35,7 +44,84 @@ final class DisplayList
     /** Text::pathQuad, for path(): the glyph quad of a path from its mask in the atlas. Set by the window; null leaves paths undrawn (a headless list). */
     public ?\Closure $pathQuad = null;
 
-    public function __construct(public CData $buf, public int $capacity) {}
+    /** The entries of $xforms written this frame, the identity's included. */
+    public int $transforms = 1;
+    /** What is drawn now is drawn through: the map, its entry as kind + KIND_STRIDE * entry, and the entries of the maps written this frame by spl_object_id. */
+    private Affine $world;
+    private float $xk = 0.0;
+    private array $entries = [];
+    /** The opacity what is drawn now is drawn at. */
+    private float $opacity = 1.0;
+
+    public function __construct(public CData $buf, public int $capacity, public CData $xforms, public int $xformCapacity)
+    {
+        $this->world = Affine::identity();
+        $this->writeEntry(0, $this->world);
+    }
+
+    /** Draws what follows through $m, the map from its coordinates to the window (mygo's Painter transform); clips pushed after it are its bounds. */
+    public function setWorld(Affine $m): void
+    {
+        if ($m === $this->world) {
+            return;
+        }
+        $this->world = $m;
+        if (!$m->set) {
+            $this->xk = 0.0;
+            return;
+        }
+        $entry = $this->entries[spl_object_id($m)] ?? null;
+        if ($entry === null) {
+            if ($this->transforms === $this->xformCapacity) {
+                throw new RuntimeException("display list full ({$this->xformCapacity} transforms)");
+            }
+            $entry = $this->entries[spl_object_id($m)] = $this->transforms++;
+            $this->writeEntry($entry, $m);
+        }
+        $this->xk = self::KIND_STRIDE * $entry;
+    }
+
+    /** The map what is drawn now is drawn through. */
+    public function world(): Affine
+    {
+        return $this->world;
+    }
+
+    /** Draws what follows at $opacity, from 0 to 1, as its alpha times it. */
+    public function setOpacity(float $opacity): void
+    {
+        $this->opacity = $opacity;
+    }
+
+    public function opacity(): float
+    {
+        return $this->opacity;
+    }
+
+    /**
+     * Draws what $fn draws through $t, around ($ox, $oy), after what it is
+     * drawn through, as mygo's Painter.Transform.
+     */
+    public function transform(Transform $t, float $ox, float $oy, \Closure $fn): void
+    {
+        $saved = $this->world;
+        $m = $t->flat();
+        if ($m->set) {
+            $this->setWorld($saved->mul(Affine::translation($ox, $oy))->mul($m)->mul(Affine::translation(-$ox, -$oy)));
+        }
+        try {
+            $fn();
+        } finally {
+            $this->setWorld($saved);
+        }
+    }
+
+    private function writeEntry(int $entry, Affine $m): void
+    {
+        $x = $this->xforms; $k = $entry * self::FLOATS_PER_TRANSFORM;
+        $x[$k] = $m->a; $x[$k + 1] = $m->b; $x[$k + 2] = $m->c; $x[$k + 3] = $m->d;
+        $x[$k + 4] = $m->x; $x[$k + 5] = $m->y; $x[$k + 6] = $m->g; $x[$k + 7] = $m->h;
+    }
 
     /** Fills $path in $rgb (non-zero winding), or with $width > 0 strokes it that wide with round joins and caps, as mygo's FillPath and StrokePath: drawn as a glyph from a cached mask. */
     public function path(Path $path, int $rgb, float $alpha = 1.0, float $width = 0.0): void
@@ -52,12 +138,18 @@ final class DisplayList
         $this->glass = [];
         $this->clip = self::NO_CLIP;
         $this->clips = [];
+        $this->transforms = 1; $this->entries = [];
+        $this->world = Affine::identity(); $this->xk = 0.0;
+        $this->opacity = 1.0;
     }
 
     /** Clips what follows to the intersection of the current clip and this rect. */
     public function pushClip(float $x, float $y, float $w, float $h): void
     {
         $this->clips[] = $c = $this->clip;
+        if ($this->world->set) {
+            [$x, $y, $w, $h] = $this->world->bounds($x, $y, $w, $h); // as mygo's, the bounds of the clip as it shows
+        }
         $x0 = max($c[0], $x); $y0 = max($c[1], $y);
         $x1 = min($c[0] + $c[2], $x + $w); $y1 = min($c[1] + $c[3], $y + $h);
         $this->clip = [$x0, $y0, max(0, $x1 - $x0), max(0, $y1 - $y0)];
@@ -68,15 +160,21 @@ final class DisplayList
         $this->clip = array_pop($this->clips);
     }
 
-    /** The current clip: x, y, w, h (mygo's Painter.Visible). @return array{0: float, 1: float, 2: float, 3: float} */
+    /** The current clip, in the coordinates of what is drawn now: x, y, w, h (mygo's Painter.Visible); the bounds of it through a transform, nothing through a singular one. @return array{0: float, 1: float, 2: float, 3: float} */
     public function visible(): array
     {
-        return $this->clip;
+        if (!$this->world->set) {
+            return $this->clip;
+        }
+        return $this->world->inverse()?->bounds(...$this->clip) ?? [0.0, 0.0, 0.0, 0.0];
     }
 
     /** Whether a rect lies entirely outside the current clip (nothing to draw). */
     public function clipped(float $x, float $y, float $w, float $h): bool
     {
+        if ($this->world->set) {
+            [$x, $y, $w, $h] = $this->world->bounds($x, $y, $w, $h);
+        }
         $c = $this->clip;
         return $x >= $c[0] + $c[2] || $y >= $c[1] + $c[3] || $x + $w <= $c[0] || $y + $h <= $c[1];
     }
@@ -88,8 +186,8 @@ final class DisplayList
         }
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
-        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
-        $b[$k + 8] = $radius; $b[$k + 9] = 0.0;
+        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        $b[$k + 8] = $radius; $b[$k + 9] = $this->xk;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }
@@ -150,8 +248,8 @@ final class DisplayList
         }
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
-        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
-        $b[$k + 8] = $radius; $b[$k + 9] = $kind; $b[$k + 10] = $u; $b[$k + 11] = $v;
+        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        $b[$k + 8] = $radius; $b[$k + 9] = $kind + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }
@@ -166,8 +264,8 @@ final class DisplayList
         }
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
-        $b[$k + 4] = $sw; $b[$k + 5] = $sh; $b[$k + 6] = $page; $b[$k + 7] = $alpha;
-        $b[$k + 8] = $radius; $b[$k + 9] = $gray ? 12.0 : 2.0; $b[$k + 10] = $u; $b[$k + 11] = $v;
+        $b[$k + 4] = $sw; $b[$k + 5] = $sh; $b[$k + 6] = $page; $b[$k + 7] = $alpha * $this->opacity;
+        $b[$k + 8] = $radius; $b[$k + 9] = ($gray ? 12.0 : 2.0) + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }
@@ -180,8 +278,8 @@ final class DisplayList
         }
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
-        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha;
-        $b[$k + 8] = 0.0; $b[$k + 9] = 1.0; $b[$k + 10] = $u; $b[$k + 11] = $v;
+        $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        $b[$k + 8] = 0.0; $b[$k + 9] = 1.0 + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }

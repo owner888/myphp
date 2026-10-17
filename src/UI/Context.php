@@ -182,6 +182,31 @@ final class Context
         return $this->runtime?->hovered($n->id) ?? false;
     }
 
+    /** The box of $n in the last frame, before its transform, in the window's coordinates of the layout, which draw closures use (mygo's LayoutBounds): x, y, w, h. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function layoutBounds(Node $n): array
+    {
+        return $this->runtime?->rectOf($n->id) ?? [0.0, 0.0, 0.0, 0.0];
+    }
+
+    /** The bounds of $n in the window in the last frame, through its transform (mygo's Bounds): x, y, w, h. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function bounds(Node $n): array
+    {
+        $r = $this->runtime?->rectOf($n->id);
+        return $r === null ? [0.0, 0.0, 0.0, 0.0] : $this->runtime->worldOf($n->id)->bounds(...$r);
+    }
+
+    /** The point ($x, $y) of the last frame's box of $n, from its top left, in the window (mygo's LocalToWindow). @return array{0: float, 1: float} */
+    public function localToWindow(Node $n, float $x, float $y): array
+    {
+        return $this->runtime?->toWindow($n->id, $x, $y) ?? [0.0, 0.0];
+    }
+
+    /** The window's point ($x, $y) in the last frame's box of $n, from its top left (mygo's WindowToLocal); null through a singular transform, which takes no pointer. @return ?array{0: float, 1: float} */
+    public function windowToLocal(Node $n, float $x, float $y): ?array
+    {
+        return $this->runtime?->toLocal($n->id, $x, $y);
+    }
+
     /**
      * A grid, as mygo's Grid: its children fill its cells row by row, in
      * columns sized by $cols (Track::fixed, fr, fit) and rows that fit

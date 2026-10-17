@@ -156,7 +156,7 @@ trait RuntimeAccess
         if (($role = $this->roleOf($n)) !== null && $this->reachable($n->id)) {
             $node = new AccessNode($n->id, $parent, $role);
             $node->label = $n->label;
-            $node->bounds = [$n->x, $n->y, $n->w, $n->h];
+            $node->bounds = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows, through its transform (mygo's accessBounds)
             if ($clip !== null) { $node->actions |= AccessNode::ACTION_SCROLL_INTO_VIEW; }
             $this->accessDetails($n, $node, $clip);
             $t->nodes[] = $node;
@@ -164,7 +164,7 @@ trait RuntimeAccess
             if (Role::leaf($role)) { return; }
         }
         if ($n->scroll !== null) {
-            $box = [$n->x, $n->y, $n->w, $n->h];
+            $box = $n->world->bounds($n->x, $n->y, $n->w, $n->h);
             $clip = $clip === null ? $box : self::intersect($clip, $box);
         }
         $list = $n->scroll instanceof ListState && $n->rowRole !== Role::NONE ? $n->scroll : null; // a grid's rows are no nodes: its items are
@@ -202,7 +202,7 @@ trait RuntimeAccess
             $x0 = min($x0, $r->x); $y0 = min($y0, $r->y); $x1 = max($x1, $r->x + $r->w); $y1 = max($y1, $r->y + $r->h);
         }
         $row = new AccessNode($id, $parent, $n->rowRole);
-        $row->bounds = [$x0, $y0, $x1 - $x0, $y1 - $y0];
+        $row->bounds = $n->world->bounds($x0, $y0, $x1 - $x0, $y1 - $y0);
         $row->posInSet = $i + 1; $row->setSize = $state->count;
         if ($clip !== null) {
             $row->actions |= AccessNode::ACTION_SCROLL_INTO_VIEW;

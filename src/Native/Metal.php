@@ -30,21 +30,29 @@ final class Metal
     struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
+    struct Xform { float4 abcd; float4 xygh; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
-                         const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]]) {
+                         const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]], const device Xform* xf [[buffer(2)]]) {
         Inst i = in[iid];
+        float entry = floor(i.params.y / 16.0);   // the kind carries the quad's transform, as kind + 16 * entry
+        float kind = i.params.y - entry * 16.0;
+        Xform m = xf[uint(entry)];
         float2 corner = float2(vid & 1, vid >> 1);
-        float2 p = i.rect.xy + corner * i.rect.zw;
+        bool sdf = kind < 0.5 || (kind > 2.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5) || (kind > 8.5 && kind < 11.5);
+        float pad = entry > 0.5 && sdf ? 1.0 : 0.0;   // turned or scaled, a shape's edge is smoothed past the quad's: the quad grows to take it in
+        float2 p = i.rect.xy - pad + corner * (i.rect.zw + 2.0 * pad);
+        float w = m.xygh.z * p.x + m.xygh.w * p.y + 1.0;
+        float2 q = float2(m.abcd.x * p.x + m.abcd.z * p.y + m.xygh.x, m.abcd.y * p.x + m.abcd.w * p.y + m.xygh.y);   // times w: divided by it after interpolation, in perspective
         V o;
-        o.pos = float4(p.x / u.viewport.x * 2.0 - 1.0, 1.0 - p.y / u.viewport.y * 2.0, 0.0, 1.0);
-        o.local = (corner - 0.5) * i.rect.zw;
+        o.pos = float4(q.x / u.viewport.x * 2.0 - w, w - q.y / u.viewport.y * 2.0, 0.0, w);
+        o.local = (corner - 0.5) * (i.rect.zw + 2.0 * pad);
         o.extent = i.rect.zw * 0.5;
-        bool image = i.params.y > 1.5 && (i.params.y < 2.5 || i.params.y > 11.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
-        o.uv = i.params.y > 2.5 && !image ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade
+        bool image = kind > 1.5 && (kind < 2.5 || kind > 11.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
+        o.uv = kind > 2.5 && !image ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade
              : (i.params.zw + corner * (image ? i.color.xy : i.rect.zw * u.atlasScale)) / u.atlas;
         o.color = i.color;
         o.radius = i.params.x;
-        o.kind = i.params.y;
+        o.kind = kind;
         o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
         o.rect = i.rect * u.scale;   // the quad in pixels, for the glass
         return o;
@@ -218,6 +226,9 @@ final class Metal
     private $queue;
     private $pipeline;
     private array $buffers = [];
+    /** The transforms' buffers, one for each of $buffers (DisplayList's $xforms). */
+    private array $xformBuffers = [];
+    private const TRANSFORMS = 16384;
     private array $lists = [];
     private int $frame = 0;
     private $uniforms;
@@ -242,7 +253,11 @@ final class Metal
         for ($i = 0; $i < self::RING; $i++) {
             $buf = ObjC::msg('p:LL', $this->device, 'newBufferWithLength:options:', $floats * 4, 0 /* shared */);
             $this->buffers[] = $buf;
-            $this->lists[] = new DisplayList(ObjC::$c->cast("float[$floats]", ObjC::msg('p:', $buf, 'contents')), $capacity);
+            $xfloats = self::TRANSFORMS * DisplayList::FLOATS_PER_TRANSFORM;
+            $xbuf = ObjC::msg('p:LL', $this->device, 'newBufferWithLength:options:', $xfloats * 4, 0 /* shared */);
+            $this->xformBuffers[] = $xbuf;
+            $this->lists[] = new DisplayList(ObjC::$c->cast("float[$floats]", ObjC::msg('p:', $buf, 'contents')), $capacity,
+                ObjC::$c->cast("float[$xfloats]", ObjC::msg('p:', $xbuf, 'contents')), self::TRANSFORMS);
         }
         $this->uniforms = ObjC::$c->new('float[8]'); // viewport.xy, atlas.xy, scale, atlasScale, dark, pad
         $this->blurParams = ObjC::$c->new('float[4]'); // dir.xy, sigma, pad
@@ -446,6 +461,7 @@ final class Metal
         ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->pipeline);
         ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $this->buffers[$this->frame % self::RING], $from * DisplayList::FLOATS_PER_RECT * 4, 0);
         ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $this->uniforms, 32, 1);
+        ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $this->xformBuffers[$this->frame % self::RING], 0, 2);
         ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $this->uniforms, 32, 1);
         if ($this->atlasTexture !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);

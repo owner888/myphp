@@ -102,6 +102,13 @@ final class Node
     public float $fraction = 0;
     /** How far a slider's knob is held, from 0 to 1, moving between them as it is pressed and let go (mygo's "held"). */
     public float $held = 0.0;
+    /** The node's visual transform (transform()), its origin as parts of its box, whether it hides while turned away, and its opacity, which its children share (opacity()). */
+    public Transform $transform;
+    public float $originX = 0.5, $originY = 0.5;
+    public bool $backface = false;
+    public float $opacity = 1.0;
+    /** The map from the node's layout to the window, its ancestors' transforms included: Runtime::record sets it. */
+    public Affine $world;
     /** What of the node's children the node cuts off at its edges: CLIP_X, CLIP_Y or both (clip(), clipY()). */
     public int $clip = 0;
     public const CLIP_X = 1, CLIP_Y = 2;
@@ -151,7 +158,10 @@ final class Node
         /** For text: font size in points and text color. */
         public float $fontSize = 0,
         public int $fg = 0,
-    ) {}
+    ) {
+        $this->transform = Transform::identity();
+        $this->world = Affine::identity();
+    }
 
     /** Takes this node out of its parent's flow and puts it at ($x, $y) from the parent's top left, at its own size (or size()). Later siblings paint over earlier ones. */
     public function at(float $x, float $y): static
@@ -212,12 +222,105 @@ final class Node
     /**
      * Turns an icon's artwork clockwise around its center by $degrees, which
      * changes no layout sizes, as mygo's Rotate: a spinner keeps turning
-     * its SVG with `$spin->rotate($c->animate(...) * 360)`.
+     * its SVG with `$spin->rotate($c->loop(...) * 360)`. Any other node it
+     * turns after its transform, around its origin; transform(
+     * Transform::rotation()) turns an icon's whole box.
      */
     public function rotate(float $degrees): static
     {
-        $this->rotation = $degrees;
+        if (!is_finite($degrees)) {
+            throw new \InvalidArgumentException('transform values must be finite');
+        }
+        if ($this->svg !== null) {
+            $this->rotation = $degrees;
+        } else {
+            $this->transform = $this->transform->then(Transform::rotation($degrees));
+        }
         return $this;
+    }
+
+    /** Sets the node's visual transform, as mygo's Transform: it changes drawing and the pointer, not the layout. Its origin is the center of the node's box unless transformOrigin() moves it. */
+    public function transform(Transform $t): static
+    {
+        $this->transform = $t;
+        return $this;
+    }
+
+    /** Moves the node after its transform. */
+    public function translate(float $x, float $y): static
+    {
+        $this->transform = $this->transform->then(Transform::translation($x, $y));
+        return $this;
+    }
+
+    /** Scales the node after its transform, around its origin. */
+    public function scale(float $x, float $y): static
+    {
+        $this->transform = $this->transform->then(Transform::scaling($x, $y));
+        return $this;
+    }
+
+    /** Slants the node after its transform, around its origin, by x degrees along the horizontal axis and y along the vertical. */
+    public function skew(float $x, float $y): static
+    {
+        $this->transform = $this->transform->then(Transform::skewing($x, $y));
+        return $this;
+    }
+
+    /** Turns the node in 3D around the horizontal axis through its origin, after its transform; follow it with perspective() to see it in depth. */
+    public function rotateX(float $degrees): static
+    {
+        $this->transform = $this->transform->then(Transform::rotationX($degrees));
+        return $this;
+    }
+
+    /** Turns the node in 3D around the vertical axis through its origin, after its transform: a card turning over shows its back past 90 degrees, mirrored. */
+    public function rotateY(float $degrees): static
+    {
+        $this->transform = $this->transform->then(Transform::rotationY($degrees));
+        return $this;
+    }
+
+    /** Sees the node's transform in 3D from $distance points in front of its origin. */
+    public function perspective(float $distance): static
+    {
+        $this->transform = $this->transform->then(Transform::perspective($distance));
+        return $this;
+    }
+
+    /** The origin of the node's transform, as parts of its box: (0, 0) its top left, (0.5, 0.5) its center; values outside the box are allowed, and translation does not depend on it. */
+    public function transformOrigin(float $x, float $y): static
+    {
+        if (!is_finite($x) || !is_finite($y)) {
+            throw new \InvalidArgumentException('transform values must be finite');
+        }
+        $this->originX = $x; $this->originY = $y;
+        return $this;
+    }
+
+    /** Hides the node, and takes it from the pointer, while its 3D transform turns its back to the viewer, as CSS's backface-visibility: hidden: the two faces of a card turning over show one at a time. */
+    public function backfaceHidden(): static
+    {
+        $this->backface = true;
+        return $this;
+    }
+
+    /** Makes the node and its children translucent, from 0 to 1 (mygo's Opacity). */
+    public function opacity(float $o): static
+    {
+        $this->opacity = max(0.0, min($o, 1.0));
+        return $this;
+    }
+
+    /** The node's map from its layout to the window: its transform around its origin, after its ancestors'. */
+    public function transformAt(): Affine
+    {
+        $m = $this->transform->flat();
+        if (!$m->set) {
+            return $m;
+        }
+        $x = $this->x + $this->originX * $this->w; $y = $this->y + $this->originY * $this->h;
+        return Affine::translation($x, $y)->mul($m)->mul(Affine::translation(-$x, -$y));
     }
 
     /** How this node's image or SVG fills its box: one of Node::CONTAIN, COVER, FILL_BOX, SCALE_DOWN, NATURAL_SIZE (mygo's Fit). */
