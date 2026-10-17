@@ -19,12 +19,6 @@ function motionTester(\Closure $view, ?int &$now): Headless
 
 const MS = 1_000_000;
 
-/** Fails unless $got is within 1e-3 of $want (mygo's closeFloat). */
-function closeFloat(float $want, float $got, string $what): void
-{
-    check(abs($got - $want) <= 1e-3 * max(1.0, abs($want)), "$what: expected $want, got $got");
-}
-
 /** Whether $fn throws an InvalidArgumentException. */
 function rejects(\Closure $fn): bool
 {

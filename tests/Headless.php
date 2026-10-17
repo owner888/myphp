@@ -309,3 +309,9 @@ function same(mixed $want, mixed $got, string $what): void
 {
     check($want === $got, "$what: expected " . json_encode($want) . ", got " . json_encode($got));
 }
+
+/** Fails unless $got is within 1e-3 of $want (mygo's closeFloat). */
+function closeFloat(float $want, float $got, string $what): void
+{
+    check(abs($got - $want) <= 1e-3 * max(1.0, abs($want)), "$what: expected $want, got $got");
+}

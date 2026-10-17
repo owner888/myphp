@@ -1326,6 +1326,22 @@ asks for less motion (Reduce Motion: `App::reduceMotion`, read from
 their targets at once and sequences finish, but colors still change
 smoothly; `disableAnimations` makes even colors jump, for one frame.
 
+A `Timeline` (`Context::timeline($node, $key, TimelineOptions)`, mygo's
+timeline.go) plays several `Tween`s along one playhead: each `tween()`
+returns the value it shows in this frame, placed after the one before it,
+with it, at a time or at a `label()` (`Placement`, as GSAP's position
+parameter). Its options run it over, repeat and alternate it, delay it,
+pause it, reverse it from where the playhead is, and seek it to a time or
+a progress, which hold the playhead; `duration`, `time`, `progress`,
+`settled` and `arrived` report it. A `TimelineState` keeps the playhead
+from frame to frame (by node and key in `Runtime`, gone with the node):
+only time it played moves it, so the frame that lets a pause or a seek go
+plays none, and a definition that grows plays on from where it rested.
+With less motion it is at once where it would come to rest, but seek,
+progress and pause still put and hold it. The options apply in the pass
+they are given in (`Runtime::$pass`), so a button that plays it over shows
+that in the frame it is clicked in.
+
 The widgets move as mygo's: a switch's knob over 140 ms, a slider's knob
 growing into a lens over 150 ms as it is held (a range slider's and a
 color picker's channels too), a collapsible's and an accordion's arrows

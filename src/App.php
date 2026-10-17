@@ -15,7 +15,7 @@ use RuntimeException;
  */
 final class App
 {
-    public const VERSION = '0.67.0';
+    public const VERSION = '0.68.0';
     /** @var list<Closure> */
     private static array $whenReady = [];
     private static bool $ready = false;

@@ -286,6 +286,39 @@ trait ContextMotion
     }
 
     /**
+     * The timeline $n keeps under $key, playing as $o says (mygo's
+     * Timeline): every tween added to it shares one playhead, and returns
+     * the value it shows in this frame. $key tells apart the node's
+     * timelines, and a node asks for each of its timelines once a build.
+     * Play it again, or a changed one, by changing $o->run.
+     *
+     * While the desktop asks for less motion, a timeline that would play
+     * is at once where it would come to rest, but seek, progress and
+     * paused still put and hold its playhead. disableAnimations() does not
+     * change a timeline, which plays on its own, as keyframes do: jump it
+     * with seek.
+     */
+    public function timeline(Node $n, string|int $key, TimelineOptions $o = new TimelineOptions()): Timeline
+    {
+        if ($o->repeat < KeyframeOptions::REPEAT_FOREVER || $o->delay < 0 || $o->repeatDelay < 0) {
+            throw new InvalidArgumentException('a timeline repeat must be REPEAT_FOREVER or nonnegative, and its delays nonnegative');
+        }
+        if ($o->seek !== null && $o->progress !== null) {
+            throw new InvalidArgumentException('a timeline takes seek or progress, not both');
+        }
+        $rt = $this->runtime;
+        if ($rt === null) {
+            return new Timeline(null, null, $o);
+        }
+        $st = $rt->timelines[$n->id][$key] ??= new TimelineState();
+        if ($st->node === $n && $st->frame === $rt->frameNumber && $st->pass === $rt->pass) {
+            throw new \LogicException('a node asked for its timeline ' . var_export($key, true) . ' twice in one build: give each timeline a key of its own');
+        }
+        $st->node = $n;
+        return new Timeline($rt, $st, $o);
+    }
+
+    /**
      * Makes the values that animate in this frame go to their targets at
      * once, as when the window first shows, or the view jumps to a state
      * rather than changing to it (mygo's DisableAnimations).

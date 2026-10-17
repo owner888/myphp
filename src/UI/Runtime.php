@@ -73,6 +73,10 @@ final class Runtime
     public array $sequences = [];
     /** @var array<int, array<string|int, int>> when each Context::loop started */
     public array $loops = [];
+    /** @var array<int, array<string|int, TimelineState>> the nodes' timelines (Context::timeline) */
+    public array $timelines = [];
+    /** The pass of the frame's build being built, from 0: a click that changed state builds the frame again (mygo's pass). */
+    public int $pass = 0;
     /** @var array<int, true> the nodes some of which showed in the window last frame, within the scrolling containers and clips around them (Context::inView) */
     private array $shown = [];
     /** Steppers built this frame, by id, for the arrow keys. */
@@ -275,6 +279,7 @@ final class Runtime
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
         for ($pass = 0; $pass < 3; $pass++) {
             $this->consumed = false;
+            $this->pass = $pass;
             $root = $build();
             $this->passes = $pass + 1;
             if (!$this->consumed) {
@@ -303,7 +308,7 @@ final class Runtime
         $this->needsFrame = false;
         $this->shown = [];
         $this->record($root);
-        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops] as &$moving) {
+        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
         unset($moving);
