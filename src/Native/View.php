@@ -30,7 +30,7 @@ final class View
     public static function create(Metal $metal, $frame, Input $input, Closure $draw)
     {
         self::define();
-        $view = $metal->createView($frame, $draw, true, 'MyPHPView');
+        $view = $metal->createView($frame, $draw, 'MyPHPView');
         self::$inputs[ObjC::addr($view)] = $input;
         Drop::register($view);
         $area = ObjC::msg('p:rLpp', ObjC::alloc('NSTrackingArea'), 'initWithRect:options:owner:userInfo:',

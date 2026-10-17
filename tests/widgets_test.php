@@ -55,9 +55,10 @@ same('I', Headless::label($h->focused()), 'the combobox input');
 $h->down(); same(2, count($h->root->kids), 'Down opens its options at the root');
 $h->escape(); same(1, count($h->root->kids), 'Escape closes them');
 $h->tab(); $h->tab(); // the city, the date
-same('C(10/16/2026)', Headless::label($h->focused()), 'the date input'); $h->enter();
+$today = 'C(' . (new \DateTimeImmutable('today'))->format('n/j/Y') . ')'; // the example's "when" is today
+same($today, Headless::label($h->focused()), 'the date input'); $h->enter();
 same(2, count($h->root->kids), 'Enter opens the calendar'); same('C', Headless::label($h->focused()), 'which takes the focus');
-$h->escape(); same(1, count($h->root->kids), 'Escape closes it'); same('C(10/16/2026)', Headless::label($h->focused()), 'and the focus comes back to the date input');
+$h->escape(); same(1, count($h->root->kids), 'Escape closes it'); same($today, Headless::label($h->focused()), 'and the focus comes back to the date input');
 $h->tab(); same('C(9)', Headless::label($h->focused()), 'the hours'); $h->right(); same('C(30)', Headless::label($h->focused()), 'Right moves to the minutes');
 $m = $s['when']->format('i'); $h->up(); same(sprintf('%02d', ((int)$m + 1) % 60), $s['when']->format('i'), 'Up steps the minutes');
 

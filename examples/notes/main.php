@@ -67,10 +67,17 @@ final class Notes
         }
     }
 
-    /** Characters in the editor: letters and digits of any script, each one; spaces, punctuation and Markdown marks are none. */
-    public function chars(): int
+    /** Words in the editor: runs between spaces, as mygo's notes count them. */
+    public function words(): int
     {
-        return preg_match_all('/[\p{L}\p{N}]/u', $this->editor->text);
+        return count(preg_split('/\s+/u', $this->editor->text, -1, PREG_SPLIT_NO_EMPTY));
+    }
+
+    /** When the open note was last written (its file's time). */
+    public function edited(): int
+    {
+        foreach ($this->items as $it) { if ($it['path'] === $this->open) { return $it['mtime']; } }
+        return 0;
     }
 
     public function scan(): void
@@ -238,7 +245,7 @@ function view(Context $c, Notes $notes): void
               } else {
                   $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
                   $c->row(8, 8)->align(Node::CENTER);
-                    $c->muted($notes->chars() . ' 字', 11); $c->spacer();
+                    $c->muted(sprintf('%d words · edited %s', $notes->words(), date('M j, H:i', $notes->edited())), 12); $c->spacer();
                     $c->badge($notes->editor->text === $notes->savedText() ? 'saved' : 'editing');
                   $c->end();
               }

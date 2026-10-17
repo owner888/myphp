@@ -121,10 +121,6 @@ final class Window
         $delegate = self::delegate();
         ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
         self::$open[ObjC::addr($this->ns)] = $this;
-        if ($this->page === null) { // a frame at the new size as soon as the view has it, drawn with the window's own display of it, as mygo's setFrameSize: asks: a frame after the resize is committed would come a step late, the layer stretching the last one meanwhile
-            ObjC::msg('v:b', $this->view, 'setPostsFrameChangedNotifications:', true);
-            ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('viewResized:'), ObjC::str('NSViewFrameDidChangeNotification'), $this->view);
-        }
         if ($this->trafficLights !== null && ($container = $this->titleBarContainer()) !== null) { // AppKit lays the title bar out at each step of a zoom's animation: the lights follow each
             ObjC::msg('v:b', $container, 'setPostsFrameChangedNotifications:', true);
             ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('titleBarLaidOut:'), ObjC::str('NSViewFrameDidChangeNotification'), $container);
@@ -366,7 +362,10 @@ final class Window
             $fire = fn(string $event) => function ($self, $cmd, $note) use ($event) {
                 $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
                 if ($w !== null) {
-                    if ($event === 'resize') { $w->layoutTrafficLights(); }
+                    if ($event === 'resize') {
+                        $w->layoutTrafficLights();
+                        if ($w->page === null) { ObjC::msg('v:', $w->view, 'draw'); } // a frame at the new size now, before this step of the resize is committed, as mygo's setFrameSize: asks: asked for later, it would come a step late and the layer would stretch the last one meanwhile
+                    }
                     $w->emit($event);
                     if ($event === 'resize' || $event === 'move') {
                         $w->captureState();
@@ -409,7 +408,6 @@ final class Window
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
                 'windowDidChangeBackingProperties:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { App::rescale(); }],
-                'viewResized:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Metal::requestFrame(ObjC::msg('p:', $note, 'object')); }],
                 'titleBarLaidOut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // the title bar container's frame changed: AppKit laid it out
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
                     $w?->layoutTrafficLights();

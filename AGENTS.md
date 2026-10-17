@@ -89,8 +89,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
 
 - **Immediate mode**, as mygo's `ui`: each frame rebuilds the tree, `Layout`
   measures and arranges, `Painter` emits quads. Frames run on demand
-  (`Metal::requestFrame`), paced by MTKView on the main thread; no NSTimer
-  or CVDisplayLink into PHP. Nodes have no parent pointers (acyclic: no GC).
+  (`Metal::requestFrame`: `draw` performed from the run loop, never from
+  MTKView's dispatch-queue paths); no CVDisplayLink into PHP. Nodes have no parent pointers (acyclic: no GC).
 - **Last frame answers this frame's questions**: `Runtime` keeps rects by
   node id (creation order, or xxh64 of the key path under `Context::key`;
   list rows are keyed by index); `clicked()/hovered()/focused()` hit-test

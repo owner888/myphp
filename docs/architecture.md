@@ -84,11 +84,20 @@ renderer does (`setPresentsWithTransaction:` on the MTKView before it
 hands out the drawable, then commit, `waitUntilScheduled`, `present` and
 `CATransaction flush`), so the window's new size and the content drawn
 for it reach the screen together; other frames present as soon as the
-GPU has them. The window asks for that frame the moment the view's frame
-changes (`NSViewFrameDidChangeNotification`, as mygo's `setFrameSize:`
-asks), inside the same step of a live resize or a zoom's animation —
-asked later, from `windowDidResize:`, it would land in the next step's
-commit and the layer would stretch the last frame meanwhile.
+GPU has them. The window draws that frame at once from `windowDidResize:`
+(as mygo's `setFrameSize:` asks for it), inside the same step of a live
+resize or a zoom's animation, before AppKit commits the step — asked for
+later, it would land in the next step's commit and the layer would
+stretch the last frame meanwhile.
+
+MTKView never draws by itself (paused, `enableSetNeedsDisplay` off): its
+display link and its `setNeedsDisplay:` both draw from the main dispatch
+queue, and a frame that waits for a sheet there (`App::wait`, under a
+button's click) holds the serial queue the sheet's completion is to run
+on. `Metal::requestFrame` instead performs `draw` on the next turn of the
+run loop in its common modes (coalesced), and `windowDidResize:` calls
+`draw` directly; a frame asked for while one is drawing (waiting) is drawn
+after it.
 
 The quad kinds, by `params.y`: 0 a rounded rect, 1 a glyph, 2 an image,
 3 a soft shadow (the rect inset by the blur, feathered over it), 4 a ring
@@ -807,8 +816,8 @@ when a whole screen of new strings is shaped and rasterized at once.
 `Native\View` subclasses MTKView; `mouseDown:` and friends, `scrollWheel:`
 and `keyDown:` are PHP closures that convert the event point into the
 flipped view's coordinates, append to `UI\Input` and call
-`setNeedsDisplay:`. The view is paused with `enableSetNeedsDisplay`, so a
-frame happens only after an event or an explicit `Metal::requestFrame`.
+`Metal::requestFrame`, so a frame happens only after an event or an
+explicit request.
 `UI\Runtime::frame` drains the events, runs the build (again if a click
 changed state, at most three times), and records every node's rect by id
 for the next frame's hit tests. Wheel deltas go to the smallest scrolling

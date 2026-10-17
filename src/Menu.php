@@ -119,7 +119,7 @@ final class Menu
         [$key, $mask] = self::accelerator($accel);
         $sel = $selector !== null ? ObjC::sel($selector) : ($it->click !== null ? ObjC::sel('menuClicked:') : null);
         $ns = ObjC::msg('p:ppp', ObjC::alloc('NSMenuItem'), 'initWithTitle:action:keyEquivalent:', ObjC::str($label), $sel, ObjC::str($key));
-        if ($mask !== 0) {
+        if ($key !== '') { // also a mask of 0 (F5 alone): NSMenuItem's default is Cmd
             ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', $mask);
         }
         if ($selector === null && $it->click !== null) {

@@ -228,7 +228,9 @@ final class Metal
     private const TEXTURE_2D_ARRAY = 3; // MTLTextureType
     /** @var array<int, Closure> draw callbacks by view address */
     private static array $onDraw = [];
-    private static $delegate = null;
+    private static $delegate = null, $commonModes = null;
+    /** @var array<int, bool> the views drawing a frame now, true once a frame was asked for meanwhile */
+    private static array $drawing = [];
 
     public function __construct(public int $capacity = 65536)
     {
@@ -316,16 +318,18 @@ final class Metal
 
     /**
      * An MTKView (or a subclass, $class) that calls $draw(view, DisplayList)
-     * for each frame. On demand, a frame follows setNeedsDisplay: only (what
-     * requestFrame() sends); otherwise frames run at the display's rate.
-     * The callback fills the list; this presents it.
+     * for each frame. Frames are drawn when asked (requestFrame), from the
+     * run loop, or at once (`draw`); never by MTKView itself, whose display
+     * link and setNeedsDisplay: draw from the main dispatch queue, where a
+     * frame that waits for a sheet (App::wait) would hold the queue its
+     * completion is to run on. The callback fills the list; this presents it.
      */
-    public function createView($frame, Closure $draw, bool $onDemand = true, string $class = 'MTKView', int $fps = 60, array $clear = [1, 1, 1, 1])
+    public function createView($frame, Closure $draw, string $class = 'MTKView', int $fps = 60, array $clear = [1, 1, 1, 1])
     {
         self::$delegate ??= self::defineDelegate();
         $view = ObjC::msg('p:rp', ObjC::alloc($class), 'initWithFrame:device:', $frame, $this->device);
-        ObjC::msg('v:b', $view, 'setPaused:', $onDemand);
-        ObjC::msg('v:b', $view, 'setEnableSetNeedsDisplay:', $onDemand);
+        ObjC::msg('v:b', $view, 'setPaused:', true);
+        ObjC::msg('v:b', $view, 'setEnableSetNeedsDisplay:', false);
         ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_BGRA8);
         ObjC::msg('v:b', $view, 'setFramebufferOnly:', false); // the glass reads a copy of the drawable
         $c = ObjC::$c->new('MTLClearColor');
@@ -334,11 +338,17 @@ final class Metal
         ObjC::msg('v:l', $view, 'setPreferredFramesPerSecond:', $fps);
         ObjC::msg('v:p', $view, 'setDelegate:', self::$delegate);
         self::$onDraw[ObjC::addr($view)] = function ($view) use ($draw) {
+            $key = ObjC::addr($view);
+            if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
+            self::$drawing[$key] = false;
             $list = $this->lists[$this->frame % self::RING];
             $list->reset();
             $draw($view, $list);
             $this->present($view, $list);
             $this->frame++;
+            $again = self::$drawing[$key];
+            unset(self::$drawing[$key]);
+            if ($again) { self::requestFrame($view); }
         };
         return $view;
     }
@@ -351,10 +361,12 @@ final class Metal
         ObjC::msg('v:k', $view, 'setClearColor:', $c);
     }
 
-    /** Asks an on-demand view for a frame. */
+    /** Asks a view for a frame on the next turn of the run loop, in any of its common modes (a live resize, a modal panel); asked again before then, it draws once. */
     public static function requestFrame($view): void
     {
-        ObjC::msg('v:b', $view, 'setNeedsDisplay:', true);
+        self::$commonModes ??= ObjC::msg('p:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', ObjC::str('kCFRunLoopCommonModes')), 'retain'); // kept past the autorelease pool
+        ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
+        ObjC::msg('v:ppdp', $view, 'performSelector:withObject:afterDelay:inModes:', ObjC::sel('draw'), null, 0.0, self::$commonModes);
     }
 
     private static function defineDelegate()
@@ -378,7 +390,7 @@ final class Metal
         $size = "{$ds->w}x{$ds->h}";
         $sync = ($this->drawn[ObjC::addr($view)] ?? '') !== $size;
         $this->drawn[ObjC::addr($view)] = $size;
-        ObjC::msg('v:b', $view, 'setPresentsWithTransaction:', $sync);
+        ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
         $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
         $drawable = ObjC::msg('p:', $view, 'currentDrawable');
         if ($pass === null || $drawable === null) {
