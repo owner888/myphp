@@ -1179,8 +1179,8 @@ background and redraws. `App::setTheme` fixes one instead.
 
 ## Code editor
 
-mygo's `ui/editor` is coming over in stages, as `MyPHP\UI\Editor`. The
-model below the view is in: `Rope`, `RopeNode`, `RopeText` and `Summary`
+mygo's `ui/editor` is in, as `MyPHP\UI\Editor`. The model below the
+view: `Rope`, `RopeNode`, `RopeText` and `Summary`
 are mygo's `internal/rope`, text as a persistent AVL tree of chunks of up
 to 4 KB whose nodes sum bytes, runes, UTF-16 units and newlines, so that
 an edit shares the tree with the text before it and a version is a
@@ -1241,8 +1241,27 @@ editor. Before its first frame a state measures with `Editor::$text`, the
 app's text engine (a headless test's own). Regular expressions are PCRE,
 their replacements' `$1` and `${name}` expanded as Go's Expand does. Not
 ported: assistive technology's description (myphp has none), and text in
-hovers is not selectable. Still to come: the diff viewer (`diff*.go`,
-`patch.go`) and the example's Changes page.
+hovers is not selectable.
+The diff viewer is `diffview.go`, `difflayout.go`, `diffside.go`,
+`diffparts.go` and `patch.go`: `DiffState` is the API (`view($c)` builds
+it), two editors side by side sharing their scroll (`SharedScroll`) or
+one with the old text's deleted lines in blocks above where they were.
+`DiffModel` compares the texts again only around an edit of the new text,
+pairs a hunk's lines by similarity and finds the words or characters that
+changed in them (`Diff::words`, `Diff::chars`, `HunkWords`), and reverts
+or keeps a hunk. `DiffSide` is the `Decor` of a side: its colors
+(`Theme::diff`, mixed in Oklab as mygo's), its hidden lines and the
+blocks that align the sides (fillers, annotations, separators, a patch's
+headers), which `Heights` places; the view lays the sides out in a
+`draw` closure before they paint, and builds again when that moved what
+its nodes stand on. Separators, the actions on a change and the gutter's
+button are nodes over the lines, built by the app's render function or
+their own (`DiffSeparator::default`, `DiffHunkActions::default`,
+`DiffState::defaultGutterButton`). `FilePatch` and `PatchHunk` parse and
+apply git's unified diffs; `setPatch` shows one without its files.
+Regular expressions are PCRE, which matches nothing in a text with a byte
+that is not UTF-8, as an edit splitting a character leaves: the finder
+searches a copy with such bytes as \x1a, where Go reads U+FFFD.
 
 ## Packaging
 
@@ -1383,8 +1402,7 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- mygo's CodeEditor (ui/editor) is in but its diff viewer (Code editor
-  above); the RichText editor, Markdown view and Terminal are not ported;
-  `rich` is read-only.
+- mygo's CodeEditor and diff viewer (ui/editor) are in; the RichText
+  editor, Markdown view and Terminal are not ported; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
   fps with identical PHP time per frame); MTKView pacing is what gives 60.

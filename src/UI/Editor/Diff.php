@@ -45,6 +45,103 @@ final class Diff
         return $d->hunks();
     }
 
+    /**
+     * Compares two texts word by word, as review tools highlight what
+     * changed within lines: words (letters, digits and underscores), runs
+     * of whitespace and other characters one at a time. Returns the byte
+     * ranges [start, end] of $a and $b that changed, joined across the
+     * whitespace between them, and how much of the two texts stayed the
+     * same, from 0 to 1, by their bytes.
+     * @return array{0: list<array{0: int, 1: int}>, 1: list<array{0: int, 1: int}>, 2: float}
+     */
+    public static function words(string $a, string $b): array
+    {
+        return self::tokens($a, $b, self::wordTokens(...));
+    }
+
+    /** Compares two texts character by character, as words() does by words. @return array{0: list<array{0: int, 1: int}>, 1: list<array{0: int, 1: int}>, 2: float} */
+    public static function chars(string $a, string $b): array
+    {
+        return self::tokens($a, $b, self::charTokens(...));
+    }
+
+    private static function tokens(string $a, string $b, \Closure $split): array
+    {
+        $ta = $split($a); $tb = $split($b);
+        $ids = [];
+        $conv = function (string $s, array $t) use (&$ids): array {
+            $out = [];
+            foreach ($t as [$x, $y]) { $out[] = $ids[substr($s, $x, $y - $x)] ??= count($ids); }
+            return $out;
+        };
+        $hunks = self::ints($conv($a, $ta), $conv($b, $tb));
+        $ra = []; $rb = []; $changed = 0;
+        foreach ($hunks as $h) {
+            if ($h->a0 < $h->a1) {
+                $ra = self::join($ra, [$ta[$h->a0][0], $ta[$h->a1 - 1][1]], $a);
+                $changed += $ta[$h->a1 - 1][1] - $ta[$h->a0][0];
+            }
+            if ($h->b0 < $h->b1) {
+                $rb = self::join($rb, [$tb[$h->b0][0], $tb[$h->b1 - 1][1]], $b);
+                $changed += $tb[$h->b1 - 1][1] - $tb[$h->b0][0];
+            }
+        }
+        $total = strlen($a) + strlen($b);
+        return [$ra, $rb, $total > 0 ? 1 - $changed / $total : 1.0];
+    }
+
+    /** $rs with $r appended, merged with the last range when only whitespace (no newline) is between them. */
+    private static function join(array $rs, array $r, string $s): array
+    {
+        if (($n = count($rs)) > 0) {
+            $gap = substr($s, $rs[$n - 1][1], $r[0] - $rs[$n - 1][1]);
+            $blank = true;
+            foreach (mb_str_split($gap, 1, 'UTF-8') as $c) {
+                if ($c === "\n" || !Chars::isSpace($c)) { $blank = false; break; }
+            }
+            if ($blank) { $rs[$n - 1][1] = $r[1]; return $rs; }
+        }
+        $rs[] = $r;
+        return $rs;
+    }
+
+    /** @return list<array{0: int, 1: int}> */
+    private static function wordTokens(string $s): array
+    {
+        $out = [];
+        for ($i = 0, $n = strlen($s); $i < $n;) {
+            $r = Chars::runeAt($s, $i);
+            $j = $i + strlen($r);
+            if (View::isWordRune($r)) {
+                while ($j < $n && View::isWordRune($c = Chars::runeAt($s, $j))) { $j += strlen($c); }
+            } elseif ($r !== "\n" && Chars::isSpace($r)) {
+                while ($j < $n && ($c = Chars::runeAt($s, $j)) !== "\n" && Chars::isSpace($c)) { $j += strlen($c); }
+            }
+            $out[] = [$i, $j];
+            $i = $j;
+        }
+        return $out;
+    }
+
+    /** @return list<array{0: int, 1: int}> */
+    private static function charTokens(string $s): array
+    {
+        $out = [];
+        for ($i = 0, $n = strlen($s); $i < $n;) {
+            $j = $i + strlen(Chars::runeAt($s, $i));
+            // Combining marks stay with their base.
+            while ($j < $n) {
+                $c = Chars::runeAt($s, $j);
+                $cp = mb_ord($c, 'UTF-8');
+                if (preg_match('/^[\p{Mn}\p{Me}]$/u', $c) !== 1 && $cp !== 0x200d && !($cp >= 0xfe00 && $cp <= 0xfe0f)) { break; }
+                $j += strlen($c);
+            }
+            $out[] = [$i, $j];
+            $i = $j;
+        }
+        return $out;
+    }
+
     /** Compares the lines of two texts and returns the hunks of lines turning $a into $b, slid to read as blocks of code. @param list<string> $a @param list<string> $b @return list<Hunk> */
     public static function lines(array $a, array $b): array
     {

@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, Node};
-use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
+use MyPHP\UI\Editor\{Buffer, Command, DiffHunkActions, DiffLineRange, DiffSeparator, DiffState, Completion, CompletionMenu, CompletionRequest, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -125,3 +125,58 @@ $ct->h->frame();
 check($ed->hover->shown, 'the hover stays as the pointer goes into it');
 $ct->h->escape();
 check(!$ed->hover->shown && $ct->st->focused(), 'Escape closes it, the editor keeping the keyboard');
+
+// The parts of a diff viewer: its own separators, before the change and after it, and the app's, with its actions on a change and its gutter button.
+$lines = [];
+for ($i = 0; $i < 60; $i++) { $lines[] = "line $i"; }
+$old = implode("\n", $lines);
+$lines[30] = 'changed';
+$nw = implode("\n", $lines);
+$diffView = function (DiffState $d): Headless {
+    $t = new Headless(function (Context $c) use ($d) { $d->view($c)->grow = 1; }, 800, 600);
+    $t->paints = true;
+    $t->frame(); $t->frame();
+    return $t;
+};
+$d = new DiffState(new Buffer($old), new Buffer($nw));
+$t = $diffView($d);
+check(in_array('27 unmodified lines', $t->texts(), true) && in_array('26 unmodified lines', $t->texts(), true), 'the default separators');
+$t->clickText('27 unmodified lines');
+// Gone with the frames the click brings, not a frame later.
+check(!in_array('27 unmodified lines', $t->texts(), true), 'a separator goes as its lines expand');
+
+$commented = [];
+$d = new DiffState(new Buffer($old), new Buffer($nw));
+$d->hunkActions = true; $d->editable = true;
+$d->onGutterButton = function (DiffLineRange $r) use (&$commented) { $commented[] = $r; };
+$d->renderSeparator = function (Context $c, Node $sep, DiffSeparator $s) {
+    if ($c->clicked($c->button('Show ' . $s->lines))) { $s->expandAll(); }
+};
+$d->renderHunkActions = function (Context $c, Node $bar, DiffHunkActions $a) {
+    if ($c->clicked($c->button('Undo change ' . $a->index))) { $a->revert(); }
+};
+$d->renderGutterButton = function (Context $c, Node $btn, DiffLineRange $line) { $btn->tooltip('Comment'); };
+$t = $diffView($d);
+check(in_array('Show 26', $t->texts(), true) && !in_array('26 unmodified lines', $t->texts(), true), 'the app\'s separators in place of the default');
+// The actions show on the change under the pointer.
+$ed = $d->eds[1];
+$move = function (float $x, float $y) use ($t) { $t->input->mouse($x, $y); $t->input->push(['move', $x, $y]); $t->frame(); };
+$move(600, $ed->view->heights->geometry(30)->rows - $ed->scrollY + $ed->view->lineHeight / 2);
+$t->frame();
+$t->clickText('Undo change 0');
+$t->frame();
+check((string)$d->new === $old && $d->hunks() === [], 'the app\'s action reverts the change');
+// The gutter's button, on the line under the pointer, of the old side on the left.
+$y = $ed->view->heights->geometry(28)->rows - $ed->scrollY + $ed->view->lineHeight / 2;
+$move($ed->gutterW / 2, $y);
+$t->frame();
+// The app names its button with a tooltip.
+$tipped = function (Node $n, string $tip) use (&$tipped): ?Node {
+    if ($n->tooltip === $tip) { return $n; }
+    foreach ($n->kids as $k) { if (($f = $tipped($k, $tip)) !== null) { return $f; } }
+    return null;
+};
+$btn = $tipped($t->root, 'Comment');
+check($btn !== null, 'the app\'s gutter button shows on the line under the pointer');
+$t->clickOn($btn);
+check(count($commented) === 1 && $commented[0] == new DiffLineRange(DiffState::OLD, 28, 28), 'the gutter button reports its line');

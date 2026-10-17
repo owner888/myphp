@@ -86,4 +86,52 @@ final class Theme
             default => $this->c['error'],
         };
     }
+
+    /** $a mixed toward $b by $t in Oklab, as people see the colors between them (mygo's mixLab): [rgb, alpha]. */
+    public static function mixLab(array $a, array $b, float $t): array
+    {
+        $dec = function (float $v): float { $x = abs($v); return $x <= 0.04045 ? $v / 12.92 : ($v < 0 ? -1 : 1) * (($x + 0.055) / 1.055) ** 2.4; };
+        $enc = function (float $v): float { $x = abs($v); return $x <= 0.0031308 ? $v * 12.92 : ($v < 0 ? -1 : 1) * (1.055 * $x ** (1 / 2.4) - 0.055); };
+        $cbrt = fn(float $v) => $v < 0 ? -((-$v) ** (1 / 3)) : $v ** (1 / 3);
+        $lab = function (int $rgb) use ($dec, $cbrt): array {
+            $r = $dec((($rgb >> 16) & 255) / 255); $g = $dec((($rgb >> 8) & 255) / 255); $b = $dec(($rgb & 255) / 255);
+            $l = $cbrt(0.4122214708 * $r + 0.5363325363 * $g + 0.0514459929 * $b);
+            $m = $cbrt(0.2119034982 * $r + 0.6806995451 * $g + 0.1073969566 * $b);
+            $q = $cbrt(0.0883024619 * $r + 0.2817188376 * $g + 0.6299787005 * $b);
+            return [0.2104542553 * $l + 0.7936177850 * $m - 0.0040720468 * $q, 1.9779984951 * $l - 2.4285922050 * $m + 0.4505937099 * $q, 0.0259040371 * $l + 0.7827717662 * $m - 0.8086757660 * $q];
+        };
+        [$l1, $a1, $b1] = $lab($a[0]); [$l2, $a2, $b2] = $lab($b[0]);
+        $L = $l1 + ($l2 - $l1) * $t; $A = $a1 + ($a2 - $a1) * $t; $B = $b1 + ($b2 - $b1) * $t;
+        $lc = ($L + 0.3963377774 * $A + 0.2158037573 * $B) ** 3; $mc = ($L - 0.1055613458 * $A - 0.0638541728 * $B) ** 3; $sc = ($L - 0.0894841775 * $A - 1.2914855480 * $B) ** 3;
+        $ch = fn(float $v) => (int)($enc(max(0.0, min($v, 1.0))) * 255 + 0.5);
+        $r = $ch(4.0767416621 * $lc - 3.3077115913 * $mc + 0.2309699292 * $sc);
+        $g = $ch(-1.2684380046 * $lc + 2.6097574011 * $mc - 0.3413193965 * $sc);
+        $bb = $ch(-0.0041960863 * $lc - 0.7034186147 * $mc + 1.7076147010 * $sc);
+        return [$r << 16 | $g << 8 | $bb, $a[1] * (1 - $t) + $b[1] * $t];
+    }
+
+    /** Whether a background is dark. */
+    public static function isDark(array $c): bool
+    {
+        return 0.2126 * (($c[0] >> 16) & 255) + 0.7152 * (($c[0] >> 8) & 255) + 0.0722 * ($c[0] & 255) < 128;
+    }
+
+    /**
+     * The tints of changes over the background (mygo's diffColors): the
+     * background of changed lines, of their gutters, the words changed in
+     * them, and the bars and numbers.
+     * @return array<string, array{0: int, 1: float}> addedLine, deletedLine, addedGutter, deletedGutter, addedWord, deletedWord, added, deleted, modified
+     */
+    public function diff(bool $dark): array
+    {
+        [$line, $gutter, $word] = $dark ? [0.2, 0.15, 0.2] : [0.12, 0.09, 0.15];
+        $bg = $this->c['background'][1] == 0 ? [0xffffff, 1.0] : $this->c['background'];
+        $added = $this->c['added']; $deleted = $this->c['deleted'];
+        return [
+            'addedLine' => self::mixLab($bg, $added, $line), 'deletedLine' => self::mixLab($bg, $deleted, $line),
+            'addedGutter' => self::mixLab($bg, $added, $gutter), 'deletedGutter' => self::mixLab($bg, $deleted, $gutter),
+            'addedWord' => [$added[0], $added[1] * $word], 'deletedWord' => [$deleted[0], $deleted[1] * $word],
+            'added' => $added, 'deleted' => $deleted, 'modified' => $this->c['modified'],
+        ];
+    }
 }

@@ -151,8 +151,10 @@ final class Finder
             }
             return true;
         };
+        // PCRE matches no UTF-8 text with a byte of none in it, which Go's regexp reads as U+FFFD: a byte such as an edit splitting a character leaves.
+        $utf8 = mb_check_encoding($text, 'UTF-8') ? $text : self::validUTF8($text);
         if ($this->regex) {
-            $n = @preg_match_all($this->pattern(), $text, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE | PREG_UNMATCHED_AS_NULL);
+            $n = @preg_match_all($this->pattern(), $utf8, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE | PREG_UNMATCHED_AS_NULL);
             if ($n === false) {
                 $this->err = error_get_last()['message'] ?? preg_last_error_msg();
                 return;
@@ -180,7 +182,7 @@ final class Finder
                 $at = $b;
             }
         }
-        preg_match_all('/' . preg_quote($this->query, '/') . '/iu', $text, $all, PREG_OFFSET_CAPTURE);
+        preg_match_all('/' . preg_quote($this->query, '/') . '/iu', $utf8, $all, PREG_OFFSET_CAPTURE);
         foreach (array_slice($all[0], 0, self::MAX_MATCHES) as [$s, $a]) {
             $b = $a + strlen($s);
             if ($keep($a, $b) && !$found([$base + $a, $base + $b], null)) { return; }
@@ -239,6 +241,13 @@ final class Finder
         $lo = 0; $hi = $n;
         while ($lo < $hi) { $m = ($lo + $hi) >> 1; if ($ok($m)) { $hi = $m; } else { $lo = $m + 1; } }
         return $lo;
+    }
+
+    /** $s with each byte that is not of a UTF-8 character as \x1a, a character of one byte, so that offsets in it are those in $s. */
+    private static function validUTF8(string $s): string
+    {
+        return preg_replace_callback('/((?:[\x00-\x7f]|[\xc2-\xdf][\x80-\xbf]|\xe0[\xa0-\xbf][\x80-\xbf]|[\xe1-\xec\xee\xef][\x80-\xbf]{2}|\xed[\x80-\x9f][\x80-\xbf]|\xf0[\x90-\xbf][\x80-\xbf]{2}|[\xf1-\xf3][\x80-\xbf]{3}|\xf4[\x80-\x8f][\x80-\xbf]{2})+)|./s',
+            fn(array $m) => ($m[1] ?? '') !== '' ? $m[1] : "\x1a", $s);
     }
 
     public static function isASCII(string $s): bool { return preg_match('/[\x80-\xff]/', $s) !== 1; }

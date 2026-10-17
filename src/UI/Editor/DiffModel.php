@@ -24,6 +24,8 @@ final class DiffModel
     public array $hunks = [];
     /** Counts the changes of hunks, for the caches of what they show. */
     public int $version = 0;
+    /** @var array<string, HunkWords> the inline diffs of hunks, by what they compare */
+    public array $words = [];
 
     public function __construct()
     {
@@ -45,7 +47,7 @@ final class DiffModel
         if ($this->old === null || $this->new === null) {
             $changed = $this->hunks !== [];
             $this->hunks = [];
-            if ($changed) { $this->version++; }
+            if ($changed) { $this->bump(); }
             return $changed;
         }
         $oldText = $this->old->rope(); $oldVer = $this->old->version();
@@ -55,7 +57,7 @@ final class DiffModel
             $changed = $this->hunks !== [];
             $this->hunks = []; $this->oldVer = $oldVer; $this->newVer = $newVer;
             $this->oldText = $oldText; $this->newText = $newText;
-            if ($changed) { $this->version++; }
+            if ($changed) { $this->bump(); }
             return $changed;
         }
         if ($oldVer !== $this->oldVer || $newText->len() === 0 || $this->newText->len() === 0) {
@@ -114,7 +116,7 @@ final class DiffModel
     {
         $this->oldText = $oldText; $this->newText = $newText; $this->oldVer = $oldVer; $this->newVer = $newVer;
         $this->hunks = Diff::lines(self::ropeLines($oldText, 0, $oldText->lineCount()), self::ropeLines($newText, 0, $newText->lineCount()));
-        $this->version++;
+        $this->bump();
     }
 
     /** Lines $from to $to of $r: none of an empty text, which a diff takes as no lines rather than one empty line, as git does. @return list<string> */
@@ -194,7 +196,14 @@ final class DiffModel
             $h->a0 += $shift; $h->a1 += $shift; $h->b0 += $shift; $h->b1 += $shift;
         }
         $this->hunks = self::mergeHunks([...$before, ...$mid, ...$after]);
+        $this->bump();
+    }
+
+    /** The hunks changed: their caches go. */
+    private function bump(): void
+    {
         $this->version++;
+        $this->words = [];
     }
 
     private static function overlap(int $a0, int $a1, int $b0, int $b1): int { return max(0, min($a1, $b1) - max($a0, $b0)); }
@@ -269,5 +278,141 @@ final class DiffModel
         }
         if (($k = $this->pastEnd()) >= 0 && $to >= $this->newText->lineCount() - 1 && !in_array($k, $out, true)) { $out[] = $k; }
         return $out;
+    }
+
+    /** The index of the hunk holding or ending at line $n of the old text, or of the new, or -1: hunkAtNew for the new text. */
+    public function hunkAt(int $n, bool $old): int
+    {
+        if (!$old) { return $this->hunkAtNew($n); }
+        $i = Finder::lowerBound(count($this->hunks), fn(int $k) => $this->hunks[$k]->a1 > $n || $this->hunks[$k]->a0 >= $n);
+        if ($i < count($this->hunks)) {
+            $h = $this->hunks[$i];
+            if ($h->a0 <= $n && $n < $h->a1 || $h->a0 === $h->a1 && $h->a0 === $n) { return $i; }
+        }
+        // Lines added after the old text's last line go with it.
+        if (($k = count($this->hunks) - 1) >= 0 && $n === $this->oldText->lineCount() - 1) {
+            $h = $this->hunks[$k];
+            if ($h->a0 === $h->a1 && $h->a0 >= $this->oldText->lineCount()) { return $k; }
+        }
+        return -1;
+    }
+
+    /** How many lines the hunks add and delete. @return array{0: int, 1: int} */
+    public function stats(): array
+    {
+        $added = 0; $deleted = 0;
+        foreach ($this->hunks as $h) { $added += $h->b1 - $h->b0; $deleted += $h->a1 - $h->a0; }
+        return [$added, $deleted];
+    }
+
+    /** The inline diff of hunk $i, made as $mode (DiffState::INLINE_*) says. */
+    public function wordsOf(int $i, int $mode): HunkWords
+    {
+        $h = $this->hunks[$i];
+        $key = "{$h->a0},{$h->a1},{$h->b0},{$h->b1},$mode";
+        if (isset($this->words[$key])) { return $this->words[$key]; }
+        $w = $this->words[$key] = new HunkWords;
+        if ($h->a0 === $h->a1 || $h->b0 === $h->b1 || $mode === DiffState::INLINE_NONE) { return $w; }
+        $a = self::ropeLines($this->oldText, $h->a0, $h->a1);
+        $b = self::ropeLines($this->newText, $h->b0, $h->b1);
+        $w->offset = self::alignBySimilarity($a, $b);
+        foreach ($a as $i => $la) {
+            $j = count($a) < count($b) ? $i + $w->offset : $i - $w->offset;
+            if ($j < 0 || $j >= count($b)) { continue; }
+            if (strlen($la) > 1000 || strlen($b[$j]) > 1000) { continue; }
+            [$ra, $rb] = self::inlineDiff($la, $b[$j], $mode);
+            if ($ra !== []) { $w->oldWords[$h->a0 + $i] = $ra; }
+            if ($rb !== []) { $w->newWords[$h->b0 + $j] = $rb; }
+        }
+        return $w;
+    }
+
+    /**
+     * How far to push the lines of the shorter side of a hunk down so that
+     * they pair with the most similar lines of the longer, as Pierre's
+     * diffs realign change blocks: by the common prefix and suffix of the
+     * lines without their whitespace, over their longer length, taking an
+     * offset only when it pairs better by half a line.
+     * @param list<string> $a @param list<string> $b
+     */
+    public static function alignBySimilarity(array $a, array $b): int
+    {
+        [$short, $long] = count($a) > count($b) ? [$b, $a] : [$a, $b];
+        if (count($short) === count($long) || $short === [] || count($short) * (count($long) - count($short) + 1) > 4096) { return 0; }
+        $score = function (int $off) use ($short, $long): float {
+            $s = 0.0;
+            foreach ($short as $i => $x) { $s += self::similarity($x, $long[$i + $off]); }
+            return $s;
+        };
+        $best = 0; $bestScore = $score(0);
+        for ($off = 1; $off <= count($long) - count($short); $off++) {
+            if (($s = $score($off)) > $bestScore + 0.5 * count($short)) { $best = $off; $bestScore = $s; }
+        }
+        return $best;
+    }
+
+    private static function similarity(string $a, string $b): float
+    {
+        $a = implode('', preg_split('/\s+/u', $a, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+        $b = implode('', preg_split('/\s+/u', $b, -1, PREG_SPLIT_NO_EMPTY) ?: []);
+        if ($a === $b) { return 1.0; }
+        $n = max(strlen($a), strlen($b));
+        if ($n === 0) { return 1.0; }
+        $p = 0;
+        while ($p < strlen($a) && $p < strlen($b) && $a[$p] === $b[$p]) { $p++; }
+        $s = 0;
+        while ($s < strlen($a) - $p && $s < strlen($b) - $p && $a[strlen($a) - 1 - $s] === $b[strlen($b) - 1 - $s]) { $s++; }
+        return ($p + $s) / $n;
+    }
+
+    /** The ranges of $a and $b that changed, as $mode says. @return array{0: list<array{0: int, 1: int}>, 1: list<array{0: int, 1: int}>} */
+    private static function inlineDiff(string $a, string $b, int $mode): array
+    {
+        [$xa, $xb] = $mode === DiffState::INLINE_CHAR ? Diff::chars($a, $b) : Diff::words($a, $b);
+        $conv = function (array $rs, string $s) use ($mode): array {
+            if ($mode === DiffState::INLINE_WORD_ALT) { $rs = self::joinWordAlt($rs, $s); }
+            if ($mode === DiffState::INLINE_WORD_LINE && $rs !== []) { $rs = [[$rs[0][0], $rs[count($rs) - 1][1]]]; }
+            return $rs;
+        };
+        return [$conv($xa, $a), $conv($xb, $b)];
+    }
+
+    /** Joins ranges one character apart, as Pierre's word-alt does: "a b c" changed reads as one highlight rather than three. */
+    private static function joinWordAlt(array $rs, string $s): array
+    {
+        if (count($rs) < 2) { return $rs; }
+        $out = [$rs[0]];
+        foreach (array_slice($rs, 1) as $r) {
+            $n = count($out) - 1;
+            if (mb_strlen(substr($s, $out[$n][1], $r[0] - $out[$n][1]), 'UTF-8') <= 1) { $out[$n][1] = $r[1]; continue; }
+            $out[] = $r;
+        }
+        return $out;
+    }
+
+    /** Puts the old lines of hunk $i back in the new buffer. */
+    public function revert(int $i): void
+    {
+        if ($i >= 0 && $i < count($this->hunks)) { $this->new->applyEdits(self::hunkEdit($this->hunks[$i], $this->oldText, $this->newText)); }
+    }
+
+    /** Makes the new lines of hunk $i the old ones, so the hunk goes: the same edit, the other way. */
+    public function accept(int $i): void
+    {
+        if ($i < 0 || $i >= count($this->hunks)) { return; }
+        $h = $this->hunks[$i];
+        $this->old->applyEdits(self::hunkEdit(new Hunk($h->b0, $h->b1, $h->a0, $h->a1), $this->newText, $this->oldText));
+    }
+
+    /** The new line an unchanged old line is, or null for a line a hunk changes. */
+    public function newLineOf(int $old): ?int
+    {
+        $delta = 0;
+        foreach ($this->hunks as $h) {
+            if ($old < $h->a0) { break; }
+            if ($old < $h->a1) { return null; }
+            $delta = $h->b1 - $h->a1;
+        }
+        return $old + $delta;
     }
 }

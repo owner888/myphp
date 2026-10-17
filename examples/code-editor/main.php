@@ -2,21 +2,23 @@
 // Code editor shows MyPHP's code editor (mygo's examples/code-editor):
 // files of several languages to edit, with completions of the words of
 // the file, hovers, diagnostics of TODO comments and the changes against
-// the file as it was in the gutter.
+// the file as it was in the gutter; and the diff of those changes, side by
+// side or unified, which edits the same buffer.
 // Run: ./run.sh code-editor
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Node};
-use MyPHP\UI\Editor\{Buffer, Completion, CompletionRequest, Diagnostic, HoverRequest, Languages, Pos, State};
+use MyPHP\UI\{Content, Context, Font, Node};
+use MyPHP\UI\Editor\{Buffer, Completion, CompletionRequest, Diagnostic, DiffState, HoverRequest, Languages, Pos, State};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-/** A file of the example: its text as it was, and the buffer and editor state editing it, kept across frames. */
+/** A file of the example: its text as it was, and the buffer and editor state editing it, and the diff of its changes, kept across frames. */
 final class File
 {
     public Buffer $original;
     public State $editor;
+    public DiffState $diff;
 
     public function __construct(public string $name, string $text)
     {
@@ -28,6 +30,8 @@ final class File
         $this->editor = new State($buf);
         $this->editor->diffBase = $this->original;
         $this->editor->wrapGuides = [100];
+        $this->diff = new DiffState($this->original, $buf);
+        $this->diff->editable = true; $this->diff->hunkActions = true; $this->diff->lineSelection = true;
     }
 }
 
@@ -36,6 +40,12 @@ final class EditorApp
     /** @var list<File> */
     public array $files = [];
     public string $selected = 'server.go';
+    /** 0 the editor, 1 the diff. */
+    public int $page = 0;
+    /** The diff's: 0 split, 1 unified. */
+    public int $layout = 0;
+    /** The diff's highlights within lines: 0 words, 1 characters, 2 off. */
+    public int $inline = 0;
     public bool $wrap = false;
 
     public function current(): File
@@ -50,6 +60,7 @@ function view(Context $c, EditorApp $a): void
     $t = $c->theme;
     $f = $a->current();
     $f->editor->softWrap = $a->wrap;
+    $f->diff->wrap = $a->wrap;
     $c->row(0, 0, 1)->align(Node::STRETCH);
       $c->column(0, 0, 0, $t->surface)->padding(12, 0);
         $c->sidebar($a->selected, function () use ($c, $a) {
@@ -58,12 +69,17 @@ function view(Context $c, EditorApp $a): void
       $c->end();
       $c->column(0, 0, 1);
         $c->row(0, 12)->padding(8, 12)->align(Node::CENTER);
+          $c->segmented(['Editor', 'Changes'], $a->page);
+          if ($a->page === 1) {
+              $c->segmented(['Split', 'Unified'], $a->layout);
+              $c->select(['Words', 'Characters', 'Off'], $a->inline);
+          }
           $c->spacer();
           $c->text('Wrap', null, $t->textMuted);
           $c->switch('Soft wrap', $a->wrap);
         $c->end();
         $c->divider();
-        editorPage($c, $f);
+        if ($a->page === 0) { editorPage($c, $f); } else { diffPage($c, $a, $f); }
       $c->end();
     $c->end();
 }
@@ -91,12 +107,29 @@ function editorPage(Context $c, File $f): void
     $lang = $st->buffer->language()?->name ?? 'Plain Text';
     $status = sprintf('Ln %d, Col %d', $pos->line + 1, $pos->col + 1);
     if ($sels > 1) { $status .= sprintf(' · %d selections', $sels); }
+    [$added, $deleted] = $f->diff->stats();
     $c->divider();
     $c->row(0, 16)->padding(4, 12);
       $c->text($status, 12, $t->textMuted);
+      $c->text(sprintf('+%d −%d', $added, $deleted), 12, $t->textMuted);
       $c->spacer();
       $c->text(sprintf('%d lines · %s', $st->buffer->lineCount(), $lang), 12, $t->textMuted);
     $c->end();
+}
+
+function diffPage(Context $c, EditorApp $a, File $f): void
+{
+    $d = $f->diff;
+    $d->layout = $a->layout === 1 ? DiffState::UNIFIED : DiffState::SPLIT;
+    $d->inline = [DiffState::INLINE_WORD_ALT, DiffState::INLINE_CHAR, DiffState::INLINE_NONE][$a->inline];
+    if ($d->hunks() === []) {
+        $c->column(0, 0, 1)->center();
+          $c->text('No changes', 18, null, Font::BOLD);
+          $c->text('Edit ' . $f->name . ' to see its changes here.', null, $c->theme->textMuted);
+        $c->end();
+        return;
+    }
+    $d->view($c)->grow = 1;
 }
 
 /** Completes $prefix with the words of the buffer, as editors do without a language server. @return list<Completion> */

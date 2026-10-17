@@ -33,8 +33,14 @@ trait EditorPaint
             $this->scrollX = 0.0;
         }
         $v->heights->setLines($v->text->lineCount());
-        $v->heights->setHidden($this->hiddenSpans());
-        $v->heights->setBlocks([]);
+        $hidden = $this->hiddenSpans();
+        $blocks = [];
+        if (($ds = $this->o->decor) instanceof DiffSide) {
+            $hidden = self::mergeSpans([...$hidden, ...$ds->hidden()]);
+            $blocks = $ds->blocks();
+        }
+        $v->heights->setHidden($hidden);
+        $v->heights->setBlocks($blocks);
     }
 
     /** Fills a rect in a color [rgb, alpha], when it shows. */
@@ -150,7 +156,7 @@ trait EditorPaint
     }
 
     /** A line of $s alone, laid out as one row of its width, to paint text that is no line of the buffer (a placeholder, a number). */
-    private function lone(string $s): array
+    public function lone(string $s): array
     {
         $l = new LineLayout(0, 0, $s);
         $l->disp = $s;
@@ -182,6 +188,15 @@ trait EditorPaint
     {
         if ($this->o->decor === null || $this->view->heights->blocks === []) { return; }
         $this->eachBlock($f->first, $f->last, fn(Block $b, float $top) => $this->paintBlock($list, $text, $r, $b, $top));
+    }
+
+    /** Calls $fn with the blocks of the lines in view, as the last frame laid them out, and their tops in the content. */
+    public function blocksInView(\Closure $fn): void
+    {
+        $h = $this->view->heights;
+        if ($h->blocks === [] || $h->n === 0) { return; }
+        [$y0, $y1] = $this->o->fitContent ? [0.0, $h->total()] : [$this->scrollY, $this->scrollY + $this->viewH];
+        $this->eachBlock($h->lineAt($y0), min($h->lineAt($y1), $h->n - 1), $fn);
     }
 
     /** Calls $fn with the blocks of lines $first to $last, and their tops in the content. */
@@ -280,6 +295,9 @@ trait EditorPaint
                 }
             }
             if ($ri === 0 && $this->o->indentGuides) { $this->paintGuides($list, $f, $line, $ox, $y, count($l->rows)); }
+            if ($ri === 0 && $this->o->signs && $style->sign !== '' && ($ds = $this->o->decor) instanceof DiffSide) {
+                $ds->paintSign($list, $this, $style->sign, $r[0] + $this->textX - $v->charWidth * 1.5, $y, $style->number);
+            }
             $v->paintRow($list, $l, $row, $ox, $y, $f->colors, null, $vis[0], $vis[2]);
             $this->paintWhitespace($list, $l, $row, $ox, $y);
             // Diagnostics under the text.
@@ -505,7 +523,7 @@ trait EditorPaint
     }
 
     /** Draws a diff's change bar: solid for additions, striped for deletions, as Pierre's, so the two differ without their colors. */
-    private function paintBar(DisplayList $list, float $x, float $y, float $w, float $h, LineLook $s): void
+    public function paintBar(DisplayList $list, float $x, float $y, float $w, float $h, LineLook $s): void
     {
         if (!$s->stripes) {
             self::fill($list, $x, $y, $w, $h, $s->bar);

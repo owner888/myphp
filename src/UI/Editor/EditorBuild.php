@@ -96,6 +96,7 @@ trait EditorBuild
         };
         $caretAnchor = $this->complete->open() ? $anchor($this->complete->at) : null;
         $hoverAnchor = $h->shown ? $anchor($h->start) : null;
+        if (($ds = $this->o->decor) instanceof DiffSide) { $ds->buildBlocks($c, $this); }
         if ($this->find->open) { $this->buildFindBar($c); }
         if ($this->goTo->open) { $this->buildGoToLine($c); }
         if ($caretAnchor !== null) { $this->buildCompletions($c, $caretAnchor); }

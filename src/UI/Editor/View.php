@@ -242,6 +242,14 @@ final class View
         return $l;
     }
 
+    /** Measures the wraps of line $i, if not yet. */
+    public function wrapLineNow(int $i): void
+    {
+        $w = $this->heights->wraps;
+        if (!$w->on || $i < 0 || $i >= count($w->extra) || $w->extra[$i] !== WrapRows::UNKNOWN) { return; }
+        $this->line($i);
+    }
+
     /** Forgets every line laid out, as inlays shown anew change them. */
     public function forgetLines(): void
     {
