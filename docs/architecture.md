@@ -1159,6 +1159,35 @@ background and redraws. `App::setTheme` fixes one instead.
 `NSArray arrayWithObjects:` is variadic and so off limits to the bridge
 (stack-passed on arm64); build arrays with `NSMutableArray addObject:`.
 
+## Code editor
+
+mygo's `ui/editor` is coming over in stages, as `MyPHP\UI\Editor`. The
+model below the view is in: `Rope`, `RopeNode`, `RopeText` and `Summary`
+are mygo's `internal/rope`, text as a persistent AVL tree of chunks of up
+to 4 KB whose nodes sum bytes, runes, UTF-16 units and newlines, so that
+an edit shares the tree with the text before it and a version is a
+pointer; `Diff`, `DiffCompact` and `Hunk` are `internal/diff`'s line
+diff: git's histogram algorithm, Myers's with xdiff's cost limit where
+every line repeats, and the indent heuristic that slides changed blocks.
+`Buffer` (with `Edit`, `Change`, `Pos`, `Snapshot`, `Transaction`) is
+`buffer.go`: edits as transactions of undo, typing of one editor within
+300 ms grouped, a log of the last 256 versions' changes that editors
+follow (`changesTo`, `Change::mapOffset`/`mapLine`), and
+`changesBetween` by lines for a reader too far behind the log.
+`Selection`, `Sel` and `Chars` are `selection.go`: selections merged as
+Zed's, words and subwords, graphemes (marks, joiners, flags, CRLF) and
+indentation. `Command`, `Binding` and `Keymap` are `keymap.go`: the
+commands of code editors and Zed's macOS bindings over `Key`'s virtual
+key codes, which `Key` now names for the character keys (kVK_ANSI_*),
+the app's bindings first and chords as Cmd+K Cmd+0. Threads being Go's,
+the buffer has no mutex and the highlighter will work on the main thread.
+Still to come: the languages and lexers (`syntax.go`, `lexer.go`,
+`lexers.go`, `languages.go`, `theme.go`), then the editor itself
+(`editor.go`, `view.go`, `display.go`, `edit.go`, `commands.go`,
+`lines.go`, `multicursor.go`, `brackets.go`, `fold.go`, `input.go`,
+`paint.go`, `build.go`), its parts (`find.go`, `parts.go`, `lsp.go`) and
+the diff viewer (`diff*.go`, `patch.go`, `gitdiff.go`).
+
 ## Packaging
 
 A macOS app bundle runs `Contents/MacOS/<Name>` with no arguments, and a
@@ -1298,8 +1327,9 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- mygo's CodeEditor (ui/editor: a code editor with syntax coloring, line
-  numbers, folding, completions, a diff viewer), RichText editor,
-  Markdown view and Terminal are not ported; `rich` is read-only.
+- mygo's CodeEditor (ui/editor) is being ported: its model is in (Code
+  editor above), the languages, the editor view, its parts and the diff
+  viewer are not; the RichText editor, Markdown view and Terminal are not
+  ported; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
   fps with identical PHP time per frame); MTKView pacing is what gives 60.
