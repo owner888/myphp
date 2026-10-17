@@ -100,7 +100,11 @@ final class Node
     /** A check box over a group of them, some but not all checked: a bar instead of a check (mygo's mixed state). */
     public bool $mixed = false;
     public float $fraction = 0;
-    public bool $held = false;
+    /** How far a slider's knob is held, from 0 to 1, moving between them as it is pressed and let go (mygo's "held"). */
+    public float $held = 0.0;
+    /** What of the node's children the node cuts off at its edges: CLIP_X, CLIP_Y or both (clip(), clipY()). */
+    public int $clip = 0;
+    public const CLIP_X = 1, CLIP_Y = 2;
     /** Whether a control changed its value this frame: Context::changed(). */
     public bool $changed = false;
     /** Shown in a tip when the pointer rests on the node: tooltip(). */
@@ -373,6 +377,20 @@ final class Node
     public function center(): static
     {
         $this->justify = self::CENTER; $this->align = self::CENTER;
+        return $this;
+    }
+
+    /** Cuts what its children draw off at the node's edges, as mygo's Clip; what is cut off does not show in the window (Context::inView). */
+    public function clip(): static
+    {
+        $this->clip = self::CLIP_X | self::CLIP_Y;
+        return $this;
+    }
+
+    /** Cuts what its children draw off at the node's top and bottom only, as mygo's ClipY: a panel growing into view. */
+    public function clipY(): static
+    {
+        $this->clip |= self::CLIP_Y;
         return $this;
     }
 

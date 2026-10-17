@@ -262,7 +262,8 @@ Controls write straight into the app's variables, by reference:
 press steps once and keeps stepping while held, as AppKit's; `Runtime::stepper`
 gives the frame's steps from the hold and the arrow keys),
 `segmented($options, &$index)`, `tabs($labels, &$index)`,
-`collapsible($title, &$open)` (returns $open; build the body in an if);
+`collapsible($label, &$open, $fn)` (mygo's Collapsible: $fn builds the
+panel, which grows into view as the arrow turns);
 `Context::changed($node)` says whether this frame changed it (mygo's
 Changed). The toggles are focusable nodes whose click flips the value;
 the slider is set from `Runtime`, which records presses and drags inside
@@ -1296,6 +1297,43 @@ a tree's item is `Runtime::expanded` for the tree to read. Toasts and
 them here: web pages inside native content, links inside rich text, the
 formats of a rich text editor's runs, disabled controls and menus drawn
 in the window.
+
+## Animation
+
+Values that move are mygo's motion.go, as `Context` methods taking the
+node they belong to (`ContextMotion`): `animate`, `animateWith`,
+`animateTo` (an `Animation`: a curve of `$duration` seconds along an
+`Easing`, or a spring, `SpringOptions` by duration and bounce as SwiftUI's
+or by mass, stiffness and damping as react spring's; with a `$delay`),
+`spring`, `jump` (a drag setting the value, whose velocity a spring then
+takes over), `velocity`, `settled`, `arrived` (the one frame it comes to
+rest), `animateColor` (mixed with premultiplied alpha), `keyframes`
+(`Keyframe`s with `KeyframeOptions`: run, repeat, alternate, delays),
+`loop`, `inView` and `disableAnimations`; `Motion::rubberband` and
+`Motion::project` compute targets, `Easing::cubicBezier` and
+`Easing::bounce` make easings. Each value is a `MotionChannel` (or a
+`KeyframeSequence`) in `Runtime`, by node id and key, kept while the node
+is built: a curve samples its easing, a spring is solved analytically, so
+frames however far apart follow the same trajectory, and a new target
+takes over from where the value is, with its velocity. A value moving asks
+for the next frame (`Runtime::animate`).
+
+Time is `Runtime::$now`, in nanoseconds, read once a frame from
+`Runtime::$clock` (hrtime's when null; tests set it, as mygo's clock);
+`Runtime::$frameNumber` counts frames, for `arrived`. While the desktop
+asks for less motion (Reduce Motion: `App::reduceMotion`, read from
+`NSWorkspace` and again on its display options notification), values go to
+their targets at once and sequences finish, but colors still change
+smoothly; `disableAnimations` makes even colors jump, for one frame.
+
+The widgets move as mygo's: a switch's knob over 140 ms, a slider's knob
+growing into a lens over 150 ms as it is held (a range slider's and a
+color picker's channels too), a collapsible's and an accordion's arrows
+turning and their panels growing into view over 200 ms (`Node::clipY`
+cuts off the panel), a sidebar section's arrow over 150 ms. `Node::clip`
+and `clipY` cut what children draw off at the node's edges, and what is
+cut off, or scrolled away, is not in view (`Runtime::record` keeps the
+nodes that showed).
 
 ## Packaging
 

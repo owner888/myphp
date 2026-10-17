@@ -53,6 +53,28 @@ final class Runtime
     /** The pointer the window should show over the hovered node: 'arrow' or 'pointer' (links). */
     public string $cursor = 'arrow';
     private bool $animating = false;
+    /** The time of frames for tests (mygo's clock): nanoseconds, hrtime's when null. */
+    public ?Closure $clock = null;
+    /** This frame's time, in nanoseconds (mygo's Context.Now), and its number, from 1 (mygo's frame). */
+    public int $now = 0, $frameNumber = 0;
+    /** The frame that Context::disableAnimations shows at once. */
+    public int $instantFrame = 0;
+    /** That the desktop asks for less motion (macOS's Reduce Motion, mygo's Preferences.ReduceMotion): the window sets it from App::reduceMotion. */
+    public bool $reduceMotion = false;
+    /**
+     * The values that move, by node id and key (mygo's motions,
+     * colorMotions, sequences and anims): kept while their node is built.
+     * @var array<int, array<string|int, MotionChannel>>
+     */
+    public array $motions = [];
+    /** @var array<int, array<string|int, object>> colors moving: from, to, shown ([rgb, alpha]) and k, a MotionChannel from 0 to 1 */
+    public array $colorMotions = [];
+    /** @var array<int, array<string|int, KeyframeSequence>> */
+    public array $sequences = [];
+    /** @var array<int, array<string|int, int>> when each Context::loop started */
+    public array $loops = [];
+    /** @var array<int, true> the nodes some of which showed in the window last frame, within the scrolling containers and clips around them (Context::inView) */
+    private array $shown = [];
     /** Steppers built this frame, by id, for the arrow keys. */
     private array $steppers = [];
     /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
@@ -156,6 +178,8 @@ final class Runtime
         $this->keys = [];
         $this->presses = [];
         $now = hrtime(true);
+        $this->frameNumber++;
+        $this->now = $this->clock !== null ? ($this->clock)() : $now;
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
         $pointer = [$this->input->mouseX, $this->input->mouseY];
@@ -277,7 +301,12 @@ final class Runtime
         $this->inputs = []; $this->textClients = []; $this->keepers = [];
         $this->lists = [];
         $this->needsFrame = false;
+        $this->shown = [];
         $this->record($root);
+        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops] as &$moving) {
+            $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
+        }
+        unset($moving);
         if ($this->focus !== null && !$this->reachable($this->focus)) {
             $this->focus = null; // the focus was behind what now blocks it: Tab goes into that
         }
@@ -426,9 +455,19 @@ final class Runtime
         return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
-    private function record(Node $n, ?Node $parent = null, int $group = 0): void
+    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        $clip ??= [$n->x, $n->y, $n->x + $n->w, $n->y + $n->h]; // the root: the window
+        if (min($n->x + $n->w, $clip[2]) > max($n->x, $clip[0]) && min($n->y + $n->h, $clip[3]) > max($n->y, $clip[1])) {
+            $this->shown[$n->id] = true;
+        }
+        if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
+            $clip[0] = max($clip[0], $n->x); $clip[2] = min($clip[2], $n->x + $n->w);
+        }
+        if ($n->scroll !== null || ($n->clip & Node::CLIP_Y) !== 0) {
+            $clip[1] = max($clip[1], $n->y); $clip[3] = min($clip[3], $n->y + $n->h);
+        }
         $this->order[$n->id] = ++$this->counter;
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
@@ -502,8 +541,20 @@ final class Runtime
             }
         }
         foreach ($n->kids as $k) {
-            $this->record($k, $n, $group);
+            $this->record($k, $n, $group, $clip);
         }
+    }
+
+    /** Whether Context::disableAnimations made this frame's values go to their targets at once. */
+    public function instant(): bool
+    {
+        return $this->instantFrame === $this->frameNumber && $this->frameNumber !== 0;
+    }
+
+    /** Whether some of node $id showed in the window last frame (Context::inView). */
+    public function shown(int $id): bool
+    {
+        return isset($this->shown[$id]);
     }
 
     public function focused(int $id): bool

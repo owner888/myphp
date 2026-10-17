@@ -15,7 +15,7 @@ use RuntimeException;
  */
 final class App
 {
-    public const VERSION = '0.66.0';
+    public const VERSION = '0.67.0';
     /** @var list<Closure> */
     private static array $whenReady = [];
     private static bool $ready = false;
@@ -24,6 +24,8 @@ final class App
     private static ?Menu $menu = null;
     private static ?Theme $theme = null;
     private static bool $themeFixed = false;
+    /** Whether the desktop asks for less motion, once read (reduceMotion). */
+    private static ?bool $reduceMotion = null;
     private static $nsApp = null;
     private static ?Metal $metal = null;
     private static ?Text $text = null;
@@ -73,10 +75,16 @@ final class App
                 WindowState::save();
             }],
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
+            'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change
+                self::$reduceMotion = null;
+                foreach (Window::all() as $w) { $w->update(); }
+            }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
                 Locales::start(); // the language the app shows and the user's formats, before the menus and windows show them
                 ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('localeChanged:'), ObjC::str('NSCurrentLocaleDidChangeNotification'), null);
+                $workspace = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
+                ObjC::msg('v:pppp', ObjC::msg('p:', $workspace, 'notificationCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('displayOptionsChanged:'), ObjC::str('NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification'), null);
                 Notification::attachDelegate(); // before the click that launched the app is delivered
                 self::installMenu(self::$menu ?? Menu::default());
                 ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
@@ -103,6 +111,12 @@ final class App
             self::$theme = self::$nsApp === null ? Theme::light() : self::systemTheme();
         }
         return self::$theme;
+    }
+
+    /** Whether the desktop asks for less motion (System Settings' Reduce Motion, mygo's Preferences.ReduceMotion): what animates goes to its target at once (Context::animateTo). */
+    public static function reduceMotion(): bool
+    {
+        return self::$reduceMotion ??= self::$nsApp !== null && (bool)ObjC::msg('b:', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'accessibilityDisplayShouldReduceMotion');
     }
 
     /** Fixes the theme; null returns to following the system. */

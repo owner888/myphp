@@ -66,6 +66,7 @@ Early. What works today, on macOS / Apple Silicon:
 | A file manager: sidebar of places, breadcrumbs, the folder as icons or a sortable table sharing one selection, find bar, image preview, Trash through Finder | works (`examples/files`) |
 | Code editor (mygo's ui/editor): rope text, undo, several carets and selections, soft wraps, folding, find and replace (PCRE), go to line, completions, hovers, diagnostics, inlay hints and suggestions, the changes against a base in the gutter, Zed's commands and key bindings, input methods at every caret; 28 languages highlighted incrementally; only the lines in view laid out. Diff viewer: split or unified, incremental, words or characters changed, collapsed unchanged lines, Revert and Keep, line selection, annotations, git patches | works (`examples/code-editor`) |
 | Accessibility: VoiceOver reads and works every widget, the code editor and the diff viewer (mygo's tree of roles, names, states and actions over `NSAccessibilityElement`s) | new, to try with VoiceOver |
+| Animation: curves, springs, delays, jumps, colors, keyframes and loops by node and key (mygo's motion), Reduce Motion; the switch, sliders, collapsibles, accordions and sidebar sections move as mygo's | new |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
@@ -197,6 +198,7 @@ App::run();
 | 语言与地区格式：应用语言随用户设置（或 `App::setLocale`，记在应用 defaults 里），MyPHP 自带文案和菜单跟着切换（en、zh-Hans、zh-Hant），日期、日历、时间按地区格式与语言名称显示（通过 `ext-intl` 用 ICU） | 可用（`examples/widgets`） |
 | 文件管理器：常用位置侧栏、路径面包屑、目录以图标或可排序表格显示且共用一个选择、查找条、图片预览、经 Finder 移到废纸篓 | 可用（`examples/files`） |
 | 无障碍：VoiceOver 可朗读并操作所有控件、代码编辑器和 diff 查看器（mygo 的角色、名称、状态与动作树，基于 `NSAccessibilityElement`） | 新加，待 VoiceOver 实测 |
+| 动画：按节点和键的曲线、弹簧、延迟、跳变、颜色、关键帧和循环（mygo 的 motion），遵循「减弱动态效果」；开关、滑块、折叠区、手风琴和侧边栏分组按 mygo 的方式动起来 | 新加 |
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 

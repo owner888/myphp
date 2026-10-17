@@ -124,12 +124,18 @@ final class Painter
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
+        } elseif ($n->clip !== 0) {
+            [$vx, $vy, $vw, $vh] = $list->visible();
+            $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : $vx, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : $vy, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : $vw, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : $vh);
         }
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
         if ($n->drawOver !== null) {
             ($n->drawOver)($list, $n, $t); // over the children, inside a scrolling container's clip (mygo's DrawOver)
+        }
+        if ($n->clip !== 0 && $n->scroll === null) {
+            $list->popClip();
         }
         if ($n->focusVisible && $n->color === null) { // a list or other background-less node: the ring just inside its edge, over its children (outside, a list filling the window would lose it)
             $list->ring($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $t->focus, $t->focusAlpha, max(0.0, $n->radius - 1), 2.0);
@@ -328,16 +334,17 @@ final class Painter
 
     /**
      * A switch, as mygo's: Space(9) by Space(5), radius Space(2.5), the
-     * border a sixth toward the text when off and the accent when on; the
-     * knob white, inset Space(0.5), on a shadow (0, 1, 3, 0.25); the label
+     * border a sixth toward the text when off and the accent when on,
+     * mixed as the knob moves ($fraction, from 0 off to 1 on); the knob
+     * white, inset Space(0.5), on a shadow (0, 1, 3, 0.25); the label
      * Space(2) after.
      */
     private static function paintSwitch(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
-        $list->rect($n->x, $y, $tw, $th, $n->on ? $t->accent : Theme::mix($t->border, $t->text, 0.15), 1.0, $th / 2);
-        $kx = $n->x + $in + ($n->on ? $tw - $th : 0);
+        $list->rect($n->x, $y, $tw, $th, Theme::mix(Theme::mix($t->border, $t->text, 0.15), $t->accent, $n->fraction), 1.0, $th / 2);
+        $kx = $n->x + $in + $n->fraction * ($tw - $th);
         $list->shadow($kx, $y + $in, $d, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
         $list->rect($kx, $y + $in, $d, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {
@@ -360,26 +367,39 @@ final class Painter
         $cy = $n->y + $t->space(2.5);
         $x0 = $n->x + $kw / 2; $x1 = $n->x + $n->w - $kw / 2;
         $kx = $x0 + ($x1 - $x0) * $n->fraction;
+        if ($n->held > 0) { // the lens lightens what is behind it, under the track
+            [$x, $y, $w, $h] = self::knobRect($t, $kx, $cy, $n->held);
+            $list->rect($x, $y, $w, $h, 0xffffff, 0.1 * $n->held, $h / 2);
+        }
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
         $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
         self::knob($list, $t, $kx, $cy, $n->held, $n->focusVisible);
     }
 
-    /** A slider's knob at (x, cy), mygo's paintKnob: a Space(5) by Space(4) capsule, white, that grows into a lens of glass while held. */
-    public static function knob(DisplayList $list, Theme $t, float $kx, float $cy, bool $held, bool $focus): void
+    /** A slider's knob centered at (x, cy), held from 0 to 1, mygo's knobRect: Space(5) by Space(4), growing by 0.35 as it is held. @return array{0: float, 1: float, 2: float, 3: float} */
+    public static function knobRect(Theme $t, float $kx, float $cy, float $held): array
     {
-        $kw = $t->space(5); $kh = $t->space(4);
-        $g = $held ? 1.35 : 1.0;
-        $w = $kw * $g; $h = $kh * $g; $x = $kx - $w / 2; $y = $cy - $h / 2; $r = $h / 2;
-        [$face, $rim] = $t->dark ? [0xe0e1e1, 0x000000] : [0xffffff, 0x000000];
-        if ($held) {
-            $list->shadow($x, $y, $w, $h, 0x000000, $t->dark ? 0.3 : 0.14, $r, 14, 0, 8);
-            $list->ring($x, $y, $w, $h, $rim, $t->dark ? 0.7 : 0.22, $r, 1.0);                  // the lens's rim,
-            $list->ring($x + 1, $y + 1, $w - 2, $h - 2, 0xffffff, 0.25, $r - 1, 1.0);          // lit on the inside
-        } else {
-            $list->shadow($x, $y, $w, $h, 0x000000, 0.08, $r, 1, 0, 0.5);   // a tight shadow edges the knob,
-            $list->shadow($x, $y, $w, $h, 0x000000, 0.10, $r, 7, 0, 1.5);   // a soft one lifts it
-            $list->rect($x, $y, $w, $h, $face, 1.0, $r);
+        $g = 1 + 0.35 * $held;
+        $w = $t->space(5) * $g; $h = $t->space(4) * $g;
+        return [$kx - $w / 2, $cy - $h / 2, $w, $h];
+    }
+
+    /** A slider's knob at (x, cy), held from 0 to 1, mygo's paintKnob: a capsule of white, which grows into a lens of glass as it is held, as AppKit's does. */
+    public static function knob(DisplayList $list, Theme $t, float $kx, float $cy, float $held, bool $focus): void
+    {
+        [$x, $y, $w, $h] = self::knobRect($t, $kx, $cy, $held); $r = $h / 2;
+        [$face, $rim, $drop] = $t->dark ? [0xe0e1e1, 0.7, 0.3] : [0xffffff, 0.22, 0.14];
+        if ($held > 0) {
+            $list->shadow($x, $y, $w, $h, 0x000000, $drop * $held, $r, 14, 0, 8);
+        }
+        if ($held < 1) {
+            $list->shadow($x, $y, $w, $h, 0x000000, 0.08 * (1 - $held), $r, 1, 0, 0.5);   // a tight shadow edges the knob,
+            $list->shadow($x, $y, $w, $h, 0x000000, 0.10 * (1 - $held), $r, 7, 0, 1.5);   // a soft one lifts it
+            $list->rect($x, $y, $w, $h, $face, 1 - $held, $r);
+        }
+        if ($held > 0) {
+            $list->ring($x, $y, $w, $h, 0x000000, $rim * $held, $r, 1.0);                  // the lens's rim,
+            $list->ring($x + 1, $y + 1, $w - 2, $h - 2, 0xffffff, 0.25 * $held, $r - 1, 1.0); // lit on the inside
         }
         if ($focus) {
             self::focusRing($list, $x, $y, $w, $h, $r, $t);

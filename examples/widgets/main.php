@@ -66,14 +66,12 @@ function view(Context $c, array &$s): void
             $c->row(0, 10)->align(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($s['when']))) { $s['last'] = 'date ' . $s['when']->format('Y-m-d'); } if ($c->changed($c->timeInput($s['when']))) { $s['last'] = 'time ' . $s['when']->format('H:i'); } $c->end();
             $c->row(0, 10)->align(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($s['tags'], TAGS))) { $s['last'] = 'tags ' . implode(', ', $s['tags']); } $c->end();
-            if ($c->collapsible('More options', $s['more'])) {
-                $c->column(12, 6);
-                  $c->muted('Shown while the section is open; the header toggles it.');
-                  $c->row(0, 8); $c->badge('new'); $c->badge('3'); $c->badge('beta'); $c->end();
-                  // A check box over check boxes: mixed while some are checked; its click checks or clears them all.
-                  if ($c->changed($c->checkboxGroup('Notifications', function () use ($c, &$s) { $c->checkbox('Mail', $s['mail']); $c->checkbox('Calendar', $s['calendar']); }))) { $s['last'] = 'notifications ' . (int)$s['mail'] . (int)$s['calendar']; }
-                $c->end();
-            }
+            $c->collapsible('More options', $s['more'], function () use ($c, &$s) {
+                $c->muted('Shown while the section is open; the header toggles it, and it grows into view.');
+                $c->row(0, 8); $c->badge('new'); $c->badge('3'); $c->badge('beta'); $c->end();
+                // A check box over check boxes: mixed while some are checked; its click checks or clears them all.
+                if ($c->changed($c->checkboxGroup('Notifications', function () use ($c, &$s) { $c->checkbox('Mail', $s['mail']); $c->checkbox('Calendar', $s['calendar']); }))) { $s['last'] = 'notifications ' . (int)$s['mail'] . (int)$s['calendar']; }
+            });
         } elseif ($s['tab'] === 1) {
             // A tree: the arrows open and close, Up/Down/Left/Right move the focus, a click chooses.
             $c->tree(function () use ($c, &$s) {

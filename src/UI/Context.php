@@ -10,6 +10,8 @@ use MyPHP\Window;
 /** Builds a frame's tree. The view function calls these in order, as code. */
 final class Context
 {
+    use ContextMotion;
+
     public Node $root;
     public int $count = 0;
     /** @var Node[] */
@@ -651,6 +653,7 @@ final class Context
             $n->changed = true;
         }
         $n->on = $on;
+        $n->fraction = $this->animate($n, 'knob', $on ? 1 : 0, 0.14); // how far the knob is toward on
         $n->role(Role::SWITCH)->checked($on);
         return $n;
     }
@@ -684,20 +687,15 @@ final class Context
         $n = $this->column(0, 0);
           if ($this->accordions[$k]++ > 0) { $this->divider(); } // a line above all but the first
           $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
+          $p = $this->collapsibleBase($head, $open);
+          if ($head->changed) { $n->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
             $this->text($title, $t->fontSize, $t->text, Font::BOLD)->single();
             $this->spacer();
             $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
-            $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 270 : 90, $t->textMuted)); // down, or up while open
+            $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, 90 + 180 * $p, $t->textMuted)); // down, turning up as it opens
           $this->end();
-          if ($this->clicked($head)) { $open = !$open; $n->changed = true; }
-          $head->expanded($open);
-          if ($open) {
-              $this->column(0, $t->space(2))->padding(0, $t->space(3));
-                $fn();
-                $this->column(0, 0)->size(0, $t->space(3)); $this->end(); // Padding(0, Space(3), Space(3)): the bottom
-              $this->end();
-          }
+          $this->collapsiblePanel($open, $p, $fn, 0, $t->space(3), $t->space(3), $t->space(3), $t->space(2)); // Padding(0, Space(3), Space(3))
         $this->end();
         return $n;
     }
@@ -792,16 +790,17 @@ final class Context
             }
         }
         $dragging = $local->dragging ?? null;
+        $held = $this->animate($n, 'held', $dragging !== null ? 1 : 0, 0.15);
         $focusLow = $rt !== null && $rt->focus === $knobs['low']->id && $rt->focusVisible($knobs['low']->id);
         $focusHigh = $rt !== null && $rt->focus === $knobs['high']->id && $rt->focusVisible($knobs['high']->id);
-        $n->draw(function (DisplayList $list, Node $e, Theme $t) use ($low, $high, $lo, $hi, $kw, $dragging, $focusLow, $focusHigh) {
+        $n->draw(function (DisplayList $list, Node $e, Theme $t) use ($low, $high, $lo, $hi, $kw, $dragging, $held, $focusLow, $focusHigh) {
             $h = $t->space(1.5); $cy = $e->y + $t->space(2.5);
             $f = fn(float $v) => $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
             $x0 = $e->x + $kw / 2 + ($e->w - $kw) * $f($low); $x1 = $e->x + $kw / 2 + ($e->w - $kw) * $f($high);
             $list->rect($e->x, $cy - $h / 2, $e->w, $h, $t->border, 1.0, $h / 2);
             $list->rect(min($x0, $x1), $cy - $h / 2, abs($x1 - $x0), $h, $t->accent, 1.0, $h / 2);
-            Painter::knob($list, $t, $x0, $cy, $dragging === 'low', $focusLow);
-            Painter::knob($list, $t, $x1, $cy, $dragging === 'high', $focusHigh);
+            Painter::knob($list, $t, $x0, $cy, $dragging === 'low' ? $held : 0.0, $focusLow);
+            Painter::knob($list, $t, $x1, $cy, $dragging === 'high' ? $held : 0.0, $focusHigh);
         });
         return $n;
     }
@@ -925,16 +924,17 @@ final class Context
         $n = $this->column(0, $t->space(0.5));
           if (count($parent->kids) > 1) { $this->column(0, 0)->size(0, $t->space(2.5)); $this->end(); } // apart from the section above
           $head = $this->row(0, 0)->padding($t->space(1), $t->space(2))->round($t->radius)->align(Node::CENTER)->role(Role::TREE_ITEM)->level(1);
+          if ($open !== null && $this->clicked($head)) { $open = !$open; }
+          if ($open !== null && ($e = $this->runtime?->expanded($head->id) ?? 0) !== 0) { $open = $e > 0; } // assistive technology opening or closing it
             $this->text($title, $t->fontSize - 1, $t->textMuted, Font::BOLD);
             $this->spacer();
             if ($open !== null) { // the disclosure arrow, shown as the pointer rests on the title
-                $hovered = $this->hovered($head); $shown = $open;
+                $hovered = $this->hovered($head);
                 $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
-                if ($hovered) { $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $shown ? 90 : 0, $t->textMuted)); }
+                $turn = $this->animate($a, 'open', $open ? 90 : 0, 0.15);
+                if ($hovered) { $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $turn, $t->textMuted)); }
             }
           $this->end();
-          if ($open !== null && $this->clicked($head)) { $open = !$open; }
-          if ($open !== null && ($e = $this->runtime?->expanded($head->id) ?? 0) !== 0) { $open = $e > 0; } // assistive technology opening or closing it
           if ($open !== null) { $head->expandable = true; $head->expanded = $open; }
           if ($open === null || $open) { $sb['depth']++; $fn(); $sb['depth']--; }
         $this->end();
@@ -1548,7 +1548,7 @@ final class Context
             $bx = $n->x; $by = $n->y + $t->space(0.5); $bw = $n->w; $bh = $n->h - $t->space(1);
             $list->pushClip($bx, $by, $bw, $bh); $track($list, $bx, $by, $bw, $bh); $list->popClip(); // the track, in a capsule's clip were there one; the gradients fill the rect
             $x = $n->x + $kw / 2 + ($n->w - $kw) * $frac;
-            $g = 1 + ($held ? 0.2 : 0.0); $w = $kw * $g; $h = $n->h * $g; $kx = $x - $w / 2; $ky = $n->y + $n->h / 2 - $h / 2;
+            $g = 1 + 0.2 * $held; $w = $kw * $g; $h = $n->h * $g; $kx = $x - $w / 2; $ky = $n->y + $n->h / 2 - $h / 2;
             $list->shadow($kx, $ky, $w, $h, 0x000000, 0.3, $w / 2, 3, 0, 1);
             $list->rect($kx, $ky, $w, $h, 0xffffff, 1.0, $w / 2);
             if ($ring) { Painter::focusRing($list, $kx, $ky, $w, $h, $w / 2, $t); }
@@ -2552,27 +2552,75 @@ final class Context
     }
 
     /**
-     * A collapsible section's header: a chevron and $title; clicking it
-     * toggles $open. Returns whether it is open, so the caller builds the
-     * body inside an if.
+     * A disclosure, as mygo's Collapsible (SwiftUI's DisclosureGroup):
+     * $label beside an arrow, which a click opens and closes, as do Enter
+     * and Space, showing below it what $fn builds while $open. The arrow
+     * turns and the content grows into view as it opens; changed()
+     * reports a click.
      */
-    public function collapsible(string $title, bool &$open): bool
+    public function collapsible(string $label, bool &$open, Closure $fn): Node
     {
         $t = $this->theme;
-        $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
-        if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
-          $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
-          $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
-          $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, $open ? 90 : 0, $t->textMuted));
-          $this->text($title, $t->fontSize, $t->text)->single();
-          $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
+        $root = $this->column(0, 0);
+          $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->alignSelf(Node::START)->focusable()->role(Role::DISCLOSURE);
+          $p = $this->collapsibleBase($head, $open);
+          if ($head->changed) { $root->changed = true; }
+          if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
+            $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
+            $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
+            $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, 90 * $p, $t->textMuted));
+            $this->text($label, $t->fontSize, $t->text)->single();
+            $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
+          $this->end();
+          $this->collapsiblePanel($open, $p, $fn, $t->space(1), $t->space(5.5), 0, $t->space(1), $t->space(2)); // below the label
         $this->end();
-        if ($this->clicked($head)) {
-            $open = !$open;
-            $head->changed = true;
-        }
+        return $root;
+    }
+
+    /**
+     * The trigger of a collapsible, as mygo's CollapsibleBase: a click on
+     * $head, or Enter or Space while it has the focus, or assistive
+     * technology, opens and closes it, which $head->changed reports. How
+     * far it is open, from 0 closed to 1 open, moving between them over
+     * 200 ms as it opens and closes (mygo's Progress).
+     */
+    private function collapsibleBase(Node $head, bool &$open): float
+    {
+        if ($this->clicked($head)) { $open = !$open; $head->changed = true; }
+        if (($e = $this->runtime?->expanded($head->id) ?? 0) !== 0 && ($e > 0) !== $open) { $open = $e > 0; $head->changed = true; } // assistive technology opening or closing it
         $head->expanded($open);
-        return $open;
+        return $this->animate($head, 'open', $open ? 1 : 0, 0.2);
+    }
+
+    /**
+     * The panel of a collapsible open $p of the way, as mygo's Panel: what
+     * $fn builds while $open, and as it opens and closes, when the panel
+     * grows and shrinks with $p, cutting off what $fn built; in a column
+     * $gap apart, padded $top, $start, $end and $bottom. Nothing while
+     * closed.
+     */
+    private function collapsiblePanel(bool $open, float $p, Closure $fn, float $top, float $start, float $end, float $bottom, float $gap): void
+    {
+        if (!$open && $p == 0) {
+            return;
+        }
+        $clip = $this->column(0, 0);
+          $inner = $this->column(0, 0);
+            if ($top > 0) { $this->column(0, 0)->size(0, $top); $this->end(); }
+            $this->row(0, 0)->align(Node::START);
+              if ($start > 0) { $this->column(0, 0)->size($start, 0); $this->end(); }
+              $this->column(0, $gap, 1);
+                $fn();
+              $this->end();
+              if ($end > 0) { $this->column(0, 0)->size($end, 0); $this->end(); }
+            $this->end();
+            if ($bottom > 0) { $this->column(0, 0)->size(0, $bottom); $this->end(); }
+          $this->end();
+        $this->end();
+        if ($p < 1) {
+            // The height the content had in the last frame, which is 0 as it starts to open, and grows as it does; Layout reads a height of 0 as none set.
+            $clip->clipY()->size(0, max(1e-3, $p * ($this->runtime?->rectOf($inner->id)[3] ?? 0.0)));
+        }
     }
 
     /** mygo's disclosurePath: a chevron pointing right in box $a, turned $deg clockwise, stroked 1.5 in $color. */
@@ -2657,7 +2705,7 @@ final class Context
             }
         }
         $n->fraction = $max > $min ? ($value - $min) / ($max - $min) : 0.0;
-        $n->held = $this->runtime?->sliding($n->id) ?? false;
+        $n->held = $this->animate($n, 'held', ($this->runtime?->sliding($n->id) ?? false) ? 1 : 0, 0.15);
         $n->role(Role::SLIDER)->range($min, $max, $value, ($max - $min) / 100); // the arrows move a hundredth of the range
         return $n;
     }

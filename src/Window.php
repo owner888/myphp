@@ -159,6 +159,7 @@ final class Window
                 $text->beginFrame();
                 $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
+                $this->runtime->reduceMotion = App::reduceMotion();
                 App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
