@@ -1181,12 +1181,26 @@ commands of code editors and Zed's macOS bindings over `Key`'s virtual
 key codes, which `Key` now names for the character keys (kVK_ANSI_*),
 the app's bindings first and chords as Cmd+K Cmd+0. Threads being Go's,
 the buffer has no mutex and the highlighter will work on the main thread.
-Still to come: the languages and lexers (`syntax.go`, `lexer.go`,
-`lexers.go`, `languages.go`, `theme.go`), then the editor itself
-(`editor.go`, `view.go`, `display.go`, `edit.go`, `commands.go`,
-`lines.go`, `multicursor.go`, `brackets.go`, `fold.go`, `input.go`,
-`paint.go`, `build.go`), its parts (`find.go`, `parts.go`, `lsp.go`) and
-the diff viewer (`diff*.go`, `patch.go`, `gitdiff.go`).
+Syntax is in too: `Token` (the kinds, and tokens as [end, kind] pairs
+joined and relabeled), `Tokenizer` and `Lexer` with `LexString` and
+`LexState` are `syntax.go` and `lexer.go`, the general lexer of
+identifiers, numbers, strings with escapes and interpolations, comments
+and operators whose state packs into 40 bits; `JsonLexer`, `TomlLexer`,
+`CssLexer`, `MarkupLexer` (HTML's scripts and styles lexed by their own
+tokenizers), `MarkdownLexer` (fenced blocks by their language) and
+`DiffTokenizer` are `lexers.go`; `Language`, `BracketPair` and
+`Languages` (28 languages, by file name or alias) are `languages.go`,
+their indent patterns as PCRE; `Highlighter` with `SyntaxSelector`,
+`Folder`, `BracketMatcher`, `Indenter` and `Range`, and
+`TokenHighlighter`, are the rest of `syntax.go`: a line at a time from
+the state the line before ends in, an edit tokenizing the lines after it
+again until one starts as it did, a frame's budget (seconds) at a time;
+`Buffer::highlighter()` keeps the buffer's and feeds it the log's
+entries. Still to come: `theme.go` (with the view, whose colors it is),
+the editor itself (`editor.go`, `view.go`, `display.go`, `edit.go`,
+`commands.go`, `lines.go`, `multicursor.go`, `brackets.go`, `fold.go`,
+`input.go`, `paint.go`, `build.go`), its parts (`find.go`, `parts.go`,
+`lsp.go`) and the diff viewer (`diff*.go`, `patch.go`, `gitdiff.go`).
 
 ## Packaging
 
@@ -1327,8 +1341,8 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- mygo's CodeEditor (ui/editor) is being ported: its model is in (Code
-  editor above), the languages, the editor view, its parts and the diff
+- mygo's CodeEditor (ui/editor) is being ported: its model and syntax
+  are in (Code editor above), the editor view, its parts and the diff
   viewer are not; the RichText editor, Markdown view and Terminal are not
   ported; `rich` is read-only.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

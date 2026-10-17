@@ -40,6 +40,9 @@ final class Buffer
     private float $lastEdit = 0.0;
     /** The text's line endings are \r\n. */
     private bool $crlf;
+    private ?Language $language = null;
+    /** The buffer's highlighter and the text it follows, [Language, Highlighter, Snapshot], made for the language set. */
+    private ?array $syntax = null;
 
     /** A buffer holding $text, which is its saved text. */
     public function __construct(string $text = '')
@@ -58,6 +61,42 @@ final class Buffer
     /** The line ending the text had as it was set, "\r\n" or "\n", which Snapshot::text writes; setLineEnding changes it. */
     public function lineEnding(): string { return $this->crlf ? "\r\n" : "\n"; }
     public function setLineEnding(string $ending): void { $this->crlf = $ending === "\r\n"; }
+
+    /** The buffer's language, null for plain text. */
+    public function language(): ?Language { return $this->language; }
+
+    /** Sets the language that highlights the text, and that comments, brackets and indentation follow; null is plain text. */
+    public function setLanguage(?Language $l): void
+    {
+        if ($this->language !== $l) { $this->language = $l; $this->syntax = null; }
+    }
+
+    /**
+     * The buffer's highlighter, following the edits since it was last
+     * used, or null for plain text. A highlighter too far behind the log
+     * to follow them is made anew of the text as it is.
+     */
+    public function highlighter(): ?Highlighter
+    {
+        $lang = $this->language;
+        if ($lang === null || $lang->tokenizer === null && $lang->highlighter === null) { return null; }
+        if ($this->syntax === null || $this->syntax[0] !== $lang) {
+            $text = $this->snapshot();
+            $this->syntax = [$lang, $lang->newHighlighter($text), $text];
+        }
+        $entries = $this->entriesSince($this->syntax[2]->version);
+        if ($entries === null) {
+            $text = $this->snapshot();
+            $this->syntax = [$lang, $lang->newHighlighter($text), $text];
+            return $this->syntax[1];
+        }
+        foreach ($entries as [$version, $rope, $changes]) {
+            $next = new Snapshot($rope, $version, $this->crlf);
+            $this->syntax[1]->edit($this->syntax[2], $next, $changes);
+            $this->syntax[2] = $next;
+        }
+        return $this->syntax[1];
+    }
 
     /** The text as it is now, which stays as it is while the buffer changes. */
     public function snapshot(): Snapshot { return new Snapshot($this->text, $this->version, $this->crlf); }
@@ -242,13 +281,19 @@ final class Buffer
      */
     public function changesTo(int $since): ?array
     {
-        if ($since === $this->version) { return [[], $this->version, $this->text]; }
+        $entries = $this->entriesSince($since);
+        if ($entries === null) { return null; }
+        return [array_map(fn($e) => $e[2], $entries), $this->version, $this->text];
+    }
+
+    /** The log's entries after version $since, [version, text, changes] each; null when the log no longer reaches back to $since. @return ?list<array{0: int, 1: RopeText, 2: list<Change>}> */
+    public function entriesSince(int $since): ?array
+    {
+        if ($since === $this->version) { return []; }
         if ($this->log === [] || $this->log[0][0] > $since + 1 || $since > $this->version) { return null; }
         $lo = 0; $hi = count($this->log);
         while ($lo < $hi) { $m = ($lo + $hi) >> 1; if ($this->log[$m][0] < $since + 1) { $lo = $m + 1; } else { $hi = $m; } }
-        $out = [];
-        for ($i = $lo; $i < count($this->log); $i++) { $out[] = $this->log[$i][2]; }
-        return [$out, $this->version, $this->text];
+        return array_slice($this->log, $lo);
     }
 
     /** The changes from $old to $new by their lines, for an editor too far behind the log to follow the edits themselves. @return list<Change> */

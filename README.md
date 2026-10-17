@@ -64,7 +64,7 @@ Early. What works today, on macOS / Apple Silicon:
 | SVG: icons as masks in any color (turned by `rotate`), pictures in their own colors — paths, shapes, transforms, gradients, strokes and dashes, opacity, clip paths, masks, style sheets — drawn by a renderer in PHP, which also rasterizes path masks (no CoreGraphics) | works (`examples/widgets`, `files`) |
 | Languages and regional formats: the app's language from the user's (or `App::setLocale`, kept in its defaults), MyPHP's own strings and menus in it (en, zh-Hans, zh-Hant), dates, calendars and times in the region's formats and the language's names (ICU through `ext-intl`) | works (`examples/widgets`) |
 | A file manager: sidebar of places, breadcrumbs, the folder as icons or a sortable table sharing one selection, find bar, image preview, Trash through Finder | works (`examples/files`) |
-| Code editor model (mygo's ui/editor): rope text, undo transactions, change log, line diff, selections, words and graphemes, commands and key bindings | works (headless; the view is next) |
+| Code editor model and syntax (mygo's ui/editor): rope text, undo transactions, change log, line diff, selections, words and graphemes, commands and key bindings; 28 languages' tokenizers and the incremental token highlighter | works (headless; the view is next) |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
