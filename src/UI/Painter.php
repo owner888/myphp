@@ -151,6 +151,9 @@ final class Painter
         } elseif ($n->clip !== 0) { // an axis not clipped reaches as far as the clip around it does
             $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : -1e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : -1e6, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : 2e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : 2e6);
         }
+        foreach ($n->ghosts as $g) { // children leaving go under the others
+            self::paint($g, $list, $text, $t, $rt);
+        }
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }

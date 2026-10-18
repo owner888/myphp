@@ -67,6 +67,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Code editor (mygo's ui/editor): rope text, undo, several carets and selections, soft wraps, folding, find and replace (PCRE), go to line, completions, hovers, diagnostics, inlay hints and suggestions, the changes against a base in the gutter, Zed's commands and key bindings, input methods at every caret; 28 languages highlighted incrementally; only the lines in view laid out. Diff viewer: split or unified, incremental, words or characters changed, collapsed unchanged lines, Revert and Keep, line selection, annotations, git patches | works (`examples/code-editor`) |
 | Accessibility: VoiceOver reads and works every widget, the code editor and the diff viewer (mygo's tree of roles, names, states and actions over `NSAccessibilityElement`s) | new, to try with VoiceOver |
 | Transforms (translate, scale, rotate, skew, and in 3D rotateX/rotateY/perspective, backface hidden) and opacity of a node and its children, drawn by the GPU through each quad's map, hit-tested through its inverse (mygo's transform.go) | new |
+| Transitions: nodes moving and resizing from where the last frame showed them, entering and leaving (moved, faded, collapsed, scaled, turned), colors fading, matched nodes coming from where their match was (mygo's transition.go) | new |
 | Animation: curves, springs, delays, jumps, colors, keyframes and loops by node and key (mygo's motion), timelines of tweens placed along one playhead (paused, sought, reversed, repeated), Reduce Motion; the switch, sliders, collapsibles, accordions and sidebar sections move as mygo's | new |
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
@@ -200,6 +201,7 @@ App::run();
 | 文件管理器：常用位置侧栏、路径面包屑、目录以图标或可排序表格显示且共用一个选择、查找条、图片预览、经 Finder 移到废纸篓 | 可用（`examples/files`） |
 | 无障碍：VoiceOver 可朗读并操作所有控件、代码编辑器和 diff 查看器（mygo 的角色、名称、状态与动作树，基于 `NSAccessibilityElement`） | 新加，待 VoiceOver 实测 |
 | 节点及其子节点的变换（平移、缩放、旋转、斜切，以及 3D 的 rotateX/rotateY/perspective、背面隐藏）和透明度，由 GPU 按每个 quad 的映射绘制，命中测试走逆映射（mygo 的 transform.go） | 新加 |
+| 过渡：节点从上一帧的位置和尺寸移动、缩放到新布局，进场和离场（平移、淡入淡出、折叠、缩放、旋转），颜色渐变，匹配节点从对应节点原来的位置过来（mygo 的 transition.go） | 新加 |
 | 动画：按节点和键的曲线、弹簧、延迟、跳变、颜色、关键帧和循环（mygo 的 motion），沿同一播放头编排补间的时间线（可暂停、拖动定位、倒放、重复），遵循「减弱动态效果」；开关、滑块、折叠区、手风琴和侧边栏分组按 mygo 的方式动起来 | 新加 |
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |

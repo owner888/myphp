@@ -319,6 +319,31 @@ trait ContextMotion
     }
 
     /**
+     * Animates $n as $t asks (mygo's Transition): from what the last frame
+     * showed to what the layout makes of it in this one. The node needs the
+     * same id from frame to frame: a key, or the same place among its
+     * siblings. Nodes that the change moves as well need a transition of
+     * their own to move smoothly, the same one to move in step with it, as
+     * the rows of a list. Changes made by resizing the window do not
+     * animate. While the desktop asks for less motion, nothing moves:
+     * colors still change smoothly, and an enter or exit that fades without
+     * collapsing fades in place.
+     */
+    public function transition(Node $n, ElementTransition $t): Node
+    {
+        if ($this->runtime !== null) {
+            $this->runtime->uses[] = [$n, $t];
+        }
+        return $n;
+    }
+
+    /** Whether $n's transition was moving it, or changing its colors, in the frame before: false once it is where it goes (mygo's Transitioning). */
+    public function transitioning(Node $n): bool
+    {
+        return $this->runtime?->transitioning($n->id) ?? false;
+    }
+
+    /**
      * Makes the values that animate in this frame go to their targets at
      * once, as when the window first shows, or the view jumps to a state
      * rather than changing to it (mygo's DisableAnimations).

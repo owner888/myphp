@@ -109,6 +109,9 @@ final class Node
     public float $opacity = 1.0;
     /** The map from the node's layout to the window, its ancestors' transforms included: Runtime::record sets it. */
     public Affine $world;
+    /** @var list<Node> the copies of the children gone with an exit, which go under the others (RuntimeTransition); and, on such a copy, 1 */
+    public array $ghosts = [];
+    public int $leaving = 0;
     /** What of the node's children the node cuts off at its edges: CLIP_X, CLIP_Y or both (clip(), clipY()). */
     public int $clip = 0;
     public const CLIP_X = 1, CLIP_Y = 2;

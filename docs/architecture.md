@@ -1376,6 +1376,33 @@ progress and pause still put and hold it. The options apply in the pass
 they are given in (`Runtime::$pass`), so a button that plays it over shows
 that in the frame it is clicked in.
 
+`Context::transition($node, ElementTransition)` is mygo's transition.go:
+a node moves and resizes from where the last frame showed it to where the
+layout puts it (its place in its parent, its size, its background and
+border colors, as `position`, `size` and `colors` choose; 200 ms easing
+out, or an `Animation`, a spring keeping its velocity, a delay
+staggering), comes in from an `enter` and goes to an `exit`
+(`TransitionMotion`, mygo's Motion: moved, faded, collapsed along its
+parent's direction, scaled and turned), and a node of a `match` comes from
+where the node sharing it showed the frame before, laid out at each size
+on the way, in its colors. `RuntimeTransition` runs after the frame's
+layout and before it is recorded, parents first, with boxes relative to
+the parent's, as mygo's: a node moves with what is inside it
+(`shiftTree`), resizes by laying its children out at the size it shows
+(`Layout::arrange`), collapses by cutting them off (`Node::clip`), fades
+by its opacity and turns by its transform. A node gone with an exit leaves
+as its node of the frame before, in its parent's `ghosts`: painted under
+its siblings, in no record, so it takes neither room, the pointer, the
+focus nor assistive technology's notice, until its exit is over; built
+again meanwhile, it comes back from where its copy was. Nodes appearing
+with a parent that is new too, as a page, appear at once, and changes
+that resizing the window makes do not animate; with less motion nothing
+moves, colors still change smoothly, and what fades without collapsing
+fades in place; `disableAnimations` shows the frame at once.
+`Context::transitioning` reports a node on its way. A border of the
+theme's own, no `borderColor`, changes at once, as the color it is known
+here only when painted.
+
 The widgets move as mygo's: a switch's knob over 140 ms, a slider's knob
 growing into a lens over 150 ms as it is held (a range slider's and a
 color picker's channels too), a collapsible's and an accordion's arrows

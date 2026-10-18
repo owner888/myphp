@@ -17,6 +17,7 @@ use Closure;
 final class Runtime
 {
     use RuntimeAccess;
+    use RuntimeTransition;
 
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
     private array $rects = [];
@@ -282,6 +283,7 @@ final class Runtime
         for ($pass = 0; $pass < 3; $pass++) {
             $this->consumed = false;
             $this->pass = $pass;
+            $this->uses = [];
             $root = $build();
             $this->passes = $pass + 1;
             if (!$this->consumed) {
@@ -291,6 +293,7 @@ final class Runtime
             $this->rightClicks = [];
             $this->doubleClicks = [];
         }
+        $this->animateLayout($root); // with the last frame's rects, before they go
         $this->activated = null; // taken by clicked() during the build, or dropped
         $this->typed = '';
         $this->rects = [];
@@ -552,6 +555,9 @@ final class Runtime
                 $this->lists[$n->id] = $n->scroll;
             }
         }
+        foreach ($n->ghosts as $g) {
+            self::worldTree($g, $n->world); // copies going only show: they are not recorded
+        }
         foreach ($n->kids as $k) {
             $this->record($k, $n, $group, $clip);
         }
@@ -582,6 +588,15 @@ final class Runtime
     {
         $r = $this->rects[$id] ?? [0.0, 0.0];
         return ($this->worlds[$id] ?? Affine::identity())->point($r[0] + $x, $r[1] + $y);
+    }
+
+    /** Works out the worlds of $n, a copy going (RuntimeTransition), and what is inside it, under $parent. */
+    private static function worldTree(Node $n, Affine $parent): void
+    {
+        $n->world = $parent->mul($n->transformAt());
+        foreach ($n->kids as $k) {
+            self::worldTree($k, $n->world);
+        }
     }
 
     /** Whether Context::disableAnimations made this frame's values go to their targets at once. */

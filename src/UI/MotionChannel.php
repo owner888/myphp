@@ -74,6 +74,22 @@ final class MotionChannel
         }
     }
 
+    /** Moves the value, and where it goes, by $d, as what it is relative to moves: it goes on as it went. */
+    public function shift(float $d): void
+    {
+        $this->value += $d; $this->target += $d; $this->from += $d; $this->pendingTo += $d;
+    }
+
+    /** Scales the value, where it goes and how fast, from $was to $to, as what it is a part of grows or shrinks: it goes on as it went, in proportion; a value at $was goes exactly to $to. */
+    public function scale(float $was, float $to): void
+    {
+        $this->value = $this->value * $to / $was;
+        $this->velocity = $this->velocity * $to / $was;
+        $this->target = $this->target * $to / $was;
+        $this->from = $this->from * $to / $was;
+        $this->pendingTo = $this->pendingTo * $to / $was;
+    }
+
     /** Moves the value to $now, heading for a pending target when its delay is over on the way. */
     public function advance(int $now): void
     {
