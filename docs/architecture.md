@@ -1403,6 +1403,22 @@ fades in place; `disableAnimations` shows the frame at once.
 theme's own, no `borderColor`, changes at once, as the color it is known
 here only when painted.
 
+`Node::animatePose(Pose, Animation)` is mygo's pose.go: a node moved,
+scaled, turned and faded after its own transform; `Runtime::record`
+heads its five channels for the pose asked and sets where it shows (the
+pose's map, `Node::$poseM`, before the transform in `transformAt`, and
+its fade, which its opacity is times), so the pointer follows it as it
+follows transforms. mygo moves poses in frames that only paint; frames
+here always build, so a pose moving asks for the next one as any value
+does. With less motion it moves at once and only fades smoothly.
+`Node::contentTransition(ContentTransition)` is mygo's content.go: as a
+text, an icon or a picture changes, the old fades out as the new fades
+in, an icon shrinking away as the new grows in (its old draw closure, in
+the node's box), and numeric text on one line rolls the characters that
+change between those it shares at its start and end, which stay, the end
+sliding to where it goes, each band its own clip (`ContentState`, kept
+from paint to paint in `Runtime::contentStep`).
+
 The widgets move as mygo's: a switch's knob over 140 ms, a slider's knob
 growing into a lens over 150 ms as it is held (a range slider's and a
 color picker's channels too), a collapsible's and an accordion's arrows

@@ -109,6 +109,13 @@ final class Node
     public float $opacity = 1.0;
     /** The map from the node's layout to the window, its ancestors' transforms included: Runtime::record sets it. */
     public Affine $world;
+    /** The pose the node animates to (animatePose) and how, and what its pose shows now: the map after its transform, and how faded it is (Runtime sets them). */
+    public ?Pose $pose = null;
+    public ?Animation $poseAnim = null;
+    public Affine $poseM;
+    public float $poseFade = 0.0;
+    /** How the node's content changes (contentTransition). */
+    public ?ContentTransition $content = null;
     /** @var list<Node> the copies of the children gone with an exit, which go under the others (RuntimeTransition); and, on such a copy, 1 */
     public array $ghosts = [];
     public int $leaving = 0;
@@ -164,6 +171,7 @@ final class Node
     ) {
         $this->transform = Transform::identity();
         $this->world = Affine::identity();
+        $this->poseM = $this->world;
     }
 
     /** Takes this node out of its parent's flow and puts it at ($x, $y) from the parent's top left, at its own size (or size()). Later siblings paint over earlier ones. */
@@ -315,10 +323,43 @@ final class Node
         return $this;
     }
 
+    /**
+     * Moves the node to pose $p as $a says, after its own transform, and
+     * fades it (mygo's AnimatePose): the cheapest motion there is, as Core
+     * Animation runs transforms and opacity. The pointer follows it as it
+     * follows transforms. It starts at the first pose. While the desktop
+     * asks for less motion, it moves at once, and only fades smoothly.
+     *
+     *     $card->animatePose(new Pose(y: $lift, scale: 1.02), Animation::snappy());
+     */
+    public function animatePose(Pose $p, Animation $a): static
+    {
+        foreach ($p->vals() as $v) {
+            if (!is_finite($v)) {
+                throw new \InvalidArgumentException('transform values must be finite');
+            }
+        }
+        if ($a->duration < 0 || $a->delay < 0) {
+            throw new \InvalidArgumentException('animation durations must not be negative');
+        }
+        if ($a->duration == 0) {
+            $a->spring->physics(); // throws now for invalid options
+        }
+        $this->pose = $p; $this->poseAnim = $a;
+        return $this;
+    }
+
+    /** Animates the node's content as it changes, as $t says (mygo's ContentTransition): the text of a text, the icon of an icon, the picture of an image. While the desktop asks for less motion, content fades without moving. */
+    public function contentTransition(ContentTransition $t): static
+    {
+        $this->content = $t;
+        return $this;
+    }
+
     /** The node's map from its layout to the window: its transform around its origin, after its ancestors'. */
     public function transformAt(): Affine
     {
-        $m = $this->transform->flat();
+        $m = $this->poseM->mul($this->transform->flat()); // its pose acts after its own transform
         if (!$m->set) {
             return $m;
         }

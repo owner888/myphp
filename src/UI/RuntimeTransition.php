@@ -326,10 +326,107 @@ trait RuntimeTransition
         }
     }
 
-    /** Whether node $id's transition was moving it, or changing its colors, in the frame before: false once it is where it goes (mygo's Transitioning). */
+    /** Whether node $id's transition was moving it, or changing its colors, or its pose was moving it, in the frame before: false once it is where it goes (mygo's Transitioning). */
     public function transitioning(int $id): bool
     {
+        $p = $this->poses[$id] ?? null;
+        if ($p !== null && $p['frame'] + 1 >= $this->frameNumber && self::posing($p['ch'])) {
+            return true;
+        }
         $r = $this->trans[$id] ?? null;
         return $r !== null && $r->built + 1 >= $this->frameNumber && ($r->moving !== 0 || $r->colorMoving || $r->matching);
+    }
+
+    /** @var array<int, array{ch: list<MotionChannel>, frame: int}> the channels of each posed node's pose (Node::animatePose), and the last frame that posed it */
+    public array $poses = [];
+    /** @var array<int, ContentState> what each node with a content transition showed */
+    public array $contents = [];
+
+    /** @param list<MotionChannel> $ch */
+    private static function posing(array $ch): bool
+    {
+        foreach ($ch as $c) {
+            if ($c->moving || $c->pending) { return true; }
+        }
+        return false;
+    }
+
+    /** Heads $n's pose for the one the view asked for, as the frame is recorded, and sets where it shows (mygo's samplePose and showPose). */
+    private function samplePose(Node $n): void
+    {
+        $now = $this->now;
+        $to = $n->pose->vals();
+        $r = $this->poses[$n->id] ?? null;
+        if ($r === null || $r['frame'] + 1 < $this->frameNumber) {
+            // Not posed in the frame before: it shows there at once.
+            $r = ['ch' => array_map(fn(float $v) => new MotionChannel($v, $now), $to), 'frame' => 0];
+        }
+        $r['frame'] = $this->frameNumber;
+        $still = $this->reduceMotion; $instant = $this->instant();
+        foreach ($r['ch'] as $i => $ch) {
+            if ($instant || ($still && $i < 4)) {
+                $r['ch'][$i] = new MotionChannel($to[$i], $now);
+                continue;
+            }
+            $ch->headFor($to[$i], $n->poseAnim, $now);
+        }
+        $this->poses[$n->id] = $r;
+        $v = [];
+        foreach ($r['ch'] as $i => $ch) {
+            if ($ch->moving || $ch->pending) {
+                $ch->advance($now); // one at rest stays where it is until headFor moves it on, which advances it first
+            }
+            $v[$i] = $ch->value;
+        }
+        $n->poseM = Affine::identity();
+        if ($v[0] != 0 || $v[1] != 0 || $v[2] != 1 || $v[3] != 0) {
+            $n->poseM = Affine::translation($v[0], $v[1])->mul(Affine::rotation($v[3]))->mul(Affine::scaling($v[2], $v[2]));
+        }
+        $n->poseFade = max(0.0, min($v[4], 1.0));
+        if (self::posing($r['ch'])) {
+            $this->animate();
+        }
+    }
+
+    /**
+     * Notes what $n shows now, from ($x, $y), in $color, as it paints, and
+     * returns its record, how far its content changed, and whether it is
+     * changing (mygo's contentStep); while it changes, frames keep coming.
+     * @return array{0: ContentState, 1: float, 2: bool}
+     */
+    public function contentStep(Node $n, float $x, float $y, int $color): array
+    {
+        $now = $this->now;
+        $r = $this->contents[$n->id] ?? null;
+        if ($r === null || $r->frame + 1 < $this->frameNumber) {
+            // Not painted in the frame before: it shows at once.
+            $r = $this->contents[$n->id] = new ContentState();
+            $r->frame = $this->frameNumber; $r->text = $n->text; $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
+            $r->k = new MotionChannel(1.0, $now);
+            return [$r, 1.0, false];
+        }
+        if ($r->frame !== $this->frameNumber) {
+            $r->frame = $this->frameNumber;
+            $changed = $n->kind === Node::TEXT ? $n->text !== $r->text : ($n->svg !== $r->svg || $n->image !== $r->image);
+            if ($changed) {
+                if ($this->instant()) {
+                    $r->k = new MotionChannel(1.0, $now);
+                } else {
+                    $r->oldText = $r->text; $r->oldSvg = $r->svg; $r->oldImage = $r->image; $r->oldDraw = $r->draw;
+                    $r->oldX = $x; $r->oldY = $y; $r->oldColor = $color;
+                    $r->still = $this->reduceMotion;
+                    $r->k = new MotionChannel(0.0, $now);
+                    $r->k->headFor(1.0, $n->content->animation ?? ContentTransition::defaultAnimation(), $now);
+                }
+            }
+            $r->text = $n->text; $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
+            $r->k->advance($now);
+        }
+        if (!$r->k->moving && !$r->k->pending) {
+            $r->oldText = null; $r->oldSvg = null; $r->oldImage = null; $r->oldDraw = null;
+            return [$r, 1.0, false];
+        }
+        $this->animationFrame(); // painting: the frame after is asked for here
+        return [$r, max(0.0, min($r->k->value, 1.0)), true];
     }
 }

@@ -313,7 +313,7 @@ final class Runtime
         $this->needsFrame = false;
         $this->shown = []; $this->worlds = [];
         $this->record($root);
-        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines] as &$moving) {
+        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
         unset($moving);
@@ -468,6 +468,9 @@ final class Runtime
     private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        if ($n->pose !== null) {
+            $this->samplePose($n);
+        }
         $n->world = $parent === null ? $n->transformAt() : $parent->world->mul($n->transformAt()); // its transform after its ancestors' (mygo's world)
         if ($n->world->set) {
             $this->worlds[$n->id] = $n->world;

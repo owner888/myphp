@@ -20,11 +20,12 @@ final class Painter
             return;
         }
         $world = $list->world(); $opacity = $list->opacity();
-        if ($n->opacity < 1) {
-            if ($opacity * $n->opacity <= 0.001) {
+        if ($n->opacity < 1 || $n->poseFade > 0) {
+            $o = $opacity * $n->opacity * (1 - $n->poseFade);
+            if ($o <= 0.001) {
                 return;
             }
-            $list->setOpacity($opacity * $n->opacity);
+            $list->setOpacity($o);
         }
         $list->setWorld($n->world);
         self::node($n, $list, $text, $t, $rt);
@@ -81,7 +82,9 @@ final class Painter
             return;
         }
         if ($n->kind === Node::IMAGE) {
-            self::image($n, $list, $text, $t);
+            if ($n->content === null || $rt === null || !self::contentImage($n, $list, $text, $t, $rt)) {
+                self::image($n, $list, $text, $t);
+            }
             return;
         }
         if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
@@ -138,13 +141,17 @@ final class Painter
                     $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $n->w - $ew))) . '…';
                 }
             }
-            $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
+            if ($n->content === null || $rt === null || $n->kind !== Node::TEXT || !self::contentText($n, $list, $text, $shown, $x, $y, $rt)) {
+                $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
+            }
             if ($n->underline) {
                 $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
             }
         }
         if ($n->draw !== null) {
-            ($n->draw)($list, $n, $t, $text); // over the node's own face, under its children, with the text painter for what needs the atlas
+            if ($n->content === null || $rt === null || $n->svg === null || !self::contentIcon($n, $list, $text, $t, $rt)) {
+                ($n->draw)($list, $n, $t, $text); // over the node's own face, under its children, with the text painter for what needs the atlas
+            }
         }
         if ($n->scroll !== null) {
             $list->pushClip($n->x, $n->y, $n->w, $n->h);
@@ -400,6 +407,110 @@ final class Painter
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
         $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
         self::knob($list, $t, $kx, $cy, $n->held, $n->focusVisible);
+    }
+
+    /**
+     * Paints the text of $n changing, $shown at ($x, $y), and reports whether
+     * it does: no transition otherwise (mygo's contentText). The old fades
+     * out as the new fades in; numeric, on one line and with motion, the
+     * characters the old and the new share at their start and end stay,
+     * the end sliding to where it goes, and those between roll.
+     */
+    private static function contentText(Node $n, DisplayList $list, TextPainter $text, string $shown, float $x, float $y, Runtime $rt): bool
+    {
+        [$r, $k, $changing] = $rt->contentStep($n, $x, $y, $n->fg);
+        if (!$changing || $r->oldText === null) {
+            return false;
+        }
+        $saved = $list->opacity();
+        $old = $r->oldText; $size = $n->fontSize; $style = $n->style;
+        if (!$n->content->numeric || $r->still || str_contains($old, "\n") || str_contains($shown, "\n")) {
+            $list->setOpacity($saved * (1 - $k));
+            $text->paint($list, $old, $size, $r->oldX, $r->oldY, $r->oldColor, $n->alpha, $style);
+            $list->setOpacity($saved * $k);
+            $text->paint($list, $shown, $size, $x, $y, $n->fg, $n->alpha, $style);
+            $list->setOpacity($saved);
+            return true;
+        }
+        // The characters the old and the new text share at their start and at their end stay; those between roll.
+        $a = $old; $b = $shown;
+        $starts = fn(string $s, int $i) => $i >= strlen($s) || (ord($s[$i]) & 0xc0) !== 0x80;
+        $pre = 0;
+        while ($pre < strlen($a) && $pre < strlen($b) && $a[$pre] === $b[$pre]) { $pre++; }
+        while ($pre > 0 && $pre < strlen($b) && !$starts($b, $pre)) { $pre--; }
+        $suf = 0;
+        while ($suf < strlen($a) - $pre && $suf < strlen($b) - $pre && $a[strlen($a) - 1 - $suf] === $b[strlen($b) - 1 - $suf]) { $suf++; }
+        while ($suf > 0 && !$starts($b, strlen($b) - $suf)) { $suf--; }
+        $caret = fn(string $s, int $i) => $text->xForIndex($s, $size, $i, $style);
+        $oldPre = $caret($a, $pre); $oldSuf = $caret($a, strlen($a) - $suf);
+        $curPre = $caret($b, $pre); $curSuf = $caret($b, strlen($b) - $suf);
+        [, $h] = $text->measure($b, $size, $style);
+        $dir = $n->content->down ? -1.0 : 1.0;
+        $far = 1e5;
+        $band = function (float $x0, float $x1, \Closure $fn) use ($list, $y, $far): void {
+            if ($x1 <= $x0) { return; }
+            $list->pushClip($x0, $y - $far, $x1 - $x0, 2 * $far);
+            $fn();
+            $list->popClip();
+        };
+        // What stays: the start, and the end, sliding to where it goes.
+        if ($pre > 0) {
+            $band($x - $far, $x + $curPre, fn() => $text->paint($list, $b, $size, $x, $y, $n->fg, $n->alpha, $style));
+        }
+        $dx = ($oldSuf - $curSuf) * (1 - $k);
+        if ($suf > 0) {
+            $band($x + $curSuf + $dx, $x + $far, fn() => $text->paint($list, $b, $size, $x + $dx, $y, $n->fg, $n->alpha, $style));
+        }
+        // What changes: the old going, the new coming.
+        $list->setOpacity($saved * (1 - $k));
+        $band($x + $oldPre, $x + $oldSuf, fn() => $text->paint($list, $a, $size, $x, $y - $dir * $h * 0.6 * $k, $r->oldColor, $n->alpha, $style));
+        $list->setOpacity($saved * $k);
+        $band($x + $curPre, $x + $curSuf + $dx, fn() => $text->paint($list, $b, $size, $x, $y + $dir * $h * 0.6 * (1 - $k), $n->fg, $n->alpha, $style));
+        $list->setOpacity($saved);
+        return true;
+    }
+
+    /** Paints the icon of $n changing, and reports whether it does: the old shrinking away, the new growing in (mygo's contentIcon); without motion they only fade. */
+    private static function contentIcon(Node $n, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): bool
+    {
+        [$r, $k, $changing] = $rt->contentStep($n, $n->x, $n->y, $n->fg);
+        if (!$changing) {
+            return false;
+        }
+        $saved = $list->opacity();
+        $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2;
+        $scaled = function (float $s, \Closure $fn) use ($list, $r, $cx, $cy): void {
+            if (!$r->still && $s != 1) { $list->transform(Transform::scaling($s, $s), $cx, $cy, $fn); } else { $fn(); }
+        };
+        if ($r->oldDraw !== null) {
+            $list->setOpacity($saved * (1 - $k));
+            $scaled(1 - 0.5 * $k, fn() => ($r->oldDraw)($list, $n, $t, $text)); // the old draw closure, in the node's box
+        }
+        $list->setOpacity($saved * $k);
+        $scaled(0.5 + 0.5 * $k, fn() => ($n->draw)($list, $n, $t, $text));
+        $list->setOpacity($saved);
+        return true;
+    }
+
+    /** Paints the picture of $n changing, and reports whether it does: the old fading out as the new fades in (mygo's contentImage). */
+    private static function contentImage(Node $n, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): bool
+    {
+        [$r, $k, $changing] = $rt->contentStep($n, $n->x, $n->y, $n->fg);
+        if (!$changing) {
+            return false;
+        }
+        $saved = $list->opacity();
+        if ($r->oldSvg !== null || $r->oldImage !== null) {
+            [$svg, $image] = [$n->svg, $n->image];
+            $n->svg = $r->oldSvg; $n->image = $r->oldImage;
+            $list->setOpacity($saved * (1 - $k));
+            self::image($n, $list, $text, $t);
+            $n->svg = $svg; $n->image = $image;
+        }
+        $list->setOpacity($saved * $k);
+        self::image($n, $list, $text, $t);
+        $list->setOpacity($saved);
+        return true;
     }
 
     /** A slider's knob centered at (x, cy), held from 0 to 1, mygo's knobRect: Space(5) by Space(4), growing by 0.35 as it is held. @return array{0: float, 1: float, 2: float, 3: float} */
