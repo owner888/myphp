@@ -25,7 +25,7 @@ function view(Context $c, array &$s): void
       $c->column(0, 12, 1)->scroll($s['scroll']);
         $c->image($s['photo'], $c->width, 0);
         $c->row(16, 10);
-          for ($i = 0; $i < 40; $i++) { $c->box(48, 48, ($i * 2654435761) & 0xffffff); }
+          for ($i = 0; $i < 40; $i++) { $c->box(48, 48, ($i * 2654435761) & 0xffffff)->round(18); }
         $c->end();
         $c->column(16, 8);
           for ($i = 0; $i < 12; $i++) { $c->text("Line $i under the glass — 玻璃下面的文字", 16); }

@@ -6,7 +6,6 @@ namespace MyPHP\UI;
 /** Turns a laid-out tree into display-list quads: fills, labels, clips. */
 final class Painter
 {
-    private const BOX_RADIUS = 18.0;
 
     /**
      * Paints $n and its children through the node's world (its transform
@@ -108,7 +107,7 @@ final class Painter
             $sigma = $g->style === Glass::CLEAR ? $scale : min(max($m * 0.035, 1), 10) * $scale;
             $list->glass($x, $y, $w, $h, $r, $g->style, $g->tint ?? 0, $g->tint === null ? 0.0 : $g->tintAlpha * 0.88, $sigma);
         } elseif ($n->color !== null) {
-            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, Node::BOX => self::BOX_RADIUS, default => $n->radius };
+            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius };
             if ($n->bordered) { // a bordered face: a plain button, a select, a field's box
                 $bw = $n->borderWidth;
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
