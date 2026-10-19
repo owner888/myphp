@@ -12,7 +12,7 @@ use MyPHP\UI\{Animation, Content, Context, DraggableOptions, Font, Motion, Node,
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = (object)['card' => [0.0, 0.0], 'puck' => [0.0, 0.0], 'sheet' => [0.0, 260.0], 'words' => ['apple', 'pear', 'plum'], 'basket' => []];
+$s = (object)['card' => [0.0, 0.0], 'puck' => [0.0, 0.0], 'sheet' => [0.0, 180.0], 'words' => ['apple', 'pear', 'plum'], 'basket' => []];
 
 function view(Context $c, object $s): void
 {
@@ -47,9 +47,9 @@ function view(Context $c, object $s): void
         }
       $c->end();
     $c->end();
-    // A sheet at the bottom: pulled to its heights, past them on a rubber band.
-    $sheet = $c->draggable($c->column(16, 8, 0, $t->surface)->at(0, $c->height - 320)->size($c->width, 320)->round(16)->shadow(-4, 24, 0.2), $s->sheet,
-        new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, 260], snap: Motion::nearest([0, 0], [0, 130], [0, 260])));
+    // A sheet at the bottom, below the rest even pulled all the way up: it rests at three heights, past them on a rubber band.
+    $sheet = $c->draggable($c->column(16, 8, 0, $t->surface)->at(0, $c->height - 240)->size($c->width, 240)->round(16)->shadow(-4, 24, 0.2), $s->sheet,
+        new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, 180], snap: Motion::nearest([0, 0], [0, 90], [0, 180])));
       $c->box(40, 5, $t->border)->round(3)->alignSelf(Node::CENTER);
       $c->text('A sheet', 16, style: Font::BOLD);
       $c->muted($c->dragging($sheet) ? 'Let go to rest at the nearest height.' : 'Pull it up or down: it rests at three heights.', 12);
@@ -58,7 +58,7 @@ function view(Context $c, object $s): void
 
 App::setName('Drag');
 App::whenReady(function () use ($s) {
-    new Window(new WindowOptions(title: 'MyPHP native — Drag', width: 640, height: 560,
+    new Window(new WindowOptions(title: 'MyPHP native — Drag', width: 640, height: 720,
         content: Content::view(fn(Context $c) => view($c, $s))));
 });
 App::run();
