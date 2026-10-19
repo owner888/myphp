@@ -36,6 +36,21 @@ final class Context
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
     private array $trees = [];
 
+    /**
+     * Whether the window shows its material (WindowOptions::$vibrancy)
+     * wherever the view draws no background (mygo's Vibrancy). The root
+     * draws the theme's background unless told otherwise; a sidebar over the
+     * material, beside opaque content:
+     *
+     *     if ($c->vibrancy()) { $c->root->color = null; }
+     */
+    public bool $vibrancy = false;
+
+    public function vibrancy(): bool
+    {
+        return $this->vibrancy;
+    }
+
     /** The room the window controls take in a window with a hidden title bar (Window::titleBar): height, left, right; zero elsewhere. */
     public array $titleBar = ['height' => 0.0, 'left' => 0.0, 'right' => 0.0];
 
@@ -56,7 +71,7 @@ final class Context
     public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null, public float $scale = 1.0)
     {
         $this->theme ??= Theme::light();
-        $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, null);
+        $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, $this->theme->background);
         $this->stack = [$this->root];
     }
 
@@ -609,13 +624,13 @@ final class Context
               if ($this->hovered($more)) { $more->color = $t->surfaceHover; }
               $this->end();
               if ($rt !== null && ($this->clicked($more) || ($more->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
-                  $window = Window::key();
+                  $window = Window::focused();
                   $menu = [];
                   foreach ($overflow as $k) { // choosing an item does what clicking the control does; a divider is a separator
                       $label = $k->text ?? self::labelOf($k);
                       if ($label === null) { $menu[] = MenuItem::separator(); continue; }
                       $id = $k->id;
-                      $menu[] = new MenuItem($label, function (MenuItem $it, ?Window $w) use ($rt, $id) { $rt->press($id); $w?->update(); });
+                      $menu[] = new MenuItem($label, function (MenuItem $it, ?Window $w) use ($rt, $id) { $rt->press($id); $w?->invalidate(); });
                   }
                   if ($window !== null) { (new Menu($menu))->popupAt($window, $more->id, $rt); }
               }
@@ -2058,10 +2073,10 @@ final class Context
         $n->chevron = true;
         $rt = $this->runtime;
         if ($rt !== null && ($this->clicked($n) || ($n->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
-            $window ??= Window::key();
+            $window ??= Window::focused();
             $menu = [];
             foreach ($items as $text => $fn) {
-                $menu[] = new MenuItem($text, function (MenuItem $it, ?Window $w) use ($fn) { $fn(); $w?->update(); });
+                $menu[] = new MenuItem($text, function (MenuItem $it, ?Window $w) use ($fn) { $fn(); $w?->invalidate(); });
             }
             if ($window !== null) {
                 (new Menu($menu))->popupAt($window, $n->id, $rt);
@@ -2764,11 +2779,11 @@ final class Context
             $n->changed = true;
         }
         if ($rt?->clicked($n->id) || ($n->id === $rt?->focus && $this->shortcut(Key::DOWN))) { // a click, Enter, Space or Down while focused, as a menu button's
-            $window ??= Window::key();
+            $window ??= Window::focused();
             $items = [];
             $id = $n->id;
             foreach ($options as $i => $o) {
-                $items[] = new MenuItem($o, function (MenuItem $it, ?Window $w) use ($rt, $id, $i) { $rt->chose($id, $i); $w?->update(); }, checked: $i === $index, type: MenuItem::CHECKBOX);
+                $items[] = new MenuItem($o, function (MenuItem $it, ?Window $w) use ($rt, $id, $i) { $rt->chose($id, $i); $w?->invalidate(); }, checked: $i === $index, type: MenuItem::CHECKBOX);
             }
             if ($window !== null) {
                 (new Menu($items))->popupAt($window, $n->id, $rt);

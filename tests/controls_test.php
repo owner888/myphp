@@ -217,8 +217,8 @@ same([[0.0, 2.5, 10.0, 5.0], [0.0, 0.0, 1.0, 1.0], 10.0, 5.0], $fit(Node::SCALE_
 same([[4.0, 4.5, 2.0, 1.0], [0.0, 0.0, 1.0, 1.0], 2.0, 1.0], array_map(fn($v) => is_array($v) ? array_map(fn($x) => round($x, 3), $v) : round($v, 3), Painter::fitIn(0, 0, 10, 10, 2, 1, Node::SCALE_DOWN)), 'scale down: its own size when smaller, centered');
 same([[0.0, 0.0, 10.0, 10.0], [0.25, 0.0, 0.5, 1.0], 20.0, 10.0], $fit(Node::NATURAL_SIZE), 'natural size: centered, cropped');
 $h = new Headless(function (Context $c) use (&$n, $art) { $n['g'] = $c->image($art, 20, 10)->grayscale(); $n['c'] = $c->image($art, 10, 10)->fit(Node::COVER); }, 300, 100);
-$h->frame(); $list = $h->paint(); same([12.0, 2.0], [$list->buf[9], $list->buf[16 + 9]], 'a gray image is quad kind 12, a colored one 2');
-same([5.0, 10.0, 10.0], [$list->buf[16 + 10], $list->buf[16 + 4], $list->buf[16 + 5]], 'cover shows the middle half of the slot, from u = 5 (fake slots are the pixel size, 20 × 10)');
+$h->frame(); $list = $h->paint(); same([12.0, 2.0], [$list->buf[16 + 9], $list->buf[32 + 9]], 'a gray image is quad kind 12, a colored one 2 (after the root\'s background)');
+same([5.0, 10.0, 10.0], [$list->buf[32 + 10], $list->buf[32 + 4], $list->buf[32 + 5]], 'cover shows the middle half of the slot, from u = 5 (fake slots are the pixel size, 20 × 10)');
 same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and last words');
 
 // Images shown far smaller than their pixels come from a halving: each pixel the average of the 2 × 2 it covers; an odd last column counts twice.

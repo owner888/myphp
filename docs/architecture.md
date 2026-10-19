@@ -1092,6 +1092,46 @@ seconds at rest the caret stays on and the frames stop, as in mygo.
 
 ## System integration
 
+`Window` has mygo's methods over `NSWindow`: shown with the keyboard or
+without (`show`, `showInactive`, `hide`, `focus`, `blur`), minimized,
+zoomed (`maximize`, `unmaximize`, `toggleMaximize`; maximized is zoomed
+and not in full screen), in full screen, centered; its bounds and its
+content's (`Rectangle`, in points from the top-left corner of the primary
+screen, as mygo's: AppKit's frames are flipped by the primary screen's
+height), size and position, the least and most it may be resized to;
+whether it resizes, moves, minimizes, zooms (the zoom button enabled),
+closes (style mask bits), stays on top (the floating level), its opacity,
+its shadow, whether it lets the pointer through and keeps out of screen
+captures; the file it shows (`setRepresentedFile`, the title bar's proxy
+icon) and whether it is edited (the dot in the close button); the Dock
+icon's progress (`setProgressBar`, `Native\Dock`: two custom NSBoxes, as
+NSProgressIndicator does not draw in a Dock tile), the Dock icon bouncing
+for attention (`flashFrame`) and all Spaces (`setVisibleOnAllWorkspaces`).
+`close` asks the 'close' listeners, as the close button does, and
+`destroy` does not; a child window (`WindowOptions::$parent`) stays above
+its parent, as a child window of it, or, `modal`, is its sheet. Its
+events are mygo's, 'show', 'hide', 'readyToShow' (once: its page ready,
+or native UI drawn), 'maximize' and 'unmaximize' (as a resize changes the
+zoomed state) among them. `WindowOptions` is mygo's as far as done: the
+size is the window's unless `useContentSize`, the window is frameless or
+lacks any of its controls, starts maximized or in full screen, on top,
+translucent. A window's content view is a container (as mygo's: WebKit docks the
+inspector beside the web view, in its superview, and AppKit draws a
+broken title bar if that is the frame view), holding the page or the
+Metal view and, behind it, the material of `setVibrancy`
+(`NSVisualEffectView`, behind the window, active; mygo's material names).
+With a material, or `WindowOptions::$transparent` (the window not opaque,
+its background clear), the page draws no background and the Metal layer
+is not opaque and clears to transparent: the root of native UI paints the
+theme's background, as mygo's does, and a view taking it away
+(`$c->root->color = null`, where `Context::vibrancy()` says the material
+shows) shows what is behind. `setBackgroundColor` takes mygo's CSS colors
+or light-dark() (`Background`), the window's own and the page's under-page
+color, the appearance's on a theme change.
+`Window::invalidate` asks for a frame and `update($fn)` runs
+$fn first (mygo's Invalidate and Update); `Window::focused` and `byId`
+find windows.
+
 `Tray` is an `NSStatusItem`: with a menu, `setMenu:` shows it on click;
 without one, the item's button gets a PHP target with `sendActionOn:`
 left and right mouse-up, and `NSApp currentEvent` tells which. Icons are

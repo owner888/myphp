@@ -15,7 +15,7 @@ use RuntimeException;
  */
 final class App
 {
-    public const VERSION = '0.71.0';
+    public const VERSION = '0.73.0';
     /** @var list<Closure> */
     private static array $whenReady = [];
     private static bool $ready = false;
@@ -77,7 +77,7 @@ final class App
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
             'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change
                 self::$reduceMotion = null;
-                foreach (Window::all() as $w) { $w->update(); }
+                foreach (Window::all() as $w) { $w->invalidate(); }
             }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
@@ -327,7 +327,7 @@ final class App
     {
         $scale = 1.0;
         foreach (Window::all() as $w) {
-            $scale = max($scale, ObjC::msg('d:', $w->native(), 'backingScaleFactor'));
+            $scale = max($scale, ObjC::msg('d:', $w->nativeHandle(), 'backingScaleFactor'));
         }
         if ($scale === self::$scale) {
             return;
@@ -336,7 +336,7 @@ final class App
         self::$text->rescale($scale);
         self::$metal->setAtlasScale($scale);
         foreach (Window::all() as $w) {
-            $w->update();
+            $w->invalidate();
         }
     }
 

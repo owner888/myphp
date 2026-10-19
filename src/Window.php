@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Access, Drop, Metal, ObjC, Pasteboard, View, WebView};
+use MyPHP\Native\{Access, Dock, Drop, Metal, ObjC, Pasteboard, View, WebView};
 use MyPHP\UI\{AccessTree, Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
@@ -17,6 +17,19 @@ use RuntimeException;
 final class Window
 {
     private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15;
+    private const NORMAL_LEVEL = 0, FLOATING_LEVEL = 3;
+    private const FULL_SCREEN_PRIMARY = 1 << 7, FULL_SCREEN_AUXILIARY = 1 << 8, FULL_SCREEN_NONE = 1 << 9, CAN_JOIN_ALL_SPACES = 1 << 0;
+    /** The parent window, of a child window (WindowOptions::$parent), and whether it is its sheet ($modal) and shows as one. */
+    private ?Window $parent = null;
+    private bool $modal = false, $sheet = false;
+    /** The title the app set, the file the window shows and whether it is edited (setRepresentedFile, setDocumentEdited). */
+    private string $title = '', $representedFile = '';
+    private bool $documentEdited = false;
+    /** Whether the window was closed; whether it is maximized, as the last resize found; whether it drew, or its page got, ready to show. */
+    private bool $destroyed = false, $maximized = false, $readyShown = false;
+    /** The request for the user's attention FlashFrame made, and whether a full screen none window was let onto all Spaces as an auxiliary. */
+    private int $attention = 0;
+    private bool $auxiliary = false;
     private bool $hiddenTitleBar = false;
     /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
     private ?array $trafficLights = null;
@@ -29,6 +42,11 @@ final class Window
 
     private $ns;
     private $view = null;
+    /** The window's content view, which holds the page or the native view, and the material behind it (setVibrancy), as mygo's: AppKit draws a broken title bar for a web inspector docked in the window's frame view. */
+    private $container = null, $effect = null;
+    /** The window's background (setBackgroundColor), and whether it is transparent (WindowOptions::$transparent). */
+    private ?Background $background = null;
+    private bool $transparent = false;
     private ?WebView $page = null;
     private string $secret = '';
     private bool $pageReady = false;
@@ -43,7 +61,7 @@ final class Window
     private string $stateKey = '';
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
-    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
     /** @var array<int, Window> by content view address, for drops */
     private static array $byView = [];
 
@@ -66,22 +84,40 @@ final class Window
         }
 
         $this->stateKey = $o->stateKey;
-        $rect = ObjC::rect($o->x, $o->y, $o->width, $o->height);
+        $this->parent = $o->parent; $this->modal = $o->modal;
         $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
-        $style = self::TITLED | self::CLOSABLE | self::MINIATURIZABLE | ($o->disableResize ? 0 : self::RESIZABLE);
-        $this->hiddenTitleBar = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
-        if ($this->hiddenTitleBar) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
-        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $rect, $style, self::BACKING_BUFFERED, false);
+        $style = self::TITLED | ($o->disableClose ? 0 : self::CLOSABLE) | ($o->disableMinimize ? 0 : self::MINIATURIZABLE) | ($o->disableResize ? 0 : self::RESIZABLE);
+        $hidden = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
+        $this->hiddenTitleBar = $hidden && !$o->frameless; // the traffic lights stay, over the view
+        if ($hidden || $o->frameless) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
+        $content = ObjC::rect(0, 0, $o->width, $o->height);
+        if (!$o->useContentSize) { // the size is the window's: the content's is what its frame leaves
+            $content = ObjC::msg('r:rL', ObjC::cls('NSWindow'), 'contentRectForFrameRect:styleMask:', $content, $style);
+            $content = ObjC::rect(0, 0, $content->w, $content->h);
+        }
+        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $content, $style, self::BACKING_BUFFERED, false);
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
-        if ($this->hiddenTitleBar) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
+        ObjC::msg('v:l', $this->ns, 'setTabbingMode:', 2); // NSWindowTabbingModeDisallowed
+        if ($hidden || $o->frameless) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
             ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
             ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
-            if ($o->titleBarStyle === 'hiddenInset') {
-                $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
-                ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
-                ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
-            }
         }
+        if ($o->frameless) {
+            for ($i = 0; $i < 3; $i++) { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setHidden:', true); }
+        }
+        if ($o->titleBarStyle === 'hiddenInset' && !$o->frameless) {
+            $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
+            ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
+            ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
+        }
+        if ($o->minWidth > 0 || $o->minHeight > 0) { $this->setMinimumSize($o->minWidth, $o->minHeight); }
+        if ($o->maxWidth > 0 || $o->maxHeight > 0) { $this->setMaximumSize($o->maxWidth, $o->maxHeight); }
+        ObjC::msg('v:b', $this->ns, 'setMovable:', !$o->disableMove);
+        if ($o->disableMaximize) { $this->setMaximizable(false); }
+        ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', $o->disableFullScreen ? self::FULL_SCREEN_NONE : self::FULL_SCREEN_PRIMARY);
+        if ($o->alwaysOnTop) { ObjC::msg('v:l', $this->ns, 'setLevel:', self::FLOATING_LEVEL); }
+        ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
+        if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
         if ($saved !== null) {
             ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
         }
@@ -95,6 +131,7 @@ final class Window
                 function (string $raw) {
                     if ($raw === '{"t":"dom-ready"}') {
                         $this->pageReady = true;
+                        $this->readyToShow();
                         $this->dropChannels(); // a new page: the old one's channels are gone
                         $callbacks = $this->whenPageReady;
                         $this->whenPageReady = [];
@@ -120,7 +157,22 @@ final class Window
             $view = $this->view;
             $this->runtime->onAccess = fn(AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
         }
-        ObjC::msg('v:p', $this->ns, 'setContentView:', $this->view);
+        $bounds = ObjC::msg('r:', $this->view, 'frame');
+        $this->container = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, $bounds->w, $bounds->h));
+        ObjC::msg('v:L', $this->view, 'setAutoresizingMask:', 18); // width and height sizable
+        ObjC::msg('v:p', $this->container, 'addSubview:', $this->view);
+        ObjC::msg('v:p', $this->ns, 'setContentView:', $this->container);
+        $this->transparent = $o->transparent;
+        if ($o->transparent) {
+            ObjC::msg('v:b', $this->ns, 'setOpaque:', false);
+            ObjC::msg('v:p', $this->ns, 'setBackgroundColor:', ObjC::msg('p:', ObjC::cls('NSColor'), 'clearColor'));
+            $this->clearContent();
+        } elseif ($o->backgroundColor !== '') {
+            $this->setBackgroundColor($o->backgroundColor);
+        }
+        if ($o->vibrancy !== '') {
+            $this->setVibrancy($o->vibrancy);
+        }
         ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
         $delegate = self::delegate();
         ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
@@ -142,7 +194,16 @@ final class Window
         });
         if ($saved === null && $o->x === 0 && $o->y === 0) {
             $this->center();
+        } elseif ($saved === null) {
+            $b = $this->bounds();
+            $this->setBounds(new Rectangle($o->x, $o->y, $b->width, $b->height));
         }
+        if ($o->fullScreen) {
+            ObjC::msg('v:p', $this->ns, 'toggleFullScreen:', null);
+        } elseif ($o->maximized) {
+            ObjC::msg('v:p', $this->ns, 'zoom:', null);
+        }
+        $this->maximized = $this->isMaximized();
         if (!$o->hidden) {
             $this->show();
         }
@@ -164,6 +225,7 @@ final class Window
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
                     $c->titleBar = $this->titleBar();
+                    $c->vibrancy = $this->effect !== null;
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
                     Layout::measure($c->root);
@@ -192,6 +254,7 @@ final class Window
                 if (getenv('MYPHP_STATS')) {
                     $this->stat($t0, $list);
                 }
+                $this->readyToShow(); // it drew its first frame
             });
     }
 
@@ -218,24 +281,6 @@ final class Window
             $ch->closedByPage();
         }
         $this->channels = [];
-    }
-
-    public function minimize(): void
-    {
-        ObjC::msg('v:p', $this->ns, 'miniaturize:', null);
-    }
-
-    /** Whether the window is zoomed to fill the screen (macOS's maximize). */
-    public function isMaximized(): bool
-    {
-        return ObjC::msg('b:', $this->ns, 'isZoomed');
-    }
-
-    public function setMaximized(bool $on): void
-    {
-        if ($this->isMaximized() !== $on) {
-            ObjC::msg('v:p', $this->ns, 'zoom:', null);
-        }
     }
 
     /**
@@ -311,11 +356,6 @@ final class Window
         if ($event !== null) { ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $event); }
     }
 
-    public function toggleFullScreen(): void
-    {
-        ObjC::msg('v:p', $this->ns, 'toggleFullScreen:', null);
-    }
-
     /** The window's web page, or null for native UI. */
     public function page(): ?WebView
     {
@@ -369,6 +409,10 @@ final class Window
                 if ($w !== null) {
                     if ($event === 'resize') {
                         $w->layoutTrafficLights();
+                        if (($z = $w->isMaximized()) !== $w->maximized) {
+                            $w->maximized = $z;
+                            $w->emit($z ? 'maximize' : 'unmaximize');
+                        }
                         if ($w->page === null) { ObjC::msg('v:', $w->view, 'draw'); } // a frame at the new size now, before this step of the resize is committed, as mygo's setFrameSize: asks: asked for later, it would come a step late and the layer would stretch the last one meanwhile
                     }
                     $w->emit($event);
@@ -394,6 +438,8 @@ final class Window
                     $w = self::$open[ObjC::addr($ns)] ?? null;
                     unset(self::$open[ObjC::addr($ns)]);
                     if ($w !== null) {
+                        $w->destroyed = true;
+                        if ($w->attention !== 0) { $w->flashFrame(false); }
                         unset(self::$byView[ObjC::addr($w->view)]);
                         if ($w->runtime !== null) { Access::detach($w->view); }
                         $w->dropChannels();
@@ -469,40 +515,287 @@ final class Window
         ObjC::msg('v:', ObjC::msg('p:', ObjC::cls('NSCursor'), match ($cursor) { 'pointer' => 'pointingHandCursor', 'ibeam' => 'IBeamCursor', 'resizeEW' => 'resizeLeftRightCursor', 'resizeNS' => 'resizeUpDownCursor', 'crosshair' => 'crosshairCursor', default => 'arrowCursor' }), 'set');
     }
 
-    /** The theme changed: native UI clears to its background and redraws. */
+    /** The theme changed: native UI clears to its background and redraws; a background of a light and a dark color shows the appearance's. */
     public function themeChanged(): void
     {
         $this->layoutTrafficLights(); // AppKit lays the title bar out again with the appearance
+        if ($this->background !== null) {
+            $this->applyBackground();
+        }
         if ($this->page === null) {
-            Metal::setClearColor($this->view, App::theme()->background);
-            $this->update();
+            if (!$this->transparent && $this->effect === null) {
+                Metal::setClearColor($this->view, App::theme()->background);
+            }
+            $this->invalidate();
         }
     }
 
-    /** Asks for a frame after state changed outside the view function (native UI). */
-    public function update(): void
+    /**
+     * Sets the color shown behind the page, or around native UI where it
+     * draws nothing, as WindowOptions::$backgroundColor says it: a CSS color
+     * or light-dark(<light>, <dark>), which follows the appearance.
+     */
+    public function setBackgroundColor(string $color): void
     {
-        if ($this->page === null) {
+        $this->background = Background::parse($color);
+        $this->applyBackground();
+    }
+
+    private function applyBackground(): void
+    {
+        [$r, $g, $b, $a] = $this->background->for(App::theme()->dark);
+        $c = ObjC::msg('p:dddd', ObjC::cls('NSColor'), 'colorWithSRGBRed:green:blue:alpha:', $r / 255, $g / 255, $b / 255, $a / 255);
+        ObjC::msg('v:p', $this->ns, 'setBackgroundColor:', $c);
+        if ($this->page !== null) {
+            ObjC::msg('v:pp', $this->view, 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false), ObjC::str('drawsBackground'));
+            if (ObjC::msg('b:p', $this->view, 'respondsToSelector:', ObjC::sel('setUnderPageBackgroundColor:'))) {
+                ObjC::msg('v:p', $this->view, 'setUnderPageBackgroundColor:', $c);
+            }
+        }
+    }
+
+    /** Lets what is behind the content show where it draws nothing: a page draws no background, native UI clears to transparent where its root's background is taken away. */
+    private function clearContent(): void
+    {
+        if ($this->page !== null) {
+            ObjC::msg('v:pp', $this->view, 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false), ObjC::str('drawsBackground'));
+            return;
+        }
+        ObjC::msg('v:b', ObjC::msg('p:', $this->view, 'layer'), 'setOpaque:', false);
+        Metal::setClearColor($this->view, 0, 0.0);
+    }
+
+    /** The NSVisualEffectView materials of WindowOptions::$vibrancy, as mygo's (Windows 11's backdrops as their nearest). */
+    private const MATERIALS = [
+        'titlebar' => 3, 'selection' => 4, 'menu' => 5, 'popover' => 6, 'sidebar' => 7, 'header' => 10,
+        'sheet' => 11, 'window' => 12, 'hud' => 13, 'fullscreen-ui' => 15, 'tooltip' => 17, 'content' => 18,
+        'under-window' => 21, 'under-page' => 22, 'mica' => 21, 'tabbed' => 21, 'acrylic' => 13,
+    ];
+
+    /**
+     * Puts a translucent, blurred material behind the content (mygo's
+     * SetVibrancy), '' for none: it shows behind a page that draws no
+     * background, and behind native UI where it draws none, as the root
+     * does once its background is taken away (Context::vibrancy says it
+     * shows).
+     */
+    public function setVibrancy(string $material): void
+    {
+        if ($material !== '' && !isset(self::MATERIALS[$material])) {
+            throw new \InvalidArgumentException("no vibrancy \"$material\"");
+        }
+        if ($material === '') {
+            if ($this->effect !== null) {
+                ObjC::msg('v:', $this->effect, 'removeFromSuperview');
+                ObjC::msg('v:', $this->effect, 'release');
+                $this->effect = null;
+                if ($this->page === null && !$this->transparent) {
+                    ObjC::msg('v:b', ObjC::msg('p:', $this->view, 'layer'), 'setOpaque:', true);
+                    Metal::setClearColor($this->view, App::theme()->background);
+                }
+            }
+            $this->invalidate();
+            return;
+        }
+        if ($this->effect === null) {
+            $this->effect = ObjC::msg('p:r', ObjC::alloc('NSVisualEffectView'), 'initWithFrame:', ObjC::msg('r:', $this->container, 'bounds'));
+            ObjC::msg('v:l', $this->effect, 'setBlendingMode:', 0); // NSVisualEffectBlendingModeBehindWindow
+            ObjC::msg('v:l', $this->effect, 'setState:', 1); // NSVisualEffectStateActive
+            ObjC::msg('v:L', $this->effect, 'setAutoresizingMask:', 18);
+            ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $this->effect, -1, null); // NSWindowBelow: behind the content
+            $this->clearContent();
+        }
+        ObjC::msg('v:l', $this->effect, 'setMaterial:', self::MATERIALS[$material]);
+        $this->invalidate(); // native UI looks again whether the material shows
+    }
+
+    /** Asks for a frame after state changed outside the view function (native UI, mygo's Invalidate). */
+    public function invalidate(): void
+    {
+        if ($this->page === null && !$this->destroyed) {
             Metal::requestFrame($this->view);
         }
     }
 
+    /** Runs $fn, which changes the state the view shows, and asks for a frame that shows it (mygo's Update). */
+    public function update(\Closure $fn): void
+    {
+        $fn();
+        $this->invalidate();
+    }
+
+    /** The window's id, unique in the app; the page sees it as window.myphp.windowId (mygo's ID). */
+    public function id(): int
+    {
+        return $this->id;
+    }
+
+    /** Whether the window was closed. */
+    public function isDestroyed(): bool
+    {
+        return $this->destroyed;
+    }
+
+    /** The parent window (WindowOptions::$parent), or null. */
+    public function parent(): ?Window
+    {
+        return $this->parent;
+    }
+
+    /** Closes the window as a click on its close button would: 'close' listeners can keep it open (CloseEvent::cancel). */
+    public function close(): void
+    {
+        if ($this->destroyed) {
+            return;
+        }
+        $e = new CloseEvent($this);
+        foreach ($this->listeners['close'] ?? [] as $fn) {
+            $fn($e);
+        }
+        if (!$e->canceled) {
+            $this->destroy();
+        }
+    }
+
+    /** Closes the window without asking its 'close' listeners. */
+    public function destroy(): void
+    {
+        if ($this->destroyed) {
+            return;
+        }
+        if ($this->sheet) {
+            $this->sheet = false;
+            ObjC::msg('v:p', $this->parent->ns, 'endSheet:', $this->ns);
+        }
+        ObjC::msg('v:', $this->ns, 'close');
+    }
+
+    /** Shows the window and gives it the keyboard; a modal child shows as a sheet of its parent, another stays above it. */
     public function show(): void
     {
-        ObjC::msg('v:p', $this->ns, 'makeKeyAndOrderFront:', null);
-        $this->update();
+        $visible = $this->isVisible();
+        if ($this->parent !== null && $this->modal && !$this->sheet) {
+            $this->sheet = true;
+            ObjC::msg('v:pp', $this->parent->ns, 'beginSheet:completionHandler:', $this->ns, null);
+        } elseif (!$this->sheet) {
+            ObjC::msg('v:p', $this->ns, 'makeKeyAndOrderFront:', null);
+            if ($this->parent !== null && !$this->parent->destroyed) {
+                ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1); // NSWindowAbove
+            }
+            ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+        }
+        $this->invalidate();
+        if (!$visible) {
+            $this->emit('show');
+        }
+    }
+
+    /** Shows the window without giving it the keyboard. */
+    public function showInactive(): void
+    {
+        $visible = $this->isVisible();
+        ObjC::msg('v:', $this->ns, 'orderFrontRegardless');
+        if ($this->parent !== null && !$this->parent->destroyed) {
+            ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1);
+        }
+        $this->invalidate();
+        if (!$visible) {
+            $this->emit('show');
+        }
     }
 
     public function hide(): void
     {
-        ObjC::msg('v:p', $this->ns, 'orderOut:', null);
+        if (!$this->isVisible()) {
+            return;
+        }
+        if ($this->sheet) {
+            $this->sheet = false;
+            ObjC::msg('v:p', $this->parent->ns, 'endSheet:', $this->ns);
+        } else {
+            ObjC::msg('v:p', $this->ns, 'orderOut:', null);
+        }
+        $this->emit('hide');
     }
 
-    public function close(): void
+    public function isVisible(): bool
     {
-        ObjC::msg('v:', $this->ns, 'close');
+        return ObjC::msg('b:', $this->ns, 'isVisible');
     }
 
+    /** Gives the window the keyboard, and the app with it. */
+    public function focus(): void
+    {
+        ObjC::msg('v:p', $this->ns, 'makeKeyAndOrderFront:', null);
+        ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+    }
+
+    /** Sends the window behind the others. */
+    public function blur(): void
+    {
+        ObjC::msg('v:p', $this->ns, 'orderBack:', null);
+    }
+
+    /** Whether the window has the keyboard. */
+    public function isFocused(): bool
+    {
+        return ObjC::msg('b:', $this->ns, 'isKeyWindow');
+    }
+
+    public function minimize(): void
+    {
+        ObjC::msg('v:p', $this->ns, 'miniaturize:', null);
+    }
+
+    public function isMinimized(): bool
+    {
+        return ObjC::msg('b:', $this->ns, 'isMiniaturized');
+    }
+
+    /** Zooms the window to fill the screen (macOS's maximize). */
+    public function maximize(): void
+    {
+        if (!$this->isMaximized()) { ObjC::msg('v:p', $this->ns, 'zoom:', null); }
+    }
+
+    public function unmaximize(): void
+    {
+        if ($this->isMaximized()) { ObjC::msg('v:p', $this->ns, 'zoom:', null); }
+    }
+
+    public function toggleMaximize(): void
+    {
+        $this->isMaximized() ? $this->unmaximize() : $this->maximize();
+    }
+
+    /** Whether the window is zoomed to fill the screen, not in full screen. */
+    public function isMaximized(): bool
+    {
+        return ObjC::msg('b:', $this->ns, 'isZoomed') && !$this->isFullScreen();
+    }
+
+    /** Brings a minimized window back. */
+    public function restore(): void
+    {
+        if ($this->isMinimized()) { ObjC::msg('v:p', $this->ns, 'deminiaturize:', null); }
+    }
+
+    public function setFullScreen(bool $on): void
+    {
+        if ($on !== $this->isFullScreen()) { ObjC::msg('v:p', $this->ns, 'toggleFullScreen:', null); }
+    }
+
+    public function toggleFullScreen(): void
+    {
+        $this->setFullScreen(!$this->isFullScreen());
+    }
+
+    public function isFullScreen(): bool
+    {
+        return (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN) !== 0;
+    }
+
+    /** Moves the window to the center of its screen. */
     public function center(): void
     {
         ObjC::msg('v:', $this->ns, 'center');
@@ -510,41 +803,301 @@ final class Window
 
     public function setTitle(string $title): void
     {
+        $this->title = $title;
         ObjC::msg('v:p', $this->ns, 'setTitle:', ObjC::str($title));
         $this->layoutTrafficLights();
     }
 
-    /** @return array{0: int, 1: int} content size in points */
-    public function size(): array
+    /** The title setTitle set. */
+    public function title(): string
     {
-        $r = ObjC::msg('r:', ObjC::msg('p:', $this->ns, 'contentView'), 'frame');
-        return [(int)$r->w, (int)$r->h];
+        return $this->title;
     }
 
+    /** Tells which file the window shows, '' for none: the title bar shows its icon, which the user can drag, and a Command-click on the title lists the folders it is in. */
+    public function setRepresentedFile(string $path): void
+    {
+        if ($path !== '' && ($real = realpath($path)) !== false) {
+            $path = $real;
+        } elseif ($path !== '' && $path[0] !== '/') {
+            $path = getcwd() . '/' . $path;
+        }
+        $this->representedFile = $path;
+        ObjC::msg('v:p', $this->ns, 'setRepresentedURL:', $path === '' ? null : ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path)));
+        $this->layoutTrafficLights(); // AppKit lays the title bar's buttons out again
+    }
+
+    public function representedFile(): string
+    {
+        return $this->representedFile;
+    }
+
+    /** Tells whether the window's document has unsaved changes: a dot in the close button, and the file's icon dimmed. */
+    public function setDocumentEdited(bool $edited): void
+    {
+        if ($this->documentEdited === $edited) {
+            return;
+        }
+        $this->documentEdited = $edited;
+        ObjC::msg('v:b', $this->ns, 'setDocumentEdited:', $edited);
+        $this->layoutTrafficLights();
+    }
+
+    public function isDocumentEdited(): bool
+    {
+        return $this->documentEdited;
+    }
+
+    /** Moves and resizes the window. */
+    public function setBounds(Rectangle $r): void
+    {
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', self::toMac($r), true);
+    }
+
+    /** Where the window is, and its size. */
+    public function bounds(): Rectangle
+    {
+        return self::fromMac(ObjC::msg('r:', $this->ns, 'frame'));
+    }
+
+    /** Moves and resizes the window so that its content has bounds $r. */
+    public function setContentBounds(Rectangle $r): void
+    {
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::msg('r:r', $this->ns, 'frameRectForContentRect:', self::toMac($r)), true);
+    }
+
+    /** Where the window's content is, and its size. */
+    public function contentBounds(): Rectangle
+    {
+        return self::fromMac(ObjC::msg('r:r', $this->ns, 'contentRectForFrameRect:', ObjC::msg('r:', $this->ns, 'frame')));
+    }
+
+    /** Resizes the window. */
     public function setSize(int $width, int $height): void
+    {
+        $b = $this->bounds();
+        $this->setBounds(new Rectangle($b->x, $b->y, $width, $height));
+    }
+
+    /** The window's size. @return array{0: int, 1: int} */
+    public function size(): array
+    {
+        $b = $this->bounds();
+        return [$b->width, $b->height];
+    }
+
+    /** Resizes the window so that its content has this size. */
+    public function setContentSize(int $width, int $height): void
+    {
+        $b = $this->contentBounds();
+        $this->setContentBounds(new Rectangle($b->x, $b->y, $width, $height));
+    }
+
+    /** The size of the window's content. @return array{0: int, 1: int} */
+    public function contentSize(): array
+    {
+        $b = $this->contentBounds();
+        return [$b->width, $b->height];
+    }
+
+    /** Moves the window's top-left corner. */
+    public function setPosition(int $x, int $y): void
+    {
+        $b = $this->bounds();
+        $this->setBounds(new Rectangle($x, $y, $b->width, $b->height));
+    }
+
+    /** The window's top-left corner. @return array{0: int, 1: int} */
+    public function position(): array
+    {
+        $b = $this->bounds();
+        return [$b->x, $b->y];
+    }
+
+    /** How small the user can make the window; 0 for no limit. */
+    public function setMinimumSize(int $width, int $height): void
     {
         $s = ObjC::$c->new('CGSize');
         $s->w = $width; $s->h = $height;
-        ObjC::msg('v:z', $this->ns, 'setContentSize:', $s);
+        ObjC::msg('v:z', $this->ns, 'setMinSize:', $s);
     }
 
-    /** @return list<Window> */
+    /** How large the user can make the window; 0 for no limit. */
+    public function setMaximumSize(int $width, int $height): void
+    {
+        $s = ObjC::$c->new('CGSize');
+        $s->w = $width > 0 ? $width : 3.4028234663852886e38; $s->h = $height > 0 ? $height : 3.4028234663852886e38;
+        ObjC::msg('v:z', $this->ns, 'setMaxSize:', $s);
+    }
+
+    private function setStyle(int $bit, bool $on): void
+    {
+        $mask = ObjC::msg('L:', $this->ns, 'styleMask');
+        ObjC::msg('v:L', $this->ns, 'setStyleMask:', $on ? $mask | $bit : $mask & ~$bit);
+    }
+
+    private function hasStyle(int $bit): bool
+    {
+        return (ObjC::msg('L:', $this->ns, 'styleMask') & $bit) !== 0;
+    }
+
+    public function setResizable(bool $on): void { $this->setStyle(self::RESIZABLE, $on); }
+    public function isResizable(): bool { return $this->hasStyle(self::RESIZABLE); }
+    public function setMovable(bool $on): void { ObjC::msg('v:b', $this->ns, 'setMovable:', $on); }
+    public function isMovable(): bool { return ObjC::msg('b:', $this->ns, 'isMovable'); }
+    public function setMinimizable(bool $on): void { $this->setStyle(self::MINIATURIZABLE, $on); }
+    public function isMinimizable(): bool { return $this->hasStyle(self::MINIATURIZABLE); }
+    /** Whether the zoom button can maximize the window. */
+    public function setMaximizable(bool $on): void { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 2), 'setEnabled:', $on); }
+    public function isMaximizable(): bool { return ObjC::msg('b:', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', 2), 'isEnabled'); }
+    public function setClosable(bool $on): void { $this->setStyle(self::CLOSABLE, $on); }
+    public function isClosable(): bool { return $this->hasStyle(self::CLOSABLE); }
+
+    /** Keeps the window above the other windows. */
+    public function setAlwaysOnTop(bool $on): void
+    {
+        ObjC::msg('v:l', $this->ns, 'setLevel:', $on ? self::FLOATING_LEVEL : self::NORMAL_LEVEL);
+    }
+
+    public function isAlwaysOnTop(): bool
+    {
+        return ObjC::msg('l:', $this->ns, 'level') !== self::NORMAL_LEVEL;
+    }
+
+    /** The window's opacity, from 0 to 1. */
+    public function setOpacity(float $v): void
+    {
+        ObjC::msg('v:d', $this->ns, 'setAlphaValue:', min(max($v, 0.0), 1.0));
+    }
+
+    public function opacity(): float
+    {
+        return ObjC::msg('d:', $this->ns, 'alphaValue');
+    }
+
+    public function setHasShadow(bool $on): void { ObjC::msg('v:b', $this->ns, 'setHasShadow:', $on); }
+    public function hasShadow(): bool { return ObjC::msg('b:', $this->ns, 'hasShadow'); }
+
+    /** Lets the pointer through the window, to what is under it. */
+    public function setIgnoreMouseEvents(bool $on): void
+    {
+        ObjC::msg('v:b', $this->ns, 'setIgnoresMouseEvents:', $on);
+    }
+
+    /** Keeps the window's content out of screenshots and screen recordings. */
+    public function setContentProtection(bool $on): void
+    {
+        ObjC::msg('v:L', $this->ns, 'setSharingType:', $on ? 0 : 1); // NSWindowSharingNone, ReadOnly
+    }
+
+    /**
+     * Shows the progress of a task under the app's Dock icon; the window
+     * that set it last wins: new ProgressBar(value: $done / $total), and new
+     * ProgressBar() once done.
+     */
+    public function setProgressBar(ProgressBar $p): void
+    {
+        $value = min(max($p->value, 0.0), 1.0);
+        $state = $p->state ?? ($p->value > 0 ? ProgressBar::NORMAL : ProgressBar::NONE);
+        if (!in_array($state, [ProgressBar::NONE, ProgressBar::NORMAL, ProgressBar::INDETERMINATE, ProgressBar::PAUSED, ProgressBar::ERROR], true)) {
+            throw new \InvalidArgumentException("no progress state \"$state\"");
+        }
+        Dock::setProgress($state, $value);
+    }
+
+    /** Draws the user's attention to the window, or stops: the Dock icon bounces while the app is not active. */
+    public function flashFrame(bool $flash): void
+    {
+        $app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
+        if ($this->attention !== 0) {
+            ObjC::msg('v:l', $app, 'cancelUserAttentionRequest:', $this->attention);
+            $this->attention = 0;
+        }
+        if ($flash) {
+            $this->attention = ObjC::msg('l:L', $app, 'requestUserAttention:', 10); // NSInformationalRequest
+        }
+    }
+
+    /**
+     * Shows the window on every Space, or on the current one only. A
+     * window that cannot go full screen (WindowOptions::$disableFullScreen)
+     * shows over other apps' full-screen Spaces too, as an auxiliary.
+     */
+    public function setVisibleOnAllWorkspaces(bool $on): void
+    {
+        $b = ObjC::msg('L:', $this->ns, 'collectionBehavior');
+        if ($on) {
+            $b |= self::CAN_JOIN_ALL_SPACES;
+            if ($b & self::FULL_SCREEN_NONE) {
+                $b = ($b & ~self::FULL_SCREEN_NONE) | self::FULL_SCREEN_AUXILIARY;
+                $this->auxiliary = true;
+            }
+        } else {
+            $b &= ~self::CAN_JOIN_ALL_SPACES;
+            if ($this->auxiliary) {
+                $b = ($b & ~self::FULL_SCREEN_AUXILIARY) | self::FULL_SCREEN_NONE;
+                $this->auxiliary = false;
+            }
+        }
+        ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', $b);
+    }
+
+    /** The NSWindow, for native code that needs it (mygo's NativeHandle). */
+    public function nativeHandle()
+    {
+        return $this->ns;
+    }
+
+    /** Tells the 'readyToShow' listeners, once: the page is ready, or native UI drew its first frame. */
+    private function readyToShow(): void
+    {
+        if (!$this->readyShown) {
+            $this->readyShown = true;
+            $this->emit('readyToShow');
+        }
+    }
+
+    /** The height of the primary screen, which window coordinates are flipped by. */
+    private static function screenHeight(): float
+    {
+        $screens = ObjC::msg('p:', ObjC::cls('NSScreen'), 'screens');
+        return ObjC::msg('L:', $screens, 'count') === 0 ? 0.0 : ObjC::msg('r:', ObjC::msg('p:L', $screens, 'objectAtIndex:', 0), 'frame')->h;
+    }
+
+    private static function fromMac($r): Rectangle
+    {
+        return new Rectangle((int)round($r->x), (int)round(self::screenHeight() - $r->y - $r->h), (int)round($r->w), (int)round($r->h));
+    }
+
+    private static function toMac(Rectangle $r)
+    {
+        return ObjC::rect($r->x, self::screenHeight() - $r->y - $r->height, $r->width, $r->height);
+    }
+
+    /** @return list<Window> the open windows, in the order they were created */
     public static function all(): array
     {
-        return array_values(self::$open);
+        $all = array_values(self::$open);
+        usort($all, fn(Window $a, Window $b) => $a->id <=> $b->id);
+        return $all;
     }
 
-    /** The window that has the keyboard, or null. */
-    public static function key(): ?Window
+    /** The window that has the keyboard, or null (mygo's FocusedWindow). */
+    public static function focused(): ?Window
     {
         $ns = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'keyWindow');
         return $ns === null ? null : (self::$open[ObjC::addr($ns)] ?? null);
     }
 
-    /** The NSWindow, for native code that needs it. */
-    public function native()
+    /** The open window with id $id, or null (mygo's WindowByID). */
+    public static function byId(int $id): ?Window
     {
-        return $this->ns;
+        foreach (self::$open as $w) {
+            if ($w->id === $id) {
+                return $w;
+            }
+        }
+        return null;
     }
 
     private function stat(int $t0, DisplayList $list): void
