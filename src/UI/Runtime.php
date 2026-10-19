@@ -816,8 +816,13 @@ final class Runtime
         if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
         if ($n->draggable) {
             $this->draggables[$n->id] = true;
-            if (($d = $this->dragRecs[$n->id] ?? null) !== null && $d->frame === $this->frameNumber && ($p = $d->shown()) !== [0.0, 0.0]) {
-                $n->poseM = Affine::translation($p[0], $p[1])->mul($n->poseM); // the drag moves it along with its pose
+            if (($d = $this->dragRecs[$n->id] ?? null) !== null && $d->frame === $this->frameNumber) {
+                if (($p = $d->shown()) !== [0.0, 0.0]) {
+                    $n->poseM = Affine::translation($p[0], $p[1])->mul($n->poseM); // the drag moves it along with its pose
+                }
+                if ($d->moving()) {
+                    $this->animating = true; // on its way to rest: frames keep coming until it is there
+                }
             }
         }
         $n->world = $parent === null ? $n->transformAt() : $parent->world->mul($n->transformAt()); // its transform after its ancestors' (mygo's world)
