@@ -333,6 +333,10 @@ trait RuntimeTransition
         if ($p !== null && $p['frame'] + 1 >= $this->frameNumber && self::posing($p['ch'])) {
             return true;
         }
+        $d = $this->dragRecs[$id] ?? null;
+        if ($d !== null && $d->frame + 1 >= $this->frameNumber && $d->moving()) {
+            return true; // a draggable node going to rest
+        }
         $r = $this->trans[$id] ?? null;
         return $r !== null && $r->built + 1 >= $this->frameNumber && ($r->moving !== 0 || $r->colorMoving || $r->matching);
     }

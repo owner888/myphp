@@ -119,6 +119,21 @@ final class Runtime
     private array $lastOverlayIds = [];
     /** Whether a frame is being built: a change asks for another pass of it, else for a frame (changed()). */
     private bool $building = false;
+    /** How far, in points, the pointer pressing a node moves before it drags it (mygo's dragStart). */
+    public const DRAG_START = 4;
+    /**
+     * The left press of the pointer (mygo's pressed state): the node it
+     * pressed, the innermost that takes the pointer under it last frame
+     * (null for none), its moves (DragTrack), whether it is still down, and
+     * once let go since the last frame, whether it moved (released) and how
+     * fast it went then, in the window's axes.
+     * @var ?array{id: ?int, track: DragTrack, down: bool, released: bool, v: array{0: float, 1: float}}
+     */
+    private ?array $pointerPress = null;
+    /** @var array<int, DragRec> what Context::draggable keeps of each node, by id */
+    public array $dragRecs = [];
+    /** @var array<int, true> the nodes that were draggable last frame (Node::$draggable) */
+    private array $draggables = [];
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
     /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
@@ -205,6 +220,9 @@ final class Runtime
         $now = hrtime(true);
         $this->frameNumber++;
         $this->now = $this->clock !== null ? ($this->clock)() : $now;
+        if ($this->pointerPress !== null && !$this->pointerPress['down']) {
+            $this->pointerPress = null; // the frame after it was let go saw it
+        }
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
         $pointer = [$this->input->mouseX, $this->input->mouseY];
@@ -240,6 +258,7 @@ final class Runtime
                         $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
                     }
                     $this->hold = [$e[1], $e[2], $now / 1e9, 0, false, $e[1], $e[2]];
+                    $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
@@ -251,11 +270,22 @@ final class Runtime
                     $this->input->mouseDown = false;
                     $this->sliding = null;
                     $this->hold = null;
+                    $moved = false;
+                    if ($e[3] === 0 && ($p = &$this->pointerPress) !== null && $p['down']) {
+                        $p['down'] = false;
+                        $p['released'] = $p['track']->n > 1; // a press that moved ends a drag; a click does not
+                        $p['v'] = $p['track']->velocity($this->now);
+                        $moved = $p['id'] !== null && isset($this->draggables[$p['id']]) && $p['track']->far; // it moved the node (Context::draggable): no click
+                    }
+                    unset($p);
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
-                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } else { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
+                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif (!$moved) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
                     break;
                 case 'drag':
+                    if ($this->pointerPress !== null && $this->pointerPress['down']) {
+                        $this->pointerPress['track']->move($this->now, $e[1], $e[2]);
+                    }
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
                         $this->slideTo($this->sliding, $e[1]);
                     } elseif ($this->drag !== null) {
@@ -313,6 +343,9 @@ final class Runtime
             $this->clicks = [];
             $this->rightClicks = [];
             $this->doubleClicks = [];
+            if ($this->pointerPress !== null) {
+                $this->pointerPress['released'] = false; // the pass handled the release (mygo's forgetInput)
+            }
         }
         $this->building = false;
         if ($this->escape !== null) {
@@ -341,7 +374,7 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->shown = []; $this->worlds = [];
-        $this->parents = []; $this->inertIds = []; $this->targets = [];
+        $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = [];
         $this->record($root);
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
@@ -350,7 +383,7 @@ final class Runtime
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->pageOf[$id]); }
         }
         $this->lastRouters = array_flip($this->routers);
-        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents] as &$moving) {
+        foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents, &$this->dragRecs] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
         unset($moving);
@@ -445,6 +478,40 @@ final class Runtime
     public function local(int $id, Closure $make): mixed
     {
         return $this->locals[$id] ??= $make();
+    }
+
+    /** The innermost node under ($x, $y) last frame that takes the pointer (mygo's interactive): clickable, focusable, draggable, a field, a link or a slider; null for none. */
+    private function pressTarget(float $x, float $y): ?int
+    {
+        $best = null; $at = -1;
+        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
+            foreach ($ids as $id) {
+                if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y)) {
+                    $best = $id; $at = $this->order[$id];
+                }
+            }
+        }
+        return $best;
+    }
+
+    /** The left press on node $id: still down, or let go since the last frame; null for none. @return ?array{id: ?int, track: DragTrack, down: bool, released: bool, v: array{0: float, 1: float}} */
+    public function pressOf(int $id): ?array
+    {
+        return $this->pointerPress !== null && $this->pointerPress['id'] === $id ? $this->pointerPress : null;
+    }
+
+    /** The map from the window to the axes of node $id's parent as the last frame showed them, null when it has none (a singular transform). */
+    public function parentSpace(int $id): ?Affine
+    {
+        $p = $this->parents[$id] ?? 0;
+        return $p === 0 ? Affine::identity() : $this->worldOf($p)->inverse();
+    }
+
+    /** The size of node $id's parent last frame, else of the node. @return array{0: float, 1: float} */
+    public function parentSize(int $id): array
+    {
+        $r = $this->rects[$this->parents[$id] ?? 0] ?? $this->rects[$id] ?? [0, 0, 0, 0];
+        return [$r[2], $r[3]];
     }
 
     /** Whether node $id is $ancestor or inside it, in the last frame. */
@@ -594,6 +661,12 @@ final class Runtime
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);
+        }
+        if ($n->draggable) {
+            $this->draggables[$n->id] = true;
+            if (($d = $this->dragRecs[$n->id] ?? null) !== null && $d->frame === $this->frameNumber && ($p = $d->shown()) !== [0.0, 0.0]) {
+                $n->poseM = Affine::translation($p[0], $p[1])->mul($n->poseM); // the drag moves it along with its pose
+            }
         }
         $n->world = $parent === null ? $n->transformAt() : $parent->world->mul($n->transformAt()); // its transform after its ancestors' (mygo's world)
         if ($n->world->set) {

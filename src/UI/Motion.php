@@ -54,6 +54,30 @@ final class Motion
     }
 
     /**
+     * A snap (DraggableOptions::$snap) choosing the nearest of $points, as
+     * the heights a sheet rests at (mygo's Nearest):
+     *
+     *     snap: Motion::nearest([0, 0], [0, 200], [0, 400])
+     * @param array{0: float, 1: float} ...$points
+     */
+    public static function nearest(array ...$points): \Closure
+    {
+        if ($points === []) {
+            throw new \InvalidArgumentException('Motion::nearest needs points');
+        }
+        return function (array $p) use ($points): array {
+            $best = $points[0]; $far = INF;
+            foreach ($points as $q) {
+                $dx = $q[0] - $p[0]; $dy = $q[1] - $p[1];
+                if (($d = $dx * $dx + $dy * $dy) < $far) {
+                    $best = $q; $far = $d;
+                }
+            }
+            return [(float)$best[0], (float)$best[1]];
+        };
+    }
+
+    /**
      * Where a value going at $velocity, in its units per second, comes to
      * rest as iOS's scroll views slow down (their normal deceleration
      * rate): where a fling would carry it, to choose the target a spring

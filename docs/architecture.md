@@ -1230,6 +1230,29 @@ as they come), and `$done(out, err, code)` once it ends; `kill()` stops
 it. Network and other slow work go through it — `examples/http` sends
 requests with curl this way and stays live while they are in flight.
 
+## Draggable
+
+`Context::draggable($n, $offset, DraggableOptions)` is mygo's Draggable:
+the pointer moves a node from its place in the layout by an offset, [x,
+y], which the app holds (or the node keeps, `DragRec::$own`). The runtime
+keeps the left press (mygo's pressed state): the node it pressed, the
+innermost under it last frame that takes the pointer (clickable,
+focusable, draggable, a field, a link or a slider), and its moves
+(`DragTrack`: the window's points from the press, `far` once
+`Runtime::DRAG_START` away, the velocity of its last 100 ms at the
+release, none after 50 ms still); a release is seen for one pass, as
+mygo forgets the input a pass handled. The press holds the node where it
+shows (catching it moving), then it follows the pointer in its parent's
+axes (the inverse of the parent's last-frame world), past its bounds on
+`Motion::rubberband` as long as the parent, unless rigid; let go, it goes
+to its snap (`Motion::nearest`) of where the throw would carry it
+(`Motion::project`, the velocity no faster than `MAX_FLING`), within its
+bounds, on a spring starting at the pointer's velocity, or at once with
+Reduce Motion. A release that dragged a draggable node is no click. The
+offset joins the node's pose (`Node::$poseM`, before its transform), so a
+node lifting as it is dragged stays under the pointer. Events carry no
+time: their moves are timed by the frame that drains them.
+
 ## Router
 
 `Router` is mygo's: a history of locations (an escaped path and a query,

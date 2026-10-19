@@ -337,6 +337,169 @@ trait ContextMotion
         return $n;
     }
 
+    /**
+     * Lets the pointer move $n from its place in the layout by $offset
+     * ([x, y]), and returns $n (mygo's Draggable). As the pointer drags it,
+     * it follows the pointer along its parent's axes, and $offset with it;
+     * once let go, $offset is where it comes to rest, as $o says, and it goes
+     * there. Setting $offset moves it there as well, as $o->animation says;
+     * without one, the offset is kept for it. It moves after its own
+     * transform and its pose (Node::animatePose). dragging() reports that
+     * the pointer drags it, once it moved a few points, transitioning() that
+     * it moves, and dragOffset() where it shows. A press dragging it is no
+     * click; a press catches it as it moves. With Reduce Motion it goes to
+     * rest at once.
+     *
+     *     $c->draggable($sheet, $s->sheet, new DraggableOptions(Node::VERTICAL,
+     *         bounds: [0, 0, 0, 400], snap: Motion::nearest([0, 0], [0, 200], [0, 400])));
+     * @param ?array{0: float, 1: float} $offset
+     */
+    public function draggable(Node $n, ?array &$offset = null, DraggableOptions $o = new DraggableOptions): Node
+    {
+        $axes = $o->axis;
+        if (($axes & ~(Node::HORIZONTAL | Node::VERTICAL)) !== 0) {
+            throw new \InvalidArgumentException('a draggable axis must be Node::HORIZONTAL, VERTICAL or both');
+        }
+        if ($axes === 0) {
+            $axes = Node::HORIZONTAL | Node::VERTICAL;
+        }
+        if (($b = $o->bounds) !== null) {
+            self::finite('drag bounds', ...$b);
+            if ($b[2] < 0 || $b[3] < 0) {
+                throw new \InvalidArgumentException('draggable bounds must not have a negative size');
+            }
+        }
+        $a = $o->animation ?? Animation::smooth();
+        if ($a->duration < 0 || $a->delay < 0) {
+            throw new \InvalidArgumentException('animation durations must not be negative');
+        }
+        if ($a->duration == 0) {
+            $a->spring->physics(); // throws now for invalid options
+        }
+        $rt = $this->runtime;
+        if ($rt === null) {
+            return $n;
+        }
+        $now = $rt->now;
+        $r = $rt->dragRecs[$n->id] ??= new DragRec;
+        if ($r->frame === 0 || $r->frame + 1 < $rt->frameNumber) { // not dragged in the frame before: it shows at its offset at once
+            $own = $r->own;
+            $r = $rt->dragRecs[$n->id] = new DragRec;
+            $r->own = $own;
+        }
+        if ($offset === null) {
+            $offset = &$r->own;
+        }
+        self::finite('drag offset', ...$offset);
+        if ($r->frame === 0 || $r->frame + 1 < $rt->frameNumber) {
+            $r->hold($offset, $now);
+        }
+        $r->frame = $rt->frameNumber; $r->axes = $axes; $r->rigid = $o->rigid;
+        $r->bounded = $o->bounds !== null;
+        if ($r->bounded) { $r->bounds = $o->bounds; }
+        $n->draggable = true;
+        $r->advance($now);
+        $shown = $r->shown();
+        $still = $rt->reduceMotion || $rt->instant();
+        $set = function (array $p) use (&$offset, $rt) {
+            if ($offset != $p) {
+                $offset = $p;
+                $rt->changed();
+            }
+        };
+        $press = $n->disabled ? null : $rt->pressOf($n->id);
+        $held = $press !== null && $press['down'];
+        $ended = $press !== null && !$press['down'] && $press['released']; // a press that began and ended since the last frame
+        if (!$r->pressing && ($held || $ended)) { // the press holds it where it shows
+            $r->pressing = true; $r->caught = $r->moving(); $r->from = $shown;
+            $r->hold($shown, $now);
+            if ($r->caught) { $set($shown); }
+        }
+        $space = $rt->parentSpace($n->id);
+        if ($r->pressing && $press !== null && $press['track']->far && $space !== null) { // it follows the pointer, from where the press took it
+            $d = $press['track'];
+            [$x0, $y0] = $space->point($d->ox, $d->oy);
+            [$x1, $y1] = $space->point($d->ox + $d->wx, $d->oy + $d->wy);
+            [$w, $h] = $rt->parentSize($n->id);
+            $shown = $r->band([$r->from[0] + $x1 - $x0, $r->from[1] + $y1 - $y0], $w, $h);
+            $r->hold($shown, $now);
+            $set($shown);
+        }
+        if ($r->pressing && !$held) {
+            $r->pressing = false;
+            $far = $press !== null && $press['track']->far;
+            if ($far || $r->caught) {
+                $v = [0.0, 0.0];
+                if ($far && $ended && $space !== null) {
+                    $d = $press['track'];
+                    $v = self::fling($space->vectorAt($d->ox + $d->wx, $d->oy + $d->wy, $press['v'][0], $press['v'][1]));
+                }
+                $to = $shown;
+                if ($o->snap !== null) {
+                    $to = ($o->snap)($r->clamp([Motion::project($shown[0], $v[0]), Motion::project($shown[1], $v[1])], $shown));
+                    self::finite('drag offset', ...$to);
+                }
+                $to = $r->clamp($to, $shown);
+                $set($to);
+                $r->settle($to, $v, $a, $still, $now);
+                return $n;
+            }
+        }
+        if (!$r->pressing) { // it goes where the app moves it, within its bounds
+            $to = $r->clamp($offset, $offset);
+            $set($to);
+            $r->head($to, $a, $still, $now);
+        }
+        return $n;
+    }
+
+    /** The fastest a throw goes, in points per second, as Flutter's and Android's flings: moves the window delivers at once after a slow frame would otherwise throw a node far away. */
+    public const MAX_FLING = 8000.0;
+
+    /** $v, no faster than MAX_FLING (mygo's flingVelocity). @return array{0: float, 1: float} */
+    public static function fling(array $v): array
+    {
+        $n = hypot($v[0], $v[1]);
+        if (!is_finite($n)) {
+            return [0.0, 0.0];
+        }
+        $k = $n > self::MAX_FLING ? self::MAX_FLING / $n : 1.0;
+        return [$v[0] * $k, $v[1] * $k];
+    }
+
+    private static function finite(string $what, float ...$vs): void
+    {
+        foreach ($vs as $v) {
+            if (!is_finite($v)) {
+                throw new \InvalidArgumentException("$what must be finite");
+            }
+        }
+    }
+
+    /** Where draggable() shows $n in this frame, from its place in the layout: following the pointer, or on its way to rest (mygo's DragOffset). Call it after draggable(). @return array{0: float, 1: float} */
+    public function dragOffset(Node $n): array
+    {
+        $rt = $this->runtime;
+        $r = $rt?->dragRecs[$n->id] ?? null;
+        if ($r === null || $r->frame + 1 < $rt->frameNumber) {
+            return [0.0, 0.0];
+        }
+        $r->advance($rt->now);
+        if ($r->moving()) {
+            $rt->animationFrame();
+        }
+        return $r->shown();
+    }
+
+    /** Whether the pointer is dragging $n (draggable()), once it moved a few points (mygo's Dragging). */
+    public function dragging(Node $n): bool
+    {
+        $rt = $this->runtime;
+        $p = $rt?->pressOf($n->id);
+        $r = $rt?->dragRecs[$n->id] ?? null;
+        return $p !== null && $p['down'] && !$n->disabled && $r !== null && $r->frame + 1 >= $rt->frameNumber && $p['track']->far;
+    }
+
     /** Whether $n's transition was moving it, or changing its colors, in the frame before: false once it is where it goes (mygo's Transitioning). */
     public function transitioning(Node $n): bool
     {
