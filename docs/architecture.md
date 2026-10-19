@@ -1250,8 +1250,9 @@ to its snap (`Motion::nearest`) of where the throw would carry it
 bounds, on a spring starting at the pointer's velocity, or at once with
 Reduce Motion. A release that dragged a draggable node is no click. The
 offset joins the node's pose (`Node::$poseM`, before its transform), so a
-node lifting as it is dragged stays under the pointer. Events carry no
-time: their moves are timed by the frame that drains them.
+node lifting as it is dragged stays under the pointer. The view stamps
+presses, releases and moves with NSEvent's timestamp, so the speed of a
+throw is the events', not the frames' that drain them.
 
 Values dragged within a window are mygo's dragdrop: `Context::drag($n,
 $value)` makes a source, which a press moving `DRAG_START` points starts
@@ -1266,6 +1267,44 @@ the release drops it there, which is no click, and Escape gives it up.
 three quarters' opacity, shifting its worlds; near the top or bottom
 edge of a scrolling container under the pointer, the content scrolls
 (mygo's dragScroll). Lists and grids keep their own reordering.
+
+Drags the system carries are mygo's data_drag and drop. `MyPHP\Transfer`
+holds their data: a `Data` of `Item`s, each of `Representation`s by
+format (a MIME type), given as bytes or made lazily by a provider, at
+most once per snapshot, a failure kept; `materialize` reads the formats
+taken alone. `Context::dragData($n, Data, DragOptions)` and
+`dragDataFrom($n, fn() => Data)` make a native source: the press moving
+`DRAG_START` points calls the runtime's `startDataDrag`, and the drag is
+the system's from then on (`$valueDrag['native']`: no copy painted, the
+release no click); its end calls `DragOptions::$done` once. A source
+also given `drag($n, $value)` offers that value to this process's typed
+targets (`drop`, `dragOver`) as it is. With no `preview`, its image is
+the source's visible part of the last frame at one pixel a point, at
+most 512 (mygo's dataPreview): `Metal::lastFrame` draws the last list
+again off screen, the ring keeping it, and reads it back. Escape, the
+source no longer built or the window closing cancel it.
+
+`MyPHP\DataDrag` is mygo's core dataSource: the one drag on, a random
+session key that finds its value and data inside this process alone
+(`resolve`, for each drag over a window), the start after the input
+being handled (`App::later`), its end told once, an effect it did not
+allow an error. `Window::startDataDrag` starts one from the window's
+gesture. `Native\Drag` is darwin's surface_drag.go: one
+`NSPasteboardItem` an item, a provider giving its formats when a
+destination asks (`macType`: UTIs, the URI list in `dev.mygo.uri-list`
+with `public.url` beside it, a MIME type's `UTType` or
+`dev.mygo.mime.<hex>`) and the session's key; Escape posted to AppKit's
+tracking loop cancels it. The view's `NSDraggingDestination` methods
+offer the pasteboard's types unread; once the content takes formats
+over the drop point (`Runtime::dataDragOver`: the innermost enabled node
+taking a value of this process's by type, else `dropData`/`dataDragOver`
+by format and negotiated effect, the modifier's, else copy before move),
+the drop reads those, a Finder reference URL as its path's, and
+`dataDrop` materializes them. Files no node takes as data go to a node
+taking files (`droppedFiles`, `fileDragOver`), then to the window's
+`fileDrop` listeners (mygo's SurfaceEvent). The formats the targets take
+are told the view at the end of a frame when they changed
+(`setDropFormats`).
 
 ## Router
 

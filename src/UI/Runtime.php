@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use MyPHP\Transfer\{Drop, DragOptions, Format, Offer, Operation, Result};
+
 use Closure;
 
 /**
@@ -84,6 +86,8 @@ final class Runtime
     private array $worlds = [];
     /** @var array<int, true> the nodes some of which showed in the window last frame, within the scrolling containers and clips around them (Context::inView) */
     private array $shown = [];
+    /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> each node's rectangle as it shows in the window, clipped by its ancestors, last frame */
+    private array $visible = [];
     /** Steppers built this frame, by id, for the arrow keys. */
     private array $steppers = [];
     /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
@@ -139,9 +143,27 @@ final class Runtime
      * dragging it, the value, where the press took the node (from its top
      * left), the node taking it under the pointer, whether Escape gave it
      * up, and the source's node in the frame, for its copy.
-     * @var ?array{src: int, value: mixed, offX: float, offY: float, over: ?int, canceled: bool, elem: ?Node}
+     * A native one ($native) is the system's from then on (Context::dragData).
+     * @var ?array{src: int, value: mixed, offX: float, offY: float, over: ?int, canceled: bool, elem: ?Node, native: bool}
      */
     public ?array $valueDrag = null;
+    /** The native drag sources of last frame (Node::$dataSource), its native drop targets (Node::$dataTarget), the nodes taking files (Node::$takesFiles). */
+    private array $dataSources = [], $dataTargets = [], $fileTargets = [];
+    /** A native drag over the window (mygo's incoming) and the node taking it there; files dragged over a node taking them; transfers and files dropped since the last pass, by node. */
+    private ?DataDragEvent $incoming = null;
+    private ?int $dataOver = null, $fileOver = null;
+    private array $dataDropped = [], $filesDropped = [];
+    /** The formats the drop targets take, as the view was told them last. @var list<string> */
+    private array $dropFormats = [];
+    /**
+     * The host's native drags (mygo's host): $startDataDrag(Data, local
+     * value, DragOptions, x, y) starts one, returning what failed or null;
+     * $cancelDataDrag() cancels it, its end told the source at once;
+     * $setDropFormats(list) tells the view what drops to take;
+     * $snapshot(x, y, w, h) is an Image of the last frame's ($x, $y) and
+     * the $w by $h points from there, one pixel a point. The window sets them.
+     */
+    public ?Closure $startDataDrag = null, $cancelDataDrag = null, $setDropFormats = null, $snapshot = null;
     /** The nodes dragging values last frame (Context::drag) and their values; the nodes taking values (Context::drop, dragOver), by the type they take; the values dropped since the last pass, by the node taking them. */
     private array $dragSources = [], $dropTargets = [], $dropped = [];
     /** The node around the one pressed that drags a value, which takes the press once it moves (mygo's pressDragger). */
@@ -318,7 +340,11 @@ final class Runtime
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
                 case 'key':
                     if ($e[2] === Key::ESCAPE && ($e[3] & Key::MODIFIERS) === 0 && $this->valueDrag !== null && !$this->valueDrag['canceled']) {
-                        $this->valueDrag['canceled'] = true; $this->valueDrag['over'] = null; // Escape gives up the drag
+                        if ($this->valueDrag['native']) {
+                            ($this->cancelDataDrag)(); // the system's: its end clears it
+                        } else {
+                            $this->valueDrag['canceled'] = true; $this->valueDrag['over'] = null; // Escape gives up the drag
+                        }
                         break;
                     }
                     $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false];
@@ -367,10 +393,10 @@ final class Runtime
             if ($this->pointerPress !== null) {
                 $this->pointerPress['released'] = false; // the pass handled the release (mygo's forgetInput)
             }
-            $this->dropped = [];
+            $this->dropped = []; $this->dataDropped = []; $this->filesDropped = [];
         }
         $this->building = false;
-        $this->dropped = []; // dropped on nodes the frame did not build
+        $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
         if ($this->escape !== null) {
             foreach ($this->keys as $k) {
                 if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
@@ -396,8 +422,9 @@ final class Runtime
         $this->inputs = []; $this->textClients = []; $this->keepers = [];
         $this->lists = [];
         $this->needsFrame = false;
-        $this->shown = []; $this->worlds = [];
+        $this->shown = []; $this->worlds = []; $this->visible = [];
         $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
+        $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->record($root);
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
@@ -406,6 +433,10 @@ final class Runtime
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->pageOf[$id]); }
         }
         $this->lastRouters = array_flip($this->routers);
+        if ($this->valueDrag !== null && $this->valueDrag['native'] && !isset($this->rects[$this->valueDrag['src']])) {
+            ($this->cancelDataDrag)(); // its source went: its end clears it
+        }
+        $this->syncDropFormats();
         foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents, &$this->dragRecs] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
@@ -507,7 +538,7 @@ final class Runtime
     private function pressTarget(float $x, float $y): ?int
     {
         $best = null; $at = -1;
-        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->dragSources), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
+        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->dragSources), array_keys($this->dataSources), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
             foreach ($ids as $id) {
                 if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y)) {
                     $best = $id; $at = $this->order[$id];
@@ -526,11 +557,11 @@ final class Runtime
     /** The node around $target, the node pressed, that drags a value, as a row around a button, when $target only takes clicks: one taking the pointer's moves (a field, a slider, a draggable or a value of its own to drag) keeps them. */
     private function pressDragger(?int $target): ?int
     {
-        if ($target === null || isset($this->dragSources[$target]) || isset($this->fields[$target]) || isset($this->sliders[$target]) || isset($this->draggables[$target]) || isset($this->inputs[$target])) {
+        if ($target === null || $this->drags($target) || isset($this->fields[$target]) || isset($this->sliders[$target]) || isset($this->draggables[$target]) || isset($this->inputs[$target])) {
             return null;
         }
         for ($id = $this->parents[$target] ?? 0, $n = 0; $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? 0, $n++) {
-            if (isset($this->dragSources[$id])) {
+            if ($this->drags($id)) {
                 return $id;
             }
         }
@@ -542,7 +573,7 @@ final class Runtime
     {
         $p = &$this->pointerPress;
         $src = $p['id'];
-        if ($src === null || !isset($this->dragSources[$src])) {
+        if ($src === null || !$this->drags($src)) {
             // The press goes to the node around the one pressed that drags a value, once it moves as far as starts a drag: the node pressed has no click then.
             $a = $this->pressDragger;
             $dx = $x - $p['track']->ox; $dy = $y - $p['track']->oy;
@@ -557,12 +588,226 @@ final class Runtime
                 return;
             }
             [$lx, $ly] = $this->toLocal($src, $p['track']->ox, $p['track']->oy) ?? [0.0, 0.0]; // from its top left; a node turned singular took no press
-            $this->valueDrag = ['src' => $src, 'value' => $this->dragSources[$src], 'offX' => $lx, 'offY' => $ly, 'over' => null, 'canceled' => false, 'elem' => null];
+            $native = $this->dataSources[$src] ?? null;
+            $this->valueDrag = ['src' => $src, 'value' => $this->dragSources[$src] ?? null, 'offX' => $lx, 'offY' => $ly, 'over' => null, 'canceled' => false, 'elem' => null, 'native' => $native !== null];
+            if ($native !== null) {
+                $this->startNative($src, $native, $x, $y, $lx, $ly);
+                return;
+            }
         }
-        if ($this->valueDrag['canceled']) {
+        if ($this->valueDrag['native'] || $this->valueDrag['canceled']) {
             return;
         }
         $this->valueDrag['over'] = $this->valueTarget($x, $y, $this->valueDrag['value']);
+    }
+
+    /** Whether node $id drags a value (Context::drag) or data (dragData), last frame. */
+    private function drags(int $id): bool
+    {
+        return isset($this->dragSources[$id]) || isset($this->dataSources[$id]);
+    }
+
+    /** Hands the drag of source $src to the system (mygo's dragMove with a data source): the data made now, its own value offered to this process's targets; its end clears it, and tells the source. */
+    private function startNative(int $src, array $source, float $x, float $y, float $lx, float $ly): void
+    {
+        [$make, $o] = $source;
+        [$preview, $hotspot] = $o->preview === null ? $this->dataPreview($src, $lx, $ly) : [$o->preview, $o->hotspot];
+        $done = function (Result $r) use ($o): void {
+            $this->valueDrag = null;
+            $this->input->mouseDown = false;
+            if ($this->pointerPress !== null) { $this->pointerPress['down'] = false; } // the system took the press's release
+            $this->clearDataOver();
+            $this->changed();
+            if ($o->done !== null) { ($o->done)($r); }
+        };
+        $error = ($this->startDataDrag)($make(), $this->valueDrag['value'], new DragOptions($o->operations, $preview, $hotspot, $done), $x, $y);
+        if ($error !== null) {
+            $done(new Result(error: $error));
+        }
+    }
+
+    /**
+     * The image of node $id as the last frame showed it, its visible part
+     * at one pixel a point, at most 512 on a side, and the point of it the
+     * press at ($lx, $ly) in the node took (mygo's dataPreview); none for
+     * a node showing nothing.
+     *
+     * @return array{0: ?Image, 1: array{0: int, 1: int}}
+     */
+    private function dataPreview(int $id, float $lx, float $ly): array
+    {
+        [$vx, $vy, $vw, $vh] = $this->visible[$id] ?? [0.0, 0.0, 0.0, 0.0];
+        $w = min((int)$vw, 512); $h = min((int)$vh, 512);
+        if ($w <= 0 || $h <= 0) {
+            return [null, [0, 0]];
+        }
+        $r = $this->rects[$id];
+        [$x, $y] = ($this->worlds[$id] ?? Affine::identity())->point($r[0] + $lx, $r[1] + $ly);
+        return [($this->snapshot)($vx, $vy, $w, $h), [min(max((int)($x - $vx), 0), $w - 1), min(max((int)($y - $vy), 0), $h - 1)]];
+    }
+
+    /**
+     * The innermost node at ($x, $y) taking the native drag $d (mygo's
+     * dataTargetAt), with $d's effect and the formats it takes set: a node
+     * taking its local value by type, else by its formats and operations.
+     */
+    private function dataTargetAt(float $x, float $y, DataDragEvent $d): ?int
+    {
+        $d->operation = Operation::NONE; $d->formats = [];
+        $hits = [];
+        foreach ([...array_keys($this->dropTargets), ...array_keys($this->dataTargets)] as $id) {
+            if (!isset($hits[$id]) && $this->under($id, $x, $y)) { $hits[$id] = $this->order[$id]; }
+        }
+        arsort($hits); // innermost first
+        foreach ($hits as $id => $_) {
+            if (isset($this->dropTargets[$id]) && $d->local !== null && self::isOf($d->local, $this->dropTargets[$id])) {
+                $d->operation = Operation::negotiate($d->offer->operations, Operation::COPY, $d->offer->suggested);
+                if ($d->operation !== Operation::NONE) {
+                    return $id;
+                }
+            }
+            if (($o = $this->dataTargets[$id] ?? null) !== null) {
+                foreach ($o->formats as $f) {
+                    if ($f !== Format::DRAG_SESSION && in_array($f, $d->offer->formats, true) && !in_array($f, $d->formats, true)) { $d->formats[] = $f; }
+                }
+                $d->operation = Operation::negotiate($d->offer->operations, $o->operations, $d->offer->suggested);
+                if ($d->formats !== [] && $d->operation !== Operation::NONE) {
+                    return $id;
+                }
+                $d->formats = [];
+            }
+        }
+        $d->operation = Operation::NONE;
+        return null;
+    }
+
+    /** A native drag over ($x, $y): whether a node takes it there, which then shows it (mygo's dataDragOver). */
+    public function dataDragOver(float $x, float $y, DataDragEvent $d): bool
+    {
+        $this->incoming = $d;
+        $this->dataOver = $this->dataTargetAt($x, $y, $d);
+        $this->input->mouse($x, $y);
+        $this->needsFrame = true; $this->changed();
+        return $this->dataOver !== null;
+    }
+
+    /** The native drag left the window, or dropped. */
+    public function clearDataOver(): void
+    {
+        if ($this->incoming !== null) {
+            $this->incoming = null; $this->dataOver = null;
+            $this->changed();
+        }
+    }
+
+    /** A native drag dropped at ($x, $y): whether a node took it, its value by type or the formats it takes, read now (mygo's dataDrop). */
+    public function dataDrop(float $x, float $y, DataDragEvent $d): bool
+    {
+        $this->clearDataOver();
+        $id = $this->dataTargetAt($x, $y, $d);
+        if ($id === null) {
+            return false;
+        }
+        if (isset($this->dropTargets[$id]) && $d->local !== null && self::isOf($d->local, $this->dropTargets[$id])) {
+            $this->dropped[$id] = [$d->local, $x, $y];
+        } else {
+            try {
+                $this->dataDropped[$id] = new Drop($d->data->materialize($d->formats), $d->operation);
+            } catch (\Throwable) {
+                $d->operation = Operation::NONE; // a representation failed: no drop
+                return false;
+            }
+        }
+        $this->changed();
+        return true;
+    }
+
+    /** The native drag over node $id, last told: its offer; null when none is over it. */
+    public function dataOffer(int $id): ?Offer
+    {
+        return $this->incoming !== null && $this->dataOver === $id ? $this->incoming->offer : null;
+    }
+
+    /** The local value of a native drag of this process over node $id, for its type's targets (Context::dragOver); null when none. */
+    public function incomingLocal(int $id): mixed
+    {
+        return $this->incoming !== null && $this->dataOver === $id ? $this->incoming->local : null;
+    }
+
+    /** The transfer dropped on node $id since the last pass, or null. */
+    public function dataDroppedOn(int $id): ?Drop
+    {
+        if (!isset($this->dataDropped[$id])) {
+            return null;
+        }
+        $this->consumed = true;
+        return $this->dataDropped[$id];
+    }
+
+    /** The innermost node at ($x, $y) taking files, or null. */
+    private function fileTarget(float $x, float $y): ?int
+    {
+        $best = null; $at = -1;
+        foreach ($this->fileTargets as $id => $_) {
+            if ($this->order[$id] > $at && $this->under($id, $x, $y)) { $best = $id; $at = $this->order[$id]; }
+        }
+        return $best;
+    }
+
+    /** Files dragged from another app over ($x, $y), or out of the window for negative coordinates: whether a node takes them there (mygo's fileDrag). */
+    public function fileDrag(float $x, float $y): bool
+    {
+        $over = $x >= 0 && $y >= 0 ? $this->fileTarget($x, $y) : null;
+        if ($over !== $this->fileOver) {
+            $this->fileOver = $over;
+            $this->changed();
+        }
+        return $over !== null;
+    }
+
+    /** Files dropped at ($x, $y): whether a node took them (mygo's fileDrop). @param list<string> $paths */
+    public function fileDrop(float $x, float $y, array $paths): bool
+    {
+        $this->fileDrag(-1, -1);
+        $id = $this->fileTarget($x, $y);
+        if ($id === null || $paths === []) {
+            return false;
+        }
+        $this->filesDropped[$id] = [...($this->filesDropped[$id] ?? []), ...$paths];
+        $this->changed();
+        return true;
+    }
+
+    /** The files dropped on node $id since the last pass, or null. @return ?list<string> */
+    public function filesDroppedOn(int $id): ?array
+    {
+        if (!isset($this->filesDropped[$id])) {
+            return null;
+        }
+        $this->consumed = true;
+        return $this->filesDropped[$id];
+    }
+
+    /** Whether files dragged from another app are over node $id. */
+    public function filesOver(int $id): bool
+    {
+        return $this->fileOver === $id;
+    }
+
+    /** Tells the view the formats the drop targets take, when they changed (mygo's syncDropFormats): files, URLs and this process's drags always. */
+    private function syncDropFormats(): void
+    {
+        $formats = [Format::FILE_LIST, Format::URI_LIST, Format::DRAG_SESSION];
+        foreach ($this->dataTargets as $o) {
+            foreach ($o->formats as $f) {
+                if (!in_array($f, $formats, true)) { $formats[] = $f; }
+            }
+        }
+        sort($formats);
+        if ($formats !== $this->dropFormats) {
+            $this->dropFormats = $formats;
+            if ($this->setDropFormats !== null) { ($this->setDropFormats)($formats); }
+        }
     }
 
     /** The innermost node at ($x, $y) taking $value, or null. */
@@ -584,6 +829,9 @@ final class Runtime
         if ($d === null) {
             return false;
         }
+        if ($d['native']) {
+            return true; // the system's: its end clears it
+        }
         $this->valueDrag = null;
         if (!$d['canceled'] && ($t = $this->valueTarget($x, $y, $d['value'])) !== null) {
             $this->dropped[$t] = [$d['value'], $x, $y];
@@ -596,7 +844,7 @@ final class Runtime
     private function dragScroll(): void
     {
         $d = $this->valueDrag;
-        if ($d === null || $d['canceled']) {
+        if ($d === null || $d['canceled'] || $d['native']) {
             return;
         }
         $x = $this->input->mouseX; $y = $this->input->mouseY;
@@ -629,7 +877,9 @@ final class Runtime
     {
         if ($this->valueDrag !== null && $this->valueDrag['src'] === $n->id) {
             $this->valueDrag['elem'] = $n;
-            $this->valueDrag['value'] = $value;
+            if (!$this->valueDrag['native']) {
+                $this->valueDrag['value'] = $value; // the value as the frame has it
+            }
         }
     }
 
@@ -812,7 +1062,12 @@ final class Runtime
             $this->samplePose($n);
         }
         if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
-        if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
+        if ($n->dataSource !== null) { $this->dataSources[$n->id] = $n->dataSource; }
+        if (!$n->disabled) {
+            if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
+            if ($n->dataTarget !== null) { $this->dataTargets[$n->id] = $n->dataTarget; }
+            if ($n->takesFiles) { $this->fileTargets[$n->id] = true; }
+        }
         if ($n->draggable) {
             $this->draggables[$n->id] = true;
             if (($d = $this->dragRecs[$n->id] ?? null) !== null && $d->frame === $this->frameNumber) {
@@ -833,6 +1088,8 @@ final class Runtime
         if (min($bx + $bw, $clip[2]) > max($bx, $clip[0]) && min($by + $bh, $clip[3]) > max($by, $clip[1]) && !($n->backface && $n->transform->facesAway())) {
             $this->shown[$n->id] = true;
         }
+        $vx = max($bx, $clip[0]); $vy = max($by, $clip[1]);
+        $this->visible[$n->id] = [$vx, $vy, max(0.0, min($bx + $bw, $clip[2]) - $vx), max(0.0, min($by + $bh, $clip[3]) - $vy)]; // as it shows, clipped (mygo's vx, vy, vw, vh)
         if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
             $clip[0] = max($clip[0], $bx); $clip[2] = min($clip[2], $bx + $bw);
         }

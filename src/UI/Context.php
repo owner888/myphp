@@ -11,6 +11,7 @@ use MyPHP\Window;
 final class Context
 {
     use ContextMotion;
+    use ContextTransfer;
 
     public Node $root;
     public int $count = 0;

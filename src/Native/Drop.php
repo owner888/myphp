@@ -6,10 +6,10 @@ namespace MyPHP\Native;
 use Closure;
 
 /**
- * File drops onto a view: the NSDraggingDestination methods a view class
+ * File drops onto a web view: the NSDraggingDestination methods its class
  * adds (defineClass) and the registration that makes AppKit send them.
  * The drop goes to $onDrop(view, paths, x, y) with the point in the
- * view's coordinates, y down.
+ * view's coordinates, y down. The native view's drags are Drag's.
  */
 final class Drop
 {
@@ -30,41 +30,24 @@ final class Drop
         ObjC::msg('v:p', $view, 'registerForDraggedTypes:', $types);
     }
 
-    /** The methods, for a view class whose y runs down ($flipped) or up. */
-    public static function methods(bool $flipped): array
+    /** The methods, for a view class whose y runs up. */
+    public static function methods(): array
     {
         return [
             'draggingEntered:' => ['Q@:@', 'L(ppp)', fn($self, $cmd, $info) => self::OPERATION_COPY],
             'draggingUpdated:' => ['Q@:@', 'L(ppp)', fn($self, $cmd, $info) => self::OPERATION_COPY],
-            'performDragOperation:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $info) use ($flipped) {
-                $paths = self::paths(ObjC::msg('p:', $info, 'draggingPasteboard'));
+            'performDragOperation:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $info) {
+                $paths = Drag::paths(ObjC::msg('p:', $info, 'draggingPasteboard'));
                 if ($paths === []) {
                     return false;
                 }
                 $p = ObjC::msg('q:qp', $self, 'convertPoint:fromView:', ObjC::msg('q:', $info, 'draggingLocation'), null);
-                $y = $flipped ? $p->y : ObjC::msg('r:', $self, 'bounds')->h - $p->y;
+                $y = ObjC::msg('r:', $self, 'bounds')->h - $p->y;
                 if (self::$onDrop !== null) {
                     (self::$onDrop)($self, $paths, $p->x, $y);
                 }
                 return true;
             }],
         ];
-    }
-
-    /** @return list<string> the file paths on a pasteboard */
-    private static function paths($pasteboard): array
-    {
-        $classes = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
-        ObjC::msg('v:p', $classes, 'addObject:', ObjC::cls('NSURL'));
-        $options = ObjC::msg('p:', ObjC::cls('NSMutableDictionary'), 'dictionary');
-        ObjC::msg('v:pp', $options, 'setObject:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', true), ObjC::str('NSPasteboardURLReadingFileURLsOnlyKey'));
-        $urls = ObjC::msg('p:pp', $pasteboard, 'readObjectsForClasses:options:', $classes, $options);
-        $paths = [];
-        if ($urls !== null) {
-            for ($i = 0, $n = ObjC::msg('L:', $urls, 'count'); $i < $n; $i++) {
-                $paths[] = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:L', $urls, 'objectAtIndex:', $i), 'path'));
-            }
-        }
-        return $paths;
     }
 }

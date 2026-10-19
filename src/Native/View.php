@@ -9,7 +9,8 @@ use MyPHP\UI\{TextInputRange, Input, Key, TextState};
 /**
  * The window's content view: an MTKView subclass whose event methods are
  * PHP closures. Each event lands in the view's Input and asks for a frame.
- * Coordinates are in points, y down (the view is flipped).
+ * Coordinates are in points, y down (the view is flipped). Native drags
+ * over it go to Drag; one starts from its last press.
  *
  * Keys go through interpretKeyEvents:, so the input context (input
  * methods, dead keys, the key bindings) answers with insertText:,
@@ -26,6 +27,8 @@ final class View
     /** @var array<int, Input> by view address */
     private static array $inputs = [];
     private static bool $defined = false;
+    /** @var array<int, mixed> the last left press of each view, retained, by view address: a native drag begins with it */
+    private static array $lastDown = [];
 
     /** Creates the view through $metal with $draw as its frame callback. */
     public static function create(Metal $metal, $frame, Input $input, Closure $draw)
@@ -34,11 +37,24 @@ final class View
         $view = $metal->createView($frame, $draw, 'MyPHPView');
         self::$inputs[ObjC::addr($view)] = $input;
         Access::attach($view, $input); // the container of the elements assistive technology sees
-        Drop::register($view);
         $area = ObjC::msg('p:rLpp', ObjC::alloc('NSTrackingArea'), 'initWithRect:options:owner:userInfo:',
             ObjC::rect(0, 0, 0, 0), self::TRACKING, $view, null);
         ObjC::msg('v:p', $view, 'addTrackingArea:', $area);
         return $view;
+    }
+
+    /** The last left press on $view, which a native drag starts from (Drag::start); null before one. */
+    public static function lastDown($view)
+    {
+        return self::$lastDown[ObjC::addr($view)] ?? null;
+    }
+
+    /** Lets the last press on $view go, once it closed. */
+    public static function forget($view): void
+    {
+        $key = ObjC::addr($view);
+        if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
+        unset(self::$lastDown[$key]);
     }
 
     /** When $event happened, in hrtime's nanoseconds: NSEvent's timestamp counts seconds of uptime, as mach_absolute_time, which hrtime reads on macOS. A drag's velocity is timed by its events, not by the frames that drain them. */
@@ -76,7 +92,12 @@ final class View
             'mouseDownCanMoveWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
             // The layer's changes are not animated, as layers do by default (mygo's fit): a resize would show the last frame stretched to the new size, catching up over the animation.
             'actionForLayer:forKey:' => ['@@:@@', 'p(pppp)', fn($self, $cmd, $layer, $key) => ObjC::msg('p:', ObjC::cls('NSNull'), 'null')],
-            'mouseDown:' => ['v@:@', 'v(ppp)', $mouse('down')],
+            'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($mouse) {
+                $key = ObjC::addr($self);
+                if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
+                self::$lastDown[$key] = ObjC::msg('p:', $event, 'retain');
+                $mouse('down')($self, $cmd, $event);
+            }],
             'mouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
             'rightMouseDown:' => ['v@:@', 'v(ppp)', $mouse('down')],
             'rightMouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
@@ -258,7 +279,7 @@ final class View
                 }
                 Metal::requestFrame($self);
             }],
-        ] + Drop::methods(true) + Access::viewMethods(), ['NSTextInputClient', 'NSDraggingDestination']);
+        ] + Drag::methods() + Access::viewMethods(), ['NSTextInputClient', 'NSDraggingDestination']);
     }
 
     /** Asks for a frame $seconds from now; a later call replaces an earlier one. */

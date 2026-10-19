@@ -3,8 +3,9 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Access, Dock, Drop, Metal, ObjC, Pasteboard, Screens, View, WebView};
-use MyPHP\UI\{AccessTree, Context, DisplayList, Input, Layout, Painter, Runtime};
+use MyPHP\Native\{Access, Dock, Drag, Drop, Metal, ObjC, Pasteboard, Screens, View, WebView};
+use MyPHP\Transfer\{Data, DragOptions, Format, Operation, Result};
+use MyPHP\UI\{AccessTree, Context, DataDragEvent, DisplayList, Image, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
 /**
@@ -121,6 +122,17 @@ final class Window
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
             $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame
+            $this->runtime->startDataDrag = function (Data $data, mixed $local, DragOptions $o, float $x, float $y): ?\Throwable {
+                try {
+                    $this->dragData($data, $local, $o, $x, $y);
+                    return null;
+                } catch (\InvalidArgumentException|RuntimeException $e) {
+                    return $e; // what is wrong with it: the source is told
+                }
+            };
+            $this->runtime->cancelDataDrag = $this->cancelDataDrag(...);
+            $this->runtime->setDropFormats = fn(array $formats) => Drag::setFormats($this->view, $formats);
+            $this->runtime->snapshot = $this->snapshot(...);
         }
 
         $this->stateKey = $o->stateKey;
@@ -204,6 +216,10 @@ final class Window
             ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('titleBarLaidOut:'), ObjC::str('NSViewFrameDidChangeNotification'), $container);
         }
         self::$byView[ObjC::addr($this->view)] = $this;
+        Drag::handle(function ($view, string $kind, DataDragEvent $d, float $x, float $y): bool {
+            $w = self::$byView[ObjC::addr($view)] ?? null;
+            return $w !== null && $w->dataEvent($kind, $d, $x, $y);
+        });
         Drop::handle(function ($view, array $paths, float $x, float $y) {
             $w = self::$byView[ObjC::addr($view)] ?? null;
             if ($w === null) {
@@ -600,7 +616,7 @@ final class Window
         }
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
-        if ($this->runtime !== null) { Access::detach($this->view); }
+        if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); }
         $this->dropChannels();
         $this->captureState();
         WindowState::save();
@@ -613,7 +629,9 @@ final class Window
     /**
      * Calls $fn on $event, one of EVENTS: close (with a CloseEvent to
      * cancel), closed, focus, blur, resize, move, minimize, restore,
-     * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent).
+     * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent:
+     * files dropped from other apps that no node took, Context::dropData
+     * or droppedFiles).
      * Returns a function that removes it.
      */
     public function on(string $event, \Closure $fn): \Closure
@@ -1560,6 +1578,147 @@ final class Window
         ObjC::msg('v:p', $this->popover, 'setContentViewController:', null);
         ObjC::msg('v:', $this->popover, 'release');
         ObjC::msg('v:', $this->popoverController, 'release');
+    }
+
+    /**
+     * Starts a native drag of $data from this window's pointer gesture
+     * (mygo's StartDataDrag): the window shows native UI. $o->done hears
+     * how it ended, on the main thread; what is wrong with it throws, and
+     * starts nothing. A node's drag is Context::dragData.
+     */
+    public function startDataDrag(Data $data, DragOptions $o = new DragOptions()): void
+    {
+        $this->dragData($data, null, $o, -1, -1);
+    }
+
+    /** Cancels the native drag this window sources, if any (mygo's CancelDataDrag); its source is told. */
+    public function cancelDataDrag(): void
+    {
+        DataDrag::cancel($this, fn() => Drag::cancel($this->view));
+    }
+
+    /** A native drag of $data, its value $local for this process's typed targets, from ($x, $y), or the press for negative ones (mygo's startDataDrag). */
+    private function dragData(Data $data, mixed $local, DragOptions $o, float $x, float $y): void
+    {
+        if ($this->destroyed) {
+            throw new RuntimeException('myphp: the window is closed');
+        }
+        if ($this->runtime === null) {
+            throw new RuntimeException('myphp: a data drag requires native UI');
+        }
+        [$pix, $width, $height] = self::dragImage($o->preview);
+        DataDrag::start($this, $data, $local, $o->done, $o->operations, function (DataDrag $src) use ($o, $x, $y, $pix, $width, $height) {
+            if ($this->destroyed) {
+                $src->finish(new Result(canceled: true));
+                return;
+            }
+            Drag::start($this->view, View::lastDown($this->view), ['data' => $src->data(), 'session' => $src->token, 'operations' => $src->operations,
+                'x' => $x, 'y' => $y, 'preview' => $pix, 'width' => $width, 'height' => $height,
+                'hotX' => $o->hotspot[0], 'hotY' => $o->hotspot[1], 'done' => $src->finish(...)]);
+        });
+    }
+
+    /** The pixels of a drag's image, premultiplied BGRA (mygo's dragImage): none for none. @return array{0: ?string, 1: int, 2: int} */
+    private static function dragImage(?Image $image): array
+    {
+        if ($image === null) {
+            return [null, 0, 0];
+        }
+        if ($image->w <= 0 || $image->h <= 0 || $image->w > 4096 || $image->h > 4096) {
+            throw new \InvalidArgumentException('myphp: drag preview size must be 1..4096 pixels');
+        }
+        $p = $image->pixels();
+        for ($i = 0, $n = strlen($p); $i < $n; $i += 4) {
+            [$p[$i], $p[$i + 2]] = [$p[$i + 2], $p[$i]];
+        }
+        return [$p, $image->w, $image->h];
+    }
+
+    /** The last frame's ($x, $y) and the $w by $h points from there, at one pixel a point (the runtime's snapshot, for mygo's dataPreview). */
+    private function snapshot(float $x, float $y, int $w, int $h): Image
+    {
+        $window = ObjC::msg('p:', $this->view, 'window');
+        $scale = $window === null ? App::scale() : ObjC::msg('d:', $window, 'backingScaleFactor');
+        [$frame, $fw, $fh] = App::metal()->lastFrame($this->view);
+        $out = str_repeat("\0", $w * $h * 4);
+        for ($row = 0; $row < $h; $row++) {
+            $py = (int)(($y + $row) * $scale);
+            if ($py < 0 || $py >= $fh) {
+                continue;
+            }
+            for ($col = 0; $col < $w; $col++) {
+                $px = (int)(($x + $col) * $scale);
+                if ($px < 0 || $px >= $fw) {
+                    continue;
+                }
+                $i = ($py * $fw + $px) * 4; $j = ($row * $w + $col) * 4;
+                $out[$j] = $frame[$i + 2]; $out[$j + 1] = $frame[$i + 1]; $out[$j + 2] = $frame[$i]; $out[$j + 3] = $frame[$i + 3]; // BGRA to RGBA
+            }
+        }
+        return Image::fromPixels($w, $h, $out);
+    }
+
+    /**
+     * A native drag over the view, 'over', 'leave' or 'drop', to the content
+     * (mygo's SurfaceEvent): files it does not take as data go to a node
+     * taking files (Context::droppedFiles), then to the 'fileDrop'
+     * listeners, when it has some. Whether it took it.
+     */
+    private function dataEvent(string $kind, DataDragEvent $d, float $x, float $y): bool
+    {
+        DataDrag::resolve($d);
+        $rt = $this->runtime;
+        if ($kind === 'leave') {
+            $rt->clearDataOver();
+            $taken = false;
+        } else {
+            $taken = $kind === 'over' ? $rt->dataDragOver($x, $y, $d) : $rt->dataDrop($x, $y, $d);
+        }
+        if ($taken) {
+            return true;
+        }
+        if ($kind === 'leave') {
+            $rt->fileDrag(-1, -1);
+        } elseif ($d->hasFiles || in_array(Format::FILE_LIST, $d->offer->formats, true)) {
+            $d->operation = Operation::negotiate($d->offer->operations, Operation::COPY, $d->offer->suggested);
+            if ($d->operation === Operation::NONE) {
+                return false;
+            }
+            $paths = [];
+            if ($kind === 'drop') {
+                $paths = $d->data->paths();
+                if ($paths === []) {
+                    $d->operation = Operation::NONE;
+                    return false;
+                }
+            }
+            $d->formats = [Format::FILE_LIST];
+            if ($this->fileEvent($kind, $x, $y, $paths)) {
+                return true;
+            }
+        }
+        $d->operation = Operation::NONE;
+        return false;
+    }
+
+    /** Files from another app over the view or dropped on it: to a node taking them, else to the 'fileDrop' listeners. @param list<string> $paths */
+    private function fileEvent(string $kind, float $x, float $y, array $paths): bool
+    {
+        $listeners = $this->listeners['fileDrop'] ?? [];
+        if ($kind === 'over') {
+            return $this->runtime->fileDrag($x, $y) || $listeners !== [];
+        }
+        if ($this->runtime->fileDrop($x, $y, $paths)) {
+            return true;
+        }
+        if ($listeners === []) {
+            return false;
+        }
+        $e = new FileDropEvent($this, $paths, $x, $y);
+        foreach ($listeners as $fn) {
+            $fn($e);
+        }
+        return true;
     }
 
     /** Closes a flyout or a panel on an Escape its page or native UI left, as the user closing it, after the frame being built: menus, popovers and launchers close so. */

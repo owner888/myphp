@@ -91,6 +91,10 @@ final class Node
     public bool $drags = false;
     public mixed $dragValue = null;
     public ?string $accepts = null;
+    /** A native drag source (Context::dragData): what makes its data as the drag starts, and its options; a native drop target's options (Context::dropData); whether it takes files dragged from other apps (Context::droppedFiles). @var ?array{0: \Closure(): \MyPHP\Transfer\Data, 1: \MyPHP\Transfer\DragOptions} */
+    public ?array $dataSource = null;
+    public ?\MyPHP\Transfer\DropOptions $dataTarget = null;
+    public bool $takesFiles = false;
     /** Moved by the pointer from its place in the layout (Context::draggable): its offset joins its pose. */
     public bool $draggable = false;
     /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled. */

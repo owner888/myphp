@@ -430,14 +430,7 @@ final class Metal
         $texture = ObjC::msg('p:', $drawable, 'texture');
         // One pass draws everything; a glass quad splits it: what is below it is drawn, copied and
         // blurred into the backdrop, and the pass goes on from the glass, which reads the blur.
-        $start = 0;
-        foreach ($list->glass as $g) {
-            [$at, $sigma] = $g;
-            $this->pass($cb, $pass, $start, $at - $start, $start === 0);
-            $this->blur($cb, $texture, $sigma);
-            $start = $at;
-        }
-        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0);
+        $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$this->frame % self::RING], $this->xformBuffers[$this->frame % self::RING]]);
         if ($sync) {
             ObjC::msg('v:', $cb, 'commit');
             ObjC::msg('v:', $cb, 'waitUntilScheduled');
@@ -449,19 +442,67 @@ final class Metal
         }
     }
 
-    private const LOAD_LOAD = 1; // MTLLoadAction: dontCare 0, load 1, clear 2
+    private const LOAD_LOAD = 1, LOAD_CLEAR = 2; // MTLLoadAction: dontCare 0, load 1, clear 2
+
+    /**
+     * The last frame $view showed, drawn again off screen from its list,
+     * which the ring keeps until it comes round: BGRA pixels,
+     * premultiplied, rows top down, [bytes, width, height]. For a native
+     * drag's image of its source; it waits for the GPU.
+     */
+    public function lastFrame($view): array
+    {
+        $ds = ObjC::msg('z:', $view, 'drawableSize');
+        $pw = max(1, (int)$ds->w); $ph = max(1, (int)$ds->h);
+        $at = ($this->frame - 1 + self::RING) % self::RING;
+        $list = $this->lists[$at];
+        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_BGRA8, $pw, $ph, false);
+        ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
+        ObjC::msg('v:L', $desc, 'setStorageMode:', 0); // shared: read back here
+        $texture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('snapshot texture');
+        $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+        $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+        ObjC::msg('v:p', $ca, 'setTexture:', $texture);
+        ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
+        ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
+        ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::msg('k:', $view, 'clearColor'));
+        $cb = ObjC::msg('p:', $this->queue, 'commandBuffer');
+        $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$at], $this->xformBuffers[$at]]);
+        ObjC::msg('v:', $cb, 'commit');
+        ObjC::msg('v:', $cb, 'waitUntilCompleted');
+        $bytes = ObjC::$c->new("char[" . ($pw * $ph * 4) . "]");
+        $region = ObjC::$c->new('MTLRegion');
+        $region->w = $pw; $region->h = $ph; $region->d = 1;
+        ObjC::msg('v:pLRL', $texture, 'getBytes:bytesPerRow:fromRegion:mipmapLevel:', ObjC::$c->cast('void*', FFI::addr($bytes)), $pw * 4, $region, 0);
+        ObjC::msg('v:', $texture, 'release');
+        return [FFI::string($bytes, $pw * $ph * 4), $pw, $ph];
+    }
+
+    /** Draws $list onto $texture through $pass: one pass, split at each glass quad, which reads what is below it blurred. */
+    private function drawList($cb, $pass, $texture, DisplayList $list, array $buffers): void
+    {
+        $start = 0;
+        foreach ($list->glass as $g) {
+            [$at, $sigma] = $g;
+            $this->pass($cb, $pass, $start, $at - $start, $start === 0, $buffers);
+            $this->blur($cb, $texture, $sigma);
+            $start = $at;
+        }
+        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers);
+    }
 
     /** Draws quads [$from, $from + $count) of the frame's buffer onto the drawable, clearing it first for the first pass. */
-    private function pass($cb, $pass, int $from, int $count, bool $first): void
+    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers): void
     {
+        [$quads, $xforms] = $buffers;
         if (!$first) {
             ObjC::msg('v:L', ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0), 'setLoadAction:', self::LOAD_LOAD);
         }
         $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
         ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->pipeline);
-        ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $this->buffers[$this->frame % self::RING], $from * DisplayList::FLOATS_PER_RECT * 4, 0);
+        ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $quads, $from * DisplayList::FLOATS_PER_RECT * 4, 0);
         ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $this->uniforms, 32, 1);
-        ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $this->xformBuffers[$this->frame % self::RING], 0, 2);
+        ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $xforms, 0, 2);
         ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $this->uniforms, 32, 1);
         if ($this->atlasTexture !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);

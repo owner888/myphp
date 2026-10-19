@@ -535,11 +535,17 @@ trait ContextMotion
     public function dragOver(Node $n, string $type, mixed &$value = null): bool
     {
         $n->accepts = $type;
-        $d = $this->runtime?->valueDrag;
-        if ($d === null || $d['canceled'] || $d['over'] !== $n->id || !Runtime::isOf($d['value'], $type)) {
+        $rt = $this->runtime;
+        $d = $rt?->valueDrag;
+        if ($d !== null && !$d['native'] && !$d['canceled'] && $d['over'] === $n->id && Runtime::isOf($d['value'], $type)) {
+            $value = $d['value'];
+            return true;
+        }
+        $local = $rt?->incomingLocal($n->id); // a native drag of this process's, with its value
+        if ($local === null || !Runtime::isOf($local, $type)) {
             return false;
         }
-        $value = $d['value'];
+        $value = $local;
         return true;
     }
 

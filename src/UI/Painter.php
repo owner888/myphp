@@ -220,7 +220,7 @@ final class Painter
     public static function dragCopy(DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {
         $d = $rt->valueDrag;
-        if ($d === null || $d['canceled'] || ($e = $d['elem']) === null) {
+        if ($d === null || $d['canceled'] || $d['native'] || ($e = $d['elem']) === null) { // the system shows a native drag
             return;
         }
         [$px, $py] = $e->world->point($e->x + $d['offX'], $e->y + $d['offY']);

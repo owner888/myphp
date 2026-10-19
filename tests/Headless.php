@@ -55,6 +55,42 @@ final class Headless
         $this->theme = Theme::dark();
         $this->view = $view;
         $this->rt->onAccess = function (AccessTree $t) { array_push($this->told, ...$t->announcements); };
+        $this->rt->startDataDrag = function (\MyPHP\Transfer\Data $data, mixed $local, \MyPHP\Transfer\DragOptions $o, float $x, float $y): ?\Throwable {
+            $this->dataDrag = ['data' => $data->snapshot(), 'local' => $local, 'options' => $o, 'x' => $x, 'y' => $y];
+            return null;
+        };
+        $this->rt->cancelDataDrag = fn() => $this->finishDataDrag(new \MyPHP\Transfer\Result(canceled: true));
+        $this->rt->setDropFormats = function (array $formats): void { $this->dropFormats = $formats; };
+        $this->rt->snapshot = fn(float $x, float $y, int $w, int $h) => Image::fromPixels($w, $h, str_repeat("\0", $w * $h * 4));
+    }
+
+    /** The native drag the host was asked to start (mygo's headless host): its data as the drag snapshots it, its local value, options and where it started; null when none is on. */
+    public ?array $dataDrag = null;
+    /** @var list<string> the formats the view was told to take */
+    public array $dropFormats = [];
+
+    /** Ends the native drag on, as the system would, telling its source $r (mygo's finishDataDrag). */
+    public function finishDataDrag(\MyPHP\Transfer\Result $r): void
+    {
+        $d = $this->dataDrag;
+        $this->dataDrag = null;
+        if ($d !== null && $d['options']->done !== null) { ($d['options']->done)($r); }
+    }
+
+    /** $e over ($x, $y), then a frame: whether a node takes it. */
+    public function dataOver(float $x, float $y, \MyPHP\UI\DataDragEvent $e): bool
+    {
+        $took = $this->rt->dataDragOver($x, $y, $e);
+        $this->frame();
+        return $took;
+    }
+
+    /** $e dropped at ($x, $y), then a frame: whether a node took it. */
+    public function dataDrop(float $x, float $y, \MyPHP\UI\DataDragEvent $e): bool
+    {
+        $took = $this->rt->dataDrop($x, $y, $e);
+        $this->frame();
+        return $took;
     }
 
     /** @var list<string> what the trees for assistive technology announced (mygo's told) */

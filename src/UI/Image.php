@@ -56,6 +56,12 @@ final class Image
         return self::fromBytes($bytes, $max);
     }
 
+    /** The pixels, premultiplied RGBA, four bytes a pixel, top row first. */
+    public function pixels(): string
+    {
+        return \FFI::string($this->pix, $this->w * $this->h * 4);
+    }
+
     /**
      * The image, or a halving of it, for showing $shrink times smaller
      * than its pixels, as mygo's smaller: far smaller than its pixels, a

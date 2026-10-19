@@ -51,7 +51,7 @@ final class WebView
         }
         self::$defined = true;
         // A WKWebView that hands dropped files to PHP (the page's own drop events do not see paths).
-        ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods(false), ['NSDraggingDestination']);
+        ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods(), ['NSDraggingDestination']);
         ObjC::defineClass('MyPHPScriptHandler', 'NSObject', [
             'userContentController:didReceiveScriptMessage:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $ucc, $message) {
                 $view = self::$views[ObjC::addr(ObjC::msg('p:', $message, 'webView'))] ?? null;
