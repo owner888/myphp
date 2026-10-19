@@ -196,7 +196,7 @@ final class Menu
                 if ($it->type === MenuItem::CHECKBOX) {
                     $it->setChecked(!$it->checked);
                 }
-                ($it->click)($it, Window::key());
+                ($it->click)($it, Window::focused());
             }],
         ]);
         return ObjC::msg('p:', ObjC::alloc('MyPHPMenuTarget'), 'init');
@@ -212,7 +212,7 @@ final class Menu
             return;
         }
         $native = $this->build();
-        $view = ObjC::msg('p:', $window->native(), 'contentView');
+        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
         $p = ObjC::$c->new('NSPoint');
         $p->x = $r[0]; $p->y = $r[1] + $r[3] + 2; // the content view is flipped: y runs down
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
@@ -221,8 +221,8 @@ final class Menu
     public function popup(Window $window): void
     {
         $native = $this->build();
-        $view = ObjC::msg('p:', $window->native(), 'contentView');
-        $p = ObjC::msg('q:qp', $view, 'convertPoint:fromView:', ObjC::msg('q:', $window->native(), 'mouseLocationOutsideOfEventStream'), null);
+        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
+        $p = ObjC::msg('q:qp', $view, 'convertPoint:fromView:', ObjC::msg('q:', $window->nativeHandle(), 'mouseLocationOutsideOfEventStream'), null);
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 }

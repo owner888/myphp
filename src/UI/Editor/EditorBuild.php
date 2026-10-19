@@ -54,7 +54,7 @@ trait EditorBuild
         $e->handleInput(fn(InputEvent $ev) => $this->input($ev));
         $e->cursor($this->region === self::REGION_TEXT ? 'ibeam' : 'arrow');
         $e->draw(function (DisplayList $list, Node $n, UITheme $t, TextPainter $text) { $this->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
-        if ($c->rightClicked($e) && ($w = Window::key()) !== null) { (new Menu($this->menu()))->popup($w); }
+        if ($c->rightClicked($e) && ($w = Window::focused()) !== null) { (new Menu($this->menu()))->popup($w); }
         $last = $rt?->rectOf($e->id);
         if ($last !== null) { $this->r = $last; }
         if ($o->fitContent) {

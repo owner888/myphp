@@ -60,7 +60,7 @@ final class Dialog
             return ObjC::msg('l:', $panel, 'runModal');
         }
         $response = null;
-        ObjC::msg('v:pp', $panel, 'beginSheetModalForWindow:completionHandler:', $parent->native(),
+        ObjC::msg('v:pp', $panel, 'beginSheetModalForWindow:completionHandler:', $parent->nativeHandle(),
             ObjC::block('l', function (int $r) use (&$response) { $response = $r; }));
         App::wait(function () use (&$response) { return $response !== null; }); // by reference: an arrow function would keep the null it was made with
         return $response;

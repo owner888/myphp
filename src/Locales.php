@@ -144,7 +144,7 @@ final class Locales
         if ($before === null || !$tell) { return; }
         $localeChanged = $before[0] !== $locale; $regionChanged = !$before[2]->equals($region);
         if (!$localeChanged && !$regionChanged) { return; }
-        foreach (Window::all() as $w) { $w->update(); }
+        foreach (Window::all() as $w) { $w->invalidate(); }
         if ($localeChanged) {
             App::relabelMenus();
             foreach (self::$onLocale as $fn) { $fn($locale); }

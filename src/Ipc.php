@@ -182,9 +182,9 @@ final class Ipc
         try {
             return [match ($name) {
                 'Minimize' => $w->minimize(),
-                'Maximize' => $w->setMaximized(true),
-                'Unmaximize' => $w->setMaximized(false),
-                'ToggleMaximize' => $w->setMaximized(!$w->isMaximized()),
+                'Maximize' => $w->maximize(),
+                'Unmaximize' => $w->unmaximize(),
+                'ToggleMaximize' => $w->toggleMaximize(),
                 'IsMaximized' => $w->isMaximized(),
                 'ToggleFullScreen' => $w->toggleFullScreen(),
                 'Close' => $w->close(),

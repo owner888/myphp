@@ -52,7 +52,7 @@ final class Photos
         $this->viewing = $select !== null;
         $this->grid->scrollTo(0);
         $this->window?->setTitle(basename($path));
-        $this->window?->update();
+        $this->window?->invalidate();
     }
 
     public function select(int $i): void
@@ -80,7 +80,7 @@ final class Photos
             while (count($this->thumbs) > self::KEEP) {
                 unset($this->thumbs[array_key_first($this->thumbs)]);
             }
-            $this->window->update();
+            $this->window->invalidate();
             App::later($next);
         });
     }
@@ -196,7 +196,7 @@ function size(string $f): string
 
 $p = new Photos;
 $openDialog = function () use ($p) {
-    $paths = Dialog::open(new OpenDialogOptions(parent: Window::key(), title: 'Open a folder of photos', directory: true));
+    $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: 'Open a folder of photos', directory: true));
     if ($paths) { $p->open($paths[0]); }
 };
 App::setMenu(new Menu([

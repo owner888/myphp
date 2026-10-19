@@ -2,7 +2,7 @@
 // Menus and dialogs around a native window: a menu bar with the standard
 // menus plus a Notes menu (an accelerator, a checkbox, a disabled item), a
 // context menu on right click, and the open/save/message dialogs as sheets
-// of the window (parent: Window::key()); without a parent they are app-modal.
+// of the window (parent: Window::focused()); without a parent they are app-modal.
 // Also a tray icon with its own menu, a global shortcut (Cmd+Shift+Space
 // shows the window from anywhere), window events in the log, the window's
 // frame remembered across runs, and a notification (from a built .app).
@@ -15,19 +15,19 @@ use MyPHP\UI\{Content, Context};
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 $s = ['log' => ['Use the menu, the buttons, or right-click.'], 'wrap' => true, 'window' => null];
-$log = function (string $line) use (&$s) { $s['log'][] = $line; $s['window']?->update(); };
+$log = function (string $line) use (&$s) { $s['log'][] = $line; $s['window']?->invalidate(); };
 
 $open = function () use ($log) {
-    $paths = Dialog::open(new OpenDialogOptions(parent: Window::key(), title: 'Open notes', multiple: true,
+    $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: 'Open notes', multiple: true,
         filters: [new FileFilter('Text', ['txt', 'md']), new FileFilter('PHP', ['php'])]));
     $log($paths ? 'opened: ' . implode(', ', array_map('basename', $paths)) : 'open canceled');
 };
 $save = function () use ($log) {
-    $path = Dialog::save(new SaveDialogOptions(parent: Window::key(), defaultPath: getenv('HOME') . '/notes.txt', filters: [new FileFilter('Text', ['txt'])]));
+    $path = Dialog::save(new SaveDialogOptions(parent: Window::focused(), defaultPath: getenv('HOME') . '/notes.txt', filters: [new FileFilter('Text', ['txt'])]));
     $log($path !== '' ? "save to $path" : 'save canceled');
 };
 $ask = function () use ($log) {
-    $r = Dialog::message(new MessageOptions(parent: Window::key(), type: 'question', message: 'Discard the changes?',
+    $r = Dialog::message(new MessageOptions(parent: Window::focused(), type: 'question', message: 'Discard the changes?',
         detail: 'There is no undo for this.', buttons: ['Discard', 'Keep editing'], cancelButton: 1, checkboxLabel: "Don't ask again"));
     $log("message: button {$r->button}" . ($r->checkboxChecked ? ', checkbox on' : ''));
 };

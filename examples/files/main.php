@@ -153,7 +153,7 @@ final class Files
         App::later($next = function () use (&$next) {
             $p = array_shift($this->wanted);
             if ($p === null) { $this->decoding = false; return; }
-            if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); $this->window?->update(); }
+            if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); $this->window?->invalidate(); }
             App::later($next);
         });
     }
@@ -263,8 +263,8 @@ $files = new Files($argv[1] ?? (getenv('HOME') ?: '/'));
 App::setMenu(new Menu([
     new MenuItem(role: 'appMenu'),
     new MenuItem('File', submenu: [
-        new MenuItem('Enclosing Folder', function () use ($files) { $files->open(dirname($files->path)); $files->window?->update(); }, 'CmdOrCtrl+Up'),
-        new MenuItem('Find', function () use ($files) { $files->finding = true; $files->window?->update(); }, 'CmdOrCtrl+F'),
+        new MenuItem('Enclosing Folder', function () use ($files) { $files->open(dirname($files->path)); $files->window?->invalidate(); }, 'CmdOrCtrl+Up'),
+        new MenuItem('Find', function () use ($files) { $files->finding = true; $files->window?->invalidate(); }, 'CmdOrCtrl+F'),
         MenuItem::separator(), new MenuItem(role: 'close'),
     ]),
     new MenuItem('Edit', submenu: [new MenuItem(role: 'selectAll')]),

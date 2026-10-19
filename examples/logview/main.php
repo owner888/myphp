@@ -183,7 +183,7 @@ function view(Context $c, Log $log): void
 }
 
 $openDialog = function () use ($log) {
-    $paths = Dialog::open(new OpenDialogOptions(parent: Window::key(), title: 'Open a log', defaultPath: '/var/log'));
+    $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: 'Open a log', defaultPath: '/var/log'));
     if ($paths) { $log->open($paths[0]); }
 };
 $copy = function () use ($log) {
@@ -207,7 +207,7 @@ App::whenReady(function () use ($log, $argv) {
     }
     // Follow the file: look for new lines twice a second and redraw when there are.
     $tick = function () use (&$tick, $log) {
-        if ($log->poll()) { $log->window->update(); }
+        if ($log->poll()) { $log->window->invalidate(); }
         App::after(0.5, $tick);
     };
     $tick();
