@@ -75,6 +75,14 @@ final class View
             'rightMouseDown:' => ['v@:@', 'v(ppp)', $mouse('down')],
             'rightMouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
             'mouseMoved:' => ['v@:@', 'v(ppp)', $mouse('move')],
+            // A mouse's back and forward buttons (3 and 4) are keys, as mygo's KeyBack and KeyForward: a router goes back and forward on them.
+            'otherMouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                $key = match (ObjC::msg('l:', $event, 'buttonNumber')) { 3 => Key::BACK, 4 => Key::FORWARD, default => null };
+                if ($key !== null) {
+                    self::$inputs[ObjC::addr($self)]->push(['key', '', $key, ObjC::msg('L:', $event, 'modifierFlags')]);
+                    Metal::requestFrame($self);
+                }
+            }],
             'mouseDragged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
                 $input = self::$inputs[ObjC::addr($self)];
                 [$x, $y] = $point($self, $event);

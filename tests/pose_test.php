@@ -9,16 +9,6 @@ namespace MyPHP\Tests;
 
 use MyPHP\UI\{Animation, Context, ContentTransition, DisplayList, Easing, Node, Pose, SVG};
 
-/** A harness whose frames happen at $now, nanoseconds (mygo's clockTester). */
-function poseTester(\Closure $view, ?int &$now, float $w, float $h): Headless
-{
-    $now = 1_000_000 * 1_000_000_000;
-    $t = new Headless($view, $w, $h);
-    $t->rt->clock = function () use (&$now): int { return $now; };
-    $t->frame(1);
-    return $t;
-}
-
 $lin = Easing::linear(...);
 $a = new Animation(0.1, $lin);
 

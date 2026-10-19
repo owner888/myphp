@@ -1230,6 +1230,39 @@ as they come), and `$done(out, err, code)` once it ends; `kill()` stops
 it. Network and other slow work go through it — `examples/http` sends
 requests with curl this way and stays live while they are in flight.
 
+## Router
+
+`Router` is mygo's: a history of locations (an escaped path and a query,
+resolved against the page shown as links in web pages are, as Go's
+ResolveReference and path.Clean: `edit`, `../settings/`, `?tab=info`),
+the entry shown, at most `MAX_HISTORY`. `view($c, $fn)` builds the page
+shown in a column, keyed by the box and a number of the router (an entry
+pushed with the same path, or keeping a layout's part of it, shares its
+pages), so the nodes inside keep their ids; `Route::match` reads
+`{name}` and `{name...}` patterns and `Route::view` builds the pages of
+the rest of the path inside a layout, its view's state local to its box.
+State goes with its node: `Runtime::local` drops what was not built, as
+mygo's engine drops states, unless the router keeps the page it is in —
+the `KEPT_PAGES` entries nearest the one shown (`Runtime::keep`, by the
+page each node was last built in, `pageOf`), so going back finds a page
+as it was. A change during a build asks for another pass, from outside
+one a frame (`Runtime::changed`, the window's `requestFrame`). Going to a
+page moves the focus into it (the node that had it there, else the page,
+a focus target Tab goes past but into) when it was in the page going
+away, in an overlay or nowhere; otherwise it stays, and the title is
+announced. Pages slide (the upper over the lower, which moves 30% and
+dims, both placed with `Node::at` by the box's last-frame width) or fade
+over `SLIDE_TIME` and `FADE_TIME` or `$animation`; the page going away is
+inert (`Node::$inert`: it takes no pointer, focus or shortcut, and
+assistive technology does not see it). Cmd+[ and Cmd+] and a mouse's
+buttons 3 and 4 (`Key::BACK`, `FORWARD`, from the view's
+`otherMouseDown:`) go back and forward in the innermost router around the
+focus, or the window's first. `Context::link` is focusable and goes to
+paths through the router whose page it is in; `backButton` and
+`forwardButton` are disabled (`Node::$disabled`) at the ends, and list
+the pages that way in a context menu (`Router::pagesToward`). mygo's
+browser history (its js build) has no place here.
+
 ## Locale and formats
 
 mygo's locale model (locale.go) is `Locales`, behind `App::locale()`,

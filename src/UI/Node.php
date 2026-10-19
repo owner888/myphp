@@ -83,6 +83,12 @@ final class Node
     public bool $wraps = false;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
     public bool $focusable = false;
+    /** A focusable node Tab goes past, into what is inside it, which takes the focus from code alone (a router's page, mygo's focus target). */
+    public bool $focusTarget = false;
+    /** A router's page (mygo's flagPage), whose nodes' state lives while the router keeps the page; inert, what is in it takes neither the pointer nor the keyboard, and assistive technology does not see it (a page going away). */
+    public bool $page = false, $inert = false;
+    /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled. */
+    public bool $disabled = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
     /** Drawn over the children (mygo's DrawOver): a list's drop line. */

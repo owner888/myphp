@@ -214,7 +214,7 @@ final class Menu
         $native = $this->build();
         $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
         $p = ObjC::$c->new('NSPoint');
-        $p->x = $r[0]; $p->y = $r[1] + $r[3] + 2; // the content view is flipped: y runs down
+        $p->x = $r[0]; $p->y = ObjC::msg('r:', $view, 'bounds')->h - ($r[1] + $r[3] + 2); // the content view (the window's container) is not flipped: y runs up from its bottom
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 

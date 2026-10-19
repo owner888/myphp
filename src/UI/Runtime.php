@@ -103,8 +103,24 @@ final class Runtime
     private array $overlayIds = [], $openers = [];
     /** Focus groups: each focusable's group id, the groups' orientation, selects flag and member on, and the member each group focused last. */
     private array $memberOf = [], $groups = [], $groupLast = [];
-    /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state. */
+    /** State a composite keeps across frames by its node's id (a sidebar's scroll offset and items), as mygo's local state: it goes with its node, unless a router keeps the page it is in. */
     private array $locals = [];
+    /**
+     * Each node's parent in the last frame (0 for the root); the page of a
+     * router each node was last built in (0 for none), kept with its state;
+     * the pages the routers keep this pass, and the nodes inert last frame
+     * (in a page going away) and those Tab goes past (focus targets).
+     * @var array<int, int> $parents @var array<int, int> $pageOf
+     */
+    private array $parents = [], $pageOf = [], $kept = [], $inertIds = [], $targets = [];
+    /** The routers' boxes built this pass, in order, and those of the last frame (Router::view). */
+    private array $routers = [], $lastRouters = [];
+    /** The overlays of the last frame, while this one is built. */
+    private array $lastOverlayIds = [];
+    /** Whether a frame is being built: a change asks for another pass of it, else for a frame (changed()). */
+    private bool $building = false;
+    /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
+    public ?Closure $requestFrame = null;
     /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
     private array $toasts = [];
     public const TOASTS = 3, TOAST_FOR = 4.0;
@@ -282,9 +298,12 @@ final class Runtime
         $this->clickable = []; // this frame's build asks again
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
+        $this->lastOverlayIds = $lastOverlays;
+        $this->building = true;
         for ($pass = 0; $pass < 3; $pass++) {
             $this->consumed = false;
             $this->pass = $pass;
+            $this->kept = []; $this->routers = [];
             $this->uses = [];
             $root = $build();
             $this->passes = $pass + 1;
@@ -295,6 +314,7 @@ final class Runtime
             $this->rightClicks = [];
             $this->doubleClicks = [];
         }
+        $this->building = false;
         if ($this->escape !== null) {
             foreach ($this->keys as $k) {
                 if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
@@ -321,7 +341,15 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->shown = []; $this->worlds = [];
+        $this->parents = []; $this->inertIds = []; $this->targets = [];
         $this->record($root);
+        foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
+            if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
+        }
+        foreach ($this->pageOf as $id => $_) {
+            if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->pageOf[$id]); }
+        }
+        $this->lastRouters = array_flip($this->routers);
         foreach ([&$this->motions, &$this->colorMotions, &$this->sequences, &$this->loops, &$this->timelines, &$this->poses, &$this->contents] as &$moving) {
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
@@ -419,6 +447,88 @@ final class Runtime
         return $this->locals[$id] ??= $make();
     }
 
+    /** Whether node $id is $ancestor or inside it, in the last frame. */
+    public function within(int $id, int $ancestor): bool
+    {
+        for ($n = 0; isset($this->parents[$id]) && $n < 1024; $n++) {
+            if ($id === $ancestor) {
+                return true;
+            }
+            $id = $this->parents[$id];
+        }
+        return false;
+    }
+
+    /** Whether node $id was in an overlay (a popover, a menu, a dialog) in the last frame. */
+    public function inOverlay(int $id): bool
+    {
+        for ($n = 0; isset($this->parents[$id]) && $n < 1024; $n++) {
+            if (isset($this->lastOverlayIds[$id])) {
+                return true;
+            }
+            $id = $this->parents[$id];
+        }
+        return false;
+    }
+
+    /** Keeps, this pass, the state of the nodes of page $id, which is not built: one of a router's history (Router's). */
+    public function keep(int $id): void
+    {
+        $this->kept[$id] = true;
+    }
+
+    public function isKept(int $id): bool
+    {
+        return isset($this->kept[$id]);
+    }
+
+    /** Whether the state of node $id, not built, is in a page a router keeps: one of its history, or inside one. */
+    private function keptAlive(int $id): bool
+    {
+        if ($this->kept === []) {
+            return false;
+        }
+        for ($n = 0; $n < 64; $n++) {
+            if (isset($this->kept[$id])) {
+                return true;
+            }
+            $id = $this->pageOf[$id] ?? 0;
+            if ($id === 0) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** Notes the box of a router being built, and whether it is the first of the frame (Router::view). */
+    public function addRouter(int $box): bool
+    {
+        $this->routers[] = $box;
+        return count($this->routers) === 1;
+    }
+
+    /** The box of the innermost router node $id was in last frame, or null. */
+    public function routerOf(?int $id): ?int
+    {
+        for ($n = 0; $id !== null && isset($this->parents[$id]) && $n < 1024; $n++) {
+            if (isset($this->lastRouters[$id])) {
+                return $id;
+            }
+            $id = $this->parents[$id];
+        }
+        return null;
+    }
+
+    /** Shows a change of the state the view shows (a router's page): another pass of the frame being built, else a frame. */
+    public function changed(): void
+    {
+        if ($this->building) {
+            $this->consumed = true;
+        } elseif ($this->requestFrame !== null) {
+            ($this->requestFrame)();
+        }
+    }
+
     /** Presses node $id as a click would, from outside a build (a toolbar's overflow menu choosing it): clicked($id) reports it next frame. */
     public function press(int $id): void
     {
@@ -474,9 +584,14 @@ final class Runtime
         return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
-    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null): void
+    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        $this->parents[$n->id] = $parent?->id ?? 0;
+        $this->pageOf[$n->id] = $page;
+        $inert = $inert || $n->inert;
+        if ($inert) { $this->inertIds[$n->id] = true; }
+        if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);
         }
@@ -512,7 +627,7 @@ final class Runtime
             $group = $n->id;
             $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null];
         }
-        if ($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) {
+        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->disabled) {
             $this->focusables[] = $n->id;
             if ($group !== 0) {
                 $this->memberOf[$n->id] = $group;
@@ -571,7 +686,7 @@ final class Runtime
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
         foreach ($n->kids as $k) {
-            $this->record($k, $n, $group, $clip);
+            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert);
         }
     }
 
@@ -898,6 +1013,7 @@ final class Runtime
         // The stops of Tab: a focusable on its own, or a focus group as one at its first member's place.
         $stops = [];
         foreach ($reachable as $id) {
+            if (isset($this->targets[$id]) && $id !== $this->focus) { continue; } // Tab goes past a focus target, but from it, into it
             $g = $this->memberOf[$id] ?? 0;
             if ($g === 0) { $stops[] = $id; } elseif (!in_array($g, $stops, true)) { $stops[] = $g; }
         }
@@ -1180,7 +1296,7 @@ final class Runtime
     public function shortcut(int|string $key, int $mods = 0): bool
     {
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
-        $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE] : [Key::ESCAPE, Key::UP, Key::DOWN]; // what a focused field leaves: a single line has no use for Up and Down
+        $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE, Key::BACK, Key::FORWARD] : [Key::ESCAPE, Key::UP, Key::DOWN, Key::BACK, Key::FORWARD]; // what a focused field leaves: a single line has no use for Up and Down
         if ($field && $this->fields[$this->focus][0]->leaveEmptyBackspace && $this->fields[$this->focus][0]->text === '') { $free[] = Key::DELETE; }
         foreach ($this->keys as $i => $k) {
             if ($k[3] || $k[2] !== $mods) {
@@ -1227,7 +1343,7 @@ final class Runtime
     /** Whether the pointer and the keys reach node $id: nothing blocks it (a modal built after it does). */
     public function reachable(int $id): bool
     {
-        return ($this->order[$id] ?? 0) >= $this->barrier;
+        return !isset($this->inertIds[$id]) && ($this->order[$id] ?? 0) >= $this->barrier;
     }
 
     /** Whether a press at (x, y) is a drag handle's: on one, and on no focusable, slider, scroll or link inside it (those keep their presses, as mygo's interactive flags). */

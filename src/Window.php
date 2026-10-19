@@ -120,6 +120,7 @@ final class Window
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
+            $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame
         }
 
         $this->stateKey = $o->stateKey;

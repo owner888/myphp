@@ -14,6 +14,8 @@ final class Key
         U = 32, BRACKET_LEFT = 33, I = 34, P = 35, L = 37, J = 38, QUOTE = 39, K = 40, SEMICOLON = 41, BACKSLASH = 42, COMMA = 43, SLASH = 44,
         N = 45, M = 46, PERIOD = 47, GRAVE = 50, F5 = 96, F6 = 97, F7 = 98, F3 = 99, F8 = 100, F9 = 101, F11 = 103, F10 = 109, F12 = 111,
         INSERT = 114, F4 = 118, F2 = 120, F1 = 122;
+    /** The back and forward buttons of a mouse (mygo's KeyBack and KeyForward), which no key of macOS has a code for: the view sends them for buttons 3 and 4. */
+    public const BACK = 1000, FORWARD = 1001;
     public const SHIFT = 1 << 17, CONTROL = 1 << 18, OPTION = 1 << 19, COMMAND = 1 << 20;
     public const MODIFIERS = self::SHIFT | self::CONTROL | self::OPTION | self::COMMAND;
 }

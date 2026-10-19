@@ -202,10 +202,11 @@ final class Headless
         return null;
     }
 
-    /** The texts the tree shows, in order: of texts, buttons and the like. @return list<string> */
+    /** The texts the tree shows, in order: of texts, buttons and the like, but not in an inert page. @return list<string> */
     public function texts(?Node $from = null): array
     {
         $from ??= $this->root;
+        if ($from?->inert) { return []; } // a page going away has nothing to find
         $out = $from?->text !== null && $from->text !== '' ? [$from->text] : [];
         foreach ($from?->kids ?? [] as $k) { array_push($out, ...$this->texts($k)); }
         return $out;
@@ -215,7 +216,7 @@ final class Headless
     public function byText(string $text, ?Node $from = null): ?Node
     {
         $from ??= $this->root;
-        if ($from === null) { return null; }
+        if ($from === null || $from->inert) { return null; }
         if ($from->text === $text) { return $from; }
         foreach ($from->kids as $k) { if (($r = $this->byText($text, $k)) !== null) { return $r; } }
         return null;
@@ -314,4 +315,14 @@ function same(mixed $want, mixed $got, string $what): void
 function closeFloat(float $want, float $got, string $what): void
 {
     check(abs($got - $want) <= 1e-3 * max(1.0, abs($want)), "$what: expected $want, got $got");
+}
+
+/** A harness whose frames happen at $now, nanoseconds (mygo's clockTester). */
+function poseTester(\Closure $view, ?int &$now, float $w, float $h): Headless
+{
+    $now = 1_000_000 * 1_000_000_000;
+    $t = new Headless($view, $w, $h);
+    $t->rt->clock = function () use (&$now): int { return $now; };
+    $t->frame(1);
+    return $t;
 }

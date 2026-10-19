@@ -35,6 +35,9 @@ final class Context
     private array $accordions = [];
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
     private array $trees = [];
+    /** The router whose page is being built, which a link to a path goes through, and whether what is built is inert (a page going away). */
+    private ?Router $router = null;
+    private bool $inert = false;
 
     /**
      * Whether the window shows its material (WindowOptions::$vibrancy)
@@ -139,6 +142,78 @@ final class Context
     {
         $this->nextKey = $key;
         return $this;
+    }
+
+    /** The id key($key) gives the next node built here, for the state of a node not built (a router keeps its pages'). */
+    public function keyedId(string|int $key): int
+    {
+        return self::hash($this->scope . '/' . $key);
+    }
+
+    /** The router whose page is being built, which links to paths go through, or null outside one (mygo's Router). */
+    public function router(): ?Router
+    {
+        return $this->router;
+    }
+
+    /** Builds $fn as a page of $router, inert while $inert (a page going away): shortcuts reach nothing in it. Router's. */
+    public function inRoute(?Router $router, bool $inert, Closure $fn): void
+    {
+        [$savedRouter, $savedInert] = [$this->router, $this->inert];
+        $this->router = $router;
+        $this->inert = $this->inert || $inert;
+        $fn();
+        [$this->router, $this->inert] = [$savedRouter, $savedInert];
+    }
+
+    /** The color behind what is being built: the background of the nearest container around it that has one, else the theme's (mygo's backdrop). */
+    public function background(): int
+    {
+        for ($i = count($this->stack) - 1; $i >= 0; $i--) {
+            if ($this->stack[$i]->color !== null) {
+                return $this->stack[$i]->color;
+            }
+        }
+        return $this->theme->background;
+    }
+
+    /** A button going back in $router's history, disabled at its start, as in the toolbar of Finder or a browser; a right click lists the pages before, to go back several (mygo's BackButton). */
+    public function backButton(Router $router): Node
+    {
+        return $this->historyButton($router, -1);
+    }
+
+    /** A button going forward in $router's history, as backButton goes back (mygo's ForwardButton). */
+    public function forwardButton(Router $router): Node
+    {
+        return $this->historyButton($router, 1);
+    }
+
+    private function historyButton(Router $r, int $d): Node
+    {
+        $t = $this->theme;
+        [$label, $can] = $d < 0 ? ['Back', $r->canGoBack()] : ['Forward', $r->canGoForward()];
+        $b = $this->makeButton('', null, false);
+        $b->fw = $t->space(4) + 2 * $t->space(2); $b->fh = $t->space(4) + 2 * $t->space(1.5); // the arrow, padded Space(1.5) by Space(2)
+        $b->label($label)->tooltip($label);
+        $b->disabled = !$can;
+        $color = $can ? $t->text : $t->textMuted;
+        $b->drawOver(function (DisplayList $l, Node $n) use ($d, $color, $t) {
+            $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2; $s = $t->space(4) * 0.22; $dx = $s * $d; // back points the way pages came from
+            $l->path((new Path)->moveTo($cx - $dx / 2, $cy - $s * 1.6)->lineTo($cx + $dx, $cy)->lineTo($cx - $dx / 2, $cy + $s * 1.6), $color, 1.0, 1.6);
+        });
+        if ($can && $this->clicked($b)) {
+            $r->go($d);
+        }
+        if ($this->rightClicked($b) && ($w = Window::focused()) !== null && ($pages = $r->pagesToward($d)) !== []) {
+            $items = [];
+            foreach ($pages as $i => $title) {
+                $steps = $d * ($i + 1);
+                $items[] = new MenuItem($title, function (MenuItem $it, ?Window $win) use ($r, $steps) { $r->go($steps); $win?->invalidate(); });
+            }
+            (new Menu($items))->popup($w);
+        }
+        return $b;
     }
 
     private static function hash(string $path): int
@@ -454,15 +529,20 @@ final class Context
         return $this->runtime?->focused($n->id) ?? false;
     }
 
-    /** A link: accent text, underlined, a hand pointer; clicking opens $url with the system (App::openURL). */
+    /** A link: accent text, underlined, a hand pointer, focusable; clicking, or Enter while it has the focus, goes to $url: a path through the router whose page it is in (Router::push), else a URL the system opens (App::openURL). */
     public function link(string $s, string $url, ?float $size = null): Node
     {
-        $n = $this->text($s, $size, $this->theme->accent);
+        $n = $this->text($s, $size, $this->theme->accent)->focusable();
         $n->underline = $this->hovered($n); // underlined under the pointer, as mygo's
         $n->url = $url;
         $n->role = Role::LINK;
-        if ($this->runtime?->clicked($n->id)) {
-            ($this->runtime->openURL)($url);
+        $router = $this->router;
+        if ($this->runtime?->clicked($n->id) && $url !== '') {
+            if ($router !== null && Router::isPath($url)) {
+                $router->push($url);
+            } else {
+                ($this->runtime->openURL)($url);
+            }
         }
         return $n;
     }
@@ -653,6 +733,9 @@ final class Context
     /** Whether $key (a Key code or a character) was pressed this frame with exactly $mods, unless a focused control took it (mygo's Shortcut). */
     public function shortcut(int|string $key, int $mods = 0): bool
     {
+        if ($this->inert) {
+            return false; // a page going away takes no keys
+        }
         return $this->runtime?->shortcut($key, $mods) ?? false;
     }
 
