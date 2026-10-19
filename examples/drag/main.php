@@ -3,12 +3,13 @@
 // is let go; a puck thrown along a track to the nearest of three stops, at
 // the pointer's speed; a sheet pulled up or down to its heights, rubber-
 // banded past them, lifting as it is dragged; words dragged into a basket,
-// which shows when one is over it (Escape gives a drag up).
+// which lights up when one is over it and takes it in, the word flying to
+// its place there (Escape gives a drag up; a click on one takes it back).
 // Run: ./run.sh drag
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, Content, Context, DisplayList, DraggableOptions, Font, Motion, Node, Pose};
+use MyPHP\UI\{Animation, Content, Context, DisplayList, DraggableOptions, ElementTransition, Font, Motion, Node, Pose};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -35,14 +36,32 @@ function view(Context $c, object $s): void
         $c->draggable($c->box(48, 48, $t->accent)->round(24), $s->puck, new DraggableOptions(Node::HORIZONTAL, bounds: [0, 0, 412, 0], rigid: true, snap: Motion::nearest([0, 0], [206, 0], [412, 0])));
       $c->end();
       $c->row(0, 16);
-        foreach ($s->words as $w) {
-            $c->drag($c->row(10, 0, 0, $t->surface)->round(8)->border($t->border), $w);
+        // A word is one chip, in the row or in the basket: moved there, it flies to its new place (match), the others close up.
+        $move = new ElementTransition(animation: Animation::snappy());
+        $chip = function (string $w, string $where) use ($c, $t) {
+            $n = $c->key("$where-$w")->row(10, 0, 0, $t->surface)->round(8)->border($t->border);
+            $c->transition($n, new ElementTransition(animation: Animation::snappy(), match: $w));
               $c->text($w);
             $c->end();
+            return $n;
+        };
+        foreach ($s->words as $w) {
+            $c->drag($chip($w, 'row'), $w);
         }
-        $basket = $c->column(10, 4, 0, $t->surface)->round(8)->size(180, 90);
+        $basket = $c->key('basket')->column(10, 6, 0, $t->surface)->round(8)->size(240, 0);
+        $c->transition($basket, $move); // it grows as words come, and lights up as one is over it
           $c->text('Basket', 13, style: Font::BOLD);
-          $c->muted($s->basket === [] ? 'Drop words here' : implode(', ', $s->basket), 12);
+          if ($s->basket === []) {
+              $c->muted('Drop words here', 12);
+          }
+          $c->row(0, 6);
+            foreach ($s->basket as $w) {
+                if ($c->clicked($chip($w, 'basket'))) { // a click takes it back
+                    $s->basket = array_values(array_diff($s->basket, [$w]));
+                    $s->words[] = $w;
+                }
+            }
+          $c->end();
         $c->end();
         if ($c->dragOver($basket, 'string')) { $basket->color = $t->surfaceHover; $basket->border($t->accent, 2); }
         if ($c->drop($basket, 'string', $word)) {
