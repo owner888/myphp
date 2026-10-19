@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, Content, Context, DraggableOptions, Font, Motion, Node, Pose};
+use MyPHP\UI\{Animation, Content, Context, DisplayList, DraggableOptions, Font, Motion, Node, Pose};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -26,8 +26,12 @@ function view(Context $c, object $s): void
         $c->end();
         $card->animatePose($c->dragging($card) ? new Pose(scale: 1.04) : new Pose(), Animation::snappy());
       $c->end();
-      $c->muted('Throw the puck: it goes to the nearest stop from where the throw would carry it.', 12);
-      $c->column(0, 0, 0, $t->surface)->round(24)->size(460, 48);
+      $c->muted('Throw the puck: let go, it glides to the stop nearest to where the throw would carry it — the faster, the farther.', 12);
+      $c->column(0, 0, 0, $t->surface)->round(24)->size(460, 48)->draw(function (DisplayList $l, Node $n) use ($t) {
+          foreach ([0, 206, 412] as $stop) { // the stops the puck rests at, under it
+              $l->rect($n->x + $stop + 18, $n->y + 18, 12, 12, $t->textMuted, 0.5, 6);
+          }
+      });
         $c->draggable($c->box(48, 48, $t->accent)->round(24), $s->puck, new DraggableOptions(Node::HORIZONTAL, bounds: [0, 0, 412, 0], rigid: true, snap: Motion::nearest([0, 0], [206, 0], [412, 0])));
       $c->end();
       $c->row(0, 16);

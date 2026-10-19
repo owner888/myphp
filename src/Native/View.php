@@ -41,6 +41,12 @@ final class View
         return $view;
     }
 
+    /** When $event happened, in hrtime's nanoseconds: NSEvent's timestamp counts seconds of uptime, as mach_absolute_time, which hrtime reads on macOS. A drag's velocity is timed by its events, not by the frames that drain them. */
+    private static function time($event): int
+    {
+        return (int)round(ObjC::msg('d:', $event, 'timestamp') * 1e9);
+    }
+
     private static function define(): void
     {
         if (self::$defined) {
@@ -58,7 +64,7 @@ final class View
             if ($kind === 'move') {
                 $input->push(['move', $x, $y]); // to a node taking its input as it comes, under the pointer
             } else {
-                $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber'), ObjC::msg('l:', $event, 'clickCount'), ObjC::msg('L:', $event, 'modifierFlags')]);
+                $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber'), ObjC::msg('l:', $event, 'clickCount'), ObjC::msg('L:', $event, 'modifierFlags'), self::time($event)]);
             }
             Metal::requestFrame($self);
         };
@@ -87,7 +93,7 @@ final class View
                 $input = self::$inputs[ObjC::addr($self)];
                 [$x, $y] = $point($self, $event);
                 $input->mouse($x, $y);
-                $input->push(['drag', $x, $y]);
+                $input->push(['drag', $x, $y, self::time($event)]);
                 Metal::requestFrame($self);
             }],
             'mouseExited:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {

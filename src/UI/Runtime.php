@@ -270,7 +270,7 @@ final class Runtime
                         $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
                     }
                     $this->hold = [$e[1], $e[2], $now / 1e9, 0, false, $e[1], $e[2]];
-                    $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
+                    $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($e[6] ?? $this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
                     $this->pressDragger = $this->pressDragger($this->pointerPress['id']);
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
@@ -287,7 +287,7 @@ final class Runtime
                     if ($e[3] === 0 && ($p = &$this->pointerPress) !== null && $p['down']) {
                         $p['down'] = false;
                         $p['released'] = $p['track']->n > 1; // a press that moved ends a drag; a click does not
-                        $p['v'] = $p['track']->velocity($this->now);
+                        $p['v'] = $p['track']->velocity($e[6] ?? $this->now); // timed by the events, the frame's time for those without (a test's)
                         $moved = $moved || ($p['id'] !== null && isset($this->draggables[$p['id']]) && $p['track']->far); // it moved the node (Context::draggable): no click
                     }
                     unset($p);
@@ -297,7 +297,7 @@ final class Runtime
                     break;
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {
-                        $this->pointerPress['track']->move($this->now, $e[1], $e[2]);
+                        $this->pointerPress['track']->move($e[3] ?? $this->now, $e[1], $e[2]);
                         $this->dragMove($e[1], $e[2]);
                     }
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
