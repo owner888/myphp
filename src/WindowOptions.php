@@ -5,7 +5,7 @@ namespace MyPHP;
 
 use MyPHP\UI\Content;
 
-/** What a window is created with: mygo's WindowOptions, as far as done (no panels nor flyouts yet; Linux's and Windows' own options have no place here). */
+/** What a window is created with: mygo's WindowOptions (Linux's and Windows' own options have no place here); Window::flyout() takes FlyoutOptions. */
 final class WindowOptions
 {
     public function __construct(
@@ -49,6 +49,8 @@ final class WindowOptions
         /** Makes the window a child that stays above $parent; $modal makes it a sheet of it. */
         public ?Window $parent = null,
         public bool $modal = false,
+        /** Makes the window a panel, as the windows of launchers and quick entry are (mygo's Panel): it floats above the windows of all apps, on whichever Space the user is on, over full screen apps too, out of the window cycle; it cannot be minimized, zoomed or go full screen. Showing or focusing it gives it the keyboard without activating the app, so the app the user was in gets it back when the panel hides; it closes on an Escape its content leaves. */
+        public bool $panel = false,
         /** Native UI drawn by MyPHP: make it with Content::view(). */
         public ?Content $content = null,
         /** A web page instead: HTML to show, or a URL to load (http(s) or file:). */

@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | gen [out.ts]
+# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -18,6 +18,7 @@ case "$1" in
   titlebar) exec $PHP $OPTS examples/titlebar/main.php ${2:+"$2"} ${3:+"$3"} ;;
   files)   exec $PHP $OPTS examples/files/main.php ${2:+"$2"} ;;
   code-editor) exec $PHP $OPTS examples/code-editor/main.php ;;
+  flyout)  exec $PHP $OPTS examples/flyout/main.php ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | gen [out.ts]"; exit 1 ;;
 esac

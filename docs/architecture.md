@@ -1132,6 +1132,38 @@ color, the appearance's on a theme change.
 $fn first (mygo's Invalidate and Update); `Window::focused` and `byId`
 find windows.
 
+`Window::flyout(FlyoutOptions)` is mygo's NewFlyout: a borderless,
+nonactivating `NSPanel` (MyPHPFlyout, the key window only when
+`focusable`, never the main one; it stays as the app is deactivated,
+transient, out of the window cycle) next to a rectangle of its parent's
+content (`anchor`, as `Context::bounds` gives it), or of a tray icon
+(`Tray::bounds`, at the menu bar's menu level). `Flyout::place` is
+mygo's platform placement, GTK's for popups: on each axis the flyout
+flips to the other side of the anchor or its other end where it does not
+fit and the flipped one does, then slides back into the work area (an
+`NSScreen`'s visible frame, `Native\Screens`, chosen by `workAreaFor`),
+then shrinks to it. It is placed again as its parent moves or resizes,
+on `setAnchor`, `setSize` and `setContentSize`, and shows as its child
+window, which it stops being as it hides, giving the keyboard back. A
+focusable flyout closes, as the user closing it ('close' listeners may
+keep it), when it resigns the key window (unless to a flyout of its own,
+or as its tray icon is pressed, whose click toggles it), on a press
+outside the app (a global `NSEvent` monitor: a nonactivating panel would
+not resign the key window then), and on a press on its anchor, which a
+local monitor eats with its drags and release so that the release does
+not open it again. Children close with their parent. A window with
+`WindowOptions::$panel` is a MyPHPPanel, nonactivating from its creation
+(the window server reads it from the initial style), on all Spaces and
+over full screen apps, on top, never minimized, zoomed or in full
+screen; showing or focusing it does not activate the app, and its
+`cancelOperation:` does nothing, as NSPanel's would close it past
+`windowShouldClose:`. A flyout or a panel closes, as the user closing
+it, on an Escape its content leaves: one no control or `shortcut` took
+in a frame of native UI (`Runtime::$escape`, called after the build), or
+one the page's handlers did not `preventDefault` (the bridge posts
+`{t: "escape"}`). mygo's popover flyouts (`NSPopover`) are not ported
+yet.
+
 `Tray` is an `NSStatusItem`: with a menu, `setMenu:` shows it on click;
 without one, the item's button gets a PHP target with `sendActionOn:`
 left and right mouse-up, and `NSApp currentEvent` tells which. Icons are

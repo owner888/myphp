@@ -142,23 +142,24 @@ final class ObjC
     /**
      * An Objective-C block whose body is a PHP closure, for completion
      * handlers. $args are the block's parameter letters (MAP), without the
-     * block itself: block('lp', fn($response, $obj) => ...). A global block
-     * (never copied or freed by the runtime); a once block is released
-     * after it fires, otherwise it lives for the process.
+     * block itself: block('lp', fn($response, $obj) => ...), and $ret the
+     * letter of what it returns ('v' for nothing). A global block (never
+     * copied or freed by the runtime); a once block is released after it
+     * fires, otherwise it lives for the process.
      */
-    public static function block(string $args, Closure $fn, bool $once = true)
+    public static function block(string $args, Closure $fn, bool $once = true, string $ret = 'v')
     {
         foreach (self::$spentBlocks as $addr) {
             unset(self::$blocks[$addr]);
         }
         self::$spentBlocks = [];
         $params = ['void*'];
-        $encoding = 'v@?';
+        $encoding = self::ENCODING[$ret] . '@?';
         foreach (str_split($args) as $ch) {
             $params[] = self::MAP[$ch];
             $encoding .= self::ENCODING[$ch];
         }
-        $type = 'void(*)(' . implode(',', $params) . ')';
+        $type = self::MAP[$ret] . '(*)(' . implode(',', $params) . ')';
         $holder = self::$c->new('struct { ' . str_replace('(*)', '(*fn)', $type) . '; }');
         $literal = self::$c->new('BlockLiteral');
         $addr = self::addr(FFI::addr($literal));
@@ -166,7 +167,7 @@ final class ObjC
             if ($once) {
                 self::$spentBlocks[] = $addr;
             }
-            $fn(...$a);
+            return $fn(...$a);
         };
         $sig = self::$c->new('char[' . (strlen($encoding) + 1) . ']');
         FFI::memcpy($sig, $encoding, strlen($encoding));

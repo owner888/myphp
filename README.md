@@ -56,7 +56,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
-| App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors; without panels and flyouts |
+| App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors, panels, flyouts (anchored to a rectangle or a tray icon, flipping and sliding into the screen, closing on a press outside or Escape); without popover flyouts |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | Tray icon, global shortcuts, notifications (from a built .app), window events, file drops, remembered window frames | works (`examples/desktop`) |
@@ -114,6 +114,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh titlebar [hidden|hiddenInset] [x,y]   # a hidden title bar: the view draws its own under the traffic lights (moved to x,y) and drags the window by it
 ./run.sh files [folder]                # a file manager: places, breadcrumbs, icons or a sortable table, Cmd+F finds, Space previews, Delete… trashes
 ./run.sh code-editor                   # a code editor: files of several languages, completions of their words, hovers, TODO diagnostics, changes in the gutter, and their diff
+./run.sh flyout                        # flyouts: a menu under its button, a hover card, a tray icon's flyout; a panel above every app
 php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
@@ -192,7 +193,7 @@ App::run();
 | 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位 | 可用（`examples/widgets`、`notes`、`http`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
-| App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色；还没有面板和 flyout |
+| App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色、面板、flyout（锚定到矩形或托盘图标，空间不够时翻转、滑回屏幕内，点外部或 Esc 关闭）；还没有 popover 样式的 flyout |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
@@ -246,6 +247,7 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh logview /var/log/system.log   # 日志查看器：跟随文件增长、过滤、高亮、Cmd+F 查找
 ./run.sh titlebar [hidden|hiddenInset] [x,y]   # 隐藏标题栏：视图在红绿灯下自己画标题栏（x,y 可挪红绿灯），拖它移动窗口
 ./run.sh files [目录]                   # 文件管理器：常用位置、路径面包屑、图标或可排序表格、Cmd+F 查找、空格预览、Delete… 移到废纸篓
+./run.sh flyout                        # flyout：按钮下的菜单、悬停卡片、托盘图标的 flyout；浮在所有应用之上的面板
 php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 和 files 例子
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存

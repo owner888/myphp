@@ -42,6 +42,8 @@ final class Runtime
     public Closure $openURL;
     /** Moves the window with the mouse (1 click) or zooms or minimizes it (2) for a press on a Node::dragWindow handle; the window sets it. */
     public ?Closure $dragWindow = null;
+    /** Called after a frame in which an Escape came that nothing took (mygo's host escape): a flyout or a panel closes on it. */
+    public ?Closure $escape = null;
     /** The drag handles of last frame (id => rect), and the links (ids), which keep their presses from a handle. */
     private array $handles = [], $links = [];
     /** @var array<int, string> nodes with tooltips by id, from last frame */
@@ -292,6 +294,13 @@ final class Runtime
             $this->clicks = [];
             $this->rightClicks = [];
             $this->doubleClicks = [];
+        }
+        if ($this->escape !== null) {
+            foreach ($this->keys as $k) {
+                if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
+                    ($this->escape)();
+                }
+            }
         }
         $this->animateLayout($root); // with the last frame's rects, before they go
         $this->activated = null; // taken by clicked() during the build, or dropped

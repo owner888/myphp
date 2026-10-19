@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\ObjC;
+use MyPHP\Native\{ObjC, Screens};
 use RuntimeException;
 
 /**
@@ -117,6 +117,31 @@ final class Tray
     {
         $this->onRightClick[] = $fn;
         return function () use ($fn) { $this->onRightClick = array_values(array_filter($this->onRightClick, fn($f) => $f !== $fn)); };
+    }
+
+    /** Where the icon is in the menu bar, on the screens (mygo's Bounds): nothing while it shows in none. */
+    public function bounds(): Rectangle
+    {
+        $win = ObjC::msg('p:', $this->button(), 'window');
+        return $win === null ? new Rectangle(0, 0, 0, 0) : Screens::fromMac(ObjC::msg('r:', $win, 'frame'));
+    }
+
+    /** Whether the event being handled is a press on the icon (mygo's pressed): a flyout of the icon leaves it to its click, which toggles it. */
+    public function pressed(): bool
+    {
+        $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
+        if ($ev === null || !in_array(ObjC::msg('L:', $ev, 'type'), [1, 3], true)) { // NSEventTypeLeftMouseDown, RightMouseDown
+            return false;
+        }
+        $button = $this->button();
+        $win = ObjC::msg('p:', $button, 'window');
+        $evWin = ObjC::msg('p:', $ev, 'window');
+        if ($win === null || $evWin === null || ObjC::addr($evWin) !== ObjC::addr($win)) {
+            return false;
+        }
+        $p = ObjC::msg('q:qp', $button, 'convertPoint:fromView:', ObjC::msg('q:', $ev, 'locationInWindow'), null);
+        $b = ObjC::msg('r:', $button, 'bounds');
+        return $p->x >= $b->x && $p->y >= $b->y && $p->x < $b->x + $b->w && $p->y < $b->y + $b->h;
     }
 
     /** Takes the icon out of the menu bar. */

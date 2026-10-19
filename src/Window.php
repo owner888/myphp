@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Access, Dock, Drop, Metal, ObjC, Pasteboard, View, WebView};
+use MyPHP\Native\{Access, Dock, Drop, Metal, ObjC, Pasteboard, Screens, View, WebView};
 use MyPHP\UI\{AccessTree, Context, DisplayList, Input, Layout, Painter, Runtime};
 use RuntimeException;
 
@@ -12,13 +12,33 @@ use RuntimeException;
  * With native content, each frame runs the view function through the
  * window's Runtime, lays the tree out to the window's size and paints it;
  * frames happen on demand. With a page, the window holds a WebView whose
- * bridge routes calls to Ipc and events back.
+ * bridge routes calls to Ipc and events back. Window::flyout() makes a
+ * flyout: a borderless panel next to a rectangle of its parent, or a tray
+ * icon; WindowOptions::$panel a panel above all apps, as launchers are.
  */
 final class Window
 {
     private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15;
-    private const NORMAL_LEVEL = 0, FLOATING_LEVEL = 3;
-    private const FULL_SCREEN_PRIMARY = 1 << 7, FULL_SCREEN_AUXILIARY = 1 << 8, FULL_SCREEN_NONE = 1 << 9, CAN_JOIN_ALL_SPACES = 1 << 0;
+    private const NONACTIVATING = 1 << 7; // NSWindowStyleMaskNonactivatingPanel
+    private const NORMAL_LEVEL = 0, FLOATING_LEVEL = 3, POP_UP_MENU_LEVEL = 101;
+    private const FULL_SCREEN_PRIMARY = 1 << 7, FULL_SCREEN_AUXILIARY = 1 << 8, FULL_SCREEN_NONE = 1 << 9, CAN_JOIN_ALL_SPACES = 1 << 0, TRANSIENT = 1 << 3, IGNORES_CYCLE = 1 << 6;
+    /**
+     * A flyout's placement (Window::flyout): its side and alignment
+     * (Flyout's), gap, anchor and tray, whether it takes the keyboard, and
+     * the size it is placed at; whether the window is a panel
+     * (WindowOptions::$panel).
+     * @var ?array{side: int, align: int, gap: int, anchor: Rectangle, tray: ?Tray, focusable: bool, width: int, height: int}
+     */
+    private ?array $flyout = null;
+    private bool $panel = false;
+    /** What Window::flyout hands the constructor. */
+    private static ?array $creating = null;
+    private static bool $panelsDefined = false;
+    /** The monitors of presses outside the app and on a flyout's anchor (watchOutsideClicks), and the release type of the press the latter ate, or 0. */
+    private static $outsideClicks = null, $anchorPresses = null;
+    private static int $eatingPress = 0;
+    /** How many windows are closing their children: the last window to close is reported once they all are. */
+    private static int $closingParents = 0;
     /** The parent window, of a child window (WindowOptions::$parent), and whether it is its sheet ($modal) and shows as one. */
     private ?Window $parent = null;
     private bool $modal = false, $sheet = false;
@@ -74,6 +94,14 @@ final class Window
             throw new RuntimeException('WindowOptions needs content, html or url');
         }
         $this->id = self::$nextId++;
+        $this->flyout = self::$creating;
+        self::$creating = null;
+        $this->panel = $o->panel && $this->flyout === null;
+        if ($this->panel) { // above all apps, out of the way of minimizing, zooming and full screen (mygo's panel options)
+            $o = clone $o;
+            $o->disableMinimize = $o->disableMaximize = $o->disableFullScreen = true;
+            $o->alwaysOnTop = true;
+        }
         $this->input = $o->content === null ? null : new Input();
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
         if ($this->runtime !== null) {
@@ -81,45 +109,16 @@ final class Window
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->readClipboard = Pasteboard::text(...);
+            $this->runtime->escape = $this->escape(...);
         }
 
         $this->stateKey = $o->stateKey;
         $this->parent = $o->parent; $this->modal = $o->modal;
         $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
-        $style = self::TITLED | ($o->disableClose ? 0 : self::CLOSABLE) | ($o->disableMinimize ? 0 : self::MINIATURIZABLE) | ($o->disableResize ? 0 : self::RESIZABLE);
-        $hidden = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
-        $this->hiddenTitleBar = $hidden && !$o->frameless; // the traffic lights stay, over the view
-        if ($hidden || $o->frameless) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
-        $content = ObjC::rect(0, 0, $o->width, $o->height);
-        if (!$o->useContentSize) { // the size is the window's: the content's is what its frame leaves
-            $content = ObjC::msg('r:rL', ObjC::cls('NSWindow'), 'contentRectForFrameRect:styleMask:', $content, $style);
-            $content = ObjC::rect(0, 0, $content->w, $content->h);
-        }
-        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $content, $style, self::BACKING_BUFFERED, false);
-        ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
-        ObjC::msg('v:l', $this->ns, 'setTabbingMode:', 2); // NSWindowTabbingModeDisallowed
-        if ($hidden || $o->frameless) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
-            ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
-            ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
-        }
-        if ($o->frameless) {
-            for ($i = 0; $i < 3; $i++) { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setHidden:', true); }
-        }
-        if ($o->titleBarStyle === 'hiddenInset' && !$o->frameless) {
-            $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
-            ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
-            ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
-        }
-        if ($o->minWidth > 0 || $o->minHeight > 0) { $this->setMinimumSize($o->minWidth, $o->minHeight); }
-        if ($o->maxWidth > 0 || $o->maxHeight > 0) { $this->setMaximumSize($o->maxWidth, $o->maxHeight); }
-        ObjC::msg('v:b', $this->ns, 'setMovable:', !$o->disableMove);
-        if ($o->disableMaximize) { $this->setMaximizable(false); }
-        ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', $o->disableFullScreen ? self::FULL_SCREEN_NONE : self::FULL_SCREEN_PRIMARY);
-        if ($o->alwaysOnTop) { ObjC::msg('v:l', $this->ns, 'setLevel:', self::FLOATING_LEVEL); }
-        ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
-        if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
-        if ($saved !== null) {
-            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
+        if ($this->flyout !== null) {
+            $this->createFlyout($o);
+        } else {
+            $this->createWindow($o, $saved);
         }
         $this->trafficLights = $o->trafficLightPosition;
         $this->setTitle($o->title ?? App::name());
@@ -138,6 +137,10 @@ final class Window
                         foreach ($callbacks as $fn) {
                             $fn();
                         }
+                        return;
+                    }
+                    if ($raw === '{"t":"escape"}') { // an Escape the page left (no handler called preventDefault)
+                        $this->escape();
                         return;
                     }
                     $reply = Ipc::handle($raw, $this->secret, $this);
@@ -192,7 +195,9 @@ final class Window
                 $fn($e);
             }
         });
-        if ($saved === null && $o->x === 0 && $o->y === 0) {
+        if ($this->flyout !== null) {
+            $this->placeFlyout();
+        } elseif ($saved === null && $o->x === 0 && $o->y === 0) {
             $this->center();
         } elseif ($saved === null) {
             $b = $this->bounds();
@@ -207,6 +212,74 @@ final class Window
         if (!$o->hidden) {
             $this->show();
         }
+    }
+
+    /** The NSWindow of a window (not a flyout), with its style, title bar and limits. */
+    private function createWindow(WindowOptions $o, ?array $saved): void
+    {
+        $style = self::TITLED | ($o->disableClose ? 0 : self::CLOSABLE) | ($o->disableMinimize ? 0 : self::MINIATURIZABLE) | ($o->disableResize ? 0 : self::RESIZABLE);
+        $hidden = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
+        $this->hiddenTitleBar = $hidden && !$o->frameless; // the traffic lights stay, over the view
+        if ($hidden || $o->frameless) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
+        $content = ObjC::rect(0, 0, $o->width, $o->height);
+        if (!$o->useContentSize) { // the size is the window's: the content's is what its frame leaves
+            $content = ObjC::msg('r:rL', ObjC::cls('NSWindow'), 'contentRectForFrameRect:styleMask:', $content, $style);
+            $content = ObjC::rect(0, 0, $content->w, $content->h);
+        }
+        if ($this->panel) {
+            self::definePanels();
+            $style |= self::NONACTIVATING; // from the start: the window server learns from the style it is created with that it never activates the app
+        }
+        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc($this->panel ? 'MyPHPPanel' : 'NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $content, $style, self::BACKING_BUFFERED, false);
+        ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
+        ObjC::msg('v:l', $this->ns, 'setTabbingMode:', 2); // NSWindowTabbingModeDisallowed
+        if ($hidden || $o->frameless) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
+            ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
+            ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
+        }
+        if ($o->frameless) {
+            for ($i = 0; $i < 3; $i++) { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setHidden:', true); }
+        }
+        if ($o->titleBarStyle === 'hiddenInset' && !$o->frameless) {
+            $tb = ObjC::msg('p:p', ObjC::alloc('NSToolbar'), 'initWithIdentifier:', ObjC::str('myphp.titlebar'));
+            ObjC::msg('v:b', $tb, 'setShowsBaselineSeparator:', false);
+            ObjC::msg('v:p', $this->ns, 'setToolbar:', $tb);
+        }
+        if ($o->minWidth > 0 || $o->minHeight > 0) { $this->setMinimumSize($o->minWidth, $o->minHeight); }
+        if ($o->maxWidth > 0 || $o->maxHeight > 0) { $this->setMaximumSize($o->maxWidth, $o->maxHeight); }
+        ObjC::msg('v:b', $this->ns, 'setMovable:', !$o->disableMove);
+        if ($o->disableMaximize) { $this->setMaximizable(false); }
+        if ($this->panel) { // on the Space the user is on, full screen ones too, out of Mission Control and the window cycle; it stays as the app is deactivated
+            ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', self::CAN_JOIN_ALL_SPACES | self::FULL_SCREEN_AUXILIARY | self::IGNORES_CYCLE | self::TRANSIENT);
+            ObjC::msg('v:b', $this->ns, 'setHidesOnDeactivate:', false);
+        } else {
+            ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', $o->disableFullScreen ? self::FULL_SCREEN_NONE : self::FULL_SCREEN_PRIMARY);
+        }
+        if ($o->alwaysOnTop) { ObjC::msg('v:l', $this->ns, 'setLevel:', self::FLOATING_LEVEL); }
+        ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
+        if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
+        if ($saved !== null) {
+            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
+        }
+    }
+
+    /**
+     * The panel of a flyout (mygo's createFlyout): borderless and
+     * nonactivating, so that it never activates the app; the key window
+     * only when it is focusable, while its parent stays the main window.
+     */
+    private function createFlyout(WindowOptions $o): void
+    {
+        self::definePanels();
+        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('MyPHPFlyout'), 'initWithContentRect:styleMask:backing:defer:', ObjC::rect(0, 0, $o->width, $o->height), self::NONACTIVATING, self::BACKING_BUFFERED, false);
+        ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
+        ObjC::msg('v:b', $this->ns, 'setHidesOnDeactivate:', false); // it stays with its parent as the app is deactivated; one that takes the keyboard closes
+        ObjC::msg('v:L', $this->ns, 'setCollectionBehavior:', self::TRANSIENT | self::IGNORES_CYCLE | self::FULL_SCREEN_AUXILIARY);
+        if ($this->flyout['tray'] !== null) {
+            ObjC::msg('v:l', $this->ns, 'setLevel:', self::POP_UP_MENU_LEVEL); // over the windows of other apps, as the menu bar's menus
+        }
+        ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
+        if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
     }
 
     private function nativeView(WindowOptions $o)
@@ -415,6 +488,9 @@ final class Window
                         }
                         if ($w->page === null) { ObjC::msg('v:', $w->view, 'draw'); } // a frame at the new size now, before this step of the resize is committed, as mygo's setFrameSize: asks: asked for later, it would come a step late and the layer would stretch the last one meanwhile
                     }
+                    if ($event === 'resize' || $event === 'move') {
+                        $w->placeFlyouts(); // they stay next to their anchors, in the work area
+                    }
                     $w->emit($event);
                     if ($event === 'resize' || $event === 'move') {
                         $w->captureState();
@@ -439,6 +515,11 @@ final class Window
                     unset(self::$open[ObjC::addr($ns)]);
                     if ($w !== null) {
                         $w->destroyed = true;
+                        self::$closingParents++; // its children close with it; the last window is reported once they all are
+                        foreach (self::all() as $child) {
+                            if ($child->parent === $w) { $child->destroy(); }
+                        }
+                        self::$closingParents--;
                         if ($w->attention !== 0) { $w->flashFrame(false); }
                         unset(self::$byView[ObjC::addr($w->view)]);
                         if ($w->runtime !== null) { Access::detach($w->view); }
@@ -447,12 +528,18 @@ final class Window
                         WindowState::save();
                         $w->emit('closed');
                     }
-                    if (self::$open === [] && App::$quitOnLastWindowClosed) {
+                    if (self::$closingParents === 0 && self::$open === [] && App::$quitOnLastWindowClosed) {
                         App::quit();
                     }
                 }],
                 'windowDidBecomeKey:' => ['v@:@', 'v(ppp)', $fire('focus')],
-                'windowDidResignKey:' => ['v@:@', 'v(ppp)', $fire('blur')],
+                'windowDidResignKey:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($fire) {
+                    $fire('blur')($self, $cmd, $note);
+                    $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                    if ($w?->flyout !== null && !($w->flyout['tray']?->pressed() ?? false)) {
+                        App::later($w->dismissFlyout(...)); // once AppKit made another window key, or none; a press on its tray icon toggles it instead
+                    }
+                }],
                 'windowDidResize:' => ['v@:@', 'v(ppp)', $fire('resize')],
                 'windowDidMove:' => ['v@:@', 'v(ppp)', $fire('move')],
                 'windowDidMiniaturize:' => ['v@:@', 'v(ppp)', $fire('minimize')],
@@ -667,14 +754,19 @@ final class Window
             $this->sheet = false;
             ObjC::msg('v:p', $this->parent->ns, 'endSheet:', $this->ns);
         }
+        if ($this->flyout !== null) {
+            $this->hideFlyout();
+        }
         ObjC::msg('v:', $this->ns, 'close');
     }
 
-    /** Shows the window and gives it the keyboard; a modal child shows as a sheet of its parent, another stays above it. */
+    /** Shows the window and gives it the keyboard; a modal child shows as a sheet of its parent, another stays above it; a flyout takes the keyboard only when focusable, and a panel or a flyout never activates the app. */
     public function show(): void
     {
         $visible = $this->isVisible();
-        if ($this->parent !== null && $this->modal && !$this->sheet) {
+        if ($this->flyout !== null) {
+            $this->showFlyout($this->flyout['focusable']);
+        } elseif ($this->parent !== null && $this->modal && !$this->sheet) {
             $this->sheet = true;
             ObjC::msg('v:pp', $this->parent->ns, 'beginSheet:completionHandler:', $this->ns, null);
         } elseif (!$this->sheet) {
@@ -682,7 +774,9 @@ final class Window
             if ($this->parent !== null && !$this->parent->destroyed) {
                 ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1); // NSWindowAbove
             }
-            ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+            if (!$this->panel) {
+                ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+            }
         }
         $this->invalidate();
         if (!$visible) {
@@ -694,9 +788,13 @@ final class Window
     public function showInactive(): void
     {
         $visible = $this->isVisible();
-        ObjC::msg('v:', $this->ns, 'orderFrontRegardless');
-        if ($this->parent !== null && !$this->parent->destroyed) {
-            ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1);
+        if ($this->flyout !== null) {
+            $this->showFlyout(false);
+        } else {
+            ObjC::msg('v:', $this->ns, 'orderFrontRegardless');
+            if ($this->parent !== null && !$this->parent->destroyed) {
+                ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1);
+            }
         }
         $this->invalidate();
         if (!$visible) {
@@ -709,7 +807,9 @@ final class Window
         if (!$this->isVisible()) {
             return;
         }
-        if ($this->sheet) {
+        if ($this->flyout !== null) {
+            $this->hideFlyout();
+        } elseif ($this->sheet) {
             $this->sheet = false;
             ObjC::msg('v:p', $this->parent->ns, 'endSheet:', $this->ns);
         } else {
@@ -723,11 +823,17 @@ final class Window
         return ObjC::msg('b:', $this->ns, 'isVisible');
     }
 
-    /** Gives the window the keyboard, and the app with it. */
+    /** Gives the window the keyboard, and the app with it; a panel takes it without activating the app, a flyout shows (the keyboard only when focusable). */
     public function focus(): void
     {
+        if ($this->flyout !== null) {
+            $this->show();
+            return;
+        }
         ObjC::msg('v:p', $this->ns, 'makeKeyAndOrderFront:', null);
-        ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+        if (!$this->panel) {
+            ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+        }
     }
 
     /** Sends the window behind the others. */
@@ -851,30 +957,33 @@ final class Window
     /** Moves and resizes the window. */
     public function setBounds(Rectangle $r): void
     {
-        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', self::toMac($r), true);
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', Screens::toMac($r), true);
     }
 
     /** Where the window is, and its size. */
     public function bounds(): Rectangle
     {
-        return self::fromMac(ObjC::msg('r:', $this->ns, 'frame'));
+        return Screens::fromMac(ObjC::msg('r:', $this->ns, 'frame'));
     }
 
     /** Moves and resizes the window so that its content has bounds $r. */
     public function setContentBounds(Rectangle $r): void
     {
-        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::msg('r:r', $this->ns, 'frameRectForContentRect:', self::toMac($r)), true);
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::msg('r:r', $this->ns, 'frameRectForContentRect:', Screens::toMac($r)), true);
     }
 
     /** Where the window's content is, and its size. */
     public function contentBounds(): Rectangle
     {
-        return self::fromMac(ObjC::msg('r:r', $this->ns, 'contentRectForFrameRect:', ObjC::msg('r:', $this->ns, 'frame')));
+        return Screens::fromMac(ObjC::msg('r:r', $this->ns, 'contentRectForFrameRect:', ObjC::msg('r:', $this->ns, 'frame')));
     }
 
-    /** Resizes the window. */
+    /** Resizes the window; a flyout is placed again at that size. */
     public function setSize(int $width, int $height): void
     {
+        if ($this->setFlyoutSize($width, $height)) {
+            return;
+        }
         $b = $this->bounds();
         $this->setBounds(new Rectangle($b->x, $b->y, $width, $height));
     }
@@ -886,9 +995,12 @@ final class Window
         return [$b->width, $b->height];
     }
 
-    /** Resizes the window so that its content has this size. */
+    /** Resizes the window so that its content has this size; a flyout is placed again at that size. */
     public function setContentSize(int $width, int $height): void
     {
+        if ($this->setFlyoutSize($width, $height)) {
+            return;
+        }
         $b = $this->contentBounds();
         $this->setContentBounds(new Rectangle($b->x, $b->y, $width, $height));
     }
@@ -1057,21 +1169,249 @@ final class Window
         }
     }
 
-    /** The height of the primary screen, which window coordinates are flipped by. */
-    private static function screenHeight(): float
+    /**
+     * Creates a flyout (mygo's NewFlyout): a window without a frame, a
+     * background, a shadow or a Dock presence, owned by its parent and
+     * placed next to a rectangle of it, which may extend beyond the parent
+     * but stays in the work area of a display; or next to a tray icon,
+     * above the windows of other apps. Its page or native UI draws all of
+     * it: give the page a background, or the native UI's root one.
+     */
+    public static function flyout(FlyoutOptions $o): Window
     {
-        $screens = ObjC::msg('p:', ObjC::cls('NSScreen'), 'screens');
-        return ObjC::msg('L:', $screens, 'count') === 0 ? 0.0 : ObjC::msg('r:', ObjC::msg('p:L', $screens, 'objectAtIndex:', 0), 'frame')->h;
+        if (($o->parent === null) === ($o->tray === null)) {
+            throw new \InvalidArgumentException('Window::flyout needs a parent or a tray');
+        }
+        [$side, $align] = Flyout::PLACEMENTS[$o->placement] ?? throw new \InvalidArgumentException("unknown flyout placement \"{$o->placement}\"");
+        $width = $o->width ?: 200; $height = $o->height ?: 200;
+        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'width' => $width, 'height' => $height];
+        try {
+            return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
+                disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
+                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload));
+        } finally {
+            self::$creating = null;
+        }
     }
 
-    private static function fromMac($r): Rectangle
+    /** Whether Window::flyout() created the window. */
+    public function isFlyout(): bool
     {
-        return new Rectangle((int)round($r->x), (int)round(self::screenHeight() - $r->y - $r->h), (int)round($r->w), (int)round($r->h));
+        return $this->flyout !== null;
     }
 
-    private static function toMac(Rectangle $r)
+    /** Whether the window was created with WindowOptions::$panel. */
+    public function isPanel(): bool
     {
-        return ObjC::rect($r->x, self::screenHeight() - $r->y - $r->height, $r->width, $r->height);
+        return $this->panel;
+    }
+
+    /** Places a flyout against another rectangle of its parent, in points from the top-left of the parent's content, as FlyoutOptions::$anchor; nothing for other windows. */
+    public function setAnchor(Rectangle $anchor): void
+    {
+        if ($this->flyout === null || $this->destroyed) {
+            return;
+        }
+        $this->flyout['anchor'] = $anchor;
+        $this->placeFlyout();
+    }
+
+    /** Places a flyout where it goes now: Flyout::place in the work area of the display of its anchor, the tray icon's or its parent's content's. */
+    private function placeFlyout(): void
+    {
+        if ($this->flyout === null || $this->destroyed) {
+            return;
+        }
+        $f = $this->flyout;
+        $displays = Screens::displays();
+        $anchor = $f['anchor'];
+        if ($f['tray'] !== null) {
+            $anchor = $f['tray']->bounds();
+            if ($anchor->width === 0 || $anchor->height === 0) { // the icon shows in no menu bar: in the middle of the primary display
+                ObjC::msg('v:rb', $this->ns, 'setFrame:display:', Screens::toMac(Flyout::centered($f['width'], $f['height'], Flyout::primaryWorkArea($displays))), true);
+                return;
+            }
+        } elseif ($this->parent !== null && !$this->parent->destroyed) {
+            $c = $this->parent->contentBounds();
+            $anchor = new Rectangle($anchor->x + $c->x, $anchor->y + $c->y, $anchor->width, $anchor->height);
+        }
+        [$r] = Flyout::place($f['side'], $f['align'], $f['gap'], $anchor, $f['width'], $f['height'], Flyout::workAreaFor($anchor, $displays));
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', Screens::toMac($r), true);
+    }
+
+    /** Places the flyouts of a window that moved or resized again. */
+    private function placeFlyouts(): void
+    {
+        foreach (self::$open as $w) {
+            if ($w->parent === $this && $w->flyout !== null) {
+                $w->placeFlyout();
+            }
+        }
+    }
+
+    /** Resizes a flyout and places it again, as setSize and setContentSize do alike; false for other windows. */
+    private function setFlyoutSize(int $width, int $height): bool
+    {
+        if ($this->flyout === null) {
+            return false;
+        }
+        $this->flyout['width'] = max($width, 1);
+        $this->flyout['height'] = max($height, 1);
+        $this->placeFlyout();
+        return true;
+    }
+
+    /** Shows a flyout above its parent, as its child window, with the keyboard when $key: it does not activate the app, as it shows over a parent the user is using. */
+    private function showFlyout(bool $key): void
+    {
+        if ($key) {
+            self::watchOutsideClicks();
+            ObjC::msg('v:p', $this->ns, 'makeKeyAndOrderFront:', null);
+        } else {
+            ObjC::msg('v:p', $this->ns, 'orderFront:', null);
+        }
+        if ($this->parent !== null && !$this->parent->destroyed && ObjC::msg('p:', $this->ns, 'parentWindow') === null) {
+            ObjC::msg('v:pl', $this->parent->ns, 'addChildWindow:ordered:', $this->ns, 1); // NSWindowAbove
+        }
+    }
+
+    /** Hides a flyout: it stops being a child window, which AppKit would order in again with its parent, and gives the keyboard it had back to the parent. */
+    private function hideFlyout(): void
+    {
+        $key = ObjC::msg('b:', $this->ns, 'isKeyWindow');
+        if ($this->parent !== null && !$this->parent->destroyed) {
+            ObjC::msg('v:p', $this->parent->ns, 'removeChildWindow:', $this->ns);
+            if ($key && $this->parent->isVisible()) {
+                ObjC::msg('v:', $this->parent->ns, 'makeKeyWindow');
+            }
+        }
+        ObjC::msg('v:p', $this->ns, 'orderOut:', null);
+    }
+
+    /**
+     * Watches presses outside the app, in other apps or the menu bar,
+     * which close focusable flyouts as AppKit's transient popovers close:
+     * their panels take the keyboard without the app being activated, and
+     * a press in the menu bar activates no other app, so they would not
+     * resign the key window. Made once, as the first focusable flyout
+     * shows, with the watch of presses on anchors.
+     */
+    private static function watchOutsideClicks(): void
+    {
+        if (self::$outsideClicks !== null) {
+            return;
+        }
+        $mask = 1 << 1 | 1 << 3 | 1 << 25; // left, right and other mouse down
+        self::$outsideClicks = ObjC::msg('p:Lp', ObjC::cls('NSEvent'), 'addGlobalMonitorForEventsMatchingMask:handler:', $mask, ObjC::block('p', function ($ev) {
+            $open = array_filter(self::$open, fn(Window $w) => $w->flyout !== null && $w->flyout['focusable'] && !$w->destroyed && $w->isVisible());
+            foreach ($open as $w) {
+                $w->close();
+            }
+        }, false));
+        ObjC::msg('p:', self::$outsideClicks, 'retain');
+        self::watchAnchorPresses();
+    }
+
+    /**
+     * Watches presses in the app, and eats one on the anchor of a
+     * focusable flyout, which only closes the flyout, as AppKit's transient
+     * popovers eat a press on their positioning rect: the press would make
+     * the parent key, which closes the flyout before the release clicks
+     * what opened it, which would open it again. The press's drags and
+     * release are eaten too; presses elsewhere go on to what is under the
+     * pointer.
+     */
+    private static function watchAnchorPresses(): void
+    {
+        $mask = 1 << 1 | 1 << 3 | 1 << 25 | 1 << 2 | 1 << 4 | 1 << 26 | 1 << 6 | 1 << 7 | 1 << 27; // left, right and other mouse down, up and dragged
+        self::$anchorPresses = ObjC::msg('p:Lp', ObjC::cls('NSEvent'), 'addLocalMonitorForEventsMatchingMask:handler:', $mask, ObjC::block('p', function ($ev) {
+            $type = ObjC::msg('L:', $ev, 'type');
+            if (in_array($type, [2, 4, 26], true)) { // NSEventTypeLeftMouseUp, RightMouseUp, OtherMouseUp
+                if ($type === self::$eatingPress) {
+                    self::$eatingPress = 0;
+                    return null;
+                }
+            } elseif (in_array($type, [6, 7, 27], true)) { // NSEventTypeLeftMouseDragged, RightMouseDragged, OtherMouseDragged
+                if (self::$eatingPress !== 0) {
+                    return null;
+                }
+            } else { // a press, which ends any other
+                self::$eatingPress = 0;
+                if (($w = self::flyoutAnchoredAt($ev)) !== null) {
+                    self::$eatingPress = $type + 1;
+                    $w->close();
+                    return null;
+                }
+            }
+            return $ev;
+        }, false, 'p'));
+        ObjC::msg('p:', self::$anchorPresses, 'retain');
+    }
+
+    /** The focusable flyout showing whose anchor is under the press $ev in its parent, or null. */
+    private static function flyoutAnchoredAt($ev): ?Window
+    {
+        $evWin = ObjC::msg('p:', $ev, 'window');
+        $p = $evWin === null ? null : (self::$open[ObjC::addr($evWin)] ?? null);
+        if ($p === null || $p->destroyed) {
+            return null;
+        }
+        $frame = ObjC::msg('r:', $p->ns, 'frame');
+        $c = ObjC::msg('r:r', $p->ns, 'contentRectForFrameRect:', $frame);
+        $loc = ObjC::msg('q:', $ev, 'locationInWindow');
+        $x = $loc->x - ($c->x - $frame->x);
+        $y = $c->y - $frame->y + $c->h - $loc->y;
+        foreach (self::$open as $w) {
+            if ($w->parent !== $p || $w->flyout === null || !$w->flyout['focusable'] || $w->destroyed || !$w->isVisible()) {
+                continue;
+            }
+            $a = $w->flyout['anchor'];
+            if ($x >= $a->x && $y >= $a->y && $x < $a->x + $a->width && $y < $a->y + $a->height) {
+                return $w;
+            }
+        }
+        return null;
+    }
+
+    /** Closes a focusable flyout that lost the keyboard, as the user closing it, unless it went to a flyout of its own. */
+    private function dismissFlyout(): void
+    {
+        if ($this->destroyed || !$this->flyout['focusable'] || !$this->isVisible()) {
+            return;
+        }
+        for ($k = self::focused(); $k !== null; $k = $k->parent) {
+            if ($k === $this) {
+                return;
+            }
+        }
+        $this->close();
+    }
+
+    /** Closes a flyout or a panel on an Escape its page or native UI left, as the user closing it, after the frame being built: menus, popovers and launchers close so. */
+    private function escape(): void
+    {
+        if ($this->flyout !== null || $this->panel) {
+            App::later($this->close(...));
+        }
+    }
+
+    /** The panel classes: a panel (MyPHPPanel) takes the keyboard without activating the app and is never the main window; a flyout's (MyPHPFlyout) is the key window only when it takes the keyboard, its parent staying the main window. */
+    private static function definePanels(): void
+    {
+        if (self::$panelsDefined) {
+            return;
+        }
+        self::$panelsDefined = true;
+        ObjC::defineClass('MyPHPPanel', 'NSPanel', [
+            'canBecomeKeyWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
+            'canBecomeMainWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
+            // NSPanel closes on an Escape its content leaves (cancelOperation:), past windowShouldClose:: escape() closes it, as the user closing it.
+            'cancelOperation:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {}],
+        ]);
+        ObjC::defineClass('MyPHPFlyout', 'NSPanel', [
+            'canBecomeKeyWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => (self::$open[ObjC::addr($self)] ?? null)?->flyout['focusable'] ?? false],
+            'canBecomeMainWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
+        ]);
     }
 
     /** @return list<Window> the open windows, in the order they were created */

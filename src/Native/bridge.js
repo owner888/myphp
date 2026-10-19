@@ -136,4 +136,11 @@
     },
   };
   document.addEventListener("DOMContentLoaded", () => post({ t: "dom-ready" }));
+  // An Escape no handler of the page called preventDefault on: a flyout or a panel closes on it.
+  addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.isComposing) return;
+    setTimeout(() => {
+      if (!e.defaultPrevented) post({ t: "escape" });
+    });
+  });
 })();
