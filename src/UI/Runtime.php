@@ -134,6 +134,18 @@ final class Runtime
     public array $dragRecs = [];
     /** @var array<int, true> the nodes that were draggable last frame (Node::$draggable) */
     private array $draggables = [];
+    /**
+     * A value being dragged within the window (mygo's valueDrag): the node
+     * dragging it, the value, where the press took the node (from its top
+     * left), the node taking it under the pointer, whether Escape gave it
+     * up, and the source's node in the frame, for its copy.
+     * @var ?array{src: int, value: mixed, offX: float, offY: float, over: ?int, canceled: bool, elem: ?Node}
+     */
+    public ?array $valueDrag = null;
+    /** The nodes dragging values last frame (Context::drag) and their values; the nodes taking values (Context::drop, dragOver), by the type they take; the values dropped since the last pass, by the node taking them. */
+    private array $dragSources = [], $dropTargets = [], $dropped = [];
+    /** The node around the one pressed that drags a value, which takes the press once it moves (mygo's pressDragger). */
+    private ?int $pressDragger = null;
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
     /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
@@ -259,6 +271,7 @@ final class Runtime
                     }
                     $this->hold = [$e[1], $e[2], $now / 1e9, 0, false, $e[1], $e[2]];
                     $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
+                    $this->pressDragger = $this->pressDragger($this->pointerPress['id']);
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
@@ -270,12 +283,12 @@ final class Runtime
                     $this->input->mouseDown = false;
                     $this->sliding = null;
                     $this->hold = null;
-                    $moved = false;
+                    $moved = $e[3] === 0 && $this->dragEnd($e[1], $e[2]); // a drag ended, dropping its value: no click
                     if ($e[3] === 0 && ($p = &$this->pointerPress) !== null && $p['down']) {
                         $p['down'] = false;
                         $p['released'] = $p['track']->n > 1; // a press that moved ends a drag; a click does not
                         $p['v'] = $p['track']->velocity($this->now);
-                        $moved = $p['id'] !== null && isset($this->draggables[$p['id']]) && $p['track']->far; // it moved the node (Context::draggable): no click
+                        $moved = $moved || ($p['id'] !== null && isset($this->draggables[$p['id']]) && $p['track']->far); // it moved the node (Context::draggable): no click
                     }
                     unset($p);
                     if ($this->drag !== null) {
@@ -285,6 +298,7 @@ final class Runtime
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {
                         $this->pointerPress['track']->move($this->now, $e[1], $e[2]);
+                        $this->dragMove($e[1], $e[2]);
                     }
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
                         $this->slideTo($this->sliding, $e[1]);
@@ -302,7 +316,13 @@ final class Runtime
                     }
                     break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
-                case 'key': $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false]; break;
+                case 'key':
+                    if ($e[2] === Key::ESCAPE && ($e[3] & Key::MODIFIERS) === 0 && $this->valueDrag !== null && !$this->valueDrag['canceled']) {
+                        $this->valueDrag['canceled'] = true; $this->valueDrag['over'] = null; // Escape gives up the drag
+                        break;
+                    }
+                    $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false];
+                    break;
                 case 'command': // what the text system made of the key just pushed; a focused control taking it keeps it from shortcut()
                     if ($this->command($e[1]) && $this->keys !== []) {
                         $this->keys[array_key_last($this->keys)][3] = true;
@@ -325,6 +345,7 @@ final class Runtime
             }
         }
         $this->input->events = [];
+        $this->dragScroll();
         $this->clickable = []; // this frame's build asks again
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
@@ -346,8 +367,10 @@ final class Runtime
             if ($this->pointerPress !== null) {
                 $this->pointerPress['released'] = false; // the pass handled the release (mygo's forgetInput)
             }
+            $this->dropped = [];
         }
         $this->building = false;
+        $this->dropped = []; // dropped on nodes the frame did not build
         if ($this->escape !== null) {
             foreach ($this->keys as $k) {
                 if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
@@ -374,7 +397,7 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->shown = []; $this->worlds = [];
-        $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = [];
+        $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->record($root);
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
@@ -484,7 +507,7 @@ final class Runtime
     private function pressTarget(float $x, float $y): ?int
     {
         $best = null; $at = -1;
-        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
+        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->dragSources), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $ids) {
             foreach ($ids as $id) {
                 if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y)) {
                     $best = $id; $at = $this->order[$id];
@@ -492,6 +515,133 @@ final class Runtime
             }
         }
         return $best;
+    }
+
+    /** Whether $value is of $type: a class or interface it is an instance of, or one of PHP's types as get_debug_type names them ('string', 'int', 'array'). */
+    public static function isOf(mixed $value, string $type): bool
+    {
+        return $value instanceof $type || get_debug_type($value) === $type;
+    }
+
+    /** The node around $target, the node pressed, that drags a value, as a row around a button, when $target only takes clicks: one taking the pointer's moves (a field, a slider, a draggable or a value of its own to drag) keeps them. */
+    private function pressDragger(?int $target): ?int
+    {
+        if ($target === null || isset($this->dragSources[$target]) || isset($this->fields[$target]) || isset($this->sliders[$target]) || isset($this->draggables[$target]) || isset($this->inputs[$target])) {
+            return null;
+        }
+        for ($id = $this->parents[$target] ?? 0, $n = 0; $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? 0, $n++) {
+            if (isset($this->dragSources[$id])) {
+                return $id;
+            }
+        }
+        return null;
+    }
+
+    /** Starts dragging the value of the source pressed once the pointer moved far enough, and follows the node taking it under the pointer (mygo's dragMove). */
+    private function dragMove(float $x, float $y): void
+    {
+        $p = &$this->pointerPress;
+        $src = $p['id'];
+        if ($src === null || !isset($this->dragSources[$src])) {
+            // The press goes to the node around the one pressed that drags a value, once it moves as far as starts a drag: the node pressed has no click then.
+            $a = $this->pressDragger;
+            $dx = $x - $p['track']->ox; $dy = $y - $p['track']->oy;
+            if ($a === null || $this->valueDrag !== null || $dx * $dx + $dy * $dy < self::DRAG_START * self::DRAG_START) {
+                return;
+            }
+            $p['id'] = $src = $a; $this->pressDragger = null;
+        }
+        if ($this->valueDrag === null) {
+            $dx = $x - $p['track']->ox; $dy = $y - $p['track']->oy;
+            if ($dx * $dx + $dy * $dy < self::DRAG_START * self::DRAG_START) {
+                return;
+            }
+            [$lx, $ly] = $this->toLocal($src, $p['track']->ox, $p['track']->oy) ?? [$p['track']->ox, $p['track']->oy];
+            $r = $this->rects[$src];
+            $this->valueDrag = ['src' => $src, 'value' => $this->dragSources[$src], 'offX' => $lx - $r[0], 'offY' => $ly - $r[1], 'over' => null, 'canceled' => false, 'elem' => null];
+        }
+        if ($this->valueDrag['canceled']) {
+            return;
+        }
+        $this->valueDrag['over'] = $this->valueTarget($x, $y, $this->valueDrag['value']);
+    }
+
+    /** The innermost node at ($x, $y) taking $value, or null. */
+    private function valueTarget(float $x, float $y, mixed $value): ?int
+    {
+        $best = null; $at = -1;
+        foreach ($this->dropTargets as $id => $type) {
+            if (($this->order[$id] ?? -1) > $at && self::isOf($value, $type) && $this->under($id, $x, $y)) {
+                $best = $id; $at = $this->order[$id];
+            }
+        }
+        return $best;
+    }
+
+    /** Drops the value dragged on the node taking it under ($x, $y), and reports whether a drag ended, which is no click (mygo's dragEnd). */
+    private function dragEnd(float $x, float $y): bool
+    {
+        $d = $this->valueDrag;
+        if ($d === null) {
+            return false;
+        }
+        $this->valueDrag = null;
+        if (!$d['canceled'] && ($t = $this->valueTarget($x, $y, $d['value'])) !== null) {
+            $this->dropped[$t] = [$d['value'], $x, $y];
+        }
+        $this->needsFrame = true;
+        return true;
+    }
+
+    /** Scrolls the scrolling container under the pointer while a value is dragged near its top or bottom edge, faster nearer to it (mygo's dragScroll). */
+    private function dragScroll(): void
+    {
+        $d = $this->valueDrag;
+        if ($d === null || $d['canceled']) {
+            return;
+        }
+        $x = $this->input->mouseX; $y = $this->input->mouseY;
+        $best = null; $at = -1;
+        foreach ($this->scrolls as $id => $_) {
+            if ($this->scrollAxes[$id][1] && $this->order[$id] > $at && $this->under($id, $x, $y)) {
+                $best = $id; $at = $this->order[$id];
+            }
+        }
+        if ($best === null) {
+            return;
+        }
+        $edge = 32;
+        $ly = ($this->toLocal($best, $x, $y) ?? [$x, $y])[1] - $this->rects[$best][1];
+        $top = $ly; $bottom = $this->rects[$best][3] - $ly;
+        $dy = $top < $edge ? -($edge - $top) / 2 : ($bottom < $edge ? ($edge - $bottom) / 2 : 0.0);
+        $st = $this->scrolls[$best];
+        $was = $st->extent()[0];
+        if ($dy != 0) {
+            $st->scrollBy($dy);
+        }
+        if ($st->extent()[0] != $was) {
+            $this->animating = true;
+            $this->valueDrag['over'] = $this->valueTarget($x, $y, $d['value']); // the node under the pointer changes as the content moves
+        }
+    }
+
+    /** The node $n dragging $value this frame (Context::drag): the copy following the pointer is of it, and the value as the frame has it. */
+    public function dragSource(Node $n, mixed $value): void
+    {
+        if ($this->valueDrag !== null && $this->valueDrag['src'] === $n->id) {
+            $this->valueDrag['elem'] = $n;
+            $this->valueDrag['value'] = $value;
+        }
+    }
+
+    /** The value dropped on node $id since the last pass, and where: [value, x, y]; null for none. */
+    public function droppedOn(int $id): ?array
+    {
+        if (!isset($this->dropped[$id])) {
+            return null;
+        }
+        $this->consumed = true;
+        return $this->dropped[$id];
     }
 
     /** The left press on node $id: still down, or let go since the last frame; null for none. @return ?array{id: ?int, track: DragTrack, down: bool, released: bool, v: array{0: float, 1: float}} */
@@ -662,6 +812,8 @@ final class Runtime
         if ($n->pose !== null) {
             $this->samplePose($n);
         }
+        if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
+        if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
         if ($n->draggable) {
             $this->draggables[$n->id] = true;
             if (($d = $this->dragRecs[$n->id] ?? null) !== null && $d->frame === $this->frameNumber && ($p = $d->shown()) !== [0.0, 0.0]) {
@@ -688,7 +840,7 @@ final class Runtime
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
         if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1) { // placed at the root: over what was built before it
-            $this->overlays[] = [$this->counter, $n->x, $n->y, $n->w, $n->h];
+            $this->overlays[] = [$this->counter, $bx, $by, $bw, $bh]; // as it shows, through its transform
         }
         if ($n->blocks || ($n->absolute && $parent !== null && $this->order[$parent->id] === 1)) {
             $this->overlayIds[$n->id] = true;

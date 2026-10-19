@@ -2,7 +2,8 @@
 // Draggable nodes: a card the pointer drags anywhere, which stays where it
 // is let go; a puck thrown along a track to the nearest of three stops, at
 // the pointer's speed; a sheet pulled up or down to its heights, rubber-
-// banded past them, lifting as it is dragged.
+// banded past them, lifting as it is dragged; words dragged into a basket,
+// which shows when one is over it (Escape gives a drag up).
 // Run: ./run.sh drag
 declare(strict_types=1);
 
@@ -11,7 +12,7 @@ use MyPHP\UI\{Animation, Content, Context, DraggableOptions, Font, Motion, Node,
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = (object)['card' => [0.0, 0.0], 'puck' => [0.0, 0.0], 'sheet' => [0.0, 260.0]];
+$s = (object)['card' => [0.0, 0.0], 'puck' => [0.0, 0.0], 'sheet' => [0.0, 260.0], 'words' => ['apple', 'pear', 'plum'], 'basket' => []];
 
 function view(Context $c, object $s): void
 {
@@ -28,6 +29,22 @@ function view(Context $c, object $s): void
       $c->muted('Throw the puck: it goes to the nearest stop from where the throw would carry it.', 12);
       $c->column(0, 0, 0, $t->surface)->round(24)->size(460, 48);
         $c->draggable($c->box(48, 48, $t->accent)->round(24), $s->puck, new DraggableOptions(Node::HORIZONTAL, bounds: [0, 0, 412, 0], rigid: true, snap: Motion::nearest([0, 0], [206, 0], [412, 0])));
+      $c->end();
+      $c->row(0, 16);
+        foreach ($s->words as $w) {
+            $c->drag($c->row(10, 0, 0, $t->surface)->round(8)->border($t->border), $w);
+              $c->text($w);
+            $c->end();
+        }
+        $basket = $c->column(10, 4, 0, $t->surface)->round(8)->size(180, 90);
+          $c->text('Basket', 13, style: Font::BOLD);
+          $c->muted($s->basket === [] ? 'Drop words here' : implode(', ', $s->basket), 12);
+        $c->end();
+        if ($c->dragOver($basket, 'string')) { $basket->color = $t->surfaceHover; $basket->border($t->accent, 2); }
+        if ($c->drop($basket, 'string', $word)) {
+            $s->basket[] = $word;
+            $s->words = array_values(array_diff($s->words, [$word]));
+        }
       $c->end();
     $c->end();
     // A sheet at the bottom: pulled to its heights, past them on a rubber band.

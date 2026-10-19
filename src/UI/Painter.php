@@ -217,6 +217,29 @@ final class Painter
         $list->rect($n->x, $y, $n->w, 0.5, $t->dark ? 0xffffff : 0x000000, $t->dark ? 0.07 : 0.1);
     }
 
+    /** Paints a copy of the node dragging its value under the pointer, above the rest, at three quarters' opacity (mygo's paintDrag). */
+    public static function dragCopy(DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
+    {
+        $d = $rt->valueDrag;
+        if ($d === null || $d['canceled'] || ($e = $d['elem']) === null) {
+            return;
+        }
+        [$px, $py] = $e->world->point($e->x + $d['offX'], $e->y + $d['offY']);
+        $shift = Affine::translation($rt->input->mouseX - $px, $rt->input->mouseY - $py);
+        $saved = [];
+        $move = function (Node $n) use (&$move, &$saved, $shift) {
+            $saved[] = [$n, $n->world];
+            $n->world = $shift->mul($n->world);
+            foreach ($n->kids as $k) { $move($k); }
+        };
+        $move($e);
+        $opacity = $list->opacity();
+        $list->setOpacity(0.75);
+        self::paint($e, $list, $text, $t, $rt);
+        $list->setOpacity($opacity);
+        foreach ($saved as [$n, $w]) { $n->world = $w; }
+    }
+
     /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */
     public static function tooltip(Node $root, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {

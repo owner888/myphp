@@ -194,3 +194,14 @@ check($n !== null && abs($n->bounds[0] - $b[0]) < 0.01 && abs($n->bounds[2] - $b
 $t = new Headless(fn(Context $c) => $c->box(80, 40, 0x145078)->rotate(10)->translate(50, 30), 200, 120);
 $t->frame();
 check(!$t->rt->needsFrame, 'static transformed content asks for no frames');
+
+// An overlay moved away by its transform blocks the pointer where it shows, not where the layout put it.
+$hits = 0;
+$t = new Headless(function (Context $c) use (&$hits) {
+    if ($c->clicked($c->button('Under'))) { $hits++; }
+    $c->column()->at(0, 0)->size(300, 100)->translate(0, 200);
+    $c->end();
+}, 300, 400);
+$t->frame();
+$t->clickText('Under');
+same(1, $hits, 'an overlay moved away by its transform lets the pointer through where it no longer is');

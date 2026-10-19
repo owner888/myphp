@@ -329,6 +329,7 @@ final class Window
                 });
                 $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                 Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
                 Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 if ($text->repaint) {
                     // An atlas started over during the paint: what was painted before points at slots that are gone.
@@ -336,6 +337,7 @@ final class Window
                     $list->reset();
                     $list->pushClip(0, 0, $bounds->w, $bounds->h);
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                    Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
                     Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 }
                 $this->showCursor($this->runtime->cursor);

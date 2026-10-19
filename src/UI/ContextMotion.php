@@ -491,10 +491,65 @@ trait ContextMotion
         return $r->shown();
     }
 
-    /** Whether the pointer is dragging $n (draggable()), once it moved a few points (mygo's Dragging). */
+    /**
+     * Makes $n the source of $value (mygo's Drag), dragged within the window
+     * once the pointer pressing it moves a few points: a copy of $n follows
+     * the pointer, and the node taking the value under it gets it when the
+     * pointer is released (drop()); Escape gives the drag up. A press on a
+     * control inside $n that takes clicks alone, as a button, drags $n once
+     * it moves; fields, sliders and draggables keep the pointer's moves. A
+     * press dragging is no click; dragging() reports the drag. A null value
+     * drags nothing.
+     */
+    public function drag(Node $n, mixed $value): Node
+    {
+        if ($value === null) {
+            return $n;
+        }
+        $n->drags = true; $n->dragValue = $value;
+        $this->runtime?->dragSource($n, $value);
+        return $n;
+    }
+
+    /**
+     * Makes $n take values of $type dragged within the window (drag()), a
+     * class or interface or one of PHP's types as get_debug_type names them
+     * ('string', 'int'), and reports whether one was dropped on it since
+     * the last frame, setting $value to it (mygo's Drop). The innermost node
+     * under the pointer taking a value gets it.
+     *
+     *     if ($c->drop($folder, File::class, $f)) { move($f, $dir); }
+     */
+    public function drop(Node $n, string $type, mixed &$value = null): bool
+    {
+        $n->accepts = $type;
+        $d = $this->runtime?->droppedOn($n->id);
+        if ($d === null || !Runtime::isOf($d[0], $type)) {
+            return false;
+        }
+        $value = $d[0];
+        return true;
+    }
+
+    /** Makes $n take values of $type, as drop() does, and reports whether one is being dragged over it, setting $value to it: for showing it would take it (mygo's DragOver). */
+    public function dragOver(Node $n, string $type, mixed &$value = null): bool
+    {
+        $n->accepts = $type;
+        $d = $this->runtime?->valueDrag;
+        if ($d === null || $d['canceled'] || $d['over'] !== $n->id || !Runtime::isOf($d['value'], $type)) {
+            return false;
+        }
+        $value = $d['value'];
+        return true;
+    }
+
+    /** Whether $n is dragging its value (drag()), or the pointer is dragging $n (draggable()) once it moved a few points (mygo's Dragging). */
     public function dragging(Node $n): bool
     {
         $rt = $this->runtime;
+        if (($d = $rt?->valueDrag) !== null && $d['src'] === $n->id && !$d['canceled']) {
+            return true;
+        }
         $p = $rt?->pressOf($n->id);
         $r = $rt?->dragRecs[$n->id] ?? null;
         return $p !== null && $p['down'] && !$n->disabled && $r !== null && $r->frame + 1 >= $rt->frameNumber && $p['track']->far;

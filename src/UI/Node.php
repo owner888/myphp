@@ -87,6 +87,10 @@ final class Node
     public bool $focusTarget = false;
     /** A router's page (mygo's flagPage), whose nodes' state lives while the router keeps the page; inert, what is in it takes neither the pointer nor the keyboard, and assistive technology does not see it (a page going away). */
     public bool $page = false, $inert = false;
+    /** Drags $dragValue within the window once the pointer pressing it moves a few points (Context::drag); takes values of type $accepts dragged onto it (Context::drop, dragOver). */
+    public bool $drags = false;
+    public mixed $dragValue = null;
+    public ?string $accepts = null;
     /** Moved by the pointer from its place in the layout (Context::draggable): its offset joins its pose. */
     public bool $draggable = false;
     /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled. */

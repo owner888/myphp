@@ -87,6 +87,7 @@ final class Headless
         $this->list->reset();
         $this->list->pushClip(0, 0, $this->w, $this->h);
         Painter::paint($this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
+        Painter::dragCopy($this->list, $this->metrics, $this->theme, $this->rt);
         return $this->list;
     }
 

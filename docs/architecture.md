@@ -1253,6 +1253,20 @@ offset joins the node's pose (`Node::$poseM`, before its transform), so a
 node lifting as it is dragged stays under the pointer. Events carry no
 time: their moves are timed by the frame that drains them.
 
+Values dragged within a window are mygo's dragdrop: `Context::drag($n,
+$value)` makes a source, which a press moving `DRAG_START` points starts
+dragging (`Runtime::$valueDrag`); a press on a node inside it that only
+takes clicks, as a button, gives the press to the source once it moves
+(mygo's pressDragger), while fields, sliders and draggables keep it.
+`drop($n, $type, $v)` and `dragOver` make a node take values of a type —
+a class or interface (instanceof) or one of PHP's types as
+`get_debug_type` names them — the innermost under the pointer taking it;
+the release drops it there, which is no click, and Escape gives it up.
+`Painter::dragCopy` paints the source's node again under the pointer at
+three quarters' opacity, shifting its worlds; near the top or bottom
+edge of a scrolling container under the pointer, the content scrolls
+(mygo's dragScroll). Lists and grids keep their own reordering.
+
 ## Router
 
 `Router` is mygo's: a history of locations (an escaped path and a query,
