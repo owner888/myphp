@@ -1,7 +1,8 @@
 <?php
 // Flyouts and panels: a menu that opens under its button, takes the
 // keyboard and closes on a press outside it, on its button or on Escape;
-// a hover card that never takes the keyboard; a flyout of a tray icon in
+// the same menu in a popover of the system, with its material and
+// arrow; a hover card that never takes the keyboard; a flyout of a tray icon in
 // the menu bar; a panel above every app, which leaves the app the user is
 // in active and closes on Escape.
 // Run: ./run.sh flyout
@@ -12,7 +13,7 @@ use MyPHP\UI\{Content, Context, Font};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['menu' => null, 'card' => null, 'chosen' => '—', 'placement' => FlyoutOptions::BOTTOM_START, 'panel' => null, 'trayFlyout' => null];
+$s = ['menu' => null, 'card' => null, 'chosen' => '—', 'placement' => FlyoutOptions::BOTTOM_START, 'panel' => null, 'trayFlyout' => null, 'popover' => null];
 
 /** A flyout's content: a rounded card on the theme's background, as a flyout draws all of itself. */
 function card(Context $c, \Closure $fn): void
@@ -50,6 +51,19 @@ function view(Context $c, array &$s, ?Window $w): void
                   });
               })));
           $s['menu']->on('closed', function () use (&$s, $w) { $s['menu'] = null; $w->invalidate(); });
+      }
+      $pop = $c->button('Open a popover');
+      if ($c->clicked($pop) && $w !== null && $s['popover'] === null) {
+          $s['popover'] = Window::flyout(new FlyoutOptions(parent: $w, anchor: anchorOf($c, $pop), placement: $s['placement'], width: 220, height: 150, focusable: true, popover: true,
+              content: Content::view(function (Context $c) use (&$s) {
+                  if ($c->vibrancy()) { $c->root->color = null; } // the popover draws its material
+                  $c->column(12, 6, 1);
+                    foreach (['Cut', 'Copy', 'Paste', 'Select all'] as $item) {
+                        if ($c->clicked($c->button($item))) { $s['chosen'] = "$item (popover)"; $s['popover']?->close(); }
+                    }
+                  $c->end();
+              })));
+          $s['popover']->on('closed', function () use (&$s, $w) { $s['popover'] = null; $w->invalidate(); });
       }
       $c->muted("chosen: {$s['chosen']}");
       $hover = $c->text('Hover here for a card', 15);

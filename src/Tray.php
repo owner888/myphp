@@ -119,6 +119,12 @@ final class Tray
         return function () use ($fn) { $this->onRightClick = array_values(array_filter($this->onRightClick, fn($f) => $f !== $fn)); };
     }
 
+    /** The status item's button (NSStatusBarButton), which a flyout's popover shows from. */
+    public function nativeHandle()
+    {
+        return $this->button();
+    }
+
     /** Where the icon is in the menu bar, on the screens (mygo's Bounds): nothing while it shows in none. */
     public function bounds(): Rectangle
     {

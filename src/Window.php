@@ -27,9 +27,19 @@ final class Window
      * (Flyout's), gap, anchor and tray, whether it takes the keyboard, and
      * the size it is placed at; whether the window is a panel
      * (WindowOptions::$panel).
-     * @var ?array{side: int, align: int, gap: int, anchor: Rectangle, tray: ?Tray, focusable: bool, width: int, height: int}
+     * @var ?array{side: int, align: int, gap: int, anchor: Rectangle, tray: ?Tray, focusable: bool, popover: bool, width: int, height: int}
      */
     private ?array $flyout = null;
+    /**
+     * The NSPopover a flyout with FlyoutOptions::$popover shows in, and its
+     * view controller: the popover makes its window as it shows, which is
+     * $ns while it shows (null otherwise); $popoverClosing tells its close
+     * from hide() and destroy() from the user's. $key is where the window
+     * is in $open: its NSWindow's address, or its popover's.
+     */
+    private $popover = null, $popoverController = null;
+    private bool $popoverClosing = false;
+    private int $key = 0;
     private bool $panel = false;
     /** What Window::flyout hands the constructor. */
     private static ?array $creating = null;
@@ -164,7 +174,9 @@ final class Window
         $this->container = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, $bounds->w, $bounds->h));
         ObjC::msg('v:L', $this->view, 'setAutoresizingMask:', 18); // width and height sizable
         ObjC::msg('v:p', $this->container, 'addSubview:', $this->view);
-        ObjC::msg('v:p', $this->ns, 'setContentView:', $this->container);
+        if ($this->flyout === null || !$this->flyout['popover']) {
+            ObjC::msg('v:p', $this->ns, 'setContentView:', $this->container);
+        }
         $this->transparent = $o->transparent;
         if ($o->transparent) {
             ObjC::msg('v:b', $this->ns, 'setOpaque:', false);
@@ -176,10 +188,16 @@ final class Window
         if ($o->vibrancy !== '') {
             $this->setVibrancy($o->vibrancy);
         }
-        ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
         $delegate = self::delegate();
-        ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
-        self::$open[ObjC::addr($this->ns)] = $this;
+        if ($this->flyout !== null && $this->flyout['popover']) {
+            $this->createPopover($delegate);
+            $this->key = ObjC::addr($this->popover);
+        } else {
+            ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
+            ObjC::msg('v:p', $this->ns, 'setDelegate:', $delegate);
+            $this->key = ObjC::addr($this->ns);
+        }
+        self::$open[$this->key] = $this;
         if ($this->trafficLights !== null && ($container = $this->titleBarContainer()) !== null) { // AppKit lays the title bar out at each step of a zoom's animation: the lights follow each
             ObjC::msg('v:b', $container, 'setPostsFrameChangedNotifications:', true);
             ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $delegate, ObjC::sel('titleBarLaidOut:'), ObjC::str('NSViewFrameDidChangeNotification'), $container);
@@ -270,6 +288,9 @@ final class Window
      */
     private function createFlyout(WindowOptions $o): void
     {
+        if ($this->flyout['popover']) {
+            return; // its popover makes its window as it shows (createPopover)
+        }
         self::definePanels();
         $this->ns = ObjC::msg('p:rLLb', ObjC::alloc('MyPHPFlyout'), 'initWithContentRect:styleMask:backing:defer:', ObjC::rect(0, 0, $o->width, $o->height), self::NONACTIVATING, self::BACKING_BUFFERED, false);
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
@@ -298,7 +319,7 @@ final class Window
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
                     $c->titleBar = $this->titleBar();
-                    $c->vibrancy = $this->effect !== null;
+                    $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
                     Layout::measure($c->root);
@@ -499,38 +520,33 @@ final class Window
             };
             ObjC::defineClass('MyPHPWindowDelegate', 'NSObject', [
                 'windowShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $sender) {
-                    $w = self::$open[ObjC::addr($sender)] ?? null;
+                    return (self::$open[ObjC::addr($sender)] ?? null)?->shouldClose() ?? true;
+                }],
+                'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                    (self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null)?->closed();
+                }],
+                // The user clicked elsewhere, in a transient popover: a press on its own tray icon leaves it to the icon's click, which toggles it, rather than closing it for the click to open it again.
+                'popoverShouldClose:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $popover) {
+                    $w = self::$open[ObjC::addr($popover)] ?? null;
                     if ($w === null) {
                         return true;
                     }
-                    $e = new CloseEvent($w);
-                    foreach ($w->listeners['close'] ?? [] as $fn) {
-                        $fn($e);
+                    if ($w->flyout['tray']?->pressed() ?? false) {
+                        return false;
                     }
-                    return !$e->canceled;
+                    return $w->shouldClose();
                 }],
-                'windowWillClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                    $ns = ObjC::msg('p:', $note, 'object');
-                    $w = self::$open[ObjC::addr($ns)] ?? null;
-                    unset(self::$open[ObjC::addr($ns)]);
-                    if ($w !== null) {
-                        $w->destroyed = true;
-                        self::$closingParents++; // its children close with it; the last window is reported once they all are
-                        foreach (self::all() as $child) {
-                            if ($child->parent === $w) { $child->destroy(); }
-                        }
-                        self::$closingParents--;
-                        if ($w->attention !== 0) { $w->flashFrame(false); }
-                        unset(self::$byView[ObjC::addr($w->view)]);
-                        if ($w->runtime !== null) { Access::detach($w->view); }
-                        $w->dropChannels();
-                        $w->captureState();
-                        WindowState::save();
-                        $w->emit('closed');
+                'popoverDidClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                    $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                    if ($w === null) {
+                        return;
                     }
-                    if (self::$closingParents === 0 && self::$open === [] && App::$quitOnLastWindowClosed) {
-                        App::quit();
+                    $w->ns = null; // the popover's window goes
+                    if ($w->popoverClosing) {
+                        $w->popoverClosing = false;
+                        return;
                     }
+                    $w->closed();
                 }],
                 'windowDidBecomeKey:' => ['v@:@', 'v(ppp)', $fire('focus')],
                 'windowDidResignKey:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($fire) {
@@ -551,9 +567,44 @@ final class Window
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
                     $w?->layoutTrafficLights();
                 }],
-            ], ['NSWindowDelegate']);
+            ], ['NSWindowDelegate', 'NSPopoverDelegate']);
         }
         return ObjC::msg('p:', ObjC::alloc('MyPHPWindowDelegate'), 'init');
+    }
+
+    /** Asks the 'close' listeners whether the window closes, as the user closing it. */
+    private function shouldClose(): bool
+    {
+        $e = new CloseEvent($this);
+        foreach ($this->listeners['close'] ?? [] as $fn) {
+            $fn($e);
+        }
+        return !$e->canceled;
+    }
+
+    /** The window closed (windowWillClose:, or a popover's close): its children close with it, and the app quits after the last window when it should. */
+    private function closed(): void
+    {
+        unset(self::$open[$this->key]);
+        $this->destroyed = true;
+        self::$closingParents++; // its children close with it; the last window is reported once they all are
+        foreach (self::all() as $child) {
+            if ($child->parent === $this) { $child->destroy(); }
+        }
+        self::$closingParents--;
+        if ($this->popover !== null) {
+            $this->cleanupPopover();
+        }
+        if ($this->attention !== 0) { $this->flashFrame(false); }
+        unset(self::$byView[ObjC::addr($this->view)]);
+        if ($this->runtime !== null) { Access::detach($this->view); }
+        $this->dropChannels();
+        $this->captureState();
+        WindowState::save();
+        $this->emit('closed');
+        if (self::$closingParents === 0 && self::$open === [] && App::$quitOnLastWindowClosed) {
+            App::quit();
+        }
     }
 
     /**
@@ -735,11 +786,7 @@ final class Window
         if ($this->destroyed) {
             return;
         }
-        $e = new CloseEvent($this);
-        foreach ($this->listeners['close'] ?? [] as $fn) {
-            $fn($e);
-        }
-        if (!$e->canceled) {
+        if ($this->shouldClose()) {
             $this->destroy();
         }
     }
@@ -748,6 +795,12 @@ final class Window
     public function destroy(): void
     {
         if ($this->destroyed) {
+            return;
+        }
+        if ($this->popover !== null) { // at once, without the popover's animation
+            ObjC::msg('v:b', $this->popover, 'setAnimates:', false);
+            $this->hidePopover();
+            $this->closed();
             return;
         }
         if ($this->sheet) {
@@ -764,7 +817,9 @@ final class Window
     public function show(): void
     {
         $visible = $this->isVisible();
-        if ($this->flyout !== null) {
+        if ($this->popover !== null) {
+            $this->showPopover();
+        } elseif ($this->flyout !== null) {
             $this->showFlyout($this->flyout['focusable']);
         } elseif ($this->parent !== null && $this->modal && !$this->sheet) {
             $this->sheet = true;
@@ -788,7 +843,9 @@ final class Window
     public function showInactive(): void
     {
         $visible = $this->isVisible();
-        if ($this->flyout !== null) {
+        if ($this->popover !== null) {
+            $this->showPopover();
+        } elseif ($this->flyout !== null) {
             $this->showFlyout(false);
         } else {
             ObjC::msg('v:', $this->ns, 'orderFrontRegardless');
@@ -807,7 +864,9 @@ final class Window
         if (!$this->isVisible()) {
             return;
         }
-        if ($this->flyout !== null) {
+        if ($this->popover !== null) {
+            $this->hidePopover();
+        } elseif ($this->flyout !== null) {
             $this->hideFlyout();
         } elseif ($this->sheet) {
             $this->sheet = false;
@@ -820,6 +879,9 @@ final class Window
 
     public function isVisible(): bool
     {
+        if ($this->popover !== null) {
+            return ObjC::msg('b:', $this->popover, 'isShown');
+        }
         return ObjC::msg('b:', $this->ns, 'isVisible');
     }
 
@@ -1184,7 +1246,7 @@ final class Window
         }
         [$side, $align] = Flyout::PLACEMENTS[$o->placement] ?? throw new \InvalidArgumentException("unknown flyout placement \"{$o->placement}\"");
         $width = $o->width ?: 200; $height = $o->height ?: 200;
-        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'width' => $width, 'height' => $height];
+        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'popover' => $o->popover, 'width' => $width, 'height' => $height];
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
                 disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
@@ -1220,6 +1282,10 @@ final class Window
     private function placeFlyout(): void
     {
         if ($this->flyout === null || $this->destroyed) {
+            return;
+        }
+        if ($this->popover !== null) {
+            $this->placePopover();
             return;
         }
         $f = $this->flyout;
@@ -1303,7 +1369,7 @@ final class Window
         }
         $mask = 1 << 1 | 1 << 3 | 1 << 25; // left, right and other mouse down
         self::$outsideClicks = ObjC::msg('p:Lp', ObjC::cls('NSEvent'), 'addGlobalMonitorForEventsMatchingMask:handler:', $mask, ObjC::block('p', function ($ev) {
-            $open = array_filter(self::$open, fn(Window $w) => $w->flyout !== null && $w->flyout['focusable'] && !$w->destroyed && $w->isVisible());
+            $open = array_filter(self::$open, fn(Window $w) => $w->flyout !== null && $w->popover === null && $w->flyout['focusable'] && !$w->destroyed && $w->isVisible());
             foreach ($open as $w) {
                 $w->close();
             }
@@ -1362,7 +1428,7 @@ final class Window
         $x = $loc->x - ($c->x - $frame->x);
         $y = $c->y - $frame->y + $c->h - $loc->y;
         foreach (self::$open as $w) {
-            if ($w->parent !== $p || $w->flyout === null || !$w->flyout['focusable'] || $w->destroyed || !$w->isVisible()) {
+            if ($w->parent !== $p || $w->flyout === null || $w->popover !== null || !$w->flyout['focusable'] || $w->destroyed || !$w->isVisible()) {
                 continue;
             }
             $a = $w->flyout['anchor'];
@@ -1385,6 +1451,112 @@ final class Window
             }
         }
         $this->close();
+    }
+
+    /**
+     * The NSPopover of a flyout with FlyoutOptions::$popover (mygo's
+     * createPopover): it draws the system's material and an arrow, and
+     * animates; a focusable flyout's is transient, closing on a click
+     * elsewhere once popoverShouldClose: lets it.
+     */
+    private function createPopover($delegate): void
+    {
+        ObjC::msg('v:L', $this->container, 'setAutoresizingMask:', 18); // width and height sizable
+        $this->popoverController = ObjC::msg('p:', ObjC::alloc('NSViewController'), 'init');
+        ObjC::msg('v:p', $this->popoverController, 'setView:', $this->container);
+        $this->popover = ObjC::msg('p:', ObjC::alloc('NSPopover'), 'init');
+        ObjC::msg('v:p', $this->popover, 'setContentViewController:', $this->popoverController);
+        ObjC::msg('v:z', $this->popover, 'setContentSize:', $this->flyoutSize());
+        ObjC::msg('v:l', $this->popover, 'setBehavior:', $this->flyout['focusable'] ? 1 : 0); // NSPopoverBehaviorTransient, ApplicationDefined
+        ObjC::msg('v:p', $this->popover, 'setDelegate:', $delegate);
+    }
+
+    private function flyoutSize()
+    {
+        $s = ObjC::$c->new('CGSize');
+        $s->w = $this->flyout['width']; $s->h = $this->flyout['height'];
+        return $s;
+    }
+
+    /**
+     * The view the popover shows from, the anchor in it and the edge of it
+     * the popover goes to (NSRectEdge): the parent's content view, which is
+     * not flipped, or the tray icon's button; the view is null when there
+     * is none.
+     * @return array{0: mixed, 1: mixed, 2: int}
+     */
+    private function popoverAnchor(): array
+    {
+        $edge = [Flyout::BOTTOM => 1, Flyout::TOP => 3, Flyout::RIGHT => 2, Flyout::LEFT => 0][$this->flyout['side']];
+        if (($t = $this->flyout['tray']) !== null) {
+            $button = $t->nativeHandle();
+            return [$button, ObjC::msg('r:', $button, 'bounds'), $edge];
+        }
+        $a = $this->flyout['anchor'];
+        $p = $this->parent;
+        if ($p === null || $p->destroyed) {
+            return [null, null, $edge];
+        }
+        $h = ObjC::msg('r:', $p->container, 'bounds')->h;
+        $height = max($a->height, 1);
+        return [$p->container, ObjC::rect($a->x, $h - $a->y - $height, max($a->width, 1), $height), $edge];
+    }
+
+    private function showPopover(): void
+    {
+        [$view, $r, $edge] = $this->popoverAnchor();
+        if ($view === null || ObjC::msg('b:', $this->popover, 'isShown')) {
+            return;
+        }
+        $this->popoverClosing = false;
+        if ($this->flyout['tray'] !== null) { // the popover of a menu bar app takes the keyboard of an app the user did not activate, as AppKit's own status items' do
+            ObjC::msg('v:b', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'activateIgnoringOtherApps:', true);
+        }
+        ObjC::msg('v:z', $this->popover, 'setContentSize:', $this->flyoutSize());
+        ObjC::msg('v:rpL', $this->popover, 'showRelativeToRect:ofView:preferredEdge:', $r, $view, $edge);
+        $this->ns = ObjC::msg('p:', $this->container, 'window'); // the window the popover shows in is the flyout's
+        if ($this->ns !== null) {
+            ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
+        }
+    }
+
+    /** Moves a popover that shows to the anchor, at the size. */
+    private function placePopover(): void
+    {
+        if (!ObjC::msg('b:', $this->popover, 'isShown')) {
+            return;
+        }
+        ObjC::msg('v:z', $this->popover, 'setContentSize:', $this->flyoutSize());
+        if ($this->flyout['tray'] === null && ($r = $this->popoverAnchor()[1]) !== null) {
+            ObjC::msg('v:r', $this->popover, 'setPositioningRect:', $r);
+        }
+    }
+
+    /** Closes the popover, which shows again with show(), and gives the keyboard it had back to the parent. */
+    private function hidePopover(): void
+    {
+        if (!ObjC::msg('b:', $this->popover, 'isShown')) {
+            return;
+        }
+        $key = $this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow');
+        $this->popoverClosing = true;
+        ObjC::msg('v:', $this->popover, 'close');
+        if ($key && $this->parent !== null && !$this->parent->destroyed && $this->parent->isVisible()) {
+            ObjC::msg('v:', $this->parent->ns, 'makeKeyWindow');
+        }
+    }
+
+    private function cleanupPopover(): void
+    {
+        $this->ns = null;
+        ObjC::msg('v:p', $this->popover, 'setDelegate:', null);
+        if (ObjC::msg('b:', $this->popover, 'isShown')) {
+            ObjC::msg('v:b', $this->popover, 'setAnimates:', false);
+            ObjC::msg('v:', $this->popover, 'close');
+        }
+        ObjC::msg('v:p', $this->popover, 'setContentViewController:', null);
+        ObjC::msg('v:', $this->popover, 'release');
+        ObjC::msg('v:', $this->popoverController, 'release');
     }
 
     /** Closes a flyout or a panel on an Escape its page or native UI left, as the user closing it, after the frame being built: menus, popovers and launchers close so. */

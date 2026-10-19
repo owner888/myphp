@@ -1161,8 +1161,18 @@ screen; showing or focusing it does not activate the app, and its
 it, on an Escape its content leaves: one no control or `shortcut` took
 in a frame of native UI (`Runtime::$escape`, called after the build), or
 one the page's handlers did not `preventDefault` (the bridge posts
-`{t: "escape"}`). mygo's popover flyouts (`NSPopover`) are not ported
-yet.
+`{t: "escape"}`). A flyout with `FlyoutOptions::$popover` shows its
+content view in an `NSPopover` (mygo's createPopover), through an
+`NSViewController`, from the parent's content view (not flipped: the
+anchor's y is turned) or the tray icon's button, on the edge its side
+names; AppKit draws the material and the arrow, flips the side where the
+screen has no room and animates. The popover makes its window as it
+shows: the flyout's NSWindow is that window while it shows and null
+otherwise, and the flyout is kept in `$open` by its popover. A focusable
+flyout's popover is transient: `popoverShouldClose:` asks the 'close'
+listeners (a press on its tray icon leaves it to the icon's click), and
+`popoverDidClose:` closes the flyout unless `hide` or `destroy` closed
+the popover. Native UI in it sees `Context::vibrancy()`.
 
 `Tray` is an `NSStatusItem`: with a menu, `setMenu:` shows it on click;
 without one, the item's button gets a PHP target with `sendActionOn:`
