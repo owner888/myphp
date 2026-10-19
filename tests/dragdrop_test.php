@@ -43,7 +43,11 @@ $t->drag($sx + 30, $sy + 30);
 check($c = $t->rt->valueDrag !== null && $t->rt->valueDrag['src'] === $nodes['src']->id, 'past a few points, the value is dragged');
 $t->drag($tx + 120, $ty + 60);
 check($over, 'over the target, it sees the value');
-$quads = $t->paint()->n;
+$list = $t->paint();
+$quads = $list->n;
+$moved = [];
+for ($e = 1; $e < $list->transforms; $e++) { $moved[] = [round($list->xforms[$e * 8 + 4]), round($list->xforms[$e * 8 + 5])]; }
+check(in_array([$tx + 120 - $sx - 10, $ty + 60 - $sy - 10], $moved), 'the copy shows under the pointer, where the press took the source: moved by ' . json_encode($moved));
 $t->release($tx + 120, $ty + 60);
 check($dropped === ['hello'] && $clicks === 1 && !$over, 'dropped on the target: no click');
 dragTo($t, $sx + 10, $sy + 10, $ix + 10, $iy + 10);

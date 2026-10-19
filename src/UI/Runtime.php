@@ -556,9 +556,8 @@ final class Runtime
             if ($dx * $dx + $dy * $dy < self::DRAG_START * self::DRAG_START) {
                 return;
             }
-            [$lx, $ly] = $this->toLocal($src, $p['track']->ox, $p['track']->oy) ?? [$p['track']->ox, $p['track']->oy];
-            $r = $this->rects[$src];
-            $this->valueDrag = ['src' => $src, 'value' => $this->dragSources[$src], 'offX' => $lx - $r[0], 'offY' => $ly - $r[1], 'over' => null, 'canceled' => false, 'elem' => null];
+            [$lx, $ly] = $this->toLocal($src, $p['track']->ox, $p['track']->oy) ?? [0.0, 0.0]; // from its top left; a node turned singular took no press
+            $this->valueDrag = ['src' => $src, 'value' => $this->dragSources[$src], 'offX' => $lx, 'offY' => $ly, 'over' => null, 'canceled' => false, 'elem' => null];
         }
         if ($this->valueDrag['canceled']) {
             return;
@@ -611,7 +610,7 @@ final class Runtime
             return;
         }
         $edge = 32;
-        $ly = ($this->toLocal($best, $x, $y) ?? [$x, $y])[1] - $this->rects[$best][1];
+        $ly = ($this->toLocal($best, $x, $y) ?? [0.0, 0.0])[1]; // from its top
         $top = $ly; $bottom = $this->rects[$best][3] - $ly;
         $dy = $top < $edge ? -($edge - $top) / 2 : ($bottom < $edge ? ($edge - $bottom) / 2 : 0.0);
         $st = $this->scrolls[$best];

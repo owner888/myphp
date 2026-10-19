@@ -46,9 +46,10 @@ final class DisplayList
 
     /** The entries of $xforms written this frame, the identity's included. */
     public int $transforms = 1;
-    /** What is drawn now is drawn through: the map, its entry as kind + KIND_STRIDE * entry, and the entries of the maps written this frame by spl_object_id. */
+    /** What is drawn now is drawn through: the map, its entry as kind + KIND_STRIDE * entry, and the entries of the maps written this frame by spl_object_id, with the maps: held until reset, as an id is reused by a new object once its own is freed, and a map drawn through and gone would give its entry to another. */
     private Affine $world;
     private float $xk = 0.0;
+    /** @var array<int, array{0: int, 1: Affine}> */
     private array $entries = [];
     /** The opacity what is drawn now is drawn at. */
     private float $opacity = 1.0;
@@ -70,12 +71,13 @@ final class DisplayList
             $this->xk = 0.0;
             return;
         }
-        $entry = $this->entries[spl_object_id($m)] ?? null;
+        $entry = $this->entries[spl_object_id($m)][0] ?? null;
         if ($entry === null) {
             if ($this->transforms === $this->xformCapacity) {
                 throw new RuntimeException("display list full ({$this->xformCapacity} transforms)");
             }
-            $entry = $this->entries[spl_object_id($m)] = $this->transforms++;
+            $entry = $this->transforms++;
+            $this->entries[spl_object_id($m)] = [$entry, $m];
             $this->writeEntry($entry, $m);
         }
         $this->xk = self::KIND_STRIDE * $entry;
