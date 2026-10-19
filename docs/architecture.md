@@ -1492,6 +1492,31 @@ Regular expressions are PCRE, which matches nothing in a text with a byte
 that is not UTF-8, as an edit splitting a character leaves: the finder
 searches a copy with such bytes as \x1a, where Go reads U+FFFD.
 
+## Markdown
+
+`MyPHP\UI\Markdown\Parser` is mygo's ui/markdown/parser: CommonMark
+0.31.2, with the extensions `Extensions` names (GitHub's tables, task
+lists, strikethrough and autolinks; footnotes; math between `$$`, `\[ \]`
+and `\( \)`, and single dollars with `DOLLAR_MATH`). All the spec's
+examples and GitHub's extensions' render as cmark-gfm does
+(`Document::html`, for the tests). The block parser follows cmark's
+blocks.c line by line over flat blocks in document order (a block's
+children right after it, up to its `$next`), byte offsets into the
+source, a leaf's lines as segs; inlines are parsed when asked for
+(`Document::inlines`), by CommonMark's delimiter algorithm with cmark's
+guards against quadratic inputs, into a flat list the same way. A
+`Document` takes text appended (`append`) or edited (`edit`, `set`)
+and parses again only from the outermost block still open, or from the
+top-level block before the change until a block starts where one did,
+keeping the inlines of the blocks it parses again unchanged; a link
+reference defined or undefined parses anew the blocks that looked it up
+(`Block::revision`). `setStreaming` heals the end of a reply being
+written: the last paragraph's emphasis, code spans, strikethrough and
+math close, a link being written is a link (`Inline::$pending`), and a
+line that could still turn into something else waits. PHP copies a
+substring where Go slices one: a text node merged into keeps only its
+offsets until its text is asked for, or long runs would be quadratic.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,
@@ -1758,8 +1783,9 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
-- mygo's CodeEditor and diff viewer (ui/editor) are in; the RichText
-  editor, Markdown view and Terminal are not ported; `rich` is read-only.
+- mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
+  are in; the RichText editor, Markdown view and Terminal are not ported
+  yet; `rich` is read-only.
 - VoiceOver is in (Accessibility above); Linux's and Windows's assistive
   technology come with those platforms.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58
