@@ -71,7 +71,50 @@ final class Headless
         };
         $this->rt->cancelDataDrag = fn() => $this->finishDataDrag(new \MyPHP\Transfer\Result(canceled: true));
         $this->rt->setDropFormats = function (array $formats): void { $this->dropFormats = $formats; };
+        $this->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, Closure $chosen): void {
+            $this->menu = ['items' => $items, 'at' => [$x, $y], 'chosen' => $chosen];
+        };
         $this->rt->snapshot = fn(float $x, float $y, int $w, int $h) => Image::fromPixels($w, $h, str_repeat("\0", $w * $h * 4));
+    }
+
+    /** The menu the runtime showed and the user has not closed: its items (MyPHP\MenuItem), where it showed, and what takes the choice (mygo's headless menu). @var ?array{items: list<\MyPHP\MenuItem>, at: array{0: float, 1: float}, chosen: Closure} */
+    public ?array $menu = null;
+
+    /** The labels of the menu showing, "-" for a separator, or null for none (mygo's Tester.Menu). @return ?list<string> */
+    public function menuLabels(): ?array
+    {
+        return $this->menu === null ? null : array_map(fn(\MyPHP\MenuItem $it) => $it->type === \MyPHP\MenuItem::SEPARATOR ? '-' : $it->label, $this->menu['items']);
+    }
+
+    /** Chooses the item at $path (a label, then a submenu's) of the menu showing, which closes, and runs a frame; false when there is no such item, or it is disabled (mygo's ChooseMenuItem). */
+    public function chooseMenuItem(string ...$path): bool
+    {
+        $items = $this->menu['items'] ?? [];
+        $it = null;
+        foreach ($path as $label) {
+            $it = null;
+            foreach ($items as $candidate) { if ($candidate->label === $label && $candidate->type !== \MyPHP\MenuItem::SEPARATOR) { $it = $candidate; break; } }
+            if ($it === null) { return false; }
+            $items = $it->submenu;
+        }
+        if ($it === null || $it->disabled || $it->submenu !== []) { return false; }
+        $chosen = $this->menu['chosen'];
+        $this->menu = null;
+        $chosen((int)$it->id);
+        $this->frame();
+        return true;
+    }
+
+    /** Closes the menu showing without a choice. */
+    public function closeMenu(): void { $this->menu = null; }
+
+    /** A click of the secondary button at ($x, $y). */
+    public function rightClick(float $x, float $y): Node
+    {
+        $this->input->mouse($x, $y);
+        $this->input->push(['down', $x, $y, 1, 1, 0]);
+        $this->input->push(['up', $x, $y, 1, 1, 0]);
+        return $this->frame();
     }
 
     /** The native drag the host was asked to start (mygo's headless host): its data as the drag snapshots it, its local value, options and where it started; null when none is on. */

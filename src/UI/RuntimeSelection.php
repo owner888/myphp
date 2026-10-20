@@ -353,9 +353,9 @@ trait RuntimeSelection
     }
 
     /** Copy and Select All on the focused paragraph; other editing commands do nothing to text that is not edited (mygo's textSelectionCommand). Whether the focus is a paragraph's. */
-    private function textSelectionCommand(string $name): bool
+    private function textSelectionCommand(string $name, ?Node $s = null): bool
     {
-        $s = $this->focusedText();
+        $s ??= $this->focusedText();
         if ($s === null) {
             return false;
         }

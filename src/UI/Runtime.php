@@ -20,6 +20,7 @@ final class Runtime
 {
     use RuntimeAccess;
     use RuntimeSelection;
+    use RuntimeMenu;
     use RuntimeTransition;
 
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
@@ -223,6 +224,7 @@ final class Runtime
             try { $clip = $d->read(Format::TEXT); } catch (FormatUnavailable) { $clip = ''; }
         };
         $this->selection = new TextSelection();
+        $this->initMenus();
     }
 
     /** Puts data on the clipboard, each representation of its items in the system's formats (mygo's WriteClipboardData): the window sets it to the system's pasteboard. @var Closure(Data): void */
@@ -283,7 +285,17 @@ final class Runtime
             switch ($e[0]) {
                 case 'down':
                     $this->input->mouseDown = true;
+                    if ($e[3] === 1 && $this->menuPress($e[1], $e[2])) {
+                        $this->menuTook = true;
+                        break; // a context menu opens: the menu takes the press
+                    }
                     if ($e[3] !== 0) {
+                        break;
+                    }
+                    if (($t = $this->pressTarget($e[1], $e[2])) !== null && isset($this->menuNodes[$t]) && ($this->menuNodes[$t] & 2) !== 0) {
+                        $this->focus = $t; $this->focusVisible = false;
+                        $this->openMenuButton($t); // a menu button's menu opens as it goes down, and takes the release
+                        $this->menuRelease = true;
                         break;
                     }
                     if ($this->grabThumb($e[1], $e[2])) {
@@ -319,6 +331,14 @@ final class Runtime
                     $this->selection->dragging = false;
                     $this->sliding = null;
                     $this->hold = null;
+                    if ($e[3] === 0 && $this->menuRelease) {
+                        $this->menuRelease = false;
+                        break; // the menu button's menu took the release
+                    }
+                    if ($e[3] === 1 && $this->menuTook) {
+                        $this->menuTook = false;
+                        break; // the context menu took the press, and its release
+                    }
                     $moved = $e[3] === 0 && $this->dragEnd($e[1], $e[2]); // a drag ended, dropping its value: no click
                     if ($e[3] === 0 && ($p = &$this->pointerPress) !== null && $p['down']) {
                         $p['down'] = false;
@@ -364,6 +384,10 @@ final class Runtime
                         break;
                     }
                     $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false];
+                    if ((($e[2] === Key::CONTEXT_MENU && ($e[3] & Key::MODIFIERS) === 0) || ($e[2] === Key::F10 && ($e[3] & Key::MODIFIERS) === Key::SHIFT)) && $this->menuKey()) {
+                        $this->keys[array_key_last($this->keys)][3] = true; // the menu key or Shift+F10 opens the focused node's context menu
+                        break;
+                    }
                     if (($e[3] & Key::MODIFIERS) === Key::COMMAND && in_array(strtolower($e[1]), ['a', 'c'], true) && $this->textSelectionCommand(strtolower($e[1]) === 'a' ? 'selectAll' : 'copy')) {
                         $this->keys[array_key_last($this->keys)][3] = true; // Cmd+A and Cmd+C on selectable text (mygo's textSelectionKey)
                     }
@@ -379,6 +403,9 @@ final class Runtime
                 case 'insert':
                     if ($this->focus !== null && isset($this->fields[$this->focus]) && $this->keys !== []) {
                         $this->keys[array_key_last($this->keys)][3] = true; // typed into the field
+                    } elseif ($e[1] === ' ' && $this->focus !== null && (($this->menuNodes[$this->focus] ?? 0) & 2) !== 0) {
+                        $this->openMenuButton($this->focus); // and Space
+                        if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus]) && hrtime(true) / 1e9 - $this->typedAt >= 1.0) {
                         $this->activated = $this->focus; // space presses a focused button; within a second of letters typed at it, it is typed too (mygo's typePause)
                         $this->focusVisible = true;
@@ -419,6 +446,7 @@ final class Runtime
             $this->dropped = []; $this->dataDropped = []; $this->filesDropped = [];
         }
         $this->building = false;
+        $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
         if ($this->escape !== null) {
             foreach ($this->keys as $k) {
@@ -450,6 +478,7 @@ final class Runtime
         $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
+        $this->menuNodes = [];
         $this->record($root);
         $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
@@ -518,6 +547,7 @@ final class Runtime
         }
         $this->root = $root;
         $this->describe();
+        $this->showMenu();
         return $root;
     }
 
@@ -1125,6 +1155,7 @@ final class Runtime
         }
         $this->order[$n->id] = ++$this->counter;
         $this->recordSelectable($n, $parent);
+        $this->recordMenus($n);
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
@@ -1466,6 +1497,10 @@ final class Runtime
     private function command(string $selector): bool
     {
         if ($this->areaCommand($selector) || $this->textSelectionKey($selector)) {
+            return true;
+        }
+        if ($this->focus !== null && (($this->menuNodes[$this->focus] ?? 0) & 2) !== 0 && in_array($selector, ['insertNewline:', 'moveDown:'], true)) {
+            $this->openMenuButton($this->focus); // Enter and Down open a focused menu button's menu
             return true;
         }
         if ($this->focus !== null && !isset($this->fields[$this->focus])) {

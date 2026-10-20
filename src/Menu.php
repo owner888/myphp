@@ -218,6 +218,16 @@ final class Menu
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 
+    /** Shows the menu with its top left at ($x, $y), points of the window's view from its top left, as a context menu or a menu button's (mygo's popupMenu). */
+    public function popupAtPoint(Window $window, float $x, float $y): void
+    {
+        $native = $this->build();
+        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
+        $p = ObjC::$c->new('NSPoint');
+        $p->x = $x; $p->y = ObjC::msg('r:', $view, 'bounds')->h - $y; // the content view is not flipped: y runs up from its bottom
+        ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
+    }
+
     public function popup(Window $window): void
     {
         $native = $this->build();

@@ -16,6 +16,8 @@ final class Key
         INSERT = 114, F4 = 118, F2 = 120, F1 = 122;
     /** The back and forward buttons of a mouse (mygo's KeyBack and KeyForward), which no key of macOS has a code for: the view sends them for buttons 3 and 4. */
     public const BACK = 1000, FORWARD = 1001;
+    /** The menu key of a PC keyboard (kVK_ContextualMenu), which opens the focused node's context menu. */
+    public const CONTEXT_MENU = 110;
     public const SHIFT = 1 << 17, CONTROL = 1 << 18, OPTION = 1 << 19, COMMAND = 1 << 20;
     public const MODIFIERS = self::SHIFT | self::CONTROL | self::OPTION | self::COMMAND;
 }

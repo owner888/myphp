@@ -2231,28 +2231,23 @@ final class Context
     }
 
     /**
-     * A plain button with a chevron that drops a menu of $items below it
-     * when pressed, or for Enter, Space or Down while it has the focus, as
-     * mygo's MenuButton. $items: label => Closure, each run when chosen.
-     * @param array<string, Closure> $items
+     * A plain button with a chevron that drops a menu below it as the
+     * pointer goes down on it, or for Enter, Space or Down while it has the
+     * focus, which $build fills as Node::menu's (mygo's MenuButton):
+     *
+     *     $c->menuButton('Sort by', function (Menu $m) use ($app) {
+     *         foreach (['Name', 'Date', 'Size'] as $by) {
+     *             if ($m->item($by)->checked($app->sort === $by)->chosen()) { $app->sort = $by; }
+     *         }
+     *     });
+     * @param Closure(Menu): void $build
      */
-    public function menuButton(string $label, array $items, ?Window $window = null): Node
+    public function menuButton(string $label, Closure $build): Node
     {
-        $n = $this->button($label)->role(Role::MENU_BUTTON);
+        $n = $this->button($label);
         $n->fw += $this->theme->space(1.5) + $this->theme->space(2.5); // room for the chevron
         $n->chevron = true;
-        $rt = $this->runtime;
-        if ($rt !== null && ($this->clicked($n) || ($n->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
-            $window ??= Window::focused();
-            $menu = [];
-            foreach ($items as $text => $fn) {
-                $menu[] = new MenuItem($text, function (MenuItem $it, ?Window $w) use ($fn) { $fn(); $w?->invalidate(); });
-            }
-            if ($window !== null) {
-                (new Menu($menu))->popupAt($window, $n->id, $rt);
-            }
-        }
-        return $n;
+        return $n->menu($build);
     }
 
     /**

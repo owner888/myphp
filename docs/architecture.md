@@ -1040,6 +1040,26 @@ else `beginSheetModalForWindow:completionHandler:` with a block, and
 `App::wait` spins the run loop until the block has delivered the
 response, so the PHP call stays synchronous either way.
 
+Context menus and menu buttons of the native UI are mygo's (menu.go,
+`RuntimeMenu`): `Node::contextMenu($build)` and `Node::menu($build)` hand
+their function to `Runtime::buildMenu` as the frame builds them. The
+secondary button (or a Control-click, which the view turns into one until
+its release, as mygo's ctrlClick) over a node with a context menu, a text
+input or selectable text, the menu key or Shift+F10 on the focus, or a
+menu button going down (or Enter, Space, Down, assistive technology's
+press) asks the next frame for that node's menu: its function runs
+collecting the items (`UI\Menu`, `UI\MenuItem`, a `MenuRun`), the runtime
+keeps them as `MyPHP\MenuItem`s, and once the frame is done
+`Runtime::$popupMenu` shows them; the window's pops an NSMenu at the point
+after the frame (`Menu::popupAtPoint` from `App::later`), each item
+reporting its place. The choice reaches the function in the next frame,
+where `chosen()` finds the item by its place and label, and the frame is
+built again. A text input's or selectable text's menu, when no context
+menu built one, is its editing commands (`editCommands`: Copy and Select
+All, or Cut, Copy, Paste and Select All), which do their command without a
+frame's function; a Selectable container's context menu replaces its
+text's, and `editItems()` puts those items in it.
+
 ## Blocks
 
 An Objective-C block is a struct the caller lays out: `{isa, flags,
@@ -1857,8 +1877,6 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Selectable text has no context menu yet (mygo's Copy and Select All
-  menu and `EditItems`): node context menus come next.
 - Underlines do not skip descenders (mygo's ink skipping reads glyph
   outlines), and `text()` measures with the old metrics unless its style
   needs the text system (`TextStyle::needsLayout`).

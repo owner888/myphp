@@ -91,6 +91,8 @@ final class Node
     public ?Context $context = null;
     /** Text, and the text inside a container, that the user selects and copies (selectable()), or none of it (unselectable()); what a Selectable container's Copy puts on the clipboard (copyData()). */
     public bool $selectable = false, $unselectable = false;
+    /** That the node has a context menu (contextMenu()), or is a menu button (menu()). */
+    public bool $contextMenu = false, $menuButton = false;
     public ?\Closure $copyData = null;
     /** For text: the Selectable container around it, as it was built, 0 for none; and the container whose selection it is in, as last recorded (its own id for a Selectable text alone). */
     public int $scope = 0, $textScope = 0;
@@ -638,6 +640,52 @@ final class Node
     public function copyData(\Closure $fn): static
     {
         $this->copyData = $fn;
+        return $this;
+    }
+
+    /**
+     * Gives the node a context menu, which $build fills with items (mygo's
+     * ContextMenu). The system shows it where the node is clicked with the
+     * secondary button, or Control-clicked, and, while the node or one
+     * inside it has the focus, below it for the menu key or Shift+F10.
+     * $build runs when the menu opens, and again in the frame after an item
+     * was chosen, where the item's chosen() reports it:
+     *
+     *     $row->contextMenu(function (Menu $m) use ($app, $i) {
+     *         if ($m->item('Rename')->chosen()) { $app->renaming = $i; }
+     *         $m->separator();
+     *         if ($m->item('Delete')->disabled($app->locked)->chosen()) { $app->delete($i); }
+     *     });
+     *
+     * The innermost node with a context menu gets the click. Text inputs and
+     * selectable text have one with their editing commands, which this
+     * replaces: on a text input, on a selectable text, or on the Selectable
+     * container whose text was clicked; Menu::editItems() puts those
+     * commands in a menu of one's own.
+     * @param \Closure(Menu): void $build
+     */
+    public function contextMenu(\Closure $build): static
+    {
+        $this->contextMenu = true;
+        $this->context?->runtime?->buildMenu($this->id, $this->disabled, false, $build);
+        return $this;
+    }
+
+    /**
+     * Makes the node a menu button: it opens a menu below it, which $build
+     * fills with items, as the pointer goes down on it, as a pop-up button
+     * does, and for Enter, Space or Down while it has the focus. It takes the
+     * focus. $build runs as for contextMenu() (mygo's Menu).
+     * @param \Closure(Menu): void $build
+     */
+    public function menu(\Closure $build): static
+    {
+        $this->menuButton = true;
+        $this->focusable = true;
+        if ($this->role === Role::AUTO || $this->role === Role::BUTTON) {
+            $this->role = Role::MENU_BUTTON;
+        }
+        $this->context?->runtime?->buildMenu($this->id, $this->disabled, true, $build);
         return $this;
     }
 

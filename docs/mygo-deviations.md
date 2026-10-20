@@ -96,11 +96,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     End are told from Cmd and the arrows by the key event before the
     selector; Left and Right move by logical graphemes.
   - Why: myphp's keys come as selectors; visual movement to be ported.
-- **No context menu on selectable text** (v0.82)
-  - mygo: Copy and Select All in a context menu (`textSelectionMenu`,
-    `EditItems`).
-  - myphp: none yet.
-  - Why: node context menus are the next version.
 - **Invisible and inherited disabled** (v0.82)
   - mygo: invisible, inert and disabled subtrees are left out
     (`collectSelectable`, `flagDisabled` on states).
@@ -113,6 +108,28 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `Pasteboard::writeData` alone (no `ReadData`, `Formats`,
     `Flush`, `Close`, callback).
   - Why: only Copy needed it so far.
+
+## Menus
+
+- **The toolbar's overflow menu** (v0.83)
+  - mygo: a toolbar's controls that do not fit go in a menu built as
+    others are.
+  - myphp: `Context::toolbar` pops a `MyPHP\Menu` of its own (`popupAt`),
+    as the router's back button's history does.
+  - Why: written before node menus; to be moved onto `Node::menu`.
+- **What a menu looks at under the pointer** (v0.83)
+  - mygo: the hit chain from the innermost element out
+    (`menuTarget(chain)`).
+  - myphp: the nodes with a menu, the text inputs, the selectable text and
+    containers, and the Unselectable nodes under the point, the last built
+    first (`menuChain`).
+  - Why: myphp has no hit chain; the build order stands in for it.
+- **Right to left, and Windows** (v0.83)
+  - mygo: a right-to-left node's menu opens to the left, a menu button's
+    at its bottom right; Windows opens context menus on the release, with
+    Undo and Delete in a text input's.
+  - myphp: macOS's menus only, left to right.
+  - Why: myphp has no right-to-left layout and no other platform yet.
 
 ## Markdown parser
 

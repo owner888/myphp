@@ -120,6 +120,17 @@ final class Window
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->writeClipboardData = Pasteboard::writeData(...);
+            $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen): void {
+                $wire = function (array $items) use (&$wire, $chosen): void { // each item reports its place
+                    foreach ($items as $it) {
+                        if ($it->type === MenuItem::SEPARATOR) { continue; }
+                        if ($it->submenu !== []) { $wire($it->submenu); continue; }
+                        $it->click = function (MenuItem $chosenItem) use ($chosen) { $chosen((int)$chosenItem->id); };
+                    }
+                };
+                $wire($items);
+                App::later(fn() => (new Menu($items))->popupAtPoint($this, $x, $y)); // after the frame, as mygo's host shows it after the event
+            };
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
             $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame

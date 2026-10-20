@@ -63,6 +63,9 @@ final class View
         return (int)round(ObjC::msg('d:', $event, 'timestamp') * 1e9);
     }
 
+    /** @var array<int, bool> the views whose primary button is down for a Control-click */
+    private static array $ctrlClick = [];
+
     private static function define(): void
     {
         if (self::$defined) {
@@ -80,7 +83,16 @@ final class View
             if ($kind === 'move') {
                 $input->push(['move', $x, $y]); // to a node taking its input as it comes, under the pointer
             } else {
-                $input->push([$kind, $x, $y, ObjC::msg('l:', $event, 'buttonNumber'), ObjC::msg('l:', $event, 'clickCount'), ObjC::msg('L:', $event, 'modifierFlags'), self::time($event)]);
+                $button = ObjC::msg('l:', $event, 'buttonNumber');
+                $mods = ObjC::msg('L:', $event, 'modifierFlags');
+                if ($button === 0 && $kind === 'down') {
+                    self::$ctrlClick[ObjC::addr($self)] = ($mods & Key::CONTROL) !== 0; // a Control-click is a secondary click, until its release (mygo's ctrlClick)
+                }
+                $secondary = $button === 0 && (self::$ctrlClick[ObjC::addr($self)] ?? false);
+                if ($kind === 'up' && $button === 0) {
+                    unset(self::$ctrlClick[ObjC::addr($self)]);
+                }
+                $input->push([$kind, $x, $y, $secondary ? 1 : $button, ObjC::msg('l:', $event, 'clickCount'), $mods, self::time($event)]);
             }
             Metal::requestFrame($self);
         };

@@ -8,7 +8,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, ListState, Node, Selection, SVG, TextState};
+use MyPHP\UI\{Content, Context, Font, ListState, Menu, Node, Selection, SVG, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -45,7 +45,10 @@ function view(Context $c, array &$s): void
           $c->toggle($s['italic'], 'Italic');
           $c->divider(true);
           if ($c->clicked($c->button('Share'))) { $c->toast('Shared'); }
-          $c->menuButton('View', ['Icons' => fn() => $s['last'] = 'icons', 'List' => fn() => $s['last'] = 'list']);
+          $c->menuButton('View', function (Menu $m) use (&$s) {
+              if ($m->item('Icons')->chosen()) { $s['last'] = 'icons'; }
+              if ($m->item('List')->chosen()) { $s['last'] = 'list'; }
+          });
       });
       $c->row(0, 16);
         if ($c->changed($c->switch('Wi-Fi', $s['wifi']))) { $s['last'] = 'Wi-Fi ' . ($s['wifi'] ? 'on' : 'off'); }
@@ -126,7 +129,11 @@ function view(Context $c, array &$s): void
         if ($c->clicked($c->primaryButton('Save'))) { $c->toast('Saved'); $s['last'] = 'saved'; }
         if ($c->clicked($c->button('Delete…'))) { $s['asking'] = true; }
         if ($c->clicked($c->button('Reset…'))) { $s['resetting'] = true; }
-        $c->menuButton('Sort by', ['Name' => function () use (&$s) { $s['sort'] = 'Name'; $s['last'] = 'sort by name'; }, 'Date' => function () use (&$s) { $s['sort'] = 'Date'; $s['last'] = 'sort by date'; }]);
+        $c->menuButton('Sort by', function (Menu $m) use (&$s) {
+            foreach (['Name', 'Date'] as $by) {
+                if ($m->item($by)->checked($s['sort'] === $by)->chosen()) { $s['sort'] = $by; $s['last'] = 'sort by ' . strtolower($by); }
+            }
+        });
         $anchor = $c->button('Options');
         if ($c->clicked($anchor)) { $s['options'] = !$s['options']; }
       $c->end();
