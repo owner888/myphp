@@ -111,7 +111,7 @@ function view(Context $c, Http $h): void
                     $c->text($r['status'] === null ? ($r['error'] !== '' ? 'failed' : '…') : (string)$r['status'], 12, $color, Font::BOLD | Font::MONO);
                     break;
                 case 2: $c->muted($r['time'] > 0 ? sprintf('%.0f ms', $r['time'] * 1000) : '', 11); break;
-                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->single()->tooltip($r['url']);
+                default: $c->text(preg_replace('#^https?://#', '', $r['url']), 12)->singleLine()->tooltip($r['url']);
             }
         });
       $c->end();
@@ -160,12 +160,12 @@ function response(Context $c, Http $h): void
                   if ($c->clicked($c->button('Copy body'))) { Pasteboard::setText($r['body']); }
                 $c->end();
                 break;
-            case 'error': $c->rich([new Span($text, color: $t->danger, style: Font::MONO)], 12, width: $width, wrap: true); break;
-            case 'header': $c->rich([new Span($text, color: $t->textMuted, style: Font::MONO)], 11, width: $width, wrap: true); break;
+            case 'error': $c->richText([new Span($text, color: $t->danger, style: Font::MONO)], 12, width: $width, wrap: true); break;
+            case 'header': $c->richText([new Span($text, color: $t->textMuted, style: Font::MONO)], 11, width: $width, wrap: true); break;
             case 'divider': $c->column(0, 4); $c->divider(); $c->end(); break;
-            case 'json': $c->rich(jsonSpans($text, $t), 12, width: $width, wrap: true); break;
+            case 'json': $c->richText(jsonSpans($text, $t), 12, width: $width, wrap: true); break;
             case 'note': $c->muted($text, 11); break;
-            default: $c->rich([new Span($text === '' ? ' ' : $text, color: $t->text, style: Font::MONO)], 12, width: $width, wrap: true);
+            default: $c->richText([new Span($text === '' ? ' ' : $text, color: $t->text, style: Font::MONO)], 12, width: $width, wrap: true);
         }
     });
 }

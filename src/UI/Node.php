@@ -70,9 +70,26 @@ final class Node
     public int $style = 0;
     /** @var Span[] */
     public array $spans = [];
-    /** For rich text: its lines, wrapped at the width Context::rich was given, or at last frame's width ($wrapWidth). */
-    public ?RichLayout $rich = null;
+    /** For rich text: the width its lines wrap at, given or its container's last frame ($wrapWidth); none for null. */
     public ?float $wrapWidth = null;
+    /** That $wrapWidth is its container's last frame, so a frame follows when that differs. */
+    public bool $wrapLast = false;
+    /** That a paragraph's spans are those of the text inside it too (inlineSpans), as laid out. */
+    private bool $merged = false;
+    /** The text styling this node sets (fontSize(), font(), textColor()…), which the text inside it inherits, and, for text, what it inherited from the nodes around it as it was built. */
+    public ?TextStyle $ts = null, $inherit = null;
+    /** For rich text: what lays it out, and its layout once laid out (textLayout). */
+    public ?TextMetrics $metrics = null;
+    public ?\MyPHP\Text\Layout $layout = null;
+    /** For text: at most this many lines, ending in $ellipsis ("…" when empty), 0 for any (maxLines); lines broken only at newlines (noWrap). */
+    public int $maxLines = 0;
+    public bool $noWrap = false;
+    public string $ellipsis = '';
+    /** For rich text: the context building it, which builds its children(). */
+    public ?Context $context = null;
+    /** For a node inside a paragraph (a rich text's children()): the runes of its text in the paragraph's, and the boxes of its words in its layout, in window points. @var list<array{0: float, 1: float, 2: float, 3: float}> */
+    public array $runes = [0, 0];
+    public array $frags = [];
     /** A grid's column tracks and its first rows' (Track); null for a flex container. The rows beyond fit their content. */
     public ?array $gridCols = null;
     public array $gridRows = [];
@@ -405,10 +422,220 @@ final class Node
     }
 
     /** Keeps this text to one line: where its row or column is short of its width it shrinks and ends in "…" (mygo's SingleLine). */
-    public function single(): static
+    public function singleLine(): static
     {
         $this->single = true;
         return $this;
+    }
+
+    private function ts(): TextStyle
+    {
+        $this->layout = null; // laid out anew with the style
+        return $this->ts ??= new TextStyle();
+    }
+
+    /** Sets the size of text in points, for the node's text and its descendants' (mygo's FontSize). */
+    public function fontSize(float $v): static { $this->ts()->size = $v; return $this; }
+
+    /** Sets the weight of text from 100 (thin) to 900 (black). */
+    public function fontWeight(int $w): static { $this->ts()->weight = $w; return $this; }
+
+    /** Sets a bold font weight. */
+    public function bold(): static { return $this->fontWeight(700); }
+
+    /** Sets an italic font. */
+    public function italic(): static { $this->ts()->italic = true; return $this; }
+
+    /**
+     * Sets the font family, a comma-separated list: the first family the
+     * system has draws the text, and the others, in order, what it lacks,
+     * before the system's choice. "monospace" and "system-ui" are the
+     * system's own fonts (mygo's Font).
+     */
+    public function font(string $family): static { $this->ts()->family = $family; return $this; }
+
+    /** Sets the color of text, 0xRRGGBB, at $alpha. */
+    public function textColor(int $rgb, float $alpha = 1.0): static
+    {
+        $t = $this->ts(); $t->color = $rgb; $t->alpha = $alpha;
+        return $this;
+    }
+
+    /** Sets the height of lines of text as a multiple of the font size. */
+    public function lineHeight(float $m): static { $t = $this->ts(); $t->lineHeight = $m; $t->fixedLine = false; return $this; }
+
+    /** Sets the height of lines of text in points, whatever the font size, as for rows of text that line up with a grid. */
+    public function fixedLineHeight(float $v): static { $t = $this->ts(); $t->lineHeight = $v; $t->fixedLine = true; return $this; }
+
+    /** Aligns the lines of text: Node::START, CENTER or END. */
+    public function textAlign(int $a): static { $this->ts()->align = $a; return $this; }
+
+    /** Underlines text. */
+    public function underline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = false; return $this; }
+
+    /** Underlines text with a wave, as spell checkers mark words. */
+    public function wavyUnderline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = true; return $this; }
+
+    /** Sets the color of underlines and strikethroughs, the text's otherwise. */
+    public function decorationColor(int $rgb): static { $this->ts()->decoColor = $rgb; return $this; }
+
+    /** Sets the thickness of underlines and strikethroughs in points, which follows the font size otherwise. */
+    public function decorationThickness(float $v): static { $this->ts()->decoThick = $v; return $this; }
+
+    /** Fills the lines of text behind it with $rgb, as a highlight. */
+    public function textBackground(int $rgb): static { $this->ts()->background = $rgb; return $this; }
+
+    /** Strikes text through. */
+    public function strikethrough(): static { $this->ts()->strike = true; return $this; }
+
+    /** Adds $v points after every character of text, or tightens it with a negative $v, as for labels in capitals. */
+    public function letterSpacing(float $v): static { $this->ts()->spacing = $v; return $this; }
+
+    /** Turns on OpenType features of the font, by tag, or sets them with tag=value, as "tnum" (digits of one width) or "liga=0"; a font without a feature ignores it. */
+    public function fontFeatures(string ...$features): static { $this->ts()->features = implode(',', $features); return $this; }
+
+    /** Sets the language of the node's text, and of the text inside it, as a BCP 47 tag, as HTML's lang attribute does; "" takes that of the nodes around it. */
+    public function lang(string $tag): static { $this->ts()->lang = $tag === '' ? null : $tag; return $this; }
+
+    /** Sets the highlight of selected text in the node and the text inside it. */
+    public function selectionColor(int $rgb): static { $this->ts()->selection = $rgb; return $this; }
+
+    /** Shows at most $n lines of the node's text, ending it with an ellipsis. */
+    public function maxLines(int $n): static { $this->maxLines = $n; $this->layout = null; return $this; }
+
+    /** Keeps each line of the node's text whole, breaking it only at newlines, even where it overflows the node. */
+    public function noWrap(): static { $this->noWrap = true; $this->layout = null; return $this; }
+
+    /** Sets what ends text that maxLines() cuts, "…" by default. */
+    public function ellipsis(string $s): static { $this->ellipsis = $s; $this->layout = null; return $this; }
+
+    /**
+     * Makes a text a rich text of one span, its text in what text() was
+     * given over its text style, for a style text() does not measure
+     * (TextStyle::needsLayout), maxLines() or noWrap().
+     */
+    public function toRich(): void
+    {
+        $this->spans = [$this->given($this->text ?? '')];
+        $this->kind = self::RICH;
+        $this->text = null;
+        $this->layout = null;
+    }
+
+    /** The text of a rich text, that of the text inside it included. */
+    public function plainText(): string
+    {
+        if ($this->kids !== [] && !$this->merged) {
+            $this->spans = $this->inlineSpans();
+            $this->merged = true;
+        }
+        return implode('', array_map(static fn(Span $s): string => $s->text, $this->spans));
+    }
+
+    /** $text in what text() was given apart from what the text inherited: a size, a color, Font bits and an underline. */
+    private function given(string $text): Span
+    {
+        $s = new Span($text, style: $this->style & ~self::fontBits($this->inherit), underline: $this->underline);
+        if (($this->ts?->size) === null && $this->fontSize != $this->inherit?->size) { $s->size = $this->fontSize; }
+        if (($this->ts?->color) === null && $this->fg !== $this->inherit?->color) { $s->color = $this->fg; }
+        return $s;
+    }
+
+    /** The Font bits of a weight of 600 or more, italics and a monospaced family in $t. */
+    public static function fontBits(?TextStyle $t): int
+    {
+        if ($t === null) {
+            return 0;
+        }
+        return (($t->weight ?? 0) >= 600 ? Font::BOLD : 0) | ($t->italic ? Font::ITALIC : 0) | ($t->family !== null && str_starts_with($t->family, 'monospace') ? Font::MONO : 0);
+    }
+
+    /**
+     * Lays out a rich text, the text inside it included, once a frame: its
+     * spans over its text style, wrapped at $wrapWidth (mygo's textLayout).
+     */
+    public function textLayout(): \MyPHP\Text\Layout
+    {
+        if ($this->layout !== null) {
+            return $this->layout;
+        }
+        if ($this->kids !== [] && !$this->merged) {
+            $this->spans = $this->inlineSpans();
+            $this->merged = true;
+        }
+        $text = ''; $runes = 0; $spans = [];
+        foreach ($this->spans as $sp) {
+            $text .= $sp->text;
+            $runes += mb_strlen($sp->text, 'UTF-8');
+            $spans[] = $sp->textSpan($runes);
+        }
+        $t = $this->textStyle();
+        $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $t->align ?? self::START, spans: $spans);
+        return $this->layout = $this->metrics->textSystem()->layout($p);
+    }
+
+    /**
+     * Builds the text inside a rich text: the nodes $fn builds continue
+     * its paragraph (Context::richText; mygo's Children on a text).
+     */
+    public function children(\Closure $fn): static
+    {
+        if ($this->kind !== self::RICH || $this->context === null) {
+            throw new \LogicException('children() is for richText(): containers take theirs until end()');
+        }
+        $this->context->within($this, $fn);
+        return $this;
+    }
+
+    /** The text style the node's text takes: its own over what it inherited. */
+    public function textStyle(): TextStyle
+    {
+        return ($this->ts ?? new TextStyle())->over($this->inherit);
+    }
+
+    /**
+     * The spans of a rich text, its own then those of the text nodes inside
+     * it (a paragraph's), each in the style that node sets over the
+     * paragraph's, and each such node given the runes of its text (mygo's
+     * inlineSpans and inlineText).
+     *
+     * @return list<Span>
+     */
+    public function inlineSpans(): array
+    {
+        $out = $this->kind === self::TEXT ? [new Span($this->text ?? '')] : $this->spans;
+        $n = 0;
+        foreach ($out as $sp) { $n += mb_strlen($sp->text, 'UTF-8'); }
+        foreach ($this->kids as $k) {
+            $spans = $k->inlineSpans();
+            $base = $k->spanStyle();
+            $m = 0;
+            foreach ($spans as $sp) {
+                $out[] = $sp->over($base);
+                $m += mb_strlen($sp->text, 'UTF-8');
+            }
+            $k->runes = [$n, $n + $m];
+            $n += $m;
+        }
+        return $out;
+    }
+
+    /** The text style the node sets, as a span (mygo's spanStyle): a text node inside a paragraph its size, color and style. */
+    private function spanStyle(): Span
+    {
+        $t = $this->ts ?? new TextStyle();
+        $s = new Span('', $t->size, 0, $t->color, $t->underline ?? false, $t->strike ?? false, $t->background, $t->family, $t->weight, $t->italic ?? false, $t->alpha,
+            wavyUnderline: $t->wavy ?? false, decorationColor: $t->decoColor, decorationThickness: $t->decoThick, letterSpacing: $t->spacing, features: $t->features, lang: $t->lang);
+        if ($this->kind === self::TEXT) {
+            $s = $s->over($this->given(''));
+        }
+        if ($t->background === null && $this->color !== null) { // the background of an inline node is that of its text
+            $s->background = $this->color;
+        }
+        if ($this->disabled || $this->opacity < 1) { // what dims the node dims its text
+            $s->alpha = ($s->alpha ?? 1.0) * ($this->disabled ? 0.5 : 1.0) * $this->opacity;
+        }
+        return $s;
     }
 
     /** Keeps $left and $right points at a field's ends clear of its text, for what is drawn over them. */

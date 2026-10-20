@@ -235,7 +235,7 @@ function grid(Context $c, Files $f): void
             if ($img !== null) { $k = min(64 / $img->w, 64 / $img->h); $c->image($img, $img->w * $k, $img->h * $k, $t->radius); } // the longer side fills the 64 square
             else { $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 48, $e['dir'] ? $t->accent : $t->textMuted); }
           $c->end();
-          $c->text($e['name'], 12)->single();
+          $c->text($e['name'], 12)->singleLine();
         $c->end();
     });
     if ($f->grid->rows->submitted() && $f->grid->selected >= 0) { $f->enter($f->grid->selected); }
@@ -250,7 +250,7 @@ function table(Context $c, Files $f): void
     $c->table($f->table, $f->columns, count($f->entries), function (int $i, int $j) use ($c, $t, $f) {
         $e = $f->entries[$i];
         switch ($j) {
-            case 0: $c->row(0, 6)->align(Node::CENTER); $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 16, $e['dir'] ? $t->accent : $t->textMuted); $c->text($e['name'])->single(); $c->end(); break;
+            case 0: $c->row(0, 6)->align(Node::CENTER); $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 16, $e['dir'] ? $t->accent : $t->textMuted); $c->text($e['name'])->singleLine(); $c->end(); break;
             case 1: $c->muted(Files::size($e['size'])); break;
             case 2: $c->muted(date('Y-m-d H:i', $e['mtime'])); break;
         }

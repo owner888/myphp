@@ -162,6 +162,17 @@ final class CoreText
         return intdiv(strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')), 2);
     }
 
+    /** The id rasterize() knows the CTFont at address $addr by, which another FFI instance made (TextEngine): retained once, by CFHash, as the runs' fonts. */
+    public function adopt(int $addr): int
+    {
+        $font = $this->c->cast('void*', $addr);
+        $id = $this->c->CFHash($font);
+        if (!isset($this->runFonts[$id])) {
+            $this->runFonts[$id] = $this->c->CFRetain($font);
+        }
+        return $id;
+    }
+
     /**
      * Rasterizes one glyph at the backing scale. Returns null for glyphs
      * without ink (spaces). Offsets are in device pixels from the glyph

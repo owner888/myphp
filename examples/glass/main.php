@@ -46,7 +46,7 @@ function view(Context $c, array &$s): void
       $c->end();
       // A pill the slider moves across the photo: the lens bends what shows near its edge.
       $c->row(14, 8)->at($s['x'], 120)->round(28)->material($glass());
-        $c->rich([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
+        $c->richText([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
       $c->end();
       // A blur fading from full at its top to nothing at its bottom (a progressive blur), across the window.
       $c->column(12, 0)->at(0, 300)->size($c->width, 90)->material(new Blur(10, fade: true));

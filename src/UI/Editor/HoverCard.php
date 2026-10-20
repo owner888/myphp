@@ -40,7 +40,7 @@ final class HoverCard
             $c->row(0, $t->space(1.5));
               $sc = $ct->severityColor($d->severity);
               $c->box(3, 0, $sc[0])->round(1.5)->alignSelf(Node::STRETCH);
-              $c->rich([new Span($d->message . ($d->source !== '' ? ' (' . $d->source . ')' : ''))], $t->fontSize - 1, null, $t->space(140));
+              $c->richText([new Span($d->message . ($d->source !== '' ? ' (' . $d->source . ')' : ''))], $t->fontSize - 1, null, $t->space(140));
             $c->end();
         }
         if (($text = $h->text()) !== '') { $c->text($text, $h->fontSize(), $ct->c['text'][0], $h->fontStyle()); }

@@ -132,7 +132,7 @@ trait RuntimeAccess
     /** The texts of a node and those inside it, joined by spaces: a widget's own text, as a button's (mygo's innerText). */
     public static function innerText(Node $n): string
     {
-        if ($n->kind === Node::RICH) { return implode('', array_map(fn(Span $s) => $s->text, $n->spans)); }
+        if ($n->kind === Node::RICH) { return $n->plainText(); }
         if ($n->role === Role::NONE && $n->text !== null) { return ''; } // a glyph drawn as text, as a tree's arrow: decoration
         if ($n->kind !== Node::INPUT && $n->kind !== Node::TEXTAREA && $n->text !== null && $n->text !== '') { return $n->text; } // a field's text is its placeholder
         $out = [];
@@ -161,6 +161,7 @@ trait RuntimeAccess
             $this->accessDetails($n, $node, $clip);
             $t->nodes[] = $node;
             $parent = count($t->nodes) - 1;
+            if ($n->kind === Node::RICH) { $this->accessInline($t, $n, $parent, $clip, $focused); }
             if (Role::leaf($role)) { return; }
         }
         if ($n->scroll !== null) {
@@ -179,6 +180,35 @@ trait RuntimeAccess
                 if ($list !== null && !$absolute && $n->rowStarts !== []) { continue; } // a row's other nodes: inside the row's node
                 $this->accessNode($t, $kid, $parent, $clip, $focused, $n->id);
             }
+        }
+    }
+
+    /**
+     * Adds the nodes inside paragraph $e that are more than text to
+     * assistive technology, as links, below node $parent, their words' box
+     * as their bounds: the paragraph's text already reads theirs (mygo's
+     * accessInline).
+     */
+    private function accessInline(AccessTree $t, Node $e, int $parent, ?array $clip, ?Node &$focused): void
+    {
+        foreach ($e->kids as $k) {
+            $this->parentOf[$k->id] = $e->id;
+            $this->nodeOf[$k->id] = $k;
+            if ($k->id === $this->focus) { $focused = $k; }
+            if ($k->frags === []) {
+                continue;
+            }
+            $role = $this->roleOf($k);
+            if ($role === null || $role === Role::TEXT && !$k->focusable && $k->url === null) {
+                $this->accessInline($t, $k, $parent, $clip, $focused);
+                continue;
+            }
+            $node = new AccessNode($k->id, $parent, $role);
+            $node->label = $k->label;
+            $node->bounds = $k->world->bounds($k->x, $k->y, $k->w, $k->h);
+            if ($clip !== null) { $node->actions |= AccessNode::ACTION_SCROLL_INTO_VIEW; }
+            $this->accessDetails($k, $node, $clip);
+            $t->nodes[] = $node;
         }
     }
 
@@ -240,7 +270,7 @@ trait RuntimeAccess
         $node->states |= match ($n->sort) { 1 => AccessNode::SORT_ASCENDING, 2 => AccessNode::SORT_DESCENDING, default => 0 };
         $node->description = $n->description ?? $n->tooltip ?? '';
         if (($f = $n->nameFrom) !== null) {
-            $name = $f->label === '' && $f->kind === Node::TEXT ? (string)$f->text : $f->label; // its label, or the text it is (mygo's nameOf)
+            $name = $f->label !== '' ? $f->label : match ($f->kind) { Node::TEXT => (string)$f->text, Node::RICH => $f->plainText(), default => '' }; // its label, or the text it is (mygo's nameOf)
             if ($node->label === '') { $node->label = $name; } elseif ($n->nameJoin && $name !== '') { $node->label = $name . ' ' . $node->label; }
         }
         if ($n->setSize > 0) { $node->posInSet = $n->setPos; $node->setSize = $n->setSize; }

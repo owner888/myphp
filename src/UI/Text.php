@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-use MyPHP\Native\{CoreText, Mem};
+use MyPHP\Native\{CoreText, Mem, TextEngine};
+use MyPHP\Text\{Layout, System};
 
 /**
  * Shaped lines, cached by size and string, painted as glyph quads from the
@@ -31,7 +32,50 @@ final class Text implements TextPainter
     /** @var array<string, Image> SVGs drawn in their own colors, by SVG, size and color, and the frame each was last drawn */
     private array $pictures = [], $pictureUsed = [];
 
-    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images) {}
+    private System $system;
+
+    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images)
+    {
+        $this->system = new System(new TextEngine($ct));
+    }
+
+    public function textSystem(): System
+    {
+        return $this->system;
+    }
+
+    public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt): void
+    {
+        $s = $this->ct->scale;
+        foreach ($l->lines as $line) {
+            $lastC = -2; $rgb = 0; $alpha = 1.0;
+            foreach ($line->glyphs as $g) {
+                if ($g->object || $g->font === null) {
+                    continue;
+                }
+                $key = $g->font->id . ':' . $g->id;
+                $slot = $this->atlas->get($key);
+                if ($slot === null) {
+                    $bitmap = $this->ct->rasterize($g->font->id, $g->id);
+                    if ($bitmap === null) {
+                        continue; // no ink, as a space
+                    }
+                    if (!$this->atlas->fits($bitmap['w'], $bitmap['h'])) {
+                        $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
+                    }
+                    $slot = $this->atlas->add($key, $bitmap['w'], $bitmap['h'], $bitmap['addr']);
+                    Mem::free($bitmap['rows']);
+                    $this->offsets[$key] = [$bitmap['ox'], $bitmap['oy']];
+                }
+                [$ox, $oy] = $this->offsets[$key];
+                if ($g->cluster !== $lastC) { [$rgb, $alpha] = $colorAt($g->cluster); $lastC = $g->cluster; }
+                // The pen and the baseline on device pixels, so the bitmap lands on its own grid.
+                $px = round(($x + $g->x) * $s) / $s;
+                $py = round(($y + $g->y) * $s) / $s;
+                $list->glyph($px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $rgb, $alpha, $slot['u'], $slot['v']);
+            }
+        }
+    }
 
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
@@ -148,6 +192,7 @@ final class Text implements TextPainter
     public function beginFrame(): void
     {
         $this->gen++;
+        $this->system->endFrame();
         $this->images->beginFrame();
         if ($this->gen % self::SWEEP_EVERY === 0) {
             $limit = $this->gen - self::KEEP_FRAMES;

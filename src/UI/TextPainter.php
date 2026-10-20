@@ -12,6 +12,13 @@ interface TextPainter extends TextMetrics
     /** Paints $text as paint does, each glyph in the color $colorAt(int $byte): array{0: int, 1: float} gives for the byte of $text its cluster starts at (mygo's TextLine with a color a cluster). */
     public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void;
 
+    /**
+     * Paints the glyphs of $l, its top left at ($x, $y), each in the color
+     * $colorAt(int $rune): array{0: int, 1: float} gives the rune its
+     * cluster starts at; inline objects draw nothing.
+     */
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void;
+
     /** The image atlas slot of $image: u, v, w, h in pixels and its page. @return array{u: int, v: int, w: int, h: int, page: int} */
     public function imageSlot(Image $image): array;
 

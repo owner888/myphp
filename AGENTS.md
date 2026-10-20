@@ -95,7 +95,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   node id (creation order, or xxh64 of the key path under `Context::key`;
   list rows are keyed by index); `clicked()/hovered()/focused()` hit-test
   them while building; a click that changed state re-runs the build (≤3 passes).
-  `rich(..., wrap: true)` wraps at last frame's width (a frame follows when
+  `richText(..., wrap: true)` wraps at last frame's width (a frame follows when
   it differs); `->focusable()` puts any node in the Tab order; `->size(w, h)`
   fixes a container's size over its content's; `->fit(Node::COVER…)`/`->grayscale()` on images; `->justifyItems()`/`->justifySelf()` in grids; `->basis(0)` with grow shares
   the room equally and keeps content from widening the parent (mygo's Basis).

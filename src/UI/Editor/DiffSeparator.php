@@ -54,7 +54,7 @@ final class DiffSeparator
         $bar = $c->row(0, $t->space(0.5), 1, $bg[0])->align(Node::CENTER)->padding(0, $t->space(1.5))->round(6)->alignSelf(Node::STRETCH);
         $bar->alpha = $bg[1];
           if ($s->lines === 0) {
-              $c->text($s->header, $s->fontSize() - 1, $t->textMuted, $s->fontStyle())->single();
+              $c->text($s->header, $s->fontSize() - 1, $t->textMuted, $s->fontStyle())->singleLine();
           } else {
               $chevron = function (int $dir, string $label, \Closure $fn) use ($c, $t, $ct, $s) {
                   $b = $c->key($label)->row()->size(20, 20)->round(4)->label($label)->tooltip($label)->cursor('pointer')->focusable();

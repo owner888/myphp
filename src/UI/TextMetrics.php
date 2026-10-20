@@ -17,4 +17,7 @@ interface TextMetrics
 
     /** The byte offset whose caret is nearest to $x points from the left. */
     public function indexForX(string $text, float $size, float $x, int $style = 0): int;
+
+    /** The text system rich text lays out with: fonts by family, weight and italics, spans, lines with their glyphs, carets and selections. */
+    public function textSystem(): \MyPHP\Text\System;
 }

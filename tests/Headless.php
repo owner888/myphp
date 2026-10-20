@@ -32,6 +32,16 @@ final class Metrics implements TextPainter
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return [$x, $y, $w, $h, 0, 0]; }
     public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return ['u' => 0, 'v' => 0, 'w' => $w, 'h' => $h, 'page' => 0]; }
     public function scale(): float { return 1.0; }
+    private ?\MyPHP\Text\System $system = null;
+    public function textSystem(): \MyPHP\Text\System { return $this->system ??= new \MyPHP\Text\System(new \MyPHP\Text\StubEngine()); }
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void
+    {
+        foreach ($l->lines as $line) {
+            foreach ($line->glyphs as $g) {
+                if (!$g->object) { [$rgb, $alpha] = $colorAt($g->cluster); $list->glyph($x + $g->x, $y + $line->y, $g->advance, $line->height, $rgb, $alpha, 0, 0); }
+            }
+        }
+    }
 }
 
 final class Headless

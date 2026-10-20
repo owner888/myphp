@@ -208,14 +208,54 @@ Styles: `UI\Font` bits (BOLD, ITALIC, MONO) reach `CoreText::font`, which
 takes the system or fixed-pitch UI font and applies the bold/italic
 symbolic traits with `CTFontCreateCopyWithSymbolicTraits` (a font without
 the variant keeps the base); fonts and shaped lines are keyed by size and
-style. `Context::rich` lays spans (`UI\Span`: text, size, style, color,
-underline, strikethrough, background) on one baseline, the tallest
-ascent setting it; the painter draws each span's background, glyphs and
-lines. With a `$width`, `RichLayout::wrap` breaks the spans into lines:
-chunks are runs of spaces, single CJK characters or other runs, placed
-greedily, a chunk wider than a line broken by character, newlines
-honored; adjacent chunks of one span on a line merge into one piece so
-they shape as one run. The width is the app's to pass (`$c->width` minus
+style.
+
+Rich text has a text system of its own, mygo's internal/text ported as
+`MyPHP\Text`: `System::layout(Params)` lays out a text in a `Style`
+(family, size, weight, italics, line height, letter spacing, OpenType
+features, language) with `Span`s styling runs of it, wrapped at a width,
+cut to `maxLines` with an ellipsis, aligned, right-to-left paragraphs
+told by their first strong character; the `Layout` it returns has lines
+of positioned glyphs and the caret geometry (carets, hit-testing,
+selection boxes, visual carets with an affinity at bidi boundaries and
+soft breaks, grapheme and word boundaries). Layouts are cached by their
+parameters and swept after 240 frames unused. The `Engine` shapes and
+breaks paragraphs: `Native\TextEngine` with CoreText's typesetter
+(`CTTypesetterSuggestLineBreak`, `CTTypesetterCreateLine`), fonts by
+family list (the generic families, named families by descriptor, a
+cascade list for the rest), weights through `NSFont
+systemFontOfSize:weight:`, a 14° shear where a family has no italic,
+tracking and features as attributes; `StubEngine` (half an em a rune) is
+the tests'. Glyphs rasterize into the same atlas, keyed by the CTFont
+`CoreText::adopt` registers.
+
+Text styles are mygo's: `Node::fontSize`, `fontWeight`/`bold`, `italic`,
+`font`, `textColor`, `lineHeight`/`fixedLineHeight`, `textAlign`,
+`underline`/`wavyUnderline`, `decorationColor`/`Thickness`,
+`textBackground`, `strikethrough`, `letterSpacing`, `fontFeatures`,
+`lang`, `selectionColor` set a `UI\TextStyle` the text inside the node
+inherits: `Context::inheritedText` folds those of the nodes being built
+over the theme's, and `text()` and `richText()` take it as they are built.
+`text()` still measures with `TextMetrics::measure` (size, color, Font
+bits, an underline); a style that needs more (`TextStyle::needsLayout`),
+`maxLines()` or `noWrap()` makes it a rich text of one span
+(`Node::toRich`). `Context::richText` lays its spans (`UI\Span`, mygo's: font,
+size, weight, italics, color, underline, wavy underline, strikethrough,
+decoration color and thickness, background with a radius, letter
+spacing, features, language, inline objects) over the node's style;
+`Layout::measure` lays it out once a frame (`Node::textLayout`) and the
+painter draws mygo's textLayout: line and span backgrounds, glyphs in
+their spans' colors, then underlines and strikethroughs where the fonts
+place them (`System::decorate`; underlines do not skip descenders yet).
+`Node::children` on a rich text is mygo's Children on one: the text
+built inside it (`Context::within` pushes the node while the closure
+runs) continues its paragraph, each node's style a span over the paragraph's
+(`Node::inlineSpans`); after arranging, `Layout::placeInline` gives each
+the boxes of its words (`frags`), which are its area for the pointer
+(`Runtime::under`), its focus ring and its bounds to assistive
+technology (`accessInline`). A paragraph wraps at `$width`, or at its
+container's last-frame room with `wrap: true`; otherwise at newlines.
+The width is the app's to pass (`$c->width` minus
 its paddings), or, with `wrap: true`, the room its container had last
 frame inside the container's padding (`Runtime::widthOf` of the parent,
 the window's width on the first frame): the flex layout measures before
@@ -273,7 +313,7 @@ by Space(2), radius Space(1.25), in the inverse colors, Space(1.5) above
 its anchor (below when there is no room); the focus ring is 2 points
 wide a point outside the node, as `Painter.FocusRing`.
 
-`Node::single()` is mygo's SingleLine: the painter cuts what no longer
+`Node::singleLine()` is mygo's SingleLine: the painter cuts what no longer
 fits at `indexForX` and ends it in "…"; in a column one is clamped to
 the column's width. A row that overflows shrinks its children as CSS
 flexbox and mygo's resolveFlexible do (`Layout::shrink`, every child's
@@ -1783,9 +1823,14 @@ and the nodes with local state.
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
+  mygo's `Margin` comes with the Markdown view, which uses it.
+- Underlines do not skip descenders (mygo's ink skipping reads glyph
+  outlines), and `text()` measures with the old metrics unless its style
+  needs the text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
-  are in; the RichText editor, Markdown view and Terminal are not ported
-  yet; `rich` is read-only.
+  are in, with mygo's text system and paragraphs of inline text; the
+  RichText editor, Markdown view and Terminal are not ported yet; text
+  is not selectable yet (mygo's Selectable comes next).
 - VoiceOver is in (Accessibility above); Linux's and Windows's assistive
   technology come with those platforms.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

@@ -487,41 +487,105 @@ final class Context
         foreach ($n->kids as $k) { self::fade($k, $alpha); }
     }
 
-    /** Text in the theme's text color, or $color; $style is Font bits (BOLD, ITALIC, MONO). */
+    /** The theme's text style, under what the nodes being built set. */
+    private ?TextStyle $base = null;
+
+    /** The text style the nodes being built set over the theme's, which text built now inherits (mygo's resolvedText). */
+    public function inheritedText(): TextStyle
+    {
+        if ($this->base === null) {
+            $this->base = new TextStyle();
+            $this->base->size = $this->theme->fontSize;
+            $this->base->color = $this->theme->text;
+        }
+        $in = $this->base;
+        foreach ($this->stack as $n) {
+            if ($n->ts !== null) {
+                $in = $n->ts->over($in);
+            }
+        }
+        return $in;
+    }
+
+    /**
+     * Text in the size and color the nodes around it set (Node::fontSize,
+     * Node::textColor), the theme's by default, or $size and $color; $style
+     * is Font bits (BOLD, ITALIC, MONO), over a weight, italics or a
+     * monospaced family around it. Inside a paragraph it continues it.
+     */
     public function text(string $s, ?float $size = null, ?int $color = null, int $style = 0): Node
     {
-        $size ??= $this->theme->fontSize;
+        $in = $this->inheritedText();
+        $size ??= $in->size;
+        $style |= Node::fontBits($in);
         [$w, $h] = $this->metrics->measure($s, $size, $style);
-        $n = $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $this->theme->text));
+        $n = $this->add(new Node(Node::TEXT, 0, 0, 0, $w, $h, 0, $s, null, $size, $color ?? $in->color));
         $n->style = $style;
+        $n->inherit = $in;
+        $n->metrics = $this->metrics;
+        if ($in !== $this->base && $in->needsLayout()) {
+            $n->toRich();
+            $n->fw = $n->fh = 0.0; // laid out, not measured
+        }
         return $n;
     }
 
     /**
-     * Spans that differ in style over $size and $color (the theme's by
-     * default), baselines aligned per line, as mygo's RichText. With a
-     * $width the text wraps there (at spaces, between CJK characters, by
-     * character when a word is wider) and at newlines; with $wrap it
-     * wraps at the width its container had last frame, inside its padding
-     * (the window's width the first time, and a frame follows when it differs);
-     * otherwise it is one line. The node is as wide as its widest line.
+     * Spans that differ in style over the text style of the node, which it
+     * and the nodes around it set as for text (Node::fontSize, font(),
+     * textColor()…), or $size and $color, as mygo's RichText: the spans
+     * wrap together as one paragraph, or several at newlines, at $width;
+     * with $wrap at the width its container had last frame, inside its
+     * padding (the window's width the first time, and a frame follows when
+     * it differs); otherwise at newlines only. The node is as wide as its
+     * widest line.
+     *
+     * Text built in its children() (text(), link(), richText()) continues
+     * the paragraph after its spans, as HTML's inline elements do: each
+     * styles its own text over the paragraph's, and keeps its interaction
+     * (clicked, hovered, the focus, a tooltip, assistive technology) with
+     * the boxes of its words as its area. A link in a sentence:
+     *
+     *     $c->richText([], wrap: true)->children(function () use ($c, $url) {
+     *         $c->text('Read ');
+     *         $c->link('the guide', $url);
+     *         $c->text(' to get started.');
+     *     });
+     *
+     * Only text goes inside a text, and the sizes, padding, borders and
+     * corners of its children do not apply; a color() highlights their text.
      * @param Span[] $spans
      */
-    public function rich(array $spans, ?float $size = null, ?int $color = null, ?float $width = null, bool $wrap = false): Node
+    public function richText(array $spans, ?float $size = null, ?int $color = null, ?float $width = null, bool $wrap = false): Node
     {
-        $size ??= $this->theme->fontSize;
-        $n = $this->add(new Node(Node::RICH, 0, 0, 0, 0, 0, 0, null, null, $size, $color ?? $this->theme->text));
+        $in = $this->inheritedText();
+        $n = $this->add(new Node(Node::RICH, 0, 0, 0, 0, 0, 0, null, null, $size ?? $in->size, $color ?? $in->color));
+        if ($size !== null) { $n->fontSize($size); }
+        if ($color !== null) { $n->textColor($color); }
         if ($wrap && $width === null) { // the room its container had last frame, inside the padding
+            $n->wrapLast = true;
             $parent = $this->stack[count($this->stack) - 1];
             $pw = $this->runtime?->widthOf($parent->id);
             $width = $pw === null ? $this->width : max(1.0, $pw - 2 * $parent->padX());
-            $n->wrapWidth = $width;
         }
-        $layout = RichLayout::wrap($this->metrics, $spans, $size, $width ?? INF);
-        $n->fw = $layout->w; $n->fh = $layout->h;
+        $n->wrapWidth = $width;
         $n->spans = $spans;
-        $n->rich = $layout;
+        $n->inherit = $in;
+        $n->metrics = $this->metrics;
+        $n->context = $this;
         return $n;
+    }
+
+    /** Builds $fn's nodes inside $n, as children() does. @internal */
+    public function within(Node $n, \Closure $fn): void
+    {
+        $this->stack[] = $n;
+        $this->scopes[] = null;
+        try {
+            $fn();
+        } finally {
+            $this->end();
+        }
     }
 
     /** Whether the node just built has the keyboard focus (buttons, fields, lists and nodes made focusable()). */
@@ -814,7 +878,7 @@ final class Context
           $p = $this->collapsibleBase($head, $open);
           if ($head->changed) { $n->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
-            $this->text($title, $t->fontSize, $t->text, Font::BOLD)->single();
+            $this->text($title, $t->fontSize, $t->text, Font::BOLD)->singleLine();
             $this->spacer();
             $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
             $a->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, 90 + 180 * $p, $t->textMuted)); // down, turning up as it opens
@@ -986,7 +1050,7 @@ final class Context
           $arrow = $this->column(0, 0)->size($t->space(4), $t->space(4))->center();
             if ($branch) { $this->text($open ? '▾' : '▸', $t->fontSize - 1, $selected ? $t->accentText : $t->textMuted)->role(Role::NONE); }
           $this->end();
-          $this->text($label, $t->fontSize, $fg)->single();
+          $this->text($label, $t->fontSize, $fg)->singleLine();
           $this->column(0, 0)->size($t->space(2), 0); $this->end();
         $this->end();
         if ($branch && $this->clicked($arrow)) { $open = !$open; }
@@ -1085,7 +1149,7 @@ final class Context
         if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
           if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
-          $this->text($label, $t->fontSize, $fg)->single();
+          $this->text($label, $t->fontSize, $fg)->singleLine();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();
         if ($this->clicked($n) && $sb['selected'] !== $id) {
@@ -1143,7 +1207,7 @@ final class Context
                   $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->role(Role::LIST_ITEM);
                   $item->setPos = $i + 1; $item->setSize = count($shown); $item->choosable = true;
                   if ($hl) { $in->activeDescendant($item); } // the input has the focus for the option its arrows are on
-                    $this->text($opt, $t->fontSize, $hl ? $t->accentText : $t->text)->single();
+                    $this->text($opt, $t->fontSize, $hl ? $t->accentText : $t->text)->singleLine();
                   $this->end();
                   if ($this->hovered($item) && $rt->pressedAnywhere() === false) { $local->highlight = $i; }
                   if ($this->clicked($item)) { $chosen = $opt; }
@@ -1256,7 +1320,7 @@ final class Context
           foreach ($tokens as $i => $tok) {
               $chip = $this->key($tok)->row(0, $t->space(1), 0, $t->surfacePressed)->padding($t->space(0.25), 0)->round($t->radius)->align(Node::CENTER)->cursor('arrow');
                 $this->column(0, 0)->size($t->space(1), 0); $this->end(); // with the gap: PaddingStart(Space(2))
-                $this->text($tok, $t->fontSize)->single();
+                $this->text($tok, $t->fontSize)->singleLine();
                 $x = $this->box($t->space(3.5), $t->space(3.5), 0)->round($t->space(1))->role(Role::BUTTON)->label($this->texts()->get('removeToken', ['token' => $tok])); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
                 $x->draw(function (DisplayList $list, Node $b, Theme $t) { $k = $b->w * 0.3; $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); $list->line($b->x + $b->w - $k, $b->y + $k, $b->x + $k, $b->y + $b->h - $k, $t->textMuted, 1.0, 1.25); });
                 $this->column(0, 0); $this->end(); // with the gap: PaddingEnd(Space(1))
@@ -1303,7 +1367,7 @@ final class Context
         $rt = $this->runtime;
         $b = $this->buttonFace($t->space(1.5), $t->space(3.5))->min($t->space(32.5), 0); // its text and a page icon at its ends (Justify(SpaceBetween))
           [, $locale] = $this->formats();
-          $this->text(I18n::formatDate($locale, $date, 'yMd'), $t->fontSize, $t->text)->single();
+          $this->text(I18n::formatDate($locale, $date, 'yMd'), $t->fontSize, $t->text)->singleLine();
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
           $page->draw(function (DisplayList $list, Node $a, Theme $t) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
@@ -1821,9 +1885,9 @@ final class Context
                   })->alpha = 0.0;
               }
               $last = $i === $n - 1;
-              $b = $this->key($i)->row(0, 0)->padding($t->space(0.5), $t->space(1.5))->round($t->radius)->min($t->space(6), 0)->single(); // shrinks with the others as room runs short
+              $b = $this->key($i)->row(0, 0)->padding($t->space(0.5), $t->space(1.5))->round($t->radius)->min($t->space(6), 0)->singleLine(); // shrinks with the others as room runs short
               if (!$last) { $b->focusable()->role(Role::LINK); if ($this->hovered($b)) { $b->color = $t->surfaceHover; } }
-                $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted, $last ? Font::BOLD : 0)->single(); // the last, where the path is: no link, weight 500 (bold here)
+                $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted, $last ? Font::BOLD : 0)->singleLine(); // the last, where the path is: no link, weight 500 (bold here)
               $this->end();
               if (!$last && $this->clicked($b)) { $chosen = $i; $e->changed = true; }
           }
@@ -2065,7 +2129,7 @@ final class Context
         $h = 2166136261; // the hue of the name's FNV-1a hash
         for ($i = 0, $n = strlen($name); $i < $n; $i++) { $h = (($h ^ ord($name[$i])) * 16777619) & 0xffffffff; }
         $e = $this->column(0, 0, 0, self::hsl($h % 360, 0.45, 0.55))->size($size, $size)->round($size / 2)->center()->tooltip($name)->role(Role::IMAGE)->label($name);
-          $this->text(self::initials($name), $size * 0.4, 0xffffff, Font::BOLD)->single(); // FontWeight(600)
+          $this->text(self::initials($name), $size * 0.4, 0xffffff, Font::BOLD)->singleLine(); // FontWeight(600)
         $this->end();
         return $e;
     }
@@ -2693,7 +2757,7 @@ final class Context
             $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
             $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
             $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => self::disclosure($list, $a, 90 * $p, $t->textMuted));
-            $this->text($label, $t->fontSize, $t->text)->single();
+            $this->text($label, $t->fontSize, $t->text)->singleLine();
             $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
           $this->end();
           $this->collapsiblePanel($open, $p, $fn, $t->space(1), $t->space(5.5), 0, $t->space(1), $t->space(2)); // below the label

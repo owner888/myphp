@@ -152,7 +152,7 @@ function view(Context $c, Log $log): void
       $log->find->seen = $log->find->text;
       $c->row(10, 10, 0, $t->surface);
         $c->input($log->filter, 'Filter lines (type to search)', 320);
-        $c->rich($log->path === ''
+        $c->richText($log->path === ''
             ? [new Span('Open a log with ', color: $t->textMuted), new Span('File > Open…', style: Font::BOLD, color: $t->textMuted)]
             : [new Span(number_format(count($log->lines)) . ' lines', color: $t->textMuted),
                new Span($log->filter->text === '' ? '' : ', ' . number_format(count($log->shown)) . ' match', color: $t->textMuted),
@@ -177,7 +177,7 @@ function view(Context $c, Log $log): void
           } else {
               $spans[] = new Span($line, style: Font::MONO, color: $color);
           }
-          $c->rich($spans, 12, wrap: true); // at the width the cell had last frame
+          $c->richText($spans, 12, wrap: true); // at the width the cell had last frame
       });
     $c->end();
 }

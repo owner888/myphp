@@ -23,6 +23,8 @@ final class Runtime
 
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
     private array $rects = [];
+    /** @var array<int, list<array{0: float, 1: float, 2: float, 3: float}>> the boxes of the words of text inside a paragraph, by id, last frame */
+    private array $frags = [];
     /** @var array<int, Scrollable> id => scroll state, from last frame */
     private array $scrolls = [];
     /** @var array<int, array{0: bool, 1: bool}> id => scrolls horizontally, vertically */
@@ -408,6 +410,7 @@ final class Runtime
         $this->activated = null; // taken by clicked() during the build, or dropped
         $this->typed = '';
         $this->rects = [];
+        $this->frags = [];
         $this->order = [];
         $this->barrier = 0; $this->counter = 0; $this->overlays = []; $this->handles = []; $this->links = [];
         $this->sliders = [];
@@ -1053,6 +1056,7 @@ final class Runtime
     private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false): void
     {
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+        if ($n->frags !== []) { $this->frags[$n->id] = $n->frags; } // text inside a paragraph: its words are its area
         $this->parents[$n->id] = $parent?->id ?? 0;
         $this->pageOf[$n->id] = $page;
         $inert = $inert || $n->inert;
@@ -1143,7 +1147,7 @@ final class Runtime
         if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
             $this->animating = true; // an indeterminate bar or a spinner moves every frame
         }
-        if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapWidth !== null && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
+        if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapLast && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
             $this->needsFrame = true; // wrapped at the width it, or its container, had last frame; this frame's differs
         }
         if ($n->keepFocus) { $this->keepers[$n->id] = true; }
@@ -1861,6 +1865,15 @@ final class Runtime
         }
         if ($x < $r[0] || $x >= $r[0] + $r[2] || $y < $r[1] || $y >= $r[1] + $r[3]) {
             return false;
+        }
+        if (isset($this->frags[$id])) {
+            $on = false;
+            foreach ($this->frags[$id] as [$fx, $fy, $fw, $fh]) {
+                if ($x >= $fx && $x < $fx + $fw && $y >= $fy && $y < $fy + $fh) { $on = true; break; }
+            }
+            if (!$on) {
+                return false;
+            }
         }
         $o = $this->order[$id];
         foreach ($this->overlays as [$at, $ox, $oy, $ow, $oh]) {

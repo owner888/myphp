@@ -75,8 +75,8 @@ $n = [];
 $h = new Headless(function (Context $c) use (&$n) {
     $n['r'] = $c->row(0, 0);
       $n['box'] = $c->box(50, 10, 0);
-      $n['in'] = $c->row(0, 4); $c->box(16, 16, 0); $n['t'] = $c->text(str_repeat('x', 100))->single(); $c->end(); // 16 + 4 + 700 = 720
-      $n['u'] = $c->text(str_repeat('y', 30))->single(); // 210
+      $n['in'] = $c->row(0, 4); $c->box(16, 16, 0); $n['t'] = $c->text(str_repeat('x', 100))->singleLine(); $c->end(); // 16 + 4 + 700 = 720
+      $n['u'] = $c->text(str_repeat('y', 30))->singleLine(); // 210
     $c->end();
 }, 400, 100);
 $h->frame(); $r = fn($k) => $h->rect($k);

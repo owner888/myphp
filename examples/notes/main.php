@@ -153,7 +153,7 @@ final class Markdown
         $para = [];
         $flush = function () use (&$para, $c, $t, $width) {
             if ($para !== []) {
-                $c->rich(self::inline(implode(' ', $para), $t), 14, width: $width);
+                $c->richText(self::inline(implode(' ', $para), $t), 14, width: $width);
                 $para = [];
             }
         };
@@ -168,7 +168,7 @@ final class Markdown
                 $c->end();
             } elseif (preg_match('/^(#{1,3})\s+(.*)$/', $line, $m)) {
                 $flush();
-                $c->rich(self::inline($m[2], $t), [24, 19, 16][strlen($m[1]) - 1], width: $width);
+                $c->richText(self::inline($m[2], $t), [24, 19, 16][strlen($m[1]) - 1], width: $width);
             } elseif (preg_match('/^!\[[^\]]*\]\(([^)]+)\)\s*$/', $line, $m)) {
                 $flush();
                 $path = str_starts_with($m[1], '/') ? $m[1] : "$baseDir/{$m[1]}";
@@ -180,7 +180,7 @@ final class Markdown
                 }
             } elseif (preg_match('/^\s*[-*]\s+(.*)$/', $line, $m)) {
                 $flush();
-                $c->row(0, 6)->align(Node::START); $c->text('•', 14, $t->textMuted); $c->rich(self::inline($m[1], $t), 14, width: $width - 16); $c->end();
+                $c->row(0, 6)->align(Node::START); $c->text('•', 14, $t->textMuted); $c->richText(self::inline($m[1], $t), 14, width: $width - 16); $c->end();
             } elseif (trim($line) === '') {
                 $flush();
             } else {
@@ -229,7 +229,7 @@ function view(Context $c, Notes $notes): void
           $c->divider();
           $c->list($notes->list, count($notes->shown), function (int $row) use ($c, $t, $notes) {
               $it = $notes->items[$notes->shown[$row]];
-              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0)->single();
+              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0)->singleLine();
                 $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
           });
           if ($notes->shown === [] && $notes->query->text !== '') { $c->column(10, 0); $c->muted('No note matches.', 12); $c->end(); }

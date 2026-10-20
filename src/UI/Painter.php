@@ -46,7 +46,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::RICH) {
-            self::paintRich($n, $list, $text);
+            self::paintRich($n, $list, $text, $t);
             return;
         }
         if ($n->kind === Node::CHECKBOX || $n->kind === Node::RADIO) {
@@ -565,32 +565,140 @@ final class Painter
         }
     }
 
-    /** Rich text: its wrapped lines, each on one baseline, with the spans' backgrounds, underlines and strikes. */
-    private static function paintRich(Node $n, DisplayList $list, TextPainter $text): void
+    /**
+     * Rich text: its layout from its top left, with the background,
+     * underline or strikethrough of its text style, and the colors,
+     * backgrounds and lines of its spans (mygo's textLayout with a
+     * spanPaint); then the focus rings of the text inside it, around their
+     * words, whose text it draws (paintInline).
+     */
+    private static function paintRich(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
     {
-        $y = $n->y;
-        foreach ($n->rich->lines as $line) {
-            $baseline = $y + $line['ascent'];
-            foreach ($line['pieces'] as [$sp, $piece, $px, $w]) {
-                $size = $sp->size ?? $n->fontSize;
-                $x = $n->x + $px;
-                $top = $baseline - $text->ascent($size, $sp->style);
-                if ($sp->background !== null) {
-                    [, $h] = $text->measure('X', $size, $sp->style);
-                    $list->rect($x - 2, $top, $w + 4, $h, $sp->background, 1.0, 3.0);
+        $l = $n->textLayout();
+        $ts = $n->textStyle();
+        $x = $n->x; $y = $n->y;
+        $color = $ts->color ?? $n->fg;
+        $alpha = ($ts->alpha ?? 1.0) * $n->alpha;
+        $spans = $n->spans;
+        $ends = []; $end = 0;
+        foreach ($spans as $sp) { $end += mb_strlen($sp->text, 'UTF-8'); $ends[] = $end; }
+        $at = static function (int $r) use ($ends): int { // the span holding rune $r, or -1
+            $lo = 0; $hi = count($ends);
+            while ($lo < $hi) {
+                $m = intdiv($lo + $hi, 2);
+                if ($ends[$m] <= $r) { $lo = $m + 1; } else { $hi = $m; }
+            }
+            return $lo === count($ends) ? -1 : $lo;
+        };
+        // The runs of the glyphs of a line in one span: the span's index, the glyphs [i, j), and their left and right.
+        $runs = static function (\MyPHP\Text\Line $line) use ($at): array {
+            $out = []; $gs = $line->glyphs; $c = count($gs);
+            for ($i = 0; $i < $c;) {
+                $k = $at($gs[$i]->cluster); $x0 = INF; $x1 = -INF;
+                for ($j = $i; $j < $c && $at($gs[$j]->cluster) === $k; $j++) { $x0 = min($x0, $gs[$j]->x); $x1 = max($x1, $gs[$j]->x + $gs[$j]->advance); }
+                $out[] = [$k, $i, $j, $x0, $x1];
+                $i = $j;
+            }
+            return $out;
+        };
+        foreach ($l->lines as $line) { // the backgrounds, under the glyphs
+            if ($ts->background !== null && $line->width > 0) {
+                $list->rect($x + $line->x, $y + $line->y, $line->width, $line->height, $ts->background, $alpha);
+            }
+            foreach ($runs($line) as [$k, $i, , $x0, $x1]) {
+                if ($k < 0 || $spans[$k]->background === null) {
+                    continue;
                 }
-                $color = $sp->color ?? $n->fg;
-                if (trim($piece) !== '') {
-                    $text->paint($list, $piece, $size, $x, $top, $color, 1.0, $sp->style);
-                }
-                if ($sp->underline) {
-                    $list->rect($x, $baseline + 1, $w, 1.0, $color);
-                }
-                if ($sp->strikethrough) {
-                    $list->rect($x, $baseline - $size * 0.3, $w, 1.0, $color);
+                $sp = $spans[$k]; $ba = ($sp->alpha ?? 1.0) * $n->alpha;
+                if ($sp->radius > 0) { // hugging the glyphs, a little wider
+                    $size = $line->glyphs[$i]->size;
+                    $px = min($size * 0.22, $sp->radius);
+                    $list->rect($x + $x0 - $px, $y + $line->baseline - $size * 0.98, $x1 - $x0 + 2 * $px, $size * 1.32, $sp->background, $ba, $sp->radius);
+                } else {
+                    $list->rect($x + $x0, $y + $line->y, $x1 - $x0, $line->height, $sp->background, $ba);
                 }
             }
-            $y += $line['h'];
+        }
+        $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $n): array {
+            $k = $at($r);
+            if ($k < 0 || $spans[$k]->color === null && $spans[$k]->alpha === null) {
+                return [$color, $alpha];
+            }
+            return [$spans[$k]->color ?? $color, ($spans[$k]->alpha ?? 1.0) * $n->alpha];
+        });
+        $sys = $text->textSystem(); $scale = $text->scale();
+        $base = [$ts->underline ?? false, $ts->wavy ?? false, $ts->strike ?? false, $ts->decoColor, $ts->decoThick ?? 0.0];
+        foreach ($l->lines as $li => $line) {
+            foreach ($runs($line) as [$k, $i, $j]) {
+                if ($k < 0) {
+                    continue;
+                }
+                $sp = $spans[$k];
+                $d = [$sp->underline || $sp->wavyUnderline, $sp->wavyUnderline, $sp->strikethrough, $sp->decorationColor ?? $base[3], $sp->decorationThickness ?? $base[4]];
+                if ($d[0] || $d[2]) {
+                    self::decorationRun($list, $sys, $l, $li, $i, $j, $x, $y, $scale, $d, $sp->color ?? $color, ($sp->alpha ?? 1.0) * $n->alpha);
+                }
+            }
+            if ($base[0] || $base[2]) {
+                self::decorationRun($list, $sys, $l, $li, 0, count($line->glyphs), $x, $y, $scale, $base, $color, $alpha);
+            }
+        }
+        self::paintInline($n, $list, $t);
+    }
+
+    /**
+     * The underline and strikethrough of $d (underline, wavy, strike,
+     * color, thickness) along glyphs [i, j) of line $li of $l from (x, y),
+     * where the fonts place them, in $d's color or $rgb (mygo's
+     * decorationRun); a wavy underline follows the underline, at least a
+     * pixel thick.
+     * @param array{0: bool, 1: bool, 2: bool, 3: ?int, 4: float} $d
+     */
+    private static function decorationRun(DisplayList $list, \MyPHP\Text\System $sys, \MyPHP\Text\Layout $l, int $li, int $i, int $j, float $x, float $y, float $scale, array $d, int $rgb, float $alpha): void
+    {
+        $rgb = $d[3] ?? $rgb;
+        foreach ([\MyPHP\Text\System::UNDERLINE, \MyPHP\Text\System::STRIKETHROUGH] as $kind) {
+            if ($kind === \MyPHP\Text\System::UNDERLINE ? !$d[0] : !$d[2]) {
+                continue;
+            }
+            foreach ($sys->decorate($l, $li, $i, $j, $x, $y, $scale, $kind, $d[4]) as [$x0, $x1, $top, $bottom]) {
+                if ($x1 <= $x0 || $bottom <= $top) {
+                    continue;
+                }
+                if ($kind === \MyPHP\Text\System::UNDERLINE && $d[1]) {
+                    self::wave($list, $x0, $x1, ($top + $bottom) / 2, max($bottom - $top, 1 / $scale), $rgb, $alpha);
+                    continue;
+                }
+                $list->rect($x0, $top, $x1 - $x0, $bottom - $top, $rgb, $alpha);
+            }
+        }
+    }
+
+    /** A wave from x0 to x1 around y, $thick points wide, one and a half times as high, as spell checkers underline words (mygo's wave). */
+    private static function wave(DisplayList $list, float $x0, float $x1, float $y, float $thick, int $rgb, float $alpha): void
+    {
+        $amp = $thick * 1.5 / 2;
+        $length = $thick * 6;
+        $y += $amp;
+        $n = max((int)ceil(($x1 - $x0) / ($length / 8)), 1); // eight points a wave, the last at x1
+        $path = (new Path())->moveTo($x0, $y);
+        for ($i = 1; $i <= $n; $i++) {
+            $px = $x0 + ($x1 - $x0) * $i / $n;
+            $path->lineTo($px, $y - $amp * sin(($px - $x0) / $length * 2 * M_PI));
+        }
+        $list->path($path, $rgb, $alpha, $thick);
+    }
+
+    /** The focus rings of the text inside a paragraph, around their words, and of the text inside that (mygo's paintInline). */
+    private static function paintInline(Node $n, DisplayList $list, Theme $t): void
+    {
+        foreach ($n->kids as $k) {
+            if ($k->focusVisible) {
+                foreach ($k->frags as [$fx, $fy, $fw, $fh]) {
+                    self::focusRing($list, $fx, $fy, $fw, $fh, 2.0, $t);
+                }
+            }
+            self::paintInline($k, $list, $t);
         }
     }
 

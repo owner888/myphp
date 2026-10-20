@@ -90,15 +90,15 @@ final class CompletionMenu
               $row->gap = $t->space(2);
               if ($i === $m->selected()) { $row->color = $t->accent; $row->alpha = 0.18; }
                 $c->text(Completion::icon($it->kind), $size - 1, $ct->tokenColor(Completion::token($it->kind))[0], Font::MONO)->size($t->space(3), 0);
-                $c->text($it->label, $size, $ct->c['text'][0], $m->fontStyle())->single();
-                if ($it->detail !== '') { $c->text($it->detail, $size - 1, $t->textMuted)->single(); }
+                $c->text($it->label, $size, $ct->c['text'][0], $m->fontStyle())->singleLine();
+                if ($it->detail !== '') { $c->text($it->detail, $size - 1, $t->textMuted)->singleLine(); }
               $c->end();
           }
         $c->end();
         $s = $m->selected();
         if ($s < count($items) && $items[$s]->documentation !== '') {
             $c->box(0, 1, $t->border);
-            $c->rich([new Span($items[$s]->documentation)], $t->fontSize - 1, $t->textMuted, $t->space(140));
+            $c->richText([new Span($items[$s]->documentation)], $t->fontSize - 1, $t->textMuted, $t->space(140));
         }
     }
 }

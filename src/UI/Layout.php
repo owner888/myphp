@@ -8,8 +8,49 @@ use Closure;
 /** Flex layout in two passes: measure bottom-up, arrange top-down. */
 final class Layout
 {
+    /**
+     * Gives the nodes inside $e, whose text starts at rune $offset of
+     * paragraph $para's, and those inside them, the boxes of their words in
+     * the paragraph's layout as their frags, and the box around those as
+     * theirs (mygo's placeInline).
+     */
+    private static function placeInline(Node $para, Node $e, int $offset): void
+    {
+        $l = $para->textLayout();
+        foreach ($e->kids as $k) {
+            $a = $offset + $k->runes[0]; $b = $offset + $k->runes[1];
+            $k->frags = [];
+            $x0 = $y0 = INF; $x1 = $y1 = -INF;
+            foreach ($l->appendSelection([], $a, $b, false) as [$rx, $ry, $rw, $rh]) {
+                $k->frags[] = [$para->x + $rx, $para->y + $ry, $rw, $rh];
+                $x0 = min($x0, $para->x + $rx); $y0 = min($y0, $para->y + $ry);
+                $x1 = max($x1, $para->x + $rx + $rw); $y1 = max($y1, $para->y + $ry + $rh);
+            }
+            if ($k->frags === []) {
+                $k->x = $k->y = $k->w = $k->h = 0.0;
+            } else {
+                $k->x = $x0; $k->y = $y0; $k->w = $x1 - $x0; $k->h = $y1 - $y0;
+            }
+            self::placeInline($para, $k, $a);
+        }
+    }
+
     public static function measure(Node $n): void
     {
+        if ($n->kind === Node::RICH) { // laid out at the width it wraps at, unless given a size
+            $l = $n->textLayout();
+            if ($n->fw <= 0) { $n->fw = $l->width; }
+            if ($n->fh <= 0) { $n->fh = $l->height; }
+        } elseif ($n->kind === Node::TEXT && ($n->ts !== null || $n->maxLines > 0 || $n->noWrap) && $n->metrics !== null) {
+            if ($n->maxLines > 0 || $n->noWrap || $n->textStyle()->needsLayout()) {
+                $n->toRich(); // laid out by the text system, as rich text is
+                $n->fw = $n->fh = 0.0;
+                $l = $n->textLayout();
+                $n->fw = $l->width; $n->fh = $l->height;
+            } else {
+                self::restyle($n);
+            }
+        }
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
             $n->mh = $n->fh;
@@ -65,9 +106,33 @@ final class Layout
         $n->minMw = max(min($n->minMw, $n->mw), $n->minW);
     }
 
+    /**
+     * A text given a text style of its own (Node::fontSize, bold()…) in it:
+     * the size, color and Font bits it shows in, and its size measured
+     * anew. Its metrics draw a weight of 600 or more bold and a family of
+     * "monospace" in the fixed-pitch font, the others in the system's.
+     */
+    private static function restyle(Node $n): void
+    {
+        $own = $n->ts;
+        [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it
+        if ($own->size !== null) { $n->fontSize = $own->size; }
+        if ($own->color !== null) { $n->fg = $own->color; }
+        $n->style |= Node::fontBits($own);
+        if ($own->underline) { $n->underline = true; }
+        [$w, $h] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style);
+        if ($n->fw == $ow) { $n->fw = $w; } // a size given to it stays
+        if ($n->fh == $oh) { $n->fh = $h; }
+        $n->metrics = null; // once
+    }
+
     public static function arrange(Node $n, float $x, float $y, float $w, float $h): void
     {
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
+        if ($n->kind === Node::RICH && $n->kids !== []) {
+            self::placeInline($n, $n, 0);
+            return;
+        }
         if ($n->kind !== Node::CONTAINER) return;
         $kids = [];
         foreach ($n->kids as $k) {

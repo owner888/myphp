@@ -102,7 +102,7 @@ function view(Context $c, array &$s): void
             // A calendar: a click or the arrows choose a day, Page Up and Page Down move by months.
             $c->row(0, 10)->align(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
         } else {
-            $c->rich([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
+            $c->richText([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
             $crumbs = ['Macintosh HD', 'Users', 'developer', 'Documents', 'Widgets']; // a path: the items but the last are links
             if ($c->changed($c->breadcrumbs(array_slice($crumbs, 0, $s['crumb'] + 1), $s['crumb']))) { $s['last'] = 'went to ' . $crumbs[$s['crumb']]; }
             $c->row(0, 10)->align(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($s['color'], $s['alpha']))) { $s['last'] = 'color ' . Context::hexOf($s['color'], $s['alpha']); } $c->muted(Context::hexOf($s['color'], $s['alpha'])); $c->end();

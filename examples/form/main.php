@@ -68,7 +68,7 @@ function form(Context $c, array &$s): void
       $card = $c->column(10, 4, 0, $c->theme->surface)->focusable();
         if ($c->hovered($card)) { $card->color = $c->theme->surfaceHover; }
         if ($c->clicked($card)) { $s['submits']++; $s['greeting'] = 'card activated'; }
-        $c->rich([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
+        $c->richText([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
             . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')], wrap: true);
       $c->end();
       // A link, a determinate bar following the slider, an indeterminate one; the Submit button has a tip.
