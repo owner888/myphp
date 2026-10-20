@@ -81,7 +81,14 @@ final class Context
 
     private function add(Node $n): Node
     {
-        $this->stack[count($this->stack) - 1]->kids[] = $n;
+        $top = $this->stack[count($this->stack) - 1];
+        $top->kids[] = $n;
+        $n->context = $this;
+        if ($top->kind === Node::RICH) {
+            $n->inline = true;
+        } elseif ($n->kind === Node::TEXT || $n->kind === Node::RICH) {
+            $n->scope = $this->selectScope();
+        }
         if ($this->nextKey !== null) {
             $n->id = self::hash($this->scope . '/' . $this->nextKey);
             $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
@@ -489,6 +496,21 @@ final class Context
 
     /** The theme's text style, under what the nodes being built set. */
     private ?TextStyle $base = null;
+
+    /** The Selectable container text built now is in: the innermost, unless a control, an Unselectable or a disabled node is nearer (mygo's prepareSelectable); 0 for none. */
+    private function selectScope(): int
+    {
+        for ($i = count($this->stack) - 1; $i > 0; $i--) {
+            $p = $this->stack[$i];
+            if ($p->kind === Node::CONTAINER && $p->selectable && !$p->disabled) {
+                return $p->id;
+            }
+            if ($p->unselectable || $p->focusable || $p->disabled || $p->kind !== Node::CONTAINER) {
+                return 0; // a control owns its text
+            }
+        }
+        return 0;
+    }
 
     /** The text style the nodes being built set over the theme's, which text built now inherits (mygo's resolvedText). */
     public function inheritedText(): TextStyle

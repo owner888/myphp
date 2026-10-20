@@ -119,6 +119,7 @@ final class Window
             $this->runtime->openURL = App::openURL(...);
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
+            $this->runtime->writeClipboardData = Pasteboard::writeData(...);
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
             $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame
@@ -332,6 +333,7 @@ final class Window
                 $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
                 $this->runtime->reduceMotion = App::reduceMotion();
+                $this->runtime->windowFocus = $this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow'); // a selection shows in the key window
                 App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
                     $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
@@ -567,10 +569,14 @@ final class Window
                     }
                     $w->closed();
                 }],
-                'windowDidBecomeKey:' => ['v@:@', 'v(ppp)', $fire('focus')],
+                'windowDidBecomeKey:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($fire) {
+                    $fire('focus')($self, $cmd, $note);
+                    (self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null)?->invalidate(); // a selection shows again
+                }],
                 'windowDidResignKey:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) use ($fire) {
                     $fire('blur')($self, $cmd, $note);
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                    $w?->invalidate(); // a selection stops showing
                     if ($w?->flyout !== null && !($w->flyout['tray']?->pressed() ?? false)) {
                         App::later($w->dismissFlyout(...)); // once AppKit made another window key, or none; a press on its tray icon toggles it instead
                     }

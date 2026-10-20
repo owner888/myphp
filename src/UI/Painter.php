@@ -46,7 +46,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::RICH) {
-            self::paintRich($n, $list, $text, $t);
+            self::paintRich($n, $list, $text, $t, $rt);
             return;
         }
         if ($n->kind === Node::CHECKBOX || $n->kind === Node::RADIO) {
@@ -572,7 +572,7 @@ final class Painter
      * spanPaint); then the focus rings of the text inside it, around their
      * words, whose text it draws (paintInline).
      */
-    private static function paintRich(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
+    private static function paintRich(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $l = $n->textLayout();
         $ts = $n->textStyle();
@@ -617,6 +617,11 @@ final class Painter
                 } else {
                     $list->rect($x + $x0, $y + $line->y, $x1 - $x0, $line->height, $sp->background, $ba);
                 }
+            }
+        }
+        if (($sel = $rt?->textSelectionOf($n->id)) !== null) { // over the backgrounds, under the glyphs and lines
+            foreach ($l->selection($sel[0], $sel[1]) as [$sx, $sy, $sw, $sh]) {
+                $list->rect($x + $sx, $y + $sy, $sw, $sh, $ts->selection ?? $t->selection, $ts->selection !== null ? ($ts->selectionAlpha ?? 1.0) : $t->selectionAlpha);
             }
         }
         $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $n): array {

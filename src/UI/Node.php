@@ -74,6 +74,8 @@ final class Node
     public ?float $wrapWidth = null;
     /** That $wrapWidth is its container's last frame, so a frame follows when that differs. */
     public bool $wrapLast = false;
+    /** That the node is built inside a rich text's children(), continuing its paragraph (mygo's isInline). */
+    public bool $inline = false;
     /** That a paragraph's spans are those of the text inside it too (inlineSpans), as laid out. */
     private bool $merged = false;
     /** The text styling this node sets (fontSize(), font(), textColor()…), which the text inside it inherits, and, for text, what it inherited from the nodes around it as it was built. */
@@ -85,8 +87,13 @@ final class Node
     public int $maxLines = 0;
     public bool $noWrap = false;
     public string $ellipsis = '';
-    /** For rich text: the context building it, which builds its children(). */
+    /** The context building the node: a rich text's builds its children(), a Selectable container's has its selection. */
     public ?Context $context = null;
+    /** Text, and the text inside a container, that the user selects and copies (selectable()), or none of it (unselectable()); what a Selectable container's Copy puts on the clipboard (copyData()). */
+    public bool $selectable = false, $unselectable = false;
+    public ?\Closure $copyData = null;
+    /** For text: the Selectable container around it, as it was built, 0 for none; and the container whose selection it is in, as last recorded (its own id for a Selectable text alone). */
+    public int $scope = 0, $textScope = 0;
     /** For a node inside a paragraph (a rich text's children()): the runes of its text in the paragraph's, and the boxes of its words in its layout, in window points. @var list<array{0: float, 1: float, 2: float, 3: float}> */
     public array $runes = [0, 0];
     public array $frags = [];
@@ -497,8 +504,8 @@ final class Node
     /** Sets the language of the node's text, and of the text inside it, as a BCP 47 tag, as HTML's lang attribute does; "" takes that of the nodes around it. */
     public function lang(string $tag): static { $this->ts()->lang = $tag === '' ? null : $tag; return $this; }
 
-    /** Sets the highlight of selected text in the node and the text inside it. */
-    public function selectionColor(int $rgb): static { $this->ts()->selection = $rgb; return $this; }
+    /** Sets the highlight of selected text in the node and the text inside it, $rgb at $alpha; the theme's selection otherwise. */
+    public function selectionColor(int $rgb, float $alpha = 1.0): static { $t = $this->ts(); $t->selection = $rgb; $t->selectionAlpha = $alpha; return $this; }
 
     /** Shows at most $n lines of the node's text, ending it with an ellipsis. */
     public function maxLines(int $n): static { $this->maxLines = $n; $this->layout = null; return $this; }
@@ -572,6 +579,66 @@ final class Node
         $t = $this->textStyle();
         $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $t->align ?? self::START, spans: $spans);
         return $this->layout = $this->metrics->textSystem()->layout($p);
+    }
+
+    /**
+     * Lets the user select and copy text by dragging, double-clicking a
+     * word, triple-clicking a line, or using Shift with the arrows; Cmd+C
+     * copies the selection (mygo's Selectable). On a container, the text
+     * built inside it shares one selection: Copy joins their selected text
+     * with newlines, in the order they were built. Nested Selectable
+     * containers have selections of their own; text inside controls keeps
+     * the control's interaction, and unselectable() leaves a subtree out.
+     * On a text alone, the selection stays in its paragraph. The text
+     * inside a paragraph shares its selection: set it on the paragraph.
+     */
+    public function selectable(): static
+    {
+        if ($this->inline) {
+            return $this;
+        }
+        if ($this->kind === self::TEXT || $this->kind === self::RICH || $this->kind === self::CONTAINER) {
+            $this->unselectable = false;
+            $this->selectable = true;
+        }
+        return $this;
+    }
+
+    /** Leaves text, or a container's subtree, out of the selection of a Selectable container around it; a Selectable container inside it has its own (mygo's Unselectable). For the text inside a paragraph, set it on the paragraph. */
+    public function unselectable(): static
+    {
+        if ($this->inline) {
+            return $this;
+        }
+        $this->selectable = false;
+        $this->unselectable = true;
+        return $this;
+    }
+
+    /**
+     * The parts of the paragraphs that the selection of this Selectable
+     * container holds, in the order they were built, or none, as of the
+     * last frame: to copy them otherwise, as a context menu's item does
+     * (mygo's SelectedTexts).
+     * @return list<SelectedText>
+     */
+    public function selectedTexts(): array
+    {
+        return $this->context?->runtime?->selectedTexts($this->id) ?? [];
+    }
+
+    /**
+     * Sets what Copy and its shortcut put on the clipboard for the
+     * selection of this Selectable container: $fn gets its parts, as
+     * selectedTexts() returns them, and returns the data, as a document
+     * copies its paragraphs with blank lines between them as text, and as
+     * HTML too to keep their formatting (mygo's CopyData).
+     * @param \Closure(list<SelectedText>): \MyPHP\Transfer\Data $fn
+     */
+    public function copyData(\Closure $fn): static
+    {
+        $this->copyData = $fn;
+        return $this;
     }
 
     /**

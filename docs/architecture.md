@@ -1054,6 +1054,36 @@ kept; a `once` block is dropped at the next `block()` call after it fired,
 never from inside its own invocation. Verified on Linux with a C shim
 calling `invoke` directly before use on macOS.
 
+## Selecting text
+
+`Node::selectable()` is mygo's Selectable: on a container, the text built
+inside it shares one selection (`TextSelection`, mygo's textSelection),
+from a rune of one paragraph to a rune of another in build order; on a
+text alone the selection stays in its paragraph. `Context::add` notes
+the container a text is in as it is built (`Node::$scope`; a control, an
+Unselectable or a disabled node in between keeps it out), and such text
+is laid out by the text system to find its runes. `RuntimeSelection`
+(mygo's textselection.go) collects the frame's paragraphs in build order
+as it records them, presses start a selection on them or in their
+container around them (not on a control, nor on Unselectable nodes), a
+double or triple click goes by words and lines, a drag near a scrolling
+container's edge scrolls it, Shift with the arrows, Home and End extends
+it across paragraphs (the keys without Shift are left to scroll), Cmd+A
+and Cmd+C or the menus' Select All and Copy (the view's `copy:` and
+`selectAll:` with no field focused push `['edit', …]`) select and copy,
+the parts joined by newlines, or `copyData()`'s data through
+`Runtime::$writeClipboardData` (`Pasteboard::writeData`, mygo's darwin
+WriteData: one NSPasteboardItem an item, a provider giving its formats).
+`selectedTexts()` gives the parts as `SelectedText`s. Each frame
+(`syncTextSelection`) the endpoints must still be in the container's
+paragraphs, and the text it holds may only have grown at its end, or the
+selection clears; the painter highlights each paragraph's part, over the
+backgrounds and under the glyphs, while the window is key (the window
+sets `Runtime::$windowFocus`) and the focus is in that container. The
+text inside a paragraph shares the paragraph's selection. A press on
+nothing focusable takes the focus from selectable text, as mygo's
+pointerDown does; elsewhere myphp keeps the focus there was.
+
 ## Text input
 
 `Native\View::keyDown:` records the key for apps and hands the event to
@@ -1824,6 +1854,8 @@ and the nodes with local state.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
+- Selectable text has no context menu yet (mygo's Copy and Select All
+  menu and `EditItems`): node context menus come next.
 - Underlines do not skip descenders (mygo's ink skipping reads glyph
   outlines), and `text()` measures with the old metrics unless its style
   needs the text system (`TextStyle::needsLayout`).

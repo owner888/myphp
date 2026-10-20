@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-use MyPHP\Transfer\{Drop, DragOptions, Format, Offer, Operation, Result};
+use MyPHP\Transfer\{Data, Drop, DragOptions, Format, FormatUnavailable, Offer, Operation, Result};
 
 use Closure;
 
@@ -19,6 +19,7 @@ use Closure;
 final class Runtime
 {
     use RuntimeAccess;
+    use RuntimeSelection;
     use RuntimeTransition;
 
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
@@ -218,7 +219,14 @@ final class Runtime
         $clip = '';
         $this->writeClipboard = function (string $s) use (&$clip) { $clip = $s; };
         $this->readClipboard = function () use (&$clip): string { return $clip; };
+        $this->writeClipboardData = function (Data $d) use (&$clip) { // its text, as mygo's headless host keeps
+            try { $clip = $d->read(Format::TEXT); } catch (FormatUnavailable) { $clip = ''; }
+        };
+        $this->selection = new TextSelection();
     }
+
+    /** Puts data on the clipboard, each representation of its items in the system's formats (mygo's WriteClipboardData): the window sets it to the system's pasteboard. @var Closure(Data): void */
+    public Closure $writeClipboardData;
 
     /** Write text to the clipboard and read it (mygo's Services' WriteClipboard and ReadClipboard), for what edits text itself, as a code editor: the window sets them to the system's pasteboard; without one, a clipboard of the runtime's own. */
     public Closure $writeClipboard, $readClipboard;
@@ -288,6 +296,9 @@ final class Runtime
                     if ($e[4] >= 2) {
                         $this->doubleClicks[] = [$e[1], $e[2]];
                     }
+                    if ($this->pressTextSelection($e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS, max(1, $e[4]))) {
+                        break; // a selection starts: the paragraph pressed has the focus
+                    }
                     $this->presses[] = [$e[1], $e[2]];
                     $this->pressAt($e[1], $e[2]);
                     if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
@@ -305,6 +316,7 @@ final class Runtime
                     break;
                 case 'up':
                     $this->input->mouseDown = false;
+                    $this->selection->dragging = false;
                     $this->sliding = null;
                     $this->hold = null;
                     $moved = $e[3] === 0 && $this->dragEnd($e[1], $e[2]); // a drag ended, dropping its value: no click
@@ -337,6 +349,8 @@ final class Runtime
                         }
                     } elseif ($this->focus !== null && isset($this->fields[$this->focus]) && $this->input->mouseDown) {
                         $this->placeCaret($this->focus, $e[1], $e[2], true);
+                    } elseif ($this->selection->dragging) {
+                        $this->moveTextSelection($e[1], $e[2]);
                     }
                     break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
@@ -350,6 +364,12 @@ final class Runtime
                         break;
                     }
                     $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false];
+                    if (($e[3] & Key::MODIFIERS) === Key::COMMAND && in_array(strtolower($e[1]), ['a', 'c'], true) && $this->textSelectionCommand(strtolower($e[1]) === 'a' ? 'selectAll' : 'copy')) {
+                        $this->keys[array_key_last($this->keys)][3] = true; // Cmd+A and Cmd+C on selectable text (mygo's textSelectionKey)
+                    }
+                    break;
+                case 'edit': // an editing command of the menus with no node taking its input: on selectable text, Copy and Select All
+                    $this->textSelectionCommand($e[1]);
                     break;
                 case 'command': // what the text system made of the key just pushed; a focused control taking it keeps it from shortcut()
                     if ($this->command($e[1]) && $this->keys !== []) {
@@ -374,6 +394,7 @@ final class Runtime
         }
         $this->input->events = [];
         $this->dragScroll();
+        $this->scrollTextSelection();
         $this->clickable = []; // this frame's build asks again
         $this->steppers = []; // the keys above used last frame's; this frame's build registers again
         $wasFocus = $this->focus; $lastOverlays = $this->overlayIds; $this->overlayIds = [];
@@ -428,7 +449,9 @@ final class Runtime
         $this->shown = []; $this->worlds = []; $this->visible = [];
         $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
+        $this->forgetSelectable();
         $this->record($root);
+        $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
         }
@@ -1101,6 +1124,7 @@ final class Runtime
             $clip[1] = max($clip[1], $by); $clip[3] = min($clip[3], $by + $bh);
         }
         $this->order[$n->id] = ++$this->counter;
+        $this->recordSelectable($n, $parent);
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
@@ -1339,6 +1363,9 @@ final class Runtime
             }
         }
         if ($best === null) {
+            if ($this->focusedText() !== null) {
+                $this->focus = null; // a press on nothing to focus takes it from selectable text, as mygo's pointerDown
+            }
             return;
         }
         if ($best !== $this->focus) {
@@ -1438,7 +1465,7 @@ final class Runtime
     /** Text system commands the field did not take: focus moves, activation, list navigation. */
     private function command(string $selector): bool
     {
-        if ($this->areaCommand($selector)) {
+        if ($this->areaCommand($selector) || $this->textSelectionKey($selector)) {
             return true;
         }
         if ($this->focus !== null && !isset($this->fields[$this->focus])) {

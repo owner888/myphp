@@ -41,12 +41,13 @@ final class Layout
             $l = $n->textLayout();
             if ($n->fw <= 0) { $n->fw = $l->width; }
             if ($n->fh <= 0) { $n->fh = $l->height; }
-        } elseif ($n->kind === Node::TEXT && ($n->ts !== null || $n->maxLines > 0 || $n->noWrap) && $n->metrics !== null) {
-            if ($n->maxLines > 0 || $n->noWrap || $n->textStyle()->needsLayout()) {
+        } elseif ($n->kind === Node::TEXT && $n->metrics !== null && ($n->ts !== null || $n->maxLines > 0 || $n->noWrap || ($selects = ($n->scope !== 0 || $n->selectable) && !$n->unselectable && !$n->focusable && $n->url === null))) {
+            if ($n->maxLines > 0 || $n->noWrap || ($selects ?? false) || $n->textStyle()->needsLayout()) { // selected text is laid out to find its runes
+                [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it
                 $n->toRich(); // laid out by the text system, as rich text is
-                $n->fw = $n->fh = 0.0;
                 $l = $n->textLayout();
-                $n->fw = $l->width; $n->fh = $l->height;
+                if ($n->fw == $ow || $n->fw <= 0) { $n->fw = $l->width; } // a size given to it stays
+                if ($n->fh == $oh || $n->fh <= 0) { $n->fh = $l->height; }
             } else {
                 self::restyle($n);
             }

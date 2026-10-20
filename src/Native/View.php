@@ -153,7 +153,8 @@ final class View
             'copy:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 if (self::edit($self, 'copy')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null && $f->hasSelection()) { Pasteboard::setText($f->selectedText()); }
+                if ($f === null) { self::selection($self, 'copy'); return; }
+                if ($f->hasSelection()) { Pasteboard::setText($f->selectedText()); }
             }],
             'cut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 if (self::edit($self, 'cut')) { return; }
@@ -183,7 +184,8 @@ final class View
             'selectAll:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 if (self::edit($self, 'selectAll')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null) { $f->selectAll(); Metal::requestFrame($self); }
+                if ($f === null) { self::selection($self, 'selectAll'); return; }
+                $f->selectAll(); Metal::requestFrame($self);
             }],
             'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => true],
             // NSTextInputClient
@@ -297,6 +299,13 @@ final class View
         $input->push(['edit', $command]);
         Metal::requestFrame($self);
         return true;
+    }
+
+    /** An editing command with no field nor node taking its input: the runtime gives Copy and Select All to selectable text that has the focus. */
+    private static function selection($self, string $command): void
+    {
+        self::$inputs[ObjC::addr($self)]->push(['edit', $command]);
+        Metal::requestFrame($self);
     }
 
     /** Writes a range to an NSRange the text system passed a pointer to (an actualRange:), when it passed one. */

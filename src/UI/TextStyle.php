@@ -35,6 +35,7 @@ final class TextStyle
     public ?float $decoThick = null;
     public ?int $background = null;
     public ?int $selection = null;
+    public ?float $selectionAlpha = null;
 
     /** This style over $base: what this leaves null, $base's. */
     public function over(?self $base): self
