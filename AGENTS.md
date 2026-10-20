@@ -27,6 +27,10 @@ the reasoning, the numbers and the pitfalls behind the rules here.
    gap, height, icon, stroke, radius, color role — comes from mygo's
    source (`t.Space(n)`, the SVG viewBox), never guessed or approximated.
    Before drawing a control, read its mygo function and copy the numbers.
+10. **Public API takes mygo's names** (the developer's rule): lowerCamel of
+    the Go name, never one of our own. Anything that is not mygo's yet —
+    left out, done differently, named otherwise — goes in
+    `docs/mygo-deviations.md` as it is found; take it out once it matches.
 
 ## What this is
 

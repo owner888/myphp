@@ -1835,6 +1835,9 @@ and the nodes with local state.
 
 ## Open items
 
+Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
+
+
 - The glyph atlas starts over when full and is re-rasterized whole; an
   image page is emptied whole. Eviction per glyph or image would avoid
   the restart, at the cost of free-space bookkeeping the shelves lack.
