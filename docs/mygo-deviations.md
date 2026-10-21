@@ -274,6 +274,36 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: 2 s; 5 rounds; 100 edits (ZZFUZZ runs more).
   - Why: PHP is slower; the full run would take minutes.
 
+## SQLite
+
+- **Contexts and goroutines** (v0.90)
+  - mygo: `Open`, `Execute`, `Query` and `Transaction` take a
+    `context.Context`, which cancels them (a progress handler in C); a
+    `DB` is safe from any goroutine, its operations serialized.
+  - myphp: no context: an operation runs to its end on the main thread,
+    and a busy lock waits for `busyTimeout` only.
+  - Why: PHP runs the app on one thread.
+- **Values** (v0.90)
+  - mygo: `[]byte` is a BLOB, `string` TEXT; integers of any size,
+    `json.Number` and unsigned ones bind.
+  - myphp: a string is TEXT and must be UTF-8; a `Blob` is a BLOB, in
+    and out; `int`, `float`, `bool` and null bind.
+  - Why: PHP's strings are bytes; PHP has one integer type.
+- **Errors and options** (v0.90)
+  - mygo: `*Error` with `Code`, `ExtendedCode` and `Message`;
+    `ErrClosed` a sentinel; `BusyTimeout` a `time.Duration`; `sqlite.Open`
+    a package function.
+  - myphp: `Error` (getCode() the primary code, `$extendedCode`,
+    `$sqliteMessage`) and `ErrClosed` exceptions; `$busyTimeout` in
+    seconds; `Sqlite::open()`, `load()`, `libraryPath()`.
+  - Why: PHP's exceptions and durations; no package functions.
+- **The page plugin** (v0.90)
+  - mygo: `mygo.Use(sqlite.Plugin)` binds the service of
+    `@mygo-plugins/sqlite`, with connections owned by the calling page.
+  - myphp: not yet: it needs `App::use`, plugins, the calling page and
+    its navigation, and `App::onQuit`.
+  - Why: myphp has none of those yet; they come next.
+
 ## Terminal
 
 - **Package functions and results** (v0.88)

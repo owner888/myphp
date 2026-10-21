@@ -1,31 +1,36 @@
 <?php
 declare(strict_types=1);
 
-namespace MyPHP\Plugins\Terminal;
+namespace MyPHP\Plugins;
 
 use RuntimeException;
 
 /**
- * Finds libghostty-vt for the terminal (mygo's terminal/internal/library):
- * next to the app, in the user's cache, or downloaded there, as
- * mygo-plugin.json names it, the same builds as mygo's.
+ * Finds a plugin's native library (mygo's terminal/internal/library and
+ * sqlite's library.go, one here): next to the app, in the user's cache, or
+ * downloaded there, as the plugin's mygo-plugin.json names it, the same
+ * builds as mygo's. $plugin names the plugin in errors ("terminal").
  *
  * @internal
  */
-final class Library
+final class NativeLibrary
 {
-    /** The build of libghostty-vt for this platform that mygo-plugin.json names. @return array{name: string, url: string, sha256: string} */
-    public static function file(): array
+    /** The build of library $name for this platform that the manifest at $manifest names, checked as mygo checks it: a SHA-256 and a plain file name. @return array{name: string, url: string, sha256: string} */
+    public static function file(string $manifest, string $name, string $plugin): array
     {
-        $n = json_decode((string)file_get_contents(__DIR__ . '/mygo-plugin.json'), true, flags: JSON_THROW_ON_ERROR);
+        $n = json_decode((string)file_get_contents($manifest), true, flags: JSON_THROW_ON_ERROR);
         $target = self::target();
         foreach ($n['libraries'] ?? [] as $l) {
-            if (($l['name'] ?? '') === 'libghostty-vt' && isset($l['files'][$target])) {
+            if (($l['name'] ?? '') === $name && isset($l['files'][$target])) {
                 $f = $l['files'][$target];
-                return ['name' => (string)$f['name'], 'url' => (string)($f['url'] ?? ''), 'sha256' => (string)($f['sha256'] ?? '')];
+                $f = ['name' => (string)($f['name'] ?? ''), 'url' => (string)($f['url'] ?? ''), 'sha256' => (string)($f['sha256'] ?? '')];
+                if (preg_match('/^[0-9a-f]{64}$/', $f['sha256']) !== 1 || $f['url'] === '' || in_array($f['name'], ['', '.', '..'], true) || strpbrk($f['name'], '/\\') !== false) {
+                    throw new RuntimeException("$plugin: no valid $name for $target in $manifest");
+                }
+                return $f;
             }
         }
-        throw new RuntimeException("terminal: libghostty-vt has no build for $target");
+        throw new RuntimeException("$plugin: $name has no build for $target");
     }
 
     /** The platform as mygo-plugin.json names it, Go's GOOS-GOARCH. */
@@ -37,21 +42,21 @@ final class Library
     }
 
     /**
-     * The libghostty-vt the terminal loads, the first of (mygo's Find):
-     * the file $MYGO_GHOSTTY_VT names; the one among the app's resources
+     * The library a plugin loads, the first of (mygo's Find and
+     * LibraryPath): the file $env names; the one among the app's resources
      * (Contents/Resources of the .app the framework runs from); the one
      * next to the executable (PHP_BINARY); the one in the user's cache,
      * where mygo's CLI downloads it (<cache>/mygo/natives/<sha256>/),
      * which programs that are not packaged apps download there when it
      * is missing, checking its SHA-256. Packaged apps never download it.
      */
-    public static function find(): string
+    public static function find(string $manifest, string $name, string $env, string $plugin): string
     {
-        $env = getenv('MYGO_GHOSTTY_VT');
-        if (is_string($env) && $env !== '') {
-            return $env;
+        $named = getenv($env);
+        if (is_string($named) && $named !== '') {
+            return $named;
         }
-        $f = self::file();
+        $f = self::file($manifest, $name, $plugin);
         $resources = self::resources();
         $dirs = [];
         if ($resources !== null) { $dirs[] = $resources; }
@@ -60,14 +65,14 @@ final class Library
         $dirs[] = dirname($cached);
         foreach ($dirs as $dir) {
             $p = $dir . '/' . $f['name'];
-            if (is_file($p)) {
+            if (is_file($p) && ($dir !== dirname($cached) || hash_file('sha256', $p) === $f['sha256'])) {
                 return $p;
             }
         }
         if ($resources !== null) {
-            throw new RuntimeException("terminal: {$f['name']} is missing from the app: build it with myphp build");
+            throw new RuntimeException("$plugin: {$f['name']} is missing from the app: build it with myphp build");
         }
-        self::download($f, $cached);
+        self::download($f, $cached, $plugin);
         return $cached;
     }
 
@@ -78,7 +83,7 @@ final class Library
         if ($phar !== '' && preg_match('~^(.*\.app/Contents)/MacOS/[^/]+$~', $phar, $m) === 1) {
             return $m[1] . '/Resources';
         }
-        $src = realpath(__DIR__ . '/../..');
+        $src = realpath(__DIR__ . '/..');
         if ($src !== false && preg_match('~^(.*\.app/Contents/Resources)/app/~', $src . '/', $m) === 1) {
             return $m[1];
         }
@@ -98,16 +103,16 @@ final class Library
     }
 
     /** Downloads $f to $path, checking its SHA-256. @param array{name: string, url: string, sha256: string} $f */
-    private static function download(array $f, string $path): void
+    private static function download(array $f, string $path, string $plugin): void
     {
         if ($f['url'] === '' || $f['sha256'] === '') {
-            throw new RuntimeException("terminal: no download of {$f['name']} for " . self::target());
+            throw new RuntimeException("$plugin: no download of {$f['name']} for " . self::target());
         }
-        error_log("terminal: downloading {$f['url']} into " . dirname($path));
+        error_log("$plugin: downloading {$f['url']} into " . dirname($path));
         $ctx = stream_context_create(['http' => ['timeout' => 120, 'follow_location' => 1, 'max_redirects' => 10, 'ignore_errors' => true]]);
         $in = @fopen($f['url'], 'rb', false, $ctx);
         if ($in === false) {
-            throw new RuntimeException("terminal: downloading {$f['name']}: " . (error_get_last()['message'] ?? 'cannot open'));
+            throw new RuntimeException("$plugin: downloading {$f['name']}: " . (error_get_last()['message'] ?? 'cannot open'));
         }
         $status = '';
         foreach (stream_get_meta_data($in)['wrapper_data'] ?? [] as $h) {
@@ -115,12 +120,12 @@ final class Library
         }
         if (preg_match('~^HTTP/\S+ 200~', $status) !== 1) {
             fclose($in);
-            throw new RuntimeException("terminal: downloading {$f['url']}: $status");
+            throw new RuntimeException("$plugin: downloading {$f['url']}: $status");
         }
         $dir = dirname($path);
         if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
             fclose($in);
-            throw new RuntimeException("terminal: cannot make $dir");
+            throw new RuntimeException("$plugin: cannot make $dir");
         }
         $tmp = tempnam($dir, '.download-');
         $out = fopen($tmp, 'wb');
@@ -138,13 +143,13 @@ final class Library
         fclose($out);
         try {
             if (($sum = hash_final($h)) !== $f['sha256']) {
-                throw new RuntimeException("terminal: {$f['url']} has SHA-256 $sum, not {$f['sha256']}");
+                throw new RuntimeException("$plugin: {$f['url']} has SHA-256 $sum, not {$f['sha256']}");
             }
             chmod($tmp, 0755);
             if (!rename($tmp, $path)) {
                 // Another process downloaded it meanwhile.
                 if (is_file($path) && hash_file('sha256', $path) === $f['sha256']) { return; }
-                throw new RuntimeException("terminal: cannot move the download to $path");
+                throw new RuntimeException("$plugin: cannot move the download to $path");
             }
         } finally {
             if (is_file($tmp)) { unlink($tmp); }

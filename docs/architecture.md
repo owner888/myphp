@@ -1713,7 +1713,7 @@ HTML and plain text; Paste reads the richest of those, RTF and Markdown
 `MyPHP\Plugins\Terminal` is mygo's plugins/terminal. The emulator is
 libghostty-vt, the very build mygo's release carries
 (`mygo-plugin.json`, copied: names, URLs and SHA-256s), found as mygo
-finds it (`Library`: `$MYGO_GHOSTTY_VT`, the bundle's Resources, next to
+finds it (`Plugins\NativeLibrary`: `$MYGO_GHOSTTY_VT`, the bundle's Resources, next to
 `PHP_BINARY`, then `<cache>/mygo/natives/<sha256>/`, downloaded there
 once and checked), and bound through one `FFI::cdef` (`Vt\Lib`) whose
 layouts are checked against the library's own JSON description of its
@@ -1745,6 +1745,27 @@ compose is theirs. Keys are released as `InputEvent::KEY_UP` (`keyUp:`),
 the modifiers held come with every pointer event and `flagsChanged:`
 (`Context::modifiers()`), and `Runtime::$clipboardFormats` lists what a
 paste could read.
+
+## SQLite
+
+`MyPHP\Plugins\Sqlite` is mygo's plugins/sqlite from PHP: the very
+library mygo's release carries (SQLite's amalgamation and mygo's shim,
+`native/sqlite.c`), found by `Plugins\NativeLibrary` as the terminal's is
+(`$MYGO_SQLITE_LIBRARY`, the app's Resources, beside the executable, the
+cache) and bound by one `FFI::cdef` (`Sqlite\Lib`), which checks the
+shim's ABI version and that SQLite is threadsafe. The shim's functions
+for doubles as bits are mygo's way around purego's registers; FFI passes
+doubles, so `sqlite3_bind_double` and `sqlite3_column_double` are called
+as they are. Each call is an operation of the shim (its busy handler,
+timed by `OpenOptions::$busyTimeout`, and its authorizer, which denies
+transaction control and ATTACH in the user's SQL while `mygo_sqlite_
+prepare` compiles it); SQL is compiled whole, the tail after the first
+statement too, before anything runs, so "one statement; another" never
+runs half. The tail is found by its address: the out pointer is an
+`intptr_t` passed as `const char**`, and the buffer's base comes through
+a `void*` slot. PHP's strings are bytes, so TEXT is a string that must be
+UTF-8 and a BLOB is a `Blob`, in and out. There are no contexts: an
+operation runs to its end on the main thread, and nothing cancels it.
 
 ## Accessibility
 
@@ -1906,7 +1927,7 @@ build` puts those of the plugins the app uses at the top of
 `~/Library/Caches/mygo/natives/<sha256>/` once and checked there, the
 cache mygo's CLI and the plugins share; a plugin is used when the app's
 PHP files name its namespace, where mygo asks `go list -deps`. The
-plugins find the library there first (`Terminal\Library`: the bundle's
+plugins find the library there first (`Plugins\NativeLibrary`: the bundle's
 Resources from the framework's path, or from `Phar::running()` in a
 static app) and never download it inside an app. A static app's
 executable is phpmicro running its stub, whatever arguments it gets, so

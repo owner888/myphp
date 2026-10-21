@@ -185,7 +185,7 @@ final class Terminal
      * packaged apps download there when it is missing, checking its
      * SHA-256. Packaged apps never download it.
      */
-    public static function libraryPath(): string { return Library::find(); }
+    public static function libraryPath(): string { return \MyPHP\Plugins\NativeLibrary::find(__DIR__ . '/mygo-plugin.json', 'libghostty-vt', 'MYGO_GHOSTTY_VT', 'terminal'); }
 
     /** The view of a terminal (mygo's View): see View. */
     public static function view(Context $c, self $t): Node { return View::build($c, $t); }
