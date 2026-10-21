@@ -84,3 +84,34 @@ same(50.0, $r($n['box'])[2], 'a box keeps its size');
 same(400.0 - 50, $r($n['in'])[2] + $r($n['u'])[2], 'the rows and the text share what is left');
 check(abs($r($n['in'])[2] / $r($n['u'])[2] - 720 / 210) < 0.01, 'in proportion to their widths');
 same(round($r($n['in'])[2] - 20, 6), round($r($n['t'])[2], 6), 'the nested row shrinks its own text');
+
+// Margins, automatic ones taking the free space, and borders inside the edges (mygo's style_test.go).
+$n = [];
+$h = new Headless(function (Context $c) use (&$n) {
+    $c->column()->size(200, 0);
+      $n['centered'] = $c->box(50, 10, 0x808080)->margin(0, Node::AUTO);
+      $c->row()->size(0, 40);
+        $n['left'] = $c->box(20, 10, 0x808080);
+        $n['right'] = $c->box(20, 10, 0x808080)->margin(Node::AUTO, 0, Node::AUTO, Node::AUTO);
+      $c->end();
+      $n['spaced'] = $c->box(20, 10, 0x808080)->margin(5, 0, 0, 7);
+      $n['after'] = $c->box(20, 10, 0x808080);
+    $c->end();
+    $n['bordered'] = $c->column()->size(100, 60)->background(0xffffff)->borderWidth(2, 0, 6, 10)->borderColor(0xdc0000)->padding(4);
+      $n['inner'] = $c->column(0, 0, 1); $c->end();
+    $c->end();
+    $c->row()->size(100, 0);
+      $n['kept'] = $c->column()->size(80, 10)->shrink(0); $c->end();
+      $n['gives'] = $c->column()->size(80, 10); $c->end();
+    $c->end();
+}, 200, 300);
+$h->frame();
+$r = fn(Node $k) => array_map(fn($v) => round($v, 2), $h->rect($k));
+same([75.0, 0.0, 50.0, 10.0], $r($n['centered']), 'margin(0, AUTO) centers');
+same([0.0, 25.0, 20.0, 10.0], $r($n['left']), 'a row child without margins');
+same([180.0, 25.0, 20.0, 10.0], $r($n['right']), 'automatic margins push it to the end, centered across');
+same([7.0, 55.0, 20.0, 10.0], $r($n['spaced']), 'fixed margins move it');
+same(65.0, $r($n['after'])[1], 'and take their room in the column');
+$b = $r($n['bordered']);
+same([$b[0] + 14, $b[1] + 6, 82.0, 44.0], $r($n['inner']), 'the content box inside a border of 2, 0, 6, 10 and a padding of 4');
+same([80.0, 20.0], [$r($n['kept'])[2], $r($n['gives'])[2]], 'shrink(0) keeps its width; the other gives up the overflow');

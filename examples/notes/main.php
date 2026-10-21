@@ -2,14 +2,15 @@
 // Markdown notes, the second real tool on MyPHP: notes are .md files in a
 // folder (~/Library/Application Support/Notes/notes, or the folder on the
 // command line); a list on the left, the editor in the middle, a live
-// preview on the right. Edits save themselves half a second after you stop
+// preview on the right (Markdown::view). Edits save themselves half a second after you stop
 // typing (Cmd+S saves now). Cmd+N makes a note, Cmd+Backspace deletes the
 // chosen one. The preview scrolls along with the editor.
 // Run: ./run.sh notes [folder]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, Image, ListState, Node, ScrollState, Span, TextState, Theme};
+use MyPHP\UI\{Content, Context, Font, ListState, Node, ScrollState, TextState};
+use MyPHP\UI\Markdown\{Markdown, Options};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -40,6 +41,8 @@ final class Notes
     /** @var list<int> */
     public array $shown = [];
     public bool $previewing = true, $asking = false;
+    /** How the preview shows Markdown: images from the notes' folder. */
+    public Options $md;
 
     public function __construct(public readonly string $dir)
     {
@@ -50,6 +53,7 @@ final class Notes
         $this->editor->multiline = true;
         $this->preview = new ScrollState();
         $this->query = new TextState();
+        $this->md = new Options(loadImage: Markdown::fileImages($dir));
         $this->scan();
     }
 
@@ -140,72 +144,6 @@ final class Notes
     }
 }
 
-/** A small Markdown-to-UI renderer: headings, paragraphs with inline styles, bullets, code blocks, images. */
-final class Markdown
-{
-    /** @var array<string, Image> */
-    private static array $images = [];
-
-    public static function render(Context $c, string $md, float $width, string $baseDir): void
-    {
-        $t = $c->theme;
-        $lines = explode("\n", $md);
-        $para = [];
-        $flush = function () use (&$para, $c, $t, $width) {
-            if ($para !== []) {
-                $c->richText(self::inline(implode(' ', $para), $t), 14, width: $width);
-                $para = [];
-            }
-        };
-        for ($i = 0, $n = count($lines); $i < $n; $i++) {
-            $line = $lines[$i];
-            if (str_starts_with($line, '```')) { // a code block to the closing fence
-                $flush();
-                $code = [];
-                for ($i++; $i < $n && !str_starts_with($lines[$i], '```'); $i++) { $code[] = $lines[$i]; }
-                $c->column(10, 2, 0, $t->surface);
-                  foreach ($code as $cl) { $c->text($cl === '' ? ' ' : $cl, 12, $t->text, Font::MONO); }
-                $c->end();
-            } elseif (preg_match('/^(#{1,3})\s+(.*)$/', $line, $m)) {
-                $flush();
-                $c->richText(self::inline($m[2], $t), [24, 19, 16][strlen($m[1]) - 1], width: $width);
-            } elseif (preg_match('/^!\[[^\]]*\]\(([^)]+)\)\s*$/', $line, $m)) {
-                $flush();
-                $path = str_starts_with($m[1], '/') ? $m[1] : "$baseDir/{$m[1]}";
-                if (is_file($path)) {
-                    self::$images[$path] ??= Image::fromFile($path, 512);
-                    $c->image(self::$images[$path], min($width, self::$images[$path]->w / 2), 0, 6);
-                } else {
-                    $c->muted("missing image: {$m[1]}", 12);
-                }
-            } elseif (preg_match('/^\s*[-*]\s+(.*)$/', $line, $m)) {
-                $flush();
-                $c->row(0, 6)->align(Node::START); $c->text('•', 14, $t->textMuted); $c->richText(self::inline($m[1], $t), 14, width: $width - 16); $c->end();
-            } elseif (trim($line) === '') {
-                $flush();
-            } else {
-                $para[] = $line;
-            }
-        }
-        $flush();
-    }
-
-    /** `**bold**`, `*italic*`, `` `code` `` and `[text](url)` into spans. */
-    private static function inline(string $s, Theme $t): array
-    {
-        $spans = [];
-        $parts = preg_split('/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/', $s, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
-        foreach ($parts as $p) {
-            if (str_starts_with($p, '**')) { $spans[] = new Span(substr($p, 2, -2), style: Font::BOLD); }
-            elseif (str_starts_with($p, '`')) { $spans[] = new Span(substr($p, 1, -1), style: Font::MONO, background: $t->surface); }
-            elseif (str_starts_with($p, '*')) { $spans[] = new Span(substr($p, 1, -1), style: Font::ITALIC); }
-            elseif (preg_match('/^\[([^\]]+)\]\(([^)]+)\)$/', $p, $m)) { $spans[] = new Span($m[1], color: $t->accent, underline: true); }
-            else { $spans[] = new Span($p); }
-        }
-        return $spans;
-    }
-}
-
 App::setName('Notes'); // before userDataPath(), which is named after the app
 $notes = new Notes($argv[1] ?? App::userDataPath() . '/notes');
 
@@ -258,9 +196,8 @@ function view(Context $c, Notes $notes): void
                 $notes->followed = $notes->editor->scrollFraction;
                 $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
             }
-            $previewW = $c->width - $notes->listW - $notes->editorW - 2;
             $c->column(16, 10, 1, $t->background)->scroll($notes->preview);
-              Markdown::render($c, $notes->editor->text, $previewW - 32, $notes->dir);
+              Markdown::view($c, $notes->editor->text, $notes->md);
             $c->end();
         });
     });

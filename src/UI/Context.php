@@ -613,6 +613,58 @@ final class Context
         }
     }
 
+    /** Whether node $n, or one inside it, has the keyboard focus (mygo's FocusWithin). */
+    public function focusWithin(Node $n): bool
+    {
+        return $this->runtime?->focusWithin($n->id) ?? false;
+    }
+
+    /**
+     * A button without a look (mygo's ButtonBase): a row centering what is
+     * built in it until end(), focusable, keeping its width, that clicked()
+     * reports and assistive technology presses; give it its look and its
+     * label.
+     */
+    public function buttonBase(): Node
+    {
+        $b = $this->open(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 0, null, null));
+        $b->center()->focusable()->shrink(0)->role(Role::BUTTON);
+        return $b;
+    }
+
+    /**
+     * The size spans of text take as rich text shows them, wrapping lines
+     * at $width points (none for 0), to lay out what depends on it while
+     * building (mygo's MeasureText).
+     * @return array{0: float, 1: float}
+     */
+    public function measureText(float $width, Span ...$spans): array
+    {
+        $in = $this->inheritedText();
+        $text = ''; $runes = 0; $styles = [];
+        foreach ($spans as $sp) {
+            $text .= $sp->text;
+            $runes += mb_strlen($sp->text, 'UTF-8');
+            $styles[] = $sp->textSpan($runes);
+        }
+        $l = $this->metrics->textSystem()->layout(new \MyPHP\Text\Params($text, (new TextStyle())->over($in)->style($this->theme->fontSize), $width, spans: $styles));
+        return [$l->width, $l->height];
+    }
+
+    /**
+     * Whether a link to $url can open in the system when others wrote it,
+     * as a message, a language model's reply or a pasted document: an http,
+     * https or mailto address; other schemes and paths do not (mygo's
+     * SafeToOpen).
+     */
+    public static function safeToOpen(string $url): bool
+    {
+        if (preg_match('/[\x00-\x1f\x7f\\\\]/', $url) === 1 || !str_contains($url, ':')) {
+            return false;
+        }
+        return in_array(strtolower(explode(':', $url, 2)[0]), ['http', 'https', 'mailto'], true);
+    }
+
     /** Whether the node just built has the keyboard focus (buttons, fields, lists and nodes made focusable()). */
     public function focused(Node $n): bool
     {
@@ -627,7 +679,7 @@ final class Context
         $n->url = $url;
         $n->role = Role::LINK;
         $router = $this->router;
-        if ($this->runtime?->clicked($n->id) && $url !== '') {
+        if ($url !== '' && $this->runtime?->clicked($n->id)) { // a link going nowhere leaves its click to clicked()
             if ($router !== null && Router::isPath($url)) {
                 $router->push($url);
             } else {

@@ -1289,6 +1289,17 @@ final class Runtime
         return $this->focus === $id;
     }
 
+    /** Whether node $id, or one inside it, has the keyboard focus, as of the last frame (mygo's FocusWithin). */
+    public function focusWithin(int $id): bool
+    {
+        for ($at = $this->focus; $at !== null && $at !== 0; $at = $this->parents[$at] ?? 0) {
+            if ($at === $id) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Gives an event to the node that takes its input as it comes
      * (Node::handleInput) as it arrives, before the next frame is built

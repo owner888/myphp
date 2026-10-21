@@ -39,6 +39,8 @@ final class Node
     public const HORIZONTAL = 1, VERTICAL = 2;
     /** The least width and height this node measures to (mygo's MinWidth, MinHeight); 0 for none. */
     public float $minW = 0, $minH = 0;
+    /** That min() set $minW, which is then the least width a row shrinks the container to, rather than its content's (CSS's min-width, as mygo's MinWidth). */
+    public bool $minSet = false;
     /** The flex basis along the parent's axis (Node::basis), or null for the content's size. */
     public ?float $basis = null;
     /** A text kept to one line: it shrinks to the room its row or column has and ends in an ellipsis where cut (mygo's SingleLine). */
@@ -53,6 +55,16 @@ final class Node
     public ?array $shadow = null;
     /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
     public ?float $padY = null, $padX = null;
+    /** @var ?array{0: float, 1: float, 2: float, 3: float} the padding of each side, top, right, bottom and left, when padding() set them apart; null for $padY and $padX */
+    public ?array $pads = null;
+    /** @var array{0: float, 1: float, 2: float, 3: float} the widths of the border on each side, inside which the content is (mygo's BorderWidth), in $borderColor */
+    public array $borders = [0.0, 0.0, 0.0, 0.0];
+    /** @var array{0: float, 1: float, 2: float, 3: float} the space around the node on each side, INF for an automatic margin (mygo's Margin) */
+    public array $margins = [0.0, 0.0, 0.0, 0.0];
+    /** How much the node gives up of its width when its row overflows, against the others' (mygo's Shrink): 1 by default, 0 for none. */
+    public float $shrink = 1.0;
+    /** The opacity of the background (background()). */
+    public float $bgAlpha = 1.0;
     /** Paints this node itself, given the display list, the node (laid out) and the theme, before its children (mygo's Draw): icons, custom marks. */
     public ?\Closure $draw = null;
     /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
@@ -426,7 +438,7 @@ final class Node
     /** Keeps this node at least $w wide and $h high, whatever its content measures (mygo's MinWidth and MinHeight); 0 leaves one to the content. */
     public function min(float $w = 0, float $h = 0): static
     {
-        $this->minW = $w; $this->minH = $h;
+        $this->minW = $w; $this->minH = $h; $this->minSet = true;
         return $this;
     }
 
@@ -710,8 +722,12 @@ final class Node
      */
     public function children(\Closure $fn): static
     {
+        if ($this->kind === self::TEXT && $this->context !== null) { // a text with text inside it is a paragraph (mygo's Text with Children), as a link around a rich text
+            $this->toRich();
+            $this->fw = $this->fh = 0.0;
+        }
         if ($this->kind !== self::RICH || $this->context === null) {
-            throw new \LogicException('children() is for richText(): containers take theirs until end()');
+            throw new \LogicException('children() is for text and rich text: containers take theirs until end()');
         }
         $this->context->within($this, $fn);
         return $this;
@@ -756,7 +772,7 @@ final class Node
         $t = $this->ts ?? new TextStyle();
         $s = new Span('', $t->size, 0, $t->color, $t->underline ?? false, $t->strike ?? false, $t->background, $t->family, $t->weight, $t->italic ?? false, $t->alpha,
             wavyUnderline: $t->wavy ?? false, decorationColor: $t->decoColor, decorationThickness: $t->decoThick, letterSpacing: $t->spacing, features: $t->features, lang: $t->lang);
-        if ($this->kind === self::TEXT) {
+        if ($this->kind === self::TEXT || $this->kind === self::RICH) { // what text() or a link was given, as a link's color
             $s = $s->over($this->given(''));
         }
         if ($t->background === null && $this->color !== null) { // the background of an inline node is that of its text
@@ -848,15 +864,91 @@ final class Node
     }
 
     /** Pads this container $y points at its top and bottom and $x at its left and right (mygo's Padding(y, x)); row()/column()'s $pad is both. */
-    public function padding(float $y, float $x): static
+    public function padding(float ...$v): static
     {
-        $this->padY = $y; $this->padX = $x;
+        $this->pads = self::edges($v);
+        $this->padY = ($this->pads[0] + $this->pads[2]) / 2; $this->padX = ($this->pads[1] + $this->pads[3]) / 2;
         return $this;
     }
 
-    /** The padding at the top and bottom, and at the left and right. */
-    public function padY(): float { return $this->padY ?? $this->pad; }
-    public function padX(): float { return $this->padX ?? $this->pad; }
+    /** Sets the left and right padding (mygo's PaddingX). */
+    public function paddingX(float $v): static { $p = $this->sides(); return $this->padding($p[0], $v, $p[2], $v); }
+
+    /** Sets the top and bottom padding (mygo's PaddingY). */
+    public function paddingY(float $v): static { $p = $this->sides(); return $this->padding($v, $p[1], $v, $p[3]); }
+
+    /** Sets the padding on the side lines start: the left (mygo's PaddingStart; myphp lays out left to right). */
+    public function paddingStart(float $v): static { $p = $this->sides(); return $this->padding($p[0], $p[1], $p[2], $v); }
+
+    /** The padding of each side, top, right, bottom and left. @return array{0: float, 1: float, 2: float, 3: float} */
+    private function sides(): array
+    {
+        return $this->pads ?? [$this->padY ?? $this->pad, $this->padX ?? $this->pad, $this->padY ?? $this->pad, $this->padX ?? $this->pad];
+    }
+
+    /** Four sides CSS style from one to four values: all, vertical and horizontal, top, horizontal and bottom, or top, right, bottom and left (mygo's edges). @param list<float> $v @return array{0: float, 1: float, 2: float, 3: float} */
+    private static function edges(array $v): array
+    {
+        return match (count($v)) {
+            1 => [$v[0], $v[0], $v[0], $v[0]],
+            2 => [$v[0], $v[1], $v[0], $v[1]],
+            3 => [$v[0], $v[1], $v[2], $v[1]],
+            4 => [$v[0], $v[1], $v[2], $v[3]],
+            default => [0.0, 0.0, 0.0, 0.0],
+        };
+    }
+
+    /** The padding at the top and bottom, and at the left and right, the border inside the node's edges included: the mean of the two sides where they differ. */
+    public function padY(): float { return ($this->padT() + $this->padB()) / 2; }
+    public function padX(): float { return ($this->padL() + $this->padR()) / 2; }
+
+    /** The room between the node's edge and its content on each side: its border and its padding. */
+    public function padT(): float { return ($this->pads[0] ?? $this->padY ?? $this->pad) + $this->borders[0]; }
+    public function padR(): float { return ($this->pads[1] ?? $this->padX ?? $this->pad) + $this->borders[1]; }
+    public function padB(): float { return ($this->pads[2] ?? $this->padY ?? $this->pad) + $this->borders[2]; }
+    public function padL(): float { return ($this->pads[3] ?? $this->padX ?? $this->pad) + $this->borders[3]; }
+
+    /**
+     * Sets the space around the node, as padding() does (mygo's Margin);
+     * Node::AUTO, an automatic margin, takes the free space on its side, as
+     * in CSS: margin(0, Node::AUTO) centers a node horizontally, and a row's
+     * child with margin(0, 0, 0, Node::AUTO) goes to the end with those
+     * after it.
+     */
+    public function margin(int|float ...$v): static
+    {
+        $this->margins = self::edges(array_map(static fn(int|float $m): float => $m === self::AUTO ? INF : (float)$m, $v));
+        return $this;
+    }
+
+    /** Sets the left and right margins (mygo's MarginX). */
+    public function marginX(int|float $v): static { $m = $v === self::AUTO ? INF : (float)$v; $this->margins[1] = $this->margins[3] = $m; return $this; }
+
+    /** Sets the top and bottom margins (mygo's MarginY). */
+    public function marginY(int|float $v): static { $m = $v === self::AUTO ? INF : (float)$v; $this->margins[0] = $this->margins[2] = $m; return $this; }
+
+    /** Sets the widths of the border on each side, as padding() does, inside which the content is (mygo's BorderWidth), in borderColor(). */
+    public function borderWidth(float ...$v): static
+    {
+        $this->borders = self::edges($v);
+        return $this;
+    }
+
+    /** Sets the width of the border on the side lines start: the left (mygo's BorderStartWidth). */
+    public function borderStartWidth(float $v): static { $this->borders[3] = $v; return $this; }
+
+    /** Sets the color of the border (mygo's BorderColor). */
+    public function borderColor(int $rgb): static { $this->borderColor = $rgb; return $this; }
+
+    /** Fills the node's box with $rgb at $alpha (mygo's Background). */
+    public function background(int $rgb, float $alpha = 1.0): static
+    {
+        $this->color = $rgb; $this->bgAlpha = $alpha;
+        return $this;
+    }
+
+    /** Sets how much the node gives up of its width when its row overflows, against the others (mygo's Shrink): 0 keeps its width. */
+    public function shrink(float $s): static { $this->shrink = $s; return $this; }
 
     /** Places this container's children across its axis: a row's vertically, a column's horizontally (mygo's AlignItems); rows center by default, columns stretch. */
     public function align(int $align): static

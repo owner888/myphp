@@ -60,18 +60,20 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
+src/Text/          the text system (mygo's internal/text): System, Layout (lines, carets, selection), Engine (Native\TextEngine, StubEngine)
+src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
-src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Context (column/row/grid/text/muted/rich/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
+src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea(minLines, maxLines)/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/block()/draw()/drawOver()/single()/
+                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
                    min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
                    columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
-                   bits), Span (rich text run), RichLayout (spans wrapped at a width), Layout (flex),
+                   bits), Span (rich text run), TextStyle (inherited), Layout (flex, margins),
                    DisplayList (quads with clip), Painter (tree -> list), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,
                    undo, readOnly, onPaste/onTextKey hooks), TextLayout (wrapped lines of a text area),

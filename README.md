@@ -62,7 +62,8 @@ Early. What works today, on macOS / Apple Silicon:
 | Router (mygo's): a history of pages with paths and queries, `{name}` and `{name...}` patterns, layouts, pages keeping their state and the focus, sliding and fading in, Back and Forward buttons, Cmd+[ and Cmd+], a mouse's back and forward buttons, links to paths | works (`examples/router`) |
 | Draggable nodes (mygo's Draggable): following the pointer in the parent's axes, thrown to snap points at the pointer's speed, bounds rubber-banded or rigid, caught moving, lifting with a pose; values dragged within a window to nodes taking their type, with a copy under the pointer, scrolling at the edges, Escape giving up | works (`examples/drag`) |
 | Native drag and drop (mygo's data_drag): data dragged out to other apps in several formats, made lazily; text, URLs, Markdown and other formats dragged in, offered unread and read once dropped; copy and move negotiated; files from the Finder to nodes, then the window's `fileDrop`; a value dropped as it is inside the app; `Window::startDataDrag` | works (`examples/transfer`) |
-| Markdown parser (mygo's ui/markdown/parser): CommonMark 0.31.2 and GitHub's extensions (all their examples), footnotes, math; text appended or edited parsed again only where it changed; a streaming reply's half-written end healed | the parser works; its view comes next |
+| Markdown parser (mygo's ui/markdown/parser): CommonMark 0.31.2 and GitHub's extensions (all their examples), footnotes, math; text appended or edited parsed again only where it changed; a streaming reply's half-written end healed | works |
+| Markdown view and stream (mygo's ui/markdown): headings, paragraphs with links and footnote references, lists and task lists, quotes, highlighted code blocks with a copy button, tables, images, math and HTML as text or by hooks; selectable, copied as text, HTML and Markdown, or as Markdown with Shift+Cmd+C; a reply being written revealed at an even pace, fading in | works |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | Scrolling a node into view (mygo's ScrollIntoView), and the focus Tab brings into view, through nested scrolling containers | works |
@@ -212,7 +213,8 @@ App::run();
 | 路由（mygo 的 Router）：带路径和查询的页面历史、`{name}` 与 `{name...}` 模式、嵌套布局、页面保留状态和焦点、滑入淡入、前进后退按钮、Cmd+[ 与 Cmd+]、鼠标侧键、指向路径的链接 | 可用（`examples/router`） |
 | 可拖动节点（mygo 的 Draggable）：按父节点坐标跟随指针、按松手速度甩到吸附点、边界橡皮筋或硬边界、移动中可接住、配合 pose 抬起；窗口内拖拽值到接收该类型的节点，指针下有半透明副本，靠近边缘自动滚动，Esc 取消 | 可用（`examples/drag`） |
 | 系统拖放（mygo 的 data_drag）：把数据以多种格式拖到其他应用，格式按需生成；从其他应用拖入文本、链接、Markdown 等格式，悬停时只看格式不读内容，放下才读取；复制/移动协商；Finder 文件先给节点，再给窗口的 `fileDrop`；应用内拖放直接拿到原值 | 可用（`examples/transfer`） |
-| Markdown 解析器（mygo 的 ui/markdown/parser）：CommonMark 0.31.2 和 GitHub 扩展（规范示例全部通过）、脚注、公式；追加或编辑的文本只重新解析改动处；流式回复末尾写到一半的语法自动补全 | 解析器可用；视图下一步做 |
+| Markdown 解析器（mygo 的 ui/markdown/parser）：CommonMark 0.31.2 和 GitHub 扩展（规范示例全部通过）、脚注、公式；追加或编辑的文本只重新解析改动处；流式回复末尾写到一半的语法自动补全 | 可用 |
+| Markdown 视图与流式视图（mygo 的 ui/markdown）：标题、带链接和脚注引用的段落、列表和任务列表、引用、带复制按钮的高亮代码块、表格、图片，公式和 HTML 按文本显示或交给钩子；可选中，复制为文本、HTML 和 Markdown，Shift+Cmd+C 复制为 Markdown；正在生成的回复匀速显示、渐入 | 可用 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |

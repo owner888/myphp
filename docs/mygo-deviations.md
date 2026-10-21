@@ -109,6 +109,48 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Flush`, `Close`, callback).
   - Why: only Copy needed it so far.
 
+## Box model and setters
+
+- **Older setters under other names** (v0.85)
+  - mygo: `AlignItems`, `Radius`, `MinWidth`/`MinHeight`, `Width`/`Height`,
+    `Border(width, color)`, `Gap`, `Grow`, `Padding(v...)` on any element.
+  - myphp: `align()`, `round()`, `min($w, $h)`, `size($w, $h)`,
+    `border(?$color, $width)` (drawn over the padding, not inside it),
+    the `$gap` and `$grow` properties or `column($pad, $gap, $grow,
+    $color)`; mygo's names came only where myphp had none (`margin`,
+    `borderWidth`, `borderColor`, `background`, `shrink`, `paddingX`,
+    `paddingY`, `paddingStart`, `borderStartWidth`).
+  - Why: written before the naming rule; renaming them is a sweep over
+    the widgets and examples, to be decided.
+- **Text takes no padding or border** (v0.85)
+  - mygo: a text element has padding and borders as boxes do; a heading
+    with a rule is the text with a bottom border.
+  - myphp: text and rich text are leaves without them; the Markdown view
+    puts a heading with a rule in a box that draws it.
+  - Why: the text's origin is its node's corner throughout the painter and
+    the selection.
+
+## Markdown view
+
+- **Colors** (v0.85)
+  - mygo: `Theme` colors are `ui.Color`s with their alpha.
+  - myphp: `[0xRRGGBB, alpha]` pairs; a span's background has its own
+    opacity (`Span::$backgroundAlpha`), and borders take the color alone.
+  - Why: myphp's colors are ints.
+- **Images** (v0.85)
+  - mygo: `LoadImage` runs on a goroutine of its own and the view shows the
+    description until it is done; an image is at most 100% of the view's
+    width (`MaxWidthPercent`) with its aspect ratio (`AspectRatio`).
+  - myphp: the image loads on the main thread the first frame it is asked
+    for; it is fitted to the width its row had last frame.
+  - Why: PHP has no threads here; myphp has no percentage sizes or aspect
+    ratios yet.
+- **Right to left** (v0.85)
+  - mygo: code reads left to right in a right-to-left interface
+    (`Direction(LeftToRight)`), a quote's bar is on the side lines start.
+  - myphp: left to right only.
+  - Why: no right-to-left layout yet.
+
 ## Scrolling
 
 - **ScrollIntoView inside a List** (v0.84)

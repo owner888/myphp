@@ -1623,6 +1623,38 @@ line that could still turn into something else waits. PHP copies a
 substring where Go slices one: a text node merged into keeps only its
 offsets until its text is asked for, or long runs would be quadratic.
 
+`Markdown::view` and `Markdown::stream` are mygo's markdown.View and
+Stream (`MyPHP\UI\Markdown`): a column whose state (`ViewState`, kept by
+the runtime as the column's local) holds the `Document`, set to the text
+each frame, the resolved `Theme`, the paragraphs' spans by block
+(`Para`, made by `SpanBuilder` and made anew only when a block's range,
+revision or base style changed), the code blocks' tokens by chunks of 32
+lines (`CodeState`), the tables' column widths and how much of a stream
+shows (`RevealState`: a unit at a time at a pace catching up within
+`Reveal::$catchUp`, the text revealed fading in by its spans). Blocks
+are nodes (paragraphs rich text with links and footnote references as
+links inside them, lists rows of a marker and a column, quotes a
+column with a bar, code blocks a box with a copy button over a sideways
+scrolling row, tables rows of cells as wide as their columns' text),
+spaced by margins. The view is a Selectable container: Copy puts text
+(paragraphs apart by blank lines, a tight list's items by newlines,
+cells by tabs), HTML and Markdown on the clipboard, and Copy as
+Markdown, its context menu's or Shift+Cmd+C, the source between the
+selection's ends with the syntax cut there completed; each paragraph
+notes where its runes come from in the source (`Para::$marks`).
+
+The box model this needed is mygo's: `padding()` takes one to four
+sides, `margin()` four with `Node::AUTO` for an automatic margin,
+`borderWidth()` and `borderColor()` a border inside the edges, which the
+content sits inside of, `background()` a fill with its own opacity,
+`shrink()` how much a node gives up in an overflowing row, and a least
+width set with `min()` replaces its content's. A node's measured size
+includes its margins (`Layout::measure`), and arrange takes them off
+again, an automatic margin sharing the room the node does not need
+(`inMargins`); along a row or a column, automatic margins take the free
+space before justify does, and across, a node with one takes all the
+room and places itself in it.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

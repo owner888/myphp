@@ -116,7 +116,19 @@ final class Painter
                 if ($n->shadow !== null) {
                     $list->shadow($n->x, $n->y, $n->w, $n->h, 0x000000, $n->shadow[2], $radius, $n->shadow[1], 0, $n->shadow[0]);
                 }
-                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha, $radius);
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
+            }
+        }
+        [$bt, $br, $bb, $bl] = $n->borders;
+        if ($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
+            $bc = $n->borderColor ?? $t->border;
+            if ($bt === $br && $br === $bb && $bb === $bl) {
+                $list->ring($n->x, $n->y, $n->w, $n->h, $bc, $n->alpha, $n->radius, $bt);
+            } else {
+                if ($bt > 0) { $list->rect($n->x, $n->y, $n->w, $bt, $bc, $n->alpha); }
+                if ($bb > 0) { $list->rect($n->x, $n->y + $n->h - $bb, $n->w, $bb, $bc, $n->alpha); }
+                if ($bl > 0) { $list->rect($n->x, $n->y + $bt, $bl, $n->h - $bt - $bb, $bc, $n->alpha); }
+                if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
             }
         }
         if ($n->selected) {
@@ -609,7 +621,7 @@ final class Painter
                 if ($k < 0 || $spans[$k]->background === null) {
                     continue;
                 }
-                $sp = $spans[$k]; $ba = ($sp->alpha ?? 1.0) * $n->alpha;
+                $sp = $spans[$k]; $ba = ($sp->backgroundAlpha ?? $sp->alpha ?? 1.0) * $n->alpha;
                 if ($sp->radius > 0) { // hugging the glyphs, a little wider
                     $size = $line->glyphs[$i]->size;
                     $px = min($size * 0.22, $sp->radius);

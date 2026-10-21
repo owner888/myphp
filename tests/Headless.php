@@ -296,7 +296,8 @@ final class Headless
     {
         $from ??= $this->root;
         if ($from?->inert) { return []; } // a page going away has nothing to find
-        $out = $from?->text !== null && $from->text !== '' ? [$from->text] : [];
+        $shown = $from?->kind === Node::RICH ? $from->plainText() : $from?->text; // a rich text's, then that of the text inside it
+        $out = $shown !== null && $shown !== '' ? [$shown] : [];
         foreach ($from?->kids ?? [] as $k) { array_push($out, ...$this->texts($k)); }
         return $out;
     }
@@ -306,7 +307,7 @@ final class Headless
     {
         $from ??= $this->root;
         if ($from === null || $from->inert) { return null; }
-        if ($from->text === $text) { return $from; }
+        if (($from->kind === Node::RICH ? $from->plainText() : $from->text) === $text) { return $from; }
         foreach ($from->kids as $k) { if (($r = $this->byText($text, $k)) !== null) { return $r; } }
         return null;
     }

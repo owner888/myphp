@@ -28,7 +28,7 @@ final class Span
         /** From 100 to 900. */
         public ?int $weight = null,
         public bool $italic = false,
-        /** The opacity of $color and $background. */
+        /** The opacity of $color, and of $background unless $backgroundAlpha sets its own. */
         public ?float $alpha = null,
         /** Rounds the corners of the background, which then hugs the span's glyphs, a little wider than them, rather than filling the line, as code within text shows. */
         public float $radius = 0,
@@ -49,6 +49,8 @@ final class Span
          */
         public float $objectWidth = 0,
         public float $objectHeight = 0,
+        /** The opacity of $background, as a code span's tint. */
+        public ?float $backgroundAlpha = null,
     ) {}
 
     /** The span over $base: what it leaves unset, $base's (mygo's over). */
@@ -63,6 +65,7 @@ final class Span
         $s->decorationColor ??= $base->decorationColor;
         $s->decorationThickness ??= $base->decorationThickness;
         $s->background ??= $base->background;
+        $s->backgroundAlpha ??= $base->backgroundAlpha;
         $s->letterSpacing ??= $base->letterSpacing;
         $s->features ??= $base->features;
         $s->lang ??= $base->lang;
