@@ -1,0 +1,9 @@
+{
+  "name": "@myphp-plugins/watch",
+  "version": "0.1.0",
+  "description": "The page side of MyPHP's watch plugin: changes to the files in the directories the app lets its pages watch, over window.myphp.call",
+  "type": "module",
+  "exports": "./index.ts",
+  "types": "./index.ts",
+  "license": "MIT"
+}

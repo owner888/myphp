@@ -329,6 +329,38 @@ final class App
         ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('fire:'), ObjC::msg('p:l', ObjC::cls('NSNumber'), 'numberWithLong:', $id), $seconds);
     }
 
+    /**
+     * Watches the file or directory at $path, and with $opts->recursive the
+     * directories in it, but not those symlinks point to (mygo's
+     * WatchFiles). It returns once everything is watched; what is already
+     * there is not reported. Take the changes with FileWatcher::next().
+     *
+     * A file is watched through its directory, so that a file replaced, as
+     * editors save, is reported as written, one removed as removed, and one
+     * that appears again as created. When the directory itself (or the
+     * directory of the file) is removed, renamed or replaced, the watch
+     * reports a FileRemove of "." and ends: next() returns null. The app
+     * stops its watches when it quits.
+     */
+    public static function watchFiles(string $path, FileWatchOptions $opts = new FileWatchOptions): FileWatcher
+    {
+        if ($path === '') {
+            throw new \InvalidArgumentException('myphp: empty watch path');
+        }
+        if ($opts->maxEntries < 0) {
+            throw new \InvalidArgumentException('myphp: negative watch limit');
+        }
+        $debounce = $opts->debounce == 0 ? 0.05 : max($opts->debounce, 0.0);
+        $maxDelay = max($opts->maxDelay == 0 ? 0.5 : $opts->maxDelay, $debounce);
+        return new FileWatcher(Native\FileWatch\Fs::realpath($path), $debounce, $maxDelay, $opts->recursive, $opts->ignore, $opts->maxEntries === 0 ? 8192 : $opts->maxEntries);
+    }
+
+    /** @internal whether run() is running the event loop, which a wait must keep turning */
+    public static function running(): bool
+    {
+        return self::$nsApp !== null;
+    }
+
     /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenURL. */
     public static function openURL(string $url): void
     {

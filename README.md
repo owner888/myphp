@@ -67,6 +67,8 @@ Early. What works today, on macOS / Apple Silicon:
 | Rich text (mygo's ui/richtext): `Text` of attributed runs in styled paragraphs (headings, lists, task lists, quotes, code blocks, alignment, links, tags, attachments), persistent; `Document` with selection, typing attributes, undo and redo, and the Format commands; Markdown, HTML, RTF and JSON in and out; the editor (`RichText::editor`): word processors' shortcuts, Markdown shortcuts as you type, lists and tasks, undo of formats with the text, input methods, rich copy and paste | works (`examples/richtext`) |
 | Terminal (mygo's plugins/terminal): the user's shell, or any program, in a pseudo-terminal, emulated by Ghostty's libghostty-vt (mygo's build, loaded through FFI, downloaded into the cache once); colors, Unicode, the scrollback, full-screen programs, the Kitty keyboard protocol, the mouse, bracketed paste, hyperlinks, titles, OSC 52, pastes a program reads itself; selecting as Ghostty does, keybinds, Ghostty's themes, links opened with Command+click | works (`examples/terminal`) |
 | Plugins (mygo's Use), in PHP: `App::use(Plugin)` binds a plugin's service as `plugin:<name>`, its page side a TypeScript client of its own; a `CallContext` parameter tells the calling page and ends as it goes; `App::onQuit` | works |
+| File watches (mygo's WatchFiles): `App::watchFiles` on a file or a directory, recursive or not, `Ignore` leaving out what is never opened; batches of create, write, remove and rename once changes stop, a file saved as editors do a write, the end when the root goes away; kqueue through FFI | works |
+| watch (mygo's plugins/watch): pages watch the directories and files the app names (`src/Plugins/Watch/client/index.ts`, `@myphp-plugins/watch`), recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all, failures as codes that never say a path | works (`examples/watch`) |
 | fetch (mygo's plugins/fetch): pages make HTTP requests from PHP with a standard `fetch` (`src/Plugins/Fetch/client/index.ts`): no CORS, any header (Origin, Cookie, Host…), the body streamed as it arrives, aborting stops the request; libcurl, the system's, through FFI | works |
 | SQLite (mygo's plugins/sqlite): mygo's build of SQLite 3.53.4 and its shim through FFI; `Sqlite::open`, one statement at a time checked whole before it runs, parameters, `RETURNING`, transactions rolled back on any error, read-only connections, busy timeouts, FTS5, R*Tree and JSON; for pages, `App::use(Sqlite::plugin())` and `src/Plugins/Sqlite/client/index.ts` (`@myphp-plugins/sqlite`), connections owned by their page | works |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
@@ -138,6 +140,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh richtext         # a rich text editor with a toolbar of its formats
 ./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
 ./run.sh sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
+./run.sh watch [folder]   # a web page watching a folder through the PHP plugin; the buttons change files
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -226,6 +229,8 @@ App::run();
 | 富文本（mygo 的 ui/richtext）：带属性的文本段、带样式的段落（标题、列表、任务列表、引用、代码块、对齐、链接、标签、附件），持久化数据结构；`Document` 管选区、输入属性、撤销重做和格式命令；Markdown、HTML、RTF、JSON 双向转换；编辑器（`RichText::editor`）：文字处理软件的快捷键、边打边转的 Markdown 快捷写法、列表和任务、格式随文本一起撤销、输入法、富文本复制粘贴 | 可用（`examples/richtext`） |
 | 终端（mygo 的 plugins/terminal）：在伪终端里运行用户的 shell 或任意程序，由 Ghostty 的 libghostty-vt 模拟（mygo 编好的库，经 FFI 加载，首次运行下载到缓存）；颜色、Unicode、回滚缓冲、全屏程序、Kitty 键盘协议、鼠标、括号粘贴、超链接、标题、OSC 52、程序自己读取的粘贴；像 Ghostty 一样选择文本、快捷键绑定、Ghostty 的主题、Command+点击打开链接 | 可用（`examples/terminal`） |
 | 插件（mygo 的 Use），PHP 插件：`App::use(Plugin)` 把插件的服务绑定为 `plugin:<名字>`，网页侧是插件自带的 TypeScript 客户端；`CallContext` 参数告诉方法是哪个页面调用的，页面离开时结束；`App::onQuit` | 可用 |
+| 文件监视（mygo 的 WatchFiles）：`App::watchFiles` 监视文件或目录，可递归，`Ignore` 排除的目录从不打开；改动停下后成批给出 create、write、remove、rename，编辑器式保存算一次 write，根目录没了监视即结束；kqueue 经 FFI | 可用 |
+| watch（mygo 的 plugins/watch）：网页按名字监视应用开放的目录和文件（`src/Plugins/Watch/client/index.ts`，`@myphp-plugins/watch`），只在应用允许处递归，`Resolve` 与 `Allow`，每页和总数配额，失败只给代码、从不暴露路径 | 可用（`examples/watch`） |
 | fetch（mygo 的 plugins/fetch）：网页用标准的 `fetch`（`src/Plugins/Fetch/client/index.ts`）从 PHP 发 HTTP 请求：没有 CORS 限制，任意请求头（Origin、Cookie、Host…），响应体边收边流给页面，abort 即停止请求；用系统自带的 libcurl，经 FFI | 可用 |
 | SQLite（mygo 的 plugins/sqlite）：mygo 编好的 SQLite 3.53.4 和它的 C shim，经 FFI 调用；`Sqlite::open`，每次一条语句、执行前整体校验，参数绑定，`RETURNING`，出错整体回滚的事务，只读连接，忙等超时，FTS5、R*Tree、JSON；网页用 `App::use(Sqlite::plugin())` 和 `src/Plugins/Sqlite/client/index.ts`（`@myphp-plugins/sqlite`），连接归调用它的页面 | 可用 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
@@ -291,6 +296,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh richtext         # 富文本编辑器，带格式工具栏
 ./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
 ./run.sh sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
+./run.sh watch [folder]   # 网页经 PHP 插件监视一个文件夹；按钮会改动其中的文件
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass

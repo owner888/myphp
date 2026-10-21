@@ -328,6 +328,46 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Channel::wait()` between them while nothing came.
   - Why: one thread (the developer's choice of the mechanism).
 
+## File watches
+
+- **Waiting** (v0.93)
+  - mygo: `WatchFiles(ctx, path, opts)` runs a goroutine per watch, which
+    debounces and looks while the caller does something else; `Next(ctx)`
+    blocks, its context canceling the wait; canceling the watch's context
+    stops it; `Done()` is a channel, `Close()` returns an error; io.EOF
+    ends it.
+  - myphp: `App::watchFiles($path, $opts)` with no context; the watch
+    looks only inside `next(float $timeout = INF)`, which returns null at
+    the end (io.EOF), `[]` when the timeout passed (the context's
+    deadline), and throws the error that stopped it; `done(): bool`;
+    `close(): void`. What changed while `next()` wasn't called comes in
+    one batch, where mygo's goroutine had already taken a first one.
+  - Why: PHP runs the app on one thread.
+- **Durations, stats and handles** (v0.93)
+  - mygo: `Debounce` and `MaxDelay` are durations; modification times
+    have nanoseconds; the scan holds the root through `os.Root` and lists
+    directories through the handle it checked.
+  - myphp: seconds as floats; PHP's `lstat` gives whole seconds, so a
+    same-size change within a second shows only when the system reports
+    the write (it does, for files watched); paths are checked by `lstat`
+    before and after a directory is listed.
+  - Why: PHP's stat API; PHP has no openat.
+- **Linux** (v0.93)
+  - mygo: one inotify instance for the whole app.
+  - myphp: an instance per watch.
+  - Why: Linux is where myphp's tests run, not its apps; simpler.
+- **The watch plugin** (v0.93)
+  - mygo: `watch.Plugin`, `watch.New(Options)`; `Resolve` returns
+    `(Root, bool)`; `Resolve` and `Allow` take a `context.Context`; the
+    service's `Watch` blocks and returns `{}` or `{code, message}`; a call
+    not from a page is denied; the page side is `@mygo-plugins/watch`.
+  - myphp: `Watch::plugin()`, `Watch::new(Options)`; `$resolve` returns a
+    `Root` or null; both take the `CallContext`; `plugin:watch.watch` is a
+    generator yielding `Channel::wait` between polls; the page side is
+    `src/Plugins/Watch/client/index.ts` (`@myphp-plugins/watch`), the same
+    API and wire.
+  - Why: plugins are PHP (the developer's rule); one thread.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

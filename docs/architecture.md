@@ -1803,6 +1803,44 @@ encoding, redirects followed to 20 or returned (`manual`) or refused
 plugins' clients are tested over the real `bridge.js`
 (`src/Plugins/fake-myphp.ts`, mygo's fake-go.ts) with `bun test`.
 
+## File watches
+
+`App::watchFiles` is mygo's WatchFiles on the main thread. The scan
+(`Native\FileWatch\Scan`, mygo's watch_scan.go line for line) keeps what
+it saw of the tree, by slash-separated path, and the targets it enrolled
+in the backend; a notice only says where something changed, so an update
+lists or stats those places again and the events are the differences
+(`Scan::diff`, renames paired by identity). There are no goroutines:
+`FileWatcher::next()` polls the backend, marks the notices, runs the
+debounce against the clock and looks once it has passed, blocking in
+`kevent`/`poll` for at most the time left when the app isn't running, and
+turning the run loop (`App::wait`, 50 ms at a time) while it is. A watch
+looks only when `next()` is called, so what changed meanwhile waits in
+the system's queue and comes in one batch. The page plugin calls
+`next(0)` from its generator and yields `Channel::wait` between, 10 ms
+backing off to 100 ms.
+
+The backends (`Native\FileWatch\Backend`) are libc through FFI: kqueue on
+macOS, an `O_EVTONLY` descriptor per file and directory (mygo's darwin
+watch), checked by `fstat` against the scan's stat so that a replacement
+racing the enrollment is not watched; inotify on Linux, where the tests
+run, an instance per watch, read without blocking. As Go does at start,
+the first kqueue watch raises the soft limit of open files to the hard
+one, at most OPEN_MAX (10240): macOS gives a process 256, and a watch
+takes a descriptor per entry. Stats are PHP's `lstat` with its stat cache
+cleared first (it keeps the last path's), and when one fails libc's
+`lstat` again for its errno (`__error`, `__errno_location`), which PHP
+doesn't give, so that not found and permission denied are told apart as
+Go's errors are. PHP keeps array keys like "42" as integers, so the scan
+reads keys back as strings. The tests send notices through a fake backend
+(`Backends::$fake`, mygo's fake.FileWatch), then use the system's.
+
+The watch plugin (`Plugins\Watch`) maps the names pages use to roots
+checked at setup (symlinks resolved, every component an ordinary
+directory) and again at each watch, walks a page's path component by
+component without following symlinks, and counts each watch against its
+page (its `CallContext`) until the page goes away.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,
