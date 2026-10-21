@@ -20,12 +20,12 @@ if ($o['dir'] !== '' && $c->chdir($o['dir']) !== 0) {
     fwrite(STDERR, "pty: cannot change to {$o['dir']}\n");
 }
 $strings = function (array $list) use ($c): array {
-    $arr = FFI::new('char*[' . (count($list) + 1) . ']', false);
+    $arr = $c->new('char*[' . (count($list) + 1) . ']', false);
     $keep = [];
     foreach (array_values($list) as $i => $s) {
-        $keep[] = $b = FFI::new('char[' . (strlen($s) + 1) . ']', false);
+        $keep[] = $b = $c->new('char[' . (strlen($s) + 1) . ']', false);
         FFI::memcpy($b, $s . "\0", strlen($s) + 1);
-        $arr[$i] = FFI::cast('char*', FFI::addr($b[0]));
+        $arr[$i] = $c->cast('char*', FFI::addr($b[0]));
     }
     $arr[count($list)] = null;
     return [$arr, $keep];

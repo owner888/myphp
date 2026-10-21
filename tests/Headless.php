@@ -170,7 +170,8 @@ final class Headless
     /** Paints the root into a display list over an FFI buffer of $capacity quads, clipped to the window as the Window does, and returns the list (its ->n is the quad count). */
     public function paint(int $capacity = 65536): DisplayList
     {
-        $this->list ??= new DisplayList(\FFI::new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity, \FFI::new('float[' . (4096 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4096);
+        $ffi = \FFI::cdef();
+        $this->list ??= new DisplayList($ffi->new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity, $ffi->new('float[' . (4096 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4096);
         $this->list->pathQuad ??= fn(Path $p, float $w) => ($b = $p->bounds()) === null ? null : [$b[0], $b[1], $b[2] - $b[0], $b[3] - $b[1], 0, 0]; // a path's quad is its bounds; no mask
         $this->list->reset();
         $this->list->pushClip(0, 0, $this->w, $this->h);

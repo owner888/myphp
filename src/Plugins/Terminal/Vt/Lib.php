@@ -242,6 +242,13 @@ final class Lib
         self::$ffi = $ffi;
     }
 
+    /** An FFI of no library, for C values of plain types (FFI's static new() and cast() are deprecated). */
+    private static function plain(): FFI
+    {
+        static $c = null;
+        return $c ??= FFI::cdef();
+    }
+
     /** Whether load() succeeded. */
     public static function loaded(): bool { return self::$ffi !== null; }
 
@@ -251,8 +258,8 @@ final class Lib
         static $slot = null, $slotInt = null;
         if ($p === null) { return 0; }
         if ($slot === null) {
-            $slot = FFI::new('void*[1]');
-            $slotInt = FFI::cast('uint64_t[1]', $slot);
+            $slot = self::plain()->new('void*[1]');
+            $slotInt = self::plain()->cast('uint64_t[1]', $slot);
         }
         $slot[0] = $p;
         return $slotInt[0];
@@ -352,7 +359,7 @@ final class Lib
     public static function buffer(string $s): CData
     {
         $n = max(strlen($s), 1);
-        $b = FFI::new("uint8_t[$n]");
+        $b = self::plain()->new("uint8_t[$n]");
         FFI::memcpy($b, $s, strlen($s));
         return $b;
     }
