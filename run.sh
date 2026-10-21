@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | gen [out.ts]
+# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -26,6 +26,7 @@ case "$1" in
   terminal) exec $PHP $OPTS examples/terminal/main.php ;;
   sqlite)  exec $PHP $OPTS examples/sqlite/main.php ;;
   watch)   exec $PHP $OPTS examples/watch/main.php ${2:+"$2"} ;;
+  websocket) exec $PHP $OPTS examples/websocket/main.php ${2:+"$2"} ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | gen [out.ts]"; exit 1 ;;
 esac

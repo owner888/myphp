@@ -31,15 +31,16 @@
   class Channel {
     #id = 0;
     #closed = false;
-    #queue = [];
+    #queue = []; // {value, n, ask}
     #waiting = [];
     #onmessage = null;
+    #pushed = 0;
     onclose = null;
     get closed() { return this.#closed; }
     get onmessage() { return this.#onmessage; }
     set onmessage(fn) {
       this.#onmessage = fn;
-      while (fn && this.#queue.length > 0) fn(this.#queue.shift());
+      while (fn && this.#queue.length > 0) this.#take(this.#queue.shift(), fn);
     }
     /** Called by call(): the id PHP knows the channel by. */
     __attach() {
@@ -48,11 +49,18 @@
       channels.set(this.#id, this);
       return this.#id;
     }
-    __push(value) {
+    /** A value from PHP; ask: PHP waits to hear once it is taken (mygo's flow control). */
+    __push(value, ask) {
       if (this.#closed) return;
-      if (this.#onmessage) this.#onmessage(value);
-      else if (this.#waiting.length > 0) this.#waiting.shift()({ value, done: false });
-      else this.#queue.push(value);
+      const item = { value, n: ++this.#pushed, ask };
+      if (this.#onmessage) this.#take(item, this.#onmessage);
+      else if (this.#waiting.length > 0) this.#take(item, this.#waiting.shift(), true);
+      else this.#queue.push(item);
+    }
+    #take(item, fn, iterating) {
+      if (item.ask) post({ t: "chan-ack", c: this.#id, k: cfg.secret, n: item.n });
+      if (iterating) fn({ value: item.value, done: false });
+      else fn(item.value);
     }
     __end() {
       if (this.#closed) return;
@@ -71,7 +79,7 @@
     [Symbol.asyncIterator]() {
       return {
         next: () => {
-          if (this.#queue.length > 0) return Promise.resolve({ value: this.#queue.shift(), done: false });
+          if (this.#queue.length > 0) return new Promise((resolve) => this.#take(this.#queue.shift(), resolve, true));
           if (this.#closed) return Promise.resolve({ value: undefined, done: true });
           return new Promise((resolve) => this.#waiting.push(resolve));
         },
@@ -131,7 +139,7 @@
         const c = channels.get(msg.c);
         if (!c) return;
         if (msg.end) c.__end();
-        else c.__push(msg.p);
+        else c.__push(msg.p, msg.a === 1);
       }
     },
   };

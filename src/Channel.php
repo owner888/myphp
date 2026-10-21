@@ -29,14 +29,32 @@ namespace MyPHP;
  * Values arrive in order, before the call's result. The page may close
  * the channel (breaking out of the loop does): send() then throws
  * ChannelClosed, and a generator gets it thrown at its yield. Navigating
- * away or closing the window closes it too. There is no back-pressure:
- * calls run on the main thread, which must not wait for the page.
+ * away or closing the window closes it too.
+ *
+ * A generator waits while the page has more than a MiB of values yet to
+ * take (mygo's flow control), so a fast producer does not pile them up in
+ * the page's memory; send() itself never waits, as the main thread must
+ * not (mygo's Send on the main thread doesn't either).
  */
 final class Channel
 {
-    private bool $closed = false;
+    /** How many bytes of values may wait for the page to take them (mygo's channelWindow). The page acknowledges what it took when a value asks for it, once every half window. */
+    public const WINDOW = 1 << 20;
 
-    public function __construct(private readonly Window $window, public readonly int $id, private readonly string $secret) {}
+    private bool $closed = false;
+    /** Flow control, in bytes: sent, taken by the page as far as it said, and sent when an acknowledgment was last asked for. */
+    private int $seq = 0, $sent = 0, $taken = 0, $asked = 0;
+    /** @var list<array{0: int, 1: int}> the acknowledgments asked for: [seq, sent] */
+    private array $asks = [];
+    /** What runs once there is room again, or the channel closed. */
+    private ?\Closure $whenRoom = null;
+
+    /**
+     * @internal Window::openChannel() makes it
+     * @param \Closure(array<string, mixed>): void $deliver
+     * @param \Closure(): void $forget
+     */
+    public function __construct(private readonly \Closure $deliver, private readonly \Closure $forget, public readonly int $id, private readonly string $secret) {}
 
     /** What a streaming generator yields to send nothing now and go on $seconds later. */
     public static function wait(float $seconds): ChannelWait
@@ -50,7 +68,15 @@ final class Channel
         if ($this->closed) {
             throw new ChannelClosed("channel {$this->id} is closed");
         }
-        $this->window->page()->deliver(['t' => 'chan', 'c' => $this->id, 'k' => $this->secret, 'p' => $value]);
+        $m = ['t' => 'chan', 'c' => $this->id, 'k' => $this->secret, 'p' => $value];
+        $this->seq++;
+        $this->sent += strlen(json_encode($m, JSON_THROW_ON_ERROR)); // the whole message
+        if ($this->sent - $this->asked >= self::WINDOW / 2) {
+            $this->asked = $this->sent;
+            $this->asks[] = [$this->seq, $this->sent];
+            $m['a'] = 1;
+        }
+        ($this->deliver)($m);
     }
 
     /** Closes the channel: the page's iteration ends once it took what was sent. Called when the method returns. */
@@ -60,8 +86,9 @@ final class Channel
             return;
         }
         $this->closed = true;
-        $this->window->page()?->deliver(['t' => 'chan', 'c' => $this->id, 'k' => $this->secret, 'end' => true]);
-        $this->window->forgetChannel($this->id);
+        ($this->deliver)(['t' => 'chan', 'c' => $this->id, 'k' => $this->secret, 'end' => true]);
+        ($this->forget)();
+        $this->room();
     }
 
     public function isClosed(): bool
@@ -69,10 +96,45 @@ final class Channel
         return $this->closed;
     }
 
-    /** The page closed it, or went away: nothing more is sent, and the next send() throws. */
+    /** @internal whether the page is a window behind, so that a generator waits */
+    public function full(): bool
+    {
+        return !$this->closed && $this->sent - $this->taken >= self::WINDOW;
+    }
+
+    /** @internal runs $fn once the channel is no longer full(), at once if it isn't */
+    public function whenRoom(\Closure $fn): void
+    {
+        if (!$this->full()) {
+            $fn();
+            return;
+        }
+        $this->whenRoom = $fn;
+    }
+
+    /** @internal the page took the values up to the $seq-th (its chan-ack) */
+    public function ack(int $seq): void
+    {
+        while ($this->asks !== [] && $this->asks[0][0] <= $seq) {
+            $this->taken = array_shift($this->asks)[1];
+        }
+        $this->room();
+    }
+
+    /** @internal the page closed it, or went away: nothing more is sent, and the next send() throws */
     public function closedByPage(): void
     {
         $this->closed = true;
-        $this->window->forgetChannel($this->id);
+        ($this->forget)();
+        $this->room();
+    }
+
+    private function room(): void
+    {
+        if ($this->whenRoom !== null && !$this->full()) {
+            $fn = $this->whenRoom;
+            $this->whenRoom = null;
+            $fn();
+        }
     }
 }

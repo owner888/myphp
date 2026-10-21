@@ -18,8 +18,10 @@ use Throwable;
  * A Channel parameter streams values to the page (see Channel); a method
  * returning a Generator streams each yield through its first Channel
  * parameter and replies with the generator's return value, the run loop
- * turning between yields. "myphp:window.*" calls are the page's window
- * controls (window.myphp.window in the page).
+ * turning between yields. A generator without a Channel yields only
+ * Channel::wait(), for a method whose result comes later (one of mygo's
+ * that blocks on its goroutine). "myphp:window.*" calls are the page's
+ * window controls (window.myphp.window in the page).
  */
 final class Ipc
 {
@@ -74,9 +76,7 @@ final class Ipc
                 self::checkType($t, "$name.{$m->getName()}(\${$p->getName()})");
             }
             $rt = $m->getReturnType();
-            if ($rt instanceof ReflectionNamedType && $rt->getName() === Generator::class) {
-                $channels || throw new RuntimeException("Ipc: $name.{$m->getName()}() returns a Generator but has no Channel parameter to stream through");
-            } else {
+            if (!$rt instanceof ReflectionNamedType || $rt->getName() !== Generator::class) {
                 self::checkType($rt, "$name.{$m->getName()}()");
             }
             $methods[$m->getName()] = $m;
@@ -121,7 +121,8 @@ final class Ipc
             return null;
         }
         if ($t === 'chan-ack') {
-            return null; // no back-pressure: the main thread cannot wait for the page
+            $window->channel((int)($msg['c'] ?? 0))?->ack((int)($msg['n'] ?? 0));
+            return null;
         }
         $method = (string)($msg['m'] ?? '');
         $args = array_values($msg['a'] ?? []);
@@ -212,16 +213,18 @@ final class Ipc
 
     /**
      * Runs a generator one yield per run-loop turn: each yield goes to the
-     * first channel; a channel the page closed is thrown into the
-     * generator; the return value is the call's reply.
+     * first channel, waiting while the page is a window behind (mygo's flow
+     * control); a Channel::wait() goes on that much later; a channel the
+     * page closed is thrown into the generator; the return value is the
+     * call's reply. A generator without channels may only wait.
      * @param list<Channel> $channels
      */
     private static function pump(Generator $gen, array $channels, Window $window, int $id, string $secret): void
     {
-        $out = $channels[0];
+        $out = $channels[0] ?? null;
         $step = function () use (&$step, $gen, $channels, $out, $window, $id, $secret) {
             try {
-                if ($out->isClosed() && $gen->valid()) {
+                if ($out !== null && $out->isClosed() && $gen->valid()) {
                     $gen->throw(new ChannelClosed("channel {$out->id} is closed"));
                 }
                 if (!$gen->valid()) {
@@ -233,6 +236,13 @@ final class Ipc
                 if ($current instanceof ChannelWait) { // nothing to send yet: go on later
                     $gen->next();
                     App::after($current->seconds, $step);
+                    return;
+                }
+                if ($out === null) {
+                    throw new RuntimeException('Ipc: a generator without a Channel parameter may only yield Channel::wait()');
+                }
+                if ($out->full()) { // the page is behind: go on once it took some
+                    $out->whenRoom(fn() => App::later($step));
                     return;
                 }
                 $out->send($current);

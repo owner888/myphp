@@ -69,6 +69,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Plugins (mygo's Use), in PHP: `App::use(Plugin)` binds a plugin's service as `plugin:<name>`, its page side a TypeScript client of its own; a `CallContext` parameter tells the calling page and ends as it goes; `App::onQuit` | works |
 | File watches (mygo's WatchFiles): `App::watchFiles` on a file or a directory, recursive or not, `Ignore` leaving out what is never opened; batches of create, write, remove and rename once changes stop, a file saved as editors do a write, the end when the root goes away; kqueue through FFI | works |
 | watch (mygo's plugins/watch): pages watch the directories and files the app names (`src/Plugins/Watch/client/index.ts`, `@myphp-plugins/watch`), recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all, failures as codes that never say a path | works (`examples/watch`) |
+| WebSocket (mygo's plugins/websocket): pages open WebSocket connections from PHP with the browser's API (`src/Plugins/WebSocket/client/index.ts`, `@myphp-plugins/websocket`): any header in the handshake (Authorization, Cookie, Origin), subprotocols, text and binary messages in order, `bufferedAmount`, closing either way, connections ending with their page; libcurl, the system's, through FFI | works (`examples/websocket`) |
 | fetch (mygo's plugins/fetch): pages make HTTP requests from PHP with a standard `fetch` (`src/Plugins/Fetch/client/index.ts`): no CORS, any header (Origin, Cookie, Host…), the body streamed as it arrives, aborting stops the request; libcurl, the system's, through FFI | works |
 | SQLite (mygo's plugins/sqlite): mygo's build of SQLite 3.53.4 and its shim through FFI; `Sqlite::open`, one statement at a time checked whole before it runs, parameters, `RETURNING`, transactions rolled back on any error, read-only connections, busy timeouts, FTS5, R*Tree and JSON; for pages, `App::use(Sqlite::plugin())` and `src/Plugins/Sqlite/client/index.ts` (`@myphp-plugins/sqlite`), connections owned by their page | works |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
@@ -141,6 +142,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
 ./run.sh sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
 ./run.sh watch [folder]   # a web page watching a folder through the PHP plugin; the buttons change files
+./run.sh websocket [url]  # a WebSocket from a web page through the PHP plugin, to an echo server
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -231,6 +233,7 @@ App::run();
 | 插件（mygo 的 Use），PHP 插件：`App::use(Plugin)` 把插件的服务绑定为 `plugin:<名字>`，网页侧是插件自带的 TypeScript 客户端；`CallContext` 参数告诉方法是哪个页面调用的，页面离开时结束；`App::onQuit` | 可用 |
 | 文件监视（mygo 的 WatchFiles）：`App::watchFiles` 监视文件或目录，可递归，`Ignore` 排除的目录从不打开；改动停下后成批给出 create、write、remove、rename，编辑器式保存算一次 write，根目录没了监视即结束；kqueue 经 FFI | 可用 |
 | watch（mygo 的 plugins/watch）：网页按名字监视应用开放的目录和文件（`src/Plugins/Watch/client/index.ts`，`@myphp-plugins/watch`），只在应用允许处递归，`Resolve` 与 `Allow`，每页和总数配额，失败只给代码、从不暴露路径 | 可用（`examples/watch`） |
+| WebSocket（mygo 的 plugins/websocket）：网页用浏览器同款 API 从 PHP 建 WebSocket 连接（`src/Plugins/WebSocket/client/index.ts`，`@myphp-plugins/websocket`）：握手可带任意请求头（Authorization、Cookie、Origin），子协议，文本和二进制消息按序发送，`bufferedAmount`，双方都可关闭，连接随页面结束；用系统自带的 libcurl，经 FFI | 可用（`examples/websocket`） |
 | fetch（mygo 的 plugins/fetch）：网页用标准的 `fetch`（`src/Plugins/Fetch/client/index.ts`）从 PHP 发 HTTP 请求：没有 CORS 限制，任意请求头（Origin、Cookie、Host…），响应体边收边流给页面，abort 即停止请求；用系统自带的 libcurl，经 FFI | 可用 |
 | SQLite（mygo 的 plugins/sqlite）：mygo 编好的 SQLite 3.53.4 和它的 C shim，经 FFI 调用；`Sqlite::open`，每次一条语句、执行前整体校验，参数绑定，`RETURNING`，出错整体回滚的事务，只读连接，忙等超时，FTS5、R*Tree、JSON；网页用 `App::use(Sqlite::plugin())` 和 `src/Plugins/Sqlite/client/index.ts`（`@myphp-plugins/sqlite`），连接归调用它的页面 | 可用 |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
@@ -297,6 +300,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
 ./run.sh sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
 ./run.sh watch [folder]   # 网页经 PHP 插件监视一个文件夹；按钮会改动其中的文件
+./run.sh websocket [url]  # 网页经 PHP 插件连 WebSocket，默认连一个回显服务器
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass

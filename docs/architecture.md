@@ -1031,8 +1031,16 @@ parameter typed `MyPHP\Channel`. `send()` delivers `{t:"chan", c, k, p}`
 at once, `close()` `{..., end: true}`, and the page's `chan-close`
 (from `close()` or breaking out of `for await`) marks the channel closed
 so the next `send()` throws `ChannelClosed`; a new page (`dom-ready`) or
-the window closing closes them all. `chan-ack` is accepted and ignored:
-mygo's back-pressure makes the sender wait, which the main thread cannot.
+the window closing closes them all. Flow control is mygo's: a channel
+counts the bytes of the messages it sent, asks the page to acknowledge
+one every half of a 1 MiB window (`"a":1`), and the page posts
+`chan-ack` with the value's number once it takes it (from the iterator or
+`onmessage`), not when it arrives. `send()` never waits, as mygo's on the
+main thread doesn't; a generator does: `Ipc::pump` holds its next yield
+while the channel is a window ahead (`Channel::full`) and goes on when an
+acknowledgment makes room (`whenRoom`). A generator method without a
+`Channel` may only yield `Channel::wait()`, for a method whose reply comes
+later, as one of mygo's that blocks on its goroutine.
 A method returning a `Generator` is pumped by `Ipc::pump`: one yield per
 turn of the run loop through `App::later` (`performSelector:...afterDelay:
 0` on a helper object, batching what was queued), each yield sent on the
@@ -1789,7 +1797,7 @@ cannot block the main thread as mygo's goroutines do: a streaming
 generator yields `Channel::wait($seconds)`, which sends nothing and has
 `Ipc::pump` go on that much later (`App::after`), the run loop turning
 meanwhile. The fetch plugin is such a generator around libcurl, the
-system's (`/usr/lib/libcurl.4.dylib`), through FFI (`Fetch\Curl`): an easy
+system's (`/usr/lib/libcurl.4.dylib`), through FFI (`Plugins\Curl`): an easy
 handle a request on a multi handle of its own, `curl_multi_perform` each
 turn, its header and write callbacks (closures in a struct of function
 pointers) gathering the head and the body, every 2 ms while data flows,
@@ -1802,6 +1810,23 @@ encoding, redirects followed to 20 or returned (`manual`) or refused
 (`error`), the head of the final response told by its blank line. The
 plugins' clients are tested over the real `bridge.js`
 (`src/Plugins/fake-myphp.ts`, mygo's fake-go.ts) with `bun test`.
+
+The WebSocket plugin (`Plugins\WebSocket`) has libcurl only connect
+(`CONNECT_ONLY`, with TLS for wss and through a proxy by a tunnel) and
+keeps the handle in its multi handle, without which `curl_easy_send` and
+`curl_easy_recv` fail (CURLE_UNSUPPORTED_PROTOCOL). The opening handshake
+is written and read over them by the plugin, as Go's client writes it,
+and the frames are mygo's conn.go over a non-blocking `Transport`:
+`Conn::readMessage()` returns a message once its frames have all arrived,
+and frames written wait in a buffer the transport takes as it can.
+`connect` is a generator streaming the events, polling every 1 ms while
+data flows, backing off to 25 ms; `send` is a generator without a
+channel that waits for its turn (the page numbers its messages, as a Blob
+is read asynchronously) and replies once the transport took the frame,
+which is when the page's `bufferedAmount` goes down. Received messages
+wait in PHP while the page is behind, as the channel's flow control holds
+the generator. The tests' server (`tests/testdata/ws_server.php`) is the
+same `Conn` as a server over a PHP stream (`StreamTransport`).
 
 ## File watches
 

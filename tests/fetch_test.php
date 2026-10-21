@@ -12,7 +12,7 @@ use MyPHP\{CallContext, ChannelWait};
 use MyPHP\Plugins\Fetch\{Fetch, Options, Request, Service};
 
 try {
-    \MyPHP\Plugins\Fetch\Curl::ffi();
+    \MyPHP\Plugins\Curl::ffi();
 } catch (\Throwable $e) {
     echo "  skipped: fetch: {$e->getMessage()}\n";
     return;

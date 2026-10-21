@@ -7,8 +7,8 @@ import { readFileSync } from "node:fs";
 /** A call being handled. */
 export interface PhpCall {
   args: unknown[];
-  /** Sends a value on the channel passed as the i-th argument. */
-  send(i: number, value: unknown): void;
+  /** Sends a value on the channel passed as the i-th argument; ask asks the page to acknowledge it once taken (flow control). */
+  send(i: number, value: unknown, ask?: boolean): void;
   /** Aborted when the page closes a channel of the call. */
   signal: AbortSignal;
 }
@@ -18,8 +18,9 @@ export type Handler = (call: PhpCall) => unknown;
 interface Message { t: string; id: number; k: string; m: string; a: unknown[]; c: number }
 
 /** Installs window.myphp with handlers for methods; returns what was called. */
-export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, unknown[]][]; uninstall(): void } {
+export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, unknown[]][]; posted: Record<string, unknown>[]; uninstall(): void } {
   const calls: [string, unknown[]][] = [];
+  const posted: Record<string, unknown>[] = [];
   const aborts = new Map<number, AbortController>();
   const g = globalThis as unknown as { window?: unknown };
   const before = g.window;
@@ -30,6 +31,7 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
       myphp: {
         postMessage(raw: string) {
           const m = JSON.parse(raw) as Message;
+          posted.push(m as unknown as Record<string, unknown>);
           if (m.t === "chan-close") aborts.get(m.c)?.abort();
           if (m.t !== "call") return;
           calls.push([m.m, m.a]);
@@ -45,9 +47,9 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
               chans.forEach((c) => c && aborts.set(c, abort));
               const v = await handler({
                 args: m.a,
-                send(i, value) {
+                send(i, value, ask) {
                   if (abort.signal.aborted) throw new Error(`channel ${chans[i]} is closed`);
-                  deliver({ t: "chan", c: chans[i], k: m.k, p: value });
+                  deliver({ t: "chan", c: chans[i], k: m.k, p: value, ...(ask ? { a: 1 } : {}) });
                 },
                 signal: abort.signal,
               });
@@ -67,7 +69,7 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
   );
   new Function("window", "document", "addEventListener", source)(win, { addEventListener() {} }, () => {});
   g.window = win;
-  return { calls, uninstall: () => { g.window = before; } };
+  return { calls, posted, uninstall: () => { g.window = before; } };
 }
 
 export const tick = () => new Promise((r) => setTimeout(r, 1));

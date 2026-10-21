@@ -64,7 +64,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout (lines
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/ (libcurl); Watch/ (App::watchFiles)
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Plugins\Curl); Watch/ (App::watchFiles)
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
@@ -144,7 +144,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   the page's window controls; `WindowOptions::$preload` runs before the page.
   `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client.
   PHP plugins (`App::use`): service "plugin:<name>", page side its client/ (`bun test`, real
-  bridge.js via Plugins/fake-myphp.ts); `CallContext` param = the page's life; `Channel::wait`.
+  bridge.js via Plugins/fake-myphp.ts); `CallContext` param = the page's life; `Channel::wait`; generators wait on flow control.
 - **FFI discipline**: one FFI instance per bridge (structs are not shared
   across instances; foreign pointers pass `ObjC::import`); `objc_msgSend`
   cast per "ret:args" signature (`ObjC::MAP`), never variadic; callbacks

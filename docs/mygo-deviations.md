@@ -368,6 +368,26 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     API and wire.
   - Why: plugins are PHP (the developer's rule); one thread.
 
+## WebSocket
+
+- **The client** (v0.94)
+  - mygo: Go's `net/http` makes the handshake: `Options.Client`, a
+    `User-Agent` of Go's; `Allow` gets the `*http.Request`; durations.
+  - myphp: libcurl through FFI only connects, and the plugin writes the
+    handshake; no `Client` option and no `User-Agent`; `Options::$allow`
+    gets a `Request` (URL, headers); `$closeTimeout` in seconds.
+  - Why: as fetch, libcurl is the system's HTTP client through ext-ffi.
+- **The service** (v0.94)
+  - mygo: `Connect` and `Send` block on their goroutines; the page side is
+    `@mygo-plugins/websocket` over `mygo-runtime`, whose `Channel` takes an
+    onmessage function.
+  - myphp: `plugin:websocket.connect` and `send` are generators
+    (`send` without a channel, waiting with `Channel::wait`); the page
+    side is `src/Plugins/WebSocket/client/index.ts`
+    (`@myphp-plugins/websocket`), the same API and wire, setting the
+    channel's `onmessage`.
+  - Why: plugins are PHP (the developer's rule); one thread.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

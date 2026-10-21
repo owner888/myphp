@@ -395,7 +395,7 @@ final class Window
     /** The channel the page numbered $id, for a call just made (Ipc). */
     public function openChannel(int $id, string $secret): Channel
     {
-        return $this->channels[$id] = new Channel($this, $id, $secret);
+        return $this->channels[$id] = new Channel(fn(array $m) => $this->page()?->deliver($m), fn() => $this->forgetChannel($id), $id, $secret);
     }
 
     public function channel(int $id): ?Channel
@@ -403,7 +403,7 @@ final class Window
         return $this->channels[$id] ?? null;
     }
 
-    public function forgetChannel(int $id): void
+    private function forgetChannel(int $id): void
     {
         unset($this->channels[$id]);
     }
