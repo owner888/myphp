@@ -272,7 +272,7 @@ trait ViewPaint
     /** @param list<int> $runes */
     private static function str(array $runes): string
     {
-        return implode('', array_map(fn(int $r) => mb_chr($r, 'UTF-8') ?: "\u{FFFD}", $runes));
+        return implode('', array_map(fn(int $r) => ($c = mb_chr($r, 'UTF-8')) === false ? "\u{FFFD}" : $c, $runes)); // not ?:, which takes "0" for false
     }
 
     /** Glyphs as a layout of one line, for TextPainter::paintLayout(): their x from the left of the grid, their baseline at 0. @param list<Glyph> $glyphs */

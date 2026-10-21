@@ -38,6 +38,16 @@ TermClock::install();
 })();
 
 (function () {
+    // Digits are shaped as they are: "0" is no character missing.
+    $term = Terminal::new(new Options(conn: new TermPipe));
+    $term->feed('15:02:41 2026');
+    $tt = new TermTester($term);
+    $shaped = array_map(fn($k) => explode("\0", $k)[2], array_keys($term->v->shaped));
+    check(in_array('15:02:41 2026', $shaped, true), 'the row is shaped with its zeros: ' . json_encode($shaped, JSON_UNESCAPED_UNICODE));
+    $term->close();
+})();
+
+(function () {
     // The scrollback.
     $term = Terminal::new(new Options(conn: new TermPipe));
     $tt = new TermTester($term);
