@@ -218,10 +218,16 @@ final class Runtime
         $input->direct = $this->deliver(...);
         $this->openURL = fn(string $url) => null;
         $clip = '';
-        $this->writeClipboard = function (string $s) use (&$clip) { $clip = $s; };
         $this->readClipboard = function () use (&$clip): string { return $clip; };
-        $this->writeClipboardData = function (Data $d) use (&$clip) { // its text, as mygo's headless host keeps
+        $data = new Data;
+        $this->writeClipboard = function (string $s) use (&$clip, &$data) { $clip = $s; $data = Data::text($s); };
+        $this->writeClipboardData = function (Data $d) use (&$clip, &$data) { // its text, and the data whole, as mygo's headless host keeps
             try { $clip = $d->read(Format::TEXT); } catch (FormatUnavailable) { $clip = ''; }
+            $data = $d->formats() === [] ? new Data : $d->materialize($d->formats());
+        };
+        $this->readClipboardData = function (string ...$formats) use (&$data): Data {
+            $have = array_values(array_intersect($data->formats(), $formats));
+            return $have === [] ? new Data : $data->materialize($have);
         };
         $this->selection = new TextSelection();
         $this->initMenus();
@@ -229,6 +235,9 @@ final class Runtime
 
     /** Puts data on the clipboard, each representation of its items in the system's formats (mygo's WriteClipboardData): the window sets it to the system's pasteboard. @var Closure(Data): void */
     public Closure $writeClipboardData;
+
+    /** Reads the representations of $formats the clipboard holds, of each item (mygo's ReadClipboardData): the window sets it to the system's pasteboard. @var Closure(string ...): Data */
+    public Closure $readClipboardData;
 
     /** Write text to the clipboard and read it (mygo's Services' WriteClipboard and ReadClipboard), for what edits text itself, as a code editor: the window sets them to the system's pasteboard; without one, a clipboard of the runtime's own. */
     public Closure $writeClipboard, $readClipboard;

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
-use MyPHP\Transfer\{Data, Format, Item};
+use MyPHP\Transfer\{Data, Format, Item, Representation};
 
 /**
  * The general pasteboard: plain text, and data in several formats
@@ -66,6 +66,26 @@ final class Pasteboard
             throw new \RuntimeException('myphp: cannot write pasteboard items');
         }
         self::$source['change'] = ObjC::msg('l:', $board, 'changeCount');
+    }
+
+    /**
+     * The representations of $formats on the pasteboard, of each of its
+     * items, read in the system's types (mygo's ReadData): data of no items
+     * when it holds none of them.
+     */
+    public static function readData(string ...$formats): Data
+    {
+        $board = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
+        $items = [];
+        foreach (Drag::array(ObjC::msg('p:', $board, 'pasteboardItems')) as $pb) {
+            $reps = [];
+            foreach ($formats as $f) {
+                $d = ObjC::msg('p:p', $pb, 'dataForType:', ObjC::str(Drag::macType($f)));
+                if ($d !== null) { $reps[] = Representation::bytes($f, Drag::bytes($d)); }
+            }
+            if ($reps !== []) { $items[] = new Item(...$reps); }
+        }
+        return new Data(...$items);
     }
 
     /** The system's types of an item's formats (mygo's macClipboardTypes). @return list<string> */

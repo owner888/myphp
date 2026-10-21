@@ -1655,6 +1655,48 @@ again, an automatic margin sharing the room the node does not need
 space before justify does, and across, a node with one takes all the
 room and places itself in it.
 
+## Rich text
+
+`MyPHP\UI\RichText` is mygo's ui/richtext. A `Text` is a value: a rope
+of its runes (the code editor's `Rope`) and a persistent sequence of its
+paragraphs (`Seq`, an AVL tree of leaves of 32, as mygo's seq), aligned
+with the rope's lines; each paragraph (`RichPara`) has an identity, a
+`ParagraphStyle` and runs of `Attributes` as `[runes, attributes]`,
+its last run its newline (or the text's end), whose attributes are
+those typing gets in it. Every method returns a new text sharing what
+did not change, so undo keeps versions. Attributes and styles in a text
+never change: what a text hands out, and what a format's closure gets,
+is a copy, and runs are joined when their attributes are `equals()`.
+`Document` holds the text, the selection, the typing attributes and the
+steps of undo (`UndoStep`: the texts before and after, the selections,
+the region changed), with a log of changes (`Change`) for the editor to
+lay out only what changed; `Edit` changes it as one step, its offsets
+following the edit's own changes. The commands of a toolbar or a
+Format menu are `DocumentCommands`. The codecs are mygo's: Markdown
+written by `MarkdownWriter` (marks as HTML where their delimiters
+cannot flank, checked by reading the result back) and read by
+`MarkdownReader` over the Markdown parser; HTML written by `HtmlWriter`
+and read by `HtmlBuilder` over a small tree builder of its own
+(`HtmlNode`); RTF read by `RtfReader`; and JSON, the clipboard's own
+format (`Clip`), which pastes the last copy of this process whole.
+
+`RichText::editor` is mygo's richtext.Editor: a focusable column whose
+local state, a `View`, follows its document each frame (`sync`, through
+the document's log of changes, so that a keystroke lays out again only
+its paragraph), lays out only the paragraphs in view (a `ParaView` each,
+its `ParaLayout` the text system's layout of its spans, kept until the
+paragraph, the composition in it or the look change; their heights in
+Fenwick trees, `Heights`, estimated for those not laid out), and paints
+them in its draw function: code blocks' and quotes' backgrounds, the
+selection, the text (`Painter::paintSpans`, shared with rich text
+nodes), attachments, list markers, the composition's underline, the caret
+and a scroll bar. It takes keys as they come (`handleInput`) and text
+from the input methods as their client (`TextInputClient`), every edit a
+step of the document's undo, typing joined into one; the Markdown
+shortcuts run after a character is typed. Copy writes the editor's JSON,
+HTML and plain text; Paste reads the richest of those, RTF and Markdown
+(`Runtime::$readClipboardData`, the pasteboard's `readData`).
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

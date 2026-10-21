@@ -70,8 +70,81 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Grid and flex margins** (v0.81)
   - mygo: `Margin`, `MarginX`, `MarginY`, `MarginStart`, `MarginEnd`,
     automatic margins.
-  - myphp: none.
-  - Why: not ported yet; it comes with the Markdown view, which uses it.
+  - myphp: `margin()`, `marginX()`, `marginY()` with automatic margins
+    since v0.85; no `marginStart()` or `marginEnd()`.
+  - Why: the Markdown view needed only those; the others come with
+    right-to-left layout.
+
+## Rich text
+
+- **Value types as classes** (v0.86)
+  - mygo: `Text`, `Attributes`, `ParagraphStyle` are comparable values;
+    a format's closure gets a pointer to change.
+  - myphp: classes; a `Text` never changes what it holds and hands out
+    copies (`attributesAt()`, `paragraphStyleAt()`, `paragraphs()`,
+    `runs()`), a format's closure gets a copy to change, equality is
+    `equals()`; runs are `[runes, Attributes]` pairs.
+  - Why: PHP objects are references.
+- **Colors** (v0.86)
+  - mygo: `Attributes.Color` and `Background` are `ui.Color`s, zero for
+    none.
+  - myphp: `[0xRRGGBB, alpha]` or null, as the Markdown theme's.
+  - Why: myphp's colors are ints.
+- **Constructors and enums** (v0.86)
+  - mygo: `NewText`, `TextOf`, `NewDocument`, `Text{}`; `ListKind` and
+    `FormatState` constants; `ParseMarkdown`, `ParseHTML`, `ParseRTF`,
+    `Format`, `RTF` in the package; `Text.String()`; `MarshalJSON` and
+    `UnmarshalJSON` the json package's.
+  - myphp: `Text::new()`, `Text::of()`, `new Document($text)`,
+    `new Text`; the enums `ListKind` and `FormatState` with mygo's case
+    names; `RichText::parseMarkdown()`, `parseHTML()`, `parseRTF()`,
+    `RichText::FORMAT`, `RichText::RTF`; `Text::string()`;
+    `marshalJSON()` and the static `Text::unmarshalJSON()`, which throws
+    on what is not JSON. Several results are arrays: `selection()`,
+    `paragraphRange()`; `paragraphs()` and `runs()` are generators keyed
+    by the rune each starts at. Alignment is `Params::START`, `CENTER`,
+    `END`.
+  - Why: PHP has no package functions to autoload, no multiple results.
+- **No lock** (v0.86)
+  - mygo: `Document`'s methods take a mutex, safe from any goroutine.
+  - myphp: none; its fields are public, `@internal`, for the editor.
+  - Why: PHP runs the app on one thread.
+- **The HTML parser** (v0.86)
+  - mygo: `golang.org/x/net/html`, a whole HTML5 tree builder.
+  - myphp: `HtmlNode::parse`, a small one: tags, attributes, entities,
+    raw text, void elements and the end tags HTML implies, without the
+    adoption agency that reparents misnested formatting.
+  - Why: no dependency; a paste's HTML is well formed enough.
+
+- **The editor's layouts** (v0.87)
+  - mygo: `ui.ShapeRichTextWith`, `ui.TextLayout` (UTF-16 offsets) and
+    `Painter.TextLayout` are the ui package's, which the editor uses.
+  - myphp: the editor's own `ParaLayout` (`@internal`, rune offsets),
+    painted by `Painter::paintSpans`, which rich text nodes share; images
+    by `Painter::picture`.
+  - Why: `MyPHP\UI\TextLayout` is the legacy wrapping of text fields;
+    a public shaped-layout API is to be decided.
+- **The editor's options and look** (v0.87)
+  - mygo: `EditorOptions.Font` is a `ui.Font`; `Editor` returns an
+    element the app fills (`Fill()`); an attachment's `Draw` takes a
+    `*ui.Painter`; theme colors are `ui.Color`s.
+  - myphp: `$font` and `$fontSize`; the app sizes the node (`size()`,
+    `$grow`); `draw` takes the `DisplayList` and the box; colors are
+    `[0xRRGGBB, alpha]`.
+  - Why: myphp's builders and colors.
+- **macOS only** (v0.87)
+  - mygo: Ctrl in place of Command elsewhere, Ctrl+L, E, R align, Alt
+    and Ctrl move by words and paragraphs as Windows and GTK do.
+  - myphp: macOS's keys alone.
+  - Why: myphp runs on macOS.
+- **The editor's menu and accessibility** (v0.87)
+  - mygo: the context menu is `EditItems()`; assistive technology reads
+    the runs' formats (`AccessTextRun`) and can select text
+    (`InputSelect`).
+  - myphp: Cut, Copy, Paste and Select All built by the editor's menu
+    function; the text, selection and placeholder only.
+  - Why: myphp's `editItems()` knows text fields and selectable text,
+    and its `AccessNode` has no runs nor a text selection action.
 
 ## Selecting text
 
@@ -105,9 +178,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **The clipboard's data** (v0.82)
   - mygo: darwin `clipboard.go` writes, reads, flushes and closes data,
     with a released callback.
-  - myphp: `Pasteboard::writeData` alone (no `ReadData`, `Formats`,
-    `Flush`, `Close`, callback).
-  - Why: only Copy needed it so far.
+  - myphp: `Pasteboard::writeData` and, since v0.87, `readData`
+    (`Runtime::$readClipboardData`); no `Formats`, `Flush`, `Close` or
+    callback.
+  - Why: only Copy and the rich text editor's Paste needed them so far.
 
 ## Box model and setters
 

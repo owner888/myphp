@@ -120,6 +120,7 @@ final class Window
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->writeClipboardData = Pasteboard::writeData(...);
+            $this->runtime->readClipboardData = Pasteboard::readData(...);
             $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen): void {
                 $wire = function (array $items) use (&$wire, $chosen): void { // each item reports its place
                     foreach ($items as $it) {

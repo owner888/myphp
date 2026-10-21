@@ -286,22 +286,34 @@ final class Painter
     /** Draws an image, or an SVG in its own colors, in the node's box as its fit says (mygo's Painter.image: fitIn, drawBitmap, drawSVG), rounded, faded, gray if asked. */
     private static function image(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
     {
+        self::picture($list, $text, $n->svg ?? $n->image, $n->x, $n->y, $n->w, $n->h, $n->fit, $n->fg !== 0 ? $n->fg : $t->text, $n->alpha, $n->radius, $n->gray);
+    }
+
+    /**
+     * Draws a bitmap or an SVG in the box ($x, $y, $w, $h) as $fit says
+     * (Node::CONTAIN…), an SVG's current color $rgb, as an image node draws
+     * its picture (mygo's Painter.Image).
+     *
+     * @internal
+     */
+    public static function picture(DisplayList $list, TextPainter $text, Image|SVG $pic, float $x, float $y, float $w, float $h, int $fit, int $rgb, float $alpha = 1.0, float $radius = 0.0, bool $gray = false): void
+    {
         $scale = $text->scale();
         // The picture's own size in points: a bitmap's pixels as the image laid it out, an SVG's size.
-        [$iw, $ih] = $n->svg !== null ? [$n->svg->w, $n->svg->h] : [$n->image->w / $scale, $n->image->h / $scale];
+        [$iw, $ih] = $pic instanceof SVG ? [$pic->w, $pic->h] : [$pic->w / $scale, $pic->h / $scale];
         if ($iw <= 0 || $ih <= 0) { return; }
-        [$dst, $frac, $fw, $fh] = self::fitIn($n->x, $n->y, $n->w, $n->h, $iw, $ih, $n->fit);
+        [$dst, $frac, $fw, $fh] = self::fitIn($x, $y, $w, $h, $iw, $ih, $fit);
         if ($dst[2] <= 0 || $dst[3] <= 0) { return; }
-        if ($n->svg !== null) {
-            $s = $text->svgSlot($n->svg, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $n->fg !== 0 ? $n->fg : $t->text);
+        if ($pic instanceof SVG) {
+            $s = $text->svgSlot($pic, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $rgb);
         } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
-            $shrink = min($frac[2] * $n->image->w / ($dst[2] * $scale), $frac[3] * $n->image->h / ($dst[3] * $scale));
-            $s = $text->imageSlot($n->image->smaller($shrink));
+            $shrink = min($frac[2] * $pic->w / ($dst[2] * $scale), $frac[3] * $pic->h / ($dst[3] * $scale));
+            $s = $text->imageSlot($pic->smaller($shrink));
         }
         $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box
         $u = $s['u'] + (int)round($frac[0] * $sw); $v = $s['v'] + (int)round($frac[1] * $sh);
         $cw = max(1, (int)round($frac[2] * $sw)); $ch = max(1, (int)round($frac[3] * $sh));
-        $list->image($dst[0], $dst[1], $dst[2], $dst[3], $u, $v, $cw, $ch, $s['page'], $n->alpha, $n->radius, $n->gray);
+        $list->image($dst[0], $dst[1], $dst[2], $dst[3], $u, $v, $cw, $ch, $s['page'], $alpha, $radius, $gray);
     }
 
     /**
@@ -589,9 +601,30 @@ final class Painter
         $l = $n->textLayout();
         $ts = $n->textStyle();
         $x = $n->x; $y = $n->y;
-        $color = $ts->color ?? $n->fg;
-        $alpha = ($ts->alpha ?? 1.0) * $n->alpha;
-        $spans = $n->spans;
+        $under = null;
+        if (($sel = $rt?->textSelectionOf($n->id)) !== null) { // over the backgrounds, under the glyphs and lines
+            $under = function () use ($list, $l, $sel, $x, $y, $ts, $t): void {
+                foreach ($l->selection($sel[0], $sel[1]) as [$sx, $sy, $sw, $sh]) {
+                    $list->rect($x + $sx, $y + $sy, $sw, $sh, $ts->selection ?? $t->selection, $ts->selection !== null ? ($ts->selectionAlpha ?? 1.0) : $t->selectionAlpha);
+                }
+            };
+        }
+        self::paintSpans($list, $text, $l, $n->spans, $x, $y, $ts->color ?? $n->fg, ($ts->alpha ?? 1.0) * $n->alpha, $n->alpha, $ts, $under);
+        self::paintInline($n, $list, $t);
+    }
+
+    /**
+     * Paints layout $l of $spans at ($x, $y), as rich text shows: the text's
+     * background and the spans', what $under paints over them, the glyphs in
+     * their spans' colors or $color, and the underlines and strikethroughs
+     * of the spans and of $ts (mygo's Painter.TextLayout). $nodeAlpha dims
+     * the spans' own colors, as a node's opacity.
+     *
+     * @internal
+     * @param list<Span> $spans
+     */
+    public static function paintSpans(DisplayList $list, TextPainter $text, \MyPHP\Text\Layout $l, array $spans, float $x, float $y, int $color, float $alpha, float $nodeAlpha = 1.0, ?TextStyle $ts = null, ?\Closure $under = null): void
+    {
         $ends = []; $end = 0;
         foreach ($spans as $sp) { $end += mb_strlen($sp->text, 'UTF-8'); $ends[] = $end; }
         $at = static function (int $r) use ($ends): int { // the span holding rune $r, or -1
@@ -614,14 +647,14 @@ final class Painter
             return $out;
         };
         foreach ($l->lines as $line) { // the backgrounds, under the glyphs
-            if ($ts->background !== null && $line->width > 0) {
+            if ($ts?->background !== null && $line->width > 0) {
                 $list->rect($x + $line->x, $y + $line->y, $line->width, $line->height, $ts->background, $alpha);
             }
             foreach ($runs($line) as [$k, $i, , $x0, $x1]) {
                 if ($k < 0 || $spans[$k]->background === null) {
                     continue;
                 }
-                $sp = $spans[$k]; $ba = ($sp->backgroundAlpha ?? $sp->alpha ?? 1.0) * $n->alpha;
+                $sp = $spans[$k]; $ba = ($sp->backgroundAlpha ?? $sp->alpha ?? 1.0) * $nodeAlpha;
                 if ($sp->radius > 0) { // hugging the glyphs, a little wider
                     $size = $line->glyphs[$i]->size;
                     $px = min($size * 0.22, $sp->radius);
@@ -631,20 +664,16 @@ final class Painter
                 }
             }
         }
-        if (($sel = $rt?->textSelectionOf($n->id)) !== null) { // over the backgrounds, under the glyphs and lines
-            foreach ($l->selection($sel[0], $sel[1]) as [$sx, $sy, $sw, $sh]) {
-                $list->rect($x + $sx, $y + $sy, $sw, $sh, $ts->selection ?? $t->selection, $ts->selection !== null ? ($ts->selectionAlpha ?? 1.0) : $t->selectionAlpha);
-            }
-        }
-        $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $n): array {
+        if ($under !== null) { $under(); }
+        $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $nodeAlpha): array {
             $k = $at($r);
             if ($k < 0 || $spans[$k]->color === null && $spans[$k]->alpha === null) {
                 return [$color, $alpha];
             }
-            return [$spans[$k]->color ?? $color, ($spans[$k]->alpha ?? 1.0) * $n->alpha];
+            return [$spans[$k]->color ?? $color, ($spans[$k]->alpha ?? 1.0) * $nodeAlpha];
         });
         $sys = $text->textSystem(); $scale = $text->scale();
-        $base = [$ts->underline ?? false, $ts->wavy ?? false, $ts->strike ?? false, $ts->decoColor, $ts->decoThick ?? 0.0];
+        $base = [$ts?->underline ?? false, $ts?->wavy ?? false, $ts?->strike ?? false, $ts?->decoColor, $ts?->decoThick ?? 0.0];
         foreach ($l->lines as $li => $line) {
             foreach ($runs($line) as [$k, $i, $j]) {
                 if ($k < 0) {
@@ -653,14 +682,13 @@ final class Painter
                 $sp = $spans[$k];
                 $d = [$sp->underline || $sp->wavyUnderline, $sp->wavyUnderline, $sp->strikethrough, $sp->decorationColor ?? $base[3], $sp->decorationThickness ?? $base[4]];
                 if ($d[0] || $d[2]) {
-                    self::decorationRun($list, $sys, $l, $li, $i, $j, $x, $y, $scale, $d, $sp->color ?? $color, ($sp->alpha ?? 1.0) * $n->alpha);
+                    self::decorationRun($list, $sys, $l, $li, $i, $j, $x, $y, $scale, $d, $sp->color ?? $color, ($sp->alpha ?? 1.0) * $nodeAlpha);
                 }
             }
             if ($base[0] || $base[2]) {
                 self::decorationRun($list, $sys, $l, $li, 0, count($line->glyphs), $x, $y, $scale, $base, $color, $alpha);
             }
         }
-        self::paintInline($n, $list, $t);
     }
 
     /**

@@ -339,8 +339,8 @@ final class Drag
         ($src['request']['done'])(new Result($op, $op === Operation::NONE && $src['error'] === null, $src['error']));
     }
 
-    /** @return list<mixed> */
-    private static function array($a): array
+    /** The objects of an NSArray. @internal @return list<mixed> */
+    public static function array($a): array
     {
         $out = [];
         for ($i = 0, $n = $a === null ? 0 : ObjC::msg('L:', $a, 'count'); $i < $n; $i++) {
@@ -349,7 +349,8 @@ final class Drag
         return $out;
     }
 
-    private static function bytes($data): string
+    /** The bytes of an NSData. @internal */
+    public static function bytes($data): string
     {
         $n = ObjC::msg('L:', $data, 'length');
         return $n === 0 ? '' : \FFI::string(ObjC::$c->cast('char*', ObjC::msg('p:', $data, 'bytes')), $n);
