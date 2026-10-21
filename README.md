@@ -136,6 +136,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh richtext         # a rich text editor with a toolbar of its formats
 ./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
+./run.sh sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -287,6 +288,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh richtext         # 富文本编辑器，带格式工具栏
 ./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
+./run.sh sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass
