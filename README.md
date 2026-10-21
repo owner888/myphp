@@ -65,6 +65,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Markdown parser (mygo's ui/markdown/parser): CommonMark 0.31.2 and GitHub's extensions (all their examples), footnotes, math; text appended or edited parsed again only where it changed; a streaming reply's half-written end healed | works |
 | Markdown view and stream (mygo's ui/markdown): headings, paragraphs with links and footnote references, lists and task lists, quotes, highlighted code blocks with a copy button, tables, images, math and HTML as text or by hooks; selectable, copied as text, HTML and Markdown, or as Markdown with Shift+Cmd+C; a reply being written revealed at an even pace, fading in | works |
 | Rich text (mygo's ui/richtext): `Text` of attributed runs in styled paragraphs (headings, lists, task lists, quotes, code blocks, alignment, links, tags, attachments), persistent; `Document` with selection, typing attributes, undo and redo, and the Format commands; Markdown, HTML, RTF and JSON in and out; the editor (`RichText::editor`): word processors' shortcuts, Markdown shortcuts as you type, lists and tasks, undo of formats with the text, input methods, rich copy and paste | works (`examples/richtext`) |
+| Terminal (mygo's plugins/terminal): the user's shell, or any program, in a pseudo-terminal, emulated by Ghostty's libghostty-vt (mygo's build, loaded through FFI, downloaded into the cache once); colors, Unicode, the scrollback, full-screen programs, the Kitty keyboard protocol, the mouse, bracketed paste, hyperlinks, titles, OSC 52, pastes a program reads itself; selecting as Ghostty does, keybinds, Ghostty's themes, links opened with Command+click | works (`examples/terminal`) |
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | Scrolling a node into view (mygo's ScrollIntoView), and the focus Tab brings into view, through nested scrolling containers | works |
@@ -132,6 +133,7 @@ php tests/run.php                      # the headless tests of the UI (no window
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
 ./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
 ./run.sh richtext         # a rich text editor with a toolbar of its formats
+./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -218,6 +220,7 @@ App::run();
 | Markdown 解析器（mygo 的 ui/markdown/parser）：CommonMark 0.31.2 和 GitHub 扩展（规范示例全部通过）、脚注、公式；追加或编辑的文本只重新解析改动处；流式回复末尾写到一半的语法自动补全 | 可用 |
 | Markdown 视图与流式视图（mygo 的 ui/markdown）：标题、带链接和脚注引用的段落、列表和任务列表、引用、带复制按钮的高亮代码块、表格、图片，公式和 HTML 按文本显示或交给钩子；可选中，复制为文本、HTML 和 Markdown，Shift+Cmd+C 复制为 Markdown；正在生成的回复匀速显示、渐入 | 可用 |
 | 富文本（mygo 的 ui/richtext）：带属性的文本段、带样式的段落（标题、列表、任务列表、引用、代码块、对齐、链接、标签、附件），持久化数据结构；`Document` 管选区、输入属性、撤销重做和格式命令；Markdown、HTML、RTF、JSON 双向转换；编辑器（`RichText::editor`）：文字处理软件的快捷键、边打边转的 Markdown 快捷写法、列表和任务、格式随文本一起撤销、输入法、富文本复制粘贴 | 可用（`examples/richtext`） |
+| 终端（mygo 的 plugins/terminal）：在伪终端里运行用户的 shell 或任意程序，由 Ghostty 的 libghostty-vt 模拟（mygo 编好的库，经 FFI 加载，首次运行下载到缓存）；颜色、Unicode、回滚缓冲、全屏程序、Kitty 键盘协议、鼠标、括号粘贴、超链接、标题、OSC 52、程序自己读取的粘贴；像 Ghostty 一样选择文本、快捷键绑定、Ghostty 的主题、Command+点击打开链接 | 可用（`examples/terminal`） |
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
@@ -279,6 +282,7 @@ php tests/run.php                      # UI 的无窗口测试：布局、按键
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时
 ./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
 ./run.sh richtext         # 富文本编辑器，带格式工具栏
+./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass

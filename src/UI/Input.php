@@ -14,6 +14,8 @@ final class Input
     public float $mouseX = -1, $mouseY = -1;
     public bool $mouseInside = false;
     public bool $mouseDown = false;
+    /** The modifiers held (Key::SHIFT…), as of the last key, flag change or pointer event (mygo's Context.Modifiers). */
+    public int $mods = 0;
     /** @var list<array> ['down'|'up'|'move'|'drag'|'scroll'|'key'|'command'|'insert'|'accessOn'|'access', ...] in arrival order; down and up carry x, y, button, click count, modifier flags; access an action of assistive technology: id, AccessNode action, text, from, to */
     public array $events = [];
 

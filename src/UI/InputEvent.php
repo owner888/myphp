@@ -10,8 +10,10 @@ namespace MyPHP\UI;
  */
 final class InputEvent
 {
-    /** A key with the modifiers held; a key that types text comes before the text. */
+    /** A key with the modifiers held; a key that types text comes before the text, which comes only when the node leaves the key. */
     public const KEY_DOWN = 1;
+    /** A key released, with the modifiers held, to the node that has the keyboard focus. */
+    public const KEY_UP = 2;
     /** Text typed, or committed by an input method. */
     public const TEXT = 3;
     /** An edit command of the menus, as "copy", "cut", "paste", "selectAll", "undo", "redo" or "delete". */
@@ -37,5 +39,7 @@ final class InputEvent
         public int $clicks = 0,
         public float $dx = 0.0, public float $dy = 0.0,
         public bool $precise = false,
+        /** Marks a KEY_DOWN as the auto-repeat of a key held down. */
+        public bool $repeat = false,
     ) {}
 }

@@ -229,6 +229,7 @@ final class Runtime
             $have = array_values(array_intersect($data->formats(), $formats));
             return $have === [] ? new Data : $data->materialize($have);
         };
+        $this->clipboardFormats = function () use (&$data): array { return $data->formats(); };
         $this->selection = new TextSelection();
         $this->initMenus();
     }
@@ -238,6 +239,9 @@ final class Runtime
 
     /** Reads the representations of $formats the clipboard holds, of each item (mygo's ReadClipboardData): the window sets it to the system's pasteboard. @var Closure(string ...): Data */
     public Closure $readClipboardData;
+
+    /** The formats on the clipboard, without reading them, as a paste decides what to read (mygo's ClipboardFormats): the window sets it to the system's pasteboard. @var Closure(): list<string> */
+    public Closure $clipboardFormats;
 
     /** Write text to the clipboard and read it (mygo's Services' WriteClipboard and ReadClipboard), for what edits text itself, as a code editor: the window sets them to the system's pasteboard; without one, a clipboard of the runtime's own. */
     public Closure $writeClipboard, $readClipboard;
@@ -1331,11 +1335,11 @@ final class Runtime
             case 'move':
                 if ($this->captured !== null) { return true; } // the press's node takes the moves, as drags
                 $id = $this->inputAt($e[1], $e[2]);
-                $ev = new InputEvent(InputEvent::POINTER_MOVE, button: -1);
+                $ev = new InputEvent(InputEvent::POINTER_MOVE, mods: $this->input->mods, button: -1);
                 break;
             case 'drag':
                 $id = $this->captured;
-                $ev = new InputEvent(InputEvent::POINTER_MOVE, button: 0);
+                $ev = new InputEvent(InputEvent::POINTER_MOVE, mods: $this->input->mods, button: 0);
                 break;
             case 'up':
                 $id = $this->captured;
@@ -1343,11 +1347,15 @@ final class Runtime
                 break;
             case 'scroll':
                 $id = $this->inputAt($e[1], $e[2]);
-                $ev = new InputEvent(InputEvent::SCROLL, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
+                $ev = new InputEvent(InputEvent::SCROLL, mods: $this->input->mods, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
                 break;
             case 'key':
                 $id = $this->focus;
-                $ev = new InputEvent(InputEvent::KEY_DOWN, key: $e[2], mods: $e[3] & Key::MODIFIERS, text: $e[1]);
+                $ev = new InputEvent(InputEvent::KEY_DOWN, key: $e[2], mods: $e[3] & Key::MODIFIERS, text: $e[1], repeat: $e[4] ?? false);
+                break;
+            case 'keyup':
+                $id = $this->focus;
+                $ev = new InputEvent(InputEvent::KEY_UP, key: $e[2], mods: $e[3] & Key::MODIFIERS, text: $e[1]);
                 break;
             case 'edit':
                 $id = $this->focus;
@@ -1357,7 +1365,7 @@ final class Runtime
                 return false;
         }
         if ($id === null || !isset($this->inputs[$id])) { return $e[0] === 'move'; }
-        if ($ev->kind !== InputEvent::KEY_DOWN && $ev->kind !== InputEvent::COMMAND) {
+        if ($ev->kind !== InputEvent::KEY_DOWN && $ev->kind !== InputEvent::KEY_UP && $ev->kind !== InputEvent::COMMAND) {
             [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
         }
         $took = (bool)($this->inputs[$id])($ev);

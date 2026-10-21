@@ -88,6 +88,32 @@ final class Pasteboard
         return new Data(...$items);
     }
 
+    /** The formats on the pasteboard, without reading them (mygo's clipboard Formats): those of the data written last while it is there, else those its types name. @return list<string> */
+    public static function formats(): array
+    {
+        $board = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
+        if (self::$source !== null && self::$source['change'] === ObjC::msg('l:', $board, 'changeCount')) {
+            $out = [];
+            foreach (self::$source['items'] as $item) {
+                foreach ($item->formats() as $f) {
+                    if (!in_array($f, $out, true)) { $out[] = $f; }
+                }
+            }
+            return $out;
+        }
+        $out = [];
+        $types = ObjC::msg('p:', $board, 'types');
+        foreach ($types === null ? [] : Drag::array($types) as $typ) {
+            $f = self::format(ObjC::phpStr($typ));
+            if ($f === '' || $f === Format::DRAG_SESSION || strpbrk($f, "\0\r\n") !== false || in_array($f, $out, true)) {
+                continue;
+            }
+            $out[] = $f;
+            if ($f === Format::FILE_LIST && !in_array(Format::URI_LIST, $out, true)) { $out[] = Format::URI_LIST; }
+        }
+        return $out;
+    }
+
     /** The system's types of an item's formats (mygo's macClipboardTypes). @return list<string> */
     private static function types(Item $item): array
     {

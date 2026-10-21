@@ -80,6 +80,7 @@ final class View
             $input = self::$inputs[ObjC::addr($self)];
             [$x, $y] = $point($self, $event);
             $input->mouse($x, $y);
+            $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
             if ($kind === 'move') {
                 $input->push(['move', $x, $y]); // to a node taking its input as it comes, under the pointer
             } else {
@@ -126,6 +127,7 @@ final class View
                 $input = self::$inputs[ObjC::addr($self)];
                 [$x, $y] = $point($self, $event);
                 $input->mouse($x, $y);
+                $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
                 $input->push(['drag', $x, $y, self::time($event)]);
                 Metal::requestFrame($self);
             }],
@@ -142,6 +144,7 @@ final class View
                     $dx *= 10; $dy *= 10; // mouse wheel steps are in lines
                 }
                 $input->mouse($x, $y);
+                $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
                 $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas')]);
                 Metal::requestFrame($self);
             }],
@@ -153,12 +156,27 @@ final class View
                     Metal::requestFrame($self);
                     return;
                 }
-                if ($input->push(['key', $chars, $code, $mods])) { // a node taking its input as it comes took the key: the text system sees nothing of it
+                $input->mods = $mods & Key::MODIFIERS;
+                if ($input->push(['key', $chars, $code, $mods, ObjC::msg('b:', $event, 'isARepeat')])) { // a node taking its input as it comes took the key: the text system sees nothing of it
                 } elseif ($input->client !== null && !$input->inputMethod) { // input methods off: the key types the characters of the layout
                     if ($chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/[\x{F700}-\x{F8FF}]/u', $chars) !== 1) { $input->client->replaceText(null, $chars); }
                 } else {
                     ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
                 }
+                Metal::requestFrame($self);
+            }],
+            // The release of a key, for a node taking its input as it comes (mygo's KeyReleased).
+            'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                $input = self::$inputs[ObjC::addr($self)];
+                $mods = ObjC::msg('L:', $event, 'modifierFlags');
+                $input->mods = $mods & Key::MODIFIERS;
+                if ($input->push(['keyup', ObjC::phpStr(ObjC::msg('p:', $event, 'characters')), ObjC::msg('S:', $event, 'keyCode'), $mods])) {
+                    Metal::requestFrame($self);
+                }
+            }],
+            // The modifiers held, as Context::modifiers() reports them with the pointer still (mygo's ModifiersChanged).
+            'flagsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                self::$inputs[ObjC::addr($self)]->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
                 Metal::requestFrame($self);
             }],
             // Edit menu roles reach the first responder: the focused field, or as commands the node taking its input (mygo's SurfaceCommand).

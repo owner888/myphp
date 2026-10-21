@@ -1697,6 +1697,44 @@ shortcuts run after a character is typed. Copy writes the editor's JSON,
 HTML and plain text; Paste reads the richest of those, RTF and Markdown
 (`Runtime::$readClipboardData`, the pasteboard's `readData`).
 
+## Terminal
+
+`MyPHP\Plugins\Terminal` is mygo's plugins/terminal. The emulator is
+libghostty-vt, the very build mygo's release carries
+(`mygo-plugin.json`, copied: names, URLs and SHA-256s), found as mygo
+finds it (`Library`: `$MYGO_GHOSTTY_VT`, the bundle's Resources, next to
+`PHP_BINARY`, then `<cache>/mygo/natives/<sha256>/`, downloaded there
+once and checked), and bound through one `FFI::cdef` (`Vt\Lib`) whose
+layouts are checked against the library's own JSON description of its
+types before anything is called; packed cells are read by the bit fields
+that JSON gives. Callbacks are PHP closures assigned to the fields of a
+struct of function pointers (`MyPHPTerminalCallbacks`), which keeps them
+alive while the terminal lives. The pseudo-terminal is libc's
+(`posix_openpt`, `grantpt`, `unlockpt`); the child cannot be a fork of a
+PHP running AppKit, so `proc_open` starts `Pty/spawn.php` in a PHP of its
+own, with the slave as its stdio, which calls `setsid`, makes the slave
+its controlling terminal (`TIOCSCTTY`), closes the other descriptors and
+`execve`s the program through FFI. PHP has one thread where mygo has a
+reader and a writer goroutine: the terminal polls the master, non
+blocking, on the run loop (`Terminal::poll`, through `App::after`, every
+4 ms while output flows or input waits, backing off to 50 ms when quiet;
+at most a megabyte a turn), writing what waits in its `InputQueue` as
+far as the program takes it; `Terminal::$after` swaps the timer for the
+tests. What the emulator's callbacks ask (a reply to the program, a
+paste's reply in pieces with their progress) is queued and written by
+the next poll, never inside the library's call. The view (`View`, with
+`ViewInput` and `ViewPaint`) sizes the grid from the font's advance and
+line height, rebuilds only the rows the render state marks dirty (a
+`RowCache` each: backgrounds, runs of glyphs placed in their cells as
+one-line layouts for `TextPainter::paintLayout`, lines, characters drawn
+by `Box`), and is the client of the input methods: keys that type text
+are left to them (`handleInput` returning false), their text comes as
+`replaceText`, their composition as `setMarkedText`, and a key while they
+compose is theirs. Keys are released as `InputEvent::KEY_UP` (`keyUp:`),
+the modifiers held come with every pointer event and `flagsChanged:`
+(`Context::modifiers()`), and `Runtime::$clipboardFormats` lists what a
+paste could read.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,
@@ -1972,8 +2010,8 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   needs the text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
   are in, with mygo's text system and paragraphs of inline text; the
-  RichText editor, Markdown view and Terminal are not ported yet; text
-  is not selectable yet (mygo's Selectable comes next).
+  RichText editor, Markdown view and Terminal are in (their sections
+  above); text is selectable (mygo's Selectable).
 - VoiceOver is in (Accessibility above); Linux's and Windows's assistive
   technology come with those platforms.
 - NSTimer is not locked to the display (the CoreGraphics path ran 50–58

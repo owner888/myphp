@@ -872,6 +872,12 @@ final class Context
         return null;
     }
 
+    /** The modifier keys held (Key::SHIFT, CONTROL, OPTION, COMMAND), as of the last key, change of modifiers or pointer event (mygo's Modifiers). */
+    public function modifiers(): int
+    {
+        return $this->runtime?->input->mods ?? 0;
+    }
+
     /** Whether $key (a Key code or a character) was pressed this frame with exactly $mods, unless a focused control took it (mygo's Shortcut). */
     public function shortcut(int|string $key, int $mods = 0): bool
     {

@@ -273,3 +273,80 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     400 random edits.
   - myphp: 2 s; 5 rounds; 100 edits (ZZFUZZ runs more).
   - Why: PHP is slower; the full run would take minutes.
+
+## Terminal
+
+- **Package functions and results** (v0.88)
+  - mygo: `terminal.New`, `View`, `Load`, `LibraryPath`,
+    `DefaultKeybinds`, `DarkTheme`, `LightTheme`, `GhosttyTheme`,
+    `GhosttyThemes`, `ParseGhosttyTheme` in the package, with errors;
+    `Done()` a channel; `Close()` an error; `Size()` two results; data
+    as `[]byte`; `View(c, term).Fill().AutoFocus()`.
+  - myphp: static methods of `Terminal` (`Terminal::new()`, `view()`…),
+    which throw; `done(): bool`; `close(): void`; `size()` an array;
+    strings; the view is a `Node` the app sizes (`$grow`), and
+    `Node::autoFocus()` (mygo's AutoFocus, added for it).
+  - Why: PHP has no package functions to autoload, no multiple results.
+- **Colors and enums** (v0.88)
+  - mygo: `Theme` of `ui.Color`s, zero for unset, `Palette [16]`;
+    `CursorStyle`, `CopyOnSelect`, `RightClickAction`, `PasteStatus` and
+    `Action` integer constants.
+  - myphp: `0xRRGGBB` ints, null for the unset cursor and selection
+    colors, the palette a list; enums with mygo's constant names as cases.
+  - Why: myphp's colors are ints.
+- **One thread** (v0.88)
+  - mygo: a goroutine reads the program, another writes its input; the
+    callbacks run on them; `Conn` is an `io.ReadWriteCloser` that blocks.
+  - myphp: the terminal polls on the run loop (4 ms while busy, up to
+    50 ms when quiet) and the callbacks run on the main thread; `Conn`'s
+    `read()` returns '' for nothing yet and null at its end, its
+    `write()` takes what it can; a `resize(cols, rows)` method of a Conn
+    is called as the size changes, not on a goroutine.
+  - Why: PHP runs the app on one thread.
+- **Starting the program** (v0.88)
+  - mygo: forks and execs in Go (`pty.Start`).
+  - myphp: `proc_open` starts `Pty/spawn.php` in `PHP_BINARY` with FFI,
+    which becomes the program. Under `myphp build --launcher micro`,
+    `PHP_BINARY` is the app, which does not run spawn.php: terminals do
+    not start programs there yet (a `Conn` works).
+  - Why: a PHP running AppKit cannot fork safely, and PHP has no exec.
+- **The library in apps** (v0.88)
+  - mygo: `mygo build` and `mygo dev` put libghostty-vt among the app's
+    resources, signed with it.
+  - myphp: `myphp build` does not yet; a built app (found by its path,
+    `.app/Contents/Resources/app/`) looks in `Contents/Resources` and
+    never downloads, so the library is put there by hand or named by
+    `$MYGO_GHOSTTY_VT`.
+  - Why: not done yet; it is the next step for apps with a terminal.
+- **macOS only** (v0.88)
+  - mygo: Windows (ConPTY, PowerShell) and Linux; Control+Shift+C and V
+    and the other keybinds of Linux and Windows; AltGr; text that comes
+    without its key on Linux.
+  - myphp: macOS's keys and shell; `OnKey` and `Keybind` take myphp's
+    `Key` codes (by their place on the keyboard) and modifier masks.
+  - Why: myphp runs on macOS.
+- **Font and wheel** (v0.88)
+  - mygo: `Font.Thicken` draws a thicker stroke on macOS; sizes in DIPs;
+    a mouse wheel's line is 40 DIPs, which scrolls three rows a notch.
+  - myphp: `$thicken` is kept but not drawn (the text system has no
+    stroke option); sizes in points; a line is 10 points, as the
+    window's wheel events have it, and still scrolls three rows.
+  - Why: myphp's CoreText rasterizer and its wheel events.
+- **The pointer when the window loses the keyboard** (v0.88)
+  - mygo: a press in the view gets its release when the window loses the
+    keyboard, which ends a selection being dragged.
+  - myphp: the runtime sends no release then; the test of it is not
+    ported.
+  - Why: myphp's runtime does not do it yet.
+- **Images on the clipboard** (v0.88)
+  - mygo: `ClipboardFormats` lists a TIFF as `transfer.PNG`, which
+    reading converts.
+  - myphp: `Runtime::$clipboardFormats` (`Pasteboard::formats`) lists
+    the types as they are, without converting TIFF.
+  - Why: the pasteboard's `readData` does not convert images yet.
+- **Tests** (v0.88)
+  - mygo: checks colors in the pixels of the tester's image, registers
+    Go's fonts to measure ink.
+  - myphp: checks the colors the display list holds and the cells' sizes
+    with the stub text engine.
+  - Why: the headless harness has no rasterizer nor fonts.

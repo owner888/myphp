@@ -1029,6 +1029,17 @@ final class Node
         return $this;
     }
 
+    /** Gives the node the keyboard focus in the frame it appears, as the first field of a dialog (mygo's AutoFocus); it makes it focusable. */
+    public function autoFocus(): static
+    {
+        $this->focusable = true;
+        $rt = $this->context?->runtime;
+        if ($rt !== null && $rt->rectOf($this->id) === null) {
+            $rt->focus = $this->id;
+        }
+        return $this;
+    }
+
     /**
      * Has $fn(InputEvent): bool take the node's input as it comes, before
      * the next frame is built (mygo's HandleInput): keys, text and edit
