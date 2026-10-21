@@ -59,10 +59,21 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
   into GPU memory). So `cast('unsigned long', $obj)` reads the object's first
   word, the isa, not its address; `ObjC::addr()` goes through a `void*[1]`
   slot instead.
-- There is no pointer arithmetic on CData (`$p + 1` is a TypeError), and
-  the static `FFI::new()/cast()` forms are deprecated in PHP 8.5. `Native\Mem`
+- There is no pointer arithmetic on CData (`$p + 1` is a TypeError). `Native\Mem`
   works on integer addresses: `addr()` reads a pointer's value through the
   slot trick, `copy()` casts `int` back to `unsigned char*` for `FFI::memcpy`.
+- `FFI::new()`, `FFI::cast()` and `FFI::type()` are called on an instance
+  (`$ffi->new()`; `FFI::cdef()` with no library for plain C types): their
+  static forms are deprecated since PHP 8.3. PHP's default error level
+  hides deprecations, so the terminal's first version used them anyway and
+  only the developer's PHP showed it (in the terminal, from spawn.php);
+  `tests/run.php` now reports every deprecation, warning and notice as a
+  failure. `FFI::addr()`, `memcpy()`, `string()`, `sizeof()` and `isNull()`
+  stay static.
+- `?:` takes `"0"` for false: `mb_chr(0x30) ?: "\u{FFFD}"` drew every zero
+  of the terminal as �. A string result that may be `"0"` (a character,
+  `substr`, `basename`, `getenv`, a name) is checked with `=== false`,
+  `=== ''` or `??` (for null), never `?:`.
 - Callbacks run only on the main thread. PHP's engine is not re-entrant
   from another thread: CoreAudio render callbacks, CVDisplayLink and
   dispatch queues must not call into PHP. Use NSTimer / run-loop sources.

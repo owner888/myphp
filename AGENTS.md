@@ -147,6 +147,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   cast per "ret:args" signature (`ObjC::MAP`), never variadic; callbacks
   kept alive in holder structs; blocks via `ObjC::block`; `App::wait` makes a
   block-delivered result synchronous; PHP is entered on the main thread only.
+  `FFI::new/cast/type` only on an instance (static: deprecated since 8.3);
+  never `?:` on a string that may be `"0"` (`mb_chr`, `substr`, `basename`).
 
 Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
 ~4–6 ms per frame at 60 fps; a million-row list ~1.3 ms, 8 MB flat.
