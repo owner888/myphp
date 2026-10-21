@@ -71,7 +71,8 @@ final class Files
         $this->reload();
         $this->place = array_search($path, self::places(), true) ?: '';
         $this->status = '';
-        $this->window?->setTitle(basename($path) ?: $path);
+        $base = basename($path); // a folder named 0 is a name, not nothing: not ?:
+        $this->window?->setTitle($base !== '' ? $base : $path);
     }
 
     /** Reads the folder again: the entries the find bar leaves, in the table's order. */

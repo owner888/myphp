@@ -59,7 +59,8 @@ function init(array $args): void
     in_array($template, ['native', 'web'], true) || fail("unknown template $template");
     !file_exists($dir) || fail("$dir exists");
     mkdir($dir, 0755, true);
-    $name = ucfirst(preg_replace('/[^A-Za-z0-9]+/', '', basename($dir))) ?: 'App';
+    $name = ucfirst(preg_replace('/[^A-Za-z0-9]+/', '', basename($dir)));
+    if ($name === '') { $name = 'App'; } // a directory named 0 names its app 0: not ?:
     $id = 'com.example.' . strtolower($name);
     file_put_contents("$dir/myphp.json", json_encode([
         'name' => $name,

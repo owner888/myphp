@@ -89,7 +89,8 @@ final class Notes
         $this->items = [];
         foreach (glob($this->dir . '/*.md') as $path) {
             $first = strtok((string)file_get_contents($path, false, null, 0, 200), "\n");
-            $this->items[] = ['path' => $path, 'title' => trim(ltrim((string)$first, '# ')) ?: basename($path, '.md'), 'mtime' => filemtime($path)];
+            $title = trim(ltrim((string)$first, '# ')); // a note whose first line is 0 has that title: not ?:
+            $this->items[] = ['path' => $path, 'title' => $title !== '' ? $title : basename($path, '.md'), 'mtime' => filemtime($path)];
         }
         usort($this->items, fn($a, $b) => $b['mtime'] <=> $a['mtime']);
     }

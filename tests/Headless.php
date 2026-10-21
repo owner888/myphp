@@ -378,8 +378,11 @@ final class Headless
     private static function example(string $name, string $stop, array $args, mixed &$state): void
     {
         $path = __DIR__ . "/../examples/$name/main.php";
-        $src = file_get_contents($path) ?: throw new \RuntimeException($path);
-        $src = substr($src, 0, strpos($src, $stop) ?: throw new \RuntimeException($stop));
+        $src = file_get_contents($path);
+        if ($src === false) { throw new \RuntimeException($path); }
+        $at = strpos($src, $stop); // 0 is a place: not ?:
+        if ($at === false) { throw new \RuntimeException($stop); }
+        $src = substr($src, 0, $at);
         // In a namespace of its own, the global classes the examples use (functions and constants fall back on their own) must be named.
         $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . ucfirst($name) . '; use Closure, DateTimeImmutable;', var_export(dirname($path), true)], $src);
         $src = preg_replace('/^const (\w+) = (.*);$/m', 'defined(\'$1\') || define(\'$1\', $2);', $src);
