@@ -34,11 +34,18 @@ final class TypeScript
         self::$interfaces = [];
         $services = '';
         foreach (Ipc::services() as $name => $svc) {
+            if ($svc['plugin']) {
+                continue; // a plugin's page side is its own client
+            }
             $methods = '';
             foreach ($svc['methods'] as $mname => $m) {
                 $params = [];
                 $names = [];
                 foreach ($m->getParameters() as $p) {
+                    $pt = $p->getType();
+                    if ($pt instanceof ReflectionNamedType && $pt->getName() === CallContext::class) {
+                        continue; // the call's, not the page's
+                    }
                     $doc = self::docTag($m, 'param', $p->getName());
                     $params[] = $p->getName() . ($p->isOptional() ? '?' : '') . ': ' . self::type($p->getType(), $doc);
                     $names[] = $p->getName();

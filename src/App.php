@@ -33,6 +33,51 @@ final class App
     /** Quit once the last window closes, as a document-less app does. */
     public static bool $quitOnLastWindowClosed = true;
 
+    /** @var array<int, Closure> */
+    private static array $onQuit = [];
+    private static int $nextQuit = 0;
+
+    /**
+     * Adds plugins to the app (mygo's Use): binds each one's service as
+     * "plugin:<name>" and runs its setup. Call it before App::run, like
+     * Ipc::bind. It throws when a plugin is invalid, already used, or its
+     * setup throws.
+     */
+    public static function use(Plugin ...$plugins): void
+    {
+        foreach ($plugins as $p) {
+            if (preg_match('/^[a-z][a-z0-9-]*$/', $p->name) !== 1) {
+                throw new RuntimeException("myphp: plugin name \"{$p->name}\" must be lowercase letters, digits and hyphens, starting with a letter");
+            }
+            if ($p->name === 'myphp' || $p->name === 'mygo') {
+                throw new RuntimeException("myphp: plugin name \"{$p->name}\" is reserved");
+            }
+            if (Ipc::pluginUsed($p->name)) {
+                throw new RuntimeException("myphp: plugin {$p->name} is already used");
+            }
+            try {
+                Ipc::usePlugin($p->name, $p->service);
+            } catch (RuntimeException $e) {
+                throw new RuntimeException("myphp: plugin {$p->name}: " . preg_replace('/^Ipc: /', '', $e->getMessage()), 0, $e);
+            }
+            if ($p->setup !== null) {
+                try {
+                    ($p->setup)();
+                } catch (\Throwable $e) {
+                    throw new RuntimeException("myphp: plugin {$p->name}: {$e->getMessage()}", 0, $e);
+                }
+            }
+        }
+    }
+
+    /** Calls $fn as the app quits, after its windows' state is saved (mygo's OnQuit). Returns a function that removes it. */
+    public static function onQuit(Closure $fn): Closure
+    {
+        $k = self::$nextQuit++;
+        self::$onQuit[$k] = $fn;
+        return function () use ($k): void { unset(self::$onQuit[$k]); };
+    }
+
     public static function whenReady(Closure $fn): void
     {
         if (self::$ready) {
@@ -73,6 +118,11 @@ final class App
             }],
             'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 WindowState::save();
+                $quit = self::$onQuit;
+                self::$onQuit = [];
+                foreach ($quit as $fn) {
+                    $fn();
+                }
             }],
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
             'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change

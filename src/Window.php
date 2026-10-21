@@ -81,6 +81,8 @@ final class Window
     private ?WebView $page = null;
     private string $secret = '';
     private bool $pageReady = false;
+    /** The context of the calls of the page shown now, made on its first call. */
+    private ?CallContext $callContext = null;
     /** @var list<\Closure> */
     private array $whenPageReady = [];
     public readonly int $id;
@@ -165,6 +167,11 @@ final class Window
             $this->page = WebView::create(ObjC::rect(0, 0, $o->width, $o->height),
                 ['platform' => 'darwin', 'windowId' => $this->id, 'version' => App::VERSION, 'secret' => $this->secret],
                 function (string $raw) {
+                    if ($raw === '{"t":"page"}') { // a document starts, before its scripts: the last one's calls end
+                        $this->callContext?->cancel();
+                        $this->callContext = null;
+                        return;
+                    }
                     if ($raw === '{"t":"dom-ready"}') {
                         $this->pageReady = true;
                         $this->readyToShow();
@@ -489,6 +496,12 @@ final class Window
         return $this->page;
     }
 
+    /** @internal the context of the calls of the page shown now (Ipc) */
+    public function callContext(): CallContext
+    {
+        return $this->callContext ??= new CallContext($this);
+    }
+
     /** Sends an event to the window's page; nothing for native UI. */
     public function send(string $name, mixed $payload = null): void
     {
@@ -636,6 +649,8 @@ final class Window
         unset(self::$byView[ObjC::addr($this->view)]);
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); }
         $this->dropChannels();
+        $this->callContext?->cancel(); // the page goes with the window
+        $this->callContext = null;
         $this->captureState();
         WindowState::save();
         $this->emit('closed');

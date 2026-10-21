@@ -128,3 +128,38 @@ function sqlThrows(\Closure $fn): ?\Throwable
     check(sqlThrows(fn() => $db->close()) === null, 'closing twice');
     check(sqlThrows(fn() => Sqlite::open('')) !== null, 'an empty path');
 })();
+
+(function () {
+    // The page plugin's service: wire values, a page's own connections, and their end with the page.
+    $dir = sys_get_temp_dir() . '/myphp-sqlite-pages-' . getmypid();
+    $plugin = Sqlite::new(new \MyPHP\Plugins\Sqlite\Options($dir));
+    same('sqlite', $plugin->name, 'the plugin is sqlite');
+    $s = $plugin->service;
+    $page = new \MyPHP\CallContext(null);
+    $other = new \MyPHP\CallContext(null);
+    $id = $s->open($page, 'app.db');
+    check(is_file("$dir/app.db"), 'the file is in the plugin\'s directory');
+    $s->execute($page, $id, 'CREATE TABLE t (a, b, c, d, e)');
+    $r = $s->execute($page, $id, 'INSERT INTO t VALUES (?, ?, ?, ?, ?)', [['type' => 'null'], ['type' => 'integer', 'integer' => '9223372036854775807'], ['type' => 'real', 'real' => 0.25], ['type' => 'text', 'text' => '中文'], ['type' => 'blob', 'blob' => 'AP8=']]);
+    same(['changes' => 1, 'lastInsertId' => '1'], $r, 'execute replies as mygo');
+    same(['columns' => ['a', 'b', 'c', 'd', 'e', 'x'], 'rows' => [[['type' => 'null'], ['type' => 'integer', 'integer' => '9223372036854775807'], ['type' => 'real', 'real' => 0.25], ['type' => 'text', 'text' => '中文'], ['type' => 'blob', 'blob' => 'AP8='], ['type' => 'real', 'special' => 'Infinity']]]],
+        $s->query($page, $id, 'SELECT *, 1e999 AS x FROM t'), 'query replies as mygo');
+    same([['changes' => 1, 'lastInsertId' => '2'], ['changes' => 1, 'lastInsertId' => '3']],
+        $s->transaction($page, $id, [['sql' => 'INSERT INTO t (a) VALUES (?)', 'args' => [['type' => 'integer', 'integer' => '1']]], ['sql' => 'INSERT INTO t (a) VALUES (2)']]), 'a transaction');
+    foreach ([[['type' => 'integer', 'integer' => '9223372036854775808']], [['type' => 'real', 'special' => 'NaN']], [['type' => 'blob', 'blob' => '%%']], [['type' => 'date']]] as $bad) {
+        check(sqlThrows(fn() => $s->execute($page, $id, 'SELECT ?', $bad)) !== null, 'a bad wire value: ' . json_encode($bad));
+    }
+    check(sqlThrows(fn() => $s->query($other, $id, 'SELECT 1')) !== null, 'another page cannot use the connection');
+    foreach (['../x.db', '/tmp/x.db', 'a/b.db', 'CON.db', 'x.db.', ' x.db', 'a:b'] as $bad) {
+        check(sqlThrows(fn() => $s->open($page, $bad)) !== null, "the name \"$bad\" is refused");
+    }
+    $mem = $s->open($other, ':memory:');
+    $page->cancel(); // the page went away
+    check(sqlThrows(fn() => $s->query($page, $id, 'SELECT 1')) !== null, 'the page\'s connection closed with it');
+    same(1, $s->query($other, $mem, 'SELECT 1')['rows'][0][0]['integer'] === '1' ? 1 : 0, 'the other page\'s stays');
+    check(sqlThrows(fn() => $s->open($page, 'late.db')) !== null, 'a page that went away opens nothing');
+    $s->close($other, $mem);
+    $s->close($other, $mem);
+    check(sqlThrows(fn() => $s->query($other, $mem, 'SELECT 1')) !== null, 'closed, twice harmlessly');
+    @unlink("$dir/app.db"); @rmdir($dir);
+})();

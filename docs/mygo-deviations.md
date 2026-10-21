@@ -297,12 +297,37 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `$sqliteMessage`) and `ErrClosed` exceptions; `$busyTimeout` in
     seconds; `Sqlite::open()`, `load()`, `libraryPath()`.
   - Why: PHP's exceptions and durations; no package functions.
-- **The page plugin** (v0.90)
-  - mygo: `mygo.Use(sqlite.Plugin)` binds the service of
-    `@mygo-plugins/sqlite`, with connections owned by the calling page.
-  - myphp: not yet: it needs `App::use`, plugins, the calling page and
-    its navigation, and `App::onQuit`.
-  - Why: myphp has none of those yet; they come next.
+- **The page plugin** (v0.91)
+  - mygo: `sqlite.Plugin` and `sqlite.New(Options)` for `mygo.Use`; the
+    service's methods `Open`, `Execute`… take a `context.Context`; the
+    page side is the npm package `@mygo-plugins/sqlite` over
+    `mygo-runtime`; `Options.BusyTimeout` a duration.
+  - myphp: `Sqlite::plugin()` and `Sqlite::new(Options)` for `App::use`;
+    lowercase methods (`plugin:sqlite.open`) that take a `CallContext`;
+    the page side is `src/Plugins/Sqlite/client/index.ts`
+    (`@myphp-plugins/sqlite`) over `window.myphp.call`, the same API and
+    wire values; `$busyTimeout` in seconds.
+  - Why: plugins are PHP (the developer's rule), and PHP's methods are
+    named in lowercase.
+
+## Plugins
+
+- **Plugins are PHP** (v0.91)
+  - mygo: a plugin is a Go package: `mygo.Plugin{Name, Service, Setup}`
+    for `mygo.Use`, its page side an npm package.
+  - myphp: `MyPHP\Plugin(name, service, setup)` for `App::use`, only PHP
+    plugins (the developer's rule), their page side a TypeScript client
+    in the plugin's `client/`; "myphp" is reserved as well as "mygo".
+  - Why: the developer's rule; `myphp:` names the framework's own calls.
+- **The context of a call** (v0.91)
+  - mygo: a bound method's first parameter is a `context.Context`, from
+    which `CallerWindow` and `CallerPage` read the caller, canceled as the
+    page navigates or its window closes.
+  - myphp: a parameter typed `CallContext`, anywhere: `window()`,
+    `done()`, `afterFunc()`; a document ends when the next one starts (the
+    bridge's `{"t":"page"}`) or the window closes. There is no `Page`
+    object yet, so no `CallerPage`.
+  - Why: PHP has no contexts; myphp's pages are its windows' WebViews.
 
 ## Terminal
 

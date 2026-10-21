@@ -23,11 +23,33 @@ use Throwable;
  */
 final class Ipc
 {
-    /** @var array<string, array{object: object, methods: array<string, ReflectionMethod>, doc: string}> */
+    /** @var array<string, array{object: object, methods: array<string, ReflectionMethod>, doc: string, plugin: bool}> */
     private static array $services = [];
+    /** @var array<string, true> the names of the plugins App::use took */
+    private static array $plugins = [];
 
     /** Exposes the public methods of $service under its short class name, or $name. */
     public static function bind(object $service, ?string $name = null): void
+    {
+        self::add($service, $name, false);
+    }
+
+    /** @internal App::use's: notes the plugin used, and binds its service as "plugin:<name>", which the TypeScript client leaves to the plugin's own */
+    public static function usePlugin(string $name, ?object $service): void
+    {
+        if ($service !== null) {
+            self::add($service, "plugin:$name", true);
+        }
+        self::$plugins[$name] = true;
+    }
+
+    /** @internal whether App::use took a plugin of this name */
+    public static function pluginUsed(string $name): bool
+    {
+        return isset(self::$plugins[$name]);
+    }
+
+    private static function add(object $service, ?string $name, bool $plugin): void
     {
         $rc = new ReflectionClass($service);
         $name ??= $rc->getShortName();
@@ -46,6 +68,9 @@ final class Ipc
                     $channels = true;
                     continue;
                 }
+                if ($t instanceof ReflectionNamedType && $t->getName() === CallContext::class) {
+                    continue; // the call's, not the page's
+                }
                 self::checkType($t, "$name.{$m->getName()}(\${$p->getName()})");
             }
             $rt = $m->getReturnType();
@@ -56,7 +81,7 @@ final class Ipc
             }
             $methods[$m->getName()] = $m;
         }
-        self::$services[$name] = ['object' => $service, 'methods' => $methods, 'doc' => (string)$rc->getDocComment()];
+        self::$services[$name] = ['object' => $service, 'methods' => $methods, 'doc' => (string)$rc->getDocComment(), 'plugin' => $plugin];
     }
 
     private static function checkType($type, string $where): void
@@ -66,7 +91,7 @@ final class Ipc
         }
     }
 
-    /** @return array<string, array{object: object, methods: array<string, ReflectionMethod>, doc: string}> */
+    /** @return array<string, array{object: object, methods: array<string, ReflectionMethod>, doc: string, plugin: bool}> */
     public static function services(): array
     {
         return self::$services;
@@ -107,15 +132,12 @@ final class Ipc
         [$service, $name] = array_pad(explode('.', $method, 2), 2, '');
         $m = self::$services[$service]['methods'][$name] ?? null;
         if ($m === null) {
-            return self::reply($id, $secret, null, "no bound method $method");
+            return self::reply($id, $secret, null, self::notBound($method));
         }
         $channels = [];
-        foreach ($m->getParameters() as $i => $p) {
-            $pt = $p->getType();
-            if ($pt instanceof ReflectionNamedType && $pt->getName() === Channel::class) {
-                $channels[] = $args[$i] = $window->openChannel((int)($args[$i] ?? 0), $secret);
-            }
-        }
+        $args = self::arguments($m, $args, $window->callContext(), function (int $chan) use ($window, $secret, &$channels): Channel {
+            return $channels[] = $window->openChannel($chan, $secret);
+        });
         try {
             $result = $m->invokeArgs(self::$services[$service]['object'], $args);
         } catch (Throwable $e) {
@@ -128,6 +150,49 @@ final class Ipc
         }
         self::closeAll($channels);
         return self::reply($id, $secret, $result, null);
+    }
+
+    /**
+     * @internal the arguments of a call of $m: the page's, in order, with a
+     * Channel made for each Channel parameter from the id the page passed,
+     * and $ctx for a CallContext parameter, for which the page passes none
+     * @param list<mixed> $args
+     * @param \Closure(int): Channel $channel
+     * @return list<mixed>
+     */
+    public static function arguments(ReflectionMethod $m, array $args, CallContext $ctx, \Closure $channel): array
+    {
+        $out = [];
+        $j = 0;
+        foreach ($m->getParameters() as $p) {
+            $pt = $p->getType();
+            $type = $pt instanceof ReflectionNamedType ? $pt->getName() : '';
+            if ($type === CallContext::class) {
+                $out[] = $ctx;
+            } elseif ($type === Channel::class) {
+                $out[] = $channel((int)($args[$j++] ?? 0));
+            } elseif ($p->isVariadic()) {
+                array_push($out, ...array_slice($args, $j));
+                $j = count($args);
+            } elseif ($j < count($args)) {
+                $out[] = $args[$j++];
+            } else {
+                break; // the defaults of the rest
+            }
+        }
+        return $out;
+    }
+
+    /** Why the method a page called is missing (mygo's notBound). */
+    private static function notBound(string $method): string
+    {
+        if (str_starts_with($method, 'plugin:')) {
+            $plugin = explode('.', substr($method, strlen('plugin:')), 2)[0];
+            if (!isset(self::$plugins[$plugin])) {
+                return "the $plugin plugin is not used: call App::use with it before App::run";
+            }
+        }
+        return "no bound method $method";
     }
 
     private static function reply(int $id, string $secret, mixed $result, ?string $error): array

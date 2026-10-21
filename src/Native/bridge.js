@@ -135,6 +135,7 @@
       }
     },
   };
+  post({ t: "page" }); // a document starts: the calls of the last one end (MyPHP\CallContext)
   document.addEventListener("DOMContentLoaded", () => post({ t: "dom-ready" }));
   // An Escape no handler of the page called preventDefault on: a flyout or a panel closes on it.
   addEventListener("keydown", (e) => {

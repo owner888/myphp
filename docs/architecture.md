@@ -1767,6 +1767,23 @@ a `void*` slot. PHP's strings are bytes, so TEXT is a string that must be
 UTF-8 and a BLOB is a `Blob`, in and out. There are no contexts: an
 operation runs to its end on the main thread, and nothing cancels it.
 
+Plugins are PHP, as mygo's are Go: `App::use(Plugin)` (mygo's Use) checks
+the name, binds the plugin's service as `plugin:<name>` (`Ipc::usePlugin`)
+and runs its setup; the app's generated TypeScript leaves plugin services
+out, as each plugin ships its page side as a TypeScript client of its own
+over `window.myphp.call` (`client/index.ts`, with its `bun test`). A call
+to a plugin not used says so (mygo's notBound). mygo hands bound methods a
+`context.Context` that tells the calling page and is canceled as the page
+navigates or its window closes; here a parameter typed `CallContext` gets
+the window's context of its page in that place (`Ipc::arguments`, which
+the page passes no argument for, as `Channel`s are made from theirs), one
+per document: the bridge posts `{"t":"page"}` at document start, before
+the page's scripts, which ends the last document's context, and closing
+the window ends it too. `afterFunc` is Go's `context.AfterFunc`, which
+the SQLite service closes a page's connections with. The service's
+methods are lowercase, as PHP's (`plugin:sqlite.open`), and its shutdown,
+which `App::onQuit` runs, is private, out of the pages' reach.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

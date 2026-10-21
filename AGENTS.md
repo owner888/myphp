@@ -64,7 +64,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout (lines
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite from PHP (Sqlite::open, DB, Blob); NativeLibrary finds plugins' libraries
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin() and client/index.ts for pages); NativeLibrary
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
@@ -143,6 +143,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   yield one run-loop turn apart (`App::later`). `myphp:window.*` calls are
   the page's window controls; `WindowOptions::$preload` runs before the page.
   `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client.
+  Plugins are PHP (`App::use(Plugin)`): their service is "plugin:<name>",
+  their page side a client/ of their own; a `CallContext` parameter is the page's life.
 - **FFI discipline**: one FFI instance per bridge (structs are not shared
   across instances; foreign pointers pass `ObjC::import`); `objc_msgSend`
   cast per "ret:args" signature (`ObjC::MAP`), never variadic; callbacks

@@ -5,6 +5,7 @@ namespace MyPHP\Plugins\Sqlite;
 
 use FFI;
 use InvalidArgumentException;
+use MyPHP\{App, Plugin};
 use MyPHP\Plugins\NativeLibrary;
 
 /**
@@ -18,11 +19,33 @@ use MyPHP\Plugins\NativeLibrary;
  *     $db->close();
  *
  * Foreign keys are on; FTS5, R*Tree and JSON are in; extensions cannot be
- * loaded.
+ * loaded. Pages use it through the plugin (plugin(), App::use) and its
+ * TypeScript client.
  */
 final class Sqlite
 {
     private static bool $loaded = false;
+
+    /**
+     * The page plugin with default options (mygo's sqlite.Plugin), for
+     * App::use() when pages use the plugin's TypeScript client
+     * (client/index.ts): it binds "plugin:sqlite". It loads the library
+     * only when a page opens its first database. PHP and native UI code
+     * call open() directly and need no plugin.
+     */
+    public static function plugin(): Plugin
+    {
+        return self::new(new Options);
+    }
+
+    /** The page plugin with options (mygo's sqlite.New). Connections belong to their page, close when it goes away, and close as the app quits. */
+    public static function new(Options $opts): Plugin
+    {
+        $s = new Service($opts);
+        // Its shutdown is private, out of the pages' reach: the app's quit calls it.
+        $shutdown = \Closure::bind(fn() => $this->shutdown(), $s, Service::class);
+        return new Plugin('sqlite', $s, function () use ($shutdown): void { App::onQuit($shutdown); });
+    }
 
     /**
      * Opens $path, or ":memory:" (mygo's Open). It creates a missing file
