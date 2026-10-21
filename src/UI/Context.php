@@ -494,6 +494,9 @@ final class Context
         foreach ($n->kids as $k) { self::fade($k, $alpha); }
     }
 
+    /** @var list<int> the nodes the view asked to scroll into view in this frame (Node::scrollIntoView) */
+    public array $reveal = [];
+
     /** The theme's text style, under what the nodes being built set. */
     private ?TextStyle $base = null;
 
@@ -2071,7 +2074,7 @@ final class Context
                 } else {
                     $changed = $this->gridChoose($s, $to, $n, 0) || $changed;
                 }
-                $s->reveal($to);
+                $s->scrollIntoView($to);
             }
         }
         $grid->changed = $changed;

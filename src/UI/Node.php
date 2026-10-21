@@ -644,6 +644,21 @@ final class Node
     }
 
     /**
+     * Scrolls the containers around the node as little as shows it, once
+     * the frame is laid out: a node added in this frame comes into view
+     * with it. Call it in the frame it should come into view, as when it is
+     * added or chosen: in every frame, it would keep the user from scrolling
+     * it away (mygo's ScrollIntoView).
+     */
+    public function scrollIntoView(): static
+    {
+        if ($this->context !== null && !in_array($this->id, $this->context->reveal, true)) {
+            $this->context->reveal[] = $this->id;
+        }
+        return $this;
+    }
+
+    /**
      * Gives the node a context menu, which $build fills with items (mygo's
      * ContextMenu). The system shows it where the node is clicked with the
      * secondary button, or Control-clicked, and, while the node or one

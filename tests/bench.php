@@ -22,7 +22,7 @@ $phases = function (string $name, Closure $view, float $w, float $h) use ($frame
         $t0 = hrtime(true);
         $root = $hl->rt->frame(function () use ($view, $hl, &$tb, &$tl, &$t0) {
             $c = new Context($hl->metrics, $hl->rt, $hl->w, $hl->h, $hl->theme); $view($c); $t1 = hrtime(true); $tb += $t1 - $t0;
-            Layout::measure($c->root); Layout::arrange($c->root, 0, 0, $hl->w, $hl->h); $t0 = hrtime(true); $tl += $t0 - $t1; return $c->root;
+            Layout::layout($c, $hl->w, $hl->h); $t0 = hrtime(true); $tl += $t0 - $t1; return $c->root;
         });
         $hl->root = $root;
         $t2 = hrtime(true); $tr += $t2 - $t0;

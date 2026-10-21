@@ -159,8 +159,7 @@ final class Headless
             $this->root = $this->rt->frame(function () {
                 $c = new Context($this->metrics, $this->rt, $this->w, $this->h, $this->theme);
                 ($this->view)($c);
-                Layout::measure($c->root);
-                Layout::arrange($c->root, 0, 0, $this->w, $this->h);
+                Layout::layout($c, $this->w, $this->h);
                 return $c->root;
             });
             if ($this->paints) { $this->paint(); }

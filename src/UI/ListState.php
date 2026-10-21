@@ -163,7 +163,7 @@ final class ListState implements Scrollable
     }
 
     /** Scrolls as little as needed to bring row $row into view. */
-    public function reveal(int $row): void
+    public function scrollIntoView(int $row): void
     {
         $this->target = null;
         $row = max(0, min($this->count - 1, $row));
@@ -200,7 +200,7 @@ final class ListState implements Scrollable
             $this->didChange = true;
         }
         if ($row >= 0) {
-            $this->reveal($row);
+            $this->scrollIntoView($row);
         }
     }
 
@@ -210,7 +210,7 @@ final class ListState implements Scrollable
         if ($this->selection === null) { $this->choose($row); return; }
         $row = max(0, min($this->count - 1, $row));
         if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->didChange = true; }
-        $this->reveal($row);
+        $this->scrollIntoView($row);
     }
 
     /** Extends the choice from the pivot to $row with Shift and the keys; choose() without a selection. */
@@ -220,7 +220,7 @@ final class ListState implements Scrollable
         $row = max(0, min($this->count - 1, $row));
         if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; }
         $this->selected = $row;
-        $this->reveal($row);
+        $this->scrollIntoView($row);
     }
 
     /** Chooses every row (Cmd+A), with a selection. */

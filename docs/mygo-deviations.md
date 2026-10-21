@@ -109,6 +109,25 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Flush`, `Close`, callback).
   - Why: only Copy needed it so far.
 
+## Scrolling
+
+- **ScrollIntoView inside a List** (v0.84)
+  - mygo: a node inside a List's row scrolls the list to it, the list
+    placing its rows anew from there and building those it lacked
+    (`relayoutList`).
+  - myphp: `Node::scrollIntoView()` scrolls the `ScrollState` containers
+    around a node; a list scrolls to a row by its place
+    (`ListState::scrollIntoView($row)`), which the app calls.
+  - Why: myphp's lists are placed by their anchor as they are built; the
+    relayout during layout is not ported.
+- **ListState and GridState methods** (v0.84)
+  - mygo: `ScrollTo(row, align)`, `ScrollIntoView(row)`, `ScrollToEnd()`,
+    `Visible()`, `AtEnd()`; `GridState.ScrollTo(item, align)`.
+  - myphp: `scrollTo($row, $smooth)` without an alignment, `end()`,
+    `scrollIntoView($row)`, the public `$atEnd`, no `visible()`;
+    `GridState::scrollTo($item)` puts the item's row at the top.
+  - Why: written before the naming rule; to be renamed and aligned.
+
 ## Menus
 
 - **The toolbar's overflow menu** (v0.83)

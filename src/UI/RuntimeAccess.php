@@ -353,7 +353,7 @@ trait RuntimeAccess
             case AccessNode::SCROLL_INTO_VIEW:
                 // The rows of lists around it scroll into view by their place, as the next frame may not build them, then it does.
                 for ($at = $id; $at !== 0; $at = $this->parentOf[$at] ?? 0) {
-                    if (isset($this->rowNodes[$at])) { $this->rowNodes[$at][1]->reveal($this->rowNodes[$at][2]); }
+                    if (isset($this->rowNodes[$at])) { $this->rowNodes[$at][1]->scrollIntoView($this->rowNodes[$at][2]); }
                 }
                 $this->reveal($id);
                 break;
@@ -397,16 +397,4 @@ trait RuntimeAccess
         $this->reveal($id);
     }
 
-    /** Scrolls the scroll containers around node $id of the last frame to show it. */
-    private function reveal(int $id): void
-    {
-        $r = $this->rects[$id] ?? null;
-        if ($r === null) { return; }
-        for ($at = $this->parentOf[$id] ?? 0; $at !== 0; $at = $this->parentOf[$at] ?? 0) {
-            $s = $this->nodeOf[$at]->scroll ?? null;
-            if (!$s instanceof ScrollState || !isset($this->rects[$at])) { continue; }
-            $box = $this->rects[$at];
-            if ($r[1] < $box[1]) { $s->scrollBy($r[1] - $box[1]); } elseif ($r[1] + $r[3] > $box[1] + $box[3]) { $s->scrollBy(min($r[1] - $box[1], $r[1] + $r[3] - $box[1] - $box[3])); }
-        }
-    }
 }

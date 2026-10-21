@@ -937,6 +937,22 @@ routes the wheel's dx and dy to the axes the container scrolls, and
 thumbs (`Scrollbar::thumb` with `$horizontal`) sit along the right and
 bottom edges, each draggable.
 
+## Scrolling into view
+
+`Node::scrollIntoView()` is mygo's ScrollIntoView: the node's id goes in
+the Context's `reveal`, and `Layout::layout` (the measure and arrange of
+a frame, which the window and the headless runner call) scrolls the
+`ScrollState` containers around each node asked for, innermost first, as
+little as shows its box (`nearest`: what is larger than the viewport shows
+from its start), arranging each container again at its new offset before
+looking at the next one out, so a node added in this frame comes into
+view in it. The runtime asks the same of the nodes Tab, a focus group's
+keys and assistive technology bring the focus to (`Runtime::reveal`, the
+ids taken by `takeReveals`), and the ids a pass asked for are kept for
+the passes after it in the frame, which may not ask again. The rows of a
+`ListState` scroll into view by their place (`ListState::scrollIntoView`),
+as do a `GridState`'s items.
+
 ## Lists
 
 `Context::list($state, $count, $row)` is the virtualized list. `ListState`

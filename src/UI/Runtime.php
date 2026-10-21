@@ -446,6 +446,7 @@ final class Runtime
             $this->dropped = []; $this->dataDropped = []; $this->filesDropped = [];
         }
         $this->building = false;
+        $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
         if ($this->escape !== null) {
@@ -1587,7 +1588,7 @@ final class Runtime
         return $group;
     }
 
-    /** Gives the keyboard focus to $id, visibly, remembering it for its group. */
+    /** Gives the keyboard focus to $id, visibly, remembering it for its group, and scrolls it into view (mygo's moveFocus). */
     private function focusTo(int $id): void
     {
         $this->focus = $id;
@@ -1596,6 +1597,37 @@ final class Runtime
         if (isset($this->fields[$id])) {
             $this->fields[$id][0]->selectAll();
         }
+        $this->reveal($id);
+    }
+
+    /** @var list<int> the nodes to scroll into view once the frame is laid out (mygo's revealIDs) */
+    private array $revealIDs = [];
+
+    /** Scrolls node $id into view in the frame, once it is laid out (mygo's reveal). */
+    private function reveal(int $id): void
+    {
+        if (!in_array($id, $this->revealIDs, true)) {
+            $this->revealIDs[] = $id;
+        }
+        $this->needsFrame = true;
+    }
+
+    /**
+     * The nodes to scroll into view as the frame's pass is laid out: those
+     * the runtime asked for and those the pass did (Node::scrollIntoView);
+     * the pass's are kept for the next pass, which may not ask again
+     * (mygo's layoutTree and runFrame). Layout::layout takes them.
+     * @param list<int> $asked
+     * @return list<int>
+     */
+    public function takeReveals(array $asked): array
+    {
+        $ids = $this->revealIDs;
+        foreach ($asked as $id) {
+            if (!in_array($id, $ids, true)) { $ids[] = $id; }
+        }
+        $this->revealIDs = $asked;
+        return $ids;
     }
 
     /** The arrows, Home and End inside a focus group: among its members, round; with selects, the move clicks the member. */

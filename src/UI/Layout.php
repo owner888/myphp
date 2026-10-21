@@ -35,6 +35,87 @@ final class Layout
         }
     }
 
+    /**
+     * Lays the frame of context $c out in a window of $w × $h points:
+     * measures, arranges, and scrolls the nodes asked for into view (mygo's
+     * layoutTree).
+     */
+    public static function layout(Context $c, float $w, float $h): void
+    {
+        self::measure($c->root);
+        self::arrange($c->root, 0, 0, $w, $h);
+        $ids = $c->runtime?->takeReveals($c->reveal) ?? $c->reveal;
+        if ($ids !== []) {
+            self::revealAll($c->root, $ids);
+        }
+    }
+
+    /** Scrolls the nodes of $root with ids $ids into view, in that order (mygo's revealAll). @param list<int> $ids */
+    private static function revealAll(Node $root, array $ids): void
+    {
+        $found = [];
+        $walk = function (Node $n, array $chain) use (&$walk, &$found, $ids): void {
+            $chain[] = $n;
+            if (!isset($found[$n->id]) && in_array($n->id, $ids, true)) {
+                $found[$n->id] = $chain;
+            }
+            foreach ($n->kids as $k) { $walk($k, $chain); }
+        };
+        $walk($root, []);
+        foreach ($ids as $id) {
+            if (isset($found[$id])) {
+                self::reveal($found[$id]);
+            }
+        }
+    }
+
+    /**
+     * Scrolls the containers around the last node of $chain (its ancestors
+     * from the root, then it), innermost first, as little as shows its box,
+     * arranging each one scrolled again (mygo's reveal). The text inside a
+     * paragraph shows by its paragraph.
+     * @param non-empty-list<Node> $chain
+     */
+    private static function reveal(array $chain): void
+    {
+        while (count($chain) > 1 && $chain[count($chain) - 1]->inline) {
+            array_pop($chain);
+        }
+        $e = $chain[count($chain) - 1];
+        for ($i = count($chain) - 2; $i >= 0; $i--) {
+            $p = $chain[$i]; $ch = $chain[$i + 1];
+            if (!$p->scroll instanceof ScrollState || $ch->absolute) {
+                continue;
+            }
+            $s = $p->scroll;
+            $sx = $s->x; $sy = $s->y;
+            if ($p->scrollX) { // where the box is in the content, and the offset that shows it
+                $sx = max(0.0, min(self::nearest($s->x, $e->x - $p->x - $p->padX() + $s->x, $e->w, $s->viewportW), $s->maxX));
+            }
+            if ($p->scrollY) {
+                $sy = max(0.0, min(self::nearest($s->y, $e->y - $p->y - $p->padY() + $s->y, $e->h, $s->viewport), $s->maxY));
+            }
+            if ($sx != $s->x || $sy != $s->y) {
+                $s->x = $sx;
+                $s->scrollTo($sy, false);
+                self::arrange($p, $p->x, $p->y, $p->w, $p->h); // what is inside it moves with the offset
+            }
+        }
+    }
+
+    /** The offset that shows what spans [pos, pos + size) of a container's content in its viewport [0, view), scrolled by off, moving as little as it can: what is larger than the viewport shows from its start (mygo's nearest). */
+    private static function nearest(float $off, float $pos, float $size, float $view): float
+    {
+        $start = $pos - $off; $end = $pos + $size - $off;
+        if ($start < 0) {
+            return $off + $start;
+        }
+        if ($end > $view) {
+            return $off + min($end - $view, $start);
+        }
+        return $off;
+    }
+
     public static function measure(Node $n): void
     {
         if ($n->kind === Node::RICH) { // laid out at the width it wraps at, unless given a size

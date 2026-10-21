@@ -65,8 +65,8 @@ final class GridState
     }
 
     /** Scrolls the grid as little as shows item $item. */
-    public function reveal(int $item): void
+    public function scrollIntoView(int $item): void
     {
-        $this->rows->reveal(intdiv($item, max($this->cols, 1)));
+        $this->rows->scrollIntoView(intdiv($item, max($this->cols, 1)));
     }
 }

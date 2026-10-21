@@ -352,8 +352,7 @@ final class Window
                     $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
-                    Layout::measure($c->root);
-                    Layout::arrange($c->root, 0, 0, $bounds->w, $bounds->h);
+                    Layout::layout($c, $bounds->w, $bounds->h);
                     return $c->root;
                 });
                 $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
