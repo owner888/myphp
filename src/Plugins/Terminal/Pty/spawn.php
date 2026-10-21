@@ -6,7 +6,8 @@
 // becomes the program, as mygo's exec.Cmd with Setsid and Setctty does.
 declare(strict_types=1);
 
-$o = json_decode(base64_decode($argv[1] ?? ''), true);
+// The options are the last argument: after the script's path, or after --myphp-pty-spawn in a static app's stub.
+$o = json_decode(base64_decode($argv[count($argv) - 1] ?? ''), true);
 if (!is_array($o)) {
     fwrite(STDERR, "pty: no program to run\n");
     exit(127);

@@ -306,18 +306,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Starting the program** (v0.88)
   - mygo: forks and execs in Go (`pty.Start`).
   - myphp: `proc_open` starts `Pty/spawn.php` in `PHP_BINARY` with FFI,
-    which becomes the program. Under `myphp build --launcher micro`,
-    `PHP_BINARY` is the app, which does not run spawn.php: terminals do
-    not start programs there yet (a `Conn` works).
+    which becomes the program; in a static app (`--launcher micro`) the
+    app itself, whose stub runs spawn.php on `--myphp-pty-spawn`.
   - Why: a PHP running AppKit cannot fork safely, and PHP has no exec.
-- **The library in apps** (v0.88)
-  - mygo: `mygo build` and `mygo dev` put libghostty-vt among the app's
-    resources, signed with it.
-  - myphp: `myphp build` does not yet; a built app (found by its path,
-    `.app/Contents/Resources/app/`) looks in `Contents/Resources` and
-    never downloads, so the library is put there by hand or named by
-    `$MYGO_GHOSTTY_VT`.
-  - Why: not done yet; it is the next step for apps with a terminal.
+- **Which plugins an app uses** (v0.88)
+  - mygo: the CLI ships the native libraries of the packages
+    `go list -deps` finds the app importing.
+  - myphp: `myphp build` ships those of the plugins whose namespace
+    (`MyPHP\Plugins\<Name>`) the app's PHP files name; one built for
+    the Mac it runs on, not universal.
+  - Why: PHP has no import graph to ask; myphp builds for one
+    architecture.
 - **macOS only** (v0.88)
   - mygo: Windows (ConPTY, PowerShell) and Linux; Control+Shift+C and V
     and the other keybinds of Linux and Windows; AltGr; text that comes

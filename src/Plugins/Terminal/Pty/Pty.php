@@ -59,7 +59,9 @@ final class Pty
         self::setSize($fd, $o->cols, $o->rows, $o->width, $o->height);
         $s = fopen("php://fd/$slave", 'r+');
         $arg = base64_encode(json_encode(['path' => $o->path, 'args' => $o->args, 'dir' => $o->dir, 'env' => $o->env], JSON_THROW_ON_ERROR));
-        $proc = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/spawn.php', $arg], [$s, $s, $s], $pipes);
+        // A static app (phpmicro) runs its own stub whatever it is given, which runs spawn.php on --myphp-pty-spawn (bin/myphp's micro launcher).
+        $argv = PHP_SAPI === 'micro' ? [PHP_BINARY, '--myphp-pty-spawn', $arg] : [PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/spawn.php', $arg];
+        $proc = proc_open($argv, [$s, $s, $s], $pipes);
         fclose($s);
         $c->close($slave); // the child has its own copies
         if ($proc === false) {

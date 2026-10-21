@@ -159,7 +159,8 @@ Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
 built app, else the checkout) and app.php; `myphp build` makes `<Name>.app`
 with a C launcher that execs this php (development) or, `--launcher micro`,
 a phar combined with phpmicro by static-php-cli (release, one static
-binary); `myphp micro` fetches spc into ~/.myphp and builds micro.sfx once.
+binary), with the native libraries of the plugins the app names
+(mygo-plugin.json) in Resources; `myphp micro` builds micro.sfx once.
 static-php-cli is the one outside tool, for release builds only.
 
 ## Working on it

@@ -93,7 +93,7 @@ scrolling; frames are only built when something changes.
 ```sh
 bin/myphp init my-app              # a native-UI project (--template web for a page calling PHP)
 cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerates the TS client
-../myphp/bin/myphp build           # dist/MyApp.app, a launcher that execs this machine's php
+../myphp/bin/myphp build           # dist/MyApp.app, a launcher that execs this machine's php; the plugins' native libraries (the terminal's libghostty-vt) in its Resources
 ../myphp/bin/myphp build --launcher micro   # one static binary: fetches static-php-cli and builds phpmicro the first time
 ```
 
@@ -243,7 +243,7 @@ App::run();
 ```sh
 bin/myphp init my-app              # 原生 UI 项目（--template web 是调用 PHP 的网页项目）
 cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重新生成 TS client
-../myphp/bin/myphp build           # dist/MyApp.app，启动器 exec 本机的 php
+../myphp/bin/myphp build           # dist/MyApp.app，启动器 exec 本机的 php；插件要的原生库（终端的 libghostty-vt）放进 Resources
 ../myphp/bin/myphp build --launcher micro   # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
 ```
 

@@ -246,6 +246,11 @@ function build(array $args): void
     // The app's files and the framework's src, as the bundle's Resources/app.
     copyTree($dir, "$contents/Resources/app", ['dist', 'vendor', 'node_modules', '.git', 'myphp', '.DS_Store']);
     copyTree(realpath($c['framework'] ?? FRAMEWORK) . '/src', "$contents/Resources/app/myphp/src", []);
+    // The native libraries of the plugins the app uses, at the top of Resources, where the plugins look first (mygo's natives).
+    foreach (natives($dir, realpath($c['framework'] ?? FRAMEWORK)) as [$file, $path]) {
+        copy($path, "$contents/Resources/$file") || fail("cannot copy $path");
+        chmod("$contents/Resources/$file", 0755);
+    }
     $iconFile = $icon ?? ($c['icon'] ?? null);
     if ($iconFile !== null) {
         $iconFile = str_starts_with($iconFile, '/') ? $iconFile : "$dir/$iconFile";
@@ -273,6 +278,96 @@ function build(array $args): void
         buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $spc, $micro);
     }
     echo "built $app ($launcher launcher)\n  open \"$app\"\n";
+}
+
+/**
+ * The native libraries that the plugins the app uses name in their
+ * mygo-plugin.json (src/Plugins/<Name>/), the same file and builds as
+ * mygo's, downloaded into the user's cache once: [file name, path] each
+ * (mygo's natives). A plugin is used when the app's PHP files name its
+ * namespace (MyPHP\Plugins\<Name>), as mygo's are the packages the app
+ * imports.
+ *
+ * @return list<array{0: string, 1: string}>
+ */
+function natives(string $appDir, string $framework): array
+{
+    $target = 'darwin-' . (in_array(strtolower(php_uname('m')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64');
+    $sources = '';
+    foreach (phpFiles($appDir, ['dist', 'vendor', 'node_modules', '.git', 'myphp']) as $f) {
+        $sources .= file_get_contents($f) . "\n";
+    }
+    $out = []; $seen = [];
+    foreach (glob("$framework/src/Plugins/*/mygo-plugin.json") ?: [] as $json) {
+        $plugin = basename(dirname($json));
+        if (!str_contains($sources, "MyPHP\\Plugins\\$plugin")) {
+            continue;
+        }
+        $n = json_decode(file_get_contents($json), true, 32, JSON_THROW_ON_ERROR);
+        foreach ($n['libraries'] ?? [] as $l) {
+            if (isset($seen[$l['name']])) { continue; }
+            $seen[$l['name']] = true;
+            $f = $l['files'][$target] ?? fail("the $plugin plugin needs {$l['name']}, which has no build for $target");
+            $out[] = [$f['name'], fetchNative($f)];
+        }
+    }
+    return $out;
+}
+
+/** The .php files under $dir, but in the directories $skip names. @return list<string> */
+function phpFiles(string $dir, array $skip): array
+{
+    $out = [];
+    foreach (scandir($dir) ?: [] as $name) {
+        if ($name === '.' || $name === '..' || in_array($name, $skip, true)) { continue; }
+        $p = "$dir/$name";
+        if (is_dir($p)) {
+            array_push($out, ...phpFiles($p, $skip));
+        } elseif (str_ends_with($name, '.php')) {
+            $out[] = $p;
+        }
+    }
+    return $out;
+}
+
+/**
+ * The path of a native library in the user's cache, downloaded there with
+ * curl first when it is missing and its SHA-256 checked:
+ * ~/Library/Caches/mygo/natives/<sha256>/<name>, where mygo's CLI keeps it
+ * and the plugins look too when they run outside a built app (mygo's
+ * fetchNative).
+ *
+ * @param array{name: string, url: string, sha256: string} $f
+ */
+function fetchNative(array $f): string
+{
+    // The SHA-256 and the name are parts of a path: a plugin may not name another file than the library it downloads.
+    $name = (string)($f['name'] ?? ''); $sum = (string)($f['sha256'] ?? ''); $url = (string)($f['url'] ?? '');
+    if ($url === '' || preg_match('/^[0-9a-f]{64}$/', $sum) !== 1 || $name === '' || $name === '.' || $name === '..' || strpbrk($name, '/\\') !== false) {
+        fail('invalid native library ' . json_encode($f));
+    }
+    $dir = getenv('HOME') . "/Library/Caches/mygo/natives/$sum";
+    $path = "$dir/$name";
+    if (is_file($path) && hash_file('sha256', $path) === $sum) {
+        return $path;
+    }
+    is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot make $dir");
+    $tmp = tempnam($dir, '.download-');
+    echo "downloading $name from $url\n";
+    if (sh(['curl', '-fsSL', '-o', $tmp, $url]) !== 0) {
+        unlink($tmp);
+        fail("downloading $name from $url failed");
+    }
+    if (($got = hash_file('sha256', $tmp)) !== $sum) {
+        unlink($tmp);
+        fail("$url has SHA-256 $got, not $sum");
+    }
+    chmod($tmp, 0755);
+    if (!rename($tmp, $path)) {
+        unlink($tmp);
+        is_file($path) && hash_file('sha256', $path) === $sum || fail("cannot move the download to $path");
+    }
+    return $path;
 }
 
 function copyTree(string $from, string $to, array $skip): void
@@ -346,7 +441,7 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
     @unlink($phar);
     $code = sh([PHP_BINARY, '-d', 'phar.readonly=0', '-r', <<<PHP
     \$p = new Phar('$phar'); \$p->buildFromDirectory('$appDir');
-    \$p->setStub("<?php Phar::mapPhar('app.phar'); require 'phar://app.phar/$entry'; __HALT_COMPILER();");
+    \$p->setStub("<?php Phar::mapPhar('app.phar'); if ((\\\$argv[1] ?? '') === '--myphp-pty-spawn') { require 'phar://app.phar/myphp/src/Plugins/Terminal/Pty/spawn.php'; exit(127); } require 'phar://app.phar/$entry'; __HALT_COMPILER();");
     PHP]);
     $code === 0 || fail('building the phar failed');
     $ini = [];

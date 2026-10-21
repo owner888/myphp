@@ -1898,6 +1898,22 @@ stream; `dlopen` only touches system frameworks, so nothing needs to be
 on disk. `DirectoryIterator` returned nothing on the container's mount
 during testing while `scandir` worked, so the CLI walks with `scandir`.
 
+Plugins with native libraries say so as mygo's do, in a
+`mygo-plugin.json` next to their sources (`src/Plugins/<Name>/`), the
+same file as mygo's: a build per platform, its URL and SHA-256. `myphp
+build` puts those of the plugins the app uses at the top of
+`Contents/Resources` (`natives()`), downloaded with curl into
+`~/Library/Caches/mygo/natives/<sha256>/` once and checked there, the
+cache mygo's CLI and the plugins share; a plugin is used when the app's
+PHP files name its namespace, where mygo asks `go list -deps`. The
+plugins find the library there first (`Terminal\Library`: the bundle's
+Resources from the framework's path, or from `Phar::running()` in a
+static app) and never download it inside an app. A static app's
+executable is phpmicro running its stub, whatever arguments it gets, so
+the stub runs `Pty/spawn.php` when its first argument is
+`--myphp-pty-spawn`, which is how the terminal starts its programs
+there (`PHP_SAPI === 'micro'`).
+
 Local state and ids: `Runtime::local` keys a control's state (a
 combobox's popup, a picker's HSV, an alert's opening) by its node's id,
 and an unkeyed node's id is its place in the build order, so content
