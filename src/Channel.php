@@ -22,6 +22,10 @@ namespace MyPHP;
  *     for await (const line of lines) output.append(line + "\n");
  *     await done;
  *
+ * A generator that waits for something, as the network, yields
+ * Channel::wait($seconds): nothing is sent, and it goes on that much later,
+ * the run loop turning meanwhile (mygo's methods block on a goroutine).
+ *
  * Values arrive in order, before the call's result. The page may close
  * the channel (breaking out of the loop does): send() then throws
  * ChannelClosed, and a generator gets it thrown at its yield. Navigating
@@ -33,6 +37,12 @@ final class Channel
     private bool $closed = false;
 
     public function __construct(private readonly Window $window, public readonly int $id, private readonly string $secret) {}
+
+    /** What a streaming generator yields to send nothing now and go on $seconds later. */
+    public static function wait(float $seconds): ChannelWait
+    {
+        return new ChannelWait(max(0.0, $seconds));
+    }
 
     /** Sends $value to the page. */
     public function send(mixed $value): void

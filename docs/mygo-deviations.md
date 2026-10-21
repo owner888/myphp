@@ -310,6 +310,24 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: plugins are PHP (the developer's rule), and PHP's methods are
     named in lowercase.
 
+## Fetch
+
+- **The HTTP client** (v0.92)
+  - mygo: Go's `net/http`: `Options.Client` (its cookie jar, transport,
+    `CheckRedirect`); `Allow` gets the `*http.Request`; the request's
+    context cancels it; a `User-Agent` of Go's.
+  - myphp: libcurl through FFI, the system's; no `Client` option and no
+    cookies kept; `Options::$allow` gets a `Request` (method, URL,
+    headers); the page going away, or closing the channel, stops it; no
+    `User-Agent` unless the page sets one.
+  - Why: PHP has no HTTP client of its own beyond extensions; libcurl is
+    on every Mac, through ext-ffi alone (the developer's choice).
+- **Waiting without blocking** (v0.92)
+  - mygo: `Fetch` blocks on its goroutine, sending parts as they come.
+  - myphp: `fetch()` is a generator that yields the parts, and
+    `Channel::wait()` between them while nothing came.
+  - Why: one thread (the developer's choice of the mechanism).
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

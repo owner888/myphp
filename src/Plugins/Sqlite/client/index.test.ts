@@ -1,27 +1,8 @@
-// The page side of the plugin (mygo's src/index.test.ts), over a fake
-// window.myphp whose calls the tests answer: bun test, here.
+// The page side of the plugin (mygo's src/index.test.ts), over MyPHP's
+// real page runtime whose calls the tests answer: bun test, here.
 import { afterEach, expect, test } from "bun:test";
+import { fakeMyPHP } from "../../fake-myphp";
 import { open } from "./index";
-
-type Handler = (...args: unknown[]) => unknown;
-
-/** A window.myphp whose call() answers from handlers, as PHP would, and keeps the calls (mygo's fakeGo). */
-function fakeMyPHP(handlers: Record<string, Handler>) {
-  const calls: [string, unknown[]][] = [];
-  const g = globalThis as unknown as { window?: unknown };
-  const before = g.window;
-  g.window = {
-    myphp: {
-      async call(method: string, ...args: unknown[]) {
-        calls.push([method, JSON.parse(JSON.stringify(args))]);
-        const h = handlers[method];
-        if (!h) throw new Error(`no bound method ${method}`);
-        return h(...args);
-      },
-    },
-  };
-  return { calls, uninstall: () => { g.window = before; } };
-}
 
 let php: ReturnType<typeof fakeMyPHP> | undefined;
 afterEach(() => php?.uninstall());

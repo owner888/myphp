@@ -229,7 +229,13 @@ final class Ipc
                     $window->page()?->deliver(self::reply($id, $secret, $gen->getReturn(), null));
                     return;
                 }
-                $out->send($gen->current());
+                $current = $gen->current();
+                if ($current instanceof ChannelWait) { // nothing to send yet: go on later
+                    $gen->next();
+                    App::after($current->seconds, $step);
+                    return;
+                }
+                $out->send($current);
                 $gen->next();
             } catch (Throwable $e) {
                 self::closeAll($channels);

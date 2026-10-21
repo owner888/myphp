@@ -1784,6 +1784,25 @@ the SQLite service closes a page's connections with. The service's
 methods are lowercase, as PHP's (`plugin:sqlite.open`), and its shutdown,
 which `App::onQuit` runs, is private, out of the pages' reach.
 
+A bound method waiting for something, as a response from the network,
+cannot block the main thread as mygo's goroutines do: a streaming
+generator yields `Channel::wait($seconds)`, which sends nothing and has
+`Ipc::pump` go on that much later (`App::after`), the run loop turning
+meanwhile. The fetch plugin is such a generator around libcurl, the
+system's (`/usr/lib/libcurl.4.dylib`), through FFI (`Fetch\Curl`): an easy
+handle a request on a multi handle of its own, `curl_multi_perform` each
+turn, its header and write callbacks (closures in a struct of function
+pointers) gathering the head and the body, every 2 ms while data flows,
+backing off to 50 ms. A PHP int goes to `curl_easy_setopt`, variadic, as
+a 64-bit integer, libcurl's long and curl_off_t; a scalar CData does not
+(FFI warns and passes garbage). It sends what Go's client sends: no
+`Accept` or `Expect` of curl's own, gzip asked for and undone (its
+`Content-Encoding` and `Content-Length` dropped) unless the page names an
+encoding, redirects followed to 20 or returned (`manual`) or refused
+(`error`), the head of the final response told by its blank line. The
+plugins' clients are tested over the real `bridge.js`
+(`src/Plugins/fake-myphp.ts`, mygo's fake-go.ts) with `bun test`.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

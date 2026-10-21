@@ -1,0 +1,9 @@
+{
+  "name": "@myphp-plugins/fetch",
+  "version": "0.1.0",
+  "description": "The page side of MyPHP's fetch plugin: a fetch that makes HTTP requests from PHP, over window.myphp.call",
+  "type": "module",
+  "exports": "./index.ts",
+  "types": "./index.ts",
+  "license": "MIT"
+}
