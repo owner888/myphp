@@ -7,6 +7,7 @@
 //   myphp dev [dir]                            run it, restart on changes, regenerate the TS client
 //   myphp build [dir] [--launcher exec|micro] [--out dist]   build <Name>.app
 //   myphp micro [--php 8.4] [--manual]         get static-php-cli and build micro.sfx (once), or print the steps
+//   myphp keygen [--out dir] [--force]         the key pair that signs updates
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
@@ -214,7 +215,7 @@ function dev(array $args): void
             }
         }
         $code = proc_close($proc);
-        if (!$changed) {
+        if (!$changed && $code !== 75) { // 75: App::relaunch() asks to be started again (mygo's devRelaunchCode)
             exit($code);
         }
     }
@@ -270,7 +271,7 @@ function build(array $args): void
         'NSHighResolutionCapable' => true,
         'NSPrincipalClass' => 'NSApplication',
         'LSApplicationCategoryType' => 'public.app-category.utilities',
-    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : [])));
+    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + updatePlist($dir, $c)));
     file_put_contents("$contents/PkgInfo", 'APPL????');
     if ($launcher === 'exec') {
         buildExecLauncher("$contents/MacOS/$name", $c['entry']);
@@ -278,6 +279,9 @@ function build(array $args): void
         buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $spc, $micro);
     }
     echo "built $app ($launcher launcher)\n  open \"$app\"\n";
+    foreach (writeUpdate($dir, $c, dirname($app), basename($app)) as $f) {
+        echo "  $f\n";
+    }
 }
 
 /**
@@ -538,6 +542,59 @@ function micro(array $args): void
     echo "spc: $spc\nmicro.sfx: $micro\n";
 }
 
+
+// ---- updates ------------------------------------------------------------
+// Signed updates (App's Updater): `myphp keygen` makes the key pair, `myphp
+// build` signs an archive of the app with the private key and writes
+// update-<target>.json, which apps built with the public key check; the
+// work is MyPHP\Native\Update\Publish's.
+
+/** The framework's Publish, with myphp.json's "updates", or null without them. */
+function publisher(string $dir, array $c): ?MyPHP\Native\Update\Publish
+{
+    if (!isset($c['updates'])) {
+        return null;
+    }
+    require_once FRAMEWORK . '/src/autoload.php';
+    try {
+        return new MyPHP\Native\Update\Publish($dir, $c);
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+}
+
+/** The Info.plist keys that point the app at its manifest. @return array<string, string> */
+function updatePlist(string $dir, array $c): array
+{
+    return publisher($dir, $c)?->plist() ?? [];
+}
+
+/** The update files of the app $entry built in $out. @return list<string> */
+function writeUpdate(string $dir, array $c, string $out, string $entry): array
+{
+    $p = publisher($dir, $c);
+    if ($p === null) {
+        return [];
+    }
+    try {
+        return $p->write($out, $entry, fn(string $line) => print("myphp: $line\n"));
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+}
+
+/** Creates the Ed25519 key pair that signs updates (mygo's keygen). */
+function keygen(array $args): void
+{
+    $out = option($args, 'out', getenv('HOME') . '/Library/Application Support/myphp/update-keys');
+    require_once FRAMEWORK . '/src/autoload.php';
+    try {
+        echo MyPHP\Native\Update\Publish::keygen($out, in_array('--force', $args, true));
+    } catch (RuntimeException $e) {
+        fail($e->getMessage());
+    }
+}
+
 // ---- main ---------------------------------------------------------------
 $args = array_slice($_SERVER['argv'], 1);
 $cmd = array_shift($args) ?? '';
@@ -546,5 +603,6 @@ match ($cmd) {
     'dev' => dev($args),
     'build' => build($args),
     'micro' => micro($args),
-    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual]"),
+    'keygen' => keygen($args),
+    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual] | keygen [--out dir] [--force]"),
 };

@@ -5,7 +5,7 @@ namespace MyPHP\Plugins\WebSocket;
 
 use FFI;
 use FFI\CData;
-use MyPHP\Plugins\Curl;
+use MyPHP\Native\Curl;
 use RuntimeException;
 
 /**

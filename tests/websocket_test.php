@@ -13,7 +13,7 @@ use MyPHP\{CallContext, Channel, ChannelWait};
 use MyPHP\Plugins\WebSocket\{Options, Request, Service, WebSocket};
 
 try {
-    \MyPHP\Plugins\Curl::ffi();
+    \MyPHP\Native\Curl::ffi();
 } catch (\Throwable $e) {
     echo "  skipped: websocket: {$e->getMessage()}\n";
     return;

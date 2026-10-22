@@ -76,18 +76,11 @@ final class NativeLibrary
         return $cached;
     }
 
-    /** The Resources of the .app the framework runs from, as `myphp build` lays it out (Contents/Resources/app/myphp/src, or the phar of a static app's Contents/MacOS/<Name>), or null when it runs from no bundle. */
+    /** The Resources of the .app the app runs from (Native\Bundle), or null when it runs from no bundle. */
     private static function resources(): ?string
     {
-        $phar = class_exists(\Phar::class) ? \Phar::running(false) : '';
-        if ($phar !== '' && preg_match('~^(.*\.app/Contents)/MacOS/[^/]+$~', $phar, $m) === 1) {
-            return $m[1] . '/Resources';
-        }
-        $src = realpath(__DIR__ . '/..');
-        if ($src !== false && preg_match('~^(.*\.app/Contents/Resources)/app/~', $src . '/', $m) === 1) {
-            return $m[1];
-        }
-        return null;
+        $app = \MyPHP\Native\Bundle::path();
+        return $app === null ? null : "$app/Contents/Resources";
     }
 
     /** Where mygo's CLI and this keep a downloaded library (Go's os.UserCacheDir). @param array{name: string, sha256: string} $f */

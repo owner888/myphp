@@ -1797,7 +1797,7 @@ cannot block the main thread as mygo's goroutines do: a streaming
 generator yields `Channel::wait($seconds)`, which sends nothing and has
 `Ipc::pump` go on that much later (`App::after`), the run loop turning
 meanwhile. The fetch plugin is such a generator around libcurl, the
-system's (`/usr/lib/libcurl.4.dylib`), through FFI (`Plugins\Curl`): an easy
+system's (`/usr/lib/libcurl.4.dylib`), through FFI (`Native\Curl`): an easy
 handle a request on a multi handle of its own, `curl_multi_perform` each
 turn, its header and write callbacks (closures in a struct of function
 pointers) gathering the head and the body, every 2 ms while data flows,
@@ -1865,6 +1865,38 @@ checked at setup (symlinks resolved, every component an ordinary
 directory) and again at each watch, walks a page's path component by
 component without following symlinks, and counts each watch against its
 page (its `CallContext`) until the page goes away.
+
+## Updates
+
+`Updater` is mygo's: `myphp build` with myphp.json's `updates` writes the
+manifest's URL and the public key into Info.plist (`MyPHPUpdateFeed`,
+`MyPHPUpdateKey`, where mygo's `-ldflags -X` put them), signs a gzip'd tar
+of the bundle and writes `update-<target>.json`; the app checks the feed,
+downloads the archive or the delta of its version, checks its size and
+signature, and renames the new bundle into place (`Native\Update`, mygo's
+internal/update line for line, and `Native\Update\Publish` the build's
+side, which bin/myphp calls). Nothing needs an extension the static build
+lacks: Ed25519 is TweetNaCl's arithmetic in PHP (16 limbs of 16 bits in
+64-bit ints, SHA-512 from `hash`), a signature checked in about 20 ms with
+the JIT, RFC 8032's vectors in the tests; gzip and raw DEFLATE are the
+system's libz through FFI (`Native\Zlib`, a `z_stream` driven chunk by
+chunk); tar is read and written in PHP, with PAX headers for long names as
+Go writes them, and extracted as it is inflated. The requests are
+libcurl's (`Native\Curl`, which the fetch and WebSocket plugins share),
+HTTPS only but for the loopback interface. bsdiff's suffix array in PHP
+takes about 3 s and 70 MB a MB of the old file, so deltas patch files of
+up to 32 MiB (mygo's 256 MiB) and include larger ones whole; applying a
+patch streams it.
+
+Waiting is a fiber's, as mygo's is a goroutine's: `App::go($fn)` runs
+`$fn` in a `Fiber`, and `Native\Fibers::sleep()` inside one schedules its
+resumption with `App::after` and suspends it, so a download in the
+background lets the app run; outside a fiber the wait turns the run loop
+(`App::wait`), or sleeps when the app doesn't run, and without the run
+loop fibers wait in a queue `Fibers::drain()` runs (the tests).
+`App::relaunch()` quits and, after the quit's `onQuit`, starts the
+bundle's executable again; under `myphp dev` the app exits with 75 and
+dev starts it again, as mygo dev does.
 
 ## Accessibility
 

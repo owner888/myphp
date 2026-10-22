@@ -21,6 +21,9 @@ final class App
     private static bool $ready = false;
     private static bool $running = false;
     private static ?string $name = null;
+    private static ?string $version = null;
+    /** App::relaunch() asked for the app to start again once it quit. */
+    private static bool $relaunch = false;
     private static ?Menu $menu = null;
     private static ?Theme $theme = null;
     private static bool $themeFixed = false;
@@ -122,6 +125,9 @@ final class App
                 self::$onQuit = [];
                 foreach ($quit as $fn) {
                     $fn();
+                }
+                if (self::$relaunch) {
+                    self::relaunchNow(); // after onQuit, which releases what the app holds
                 }
             }],
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
@@ -359,6 +365,69 @@ final class App
     public static function running(): bool
     {
         return self::$nsApp !== null;
+    }
+
+    /**
+     * The version of the app (mygo's App.Version): that of the bundle it
+     * runs from (myphp.json's "version", which `myphp build` writes in
+     * Info.plist), or what setVersion() set; "" when neither says.
+     */
+    public static function version(): string
+    {
+        return self::$version ?? Native\Bundle::info('CFBundleShortVersionString') ?? '';
+    }
+
+    /** Overrides the version of the app (mygo's SetVersion). */
+    public static function setVersion(string $version): void
+    {
+        self::$version = $version;
+    }
+
+    /** Whether the app runs from an app bundle that `myphp build` made, rather than from its project (mygo's IsPackaged). */
+    public static function isPackaged(): bool
+    {
+        return Native\Bundle::path() !== null;
+    }
+
+    /** Whether the app runs from its project, as `myphp dev` and `php app.php` run it, not from a bundle `myphp build` made (mygo's IsDev). */
+    public static function isDev(): bool
+    {
+        return !self::isPackaged();
+    }
+
+    /**
+     * Quits the app, then starts it again (mygo's Relaunch): the bundle's
+     * executable, which an update may have replaced. Under `myphp dev`,
+     * myphp dev starts it again. Nothing happens when quitting is
+     * canceled.
+     */
+    public static function relaunch(): void
+    {
+        self::$relaunch = true;
+        self::quit();
+    }
+
+    private static function relaunchNow(): void
+    {
+        if (getenv('MYPHP_DEV') === '1') {
+            exit(self::DEV_RELAUNCH_CODE); // myphp dev starts it again
+        }
+        $cmd = implode(' ', array_map('escapeshellarg', Native\Bundle::command()));
+        exec("nohup $cmd > /dev/null 2>&1 &");
+    }
+
+    /** The exit code with which an app under `myphp dev` asks to be started again (mygo's devRelaunchCode). */
+    public const DEV_RELAUNCH_CODE = 75;
+
+    /**
+     * Runs $fn in a fiber of its own, as a goroutine of mygo's: what waits
+     * in it, as Updater::check() and Update::install() do, suspends the
+     * fiber and lets the app run until the run loop resumes it. It runs at
+     * once, until its first wait.
+     */
+    public static function go(Closure $fn): void
+    {
+        Native\Fibers::go($fn);
     }
 
     /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenURL. */

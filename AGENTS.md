@@ -54,17 +54,17 @@ src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after),
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
                    region/on*Changed), Region, I18n (tags, patterns, dates, numbers, names — over ext-intl), L10n
                    (MyPHP's own strings, src/l10n/<tag>.json: mygo's catalogs in en, zh-Hans, zh-Hant)
-src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale
-                   (AppleLanguages, the current locale's formats), Carbon (hot
-                   keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
+src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale (AppleLanguages,
+                   the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
-                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy)
-src/Text/          the text system (mygo's internal/text): System, Layout (lines, carets, selection), Engine (Native\TextEngine, StubEngine)
+                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy),
+                   Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/
+src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine)
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Plugins\Curl); Watch/ (App::watchFiles)
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles)
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors

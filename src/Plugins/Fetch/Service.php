@@ -7,7 +7,7 @@ use FFI;
 use FFI\CData;
 use Generator;
 use MyPHP\{CallContext, Channel};
-use MyPHP\Plugins\Curl;
+use MyPHP\Native\Curl;
 use RuntimeException;
 
 /**

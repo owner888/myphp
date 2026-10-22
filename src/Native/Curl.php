@@ -1,14 +1,14 @@
 <?php
 declare(strict_types=1);
 
-namespace MyPHP\Plugins;
+namespace MyPHP\Native;
 
 use FFI;
 use FFI\CData;
 use RuntimeException;
 
 /**
- * The system's libcurl through FFI, for the fetch and WebSocket plugins:
+ * The system's libcurl through FFI, for the updater and the fetch and WebSocket plugins:
  * one easy handle a request, driven by a multi handle without blocking,
  * its callbacks run from perform() on the main thread. A WebSocket's
  * handle only connects (CONNECT_ONLY) and stays in its multi handle, which
@@ -45,7 +45,7 @@ final class Curl
     public const OPT_URL = 10002, OPT_WRITEFUNCTION = 20011, OPT_HEADERFUNCTION = 20079, OPT_HTTPHEADER = 10023,
         OPT_CUSTOMREQUEST = 10036, OPT_POSTFIELDS = 10015, OPT_POSTFIELDSIZE_LARGE = 30120, OPT_FOLLOWLOCATION = 52,
         OPT_MAXREDIRS = 68, OPT_NOBODY = 44, OPT_NOSIGNAL = 99, OPT_PROTOCOLS_STR = 10318, OPT_REDIR_PROTOCOLS_STR = 10319,
-        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61;
+        OPT_ACCEPT_ENCODING = 10102, OPT_POST = 47, OPT_CONNECT_ONLY = 141, OPT_HTTPPROXYTUNNEL = 61, OPT_USERAGENT = 10018;
     public const INFO_RESPONSE_CODE = 0x200002, INFO_EFFECTIVE_URL = 0x100001, INFO_REDIRECT_COUNT = 0x200014;
     public const MSG_DONE = 1;
     /** CURLE_TOO_MANY_REDIRECTS. */

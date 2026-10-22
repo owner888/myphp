@@ -388,6 +388,42 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     channel's `onmessage`.
   - Why: plugins are PHP (the developer's rule); one thread.
 
+## Updates
+
+- **Waiting and canceling** (v0.95)
+  - mygo: `Updater.Check(ctx)` and `Update.Install(ctx, progress)` block
+    on their goroutine; the context cancels them; `progress` gets int64s.
+  - myphp: `Updater::check(?Closure $canceled)` and
+    `Update::install(?Closure $progress, ?Closure $canceled)`, which wait
+    in a fiber (`App::go`, new) or turn the run loop; `$canceled` returns
+    true to stop them.
+  - Why: PHP runs the app on one thread; fibers are its goroutines (the
+    developer's choice).
+- **Where the feed and key are** (v0.95)
+  - mygo: `-ldflags -X` puts them in the executable; `mygo.config.ts` or
+    `mygo.json` configures them; `MYGO_UPDATER_PRIVATE_KEY`;
+    `mygo-update.key` in `mygo/update-keys` of the config directory.
+  - myphp: `myphp build` writes them in Info.plist (`MyPHPUpdateFeed`,
+    `MyPHPUpdateKey`); `myphp.json`'s `updates`;
+    `MYPHP_UPDATER_PRIVATE_KEY`; `myphp keygen --out` writes
+    `myphp-update.key` in `~/Library/Application Support/myphp/update-keys`.
+  - Why: a PHP app has no link step; Info.plist is in the signed bundle.
+- **What the build publishes** (v0.95)
+  - mygo: `mygo build -upload` uploads to a GitHub release or S3
+    (`updates.s3`); Linux and Windows archives and `install.sh`; deltas
+    patch files of up to 256 MiB.
+  - myphp: macOS bundles only; no upload (publish the files yourself), and
+    `updates.s3` is refused; deltas patch files of up to 32 MiB.
+  - Why: myphp builds macOS apps; PHP's bsdiff takes ~70 bytes of memory a
+    byte.
+- **App** (v0.95)
+  - mygo: `App.Version` from the build, `IsDev` false in production builds,
+    `Relaunch` starts the executable it started from.
+  - myphp: `App::version()` from Info.plist (myphp.json's version),
+    `App::isDev()` true outside a bundle, `App::relaunch()` starts the
+    bundle's executable, or the script again with the PHP running it.
+  - Why: a PHP app is a project or the bundle `myphp build` made.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)
