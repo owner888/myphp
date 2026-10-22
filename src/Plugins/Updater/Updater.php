@@ -44,7 +44,19 @@ final class Updater
     /** The plugin with $opts (mygo's updater.New). Use one of them only. */
     public static function new(Options $opts): Plugin
     {
-        $u = new Checker($opts);
+        return self::with($opts, null);
+    }
+
+    /**
+     * The plugin with $opts whose windows $open creates (mygo's
+     * frontend.Plugin): Native\Native's, or the web page's for null.
+     *
+     * @internal
+     * @param ?Closure(Checker, Session): void $open
+     */
+    public static function with(Options $opts, ?Closure $open): Plugin
+    {
+        $u = new Checker($opts, $open);
         return new Plugin('updater', new Service($u), function () use ($u, $opts): void {
             foreach ($opts->strings as $lang => $s) {
                 if (($err = $s->check()) !== null) {

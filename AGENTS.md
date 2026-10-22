@@ -64,7 +64,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout, Engin
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html)
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html; Native/ in native UI)
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
@@ -106,7 +106,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   them while building; a click that changed state re-runs the build (≤3 passes).
   `richText(..., wrap: true)` wraps at last frame's width (a frame follows when
   it differs); `->focusable()` puts any node in the Tab order; `->size(w, h)`
-  fixes a container's size over its content's; `->fit(Node::COVER…)`/`->grayscale()` on images; `->justifyItems()`/`->justifySelf()` in grids; `->basis(0)` with grow shares
+  fixes a container's size over its content's; `->fit(Node::COVER…)`/`->grayscale()` on images; `->justifyItems()`/`->justifySelf()` in grids; `->reverse()` (mygo's Reverse); `->basis(0)` with grow shares
   the room equally and keeps content from widening the parent (mygo's Basis).
 - **Scrolling on either axis**: `->scroll($state, horizontal:, vertical:)`;
   a container takes the room it is given on the axes it scrolls and its

@@ -4,18 +4,24 @@
 // says that development builds do not update themselves; a bundle that
 // `myphp build` made with myphp.json's "updates" checks its feed. With
 // --demo, checks find a made-up version 9.9.9 whose "install" only counts
-// up, to show the release notes, the progress and the relaunch offer.
-// Run: ./run.sh updater [--demo]
+// up, to show the release notes, the progress and the relaunch offer. With
+// --native, the window is drawn in native UI (Native::plugin()), as is the
+// app's own.
+// Run: ./run.sh updater [--demo] [--native]
 declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\Native\Fibers;
 use MyPHP\Plugins\Updater\{Options, Release, Updater};
+use MyPHP\Plugins\Updater\Native\Native;
+use MyPHP\UI\{Content, Context};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 App::setName('Updater Demo');
-App::use(Updater::new(new Options(disableAutomaticChecks: true)));
+$native = in_array('--native', $argv, true);
+$opts = new Options(disableAutomaticChecks: true);
+App::use($native ? Native::new($opts) : Updater::new($opts));
 
 if (in_array('--demo', $argv, true)) {
     // Not an API: the plugin's internals, so that a development run shows each view of the window.
@@ -51,7 +57,20 @@ final class Demo
 }
 MyPHP\Ipc::bind(new Demo());
 
-App::whenReady(function () {
+App::whenReady(function () use ($native) {
+    if ($native) {
+        new Window(new WindowOptions(title: 'Updater', width: 420, height: 200, content: Content::view(function (Context $c): void {
+            $c->column(24, 12, 1);
+            $c->text('Check from the app menu, or here:');
+            $c->row();
+            if ($c->clicked($c->button('Check for Updates…'))) {
+                Updater::checkForUpdates();
+            }
+            $c->end();
+            $c->end();
+        })));
+        return;
+    }
     new Window(new WindowOptions(title: 'Updater', width: 420, height: 200, html: <<<'HTML'
         <!doctype html><meta charset="utf-8">
         <body style="font: 15px -apple-system, system-ui; padding: 24px">

@@ -342,12 +342,14 @@ final class Layout
             if ($n->dir === Node::ROW) {
                 $kw = ($k->basis ?? $k->mw) + $extra * $k->grow - ($shrink[$i] ?? 0.0) + ($autos[$i] ?? 0.0);
                 $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
-                self::arrange($k, $cx, $cy + ($autoCross ? 0.0 : self::across($a, $ch, $kh)), $kw, $kh);
+                $at = $n->reverse ? 2 * ($x + $px) + $cw - $cx - $kw : $cx; // reversed: the same place counted from the right
+                self::arrange($k, $at, $cy + ($autoCross ? 0.0 : self::across($a, $ch, $kh)), $kw, $kh);
                 $cx += $kw + $n->gap;
             } else {
                 $kh = ($k->basis ?? $k->mh) + $extra * $k->grow + ($autos[$i] ?? 0.0);
                 $kw = $autoCross || ($a === Node::STRETCH && $k->fw <= 0) ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
-                self::arrange($k, $cx + ($autoCross ? 0.0 : self::across($a, $cw, $kw)), $cy, $kw, $kh);
+                $at = $n->reverse ? 2 * ($y + $py) + $ch - $cy - $kh : $cy; // from the bottom
+                self::arrange($k, $cx + ($autoCross ? 0.0 : self::across($a, $cw, $kw)), $at, $kw, $kh);
                 $cy += $kh + $n->gap;
             }
         }

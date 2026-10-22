@@ -135,6 +135,8 @@ final class Node
     public bool $takesFiles = false;
     /** Moved by the pointer from its place in the layout (Context::draggable): its offset joins its pose. */
     public bool $draggable = false;
+    /** Lays a row out from right to left and a column from bottom to top, as CSS's row-reverse and column-reverse (mygo's Reverse): justify()'s START is then the right or the bottom. A check box or radio button puts its box after its label, a progress bar fills from the right. Rows that wrap and grids keep their order. */
+    public bool $reverse = false;
     /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled. */
     public bool $disabled = false;
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
@@ -429,6 +431,13 @@ final class Node
     }
 
     /** Draws this node's image, or icon, in shades of gray (mygo's Grayscale). */
+    /** See $reverse. */
+    public function reverse(): static
+    {
+        $this->reverse = true;
+        return $this;
+    }
+
     public function grayscale(): static
     {
         $this->gray = true;

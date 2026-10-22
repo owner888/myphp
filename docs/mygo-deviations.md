@@ -428,15 +428,37 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: package functions `updater.Plugin`, `New`, `CheckForUpdates`,
     `MenuItem`, `AutomaticChecks`…; `Options.Interval` a duration and
     `Icon` bytes, default icon.png among the resources; `Strings` formats
-    with Go's verbs (`%[2]s`); `LastCheck` the zero time when never; a
-    window in native UI too (`native.Plugin`).
+    with Go's verbs (`%[2]s`); `LastCheck` the zero time when never;
+    `native.Plugin` and `native.New` for the window in native UI.
   - myphp: static methods of `Plugins\Updater\Updater` (`plugin()`,
-    `new()`, `checkForUpdates()`, `menuItem()`…); `$interval` in seconds,
-    `$icon` PNG bytes, default the project's icon.png
+    `new()`, `checkForUpdates()`, `menuItem()`…) and of
+    `Plugins\Updater\Native\Native` (`plugin()`, `new()`); `$interval` in
+    seconds, `$icon` PNG bytes, default the project's icon.png
     (`Resources/app/icon.png`); `Strings` formats in sprintf's syntax
-    (`%2$s`); `lastCheck()` null; the web page window only, so far.
-  - Why: PHP's packages are classes; the native window waits for a later
-    version.
+    (`%2$s`); `lastCheck()` null.
+  - Why: PHP's packages are classes.
+- **The native update window** (v0.97)
+  - mygo: links inside release notes keep the styles of their text (a
+    bold word in a link); plain buttons have a faint shadow (0, 1, 1,
+    rgba(0, 0, 0, .08)); its theme's border is white or black at 15 %
+    opacity; the checkbox, progress bar and focus ring take the window's
+    theme.
+  - myphp: a link shows its text in the link's style alone; no shadow
+    under plain buttons (myphp's bordered faces have none); the border is
+    that color mixed over the window's background; the checkbox's box,
+    the progress bar's track and the focus ring are painted in the app's
+    theme (the painter's), the rest in the window's.
+  - Why: a link is one text in myphp's paragraphs; myphp's theme colors
+    have no alpha, and its painter takes the app's theme.
+- **Reverse** (v0.97)
+  - mygo: `Reverse()` on rows and columns (and wrapping rows), check
+    boxes, radio buttons, progress bars; the layout also follows the
+    window's direction (`Direction`, right to left).
+  - myphp: `Node::reverse()` on rows and columns that do not wrap, check
+    boxes, radio buttons and progress bars; myphp lays out left to right
+    only, so a mirrored window reverses its rows itself (the update
+    window does).
+  - Why: what the update window needs; the direction of windows waits.
 - **Core additions it needed** (v0.96)
   - mygo: `Page.OnWillNavigate(NavigateEvent)`; `Power` with
     `OnSuspend`, `OnResume`, `OnLockScreen`, `OnUnlockScreen`, `KeepAwake`,

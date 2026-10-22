@@ -69,11 +69,12 @@ final class Painter
             $h = $n->fh; $y = $n->y + ($n->h - $h) / 2; $r = $h / 2;
             $list->rect($n->x, $y, $n->w, $h, $t->border, 1.0, $r);
             if ($n->fraction >= 0) {
-                $list->rect($n->x, $y, $n->w * min(1.0, $n->fraction), $h, $n->color ?? $t->accent, 1.0, $r);
+                $fill = $n->w * min(1.0, $n->fraction);
+                $list->rect($n->reverse ? $n->x + $n->w - $fill : $n->x, $y, $fill, $h, $n->color ?? $t->accent, 1.0, $r); // reversed: from the right
             } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
                 $phase = fmod(hrtime(true) / 1.5e9, 1.0);
                 $bar = $n->w / 3;
-                $x = $n->x - $bar + $phase * ($n->w + $bar);
+                $x = $n->reverse ? $n->x + $n->w - $phase * ($n->w + $bar) : $n->x - $bar + $phase * ($n->w + $bar);
                 $list->pushClip($n->x, $y, $n->w, $h);
                 $list->rect($x, $y, $bar, $h, $t->accent, 1.0, $r);
                 $list->popClip();
@@ -362,7 +363,7 @@ final class Painter
     private static function paintToggle(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $box = $t->space(4);
-        $x = $n->x; $y = $n->y + ($n->h - $box) / 2;
+        $x = $n->reverse ? $n->x + $n->w - $box : $n->x; $y = $n->y + ($n->h - $box) / 2; // reversed: the box after the label
         $radius = $n->kind === Node::RADIO ? $t->space(2) : $t->space(1);
         $hovered = $rt?->hovered($n->id) ?? false;
         if ($n->on || $n->mixed) {
@@ -384,8 +385,8 @@ final class Painter
         if ($n->focusVisible) {
             self::focusRing($list, $x, $y, $box, $box, $radius, $t);
         }
-        [, $lh] = $text->measure($n->text, $n->fontSize);
-        $text->paint($list, $n->text, $n->fontSize, $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+        [$lw, $lh] = $text->measure($n->text, $n->fontSize);
+        $text->paint($list, $n->text, $n->fontSize, $n->reverse ? $x - $t->space(2) - $lw : $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**

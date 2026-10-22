@@ -6,6 +6,7 @@ namespace MyPHP\Plugins\Updater;
 use Closure;
 use DateTimeImmutable;
 use MyPHP\{App, Power, Updater as Core};
+use MyPHP\Native\Bundle;
 use Throwable;
 
 /**
@@ -66,7 +67,8 @@ final class Checker
 
     public readonly Options $opts;
 
-    public function __construct(Options $opts)
+    /** @param ?Closure(Checker, Session): void $open creates the window of a session and shows it: the web page's by default */
+    public function __construct(Options $opts, ?Closure $open = null)
     {
         $this->opts = clone $opts; // the app's own stay as they are
         if ($this->opts->interval <= 0) {
@@ -84,7 +86,8 @@ final class Checker
         $this->stateDir = fn(): string => App::userDataPath();
         $this->after = fn(float $s, Closure $fn) => App::after($s, $fn);
         $this->go = fn(Closure $fn) => App::go($fn);
-        $this->open = fn(Session $s) => UpdateWindow::open($this, $s);
+        $open ??= UpdateWindow::open(...);
+        $this->open = fn(Session $s) => $open($this, $s);
     }
 
     /** The size of the window's content for a status view or a release view. @return array{0: int, 1: int} */
@@ -97,6 +100,17 @@ final class Checker
     public function text(): Text
     {
         return $this->text ??= Text::for($this->opts->language !== '' ? $this->opts->language : ($this->locale)(), $this->opts->strings);
+    }
+
+    /** The PNG image of the update window: Options::$icon, else the project's icon.png among the app's resources, or null. */
+    public function icon(): ?string
+    {
+        if ($this->opts->icon !== null) {
+            return $this->opts->icon;
+        }
+        $app = Bundle::path();
+        $png = $app === null ? false : @file_get_contents("$app/Contents/Resources/app/icon.png");
+        return $png === false ? null : $png;
     }
 
     /** Schedules the automatic checks, once the app is ready. */

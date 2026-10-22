@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Updater;
 
 use MyPHP\Native\Fibers;
-use MyPHP\Window;
+use MyPHP\{Window, WindowOptions};
+use MyPHP\UI\Content;
 
 /**
  * A check for updates and what follows it: the update window, the
@@ -17,6 +18,9 @@ use MyPHP\Window;
  */
 final class Session
 {
+    /** The light and dark colors of the window: the gray of dialogs on macOS (mygo's frontend.Background). */
+    public const LIGHT = '#ececec', DARK = '#1e1e1e';
+
     /** The user asked for the check: the window shows from the start and says when the app is up to date. */
     public bool $user;
     public bool $shown = false;
@@ -38,6 +42,44 @@ final class Session
         $this->user = $user;
     }
 
+    /**
+     * Creates the session's window, hidden, showing $content, or the page
+     * $html: the session resizes it for its views and closes it when it
+     * ends, and the window closing cancels it (mygo's NewWindow).
+     */
+    public function newWindow(?Content $content, ?string $html = null): Window
+    {
+        $this->release = (bool)$this->view['release'];
+        [$width, $height] = Checker::size($this->release);
+        $win = new Window(new WindowOptions(
+            title: $this->u->text()->s->title,
+            width: $width,
+            height: $height,
+            useContentSize: true,
+            hidden: true,
+            disableResize: true,
+            disableMaximize: true,
+            disableFullScreen: true,
+            backgroundColor: 'light-dark(' . self::LIGHT . ', ' . self::DARK . ')',
+            html: $html,
+            content: $content,
+        ));
+        $this->win = $win;
+        $win->on('closed', function (): void { $this->canceled = true; });
+        return $win;
+    }
+
+    /** Shows the window, in front when the user asked for the check (mygo's frontend.Show). */
+    public static function present(Window $win, bool $user): void
+    {
+        if ($user) {
+            $win->show();
+            $win->focus();
+        } else {
+            $win->showInactive();
+        }
+    }
+
     /** Changes the view, and the window's size when the view needs another. @param array<string, mixed> $v */
     public function set(array $v): void
     {
@@ -47,6 +89,7 @@ final class Session
         }
         $this->view = $v + ['release' => false];
         $this->changes++;
+        $this->win?->invalidate(); // native UI shows it in a frame; a page watches $changes
         $release = (bool)$this->view['release'];
         if ($this->win !== null && $this->release !== $release) {
             $this->release = $release;

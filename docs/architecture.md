@@ -1917,6 +1917,18 @@ read through a `function () use (&$flag)`. The texts are mygo's
 translations, converted to sprintf's numbered arguments (`%1$s` for Go's
 `%[1]s`).
 
+The same window in native UI (`Plugins\Updater\Native`) builds the
+session's view each frame, as mygo's native/window.go: `Session::set`
+invalidates the session's window (nothing for a page, which watches the
+change count), and the window asks for the size its content needs one
+frame after a layout of the same view at the same size, measured with
+`Context::bounds`; the rich text of a status wraps at the width its
+column had in the frame before, so the size settles over a frame or two.
+A window written from right to left reverses its rows (`Node::reverse`,
+which mirrors a flex row or column's children inside its content box),
+its check box and its progress bar; release notes reverse their lists by
+the script of their first letter.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,
