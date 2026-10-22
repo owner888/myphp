@@ -64,7 +64,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout, Engin
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles)
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html)
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors

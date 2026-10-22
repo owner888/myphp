@@ -94,7 +94,7 @@ final class Window
     private string $stateKey = '';
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
-    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate'];
     /** @var array<int, Window> by content view address, for drops */
     private static array $byView = [];
 
@@ -193,6 +193,13 @@ final class Window
                     }
                 }, $o->preload);
             $this->view = $this->page->ns;
+            $this->page->onNavigate = function (string $url, bool $user): bool {
+                $e = new NavigateEvent($url, $user);
+                foreach ($this->listeners['willNavigate'] ?? [] as $fn) {
+                    $fn($e);
+                }
+                return !$e->prevented;
+            };
             if ($o->html !== null) {
                 $this->page->loadHTML($o->html);
             } else {
@@ -664,7 +671,8 @@ final class Window
      * cancel), closed, focus, blur, resize, move, minimize, restore,
      * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent:
      * files dropped from other apps that no node took, Context::dropData
-     * or droppedFiles).
+     * or droppedFiles), willNavigate (with a NavigateEvent to prevent: the
+     * page going to another URL, mygo's Page.OnWillNavigate).
      * Returns a function that removes it.
      */
     public function on(string $event, \Closure $fn): \Closure

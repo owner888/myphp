@@ -62,14 +62,29 @@ final class Fibers
     /** Runs the fibers that wait without the run loop, until none does. */
     public static function drain(): void
     {
-        while (self::$queue !== []) {
+        self::runUntil(fn(): bool => false, INF);
+    }
+
+    /** Runs the fibers that wait without the run loop until $done() holds, none waits, or $timeout seconds passed; returns whether $done() held. */
+    public static function runUntil(\Closure $done, float $timeout = 5): bool
+    {
+        $end = microtime(true) + $timeout;
+        while (!$done()) {
+            if (self::$queue === [] || microtime(true) >= $end) {
+                return false;
+            }
             usort(self::$queue, fn(array $a, array $b): int => $a[0] <=> $b[0]);
             [$at, $fiber] = array_shift(self::$queue);
-            $wait = $at - microtime(true);
+            $wait = min($at, $end) - microtime(true);
             if ($wait > 0) {
                 usleep((int)($wait * 1e6));
             }
+            if ($at > microtime(true)) {
+                array_unshift(self::$queue, [$at, $fiber]); // not due yet: the time is up
+                continue;
+            }
             $fiber->resume();
         }
+        return true;
     }
 }

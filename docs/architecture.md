@@ -1898,6 +1898,25 @@ loop fibers wait in a queue `Fibers::drain()` runs (the tests).
 bundle's executable again; under `myphp dev` the app exits with 75 and
 dev starts it again, as mygo dev does.
 
+The updater plugin (`Plugins\Updater`) is mygo's on top: `Checker` keeps
+the user's choices in updater.json and arms the next automatic check with
+`App::after` (a generation number cancels a timer, which `App::after`
+cannot), again on `Power::onResume` as timers stop while the Mac sleeps; a
+check is a `Session` in a fiber (`App::go`), whose waits for the user's
+answer and for the network suspend it, the flow of mygo's `run` line for
+line. The window is mygo's page.html over the myphp bridge: `watch`
+streams the session's views (a generator that polls the session's change
+count), `fit` and `respond` answer it, and only the session's window may
+call them (its `CallContext`). Links of the release notes open in the
+browser through the window's `willNavigate` event, a WKNavigationDelegate
+on every page's web view that asks the window about navigations of the
+main frame the app did not start (the loads of `WindowOptions`' html and
+url pass). The tests drive the fibers with `Fibers::runUntil`; mind that
+an arrow function captures by value, so a flag a waiting fiber polls is
+read through a `function () use (&$flag)`. The texts are mygo's
+translations, converted to sprintf's numbered arguments (`%1$s` for Go's
+`%[1]s`).
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

@@ -424,6 +424,29 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     bundle's executable, or the script again with the PHP running it.
   - Why: a PHP app is a project or the bundle `myphp build` made.
 
+- **The updater plugin** (v0.96)
+  - mygo: package functions `updater.Plugin`, `New`, `CheckForUpdates`,
+    `MenuItem`, `AutomaticChecks`…; `Options.Interval` a duration and
+    `Icon` bytes, default icon.png among the resources; `Strings` formats
+    with Go's verbs (`%[2]s`); `LastCheck` the zero time when never; a
+    window in native UI too (`native.Plugin`).
+  - myphp: static methods of `Plugins\Updater\Updater` (`plugin()`,
+    `new()`, `checkForUpdates()`, `menuItem()`…); `$interval` in seconds,
+    `$icon` PNG bytes, default the project's icon.png
+    (`Resources/app/icon.png`); `Strings` formats in sprintf's syntax
+    (`%2$s`); `lastCheck()` null; the web page window only, so far.
+  - Why: PHP's packages are classes; the native window waits for a later
+    version.
+- **Core additions it needed** (v0.96)
+  - mygo: `Page.OnWillNavigate(NavigateEvent)`; `Power` with
+    `OnSuspend`, `OnResume`, `OnLockScreen`, `OnUnlockScreen`, `KeepAwake`,
+    `IsOnBattery`.
+  - myphp: the window's `willNavigate` event (`Window::on`, a
+    `NavigateEvent`), as myphp has no `Page`; `Power::onSuspend`,
+    `onResume`, `onLockScreen`, `onUnlockScreen`, without `KeepAwake` and
+    `IsOnBattery` yet.
+  - Why: what the updater needs, ported first.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)
