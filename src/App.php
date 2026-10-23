@@ -197,6 +197,42 @@ final class App
         return Native\Login::$openedAtLogin;
     }
 
+    /** @var array<int, Closure(QuitEvent): void> */
+    private static array $onBeforeQuit = [];
+    /** @var array<int, Closure(bool): void> */
+    private static array $onActivate = [];
+
+    /**
+     * Calls $fn(QuitEvent) as the app is asked to quit, by App::quit(), the
+     * Quit menu item or the system, before it quits (mygo's OnBeforeQuit):
+     * QuitEvent::cancel() keeps it running. Documents use it to save or ask
+     * first. Returns a function that removes it.
+     */
+    public static function onBeforeQuit(Closure $fn): Closure
+    {
+        $k = self::$nextQuit++;
+        self::$onBeforeQuit[$k] = $fn;
+        return function () use ($k): void { unset(self::$onBeforeQuit[$k]); };
+    }
+
+    /** @internal asks the onBeforeQuit listeners whether the app quits */
+    public static function shouldQuit(): bool
+    {
+        $e = new QuitEvent;
+        foreach (self::$onBeforeQuit as $fn) {
+            $fn($e);
+        }
+        return !$e->canceled;
+    }
+
+    /** Calls $fn(bool $hasVisibleWindows) when the user activates the app again, by clicking its Dock icon or opening it while it runs (mygo's OnActivate): an app without windows usually opens one. Returns a function that removes it. */
+    public static function onActivate(Closure $fn): Closure
+    {
+        $k = self::$nextQuit++;
+        self::$onActivate[$k] = $fn;
+        return function () use ($k): void { unset(self::$onActivate[$k]); };
+    }
+
     /** Calls $fn as the app quits, after its windows' state is saved (mygo's OnQuit). Returns a function that removes it. */
     public static function onQuit(Closure $fn): Closure
     {
@@ -250,6 +286,13 @@ final class App
                     Native\Login::$openedAtLogin = true;
                 }
             }],
+            'applicationShouldTerminate:' => ['Q@:@', 'L(ppp)', fn($self, $cmd, $app) => self::shouldQuit() ? 1 : 0], // NSTerminateNow, NSTerminateCancel
+            'applicationShouldHandleReopen:hasVisibleWindows:' => ['B@:@B', 'b(pppb)', function ($self, $cmd, $app, $visible) {
+                foreach (self::$onActivate as $fn) {
+                    $fn((bool)$visible);
+                }
+                return true;
+            }],
             'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 WindowState::save();
                 try {
@@ -286,7 +329,10 @@ final class App
                     $fn();
                 }
                 // After the windows the app opens when ready, which URLs may target.
-                self::later(fn() => Native\DeepLink::deliverArgs(array_slice($_SERVER['argv'] ?? [], 1), self::$startDir));
+                self::later(function (): void {
+                    Native\DeepLink::deliverArgs(array_slice($_SERVER['argv'] ?? [], 1), self::$startDir);
+                    Native\Docs\Registry::start(); // once the files the app was started with are in
+                });
             }],
             'application:openURLs:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $app, $urls) {
                 $files = $links = [];
@@ -372,7 +418,7 @@ final class App
 
     public static function onRegionChanged(Closure $fn): Closure { return Locales::onRegionChanged($fn); }
 
-    /** Says the menus' items in the language the app shows: the menu bar is installed again with its roles' labels in it. */
+    /** Installs the menu bar again: its roles' labels in the language the app shows, its Open Recent menus' documents as they are now. */
     public static function relabelMenus(): void
     {
         if (self::$ready) { self::installMenu(self::$menu ?? Menu::default()); }
@@ -392,9 +438,20 @@ final class App
         return self::$menu;
     }
 
+    /** The menu bar installed, null before the app is ready. */
+    private static ?Menu $installed = null;
+
+    /** @internal the menu bar installed, whose items are built: setMenu()'s, or Menu::default()'s */
+    public static function menuBar(): ?Menu
+    {
+        return self::$installed;
+    }
+
     private static function installMenu(Menu $menu): void
     {
         ObjC::msg('v:p', self::$nsApp, 'setMainMenu:', $menu->build());
+        self::$installed = $menu;
+        Native\Docs\Registry::refreshMenus();
     }
 
     /**

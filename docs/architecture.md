@@ -1997,6 +1997,36 @@ Highlight API), `printToPDF` an `NSPrintOperation` saving to a temporary
 file, as a sheet of the window, its end heard by a delegate of its own;
 downloads are `WKDownload`s whose delegate is the navigation delegate.
 
+## Documents
+
+mygo's documents (`Documents`, `Document`, `Native\Docs`), without its
+goroutines: everything runs on the main thread, so the content needs no
+lock and a write captures it and its change number at once; an edit made
+while `write` runs (the app's closure) stays unsaved because the change
+number moved. Timers are `App::after` with a number per document: a new
+schedule bumps it, and a timer of an older number does nothing, as Go's
+`timer.Reset`. A close or a quit that must ask cancels itself and asks on
+the next turn of the run loop, then destroys the window or quits again
+(`Registry`'s resolved flag lets the second `applicationShouldTerminate:`
+through). What documents ask of the app goes through `Native\Docs\Host`
+(dialogs, `later`, `after`, the clock, the data directory, quitting) and
+windows through a `Frame` (`WindowFrame` of a `Window`), which tests
+replace: tests/documents_test.php runs the flows on a test clock without
+AppKit. Files are written next to themselves and moved over with
+`NSFileManager`'s `replaceItemAtURL:` (`Files::$replace` in tests); a
+permission error is `NotWritable`, which makes saving ask for another
+file. Recovery sessions are locked with `flock`, which another process's
+lock refuses and a crash releases. Watches are `App::watchFiles` looked at
+with `next(0)` every 0.25 s; a file watch reports a rename as a remove of
+".", whose identity (device, inode) is then searched for in its directory.
+Menu roles whose selector is '' are documents': their click is
+`Registry::role`, deferred to the next turn so the menu is done tracking;
+`fileMenu` expands to DocumentGroup's menu and `openRecent` to the recent
+documents each time the menu bar is built, which adding one rebuilds
+(`App::relabelMenus`). Mind that the run.php scope is shared: the test
+avoids `$file` and `$name`; and that a test running as root can write
+read-only files, so the read-only flow runs only for other users.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

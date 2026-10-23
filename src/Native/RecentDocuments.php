@@ -55,6 +55,7 @@ final class RecentDocuments
             $url = ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path));
             ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'noteNewRecentDocumentURL:', $url);
         }
+        App::relabelMenus(); // the Open Recent menus list it
     }
 
     public static function clear(): void
@@ -64,6 +65,7 @@ final class RecentDocuments
         if (self::$system) {
             ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'clearRecentDocuments:', null);
         }
+        App::relabelMenus();
     }
 
     /** The documents, newest first, without those that no longer exist, which come back if they do again. @return list<string> */

@@ -78,6 +78,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Web pages: `Ipc::bind()` a PHP service, call it from the page, events back, streaming channels, page-side window controls, preload script, generated TypeScript client | works (`examples/webview`) |
 | Menu bar with roles and accelerators, context menus, open/save/message dialogs | works (`examples/desktop`) |
 | App services (mygo's): deep links (`App::onOpenURL`, `registerURLScheme`, myphp.json's `urlSchemes`) and files opened with the app (`onOpenFile`, `fileAssociations`), a single instance (`requestSingleInstanceLock`, `onSecondInstance`), recent documents, opening at login, `Network` (online, metered), `Clipboard` (data in several formats, files, flush), `Secrets` (the Keychain), `Cookies`; pages: find in page, print, print to PDF, permissions (camera, microphone), downloads | works (`examples/services`) |
+| Documents (mygo's): `Documents`, `Document` — a window per file, the File menu's roles (new, open, openRecent, save, saveAs, duplicate, rename, moveTo, revert), autosave in place, recovery copies after a crash, asking before closing and quitting, files changed by other apps, a `DocumentService` for pages; see docs/documents.md | works (`examples/documents`) |
 | Scrolling a node into view (mygo's ScrollIntoView), and the focus Tab brings into view, through nested scrolling containers | works |
 | Context menus and menu buttons of the native UI (mygo's ContextMenu, Menu, MenuButton): items, check marks, submenus, shortcuts, the innermost menu, the menu key and Shift+F10, text inputs' and selectable text's editing items, `editItems()` | works |
 | Tray icon, global shortcuts, notifications (from a built .app), window events, file drops, remembered window frames | works (`examples/desktop`) |
@@ -150,6 +151,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh updater --demo   # the update window, with a made-up update to install (--native: in native UI)
 ./run.sh game             # a little game: WASD, the arrows or a gamepad, the wheel zooms
 ./run.sh services         # the app's services from a page: network, clipboard, Keychain, cookies, find, PDF…
+./run.sh documents [x.md] # document notes: a window per file, the File menu, autosave, crash recovery
 ./run.sh photos ~/Pictures # a photo browser: thumbnail grid, one full size, arrow keys
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
@@ -249,6 +251,7 @@ App::run();
 | 网页：`Ipc::bind()` 绑定 PHP 服务，页面直接调用，事件回推，流式 channel，页面侧窗口控制，preload 脚本，生成 TypeScript client | 可用（`examples/webview`） |
 | 菜单栏（角色、快捷键）、右键菜单、打开/保存/消息对话框 | 可用（`examples/desktop`） |
 | App 服务（mygo 的）：深链接（`App::onOpenURL`、`registerURLScheme`、myphp.json 的 `urlSchemes`）与用本应用打开的文件（`onOpenFile`、`fileAssociations`）、单实例（`requestSingleInstanceLock`、`onSecondInstance`）、最近文档、登录时启动、`Network`（是否联网、是否按流量计费）、`Clipboard`（多格式数据、文件、flush）、`Secrets`（钥匙串）、`Cookies`；网页：页内查找、打印、打印为 PDF、权限（摄像头、麦克风）、下载 | 可用（`examples/services`） |
+| 文档型应用（mygo 的）：`Documents`、`Document`——每个文件一个窗口、文件菜单的角色（new、open、openRecent、save、saveAs、duplicate、rename、moveTo、revert）、原地自动保存、崩溃后的恢复副本、关闭和退出前询问、被其他应用改动的文件、给网页用的 `DocumentService`；见 docs/documents.md | 可用（`examples/documents`） |
 | 托盘图标、全局快捷键、通知（需打包的 .app）、窗口事件、文件拖放、记住窗口位置 | 可用（`examples/desktop`） |
 | 不阻塞界面的子进程（`Process`）：curl、脚本、命令行工具 | 可用（`examples/http`） |
 | SVG：图标按蒙版任意着色（`rotate` 可旋转），图片按自身颜色绘制——路径、基本图形、变换、渐变、描边与虚线、不透明度、裁剪、遮罩、样式表——由纯 PHP 渲染器绘制，路径蒙版也由它栅格化（不再用 CoreGraphics） | 可用（`examples/widgets`、`files`） |
@@ -315,6 +318,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh updater --demo   # 更新窗口，用一个虚构的更新演示安装流程（--native：原生 UI 版）
 ./run.sh game             # 一个小游戏：WASD、方向键或手柄移动，滚轮缩放
 ./run.sh services         # 从网页调用 App 服务：网络、剪贴板、钥匙串、Cookie、页内查找、PDF…
+./run.sh documents [x.md] # 文档型笔记：每个文件一个窗口、文件菜单、自动保存、崩溃恢复
 ./run.sh photos ~/Pictures # 照片浏览：缩略图网格、单张全尺寸、方向键翻页
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass

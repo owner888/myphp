@@ -532,8 +532,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     system asks the user; deep links need a bundle `myphp build` made;
     `unregisterURLScheme` throws (the scheme is the bundle's on macOS, as
     mygo says); no page event of the network yet; the Open Recent role
-    waits for the documents.
-  - Why: PHP has one thread; the rest comes with documents.
+    came with the documents (v1.01).
+  - Why: PHP has one thread.
 - **Pages' services** (v1.00)
   - mygo: `Page.FindInPage`, `StopFindInPage`, `Print`, `PrintToPDF`,
     `SetPermissionHandler` (the default trusts `PageOptions.TrustedOrigins`
@@ -546,6 +546,54 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     yet; `PageSize::letter()`… static methods.
   - Why: myphp's window holds its page; trusted origins come with the
     app's protocol.
+
+## Documents
+
+- **One Document class** (v1.01)
+  - mygo: `NewDocuments[T]`, `Documents[T]`, `Document[T]`, generic over
+    the content; `Read(io.Reader)` and `Write(io.Writer, T)` run on
+    goroutines; methods safe from any goroutine; errors `ErrCanceled` and
+    `ErrDocumentChanged`; `DocumentService[T]` types the content for the
+    TypeScript client.
+  - myphp: `new Documents(DocumentsOptions)`, `Document` with a `mixed`
+    content; `read(string $bytes)` and `write($content): string` run on
+    the main thread, as everything does; a new document's content is null
+    without `new` (Go's zero value); the exceptions `DocumentCanceled` and
+    `DocumentChanged`; the client's content is `unknown`.
+  - Why: PHP has no generics and one thread; bytes are strings.
+- **The flows** (v1.01)
+  - mygo: dialogs asked on goroutines while the main thread runs on;
+    `Revert()` reads the file again, File > Revert asks first.
+  - myphp: a close or a quit that must ask is canceled, and the asking
+    runs on the next turn of the run loop (`App::later`), its dialogs
+    sheets that turn the run loop (`App::wait`) until answered; the same
+    `revert()`, the menu's asking first.
+  - Why: no goroutines; the window's and the app's delegate return first.
+- **Files and their changes** (v1.01)
+  - mygo: stamps of nanoseconds; a file moved to another volume is copied
+    with `writeFileSafely`; watches are goroutines; Linux and Windows
+    replace files their way, mark edited titles with `*`, and get a File
+    menu of their own.
+  - myphp: stamps of whole seconds (PHP's `stat()`), so another app's
+    write of the same size within the second of the document's goes
+    unseen; PHP's `rename()` copies across volumes; the watches are looked
+    at every 0.25 s on the run loop; macOS only.
+  - Why: what PHP gives; the Mac is the platform.
+- **The app's side** (v1.01)
+  - mygo: `App.OnBeforeQuit` with `QuitEvent.PreventDefault`,
+    `App.OnActivate`, `App.OnWindowAllClosed`; pages get
+    `mygo:document-state` and `mygo:document-reload`, which mygo-runtime's
+    `onDocumentState`/`onDocumentReload` take; a page's `<title>` doesn't
+    name a document's window; files on the command line open in
+    development too.
+  - myphp: `App::onBeforeQuit` with `QuitEvent::cancel()` (as
+    `CloseEvent`), `App::onActivate`, `App::$quitOnLastWindowClosed`
+    turned off; the events `myphp:document-state` and
+    `myphp:document-reload`, taken with `window.myphp.on`; pages don't
+    name myphp's windows anyway; files on the command line are the
+    bundle's (`DeepLink`), so `examples/documents` opens its own.
+  - Why: myphp's names and runtime; without a bundle the app declares no
+    file types.
 
 ## Plugins
 

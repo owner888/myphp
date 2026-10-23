@@ -15,7 +15,7 @@ final class Menu
 {
     private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_ALT = 1 << 19, MOD_CMD = 1 << 20;
 
-    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain] */
+    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain, or '' for documents' roles, which act on the document of the window that has the keyboard (Documents)] */
     public const ROLES = [
         'undo' => ['menuUndo', 'CmdOrCtrl+Z', 'undo:'],
         'redo' => ['menuRedo', 'CmdOrCtrl+Shift+Z', 'redo:'],
@@ -35,6 +35,14 @@ final class Menu
         'hideOthers' => ['menuHideOthers', 'Cmd+Alt+H', 'hideOtherApplications:'],
         'unhide' => ['menuShowAll', '', 'unhideAllApplications:'],
         'front' => ['menuBringAllToFront', '', 'arrangeInFront:'],
+        'new' => ['menuNew', 'CmdOrCtrl+N', ''],
+        'open' => ['menuOpen', 'CmdOrCtrl+O', ''],
+        'save' => ['menuSave', 'CmdOrCtrl+S', ''],
+        'saveAs' => ['menuSaveAs', 'Alt+Shift+Cmd+S', ''],
+        'duplicate' => ['menuDuplicate', 'Shift+Cmd+S', ''],
+        'rename' => ['menuRename', '', ''],
+        'moveTo' => ['menuMoveTo', '', ''],
+        'revert' => ['menuRevertToSaved', '', ''],
     ];
 
     private const KEYS = [
@@ -44,7 +52,7 @@ final class Menu
         'pageup' => "\u{F72C}", 'pagedown' => "\u{F72D}",
     ];
 
-    /** @var array<int, MenuItem> by uid, for clicks */
+    /** @var array<int, array{0: MenuItem, 1: \Closure}> items and what their clicks do, by uid */
     private static array $byUid = [];
     private static int $nextUid = 1;
     private static $target = null;
@@ -107,24 +115,29 @@ final class Menu
         if ($it->type === MenuItem::SEPARATOR) {
             return $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
         }
-        $label = $it->label; $accel = $it->accelerator; $selector = null;
+        $label = $it->label; $accel = $it->accelerator; $selector = null; $click = $it->click;
         if ($it->role !== '') { // a role's label is in the language the app shows, so that relabelMenus can say it again
             [$label, $it->submenu] = self::expandRole($it->role, $it->label, $it->submenu);
             if (isset(self::ROLES[$it->role])) {
                 [$key, $ra, $selector] = self::ROLES[$it->role];
+                $key = $it->role === 'close' && Native\Docs\Registry::has() ? 'menuClose' : $key; // a document's window closes the document
                 $label = $label !== '' ? $label : L10n::in(App::locale())->get($key, ['app' => App::name()]);
                 $accel = $accel !== '' ? $accel : $ra;
+                if ($selector === '') {
+                    $role = $it->role;
+                    [$selector, $click] = [null, fn(MenuItem $m, ?Window $w) => Native\Docs\Registry::role($role, $w)];
+                }
             }
         }
         [$key, $mask] = self::accelerator($accel);
-        $sel = $selector !== null ? ObjC::sel($selector) : ($it->click !== null ? ObjC::sel('menuClicked:') : null);
+        $sel = $selector !== null ? ObjC::sel($selector) : ($click !== null ? ObjC::sel('menuClicked:') : null);
         $ns = ObjC::msg('p:ppp', ObjC::alloc('NSMenuItem'), 'initWithTitle:action:keyEquivalent:', ObjC::str($label), $sel, ObjC::str($key));
         if ($key !== '') { // also a mask of 0 (F5 alone): NSMenuItem's default is Cmd
             ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', $mask);
         }
-        if ($selector === null && $it->click !== null) {
+        if ($selector === null && $click !== null) {
             $it->uid = self::$nextUid++;
-            self::$byUid[$it->uid] = $it;
+            self::$byUid[$it->uid] = [$it, $click];
             ObjC::msg('v:p', $ns, 'setTarget:', self::$target);
             ObjC::msg('v:l', $ns, 'setTag:', $it->uid);
         }
@@ -150,7 +163,8 @@ final class Menu
         return match ($role) {
             'appMenu' => [$label !== '' ? $label : App::name(), $submenu ?: [
                 $r('about'), MenuItem::separator(), $r('hide'), $r('hideOthers'), $r('unhide'), MenuItem::separator(), $r('quit')]],
-            'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: [$r('close')]],
+            'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: (Native\Docs\Registry::has() ? Native\Docs\Registry::fileMenu() : [$r('close')])],
+            'openRecent' => [$label !== '' ? $label : $t->get('menuOpenRecent'), Native\Docs\Registry::recentItems()], // the recent documents as the menu is built
             'editMenu' => [$label !== '' ? $label : $t->get('menuEdit'), $submenu ?: [
                 $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('pasteAndMatchStyle'), $r('delete'), $r('selectAll')]],
             'windowMenu' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu ?: [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')]],
@@ -189,14 +203,14 @@ final class Menu
     {
         ObjC::defineClass('MyPHPMenuTarget', 'NSObject', [
             'menuClicked:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                $it = self::$byUid[ObjC::msg('l:', $sender, 'tag')] ?? null;
+                [$it, $click] = self::$byUid[ObjC::msg('l:', $sender, 'tag')] ?? [null, null];
                 if ($it === null) {
                     return;
                 }
                 if ($it->type === MenuItem::CHECKBOX) {
                     $it->setChecked(!$it->checked);
                 }
-                ($it->click)($it, Window::focused());
+                $click($it, Window::focused());
             }],
         ]);
         return ObjC::msg('p:', ObjC::alloc('MyPHPMenuTarget'), 'init');

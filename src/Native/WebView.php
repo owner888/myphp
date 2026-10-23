@@ -180,6 +180,13 @@ final class WebView
         ObjC::msg('p:pp', $this->ns, 'loadHTMLString:baseURL:', ObjC::str($html), $base);
     }
 
+    /** The URL of the page shown, '' before any; about:blank for HTML loaded without a base URL. */
+    public function url(): string
+    {
+        $u = ObjC::msg('p:', $this->ns, 'URL');
+        return $u === null ? '' : ObjC::phpStr(ObjC::msg('p:', $u, 'absoluteString'));
+    }
+
     /** Loads an http(s) URL, or a file: URL with read access to its directory. */
     public function loadURL(string $url): void
     {

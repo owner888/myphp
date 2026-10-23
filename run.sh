@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | gen [out.ts]
+# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -29,7 +29,8 @@ case "$1" in
   websocket) exec $PHP $OPTS examples/websocket/main.php ${2:+"$2"} ;;
   services) exec $PHP $OPTS examples/services/main.php "${@:2}" ;;
   game) exec $PHP $OPTS examples/game/main.php ;;
+  documents) exec $PHP $OPTS examples/documents/main.php "${@:2}" ;;
   updater) exec $PHP $OPTS examples/updater/main.php "${@:2}" ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | gen [out.ts]"; exit 1 ;;
 esac

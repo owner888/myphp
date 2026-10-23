@@ -575,6 +575,13 @@ final class Window
         $this->permissionHandler = $fn;
     }
 
+    /** @internal whether the window shows one of the app's own pages, WindowOptions' html or a file, which documents tell their paths (mygo's trusted pages) */
+    public function isOwnPage(): bool
+    {
+        $url = $this->page?->url();
+        return $url !== null && ($url === '' || $url === 'about:blank' || str_starts_with($url, 'file://'));
+    }
+
     /** Whether $origin is one of the app's own pages: its html (no origin) or a file. */
     private static function ownOrigin(string $origin): bool
     {

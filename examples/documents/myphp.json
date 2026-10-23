@@ -1,0 +1,9 @@
+{
+  "name": "MyPHP Notes",
+  "identifier": "dev.myphp.examples.documents",
+  "entry": "main.php",
+  "fileAssociations": [
+    { "ext": ["md", "markdown"], "name": "Markdown Document", "mimeType": "text/markdown" },
+    { "ext": ["txt"], "name": "Plain Text", "mimeType": "text/plain" }
+  ]
+}
