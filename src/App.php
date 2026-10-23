@@ -73,6 +73,130 @@ final class App
         }
     }
 
+    /** The working directory the app started in, which relative paths of its command line are relative to. */
+    private static string $startDir = '';
+
+    /**
+     * Calls $fn with every URL of a scheme the app handles that it is asked
+     * to open (mygo's OnOpenURL): one listed in urlSchemes in myphp.json,
+     * which `myphp build` declares in the bundle, or registered with
+     * registerURLScheme(). Register it before run() to get the URL the app
+     * was launched with; with requestSingleInstanceLock(), the first
+     * instance gets those of later ones. Returns a function that removes it.
+     */
+    public static function onOpenURL(Closure $fn): Closure
+    {
+        return Native\DeepLink::add(Native\DeepLink::$onURL, $fn);
+    }
+
+    /**
+     * Calls $fn with every file opened with the app (mygo's OnOpenFile):
+     * one of the types of fileAssociations in myphp.json opened from the
+     * Finder, a file dropped on the Dock icon, or one passed on the command
+     * line. Register it before run() to get those the app was launched
+     * with. Returns a function that removes it.
+     */
+    public static function onOpenFile(Closure $fn): Closure
+    {
+        return Native\DeepLink::add(Native\DeepLink::$onFile, $fn);
+    }
+
+    /**
+     * Makes the app the handler of the URLs of $scheme for the user (mygo's
+     * RegisterURLScheme), as "myapp" for myapp://open?item=1: they reach
+     * onOpenURL. The scheme must be listed in urlSchemes in myphp.json,
+     * which registers it with the system as the app is built; this makes
+     * the app its default handler when others claim it too. Throws when
+     * the bundle does not declare it or Launch Services refuses.
+     */
+    public static function registerURLScheme(string $scheme): void
+    {
+        Native\DeepLink::register($scheme);
+    }
+
+    /** Undoes registerURLScheme() (mygo's UnregisterURLScheme): not on macOS, where the scheme belongs to the bundle; it throws. */
+    public static function unregisterURLScheme(string $scheme): void
+    {
+        throw new RuntimeException('myphp: unregisterURLScheme is not supported on macOS: the scheme belongs to the bundle');
+    }
+
+    /** Whether the system opens URLs of $scheme with this app (mygo's IsURLSchemeRegistered). */
+    public static function isURLSchemeRegistered(string $scheme): bool
+    {
+        return Native\DeepLink::isRegistered($scheme);
+    }
+
+    /**
+     * Makes sure a single instance of the app runs (mygo's
+     * RequestSingleInstanceLock): true in the first instance; in a later
+     * one, false after handing its command line and working directory to
+     * the first (onSecondInstance), and that one should then exit:
+     *
+     *     if (!App::requestSingleInstanceLock()) { exit; }
+     *
+     * The lock is named after the app's name and, in a bundle, its
+     * identifier, and released as the app quits.
+     */
+    public static function requestSingleInstanceLock(): bool
+    {
+        return Native\SingleInstance::request();
+    }
+
+    /** Calls $fn(list<string> $args, string $workingDir) in the first instance when another started and called requestSingleInstanceLock() (mygo's OnSecondInstance): apps usually focus their main window. Returns a function that removes it. */
+    public static function onSecondInstance(Closure $fn): Closure
+    {
+        return Native\DeepLink::add(Native\SingleInstance::$handlers, $fn);
+    }
+
+    /**
+     * Records $path as a document the user opened (mygo's
+     * AddRecentDocument): it goes first in recentDocuments(), and the
+     * system offers it again in the app's Dock menu, whose choice opens it
+     * through onOpenFile. Call it whenever the app opens a document or
+     * folder, also one the user chose with a file dialog. A relative path
+     * is resolved against the working directory.
+     */
+    public static function addRecentDocument(string $path): void
+    {
+        Native\RecentDocuments::add($path);
+    }
+
+    /** Empties recentDocuments() and the app's recent documents of the system (mygo's ClearRecentDocuments). */
+    public static function clearRecentDocuments(): void
+    {
+        Native\RecentDocuments::clear();
+    }
+
+    /** The documents the app opened lately, newest first, up to ten, also in earlier runs (mygo's RecentDocuments): as in AppKit, files that no longer exist are left out, and come back if they do again. @return list<string> */
+    public static function recentDocuments(): array
+    {
+        return Native\RecentDocuments::list();
+    }
+
+    /**
+     * Makes the app start when the user logs in, or stops it (mygo's
+     * SetOpenAtLogin), as a setting of the app: on macOS 13 and later the
+     * app becomes a login item of the user (System Settings > General >
+     * Login Items), on macOS 12 a launch agent starts it. It needs an app
+     * bundle, and throws without one, or when the user must allow it.
+     */
+    public static function setOpenAtLogin(bool $open): void
+    {
+        Native\Login::set($open);
+    }
+
+    /** Whether the app starts when the user logs in (mygo's OpenAtLogin). */
+    public static function openAtLogin(): bool
+    {
+        return Native\Login::enabled();
+    }
+
+    /** Whether the system started the app because the user logged in (mygo's WasOpenedAtLogin), as to start it in the background. */
+    public static function wasOpenedAtLogin(): bool
+    {
+        return Native\Login::$openedAtLogin;
+    }
+
     /** Calls $fn as the app quits, after its windows' state is saved (mygo's OnQuit). Returns a function that removes it. */
     public static function onQuit(Closure $fn): Closure
     {
@@ -106,6 +230,8 @@ final class App
             throw new RuntimeException('App::run called twice');
         }
         self::$running = true;
+        self::$startDir = (string)getcwd();
+        Native\Login::takeArg();
         if (($out = getenv('MYPHP_GENERATE')) !== false && $out !== '') {
             file_put_contents($out, TypeScript::generate());
             return;
@@ -119,8 +245,18 @@ final class App
                     self::themeChanged();
                 }
             }],
+            'applicationWillFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                if (Native\Login::launchedAsLoginItem()) {
+                    Native\Login::$openedAtLogin = true;
+                }
+            }],
             'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 WindowState::save();
+                try {
+                    Native\Pasteboard::flush(); // the app's data stays on the clipboard once it quit
+                } catch (\Throwable $e) {
+                    error_log("myphp: clipboard: {$e->getMessage()}");
+                }
                 $quit = self::$onQuit;
                 self::$onQuit = [];
                 foreach ($quit as $fn) {
@@ -149,6 +285,21 @@ final class App
                 foreach ($callbacks as $fn) {
                     $fn();
                 }
+                // After the windows the app opens when ready, which URLs may target.
+                self::later(fn() => Native\DeepLink::deliverArgs(array_slice($_SERVER['argv'] ?? [], 1), self::$startDir));
+            }],
+            'application:openURLs:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $app, $urls) {
+                $files = $links = [];
+                for ($i = 0, $n = ObjC::msg('L:', $urls, 'count'); $i < $n; $i++) {
+                    $u = ObjC::msg('p:L', $urls, 'objectAtIndex:', $i);
+                    if (ObjC::msg('b:', $u, 'isFileURL')) {
+                        $files[] = ObjC::phpStr(ObjC::msg('p:', $u, 'path'));
+                    } else {
+                        $links[] = ObjC::phpStr(ObjC::msg('p:', $u, 'absoluteString'));
+                    }
+                }
+                Native\DeepLink::openFiles($files);
+                Native\DeepLink::openURLs($links);
             }],
         ]);
         $delegate = ObjC::msg('p:', ObjC::alloc('MyPHPAppDelegate'), 'init');

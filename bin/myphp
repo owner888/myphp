@@ -43,6 +43,16 @@ function project(array $args): array
     is_file($file) || fail("$dir has no myphp.json; run `myphp init` first");
     $config = json_decode(file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
     isset($config['name'], $config['entry']) || fail('myphp.json needs "name" and "entry"');
+    foreach ($config['urlSchemes'] ?? [] as $scheme) {
+        is_string($scheme) && preg_match('/^[A-Za-z][A-Za-z0-9+.-]*$/', $scheme) === 1 || fail('urlSchemes: ' . json_encode($scheme) . ' is not a URL scheme (a letter, then letters, digits, +, - or .)');
+    }
+    foreach ($config['fileAssociations'] ?? [] as $i => $fa) {
+        ($fa['ext'] ?? []) !== [] || fail("fileAssociations[$i] has no ext");
+        foreach ($fa['ext'] as $ext) {
+            is_string($ext) && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $ext) === 1 || fail("fileAssociations[$i]: " . json_encode($ext) . ' is not a file name extension (without the dot)');
+        }
+        in_array($fa['role'] ?? 'Editor', ['Editor', 'Viewer'], true) || fail("fileAssociations[$i].role is Editor or Viewer");
+    }
     return ['dir' => $dir, 'config' => $config];
 }
 
@@ -271,7 +281,7 @@ function build(array $args): void
         'NSHighResolutionCapable' => true,
         'NSPrincipalClass' => 'NSApplication',
         'LSApplicationCategoryType' => 'public.app-category.utilities',
-    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + updatePlist($dir, $c)));
+    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + updatePlist($dir, $c) + openPlist($c)));
     file_put_contents("$contents/PkgInfo", 'APPL????');
     if ($launcher === 'exec') {
         buildExecLauncher("$contents/MacOS/$name", $c['entry']);
@@ -387,11 +397,50 @@ function copyTree(string $from, string $to, array $skip): void
 
 function plist(array $kv): string
 {
-    $x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n";
-    foreach ($kv as $k => $v) {
-        $x .= "\t<key>$k</key>\n\t" . (is_bool($v) ? ($v ? '<true/>' : '<false/>') : '<string>' . htmlspecialchars($v, ENT_XML1) . '</string>') . "\n";
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n" . plistValue($kv, '') . "</plist>\n";
+}
+
+/** A value as XML property list, indented by $indent: lists are arrays, other arrays dicts (mygo's writePlistValue). */
+function plistValue(mixed $v, string $indent): string
+{
+    $esc = fn(string $s): string => htmlspecialchars($s, ENT_XML1);
+    if (is_array($v) && array_is_list($v) && $v !== []) {
+        return "$indent<array>\n" . implode('', array_map(fn($e) => plistValue($e, "$indent\t"), $v)) . "$indent</array>\n";
     }
-    return $x . "</dict>\n</plist>\n";
+    if (is_array($v)) {
+        $x = "$indent<dict>\n";
+        foreach ($v as $k => $e) {
+            $x .= "$indent\t<key>" . $esc((string)$k) . "</key>\n" . plistValue($e, "$indent\t");
+        }
+        return "$x$indent</dict>\n";
+    }
+    return $indent . match (true) {
+        is_bool($v) => $v ? '<true/>' : '<false/>',
+        is_int($v) => "<integer>$v</integer>",
+        is_float($v) => "<real>$v</real>",
+        default => '<string>' . $esc((string)$v) . '</string>',
+    } . "\n";
+}
+
+/** The Info.plist keys of myphp.json's "urlSchemes" and "fileAssociations", which the system opens with the app (mygo's bundle.go). @return array<string, mixed> */
+function openPlist(array $c): array
+{
+    $d = [];
+    $docs = [];
+    foreach ($c['fileAssociations'] ?? [] as $fa) {
+        $doc = ['CFBundleTypeName' => $fa['name'] ?? strtoupper($fa['ext'][0]) . ' file', 'CFBundleTypeRole' => $fa['role'] ?? 'Editor', 'LSHandlerRank' => 'Default', 'CFBundleTypeExtensions' => array_values($fa['ext'])];
+        if (($fa['mimeType'] ?? '') !== '') {
+            $doc['CFBundleTypeMIMETypes'] = [$fa['mimeType']];
+        }
+        $docs[] = $doc;
+    }
+    if ($docs !== []) {
+        $d['CFBundleDocumentTypes'] = $docs;
+    }
+    if (($c['urlSchemes'] ?? []) !== []) {
+        $d['CFBundleURLTypes'] = [['CFBundleURLName' => $c['bundleId'] ?? 'com.example.' . strtolower($c['name']), 'CFBundleURLSchemes' => array_values($c['urlSchemes'])]];
+    }
+    return $d;
 }
 
 /**

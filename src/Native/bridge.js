@@ -143,6 +143,72 @@
       }
     },
   };
+  // Find in page (Window::findInPage, mygo's find.ts): matches are marked with the CSS Custom
+  // Highlight API, which leaves the page's DOM and selection alone; engines without it select
+  // the active match instead.
+  let findState = null;
+  let findSheet = null;
+  const highlights = () => typeof CSS !== "undefined" && "highlights" in CSS && typeof Highlight !== "undefined";
+  const collect = (text, matchCase) => {
+    const ranges = [];
+    if (!text || !document.body) return ranges;
+    const needle = matchCase ? text : text.toLowerCase();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const el = node.parentElement;
+        if (!el || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TEXTAREA)$/.test(el.tagName)) return NodeFilter.FILTER_REJECT;
+        return el.getClientRects().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const hay = matchCase ? node.nodeValue : node.nodeValue.toLowerCase();
+      for (let i = hay.indexOf(needle); i >= 0; i = hay.indexOf(needle, i + needle.length)) {
+        const r = document.createRange();
+        r.setStart(node, i);
+        r.setEnd(node, i + needle.length);
+        ranges.push(r);
+      }
+    }
+    return ranges;
+  };
+  const stopFind = () => {
+    if (findState && !highlights()) getSelection()?.removeAllRanges();
+    findState = null;
+    if (highlights()) {
+      CSS.highlights.delete("myphp-find");
+      CSS.highlights.delete("myphp-find-active");
+    }
+  };
+  const find = (text, opts = {}) => {
+    const matchCase = !!opts.matchCase;
+    if (!opts.next || !findState || findState.text !== text || findState.matchCase !== matchCase) {
+      findState = { text, matchCase, ranges: collect(text, matchCase), active: -1 };
+    }
+    const n = findState.ranges.length;
+    if (n === 0) {
+      stopFind();
+      return { matches: 0, active: 0 };
+    }
+    findState.active = findState.active < 0 ? (opts.backward ? n - 1 : 0) : (findState.active + (opts.backward ? n - 1 : 1)) % n;
+    const range = findState.ranges[findState.active];
+    if (highlights()) {
+      if (!findSheet && "adoptedStyleSheets" in document) {
+        // A constructed style sheet, which a Content Security Policy allows.
+        findSheet = new CSSStyleSheet();
+        findSheet.replaceSync("::highlight(myphp-find){background-color:#fdeb62;color:#000}::highlight(myphp-find-active){background-color:#ff9632;color:#000}");
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, findSheet];
+      }
+      CSS.highlights.set("myphp-find", new Highlight(...findState.ranges));
+      CSS.highlights.set("myphp-find-active", new Highlight(range));
+    } else {
+      const sel = getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+    range.startContainer.parentElement?.scrollIntoView({ block: "center", inline: "nearest" });
+    return { matches: n, active: findState.active + 1 };
+  };
+  Object.defineProperty(window, "__myphp", { value: Object.freeze({ find, stopFind }) });
   post({ t: "page" }); // a document starts: the calls of the last one end (MyPHP\CallContext)
   document.addEventListener("DOMContentLoaded", () => post({ t: "dom-ready" }));
   // An Escape no handler of the page called preventDefault on: a flyout or a panel closes on it.

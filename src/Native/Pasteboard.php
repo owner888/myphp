@@ -16,8 +16,10 @@ final class Pasteboard
     private const URL = 'public.url', FILE_URL = 'public.file-url', FILE_LIST = 'dev.mygo.file-list';
 
     private static bool $defined = false;
-    /** The data on the pasteboard that providers give, while it is: its provider object, the pasteboard's change count after writing it, and its items by their pasteboard item's address (mygo's macClipboardSource). @var ?array{obj: mixed, change: int, items: array<int, Item>} */
+    /** The data on the pasteboard that providers give, while it is: its provider object, the pasteboard's change count after writing it, its items by their pasteboard item's address, and what runs once it is let go (mygo's macClipboardSource). @var ?array{obj: mixed, change: int, items: array<int, Item>, data: Data, onRelease: ?\Closure} */
     private static ?array $source = null;
+    /** A provider is giving its data now: it must not read or replace the clipboard. */
+    public static bool $providing = false;
 
     public static function text(): string
     {
@@ -34,14 +36,17 @@ final class Pasteboard
         ObjC::msg('b:pp', $pb, 'setString:forType:', ObjC::str($text), ObjC::str(self::STRING_TYPE));
     }
 
-    /** Puts $data on the pasteboard, each representation of its items in the system's types, given when asked (mygo's WriteData); data of no formats clears it. */
-    public static function writeData(Data $data): void
+    /** Puts $data on the pasteboard, each representation of its items in the system's types, given when asked (mygo's WriteData); data of no formats clears it. $onRelease runs once its providers are no longer needed. */
+    public static function writeData(Data $data, ?\Closure $onRelease = null): void
     {
         self::define();
         $board = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
         if ($data->formats() === []) {
             ObjC::msg('l:', $board, 'clearContents');
             self::release();
+            if ($onRelease !== null) {
+                self::later($onRelease);
+            }
             return;
         }
         $obj = ObjC::msg('p:', ObjC::alloc('MyPHPClipboardProvider'), 'init');
@@ -60,8 +65,9 @@ final class Pasteboard
         }
         ObjC::msg('l:', $board, 'clearContents');
         self::release();
-        self::$source = ['obj' => $obj, 'change' => 0, 'items' => $byItem];
+        self::$source = ['obj' => $obj, 'change' => 0, 'items' => $byItem, 'data' => $data, 'onRelease' => $onRelease];
         if (!ObjC::msg('b:p', $board, 'writeObjects:', $array)) {
+            self::$source['onRelease'] = null; // a failed write does not release
             self::release();
             throw new \RuntimeException('myphp: cannot write pasteboard items');
         }
@@ -138,14 +144,66 @@ final class Pasteboard
         return Drag::macFormat($type);
     }
 
-    /** Lets go of the data written last: its provider gives nothing more (mygo's release). */
+    /** Lets go of the data written last: its provider gives nothing more, and its onRelease runs after the callback it may be in (mygo's release). */
     private static function release(): void
     {
         if (self::$source === null) {
             return;
         }
         ObjC::msg('p:', self::$source['obj'], 'autorelease'); // AppKit may still be in a callback on it; its own references are its own
+        $fn = self::$source['onRelease'];
         self::$source = null;
+        if ($fn !== null) {
+            self::later($fn);
+        }
+    }
+
+    /** Runs $fn after the native callback returns, on the run loop; at once when the app no longer runs one. */
+    private static function later(\Closure $fn): void
+    {
+        \MyPHP\App::running() ? \MyPHP\App::later($fn) : $fn();
+    }
+
+    /**
+     * Gives the pasteboard every representation of the data written last,
+     * so that it stays once the app quits, and lets go of its providers
+     * (mygo's Flush); it does nothing to another app's data. A provider's
+     * error leaves it as it was.
+     */
+    public static function flush(): void
+    {
+        $board = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
+        $s = self::$source;
+        if ($s === null || $s['change'] !== ObjC::msg('l:', $board, 'changeCount')) {
+            return;
+        }
+        self::$providing = true;
+        try {
+            $d = $s['data']->materialize($s['data']->formats());
+        } finally {
+            self::$providing = false;
+        }
+        if (self::$source !== $s) {
+            throw new \MyPHP\ClipboardChanged('myphp: the clipboard changed while it was flushed');
+        }
+        $array = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
+        foreach ($d->items as $item) {
+            $pb = ObjC::msg('p:', ObjC::msg('p:', ObjC::alloc('NSPasteboardItem'), 'init'), 'autorelease');
+            foreach (self::types($item) as $name) {
+                $b = $item->read(self::format($name));
+                if ($name === self::URL || $name === self::FILE_URL) {
+                    $b = trim(explode("\n", $b)[0]);
+                }
+                ObjC::msg('b:pp', $pb, 'setData:forType:', ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $b, strlen($b)), ObjC::str($name));
+            }
+            ObjC::msg('v:p', $array, 'addObject:', $pb);
+        }
+        ObjC::msg('l:', $board, 'clearContents');
+        $ok = ObjC::msg('b:p', $board, 'writeObjects:', $array);
+        self::release();
+        if (!$ok) {
+            throw new \RuntimeException('myphp: cannot persist pasteboard items');
+        }
     }
 
     private static function define(): void
@@ -161,10 +219,13 @@ final class Pasteboard
                     return;
                 }
                 $name = ObjC::phpStr($type);
+                self::$providing = true;
                 try {
                     $b = $s['items'][ObjC::addr($item)]->read(self::format($name));
                 } catch (\Throwable) {
                     return;
+                } finally {
+                    self::$providing = false;
                 }
                 if ($name === self::URL || $name === self::FILE_URL) {
                     $b = trim(explode("\n", $b)[0]); // one URL

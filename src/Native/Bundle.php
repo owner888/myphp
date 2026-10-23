@@ -13,7 +13,7 @@ namespace MyPHP\Native;
  */
 final class Bundle
 {
-    /** @var array<string, string>|null */
+    /** @var array<string, mixed>|null */
     private static ?array $info = null;
 
     /** The bundle's path, null when the app runs from no bundle (myphp dev, php app.php). */
@@ -33,18 +33,20 @@ final class Bundle
     /** The string $key of the bundle's Info.plist, as `myphp build` writes it, or null. */
     public static function info(string $key): ?string
     {
+        $v = self::plist()[$key] ?? null;
+        return is_string($v) ? $v : null;
+    }
+
+    /** What the bundle's Info.plist says; nothing without a bundle. @return array<string, mixed> */
+    public static function plist(): array
+    {
         if (self::$info === null) {
-            self::$info = [];
             $app = self::path();
-            $plist = $app === null ? false : @file_get_contents("$app/Contents/Info.plist");
-            if ($plist !== false) {
-                preg_match_all('~<key>([^<]*)</key>\s*<string>([^<]*)</string>~', $plist, $m, PREG_SET_ORDER);
-                foreach ($m as [, $k, $v]) {
-                    self::$info[html_entity_decode($k, ENT_XML1)] = html_entity_decode($v, ENT_XML1);
-                }
-            }
+            $xml = $app === null ? false : @file_get_contents("$app/Contents/Info.plist");
+            $plist = $xml === false ? [] : Plist::parse($xml);
+            self::$info = is_array($plist) ? $plist : throw new \RuntimeException("$app/Contents/Info.plist is no dictionary");
         }
-        return self::$info[$key] ?? null;
+        return self::$info;
     }
 
     /** The executable that starts the app: the bundle's, else the PHP that runs it with the script. @return list<string> */

@@ -94,7 +94,7 @@ final class Window
     private string $stateKey = '';
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
-    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate'];
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate', 'willDownload', 'downloadDone'];
     /** @var array<int, Window> by content view address, for drops */
     private static array $byView = [];
 
@@ -199,6 +199,27 @@ final class Window
                     $fn($e);
                 }
                 return !$e->prevented;
+            };
+            $this->page->onPermission = function (array $kinds, string $origin): bool {
+                $req = new PermissionRequest($kinds, $origin);
+                return $this->permissionHandler !== null ? (bool)($this->permissionHandler)($req) : self::ownOrigin($origin);
+            };
+            $this->page->onDownload = function (string $url, string $suggested): ?string {
+                $e = new DownloadEvent($url, self::downloadName($suggested), '');
+                $dir = getenv('HOME') . '/Downloads';
+                if (is_dir($dir) || @mkdir($dir, 0755, true)) {
+                    $e->path = self::uniquePath("$dir/{$e->suggestedName}");
+                }
+                foreach ($this->listeners['willDownload'] ?? [] as $fn) {
+                    $fn($e);
+                }
+                return $e->prevented || $e->path === '' ? null : $e->path;
+            };
+            $this->page->onDownloadDone = function (string $url, string $path, ?string $error): void {
+                $d = new Download($url, $path, $error);
+                foreach ($this->listeners['downloadDone'] ?? [] as $fn) {
+                    $fn($d);
+                }
             };
             if ($o->html !== null) {
                 $this->page->loadHTML($o->html);
@@ -537,6 +558,108 @@ final class Window
         }));
     }
 
+    /** @var ?\Closure(PermissionRequest): bool */
+    private ?\Closure $permissionHandler = null;
+
+    /**
+     * Decides what the window's pages may use, as the camera and the
+     * microphone (mygo's Page.SetPermissionHandler): $fn returns whether
+     * to grant a request. Null restores the default: the app's own pages,
+     * those of WindowOptions' html and of file: URLs, get what they ask for,
+     * others do not. macOS may still ask the user once, which needs
+     * NSCameraUsageDescription and NSMicrophoneUsageDescription in the
+     * bundle's Info.plist, without which it ends the app.
+     */
+    public function setPermissionHandler(?\Closure $fn): void
+    {
+        $this->permissionHandler = $fn;
+    }
+
+    /** Whether $origin is one of the app's own pages: its html (no origin) or a file. */
+    private static function ownOrigin(string $origin): bool
+    {
+        return $origin === '://' || str_starts_with($origin, 'file://');
+    }
+
+    /** The file name a download suggests, without directories (mygo's DownloadStarted). */
+    public static function downloadName(string $suggested): string
+    {
+        $name = basename('/' . str_replace('\\', '/', $suggested));
+        return $name === '' || $name === '.' || $name === '..' ? 'download' : $name;
+    }
+
+    /** $path, or numbered as "name (2).ext" when a file has its name (mygo's uniquePath). */
+    public static function uniquePath(string $path): string
+    {
+        if (!file_exists($path) && !is_link($path)) {
+            return $path;
+        }
+        $ext = pathinfo($path, PATHINFO_EXTENSION);
+        $base = $ext === '' ? $path : substr($path, 0, -strlen($ext) - 1);
+        for ($i = 2; ; $i++) {
+            $p = "$base ($i)" . ($ext === '' ? '' : ".$ext");
+            if (!file_exists($p) && !is_link($p)) {
+                return $p;
+            }
+        }
+    }
+
+    /**
+     * Highlights the occurrences of $text in the page, scrolls to the
+     * active one and says how many there are, as a browser's find bar
+     * (mygo's Page.FindInPage): call it as the user types, and with
+     * findNext to go to the next match. Text split by markup, as
+     * "my<b>go</b>", is not found.
+     */
+    public function findInPage(string $text, FindOptions $opts = new FindOptions): FindResult
+    {
+        $this->page ?? throw new RuntimeException('myphp: the window shows no page');
+        $js = 'JSON.stringify(window.__myphp.find(' . json_encode($text, JSON_THROW_ON_ERROR) . ', ' . json_encode(['matchCase' => $opts->matchCase, 'backward' => $opts->backward, 'next' => $opts->findNext]) . '))';
+        $done = false;
+        $value = $error = null;
+        $this->evaluate($js, function (?string $v, ?string $e) use (&$done, &$value, &$error): void { [$done, $value, $error] = [true, $v, $e]; });
+        App::wait(function () use (&$done): bool { return $done || $this->destroyed; });
+        if ($error !== null || $value === null) {
+            throw new RuntimeException('myphp: finding in the page: ' . ($error ?? 'the window closed'));
+        }
+        $r = json_decode($value, true);
+        return new FindResult((int)($r['matches'] ?? 0), (int)($r['active'] ?? 0));
+    }
+
+    /** Removes the highlights of findInPage() (mygo's Page.StopFindInPage). */
+    public function stopFindInPage(): void
+    {
+        $this->evaluate('window.__myphp && window.__myphp.stopFind()');
+    }
+
+    /** Shows the print panel for the page (mygo's Page.Print). */
+    public function print(): void
+    {
+        ($this->page ?? throw new RuntimeException('myphp: the window shows no page'))->print($this->ns);
+    }
+
+    /**
+     * The page as a PDF document, laid out for printing (its print style
+     * sheets apply) on pages of the size $opts gives (mygo's
+     * Page.PrintToPDF): the PDF's bytes.
+     *
+     *     $pdf = $win->printToPDF(new PDFOptions(PageSize::a4(), background: true));
+     */
+    public function printToPDF(PDFOptions $opts = new PDFOptions): string
+    {
+        $page = $this->page ?? throw new RuntimeException('myphp: the window shows no page');
+        $size = $opts->pageSize ?? PageSize::letter();
+        $m = $opts->margins ?? new Margins(0.4, 0.4, 0.4, 0.4);
+        $result = null;
+        $page->printToPDF($this->ns, $size->width, $size->height, $opts->landscape, [$m->top, $m->right, $m->bottom, $m->left], $opts->background,
+            function (?string $pdf, ?string $error) use (&$result): void { $result = [$pdf, $error]; });
+        App::wait(function () use (&$result): bool { return $result !== null || $this->destroyed; });
+        if ($result === null) {
+            throw new RuntimeException('myphp: the window was closed while it printed');
+        }
+        return $result[0] ?? throw new RuntimeException($result[1]);
+    }
+
     /** Calls $fn once the page's DOM is ready (at once if it already is). */
     public function whenPageReady(\Closure $fn): void
     {
@@ -672,7 +795,11 @@ final class Window
      * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent:
      * files dropped from other apps that no node took, Context::dropData
      * or droppedFiles), willNavigate (with a NavigateEvent to prevent: the
-     * page going to another URL, mygo's Page.OnWillNavigate).
+     * page going to another URL, mygo's Page.OnWillNavigate), willDownload
+     * (with a DownloadEvent, to choose where a download of the page goes or
+     * prevent it: a link with the download attribute, or a response the
+     * page cannot show; mygo's Page.OnWillDownload) and downloadDone (with
+     * a Download, mygo's Page.OnDownloadDone).
      * Returns a function that removes it.
      */
     public function on(string $event, \Closure $fn): \Closure

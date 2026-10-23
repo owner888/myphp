@@ -46,8 +46,9 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
-src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after), Window (+ on(event), CloseEvent,
-                   FileDropEvent, WindowState),
+src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after; onOpenURL/File, single instance, recent
+                   documents, open at login), Window (+ on(event), CloseEvent, FileDropEvent, WindowState; findInPage, printToPDF,
+                   downloads, permissions), Network, Clipboard, Secrets (Keychain), Cookies,
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
                    Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
                    window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), autoload.php,
@@ -193,7 +194,6 @@ rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload;
-file drops; CLI + .app.
+events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

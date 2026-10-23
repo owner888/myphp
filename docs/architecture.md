@@ -1964,6 +1964,39 @@ replaces `Gamepad::$scan` with fake devices. Tests mind that a test file
 shares its scope with tests/run.php: `$before`, `$file` and `$name` are
 the runner's.
 
+## App services
+
+mygo's smaller services, ported one by one. Deep links and files reach
+`App::onOpenURL`/`onOpenFile` from the app delegate's
+`application:openURLs:` (file URLs are files), and from the command line
+of the launch (after the whenReady callbacks, as mygo) and of second
+instances; what the app handles is what the bundle's Info.plist declares
+(`CFBundleURLTypes`, `CFBundleDocumentTypes`, which `myphp build` writes
+from myphp.json's `urlSchemes` and `fileAssociations`), read with a small
+property list parser (`Native\Plist`), as `Bundle::info` now is.
+`registerURLScheme` calls Launch Services through CoreServices' C API,
+which needs no Objective-C, so it works before `App::run`. The single
+instance is a Unix socket of the user's (`myphp-<uid>-<hash>.sock`, under
+100 bytes) that the first instance listens on, polled on the run loop
+every 0.1 s as `Process` is; a later instance writes its arguments and
+working directory as JSON, shuts its side, and waits for the first to
+close. The Keychain (`Secrets`) goes through Security's SecItem functions
+over CoreFoundation dictionaries, also without Objective-C; mind that a
+`const char*` return is a PHP string cut at its first NUL, so byte
+pointers are declared `const void*`. `Network` keeps one
+Network.framework path monitor whose handler runs on the main queue
+(`_dispatch_main_q`), which the run loop drains, as PHP runs on the main
+thread only; `status()` turns the run loop (`App::wait`) for the first
+path, a second at most. The clipboard's providers are the pasteboard's
+(`Native\Pasteboard`); `Clipboard::flush()` gives it every
+representation, and quitting flushes it. Cookies are the default data
+store's `WKHTTPCookieStore`, whose handlers come on the main thread; each
+call waits for its handler with `App::wait`. Find in page is
+`window.__myphp.find` of bridge.js (mygo's find.ts: the CSS Custom
+Highlight API), `printToPDF` an `NSPrintOperation` saving to a temporary
+file, as a sheet of the window, its end heard by a delegate of its own;
+downloads are `WKDownload`s whose delegate is the navigation delegate.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

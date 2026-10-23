@@ -178,10 +178,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **The clipboard's data** (v0.82)
   - mygo: darwin `clipboard.go` writes, reads, flushes and closes data,
     with a released callback.
-  - myphp: `Pasteboard::writeData` and, since v0.87, `readData`
-    (`Runtime::$readClipboardData`); no `Formats`, `Flush`, `Close` or
-    callback.
-  - Why: only Copy and the rich text editor's Paste needed them so far.
+  - myphp: since v1.00 `Clipboard` writes, reads, lists and flushes, with
+    `ClipboardOptions::$onRelease`; no `Close`.
+  - Why: quitting flushes it, which is what `Close` is for in mygo.
 
 ## Box model and setters
 
@@ -519,6 +518,34 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `fillGradient()` at 0, 90, 180 and 270 degrees, without
     `start` and `end`; others throw.
   - Why: the display list draws gradients along a quad's axes.
+
+- **App services** (v1.00)
+  - mygo: methods of `App` (`OnOpenURL`, `RegisterURLScheme`,
+    `RequestSingleInstanceLock`, `AddRecentDocument`, `SetOpenAtLogin`…)
+    returning errors; `Network`, `Clipboard`, `Secrets`, `Cookies`
+    singletons whose methods are safe from any goroutine and wait off the
+    main thread; `mygo dev` runs a development bundle, so deep links work
+    there; pages get the network's state; the Open Recent menu role.
+  - myphp: static methods of `App`, `Network`, `Clipboard`, `Cookies` and
+    `Secrets` (`Secrets::service()` returns a `SecretsModule`), throwing;
+    they run on the main thread, and the Keychain may block it while the
+    system asks the user; deep links need a bundle `myphp build` made;
+    `unregisterURLScheme` throws (the scheme is the bundle's on macOS, as
+    mygo says); no page event of the network yet; the Open Recent role
+    waits for the documents.
+  - Why: PHP has one thread; the rest comes with documents.
+- **Pages' services** (v1.00)
+  - mygo: `Page.FindInPage`, `StopFindInPage`, `Print`, `PrintToPDF`,
+    `SetPermissionHandler` (the default trusts `PageOptions.TrustedOrigins`
+    and the app's own origin), `OnWillDownload`, `OnDownloadDone`; sizes
+    `PageLetter`… as variables.
+  - myphp: the same on `Window` (`findInPage()`, `print()`,
+    `printToPDF()`, `setPermissionHandler()`, the events `willDownload` and
+    `downloadDone`), as myphp has no `Page`; the default grants the pages
+    of WindowOptions' html and file: URLs, as there are no trusted origins
+    yet; `PageSize::letter()`… static methods.
+  - Why: myphp's window holds its page; trusted origins come with the
+    app's protocol.
 
 ## Plugins
 
