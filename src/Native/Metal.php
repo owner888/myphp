@@ -27,7 +27,7 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
     struct Xform { float4 abcd; float4 xygh; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1
@@ -125,9 +125,10 @@ final class Metal
             discard_fragment();
         }
         constexpr sampler s(filter::linear);
-        if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color
-            float4 c = images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
-            if (v.kind > 11.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
+        constexpr sampler nearest(filter::nearest);
+        if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color; pixelated (13)
+            float4 c = v.kind > 12.5 ? images.sample(nearest, v.uv, uint(v.color.z + 0.5)) : images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
+            if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
             float a = 1.0 - smoothstep(-0.5, 0.5, d);

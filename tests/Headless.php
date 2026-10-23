@@ -31,7 +31,9 @@ final class Metrics implements TextPainter
     public function imageSlot(Image $image): array { return ['u' => 0, 'v' => 0, 'w' => 1, 'h' => 1, 'page' => 0]; }
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return [$x, $y, $w, $h, 0, 0]; }
     public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return ['u' => 0, 'v' => 0, 'w' => $w, 'h' => $h, 'page' => 0]; }
-    public function scale(): float { return 1.0; }
+    /** The scale the painter reports: what a test of pixels sets. */
+    public float $scale = 1.0;
+    public function scale(): float { return $this->scale; }
     private ?\MyPHP\Text\System $system = null;
     public function textSystem(): \MyPHP\Text\System { return $this->system ??= new \MyPHP\Text\System(new \MyPHP\Text\StubEngine()); }
     public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void
@@ -230,6 +232,19 @@ final class Headless
         if (!($this->input->focus?->command($selector) ?? false)) {
             $this->input->push(['command', $selector]);
         }
+        return $this->frame();
+    }
+
+    /** A key pressed and held, as a game takes it (mygo's Tester.KeyDown): its release comes with keyUp(). */
+    public function keyDown(int $code): Node
+    {
+        $this->input->push(['key', '', $code, 0]);
+        return $this->frame();
+    }
+
+    public function keyUp(int $code): Node
+    {
+        $this->input->push(['keyup', '', $code, 0]);
         return $this->frame();
     }
 

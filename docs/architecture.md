@@ -1929,6 +1929,27 @@ which mirrors a flex row or column's children inside its content box),
 its check box and its progress bar; release notes reverse their lists by
 the script of their first letter.
 
+## Games
+
+The game plugin (`Plugins\Game`) is mygo's: `Game::view()` is a focusable
+node that takes its input as it comes (`handleInput`) into an `Input`, and
+in its draw closure, which the painter runs every frame it shows, makes a
+`Painter` over the display list, asks for the next frame
+(`animationFrame`) and runs the steps the frame's time owes: whole
+`1e9 / rate()` nanoseconds of `Runtime::$now`, at most a quarter of a
+second after a pause, so painting twice at one time runs no step twice.
+Keys are virtual key codes, which are places on the keyboard already, as
+WASD wants. The window losing the keyboard (`Runtime::$windowFocus`) lets
+go of what was held, whose releases never come. Pixel art is an `Image`
+made `pixelated()`: its quads are kind 13, which the shader samples at
+the nearest pixel; `Painter::imageRegion` draws a part of it, mirrored
+by a negative slot size, unsnapped under a transform so that it glides.
+Gamepads come from GameController.framework through `ObjC::msg` ('f:'
+for an input's value), in an autorelease pool of their own; a test
+replaces `Gamepad::$scan` with fake devices. Tests mind that a test file
+shares its scope with tests/run.php: `$before`, `$file` and `$name` are
+the runner's.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

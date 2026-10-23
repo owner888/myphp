@@ -1526,7 +1526,7 @@ final class Context
         $first = $region->firstWeekday;
         $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
         $visible = $rt?->focusVisible($grid->id) ?? false;
-        $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::focusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
+        $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::paintFocusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
         $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
         if ($rt?->focus === $grid->id) {
             if ($this->shortcut(Key::LEFT)) { $move($cur->modify('-1 day')); }
@@ -1759,7 +1759,7 @@ final class Context
               $cx = $a->x + $a->w * $sat; $cy = $a->y + $a->h * (1 - $v); $d = $t->space(3.5); // the color chosen, ringed
               $list->ring($cx - $d / 2, $cy - $d / 2, $d, $d, 0xffffff, 1.0, $d / 2, 2.0);
               $list->ring($cx - $d / 2 - 1, $cy - $d / 2 - 1, $d + 2, $d + 2, 0x000000, 0.3, $d / 2 + 1, 1.0);
-              if ($ring) { Painter::focusRing($list, $a->x, $a->y, $a->w, $a->h, $t->radius, $t); }
+              if ($ring) { Painter::paintFocusRing($list, $a->x, $a->y, $a->w, $a->h, $t->radius, $t); }
           });
           // The hue, and the opacity.
           $st->hue = $h; $st->opacity = $alpha;
@@ -1822,7 +1822,7 @@ final class Context
             $g = 1 + 0.2 * $held; $w = $kw * $g; $h = $n->h * $g; $kx = $x - $w / 2; $ky = $n->y + $n->h / 2 - $h / 2;
             $list->shadow($kx, $ky, $w, $h, 0x000000, 0.3, $w / 2, 3, 0, 1);
             $list->rect($kx, $ky, $w, $h, 0xffffff, 1.0, $w / 2);
-            if ($ring) { Painter::focusRing($list, $kx, $ky, $w, $h, $w / 2, $t); }
+            if ($ring) { Painter::paintFocusRing($list, $kx, $ky, $w, $h, $w / 2, $t); }
         });
         return $s;
     }
@@ -2071,7 +2071,7 @@ final class Context
                       elseif ($chosen) { $cell->color = $t->surfacePressed; $cell->border($t->border, 2.0); }
                       elseif ($this->hovered($cell)) { $cell->color = $t->surfaceHover; }
                       if ($i === $s->selected && $s->selection !== null && !$chosen && $rt?->focusVisible($id)) { // where the keys moved without choosing
-                          $cell->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::focusRing($list, $a->x + 3, $a->y + 3, $a->w - 6, $a->h - 6, $a->radius, $t));
+                          $cell->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::paintFocusRing($list, $a->x + 3, $a->y + 3, $a->w - 6, $a->h - 6, $a->radius, $t));
                       }
                   }
                     $item($i);
@@ -2191,7 +2191,7 @@ final class Context
         $h = $size ?? $t->fontSize;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
         $n->svg = $svg; // an image to assistive technology once labeled; else decoration
-        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::icon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($color ?? $t->text) : ($color ?? $t->text), $a->alpha, $a->rotation));
+        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::paintIcon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($color ?? $t->text) : ($color ?? $t->text), $a->alpha, $a->rotation));
         return $n;
     }
 

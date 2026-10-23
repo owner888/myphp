@@ -469,6 +469,39 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `IsOnBattery` yet.
   - Why: what the updater needs, ported first.
 
+- **The game plugin** (v0.98)
+  - mygo: package `game`: an interface `Game` (`Update`, `Draw`, an
+    optional `Rate()`), functions `View` and `IntegerFit`, the constant
+    `Rate`; rects are `ui.Rect`s, times `time.Time`s; `IntegerFit` goes
+    with a `ui.Canvas` the game draws its world into. Package `gamepad`
+    reads pads on macOS, Windows (XInput), Linux (evdev) and in browsers.
+  - myphp: an abstract class `Plugins\Game\Game` that games extend, with
+    `update()`, `draw()`, `rate()` to override, and the static `view()`,
+    `integerFit()` and `RATE`; rects are `[x, y, w, h]`, the frame's time
+    nanoseconds (`Painter::now()`); no canvas yet, so a game draws its
+    pixel art straight into the view. `Gamepad\Gamepad::pads()` reads
+    GameController.framework only; `Button` and `Axis` are enums.
+  - Why: a PHP package is classes, and an interface has no static
+    methods; myphp runs on macOS only.
+- **Painter** (v0.98)
+  - mygo: `ui.Painter`, what every element's `Draw` gets: fills,
+    gradients, strokes (dashed too), shadows cut out under the shape,
+    lines, text, rich text and text layouts, images and parts of bitmaps
+    (flipped, tinted), focus rings, clips with rounded corners,
+    transforms, paths, icons, effects, `Now`, `AnimationFrame`, `After`,
+    `Scale`, `Visible`, `Theme`.
+  - myphp: a `MyPHP\UI\Painter` instance over a display list with
+    `now()`, `animationFrame()`, `after()`, `scale()`, `visible()`,
+    `theme()`, `fill()`, `stroke()`, `shadow()` (not cut out under the
+    shape), `line()`, `text()`, `image()`, `imageRegion()` (flipped, not
+    tinted: `ImageOptions` has `flipX` and `flipY`), `focusRing()`,
+    `clip()` (square corners), `transform()`, `fillPath()`,
+    `strokePath()`, `icon()`; colors 0xRRGGBB with an opacity.
+    `Node::draw()` still hands a draw the display list and the node; the
+    tree painter's own helpers became `paintIcon` and `paintFocusRing`.
+  - Why: what a game draws with, first; the display list has no tint,
+    dashes nor rounded clips.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

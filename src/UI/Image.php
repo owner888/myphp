@@ -22,6 +22,8 @@ final class Image
     public readonly int $w, $h;
     private CData $pix;
     public readonly int $addr;
+    /** Shows its pixels as squares when scaled up, sampled at the nearest rather than blended, as pixel art wants (mygo's Bitmap.Pixelated); its levels, smaller, stay smooth. */
+    public bool $pixelated = false;
     /** @var list<Image> the image halved once, twice…, made as a smaller showing asks (mygo's levels) */
     private array $levels = [];
 
@@ -54,6 +56,13 @@ final class Image
             throw new RuntimeException("cannot read image $path");
         }
         return self::fromBytes($bytes, $max);
+    }
+
+    /** Makes the image pixelated ($pixelated) and returns it. */
+    public function pixelated(): self
+    {
+        $this->pixelated = true;
+        return $this;
     }
 
     /** The pixels, premultiplied RGBA, four bytes a pixel, top row first. */

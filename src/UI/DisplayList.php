@@ -256,10 +256,8 @@ final class DisplayList
         $this->n++;
     }
 
-    /** An image quad: its atlas pixels start at ($u, $v) and span $sw × $sh, drawn into w × h with rounded corners. */
-    /** An image quad: the slot (u, v, sw*sh pixels) on page $page of the image atlas, drawn at x, y, w*h points. */
-    /** The part of an image atlas slot at (u, v), sw × sh pixels on $page, drawn into the rect, rounded by $radius at $alpha; $gray in shades of gray (kind 12 instead of 2). */
-    public function image(float $x, float $y, float $w, float $h, int $u, int $v, int $sw, int $sh, int $page, float $alpha = 1.0, float $radius = 0.0, bool $gray = false): void
+    /** The part of an image atlas slot at (u, v), sw × sh pixels on $page (negative to mirror it), drawn into the rect, rounded by $radius at $alpha; $gray in shades of gray (kind 12 instead of 2), else $pixelated sampled at the nearest pixel (kind 13). */
+    public function image(float $x, float $y, float $w, float $h, int $u, int $v, int $sw, int $sh, int $page, float $alpha = 1.0, float $radius = 0.0, bool $gray = false, bool $pixelated = false): void
     {
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} quads)");
@@ -267,7 +265,7 @@ final class DisplayList
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = $sw; $b[$k + 5] = $sh; $b[$k + 6] = $page; $b[$k + 7] = $alpha * $this->opacity;
-        $b[$k + 8] = $radius; $b[$k + 9] = ($gray ? 12.0 : 2.0) + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
+        $b[$k + 8] = $radius; $b[$k + 9] = ($gray ? 12.0 : ($pixelated ? 13.0 : 2.0)) + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
     }

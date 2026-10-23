@@ -3,9 +3,182 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-/** Turns a laid-out tree into display-list quads: fills, labels, clips. */
+/**
+ * Turns a laid-out tree into display-list quads: fills, labels, clips
+ * (the static methods). An instance draws into a display list as mygo's
+ * Painter does, for what draws itself, as a game's frame (Plugins\Game):
+ * rects are [x, y, w, h] in points, colors 0xRRGGBB with their opacity.
+ */
 final class Painter
 {
+    public function __construct(private readonly DisplayList $list, private readonly TextPainter $text, private readonly Theme $theme, private readonly ?Runtime $rt = null) {}
+
+    /** The time of the frame being painted, in nanoseconds (as Runtime::$now), which drawings that move compute from. */
+    public function now(): int
+    {
+        return $this->rt?->now ?? hrtime(true);
+    }
+
+    /** Asks for the next frame as soon as the display can show it, for a drawing that moves with now(): call it in every frame while it moves. */
+    public function animationFrame(): void
+    {
+        $this->rt?->animationFrame();
+    }
+
+    /** Asks for a frame $seconds from now, for a drawing that changes then. */
+    public function after(float $seconds): void
+    {
+        $this->rt?->after($seconds);
+    }
+
+    /** How many device pixels a point is, for drawing that lines up with the pixels of the display. */
+    public function scale(): float
+    {
+        return $this->text->scale();
+    }
+
+    /** What the clip leaves of the window, in the coordinates of what is drawn now. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function visible(): array
+    {
+        return $this->list->visible();
+    }
+
+    public function theme(): Theme
+    {
+        return $this->theme;
+    }
+
+    /** Paints a rounded rectangle. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function fill(array $r, int $rgb, float $radius = 0, float $alpha = 1.0): void
+    {
+        $this->list->rect($r[0], $r[1], $r[2], $r[3], $rgb, $alpha, $radius);
+    }
+
+    /** Paints the outline of a rounded rectangle, $width points wide inside its edge. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function stroke(array $r, int $rgb, float $radius, float $width, float $alpha = 1.0): void
+    {
+        $this->list->ring($r[0], $r[1], $r[2], $r[3], $rgb, $alpha, $radius, $width);
+    }
+
+    /** Paints the shadow of a rounded rectangle, offset by $x and $y, blurred by $blur and grown by $spread points. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function shadow(array $r, float $radius, float $x, float $y, float $blur, float $spread, int $rgb, float $alpha = 1.0): void
+    {
+        $this->list->shadow($r[0] - $spread, $r[1] - $spread, $r[2] + 2 * $spread, $r[3] + 2 * $spread, $rgb, $alpha, $radius > 0 ? max($radius + $spread, 0) : 0, $blur, $x, $y);
+    }
+
+    /** Paints a straight horizontal or vertical line between two points, $width points thick. */
+    public function line(float $x0, float $y0, float $x1, float $y1, float $width, int $rgb, float $alpha = 1.0): void
+    {
+        $r = [min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0)];
+        if ($r[2] < $r[3]) {
+            $r[0] -= $width / 2;
+            $r[2] = $width;
+        } else {
+            $r[1] -= $width / 2;
+            $r[3] = $width;
+        }
+        $this->fill($r, $rgb, 0, $alpha);
+    }
+
+    /** Draws a line of text with its top-left corner at ($x, $y). */
+    public function text(float $x, float $y, string $s, float $size, int $rgb, float $alpha = 1.0): void
+    {
+        $this->text->paint($this->list, $s, $size, $x, $y, $rgb, $alpha);
+    }
+
+    /** Draws a bitmap (pixelated if it is), or an SVG in its own colors with the theme's text color for its currentColor, as $fit (Node::CONTAIN…) places it in $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function image(Image|SVG $src, array $r, int $fit): void
+    {
+        self::picture($this->list, $this->text, $src, $r[0], $r[1], $r[2], $r[3], $fit, $this->theme->text);
+    }
+
+    /**
+     * Draws the part $src of bitmap $b, in its pixels ([] for all of it),
+     * stretched into $dst, as image() draws a bitmap (pixelated if it is),
+     * unless $dst is outside what shows. Nothing of the bitmap around $src
+     * shows, so that the parts of a bitmap holding many, as the frames of
+     * an animation, draw on their own. Under a transform, $dst is where it
+     * is, not snapped to pixels, so that a part moving through a zoomed
+     * view glides:
+     *
+     *     $p->imageRegion($sheet, [32, 0, 16, 16], $box);
+     *
+     * @param array{0: float, 1: float, 2: float, 3: float}|array{} $src
+     * @param array{0: float, 1: float, 2: float, 3: float} $dst
+     */
+    public function imageRegion(Image $b, array $src, array $dst, ImageOptions $o = new ImageOptions): void
+    {
+        if ($b->w === 0 || $b->h === 0 || $dst[2] <= 0 || $dst[3] <= 0 || $this->list->clipped(...$dst)) {
+            return;
+        }
+        if ($src === [] || $src[2] <= 0 || $src[3] <= 0) {
+            $src = [0.0, 0.0, (float)$b->w, (float)$b->h];
+        }
+        $scale = $this->scale();
+        // Far smaller than its pixels, a level of the bitmap, as smooth.
+        $shrink = min($src[2] / ($dst[2] * $scale), $src[3] / ($dst[3] * $scale));
+        $shown = $b->smaller($shrink);
+        $slot = $this->text->imageSlot($shown);
+        $kx = $shown->w / $b->w; $ky = $shown->h / $b->h;
+        $u = $slot['u'] + (int)round($src[0] * $kx); $v = $slot['v'] + (int)round($src[1] * $ky);
+        $sw = max(1, (int)round($src[2] * $kx)); $sh = max(1, (int)round($src[3] * $ky));
+        if ($o->flipX) {
+            [$u, $sw] = [$u + $sw, -$sw];
+        }
+        if ($o->flipY) {
+            [$v, $sh] = [$v + $sh, -$sh];
+        }
+        // Snapped to the pixels of the screen, unless a transform places it:
+        // snapping before a zoom would move a part in steps of several
+        // pixels, where pixelated sampling glides.
+        $r = $dst;
+        if (!$this->list->world()->set) {
+            $x0 = round($dst[0] * $scale) / $scale; $y0 = round($dst[1] * $scale) / $scale;
+            $r = [$x0, $y0, round(($dst[0] + $dst[2]) * $scale) / $scale - $x0, round(($dst[1] + $dst[3]) * $scale) / $scale - $y0];
+        }
+        $this->list->image($r[0], $r[1], $r[2], $r[3], $u, $v, $sw, $sh, $slot['page'], pixelated: $b->pixelated && $shrink <= 1);
+    }
+
+    /** Draws the ring that shows the keyboard focus around $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function focusRing(array $r, float $radius): void
+    {
+        self::paintFocusRing($this->list, $r[0], $r[1], $r[2], $r[3], $radius, $this->theme);
+    }
+
+    /** Restricts what $fn draws to $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function clip(array $r, \Closure $fn): void
+    {
+        $this->list->pushClip(...$r);
+        try {
+            $fn();
+        } finally {
+            $this->list->popClip();
+        }
+    }
+
+    /** Transforms what $fn draws by $t around ($ox, $oy), after the painter's own transforms: it nests. */
+    public function transform(Transform $t, float $ox, float $oy, \Closure $fn): void
+    {
+        $this->list->transform($t, $ox, $oy, $fn);
+    }
+
+    /** Fills $path (non-zero winding). */
+    public function fillPath(Path $path, int $rgb, float $alpha = 1.0): void
+    {
+        $this->list->path($path, $rgb, $alpha);
+    }
+
+    /** Strokes $path $width points wide, with round joins and caps. */
+    public function strokePath(Path $path, float $width, int $rgb, float $alpha = 1.0): void
+    {
+        $this->list->path($path, $rgb, $alpha, $width);
+    }
+
+    /** Draws the shapes of $svg fitted in $r in $rgb. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function icon(SVG $svg, array $r, int $rgb, float $alpha = 1.0): void
+    {
+        self::paintIcon($this->list, $this->text, $svg, $r[0], $r[1], $r[2], $r[3], $rgb, $alpha);
+    }
 
     /**
      * Paints $n and its children through the node's world (its transform
@@ -83,12 +256,12 @@ final class Painter
         }
         if ($n->kind === Node::IMAGE) {
             if ($n->content === null || $rt === null || !self::contentImage($n, $list, $text, $t, $rt)) {
-                self::image($n, $list, $text, $t);
+                self::paintImage($n, $list, $text, $t);
             }
             return;
         }
         if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
-            self::focusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
+            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
         }
         if ($n->material instanceof Blur) {
             $b = $n->material;
@@ -276,7 +449,7 @@ final class Painter
     }
 
     /** Draws the shapes of $svg fitted in the rect (contain, centered) in $rgb, turned by $rotate degrees around its center, as mygo's Painter.Icon: from a mask the text system caches in its atlas, so the GPU draws the icon in any color without drawing its shapes again. */
-    public static function icon(DisplayList $list, TextPainter $text, SVG $svg, float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0, float $rotate = 0.0): void
+    public static function paintIcon(DisplayList $list, TextPainter $text, SVG $svg, float $x, float $y, float $w, float $h, int $rgb, float $alpha = 1.0, float $rotate = 0.0): void
     {
         if ($svg->w <= 0 || $svg->h <= 0 || $alpha <= 0) { return; }
         $k = min($w / $svg->w, $h / $svg->h);
@@ -285,7 +458,7 @@ final class Painter
     }
 
     /** Draws an image, or an SVG in its own colors, in the node's box as its fit says (mygo's Painter.image: fitIn, drawBitmap, drawSVG), rounded, faded, gray if asked. */
-    private static function image(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
+    private static function paintImage(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
     {
         self::picture($list, $text, $n->svg ?? $n->image, $n->x, $n->y, $n->w, $n->h, $n->fit, $n->fg !== 0 ? $n->fg : $t->text, $n->alpha, $n->radius, $n->gray);
     }
@@ -305,16 +478,18 @@ final class Painter
         if ($iw <= 0 || $ih <= 0) { return; }
         [$dst, $frac, $fw, $fh] = self::fitIn($x, $y, $w, $h, $iw, $ih, $fit);
         if ($dst[2] <= 0 || $dst[3] <= 0) { return; }
+        $pixelated = false;
         if ($pic instanceof SVG) {
             $s = $text->svgSlot($pic, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $rgb);
         } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
             $shrink = min($frac[2] * $pic->w / ($dst[2] * $scale), $frac[3] * $pic->h / ($dst[3] * $scale));
             $s = $text->imageSlot($pic->smaller($shrink));
+            $pixelated = $pic->pixelated && $shrink <= 1;
         }
         $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box
         $u = $s['u'] + (int)round($frac[0] * $sw); $v = $s['v'] + (int)round($frac[1] * $sh);
         $cw = max(1, (int)round($frac[2] * $sw)); $ch = max(1, (int)round($frac[3] * $sh));
-        $list->image($dst[0], $dst[1], $dst[2], $dst[3], $u, $v, $cw, $ch, $s['page'], $alpha, $radius, $gray);
+        $list->image($dst[0], $dst[1], $dst[2], $dst[3], $u, $v, $cw, $ch, $s['page'], $alpha, $radius, $gray, $pixelated);
     }
 
     /**
@@ -348,7 +523,7 @@ final class Painter
     }
 
     /** mygo's Painter.FocusRing: a 2-point ring of the focus color a point outside the rect. */
-    public static function focusRing(DisplayList $list, float $x, float $y, float $w, float $h, float $radius, Theme $t): void
+    public static function paintFocusRing(DisplayList $list, float $x, float $y, float $w, float $h, float $radius, Theme $t): void
     {
         $list->ring($x - 3, $y - 3, $w + 6, $h + 6, $t->focus, $t->focusAlpha, $radius + 3, 2.0);
     }
@@ -383,7 +558,7 @@ final class Painter
             $list->rect($x + 1, $y + 1, $box - 2, $box - 2, $t->background, 1.0, $radius - 1);
         }
         if ($n->focusVisible) {
-            self::focusRing($list, $x, $y, $box, $box, $radius, $t);
+            self::paintFocusRing($list, $x, $y, $box, $box, $radius, $t);
         }
         [$lw, $lh] = $text->measure($n->text, $n->fontSize);
         $text->paint($list, $n->text, $n->fontSize, $n->reverse ? $x - $t->space(2) - $lw : $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
@@ -428,7 +603,7 @@ final class Painter
         $list->shadow($kx, $y + $in, $d, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
         $list->rect($kx, $y + $in, $d, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {
-            self::focusRing($list, $n->x, $y, $tw, $th, $th / 2, $t);
+            self::paintFocusRing($list, $n->x, $y, $tw, $th, $th / 2, $t);
         }
         [, $lh] = $text->measure($n->text, $n->fontSize);
         $text->paint($list, $n->text, $n->fontSize, $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
@@ -551,11 +726,11 @@ final class Painter
             [$svg, $image] = [$n->svg, $n->image];
             $n->svg = $r->oldSvg; $n->image = $r->oldImage;
             $list->setOpacity($saved * (1 - $k));
-            self::image($n, $list, $text, $t);
+            self::paintImage($n, $list, $text, $t);
             $n->svg = $svg; $n->image = $image;
         }
         $list->setOpacity($saved * $k);
-        self::image($n, $list, $text, $t);
+        self::paintImage($n, $list, $text, $t);
         $list->setOpacity($saved);
         return true;
     }
@@ -586,7 +761,7 @@ final class Painter
             $list->ring($x + 1, $y + 1, $w - 2, $h - 2, 0xffffff, 0.25 * $held, $r - 1, 1.0); // lit on the inside
         }
         if ($focus) {
-            self::focusRing($list, $x, $y, $w, $h, $r, $t);
+            self::paintFocusRing($list, $x, $y, $w, $h, $r, $t);
         }
     }
 
@@ -741,7 +916,7 @@ final class Painter
         foreach ($n->kids as $k) {
             if ($k->focusVisible) {
                 foreach ($k->frags as [$fx, $fy, $fw, $fh]) {
-                    self::focusRing($list, $fx, $fy, $fw, $fh, 2.0, $t);
+                    self::paintFocusRing($list, $fx, $fy, $fw, $fh, 2.0, $t);
                 }
             }
             self::paintInline($k, $list, $t);
