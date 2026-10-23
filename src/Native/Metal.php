@@ -27,7 +27,7 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (blur) and 8 (hard scroll edge): backdrop mixed with color by color.a, shown from u at the top to v at the bottom; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
     struct Xform { float4 abcd; float4 xygh; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1
@@ -152,16 +152,19 @@ final class Metal
             float d = length(pa - ba * t) - v.radius;
             return float4(v.color.rgb, v.color.a * (1.0 - smoothstep(-0.5, 0.5, d)));
         }
-        if (v.kind > 6.5) {   // a backdrop blur, faded along the quad; 8 tones it as macOS's hard scroll edge
+        if (v.kind > 6.5) {   // a level of a backdrop blur (7), shown along its mask by w; macOS's hard scroll edge (8), toned under the color by its alpha
             constexpr sampler bs(filter::linear, address::clamp_to_edge);
-            float ty = (v.local.y + v.extent.y) / max(v.rect.w / u.scale, 1.0);
-            float w = v.uv.x + (v.uv.y - v.uv.x) * ty;
             float3 c = backdrop.sample(bs, v.pos.xy / (u.viewport * u.scale)).rgb;
-            if (v.kind > 7.5) {
+            float w = 1.0;
+            if (v.kind < 7.5) {
+                float2 lp = v.local + v.extent;   // the quad's points from its top left
+                float t = clamp(v.color.z + v.color.x * lp.x + v.color.y * lp.y, 0.0, 1.0);
+                w = clamp(v.uv.x + v.uv.y * t, 0.0, 1.0) * v.color.a;
+            } else {
                 float l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
                 c = clamp(l + (c - l) * 1.25 + 0.03, 0.0, 1.0);
+                c += (v.color.rgb - c) * v.color.a;
             }
-            c += (v.color.rgb - c) * v.color.a;
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
             return float4(c, w * (1.0 - smoothstep(-0.5, 0.5, d)));

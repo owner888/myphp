@@ -9,7 +9,8 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Blur, Content, Context, Font, Glass, Image, ScrollEdge, ScrollState, Span};
+use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style};
+use MyPHP\UI\{Content, Context, Font, Image, LinearGradient, ScrollState, Span};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -32,7 +33,7 @@ function view(Context $c, array &$s): void
         $c->end();
       $c->end();
       // The toolbar: a glass row floating over the content.
-      $glass = fn() => new Glass($s['clear'] ? Glass::CLEAR : Glass::REGULAR, $s['tinted'] ? $t->accent : null, 0.5);
+      $glass = fn() => new Glass($s['clear'] ? Style::Clear : Style::Regular, $s['tinted'] ? $t->accent : null, 0.5);
       $c->row(10, 14)->at(16, 16)->round(22)->material($glass());
         $c->text('Liquid Glass', 15, style: Font::BOLD);
         $c->checkbox('Clear', $s['clear']);
@@ -48,8 +49,8 @@ function view(Context $c, array &$s): void
       $c->row(14, 8)->at($s['x'], 120)->round(28)->material($glass());
         $c->richText([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
       $c->end();
-      // A blur fading from full at its top to nothing at its bottom (a progressive blur), across the window.
-      $c->column(12, 0)->at(0, 300)->size($c->width, 90)->material(new Blur(10, fade: true));
+      // A blur fading from full at its top to nothing at its bottom (a progressive blur, in levels), across the window.
+      $c->column(12, 0)->at(0, 300)->size($c->width, 90)->material(new Blur(10, new LinearGradient(0x000000, 1, 0x000000, 0, 180)));
         $c->text('Blur, fading downward', 13, style: Font::BOLD);
       $c->end();
       // The scroll edge at the bottom: a bar of controls stands out from what scrolls under it.

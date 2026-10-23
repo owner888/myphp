@@ -502,6 +502,24 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: what a game draws with, first; the display list has no tint,
     dashes nor rounded clips.
 
+- **The glass plugin** (v0.99)
+  - mygo: `glass.Glass{Style, Tint, Interactive}` with `Tint` a color
+    with its alpha, `glass.Paint`, `glass.Blur{Radius, Mask}`,
+    `glass.ScrollEdge`; each has `String()` for the inspector; materials
+    take four radii; the effects are the plugin's own shaders (Metal,
+    HLSL, GLSL) and their CPU twins, which `p.Effect` runs.
+  - myphp: `Plugins\Glass\Glass(style, tint, tintAlpha, interactive)`,
+    `Glass::paint()`, `Blur(radius, mask)`, `ScrollEdge`; no `String()`
+    (no inspector); one radius; the shaders stay core's (`Native\Metal`),
+    which the painter's `glass()`, `blurLevel()` and `hardBlur()` reach.
+  - Why: myphp's colors and corners; one renderer, Metal, whose pipeline
+    is built once.
+- **Painter's gradients** (v0.99)
+  - mygo: `FillGradient` at any angle, with `Start` and `End`.
+  - myphp: `fillGradient()` at 0, 90, 180 and 270 degrees, without
+    `start` and `end`; others throw.
+  - Why: the display list draws gradients along a quad's axes.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

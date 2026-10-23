@@ -64,7 +64,7 @@ src/Text/          the text system (mygo's internal/text): System, Layout, Engin
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
-src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html; Native/ in native UI); Game/ (Game::view, Camera, Gamepad/)
+src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), client/); Fetch/, WebSocket/ (Native\Curl); Watch/ (App::watchFiles); Updater/ (Checker, Session in fibers, page.html; Native/ in native UI); Game/ (Game::view, Camera, Gamepad/); Glass/
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
@@ -75,7 +75,7 @@ src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), 
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
                    min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
-                   columns stretch, as mygo), Glass / Blur / ScrollEdge (backdrop materials), Font (style
+                   columns stretch, as mygo), Material (+ MaterialBuilder, LinearGradient: Plugins/Glass/), Font (style
                    bits), Span (rich text run), TextStyle (inherited), Layout (flex, margins),
                    DisplayList (quads with clip), Painter (tree -> list; an instance draws as mygo's Painter), Text + Atlas (glyphs R8), ImageAtlas (RGBA pages, a texture array)
                    + TextMetrics, Image (decoded once, atlas slot on first paint), TextState (editing model,

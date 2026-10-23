@@ -162,6 +162,64 @@ final class Painter
         $this->list->transform($t, $ox, $oy, $fn);
     }
 
+    /**
+     * Paints $box rounded by $radius with $g (mygo's FillGradient): along
+     * the box's height at 180° (from the top) or 0° (from the bottom), or
+     * its width at 90° (from the left) or 270° (from the right), with
+     * $start and $end both 0.
+     * @param array{0: float, 1: float, 2: float, 3: float} $box
+     */
+    public function fillGradient(array $box, LinearGradient $g, float $radius = 0): void
+    {
+        if ($g->start != 0 || $g->end != 0) {
+            throw new \InvalidArgumentException('Painter::fillGradient: a gradient\'s start and end are not drawn yet');
+        }
+        $a = fmod(fmod($g->angle, 360) + 360, 360);
+        [$vertical, $flip] = match ($a) {
+            180.0 => [true, false], 0.0 => [true, true], 90.0 => [false, false], 270.0 => [false, true],
+            default => throw new \InvalidArgumentException("Painter::fillGradient: an angle of {$g->angle}° is not drawn yet, only 0, 90, 180 and 270"),
+        };
+        [$from, $fa, $to, $ta] = $flip ? [$g->to, $g->toAlpha, $g->from, $g->fromAlpha] : [$g->from, $g->fromAlpha, $g->to, $g->toAlpha];
+        $this->list->gradient2($box[0], $box[1], $box[2], $box[3], $from, $fa, $to, $ta, $vertical, $radius);
+    }
+
+    /**
+     * Paints a pane of Liquid Glass over what was painted before (the
+     * renderer's glass effect, which Plugins\Glass draws with): $style 0
+     * regular, 1 clear; tinted by $tint at $tintAlpha; what shows through
+     * blurred by $sigma pixels.
+     * @param array{0: float, 1: float, 2: float, 3: float} $box
+     */
+    public function glass(array $box, float $radius, int $style, int $tint, float $tintAlpha, float $sigma): void
+    {
+        $this->list->glass($box[0], $box[1], $box[2], $box[3], $radius, $style, $tint, $tintAlpha, $sigma);
+    }
+
+    /**
+     * Paints a level of a backdrop blur (the renderer's blur effect): what
+     * was painted before, blurred by $sigma pixels, where the blur wanted,
+     * from $at0 pixels at the start of $line to $at1 at its end (in the
+     * window's pixels), is more than $lo, wholly from $hi.
+     * @param array{0: float, 1: float, 2: float, 3: float} $box
+     * @param array{0: float, 1: float, 2: float, 3: float} $line
+     */
+    public function blurLevel(array $box, float $radius, float $sigma, array $line, float $at0, float $at1, float $lo, float $hi): void
+    {
+        // t along the line as a function of the quad's points, the band's weight as one of t.
+        $s = $this->scale();
+        $dx = $line[2] - $line[0]; $dy = $line[3] - $line[1];
+        $l = $dx * $dx + $dy * $dy;
+        [$t0, $tx, $ty] = $l > 0 ? [(($box[0] * $s - $line[0]) * $dx + ($box[1] * $s - $line[1]) * $dy) / $l, $s * $dx / $l, $s * $dy / $l] : [0.0, 0.0, 0.0];
+        $band = $hi - $lo;
+        $this->list->blurLevel($box[0], $box[1], $box[2], $box[3], $radius, $sigma, ($at0 - $lo) / $band, ($at1 - $at0) / $band, $t0, $tx, $ty);
+    }
+
+    /** Paints what was painted before blurred by $sigma pixels and toned as macOS's hard scroll edge, under $rgb by $mix. @param array{0: float, 1: float, 2: float, 3: float} $box */
+    public function hardBlur(array $box, float $radius, float $sigma, int $rgb, float $mix): void
+    {
+        $this->list->hardBlur($box[0], $box[1], $box[2], $box[3], $radius, $sigma, $rgb, $mix);
+    }
+
     /** Fills $path (non-zero winding). */
     public function fillPath(Path $path, int $rgb, float $alpha = 1.0): void
     {
@@ -263,23 +321,8 @@ final class Painter
         if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
             self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
         }
-        if ($n->material instanceof Blur) {
-            $b = $n->material;
-            [$top, $bottom] = $b->fade ? ($b->fromBottom ? [0.0, 1.0] : [1.0, 0.0]) : [1.0, 1.0];
-            $list->blur($n->x, $n->y, $n->w, $n->h, $n->radius, $b->radius * $text->scale(), 0, 0.0, $top, $bottom);
-        } elseif ($n->material instanceof ScrollEdge) {
-            self::paintScrollEdge($n, $list, $text, $t);
-        } elseif ($n->material !== null) {
-            $g = $n->material;
-            $x = $n->x; $y = $n->y; $w = $n->w; $h = $n->h; $r = $n->radius;
-            if ($g->interactive && $rt !== null && $rt->input->mouseDown && $rt->hovered($n->id)) {
-                // Pressed: grown as macOS's, by about 1.1 points left and right and 0.45 above and below.
-                $x -= 1.1; $w += 2.2; $y -= 0.45; $h += 0.9; $r += $r > 0 ? 0.45 : 0;
-            }
-            $scale = $text->scale();
-            $m = min($w, $h);
-            $sigma = $g->style === Glass::CLEAR ? $scale : min(max($m * 0.035, 1), 10) * $scale;
-            $list->glass($x, $y, $w, $h, $r, $g->style, $g->tint ?? 0, $g->tint === null ? 0.0 : $g->tintAlpha * 0.88, $sigma);
+        if ($n->material !== null) {
+            $n->material->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
         } elseif ($n->color !== null) {
             $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius };
             if ($n->bordered) { // a bordered face: a plain button, a select, a field's box
@@ -382,26 +425,6 @@ final class Painter
      * blurred by 6.4 points and saturated under 82% of the background
      * (toned as AppKit's), with a hairline along the other edge.
      */
-    private static function paintScrollEdge(Node $n, DisplayList $list, TextPainter $text, Theme $t): void
-    {
-        $e = $n->material;
-        $bg = $e->background ?? $t->background;
-        if (!$e->hard) {
-            [$a0, $a1] = $e->bottom ? [0.0, 0.85] : [0.85, 0.0];
-            $list->gradient($n->x, $n->y, $n->w, $n->h, $bg, $a0, $a1, $n->radius);
-            return;
-        }
-        // The background toned: desaturated to 0.947 and lightened by 0.03, as AppKit's background replay.
-        $r = (($bg >> 16) & 255) / 255; $g = (($bg >> 8) & 255) / 255; $b = ($bg & 255) / 255;
-        $l = 0.2126 * $r + 0.7152 * $g + 0.0722 * $b;
-        $tone = fn(float $c) => (int)round(max(0.0, min(1.0, $l + ($c - $l) * 0.947 + 0.03)) * 255);
-        $toned = ($tone($r) << 16) | ($tone($g) << 8) | $tone($b);
-        $list->blur($n->x, $n->y, $n->w, $n->h, $n->radius, 6.4 * $text->scale(), $toned, 0.8245, 1.0, 1.0, true);
-        // The hairline along the other edge, outside it: black at 10% in light mode, white at 7% in dark.
-        $y = $e->bottom ? $n->y - 0.5 : $n->y + $n->h;
-        $list->rect($n->x, $y, $n->w, 0.5, $t->dark ? 0xffffff : 0x000000, $t->dark ? 0.07 : 0.1);
-    }
-
     /** Paints a copy of the node dragging its value under the pointer, above the rest, at three quarters' opacity (mygo's paintDrag). */
     public static function dragCopy(DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {

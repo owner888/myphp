@@ -189,10 +189,8 @@ final class Node
     /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
     public bool $absolute = false;
     public float $ax = 0, $ay = 0;
-    /** A material painted in place of the color: Glass, Blur or ScrollEdge. */
-    public Glass|Blur|ScrollEdge|null $material = null;
-    /** Whether the pointer is pressing this node (for interactive glass); Context sets it on material nodes. */
-    public bool $pressed = false;
+    /** A material painted in place of the color (Node::material). */
+    public ?Material $material = null;
     /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
     public ?Image $image = null;
     /** For an image node, an SVG shown in its own colors instead; for an icon, the SVG it shows. */
@@ -238,9 +236,12 @@ final class Node
         return $this;
     }
 
-    /** Fills this container with a material instead of a color (Glass, Blur, ScrollEdge), shaped by round(). */
-    public function material(Glass|Blur|ScrollEdge $material): static
+    /** Fills this container with a material instead of a color, shaped by round() (mygo's Material): a MaterialBuilder builds the one it paints, following the node. */
+    public function material(Material $material): static
     {
+        if ($material instanceof MaterialBuilder && $this->context !== null) {
+            $material = $material->buildMaterial($this->context, $this);
+        }
         $this->material = $material;
         return $this;
     }

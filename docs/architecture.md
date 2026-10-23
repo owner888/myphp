@@ -159,9 +159,16 @@ children translucent: each quad's alpha times the opacity in effect
 
 ## Liquid Glass
 
-`UI\Glass` is a material a container takes with `->material()`, shaped
-by `->round()`, ported from mygo's `plugins/glass` (itself measured from
-macOS 26's NSGlassEffectView). The painter emits a `kind = 5` quad (tint
+A material (`UI\Material`, mygo's) fills a container in place of a
+background color: `->material()` takes it, shaped by `->round()`, and the
+tree painter calls its `paintMaterial()` with a `Painter` over the node's
+box; a `MaterialBuilder` builds the material it paints as the node is
+built (`Node::material` reaches the node's context), as interactive glass
+follows the press. `Plugins\Glass` is mygo's `plugins/glass` (itself
+measured from macOS 26's NSGlassEffectView): `Glass`, `Blur` and
+`ScrollEdge` paint through the painter's `glass()`, `blurLevel()`,
+`hardBlur()` and `fillGradient()`, the renderer's effects, whose shaders
+are core's. `Painter::glass` emitsThe painter emits a `kind = 5` quad (tint
 in the color, style in `u`) and `DisplayList` notes its index and blur
 sigma (`min(max(min(w,h)·0.035, 1), 10)` pixels; Clear: 1 pixel).
 `Metal::present` then draws in passes: the quads before the glass, a
@@ -182,21 +189,28 @@ to 54 % and 100 % in light mode, 15 % and 51 % in dark, Clear adds an
 eighth, saturation kept or raised), tinted by the tint's alpha (× 0.88),
 and lit along a one-pixel rim by how much the edge faces up or down;
 coverage is the rounded rect's own SDF. Interactive glass grows 1.1 × 0.45
-points while pressed. The theme's darkness reaches the shader through
+points while pressed, animated over 150 ms (`Context::animate`). The theme's darkness reaches the shader through
 `Uniforms.dark`. Nodes overlap through `->at(x, y)`, which takes a node
 out of the flow and places it from its parent's top left, painted in
 child order.
 
-`UI\Blur` and `UI\ScrollEdge` ride the same backdrop (kinds 7 and 8, with
-kind 6 a vertical alpha gradient): a blur quad samples the backdrop at
-the pixel, mixes a color in by its alpha and shows by a weight that runs
-from `u` at the quad's top to `v` at its bottom — a fading Blur mixes the
-blurred and the sharp content, where mygo stacks blur levels, which reads
-a little truer. The hard scroll edge saturates the sample by 1.25 and
-lifts it 0.03 in the shader, under the theme's background toned (0.947
-saturation, +0.03) at 82.45 %, with a half-point hairline along the other
-edge; the soft one is only the background's gradient, 85 % to nothing, as
-measured from macOS 27 by mygo.
+`Blur` and `ScrollEdge` ride the same backdrop (kinds 7 and 8). A blur
+is mygo's levels: varying along its mask (a `LinearGradient`'s alpha,
+at any angle), it paints several quads, each blurring what is drawn
+before it (the levels before included) by `√(hi² − lo²)` pixels, the
+levels' `hi`s halving from the most down to 2 pixels, so that variances
+add up to `hi` where a level shows wholly; a level shows by
+`clamp((blur − lo) / (hi − lo))`, the blur wanted where the pixel lies
+along the mask's line. That is linear in the quad's points, so the
+painter hands the shader five numbers (kind 7: `color.xyz` the line's
+`t = z + x·px + y·py`, `u + v·t` the weight); on a square box each level
+covers only where its blur is wanted (`Blur::wanted`). Each level splits
+the draw and blurs the whole drawable again, so a progressive blur costs
+a pass a level (about log₂ of its radius in pixels). The hard scroll edge
+saturates the sample by 1.25 and lifts it 0.03 in the shader, under the
+theme's background toned (0.947 saturation, +0.03) at 82.45 %, with a
+half-point hairline along the other edge; the soft one is only the
+background's gradient, 85 % to nothing, as measured from macOS 27 by mygo.
 
 ## Text path
 

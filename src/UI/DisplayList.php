@@ -13,9 +13,10 @@ use RuntimeException;
  * kind 2 samples the image atlas, with the slot's pixel size in r, g;
  * kind 3 is a soft shadow (u = blur), kind 4 a ring (u = thickness), kind 5
  * Liquid Glass (u = style, color = tint), kind 6 a vertical alpha gradient
- * (color.a at the top, u at the bottom), kind 7 a backdrop blur and 8 the
- * hard scroll edge's (mixed with the color by its alpha, shown from u at
- * the top to v at the bottom), kinds 10 and 11 a gradient between two
+ * (color.a at the top, u at the bottom), kind 7 a level of a backdrop
+ * blur (shown by clamp(u + v t), t = clamp(b + r x + g y) of the quad's
+ * own points, a its opacity) and 8 the hard scroll edge's (mixed with the
+ * color by its alpha), kind 9 a line, kinds 10 and 11 a gradient between two
  * colors across (10) or down (11) the quad: the color, and u the other's
  * rgb packed as a float, v its alpha. Kinds 5, 7 and 8 read what was drawn before
  * them, blurred: the renderer splits the frame's draw at each of them.
@@ -214,14 +215,31 @@ final class DisplayList
     }
 
     /**
-     * What was drawn before, blurred by $sigma pixels, mixed with $rgb by
-     * $mix, shown from $top to $bottom (0..1) down the quad; $hard tones it
-     * as macOS's hard scroll edge does.
+     * A level of a backdrop blur (mygo's glass blurLevel): what was drawn
+     * before, blurred by $sigma pixels, shown by w = clamp($a + $b t) where
+     * t = clamp($t0 + $tx x + $ty y) of the quad's points (x, y) from its
+     * top left: how far along the blur's mask, and how far that is into
+     * the level's band.
      */
-    public function blur(float $x, float $y, float $w, float $h, float $radius, float $sigma, int $rgb, float $mix, float $top, float $bottom, bool $hard = false): void
+    public function blurLevel(float $x, float $y, float $w, float $h, float $radius, float $sigma, float $a, float $b, float $t0, float $tx, float $ty): void
+    {
+        if ($this->n === $this->capacity) {
+            throw new RuntimeException("display list full ({$this->capacity} quads)");
+        }
+        $this->glass[] = [$this->n, $sigma];
+        $buf = $this->buf; $k = $this->n * 16; $c = $this->clip;
+        $buf[$k] = $x; $buf[$k + 1] = $y; $buf[$k + 2] = $w; $buf[$k + 3] = $h;
+        $buf[$k + 4] = $tx; $buf[$k + 5] = $ty; $buf[$k + 6] = $t0; $buf[$k + 7] = $this->opacity;
+        $buf[$k + 8] = $radius; $buf[$k + 9] = 7.0 + $this->xk; $buf[$k + 10] = $a; $buf[$k + 11] = $b;
+        $buf[$k + 12] = $c[0]; $buf[$k + 13] = $c[1]; $buf[$k + 14] = $c[2]; $buf[$k + 15] = $c[3];
+        $this->n++;
+    }
+
+    /** What was drawn before, blurred by $sigma pixels, toned as macOS's hard scroll edge (saturated by 1.25, lightened by 0.03), under $rgb by $mix. */
+    public function hardBlur(float $x, float $y, float $w, float $h, float $radius, float $sigma, int $rgb, float $mix): void
     {
         $this->glass[] = [$this->n, $sigma];
-        $this->quad($x, $y, $w, $h, $rgb, $mix, $radius, $hard ? 8.0 : 7.0, $top, $bottom);
+        $this->quad($x, $y, $w, $h, $rgb, $mix, $radius, 8.0, 0.0);
     }
 
     /** A soft shadow of a rounded rect, offset by (dx, dy), its edge feathered over $blur points each way. */

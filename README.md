@@ -53,7 +53,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
 | Text styles inherited from the nodes around (font family, size, weight, italics, line height, alignment, letter spacing, OpenType features, language, underlines, strikethrough, background), mygo's text system (CoreText typesetter, carets, selection geometry, bidi, ellipsis), paragraphs with links and styled text inside them | works |
 | Selectable text (mygo's Selectable): drag, double and triple clicks, Shift with the arrows across the paragraphs of a container, Copy and Select All, `selectedTexts()`, `copyData()` with data in several formats | works |
-| Soft shadows, rings, Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), backdrop blur, scroll edge | works (`examples/glass`) |
+| Soft shadows, rings; materials (`UI\Material`); the glass plugin (mygo's plugins/glass, `Plugins\Glass`): Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), progressive backdrop blur along a mask, scroll edges | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
 | Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
@@ -222,7 +222,7 @@ App::run();
 | 可选中文字（mygo 的 Selectable）：拖选、双击选词、三击选行、Shift 加方向键跨段落扩展选区、复制与全选、`selectedTexts()`、`copyData()` 以多种格式复制 | 可用 |
 | 把节点滚动到可见（mygo 的 ScrollIntoView），Tab 移到的焦点也会滚动到可见，嵌套滚动容器逐层处理 | 可用 |
 | 原生界面的右键菜单和菜单按钮（mygo 的 ContextMenu、Menu、MenuButton）：菜单项、勾选、子菜单、快捷键提示、最内层菜单优先、菜单键和 Shift+F10、输入框和可选中文字的编辑项、`editItems()` | 可用 |
-| 软阴影、描边环、Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大）、背景模糊、滚动边缘 | 可用（`examples/glass`） |
+| 软阴影、描边环；材质（`UI\Material`）；glass 插件（mygo 的 plugins/glass，`Plugins\Glass`）：Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大）、沿遮罩渐变的背景模糊、滚动边缘 | 可用（`examples/glass`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
 | 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位 | 可用（`examples/widgets`、`notes`、`http`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
