@@ -85,7 +85,11 @@ abstract class Game
      * whole number of the screen's pixels for each of its own, at least
      * one, centered (letterboxed): pixel-perfect scaling, for $p's screen,
      * as Godot's viewport stretch and Stardew Valley draw pixel art. Returns
-     * [the rect, that number].
+     * [the rect, that number]. A game draws its world into a UI\Canvas of a
+     * logical size, as 480×270, and shows it there:
+     *
+     *     [$dst] = Game::integerFit($p, 480, 270, $r);
+     *     $p->image($world->bitmap(), $dst, Node::FILL_BOX);
      *
      * @param array{0: float, 1: float, 2: float, 3: float} $r
      * @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: int}

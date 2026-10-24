@@ -241,7 +241,17 @@ final class Layout
         $kids = [];
         foreach ($n->kids as $k) {
             if ($k->absolute) {
-                self::arrange($k, $x + $n->padL() + $k->ax, $y + $n->padT() + $k->ay, $k->mw, $k->mh);
+                if ($k->pct === [null, null, null, null]) {
+                    self::arrange($k, $x + $n->padL() + $k->ax, $y + $n->padT() + $k->ay, $k->mw, $k->mh);
+                    continue;
+                }
+                // Placed in percentages of the content box; a size so given takes its margins on top.
+                $cw = $w - $n->padL() - $n->padR(); $ch = $h - $n->padT() - $n->padB();
+                [$mt, $mr, $mb, $ml] = array_map(fn(float $m): float => is_finite($m) ? $m : 0.0, $k->margins);
+                [$l, $t, $pw, $ph] = $k->pct;
+                $kw = $pw !== null ? $pw * $cw + $ml + $mr : $k->mw;
+                $kh = $ph !== null ? $ph * $ch + $mt + $mb : $k->mh;
+                self::arrange($k, $x + $n->padL() + ($l !== null ? $l * $cw : $k->ax), $y + $n->padT() + ($t !== null ? $t * $ch : $k->ay), $kw, $kh);
             } else {
                 $kids[] = $k;
             }
@@ -275,7 +285,7 @@ final class Layout
             return;
         }
         $avail = ($n->dir === Node::ROW ? $w - $pw : $h - $ph) - $n->gap * ($cnt - 1);
-        $used = 0.0; $grow = 0; $crossMax = 0.0;
+        $used = 0.0; $grow = 0.0; $crossMax = 0.0;
         foreach ($kids as $k) { $used += $k->basis ?? ($n->dir === Node::ROW ? $k->mw : $k->mh); $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
         $cx = $x + $px; $cy = $y + $py; $cw = $w - $pw; $ch = $h - $ph;
@@ -318,7 +328,7 @@ final class Layout
         }
         $align = $n->align === Node::AUTO ? ($n->dir === Node::ROW ? Node::CENTER : Node::STRETCH) : $n->align;
         $autos = []; $autoCount = 0; // the automatic margins along the axis take the free space, before justify does
-        if ($grow === 0 && $n->scroll === null) {
+        if ($grow <= 0 && $n->scroll === null) {
             foreach ($kids as $i => $k) {
                 $a = $n->dir === Node::ROW ? (int)is_infinite($k->margins[3]) + (int)is_infinite($k->margins[1]) : (int)is_infinite($k->margins[0]) + (int)is_infinite($k->margins[2]);
                 if ($a > 0) { $autos[$i] = $a; $autoCount += $a; }
@@ -327,7 +337,7 @@ final class Layout
         if ($autoCount > 0) {
             $per = max(0.0, $avail - $used) / $autoCount;
             foreach ($autos as $i => $a) { $autos[$i] = $a * $per; }
-        } elseif ($grow === 0 && $n->scroll === null) { // nothing grows: justify packs the children along the axis
+        } elseif ($grow <= 0 && $n->scroll === null) { // nothing grows: justify packs the children along the axis
             $free = max(0.0, $avail - $used);
             if ($n->justify === Node::CENTER) { $cx += $n->dir === Node::ROW ? $free / 2 : 0; $cy += $n->dir === Node::ROW ? 0 : $free / 2; }
             if ($n->justify === Node::END) { $cx += $n->dir === Node::ROW ? $free : 0; $cy += $n->dir === Node::ROW ? 0 : $free; }
@@ -490,7 +500,7 @@ final class Layout
     /** Arranges one line of a wrapping row across ($x, $y, $w, $h): growing children share what is left, the rest sit as the row aligns them. */
     private static function arrangeRow(Node $n, array $line, float $x, float $y, float $w, float $h): void
     {
-        $used = 0.0; $grow = 0;
+        $used = 0.0; $grow = 0.0;
         foreach ($line as $k) { $used += $k->mw; $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $w - $n->gap * (count($line) - 1) - $used) / $grow : 0.0;
         $shrink = $extra === 0.0 ? self::shrink($line, $used + $n->gap * (count($line) - 1) - $w) : [];

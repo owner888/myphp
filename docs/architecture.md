@@ -2053,6 +2053,26 @@ scheme resolves against the dev server or myphp://localhost/, which serves
 or the bundle's Resources/frontend. tests/protocol_test.php drives
 `Scheme::serve` with a task of its own.
 
+## Canvas and charts
+
+A `UI\Canvas` is drawn by a painter of its own (`Painter::forCanvas`) into
+a display list it keeps, a pixel a point (`CanvasText` reports a scale of
+1), and placed in shelves of two pages of the image atlas's texture array
+after the images' (`CanvasAtlas`), which no CPU upload touches. Its bitmap
+is an `Image` without pixels whose slot is the canvas's, so painters show
+it as any image. Each frame the renderer takes the canvases drawn, or
+placed anew after the pages filled up, oldest draw first (inner canvases
+before those that show them), renders each list into a texture of the
+canvas's size, cleared to transparent, through a pipeline of the quad
+shader that writes RGBA with alpha kept premultiplied (source alpha ONE),
+as the atlas holds images, then blits it to its place: a pass may not
+sample the texture it renders into. Charts (`UI\Chart`) are mygo's: d3's
+tick spacing exactly (`Ticks`), bands, time ticks on round times of the
+times' zone, marks placed in percentages of the plot's area
+(`Node::leftPercent`…, an absolute node against its parent's content box,
+its margins moving it), and an axis of labels in slots of no size, spaced
+by children that grow by fractions (`Node::grow`, a float now).
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

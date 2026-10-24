@@ -69,6 +69,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Updates (mygo's Updater): `myphp keygen`, then `myphp build` signs an archive of the app (Ed25519), makes delta updates from the published versions (bsdiff) and writes the manifest, for GitHub releases or a server; `Updater::check()` and `Update::install()` in the app, the bundle replaced, `App::relaunch()`; `App::go()` runs waiting work in a fiber | works |
 | updater (mygo's plugins/updater): the update window of Sparkle: background checks once a day, the release notes of a new version with Install, Remind Me Later and Skip This Version, the download's progress, Relaunch; "Check for Updates…" (`Updater::menuItem()`), the user's choices in updater.json, 15 languages; the window as a web page or in native UI (`Native::plugin()`) | works (`examples/updater`) |
 | game (mygo's plugins/game): `Game::view()` runs a game in fixed steps (60 a second, or its `rate()`) with its player's keys by position, pointer and wheel, and draws it every frame through a `Painter`; `Camera` (zoom, rotation, whole-pixel panning, `toWorld`, `visible`), `Game::integerFit()` for pixel art; `Gamepad\Gamepad::pads()` reads controllers through GameController.framework in the standard layout | works (`examples/game`) |
+| `UI\Canvas` (mygo's): a bitmap a painter draws on the GPU, kept until drawn anew, shown as any image (pixelated for pixel art); `UI\Chart` (mygo's ui/chart): `Linear`, `Band` and `Time` scales with d3's ticks, `Chart::plot` with axes, marks that are nodes (`rect`, `point`, `ruleX`, `ruleY`, `anchor`), lines, areas and pie sectors as paths, stacks, a selection for the pointer and the keys | works (`examples/charts`, `examples/game`) |
 | Plugins (mygo's Use), in PHP: `App::use(Plugin)` binds a plugin's service as `plugin:<name>`, its page side a TypeScript client of its own; a `CallContext` parameter tells the calling page and ends as it goes; `App::onQuit` | works |
 | File watches (mygo's WatchFiles): `App::watchFiles` on a file or a directory, recursive or not, `Ignore` leaving out what is never opened; batches of create, write, remove and rename once changes stop, a file saved as editors do a write, the end when the root goes away; kqueue through FFI | works |
 | watch (mygo's plugins/watch): pages watch the directories and files the app names (`src/Plugins/Watch/client/index.ts`, `@myphp-plugins/watch`), recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all, failures as codes that never say a path | works (`examples/watch`) |
@@ -151,6 +152,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh websocket [url]  # a WebSocket from a web page through the PHP plugin, to an echo server
 ./run.sh updater --demo   # the update window, with a made-up update to install (--native: in native UI)
 ./run.sh game             # a little game: WASD, the arrows or a gamepad, the wheel zooms
+./run.sh charts           # charts: bars, a live line, stacked areas, a scatter plot, a donut
 ./run.sh services         # the app's services from a page: network, clipboard, Keychain, cookies, find, PDF…
 ./run.sh documents [x.md] # document notes: a window per file, the File menu, autosave, crash recovery
 ./run.sh protocol         # a frontend at myphp://localhost/, images a scheme draws, a streamed body, a download
@@ -244,6 +246,7 @@ App::run();
 | 自动更新（mygo 的 Updater）：`myphp keygen` 生成密钥，`myphp build` 给应用的归档签名（Ed25519），从已发布的版本做增量更新（bsdiff）并写出清单，发布到 GitHub Releases 或自己的服务器；应用里 `Updater::check()`、`Update::install()` 替换整个 bundle，`App::relaunch()` 重启；`App::go()` 在 Fiber 里跑会等待的工作 | 可用 |
 | updater（mygo 的 plugins/updater）：Sparkle 式的更新窗口：每天后台检查一次，新版本显示发布说明并提供「安装更新」「以后提醒我」「跳过此版本」，下载进度，「立即重新启动」；菜单项「检查更新…」（`Updater::menuItem()`），用户选择存在 updater.json，15 种语言；窗口可以是网页，也可以用原生 UI 绘制（`Native::plugin()`） | 可用（`examples/updater`） |
 | game（mygo 的 plugins/game）：`Game::view()` 以固定步长（每秒 60 步，或游戏自己的 `rate()`）运行游戏，按键位读取按键，另有指针和滚轮，每帧经 `Painter` 绘制；`Camera`（缩放、旋转、按整像素平移、`toWorld`、`visible`），像素画用 `Game::integerFit()`；`Gamepad\Gamepad::pads()` 经 GameController.framework 按标准布局读取手柄 | 可用（`examples/game`） |
+| `UI\Canvas`（mygo 的）：画笔在 GPU 上绘制的位图，重画之前一直保留，像图片一样显示（像素画可 pixelated）；`UI\Chart`（mygo 的 ui/chart）：按 d3 取刻度的 `Linear`、`Band`、`Time` 比例尺，带坐标轴的 `Chart::plot`，本身就是节点的标记（`rect`、`point`、`ruleX`、`ruleY`、`anchor`），折线、面积和扇形路径，堆叠，指针和键盘都能移动的选择 | 可用（`examples/charts`、`examples/game`） |
 | 插件（mygo 的 Use），PHP 插件：`App::use(Plugin)` 把插件的服务绑定为 `plugin:<名字>`，网页侧是插件自带的 TypeScript 客户端；`CallContext` 参数告诉方法是哪个页面调用的，页面离开时结束；`App::onQuit` | 可用 |
 | 文件监视（mygo 的 WatchFiles）：`App::watchFiles` 监视文件或目录，可递归，`Ignore` 排除的目录从不打开；改动停下后成批给出 create、write、remove、rename，编辑器式保存算一次 write，根目录没了监视即结束；kqueue 经 FFI | 可用 |
 | watch（mygo 的 plugins/watch）：网页按名字监视应用开放的目录和文件（`src/Plugins/Watch/client/index.ts`，`@myphp-plugins/watch`），只在应用允许处递归，`Resolve` 与 `Allow`，每页和总数配额，失败只给代码、从不暴露路径 | 可用（`examples/watch`） |
@@ -320,6 +323,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh websocket [url]  # 网页经 PHP 插件连 WebSocket，默认连一个回显服务器
 ./run.sh updater --demo   # 更新窗口，用一个虚构的更新演示安装流程（--native：原生 UI 版）
 ./run.sh game             # 一个小游戏：WASD、方向键或手柄移动，滚轮缩放
+./run.sh charts           # 图表：柱状图、实时折线、堆叠面积、散点图、环形图
 ./run.sh services         # 从网页调用 App 服务：网络、剪贴板、钥匙串、Cookie、页内查找、PDF…
 ./run.sh documents [x.md] # 文档型笔记：每个文件一个窗口、文件菜单、自动保存、崩溃恢复
 ./run.sh protocol         # myphp://localhost/ 上的前端、自定义 scheme 画的图、流式响应、下载

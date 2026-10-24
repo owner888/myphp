@@ -24,6 +24,8 @@ final class Image
     public readonly int $addr;
     /** Shows its pixels as squares when scaled up, sampled at the nearest rather than blended, as pixel art wants (mygo's Bitmap.Pixelated); its levels, smaller, stay smooth. */
     public bool $pixelated = false;
+    /** @internal the canvas whose bitmap this is: its pixels are on the GPU (Canvas::bitmap) */
+    public ?Canvas $canvas = null;
     /** @var list<Image> the image halved once, twice…, made as a smaller showing asks (mygo's levels) */
     private array $levels = [];
 
@@ -49,6 +51,15 @@ final class Image
         return new self(['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => Mem::addr($pix)]);
     }
 
+    /** @internal the bitmap of $c, whose pixels the GPU holds */
+    public static function ofCanvas(Canvas $c): self
+    {
+        $pix = Mem::alloc(4);
+        $img = new self(['w' => $c->w, 'h' => $c->h, 'pix' => $pix, 'addr' => Mem::addr($pix)]);
+        $img->canvas = $c;
+        return $img;
+    }
+
     public static function fromFile(string $path, int $max = 1024): self
     {
         $bytes = @file_get_contents($path);
@@ -68,6 +79,9 @@ final class Image
     /** The pixels, premultiplied RGBA, four bytes a pixel, top row first. */
     public function pixels(): string
     {
+        if ($this->canvas !== null) {
+            throw new RuntimeException("myphp: a canvas's pixels are on the GPU");
+        }
         return \FFI::string($this->pix, $this->w * $this->h * 4);
     }
 
@@ -79,7 +93,7 @@ final class Image
      */
     public function smaller(float $shrink): self
     {
-        if ($shrink < 2) { return $this; }
+        if ($shrink < 2 || $this->canvas !== null) { return $this; } // a canvas has no pixels here to halve
         $k = (int)log($shrink, 2); // halvings that stay as large
         $img = $this;
         for ($i = 0; $i < $k; $i++) {

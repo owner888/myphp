@@ -42,12 +42,13 @@ final class ObjC
         'p' => '@', 'd' => 'd', 'f' => 'f', 'l' => 'q', 'L' => 'Q', 'i' => 'i', 'S' => 'S', 'b' => 'B',
         's' => '*', 'v' => 'v', 'r' => '{CGRect={CGPoint=dd}{CGSize=dd}}', 'q' => '{CGPoint=dd}', 'z' => '{CGSize=dd}',
         'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}', 'n' => '{_NSRange=QQ}',
+        'o' => '{MTLOrigin=QQQ}', 'Z' => '{MTLSize=QQQ}',
     ];
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
         'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
-        'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange',
+        'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange', 'o' => 'MTLOrigin', 'Z' => 'MTLSize',
         's' => 'const char*', 'v' => 'void',
     ];
 
@@ -63,6 +64,8 @@ final class ObjC
             typedef struct { double w, h; } CGSize;
             typedef struct { double r, g, b, a; } MTLClearColor;
             typedef struct { unsigned long x, y, z, w, h, d; } MTLRegion;
+            typedef struct { unsigned long x, y, z; } MTLOrigin;
+            typedef struct { unsigned long w, h, d; } MTLSize;
             typedef struct { unsigned long location, length; } NSRange;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;

@@ -31,6 +31,19 @@ final class Painter
         $this->rt?->after($seconds);
     }
 
+    /** The atlas slot of a bitmap: a canvas's in the canvases' pages, an image's in the image atlas. */
+    private static function slot(TextPainter $text, Image $img): array
+    {
+        return $img->canvas !== null ? $img->canvas->slot() : $text->imageSlot($img);
+    }
+
+    /** @internal the painter of a canvas drawn during this painter's frame: into $list, a pixel a point */
+    public function forCanvas(DisplayList $list): self
+    {
+        $list->pathQuad = $this->list->pathQuad;
+        return new self($list, new CanvasText($this->text), $this->theme, $this->rt);
+    }
+
     /** How many device pixels a point is, for drawing that lines up with the pixels of the display. */
     public function scale(): float
     {
@@ -118,7 +131,7 @@ final class Painter
         // Far smaller than its pixels, a level of the bitmap, as smooth.
         $shrink = min($src[2] / ($dst[2] * $scale), $src[3] / ($dst[3] * $scale));
         $shown = $b->smaller($shrink);
-        $slot = $this->text->imageSlot($shown);
+        $slot = self::slot($this->text, $shown);
         $kx = $shown->w / $b->w; $ky = $shown->h / $b->h;
         $u = $slot['u'] + (int)round($src[0] * $kx); $v = $slot['v'] + (int)round($src[1] * $ky);
         $sw = max(1, (int)round($src[2] * $kx)); $sh = max(1, (int)round($src[3] * $ky));
@@ -506,7 +519,7 @@ final class Painter
             $s = $text->svgSlot($pic, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $rgb);
         } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
             $shrink = min($frac[2] * $pic->w / ($dst[2] * $scale), $frac[3] * $pic->h / ($dst[3] * $scale));
-            $s = $text->imageSlot($pic->smaller($shrink));
+            $s = self::slot($text, $pic->smaller($shrink));
             $pixelated = $pic->pixelated && $shrink <= 1;
         }
         $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box

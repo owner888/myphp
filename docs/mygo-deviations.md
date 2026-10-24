@@ -195,6 +195,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `paddingY`, `paddingStart`, `borderStartWidth`).
   - Why: written before the naming rule; renaming them is a sweep over
     the widgets and examples, to be decided.
+- **Percentages and fractional grow** (v1.03)
+  - mygo: `Left`, `Top`, `Right`, `Bottom` and their `…Percent`s, `WidthPercent`, `HeightPercent` on any element, absolute or relative.
+  - myphp: `leftPercent`, `topPercent`, `widthPercent` and `heightPercent` take a node out of the flow (as `at()`), against its parent's content box, and its margins move it; no `Right` or `Bottom`; `grow()` takes fractions, as the `$grow` property now does.
+  - Why: what the charts' marks need, ported first.
 - **Text takes no padding or border** (v0.85)
   - mygo: a text element has padding and borders as boxes do; a heading
     with a rule is the text with a bottom border.
@@ -477,8 +481,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: an abstract class `Plugins\Game\Game` that games extend, with
     `update()`, `draw()`, `rate()` to override, and the static `view()`,
     `integerFit()` and `RATE`; rects are `[x, y, w, h]`, the frame's time
-    nanoseconds (`Painter::now()`); no canvas yet, so a game draws its
-    pixel art straight into the view. `Gamepad\Gamepad::pads()` reads
+    nanoseconds (`Painter::now()`); a game draws into a `UI\Canvas`
+    (v1.03) as mygo's do. `Gamepad\Gamepad::pads()` reads
     GameController.framework only; `Button` and `Axis` are enums.
   - Why: a PHP package is classes, and an interface has no static
     methods; myphp runs on macOS only.
@@ -626,6 +630,39 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `WindowOptions::$trustedOrigins` (and FlyoutOptions'); pages that
     are not trusted get mygo's error with myphp's names.
   - Why: myphp's WebView reports no commit; a call is when it matters.
+
+## Canvas and charts
+
+- **Canvas** (v1.03)
+  - mygo: `ui.NewCanvas`, a scene image the frame's renderer draws first,
+    on the GPU or the CPU; anything a painter draws, glass and blurs too;
+    its text at the canvas's scale.
+  - myphp: `new UI\Canvas($w, $h)`, at most 2048 pixels a side and 16384
+    quads a drawing, kept in two pages of the image atlas's texture array
+    after the images'; rendered into a texture of its size and copied to
+    its place (a pass may not read its own target); glass and backdrop
+    blurs draw nothing in a canvas; its text is the window's glyphs, a
+    pixel a point; when the pages fill, canvases are placed anew and
+    rendered again from what they were last drawn with; `bitmap()` has
+    no pixels on the CPU (`pixels()` throws) and no smaller levels.
+  - Why: myphp's one Metal pipeline and atlases.
+- **Charts** (v1.03)
+  - mygo: package `ui/chart`: functions over `ui.Element`, `Span`,
+    `Tick`, `Linear`, `Band`, `Time` (Go times), `Axes{Label}`,
+    `Stack`, `Pie`; marks are boxes with children; `Select` keeps the
+    focus through Escape; `docs/ui/chart.md`.
+  - myphp: `UI\Chart\Chart`'s static methods (`plot`, `rect`, `point`,
+    `ruleX`, `ruleY`, `anchor`, `select`, `x`, `y`, `line`, `area`,
+    `nearest`, `extent`, `stack`, `pie`, `polar`, `sector`, `sliceAt`),
+    the classes `Span`, `Tick`, `Linear`, `Band`, `Time` (over
+    `DateTimeImmutable`), `Axes`, `Segment`, `Slice`, and the enums
+    `Side`, `Curve`, `Stacking`; marks are closed nodes, an anchor takes
+    what goes in it; `Band::index()` is null outside the bands; Escape
+    clears a selection and lets the focus go, as every control's in
+    myphp; the axes' label slots are a millionth of a point, as
+    `size()`'s 0 leaves a side to the content; no chart guide yet.
+  - Why: PHP has no free functions in a package to autoload; myphp's
+    immediate-mode nodes and focus.
 
 ## Plugins
 

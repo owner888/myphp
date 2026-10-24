@@ -2,14 +2,16 @@
 // A little game on the game plugin: walk a meadow with WASD, the arrows or
 // a gamepad's left stick, the camera following; Space or the gamepad's
 // South button jumps. The world is tiles of a pixel-art sheet made here,
-// drawn pixelated through the camera, only those in view; the wheel zooms.
+// drawn through the camera, only those in view, into a canvas of 320×180
+// pixels, which shows pixel-perfect at the largest whole scale the view
+// takes (Game::integerFit); the wheel zooms.
 // Run: ./run.sh game
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
-use MyPHP\UI\{Content, Context, Image, Key, Node, Painter};
+use MyPHP\UI\{Canvas, Content, Context, Image, Key, Node, Painter};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -39,12 +41,16 @@ function sheet(): Image
 
 final class Meadow extends Game
 {
-    public float $x = 0, $y = 0, $px = 0, $py = 0, $z = 0, $vz = 0, $zoom = 3;
+    public float $x = 0, $y = 0, $px = 0, $py = 0, $z = 0, $vz = 0, $zoom = 1;
     private State $last;
+    /** The world, in its own pixels, drawn anew each frame. */
+    private Canvas $world;
 
     public function __construct(private readonly Image $sheet)
     {
         $this->last = new State;
+        $this->world = new Canvas(320, 180);
+        $this->world->bitmap()->pixelated();
     }
 
     private static function tile(int $tx, int $ty): int
@@ -79,7 +85,7 @@ final class Meadow extends Game
         $this->z = max(0.0, $this->z + $this->vz);
         $this->vz = $this->z > 0 ? $this->vz - 0.25 : 0;
         [, $wy] = $in->wheel();
-        $this->zoom = max(1, min(8, $this->zoom - $wy / 40));
+        $this->zoom = max(1, min(4, $this->zoom - $wy / 40));
     }
 
     public function draw(Painter $p, array $r, float $alpha): void
@@ -88,17 +94,23 @@ final class Meadow extends Game
         $x = $this->px + ($this->x - $this->px) * $alpha;
         $y = $this->py + ($this->y - $this->py) * $alpha;
         $cam = new Camera($x, $y, zoom: round($this->zoom));
-        $p->fill($r, 0x2d6a8f);
-        $cam->draw($p, $r, function () use ($p, $cam, $r, $x, $y): void {
-            [$vx, $vy, $vw, $vh] = $cam->visible($r);
-            for ($ty = (int)floor($vy / 16); $ty * 16 < $vy + $vh; $ty++) {
-                for ($tx = (int)floor($vx / 16); $tx * 16 < $vx + $vw; $tx++) {
-                    $p->imageRegion($this->sheet, [self::tile($tx, $ty) * 16, 0, 16, 16], [$tx * 16.0, $ty * 16.0, 16.0, 16.0]);
+        $this->world->draw($p, function (Painter $wp) use ($cam, $x, $y): void {
+            $view = [0.0, 0.0, 320.0, 180.0];
+            $wp->fill($view, 0x2d6a8f);
+            $cam->draw($wp, $view, function () use ($wp, $cam, $view, $x, $y): void {
+                [$vx, $vy, $vw, $vh] = $cam->visible($view);
+                for ($ty = (int)floor($vy / 16); $ty * 16 < $vy + $vh; $ty++) {
+                    for ($tx = (int)floor($vx / 16); $tx * 16 < $vx + $vw; $tx++) {
+                        $wp->imageRegion($this->sheet, [self::tile($tx, $ty) * 16, 0, 16, 16], [$tx * 16.0, $ty * 16.0, 16.0, 16.0]);
+                    }
                 }
-            }
-            $p->fill([$x - 5, $y + 5, 10, 3], 0x000000, 1.5, 0.25);
-            $p->imageRegion($this->sheet, [48, 0, 16, 16], [$x - 8, $y - 8 - $this->z, 16, 16]);
+                $wp->fill([$x - 5, $y + 5, 10, 3], 0x000000, 1.5, 0.25);
+                $wp->imageRegion($this->sheet, [48, 0, 16, 16], [$x - 8, $y - 8 - $this->z, 16, 16]);
+            });
         });
+        $p->fill($r, 0x101418);
+        [$dst] = Game::integerFit($p, 320, 180, $r);
+        $p->image($this->world->bitmap(), $dst, Node::FILL_BOX);
         $p->text($r[0] + 12, $r[1] + 10, sprintf('%.0f, %.0f   zoom %d   %d gamepads', $x, $y, round($this->zoom), count(Gamepad::pads())), 12, 0xffffff);
     }
 }

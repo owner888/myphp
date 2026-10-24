@@ -189,6 +189,8 @@ final class Node
     /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
     public bool $absolute = false;
     public float $ax = 0, $ay = 0;
+    /** @var array{0: ?float, 1: ?float, 2: ?float, 3: ?float} an absolute node's left, top, width and height as fractions of its parent's content box (leftPercent…), null where at() and its size place it */
+    public array $pct = [null, null, null, null];
     /** A material painted in place of the color (Node::material). */
     public ?Material $material = null;
     /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
@@ -215,7 +217,7 @@ final class Node
         public float $gap,
         public float $fw,
         public float $fh,
-        public int $grow,
+        public float $grow,
         public ?string $text,
         /** Fill color as 0xRRGGBB; null paints no background. */
         public ?int $color,
@@ -233,6 +235,25 @@ final class Node
     {
         $this->absolute = true;
         $this->ax = $x; $this->ay = $y;
+        return $this;
+    }
+
+    /**
+     * Places this node, out of its parent's flow as at() does, from the
+     * left of its parent's content box by $p percent of its width (mygo's
+     * LeftPercent); topPercent() from its top by a percentage of its
+     * height, widthPercent() and heightPercent() size it so, as a chart's
+     * marks follow their plot. Its margins move it from there.
+     */
+    public function leftPercent(float $p): static { $this->absolute = true; $this->pct[0] = $p / 100; return $this; }
+    public function topPercent(float $p): static { $this->absolute = true; $this->pct[1] = $p / 100; return $this; }
+    public function widthPercent(float $p): static { $this->absolute = true; $this->pct[2] = $p / 100; return $this; }
+    public function heightPercent(float $p): static { $this->absolute = true; $this->pct[3] = $p / 100; return $this; }
+
+    /** Sets how much of the room left along its parent's axis this node takes, against its siblings (mygo's Grow): fractions share as numbers do. */
+    public function grow(float $g): static
+    {
+        $this->grow = max($g, 0.0);
         return $this;
     }
 

@@ -6,7 +6,7 @@ namespace MyPHP\Native;
 use Closure;
 use FFI;
 use MyPHP\UI\DisplayList;
-use MyPHP\UI\{Atlas, ImageAtlas};
+use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, ImageAtlas};
 use RuntimeException;
 
 /**
@@ -19,7 +19,7 @@ use RuntimeException;
 final class Metal
 {
     private const PIXEL_FORMAT_BGRA8 = 80;
-    private const BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
+    private const BLEND_ONE = 1, BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
     private const PIXEL_FORMAT_R8 = 10, PIXEL_FORMAT_RGBA8 = 70;
     private const PRIMITIVE_TRIANGLE_STRIP = 4; // MTLPrimitiveType: point 0, line 1, lineStrip 2, triangle 3, triangleStrip 4
     private const RING = 4;
@@ -220,7 +220,9 @@ final class Metal
     MSL;
 
     public $device;
-    private $blurPipeline;
+    private $blurPipeline, $canvasPipeline, $canvasUniforms;
+    /** @var array<string, mixed> the textures canvases are rendered in before they are copied to their place, by size */
+    private array $canvasTargets = [];
     /** The textures the glass reads: a copy of the drawable, the half-size blur in progress, the blurred backdrop. */
     private $snapshot = null, $blurTemp = null, $backdrop = null;
     private array $backdropSize = [0, 0];
@@ -252,7 +254,8 @@ final class Metal
         $mtl = FFI::cdef('void* MTLCreateSystemDefaultDevice(void);', '/System/Library/Frameworks/Metal.framework/Metal');
         $this->device = ObjC::import($mtl->MTLCreateSystemDefaultDevice() ?? throw new RuntimeException('no Metal device'));
         $this->queue = ObjC::msg('p:', $this->device, 'newCommandQueue');
-        [$this->pipeline, $this->blurPipeline] = $this->buildPipelines();
+        [$this->pipeline, $this->blurPipeline, $this->canvasPipeline] = $this->buildPipelines();
+        $this->canvasUniforms = ObjC::$c->new('float[8]');
         $floats = $capacity * DisplayList::FLOATS_PER_RECT;
         for ($i = 0; $i < self::RING; $i++) {
             $buf = ObjC::msg('p:LL', $this->device, 'newBufferWithLength:options:', $floats * 4, 0 /* shared */);
@@ -290,7 +293,7 @@ final class Metal
         $this->uniforms[5] = $scale;
     }
 
-    /** The image atlas: a texture array of ImageAtlas::MAX slices, each the glyph atlas's size (the shader divides by one size). */
+    /** The image atlas: a texture array of ImageAtlas::MAX slices, then CanvasAtlas::PAGES for canvases, each the glyph atlas's size (the shader divides by one size). */
     public function attachImages(ImageAtlas $images): void
     {
         if ($images->w !== $this->atlas->w || $images->h !== $this->atlas->h) {
@@ -299,13 +302,14 @@ final class Metal
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:',
             self::PIXEL_FORMAT_RGBA8, $images->w, $images->h, false);
         ObjC::msg('v:L', $desc, 'setTextureType:', self::TEXTURE_2D_ARRAY);
-        ObjC::msg('v:L', $desc, 'setArrayLength:', ImageAtlas::MAX);
+        ObjC::msg('v:L', $desc, 'setArrayLength:', ImageAtlas::MAX + CanvasAtlas::PAGES); // the canvases' pages after the images'
         $this->imagesTexture = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc)
             ?? throw new RuntimeException('image atlas texture');
         $this->images = $images;
+        [CanvasAtlas::$w, CanvasAtlas::$h] = [$images->w, $images->h];
     }
 
-    /** The quad pipeline (blended) and the blur pipeline (opaque, for the backdrop textures). */
+    /** The quad pipeline (blended), the blur pipeline (opaque, for the backdrop textures), and the canvases' quad pipeline (RGBA, keeping alpha premultiplied, as the image atlas holds it). */
     private function buildPipelines(): array
     {
         $err = ObjC::$c->new('void*[1]');
@@ -313,17 +317,17 @@ final class Metal
         if ($lib === null) {
             throw new RuntimeException('MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
         }
-        $make = function (string $vertex, string $fragment, bool $blend) use ($lib, $err) {
+        $make = function (string $vertex, string $fragment, bool $blend, int $format = self::PIXEL_FORMAT_BGRA8, int $alphaFrom = self::BLEND_SRC_ALPHA) use ($lib, $err) {
             $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
             ObjC::msg('v:p', $desc, 'setVertexFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($vertex)));
             ObjC::msg('v:p', $desc, 'setFragmentFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($fragment)));
             $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
-            ObjC::msg('v:L', $ca, 'setPixelFormat:', self::PIXEL_FORMAT_BGRA8);
+            ObjC::msg('v:L', $ca, 'setPixelFormat:', $format);
             if ($blend) {
                 ObjC::msg('v:b', $ca, 'setBlendingEnabled:', true);
                 ObjC::msg('v:L', $ca, 'setSourceRGBBlendFactor:', self::BLEND_SRC_ALPHA);
                 ObjC::msg('v:L', $ca, 'setDestinationRGBBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
-                ObjC::msg('v:L', $ca, 'setSourceAlphaBlendFactor:', self::BLEND_SRC_ALPHA);
+                ObjC::msg('v:L', $ca, 'setSourceAlphaBlendFactor:', $alphaFrom);
                 ObjC::msg('v:L', $ca, 'setDestinationAlphaBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
             }
             $ps = ObjC::msg('p:pp', $this->device, 'newRenderPipelineStateWithDescriptor:error:', $desc, $err);
@@ -332,7 +336,7 @@ final class Metal
             }
             return $ps;
         };
-        return [$make('quad_vertex', 'quad_fragment', true), $make('blur_vertex', 'blur_fragment', false)];
+        return [$make('quad_vertex', 'quad_fragment', true), $make('blur_vertex', 'blur_fragment', false), $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE)];
     }
 
     /**
@@ -431,6 +435,11 @@ final class Metal
             }
         }
         $cb = ObjC::msg('p:', $this->queue, 'commandBuffer');
+        if ($this->imagesTexture !== null) {
+            foreach (CanvasAtlas::take() as $canvas) { // before the frame, which shows them
+                $this->renderCanvas($cb, $canvas);
+            }
+        }
         $texture = ObjC::msg('p:', $drawable, 'texture');
         // One pass draws everything; a glass quad splits it: what is below it is drawn, copied and
         // blurred into the backdrop, and the pass goes on from the glass, which reads the blur.
@@ -521,6 +530,63 @@ final class Metal
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $count);
         }
         ObjC::msg('v:', $enc, 'endEncoding');
+    }
+
+    /**
+     * Renders $c from the list it was last drawn with into a texture of its
+     * size, cleared to transparent, then copies that to its place among the
+     * canvases' pages: a pass may not read the texture it draws into, and
+     * the canvases inside it are in that texture. Glass and blurs, which
+     * read what is below them, draw nothing in a canvas.
+     */
+    private function renderCanvas($cb, Canvas $c): void
+    {
+        $list = $c->list;
+        [$u, $v, $page] = $c->slot;
+        $key = "{$c->w}x{$c->h}";
+        if (!isset($this->canvasTargets[$key])) {
+            $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_RGBA8, $c->w, $c->h, false);
+            ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
+            ObjC::msg('v:L', $desc, 'setStorageMode:', 2); // private
+            if (count($this->canvasTargets) > 16) {
+                foreach ($this->canvasTargets as $t) { ObjC::msg('v:', $t, 'release'); }
+                $this->canvasTargets = [];
+            }
+            $this->canvasTargets[$key] = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('canvas texture');
+        }
+        $target = $this->canvasTargets[$key];
+        $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
+        $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+        ObjC::msg('v:p', $ca, 'setTexture:', $target);
+        ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
+        ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
+        ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor')); // transparent
+        $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
+        if ($list->n > 0) {
+            $quads = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->buf)), $list->n * DisplayList::FLOATS_PER_RECT * 4, 0);
+            $xforms = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->xforms)), $list->transforms * DisplayList::FLOATS_PER_TRANSFORM * 4, 0);
+            $uni = $this->canvasUniforms;
+            [$uni[0], $uni[1], $uni[2], $uni[3], $uni[4], $uni[5], $uni[6]] = [$c->w, $c->h, $this->uniforms[2], $this->uniforms[3], 1.0, $this->uniforms[5], $this->uniforms[6]];
+            ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->canvasPipeline);
+            ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $quads, 0, 0);
+            ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $uni, 32, 1);
+            ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $xforms, 0, 2);
+            ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $uni, 32, 1);
+            ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);
+            ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->imagesTexture, 1);
+            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $list->n);
+            ObjC::msg('v:', $quads, 'release');
+            ObjC::msg('v:', $xforms, 'release');
+        }
+        ObjC::msg('v:', $enc, 'endEncoding');
+        $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
+        $from = ObjC::$c->new('MTLOrigin');
+        $size = ObjC::$c->new('MTLSize');
+        [$size->w, $size->h, $size->d] = [$c->w, $c->h, 1];
+        $to = ObjC::$c->new('MTLOrigin');
+        [$to->x, $to->y] = [$u, $v];
+        ObjC::msg('v:pLLoZpLLo', $blit, 'copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:', $target, 0, 0, $from, $size, $this->imagesTexture, $page, 0, $to);
+        ObjC::msg('v:', $blit, 'endEncoding');
     }
 
     /** Uploads the rows of $atlas that changed since the last upload into slice $slice of $texture. */
