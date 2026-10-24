@@ -94,6 +94,8 @@ final class Window
     private string $stateKey = '';
     /** @var list<string> WindowOptions::$trustedOrigins */
     private array $trustedOrigins = [];
+    /** Whether the window has developer tools (WindowOptions::$devTools). */
+    private bool $devTools = false;
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
     public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate', 'willDownload', 'downloadDone'];
@@ -155,6 +157,10 @@ final class Window
 
         $this->stateKey = $o->stateKey;
         $this->trustedOrigins = $o->trustedOrigins;
+        $this->devTools = $o->devTools->on();
+        if ($this->runtime !== null && $this->devTools) {
+            $this->runtime->inspector = new UI\Inspector(); // F12, Alt+Cmd+I and the menu's Toggle Developer Tools open it
+        }
         $this->parent = $o->parent; $this->modal = $o->modal;
         $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
         if ($this->flyout !== null) {
@@ -194,7 +200,7 @@ final class Window
                     if ($reply !== null) {
                         $this->page->deliver($reply);
                     }
-                }, $o->preload);
+                }, $o->preload, $this->devTools);
             $this->view = $this->page->ns;
             $this->page->onNavigate = function (string $url, bool $user): bool {
                 $e = new NavigateEvent($url, $user);
@@ -394,28 +400,35 @@ final class Window
                 $this->runtime->rightToLeft = I18n::rightToLeft(App::locale()); // the direction of the language the app shows
                 $this->runtime->windowFocus = $this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow'); // a selection shows in the key window
                 App::metal()->setDark(App::theme()->dark);
-                $root = $this->runtime->frame(function () use ($content, $text, $bounds) {
-                    $c = new Context($text, $this->runtime, $bounds->w, $bounds->h, App::theme(), App::scale());
+                $in = $this->runtime->inspector;
+                if ($in !== null && $in->open) { $in->hz = $this->refreshRate(); }
+                $root = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
+                    $in?->startPass();
+                    $c = new Context($text, $this->runtime, $in?->contentWidth($bounds->w) ?? $bounds->w, $bounds->h, App::theme(), App::scale());
                     $c->titleBar = $this->titleBar();
                     $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
+                    if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $bounds->w, $bounds->h); $in->lap(0); } // beside the content
                     Layout::layout($c, $bounds->w, $bounds->h);
+                    if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->runtime, $c->root); }
                     return $c->root;
                 });
-                $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
-                Painter::paint($root, $list, $text, App::theme(), $this->runtime);
-                Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
-                Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
+                $paint = function () use ($root, $list, $text, $bounds, $in): void {
+                    $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
+                    Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                    if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
+                    Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
+                    Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
+                };
+                $paint();
                 if ($text->repaint) {
                     // An atlas started over during the paint: what was painted before points at slots that are gone.
                     $text->repaint = false;
                     $list->reset();
-                    $list->pushClip(0, 0, $bounds->w, $bounds->h);
-                    Painter::paint($root, $list, $text, App::theme(), $this->runtime);
-                    Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
-                    Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
+                    $paint();
                 }
+                $in?->lap(2);
                 $this->showCursor($this->runtime->cursor);
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
@@ -533,6 +546,45 @@ final class Window
     public function page(): ?WebView
     {
         return $this->page;
+    }
+
+    /**
+     * Opens the window's developer tools (mygo's OpenDevTools): a page's
+     * web inspector, docked in the window, or the inspector of native UI;
+     * nothing unless WindowOptions::$devTools turns them on.
+     */
+    public function openDevTools(): void
+    {
+        if (!$this->isDevToolsOpened()) { $this->toggleDevTools(); }
+    }
+
+    public function closeDevTools(): void
+    {
+        if ($this->isDevToolsOpened()) { $this->toggleDevTools(); }
+    }
+
+    public function isDevToolsOpened(): bool
+    {
+        return $this->page !== null ? $this->page->isDevToolsOpened() : ($this->runtime?->inspector?->open ?? false);
+    }
+
+    /** Opens or closes the developer tools: what the menu's Toggle Developer Tools does (MenuItem role toggleDevTools). */
+    public function toggleDevTools(): void
+    {
+        if ($this->page !== null) {
+            $this->page->isDevToolsOpened() ? $this->page->closeDevTools() : $this->page->openDevTools();
+        } elseif ($this->runtime?->inspector !== null) {
+            $this->runtime->inspector->toggle($this->runtime);
+        }
+    }
+
+    /** The refresh rate of the display the window is on, for the inspector's frame budget: 60 where the screen does not say. */
+    private function refreshRate(): float
+    {
+        $screen = $this->ns === null ? null : ObjC::msg('p:', $this->ns, 'screen');
+        if ($screen === null || !ObjC::msg('b:p', $screen, 'respondsToSelector:', ObjC::sel('maximumFramesPerSecond'))) { return 60.0; } // macOS 12
+        $hz = ObjC::msg('l:', $screen, 'maximumFramesPerSecond');
+        return $hz > 0 ? (float)$hz : 60.0;
     }
 
     /** @internal the context of the calls of the page shown now (Ipc) */
@@ -1475,7 +1527,7 @@ final class Window
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
                 disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
-                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload, trustedOrigins: $o->trustedOrigins));
+                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload, trustedOrigins: $o->trustedOrigins, devTools: $o->devTools));
         } finally {
             self::$creating = null;
         }

@@ -74,6 +74,15 @@ final class Runtime
     public bool $rightToLeft = false;
     /** The inspector's direction for debugging: 0 none, 1 left to right, 2 right to left. */
     public int $dirOverride = 0;
+    /** The inspector of the window's nodes, in a window whose developer tools are on (WindowOptions::$devTools); null in others. */
+    public ?Inspector $inspector = null;
+    /** @var list<string> the mistakes found while building, the latest MAX_WARNINGS, which the inspector lists (mygo's warnings) */
+    public array $warnings = [];
+    public const MAX_WARNINGS = 50;
+    /** @var array<int, true> the ids of the duplicate keys told of */
+    private array $dupKeys = [];
+    /** A duplicate key throws, where it was given, rather than being told once: the tests' (mygo's strict Tester). */
+    public bool $strict = false;
     /** MYPHP_DIRECTION, read once: 1 for "ltr", 2 for "rtl", 0 unset (mygo's MYGO_DIRECTION). */
     private static ?int $envDirection = null;
 
@@ -291,6 +300,7 @@ final class Runtime
      */
     public function frame(callable $build): Node
     {
+        $this->inspector?->startFrame();
         $this->clicks = [];
         $this->rightClicks = [];
         $this->doubleClicks = [];
@@ -318,6 +328,9 @@ final class Runtime
         }
         $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
+            if ($this->inspector !== null && $this->inspector->event($this, $e)) {
+                continue; // its keys, and the pointer while it picks
+            }
             switch ($e[0]) {
                 case 'down':
                     $this->input->mouseDown = true;
@@ -536,7 +549,8 @@ final class Runtime
         if ($this->focus !== null && !$this->reachable($this->focus)) {
             $this->focus = null; // the focus was behind what now blocks it: Tab goes into that
         }
-        $this->needsFrame = $this->needsFrame || $this->animating || ($this->hold[4] ?? false); // a held stepper keeps stepping
+        $this->needsFrame = $this->needsFrame || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
+            || ($this->inspector?->stale() ?? false); // the inspector shows the nodes of this frame in the next
         // A tip: the pointer rested on a node with one for TIP_DELAY.
         $over = null;
         foreach ($this->tips as $id => $text) {
@@ -1997,6 +2011,39 @@ final class Runtime
     }
 
     /** Whether (x, y) is on the node this id had last frame: in its rect, reachable, and not under an overlay built after it. */
+    /** Whether node $id took the pointer at ($x, $y) in the last frame: in its box as it showed, not behind what blocks it (the inspector's picker). */
+    public function contains(int $id, float $x, float $y): bool
+    {
+        return $this->under($id, $x, $y);
+    }
+
+    /**
+     * Tells of a node given the key of another node of the pass in its
+     * scope: they have one id, and so share one state, so that the
+     * pointer, the focus and scrolling meant for one go to the other
+     * (mygo's duplicateKey). Strict (the tests'), it throws there; else it
+     * logs it once, and the inspector lists it.
+     */
+    public function duplicateKey(int $id, string|int $key, string $at): void
+    {
+        $msg = 'ui: two nodes in one scope have the key ' . var_export($key, true) . ', and share one state: give each a key of its own' . ($at !== '' ? " ($at)" : '');
+        if ($this->strict) {
+            throw new \LogicException($msg);
+        }
+        if (isset($this->dupKeys[$id])) { return; }
+        $this->dupKeys[$id] = true;
+        error_log($msg);
+        $this->warn($msg);
+    }
+
+    /** Notes a warning for the inspector. */
+    public function warn(string $msg): void
+    {
+        $this->warnings[] = $msg;
+        if (count($this->warnings) > self::MAX_WARNINGS) { array_shift($this->warnings); }
+        if ($this->inspector !== null) { $this->inspector->changed = true; }
+    }
+
     private function under(int $id, float $x, float $y): bool
     {
         $r = $this->rects[$id] ?? null;

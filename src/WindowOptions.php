@@ -65,6 +65,8 @@ final class WindowOptions
          * @var list<string>
          */
         public array $trustedOrigins = [],
+        /** The developer tools of the window (mygo's PageOptions.DevTools): a page's web inspector, the inspector of native UI (View → Toggle Developer Tools, F12). */
+        public DevTools $devTools = DevTools::Auto,
         /** JavaScript run in the page before its own scripts, after window.myphp exists (mygo's PreloadScript). */
         public string $preload = '',
         /** Remembers the window's position and size under this key across runs (WindowState). */

@@ -207,6 +207,8 @@ final class Node
     public float $rotation = 0;
     public float $radius = 0;
     public float $alpha = 1;
+    /** What the node and those inside it paint with in place of the window's theme: the inspector's panel. */
+    public ?Theme $theme = null;
     /** @var Node[] */
     public array $kids = [];
     /** Laid-out rectangle. */
@@ -982,7 +984,7 @@ final class Node
     }
 
     /** The padding of each side, top, right, bottom and left. @return array{0: float, 1: float, 2: float, 3: float} */
-    private function sides(): array
+    public function sides(): array
     {
         return $this->pads ?? [$this->padY ?? $this->pad, $this->padX ?? $this->pad, $this->padY ?? $this->pad, $this->padX ?? $this->pad];
     }

@@ -2093,6 +2093,29 @@ Controls ask `Context::arrows()` for which of Left and Right go back and
 forth along the line; the runtime's slider and group entries keep the
 node's `rtl` for the keys and the pointer.
 
+## Inspector
+
+The inspector (`UI\Inspector`) is the runtime's, in a window whose
+developer tools are on. It takes events before the view, in
+`Runtime::frame`: its keys, and the pointer while it picks, which
+`Runtime::contains` tests against the nodes of the last frame, the last
+in the tree's order first. The window and the headless harness build
+the view in a Context as wide as `contentWidth` leaves it, then the
+panel (`InspectorPanel::build`) at the root with `Context::overlay`: an
+absolute column at the content's right edge, keyed, left to right, its
+own theme (`Node::$theme`, which the painter takes for the node and those
+inside it); the root keeps clear of it with padding at its right. After
+layout `snapshot` walks the root, the panel left out, into rows the next
+frame's tree shows, and describes the node chosen; a hash of what the
+panel would show, against the one it was built from (`stale`), asks for
+another frame, so that frames settle once nothing changes.
+`Context::add` notes the keys it gives, where the node chosen was built
+(`Inspector::callSite`, the first frame of `debug_backtrace` outside
+`src/UI`), and a key given twice in a pass, which `Runtime::duplicateKey`
+throws in the tests and logs once in apps. `InspectorOverlay` paints the
+highlight after the tree, through the node's world, clipped to the
+content.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

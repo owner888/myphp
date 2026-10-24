@@ -41,5 +41,7 @@ final class FlyoutOptions
         public string $preload = '',
         /** @var list<string> as WindowOptions' */
         public array $trustedOrigins = [],
+        /** as WindowOptions' */
+        public DevTools $devTools = DevTools::Auto,
     ) {}
 }

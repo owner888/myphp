@@ -364,7 +364,7 @@ final class DiffState
               $o->sharedScroll = $this->fitContent ? null : $this->scroll;
               $o->noScrollbar = $i === 0;
               if ($this->indicators === self::CLASSIC) { $o->signs = true; }
-              $ed = $this->eds[$i]->build($c, $b, $o);
+              $ed = $this->eds[$i]->build($c->key($i === 0 ? 'old' : 'new'), $b, $o); // each side's nodes in a scope of their own: their find bars' keys are one
               $ed->grow = 1; $ed->basis(0)->alignSelf(Node::STRETCH);
               if ($i === 0) {
                   $c->box(1, 0, UITheme::mix($ct->c['background'][0], $t->border, 0.6))->alignSelf(Node::STRETCH);

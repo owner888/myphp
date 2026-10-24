@@ -44,7 +44,36 @@ final class WebView
 
     private function __construct(private Closure $onMessage) {}
 
-    public static function create($frame, array $config, Closure $onMessage, string $preload = ''): self
+    /** Whether the page has its web inspector (WebView::create's $devTools). */
+    private bool $devTools = false;
+
+    /** WebKit's inspector of the page, which WKWebView keeps to itself (mygo's darwin inspector), or null without developer tools. */
+    private function inspector()
+    {
+        if (!$this->devTools || !ObjC::msg('b:p', $this->ns, 'respondsToSelector:', ObjC::sel('_inspector'))) {
+            return null;
+        }
+        return ObjC::msg('p:', $this->ns, '_inspector');
+    }
+
+    /** Opens the web inspector, docked in the window (mygo's OpenDevTools). */
+    public function openDevTools(): void
+    {
+        if (($in = $this->inspector()) !== null) { ObjC::msg('v:', $in, 'show'); }
+    }
+
+    public function closeDevTools(): void
+    {
+        if (($in = $this->inspector()) !== null) { ObjC::msg('v:', $in, 'close'); }
+    }
+
+    public function isDevToolsOpened(): bool
+    {
+        $in = $this->inspector();
+        return $in !== null && ObjC::msg('b:p', $in, 'respondsToSelector:', ObjC::sel('isVisible')) && ObjC::msg('b:', $in, 'isVisible');
+    }
+
+    public static function create($frame, array $config, Closure $onMessage, string $preload = '', bool $devTools = false): self
     {
         self::define();
         $self = new self($onMessage);
@@ -61,7 +90,13 @@ final class WebView
             $pre = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($preload), self::INJECT_AT_DOCUMENT_START, true);
             ObjC::msg('v:p', $ucc, 'addUserScript:', $pre);
         }
+        // The web inspector (mygo's DevTools): its context menu item, Safari's Develop menu (macOS 13.3), openDevTools.
+        ObjC::msg('v:pp', ObjC::msg('p:', $wk, 'preferences'), 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', $devTools), ObjC::str('developerExtrasEnabled'));
         $self->ns = ObjC::msg('p:rp', ObjC::alloc('MyPHPWebView'), 'initWithFrame:configuration:', $frame, $wk);
+        if (ObjC::msg('b:p', $self->ns, 'respondsToSelector:', ObjC::sel('setInspectable:'))) {
+            ObjC::msg('v:b', $self->ns, 'setInspectable:', $devTools);
+        }
+        $self->devTools = $devTools;
         Drop::register($self->ns);
         ObjC::msg('v:p', $self->ns, 'setNavigationDelegate:', self::$navigationDelegate); // weak: the class keeps it
         ObjC::msg('v:p', $self->ns, 'setUIDelegate:', self::$uiDelegate);

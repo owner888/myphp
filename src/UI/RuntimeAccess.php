@@ -108,13 +108,13 @@ trait RuntimeAccess
     }
 
     /** Whether the node takes the keyboard focus. */
-    private static function takesFocus(Node $n): bool
+    public static function takesFocus(Node $n): bool
     {
         return $n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable;
     }
 
     /** The node's role, or null for nodes assistive technology does not see (mygo's accessRole). */
-    private function roleOf(Node $n): ?int
+    public function roleOf(Node $n): ?int
     {
         if ($n->role === Role::NONE) { return null; }
         if ($n->role !== Role::AUTO) { return $n->role; }

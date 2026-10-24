@@ -19,6 +19,8 @@ final class Context
     private array $stack;
     /** Identity for the next node, from key(); and the key path of the innermost keyed container with its node count. */
     private string|int|null $nextKey = null;
+    /** @var array<int, true> the ids keys gave nodes in this pass, which another node given one tells of (Runtime::duplicateKey) */
+    private array $keyed = [];
     private string $scope = '';
     private int $ordinal = 0;
     /** @var list<array{0: string, 1: int}|null> per open container: the scope it replaced, or null */
@@ -109,15 +111,35 @@ final class Context
         } elseif ($n->kind === Node::TEXT || $n->kind === Node::RICH) {
             $n->scope = $this->selectScope();
         }
+        $in = $this->runtime?->inspector;
         if ($this->nextKey !== null) {
             $n->id = self::hash($this->scope . '/' . $this->nextKey);
+            if (isset($this->keyed[$n->id])) {
+                $this->runtime?->duplicateKey($n->id, $this->nextKey, Inspector::callSite());
+            }
+            $this->keyed[$n->id] = true;
+            if ($in !== null && $in->open) { $in->keys[$n->id] = $this->nextKey; } // the tree shows it
             $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
         } elseif ($this->scope !== '') {
             $n->id = self::hash($this->scope . '#' . ++$this->ordinal);
         } else {
             $n->id = ++$this->count;
         }
+        if ($in !== null && $in->open && $n->id === $in->selected) {
+            $in->source = Inspector::callSite(); // where the app builds the node the inspector shows
+        }
         return $n;
+    }
+
+    /**
+     * Keys the container the widget builds next, unless the app keyed it,
+     * so that the nodes the widget keys inside it are in a scope of their
+     * own: another such widget in the scope keys its nodes alike (two range
+     * sliders' knobs), which would share their ids (Runtime::duplicateKey).
+     */
+    private function ownScope(string $what): void
+    {
+        if ($this->nextKey === null) { $this->key($what . ' ' . $this->nextId()); }
     }
 
     /** The id add() will give the next node, for what is computed from its last-frame rect before it is built (a grid's columns). */
@@ -834,6 +856,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
+        $this->ownScope('toolbar');
         $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER)->focusGroup(Node::HORIZONTAL)->role(Role::TOOLBAR); // one stop of Tab; Left and Right move inside
         $this->toolbars++;
           $fn();
@@ -1041,6 +1064,7 @@ final class Context
         $rt = $this->runtime;
         $kw = $t->space(5);
         $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
+        $this->ownScope('range slider');
         $n = $this->row(0, 0, $width <= 0 ? 1 : 0)->padding(0, $kw / 2)->min($t->space(25), $t->space(5))->role(Role::GROUP);
         if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
         $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
@@ -1547,6 +1571,7 @@ final class Context
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
         $title = I18n::formatDate($locale, $month, 'yMMMM');
         $first = $region->firstWeekday;
+        $this->ownScope('calendar'); // another month shown in the scope (a date input's popup) has the keys of its days
         $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
         $visible = $rt?->focusVisible($grid->id) ?? false;
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::paintFocusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
@@ -1625,6 +1650,7 @@ final class Context
         [$sep, $periodFirst] = self::timeLayout(I18n::pattern($locale, 'jmm', $twelve ? 12 : 24));
         [$am, $pm] = I18n::dayPeriods($locale, I18n::ABBREVIATED);
         $order = $twelve ? ($periodFirst ? [2, 0, 1] : [0, 1, 2]) : [0, 1];
+        $this->ownScope('time input');
         $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER)->role(Role::GROUP);
         $h = (int)$time->format('G'); $m = (int)$time->format('i');
         $set = function (int $nh, int $nm) use (&$time, $f) {
@@ -1746,6 +1772,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
+        $this->ownScope('color picker');
         $panel = $this->column(0, $t->space(2.5))->size($t->space(60), 0);
         $make = fn() => (object)['hsv' => self::toHSV($rgb), 'last' => [$rgb, $alpha], 'hex' => new TextState(self::hexOf($rgb, $alpha)), 'hue' => 0.0, 'opacity' => 0.0];
         $st = $rt?->local($panel->id, $make) ?? $make();
@@ -1981,6 +2008,7 @@ final class Context
     public function breadcrumbs(array $items, int &$chosen): Node
     {
         $t = $this->theme;
+        $this->ownScope('breadcrumbs');
         $e = $this->row(0, $t->space(0.5))->align(Node::CENTER)->role(Role::GROUP);
           $n = count($items);
           foreach ($items as $i => $item) {
@@ -2647,6 +2675,7 @@ final class Context
         $t = $this->theme;
         $rowH = $t->space(8); $flexMin = $t->space(15);
         $rt = $this->runtime;
+        $this->ownScope('table');
         $n = $this->column(0, 0, 1)->role(Role::TABLE);
         $cells = function (Closure $fill, int $role) use ($columns, $state, $t, $flexMin) {
             $boxes = [];

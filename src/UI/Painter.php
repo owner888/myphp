@@ -271,7 +271,7 @@ final class Painter
             $list->setOpacity($o);
         }
         $list->setWorld($n->world);
-        self::node($n, $list, $text, $t, $rt);
+        self::node($n, $list, $text, $n->theme ?? $t, $rt);
         $list->setWorld($world);
         $list->setOpacity($opacity);
     }

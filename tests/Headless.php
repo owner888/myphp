@@ -63,6 +63,7 @@ final class Headless
         $this->input = new Input;
         $this->input->mouseInside = true;
         $this->rt = new Runtime($this->input, $this->metrics);
+        $this->rt->strict = true; // a duplicate key throws where it was given
         \MyPHP\UI\Editor\Editor::$text = $this->metrics;
         $this->theme = Theme::dark();
         $this->view = $view;
@@ -158,13 +159,17 @@ final class Headless
     public function frame(int $n = 2): Node
     {
         for ($i = 0; $i < $n; $i++) {
-            $this->root = $this->rt->frame(function () {
-                $c = new Context($this->metrics, $this->rt, $this->w, $this->h, $this->theme);
+            $in = $this->rt->inspector;
+            $this->root = $this->rt->frame(function () use ($in) {
+                $in?->startPass();
+                $c = new Context($this->metrics, $this->rt, $in?->contentWidth($this->w) ?? $this->w, $this->h, $this->theme);
                 ($this->view)($c);
+                if ($in !== null && $in->open) { \MyPHP\UI\InspectorPanel::build($c, $this->rt, $in, $this->w, $this->h); $in->lap(0); }
                 Layout::layout($c, $this->w, $this->h);
+                if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->rt, $c->root); }
                 return $c->root;
             });
-            if ($this->paints) { $this->paint(); }
+            if ($this->paints || ($in !== null && $in->open)) { $this->paint(); } // as a window paints it: the inspector's highlight, and its times
         }
         return $this->root;
     }
@@ -178,6 +183,10 @@ final class Headless
         $this->list->reset();
         $this->list->pushClip(0, 0, $this->w, $this->h);
         Painter::paint($this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
+        if (($in = $this->rt->inspector) !== null && $in->open) {
+            \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h);
+            $in->lap(2);
+        }
         Painter::dragCopy($this->list, $this->metrics, $this->theme, $this->rt);
         return $this->list;
     }

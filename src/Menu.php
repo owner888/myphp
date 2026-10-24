@@ -15,7 +15,7 @@ final class Menu
 {
     private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_ALT = 1 << 19, MOD_CMD = 1 << 20;
 
-    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain, or '' for documents' roles, which act on the document of the window that has the keyboard (Documents)] */
+    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain, or '' for the roles PHP does: documents' roles, which act on the document of the window that has the keyboard (Documents), and toggleDevTools, on its developer tools (Window::toggleDevTools)] */
     public const ROLES = [
         'undo' => ['menuUndo', 'CmdOrCtrl+Z', 'undo:'],
         'redo' => ['menuRedo', 'CmdOrCtrl+Shift+Z', 'redo:'],
@@ -26,6 +26,7 @@ final class Menu
         'delete' => ['menuDelete', '', 'delete:'],
         'selectAll' => ['menuSelectAll', 'CmdOrCtrl+A', 'selectAll:'],
         'togglefullscreen' => ['menuToggleFullScreen', 'Ctrl+Cmd+F', 'toggleFullScreen:'],
+        'toggleDevTools' => ['menuToggleDevTools', 'Alt+Cmd+I', ''],
         'minimize' => ['menuMinimize', 'CmdOrCtrl+M', 'performMiniaturize:'],
         'zoom' => ['menuZoom', '', 'performZoom:'],
         'close' => ['menuCloseWindow', 'CmdOrCtrl+W', 'performClose:'],
@@ -125,7 +126,7 @@ final class Menu
                 $accel = $accel !== '' ? $accel : $ra;
                 if ($selector === '') {
                     $role = $it->role;
-                    [$selector, $click] = [null, fn(MenuItem $m, ?Window $w) => Native\Docs\Registry::role($role, $w)];
+                    [$selector, $click] = [null, $role === 'toggleDevTools' ? fn(MenuItem $m, ?Window $w) => $w?->toggleDevTools() : fn(MenuItem $m, ?Window $w) => Native\Docs\Registry::role($role, $w)];
                 }
             }
         }

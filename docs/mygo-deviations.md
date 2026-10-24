@@ -690,6 +690,53 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: ported in steps; the rest needs TextState laid out right to
     left first.
 
+## Inspector
+
+- **Developer tools** (v1.05)
+  - mygo: `PageOptions.DevTools` (`DevToolsAuto`, `DevToolsEnabled`,
+    `DevToolsDisabled`), `Page.OpenDevTools`, `CloseDevTools`,
+    `IsDevToolsOpened`, `ToggleDevTools`; the menu role `toggleDevTools`
+    in the View menu with `reload`, `forceReload` and the zoom roles.
+  - myphp: the enum `DevTools` (`Auto`, `Enabled`, `Disabled`) as
+    `WindowOptions::$devTools` and `FlyoutOptions::$devTools`; the
+    methods on `Window`, for a page or native UI; the role
+    `toggleDevTools` alone (Alt+Cmd+I), no View menu, reload or zoom
+    roles.
+  - Why: myphp's options and windows have no page object of their own;
+    the other View roles are not ported yet.
+- **Inspector** (v1.05)
+  - mygo: `ui/inspector*.go`; production builds leave it out
+    (`mygo_noinspector`, unless `MYGO_INSPECTOR=1` or `-debug`);
+    `Ctrl+Shift+I` and `Ctrl+Shift+C` outside macOS; tags are widget
+    names, else roles, else kinds; styles with gradients, stripes,
+    dashed borders, inset shadows with spread, attach anchors,
+    `aspect-ratio`, `max-width`, dividers; `MYGO_FRAME_STATS`.
+  - myphp: `UI\Inspector`, `InspectorPanel`, `InspectorDetails`,
+    `InspectorOverlay`; a bundle keeps the files, which a window
+    without developer tools never loads; macOS keys alone; tags are
+    roles, else kinds (`Button`, `TextInput`, `TextArea`, `Box`,
+    `Spinner`…); the styles myphp's nodes have (a shadow is `0 dy blur
+    color`, borders solid); the box model's margin and padding drawn
+    solid; Computed gives `scroll-top`, `scroll-top-max` and
+    `scroll-left` for `scroll-width` and `scroll-height`; the display's
+    rate from `NSScreen.maximumFramesPerSecond` (macOS 12), 60 without
+    it; building's time takes in every pass of a frame; `MYPHP_STATS`.
+  - Why: PHP has no build tags, and a file not loaded costs nothing;
+    myphp's nodes.
+- **Duplicate keys** (v1.05)
+  - mygo: two elements with one key under one parent; a Tester panics,
+    apps log it once.
+  - myphp: two nodes with one key in one scope (a keyed container's),
+    as myphp's ids are; the headless tests throw `LogicException`
+    (`Runtime::$strict`), apps `error_log` it once; the widgets that key
+    nodes inside them key their own container, unless the app did, so
+    that two of them in a scope do not share their nodes' ids: toolbar,
+    range slider, calendar, time input, color picker, breadcrumbs,
+    table; a diff viewer keys its sides `old` and `new`.
+  - Why: myphp's keys are a scope's, and keying found where two such
+    widgets met: a date input's calendar beside a calendar, a color
+    well's picker beside a picker, a diff's two find bars.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)
