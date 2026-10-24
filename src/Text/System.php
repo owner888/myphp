@@ -41,6 +41,41 @@ final class System
 
     public function language(): string { return $this->lang; }
 
+    /** Adds a TrueType or OpenType font, or collection, that text uses with its family, or with $family when given (mygo's RegisterFont); the layouts made before are made anew. */
+    public function registerFont(string $data, string $family = ''): void
+    {
+        $this->engine->register($data, $family);
+        $this->fonts = [];
+        $this->layouts = [];
+        $this->marks = [];
+    }
+
+    /** The font families text can use, as a font setting offers them: the app's registered ones first, then the system's, each once, sorted without regard to case (mygo's FontFamilies). @return list<\MyPHP\UI\FontFamily> */
+    public function fontFamilies(): array
+    {
+        [$app, $system] = $this->engine->fontFamilies();
+        $out = []; $seen = [];
+        foreach ([[$app, true], [$system, false]] as [$families, $registered]) {
+            $from = count($out);
+            foreach ($families as [$name, $mono]) {
+                $key = strtolower($name);
+                if ($name === '') { continue; }
+                if (!isset($seen[$key])) {
+                    $seen[$key] = count($out);
+                    $out[] = new \MyPHP\UI\FontFamily($name, $mono, $registered);
+                } elseif ($seen[$key] >= $from) { // fonts of one family, as its bold after its regular: monospaced if one is
+                    $f = $out[$seen[$key]];
+                    $out[$seen[$key]] = new \MyPHP\UI\FontFamily($f->name, $f->monospaced || $mono, $f->registered);
+                }
+            }
+            $part = array_slice($out, $from);
+            usort($part, fn($a, $b) => strcmp(strtolower($a->name), strtolower($b->name)) ?: strcmp($a->name, $b->name));
+            array_splice($out, $from, count($part), $part);
+            foreach ($part as $i => $f) { $seen[strtolower($f->name)] = $from + $i; }
+        }
+        return $out;
+    }
+
     /** Forgets layouts no frame used for a while: after each frame. */
     public function endFrame(): void
     {

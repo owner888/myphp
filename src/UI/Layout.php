@@ -386,7 +386,7 @@ final class Layout
             }
             // The view's top lies $offset below the anchor's top; built rows
             // short of the view's bottom leave a gap this frame.
-            $cy -= $s->offset;
+            $cy -= $s->offset - $s->lag; // a glide to the end on its way: below its place
             $s->gap = max(0.0, $ch - ($used + $gap * ($cnt - 1) - $s->offset));
             $s->atEnd = $s->first + $cnt >= $s->count && $used + $gap * ($cnt - 1) - $s->offset <= $ch + 0.5;
             if ($s->first + $cnt >= $s->count && $s->first === 0) {

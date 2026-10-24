@@ -82,4 +82,19 @@ final class Atlas
         $this->touch($v, $v + $h);
         return $this->slots[$key] = ['u' => $u, 'v' => $v, 'w' => $w, 'h' => $h];
     }
+
+    /** Copies the bitmap at $src, of the size it was added at, over the slot of $key, for the next upload; whether there was one. */
+    public function replace(string $key, int $src): bool
+    {
+        $s = $this->slots[$key] ?? null;
+        if ($s === null) {
+            return false;
+        }
+        $bpp = $this->bpp;
+        for ($r = 0; $r < $s['h']; $r++) {
+            Mem::copy($this->base + (($s['v'] + $r) * $this->w + $s['u']) * $bpp, $src + $r * $s['w'] * $bpp, $s['w'] * $bpp);
+        }
+        $this->touch($s['v'], $s['v'] + $s['h']);
+        return true;
+    }
 }

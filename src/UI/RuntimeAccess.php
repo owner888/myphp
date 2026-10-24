@@ -234,6 +234,11 @@ trait RuntimeAccess
         $row = new AccessNode($id, $parent, $n->rowRole);
         $row->bounds = $n->world->bounds($x0, $y0, $x1 - $x0, $y1 - $y0);
         $row->posInSet = $i + 1; $row->setSize = $state->count;
+        if ($first->level > 0) { // an outline's item: how deep, and whether it opens
+            $row->level = $first->level;
+            if ($first->expanded) { $row->states |= AccessNode::EXPANDED; }
+            if ($first->expandable) { $row->states |= AccessNode::EXPANDABLE; $row->actions |= AccessNode::ACTION_EXPAND; }
+        }
         if ($clip !== null) {
             $row->actions |= AccessNode::ACTION_SCROLL_INTO_VIEW;
             if (self::intersect($clip, $row->bounds)[2] <= 0 || self::intersect($clip, $row->bounds)[3] <= 0) { $row->states |= AccessNode::OFFSCREEN; }
@@ -348,7 +353,7 @@ trait RuntimeAccess
             case AccessNode::EXPAND:
             case AccessNode::COLLAPSE:
                 // The tree opens or closes the item as it builds it.
-                $this->expands[$id] = $action === AccessNode::EXPAND ? 1 : -1;
+                $this->expands[$row !== null ? $row[0] : $id] = $action === AccessNode::EXPAND ? 1 : -1; // a list's row: its first node, as the outline builds it
                 break;
             case AccessNode::SCROLL_INTO_VIEW:
                 // The rows of lists around it scroll into view by their place, as the next frame may not build them, then it does.

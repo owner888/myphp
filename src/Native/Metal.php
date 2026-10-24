@@ -241,15 +241,19 @@ final class Metal
         }
         return v;
     }
-    float4 box(V v, float scale) {   // the slot after: radii, border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 4 when dashed, the paint's g
+    float4 box(V v, constant Uniforms& u, texture2d<float> atlas) {   // the slot after: radii (or, for a mask, its place in the glyph atlas), border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 4 when dashed + 8 for a mask, the paint's g
+        constexpr sampler s(filter::linear);
+        float scale = u.scale;
         float2 size = 2.0 * v.extent;
         float2 p = v.local + v.extent;
         float4 rad = v.r4;
-        float outer = cover(sdBox(p, size, rad), scale);
         float flags = v.e4.w;
+        bool mask = flags > 7.5;   // a path's mask from the atlas, painted (Painter::fillPathGradient)
+        if (mask) { flags -= 8.0; }
+        float outer = mask ? atlas.sample(s, (rad.xy + p * u.atlasScale) / u.atlas).r : cover(sdBox(p, size, rad), scale);
         float4 res = paintAt(p, flags > 3.5 ? flags - 4.0 : flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale) * outer;
         float4 bw = v.b4;
-        if (any(bw > 0.0)) {
+        if (!mask && any(bw > 0.0)) {
             float2 isz = size - bw.yz - bw.wx;
             float inner = 0.0;
             if (isz.x > 0.0 && isz.y > 0.0) {
@@ -290,7 +294,7 @@ final class Metal
         constexpr sampler s(filter::linear);
         constexpr sampler nearest(filter::nearest);
         if (v.kind > 14.5) { return boxShadowQuad(v, u.scale); }
-        if (v.kind > 13.5) { return box(v, u.scale); }
+        if (v.kind > 13.5) { return box(v, u, atlas); }
         if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color; pixelated (13)
             float4 c = v.kind > 12.5 ? images.sample(nearest, v.uv, uint(v.color.z + 0.5)) : images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }

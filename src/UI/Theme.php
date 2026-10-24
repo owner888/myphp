@@ -46,7 +46,16 @@ final class Theme
         /** The unit of paddings and gaps; widgets size in multiples of it. */
         public float $spacing = 4,
         public float $fontSize = 13,
+        /** Fills tooltips and toasts, the theme turned over so that they stand out from what they are over, and text on it; null for $text and $background (mygo's Inverse, InverseText). */
+        public ?int $inverse = null,
+        public ?int $inverseText = null,
     ) {}
+
+    /** The fill of tooltips and toasts and their text (mygo's inverse). @return array{0: int, 1: int} */
+    public function inverse(): array
+    {
+        return [$this->inverse ?? $this->text, $this->inverseText ?? $this->background];
+    }
 
     public static function light(): self
     {
@@ -70,6 +79,22 @@ final class Theme
     public function space(float $n): float
     {
         return $n * $this->spacing;
+    }
+
+    /** The theme following the desktop's settings (mygo's Theme.follow): its accent, more contrast, larger text. */
+    public function follow(Preferences $p): self
+    {
+        $t = $p->accent !== null ? $this->withAccent($p->accent) : clone $this;
+        if ($p->highContrast) {
+            $t->border = self::mix($t->border, $t->text, 0.45);
+            $t->textMuted = self::mix($t->textMuted, $t->text, 0.4);
+            $t->focusAlpha = 1.0;
+            $t->scrollbarAlpha = min(1.0, $t->scrollbarAlpha * 1.6);
+        }
+        if ($p->textScale > 0 && $p->textScale != 1.0) {
+            $t->fontSize *= $p->textScale;
+        }
+        return $t;
     }
 
     /** Uses the system's accent color: hover and pressed shades are derived from it. */

@@ -67,7 +67,7 @@ final class TextLines
     }
 
     /** The row line $i starts on: the rows before it, counted past the newlines. */
-    private function firstRow(TextLayout $l, int $i): int
+    private function firstRow(FieldLayout $l, int $i): int
     {
         if ($i === 0) {
             return 0;

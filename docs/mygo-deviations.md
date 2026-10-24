@@ -116,14 +116,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     adoption agency that reparents misnested formatting.
   - Why: no dependency; a paste's HTML is well formed enough.
 
-- **The editor's layouts** (v0.87)
+- **The editor's layouts** (v0.87, v1.08)
   - mygo: `ui.ShapeRichTextWith`, `ui.TextLayout` (UTF-16 offsets) and
     `Painter.TextLayout` are the ui package's, which the editor uses.
-  - myphp: the editor's own `ParaLayout` (`@internal`, rune offsets),
-    painted by `Painter::paintSpans`, which rich text nodes share; images
-    by `Painter::picture`.
-  - Why: `MyPHP\UI\TextLayout` is the legacy wrapping of text fields;
-    a public shaped-layout API is to be decided.
+  - myphp: `UI\TextLayout` (UTF-16 offsets), `Context::shapeText` and
+    `shapeRichText`, `Painter::textLayout` since v1.08, for apps; the
+    editor keeps its own `ParaLayout` (`@internal`, rune offsets); the old
+    wrapping of text fields is `UI\FieldLayout`.
+  - Why: the editor came first and works in runes.
 - **The editor's options and look** (v0.87)
   - mygo: `EditorOptions.Font` is a `ui.Font`; `Editor` returns an
     element the app fills (`Fill()`); an attachment's `Draw` takes a
@@ -908,3 +908,61 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: checks the colors the display list holds and the cells' sizes
     with the stub text engine.
   - Why: the headless harness has no rasterizer nor fonts.
+
+## Widgets and context (v1.08)
+
+- **Package functions**
+  - mygo: `ShapeText`, `ShapeRichText`, `RegisterFont`, `FontFamilies`,
+    `Oklch` are functions of package ui; `Oklch` returns a `Color` that
+    keeps a wide-gamut twin; `Painter.EffectColor` gives an effect's
+    shader both.
+  - myphp: `Context::shapeText` and `shapeRichText` (the text system is
+    the window's), `Font::register` and `Font::families`, `Oklch::rgb`
+    mapped into Display P3, then into sRGB, which myphp draws alone; no
+    `EffectColor`, as myphp has no effects of an app's own.
+  - Why: PHP has no package functions; one renderer, sRGB.
+- **Element handles and actions**
+  - mygo: `Element.Bind(*Handle)`, `Handle.Focus` (`RequestFocus`),
+    `CancelFocus`, `Focused`, `FocusWithin`, `Bounds`, `OnShortcut`;
+    `OnClick`, `OnChange`, `OnSubmit`, `OnShortcut` on elements and on
+    the context; `FocusBind(&field, value)` with `FocusedValue[T]`;
+    `List(c, s, n)` without a row builder, then `ItemKey` and
+    `Rows(func(ListRow))`.
+  - myphp: `Node::bind(Handle)`, the same methods on `Handle` taking a
+    `Context`; `Node::onClick` and the others, `Context::onShortcut($key,
+    $mods, $fn)` in myphp's order of key and modifiers;
+    `Node::focusBind(&$field, $value)` with null for no focus, its field
+    told apart by the reference to it; `list($state, $count, $row)` with
+    `ListState::$key` as before, no `ListRow`.
+  - Why: myphp's queries take the key first; PHP has no generics, and a
+    row's index is all its closure needs.
+- **Toasts, lists and the rest**
+  - mygo: `Toast.Timeout` a `time.Duration`; `ListState.FollowAnimation`
+    glides as rows come or grow; `RepeatForever`, `TransitionAuto`…;
+    `MeterLevels` a struct.
+  - myphp: `Toast::$timeout` in seconds; `ListState::$followAnimation`
+    glides as rows come, not as the last row grows; the constants
+    `KeyframeOptions::REPEAT_FOREVER` and `Router::AUTO`, `FADE`, `NONE`
+    as before; `MeterLevels` a class.
+  - Why: myphp's durations are seconds; the growth of a row is measured
+    only after it is laid out.
+- **Bases**
+  - mygo: `ButtonBase`, `CheckboxBase` … `TooltipBase`, built on elements
+    whose children a closure builds; `SelectBase[T]`; the text inputs edit
+    a `*string`; the buffer bases a `*TextBuffer`, through the editor's
+    own buffer.
+  - myphp: `Context::buttonBase()` … `tooltipBase()` open a container to
+    build in until `end()`, the parts classes (`TabsParts`,
+    `SelectParts`…) make theirs so; `selectBase(&$selected)` of any value;
+    `textInputBase` and `textAreaBase` edit a `TextState`, as `input()`;
+    the buffer bases a `TextState` kept in step with the buffer, an edit
+    of the text written to it as the replacement of what changed.
+  - Why: myphp's immediate mode builds in order; its inputs edit
+    `TextState`s.
+- **Web views in native UI**
+  - mygo: `ui.WebView(c, v)` shows a `NativeWebView` of the window in the
+    element, a hole painted through the content; `Content.AttachContent`.
+  - myphp: none yet; it comes with the page API of windows (v1.09).
+  - Why: a web view of its own needs the page API on objects other than
+    windows.
+

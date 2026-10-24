@@ -427,7 +427,7 @@ live in `Runtime::local`, and the focused item moves the focus with Up
 and Down, opens with Right (or goes to its first child), closes with
 Left (or goes to its parent). `$selected` paints it the accent.
 
-`meter($value, $lo, $hi, $warning, $critical)` is mygo's Meter: a
+`meter($value, $lo, $hi, $levels)` is mygo's Meter (`MeterLevels`): a
 PROGRESS node Space(2) thick (the painter takes the thickness from the
 node's own height now) filled with the success color, or warning and
 danger past the levels, low ones bad when critical is below warning.
@@ -822,11 +822,12 @@ its ends for a glass and, while it holds text, a clear button, both
 absolute texts over it; Escape clears it while it has the focus, which a
 field now keeps on Escape (a control lets it go).
 
-`Context::toast($message)` is mygo's Toast: `Runtime` keeps the newest
-three with the seconds each has left; `Window` calls `Context::toasts()`
-after the view, which ages them (their time stops while the pointer
-rests on one), drops the spent and builds the rest at the bottom of the
-window; `nextWake` wakes the window when the next one goes.
+`Context::toast($message)` is mygo's Toast, `addToast(Toast)` with an id
+and an action: `Runtime` keeps the toasts with the time each showed;
+`Window` calls `Context::toasts()` after the view, which closes the spent
+(running their `onClose`) and builds the newest three at the bottom of
+the window, unless the view built them with `toastViewportBase`;
+`nextWake` wakes the window when the next one goes.
 
 `Context::table($state, $columns, $count, $cell)` is mygo's Table's core: a
 header row of `TableColumn`s (title, width or a share of the room, min
@@ -1199,7 +1200,7 @@ and the runtime see it, and a key taken reaches neither — Enter that
 sends, Tab that accepts a completion (mygo's OnPaste, OnTextKey).
 `examples/form` has a message field of one to four lines whose Enter
 sends into a read-only log.
-`TextLayout::wrap` breaks `display()` into byte ranges: paragraphs at
+`FieldLayout::wrap` breaks `display()` into byte ranges: paragraphs at
 `\n` (the newline belongs to the line it ends), then greedy lines found
 by binary search over `xForIndex` of the whole paragraph (one shaped
 line per paragraph, cached by `Text`), backed off to the last space, or
@@ -2171,6 +2172,27 @@ blurred), mygo's shader ported to points with coverage in pixels.
 so the lists the tests read stay as they were. Invisible nodes are
 recorded as inert and not shown; a pass-through node is never under the
 pointer; a disabled container passes `isDisabled` to what is built in it.
+
+## Widgets and context (v1.08)
+
+Actions (`Node::onClick` and the others) are noted while a pass builds
+and run after it, changes and submissions first, as mygo's
+`runNoticeActions` and `runActions`: one that runs makes the frame build
+again, as a click consumed does. Handles and fields bound to the focus
+(`focusBind`) apply after the build too, before the actions: a request
+for a control not built waits, and the user's focus otherwise writes the
+field, which the runtime holds by reference, told apart by
+`ReflectionReference` ids. Toasts live in the runtime with the time each
+showed while their time ran (stopped under the pointer, with the focus
+in them, or the window in the background); the theme's look or the
+app's (`toastViewportBase`) builds them once a pass. A tip of the app's
+own (`tooltipBase`) is a tip of empty text: the runtime decides it after
+the build as for others, and asks for the frame that builds it, which
+the painter's own tips leave. Sliders map the pointer across their
+content box, inside their padding, as mygo's: the theme's is padded by
+half its knob. The gradient fill and stroke of a path paint its mask
+from the glyph atlas as a box quad flagged 8, its gradient in the box's
+second slot.
 
 ## Accessibility
 

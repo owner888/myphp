@@ -99,6 +99,12 @@ final class Painter
         $this->fill($r, $rgb, 0, $alpha);
     }
 
+    /** Paints $layout with its top left at ($x, $y), $rgb at $alpha the color of what its spans leave uncolored, as rich text paints (mygo's Painter.TextLayout). */
+    public function textLayout(TextLayout $layout, float $x, float $y, int $rgb, float $alpha = 1.0): void
+    {
+        self::paintSpans($this->list, $this->text, $layout->layout, $layout->spans, $x, $y, $rgb, $alpha);
+    }
+
     /** Draws a line of text with its top-left corner at ($x, $y). */
     public function text(float $x, float $y, string $s, float $size, int $rgb, float $alpha = 1.0): void
     {
@@ -228,6 +234,18 @@ final class Painter
     public function fillPath(Path $path, int $rgb, float $alpha = 1.0): void
     {
         $this->list->path($path, $rgb, $alpha);
+    }
+
+    /** Fills $path with $g across its bounds, as the area under a chart's line (mygo's FillPathGradient). */
+    public function fillPathGradient(Path $path, LinearGradient $g): void
+    {
+        $this->list->pathGradient($path, 0.0, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
+    }
+
+    /** Strokes $path as strokePath does, $width points wide, in $g across its bounds (mygo's StrokePathGradient). */
+    public function strokePathGradient(Path $path, float $width, LinearGradient $g): void
+    {
+        $this->list->pathGradient($path, $width, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
     }
 
     /** Strokes $path $width points wide, with round joins and caps. */
@@ -372,7 +390,7 @@ final class Painter
             }
         }
         if ($n->selected) {
-            $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha);
+            $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius);
         }
         if ($n->text !== null) {
             $x = $n->x; $y = $n->y;
@@ -583,7 +601,7 @@ final class Painter
     /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */
     public static function tooltip(Node $root, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {
-        if ($rt->tip === null) {
+        if ($rt->tip === null || $rt->tip[0] === '') { // a tip of its own (Context::tooltipBase): the view built it
             return;
         }
         [$tip, $ax, $ay, $aw, $ah] = $rt->tip; // the anchor's rect
@@ -597,9 +615,10 @@ final class Painter
             $y = $ay + $ah + $apart;
         }
         $list->shadow($x, $y, $w, $h, 0x000000, 0.2, $radius, 8, 0, 2);
-        $list->rect($x, $y, $w, $h, $t->text, 1.0, $radius);
+        [$fill, $ink] = $t->inverse();
+        $list->rect($x, $y, $w, $h, $fill, 1.0, $radius);
         $list->pushClip($x, $y, $w, $h);
-        $text->paint($list, $tip, $size, $x + $px, $y + $py, $t->background);
+        $text->paint($list, $tip, $size, $x + $px, $y + $py, $ink);
         $list->popClip();
     }
 
@@ -781,6 +800,10 @@ final class Painter
         if ($n->held > 0) { // the lens lightens what is behind it, under the track
             [$x, $y, $w, $h] = self::knobRect($t, $kx, $cy, $n->held);
             $list->rect($x, $y, $w, $h, 0xffffff, 0.1 * $n->held, $h / 2);
+        }
+        for ($i = 0; $i < $n->ticks; $i++) { // a step slider's tick marks, under the track (mygo's paintTicks)
+            $x = $x0 + ($x1 - $x0) * $i / max($n->ticks - 1, 1);
+            $list->rect($x - 0.5, $cy + $kh / 2 + $t->space(1), 1.0, $t->space(1.5), $t->textMuted, 0.6);
         }
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
         $list->rect($n->rtl ? $kx : $x0, $cy - $trackH / 2, $n->rtl ? $x1 - $kx : $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
@@ -1148,9 +1171,11 @@ final class Painter
     private static function paintArea(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
-        $inset = Runtime::FIELD_INSET; $insetY = Runtime::FIELD_INSET_Y;
-        $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
-        $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+        [$inset, $insetY] = $n->bare ? [0.0, 0.0] : [Runtime::FIELD_INSET, Runtime::FIELD_INSET_Y]; // an area without a look: no padding, no face
+        if (!$n->bare) {
+            $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
+            $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+        }
         $display = $s->display();
         $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $insetY;
         $layout = $s->layout($text, $n->fontSize, $innerW);
@@ -1167,7 +1192,8 @@ final class Painter
         }
         $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
         $tx = $n->x + $inset; $ty = $n->y + $insetY - $s->scrollY;
-        $list->pushClip($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4);
+        $in = $n->bare ? 0.0 : 2.0; // inside the border
+        $list->pushClip($n->x + $in, $n->y + $in, $n->w - 2 * $in, $n->h - 2 * $in);
         if ($display === '' && $n->text !== null && $n->text !== '') {
             $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);
         }

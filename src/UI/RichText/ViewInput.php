@@ -496,7 +496,7 @@ trait ViewInput
             if ($this->opts->onLink !== null) {
                 ($this->opts->onLink)($link);
             } elseif (Context::safeToOpen($link) && $this->services !== null) {
-                ($this->services->openURL)($link);
+                $this->services->openURLThen($link);
             }
         }
         return true;

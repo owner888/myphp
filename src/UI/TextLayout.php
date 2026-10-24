@@ -3,134 +3,181 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use MyPHP\Text\{Boundaries, Layout, Params, System};
+
 /**
- * The lines a text breaks into at a width: paragraphs at "\n", then
- * greedy wrapping at the last space that fits, or between characters
- * where there is none (CJK, long words). Each line is a byte range of
- * the text; the break character, if any, belongs to the line before it.
+ * Shaped text kept for a text control of an app's own (mygo's TextLayout,
+ * Context::shapeText and shapeRichText): the system's fonts, fallback,
+ * bidi and line breaking, with no editing of its own. Offsets are UTF-16
+ * code units, as TextInputClient's; carets snap to whole graphemes. Keep
+ * layouts of the paragraphs shown, and shape again those an edit changes.
  */
 final class TextLayout
 {
-    /** @var list<array{0: int, 1: int}> byte start and end (exclusive) of each line */
-    public array $lines = [];
+    /** Which of the two places of an index a caret takes, where bidi runs or a soft wrap give it two: the edge after the text before it, or before the text after it (mygo's TextDownstream, TextUpstream). */
+    public const DOWNSTREAM = Layout::DOWNSTREAM, UPSTREAM = Layout::UPSTREAM;
 
-    public function __construct(public readonly string $text, public readonly float $size, public readonly float $width, public readonly float $lineHeight) {}
+    /** @var list<int> the UTF-16 offset of each rune, then of the end */
+    private array $units = [0];
+    /** @var list<int> whole-grapheme offsets in runes */
+    private array $bounds;
 
-    public static function wrap(TextMetrics $m, string $text, float $size, float $width): self
+    /** @param list<Span> $spans */
+    private function __construct(public readonly Layout $layout, public readonly array $spans)
     {
-        [, $lh] = $m->measure('X', $size);
-        $l = new self($text, $size, $width, $lh);
-        $pos = 0; $n = strlen($text);
-        while (true) {
-            $nl = strpos($text, "\n", $pos);
-            $end = $nl === false ? $n : $nl;
-            $para = substr($text, $pos, $end - $pos);
-            $start = 0; $plen = strlen($para);
-            do {
-                $fit = self::fit($m, $para, $size, $start, $width);
-                // The paragraph's newline belongs to its last line.
-                $l->lines[] = [$pos + $start, $pos + $fit + ($fit === $plen && $nl !== false ? 1 : 0)];
-                $start = $fit;
-            } while ($start < $plen);
-            if ($nl === false) {
-                break;
-            }
-            $pos = $nl + 1;
-            if ($pos === $n) {
-                $l->lines[] = [$n, $n]; // a trailing newline shows an empty last line
-                break;
-            }
+        foreach ($layout->runes as $i => $r) {
+            $this->units[$i + 1] = $this->units[$i] + ($r > 0xffff ? 2 : 1);
         }
-        return $l;
+        $b = new Boundaries;
+        $b->reset($layout->runes, $layout->params->text);
+        $this->bounds = $b->graphemeOffsets();
     }
 
-    /** The end of the line starting at $start of $para: as much as fits, broken after a space when one is there. */
-    private static function fit(TextMetrics $m, string $para, float $size, int $start, float $width): int
+    /**
+     * $spans shaped in $font at $size points, wrapped at $width (0 breaks
+     * at newlines only), aligned by $align (Node::START, CENTER, END)
+     * within it; $rtl, as in an interface laid out right to left, lines
+     * start at the right and paragraphs with no strong direction read
+     * right to left (mygo's ShapeRichTextWith).
+     * @param list<Span> $spans
+     */
+    public static function shape(System $sys, array $spans, TextStyle $font, float $size, float $width = 0, int $align = Node::START, bool $rtl = false): self
     {
-        $plen = strlen($para);
-        $x0 = $m->xForIndex($para, $size, $start);
-        if ($m->xForIndex($para, $size, $plen) - $x0 <= $width) {
-            return $plen;
+        $text = ''; $runes = 0; $styles = [];
+        foreach ($spans as $sp) {
+            $text .= $sp->text;
+            $runes += mb_strlen($sp->text, 'UTF-8');
+            $styles[] = $sp->textSpan($runes);
         }
-        $lo = $start; $hi = $plen; // the largest end whose text fits
-        while ($hi - $lo > 1) {
-            $mid = self::boundary($para, intdiv($lo + $hi, 2));
-            if ($mid <= $lo) { $mid = self::nextChar($para, $lo); }
-            if ($mid >= $hi) { break; }
-            if ($m->xForIndex($para, $size, $mid) - $x0 <= $width) { $lo = $mid; } else { $hi = $mid; }
-        }
-        $end = $lo;
-        $space = strrpos(substr($para, $start, $end - $start), ' ');
-        if ($space !== false && $start + $space + 1 < $plen) {
-            $end = $start + $space + 1; // the space ends the line
-        }
-        if ($end <= $start) {
-            $end = self::nextChar($para, $start); // one character at least
-        }
-        return $end;
+        $a = match (true) {
+            $align === Node::CENTER => Params::CENTER,
+            $rtl && $align === Node::END => Params::LEFT,
+            $rtl => Params::RIGHT,
+            $align === Node::END => Params::END,
+            default => Params::START,
+        };
+        return new self($sys->layout(new Params($text, $font->style($size), $width, align: $a, rtl: $rtl, keepSpaces: true, spans: $styles)), $spans);
     }
 
-    /** Backs $i up to a UTF-8 character boundary. */
-    private static function boundary(string $s, int $i): int
+    /** The layout's width and height, in points (mygo's Size). @return array{0: float, 1: float} */
+    public function size(): array
     {
-        while ($i > 0 && $i < strlen($s) && (ord($s[$i]) & 0xC0) === 0x80) { $i--; }
+        return [$this->layout->width, $this->layout->height];
+    }
+
+    /** The caret at $index, snapped to a whole grapheme: [x, y, 1, h]. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function caret(int $index): array
+    {
+        [$x, $y, $h] = $this->layout->caret($this->runeAt($index, false));
+        return [$x, $y, 1.0, $h];
+    }
+
+    /** The caret on the edge $affinity of $index: [x, y, 1, h] (mygo's CaretAt). @return array{0: float, 1: float, 2: float, 3: float} */
+    public function caretAt(int $index, int $affinity = self::DOWNSTREAM): array
+    {
+        [$x, $y, $h] = $this->layout->caretAt($this->runeAt($index, false), $affinity);
+        return [$x, $y, 1.0, $h];
+    }
+
+    /** The caret nearest ($x, $y), hit-testing whole graphemes: [index, affinity] (mygo's PositionAt). @return array{0: int, 1: int} */
+    public function positionAt(float $x, float $y): array
+    {
+        [$i, $a] = $this->layout->positionAt($x, $y);
+        return [$this->units[$i], $a];
+    }
+
+    /** The index of the caret nearest ($x, $y) (mygo's IndexAt). */
+    public function indexAt(float $x, float $y): int
+    {
+        return $this->positionAt($x, $y)[0];
+    }
+
+    /** The caret one visual grapheme left ($direction < 0) or right of [$index, $affinity] (mygo's MoveCaret). @return array{0: int, 1: int} */
+    public function moveCaret(int $index, int $affinity, int $direction): array
+    {
+        [$i, $a] = $this->layout->moveCaret($this->runeAt($index, false), $affinity, $direction);
+        return [$this->units[$i], $a];
+    }
+
+    /** The logical ranges a visual selection from caret $anchor to caret $caret, each [index, affinity], covers, apart through mixed directions (mygo's SelectionRanges). @param array{0: int, 1: int} $anchor @param array{0: int, 1: int} $caret @return list<TextInputRange> */
+    public function selectionRanges(array $anchor, array $caret): array
+    {
+        $out = [];
+        foreach ($this->layout->selectionRanges([$this->runeAt($anchor[0], false), $anchor[1]], [$this->runeAt($caret[0], false), $caret[1]]) as [$a, $b]) {
+            $out[] = new TextInputRange($this->units[$a], $this->units[$b]);
+        }
+        return $out;
+    }
+
+    /** The rectangles [x, y, w, h] of $ranges, apart where bidi runs are (mygo's SelectionRects). @return list<array{0: float, 1: float, 2: float, 3: float}> */
+    public function selectionRects(TextInputRange ...$ranges): array
+    {
+        $out = [];
+        foreach ($ranges as $r) {
+            $r = $r->normalized();
+            $out = $this->layout->appendSelection($out, $this->runeAt($r->start, false), $this->runeAt($r->end, true), false);
+        }
+        return $out;
+    }
+
+    /** The whole-grapheme offset before $index, for deleting and moving by graphemes (mygo's PreviousBoundary). */
+    public function previousBoundary(int $index): int
+    {
+        $b = $this->search($this->runeAt($index, false));
+        return $this->units[$this->bounds[max(0, $b - 1)]];
+    }
+
+    /** The whole-grapheme offset after $index (mygo's NextBoundary). */
+    public function nextBoundary(int $index): int
+    {
+        $b = $this->search($this->runeAt($index, false));
+        return $this->units[$this->bounds[min(count($this->bounds) - 1, $b + 1)]];
+    }
+
+    /** The inline objects (Span::$objectWidth), in the order of the text: the UTF-16 offset of each object replacement character and its box [x, y, w, h], standing on its line's baseline (mygo's Objects). @return list<array{0: int, 1: array{0: float, 1: float, 2: float, 3: float}}> */
+    public function objects(): array
+    {
+        $out = [];
+        foreach ($this->layout->lines as $line) {
+            foreach ($line->glyphs as $g) {
+                if (!$g->object) { continue; }
+                $h = 0.0;
+                foreach ($this->layout->params->spans as $sp) {
+                    if ($g->cluster < $sp->end) { $h = $sp->objectHeight; break; }
+                }
+                $out[] = [$this->units[$g->cluster], [$g->x, $line->baseline - $h, $g->advance, $h]];
+            }
+        }
+        return $out;
+    }
+
+    /** The rune of UTF-16 offset $index, on a whole grapheme: the one at or before it, or after it when $forward (mygo's runeAt). */
+    private function runeAt(int $index, bool $forward): int
+    {
+        $index = max(0, min($index, $this->units[count($this->units) - 1]));
+        $i = self::lowerBound($this->units, $index);
+        if ($this->units[$i] !== $index && !$forward) { $i--; }
+        $b = self::lowerBound($this->bounds, $i);
+        if (($this->bounds[$b] ?? -1) !== $i) {
+            $i = $forward ? $this->bounds[min($b, count($this->bounds) - 1)] : $this->bounds[max(0, $b - 1)];
+        }
         return $i;
     }
 
-    private static function nextChar(string $s, int $i): int
+    /** The place of grapheme start $i among the boundaries. */
+    private function search(int $i): int
     {
-        $n = strlen($s);
-        if ($i >= $n) { return $n; }
-        $i++;
-        while ($i < $n && (ord($s[$i]) & 0xC0) === 0x80) { $i++; }
-        return $i;
+        return self::lowerBound($this->bounds, $i);
     }
 
-    public function height(): float
+    /** The first index of sorted $a whose value is at least $v. @param list<int> $a */
+    private static function lowerBound(array $a, int $v): int
     {
-        return count($this->lines) * $this->lineHeight;
-    }
-
-    /** The line holding byte $byte: a byte at a line's end starts the next line; the text's end is on the last. */
-    public function lineOf(int $byte): int
-    {
-        $last = count($this->lines) - 1;
-        foreach ($this->lines as $i => [, $end]) {
-            if ($byte < $end) {
-                return $i;
-            }
+        $lo = 0; $hi = count($a);
+        while ($lo < $hi) {
+            $mid = ($lo + $hi) >> 1;
+            if ($a[$mid] < $v) { $lo = $mid + 1; } else { $hi = $mid; }
         }
-        return $last;
-    }
-
-    /** Line $i's text without its newline, what is shaped and painted. */
-    public function lineText(int $i): string
-    {
-        [$a, $b] = $this->lines[$i];
-        if ($b > $a && $this->text[$b - 1] === "\n") {
-            $b--;
-        }
-        return substr($this->text, $a, $b - $a);
-    }
-
-    /** The caret's x and the line's top for byte $byte, in points from the layout's top left. */
-    public function caret(TextMetrics $m, int $byte): array
-    {
-        $i = $this->lineOf($byte);
-        $line = $this->lineText($i);
-        $at = max(0, min($byte - $this->lines[$i][0], strlen($line)));
-        return [$m->xForIndex($line, $this->size, $at), $i * $this->lineHeight];
-    }
-
-    /** The byte nearest to ($x, $y) from the layout's top left. */
-    public function hit(TextMetrics $m, float $x, float $y): int
-    {
-        $i = max(0, min(count($this->lines) - 1, (int)floor($y / $this->lineHeight)));
-        $line = $this->lineText($i);
-        $byte = $this->lines[$i][0] + $m->indexForX($line, $this->size, max(0.0, $x));
-        if ($i < count($this->lines) - 1 && $byte === $this->lines[$i][1] && $line !== '' && $line[-1] === ' ') {
-            $byte--; // after the wrapping space would be the next line's start
-        }
-        return $byte;
+        return $lo;
     }
 }

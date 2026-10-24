@@ -57,7 +57,7 @@ final class TextState
     private array $redo = [];
     private string $lastEdit = '';
     private float $lastEditAt = 0;
-    private ?TextLayout $layout = null;
+    private ?FieldLayout $layout = null;
 
     public function __construct(public string $text = '')
     {
@@ -132,7 +132,7 @@ final class TextState
     }
 
     /** The wrapped lines the area was last laid out in (layout), null before. */
-    public function lastLayout(): ?TextLayout
+    public function lastLayout(): ?FieldLayout
     {
         return $this->layout;
     }
@@ -186,12 +186,12 @@ final class TextState
     }
 
     /** The wrapped lines of display() at $width, kept while the text, size and width stay. */
-    public function layout(TextMetrics $m, float $size, float $width): TextLayout
+    public function layout(TextMetrics $m, float $size, float $width): FieldLayout
     {
         $display = $this->display();
         $l = $this->layout;
         if ($l === null || $l->text !== $display || $l->size !== $size || $l->width !== $width) {
-            $l = $this->layout = TextLayout::wrap($m, $display, $size, $width);
+            $l = $this->layout = FieldLayout::wrap($m, $display, $size, $width);
         }
         return $l;
     }

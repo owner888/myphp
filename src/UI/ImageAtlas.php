@@ -44,6 +44,14 @@ final class ImageAtlas
         return null;
     }
 
+    /** Copies the bitmap at $src over the slot of $key, where a page has it (Image::update). */
+    public function replace(string $key, int $src): void
+    {
+        foreach ($this->pages as $page) {
+            if ($page->replace($key, $src)) { return; }
+        }
+    }
+
     /**
      * Adds a w*h RGBA bitmap at address $src; reports the slot and whether a
      * page was emptied for it (what was drawn from that page must be

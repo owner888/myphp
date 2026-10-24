@@ -27,8 +27,8 @@ final class App
     private static ?Menu $menu = null;
     private static ?Theme $theme = null;
     private static bool $themeFixed = false;
-    /** Whether the desktop asks for less motion, once read (reduceMotion). */
-    private static ?bool $reduceMotion = null;
+    /** The desktop's settings, once read until they change (preferences). */
+    private static ?UI\Preferences $preferences = null;
     private static $nsApp = null;
     private static ?Metal $metal = null;
     private static ?Text $text = null;
@@ -278,6 +278,7 @@ final class App
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
             'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
                 if (ObjC::phpStr($keyPath) === 'effectiveAppearance') {
+                    self::$preferences = null; // the accent, read in the appearance
                     self::themeChanged();
                 }
             }],
@@ -311,8 +312,8 @@ final class App
             }],
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
             'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change
-                self::$reduceMotion = null;
-                foreach (Window::all() as $w) { $w->invalidate(); }
+                self::$preferences = null;
+                self::themeChanged(); // the theme follows more contrast
             }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
@@ -366,10 +367,27 @@ final class App
         return self::$theme;
     }
 
+    /** The settings of the desktop that controls follow (mygo's Preferences): the accent color, Reduce Motion, Increase Contrast; read once until they change. */
+    public static function preferences(): UI\Preferences
+    {
+        if (self::$preferences === null) {
+            if (self::$nsApp === null) {
+                return self::$preferences = new UI\Preferences();
+            }
+            $ws = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
+            self::$preferences = new UI\Preferences(
+                accent: Appearance::accent(self::$nsApp),
+                reduceMotion: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldReduceMotion'),
+                highContrast: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldIncreaseContrast'),
+            );
+        }
+        return self::$preferences;
+    }
+
     /** Whether the desktop asks for less motion (System Settings' Reduce Motion, mygo's Preferences.ReduceMotion): what animates goes to its target at once (Context::animateTo). */
     public static function reduceMotion(): bool
     {
-        return self::$reduceMotion ??= self::$nsApp !== null && (bool)ObjC::msg('b:', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'accessibilityDisplayShouldReduceMotion');
+        return self::preferences()->reduceMotion;
     }
 
     /** Fixes the theme; null returns to following the system. */
@@ -383,7 +401,7 @@ final class App
     private static function systemTheme(): Theme
     {
         $dark = Appearance::isDark(self::$nsApp);
-        return ($dark ? Theme::dark() : Theme::light())->withAccent(Appearance::accent(self::$nsApp));
+        return ($dark ? Theme::dark() : Theme::light())->follow(self::preferences());
     }
 
     private static function themeChanged(): void
@@ -654,14 +672,16 @@ final class App
         Native\Fibers::go($fn);
     }
 
-    /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenURL. */
+    /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenExternal: throws when it is no URL, or no app can open it. */
     public static function openURL(string $url): void
     {
         $nsurl = ObjC::msg('p:p', ObjC::cls('NSURL'), 'URLWithString:', ObjC::str($url));
         if ($nsurl === null) {
             throw new RuntimeException("not a URL: $url");
         }
-        ObjC::msg('b:p', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'openURL:', $nsurl);
+        if (!ObjC::msg('b:p', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'openURL:', $nsurl)) {
+            throw new RuntimeException("no application can open $url");
+        }
     }
 
     /** Brings the app to the front, as a click on its Dock icon does. */

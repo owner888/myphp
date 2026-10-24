@@ -154,6 +154,12 @@ final class Node
     public ?array $dividers = null;
     /** A list's rows' least width (rowWidth), past which it scrolls sideways; and the scroll container whose sideways scrolling this node's content follows (scrollWith). */
     public float $rowMinW = 0;
+    /** An input without a look (Context::textInputBase, textAreaBase): no padding around its text. */
+    public bool $bare = false;
+    /** An option the pointer or the arrows are on (SelectParts::item, ComboboxParts::item; mygo's Highlighted). */
+    public bool $highlighted = false;
+    /** A step slider's tick marks (Context::stepSlider), 0 for none. */
+    public int $ticks = 0;
     public ?Node $followX = null;
     /** @var list<TextRange> the runs of an input's text styled this frame (textRanges) */
     public array $ranges = [];
@@ -512,6 +518,46 @@ final class Node
     public function isDisabled(): bool
     {
         return $this->disabled || $this->disabledIn;
+    }
+
+    /** Gives $h this node's identity in the window built now, for each pass (mygo's Bind). */
+    public function bind(Handle $h): static
+    {
+        $rt = $this->context?->runtime;
+        $b = $h->binding($rt, true);
+        if ($b === null) { return $this; }
+        if ($b->frame === $rt->frameNumber && $b->pass === $rt->pass && $b->node !== $this) {
+            throw new \LogicException('a Handle bound to two nodes in one build');
+        }
+        $b->node = $this; $b->id = $this->id; $b->frame = $rt->frameNumber; $b->pass = $rt->pass;
+        return $this;
+    }
+
+    /** Binds the focus to $value of the app's field $field, which holds the value of the member that should have it, null for none: setting the field asks for that control's focus, waiting while it is not built; the user moving the focus sets the field. Values are unique per field, and each window takes a field of its own (mygo's FocusBind). */
+    public function focusBind(mixed &$field, mixed $value): static
+    {
+        if ($value === null) { throw new \InvalidArgumentException('focusBind: null is no member, but the focus on none'); }
+        $this->focusable = true;
+        $this->context?->runtime?->focusBind($field, $value, $this);
+        return $this;
+    }
+
+    /** Runs $fn after the build when the node is clicked (mygo's OnClick): Context::clicked() without the if. */
+    public function onClick(\Closure $fn): static { $this->context?->runtime?->addAction($this, 'click', $fn); return $this; }
+
+    /** Runs $fn after the build when the control's input changed its value, before the view builds again (mygo's OnChange). */
+    public function onChange(\Closure $fn): static { $this->context?->runtime?->addAction($this, 'change', $fn); return $this; }
+
+    /** Runs $fn after the build when the input or list was submitted, Enter or a double click (mygo's OnSubmit). */
+    public function onSubmit(\Closure $fn): static { $this->context?->runtime?->addAction($this, 'submit', $fn); return $this; }
+
+    /** Runs $fn when $key with exactly $mods is pressed while the node, or one inside it, has the keyboard focus (mygo's OnShortcut). */
+    public function onShortcut(int|string $key, int $mods, \Closure $fn): static { $this->context?->runtime?->addAction($this, 'shortcut', $fn, $key, $mods); return $this; }
+
+    /** Whether the node is an option the pointer or the arrows are on (mygo's Highlighted). */
+    public function highlighted(): bool
+    {
+        return $this->highlighted;
     }
 
     /** Reports the node's value as changed this frame, as a control of your own whose input changed what it edits: Context::changed() returns true for it, as for the widgets' own (mygo's SetChanged). */

@@ -41,7 +41,7 @@ trait ViewInput
                     $this->opening = '';
                     $open = $this->t->opts->openLink;
                     if (($open === null || !$open($link)) && !$this->openingPath && $this->services !== null) {
-                        ($this->services->openURL)($link);
+                        $this->services->openURLThen($link);
                     }
                 }
                 if (($text = $this->copying) !== '') {

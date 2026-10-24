@@ -19,8 +19,10 @@ use RuntimeException;
  * color by its alpha), kind 9 a line, kinds 10 and 11 a gradient between two
  * colors across (10) or down (11) the quad: the color, and u the other's
  * rgb packed as a float, v its alpha. Kind 14 is a box (box(): its paint,
- * corners, borders) and kind 15 a box shadow (boxShadow()), each taking the
- * slot after it too for what does not fit in its own, that slot's kind -1.
+ * corners, borders; or, flagged 8, a path's mask from the glyph atlas,
+ * painted: pathGradient()) and kind 15 a box shadow (boxShadow()), each
+ * taking the slot after it too for what does not fit in its own, that
+ * slot's kind -1.
  * Kinds 5, 7 and 8 read what was drawn before
  * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
@@ -318,6 +320,17 @@ final class DisplayList
         $this->quad($x - $e, $y - $e, $w + 2 * $e, $h + 2 * $e, $rgb, $alpha, 0.0, 15.0, $sigma, $inset ? 1.0 : 0.0, 2);
         $c = $cut[2] > 0 && $cut[3] > 0 ? self::fitRadii($cut[2], $cut[3], $cutRadii) : [0.0, 0.0, 0.0, 0.0];
         $this->slot(self::fitRadii($w, $h, $radii), $cut, $c[0], $c[1], $c[2], [$c[3], 0.0, 0.0, 0.0]);
+    }
+
+    /** Fills $path, or with $width > 0 strokes it that wide, with the gradient from $rgb at $alpha to $rgb2 at $alpha2 along the line $line(w, h) gives, in points from the top left of the path's bounds (mygo's FillPathGradient, StrokePathGradient): its mask from the atlas, as path() draws it, painted as a box (flag 8). @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line */
+    public function pathGradient(Path $path, float $width, int $rgb, float $alpha, int $rgb2, float $alpha2, bool $oklab, \Closure $line): void
+    {
+        $q = $this->pathQuad === null ? null : ($this->pathQuad)($path, $width);
+        if ($q === null || $this->clipped($q[0], $q[1], $q[2], $q[3])) {
+            return;
+        }
+        $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+        $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 8.0, $line($q[2], $q[3]));
     }
 
     /** The radii of a box's corners, scaled down together where two of a side's would overlap, as CSS's. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */

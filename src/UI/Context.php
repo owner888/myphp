@@ -12,6 +12,7 @@ final class Context
 {
     use ContextMotion;
     use ContextTransfer;
+    use ContextBase;
 
     public Node $root;
     public int $count = 0;
@@ -301,6 +302,54 @@ final class Context
         $this->stack = $saved;
     }
 
+    /** Runs $fn when $key with exactly $mods is pressed in the scope built now: the container open, else the window wherever the focus is (mygo's Context.OnShortcut). */
+    public function onShortcut(int|string $key, int $mods, Closure $fn): void
+    {
+        $top = $this->stack[count($this->stack) - 1];
+        if ($top !== $this->root) {
+            $top->onShortcut($key, $mods, $fn);
+        } else {
+            $this->runtime?->addAction(null, 'shortcut', $fn, $key, $mods);
+        }
+    }
+
+    /** $s shaped in the font of the text built now, or $font, wrapped at $width points (0 breaks at newlines only), kept for a text control of one's own (mygo's ShapeText). */
+    public function shapeText(string $s, float $width = 0, ?TextStyle $font = null): TextLayout
+    {
+        return $this->shapeRichText([new Span($s)], $width, $font);
+    }
+
+    /** $spans shaped as shapeText does, aligned by $align (Node::START, CENTER, END) in the direction of what is built now (mygo's ShapeRichText, ShapeRichTextWith). @param list<Span> $spans */
+    public function shapeRichText(array $spans, float $width = 0, ?TextStyle $font = null, int $align = Node::START): TextLayout
+    {
+        $style = ($font ?? new TextStyle())->over($this->inheritedText());
+        return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, $this->stack[count($this->stack) - 1]->rtl);
+    }
+
+    /** The value of the member of $field (Node::focusBind) that has the focus, as the last frame committed it, whatever the field asks for meanwhile; null for none (mygo's FocusedValue). */
+    public function focusedValue(mixed &$field): mixed
+    {
+        return $this->runtime?->focusedValue($field);
+    }
+
+    /** The settings of the desktop that controls follow: a frame follows their changes (mygo's Preferences). */
+    public function preferences(): Preferences
+    {
+        return $this->runtime?->preferences ?? new Preferences();
+    }
+
+    /** Opens $url with the system's handler (mygo's OpenURL): an error goes unheard. */
+    public function openURL(string $url): void
+    {
+        $this->runtime?->openURLThen($url);
+    }
+
+    /** Opens $url as openURL does, and $done(?\Throwable $err) gets what came of it before a frame builds anew with what it changed: an error when no app could open it (mygo's OpenURLThen). */
+    public function openURLThen(string $url, Closure $done): void
+    {
+        $this->runtime?->openURLThen($url, $done);
+    }
+
     /** Whether the node just built was clicked (a mouse-up on where it was last frame). */
     public function clicked(Node $n): bool
     {
@@ -437,9 +486,11 @@ final class Context
      */
     public function list(ListState $state, int $count, Closure $row): Node
     {
+        $came = 0.0; // how far the end moved down as rows came, which a FollowAnimation glides
         if ($state->followEnd && $state->atEnd && $count > $state->count && !$state->moving()) {
+            for ($i = $state->count; $i < $count; $i++) { $came += $state->height($i); }
             $state->count = $count;
-            $state->end(); // rows came: stay at the end
+            $state->scrollToEnd(); // rows came: stay at the end
         }
         $state->count = $count;
         $state->row = min($state->row, max(0, $count - 1));
@@ -447,6 +498,13 @@ final class Context
         // startup, say) or the rows changed under it: keep it within the rows.
         $state->scrollBy(0);
         $node = $this->column(0, 0, 1)->scroll($state)->role(Role::LIST);
+        if ($state->followAnimation !== null && $this->runtime !== null) { // what came rises from below as the list glides to its end (mygo's FollowAnimation)
+            if ($came > 0 && !$this->runtime->reduceMotion && !$this->runtime->instant()) {
+                $this->jump($node, 'follow', $state->lag + $came);
+            }
+            $state->lag = $this->animateTo($node, 'follow', 0.0, $state->followAnimation);
+            if ($state->lag != 0.0 && $this->runtime->wheeled) { $state->lag = $this->jump($node, 'follow', 0.0); } // the user scrolling stops it
+        }
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $state->first = $state->row;
         $y = -$state->offset;
@@ -774,7 +832,7 @@ final class Context
             if ($router !== null && Router::isPath($url)) {
                 $router->push($url);
             } else {
-                ($this->runtime->openURL)($url);
+                $this->runtime->openURLThen($url);
             }
         }
         return $n;
@@ -791,20 +849,19 @@ final class Context
 
     /**
      * A bar showing $value between $lo and $hi, as mygo's Meter (AppKit's
-     * level indicator): the success color, or warning from $warning and
-     * danger from $critical (null for neither); a $critical below $warning
-     * makes low values the bad ones, as a battery's.
+     * level indicator): the success color, or the warning and danger
+     * colors from $levels (MeterLevels), none for neither.
      */
-    public function meter(float $value, float $lo, float $hi, ?float $warning = null, ?float $critical = null, float $width = 160): Node
+    public function meter(float $value, float $lo, float $hi, ?MeterLevels $levels = null, float $width = 160): Node
     {
         $t = $this->theme;
         $n = $this->add(new Node(Node::PROGRESS, 0, 0, 0, $width, $t->space(2), 0, null, $t->success));
         $n->fraction = $hi > $lo ? max(0.0, min(1.0, ($value - $lo) / ($hi - $lo))) : 0.0;
         $n->role(Role::METER)->range($lo, $hi, $value);
-        if ($warning !== null && $critical !== null && $warning !== $critical) {
-            $low = $critical < $warning;
-            if ($low ? $value <= $critical : $value >= $critical) { $n->color = $t->danger; }
-            elseif ($low ? $value <= $warning : $value >= $warning) { $n->color = $t->warning; }
+        if ($levels !== null && $levels->warning != $levels->critical) {
+            $low = $levels->critical < $levels->warning;
+            if ($low ? $value <= $levels->critical : $value >= $levels->critical) { $n->color = $t->danger; }
+            elseif ($low ? $value <= $levels->warning : $value >= $levels->warning) { $n->color = $t->warning; }
         }
         return $n;
     }
@@ -872,15 +929,39 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($s, $size);
-        $toolbar = $this->toolbars > 0 && !$primary;
-        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($toolbar ? 5 : 7), $h + $t->space(3), 0, $s, $on ? $pressed : $base, $size, $fg));
-        $n->bordered = !$primary && !$toolbar;
+        $segment = $this->segments > 0 && !$primary; // in a toggle group: a segment, padded Space(1) by Space(3), no face but pressed or hovered
+        $toolbar = $this->toolbars > 0 && !$primary && !$segment;
+        [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar || $segment ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($segment ? 6 : ($toolbar ? 5 : 7)), $h + $t->space($segment ? 2 : 3), 0, $s, $on ? $pressed : $base, $size, $fg));
+        $n->bordered = !$primary && !$toolbar && !$segment;
+        if ($segment) {
+            $n->segment = true;
+            $n->radius(max($t->radius - $t->space(0.5), 0));
+            if ($on) { $n->shadow(0, 1, 2, 0, 0x000000, 0.12); }
+        }
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         if (!$on && $this->runtime?->hovered($n->id)) {
             $n->color = $this->runtime->input->mouseDown ? $pressed : $hover;
         }
         return $n;
+    }
+
+    /** Whether toggleGroup() builds now: its buttons are segments. */
+    private int $segments = 0;
+
+    /** A row of the toggles and buttons $fn builds, drawn joined as the segments of one control, as Bold, Italic and Underline: one stop of Tab, among which the arrows move the focus (mygo's ToggleGroup); label() names it. */
+    public function toggleGroup(Closure $fn): Node
+    {
+        $t = $this->theme;
+        $g = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->shrink(0)->align(Node::STRETCH)->round($t->radius)->borderWidth(1)->borderColor($t->border)->focusGroup(Node::HORIZONTAL | Node::VERTICAL)->role(Role::GROUP);
+        $this->segments++;
+        try {
+            $fn();
+        } finally {
+            $this->segments--;
+        }
+        $this->end();
+        return $g;
     }
 
     /** A button that stays pressed while $on, as Bold in an editor's toolbar (mygo's Toggle): a click presses it or lets it go, as does Space while it has the focus; changed() reports it. */
@@ -1056,7 +1137,7 @@ final class Context
         $n = $this->column(0, 0);
           if ($this->accordions[$k]++ > 0) { $this->divider(); } // a line above all but the first
           $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
-          $p = $this->collapsibleBase($head, $open);
+          $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $n->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
             $this->text($title, $t->fontSize, $t->text, Font::BOLD)->singleLine();
@@ -1245,6 +1326,113 @@ final class Context
             array_pop($tb['open']);
         }
         return $n;
+    }
+
+    /**
+     * A list of items in a tree, as AppKit's outline view (mygo's
+     * Outline): $roots at the top, and below each item open its children,
+     * indented, which $children(item) returns, null for an item without any.
+     * A click on an item's arrow opens or closes it, with Option all inside
+     * it too; $row(item) builds the content of its row, after its arrow.
+     * Only the rows in view are built, as a list's. With
+     * $s->list->selected set, rows are chosen as a list's, and while the
+     * outline has the focus Right opens the item chosen or goes to its first
+     * child, Left closes it or goes to its parent, with Option opening and
+     * closing all inside.
+     * @param list<int|string> $roots
+     */
+    public function outline(OutlineState $s, array $roots, Closure $children, Closure $row): Node
+    {
+        $t = $this->theme;
+        $s->flatten($roots, $children);
+        $n = $this->list($s->list, $s->rows(), function (int $i) use ($s, $children, $row, $t): void {
+            $r = $this->row($t->space(1), $t->space(1))->padding($t->space(1), $t->space(2))->align(Node::CENTER)->role(Role::NONE);
+              $this->outlinePrefix($s, $i, $r, $children);
+              $row($s->item($i));
+            $this->end();
+        });
+        $n->role = Role::TREE; $n->rowRole = Role::TREE_ITEM;
+        $this->outlineKeys($s, $n, $children);
+        return $n;
+    }
+
+    /**
+     * An outline whose rows are a table's, as AppKit's outline view with
+     * columns (mygo's OutlineTable): the first of $columns shows the items'
+     * arrows, indented as deep as they are, before what $cell(item, col)
+     * builds; the columns, the sort and the keys of a table, and those of
+     * an outline.
+     * @param list<TableColumn> $columns
+     * @param list<int|string> $roots
+     */
+    public function outlineTable(OutlineState $s, array $columns, array $roots, Closure $children, Closure $cell): Node
+    {
+        $s->flatten($roots, $children);
+        $n = $this->table($s->list, $columns, $s->rows(), function (int $i, int $col) use ($s, $children, $cell): void {
+            if ($col === 0) {
+                $this->outlinePrefix($s, $i, $this->stack[count($this->stack) - 2], $children); // the row around the cell is the tree's item
+            }
+            $cell($s->item($i), $col);
+        });
+        $list = $n->kids[count($n->kids) - 1];
+        $list->rowRole = Role::TREE_ITEM;
+        $this->outlineKeys($s, $list, $children);
+        return $n;
+    }
+
+    /** The indentation and the arrow of row $i of an outline, $item the row assistive technology sees (mygo's OutlineState.prefix). */
+    private function outlinePrefix(OutlineState $s, int $i, Node $item, Closure $children): void
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        [$branch, $open] = $s->branch($i);
+        $item->level = $s->depth($i) + 1; $item->expandable = $branch; $item->expanded = $open;
+        if ($s->depth($i) > 0) {
+            $this->column()->size($s->depth($i) * ($s->indent > 0 ? $s->indent : $t->space(4)), 0)->shrink(0); $this->end();
+        }
+        $arrow = $this->column()->size($t->space(4), $t->space(4))->shrink(0)->role(Role::NONE); $this->end();
+        if (!$branch) {
+            return;
+        }
+        $arrow->keepFocus();
+        $toggle = $this->clicked($arrow);
+        if ($rt !== null && ($e = $rt->expanded($item->id)) !== 0) { $toggle = ($e > 0) !== $open; } // assistive technology opening or closing it
+        if ($toggle) {
+            $s->setOpen($s->item($i), !$open, $toggle && ($rt?->clickMods ?? 0) & Key::OPTION, $children);
+            if ($open) { $s->closed($i); }
+            $open = !$open;
+            $item->expanded = $open;
+            $rt?->changed();
+        }
+        $turn = $this->animate($arrow, 'open', $open ? 90.0 : 0.0, 0.15);
+        $color = $s->list->selected !== null && $s->list->chosen($i) ? $t->accentText : $t->textMuted;
+        $rtl = $arrow->rtl;
+        $arrow->draw(static function (DisplayList $list, Node $a) use ($turn, $rtl, $color): void { // a chevron pointing along the line, turned down as it opens (mygo's disclosurePath)
+            $d = min($a->w, $a->h); $cx = $a->x + $a->w / 2; $cy = $a->y + $a->h / 2;
+            $deg = $rtl ? -$turn : $turn;
+            [$sin, $cos] = [sin(deg2rad($deg)), cos(deg2rad($deg))];
+            $pts = array_map(static function (array $p) use ($d, $cx, $cy, $sin, $cos, $rtl): array {
+                [$x, $y] = [($rtl ? -$p[0] : $p[0]) * $d, $p[1] * $d];
+                return [$cx + $x * $cos - $y * $sin, $cy + $x * $sin + $y * $cos];
+            }, [[-0.1, -0.25], [0.15, 0.0], [-0.1, 0.25]]);
+            $list->line($pts[0][0], $pts[0][1], $pts[1][0], $pts[1][1], $color, 1.0, 1.5);
+            $list->line($pts[1][0], $pts[1][1], $pts[2][0], $pts[2][1], $color, 1.0, 1.5);
+        });
+    }
+
+    /** Right and Left on the item chosen while the outline's list $n has the focus. */
+    private function outlineKeys(OutlineState $s, Node $n, Closure $children): void
+    {
+        if ($s->list->selected === null || !$this->focused($n)) {
+            return;
+        }
+        [$back, $forth] = $this->arrows($n);
+        $f = $this->shortcut($forth); $b = $this->shortcut($back);
+        $fa = $this->shortcut($forth, Key::OPTION); $ba = $this->shortcut($back, Key::OPTION);
+        if ($f || $b || $fa || $ba) {
+            $s->keys($f || $fa, $b || $ba, $fa || $ba, $children);
+            $this->runtime?->changed();
+        }
     }
 
     /**
@@ -1917,8 +2105,9 @@ final class Context
     private function channelSlider(float &$v, float $max, string $name, Closure $track): Node
     {
         $t = $this->theme;
-        $s = $this->slider($v, 0, $max, 0)->label($name);
-        $s->grow = 1; $s->fh = $t->space(4); $s->ownRing = true;
+        $s = $this->sliderBase($v, 0, $max)->label($name)->paddingX($t->space(3) / 2);
+        $s->grow = 1; $s->fh = $t->space(4);
+        $s->held = $this->animate($s, 'held', ($this->runtime?->sliding($s->id) ?? false) ? 1 : 0, 0.15);
         $frac = $max > 0 ? $v / $max : 0.0; $held = $s->held; $ring = $this->runtime?->focusVisible($s->id) ?? false;
         $s->draw(function (DisplayList $list, Node $n, Theme $t) use ($track, $frac, $held, $ring) {
             $kw = $t->space(3);
@@ -2684,34 +2873,130 @@ final class Context
         $this->runtime?->announce($text);
     }
 
-    /** Shows $message near the bottom of the window for a few seconds, as mygo's Toast: the outcome of what the user just did. */
+    /** Shows $message near the bottom of the window for a few seconds, as the outcome of what the user just did: one already showing shows anew, others stack above it, three at most; it shows while the pointer rests on it; screen readers read it out. addToast with $message as the id and the title (mygo's Toast). */
     public function toast(string $message): void
     {
-        $this->runtime?->toast($message);
+        $this->addToast(new Toast($message, $message));
     }
 
-    /** The toasts' viewport, built by Window after the view: the toasts showing, stacked at the bottom, their time stopped while the pointer rests on one. */
+    /** Shows $message as toast() does, for longer, with a button of $label that runs $action, as Undo after deleting, and closes the toast; Tab reaches the button (mygo's ToastAction). */
+    public function toastAction(string $message, string $label, Closure $action): void
+    {
+        $this->addToast(new Toast($message, $message, timeout: Runtime::ACTION_TOAST_FOR, action: $label, onAction: $action));
+    }
+
+    /** Shows $t near the bottom of the window, as toast() does, and returns its id, to close it with closeToast (mygo's AddToast). */
+    public function addToast(Toast $t): string
+    {
+        return $this->runtime?->addToast($t) ?? $t->id;
+    }
+
+    /** Closes the toast of $id, or every toast for '', running their onClose (mygo's CloseToast). */
+    public function closeToast(string $id = ''): void
+    {
+        $this->runtime?->closeToast($id);
+    }
+
+    /** Whether this pass built the toasts already (toastViewportBase), which toasts() then leaves. */
+    private bool $toastsBuilt = false;
+
+    /**
+     * Builds the window's toasts without a look, in place of the theme's
+     * (mygo's ToastViewportBase): $fn(Node $viewport, list<Toast> $toasts)
+     * styles $viewport, a column over the window the pointer goes through,
+     * holding them at its bottom, and builds each with toastBase(). Call
+     * it once in the view. Their time stops while the pointer rests on the
+     * viewport, the focus is in it or the window is in the background.
+     */
+    public function toastViewportBase(Closure $fn): Node
+    {
+        return $this->toastViewport(true, $fn);
+    }
+
+    /** The toasts' viewport, none while no toast shows unless $keep. */
+    private function toastViewport(bool $keep, Closure $fn): ?Node
+    {
+        $rt = $this->runtime;
+        if ($rt === null || $this->toastsBuilt) {
+            return null;
+        }
+        $this->toastsBuilt = true;
+        $list = $rt->toastList();
+        if ($list === [] && !$keep) {
+            return null;
+        }
+        $viewport = null;
+        $this->overlay(function () use (&$viewport, $fn, $list, $rt): void {
+            $viewport = $this->key('myphp.toasts')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->justify(Node::END)->passThrough(); // keyed: the identity of the engine's own, not of what a dialog just closed built there
+            $rt->pauseToasts($this->hovered($viewport) || $this->focusWithin($viewport));
+              $fn($viewport, $list);
+            $this->end();
+        });
+        if (!$rt->toastsPaused()) {
+            $next = null;
+            foreach ($list as $t) {
+                [, $left] = $rt->toastTimes($t->id);
+                if ($t->life() > 0) { $next = $next === null ? $left : min($next, $left); }
+            }
+            if ($next !== null) { $rt->after($next); } // a frame closes the toast whose time is over next
+        }
+        return $viewport;
+    }
+
+    /** The toast $t without a look, in the viewport of toastViewportBase: its root, a status that Escape closes while the focus is in it, built in until end() (mygo's ToastBase). */
+    public function toastBase(Toast $t): ToastParts
+    {
+        $rt = $this->runtime;
+        $key = $rt?->toastKey($t->id) ?: $t->id;
+        [$age, $left] = $rt?->toastTimes($t->id) ?? [0.0, 0.0];
+        $root = $this->key('toast/' . $key)->column()->role(Role::STATUS);
+        if ($this->focusWithin($root) && $this->shortcut(Key::ESCAPE)) {
+            $this->closeToast($t->id);
+        }
+        return new ToastParts($root, $this, $t->id, $age, $left);
+    }
+
+    /** The window's toasts in the theme's look, unless the view built them with toastViewportBase: the inverse of the theme, fading in and out, with the action's button (mygo's buildToasts). Window builds them after the view. */
     public function toasts(): void
     {
-        if ($this->runtime === null) {
-            return;
-        }
         $t = $this->theme;
-        $paused = false;
-        foreach ($this->runtime->toasts(true) as $i => $m) { // last frame's toasts, for the hover
-            $paused = $paused || $this->runtime->hovered(self::hash($this->scope . "/toast/$i"));
-        }
-        $messages = $this->runtime->toasts($paused);
-        if ($messages === []) {
-            return;
-        }
-        $this->column($t->space(4), $t->space(2))->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->align(Node::CENTER);
-          foreach ($messages as $i => $m) {
-              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(0, 4, 12, 0, 0x000000, 0.18)->role(Role::STATUS);
-                $this->text($m);
-              $this->end();
-          }
-        $this->end();
+        [$fill, $text] = $t->inverse();
+        $this->toastViewport(false, function (Node $viewport, array $toasts) use ($t, $fill, $text): void {
+            $viewport->bottom($t->space(6))->align(Node::CENTER);
+            $viewport->gap = $t->space(2);
+            foreach ($toasts as $ts) {
+                $p = $this->toastBase($ts);
+                $box = $p->root;
+                $box->dir = Node::ROW; $box->gap = $t->space(4);
+                $box->align(Node::CENTER)->padding($t->space(2.5), $t->space(4))->round($t->space(2))->maxWidth($this->width - $t->space(12))->background($fill)->textColor($text)->shadow(0, 6, 20, 0, 0x000000, 0.25);
+                $fade = 0.2; $opacity = 1.0;
+                if (!$this->runtime->toastsPaused()) {
+                    if ($p->age() < $fade) {
+                        $opacity = $p->age() / $fade; $this->runtime->animate();
+                    } elseif ($p->left() > 0 && $p->left() < $fade) {
+                        $opacity = $p->left() / $fade; $this->runtime->animate();
+                    } elseif ($p->left() > 0) {
+                        $this->runtime->after($p->left() - $fade);
+                    }
+                }
+                $box->opacity($opacity);
+                if ($ts->description === '') {
+                    $this->text($ts->title);
+                } else {
+                    $this->column(0, $t->space(0.5))->shrink(1);
+                      $this->text($ts->title)->fontWeight(600);
+                      $this->text($ts->description)->textColor($text, 0.75);
+                    $this->end();
+                }
+                if ($ts->action !== '') {
+                    $b = $p->actionButton()->padding($t->space(1), $t->space(2.5))->round($t->radius)->textColor(Theme::mix($t->accent, $text, 0.35))->fontWeight(600);
+                    if ($this->hovered($b)) { $b->background($text, 0.12); }
+                      $this->text($ts->action);
+                    $this->end();
+                }
+                $this->end();
+            }
+        });
     }
 
     /**
@@ -2755,6 +3040,16 @@ final class Context
                 $this->text($state->sort[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted);
             }
         }, Role::COLUMN_HEADER);
+        if ($state->headerMenu !== null && $rt !== null) { // the header's context menu, told the column under the pointer, -1 past them (mygo's HeaderMenu)
+            $head->contextMenu(function (Menu $m) use ($state, $heads, $rt): void {
+                $col = -1;
+                foreach ($heads as $j => $h) {
+                    $r = $rt->rectOf($h->id);
+                    if ($r !== null && $rt->input->mouseX >= $r[0] && $rt->input->mouseX < $r[0] + $r[2]) { $col = $j; }
+                }
+                ($state->headerMenu)($m, $col);
+            });
+        }
         foreach ($columns as $j => $col) {
             $h = $heads[$j];
             $h->label = $col->title; // the title alone, not the arrow beside it
@@ -2777,6 +3072,7 @@ final class Context
         $this->divider();
         $list = $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
             $row = $this->row(0, 0)->align(Node::STRETCH)->min(0, $rowH)->role(Role::NONE); // as high as its tallest cell, at least the header; the list's row holds its cells
+            if ($state->roundRows) { $row->round($t->radius); } // chosen and hovered rows rounded, as a list's (mygo's RoundRows)
             if ($state->selected === null && $this->hovered($row)) { $row->color = $t->surfaceHover; } // chosen rows show the pointer already
               $cells(fn(int $j) => $cell($i, $j), Role::CELL);
             $this->end();
@@ -2939,7 +3235,7 @@ final class Context
         $t = $this->theme;
         $root = $this->column(0, 0);
           $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->round($t->radius)->align(Node::CENTER)->alignSelf(Node::START)->focusable()->role(Role::DISCLOSURE);
-          $p = $this->collapsibleBase($head, $open);
+          $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $root->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
             $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
@@ -2960,7 +3256,7 @@ final class Context
      * far it is open, from 0 closed to 1 open, moving between them over
      * 200 ms as it opens and closes (mygo's Progress).
      */
-    private function collapsibleBase(Node $head, bool &$open): float
+    private function collapsibleToggle(Node $head, bool &$open): float
     {
         if ($this->clicked($head)) { $open = !$open; $head->changed = true; }
         if (($e = $this->runtime?->expanded($head->id) ?? 0) !== 0 && ($e > 0) !== $open) { $open = $e > 0; $head->changed = true; } // assistive technology opening or closing it
@@ -3065,25 +3361,99 @@ final class Context
      */
     public function slider(float &$value, float $min = 0, float $max = 1, float $width = 160): Node
     {
+        return $this->sliderOf($value, $min, $max, 0.0, $width);
+    }
+
+    /** A slider setting $value to $min or a multiple of $step from it, up to $max, with a tick mark at each (none past 61), as AppKit's sliders with tick marks: dragging snaps to them, and the arrows step by step (mygo's StepSlider). */
+    public function stepSlider(float &$value, float $min, float $max, float $step, float $width = 160): Node
+    {
+        return $this->sliderOf($value, $min, $max, $step, $width);
+    }
+
+    /** slider(), or with $step stepSlider(). */
+    private function sliderOf(float &$value, float $min, float $max, float $step, float $width): Node
+    {
         $t = $this->theme;
-        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $t->space(5), 0, null, null, $t->fontSize, $t->text));
+        $ticks = self::tickCount($min, $max, $step);
+        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, $width, $t->space($ticks > 0 ? 7 : 5), 0, null, null, $t->fontSize, $t->text));
         $n->focusable = true;
+        $n->ticks = $ticks;
+        $n->paddingX($t->space(5) / 2); // the knob's half width each side: its center spans the values
+        $this->slide($n, $value, $min, $max, $step);
+        $n->held = $this->animate($n, 'held', ($this->runtime?->sliding($n->id) ?? false) ? 1 : 0, 0.15);
+        return $n;
+    }
+
+    /**
+     * A slider without a look (mygo's SliderBase): dragging across its
+     * content box, inside its padding, sets $value between $min and $max,
+     * as the arrows, Home and End do while it has the focus, by a
+     * hundredth of the range or $step; changed() reports a new value, and
+     * assistive technology sees a slider of the range. Paint its track and
+     * knob with draw(), where ($value - $min) / ($max - $min) puts it, and
+     * pad it by half the knob's width; right to left $min is at the right.
+     * $vertical goes up from $min at the bottom: pad it by half the knob's
+     * height.
+     */
+    public function sliderBase(float &$value, float $min, float $max, float $step = 0.0, bool $vertical = false): Node
+    {
+        $n = $this->add(new Node(Node::SLIDER, 0, 0, 0, 0, 0, 0, null, null, $this->theme->fontSize, $this->theme->text));
+        $n->focusable = true; $n->ownRing = true; $n->vertical = $vertical;
+        $n->draw(static function (): void {}); // paints nothing of its own: the app's draw() replaces it
+        $this->slide($n, $value, $min, $max, $step);
+        return $n;
+    }
+
+    /** The input of slider $n: the pointer, the arrows by a step, Home and End to the ends; its range for assistive technology. */
+    private function slide(Node $n, float &$value, float $min, float $max, float $step): void
+    {
+        $by = $step > 0 ? $step : ($max - $min) / 100; // the arrows move a step, or a hundredth of the range
         if ($this->runtime !== null) {
             $f = $this->runtime->slid($n->id);
             if ($f !== null) {
-                $value = $min + $f * ($max - $min);
+                $value = self::snap($min + $f * ($max - $min), $min, $max, $step);
                 $n->changed = true;
             }
-            $step = $this->runtime->stepped($n->id);
-            if ($step !== 0) {
-                $value = max($min, min($max, $value + $step * ($max - $min) / 100));
+            $steps = $this->runtime->stepped($n->id);
+            if ($steps !== 0) {
+                $value = self::snap(max($min, min($max, $value + $steps * $by)), $min, $max, $step);
+                $n->changed = true;
+            }
+            if (($j = $this->runtime->jumped($n->id)) !== 0 && $value != ($j < 0 ? $min : $max)) {
+                $value = $j < 0 ? $min : self::snap($max, $min, $max, $step);
                 $n->changed = true;
             }
         }
-        $n->fraction = $max > $min ? ($value - $min) / ($max - $min) : 0.0;
-        $n->held = $this->animate($n, 'held', ($this->runtime?->sliding($n->id) ?? false) ? 1 : 0, 0.15);
-        $n->role(Role::SLIDER)->range($min, $max, $value, ($max - $min) / 100); // the arrows move a hundredth of the range
-        return $n;
+        $n->fraction = $max > $min ? max(0.0, min(1.0, ($value - $min) / ($max - $min))) : 0.0;
+        $n->role(Role::SLIDER)->range($min, $max, $value, $by);
+    }
+
+    /** $v rounded to $lo or a multiple of $step from it, within $hi, to the decimals of the step and of $lo, as browsers round their number inputs; $v itself for no step (mygo's snap). */
+    public static function snap(float $v, float $lo, float $hi, float $step): float
+    {
+        if ($step <= 0) {
+            return $v;
+        }
+        $v = $lo + round(($v - $lo) / $step) * $step;
+        if ($v > $hi) { $v -= $step; }
+        $decimals = static function (float $x): int { // after the point, written as briefly as it reads back the same
+            $s = var_export(abs($x), true);
+            if (preg_match('/^\d+(?:\.(\d+))?E([+-]?\d+)$/i', $s, $m)) { return max(strlen(rtrim($m[1], '0')) - (int)$m[2], 0); }
+            $at = strpos($s, '.');
+            return $at === false ? 0 : strlen(rtrim(substr($s, $at + 1), '0'));
+        };
+        $d = max($decimals($step), $decimals($lo));
+        return $d >= 15 ? $v : round($v, $d);
+    }
+
+    /** How many tick marks a slider of $step shows, 0 for none or too many to tell apart (mygo's tickCount). */
+    public static function tickCount(float $lo, float $hi, float $step): int
+    {
+        if ($step <= 0 || $hi <= $lo) {
+            return 0;
+        }
+        $n = (int)floor(($hi - $lo) / $step + 1e-9) + 1;
+        return $n > 61 ? 0 : $n;
     }
 
     /**

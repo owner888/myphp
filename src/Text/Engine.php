@@ -31,4 +31,10 @@ interface Engine
      * @return list<array{start: int, end: int, runs: list<array{font: ?Font, start: int, end: int, glyphs: list<Glyph>}>}>
      */
     public function shape(array $runes, Style $style, array $spans, float $width, bool $rtl, bool $wholeWords): array;
+
+    /** Adds a TrueType or OpenType font, or collection, under $family, or its own family name for '', throwing what it is not (mygo's register). */
+    public function register(string $data, string $family): void;
+
+    /** The families the app registered, then the system's, each with whether its regular font is monospaced. @return array{0: list<array{0: string, 1: bool}>, 1: list<array{0: string, 1: bool}>} */
+    public function fontFamilies(): array;
 }

@@ -99,6 +99,10 @@ final class Text implements TextPainter
     public function imageSlot(Image $image): array
     {
         $slot = $this->images->get($image->key);
+        if ($slot !== null && $image->updated) { // new pixels in the old slot (Image::update)
+            $this->images->replace($image->key, $image->addr);
+        }
+        $image->updated = false;
         if ($slot === null) {
             [$slot, $emptied] = $this->images->add($image->key, $image->w, $image->h, $image->addr);
             if ($emptied) {

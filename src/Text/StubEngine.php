@@ -12,6 +12,23 @@ final class StubEngine implements Engine
 {
     /** @var array<string, Font> */
     private array $fonts = [];
+    /** @var list<array{0: string, 1: bool}> the families registered: any data but none is a font here */
+    private array $registered = [];
+    /** The system's families the tests see. */
+    public const SYSTEM = [['Helvetica', false], ['Menlo', true], ['Helvetica', false], ['.Hidden', false]];
+
+    public function register(string $data, string $family): void
+    {
+        if ($data === '') {
+            throw new \RuntimeException('no font data');
+        }
+        $this->registered[] = [$family !== '' ? $family : 'Stub Sans', str_contains($data, 'mono')];
+    }
+
+    public function fontFamilies(): array
+    {
+        return [$this->registered, array_values(array_filter(self::SYSTEM, fn(array $f): bool => $f[0][0] !== '.'))];
+    }
 
     public function font(Style $style): ?Font
     {

@@ -35,6 +35,13 @@ final class ListState implements Scrollable
     public float $gap = 0;
     /** How far rows wider than the list (Node::rowWidth) are scrolled sideways, how far they can go and the list's width: Layout sets the last two. */
     public float $x = 0, $maxX = 0, $viewportW = 0;
+    /** Glides a list following its end there as rows come, as $followAnimation says, rather than show it at once: what is added comes up from below; none shows it at once (mygo's FollowAnimation). And how far below its place the end shows on the way. */
+    public ?Animation $followAnimation = null;
+    /** Rounds a table's chosen and hovered rows at the theme's radius (mygo's RoundRows). */
+    public bool $roundRows = false;
+    /** Gives a table's header a context menu, built as Node::contextMenu's: fn(Menu $m, int $col), $col the column clicked in the columns given, -1 past them (mygo's HeaderMenu). */
+    public ?Closure $headerMenu = null;
+    public float $lag = 0.0;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
     /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
@@ -155,8 +162,8 @@ final class ListState implements Scrollable
         $this->scrollBy(0);
     }
 
-    /** Shows the end: the last rows fill the view. */
-    public function end(): void
+    /** Shows the end: the last rows fill the view (mygo's ScrollToEnd). */
+    public function scrollToEnd(): void
     {
         $this->target = null;
         $this->row = max(0, $this->count - 1);

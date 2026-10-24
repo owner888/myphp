@@ -62,7 +62,7 @@ function view(Context $c, array &$s): void
         if ($s['tab'] === 0) {
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
             $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();
-            $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, 80, 95); $c->muted("{$s['count']}0 % used"); $c->end();
+            $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, new \MyPHP\UI\MeterLevels(80, 95)); $c->muted("{$s['count']}0 % used"); $c->end();
             // Icons in the text's color at the font size, or a size and color of their own; avatars from names.
             $c->row(0, 10)->align(Node::CENTER); $c->text('Icons'); $c->icon($s['icons']['check']); $c->icon($s['icons']['star'], 20, $t->warning); $c->icon($s['icons']['bell'], 28); $c->icon($s['icons']['star'], 20)->rotate(45); $c->image($s['icons']['palette'], 28, 28); $c->image($s['icons']['palette'], 28, 28)->grayscale(); $c->avatar('Ada Lovelace'); $c->avatar('Grace Hopper'); $c->avatar('Linus'); $c->end();
             $c->row(0, 10)->align(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();

@@ -71,7 +71,7 @@ same([240.0, 160.0], [$sq[2], $sq[3]], 'the square Space(60) by Space(40)');
 $h->press($sq[0] + $sq[2] / 2, $sq[1] + $sq[3] / 4); same('#6084bf', Context::hexOf($rgb, $alpha), 'a press in the square sets saturation and value');
 $h->drag($sq[0] + $sq[2], $sq[1]); $h->release($sq[0] + $sq[2], $sq[1]); same('#0061ff', Context::hexOf($rgb, $alpha), 'dragging to the corner');
 $hs = $h->rect($pk->kids[1]); $h->click($hs[0] + $hs[2] / 2, $hs[1] + 8); same('#00ffff', Context::hexOf($rgb, $alpha), 'the hue slider: its middle is cyan');
-$as = $h->rect($pk->kids[2]); $h->click($as[0] + $as[2] / 4, $as[1] + 8); same('#00ffff40', Context::hexOf($rgb, $alpha), 'the opacity slider'); same('#00ffff40', $pk->kids[3]->kids[1]->edit->text, 'the hex field follows');
+$as = $h->rect($pk->kids[2]); $h->click($as[0] + 6 + ($as[2] - 12) / 4, $as[1] + 8); // a quarter across the values: the knob's half width in from each end same('#00ffff40', Context::hexOf($rgb, $alpha), 'the opacity slider'); same('#00ffff40', $pk->kids[3]->kids[1]->edit->text, 'the hex field follows');
 $h->clickOn($n['pk']->kids[4]->kids[3]); same('#22c55e', Context::hexOf($rgb, $alpha), 'a swatch'); check($n['pk']->kids[4]->kids[3]->bordered, 'bordered as chosen');
 $in = $n['pk']->kids[3]->kids[1]; $h->clickOn($in); $h->input->focus->selectAll(); $h->type('#ff0000'); same('#ff0000', Context::hexOf($rgb, $alpha), 'a hex typed sets the color');
 $h->type('zz'); same('#ff0000', Context::hexOf($rgb, $alpha), 'junk leaves it'); same('#ff0000zz', $in->edit->text, 'as typed'); $h->rt->focus = null; $h->input->focus = null; $h->frame(); same('#ff0000', $n['pk']->kids[3]->kids[1]->edit->text, 'blur restores the hex');

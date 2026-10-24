@@ -60,7 +60,7 @@ final class Log
         $this->list->selected = -1;
         $this->poll();
         $this->list->count = count($this->shown);
-        $this->list->end();
+        $this->list->scrollToEnd();
         $this->window?->setTitle(basename($path) . ' — Logs');
     }
 
@@ -122,7 +122,7 @@ final class Log
         $this->list->offset = 0;
         $this->list->selected = -1;
         $this->list->count = count($this->shown); // end() goes by the count; the list sets it only when built
-        $this->list->end();
+        $this->list->scrollToEnd();
     }
 
     public function selectedLine(): ?string

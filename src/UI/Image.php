@@ -18,10 +18,13 @@ use RuntimeException;
 final class Image
 {
     private static int $next = 0;
-    public readonly string $key;
-    public readonly int $w, $h;
+    /** What the atlas holds it by, its size and its pixels' address: update() changes them where the size changes. */
+    public string $key;
+    public int $w, $h;
     private CData $pix;
-    public readonly int $addr;
+    public int $addr;
+    /** That update() gave it new pixels the atlas has yet to take. @internal */
+    public bool $updated = false;
     /** Shows its pixels as squares when scaled up, sampled at the nearest rather than blended, as pixel art wants (mygo's Bitmap.Pixelated); its levels, smaller, stay smooth. */
     public bool $pixelated = false;
     /** @internal the canvas whose bitmap this is: its pixels are on the GPU (Canvas::bitmap) */
@@ -67,6 +70,38 @@ final class Image
             throw new RuntimeException("cannot read image $path");
         }
         return self::fromBytes($bytes, $max);
+    }
+
+    /**
+     * Shows $w × $h premultiplied RGBA pixels in place of the image's, for
+     * one that changes as video does (mygo's Bitmap.Update): of the same
+     * size, they go into the image's slot of the atlas, which the GPU
+     * uploads, where a new image a frame would take a slot each; of
+     * another, the image is drawn anew. Its smaller levels are made again.
+     */
+    public function update(int $w, int $h, string $rgba): void
+    {
+        if ($this->canvas !== null) {
+            throw new RuntimeException("myphp: a canvas's bitmap is drawn by Canvas::draw");
+        }
+        $n = $w * $h * 4;
+        if (strlen($rgba) !== $n) { throw new RuntimeException("image {$w}x{$h} needs $n bytes, got " . strlen($rgba)); }
+        if ($w !== $this->w || $h !== $this->h) {
+            Mem::free($this->pix);
+            $this->pix = Mem::alloc($n); $this->addr = Mem::addr($this->pix);
+            $this->w = $w; $this->h = $h;
+            $this->key = 'img' . ++self::$next; // a slot of its new size
+        } else {
+            $this->updated = true;
+        }
+        \FFI::memcpy($this->pix, $rgba, $n);
+        $this->levels = [];
+    }
+
+    /** The size of the image in pixels, which Context::image shows as points (mygo's Size). @return array{0: int, 1: int} */
+    public function size(): array
+    {
+        return [$this->w, $this->h];
     }
 
     /** Makes the image pixelated ($pixelated) and returns it. */

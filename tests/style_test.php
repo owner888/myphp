@@ -200,3 +200,12 @@ $h = new Headless(function (Context $c): void {
 }, 300, 100);
 $h->frame();
 same([100.0, 200.0], [styleFind($h->root, 'a')->w, styleFind($h->root, 'b')->w], 'a fixed column and the rest');
+
+// A path filled with a gradient: its mask painted as a box, the gradient across its bounds.
+$h = new Headless(fn(Context $c) => $c->box(10, 10, 0), 100, 100);
+$h->frame();
+$list = $h->paint(); $list->reset();
+$p = (new \MyPHP\UI\Path())->moveTo(10, 10)->lineTo(50, 10)->lineTo(50, 30)->close();
+(new \MyPHP\UI\Painter($list, $h->metrics, \MyPHP\UI\Theme::light()))->fillPathGradient($p, new LinearGradient(0xff0000, 1.0, 0x0000ff, 1.0, 90));
+same([14.0, 9.0], [fmod($list->buf[9], DisplayList::KIND_STRIDE), $list->buf[16 + 11]], 'a box of a mask (8), with a gradient (1)');
+same([0.0, 10.0, 40.0, 10.0], array_map(fn($v) => round($v, 6) + 0.0, [$list->buf[28], $list->buf[29], $list->buf[30], $list->buf[31]]), 'left to right across its bounds');

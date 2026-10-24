@@ -44,7 +44,7 @@ final class Runtime
     public int $passes = 0;
     /** The theme's scroll bar width, for hit-testing thumbs; Window sets it. */
     public float $scrollbarWidth = 6;
-    /** Opens a URL with the system, for links; App sets it (App::openURL). */
+    /** Opens a URL with the system, throwing when none opens it; App sets it (App::openURL). Links and Context::openURL reach it through openURLThen. */
     public Closure $openURL;
     /** Moves the window with the mouse (1 click) or zooms or minimizes it (2) for a press on a Node::dragWindow handle; the window sets it. */
     public ?Closure $dragWindow = null;
@@ -58,6 +58,8 @@ final class Runtime
     private float $pointerRestAt = 0;
     private array $lastPointer = [-1.0, -1.0];
     public ?array $tip = null;
+    /** The node the tip is of: one with a tip of its own (Context::tooltipBase) builds it in the frame after. */
+    public ?int $tipAnchor = null;
     public const TIP_DELAY = 0.6;
     /** The pointer the window should show over the hovered node. */
     public Cursor $cursor = Cursor::Default;
@@ -70,6 +72,8 @@ final class Runtime
     public int $instantFrame = 0;
     /** That the desktop asks for less motion (macOS's Reduce Motion, mygo's Preferences.ReduceMotion): the window sets it from App::reduceMotion. */
     public bool $reduceMotion = false;
+    /** The desktop's settings (Context::preferences): the window sets them from App::preferences. */
+    public Preferences $preferences;
     /** That the window reads right to left: the window sets it from the app's language (I18n::rightToLeft of App::locale). */
     public bool $rightToLeft = false;
     /** The inspector's direction for debugging: 0 none, 1 left to right, 2 right to left. */
@@ -157,6 +161,8 @@ final class Runtime
     private array $passing = [], $disabledIds = [];
     /** @var array<int, int> the node each attached node is attached to (Node::attachTo), last frame; @var array<int, true> the overlays that asked for keys last frame, and this one (overlayShortcut) */
     private array $attachedTo = [], $overlayAskers = [], $overlayAsked = [];
+    /** Whether the wheel scrolled this frame. */
+    public bool $wheeled = false;
     /** @var array<int, true> the nodes pressedOutside told of this frame's press */
     private array $outsideSaid = [];
     /** The routers' boxes built this pass, in order, and those of the last frame (Router::view). */
@@ -212,9 +218,12 @@ final class Runtime
     private ?int $pressDragger = null;
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
-    /** Toasts showing: [message, seconds left, when last aged], oldest first, the newest TOASTS at most. */
+    /** @var list<array{t: Toast, key: int, spent: float, at: float}> the toasts, oldest first: how long each showed before $at, in seconds of $now, while the time of the toasts runs; the newest TOASTS show (mygo's toasts) */
     private array $toasts = [];
-    public const TOASTS = 3, TOAST_FOR = 4.0;
+    private int $nextToast = 0;
+    private bool $toastsPaused = false;
+    /** How long a toast shows, and one with an action, which the user needs time to reach; how many show at once (mygo's toastTime, actionToastTime, toastLimit). */
+    public const TOASTS = 3, TOAST_FOR = 4.0, ACTION_TOAST_FOR = 8.0;
     private const HOLD_DELAY = 0.4, HOLD_RATE = 0.08;
     /** A thumb being dragged: its state, the pointer's last y and content points per thumb point. */
     private ?array $drag = null;
@@ -255,6 +264,7 @@ final class Runtime
         $input->metrics = $metrics;
         $input->direct = $this->deliver(...);
         $this->openURL = fn(string $url) => null;
+        $this->preferences = new Preferences();
         $clip = '';
         $this->readClipboard = function () use (&$clip): string { return $clip; };
         $data = new Data;
@@ -307,6 +317,7 @@ final class Runtime
     public function frame(callable $build): Node
     {
         $this->inspector?->startFrame();
+        foreach (array_splice($this->opened, 0) as $fn) { $fn(); } // what came of the URLs opened
         $this->clicks = [];
         $this->rightClicks = [];
         $this->doubleClicks = [];
@@ -315,6 +326,7 @@ final class Runtime
         $this->jumps = [];
         $this->keys = [];
         $this->presses = [];
+        $this->wheeled = false;
         [$this->overlayAskers, $this->overlayAsked] = [$this->overlayAsked, []];
         $this->outsideSaid = [];
         $now = hrtime(true);
@@ -328,7 +340,7 @@ final class Runtime
         $pointer = [$this->input->mouseX, $this->input->mouseY];
         if ($pointer !== $this->lastPointer) {
             $this->lastPointer = $pointer;
-            $this->pointerRestAt = $now / 1e9;
+            $this->pointerRestAt = $this->now / 1e9; // the frame's time: a test's clock
             $this->tip = null;
         }
         foreach ($this->scrolls as $state) {
@@ -379,7 +391,7 @@ final class Runtime
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
                             $this->sliding = $id;
-                            $this->slideTo($id, $e[1]);
+                            $this->slideTo($id, $e[1], $e[2]);
                         }
                     }
                     break;
@@ -414,7 +426,7 @@ final class Runtime
                         $this->dragMove($e[1], $e[2]);
                     }
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
-                        $this->slideTo($this->sliding, $e[1]);
+                        $this->slideTo($this->sliding, $e[1], $e[2]);
                     } elseif ($this->drag !== null) {
                         [$state, $last, $ratio, $horizontal] = $this->drag;
                         if ($horizontal) {
@@ -430,7 +442,7 @@ final class Runtime
                         $this->moveTextSelection($e[1], $e[2]);
                     }
                     break;
-                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); break;
+                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); $this->wheeled = true; break;
                 case 'key':
                     if ($e[2] === Key::ESCAPE && ($e[3] & Key::MODIFIERS) === 0 && $this->valueDrag !== null && !$this->valueDrag['canceled']) {
                         if ($this->valueDrag['native']) {
@@ -489,7 +501,11 @@ final class Runtime
             $this->pass = $pass;
             $this->kept = []; $this->routers = [];
             $this->uses = [];
+            $this->actions = [];
             $root = $build();
+            if ($this->applyFocusRequests()) { $this->consumed = true; }
+            if ($this->focusFields !== [] && $this->applyFocusBindings()) { $this->consumed = true; }
+            if ($this->runActions()) { $this->consumed = true; } // what they changed shows in another pass
             $this->passes = $pass + 1;
             if (!$this->consumed) {
                 break;
@@ -503,6 +519,7 @@ final class Runtime
             $this->dropped = []; $this->dataDropped = []; $this->filesDropped = [];
         }
         $this->building = false;
+        $this->commitFocusBindings();
         $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
@@ -566,8 +583,10 @@ final class Runtime
                 $over = [$id, $text];
             }
         }
-        if ($over !== null && $this->tip === null && $now / 1e9 - $this->pointerRestAt >= self::TIP_DELAY) {
+        if ($over !== null && $this->tip === null && $this->now / 1e9 - $this->pointerRestAt >= self::TIP_DELAY) {
             $this->tip = [$over[1], ...$this->rects[$over[0]]]; // the text and the anchor's rect
+            $this->tipAnchor = $over[0];
+            if ($over[1] === '') { $this->needsFrame = true; } // a tip of its own, which the next build makes
         }
         $this->tipPending = $over !== null && $this->tip === null;
         foreach ($this->overlayIds as $id => $_) { // an overlay born this frame notes who had the focus
@@ -631,8 +650,9 @@ final class Runtime
             $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
             $wake = $wake === null ? $tip : min($wake, $tip);
         }
-        foreach ($this->toasts as $t) {
-            $wake = $wake === null ? $t[1] : min($wake, $t[1]);
+        foreach ($this->toastsPaused ? [] : $this->toasts as $e) { // the next toast whose time is over
+            [, $left] = $this->toastTimes($e['t']->id);
+            if ($e['t']->life() > 0) { $wake = $wake === null ? $left : min($wake, $left); }
         }
         return $wake;
     }
@@ -1157,6 +1177,173 @@ final class Runtime
         return null;
     }
 
+    /** @var list<array{0: ?Node, 1: string, 2: Closure, 3: int|string, 4: int, 5: ?Handle}> what Node::onClick and the others ask for this pass: the node (none for the window's shortcuts, or a handle's, resolved once the pass is built), the kind, what runs, the key and its modifiers (mygo's actions) */
+    private array $actions = [];
+    /** @var list<\WeakReference<Handle>> the handles bound in this window */
+    private array $focusHandles = [];
+
+    /** Runs $fn after this pass's build when $kind ('click', 'change', 'submit', 'shortcut') happens to $n, to the node $handle is bound to in the pass, or, with neither, a shortcut of the window (mygo's actions). */
+    public function addAction(?Node $n, string $kind, Closure $fn, int|string $key = 0, int $mods = 0, ?Handle $handle = null): void
+    {
+        $this->actions[] = [$n, $kind, $fn, $key, $mods, $handle];
+    }
+
+    /** Notes a handle bound in this window, whose focus requests the passes apply. @internal */
+    public function addHandle(Handle $h): void
+    {
+        $this->focusHandles[] = \WeakReference::create($h);
+    }
+
+    /** @var array<string, array{ref: mixed, last: mixed, wanted: mixed, pending: bool, members: list<array{0: mixed, 1: Node}>, committed: list<array{0: mixed, 1: int}>}> the fields focusBind binds, by the reference to each */
+    private array $focusFields = [];
+
+    /** Binds the focus to $value of the app's field $field for node $n in this pass (Node::focusBind). @internal */
+    public function focusBind(mixed &$field, mixed $value, Node $n): void
+    {
+        $key = \ReflectionReference::fromArrayElement([&$field], 0)->getId();
+        if (!isset($this->focusFields[$key])) {
+            $this->focusFields[$key] = ['ref' => &$field, 'last' => $field, 'wanted' => $field, 'pending' => $field !== null, 'members' => [], 'committed' => [], 'pass' => -1];
+        }
+        $f = &$this->focusFields[$key];
+        if ($f['pass'] !== $this->frameNumber * 8 + $this->pass) { $f['members'] = []; $f['pass'] = $this->frameNumber * 8 + $this->pass; } // a new pass binds anew
+        foreach ($f['members'] as [$v]) {
+            if ($v === $value) { throw new \LogicException('focusBind: a value bound twice to one field in a window'); }
+        }
+        $f['members'][] = [$value, $n];
+    }
+
+    /** The value of the member of $field that has the focus, as the last frame committed it, or null (Context::focusedValue). */
+    public function focusedValue(mixed &$field): mixed
+    {
+        $f = $this->focusFields[\ReflectionReference::fromArrayElement([&$field], 0)->getId()] ?? null;
+        if ($f === null || !$this->windowFocus) {
+            return null;
+        }
+        return $this->memberWithFocus(array_map(static fn(array $m): array => [$m[0], $m[1]], $f['committed']));
+    }
+
+    /** The value of the member, [value, id], holding the focus: it, or a node inside it. @param list<array{0: mixed, 1: int}> $members */
+    private function memberWithFocus(array $members): mixed
+    {
+        for ($id = $this->focus ?? 0, $seen = 0; $id !== 0 && $seen < 10000; $id = $this->parents[$id] ?? 0, $seen++) {
+            foreach ($members as [$v, $mid]) {
+                if ($mid === $id) { return $v; }
+            }
+        }
+        return null;
+    }
+
+    /** The fields bound to the focus, after the pass is built (mygo's applyFocusBindings): a value the app set asks for the focus, waiting while its control is not built; the user's focus otherwise sets the field. Whether either changed. */
+    private function applyFocusBindings(): bool
+    {
+        $changed = false;
+        foreach ($this->focusFields as $key => &$f) {
+            if ($f['pass'] !== $this->frameNumber * 8 + $this->pass) { $f['members'] = []; } // none bound this pass
+            $members = array_map(static fn(array $m): array => [$m[0], $m[1]->id], $f['members']);
+            $v = $f['ref'];
+            if ($v !== $f['last']) { // the app asked for another
+                $f['wanted'] = $v; $f['last'] = $v; $f['pending'] = $v !== null;
+                if ($v === null && $this->memberWithFocus(array_map(static fn(array $m): array => [$m[0], $m[1]], $f['committed'])) !== null) {
+                    $this->focus = null; $changed = true;
+                }
+            }
+            if ($f['pending']) {
+                foreach ($f['members'] as [$mv, $node]) {
+                    if ($mv !== $f['wanted']) { continue; }
+                    if ($node->isDisabled()) { break; }
+                    if ($this->focus !== $node->id) { $this->focus = $node->id; $changed = true; }
+                    $f['pending'] = false;
+                    break;
+                }
+            }
+            if ($f['pending']) {
+                continue;
+            }
+            $actual = $this->memberWithFocus($members);
+            if ($actual === null && $f['wanted'] !== null && !in_array($f['wanted'], array_column($members, 0), true)) {
+                $f['pending'] = true; // the control asked for is not built: the request waits for it
+                continue;
+            }
+            if ($actual !== $f['last']) {
+                $f['ref'] = $actual;
+                $f['last'] = $f['wanted'] = $actual;
+                $changed = true;
+            }
+        }
+        unset($f);
+        return $changed;
+    }
+
+    /** The members of each field the frame's last pass bound, which focusedValue reads (mygo's commitFocusBindings). */
+    private function commitFocusBindings(): void
+    {
+        foreach ($this->focusFields as &$f) {
+            $f['committed'] = array_map(static fn(array $m): array => [$m[0], $m[1]->id], $f['members']);
+        }
+        unset($f);
+    }
+
+    /** Gives the focus to the controls whose handles asked for it, bound in this pass and not disabled (mygo's applyFocusRequests); whether one took it. */
+    private function applyFocusRequests(): bool
+    {
+        $took = false;
+        foreach ($this->focusHandles as $i => $ref) {
+            $h = $ref->get();
+            if ($h === null) { unset($this->focusHandles[$i]); continue; }
+            $b = $h->binding($this, false);
+            if ($b === null || !$b->requested || $b->frame !== $this->frameNumber || $b->pass !== $this->pass || $b->node === null || $b->node->isDisabled()) { continue; }
+            $b->requested = false;
+            if ($this->focus !== $b->id) { $this->focus = $b->id; $took = true; }
+        }
+        $this->focusHandles = array_values($this->focusHandles);
+        return $took;
+    }
+
+    /** Runs the actions whose input came, changes and submissions first, as mygo's runNoticeActions and runActions; whether one ran. */
+    private function runActions(): bool
+    {
+        $ran = [];
+        foreach ($this->actions as $i => [$n, $kind]) {
+            if ($n === null || $n->isDisabled() || ($kind !== 'change' && $kind !== 'submit')) { continue; }
+            if ($kind === 'change' ? $n->changed : ($n->edit?->submitted ?? false) || ($n->scroll instanceof ListState && $n->scroll->submitted())) { $ran[] = $i; }
+        }
+        foreach ($ran as $i) { if ($this->actions[$i][1] === 'submit' && $this->actions[$i][0]->edit !== null) { $this->actions[$i][0]->edit->submitted = false; } }
+        foreach ($this->actions as $i => [$n, $kind, , $key, $mods, $handle]) {
+            if ($handle !== null) {
+                $b = $handle->binding($this, false);
+                $n = $b !== null && $b->frame === $this->frameNumber && $b->pass === $this->pass ? $b->node : null;
+                if ($n === null) { continue; } // a control left out of the pass takes no shortcut
+            }
+            if ($kind === 'change' || $kind === 'submit' || $n?->isDisabled()) { continue; }
+            $hit = match ($kind) {
+                'click' => $this->clicked($n->id),
+                'shortcut' => $n === null ? $this->shortcut($key, $mods) : $this->focusWithin($n->id) && $this->shortcut($key, $mods),
+            };
+            if ($hit) { $ran[] = $i; }
+        }
+        foreach ($ran as $i) { ($this->actions[$i][2])(); }
+        return $ran !== [];
+    }
+
+    /** @var list<\Closure(): void> what openURLThen gives its done, before the next frame builds */
+    private array $opened = [];
+
+    /** Opens $url with the system, and gives $done what came of it, the error or null, before the next frame builds, which then shows what it changed (mygo's OpenURLThen); without $done an error goes unheard, as mygo's OpenURL drops it. */
+    public function openURLThen(string $url, ?Closure $done = null): void
+    {
+        $err = null;
+        try {
+            ($this->openURL)($url);
+        } catch (\Throwable $e) {
+            $err = $e;
+        }
+        if ($done === null) {
+            return;
+        }
+        $this->opened[] = static fn() => $done($err);
+        if ($this->building) { $this->animating = true; } elseif ($this->requestFrame !== null) { ($this->requestFrame)(); } // the next frame comes
+    }
+
     /** Shows a change of the state the view shows (a router's page): another pass of the frame being built, else a frame. */
     public function changed(): void
     {
@@ -1173,43 +1360,116 @@ final class Runtime
         $this->activated = $id;
     }
 
-    /** Shows $message as a toast for TOAST_FOR seconds (mygo's Toast): one already showing shows anew; others stack above it, TOASTS at most. */
-    public function toast(string $message): void
+    /** Shows $t, or changes the toast of its id, which shows anew, and returns its id (mygo's AddToast). */
+    public function addToast(Toast $t): string
     {
-        $now = hrtime(true) / 1e9;
-        $this->announce($message); // and screen readers read it out
-        foreach ($this->toasts as $i => $t) {
-            if ($t[0] === $message) {
-                $this->toasts[$i] = [$message, self::TOAST_FOR, $now];
-                return;
-            }
+        $this->nextToast++;
+        $t = clone $t;
+        if ($t->id === '') { $t->id = 'toast-' . $this->nextToast; }
+        $e = ['t' => $t, 'key' => $this->nextToast, 'spent' => 0.0, 'at' => $this->seconds()];
+        $i = $this->toastIndex($t->id);
+        if ($i >= 0) {
+            $e['key'] = $this->toasts[$i]['key'];
+            $this->toasts[$i] = $e;
+        } else {
+            $this->toasts[] = $e;
         }
-        $this->toasts[] = [$message, self::TOAST_FOR, $now];
-        $this->toasts = array_slice($this->toasts, -self::TOASTS);
+        $this->announce($t->title); // nothing else tells screen readers: the focus stays
+        if ($t->description !== '') { $this->announce($t->description); }
+        $this->changed();
+        return $t->id;
     }
 
-    /**
-     * The toasts showing, oldest first, aged by the time since they were
-     * last asked for — unless $paused (the pointer rests on one), when
-     * their time stops.
-     * @return list<string>
-     */
-    public function toasts(bool $paused): array
+    /** Closes the toast of $id, or every toast for '', and runs their onClose (mygo's CloseToast). */
+    public function closeToast(string $id): void
     {
-        $now = hrtime(true) / 1e9;
-        foreach ($this->toasts as $i => $t) {
-            if (!$paused) {
-                $t[1] -= $now - $t[2];
-            }
-            $t[2] = $now;
-            if ($t[1] <= 0) {
+        $closed = [];
+        foreach ($this->toasts as $i => $e) {
+            if ($id === '' || $e['t']->id === $id) {
+                if ($e['t']->onClose !== null) { $closed[] = $e['t']->onClose; }
                 unset($this->toasts[$i]);
-            } else {
-                $this->toasts[$i] = $t;
             }
         }
         $this->toasts = array_values($this->toasts);
-        return array_column($this->toasts, 0);
+        $this->changed();
+        foreach ($closed as $fn) { $fn(); }
+    }
+
+    /** The toast of $id showing, or null. */
+    public function toastNamed(string $id): ?Toast
+    {
+        $i = $this->toastIndex($id);
+        return $i < 0 ? null : $this->toasts[$i]['t'];
+    }
+
+    private function toastIndex(string $id): int
+    {
+        foreach ($this->toasts as $i => $e) {
+            if ($e['t']->id === $id) { return $i; }
+        }
+        return -1;
+    }
+
+    /** The frame's time in seconds. */
+    private function seconds(): float
+    {
+        return ($this->now !== 0 ? $this->now : hrtime(true)) / 1e9;
+    }
+
+    /** How long toast $i has shown, and how long it shows still (0 until it is closed), in seconds. @return array{0: float, 1: float} */
+    public function toastTimes(string $id): array
+    {
+        $i = $this->toastIndex($id);
+        if ($i < 0) {
+            return [0.0, 0.0];
+        }
+        $e = $this->toasts[$i];
+        $age = $e['spent'] + ($this->toastsPaused ? 0.0 : $this->seconds() - $e['at']);
+        $life = $e['t']->life();
+        return [$age, $life > 0 ? max(0.0, $life - $age) : 0.0];
+    }
+
+    /** The toasts' key for the toast of $id, which keeps its node as it changes. */
+    public function toastKey(string $id): int
+    {
+        $i = $this->toastIndex($id);
+        return $i < 0 ? 0 : $this->toasts[$i]['key'];
+    }
+
+    /** Whether the toasts' time stops (the pointer rests on them, the focus is in them), starting or stopping it. */
+    public function pauseToasts(bool $paused): void
+    {
+        $paused = $paused || !$this->windowFocus; // the window in the background
+        if ($paused === $this->toastsPaused) {
+            return;
+        }
+        $now = $this->seconds();
+        foreach ($this->toasts as $i => $e) {
+            if ($paused) { $this->toasts[$i]['spent'] += $now - $e['at']; } else { $this->toasts[$i]['at'] = $now; }
+        }
+        $this->toastsPaused = $paused;
+    }
+
+    public function toastsPaused(): bool
+    {
+        return $this->toastsPaused;
+    }
+
+    /** The toasts showing, the newest TOASTS, oldest first, those whose time is over closed first, running their onClose. @return list<Toast> */
+    public function toastList(): array
+    {
+        $ended = [];
+        foreach ($this->toasts as $i => $e) {
+            [, $left] = $this->toastTimes($e['t']->id);
+            if ($e['t']->life() > 0 && $left <= 0) {
+                if ($e['t']->onClose !== null) { $ended[] = $e['t']->onClose; }
+                unset($this->toasts[$i]);
+            }
+        }
+        $this->toasts = array_values($this->toasts);
+        foreach ($ended as $fn) { $fn(); }
+        if ($this->toasts === []) { $this->toastsPaused = false; }
+        return array_map(static fn(array $e): Toast => $e['t'], array_slice($this->toasts, -self::TOASTS));
     }
 
     /** Seconds until the caret next toggles, or null when nothing blinks. */
@@ -1306,7 +1566,7 @@ final class Runtime
             $n->focusVisible = $this->focusVisible && !$n->ownRing; // the painter rings it, unless it rings itself
         }
         if ($n->kind === Node::SLIDER) {
-            $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h, $n->rtl];
+            $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h, $n->rtl, $n->x + $n->padL(), max(1.0, $n->w - $n->padL() - $n->padR()), $n->y + $n->padT(), max(1.0, $n->h - $n->padT() - $n->padB()), $n->vertical]; // its box, and the content box its values span
         }
         if ($n->tooltip !== null) {
             $this->tips[$n->id] = $n->tooltip;
@@ -1334,7 +1594,8 @@ final class Runtime
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
             $this->areas[$n->id] = $n->edit;
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
-            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET, $n->y + self::FIELD_INSET_Y, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET];
+            [$ix, $iy] = $n->bare ? [0.0, 0.0] : [self::FIELD_INSET, self::FIELD_INSET_Y];
+            $this->fields[$n->id] = [$n->edit, $n->x + $ix, $n->y + $iy, $lh, $n->fontSize, $n->w - 2 * $ix];
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
@@ -1659,8 +1920,12 @@ final class Runtime
         if ($this->focus !== null && isset($this->sliders[$this->focus])) {
             switch ($selector) {
                 case 'moveLeft:': case 'moveRight:': // right to left, Left raises the value, which grows toward the left
-                    $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + (($selector === 'moveRight:') !== ($this->sliders[$this->focus][4] ?? false) ? 1 : -1);
+                    $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + (($selector === 'moveRight:') !== ($this->sliders[$this->focus][4] && !$this->sliders[$this->focus][9]) ? 1 : -1);
                     return true;
+                case 'moveUp:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return true;
+                case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
+                case 'moveToBeginningOfDocument:': case 'moveToBeginningOfLine:': $this->jumps[$this->focus] = -1; return true; // Home: the least
+                case 'moveToEndOfDocument:': case 'moveToEndOfLine:': $this->jumps[$this->focus] = 1; return true;
             }
         }
         if ($this->focus !== null && isset($this->steppers[$this->focus])) {
@@ -1783,6 +2048,12 @@ final class Runtime
         $this->focusTo($to);
         if ($this->groups[$g]['selects']) { $this->activated = $to; }
         return true;
+    }
+
+    /** Whether node $id is pressed this frame by Enter, Space or assistive technology rather than the pointer, as clicked() will report. */
+    public function activating(int $id): bool
+    {
+        return $this->activated === $id;
     }
 
     /** Whether a mouse-up this frame landed on the node this id had last frame, or Enter/Space pressed it while focused. */
@@ -2044,11 +2315,16 @@ final class Runtime
         return $j;
     }
 
-    private function slideTo(int $id, float $x): void
+    /** Where the pointer at ($x, $y) puts slider $id: across its content box, from the right right to left, or up it when vertical. */
+    private function slideTo(int $id, float $x, float $y): void
     {
         $r = $this->sliders[$id];
-        $f = max(0.0, min(1.0, ($x - $r[0]) / max(1.0, $r[2])));
-        $this->slid[$id] = ($r[4] ?? false) ? 1 - $f : $f; // right to left, from the right
+        if ($r[9]) {
+            $this->slid[$id] = 1 - max(0.0, min(1.0, ($y - $r[7]) / $r[8])); // from the bottom up
+            return;
+        }
+        $f = max(0.0, min(1.0, ($x - $r[5]) / $r[6]));
+        $this->slid[$id] = $r[4] ? 1 - $f : $f; // right to left, from the right
     }
 
     /** The width this node had last frame, for text that wraps at the width the layout gives it. */

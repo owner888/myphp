@@ -38,6 +38,13 @@ final class TextEngine implements Engine
     private array $oblique = [];
 
     private CData $slot, $slotInt;
+    /** @var array<string, list<array{desc: CData, weight: float, italic: bool, mono: bool}>> the faces the app registered, by lowercased family: the font's own and the name it gave (mygo's registered) */
+    private array $registered = [];
+    /** @var list<string> the families registered, as listed (mygo's names) */
+    private array $names = [];
+    /** @var ?list<array{0: string, 1: bool}> the system's families and whether each is monospaced, listed once until a registration */
+    private ?array $systemFamilies = null;
+    private const MONO_TRAIT = 1 << 10;
 
     public function __construct(private CoreText $ct)
     {
@@ -93,6 +100,12 @@ final class TextEngine implements Engine
             void  CTRunGetPositions(void*, CFRange, CGPoint*);
             void  CTRunGetAdvances(void*, CFRange, CGSize*);
             void  CTRunGetStringIndices(void*, CFRange, long*);
+            void* CFDataCreate(void*, const unsigned char*, long);
+            bool  CFNumberGetValue(void*, long, void*);
+            bool  CFStringGetCString(void*, char*, long, unsigned int);
+            void* CTFontManagerCreateFontDescriptorsFromData(void*);
+            void* CTFontManagerCopyAvailableFontFamilyNames(void);
+            void* CTFontDescriptorCopyAttribute(void*, void*);
         ', '/System/Library/Frameworks/CoreText.framework/CoreText');
         $text = $this->c->dlopen('/System/Library/Frameworks/CoreText.framework/CoreText', 2);
         $cf = $this->c->dlopen('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation', 2);
@@ -209,6 +222,104 @@ final class TextEngine implements Engine
         return $match;
     }
 
+    /**
+     * Adds a TrueType or OpenType font, or collection, from $data, under
+     * $family, or its own family name for '' (mygo's register): the faces
+     * are kept by their descriptors, which styles of the family match by
+     * weight and italics.
+     */
+    public function register(string $data, string $family): void
+    {
+        if ($data === '') {
+            throw new RuntimeException('no font data');
+        }
+        $d = $this->c->CFDataCreate(null, $data, strlen($data));
+        $descs = $this->c->CTFontManagerCreateFontDescriptorsFromData($d);
+        $this->c->CFRelease($d);
+        $n = $descs === null ? 0 : $this->c->CFArrayGetCount($descs);
+        if ($n === 0) {
+            if ($descs !== null) { $this->c->CFRelease($descs); }
+            throw new RuntimeException('cannot add font: not a font Core Text reads');
+        }
+        for ($i = 0; $i < $n; $i++) {
+            $desc = $this->c->CFRetain($this->c->CFArrayGetValueAtIndex($descs, $i));
+            $face = ['desc' => $desc, 'weight' => 0.0, 'italic' => false, 'mono' => false];
+            $name = '';
+            if (($s = $this->c->CTFontDescriptorCopyAttribute($desc, $this->k['kCTFontFamilyNameAttribute'])) !== null) {
+                $name = $this->string($s);
+                $this->c->CFRelease($s);
+            }
+            if (($traits = $this->c->CTFontDescriptorCopyAttribute($desc, $this->k['kCTFontTraitsAttribute'])) !== null) {
+                if (($w = $this->c->CFDictionaryGetValue($traits, $this->k['kCTFontWeightTrait'])) !== null) {
+                    $v = $this->c->new('double'); $this->c->CFNumberGetValue($w, self::NUMBER_FLOAT64, FFI::addr($v)); $face['weight'] = $v->cdata;
+                }
+                if (($t = $this->c->CFDictionaryGetValue($traits, $this->k['kCTFontSymbolicTrait'])) !== null) {
+                    $v = $this->c->new('long long'); $this->c->CFNumberGetValue($t, self::NUMBER_SINT64, FFI::addr($v));
+                    $face['italic'] = ($v->cdata & self::ITALIC_TRAIT) !== 0; $face['mono'] = ($v->cdata & self::MONO_TRAIT) !== 0;
+                }
+                $this->c->CFRelease($traits);
+            }
+            foreach (array_unique(array_filter([$name, $family])) as $f) {
+                $this->registered[strtolower($f)][] = $face;
+            }
+            $this->names[] = $family !== '' ? $family : $name; // listed under the name the app gave it, which it uses, or its own
+        }
+        $this->c->CFRelease($descs);
+        foreach ($this->primary as $f) { if ($f !== null) { $this->c->CFRelease($f); } }
+        $this->primary = []; // styles find their fonts anew
+        $this->systemFamilies = null;
+    }
+
+    /** The families the app registered, then the system's, each with whether it is monospaced (mygo's appFamilies, systemFamilies): the system's listed once, until a registration. @return array{0: list<array{0: string, 1: bool}>, 1: list<array{0: string, 1: bool}>} */
+    public function fontFamilies(): array
+    {
+        if ($this->systemFamilies === null) {
+            $this->systemFamilies = [];
+            $arr = $this->c->CTFontManagerCopyAvailableFontFamilyNames();
+            for ($i = 0, $n = $arr === null ? 0 : $this->c->CFArrayGetCount($arr); $i < $n; $i++) {
+                $name = $this->string($this->c->CFArrayGetValueAtIndex($arr, $i));
+                if ($name === '' || $name[0] === '.') { continue; } // the system's hidden families
+                $desc = $this->namedDesc($name, 400, false);
+                $mono = false;
+                if ($desc !== null && ($traits = $this->c->CTFontDescriptorCopyAttribute($desc, $this->k['kCTFontTraitsAttribute'])) !== null) {
+                    if (($t = $this->c->CFDictionaryGetValue($traits, $this->k['kCTFontSymbolicTrait'])) !== null) {
+                        $v = $this->c->new('long long'); $this->c->CFNumberGetValue($t, self::NUMBER_SINT64, FFI::addr($v)); $mono = ($v->cdata & self::MONO_TRAIT) !== 0;
+                    }
+                    $this->c->CFRelease($traits);
+                }
+                if ($desc !== null) { $this->c->CFRelease($desc); }
+                $this->systemFamilies[] = [$name, $mono];
+            }
+            if ($arr !== null) { $this->c->CFRelease($arr); }
+        }
+        $app = [];
+        foreach ($this->names as $name) {
+            $mono = false;
+            foreach ($this->registered[strtolower($name)] ?? [] as $f) { $mono = $mono || $f['mono']; }
+            $app[] = [$name, $mono];
+        }
+        return [$app, $this->systemFamilies];
+    }
+
+    /** A CFString as PHP's. */
+    private function string(CData $s): string
+    {
+        $buf = $this->c->new('char[1024]');
+        return $this->c->CFStringGetCString($s, $buf, 1024, self::UTF8) ? FFI::string($buf) : '';
+    }
+
+    /** The descriptor of the registered face of $faces that best matches a weight and italics, not owned (mygo's registeredDesc). */
+    private static function registeredDesc(array $faces, int $weight, bool $italic): CData
+    {
+        $want = self::nsWeight($weight);
+        $best = null; $score = INF;
+        foreach ($faces as $f) {
+            $s = abs($f['weight'] - $want) + ($f['italic'] !== $italic ? 4 : 0);
+            if ($s < $score) { $best = $f; $score = $s; }
+        }
+        return $best['desc'];
+    }
+
     /** The family names of a comma-separated list, without quotes. @return list<string> */
     private static function families(string $family): array
     {
@@ -259,7 +370,9 @@ final class TextEngine implements Engine
                 'system-ui', 'sans-serif' => $this->systemFont($size, $weight, $italic, false),
                 'monospace' => $this->systemFont($size, $weight, $italic, true),
                 'serif' => $this->named('Times New Roman', $size, $weight, $italic) ?? $this->named('Times', $size, $weight, $italic) ?? $this->named('Georgia', $size, $weight, $italic),
-                default => $this->named($family, $size, $weight, $italic),
+                default => isset($this->registered[strtolower($family)])
+                    ? $this->c->CTFontCreateWithFontDescriptor(self::registeredDesc($this->registered[strtolower($family)], $weight, $italic), $size, null)
+                    : $this->named($family, $size, $weight, $italic),
             };
             if ($font !== null) {
                 break;
@@ -271,7 +384,9 @@ final class TextEngine implements Engine
             // The families after it come before the system's for what it lacks.
             $descs = [];
             foreach (array_slice($families, $chosen + 1) as $family) {
-                if (self::generic($family) === '' && ($d = $this->namedDesc($family, $weight, $italic)) !== null) {
+                if (self::generic($family) === '' && isset($this->registered[strtolower($family)])) {
+                    $descs[] = $this->c->CFRetain(self::registeredDesc($this->registered[strtolower($family)], $weight, $italic));
+                } elseif (self::generic($family) === '' && ($d = $this->namedDesc($family, $weight, $italic)) !== null) {
                     $descs[] = $d;
                 }
             }
