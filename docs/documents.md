@@ -193,8 +193,8 @@ window.myphp.on("myphp:document-reload", async () => { editor.value = await Note
 
 The service has `content`, `setContent`, `state`, `save`, `saveAs`,
 `duplicate`, `rename`, `moveTo` and `revert`, for the window that calls
-them. The events reach the app's own pages only (WindowOptions' html, or a
-file).
+them. The events reach trusted pages only (`Window::isTrusted`): the app's
+own, and WindowOptions' `trustedOrigins`.
 
 ## What is left out
 

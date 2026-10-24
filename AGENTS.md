@@ -51,7 +51,7 @@ src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after; 
                    downloads, permissions), Network, Clipboard, Secrets (Keychain), Cookies,
                    WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
                    Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
-                   window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), autoload.php,
+                   window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), Protocol (+ Request/Response), autoload.php,
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
                    region/on*Changed), Region, I18n (tags, patterns, dates, numbers, names — over ext-intl), L10n
                    (MyPHP's own strings, src/l10n/<tag>.json: mygo's catalogs in en, zh-Hans, zh-Hant)
@@ -143,7 +143,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   myphp.Channel()`, `chan-close` back); a Generator return streams each
   yield one run-loop turn apart (`App::later`). `myphp:window.*` calls are
   the page's window controls; `WindowOptions::$preload` runs before the page.
-  `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client.
+  `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client. Only trusted pages call (`Native\Frontend`).
   PHP plugins (`App::use`): service "plugin:<name>", page side its client/ (`bun test`, real
   bridge.js via Plugins/fake-myphp.ts); `CallContext` param = the page's life; `Channel::wait`; generators wait on flow control.
 - **FFI discipline**: one FFI instance per bridge (structs are not shared
@@ -194,6 +194,6 @@ rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents.
+events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

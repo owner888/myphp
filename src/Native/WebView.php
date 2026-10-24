@@ -30,6 +30,11 @@ final class WebView
     public ?Closure $onDownload = null;
     /** @var ?Closure(string, string, ?string): void */
     public ?Closure $onDownloadDone = null;
+    /** Serves a request of a custom scheme (Protocol): (the request's [method, URL, headers, body], its task). @var ?Closure(array, SchemeTask): void */
+    public ?Closure $onScheme = null;
+    /** Serves a URL of a custom scheme into a download, which WebKit can't make of what a scheme handler serves. @var ?Closure(string): void */
+    public ?Closure $onSchemeDownload = null;
+    private static $schemeHandler = null;
     private static $navigationDelegate = null, $uiDelegate = null;
     /** @var array<int, array{0: WebView, 1: string, 2: string}> the downloads under way by WKDownload address: their view, URL and path */
     private static array $downloads = [];
@@ -44,6 +49,9 @@ final class WebView
         self::define();
         $self = new self($onMessage);
         $wk = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
+        foreach (\MyPHP\Protocol::schemes() as $scheme) { // the schemes PHP serves: handled before the view exists, as WebKit takes them only then
+            ObjC::msg('v:pp', $wk, 'setURLSchemeHandler:forURLScheme:', self::$schemeHandler, ObjC::str($scheme));
+        }
         $ucc = ObjC::msg('p:', $wk, 'userContentController');
         ObjC::msg('v:pp', $ucc, 'addScriptMessageHandler:name:', ObjC::msg('p:', ObjC::alloc('MyPHPScriptHandler'), 'init'), ObjC::str('myphp'));
         $source = str_replace('__CONFIG__', json_encode($config, JSON_THROW_ON_ERROR), file_get_contents(__DIR__ . '/bridge.js'));
@@ -80,15 +88,38 @@ final class WebView
                 ($view->onMessage)($body);
             }],
         ]);
+        // Requests of the schemes PHP serves (mygo's darwin scheme.go).
+        ObjC::defineClass('MyPHPSchemeHandler', 'NSObject', [
+            'webView:startURLSchemeTask:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $task) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $t = new WebKitTask($task);
+                if ($view?->onScheme === null) {
+                    $t->respond(503, []);
+                    $t->finish();
+                    return;
+                }
+                ($view->onScheme)(WebKitTask::request($task), $t);
+            }],
+            'webView:stopURLSchemeTask:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $task) {
+                (WebKitTask::$live[ObjC::addr($task)] ?? null)?->stop();
+            }],
+        ], ['WKURLSchemeHandler']);
+        self::$schemeHandler = ObjC::msg('p:', ObjC::alloc('MyPHPSchemeHandler'), 'init');
         // Navigations of the main frame the app did not start go to the window's 'willNavigate' listeners.
         ObjC::defineClass('MyPHPNavigationDelegate', 'NSObject', [
             'webView:decidePolicyForNavigationAction:decisionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $wk, $action, $handler) {
-                // A link with the download attribute (macOS 11.3).
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                // A link with the download attribute (macOS 11.3); one of a scheme PHP serves is served into the download.
                 if (ObjC::msg('b:p', $action, 'respondsToSelector:', ObjC::sel('shouldPerformDownload')) && ObjC::msg('b:', $action, 'shouldPerformDownload')) {
+                    $url = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString'));
+                    if (\MyPHP\Protocol::handlerFor((string)parse_url($url, PHP_URL_SCHEME)) !== null && $view?->onSchemeDownload !== null) {
+                        ObjC::callBlock('v:l', $handler, 0); // WKNavigationActionPolicyCancel
+                        ($view->onSchemeDownload)($url);
+                        return;
+                    }
                     ObjC::callBlock('v:l', $handler, 2); // WKNavigationActionPolicyDownload
                     return;
                 }
-                $view = self::$views[ObjC::addr($wk)] ?? null;
                 $frame = ObjC::msg('p:', $action, 'targetFrame');
                 $allow = true;
                 if ($view !== null && $frame !== null && ObjC::msg('b:', $frame, 'isMainFrame')) {
@@ -105,14 +136,25 @@ final class WebView
             // Responses the page cannot show, or sent as attachments, are downloads (macOS 11.3).
             'webView:decidePolicyForNavigationResponse:decisionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $handler) {
                 $resp = ObjC::msg('p:', $nav, 'response');
-                $disposition = '';
-                if (ObjC::msg('b:p', $resp, 'respondsToSelector:', ObjC::sel('allHeaderFields'))) {
+                $url = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', $resp, 'URL'), 'absoluteString'));
+                $custom = array_key_exists($url, Scheme::$dispositions); // served by PHP, whose headers WebKit doesn't keep
+                $disposition = $custom ? Scheme::$dispositions[$url] : '';
+                if (!$custom && ObjC::msg('b:p', $resp, 'respondsToSelector:', ObjC::sel('allHeaderFields'))) {
                     $d = ObjC::msg('p:p', ObjC::msg('p:', $resp, 'allHeaderFields'), 'objectForKey:', ObjC::str('Content-Disposition'));
                     $disposition = $d === null ? '' : ObjC::phpStr($d);
                 }
                 $attachment = str_starts_with(strtolower(trim($disposition)), 'attachment');
-                $policy = !$attachment && ObjC::msg('b:', $nav, 'canShowMIMEType') ? 1 : 2; // WKNavigationResponsePolicyAllow, Download
-                ObjC::callBlock('v:l', $handler, $policy);
+                if (!$attachment && ObjC::msg('b:', $nav, 'canShowMIMEType')) {
+                    ObjC::callBlock('v:l', $handler, 1); // WKNavigationResponsePolicyAllow
+                    return;
+                }
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                if ($custom && $view?->onSchemeDownload !== null) {
+                    ObjC::callBlock('v:l', $handler, 0); // Cancel: WebKit can't make a download of what a scheme handler serves, so it is served again into one
+                    ($view->onSchemeDownload)($url);
+                    return;
+                }
+                ObjC::callBlock('v:l', $handler, 2); // WKNavigationResponsePolicyDownload
             }],
             'webView:navigationAction:didBecomeDownload:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $action, $download) {
                 self::$downloads[ObjC::addr($download)] = [self::$views[ObjC::addr($wk)] ?? null, '', ''];

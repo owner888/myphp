@@ -541,11 +541,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `PageLetter`… as variables.
   - myphp: the same on `Window` (`findInPage()`, `print()`,
     `printToPDF()`, `setPermissionHandler()`, the events `willDownload` and
-    `downloadDone`), as myphp has no `Page`; the default grants the pages
-    of WindowOptions' html and file: URLs, as there are no trusted origins
-    yet; `PageSize::letter()`… static methods.
-  - Why: myphp's window holds its page; trusted origins come with the
-    app's protocol.
+    `downloadDone`), as myphp has no `Page`; the default grants trusted
+    pages (WindowOptions' `trustedOrigins`, since v1.02); `PageSize::letter()`…
+    static methods.
+  - Why: myphp's window holds its page.
 
 ## Documents
 
@@ -594,6 +593,39 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     bundle's (`DeepLink`), so `examples/documents` opens its own.
   - Why: myphp's names and runtime; without a bundle the app declares no
     file types.
+
+## Protocol and the frontend
+
+- **Handlers** (v1.02)
+  - mygo: `Protocol.Handle(scheme, http.Handler)` and `HandleFunc`,
+    returning errors; handlers run on goroutines and stream through
+    `http.Flusher`; `FileServer(fs.FS)` is Go's file server.
+  - myphp: `Protocol::handle($scheme, Closure(ProtocolRequest):
+    ProtocolResponse)`, throwing; handlers run on the main thread, a body
+    that is an iterable streams a chunk a run loop turn (a page waiting
+    for one waits for the app); `Protocol::fileServer($dir)` serves a
+    directory, with single ranges, without If-Modified-Since; content
+    types are sniffed from a short list of Go's.
+  - Why: no http.Handler in PHP (the developer chose classes of myphp's
+    own over PSR-7, which would be a dependency); one thread.
+- **The frontend** (v1.02)
+  - mygo: the scheme `mygo`; `SetFrontend(fs.FS)`; `mygo build` embeds
+    frontendDist in the binary; mygo.config.ts or mygo.json; `mygo dev`
+    stops the dev server's whole process group; WebView2's
+    http://<scheme>.localhost origins.
+  - myphp: the scheme `myphp`; `App::setFrontend($dir)`; `myphp build`
+    copies frontendDist to the bundle's Resources/frontend; myphp.json's
+    `devUrl`, `devCommand`, `buildCommand`, `frontendDist`; `myphp dev`
+    stops the shell of devCommand, which may leave a server it started
+    behind; macOS only, no WebView2 origins. The web template loads "/".
+  - Why: myphp's names; PHP files are not compiled into anything.
+- **Trusted pages** (v1.02)
+  - mygo: trust is decided as a page's navigation commits;
+    `PageOptions.TrustedOrigins`.
+  - myphp: as each call comes, from the page's URL;
+    `WindowOptions::$trustedOrigins` (and FlyoutOptions'); pages that
+    are not trusted get mygo's error with myphp's names.
+  - Why: myphp's WebView reports no commit; a call is when it matters.
 
 ## Plugins
 

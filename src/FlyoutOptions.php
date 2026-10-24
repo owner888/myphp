@@ -39,5 +39,7 @@ final class FlyoutOptions
         public ?string $html = null,
         public ?string $url = null,
         public string $preload = '',
+        /** @var list<string> as WindowOptions' */
+        public array $trustedOrigins = [],
     ) {}
 }

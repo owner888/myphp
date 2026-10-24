@@ -116,6 +116,9 @@ final class Ipc
         if (!hash_equals($secret, (string)($msg['k'] ?? ''))) {
             return $t === 'call' ? ['t' => 'reply', 'id' => $id, 'k' => $secret, 'ok' => false, 'e' => 'rejected: wrong secret'] : null;
         }
+        if ($t === 'call' && !$window->isTrusted()) {
+            return self::reply($id, $secret, null, 'this page is not allowed to call PHP methods (see WindowOptions::$trustedOrigins)');
+        }
         if ($t === 'chan-close') {
             $window->channel((int)($msg['c'] ?? 0))?->closedByPage();
             return null;

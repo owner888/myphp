@@ -2027,6 +2027,32 @@ documents each time the menu bar is built, which adding one rebuilds
 avoids `$file` and `$name`; and that a test running as root can write
 read-only files, so the read-only flow runs only for other users.
 
+## Protocol and the frontend
+
+Custom schemes are WKURLSchemeHandlers (`MyPHPSchemeHandler`), set on each
+web view's configuration for `Protocol::schemes()` (the handled ones and
+`myphp`, the frontend's) as it is made, since WebKit takes them only then.
+A request's method, URL, headers and body (HTTPBody, or HTTPBodyStream read
+whole) become a `ProtocolRequest`; `Native\Scheme::serve` runs the handler
+on the main thread and answers the `WebKitTask`, which retains the
+WKURLSchemeTask until it finishes, fails or WebKit stops it, and is never
+touched after: a string body goes in 256 KiB `didReceiveData:`s, an
+iterable a chunk a turn (`App::later`), its first chunk read first to sniff
+the content type. CORS headers go to the origins the window trusts, and a
+preflight of theirs is answered without the handler. WebKit can't make a
+download of what a scheme handler serves, so the navigation policies cancel
+those (an attachment, by the disposition `Scheme` noted for its URL, or a
+link with the download attribute) and serve the URL again into the file
+`willDownload` chooses. Trust (`Native\Frontend::isTrusted`) is worked out
+from the page's URL as each call comes: about:, file:, myphp: and handled
+schemes, the dev server (`MYPHP_DEV_URL`, which `myphp dev` sets after
+devUrl takes connections), loopback servers in development, and
+`trustedOrigins`; WindowOptions' html is about:blank. A URL without a
+scheme resolves against the dev server or myphp://localhost/, which serves
+`App::setFrontend()`'s directory, `MYPHP_FRONTEND_DIST` under `myphp dev`,
+or the bundle's Resources/frontend. tests/protocol_test.php drives
+`Scheme::serve` with a task of its own.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

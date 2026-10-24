@@ -92,6 +92,8 @@ final class Window
     /** @var array<string, list<\Closure>> listeners by event */
     private array $listeners = [];
     private string $stateKey = '';
+    /** @var list<string> WindowOptions::$trustedOrigins */
+    private array $trustedOrigins = [];
     /** @var array<int, Channel> open channels by the page's id */
     private array $channels = [];
     public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate', 'willDownload', 'downloadDone'];
@@ -152,6 +154,7 @@ final class Window
         }
 
         $this->stateKey = $o->stateKey;
+        $this->trustedOrigins = $o->trustedOrigins;
         $this->parent = $o->parent; $this->modal = $o->modal;
         $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
         if ($this->flyout !== null) {
@@ -202,7 +205,7 @@ final class Window
             };
             $this->page->onPermission = function (array $kinds, string $origin): bool {
                 $req = new PermissionRequest($kinds, $origin);
-                return $this->permissionHandler !== null ? (bool)($this->permissionHandler)($req) : self::ownOrigin($origin);
+                return $this->permissionHandler !== null ? (bool)($this->permissionHandler)($req) : $origin === '://' || $this->trusts($origin); // '://': the window's html, of no origin
             };
             $this->page->onDownload = function (string $url, string $suggested): ?string {
                 $e = new DownloadEvent($url, self::downloadName($suggested), '');
@@ -221,10 +224,17 @@ final class Window
                     $fn($d);
                 }
             };
+            $this->page->onScheme = function (array $r, Native\SchemeTask $task): void {
+                [$method, $url, $headers, $body] = $r;
+                Native\Scheme::serve(new ProtocolRequest($method, $url, $headers, $body, $this), $task, $this->trusts(...));
+            };
+            $this->page->onSchemeDownload = function (string $url): void {
+                App::later(fn() => Native\Scheme::download($url, new ProtocolRequest('GET', $url, [], '', $this), $this->page->onDownload, $this->page->onDownloadDone));
+            };
             if ($o->html !== null) {
                 $this->page->loadHTML($o->html);
             } else {
-                $this->page->loadURL($o->url);
+                $this->loadURL($o->url);
             }
         } else {
             $this->view = $this->nativeView($o);
@@ -575,17 +585,35 @@ final class Window
         $this->permissionHandler = $fn;
     }
 
-    /** @internal whether the window shows one of the app's own pages, WindowOptions' html or a file, which documents tell their paths (mygo's trusted pages) */
-    public function isOwnPage(): bool
+    /**
+     * Whether the window's page may call the app's bound methods (mygo's
+     * trusted pages): the app's own (WindowOptions' html, file:, the
+     * frontend and the schemes Protocol serves), the dev server under
+     * `myphp dev`, and WindowOptions::$trustedOrigins. Documents tell
+     * these pages their paths; permissions are theirs by default.
+     */
+    public function isTrusted(): bool
     {
-        $url = $this->page?->url();
-        return $url !== null && ($url === '' || $url === 'about:blank' || str_starts_with($url, 'file://'));
+        return $this->page !== null && Native\Frontend::isTrusted($this->page->url(), $this->trustedOrigins);
     }
 
-    /** Whether $origin is one of the app's own pages: its html (no origin) or a file. */
-    private static function ownOrigin(string $origin): bool
+    /** @internal whether pages of $origin ("scheme://host") are trusted in this window, as for CORS */
+    public function trusts(string $origin): bool
     {
-        return $origin === '://' || str_starts_with($origin, 'file://');
+        return Native\Frontend::isTrusted($origin, $this->trustedOrigins);
+    }
+
+    /**
+     * Navigates the page to $url (mygo's Page.LoadURL). A URL without a
+     * scheme, "/" or "/settings?tab=1", is a page of the app's frontend
+     * (App::setFrontend): the dev server at devUrl during `myphp dev`, the
+     * frontend's files otherwise. Besides http(s) and file: URLs, the
+     * schemes Protocol serves load.
+     */
+    public function loadURL(string $url): void
+    {
+        $this->page ?? throw new RuntimeException('myphp: the window shows native UI, not a page');
+        $this->page->loadURL(Native\Frontend::resolve($url));
     }
 
     /** The file name a download suggests, without directories (mygo's DownloadStarted). */
@@ -1446,7 +1474,7 @@ final class Window
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
                 disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
-                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload));
+                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload, trustedOrigins: $o->trustedOrigins));
         } finally {
             self::$creating = null;
         }

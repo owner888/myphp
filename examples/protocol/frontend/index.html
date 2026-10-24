@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Protocol</title>
+<link rel="stylesheet" href="style.css">
+<h1>Served by PHP</h1>
+<p>This page is <code id="where"></code>, the app's frontend; the images below come from the <code>shapes</code> scheme, drawn as they are asked for.</p>
+<div id="shapes"></div>
+<p><input id="hue" type="range" min="0" max="360" value="210"> hue</p>
+<p><button id="ticks">Stream ticks</button> <a href="shapes://localhost/report" download>Download a report</a></p>
+<pre id="out"></pre>
+<script type="module" src="app.js"></script>

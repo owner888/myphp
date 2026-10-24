@@ -441,6 +441,22 @@ final class App
     /** The menu bar installed, null before the app is ready. */
     private static ?Menu $installed = null;
 
+    /**
+     * Serves the files of the directory $dir as the app's frontend at
+     * myphp://localhost/ (mygo's SetFrontend), which windows load with URLs
+     * without a scheme ("/", "/settings"); paths without an extension that
+     * match no file serve index.html, for client-side routing. `myphp
+     * build` ships myphp.json's frontendDist in the bundle, which the app
+     * serves without this; null returns to it.
+     */
+    public static function setFrontend(?string $dir): void
+    {
+        if ($dir !== null && !is_dir($dir)) {
+            throw new \InvalidArgumentException("myphp: $dir is not a directory");
+        }
+        Native\Frontend::$dir = $dir;
+    }
+
     /** @internal the menu bar installed, whose items are built: setMenu()'s, or Menu::default()'s */
     public static function menuBar(): ?Menu
     {

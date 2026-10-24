@@ -53,9 +53,18 @@ final class WindowOptions
         public bool $panel = false,
         /** Native UI drawn by MyPHP: make it with Content::view(). */
         public ?Content $content = null,
-        /** A web page instead: HTML to show, or a URL to load (http(s) or file:). */
+        /** A web page instead: HTML to show, or a URL to load: http(s), file:, a scheme Protocol serves, or one without a scheme, "/" or "/settings", of the app's frontend (Window::loadURL). */
         public ?string $html = null,
         public ?string $url = null,
+        /**
+         * Origins, such as "https://example.com", whose pages may call the
+         * app's bound methods too (mygo's TrustedOrigins). By default only
+         * the app's own pages can: its html, file: pages, the frontend and
+         * the schemes Protocol serves, and loopback dev servers under
+         * `myphp dev`. "*" trusts every origin.
+         * @var list<string>
+         */
+        public array $trustedOrigins = [],
         /** JavaScript run in the page before its own scripts, after window.myphp exists (mygo's PreloadScript). */
         public string $preload = '',
         /** Remembers the window's position and size under this key across runs (WindowState). */

@@ -1,0 +1,4 @@
+body { font: 15px/1.5 -apple-system, system-ui; margin: 24px; color: #222; }
+@media (prefers-color-scheme: dark) { body { color: #ddd; background: #1e1e1e; } }
+#shapes img { width: 96px; height: 96px; margin-right: 12px; }
+pre { background: rgba(127, 127, 127, .12); padding: 8px; min-height: 5em; }

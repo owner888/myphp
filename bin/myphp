@@ -53,6 +53,9 @@ function project(array $args): array
         }
         in_array($fa['role'] ?? 'Editor', ['Editor', 'Viewer'], true) || fail("fileAssociations[$i].role is Editor or Viewer");
     }
+    if (($config['devUrl'] ?? '') !== '') {
+        preg_match('~^https?://[^/]+~', $config['devUrl']) === 1 || fail('devUrl ' . json_encode($config['devUrl']) . ' is not an http(s) URL');
+    }
     return ['dir' => $dir, 'config' => $config];
 }
 
@@ -80,7 +83,7 @@ function init(array $args): void
         'entry' => 'app.php',
         'framework' => realpath(FRAMEWORK),
         'bindings' => $template === 'web' ? 'src/myphp.ts' : null,
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    ] + ($template === 'web' ? ['frontendDist' => 'src'] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
     file_put_contents("$dir/boot.php", <<<'PHP'
     <?php
     // Loads MyPHP: from ./myphp inside a built app, else from the framework
@@ -147,7 +150,7 @@ function init(array $args): void
         App::setName('$name');
         App::whenReady(function () {
             new Window(new WindowOptions(title: '$name', width: 640, height: 420,
-                url: 'file://' . __DIR__ . '/src/index.html'));
+                url: '/')); // the frontend: frontendDist (src) at myphp://localhost/, or devUrl under myphp dev
         });
         App::run();
 
@@ -209,10 +212,25 @@ function dev(array $args): void
     $watch = option($args, 'watch', '1') !== '0';
     ['dir' => $dir, 'config' => $c] = project($args);
     $entry = "$dir/{$c['entry']}";
+    $env = ['MYPHP_DEV' => '1'];
+    // The frontend's dev server, which runs while myphp dev does, and the app loads in place of its built frontend (mygo dev's devCommand and devUrl).
+    $server = null;
+    if (($c['devCommand'] ?? '') !== '') {
+        $server = proc_open(['/bin/sh', '-c', $c['devCommand']], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir);
+        $server !== false || fail("cannot run {$c['devCommand']}");
+        register_shutdown_function(fn() => proc_get_status($server)['running'] && proc_terminate($server, 15));
+        echo "myphp: started {$c['devCommand']}\n";
+    }
+    if (($c['devUrl'] ?? '') !== '') {
+        waitForURL($c['devUrl'], $server);
+        $env['MYPHP_DEV_URL'] = $c['devUrl'];
+    } elseif (($c['frontendDist'] ?? '') !== '') {
+        $env['MYPHP_FRONTEND_DIST'] = str_starts_with($c['frontendDist'], '/') ? $c['frontendDist'] : "$dir/{$c['frontendDist']}"; // served from disk
+    }
     while (true) {
         generateBindings($dir, $c);
         $seen = snapshot($dir, $c);
-        $proc = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_DEV' => '1'] + getenv());
+        $proc = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, $env + getenv());
         echo "myphp: running {$c['entry']}" . ($watch ? ', restarts on change' : '') . "\n";
         $changed = false;
         while (proc_get_status($proc)['running']) {
@@ -231,6 +249,27 @@ function dev(array $args): void
     }
 }
 
+/** Waits up to 30 seconds for the server of $url to take connections, failing sooner when $server, its command, exits. */
+function waitForURL(string $url, $server): void
+{
+    $u = parse_url($url);
+    $host = trim($u['host'] ?? 'localhost', '[]');
+    $port = $u['port'] ?? (($u['scheme'] ?? 'http') === 'https' ? 443 : 80);
+    echo "myphp: waiting for the dev server at $url\n";
+    for ($end = microtime(true) + 30; microtime(true) < $end; usleep(200_000)) {
+        $sock = @fsockopen($host, $port, $errno, $errstr, 0.5);
+        if ($sock !== false) {
+            fclose($sock);
+            echo "myphp: dev server ready at $url\n";
+            return;
+        }
+        if ($server !== null && !proc_get_status($server)['running']) {
+            fail('the dev server exited');
+        }
+    }
+    fail("the dev server at $url did not answer in 30 seconds");
+}
+
 // ---- build --------------------------------------------------------------
 function build(array $args): void
 {
@@ -245,6 +284,16 @@ function build(array $args): void
     } else {
         [$spc, $micro] = ensureMicro(option($args, 'php', null));
     }
+    // The frontend, built by buildCommand, shipped as Resources/frontend, which the app serves at myphp://localhost/ (mygo's embedded frontendDist): built before the last app goes.
+    if (($c['buildCommand'] ?? '') !== '') {
+        sh(['/bin/sh', '-c', $c['buildCommand']], $dir) === 0 || fail("{$c['buildCommand']} failed");
+    }
+    $dist = null;
+    if (($c['frontendDist'] ?? '') !== '') {
+        $dist = str_starts_with($c['frontendDist'], '/') ? $c['frontendDist'] : "$dir/{$c['frontendDist']}";
+        is_dir($dist) || fail("frontendDist $dist does not exist; set buildCommand in myphp.json to build it");
+        count(scandir($dist)) > 2 || fail("frontendDist $dist is empty");
+    }
     $name = $c['name'];
     $app = (str_starts_with($outDir, '/') ? $outDir : "$dir/$outDir") . "/$name.app";
     $contents = "$app/Contents";
@@ -253,6 +302,9 @@ function build(array $args): void
     }
     foreach (["$contents/MacOS", "$contents/Resources/app/myphp"] as $d) {
         mkdir($d, 0755, true);
+    }
+    if ($dist !== null) {
+        copyTree($dist, "$contents/Resources/frontend", ['.DS_Store']);
     }
     // The app's files and the framework's src, as the bundle's Resources/app.
     copyTree($dir, "$contents/Resources/app", ['dist', 'vendor', 'node_modules', '.git', 'myphp', '.DS_Store']);
