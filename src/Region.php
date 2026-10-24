@@ -22,15 +22,19 @@ final class Region
      * as "en-GB-u-fw-mon-hc-h23" for English read with British formats,
      * or "en-DE-u-fw-mon-hc-h23" with German ones. Without a locale of
      * formats it is $lang's, with its first weekday and hour cycle when set.
+     * The pseudo locales write them in English.
      */
     public function formatLocale(string $lang): string
     {
-        $tag = I18n::normalize($lang);
-        if ($tag === '') { $tag = 'en'; }
+        $tag = I18n::stripExtensions(I18n::normalize($lang));
+        if ($tag === '' || I18n::isPseudo($tag)) { $tag = 'en'; } // the pseudo locales write formats in English
         if ($this->locale !== '') {
             $region = \Locale::getRegion($this->locale);
             if ($region !== '' && $region !== null) {
                 $parts = \Locale::parseLocale($tag) ?? [];
+                // The script the reader reads, named or implied (zh-HK reads Hant), unless the new region implies it too: zh-HK with German formats is zh-Hant-DE, not zh-DE, which is Hans.
+                $implied = I18n::likelyScript($tag);
+                if (!isset($parts['script']) && $implied !== I18n::likelyScript($parts['language'] . '-' . $region)) { $parts['script'] = $implied; }
                 $parts['region'] = $region;
                 $tag = str_replace('_', '-', \Locale::composeLocale($parts));
             }

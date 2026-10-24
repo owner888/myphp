@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, TextInputRange};
-use MyPHP\UI\Editor\{Buffer, Change, Command, Completion, CompletionRequest, Diagnostic, Edit, Editor, GoToLineBar, Highlighter, HoverRequest, Language, Languages, Snapshot, State, Token};
+use MyPHP\UI\Editor\{Buffer, Change, Command, Completion, CompletionRequest, Diagnostic, Edit, Editor, GoToLineBar, Highlighter, HoverRequest, Language, Languages, LineNumbers, Snapshot, State, Token};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -227,7 +227,7 @@ check($edOf($ct->st)->caretRect($ct->st->cursor()) !== null, 'Fold Selection lea
 
 // Toggle Line Numbers gives the numbers room in the gutter.
 $st = new State(new Buffer("a\nb"));
-$st->lineNumbers = State::LINE_NUMBERS_OFF; $st->noFolding = true;
+$st->lineNumbers = LineNumbers::LineNumbersOff; $st->noFolding = true;
 $t = $row([$st], 400, 200);
 $st->run(Command::TOGGLE_LINE_NUMBERS);
 $t->frame();

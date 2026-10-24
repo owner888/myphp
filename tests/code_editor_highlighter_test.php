@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key};
-use MyPHP\UI\Editor\{BracketMatcher, Buffer, Change, Command, Folder, Highlighter, Indenter, Language, Languages, Range, Snapshot, State, SyntaxSelector, Token, TokenHighlighter};
+use MyPHP\UI\Editor\{BracketMatcher, Buffer, Change, Command, Folder, Highlighter, Indenter, IndentStyle, Language, Languages, Range, Snapshot, State, SyntaxSelector, Token, TokenHighlighter};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -72,7 +72,7 @@ final class ParserHighlighter implements Highlighter, SyntaxSelector, Folder, Br
 $made = null;
 $lang = new Language('Parsed', highlighter: function (Snapshot $text) use (&$made) { return $made = new ParserHighlighter($text); });
 $st = new State(new Buffer("fn a() do\n  body\nend"));
-$st->indent = State::INDENT_SPACES; $st->tabSize = 2;
+$st->indent = IndentStyle::IndentSpaces; $st->tabSize = 2;
 $st->buffer->setLanguage($lang);
 $node = null;
 $h = new Headless(function (Context $c) use ($st, &$node) { $node = $st->view($c); $node->grow = 1; }, 500, 300);

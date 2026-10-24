@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key};
-use MyPHP\UI\Editor\{Buffer, Command, DiffAnnotation, DiffHunk, DiffLineRange, DiffModel, DiffState, Edit, Editor, Pos};
+use MyPHP\UI\Editor\{Buffer, Command, DiffAnnotation, DiffHunk, DiffLayout, DiffLineRange, DiffModel, DiffSide, DiffState, Edit, Editor, Pos};
 
 require_once __DIR__ . '/DiffTest.php';
 
@@ -64,11 +64,11 @@ for ($i = 0; $i < 200; $i++) {
     $oldText .= "line $i\n";
     $newText .= $i === 100 ? "changed\n" : "line $i\n";
 }
-foreach ([DiffState::SPLIT, DiffState::UNIFIED] as $layout) {
+foreach ([DiffLayout::DiffSplit, DiffLayout::DiffUnified] as $layout) {
     $d = new DiffState(new Buffer($oldText), new Buffer($newText));
     $d->layout = $layout; $d->editable = true;
     $t = diffViewer($d, 900, 500);
-    $name = $layout === DiffState::SPLIT ? 'split' : 'unified';
+    $name = $layout === DiffLayout::DiffSplit ? 'split' : 'unified';
     $hs = $d->hunks();
     check(count($hs) === 1 && $hs[0] == new DiffHunk(100, 101, 100, 101), "$name: the change's hunk");
     same([1, 1], $d->stats(), "$name: a line added and one deleted");
@@ -77,7 +77,7 @@ foreach ([DiffState::SPLIT, DiffState::UNIFIED] as $layout) {
     same([97, 97], array_map(fn($g) => $g->hidden, $gaps), "$name: the gaps collapse but 3 lines around the change");
     $ed = $d->eds[1];
     $lh = $ed->view->lineHeight;
-    $want = (3 + 1 + 3) * $lh + 2 * DiffState::SEPARATOR_HEIGHT + ($layout === DiffState::UNIFIED ? $lh : 0.0);
+    $want = (3 + 1 + 3) * $lh + 2 * DiffState::SEPARATOR_HEIGHT + ($layout === DiffLayout::DiffUnified ? $lh : 0.0);
     same($want, $ed->view->heights->total(), "$name: the lines shown and the separators make the height");
     // Expanding shows the lines.
     $d->expand($gaps[0]->a, 1, true);
@@ -100,7 +100,7 @@ foreach ([DiffState::SPLIT, DiffState::UNIFIED] as $layout) {
 foreach ([false, true] as $wrap) {
     $d = new DiffState(new Buffer("a\nb\nc\nd\ne\nf\n"), new Buffer("a\nB\nB2\nB3\nc\nf\ng\n"));
     $d->expandUnchanged = true; $d->wrap = $wrap;
-    $d->annotations = [new DiffAnnotation(DiffState::NEW, 2, 40), new DiffAnnotation(DiffState::OLD, 0, 25)];
+    $d->annotations = [new DiffAnnotation(DiffSide::DiffNew, 2, 40), new DiffAnnotation(DiffSide::DiffOld, 0, 25)];
     $d->renderAnnotation = function (Context $c, DiffAnnotation $a) { $c->text('note'); };
     $t = diffViewer($d, 600, 400);
     $ha = $d->eds[0]->view->heights; $hb = $d->eds[1]->view->heights;
@@ -115,7 +115,7 @@ foreach ([false, true] as $wrap) {
 // Selecting lines by their numbers, and extending the selection with Shift.
 $got = null;
 $d = new DiffState(new Buffer("a\nb\nc\n"), new Buffer("a\nx\nc\n"));
-$d->layout = DiffState::UNIFIED; $d->expandUnchanged = true; $d->lineSelection = true;
+$d->layout = DiffLayout::DiffUnified; $d->expandUnchanged = true; $d->lineSelection = true;
 $d->onLineSelection = function (DiffLineRange $r) use (&$got) { $got = $r; };
 $t = diffViewer($d, 600, 400);
 $ed = $d->eds[1];
@@ -123,9 +123,9 @@ $lh = $ed->view->lineHeight;
 // The number of new line 2, below the deleted line.
 $t->click($ed->gutterW - 8, $ed->view->heights->geometry(1)->rows + $lh / 2);
 $r = $d->selectedLines();
-check($r == new DiffLineRange(DiffState::NEW, 1, 1) && $got == $r, 'clicking a line\'s number selects it, and reports it');
+check($r == new DiffLineRange(DiffSide::DiffNew, 1, 1) && $got == $r, 'clicking a line\'s number selects it, and reports it');
 $t->click($ed->gutterW - 8, $ed->view->heights->geometry(2)->rows + $lh / 2, Key::SHIFT);
-check($d->selectedLines() == new DiffLineRange(DiffState::NEW, 1, 2), 'Shift-clicking another extends the selection');
+check($d->selectedLines() == new DiffLineRange(DiffSide::DiffNew, 1, 2), 'Shift-clicking another extends the selection');
 
 // The app runs commands and reads the caret in the side that has the keyboard, or had it last: the new side's until the old one has it.
 $oldText = ''; $newText = '';
@@ -140,27 +140,27 @@ $at = function () use ($d): array {
     return [$d->activeSide(), $d->cursorPos()->line, $h, $in];
 };
 // Before the viewer is built, the new side's caret is at the start.
-check($at() === [DiffState::NEW, 0, -1, false] && $d->cursor() === 0, 'before building, the new side\'s caret is at the start');
+check($at() === [DiffSide::DiffNew, 0, -1, false] && $d->cursor() === 0, 'before building, the new side\'s caret is at the start');
 $t = diffViewer($d, 900, 500);
 $d->goToHunk(1);
 $t->frame();
-check($at() === [DiffState::NEW, 30, 1, true] && $d->cursor() === $d->new->offset(new Pos(30)), 'GoToHunk(1) puts the caret on the second change');
+check($at() === [DiffSide::DiffNew, 30, 1, true] && $d->cursor() === $d->new->offset(new Pos(30)), 'GoToHunk(1) puts the caret on the second change');
 // Between changes, the current one is the one before the caret: the view shows the second change in its middle, lines of the first above it.
 $lh = $d->eds[1]->view->lineHeight;
 $t->click(200, 2.5 * $lh);
 $t->frame();
 [$side, $line, $hunk, $inside] = $at();
-check($side === DiffState::OLD && $line > 5 && $line < 30 && $hunk === 0 && !$inside, 'clicking in the old side makes it active, after the first change');
+check($side === DiffSide::DiffOld && $line > 5 && $line < 30 && $hunk === 0 && !$inside, 'clicking in the old side makes it active, after the first change');
 // The old side stays active as the keyboard goes.
 $focus = $t->rt->focus;
 $t->rt->focus = null;
 $t->frame();
-same(DiffState::OLD, $d->activeSide(), 'the old side stays active without the keyboard');
+same(DiffSide::DiffOld, $d->activeSide(), 'the old side stays active without the keyboard');
 // GoToHunk moves the caret CursorPos reads, so an app's Next Change steps from it.
 [$h] = $d->currentHunk();
 $d->goToHunk($h + 1);
 $t->frame();
-same([DiffState::OLD, 30, 1, true], $at(), 'GoToHunk acts in the old side');
+same([DiffSide::DiffOld, 30, 1, true], $at(), 'GoToHunk acts in the old side');
 $t->rt->focusOn($focus);
 $t->frame();
 check($d->run(Command::FIND), 'Run(Find) opens a find bar');
@@ -172,17 +172,17 @@ $t->frame();
 $d->find('changed');
 $t->frame();
 [$side, $line] = $at();
-check($side === DiffState::NEW && $line === 30 && $d->eds[1]->find->open, 'Find in the new side selects the match after the caret');
+check($side === DiffSide::DiffNew && $line === 30 && $d->eds[1]->find->open, 'Find in the new side selects the match after the caret');
 // A unified view has only the new side's editor.
-$d->layout = DiffState::UNIFIED;
+$d->layout = DiffLayout::DiffUnified;
 $t->frame();
-same(DiffState::NEW, $d->activeSide(), 'a unified view acts in the new side');
+same(DiffSide::DiffNew, $d->activeSide(), 'a unified view acts in the new side');
 
 // The caret is in a hunk on the lines it changes, and in a deletion on the line of the side without its lines where they were; after the last line of a hunk, it is after it.
 $d = new DiffState(new Buffer("a\nb\nc\nd\ne\n"), new Buffer("a\nB\nc\ne\n"));
 $d->expandUnchanged = true;
 same(2, count($d->hunks()), 'two hunks');
-$ed = $d->editorOf(DiffState::NEW);
+$ed = $d->editorOf(DiffSide::DiffNew);
 foreach ([[0, -1, false], [1, 0, true], [2, 0, false], [3, 1, true], [4, 1, false]] as [$line, $hunk, $inside]) {
     $off = $d->new->offset(new Pos($line));
     $ed->setSels([$ed->newSel($off, $off)], Editor::REVEAL_NONE);

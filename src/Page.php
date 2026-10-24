@@ -460,7 +460,7 @@ final class Page
     private static function locale(): array
     {
         $l = App::locale();
-        return ['locale' => $l, 'dir' => I18n::rightToLeft($l) ? 'rtl' : 'ltr'];
+        return ['locale' => $l, 'dir' => I18n::direction($l)->value];
     }
 
     /** A message the page's bridge posted. */

@@ -74,7 +74,7 @@ final class Runtime
     public bool $reduceMotion = false;
     /** The desktop's settings (Context::preferences): the window sets them from App::preferences. */
     public Preferences $preferences;
-    /** That the window reads right to left: the window sets it from the app's language (I18n::rightToLeft of App::locale). */
+    /** That the window reads right to left: the window sets it from the app's language (I18n::direction of App::locale). */
     public bool $rightToLeft = false;
     /** The inspector's direction for debugging: 0 none, 1 left to right, 2 right to left. */
     public int $dirOverride = 0;

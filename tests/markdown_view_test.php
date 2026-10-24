@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, Node};
-use MyPHP\UI\Markdown\{Markdown, Options, Reveal, RevealState, Theme, ViewState};
+use MyPHP\UI\Markdown\{Markdown, Options, Reveal, RevealState, RevealUnit, Theme, ViewState};
 
 $sample = "# Title\n\nSome **bold** and a [link](https://go.dev), `code`.\n\n" .
     "- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```go\nfunc main() {}\n```\n\nLast [bad](javascript:alert(1)) one.\n";
@@ -63,7 +63,7 @@ check(str_starts_with($got, '**') && str_ends_with($got, 'text**') && !str_conta
 
 // A document streamed a character at a time shows as the whole one does.
 $doc = file_get_contents(__DIR__ . '/testdata/markdown/extras.md');
-$o = new Options(reveal: new Reveal(Reveal::AT_ONCE));
+$o = new Options(reveal: new Reveal(RevealUnit::AtOnce));
 $text = ''; $done = false;
 $h = new Headless(function (Context $c) use (&$text, &$done, $o) { $done ? Markdown::view($c, $text, $o) : Markdown::stream($c, $text, $o); }, 700, 3000);
 $chars = preg_split('//u', $doc, -1, PREG_SPLIT_NO_EMPTY);
@@ -93,7 +93,7 @@ same(trim($text), implode('', $h->texts()), 'all of it once done');
 
 // A selection survives text streaming in.
 $text = "First paragraph here.\n\nSecond one is being";
-$o = new Options(reveal: new Reveal(Reveal::AT_ONCE));
+$o = new Options(reveal: new Reveal(RevealUnit::AtOnce));
 $h = new Headless(function (Context $c) use (&$text, $o) { Markdown::stream($c, $text, $o); }, 600, 400);
 $h->frame();
 $n = $h->byText('First paragraph here.');
@@ -125,12 +125,12 @@ same($f(9), $f(100), 'text after the last mark is as transparent as it');
 // Sentences end at a period and a space, a question mark, an ideographic full stop, a line's end; not before the space comes.
 foreach ([['Pi is 3.14 today. Next', strlen('Pi is 3.14 today. ')], ['He said "go." Then', strlen('He said "go." ')], ['Really? Yes', strlen('Really? ')],
     ['一句话。下一句', strlen('一句话。')], ["- an item\n- next", strlen("- an item\n")], ['Not done yet', -1], ['Ends here.', -1]] as [$s, $want]) {
-    same($want, RevealState::unitEnd($s, 0, strlen($s), Reveal::BY_SENTENCE), "the sentence of \"$s\" ends");
+    same($want, RevealState::unitEnd($s, 0, strlen($s), RevealUnit::BySentence), "the sentence of \"$s\" ends");
 }
 
 // By sentence, only complete sentences show while more is coming; all once done.
 $now = 0; $text = ''; $done = false;
-$o = new Options(reveal: new Reveal(Reveal::BY_SENTENCE, catchUp: 0.001));
+$o = new Options(reveal: new Reveal(RevealUnit::BySentence, catchUp: 0.001));
 $h = new Headless(function (Context $c) use (&$text, &$done, $o) { $done ? Markdown::view($c, $text, $o) : Markdown::stream($c, $text, $o); }, 600, 400);
 $h->rt->clock = function () use (&$now) { return $now; };
 $text = 'First sentence here. Second one is still';
@@ -195,7 +195,7 @@ $src = "[foo]\n\n[foo]: https://go.dev\n"; $h->frame();
 same(implode('|', $whole->texts()), implode('|', $h->texts()), 'a paragraph becomes a link once its reference comes');
 
 $now = 0; $frames = 0;
-$o = new Options(reveal: new Reveal(Reveal::BY_LINE));
+$o = new Options(reveal: new Reveal(RevealUnit::ByLine));
 $h = new Headless(function (Context $c) use (&$frames, $o) { $frames++; Markdown::stream($c, 'Hello world, no newline yet', $o); }, 600, 400);
 $h->rt->clock = function () use (&$now) { return $now; };
 $h->frame();

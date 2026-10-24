@@ -16,21 +16,6 @@ use MyPHP\UI\{Context, Font, Node, Theme as UITheme};
  */
 final class State
 {
-    /** What indenting inserts: as the language's files usually do (Go's tabs), spaces or tabs. */
-    public const INDENT_AUTO = 0, INDENT_SPACES = 1, INDENT_TABS = 2;
-    /** How the gutter numbers lines. */
-    public const LINE_NUMBERS_ON = 0, LINE_NUMBERS_RELATIVE = 1, LINE_NUMBERS_OFF = 2;
-    /** Where spaces and tabs show: within selections, nowhere, everywhere, at the ends of lines, or but single spaces between words. */
-    public const WHITESPACE_SELECTION = 0, WHITESPACE_NONE = 1, WHITESPACE_ALL = 2, WHITESPACE_TRAILING = 3, WHITESPACE_BOUNDARY = 4;
-    /**
-     * The shape of the carets, as Zed's CursorShape: a bar before the
-     * character at the caret; a block covering the character after it, a
-     * space's width at the end of a line, translucent so that the
-     * character shows, outlined without the keyboard focus, as Vim's and
-     * Zed's; or an underline under the character after it.
-     */
-    public const CURSOR_BAR = 0, CURSOR_BLOCK = 1, CURSOR_UNDERLINE = 2;
-
     /** The text the editor edits; one is made when null. */
     public ?Buffer $buffer = null;
     /** The font's size, 13 when 0, and its style bits: the system's monospaced font by default. */
@@ -40,14 +25,14 @@ final class State
     public float $lineHeight = 0.0;
     /** How many columns a tab and a level of indentation take: the language's, else 4, when 0. */
     public int $tabSize = 0;
-    public int $indent = self::INDENT_AUTO;
+    public IndentStyle $indent = IndentStyle::IndentAuto;
     /** Wraps lines at the editor's width, or at $wrapColumn columns when narrower. */
     public bool $softWrap = false;
     public int $wrapColumn = 0;
-    public int $lineNumbers = self::LINE_NUMBERS_ON;
+    public LineNumbers $lineNumbers = LineNumbers::LineNumbersOn;
     /** Makes the text selectable and copyable, not editable. */
     public bool $readOnly = false;
-    public int $whitespace = self::WHITESPACE_SELECTION;
+    public Whitespace $whitespace = Whitespace::WhitespaceSelection;
     /** @var list<int> guides at these columns, as 80 and 100 */
     public array $wrapGuides = [];
     /** Hides the lines that show indentation levels. */
@@ -60,7 +45,7 @@ final class State
     public bool $noFolding = false;
     /** Stops highlighting the lines with a caret. */
     public bool $noActiveLine = false;
-    public int $cursorShape = self::CURSOR_BAR;
+    public CursorShape $cursorShape = CursorShape::CursorBar;
     /** Makes the editor as high as its lines, to show in a scroll view or a list, rather than scrolling them itself. */
     public bool $fitContent = false;
     /** Shows while the buffer is empty. */

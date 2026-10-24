@@ -23,7 +23,7 @@ trait EditorGitDiff
     public function diffModel(): array
     {
         if ($this->gitDiff !== null) { return [$this->gitDiff->d, false]; }
-        if (($ds = $this->o->decor) instanceof DiffSide) { return [$ds->d->model, $ds->old]; }
+        if (($ds = $this->o->decor) instanceof DiffSideView) { return [$ds->d->model, $ds->old]; }
         return [null, false];
     }
 

@@ -45,7 +45,7 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 ## Layout
 
 ```
-bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
+bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app), micro; bin/cldr-tables
 src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
                    documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
                    WindowState(+Store), newWebView), Page (+ PageOptions, on(event), eval, find, PDF, downloads, permissions),
@@ -53,8 +53,8 @@ src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenUR
                    Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut, Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
                    window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), Protocol (+ Request/Response), autoload.php,
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
-                   region/on*Changed), Region, I18n (tags, patterns, dates, numbers, names — over ext-intl), L10n
-                   (MyPHP's own strings, src/l10n/<tag>.json: mygo's catalogs in en, zh-Hans, zh-Hant)
+                   region/on*Changed), Region, I18n (tags, parents, plurals, dates, numbers, names; ext-intl + CldrTables),
+                   Message, Catalog, L10n (MyPHP's own strings, src/l10n: a library catalog "myphp"), Native/I18nGen (accessors)
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale (AppleLanguages,
                    the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:

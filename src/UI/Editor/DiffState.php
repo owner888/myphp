@@ -15,24 +15,16 @@ use MyPHP\UI\{Context, DisplayList, Font, Node, Role, TextPainter, Theme as UITh
  */
 final class DiffState
 {
-    /** How the viewer lays out its two texts: the old on the left and the new on the right, their lines aligned; or the new text, with the lines deleted from the old above where they were. */
-    public const SPLIT = 0, UNIFIED = 1;
-    /** How it highlights what changed within lines: words, joining those one character apart, as "a b c" changed reads as one; each word; from the first word changed to the last; characters; nothing. */
-    public const INLINE_WORD_ALT = 0, INLINE_WORD = 1, INLINE_WORD_LINE = 2, INLINE_CHAR = 3, INLINE_NONE = 4;
-    /** How it marks changed lines: a bar at the gutter's edge, striped for deletions; + and - before the lines; their background alone. */
-    public const BARS = 0, CLASSIC = 1, NO_INDICATORS = 2;
-    /** The sides of a diff. */
-    public const OLD = 0, NEW = 1;
     /** The height of a separator. */
     public const SEPARATOR_HEIGHT = 32.0;
 
     /** The texts compared; empty buffers are made when null. New is the one edited when $editable, and can be the buffer of an editor's too: an edit in either shows in both. */
     public ?Buffer $old = null, $new = null;
-    public int $layout = self::SPLIT;
+    public DiffLayout $layout = DiffLayout::DiffSplit;
     /** Lets the new text be edited where it shows, with all an editor does; the diff follows as it is typed. */
     public bool $editable = false;
-    public int $inline = self::INLINE_WORD_ALT;
-    public int $indicators = self::BARS;
+    public DiffInline $inline = DiffInline::DiffInlineWordAlt;
+    public DiffIndicators $indicators = DiffIndicators::DiffBars;
     /**
      * How many unchanged lines show around changes, 3 when 0, none when
      * negative; the others collapse into separators that expand them,
@@ -81,7 +73,7 @@ final class DiffState
     public DiffModel $model;
     /** @var array{0: Editor, 1: Editor} the old side's and the new side's */
     public array $eds;
-    /** @var array{0: DiffSide, 1: DiffSide} */
+    /** @var array{0: DiffSideView, 1: DiffSideView} */
     public array $sides;
     /** The old text, for its lines in a unified view. */
     public View $oldView;
@@ -108,7 +100,7 @@ final class DiffState
         $this->old = $old; $this->new = $new;
         $this->model = new DiffModel;
         $this->eds = [new Editor, new Editor];
-        $this->sides = [new DiffSide($this, true), new DiffSide($this, false)];
+        $this->sides = [new DiffSideView($this, true), new DiffSideView($this, false)];
         $this->oldView = new View;
         $this->scroll = new SharedScroll;
     }
@@ -207,7 +199,7 @@ final class DiffState
         $h = $this->model->hunks[$i];
         $side = $this->activeSide();
         $ed = $this->editorOf($side);
-        $line = $side === self::OLD ? $h->a0 : $h->b0;
+        $line = $side === DiffSide::DiffOld ? $h->a0 : $h->b0;
         $r = $ed->view->text;
         $off = $r->lineStart(min($line, $r->lineCount() - 1));
         $ed->setSels([$ed->newSel($off, $off)], Editor::REVEAL_CENTER);
@@ -230,9 +222,9 @@ final class DiffState
     }
 
     /** The side that has the keyboard, or had it last: the new side before either had it, and in a unified view. cursor, cursorPos, currentHunk, goToHunk, run and find act in its editor. */
-    public function activeSide(): int
+    public function activeSide(): DiffSide
     {
-        return $this->oldActive && $this->layout === self::SPLIT ? self::OLD : self::NEW;
+        return $this->oldActive && $this->layout === DiffLayout::DiffSplit ? DiffSide::DiffOld : DiffSide::DiffNew;
     }
 
     /** The offset of the newest caret of the active side, in its text. */
@@ -258,24 +250,24 @@ final class DiffState
         $side = $this->activeSide();
         $ed = $this->editorOf($side);
         $line = $ed->view->text->lineOf($ed->primary()->head);
-        if (($j = $this->model->hunkAt($line, $side === self::OLD)) >= 0) { return [$j, true]; }
+        if (($j = $this->model->hunkAt($line, $side === DiffSide::DiffOld)) >= 0) { return [$j, true]; }
         $i = -1;
         foreach ($this->model->hunks as $j => $h) {
-            if (($side === self::OLD ? $h->a0 : $h->b0) > $line) { break; }
+            if (($side === DiffSide::DiffOld ? $h->a0 : $h->b0) > $line) { break; }
             $i = $j;
         }
         return [$i, false];
     }
 
     /** The editor of a side, made ready to act in before the viewer is first built. */
-    public function editorOf(int $side): Editor
+    public function editorOf(DiffSide $side): Editor
     {
         $this->ensure();
-        $ed = $this->eds[$side];
-        $buf = $side === self::OLD ? $this->old : $this->new;
+        $ed = $this->eds[$side->value];
+        $buf = $side === DiffSide::DiffOld ? $this->old : $this->new;
         if ($ed->view->buf !== $buf || $ed->sels === null) {
             $ed->tp ??= Editor::$text ?? App::text();
-            $ed->init($buf, $this->sideOptions($side === self::OLD), UITheme::light(), $ed->tp);
+            $ed->init($buf, $this->sideOptions($side === DiffSide::DiffOld), UITheme::light(), $ed->tp);
         }
         $ed->sync();
         return $ed;
@@ -289,13 +281,13 @@ final class DiffState
         $o->minDigits = max(3, strlen((string)max($this->old->lineCount(), $this->new->lineCount())));
         $o->readOnly = $old || !$this->editable;
         $o->fontSize = $this->fontSize; $o->fontStyle = $this->fontStyle; $o->lineHeight = $this->lineHeight; $o->tabSize = $this->tabSize;
-        $o->wrap = $this->wrap; $o->lineNumbers = $this->noLineNumbers ? State::LINE_NUMBERS_OFF : State::LINE_NUMBERS_ON;
-        $o->whitespace = State::WHITESPACE_NONE; $o->autoClose = true;
+        $o->wrap = $this->wrap; $o->lineNumbers = $this->noLineNumbers ? LineNumbers::LineNumbersOff : LineNumbers::LineNumbersOn;
+        $o->whitespace = Whitespace::WhitespaceNone; $o->autoClose = true;
         $o->theme = $this->theme; $o->bindings = $this->bindings; $o->fitContent = $this->fitContent;
         $o->renderFindBar = $this->renderFindBar; $o->renderGoToLine = $this->renderGoToLine;
         // What a code editor has that the sides have not.
         $o->indentGuides = false; $o->scrollPastEnd = false; $o->folding = false; $o->activeLine = false;
-        $o->diffSide = $old ? Options::DIFF_OLD : Options::DIFF_NEW; // which names it
+        $o->diffSide = $old ? DiffSide::DiffOld : DiffSide::DiffNew; // which names it
         return $o;
     }
 
@@ -306,14 +298,14 @@ final class DiffState
         $t = $c->theme;
         $ct = Theme::resolve($this->theme, $t);
         $this->sides[0]->unified = false;
-        $this->sides[1]->unified = $this->layout === self::UNIFIED;
-        if ($this->layout === self::UNIFIED) {
+        $this->sides[1]->unified = $this->layout === DiffLayout::DiffUnified;
+        if ($this->layout === DiffLayout::DiffUnified) {
             $this->oldView->theme = $ct;
             $this->oldView->setBuffer($this->old);
             $this->oldView->sync(null);
             $o = $this->sideOptions(false);
             $o->decor = $this->sides[1];
-            if ($this->indicators === self::CLASSIC) { $o->signs = true; }
+            if ($this->indicators === DiffIndicators::DiffClassic) { $o->signs = true; }
             $root = $c->row();
             $root->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) {
                 $ed = $this->eds[1];
@@ -363,7 +355,7 @@ final class DiffState
               $o->decor = $this->sides[$i];
               $o->sharedScroll = $this->fitContent ? null : $this->scroll;
               $o->noScrollbar = $i === 0;
-              if ($this->indicators === self::CLASSIC) { $o->signs = true; }
+              if ($this->indicators === DiffIndicators::DiffClassic) { $o->signs = true; }
               $ed = $this->eds[$i]->build($c->key($i === 0 ? 'old' : 'new'), $b, $o); // each side's nodes in a scope of their own: their find bars' keys are one
               $ed->grow = 1; $ed->basis(0)->minWidth(0)->alignSelf(Node::STRETCH);
               if ($i === 0) {
@@ -408,7 +400,7 @@ final class DiffState
     }
 
     /** Selects a line by its number, or extends the selection to it from its nearer end. */
-    public function selectLine(int $side, int $line, bool $extend): void
+    public function selectLine(DiffSide $side, int $line, bool $extend): void
     {
         $s = $this->selected;
         if ($extend && $s !== null && $s->side === $side) {
@@ -444,7 +436,7 @@ final class DiffState
     /** What places the nodes a diff view builds over its lines, as its separators, which the view builds from the last frame's layout: the blocks, the wraps of the lines, the height and the scroll. */
     private function geom(): array
     {
-        $a = $this->layout === self::UNIFIED ? $this->oldView : $this->eds[0]->view;
+        $a = $this->layout === DiffLayout::DiffUnified ? $this->oldView : $this->eds[0]->view;
         $b = $this->eds[1];
         return [$this->blocksV, $a->heights->wraps->version, $b->view->heights->wraps->version, $b->view->heights->total(), $b->scrollY];
     }
@@ -461,7 +453,7 @@ final class DiffState
     private function prepare(): void
     {
         $this->model->update();
-        $unified = $this->layout === self::UNIFIED;
+        $unified = $this->layout === DiffLayout::DiffUnified;
         $viewA = $unified ? $this->oldView : $this->eds[0]->view;
         $viewB = $this->eds[1]->view;
         $key = [$this->model->version, $this->expandV, $this->layout, $this->context(), self::annotationsKey($this->annotations),
@@ -516,22 +508,22 @@ final class DiffState
             }
         }
         $anns = [[], []];
-        foreach ($this->annotations as $a) { $anns[$a->side][$a->line] = ($anns[$a->side][$a->line] ?? 0.0) + $a->height; }
+        foreach ($this->annotations as $a) { $anns[$a->side->value][$a->line] = ($anns[$a->side->value][$a->line] ?? 0.0) + $a->height; }
         $rowsOf = fn(View $v, int $line): float => $v->heights->wraps->rows($line) * $lh;
         if ($unified) {
             foreach ($this->model->hunks as $hi => $h) {
                 if ($h->a1 <= $h->a0) { continue; }
                 $height = 0.0;
-                for ($i = $h->a0; $i < $h->a1; $i++) { $height += $rowsOf($viewA, $i) + ($anns[self::OLD][$i] ?? 0.0); }
+                for ($i = $h->a0; $i < $h->a1; $i++) { $height += $rowsOf($viewA, $i) + ($anns[DiffSide::DiffOld->value][$i] ?? 0.0); }
                 $b = new Block(0, false, $height, Block::DELETED, $h->a0, $h->a1, null, $hi);
                 if ($h->b0 < $nB) { $b->line = $h->b0; } else { $b->line = $nB - 1; $b->below = true; }
                 $blk[1][] = $b;
             }
             // The old text's annotations on unchanged lines go under the same lines of the new text, as only those show.
-            foreach ($anns[self::OLD] as $line => $height) {
-                if (($nl = $this->model->newLineOf($line)) !== null) { $anns[self::NEW][$nl] = ($anns[self::NEW][$nl] ?? 0.0) + $height; }
+            foreach ($anns[DiffSide::DiffOld->value] as $line => $height) {
+                if (($nl = $this->model->newLineOf($line)) !== null) { $anns[DiffSide::DiffNew->value][$nl] = ($anns[DiffSide::DiffNew->value][$nl] ?? 0.0) + $height; }
             }
-            foreach ($anns[self::NEW] as $line => $height) { $blk[1][] = new Block($line, true, $height, Block::ANNOTATION, 0, 0, $line); }
+            foreach ($anns[DiffSide::DiffNew->value] as $line => $height) { $blk[1][] = new Block($line, true, $height, Block::ANNOTATION, 0, 0, $line); }
             $this->setSide(1, $hide[1], self::sticky([...$blk[1], ...$late[1]]));
             return;
         }
@@ -649,7 +641,7 @@ final class DiffState
     }
 
     /** How high the annotations under $line of $side are. */
-    public function annotationHeight(int $side, int $line): float
+    public function annotationHeight(DiffSide $side, int $line): float
     {
         $h = 0.0;
         foreach ($this->annotations as $a) { if ($a->side === $side && $a->line === $line) { $h += $a->height; } }
@@ -660,7 +652,7 @@ final class DiffState
     private static function annotationsKey(array $anns): string
     {
         $k = '';
-        foreach ($anns as $a) { $k .= "{$a->side}:{$a->line}:{$a->height};"; }
+        foreach ($anns as $a) { $k .= "{$a->side->value}:{$a->line}:{$a->height};"; }
         return $k;
     }
 

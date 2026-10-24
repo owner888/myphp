@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, Node};
-use MyPHP\UI\Editor\{Buffer, Completion, CompletionRequest, Diagnostic, DiffState, HoverRequest, Languages, Pos, State};
+use MyPHP\UI\Editor\{Buffer, Completion, CompletionKind, CompletionRequest, Diagnostic, DiffInline, DiffLayout, DiffState, HoverRequest, Languages, Pos, Severity, State};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -120,8 +120,8 @@ function editorPage(Context $c, File $f): void
 function diffPage(Context $c, EditorApp $a, File $f): void
 {
     $d = $f->diff;
-    $d->layout = $a->layout === 1 ? DiffState::UNIFIED : DiffState::SPLIT;
-    $d->inline = [DiffState::INLINE_WORD_ALT, DiffState::INLINE_CHAR, DiffState::INLINE_NONE][$a->inline];
+    $d->layout = $a->layout === 1 ? DiffLayout::DiffUnified : DiffLayout::DiffSplit;
+    $d->inline = [DiffInline::DiffInlineWordAlt, DiffInline::DiffInlineChar, DiffInline::DiffInlineNone][$a->inline];
     if ($d->hunks() === []) {
         $c->column(0, 0, 1)->center();
           $c->text('No changes', 18, null, Font::BOLD);
@@ -139,11 +139,11 @@ function wordsOf(Buffer $b, string $prefix): array
     foreach (preg_split('/[^\p{L}\p{Nd}_]+/u', (string)$b, -1, PREG_SPLIT_NO_EMPTY) as $w) {
         if (strlen($w) < 3 || isset($seen[$w]) || $w === $prefix) { continue; }
         $seen[$w] = true;
-        $out[] = new Completion($w, 'word', Completion::TEXT);
+        $out[] = new Completion($w, 'word', CompletionKind::CompletionText);
     }
     if ($b->language() !== null) {
         foreach (['func', 'return', 'import', 'package', 'const', 'struct', 'interface', 'range'] as $k) {
-            if (!isset($seen[$k])) { $out[] = new Completion($k, 'keyword', Completion::KEYWORD); }
+            if (!isset($seen[$k])) { $out[] = new Completion($k, 'keyword', CompletionKind::CompletionKeyword); }
         }
     }
     usort($out, fn(Completion $x, Completion $y) => strcmp($x->label, $y->label));
@@ -171,7 +171,7 @@ function todos(Buffer $b): array
         $line = $b->line($i);
         if (($at = strpos($line, 'TODO')) !== false) {
             $start = $b->offset(new Pos($i, $at));
-            $out[] = new Diagnostic($start, $start + strlen($line) - $at, Diagnostic::WARNING, trim(substr($line, $at)), 'todo');
+            $out[] = new Diagnostic($start, $start + strlen($line) - $at, Severity::SeverityWarning, trim(substr($line, $at)), 'todo');
         }
     }
     return $out;

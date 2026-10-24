@@ -76,13 +76,13 @@ final class Theme
         return $c !== null && $c[1] > 0 ? $c : $this->c['text'];
     }
 
-    /** The color of diagnostics of a severity (Diagnostic). @return array{0: int, 1: float} */
-    public function severityColor(int $s): array
+    /** The color of diagnostics of a severity. @return array{0: int, 1: float} */
+    public function severityColor(Severity $s): array
     {
         return match ($s) {
-            Diagnostic::WARNING => $this->c['warning'],
-            Diagnostic::INFO => $this->c['info'],
-            Diagnostic::HINT => $this->c['hint'],
+            Severity::SeverityWarning => $this->c['warning'],
+            Severity::SeverityInfo => $this->c['info'],
+            Severity::SeverityHint => $this->c['hint'],
             default => $this->c['error'],
         };
     }

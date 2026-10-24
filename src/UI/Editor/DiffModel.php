@@ -305,14 +305,14 @@ final class DiffModel
         return [$added, $deleted];
     }
 
-    /** The inline diff of hunk $i, made as $mode (DiffState::INLINE_*) says. */
-    public function wordsOf(int $i, int $mode): HunkWords
+    /** The inline diff of hunk $i, made as $mode says. */
+    public function wordsOf(int $i, DiffInline $mode): HunkWords
     {
         $h = $this->hunks[$i];
-        $key = "{$h->a0},{$h->a1},{$h->b0},{$h->b1},$mode";
+        $key = "{$h->a0},{$h->a1},{$h->b0},{$h->b1},{$mode->value}";
         if (isset($this->words[$key])) { return $this->words[$key]; }
         $w = $this->words[$key] = new HunkWords;
-        if ($h->a0 === $h->a1 || $h->b0 === $h->b1 || $mode === DiffState::INLINE_NONE) { return $w; }
+        if ($h->a0 === $h->a1 || $h->b0 === $h->b1 || $mode === DiffInline::DiffInlineNone) { return $w; }
         $a = self::ropeLines($this->oldText, $h->a0, $h->a1);
         $b = self::ropeLines($this->newText, $h->b0, $h->b1);
         $w->offset = self::alignBySimilarity($a, $b);
@@ -366,12 +366,12 @@ final class DiffModel
     }
 
     /** The ranges of $a and $b that changed, as $mode says. @return array{0: list<array{0: int, 1: int}>, 1: list<array{0: int, 1: int}>} */
-    private static function inlineDiff(string $a, string $b, int $mode): array
+    private static function inlineDiff(string $a, string $b, DiffInline $mode): array
     {
-        [$xa, $xb] = $mode === DiffState::INLINE_CHAR ? Diff::chars($a, $b) : Diff::words($a, $b);
+        [$xa, $xb] = $mode === DiffInline::DiffInlineChar ? Diff::chars($a, $b) : Diff::words($a, $b);
         $conv = function (array $rs, string $s) use ($mode): array {
-            if ($mode === DiffState::INLINE_WORD_ALT) { $rs = self::joinWordAlt($rs, $s); }
-            if ($mode === DiffState::INLINE_WORD_LINE && $rs !== []) { $rs = [[$rs[0][0], $rs[count($rs) - 1][1]]]; }
+            if ($mode === DiffInline::DiffInlineWordAlt) { $rs = self::joinWordAlt($rs, $s); }
+            if ($mode === DiffInline::DiffInlineWordLine && $rs !== []) { $rs = [[$rs[0][0], $rs[count($rs) - 1][1]]]; }
             return $rs;
         };
         return [$conv($xa, $a), $conv($xb, $b)];

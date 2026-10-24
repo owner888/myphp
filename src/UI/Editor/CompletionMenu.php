@@ -89,7 +89,7 @@ final class CompletionMenu
               $row = $m->item($i, $scroll, $rowH)->align(Node::CENTER)->padding(0, $t->space(1.5))->round($t->radius - 2)->size(0, $rowH);
               $row->gap = $t->space(2);
               if ($i === $m->selected()) { $row->color = $t->accent; $row->alpha = 0.18; }
-                $c->text(Completion::icon($it->kind), $size - 1, $ct->tokenColor(Completion::token($it->kind))[0], Font::MONO)->size($t->space(3), 0);
+                $c->text($it->kind->icon(), $size - 1, $ct->tokenColor($it->kind->token())[0], Font::MONO)->size($t->space(3), 0);
                 $c->text($it->label, $size, $ct->c['text'][0], $m->fontStyle())->singleLine();
                 if ($it->detail !== '') { $c->text($it->detail, $size - 1, $t->textMuted)->singleLine(); }
               $c->end();

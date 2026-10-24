@@ -49,7 +49,7 @@ trait EditorBuild
                 $this->unmarkText();
             }
         }
-        $e->role(Role::TEXT_FIELD)->label($o->label !== '' ? $o->label : $this->texts->get(match ($o->diffSide) { Options::DIFF_NEW => 'newText', Options::DIFF_OLD => 'oldText', default => 'codeEditor' }))
+        $e->role(Role::TEXT_FIELD)->label($o->label !== '' ? $o->label : $this->texts->get(match ($o->diffSide) { DiffSide::DiffNew => 'newText', DiffSide::DiffOld => 'oldText', default => 'codeEditor' }))
             ->access($this->accessibility(...));
         $e->handleInput(fn(InputEvent $ev) => $this->input($ev));
         $e->cursor($this->region === self::REGION_TEXT ? \MyPHP\UI\Cursor::Text : \MyPHP\UI\Cursor::Default);
@@ -98,7 +98,7 @@ trait EditorBuild
         };
         $caretAnchor = $this->complete->open() ? $anchor($this->complete->at) : null;
         $hoverAnchor = $h->shown ? $anchor($h->start) : null;
-        if (($ds = $this->o->decor) instanceof DiffSide) { $ds->buildBlocks($c, $this); }
+        if (($ds = $this->o->decor) instanceof DiffSideView) { $ds->buildBlocks($c, $this); }
         if ($this->find->open) { $this->buildFindBar($c); }
         if ($this->goTo->open) { $this->buildGoToLine($c); }
         if ($caretAnchor !== null) { $this->buildCompletions($c, $caretAnchor); }

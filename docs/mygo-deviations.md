@@ -715,7 +715,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     environment variable `MYGO_DIRECTION`.
   - myphp: `UI\Direction`, `Node::direction()`, `Context::direction()`,
     the same logical edges, the window's direction from
-    `I18n::rightToLeft(App::locale())`, rows, columns, wrapping rows,
+    `I18n::direction(App::locale())`, rows, columns, wrapping rows,
     grids and sideways scrolling mirrored (the offset counted from the
     right, the wheel as left to right, the scroll bar on the left), text
     starting at the right, and the controls whose arrow keys go along
@@ -1039,3 +1039,104 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     page are the window's, as before.
   - Why: myphp has no runtime package; its drops are native.
 
+
+## Languages, messages and catalogs (v1.10)
+
+- **Package i18n**
+  - mygo: package functions (`i18n.Normalize`, `Match`, `Parent`,
+    `Direction` returning a `Dir`, `FormatDate(locale, t, DateOptions)`,
+    `FormatNumber(locale, any, NumberOptions)`, `Months`, `Weekdays`,
+    `DayPeriods`, `Autonym`, `FormatLocales`, `PluralCategory`…), the
+    `Width` and `Style` constants, `Plural.String`, `ParsePlural`,
+    `NewOperands` returning an error, `SetLocaleFunc` and `Locale`.
+  - myphp: static methods of `I18n`; `Width`, `Style`, `Dir` and
+    `Plural` enums (`Plural::tryFrom` reads a keyword, a `Plural`'s value
+    is it); `Operands::of` throws; `DateFormatter`, `NumberFormatter`,
+    `DateOptions`, `NumberOptions` as mygo's; `I18n::locale()` reads
+    `App::locale()`, so there is no `SetLocaleFunc`; `I18n::match`,
+    `likelyScript` and `pattern` were myphp's own: `match` now finds
+    mygo's matches by CLDR's parents, `pattern` is
+    `DateFormatter::pattern()`, `rightToLeft` is `direction()`.
+  - Why: PHP has no package functions; ICU, through ext-intl, has the
+    dates, numbers and names, but no plural rules, so they are mygo's
+    tables (`Native\CldrTables`).
+- **Time zones and other values**
+  - mygo: zones other than UTC written as GMT offsets ("GMT+8"); values
+    of any Go type (fmt.Sprint for the rest).
+  - myphp: ICU's names of zones ("Singapore Standard Time" in a full
+    time); values are PHP's: a `Throwable` its message, a `Stringable`
+    or an enum its string, arrays as JSON.
+  - Why: ICU names zones; PHP's values.
+- **Messages**
+  - mygo: `ParseMessage` returning an error, `MustParseMessage`,
+    `Message.Format(locale, map[string]any)`.
+  - myphp: `Message::parse` throws a `SyntaxError` (`$source`, `$offset`,
+    `$error`); `format($locale, $args)`; no `MustParse`, as a throw is
+    the panic.
+  - Why: PHP's exceptions.
+- **Catalogs**
+  - mygo: `NewCatalog(fs.FS, source)`, `NewLibraryCatalog`,
+    `Catalog.Message` returning `(m, lang, ok)`, `Register`,
+    `Languages`; MyGo's strings as generated functions
+    (`l10n.Cancel()`), their translations in packages an app imports.
+  - myphp: `new Catalog($dir, $source)`, `Catalog::library($dir,
+    $source, $namespace)`, `message()` returning `[$message, $lang]` or
+    null, `I18n::register`, `I18n::languages`; MyPHP's strings are
+    `L10n::in($locale)->get($key, $args)`, every translation shipped in
+    `src/l10n`, changed by an app's keys "myphp.<key>" (`L10n::add` is
+    gone), and their keys are MyPHP's ("menuQuitApp").
+  - Why: PHP reads files, not embedded file systems; MyPHP's strings
+    were `L10n` before catalogs, and the framework is shipped whole.
+- **Generated accessors**
+  - mygo: `mygo generate` writes catalog_gen.go, a package whose
+    functions say the messages (`locales.FilesSelected(3)`,
+    `locales.In("de").FilesSelected(3)`), registered as it is imported;
+    the TypeScript module imports `mygo-runtime/i18n`; `mygo dev -lang`.
+  - myphp: `myphp generate` (and `dev`, `build`) writes `<dir>/<Dir>.php`,
+    the class `Locales` for locales: `Locales::filesSelected(3)`,
+    `Locales::in('de')->filesSelected(3)` (a `LocalesMessages`),
+    registered as the app requires the file; its methods are named as
+    the keys, which may not differ in case alone; the TypeScript module
+    carries the formatter (`src/Native/i18n.ts`); `myphp dev --lang de`.
+  - Why: PHP has no packages: a class is the package, and the file the
+    import; myphp has no runtime package for pages.
+
+## Code editor, Markdown and transfer (v1.10)
+
+- **Enums of options**
+  - mygo: `IndentStyle`, `LineNumbers`, `Whitespace`, `CursorShape`,
+    `Severity`, `CompletionKind`, `DiffLayout`, `DiffInline`,
+    `DiffIndicators`, `DiffSide` (ui/editor) and `RevealUnit`
+    (ui/markdown) are `uint8` types.
+  - myphp: int-backed enums with mygo's constant names as cases
+    (`IndentStyle::IndentTabs`, `DiffSide::DiffOld`, whose value indexes
+    the sides), `CompletionKind::icon()` and `token()`; the class that
+    draws a side of a diff, mygo's unexported diffSide, is `DiffSideView`.
+  - Why: myphp's enums, as the terminal's and rich text's.
+- **Kinds that stay integers**
+  - mygo: `TokenKind`, `Command` (`String`, `CommandNamed`) and the
+    parser's `Kind`, `InlineKind`, `Task`, `Align` are `uint8` types;
+    `Extensions` a bitmask.
+  - myphp: integer constants (`Token::KEYWORD`, `Command::SELECT_ALL`,
+    `Block::HEADING`, `Inline::LINK`), `Command::name`/`named`,
+    `Block::kindName`, `Inline::kindName`; `Extensions` constants
+    without the Ext prefix (`Extensions::TABLES`, `DEFAULT`).
+  - Why: they index arrays (the theme's token styles, the key map, the
+    parser's tables) and run in the lexers' and the parser's inner loops,
+    where an enum is an object to look up.
+- **Package functions**
+  - mygo: `editor.LanguageFor`, `LanguageNamed`, `Languages`,
+    `DefaultBindings`, `DefaultTheme`, `NewTokenHighlighter`;
+    `markdown.View`, `Stream`, `Slug`, `FileImages`, `DefaultCodeBlock`;
+    `parser.Parse`, `PlainText`, `NormalizeLabel`, `Entity`;
+    `transfer.New`, `NewItem`, `TextData`, `URLData`, `FileData`,
+    `Data.Items`, `Data.Files`.
+  - myphp: `Languages::for`, `named`, `all`, `Keymap::defaults`,
+    `Theme::defaults`, `new TokenHighlighter`; `Markdown::view`,
+    `stream`, `slug`, `fileImages`, `defaultCodeBlock`;
+    `Document::parse`, `Inline::plainText`, `Document::normalizeLabel`,
+    `Scan::entity`; `new Data`, `new Item`, `Data::text`, `Data::url`,
+    `Data::files`, `$data->items`, `$data->paths()` (as `Data::files`
+    makes data).
+  - Why: PHP has no package functions; a static and a method cannot
+    share a name.

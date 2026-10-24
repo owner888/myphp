@@ -1515,30 +1515,97 @@ and calls the listeners. Without a running app (the tests) the
 language is English, the preferred languages none and the region the
 zero one.
 
-`I18n` is mygo's package i18n over ext-intl: tags normalized
-(`Locale::canonicalize`) and matched, right-to-left scripts,
-`firstWeekday` and `hourCycle` of a locale, the pattern of a skeleton
-(IntlDatePatternGenerator, with an hour cycle as the "hc" key of the
-extension), dates, numbers (without grouping, in the locale's digits),
-weekdays and day periods in a width, each formatter kept by locale and
-options and what they wrote cached (1024 entries, as mygo's fmtCache),
-since the controls write the same dates and numbers frame after frame.
-`Region::formatLocale($lang)` puts the language and the formats
-together as Apple's Locale.current does ("en-GB-u-fw-mon-hc-h23");
-`Context::formats()` is mygo's: the system's region when it names an
-hour cycle, else CLDR's for the language.
+`I18n` is mygo's package i18n, over ext-intl for what ICU knows and over
+mygo's CLDR tables for what ICU does not give PHP. Tags are normalized
+(ICU canonicalizes language, script and region; extensions keep their
+BCP 47 form, as ICU would make them `@hours=h23` keywords; old codes
+iw, in, ji, jw, mo are the new ones; POSIX modifiers name scripts,
+sr_RS@latin is sr-Latn-RS; only two- and three-letter languages are
+languages, so that "messages.json" is no catalog) and matched by CLDR's
+parents: the same tag, then an ancestor (es-419 for es-MX), then a
+sibling under the same parent (en-GB for en-AU), then another region in
+the same likely script (nb and no one language), never another script.
+A language's likely script is the script ICU writes its name in, in
+itself ("српски" is Cyrl), for the few without a name of their own a
+table. `parent()` and `chain()` are mygo's parent.go over
+`Native\CldrTables` (CLDR 48.2.0, converted from mygo's tables.go by
+`bin/cldr-tables`), as are the plural categories: the rules as PHP
+switches over `Operands` (mygo's, the last 18 digits plus 10^18 for
+longer numbers), checked against CLDR's samples and against ICU's
+categories of 250 languages (tests/i18n, mygo's testdata). PHP's intl has
+no PluralRules, which is why they are tables.
+
+Dates are `DateFormatter`: mygo's datePattern (a skeleton's hour letter
+is an hour cycle, as V8 reads Intl's options; a style's pattern with
+another cycle is the best pattern of its skeleton in it) over
+IntlDatePatternGenerator and IntlDateFormatter, the narrow no-break
+spaces of CLDR's times written as spaces as V8 writes them. Numbers are
+`NumberFormatter`: mygo's writing of decimal strings (exact however many
+digits, rounding half up or half even, percents shifted, Indian groups,
+CLDR's minimumGroupingDigits read from ICU's bundles along the parents,
+as ICU's own NumberFormatter ignores it: es writes 1234) with ICU's
+patterns, symbols and digits. Formatters are kept by locale and options
+and what dates they wrote cached (1024 entries, as mygo's fmtCache),
+since the controls write the same dates frame after frame.
+`Region::formatLocale($lang)` puts the language and the formats together
+as Apple's Locale.current does ("en-GB-u-fw-mon-hc-h23", zh-HK with German
+formats zh-Hant-DE; the pseudo locales' formats English);
+`Context::formats()` is mygo's: the system's region when it names an hour
+cycle, else CLDR's for the language.
+
+`Message` is mygo's message.go and format.go: ICU MessageFormat parsed
+(apostrophe quoting, Pattern_Syntax names, plural offsets, exact cases,
+32 levels of nesting) into nodes and formatted with the plural rules of
+the language the message is in and the numbers and dates of the locale;
+mygo's fixtures (tests/i18n/messages.json), which its Go and TypeScript
+formatters check, pass. The pseudo locales en-XA and ar-XB transform
+the source language's messages (`Native\Pseudo`, Android's
+pseudolocalizer), and `Locales` shows them whatever the app is written
+in. `Catalog` is mygo's catalog.go: a directory of `<tag>.json` read a
+language at a time, the message of a locale along its chain, the best
+match of each catalog's languages, then the app's source, then the
+library's; a library's catalog (`Catalog::library`) looks first in the
+registered catalogs' keys "<namespace>.<key>"; texts formatted without
+arguments are kept per registry version. `I18n::register` adds an app's
+catalog, whose languages become `App::languages()` where the app sets
+none (`Locales::catalogsChanged` shows them at once).
 
 `L10n` is mygo's internal/l10n: MyPHP's own strings — the controls'
-(Search, Find, "3 of 12", No matches, Done…) and the menu roles' — in
-`src/l10n/<tag>.json`, mygo's catalogs copied (English the source with
-the translators' descriptions, zh-Hans and zh-Hant), `L10n::in($lang)`
-the best match of the languages they are in, `get($key, $args)` through
-ICU's MessageFormatter (placeholders, plural, select, number skeletons);
-`L10n::add($lang, $messages)` lets an app change them or translate them
-further. `Menu::ROLES` holds the keys ("menuUndo"), the labels taken at
-build in the language the app shows with the app's name ("Quit Widgets"),
-and `App::relabelMenus` installs the bar again on a change.
+(Search, Find, "3 of 12", No matches, Done…), the code editor's and the
+menu roles' — in `src/l10n/<tag>.json` (English the source with the
+translators' descriptions, zh-Hans and zh-Hant), a library's catalog of
+the namespace "myphp": `L10n::in($locale)->get($key, $args)` says one,
+and an app changes them or translates them with keys "myphp.<key>" of
+its own catalogs. `Menu::ROLES` holds the keys ("menuUndo"), the labels
+taken at build in the language the app shows with the app's name ("Quit
+Widgets"), and `App::relabelMenus` installs the bar again on a change.
 `examples/widgets` switches among English, 简体中文 and 繁體中文.
+
+An app's catalogs are myphp.json's `"i18n": {"dir": "locales", "source":
+"en"}`. `Native\I18nGen` is mygo's internal/i18ngen: it reads them with
+the lines of their keys (its own scanner of the top-level object, which
+json_decode cannot give, nor duplicate keys), checks them (messages that
+do not parse, keys, placeholders and their ARB types, the arguments of
+translations against the source's, plural cases against the language's
+categories, keys "myphp.<key>" against MyPHP's catalog, `myphp.appName`
+and `myphp.appDescription` for packaging), and writes the accessors:
+`<dir>/<Dir>.php`, a class named after the directory with a static method
+per key in the language the app shows (`Locales::filesSelected(3)`) and
+`in($locale)` for another, which registers the catalog as the app
+requires the file; and, with "bindings", the TypeScript module next to
+the client (src/locales.ts), which carries the page formatter
+(`src/Native/i18n.ts`, mygo-runtime's i18n.ts reading
+`window.myphp.locale`) and the messages of every language, so that the
+first paint is in the right language. `myphp i18n check`, `myphp
+generate`, `myphp dev` (which writes them before each run, and takes
+`--lang` as MYPHP_LOCALE) and `myphp build` use it; build gives the
+bundle a `<lang>.lproj` per language the app ships (Xcode's names:
+zh-Hans, zh-HK, pt-BR), `InfoPlist.strings` naming the app where the
+catalog does, and CFBundleDevelopmentRegion and CFBundleLocalizations,
+so that AppKit's own texts and System Settings follow the app's
+languages. tests/i18ngen_test.php checks mygo's golden catalog, its bad
+catalogs and the command line; `bun test src/Native/i18n.test.ts` the
+page formatter, the same fixtures, and the module type-checked by tsc.
 
 ## Theme
 
@@ -1630,7 +1697,7 @@ one with the old text's deleted lines in blocks above where they were.
 `DiffModel` compares the texts again only around an edit of the new text,
 pairs a hunk's lines by similarity and finds the words or characters that
 changed in them (`Diff::words`, `Diff::chars`, `HunkWords`), and reverts
-or keeps a hunk. `DiffSide` is the `Decor` of a side: its colors
+or keeps a hunk. `DiffSideView` is the `Decor` of a side: its colors
 (`Theme::diff`, mixed in Oklab as mygo's), its hidden lines and the
 blocks that align the sides (fillers, annotations, separators, a patch's
 headers), which `Heights` places; the view lays the sides out in a
@@ -2537,9 +2604,6 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - Image decoding (`ImageIO`) runs on the main thread: a 12 MP HEIC takes
   a frame or two; `Process` is the only way off the thread, and it costs
   a child process. Apps decode between frames (`App::later`) meanwhile.
-- Apps have no catalogs of their own strings yet (mygo's i18n.NewCatalog
-  and `mygo generate`): an app translates its texts itself, by
-  `App::locale()`; `L10n::add` changes MyPHP's own.
 - An icon turned every frame rasterizes a mask a frame (mygo does too);
   the atlas starts over when it fills.
 - Text glyphs still come from CoreText: the SVG renderer could draw

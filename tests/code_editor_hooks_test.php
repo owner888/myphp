@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{InputEvent, Key, TextInputRange};
-use MyPHP\UI\Editor\{Binding, Command, Edit, LineBackground, State, Theme};
+use MyPHP\UI\Editor\{Binding, Command, CursorShape, Edit, LineBackground, State, Theme};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -69,7 +69,7 @@ $isRed = function (int $line, int $col, float $y) use ($ct, $ed, $cw, $lh): bool
 };
 $inBlock = fn(int $line, int $col) => $isRed($line, $col, 2);
 check(!$inBlock(0, 0), 'a bar caret paints no block');
-$ct->st->cursorShape = State::CURSOR_BLOCK;
+$ct->st->cursorShape = CursorShape::CursorBlock;
 $ct->h->frame();
 check($inBlock(0, 0) && !$inBlock(0, 1), 'the block caret covers the first character alone');
 [$r, $g, $b] = $ct->pixel($ed->textX + 0.6 * $cw, 2);
@@ -77,18 +77,18 @@ check($r >= 250 && $g >= 60 && $g === $b, "the block caret is translucent red ($
 $ct->st->select(7, 7);
 $ct->h->frame();
 check($inBlock(1, 2) && !$inBlock(1, 3) && !$inBlock(0, 0), 'at the end of a line, a space\'s width');
-$ct->st->cursorShape = State::CURSOR_UNDERLINE;
+$ct->st->cursorShape = CursorShape::CursorUnderline;
 $ct->st->select(0, 0);
 $ct->h->frame();
 check($isRed(0, 0, $lh - 1) && !$isRed(0, 0, 2) && !$isRed(0, 1, $lh - 1), 'the underline caret underlines the first character alone');
-$ct->st->cursorShape = State::CURSOR_BLOCK;
+$ct->st->cursorShape = CursorShape::CursorBlock;
 $ct->h->rt->focus = null; // the window lost the keyboard
 $ct->h->frame();
 check(!$ct->st->focused() && !$inBlock(0, 0) && $isRed(0, 0, 0.5) && $isRed(0, 0, $lh - 0.5), 'without the keyboard, a block is outlined, not filled');
 
 // A block caret covers a whole character, with its combining marks.
 $ct = new EditorTest('', "|e\u{0301}x");
-$ct->st->theme = $red; $ct->st->noActiveLine = true; $ct->st->cursorShape = State::CURSOR_BLOCK;
+$ct->st->theme = $red; $ct->st->noActiveLine = true; $ct->st->cursorShape = CursorShape::CursorBlock;
 $ct->h->frame();
 $ed = $edOf($ct->st);
 $l = $ed->view->line(0);

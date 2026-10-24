@@ -4,7 +4,9 @@
 // build an app bundle. Pure PHP, no dependencies.
 //
 //   myphp init <dir> [--template native|web]   scaffold a project
-//   myphp dev [dir]                            run it, restart on changes, regenerate the TS client
+//   myphp dev [dir] [--lang de]                run it, restart on changes, regenerate the TS client and the catalogs' accessors
+//   myphp generate [dir]                       write the TS client and the accessors of the catalogs
+//   myphp i18n check [dir]                     check the catalogs of the app's messages
 //   myphp build [dir] [--launcher exec|micro] [--out dist]   build <Name>.app
 //   myphp micro [--php 8.4] [--manual]         get static-php-cli and build micro.sfx (once), or print the steps
 //   myphp keygen [--out dir] [--force]         the key pair that signs updates
@@ -210,9 +212,15 @@ function generateBindings(string $dir, array $config): void
 function dev(array $args): void
 {
     $watch = option($args, 'watch', '1') !== '0';
+    $lang = option($args, 'lang', '');
     ['dir' => $dir, 'config' => $c] = project($args);
     $entry = "$dir/{$c['entry']}";
     $env = ['MYPHP_DEV' => '1'];
+    if ($lang !== '') { // the app runs in that language, or a pseudo locale, without keeping it (MYPHP_LOCALE)
+        require_once FRAMEWORK . '/src/autoload.php';
+        ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("--lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
+        $env['MYPHP_LOCALE'] = $tag;
+    }
     // The frontend's dev server, which runs while myphp dev does, and the app loads in place of its built frontend (mygo dev's devCommand and devUrl).
     $server = null;
     if (($c['devCommand'] ?? '') !== '') {
@@ -228,6 +236,7 @@ function dev(array $args): void
         $env['MYPHP_FRONTEND_DIST'] = str_starts_with($c['frontendDist'], '/') ? $c['frontendDist'] : "$dir/{$c['frontendDist']}"; // served from disk
     }
     while (true) {
+        generateI18n($dir, $c);
         generateBindings($dir, $c);
         $seen = snapshot($dir, $c);
         $proc = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, $env + getenv());
@@ -284,6 +293,7 @@ function build(array $args): void
     } else {
         [$spc, $micro] = ensureMicro(option($args, 'php', null));
     }
+    generateI18n($dir, $c);
     // The frontend, built by buildCommand, shipped as Resources/frontend, which the app serves at myphp://localhost/ (mygo's embedded frontendDist): built before the last app goes.
     if (($c['buildCommand'] ?? '') !== '') {
         sh(['/bin/sh', '-c', $c['buildCommand']], $dir) === 0 || fail("{$c['buildCommand']} failed");
@@ -320,6 +330,7 @@ function build(array $args): void
         is_file($iconFile) && str_ends_with($iconFile, '.icns') || fail("icon must be an .icns file: $iconFile");
         copy($iconFile, "$contents/Resources/$name.icns");
     }
+    $localizations = writeLocalizations($dir, $c, "$contents/Resources");
     file_put_contents("$contents/Info.plist", plist([
         'CFBundleName' => $name,
         'CFBundleDisplayName' => $name,
@@ -333,7 +344,7 @@ function build(array $args): void
         'NSHighResolutionCapable' => true,
         'NSPrincipalClass' => 'NSApplication',
         'LSApplicationCategoryType' => 'public.app-category.utilities',
-    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + updatePlist($dir, $c) + openPlist($c)));
+    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + $localizations + updatePlist($dir, $c) + openPlist($c)));
     file_put_contents("$contents/PkgInfo", 'APPL????');
     if ($launcher === 'exec') {
         buildExecLauncher("$contents/MacOS/$name", $c['entry']);
@@ -644,6 +655,151 @@ function micro(array $args): void
 }
 
 
+// ---- i18n ---------------------------------------------------------------
+// The catalogs of the app's messages, myphp.json's "i18n": {"dir":
+// "locales", "source": "en"} (mygo's i18n): `myphp i18n check` checks them,
+// and `myphp generate`, `dev` and `build` write their accessors, the class
+// <Dir>.php in the catalogs' directory (Locales::filesSelected(3), which the
+// app requires) and, with "bindings", the TypeScript module next to the
+// client (src/locales.ts); `build` gives the bundle their localizations. The
+// work is MyPHP\Native\I18nGen's.
+
+/** @return ?array{dir: string, source: string, path: string} the "i18n" of myphp.json, or null without it */
+function i18nConfig(string $dir, array $c): ?array
+{
+    if (!isset($c['i18n'])) {
+        return null;
+    }
+    is_array($c['i18n']) || fail('i18n is an object: {"dir": "locales", "source": "en"}');
+    $d = $c['i18n']['dir'] ?? 'locales';
+    $src = $c['i18n']['source'] ?? 'en';
+    is_string($d) && is_string($src) || fail('i18n.dir and i18n.source are strings');
+    return ['dir' => $d, 'source' => $src, 'path' => str_starts_with($d, '/') ? $d : "$dir/$d"];
+}
+
+/** Reads and checks the catalogs of the app, against MyPHP's own, whose keys "myphp.<key>" they change. @return array{array, list<array>} */
+function loadCatalogs(array $i): array
+{
+    require_once FRAMEWORK . '/src/autoload.php';
+    is_dir($i['path']) || fail("i18n.dir {$i['dir']} is not a directory: create it with {$i['source']}.json, the messages of the source language");
+    [$fw, $diags] = MyPHP\Native\I18nGen::load(FRAMEWORK . '/src/l10n', 'myphp', 'en', 'myphp');
+    ($e = MyPHP\Native\I18nGen::errors($diags)) === [] || fail("MyPHP's own catalog:\n" . implode("\n", $e));
+    return MyPHP\Native\I18nGen::load($i['path'], $i['dir'], $i['source'], '', ['myphp' => $fw]);
+}
+
+/** Checks the catalogs (mygo i18n check): that their messages parse, that translations have the arguments of the source language's messages and the plural forms of their languages, and which messages they lack. Errors exit with status 1; warnings do not. */
+function i18nCheck(array $args): void
+{
+    (array_shift($args) ?? '') === 'check' || fail("usage: myphp i18n check [dir]\n\nChecks the catalogs of the app's messages (i18n in myphp.json): that their\nmessages parse, that translations have the arguments of the source\nlanguage's messages and the plural forms of their languages, and which\nmessages they lack. Errors exit with status 1; warnings do not.");
+    ['dir' => $dir, 'config' => $c] = project($args);
+    $i = i18nConfig($dir, $c) ?? fail('the project has no catalogs: set i18n in myphp.json, as "i18n": {"dir": "locales", "source": "en"}');
+    [$cat, $diags] = loadCatalogs($i);
+    foreach ($diags as $d) {
+        fwrite(STDERR, '  ' . MyPHP\Native\I18nGen::line($d) . "\n");
+    }
+    if (($n = count(MyPHP\Native\I18nGen::errors($diags))) > 0) {
+        fail("$n " . ($n === 1 ? 'error' : 'errors') . ' in the catalogs');
+    }
+    echo 'myphp: ' . count($cat['keys']) . ' messages in ' . implode(', ', $cat['languages']) . "\n";
+}
+
+/** Writes the accessors of the catalogs where they changed, and shows the warnings of the catalogs; their errors fail it. */
+function generateI18n(string $dir, array $c): void
+{
+    if (($i = i18nConfig($dir, $c)) === null) {
+        return;
+    }
+    [$cat, $diags] = loadCatalogs($i);
+    ($e = MyPHP\Native\I18nGen::errors($diags)) === [] || fail("the catalogs have errors (myphp i18n check lists them all):\n" . implode("\n", $e));
+    $class = MyPHP\Native\I18nGen::className($i['path']);
+    $files = ["{$i['path']}/$class.php" => MyPHP\Native\I18nGen::php($cat, $class)];
+    if (!empty($c['bindings'])) { // the TypeScript module, next to the client, named after the catalogs' directory
+        $files[dirname("$dir/{$c['bindings']}") . '/' . basename($i['path']) . '.ts'] = MyPHP\Native\I18nGen::ts($cat, (string)file_get_contents(FRAMEWORK . '/src/Native/i18n.ts'));
+    }
+    $written = [];
+    foreach ($files as $path => $src) {
+        if (is_file($path) && file_get_contents($path) === $src) {
+            continue;
+        }
+        @mkdir(dirname($path), 0755, true);
+        file_put_contents($path, $src) !== false || fail("cannot write $path");
+        $written[] = substr($path, strlen($dir) + 1);
+    }
+    echo 'myphp: ' . ($written !== [] ? 'wrote ' . implode(', ', $written) : "the accessors of {$i['dir']} are up to date") . "\n";
+    foreach (MyPHP\Native\I18nGen::warnings($diags) as $w) {
+        fwrite(STDERR, "myphp: $w\n");
+    }
+}
+
+/**
+ * The languages the app ships, its own first, then the others by tag, for
+ * the bundle's localizations: [tag, its name of the app (myphp.appName),
+ * or '' for the app's own], none without catalogs (mygo's readLanguages).
+ *
+ * @return list<array{string, string}>
+ */
+function appLanguages(string $dir, array $c): array
+{
+    if (($i = i18nConfig($dir, $c)) === null) {
+        return [];
+    }
+    $langs = [[$i['source'], '']];
+    $files = glob("{$i['path']}/*.json") ?: [];
+    sort($files, SORT_STRING);
+    foreach ($files as $f) {
+        $tag = basename($f, '.json');
+        if ($tag === $i['source']) {
+            continue; // the app's own name is the configuration's
+        }
+        $name = json_decode((string)file_get_contents($f), true)['myphp.appName'] ?? '';
+        is_string($name) && !preg_match('/[\r\n]/', $name) || fail("$f: the app's name cannot break the line");
+        $langs[] = [$tag, $name];
+    }
+    return $langs;
+}
+
+/** The name of the localization folder of a tag in an app bundle, as Xcode names them: zh-Hans, zh-Hant or zh-HK for Chinese; the language with its script, else its region (sr-Latn, pt-BR) (mygo's lprojName). */
+function lprojName(string $tag): string
+{
+    $parts = explode('-', $tag);
+    [$lang, $script, $region] = [$parts[0], '', ''];
+    foreach (array_slice($parts, 1) as $p) {
+        if (strlen($p) === 4 && $script === '' && $region === '') { $script = $p; }
+        elseif ($region === '' && (strlen($p) === 2 || strlen($p) === 3 && ctype_digit($p[0]))) { $region = $p; }
+    }
+    if ($lang === 'zh') {
+        return $region === 'HK' ? 'zh-HK' : ($script === 'Hant' || $script === '' && in_array($region, ['TW', 'MO'], true) ? 'zh-Hant' : 'zh-Hans');
+    }
+    return $lang . ($script !== '' ? "-$script" : ($region !== '' ? "-$region" : ''));
+}
+
+/** The bundle's localizations: a folder per language the app ships, which make AppKit say its own texts in it and System Settings list it for the app, whose InfoPlist.strings names the app in it where its catalog does (myphp.appName); and their Info.plist keys. @return array<string, mixed> */
+function writeLocalizations(string $dir, array $c, string $resources): array
+{
+    $langs = appLanguages($dir, $c);
+    if ($langs === []) {
+        return [];
+    }
+    $names = [];
+    foreach ($langs as [$tag, $name]) {
+        $lproj = lprojName($tag);
+        @mkdir("$resources/$lproj.lproj", 0755, true);
+        $strings = $name !== '' && $name !== $c['name'] ? ['CFBundleName' => $name, 'CFBundleDisplayName' => $name] : [];
+        file_put_contents("$resources/$lproj.lproj/InfoPlist.strings", plist($strings));
+        if (!in_array($lproj, $names, true)) { $names[] = $lproj; }
+    }
+    // The app's own language, which the system falls back to, and those it ships, which AppKit picks its texts' language among.
+    return ['CFBundleDevelopmentRegion' => lprojName($langs[0][0]), 'CFBundleLocalizations' => $names];
+}
+
+/** Writes the TypeScript client and the accessors of the catalogs (mygo generate). */
+function generate(array $args): void
+{
+    ['dir' => $dir, 'config' => $c] = project($args);
+    generateI18n($dir, $c);
+    generateBindings($dir, $c);
+}
+
 // ---- updates ------------------------------------------------------------
 // Signed updates (App's Updater): `myphp keygen` makes the key pair, `myphp
 // build` signs an archive of the app with the private key and writes
@@ -702,8 +858,10 @@ $cmd = array_shift($args) ?? '';
 match ($cmd) {
     'init' => init($args),
     'dev' => dev($args),
+    'generate' => generate($args),
+    'i18n' => i18nCheck($args),
     'build' => build($args),
     'micro' => micro($args),
     'keygen' => keygen($args),
-    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual] | keygen [--out dir] [--force]"),
+    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] [--lang de] | generate [dir] | i18n check [dir] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual] | keygen [--out dir] [--force]"),
 };

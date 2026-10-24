@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
-use MyPHP\{App, I18n, L10n, Menu, MenuItem, Region};
+use MyPHP\{App, DateFormatter, DateOptions, I18n, L10n, Menu, MenuItem, NumberOptions, Region, Width};
 use MyPHP\Window;
 
 /** Builds a frame's tree. The view function calls these in order, as code. */
@@ -158,7 +158,7 @@ final class Context
     /** The user's regional formats (App::region): the locale of the formats, the first day of the week and the hour cycle, which dates and times follow. */
     public function region(): Region { return App::region(); }
 
-    /** MyPHP's own strings in the language the app shows (L10n), which an app changes with L10n::add. */
+    /** MyPHP's own strings in the language the app shows (L10n), which an app changes with keys "myphp.<key>" of its catalogs. */
     public function texts(): L10n { return L10n::in($this->locale()); }
 
     /**
@@ -1740,7 +1740,7 @@ final class Context
         $rt = $this->runtime;
         $b = $this->buttonFace($t->space(1.5), $t->space(3.5))->min($t->space(32.5), 0); // its text and a page icon at its ends (Justify(SpaceBetween))
           [, $locale] = $this->formats();
-          $this->text(I18n::formatDate($locale, $date, 'yMd'), $t->fontSize, $t->text)->singleLine();
+          $this->text(I18n::formatDate($locale, $date), $t->fontSize, $t->text)->singleLine();
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
           $page->draw(function (DisplayList $list, Node $a, Theme $t) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
@@ -1812,7 +1812,7 @@ final class Context
         [$region, $locale] = $this->formats();
         $cur = $cursor;
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
-        $title = I18n::formatDate($locale, $month, 'yMMMM');
+        $title = I18n::formatDate($locale, $month, new DateOptions(skeleton: 'yMMMM'));
         $first = $region->firstWeekday;
         $this->ownScope('calendar'); // another month shown in the scope (a date input's popup) has the keys of its days
         $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
@@ -1839,7 +1839,7 @@ final class Context
             if ($this->clicked($next)) { $move(self::addMonths($cur, 1)); }
           $this->end();
           $this->row(0, 0);
-            $names = I18n::weekdays($locale, I18n::SHORT, true);
+            $names = I18n::weekdays($locale, Width::Short, true);
             for ($i = 0; $i < 7; $i++) {
                 $this->row(0, 0)->size($t->space(8), 0)->justify(Node::CENTER); $this->text($names[($first + $i) % 7], $t->fontSize - 2, $t->textMuted)->role(Role::COLUMN_HEADER); $this->end();
             }
@@ -1852,7 +1852,7 @@ final class Context
                   $day = $start->modify('+' . ($w * 7 + $d) . ' days');
                   $ymd = $day->format('Y-m-d');
                   $chosen = $ymd === $date->format('Y-m-d'); $atCursor = $ymd === $cur->format('Y-m-d');
-                  $cell = $this->key($ymd)->row(0, 0)->size($t->space(8), $t->space(7))->center()->round($t->radius)->role(Role::BUTTON)->label(I18n::formatDate($locale, $day, 'yMMMMd'))->checked($chosen);
+                  $cell = $this->key($ymd)->row(0, 0)->size($t->space(8), $t->space(7))->center()->round($t->radius)->role(Role::BUTTON)->label(I18n::formatDate($locale, $day, new DateOptions(skeleton: 'yMMMMd')))->checked($chosen);
                   if ($atCursor) { $grid->activeDescendant($cell); } // assistive technology reads the day the keys are on
                   $fg = $day->format('n') !== $month->format('n') ? $t->textMuted : $t->text;
                   if ($chosen) { $cell->color = $t->accent; $fg = $t->accentText; }
@@ -1890,8 +1890,8 @@ final class Context
         [$region, $locale] = $this->formats();
         $twelve = $region->hourCycle === 12;
         // The order of the segments and what separates the hours from the minutes, as the locale's pattern of hours and minutes writes them.
-        [$sep, $periodFirst] = self::timeLayout(I18n::pattern($locale, 'jmm', $twelve ? 12 : 24));
-        [$am, $pm] = I18n::dayPeriods($locale, I18n::ABBREVIATED);
+        [$sep, $periodFirst] = self::timeLayout((new DateFormatter($locale, new DateOptions(skeleton: 'jmm', hourCycle: $twelve ? 12 : 24)))->pattern());
+        [$am, $pm] = I18n::dayPeriods($locale);
         $order = $twelve ? ($periodFirst ? [2, 0, 1] : [0, 1, 2]) : [0, 1];
         $this->ownScope('time input');
         $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER)->role(Role::GROUP);
@@ -1901,7 +1901,7 @@ final class Context
             if ($next != $time) { $time = $next; $f->changed = true; }
         };
         $segs = []; $focused = [];
-        $texts = [0 => $twelve ? I18n::formatNumber($locale, ($h + 11) % 12 + 1) : I18n::formatNumber($locale, $h, 2), 1 => I18n::formatNumber($locale, $m, 2), 2 => $h >= 12 ? $pm : $am];
+        $texts = [0 => $twelve ? I18n::formatNumber($locale, ($h + 11) % 12 + 1) : I18n::formatNumber($locale, $h, new NumberOptions(minIntegerDigits: 2)), 1 => I18n::formatNumber($locale, $m, new NumberOptions(minIntegerDigits: 2)), 2 => $h >= 12 ? $pm : $am];
           foreach ($order as $i => $k) {
               if ($k === 1) { $this->row(0, 0)->padding(0, 1); $this->text($sep, $t->fontSize, $t->textMuted)->role(Role::NONE); $this->end(); }
               elseif ($i > 0) { $this->box($t->space(1), 0, 0)->color = null; }

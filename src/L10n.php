@@ -3,76 +3,55 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MessageFormatter;
 use RuntimeException;
 
 /**
  * MyPHP's own strings, as mygo's internal/l10n: those of the controls of
- * UI\Context and of the roles of menus, in the languages they are
- * translated to (src/l10n/<tag>.json, mygo's catalogs: English the
- * source, with the descriptions translators read). `L10n::in($lang)`
- * says them in a language, `get($key, $args)` formatting ICU messages
- * ({token}, plural, select, number). An app changes them, or translates
- * them to its other languages, with L10n::add($lang, $messages).
+ * UI\Context, of the code editor and of the roles of menus, in the
+ * languages they are translated to (src/l10n/<tag>.json, English the
+ * source, with the descriptions translators read). They are a library's
+ * catalog (Catalog::library) of the namespace "myphp": an app changes
+ * them, or translates them to its other languages, with keys
+ * "myphp.<key>" in its own catalogs, as "myphp.cancel" in its de.json.
+ * `L10n::in($locale)` says them in a locale, `get($key, $args)` formatting
+ * their messages.
  */
 final class L10n
 {
-    /** @var array<string, array<string, string>> by language, then key */
-    private static array $catalogs = [];
-    /** @var array<string, array<string, string>> what apps added, over the catalogs */
-    private static array $added = [];
+    /** The namespace of the keys with which apps change MyPHP's strings: "myphp.<key>". */
+    public const NAMESPACE = 'myphp';
+    private static ?Catalog $catalog = null;
     /** @var array<string, L10n> */
     private static array $in = [];
 
-    private function __construct(private readonly string $lang) {}
+    private function __construct(private readonly string $locale) {}
+
+    /** The catalog of MyPHP's strings, which `myphp generate` checks the keys "myphp.<key>" of apps against. */
+    public static function catalog(): Catalog
+    {
+        return self::$catalog ??= Catalog::library(__DIR__ . '/l10n', 'en', self::NAMESPACE);
+    }
 
     /** The languages MyPHP's own strings are in, English first. @return list<string> */
     public static function languages(): array
     {
-        $langs = ['en'];
-        foreach (glob(__DIR__ . '/l10n/*.json') ?: [] as $f) { $l = basename($f, '.json'); if ($l !== 'en') { $langs[] = $l; } }
-        foreach (array_keys(self::$added) as $l) { if (!in_array($l, $langs, true)) { $langs[] = $l; } }
-        return $langs;
+        return self::catalog()->languages();
     }
 
-    /** The strings in the language of $lang that they are translated to (the best match), else English. */
-    public static function in(string $lang): self
+    /** The strings in a locale: the language of theirs that suits it best, along its parents, else the app's source language, else English. */
+    public static function in(string $locale): self
     {
-        return self::$in[$lang] ??= (function () use ($lang) {
-            $m = I18n::match([$lang], self::languages());
-            return new self($m === '' ? 'en' : $m);
-        })();
+        return self::$in[$locale] ??= new self($locale);
     }
 
-    /** Adds, or changes, strings in $lang: key => ICU message. @param array<string, string> $messages */
-    public static function add(string $lang, array $messages): void
-    {
-        $tag = I18n::normalize($lang);
-        if ($tag === '') { throw new RuntimeException("L10n: $lang is not a language tag"); }
-        foreach ($messages as $k => $m) { self::$added[$tag][$k] = $m; }
-        self::$in = [];
-    }
-
-    public function lang(): string { return $this->lang; }
-
-    /** The string $key says in this language, with $args formatted into it; English where the language lacks it. */
+    /** The string $key says in this locale, with $args formatted into it. Throws for a key MyPHP has no string of. */
     public function get(string $key, array $args = []): string
     {
-        $msg = self::$added[$this->lang][$key] ?? self::catalog($this->lang)[$key] ?? self::$added['en'][$key] ?? self::catalog('en')[$key] ?? throw new RuntimeException("L10n: no string $key");
-        if ($args === [] && !str_contains($msg, '{')) { return $msg; }
-        $s = MessageFormatter::formatMessage($this->lang, $msg, $args);
-        if ($s === false) { throw new RuntimeException("L10n: $key: " . intl_get_error_message()); }
-        return $s;
-    }
-
-    /** @return array<string, string> */
-    private static function catalog(string $lang): array
-    {
-        if (!isset(self::$catalogs[$lang])) {
-            $path = __DIR__ . "/l10n/$lang.json";
-            $all = is_file($path) ? json_decode(file_get_contents($path) ?: '{}', true, flags: JSON_THROW_ON_ERROR) : [];
-            self::$catalogs[$lang] = array_filter($all, fn($v, $k) => $k[0] !== '@' && is_string($v), ARRAY_FILTER_USE_BOTH);
+        $c = self::catalog();
+        $s = $c->format($this->locale, $key, $args);
+        if ($s === $key && $c->message('en', $key) === null) {
+            throw new RuntimeException("L10n: no string $key");
         }
-        return self::$catalogs[$lang];
+        return $s;
     }
 }

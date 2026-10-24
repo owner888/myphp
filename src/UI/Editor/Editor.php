@@ -153,8 +153,8 @@ final class Editor implements TextInputClient
     public function hardTabs(): bool
     {
         return match ($this->o->indent) {
-            State::INDENT_TABS => true,
-            State::INDENT_SPACES => false,
+            IndentStyle::IndentTabs => true,
+            IndentStyle::IndentSpaces => false,
             default => $this->language()?->hardTabs ?? false,
         };
     }
@@ -448,7 +448,7 @@ final class Editor implements TextInputClient
     /** Whether the gutter numbers the lines, as the options say, or the opposite once Toggle Line Numbers ran. */
     public function numbersOn(): bool
     {
-        return ($this->o->lineNumbers !== State::LINE_NUMBERS_OFF) !== $this->toggledNumbers;
+        return ($this->o->lineNumbers !== LineNumbers::LineNumbersOff) !== $this->toggledNumbers;
     }
 
     /** The width of the gutter: the numbers, the fold markers and the bars of changes. */

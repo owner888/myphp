@@ -49,10 +49,16 @@ final class Locales
         self::update(true);
     }
 
-    /** The languages the app is written in, its own first. @return list<string> */
+    /** The languages the app is written in, its own first: those setLanguages set, else those of the catalogs it registered (I18n::languages), else English. @return list<string> */
     public static function languages(): array
     {
-        return self::$languages ?? ['en'];
+        return self::$languages ?? (I18n::languages() ?: ['en']);
+    }
+
+    /** @internal a catalog was registered: the languages the app is written in may have changed */
+    public static function catalogsChanged(): void
+    {
+        if (self::$shown !== null && self::$languages === null) { self::update(true); }
     }
 
     /** The language the app shows, as a tag of the languages it is written in: the one the user reads best of them, or the one setLocale chose, else the app's own. */
@@ -158,6 +164,7 @@ final class Locales
     /** The language of $supported to show a reader of $preferred, or of $override and then $preferred when the app chose one: the best match, else the app's own. */
     private static function resolve(string $override, array $preferred, array $supported): string
     {
+        if (I18n::isPseudo($override)) { return $override; } // the pseudo locales are always shown, to test what translations would do
         $want = $override !== '' ? [$override, ...$preferred] : $preferred;
         $m = I18n::match($want, $supported);
         return $m !== '' ? $m : $supported[0];

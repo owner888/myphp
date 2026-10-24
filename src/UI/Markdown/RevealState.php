@@ -26,13 +26,13 @@ final class RevealState
         $edited = $this->shown > strlen($src) || !str_starts_with($src, substr($this->src, 0, $this->shown));
         $pending = $this->revealing && $this->shown < strlen($this->src) && !$edited;
         $this->src = $src;
-        if ((!$streaming && !$pending) || $r->unit === Reveal::AT_ONCE || $edited) {
+        if ((!$streaming && !$pending) || $r->unit === RevealUnit::AtOnce || $edited) {
             $this->shown = strlen($src); $this->last = $now; $this->revealing = $streaming;
             return [$this->shown, false];
         }
         $this->revealing = true;
         $target = strlen($src);
-        if ($streaming && $r->unit !== Reveal::BY_WORD && $r->unit !== Reveal::BY_CHARACTER) { // only complete sentences, lines or paragraphs, while more is coming
+        if ($streaming && $r->unit !== RevealUnit::ByWord && $r->unit !== RevealUnit::ByCharacter) { // only complete sentences, lines or paragraphs, while more is coming
             $target = $this->shown;
             for ($i = $this->shown; ;) {
                 $e = self::unitEnd($src, $i, strlen($src), $r->unit);
@@ -68,14 +68,14 @@ final class RevealState
     }
 
     /** Offset $i of $src moved forward to the end of the unit it is in (mygo's snap). */
-    public static function snap(string $src, int $i, int $target, int $u): int
+    public static function snap(string $src, int $i, int $target, RevealUnit $u): int
     {
         switch ($u) {
-            case Reveal::BY_WORD:
+            case RevealUnit::ByWord:
                 while ($i < $target && $src[$i] !== ' ' && $src[$i] !== "\n") { $i++; }
                 while ($i < $target && ($src[$i] === ' ' || $src[$i] === "\n")) { $i++; }
                 break;
-            case Reveal::BY_SENTENCE: case Reveal::BY_LINE: case Reveal::BY_PARAGRAPH:
+            case RevealUnit::BySentence: case RevealUnit::ByLine: case RevealUnit::ByParagraph:
                 $e = self::unitEnd($src, $i, $target, $u);
                 $i = $e >= 0 ? $e : $target;
                 break;
@@ -85,16 +85,16 @@ final class RevealState
     }
 
     /** Where the first sentence, line or paragraph of $src ending after $i and by $limit ends, or -1 (mygo's unitEnd). */
-    public static function unitEnd(string $src, int $i, int $limit, int $u): int
+    public static function unitEnd(string $src, int $i, int $limit, RevealUnit $u): int
     {
         switch ($u) {
-            case Reveal::BY_LINE:
+            case RevealUnit::ByLine:
                 $k = strpos(substr($src, $i, $limit - $i), "\n");
                 return $k === false ? -1 : $i + $k + 1;
-            case Reveal::BY_PARAGRAPH:
+            case RevealUnit::ByParagraph:
                 $k = strpos(substr($src, $i, $limit - $i), "\n\n");
                 return $k === false ? -1 : $i + $k + 2;
-            case Reveal::BY_SENTENCE:
+            case RevealUnit::BySentence:
                 for ($j = $i; $j < $limit;) {
                     $b = ord($src[$j]);
                     $r = substr($src, $j, $b < 0x80 ? 1 : ($b < 0xE0 ? 2 : ($b < 0xF0 ? 3 : 4)));

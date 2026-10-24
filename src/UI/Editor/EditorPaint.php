@@ -35,7 +35,7 @@ trait EditorPaint
         $v->heights->setLines($v->text->lineCount());
         $hidden = $this->hiddenSpans();
         $blocks = [];
-        if (($ds = $this->o->decor) instanceof DiffSide) {
+        if (($ds = $this->o->decor) instanceof DiffSideView) {
             $hidden = self::mergeSpans([...$hidden, ...$ds->hidden()]);
             $blocks = $ds->blocks();
         }
@@ -80,7 +80,7 @@ trait EditorPaint
             $phase = $this->frameNow - $this->blinkStart;
             $f->caretsOn = ((int)floor($phase / self::$blinkInterval)) % 2 === 0 || $this->gesture->active;
             if (!$this->gesture->active) { $this->services?->after(self::$blinkInterval - fmod($phase, self::$blinkInterval)); }
-        } elseif ($this->o->cursorShape === State::CURSOR_BLOCK) {
+        } elseif ($this->o->cursorShape === CursorShape::CursorBlock) {
             // Outlined, not blinking, as Vim's and Zed's blocks without the keyboard.
             $f->caretsOn = true;
         }
@@ -295,7 +295,7 @@ trait EditorPaint
                 }
             }
             if ($ri === 0 && $this->o->indentGuides) { $this->paintGuides($list, $f, $line, $ox, $y, count($l->rows)); }
-            if ($ri === 0 && $this->o->signs && $style->sign !== '' && ($ds = $this->o->decor) instanceof DiffSide) {
+            if ($ri === 0 && $this->o->signs && $style->sign !== '' && ($ds = $this->o->decor) instanceof DiffSideView) {
                 $ds->paintSign($list, $this, $style->sign, $r[0] + $this->textX - $v->charWidth * 1.5, $y, $style->number);
             }
             $v->paintRow($list, $l, $row, $ox, $y, $f->colors, null, $vis[0], $vis[2]);
@@ -325,11 +325,11 @@ trait EditorPaint
                     $x = $ox + $v->xOf($l, $row, $d);
                     $cur = $ct->c['cursor'];
                     switch ($this->o->cursorShape) {
-                        case State::CURSOR_BLOCK:
+                        case CursorShape::CursorBlock:
                             $cw = $this->caretWidth($l, $row, $s->head, $x - $ox);
                             if ($this->focused) { self::fill($list, $x, $y, $cw, $lh, [$cur[0], $cur[1] * 0.4]); } else { $list->ring($x, $y, $cw, $lh, $cur[0], $cur[1], 0, 1); }
                             break;
-                        case State::CURSOR_UNDERLINE:
+                        case CursorShape::CursorUnderline:
                             self::fill($list, $x, $y + $lh - 2, $this->caretWidth($l, $row, $s->head, $x - $ox), 2, $cur);
                             break;
                         default:
@@ -383,19 +383,19 @@ trait EditorPaint
     private function paintWhitespace(DisplayList $list, LineLayout $l, array $row, float $ox, float $y): void
     {
         $mode = $this->o->whitespace;
-        if ($mode === State::WHITESPACE_NONE) { return; }
+        if ($mode === Whitespace::WhitespaceNone) { return; }
         $v = $this->view;
         $ws = $this->theme->c['whitespace'];
         $s = $l->text;
         // The row's text alone, and in Selection mode only rows a selection meets.
         $a = $l->fromDisp($row['from']); $b = $l->fromDisp($row['to']);
-        if ($mode === State::WHITESPACE_SELECTION) {
+        if ($mode === Whitespace::WhitespaceSelection) {
             $meets = false;
             foreach ($this->sels as $sel) { if (!$sel->empty() && $sel->start() < $l->start + $b && $sel->end() > $l->start + $a) { $meets = true; break; } }
             if (!$meets) { return; }
         }
         $trailFrom = 0;
-        if ($mode === State::WHITESPACE_TRAILING) {
+        if ($mode === Whitespace::WhitespaceTrailing) {
             $trailFrom = strlen(rtrim($s, " \t"));
             $a = max($a, $trailFrom);
         }
@@ -404,13 +404,13 @@ trait EditorPaint
             if ($c !== ' ' && $c !== "\t") { continue; }
             $show = false;
             switch ($mode) {
-                case State::WHITESPACE_ALL: $show = true; break;
-                case State::WHITESPACE_TRAILING: $show = $i >= $trailFrom; break;
-                case State::WHITESPACE_BOUNDARY:
+                case Whitespace::WhitespaceAll: $show = true; break;
+                case Whitespace::WhitespaceTrailing: $show = $i >= $trailFrom; break;
+                case Whitespace::WhitespaceBoundary:
                     $single = $c === ' ' && $i > 0 && $i + 1 < strlen($s) && $s[$i - 1] !== ' ' && $s[$i - 1] !== "\t" && $s[$i + 1] !== ' ' && $s[$i + 1] !== "\t";
                     $show = !$single;
                     break;
-                case State::WHITESPACE_SELECTION:
+                case Whitespace::WhitespaceSelection:
                     foreach ($this->sels as $sel) {
                         if ($l->start + $i >= $sel->start() && $l->start + $i < $sel->end()) { $show = true; break; }
                     }
@@ -476,7 +476,7 @@ trait EditorPaint
             $active = isset($f->activeLines[$line]);
             if ($numbersOn) {
                 $n = $this->o->decor !== null ? $this->o->decor->number($line) : $line + 1;
-                if ($this->o->lineNumbers === State::LINE_NUMBERS_RELATIVE && $line !== $cur) { $n = abs($line - $cur); }
+                if ($this->o->lineNumbers === LineNumbers::LineNumbersRelative && $line !== $cur) { $n = abs($line - $cur); }
                 if ($n >= 0) {
                     [$ll, $lw] = $this->lone((string)$n);
                     $col = $active && $this->o->decor === null ? $ct->c['activeLineNumber'] : $ct->c['lineNumber'];

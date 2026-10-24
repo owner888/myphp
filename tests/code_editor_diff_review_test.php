@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Node};
-use MyPHP\UI\Editor\{Block, Buffer, Command, DiffAnnotation, DiffHunk, DiffLineRange, DiffModel, DiffState, Edit, FilePatch, State};
+use MyPHP\UI\Editor\{Block, Buffer, Command, DiffAnnotation, DiffHunk, DiffLayout, DiffLineRange, DiffModel, DiffSide, DiffState, Edit, FilePatch, State};
 
 require_once __DIR__ . '/DiffTest.php';
 
@@ -47,7 +47,7 @@ same('', $bad, 'versions of random edits in several places re-diff right');
 // New becoming the same buffer as Old shows no changes, rather than the blocks of those there were.
 $a = new Buffer("a\nb\nc\n");
 $d = new DiffState($a, new Buffer("a\nX\nc\n"));
-$d->layout = DiffState::UNIFIED; $d->expandUnchanged = true;
+$d->layout = DiffLayout::DiffUnified; $d->expandUnchanged = true;
 $t = diffViewer($d, 600, 300);
 $d->new = $a;
 $t->frame();
@@ -78,13 +78,13 @@ same($d->eds[0]->view->heights->geometry(2)->rows, $d->eds[1]->view->heights->ge
 // With no context lines, deletions and separators still show.
 $old = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n";
 $nw = str_replace("f\n", '', $old);
-foreach ([DiffState::UNIFIED, DiffState::SPLIT] as $layout) {
+foreach ([DiffLayout::DiffUnified, DiffLayout::DiffSplit] as $layout) {
     $d = new DiffState(new Buffer($old), new Buffer($nw));
     $d->contextLines = -1; $d->layout = $layout;
     $t = diffViewer($d, 600, 400);
     $t->frame();
-    check($d->eds[1]->view->heights->total() > 0, "layout $layout: the new side shows with no context lines");
-    if ($layout === DiffState::SPLIT) { same($d->eds[0]->view->heights->total(), $d->eds[1]->view->heights->total(), 'and the sides are as high'); }
+    check($d->eds[1]->view->heights->total() > 0, "layout {$layout->name}: the new side shows with no context lines");
+    if ($layout === DiffLayout::DiffSplit) { same($d->eds[0]->view->heights->total(), $d->eds[1]->view->heights->total(), 'and the sides are as high'); }
 }
 
 // Both sides of a split view wrap alike where their line counts have different numbers of digits.
@@ -132,7 +132,7 @@ same("a\nb\nc", (string)$st->buffer, 'reverting puts them back');
 
 // Annotations on one line go one after the other, with keys or without.
 $d = new DiffState(new Buffer("a\nb\n"), new Buffer("a\nB\n"));
-$d->annotations = [new DiffAnnotation(DiffState::NEW, 0, 30), new DiffAnnotation(DiffState::NEW, 0, 40)];
+$d->annotations = [new DiffAnnotation(DiffSide::DiffNew, 0, 30), new DiffAnnotation(DiffSide::DiffNew, 0, 40)];
 $d->renderAnnotation = function (Context $c, DiffAnnotation $a) { $c->text('note ' . $a->height); };
 $t = diffViewer($d, 600, 400);
 $t->frame();
@@ -144,21 +144,21 @@ $lines = [];
 for ($i = 0; $i < 30; $i++) { $lines[] = "line $i"; }
 $old = implode("\n", $lines) . "\n";
 $lines[5] = 'changed';
-foreach ([DiffState::SPLIT, DiffState::UNIFIED] as $layout) {
+foreach ([DiffLayout::DiffSplit, DiffLayout::DiffUnified] as $layout) {
     $d = new DiffState(new Buffer($old), new Buffer(implode("\n", $lines) . "\n"));
     $d->layout = $layout;
-    $d->annotations = [new DiffAnnotation(DiffState::NEW, 8, 30)];
+    $d->annotations = [new DiffAnnotation(DiffSide::DiffNew, 8, 30)];
     $d->renderAnnotation = function (Context $c, DiffAnnotation $a) { $c->text('the note'); };
     $t = diffViewer($d, 600, 600);
     $t->frame();
     $note = $t->byText('the note'); $sep = $t->byText('22 unmodified lines');
-    check($note !== null && $sep !== null && $t->rect($note)[1] <= $t->rect($sep)[1], "layout $layout: the note goes above the separator after it");
+    check($note !== null && $sep !== null && $t->rect($note)[1] <= $t->rect($sep)[1], "layout {$layout->name}: the note goes above the separator after it");
 }
 
 // The unified view shows the old text's annotations of unchanged lines.
 $d = new DiffState(new Buffer("a\nb\nc"), new Buffer("a\nX\nc"));
-$d->layout = DiffState::UNIFIED;
-$d->annotations = [new DiffAnnotation(DiffState::OLD, 2, 30)];
+$d->layout = DiffLayout::DiffUnified;
+$d->annotations = [new DiffAnnotation(DiffSide::DiffOld, 2, 30)];
 $d->renderAnnotation = function (Context $c, DiffAnnotation $a) { $c->text('old note'); };
 $t = diffViewer($d, 600, 300);
 $t->frame();
@@ -166,7 +166,7 @@ check(in_array('old note', $t->texts(), true), 'a unified view shows the old sid
 
 // Clicking the number of a wrapped deleted line selects that line.
 $d = new DiffState(new Buffer("a\n" . str_repeat('word ', 60) . "\nsecond\nc\n"), new Buffer("a\nc\n"));
-$d->layout = DiffState::UNIFIED; $d->wrap = true; $d->lineSelection = true;
+$d->layout = DiffLayout::DiffUnified; $d->wrap = true; $d->lineSelection = true;
 $t = diffViewer($d, 500, 400);
 $t->frame();
 $ed = $d->eds[1];
@@ -174,7 +174,7 @@ $ed = $d->eds[1];
 check($above !== [] && $above[0]->kind === Block::DELETED, 'the deleted lines are a block above the line after them');
 $top = $ed->view->heights->geometry(1)->top - $ed->scrollY;
 $t->click(10, $top + $ed->view->lineHeight * 1.5); // the deleted line's second row
-check($d->selectedLines() == new DiffLineRange(DiffState::OLD, 1, 1), 'clicking a wrapped deleted line\'s second row selects it');
+check($d->selectedLines() == new DiffLineRange(DiffSide::DiffOld, 1, 1), 'clicking a wrapped deleted line\'s second row selects it');
 
 // Names git quotes read as the names, in renames and new files.
 $files = FilePatch::parse("diff --git \"a/rn/old/\\346\\226\\207.txt\" \"b/rn/new/\\346\\226\\207.txt\"\nsimilarity index 100%\nrename from \"rn/old/\\346\\226\\207.txt\"\nrename to \"rn/new/\\346\\226\\207.txt\"\n"

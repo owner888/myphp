@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, Node};
-use MyPHP\UI\Editor\{Buffer, Command, DiffHunkActions, DiffLineRange, DiffSeparator, DiffState, Completion, CompletionMenu, CompletionRequest, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
+use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, DiffHunkActions, DiffLineRange, DiffSeparator, DiffSide, DiffState, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -179,4 +179,4 @@ $tipped = function (Node $n, string $tip) use (&$tipped): ?Node {
 $btn = $tipped($t->root, 'Comment');
 check($btn !== null, 'the app\'s gutter button shows on the line under the pointer');
 $t->clickOn($btn);
-check(count($commented) === 1 && $commented[0] == new DiffLineRange(DiffState::OLD, 28, 28), 'the gutter button reports its line');
+check(count($commented) === 1 && $commented[0] == new DiffLineRange(DiffSide::DiffOld, 28, 28), 'the gutter button reports its line');

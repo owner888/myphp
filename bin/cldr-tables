@@ -1,0 +1,86 @@
+#!/usr/bin/env php
+<?php
+// Writes src/Native/CldrTables.php from mygo's generated i18n/tables.go: the
+// plural rules of CLDR as PHP, their languages and categories, and the
+// parent locales, so that MyPHP's plural categories are mygo's.
+//
+//   php bin/cldr-tables <mygo>/i18n/tables.go > src/Native/CldrTables.php
+declare(strict_types=1);
+
+$src = @file_get_contents($argv[1] ?? '') ?: exit("usage: php bin/cldr-tables <mygo>/i18n/tables.go\n");
+
+/** The lines inside the Go function $name, its switch's included. */
+function body(string $src, string $name): array
+{
+    $i = strpos($src, "func $name(") ?: exit("no func $name\n");
+    $body = substr($src, $i);
+    return array_slice(explode("\n", substr($body, 0, strpos($body, "\n}\n") + 2)), 2, -1);
+}
+
+/** The Go function $name, a switch over rule sets, as a PHP method named $php. */
+function rules(string $src, string $name, string $php): string
+{
+    $out = ["    public static function $php(int \$r, Operands \$o): Plural", '    {', '        switch ($r) {'];
+    $first = true;
+    foreach (body($src, $name) as $l) {
+        $s = trim($l);
+        if ($s === 'switch r {') { continue; }
+        if (str_starts_with($s, 'case ')) {
+            if (!$first) { $out[] = '                break;'; }
+            $first = false;
+            $out[] = "            $s";
+            continue;
+        }
+        if ($s === '}' && $l === "\t}") { array_push($out, '                break;', '        }'); continue; }
+        if (str_starts_with($s, 'return PluralOther')) { $out[] = '        return Plural::Other;'; continue; }
+        $s = preg_replace('/uint64\((o\.[A-Z])\)/', '$1', $s);
+        $s = preg_replace_callback('/o\.([A-Z])/', fn($m) => '$o->' . strtolower($m[1]), $s);
+        $s = preg_replace('/return Plural([A-Z][a-z]+)/', 'return Plural::$1;', $s);
+        if (preg_match('/^if (.*) \{$/', $s, $m)) { $s = "if ($m[1]) {"; }
+        $out[] = str_repeat('    ', strspn($l, "\t") + 2) . $s;
+    }
+    $out[] = '    }';
+    return implode("\n", $out);
+}
+
+/** The Go array $name as the rows of a PHP list. */
+function items(string $src, string $name): string
+{
+    preg_match('/var ' . $name . ' = \[\.\.\.\]\w+\{(.*?)\n\}/s', $src, $m) || exit("no var $name\n");
+    $items = array_values(array_filter(array_map('trim', explode(',', str_replace("\n", ' ', $m[1]))), fn($x) => $x !== ''));
+    $rows = [];
+    foreach (array_chunk($items, 12) as $chunk) {
+        $rows[] = '        ' . implode(', ', array_map(fn($x) => $x[0] === '"' ? "'" . trim($x, '"') . "'" : $x, $chunk)) . ',';
+    }
+    return "[\n" . implode("\n", $rows) . "\n    ]";
+}
+
+preg_match('/CLDRVersion = "([^"]+)"/', $src, $v) || exit("no CLDRVersion\n");
+$ver = $v[1];
+echo <<<PHP
+<?php
+// Code generated from mygo's i18n/tables.go (CLDR $ver) by bin/cldr-tables; do not edit by hand.
+declare(strict_types=1);
+
+namespace MyPHP\\Native;
+
+use MyPHP\\{Operands, Plural};
+
+/**
+ * The plural rules and the parent locales of CLDR $ver, as mygo's
+ * generated tables: the rule sets, the languages each is for, the
+ * categories each has (a bit per Plural), and the locales whose parent
+ * CLDR names.
+ *
+ * @internal
+ */
+final class CldrTables
+{
+    public const VERSION = '$ver';
+
+
+PHP;
+foreach (['cardinalLangs' => 'CARDINAL_LANGS', 'cardinalRules' => 'CARDINAL_RULES', 'cardinalCategories' => 'CARDINAL_CATEGORIES', 'ordinalLangs' => 'ORDINAL_LANGS', 'ordinalRules' => 'ORDINAL_RULES', 'ordinalCategories' => 'ORDINAL_CATEGORIES', 'parentChildren' => 'PARENT_CHILDREN', 'parentLocales' => 'PARENT_LOCALES'] as $go => $php) {
+    echo "    public const $php = " . items($src, $go) . ";\n\n";
+}
+echo rules($src, 'cardinalRule', 'cardinal'), "\n\n", rules($src, 'ordinalRule', 'ordinal'), "\n}\n";
