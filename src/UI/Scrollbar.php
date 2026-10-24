@@ -10,6 +10,12 @@ final class Scrollbar
     /** The thumb takes presses this far around it. */
     public const GRAB = 4.0;
 
+    /** The box a scroll container's bars run along: $r less its bars' insets (Node::scrollbarInsets), top, right, bottom and left. @param array{0: float, 1: float, 2: float, 3: float} $r @param array{0: float, 1: float, 2: float, 3: float} $inset @return array{0: float, 1: float, 2: float, 3: float} */
+    public static function track(array $r, array $inset): array
+    {
+        return [$r[0] + $inset[3], $r[1] + $inset[0], max(0.0, $r[2] - $inset[1] - $inset[3]), max(0.0, $r[3] - $inset[0] - $inset[2])];
+    }
+
     /**
      * The thumb's rectangle for a container at [x, y, w, h] with $extent,
      * or null when the content fits the view. Right to left ($rtl), the

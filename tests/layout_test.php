@@ -40,17 +40,17 @@ $k = $n['w']->kids; same($r($k[0])[1], $r($k[2])[1], 'three on the first line');
 // A split's handle shows the resize cursor and drags.
 $size = 200.0;
 $h = new Headless(function (Context $c) use (&$size) { $c->split($size, function () use ($c) { $c->text('left'); }, function () use ($c) { $c->text('right'); }); }, 600, 300);
-$h->frame(); $h->hover(200, 150); same('resizeEW', $h->rt->cursor, 'the split handle cursor');
+$h->frame(); $h->hover(200, 150); same(\MyPHP\UI\Cursor::ResizeEW, $h->rt->cursor, 'the split handle cursor');
 $h->press(200, 150); $h->drag(240, 150); $h->release(240, 150); same(240.0, $size, 'dragging the handle resizes');
 
-// Basis(0) with grow: the children share the row equally whatever they hold, and never widen their parent.
+// Basis(0) with grow and MinWidth(0): the children share the row equally whatever they hold, and never widen their parent (without MinWidth(0), none goes below what its content needs, as in CSS).
 $n = [];
 $h = new Headless(function (Context $c) use (&$n) {
     $c->row(0, 0, 1);
       $n['a'] = $c->column(0, 0, 1)->basis(0); $c->text('x'); $c->end();
       $n['b'] = $c->column(0, 0, 1)->basis(0); $n['r'] = $c->row(0, 0);
-        $n['c'] = $c->column(0, 0, 1)->basis(0); $c->text(str_repeat('wide', 20)); $c->end();
-        $n['d'] = $c->column(0, 0, 1)->basis(0); $c->text('y'); $c->end();
+        $n['c'] = $c->column(0, 0, 1)->basis(0)->minWidth(0); $c->text(str_repeat('wide', 20)); $c->end();
+        $n['d'] = $c->column(0, 0, 1)->basis(0)->minWidth(0); $c->text('y'); $c->end();
       $c->end(); $c->end();
     $c->end();
 }, 600, 100);

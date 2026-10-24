@@ -393,6 +393,14 @@ final class Headless
         return [static function (Context $c) use ($files) { \MyPHP\Examples\Files\view($c, $files); }, $files];
     }
 
+    /** The piano example's view and its Piano, loaded without its window: [$view (Closure(Context)), $piano]. */
+    public static function piano(): array
+    {
+        $p = null;
+        self::example('piano', 'App::setName', [], $p);
+        return [static function (Context $c) use ($p) { \MyPHP\Examples\Piano\view($c, $p); }, $p];
+    }
+
     /**
      * Runs example $name's file up to $stop, with $args as its arguments, its
      * constants defined, its folder as __DIR__ and its functions in

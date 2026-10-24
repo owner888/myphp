@@ -33,6 +33,8 @@ final class ListState implements Scrollable
     public int $first = 0;
     public float $viewport = 0;
     public float $gap = 0;
+    /** How far rows wider than the list (Node::rowWidth) are scrolled sideways, how far they can go and the list's width: Layout sets the last two. */
+    public float $x = 0, $maxX = 0, $viewportW = 0;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
     /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
@@ -269,6 +271,18 @@ final class ListState implements Scrollable
     public function submit(): void
     {
         $this->didSubmit = true;
+    }
+
+    /** Scrolls rows wider than the list sideways by $dx points. */
+    public function scrollByX(float $dx): void
+    {
+        $this->x = max(0.0, min($this->maxX, $this->x + $dx));
+    }
+
+    /** How far it is scrolled right, how far it can go and the view's width. @return array{0: float, 1: float, 2: float} */
+    public function extentX(): array
+    {
+        return [$this->x, $this->maxX, $this->viewportW];
     }
 
     public function extent(): array

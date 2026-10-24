@@ -123,7 +123,7 @@ final class Chart
     {
         [$x0, $x1] = [min($x->lo, $x->hi), max($x->lo, $x->hi)];
         [$y0, $y1] = [min($y->lo, $y->hi), max($y->lo, $y->hi)];
-        $n = $c->column()->leftPercent(100 * $x0)->widthPercent(100 * ($x1 - $x0))->topPercent(100 * (1 - $y1))->heightPercent(100 * ($y1 - $y0));
+        $n = $c->column()->absolute()->leftPercent(100 * $x0)->widthPercent(100 * ($x1 - $x0))->topPercent(100 * (1 - $y1))->heightPercent(100 * ($y1 - $y0));
         $c->end();
         return $n;
     }
@@ -131,7 +131,7 @@ final class Chart
     /** Places a mark of $w by $h points centered on the point at $x along the plot and $y up it, as a dot of a scatter plot or the point a selection is on. */
     public static function point(Context $c, float $x, float $y, float $w, float $h): Node
     {
-        $n = $c->column()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size($w, $h)->margin(-$h / 2, 0, 0, -$w / 2);
+        $n = $c->column()->absolute()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size($w, $h)->margin(-$h / 2, 0, 0, -$w / 2);
         $c->end();
         return $n;
     }
@@ -139,7 +139,7 @@ final class Chart
     /** Places a vertical line of $width points across the plot at $x along it, as a threshold or the selection of a line chart. Color it with background(). */
     public static function ruleX(Context $c, float $x, float $width): Node
     {
-        $n = $c->column()->leftPercent(100 * $x)->topPercent(0)->heightPercent(100)->size($width, 0)->margin(0, 0, 0, -$width / 2);
+        $n = $c->column()->absolute()->leftPercent(100 * $x)->topPercent(0)->heightPercent(100)->size($width, 0)->margin(0, 0, 0, -$width / 2);
         $c->end();
         return $n;
     }
@@ -147,7 +147,7 @@ final class Chart
     /** Places a horizontal line of $height points across the plot at $y up it. */
     public static function ruleY(Context $c, float $y, float $height): Node
     {
-        $n = $c->column()->topPercent(100 * (1 - $y))->leftPercent(0)->widthPercent(100)->size(0, $height)->margin(-$height / 2, 0, 0, 0);
+        $n = $c->column()->absolute()->topPercent(100 * (1 - $y))->leftPercent(0)->widthPercent(100)->size(0, $height)->margin(-$height / 2, 0, 0, 0);
         $c->end();
         return $n;
     }
@@ -162,7 +162,7 @@ final class Chart
      */
     public static function anchor(Context $c, float $x, float $y, int $h, int $v, Closure $build): Node
     {
-        $n = $c->row()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size(self::NONE, self::NONE)->align($v);
+        $n = $c->row()->absolute()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size(self::NONE, self::NONE)->align($v);
           $c->column()->size(self::NONE, 0)->align($h);
             $build();
           $c->end();

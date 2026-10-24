@@ -35,7 +35,7 @@ final class HoverCard
         $t = $c->theme;
         $ct = $h->theme();
         $panel->dir = Node::COLUMN; $panel->pad = $t->space(2); $panel->gap = $t->space(1.5);
-        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(4, 16, 0.2);
+        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2);
         foreach ($h->diagnostics() as $d) {
             $c->row(0, $t->space(1.5));
               $sc = $ct->severityColor($d->severity);

@@ -129,7 +129,7 @@ function sales(Context $c, Charts $ch): void
         foreach ($ch->sales as $i => $v) {
             $c->key("bar$i");
             $bar = Chart::rect($c, $x->band($i), $y->span(0, $v))->round(3)->background($t->accent, $ch->month >= 0 && $i !== $ch->month ? 0.35 : 1.0)
-                ->tooltip(sprintf('%s: $%.1fk', MONTHS[$i], $v))->label(MONTHS[$i])->cursor('pointer');
+                ->tooltip(sprintf('%s: $%.1fk', MONTHS[$i], $v))->label(MONTHS[$i])->cursor(\MyPHP\UI\Cursor::Pointer);
             $c->transition($bar, new ElementTransition(0.35)); // bars grow and shrink to new values
             if ($c->clicked($bar)) {
                 $ch->month = $ch->month === $i ? -1 : $i;

@@ -79,7 +79,7 @@ final class CompletionMenu
         $size = $m->fontSize();
         $lh = $m->lineHeight();
         $panel->dir = Node::COLUMN; $panel->pad = $t->space(1);
-        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(4, 16, 0.2)->min($t->space(60), 0);
+        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2)->min($t->space(60), 0);
         $items = array_slice($m->items(), 0, self::MAX_ROWS);
         $rowH = $lh + 2;
         $list = $c->key('rows')->column();

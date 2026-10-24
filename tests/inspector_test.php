@@ -248,12 +248,12 @@ $t->clickText('RTL');
 same(Direction::LeftToRight, $seen->dir, 'and back');
 
 // Styles as CSS: a shadow, a border, a transition.
-[$t] = inspected(function (Context $c) { $c->column(8, 0, 0, 0x336699)->shadow(4, 12, 0.18)->borderWidth(2)->borderColor(0)->label('box'); $c->end(); });
+[$t] = inspected(function (Context $c) { $c->column(8, 0, 0, 0x336699)->shadow(0, 4, 12, 0, 0x000000, 0.18)->borderWidth(2)->borderColor(0)->label('box'); $c->end(); });
 $t->frame();
 inspKey($t, Key::F12);
 $in = $t->rt->inspector;
 $in->choose(inspLabeled($t->root, 'box')->id);
 $t->frame();
 $decls = array_column($in->sel['rules'][0]['decls'], 1, 0);
-same(['0 4px 12px #0000002e', '2px solid #000000', '#336699', '8px'], [$decls['box-shadow'] ?? null, $decls['border'] ?? null, $decls['background-color'] ?? null, $decls['padding'] ?? null], 'a shadow, a border, a background and padding');
+same(['0 4px 12px 0 #0000002e', '2px solid #000000', '#336699', '8px'], [$decls['box-shadow'] ?? null, $decls['border'] ?? null, $decls['background-color'] ?? null, $decls['padding'] ?? null], 'a shadow, a border, a background and padding');
 same('8px 24px', InspectorDetails::edges([8.0, 24.0, 8.0, 24.0]), 'edges as CSS writes them');

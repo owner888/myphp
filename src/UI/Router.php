@@ -336,7 +336,7 @@ final class Router
                 $old = $this->page($c, $box, $parent, $v->leaving, $fn, true);
                 [$upper, $lower] = [$old, $page];
             }
-            $upper->at($bw * (1 - $shown), 0)->size($bw, $bh)->shadow(0, 16, 0.15);
+            $upper->at($bw * (1 - $shown), 0)->size($bw, $bh)->shadow(0, 0, 16, 0, 0x000000, 0.15);
             $upper->color = $bg;
             $lower->at(-0.3 * $shown * $bw, 0)->size($bw, $bh)->drawOver(function (DisplayList $l, Node $n) use ($shown) {
                 $l->rect($n->x, $n->y, $n->w, $n->h, 0x000000, 0.06 * $shown);

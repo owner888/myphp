@@ -2116,6 +2116,62 @@ throws in the tests and logs once in apps. `InspectorOverlay` paints the
 highlight after the tree, through the node's world, clipped to the
 content.
 
+## Audio
+
+`MyPHP\Audio` mixes in PHP, as mygo mixes in Go, but on the main thread:
+the system's audio thread cannot call into PHP. The Audio Queue
+(`Native\AudioQueue`) is made with the main run loop and its common
+modes (`AudioQueueNewOutput`'s run loop arguments), so that its callback,
+a PHP closure through FFI, runs there, menus and live resizing included;
+each callback asks `Output::render` for 1024 frames, which decodes a
+little of each stream first (`Stream::fillAll`, what mygo's decoding
+goroutines do), mixes (`Mixer`, the voices of mygo's mixer.go: a
+Catmull-Rom resampler, gains as a 2×2 matrix ramping over 5 ms) and
+packs them as 32-bit floats into the buffer. Four buffers keep about 85
+ms ahead, which is what a busy frame of the main thread may take before
+the output underruns. Five seconds of silence close the queue, from
+`App::later` (not from its own callback); a watchdog reopens one that
+stopped calling back for a second. A device that does not open is
+stood in for by `NullDevice`, which mixes on the app's timers so that
+players still end on time. Sounds keep their samples as 32-bit floats in
+a string, which `unpack` reads 256 frames at a time. The Vorbis decoder
+is the spec's: codewords assigned as libvorbis's `_make_words`, looked up
+10 bits at a time; floors of type 1; residues 0 to 2; the inverse MDCT
+through a DCT-IV of N/2 points as an FFT of N/4 (unscaled, as libvorbis's
+`mdct_backward`); seeking from the last page whose granule position is a
+long block before the frame, the frames decoded held until a page's
+granule position places them. It decodes 6 s of 44.1 kHz stereo in
+about 360 ms here, and matches libvorbis to within 1e-4.
+
+## Flex layout and element styles
+
+`Layout::arrangeFlex` is CSS flexbox as mygo's `flexLayout`, inside
+myphp's measures (`mw`, `mh` and `minMw` hold the margins; the sizes
+`arrange` takes do too): each child's basis, least and largest size
+along the axis, `flexible()` growing or shrinking them with freezing
+(mygo's `resolveFlexible`), automatic margins before `justifyOffsets`'s
+spaces, then each child across. A wrapping row lays lines out with
+`arrangeRow` and shares the free height by `alignContent`. Absolute
+children go last (`arrangeAbsolute`), in the padding box by their
+insets, `attach` anchors or `attachTo` a node placed earlier in the
+frame (`$laid`); `at()` places from the content box, as before. A
+list's `rowWidth` widens the box its rows stretch in before the first
+child is measured across, and its offset moves them as a scroll
+container's does; `scrollWith` moves a node's children by another's.
+
+What a node paints beyond a color and a radius goes through two quad
+kinds that take the slot after them too, its kind -1 so that the vertex
+shader draws nothing for it: a box (14: four radii, four border widths
+and their color, solid or dashed, filled with a color, a gradient in
+sRGB or Oklab along any line, or stripes) and a box shadow (15: outside,
+the shape blurred, Evan Wallace's erf along x and four samples along y,
+cut out under the box casting it; inside, the padding box less the hole,
+blurred), mygo's shader ported to points with coverage in pixels.
+`Painter::node` keeps the old one-slot quads where a node has neither,
+so the lists the tests read stay as they were. Invisible nodes are
+recorded as inert and not shown; a pass-through node is never under the
+pointer; a disabled container passes `isDisabled` to what is built in it.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

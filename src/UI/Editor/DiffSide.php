@@ -285,7 +285,7 @@ final class DiffSide implements Decor
                 }
                 if ($top < $y0 - $v->lineHeight || $top > $y1) { continue; }
                 // At the right, clear of the scroll bar: as wide as it was last frame.
-                $bar = $c->key("hunk actions $i")->row()->cursor('arrow')->keepFocus()->handleInput(Editor::shield(...));
+                $bar = $c->key("hunk actions $i")->row()->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(Editor::shield(...));
                 $w = $c->runtime?->rectOf($bar->id)[2] ?? 0.0;
                 $bar->at($ed->r[2] - Editor::SCROLLBAR_WIDTH - 6 - $w, $top - $ed->scrollY + 2);
                 ($d->renderHunkActions ?? DiffHunkActions::default(...))($c, $bar, new DiffHunkActions($i, new DiffHunk($hk->a0, $hk->a1, $hk->b0, $hk->b1), $d));
@@ -298,7 +298,7 @@ final class DiffSide implements Decor
             if (!$g->hidden) {
                 $range = new DiffLineRange($side, $ed->hoverLine, $ed->hoverLine);
                 $c->key('gutter button')->column()->at(2, $g->rows - $ed->scrollY + 2)->handleInput(Editor::shield(...));
-                  $btn = $c->row()->size(16, $v->lineHeight - 4)->cursor('pointer')->keepFocus();
+                  $btn = $c->row()->size(16, $v->lineHeight - 4)->cursor(\MyPHP\UI\Cursor::Pointer)->keepFocus();
                   ($d->renderGutterButton ?? DiffState::defaultGutterButton(...))($c, $btn, $range);
                   $c->end();
                   if ($c->clicked($btn)) { ($d->onGutterButton)($range); }

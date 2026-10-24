@@ -365,7 +365,7 @@ final class DiffState
               $o->noScrollbar = $i === 0;
               if ($this->indicators === self::CLASSIC) { $o->signs = true; }
               $ed = $this->eds[$i]->build($c->key($i === 0 ? 'old' : 'new'), $b, $o); // each side's nodes in a scope of their own: their find bars' keys are one
-              $ed->grow = 1; $ed->basis(0)->alignSelf(Node::STRETCH);
+              $ed->grow = 1; $ed->basis(0)->minWidth(0)->alignSelf(Node::STRETCH);
               if ($i === 0) {
                   $c->box(1, 0, UITheme::mix($ct->c['background'][0], $t->border, 0.6))->alignSelf(Node::STRETCH);
               }
@@ -689,7 +689,7 @@ final class DiffState
             }
             $label = $s->lines > 0 ? $c->texts()->get('unmodifiedLines', ['n' => $s->lines]) : $s->header;
             $sep = $c->key($key)->column()->at(0, $top - $ed->scrollY)->size($width, $b->height)->role(Role::GROUP)->label($label)
-                ->cursor('arrow')->keepFocus()->handleInput(Editor::shield(...));
+                ->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(Editor::shield(...));
             $render($c, $sep, $s);
             $c->end();
         });

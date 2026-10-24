@@ -61,7 +61,7 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy),
                    Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/
-src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine)
+src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder)
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
@@ -88,7 +88,7 @@ examples/          native (inbox over a million rows), form (fields, text area, 
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
                    over curl — the API's proving ground), files (a file manager: sidebar, breadcrumbs, grid or table of
                    the folder, one Selection shared by both, find bar, image preview, Trash), glass (Liquid Glass over a
-                   photo), widgets (the small controls), titlebar, game (Plugins\Game)
+                   photo), widgets (the small controls), titlebar, game (Plugins\Game), piano (Audio)
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
                    view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
                    (check()/same() assertions, no PHPUnit; svg_test reads the renderer's pixels); php tests/bench.php [frames] times build/layout/record/paint
@@ -194,6 +194,6 @@ rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector.
+events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector; audio; mygo's element and layout API.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

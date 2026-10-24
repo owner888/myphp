@@ -9,7 +9,8 @@ namespace MyPHP\UI;
  * at $angle degrees clockwise from upwards: 180 goes from top to bottom,
  * 90 from left to right, as CSS's linear-gradient. $start and $end place
  * the colors along the line, from 0 to 1, solid before and after them;
- * both 0 mean 0 and 1.
+ * both 0 mean 0 and 1. $oklab mixes them in the Oklab color space, whose
+ * midpoints keep the colors' lightness and saturation, as CSS's "in oklab".
  */
 final class LinearGradient
 {
@@ -21,5 +22,6 @@ final class LinearGradient
         public float $angle = 180,
         public float $start = 0,
         public float $end = 0,
+        public bool $oklab = false,
     ) {}
 }

@@ -129,7 +129,7 @@ final class FindBar
         $tx = $c->texts();
         $bar->dir = Node::COLUMN;
         $bar->gap = $t->space(1); $bar->pad = $t->space(1.5);
-        $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(2, 8, 0.18);
+        $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(0, 2, 8, 0, 0x000000, 0.18);
         $field = fn(TextState $value, string $placeholder) => $c->input($value, $placeholder, $t->space(50), $t->fontSize - 1)->label($placeholder);
         $button = function (string $label, string $tip) use ($c, $t): Node {
             $b = $c->button($label, $t->fontSize - 1)->tooltip($tip)->label($tip)->keepFocus();

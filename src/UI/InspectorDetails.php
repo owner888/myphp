@@ -64,34 +64,49 @@ final class InspectorDetails
             } elseif ($n->reverse) {
                 $add('flex-direction', 'column-reverse');
             }
-            if ($n->wraps) { $add('flex-wrap', 'wrap'); }
-            if ($n->gap != 0) { $add('gap', Inspector::px($n->gap)); }
+            if ($n->wraps) { $add('flex-wrap', $n->wrapReverse ? 'wrap-reverse' : 'wrap'); }
+            $gx = $n->gapX ?? $n->gap; $gy = $n->gapY ?? $n->gap;
+            if ($gx == $gy && $gx != 0) { $add('gap', Inspector::px($gx)); } elseif ($gx != $gy) { $add('row-gap', Inspector::px($gy)); $add('column-gap', Inspector::px($gx)); }
+            if ($n->alignContent !== Node::AUTO) { $add('align-content', self::align($n->alignContent)); }
             if ($n->justify !== Node::START) { $add('justify-content', self::align($n->justify)); }
             if ($n->align !== Node::AUTO) { $add('align-items', self::align($n->align)); }
         }
         if ($n->self !== Node::AUTO) { $add('align-self', self::align($n->self)); }
         if ($n->dirSet) { $add('direction', $n->rtl ? 'rtl' : 'ltr'); }
-        if ($n->absolute) {
+        $len = fn(float $v, bool $pct): string => $pct ? Inspector::num($v * 100) . '%' : Inspector::px($v);
+        if ($n->attach !== null) {
             $add('position', 'absolute');
-            $add('left', $n->pct[0] !== null ? Inspector::num($n->pct[0] * 100) . '%' : Inspector::px($n->ax));
-            $add('top', $n->pct[1] !== null ? Inspector::num($n->pct[1] * 100) . '%' : Inspector::px($n->ay));
+            $add('attach', strtolower($n->attach[0]->name) . ' / ' . strtolower($n->attach[1]->name));
+        } elseif ($n->absolute) {
+            $add('position', 'absolute');
+            if ($n->insets === [null, null, null, null]) { $add('left', Inspector::px($n->ax)); $add('top', Inspector::px($n->ay)); }
+        } elseif ($n->insets !== [null, null, null, null]) {
+            $add('position', 'relative');
         }
-        if ($n->pct[2] !== null) { $add('width', Inspector::num($n->pct[2] * 100) . '%'); } elseif ($n->fw > 0 && $n->kind !== Node::TEXT) { $add('width', Inspector::px($n->fw)); }
-        if ($n->pct[3] !== null) { $add('height', Inspector::num($n->pct[3] * 100) . '%'); } elseif ($n->fh > 0 && $n->kind !== Node::TEXT) { $add('height', Inspector::px($n->fh)); }
-        if ($n->minW > 0) { $add('min-width', Inspector::px($n->minW)); }
-        if ($n->minH > 0) { $add('min-height', Inspector::px($n->minH)); }
+        foreach (['top', 'right', 'bottom', 'left'] as $i => $side) {
+            if ($n->insets[$i] !== null) { $add($side, $len(...$n->insets[$i])); }
+        }
+        if ($n->wPct !== null) { $add('width', $len($n->wPct, true)); } elseif ($n->fw > 0 && $n->kind !== Node::TEXT) { $add('width', Inspector::px($n->fw)); }
+        if ($n->hPct !== null) { $add('height', $len($n->hPct, true)); } elseif ($n->fh > 0 && $n->kind !== Node::TEXT) { $add('height', Inspector::px($n->fh)); }
+        if ($n->minWPct !== null) { $add('min-width', $len($n->minWPct, true)); } elseif ($n->minW > 0) { $add('min-width', Inspector::px($n->minW)); }
+        if ($n->minHPct !== null) { $add('min-height', $len($n->minHPct, true)); } elseif ($n->minH > 0) { $add('min-height', Inspector::px($n->minH)); }
+        if ($n->maxWPct !== null) { $add('max-width', $len($n->maxWPct, true)); } elseif ($n->maxW < INF) { $add('max-width', Inspector::px($n->maxW)); }
+        if ($n->maxHPct !== null) { $add('max-height', $len($n->maxHPct, true)); } elseif ($n->maxH < INF) { $add('max-height', Inspector::px($n->maxH)); }
+        if ($n->aspect > 0) { $add('aspect-ratio', Inspector::num($n->aspect)); }
         if ($n->grow != 0) { $add('flex-grow', Inspector::num($n->grow)); }
         if ($n->shrink != 1) { $add('flex-shrink', Inspector::num($n->shrink)); }
-        if ($n->basis !== null) { $add('flex-basis', Inspector::px($n->basis)); }
+        if ($n->basisPct !== null) { $add('flex-basis', Inspector::num($n->basisPct * 100) . '%'); } elseif ($n->basis !== null) { $add('flex-basis', Inspector::px($n->basis)); }
         if (($v = self::edges($n->sides())) !== null) { $add('padding', $v); }
         if (($v = self::edges($n->margins)) !== null) { $add('margin', $v); }
+        if (($v = self::edges($n->barInsets)) !== null) { $add('scrollbar-insets', $v); }
         $bc = $n->borderColor ?? $in->base?->border ?? 0;
+        $style = $n->borderStyle === BorderStyle::Dashed ? ' dashed ' : ' solid ';
         if ($n->bordered) {
-            $add('border', Inspector::px($n->borderWidth) . ' solid ' . Inspector::color($bc), $bc);
+            $add('border', Inspector::px($n->borderWidth) . $style . Inspector::color($bc), $bc);
         } elseif (($v = self::edges($n->borders)) !== null) {
-            $add('border', $v . ' solid ' . Inspector::color($bc), $bc);
+            $add('border', $v . $style . Inspector::color($bc), $bc);
         }
-        if ($n->radius != 0) { $add('border-radius', Inspector::px($n->radius)); }
+        if (($v = self::edges($n->corners())) !== null) { $add('border-radius', $v); }
         if ($n->scroll !== null) {
             $add(match (true) { $n->scrollX && $n->scrollY => 'overflow', $n->scrollX => 'overflow-x', default => 'overflow-y' }, 'scroll');
         } elseif ($n->clip !== 0) {
@@ -99,15 +114,21 @@ final class InspectorDetails
         }
         if ($n->material !== null) {
             $add('background', $n->material instanceof \Stringable ? (string)$n->material : 'material'); // a material describes itself as a Stringable
+        } elseif (($g = $n->gradient) !== null) {
+            $add('background', 'linear-gradient(' . Inspector::num($g->angle) . 'deg, ' . Inspector::color($g->from, $g->fromAlpha) . ', ' . Inspector::color($g->to, $g->toAlpha) . ')');
+        } elseif ($n->stripes !== null) {
+            $add('background', 'stripes ' . Inspector::color($n->stripes[0], $n->stripes[1]), $n->stripes[0]);
         } elseif ($n->color !== null && $n->kind !== Node::TEXT && $n->kind !== Node::RICH) {
             $add('background-color', Inspector::color($n->color, $n->alpha * $n->bgAlpha), $n->color);
         }
-        if ($n->shadow !== null) {
-            [$dy, $blur, $alpha] = $n->shadow;
-            $add('box-shadow', '0 ' . Inspector::px($dy) . ' ' . Inspector::px($blur) . ' ' . Inspector::color(0, $alpha));
+        foreach ($n->shadows as [$x, $y, $blur, $spread, $rgb, $alpha, $inset]) {
+            $add('box-shadow', ($inset ? 'inset ' : '') . Inspector::px($x) . ' ' . Inspector::px($y) . ' ' . Inspector::px($blur) . ' ' . Inspector::px($spread) . ' ' . Inspector::color($rgb, $alpha));
         }
         if ($n->opacity < 1) { $add('opacity', Inspector::num($n->opacity)); }
-        if ($n->cursor !== null) { $add('cursor', $n->cursor); }
+        if ($n->invisible) { $add('visibility', 'hidden'); }
+        if ($n->passThrough) { $add('pointer-events', 'none'); }
+        if ($n->dividers !== null) { $add('dividers', Inspector::px($n->dividers[0]) . ' ' . Inspector::color($n->dividers[1], $n->dividers[2]), $n->dividers[1]); }
+        if ($n->cursor !== null) { $add('cursor', $n->cursor->value); }
         if (($r = $rt->trans[$n->id] ?? null) !== null && $r->built + 1 >= $rt->frameNumber) {
             $p = $r->properties(); $what = [];
             if ($p & TransitionState::PROP_POSITION) { $what[] = 'position'; }
@@ -214,7 +235,7 @@ final class InspectorDetails
 
     public static function align(int $a): string
     {
-        return match ($a) { Node::START => 'flex-start', Node::CENTER => 'center', Node::END => 'flex-end', Node::STRETCH => 'stretch', default => 'auto' };
+        return match ($a) { Node::START => 'flex-start', Node::CENTER => 'center', Node::END => 'flex-end', Node::STRETCH => 'stretch', Node::SPACE_BETWEEN => 'space-between', Node::SPACE_AROUND => 'space-around', Node::SPACE_EVENLY => 'space-evenly', default => 'auto' };
     }
 
     /** The four sides top, right, bottom and left as CSS writes them, or null when all are 0. @param array{0: float, 1: float, 2: float, 3: float} $v */

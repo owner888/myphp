@@ -18,7 +18,10 @@ use RuntimeException;
  * own points, a its opacity) and 8 the hard scroll edge's (mixed with the
  * color by its alpha), kind 9 a line, kinds 10 and 11 a gradient between two
  * colors across (10) or down (11) the quad: the color, and u the other's
- * rgb packed as a float, v its alpha. Kinds 5, 7 and 8 read what was drawn before
+ * rgb packed as a float, v its alpha. Kind 14 is a box (box(): its paint,
+ * corners, borders) and kind 15 a box shadow (boxShadow()), each taking the
+ * slot after it too for what does not fit in its own, that slot's kind -1.
+ * Kinds 5, 7 and 8 read what was drawn before
  * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
  * it are discarded.
@@ -35,6 +38,8 @@ final class DisplayList
 {
     public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 8;
     public const KIND_STRIDE = 16.0;
+    /** What box() fills with (mygo's scene.Paint): a color, a gradient mixed in sRGB or in Oklab, or stripes. */
+    public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3;
     private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
@@ -261,9 +266,9 @@ final class DisplayList
         $this->quad(min($x0, $x1) - $r, min($y0, $y1) - $r, abs($x1 - $x0) + $thickness, abs($y1 - $y0) + $thickness, $rgb, $alpha, $r, 9.0, $x1 >= $x0 ? 1.0 : -1.0, $y1 >= $y0 ? 1.0 : -1.0);
     }
 
-    private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u, float $v = 0.0): void
+    private function quad(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $kind, float $u, float $v = 0.0, int $slots = 1): void
     {
-        if ($this->n === $this->capacity) {
+        if ($this->n + $slots > $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} quads)");
         }
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
@@ -271,6 +276,68 @@ final class DisplayList
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
         $b[$k + 8] = $radius; $b[$k + 9] = $kind + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
+        $this->n++;
+    }
+
+    /**
+     * A box (mygo's fill op): $radii its corners' (top left, top right,
+     * bottom right, bottom left), fitted to it as CSS does; filled with
+     * $rgb at $alpha, or, by $paint, a gradient from $rgb to $rgb2 at
+     * $alpha2 from ($g[0], $g[1]) to ($g[2], $g[3]), in points from its top
+     * left, or stripes of $rgb over $rgb2, ($g[0], $g[1]) the unit vector
+     * across them, $g[2] wide every $g[3] points; inside its edges a border
+     * of $borders (top, right, bottom, left) in $borderRgb at $borderAlpha,
+     * $dashed or solid, its inner corners each the outer less the wider of
+     * its sides.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     * @param array{0: float, 1: float, 2: float, 3: float} $borders
+     * @param array{0: float, 1: float, 2: float, 3: float} $g
+     */
+    public function box(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, array $borders = [0.0, 0.0, 0.0, 0.0], int $borderRgb = 0, float $borderAlpha = 0.0, bool $dashed = false,
+                        int $paint = self::PAINT_COLOR, int $rgb2 = 0, float $alpha2 = 0.0, array $g = [0.0, 0.0, 0.0, 0.0]): void
+    {
+        $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+        $r = self::fitRadii($w, $h, $radii);
+        $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? 4.0 : 0.0), $g);
+    }
+
+    /**
+     * The box shadow of a rounded box (mygo's shadow op), in $rgb at
+     * $alpha, blurred by a Gaussian of $sigma points: outside, the box
+     * ($x, $y, $w, $h) with $radii, shown only outside $cut (and its
+     * radii), the box casting it; $inset, inside the box, what the hole
+     * $cut, blurred, leaves of it. A $cut of no area cuts nothing out, or
+     * leaves no hole.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     * @param array{0: float, 1: float, 2: float, 3: float} $cut
+     * @param array{0: float, 1: float, 2: float, 3: float} $cutRadii
+     */
+    public function boxShadow(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, float $sigma, bool $inset, array $cut, array $cutRadii): void
+    {
+        $e = $inset ? 0.0 : 3 * $sigma; // the quad takes in the blur
+        $this->quad($x - $e, $y - $e, $w + 2 * $e, $h + 2 * $e, $rgb, $alpha, 0.0, 15.0, $sigma, $inset ? 1.0 : 0.0, 2);
+        $c = $cut[2] > 0 && $cut[3] > 0 ? self::fitRadii($cut[2], $cut[3], $cutRadii) : [0.0, 0.0, 0.0, 0.0];
+        $this->slot(self::fitRadii($w, $h, $radii), $cut, $c[0], $c[1], $c[2], [$c[3], 0.0, 0.0, 0.0]);
+    }
+
+    /** The radii of a box's corners, scaled down together where two of a side's would overlap, as CSS's. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */
+    public static function fitRadii(float $w, float $h, array $r): array
+    {
+        $f = 1.0;
+        foreach ([[$r[0] + $r[1], $w], [$r[3] + $r[2], $w], [$r[0] + $r[3], $h], [$r[1] + $r[2], $h]] as [$sum, $side]) {
+            if ($sum > $side && $sum > 0) { $f = min($f, $side / $sum); }
+        }
+        return [max($r[0] * $f, 0.0), max($r[1] * $f, 0.0), max($r[2] * $f, 0.0), max($r[3] * $f, 0.0)];
+    }
+
+    /** The slot after a box or a box shadow: 16 floats, the 10th the kind -1 that has it draw nothing. @param array{0: float, 1: float, 2: float, 3: float} $a @param array{0: float, 1: float, 2: float, 3: float} $b @param array{0: float, 1: float, 2: float, 3: float} $d */
+    private function slot(array $a, array $b, float $c0, float $c2, float $c3, array $d): void
+    {
+        $buf = $this->buf; $k = $this->n * 16;
+        $buf[$k] = $a[0]; $buf[$k + 1] = $a[1]; $buf[$k + 2] = $a[2]; $buf[$k + 3] = $a[3];
+        $buf[$k + 4] = $b[0]; $buf[$k + 5] = $b[1]; $buf[$k + 6] = $b[2]; $buf[$k + 7] = $b[3];
+        $buf[$k + 8] = $c0; $buf[$k + 9] = -1.0; $buf[$k + 10] = $c2; $buf[$k + 11] = $c3;
+        $buf[$k + 12] = $d[0]; $buf[$k + 13] = $d[1]; $buf[$k + 14] = $d[2]; $buf[$k + 15] = $d[3];
         $this->n++;
     }
 

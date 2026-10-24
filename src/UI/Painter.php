@@ -73,10 +73,16 @@ final class Painter
         $this->list->ring($r[0], $r[1], $r[2], $r[3], $rgb, $alpha, $radius, $width);
     }
 
-    /** Paints the shadow of a rounded rectangle, offset by $x and $y, blurred by $blur and grown by $spread points. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    /** Paints the outline of a rounded rectangle in dashes, as a dashed border (mygo's StrokeDashed). @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function strokeDashed(array $r, int $rgb, float $radius, float $width, float $alpha = 1.0): void
+    {
+        $this->list->box($r[0], $r[1], $r[2], $r[3], [$radius, $radius, $radius, $radius], 0, 0.0, [$width, $width, $width, $width], $rgb, $alpha, true);
+    }
+
+    /** Paints the box shadow of a rounded rectangle as Node::shadow does: offset by $x and $y, blurred by $blur and grown by $spread points, only outside the rectangle, so that it does not show through what is drawn there (mygo's Shadow). @param array{0: float, 1: float, 2: float, 3: float} $r */
     public function shadow(array $r, float $radius, float $x, float $y, float $blur, float $spread, int $rgb, float $alpha = 1.0): void
     {
-        $this->list->shadow($r[0] - $spread, $r[1] - $spread, $r[2] + 2 * $spread, $r[3] + 2 * $spread, $rgb, $alpha, $radius > 0 ? max($radius + $spread, 0) : 0, $blur, $x, $y);
+        self::boxShadow($this->list, $r, [$radius, $radius, $radius, $radius], [$x, $y, $blur, $spread, $rgb, $alpha, false]);
     }
 
     /** Paints a straight horizontal or vertical line between two points, $width points thick. */
@@ -175,25 +181,10 @@ final class Painter
         $this->list->transform($t, $ox, $oy, $fn);
     }
 
-    /**
-     * Paints $box rounded by $radius with $g (mygo's FillGradient): along
-     * the box's height at 180° (from the top) or 0° (from the bottom), or
-     * its width at 90° (from the left) or 270° (from the right), with
-     * $start and $end both 0.
-     * @param array{0: float, 1: float, 2: float, 3: float} $box
-     */
+    /** Paints a box with a gradient, at any angle, from its start to its end, in sRGB or Oklab (mygo's FillGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
     public function fillGradient(array $box, LinearGradient $g, float $radius = 0): void
     {
-        if ($g->start != 0 || $g->end != 0) {
-            throw new \InvalidArgumentException('Painter::fillGradient: a gradient\'s start and end are not drawn yet');
-        }
-        $a = fmod(fmod($g->angle, 360) + 360, 360);
-        [$vertical, $flip] = match ($a) {
-            180.0 => [true, false], 0.0 => [true, true], 90.0 => [false, false], 270.0 => [false, true],
-            default => throw new \InvalidArgumentException("Painter::fillGradient: an angle of {$g->angle}° is not drawn yet, only 0, 90, 180 and 270"),
-        };
-        [$from, $fa, $to, $ta] = $flip ? [$g->to, $g->toAlpha, $g->from, $g->fromAlpha] : [$g->from, $g->fromAlpha, $g->to, $g->toAlpha];
-        $this->list->gradient2($box[0], $box[1], $box[2], $box[3], $from, $fa, $to, $ta, $vertical, $radius);
+        $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $g->from, $g->fromAlpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha, g: self::gradientLine($box[2], $box[3], $g));
     }
 
     /**
@@ -259,12 +250,13 @@ final class Painter
      */
     public static function paint(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt = null): void
     {
-        if ($n->backface && $n->transform->facesAway()) {
+        if ($n->invisible || $n->backface && $n->transform->facesAway()) {
             return;
         }
         $world = $list->world(); $opacity = $list->opacity();
-        if ($n->opacity < 1 || $n->poseFade > 0) {
-            $o = $opacity * $n->opacity * (1 - $n->poseFade);
+        $dim = $n->disabled && $n->kind === Node::CONTAINER; // a disabled container at half its opacity (widgets look disabled their own way)
+        if ($n->opacity < 1 || $n->poseFade > 0 || $dim) {
+            $o = $opacity * $n->opacity * (1 - $n->poseFade) * ($dim ? 0.5 : 1.0);
             if ($o <= 0.001) {
                 return;
             }
@@ -331,26 +323,44 @@ final class Painter
             }
             return;
         }
-        if ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
+        if ($n->focusVisible && $n->color !== null && $n->radii !== null) { // around corners each their own
+            $list->box($n->x - 3, $n->y - 3, $n->w + 6, $n->h + 6, array_map(static fn(float $r): float => $r + 3, $n->radii), 0, 0.0, [2.0, 2.0, 2.0, 2.0], $t->focus, $t->focusAlpha);
+        } elseif ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
             self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
         }
+        $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius };
+        $box = [$n->x, $n->y, $n->w, $n->h];
+        $radii = $n->radii ?? [$radius, $radius, $radius, $radius];
+        foreach ($n->shadows as $sh) { // outside the box, under it (mygo's Shadow)
+            if (!$sh[6]) { self::boxShadow($list, $box, $radii, $sh); }
+        }
         if ($n->material !== null) {
-            $n->material->paintMaterial(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $n->radius);
+            $n->material->paintMaterial(new self($list, $text, $t, $rt), $box, $n->radius);
+        } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box
+            $bw = $n->borderWidth;
+            $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
+            $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color, 1.0, $radius - $bw);
+        } elseif ($n->gradient !== null) {
+            $g = $n->gradient;
+            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $g->from, $g->fromAlpha * $n->alpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha * $n->alpha, g: self::gradientLine($n->w, $n->h, $g));
+        } elseif ($n->stripes !== null) { // over the color, if any
+            [$sc, $sa, $sw, $sg, $angle] = $n->stripes;
+            $a = deg2rad($angle);
+            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $sc, $sa * $n->alpha, paint: DisplayList::PAINT_STRIPES, rgb2: $n->color ?? 0, alpha2: $n->color === null ? 0.0 : $n->alpha * $n->bgAlpha, g: [cos($a), sin($a), max($sw, 0.25), max($sw, 0.25) + max($sg, 0.0)]);
         } elseif ($n->color !== null) {
-            $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius };
-            if ($n->bordered) { // a bordered face: a plain button, a select, a field's box
-                $bw = $n->borderWidth;
-                $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
-                $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color, 1.0, $radius - $bw);
+            if ($n->radii !== null) {
+                $list->box($n->x, $n->y, $n->w, $n->h, $radii, $n->color, $n->alpha * $n->bgAlpha);
             } else {
-                if ($n->shadow !== null) {
-                    $list->shadow($n->x, $n->y, $n->w, $n->h, 0x000000, $n->shadow[2], $radius, $n->shadow[1], 0, $n->shadow[0]);
-                }
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
             }
         }
+        foreach ($n->shadows as $sh) { // inside the padding edge, over the background (mygo's InsetShadow)
+            if ($sh[6]) { self::insetShadow($list, $box, $radii, $n->borders, $sh); }
+        }
         [$bt, $br, $bb, $bl] = $n->borders;
-        if ($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
+        if (($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) && ($n->borderStyle === BorderStyle::Dashed || $n->radii !== null)) { // dashed, or around corners each its own
+            $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $n->borders, $n->borderColor ?? $t->border, $n->alpha, $n->borderStyle === BorderStyle::Dashed);
+        } elseif ($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
             $bc = $n->borderColor ?? $t->border;
             if ($bt === $br && $br === $bb && $bb === $bl) {
                 $list->ring($n->x, $n->y, $n->w, $n->h, $bc, $n->alpha, $n->radius, $bt);
@@ -409,11 +419,17 @@ final class Painter
         foreach ($n->kids as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
+        if ($n->dividers !== null && $n->gridCols === null) {
+            self::dividerLines($n, $list);
+        }
         if ($n->drawOver !== null) {
             ($n->drawOver)($list, $n, $t); // over the children, inside a scrolling container's clip (mygo's DrawOver)
         }
         if ($n->clip !== 0 && $n->scroll === null) {
             $list->popClip();
+        }
+        if ($n->debug) {
+            self::debugOutlines($n, $list);
         }
         if ($n->focusVisible && $n->color === null) { // a list or other background-less node: the ring just inside its edge, over its children (outside, a list filling the window would lose it)
             $list->ring($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $t->focus, $t->focusAlpha, max(0.0, $n->radius - 1), 2.0);
@@ -422,7 +438,7 @@ final class Painter
             $list->popClip();
             // The thumbs show while the pointer is over the container or drags one.
             if ($rt !== null && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
-                $r = [$n->x, $n->y, $n->w, $n->h];
+                $r = Scrollbar::track([$n->x, $n->y, $n->w, $n->h], $n->barInsets);
                 $grow = $dragging ? 2.0 : 0.0; // the thumb being dragged thickens, as mygo's
                 $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
                 if ($thumb !== null) {
@@ -442,6 +458,105 @@ final class Painter
      * blurred by 6.4 points and saturated under 82% of the background
      * (toned as AppKit's), with a hairline along the other edge.
      */
+    /** The line a gradient runs along across a box $w by $h, from its top left, as CSS's (mygo's Painter.gradient): through the middle at its angle, as long as the box's corners reach along it, cut at its start and end. @return array{0: float, 1: float, 2: float, 3: float} */
+    public static function gradientLine(float $w, float $h, LinearGradient $g): array
+    {
+        $a = deg2rad($g->angle);
+        $dx = sin($a); $dy = -cos($a); // 0° points up, 90° right
+        $half = (abs($w * $dx) + abs($h * $dy)) / 2;
+        [$x0, $y0, $x1, $y1] = [$w / 2 - $dx * $half, $h / 2 - $dy * $half, $w / 2 + $dx * $half, $h / 2 + $dy * $half];
+        [$start, $end] = $g->start == 0 && $g->end == 0 ? [0.0, 1.0] : [$g->start, $g->end];
+        $sx = $x0 + ($x1 - $x0) * $start; $sy = $y0 + ($y1 - $y0) * $start;
+        if ($end - $start < 0.25 / max(2 * $half, 1)) { // stops at one place: a hard edge
+            return [$sx, $sy, $sx + $dx * 0.25, $sy + $dy * 0.25];
+        }
+        return [$sx, $sy, $x0 + ($x1 - $x0) * $end, $y0 + ($y1 - $y0) * $end];
+    }
+
+    /** The box shadow $sh (Node::$shadows) of $box, rounded by $radii, outside it, as CSS's box-shadow (mygo's Painter.shadow). @param array{0: float, 1: float, 2: float, 3: float} $box @param array{0: float, 1: float, 2: float, 3: float} $radii */
+    public static function boxShadow(DisplayList $list, array $box, array $radii, array $sh): void
+    {
+        [$x, $y, $blur, $spread, $rgb, $alpha] = $sh;
+        $grown = array_map(static fn(float $r): float => $r > 0 ? max($r + $spread, 0.0) : 0.0, $radii);
+        $sigma = $blur / 2 < 0.25 ? 0.0 : $blur / 2;
+        $list->boxShadow($box[0] + $x - $spread, $box[1] + $y - $spread, $box[2] + 2 * $spread, $box[3] + 2 * $spread, $grown, $rgb, $alpha, $sigma, false, $box, $radii);
+    }
+
+    /** The inner shadow $sh of $box, rounded by $radii, inside its padding edge within the border $bw, as CSS's box-shadow: inset (mygo's Painter.insetShadow). @param array{0: float, 1: float, 2: float, 3: float} $box @param array{0: float, 1: float, 2: float, 3: float} $radii @param array{0: float, 1: float, 2: float, 3: float} $bw */
+    public static function insetShadow(DisplayList $list, array $box, array $radii, array $bw, array $sh): void
+    {
+        [$x, $y, $blur, $spread, $rgb, $alpha] = $sh;
+        $radii = DisplayList::fitRadii($box[2], $box[3], $radii);
+        $pad = [$box[0] + $bw[3], $box[1] + $bw[0], $box[2] - $bw[1] - $bw[3], $box[3] - $bw[0] - $bw[2]];
+        if ($pad[2] <= 0 || $pad[3] <= 0) {
+            return;
+        }
+        $pr = [];
+        foreach ([[0, 3], [0, 1], [2, 1], [2, 3]] as $i => [$a, $b]) { $pr[] = max($radii[$i] - max($bw[$a], $bw[$b]), 0.0); }
+        $pr = DisplayList::fitRadii($pad[2], $pad[3], $pr);
+        $hole = [$pad[0] + $x + $spread, $pad[1] + $y + $spread, max($pad[2] - 2 * $spread, 0.0), max($pad[3] - 2 * $spread, 0.0)];
+        $hr = array_map(static fn(float $r): float => $r > 0 ? max($r - $spread, 0.0) : 0.0, $pr);
+        $sigma = $blur / 2 < 0.25 ? 0.0 : $blur / 2;
+        $list->boxShadow($pad[0], $pad[1], $pad[2], $pad[3], $pr, $rgb, $alpha, $sigma, true, $hole, $hr);
+    }
+
+    /** The lines between the children of $n (Node::dividers), in the middle of the room between each two: below each row of a list but its last, else between children next to each other, on the same line (mygo's Painter.dividers). */
+    private static function dividerLines(Node $n, DisplayList $list): void
+    {
+        [$width, $rgb, $alpha] = $n->dividers;
+        $ls = $n->scroll instanceof ListState ? $n->scroll : null;
+        $row = $n->dir === Node::ROW && $ls === null;
+        [$lo, $hi] = $row ? [$n->y + $n->borders[0], $n->y + $n->h - $n->borders[2]] : [$n->x + $n->borders[3], $n->x + $n->w - $n->borders[1]];
+        $line = static function (float $at, float $from, float $to) use ($list, $row, $width, $rgb, $alpha): void { // vertical in a row, horizontal in a column
+            if ($row) { $list->rect($at - $width / 2, $from, $width, $to - $from, $rgb, $alpha); } else { $list->rect($from, $at - $width / 2, $to - $from, $width, $rgb, $alpha); }
+        };
+        if ($ls !== null) {
+            foreach ($n->rowStarts as $k => $i) {
+                $c = $n->kids[$k];
+                if ($i < $ls->count - 1) { $line($c->y + $c->h + max($n->gapY ?? $n->gap, 0) / 2, min($lo, $c->x), max($hi, $c->x + $c->w)); }
+            }
+            return;
+        }
+        $prev = null;
+        foreach ($n->kids as $c) {
+            if ($c->absolute) {
+                continue;
+            }
+            if ($prev !== null) {
+                [$as, $ae, $cs, $ce] = $row ? [$prev->x, $prev->x + $prev->w, $c->x, $c->x + $c->w] : [$prev->y, $prev->y + $prev->h, $c->y, $c->y + $c->h];
+                [$a0, $a1, $c0, $c1] = $row ? [$prev->y, $prev->y + $prev->h, $c->y, $c->y + $c->h] : [$prev->x, $prev->x + $prev->w, $c->x, $c->x + $c->w];
+                if (!$n->wraps || $a0 < $c1 && $c0 < $a1) { // on the same line of a row that wraps
+                    $line($cs < $as ? ($ce + $as) / 2 : ($ae + $cs) / 2, min($lo, $a0, $c0), max($hi, $a1, $c1)); // reversed: the other way
+                }
+            }
+            $prev = $c;
+        }
+    }
+
+    /** Outlines $n and the nodes inside it (Node::debug): their margins in orange, padding in green, boxes in blue, at full opacity (mygo's Painter.debug); a node debugging itself outlines its own. */
+    private static function debugOutlines(Node $n, DisplayList $list): void
+    {
+        $saved = $list->opacity();
+        $list->setOpacity(1.0);
+        $walk = static function (Node $e, bool $top) use (&$walk, $list): void {
+            if ($e->invisible || ($e->debug && !$top)) {
+                return;
+            }
+            [$mt, $mr, $mb, $ml] = array_map(static fn(float $m): float => is_finite($m) ? $m : 0.0, $e->margins);
+            if ($mt + $mb > 0 || $ml + $mr > 0) {
+                $list->ring($e->x - $ml, $e->y - $mt, $e->w + $ml + $mr, $e->h + $mt + $mb, 0xf97316, 0.8, 0.0, 1.0);
+            }
+            [$pt, $pr, $pb, $pl] = $e->sides();
+            if ($pt + $pb > 0 || $pl + $pr > 0) {
+                $list->ring($e->x + $e->padL(), $e->y + $e->padT(), $e->w - $e->padL() - $e->padR(), $e->h - $e->padT() - $e->padB(), 0x22c55e, 0.8, 0.0, 1.0);
+            }
+            $list->ring($e->x, $e->y, $e->w, $e->h, 0x3b82f6, 0.9, 0.0, 1.0);
+            foreach ($e->kids as $k) { $walk($k, false); }
+        };
+        $walk($n, true);
+        $list->setOpacity($saved);
+    }
+
     /** Paints a copy of the node dragging its value under the pointer, above the rest, at three quarters' opacity (mygo's paintDrag). */
     public static function dragCopy(DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {
@@ -964,6 +1079,25 @@ final class Painter
         }
     }
 
+    /** The color of each byte of an input's display() from $from (Node::textRanges): the last range holding it, else the input's; the composition its own. @return \Closure(int): array{0: int, 1: float} */
+    private static function rangeColors(Node $n, TextState $s, int $from): \Closure
+    {
+        $byte = static fn(int $r): int => strlen(mb_substr($s->text, 0, max(0, $r)));
+        $runs = array_map(static fn(TextRange $r): array => [$byte($r->start), $byte($r->end), $r->color, $r->alpha], array_reverse($n->ranges));
+        $mark = $s->marked === null ? null : [$s->cursor, strlen($s->marked)];
+        return static function (int $i) use ($runs, $mark, $from, $n): array {
+            $b = $from + $i;
+            if ($mark !== null && $b >= $mark[0]) {
+                if ($b < $mark[0] + $mark[1]) { return [$n->fg, 1.0]; } // the composition, unstyled
+                $b -= $mark[1];
+            }
+            foreach ($runs as [$a, $z, $rgb, $alpha]) {
+                if ($b >= $a && $b < $z) { return [$rgb, $alpha]; }
+            }
+            return [$n->fg, 1.0];
+        };
+    }
+
     /** A text field: border, selection, text or placeholder, composition underline, caret. */
     private static function paintField(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
@@ -993,7 +1127,11 @@ final class Painter
                 $xb = $text->xForIndex($display, $n->fontSize, $b);
                 $list->rect($tx + $xa, $ty, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
             }
-            $text->paint($list, $display, $n->fontSize, $tx, $ty, $n->fg);
+            if ($n->ranges !== []) {
+                $text->paintRuns($list, $display, $n->fontSize, $tx, $ty, 0, self::rangeColors($n, $s, 0));
+            } else {
+                $text->paint($list, $display, $n->fontSize, $tx, $ty, $n->fg);
+            }
             if ($s->marked !== null) {
                 $xa = $text->xForIndex($display, $n->fontSize, $s->cursor);
                 $xb = $text->xForIndex($display, $n->fontSize, $s->cursor + strlen($s->marked));
@@ -1045,7 +1183,9 @@ final class Painter
                 $xb = $selB < $b ? $text->xForIndex($line, $n->fontSize, min($selB - $a, strlen($line))) : $text->xForIndex($line, $n->fontSize, strlen($line)) + ($selB > $b ? $n->fontSize * 0.3 : 0);
                 $list->rect($tx + $xa, $y, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
             }
-            if ($line !== '') {
+            if ($line !== '' && $n->ranges !== []) {
+                $text->paintRuns($list, $line, $n->fontSize, $tx, $y, 0, self::rangeColors($n, $s, $a));
+            } elseif ($line !== '') {
                 $text->paint($list, $line, $n->fontSize, $tx, $y, $n->fg);
             }
         }

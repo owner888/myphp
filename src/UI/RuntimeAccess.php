@@ -279,7 +279,7 @@ trait RuntimeAccess
         // Statuses are named by their content, as leaves are, but show what is inside them too, as a toast's button.
         if ($node->label === '' && (Role::leaf($node->role) || $node->role === Role::STATUS)) { $node->label = self::innerText($n); }
         $node->states |= match ($n->checked) { 2 => AccessNode::CHECKED, 3 => AccessNode::MIXED, default => 0 };
-        if ($n->disabled) { $node->states |= AccessNode::DISABLED; }
+        if ($n->isDisabled()) { $node->states |= AccessNode::DISABLED; }
         if ($n->expanded) { $node->states |= AccessNode::EXPANDED; }
         if ($n->expandable) { $node->states |= AccessNode::EXPANDABLE; }
         $node->level = $n->level;
@@ -297,7 +297,7 @@ trait RuntimeAccess
             if ($v[2] <= 0 || $v[3] <= 0) { $node->states |= AccessNode::OFFSCREEN; }
         }
         if ($n->choosable) { $node->states |= AccessNode::SELECTABLE; }
-        if ((self::takesFocus($n) && !$n->disabled) || $n->choosable || ($n->scroll instanceof ListState && $n->scroll->selected !== null)) {
+        if ((self::takesFocus($n) && !$n->isDisabled()) || $n->choosable || ($n->scroll instanceof ListState && $n->scroll->selected !== null)) {
             // Focusing an item its container chooses chooses it.
             $node->states |= AccessNode::FOCUSABLE;
             $node->actions |= AccessNode::ACTION_FOCUS;

@@ -918,16 +918,59 @@ final class Window
         WindowState::set($this->stateKey, $r->x, $r->y, $r->w, $r->h);
     }
 
-    private string $cursorShown = 'arrow';
+    private \MyPHP\UI\Cursor $cursorShown = \MyPHP\UI\Cursor::Default;
+    private static mixed $noCursor = null;
 
-    /** The pointer over the content: the arrow, or the hand over links. */
-    private function showCursor(string $cursor): void
+    /** The pointer over the content (mygo's nsCursor): AppKit's cursor of each shape; the diagonal resize cursors macOS 15's frame resize cursors, else AppKit's older ones; the columns' and rows' macOS 15's, else the two-way arrows; none a cursor of a transparent image, which hides the pointer over the view alone. */
+    private function showCursor(\MyPHP\UI\Cursor $cursor): void
     {
         if ($cursor === $this->cursorShown) {
             return;
         }
         $this->cursorShown = $cursor;
-        ObjC::msg('v:', ObjC::msg('p:', ObjC::cls('NSCursor'), match ($cursor) { 'pointer' => 'pointingHandCursor', 'ibeam' => 'IBeamCursor', 'resizeEW' => 'resizeLeftRightCursor', 'resizeNS' => 'resizeUpDownCursor', 'crosshair' => 'crosshairCursor', default => 'arrowCursor' }), 'set');
+        ObjC::msg('v:', self::nsCursor($cursor), 'set');
+    }
+
+    private static function nsCursor(\MyPHP\UI\Cursor $c): mixed
+    {
+        $cls = ObjC::cls('NSCursor');
+        $responds = static fn(string $sel): bool => ObjC::msg('b:p', $cls, 'respondsToSelector:', ObjC::sel($sel));
+        if ($c === \MyPHP\UI\Cursor::ResizeNWSE || $c === \MyPHP\UI\Cursor::ResizeNESW) {
+            [$corner, $older] = $c === \MyPHP\UI\Cursor::ResizeNWSE ? [1 | 2, '_windowResizeNorthWestSouthEastCursor'] : [1 | 8, '_windowResizeNorthEastSouthWestCursor']; // the top left corner, or the top right
+            if ($responds('frameResizeCursorFromPosition:inDirections:') && ($cur = ObjC::msg('p:LL', $cls, 'frameResizeCursorFromPosition:inDirections:', $corner, 1 | 2)) !== null) { // inward and outward
+                return $cur;
+            }
+            if ($responds($older) && ($cur = ObjC::msg('p:', $cls, $older)) !== null) {
+                return $cur;
+            }
+        }
+        if ($c === \MyPHP\UI\Cursor::None) {
+            if (self::$noCursor === null) { // a 1×1 transparent image
+                $rep = ObjC::msg('p:pllllbbpLll', ObjC::alloc('NSBitmapImageRep'), 'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:',
+                    null, 1, 1, 8, 4, true, false, ObjC::str('NSDeviceRGBColorSpace'), 0, 4, 32) ?? throw new \RuntimeException('the hidden cursor\'s image');
+                \FFI::memset(ObjC::$c->cast('char*', ObjC::msg('p:', $rep, 'bitmapData')), 0, 4);
+                $size = ObjC::$c->new('CGSize');
+                $size->w = 1; $size->h = 1;
+                $img = ObjC::msg('p:z', ObjC::alloc('NSImage'), 'initWithSize:', $size);
+                ObjC::msg('v:p', $img, 'addRepresentation:', $rep);
+                ObjC::msg('v:', $rep, 'release');
+                self::$noCursor = ObjC::msg('p:pq', ObjC::alloc('NSCursor'), 'initWithImage:hotSpot:', $img, ObjC::point(0, 0));
+                ObjC::msg('v:', $img, 'release');
+            }
+            return self::$noCursor;
+        }
+        $name = match ($c) {
+            \MyPHP\UI\Cursor::Default => 'arrowCursor', \MyPHP\UI\Cursor::Pointer => 'pointingHandCursor', \MyPHP\UI\Cursor::Text => 'IBeamCursor',
+            \MyPHP\UI\Cursor::Move, \MyPHP\UI\Cursor::Grab => 'openHandCursor', \MyPHP\UI\Cursor::Grabbing => 'closedHandCursor',
+            \MyPHP\UI\Cursor::ResizeEW => 'resizeLeftRightCursor', \MyPHP\UI\Cursor::ResizeNS => 'resizeUpDownCursor',
+            \MyPHP\UI\Cursor::NotAllowed => 'operationNotAllowedCursor', \MyPHP\UI\Cursor::Crosshair => 'crosshairCursor',
+            \MyPHP\UI\Cursor::ResizeN => 'resizeUpCursor', \MyPHP\UI\Cursor::ResizeE => 'resizeRightCursor', \MyPHP\UI\Cursor::ResizeS => 'resizeDownCursor', \MyPHP\UI\Cursor::ResizeW => 'resizeLeftCursor',
+            \MyPHP\UI\Cursor::ResizeColumn => $responds('columnResizeCursor') ? 'columnResizeCursor' : 'resizeLeftRightCursor', // macOS 15
+            \MyPHP\UI\Cursor::ResizeRow => $responds('rowResizeCursor') ? 'rowResizeCursor' : 'resizeUpDownCursor',
+            \MyPHP\UI\Cursor::VerticalText => 'IBeamCursorForVerticalLayout', \MyPHP\UI\Cursor::Copy => 'dragCopyCursor', \MyPHP\UI\Cursor::Alias => 'dragLinkCursor', \MyPHP\UI\Cursor::ContextMenu => 'contextualMenuCursor',
+            \MyPHP\UI\Cursor::ResizeNWSE, \MyPHP\UI\Cursor::ResizeNESW => 'arrowCursor', // neither cursor AppKit has (before macOS 15, without its private ones): as mygo's
+        };
+        return ObjC::msg('p:', $cls, $name);
     }
 
     /** The theme changed: native UI clears to its background and redraws; a background of a light and a dark color shows the appearance's. */

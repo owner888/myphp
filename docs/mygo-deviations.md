@@ -169,12 +169,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     End are told from Cmd and the arrows by the key event before the
     selector; Left and Right move by logical graphemes.
   - Why: myphp's keys come as selectors; visual movement to be ported.
-- **Invisible and inherited disabled** (v0.82)
-  - mygo: invisible, inert and disabled subtrees are left out
-    (`collectSelectable`, `flagDisabled` on states).
-  - myphp: no invisible nodes; a disabled container is seen as text is
-    built (`Context::selectScope`), a disabled text as it is recorded.
-  - Why: myphp's disabled is not inherited.
+- **Inherited disabled** (v0.82, v1.07)
+  - mygo: `IsDisabled` walks the element's parents; `disabled()` also
+    reads the last frame's state, for an element disabled after it was
+    built.
+  - myphp: `Node::isDisabled()` is the node's own flag or that of the
+    container it was built in (`$disabledIn`, set as it is added); the
+    runtime keeps last frame's for `clicked()`. A container disabled after
+    its children were built does not disable them.
+  - Why: myphp's nodes hold no parent pointers.
 - **The clipboard's data** (v0.82)
   - mygo: darwin `clipboard.go` writes, reads, flushes and closes data,
     with a released callback.
@@ -187,7 +190,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Older setters under other names** (v0.85)
   - mygo: `AlignItems`, `Radius`, `MinWidth`/`MinHeight`, `Width`/`Height`,
     `Border(width, color)`, `Gap`, `Grow`, `Padding(v...)` on any element.
-  - myphp: `align()`, `round()`, `min($w, $h)`, `size($w, $h)`,
+  - myphp: `align()`, `round()` (and mygo's `radius()` too),
+    `min($w, $h)`, `size($w, $h)`,
     `border(?$color, $width)` (drawn over the padding, not inside it),
     the `$gap` and `$grow` properties or `column($pad, $gap, $grow,
     $color)`; mygo's names came only where myphp had none (`margin`,
@@ -195,10 +199,50 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `paddingY`, `paddingStart`, `borderStartWidth`).
   - Why: written before the naming rule; renaming them is a sweep over
     the widgets and examples, to be decided.
-- **Percentages and fractional grow** (v1.03)
-  - mygo: `Left`, `Top`, `Right`, `Bottom` and their `…Percent`s, `WidthPercent`, `HeightPercent` on any element, absolute or relative.
-  - myphp: `leftPercent`, `topPercent`, `widthPercent` and `heightPercent` take a node out of the flow (as `at()`), against its parent's content box, and its margins move it; no `Right` or `Bottom`; `grow()` takes fractions, as the `$grow` property now does.
-  - Why: what the charts' marks need, ported first.
+- **Insets and percentages** (v1.03, v1.07)
+  - mygo: `Top`, `Right`, `Bottom`, `Left`, `Start`, `End` and their
+    `…Percent`s place an absolute element in its parent's padding box and
+    move a relative one; `WidthPercent` and the other percentages keep an
+    element in the flow.
+  - myphp: the same since v1.07 (`absolute()`, `top()`…, `widthPercent()`
+    in the flow); `at($x, $y)` stays myphp's own, placing from the
+    content box. `grow()` takes fractions.
+  - Why: `at()` came before the insets; the widgets place with it.
+- **The automatic least size** (v1.07)
+  - mygo: a flex item shrinks no smaller than its min-content size
+    unless `MinWidth(0)` says so, as CSS.
+  - myphp: the same; a basis of 0 in a row of long text needs
+    `minWidth(0)` as in mygo (the grid view's cells, the diff's editors).
+  - Why: kept as mygo; noted as a change from myphp before v1.07.
+- **Element styles** (v1.07)
+  - mygo: `Shadow(x, y, blur, spread, color)` and `InsetShadow` with a
+    Gaussian blur (sigma half the blur), continuous (squircle) corners,
+    clips with rounded corners, pixel-snapped boxes, borders over clipped
+    children (`borderOver`), dividers before absolute children, `Debug`
+    walking the subtree once, `Disabled` dimming any element, and
+    `Cursor` as a `uint8` enum.
+  - myphp: the same `shadow()` and `insetShadow()` (`$rgb` and `$alpha`
+    for the color) through two new quad kinds, a box (14) and a box
+    shadow (15), each with a second slot; circular corners; rectangular
+    clips; boxes unsnapped; borders under clipped children; dividers
+    after all children; a nested `debug()` outlines its own subtree;
+    only containers dim when disabled (widgets look disabled their own
+    way); `Cursor` a string-backed enum named as CSS names them.
+  - Why: the display list's quads hold one radius and rectangular clips;
+    myphp's widgets drew their disabled look before.
+- **Input queries** (v1.07)
+  - mygo: `PointerPosition`, `DragVelocity`, `DragEnded`,
+    `PressedOutside`, `OverlayShortcut`, `Dismissed` are methods of the
+    element; `TrackScroll(&s)`; `SetTextSelection` on the input;
+    `TextRange` with a `Weight`; `TrackLines` lays lines out as needed.
+  - myphp: `Context::pointerPosition($n)` (and the others) as myphp's
+    `clicked($n)`; `pressedOutside` reports a press once a frame;
+    `overlayShortcut` ranks overlays by last frame's order; the scroll
+    state is given with `scroll($state)`; `TextState::setTextSelection`;
+    `TextRange` with a color alone; `TextLines` reads the area's last
+    layout, every top 0 before its first paint.
+  - Why: myphp's queries are the context's; its inputs measure their
+    text in one font, so a bolder run would move the caret off.
 - **Text takes no padding or border** (v0.85)
   - mygo: a text element has padding and borders as boxes do; a heading
     with a rule is the text with a bottom border.
@@ -495,15 +539,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Scale`, `Visible`, `Theme`.
   - myphp: a `MyPHP\UI\Painter` instance over a display list with
     `now()`, `animationFrame()`, `after()`, `scale()`, `visible()`,
-    `theme()`, `fill()`, `stroke()`, `shadow()` (not cut out under the
-    shape), `line()`, `text()`, `image()`, `imageRegion()` (flipped, not
+    `theme()`, `fill()`, `stroke()`, `strokeDashed()`, `shadow()`,
+    `fillGradient()`, `line()`, `text()`, `image()`, `imageRegion()` (flipped, not
     tinted: `ImageOptions` has `flipX` and `flipY`), `focusRing()`,
     `clip()` (square corners), `transform()`, `fillPath()`,
     `strokePath()`, `icon()`; colors 0xRRGGBB with an opacity.
     `Node::draw()` still hands a draw the display list and the node; the
     tree painter's own helpers became `paintIcon` and `paintFocusRing`.
-  - Why: what a game draws with, first; the display list has no tint,
-    dashes nor rounded clips.
+  - Why: what a game draws with, first; the display list has no tint
+    nor rounded clips.
 
 - **The glass plugin** (v0.99)
   - mygo: `glass.Glass{Style, Tint, Interactive}` with `Tint` a color
@@ -517,11 +561,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     which the painter's `glass()`, `blurLevel()` and `hardBlur()` reach.
   - Why: myphp's colors and corners; one renderer, Metal, whose pipeline
     is built once.
-- **Painter's gradients** (v0.99)
-  - mygo: `FillGradient` at any angle, with `Start` and `End`.
-  - myphp: `fillGradient()` at 0, 90, 180 and 270 degrees, without
-    `start` and `end`; others throw.
-  - Why: the display list draws gradients along a quad's axes.
 
 - **App services** (v1.00)
   - mygo: methods of `App` (`OnOpenURL`, `RegisterURLScheme`,
@@ -715,8 +754,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `InspectorOverlay`; a bundle keeps the files, which a window
     without developer tools never loads; macOS keys alone; tags are
     roles, else kinds (`Button`, `TextInput`, `TextArea`, `Box`,
-    `Spinner`…); the styles myphp's nodes have (a shadow is `0 dy blur
-    color`, borders solid); the box model's margin and padding drawn
+    `Spinner`…); the styles myphp's nodes have; the box model's margin and padding drawn
     solid; Computed gives `scroll-top`, `scroll-top-max` and
     `scroll-left` for `scroll-width` and `scroll-height`; the display's
     rate from `NSScreen.maximumFramesPerSecond` (macOS 12), 60 without
@@ -736,6 +774,45 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: myphp's keys are a scope's, and keying found where two such
     widgets met: a date input's calendar beside a calendar, a color
     well's picker beside a picker, a diff's two find bars.
+
+## Audio
+
+- **Audio** (v1.06)
+  - mygo: package `audio` (`DecodeSound`, `ReadSound`, `NewSound`,
+    `OpenStream` of an `io.ReadSeeker`, `NewPlayer`, `NewDecoder`,
+    `RegisterFormat`, `SetVolume`, `Volume`, `Err`, `ErrFormat`), times
+    as `time.Duration`; mixing on the output's goroutine and streams
+    decoding on goroutines of their own, safe from any goroutine; the
+    output plays without an app; an Audio Queue of 4 buffers of 512
+    frames, about 40 ms ahead; `Decoder.Read` fills a slice and returns
+    `io.EOF` at the end.
+  - myphp: `MyPHP\Audio\Audio`'s static methods of those names,
+    `Sound`, `Player`, the interface `Decoder` (`read(int $frames)`
+    returns the samples, an empty list at the end; `setPosition` throws
+    where it cannot go; a `close()` method is called with the player's),
+    `ErrFormat` an exception; `openStream` takes a path or a seekable
+    stream; times in seconds as floats; samples kept as 32-bit floats in
+    strings. The Audio Queue calls back on the main thread's run loop,
+    where PHP mixes, 4 buffers of 1024 frames, about 85 ms ahead, so
+    audio plays while the app runs (App::run, or App::wait) and a main
+    thread busy for longer than that underruns; streams decode a little
+    each time the output mixes, and as they are created, moved and
+    started; a player dropped while paused closes at once (PHP frees it
+    then); the stand-in for a device that does not open is driven by the
+    app's timers.
+  - Why: PHP has one thread, which the system's audio thread cannot
+    call into.
+- **Formats** (v1.06)
+  - mygo: WAV built in; `audio/vorbis` (jfreymuth/oggvorbis) and
+    `audio/mp3` (go-mp3) register themselves when imported; MP3 keeps
+    the encoder's delay and padding.
+  - myphp: WAV, and Ogg Vorbis decoded in PHP (`Audio\Vorbis\Decoder`:
+    floors of type 1, as every encoder since libvorbis 1.0 writes; type
+    0 throws), built in; MP3, AAC and ALAC in M4A, FLAC, AIFF and CAF
+    through AudioToolbox's ExtAudioFile (`SystemDecoder`), which leaves
+    the delay and padding out, on macOS; no packages to import.
+  - Why: the developer chose the system's decoders, and Vorbis written
+    in PHP, over new packages.
 
 ## Plugins
 

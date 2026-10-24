@@ -66,7 +66,7 @@ final class GoToLineBar
         $t = $c->theme;
         $tx = $c->texts();
         $bar->dir = Node::ROW; $bar->gap = $t->space(2); $bar->align(Node::CENTER)->padding($t->space(1.5), $t->space(2));
-        $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(2, 8, 0.18);
+        $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(0, 2, 8, 0, 0x000000, 0.18);
         $g->input($c->input($g->text(), $tx->get('lineRange', ['lines' => $g->lineCount()]), $t->space(60))->label($tx->get('goToLine')));
         $cur = $g->cursor();
         $c->text($tx->get('currentLine', ['line' => $cur->line + 1, 'lines' => $g->lineCount(), 'column' => $cur->col + 1]), $t->fontSize - 2, $t->textMuted);

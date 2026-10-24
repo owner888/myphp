@@ -103,6 +103,7 @@ final class Context
         $top = $this->stack[count($this->stack) - 1];
         $top->kids[] = $n;
         $n->context = $this;
+        $n->disabledIn = $top->isDisabled(); // inside a disabled node (mygo's IsDisabled)
         if (!$n->dirSet && $n->rtl !== $top->rtl) {
             $n->setDir($top->rtl, false); // the direction of the node it is built in
         }
@@ -304,6 +305,54 @@ final class Context
     public function clicked(Node $n): bool
     {
         return $this->runtime?->clicked($n->id) ?? false;
+    }
+
+    /** The pointer's position from $n's top left in its axes, and whether it is over $n (mygo's PointerPosition). @return array{0: float, 1: float, 2: bool} */
+    public function pointerPosition(Node $n): array
+    {
+        $rt = $this->runtime;
+        $r = $rt?->rectOf($n->id);
+        $p = $rt?->toLocal($n->id, $rt->input->mouseX, $rt->input->mouseY);
+        if ($r === null || $p === null) {
+            return [0.0, 0.0, false];
+        }
+        return [$p[0], $p[1], $rt->input->mouseInside && $p[0] >= 0 && $p[1] >= 0 && $p[0] < $r[2] && $p[1] < $r[3]];
+    }
+
+    /** How fast the pointer pressing $n moves now, in points per second along $n's axes: zero once it stops for a moment, or while nothing presses $n (mygo's DragVelocity). @return array{0: float, 1: float} */
+    public function dragVelocity(Node $n): array
+    {
+        $n->draggable = true; // a press on it is its own
+        $p = $this->runtime?->pressOf($n->id);
+        if ($p === null || !$p['down'] || $n->isDisabled()) {
+            return [0.0, 0.0];
+        }
+        return $this->runtime->alongAxes($n->id, $p['track']->velocity($this->runtime->now));
+    }
+
+    /** Whether the pointer pressing $n, and moving, let go since the last frame: how fast it moved then, as dragVelocity, which a spring taking over keeps going; null for none. A click, which does not move, ends no drag (mygo's DragEnded). @return ?array{0: float, 1: float} */
+    public function dragEnded(Node $n): ?array
+    {
+        $n->draggable = true;
+        $rt = $this->runtime;
+        $p = $rt?->pressOf($n->id);
+        if ($p === null || $p['down'] || !$p['released'] || $n->isDisabled()) {
+            return null;
+        }
+        $rt->changed();
+        return $rt->alongAxes($n->id, $p['v']);
+    }
+
+    /** Whether the pointer went down since the last frame outside $n: on neither it, nor what is in it, nor the node it is attached to (Node::attachTo), nor what is attached to a node inside it. A popover closes then, the press going on to what is under it; the last press decides (mygo's PressedOutside). */
+    public function pressedOutside(Node $n): bool
+    {
+        return $this->runtime?->pressedOutside($n->id) ?? false;
+    }
+
+    /** Whether $key with exactly $mods was pressed for $n, an overlay, which gets the keys left, wherever the focus is: the overlay built last first, so that Escape closes the one on top (mygo's OverlayShortcut). */
+    public function overlayShortcut(Node $n, int|string $key, int $mods = 0): bool
+    {
+        return $this->runtime?->overlayShortcut($n->id, $key, $mods) ?? false;
     }
 
     /** Whether a double click's second press landed on $n this frame (its last-frame rect); the click reports too. */
@@ -930,6 +979,12 @@ final class Context
         return $this->runtime?->shortcut($key, $mods) ?? false;
     }
 
+    /** Whether Escape or a press outside closed the dialog or popover $n (modal, popover) this frame, setting its $open false: one that must stay open sets it back to true (mygo's Dismissed). */
+    public function dismissed(Node $n): bool
+    {
+        return $n->dismissed;
+    }
+
     /** Whether the control just built changed its value this frame (checkbox, radio, slider, select), as mygo's Changed. */
     public function changed(Node $n): bool
     {
@@ -1328,7 +1383,7 @@ final class Context
         if ($shown !== [] && $local->open) {
             $r = $rt->rectOf($anchor->id) ?? [0, 0, 0, 0];
             $saved = $this->stack; $this->stack = [$this->root];
-            $panel = $this->key('combo:' . $in->id)->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)
+            $panel = $this->key('combo:' . $in->id)->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)
                 ->at($r[0], $r[1] + $r[3] + $t->space(1))->size($r[2], 0)->scroll($local->scroll)->role(Role::LIST);
             $panel->choosesItems = true;
             $panel->size($r[2], min($t->space(70), count($shown) * ($t->space(3) + $this->metrics->measure('X', $t->fontSize)[1]) + 2 * $t->space(1)));
@@ -1363,7 +1418,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
         $local = $rt?->local($f->id, $make) ?? $make();
@@ -1439,7 +1494,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
+        $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $f->wrap($rt?->rectOf($f->id)[2] ?? 0.0);
         $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
@@ -1448,7 +1503,7 @@ final class Context
         $changed = false;
         $add = function (string $s) use (&$tokens, &$changed) { $s = trim($s); if ($s !== '' && !in_array($s, $tokens, true)) { $tokens[] = $s; $changed = true; } };
           foreach ($tokens as $i => $tok) {
-              $chip = $this->key($tok)->row(0, $t->space(1), 0, $t->surfacePressed)->padding($t->space(0.25), 0)->round($t->radius)->align(Node::CENTER)->cursor('arrow');
+              $chip = $this->key($tok)->row(0, $t->space(1), 0, $t->surfacePressed)->padding($t->space(0.25), 0)->round($t->radius)->align(Node::CENTER)->cursor(Cursor::Default);
                 $this->column(0, 0)->size($t->space(1), 0); $this->end(); // with the gap: PaddingStart(Space(2))
                 $this->text($tok, $t->fontSize)->singleLine();
                 $x = $this->box($t->space(3.5), $t->space(3.5), 0)->round($t->space(1))->role(Role::BUTTON)->label($this->texts()->get('removeToken', ['token' => $tok])); $x->color = $this->hovered($x) ? $t->surfaceHover : null;
@@ -1788,7 +1843,7 @@ final class Context
         };
         [$h, $sat, $v] = $st->hsv;
           // The square of saturation and brightness.
-          $sq = $this->box(0, $t->space(40), 0)->round($t->radius)->focusable()->cursor('crosshair')->role(Role::SLIDER)->label($this->texts()->get('saturation')); $sq->color = null; $sq->ownRing = true;
+          $sq = $this->box(0, $t->space(40), 0)->round($t->radius)->focusable()->cursor(Cursor::Crosshair)->role(Role::SLIDER)->label($this->texts()->get('saturation')); $sq->color = null; $sq->ownRing = true;
           if ($rt !== null) {
               if ($rt->dragged($sq->id) !== null && ($r = $rt->rectOf($sq->id)) !== null && $r[2] > 0 && $r[3] > 0) {
                   $set($h, ($rt->input->mouseX - $r[0]) / $r[2], 1 - ($rt->input->mouseY - $r[1]) / $r[3], $alpha);
@@ -2057,7 +2112,7 @@ final class Context
         $chosen = -1;
         $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
         $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(10, 30, 0.3)
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->round($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)
               ->role(Role::ALERT_DIALOG)->label($title);
           $panel->description = $message;
             $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
@@ -2112,7 +2167,7 @@ final class Context
             $this->row(0, $gap)->padding($gap / 2, 0)->align(Node::STRETCH)->role(Role::NONE);
               for ($i = $r * $cols; $i < min($n, ($r + 1) * $cols); $i++) {
                   // A border, clear unless chosen, keeps the content in place as it is.
-                  $cell = $this->key($i)->column(0, 0, 1)->basis(0)->padding(2, 2)->size(0, $height)->round($t->radius)->role(Role::LIST_ITEM); // the items share the width (Grow(1).Basis(0).MinWidth(0))
+                  $cell = $this->key($i)->column(0, 0, 1)->basis(0)->minWidth(0)->padding(2, 2)->size(0, $height)->round($t->radius)->role(Role::LIST_ITEM); // the items share the width (Grow(1).Basis(0).MinWidth(0))
                   $cell->setPos = $i + 1; $cell->setSize = $n;
                   if ($s->label !== null) { $cell->label(($s->label)($i)); }
                   if ($s->selects) {
@@ -2315,7 +2370,7 @@ final class Context
     /**
      * A panel built by $fn below $anchor (a node built this frame) while
      * $open, as mygo's Popover: a press outside the panel and the anchor,
-     * or Escape, sets $open false, which changed() reports; the press goes
+     * or Escape, sets $open false, which dismissed() reports; the press goes
      * on to what is under it. Where there is no room below, the panel
      * shows above. It is built over everything else, at the window's root.
      */
@@ -2329,7 +2384,7 @@ final class Context
         $r = $rt?->rectOf($anchor->id) ?? [0, 0, 0, 0];
         $margin = $t->space(1);
         $saved = $this->stack; $this->stack = [$this->root]; // at the root: over the view, placed in the window
-        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(6, 20, 0.18)->at($r[0], $r[1] + $r[3] + $margin)->role(Role::POPUP);
+        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)->at($r[0], $r[1] + $r[3] + $margin)->role(Role::POPUP);
           $fn();
         $this->end();
         $this->stack = $saved;
@@ -2339,7 +2394,7 @@ final class Context
         }
         if ($rt !== null && ($this->shortcut(Key::ESCAPE) || ($rt->pressedAnywhere() && !$rt->pressed($panel->id) && !$rt->pressed($anchor->id)))) {
             $open = false;
-            $panel->changed = true;
+            $panel->dismissed = true;
         }
         return $panel;
     }
@@ -2384,7 +2439,7 @@ final class Context
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
-              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor('pointer')->role(Role::BUTTON)->label($this->texts()->get('clear'))
+              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))
                   ->draw(function (DisplayList $list, Node $b, Theme $t) {
                       $k = $b->w * 0.3;
                       $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
@@ -2440,7 +2495,7 @@ final class Context
         if ($this->shortcut('g', Key::COMMAND)) { $step(1); } elseif ($this->shortcut('g', Key::SHIFT | Key::COMMAND)) { $step(-1); }
           // The field: mygo's field() with a magnifier and the input, grown to at most Space(90).
           $glass = $t->space(3.75);
-          $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor('ibeam')->role(Role::NONE)->label($this->texts()->get('find'));
+          $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE)->label($this->texts()->get('find'));
             $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
             [, $h] = $this->metrics->measure('X', $t->fontSize);
             $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $this->texts()->get('find'), null, $t->fontSize, $t->text));
@@ -2528,7 +2583,7 @@ final class Context
         if ($error !== '') { $ctrl->invalid = true; }
         if ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
         if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
-        $l->cursor = 'arrow';
+        $l->cursor = Cursor::Default;
         if ($this->clicked($l) && $rt !== null) {
             $to = self::focusIn($ctrl);
             if ($to !== null) { $rt->focusOn($to->id); }
@@ -2597,7 +2652,7 @@ final class Context
      * A dialog built by $fn over the dimmed window while $open, as mygo's
      * Modal: what is behind it is inert, Tab goes round what is inside;
      * a click outside the panel or Escape sets $open false, which
-     * changed() reports.
+     * dismissed() reports.
      */
     public function modal(bool &$open, Closure $fn): ?Node
     {
@@ -2607,13 +2662,13 @@ final class Context
         $t = $this->theme;
         $back = $this->key('modal')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes
         $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(10, 30, 0.3)->role(Role::DIALOG);
+          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->round($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)->role(Role::DIALOG);
             $fn();
           $this->end();
         $this->end();
         if ($this->shortcut(Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) {
             $open = false;
-            $back->changed = true;
+            $back->dismissed = true;
         }
         return $back;
     }
@@ -2652,7 +2707,7 @@ final class Context
         }
         $this->column($t->space(4), $t->space(2))->at(0, 0)->size($this->width, $this->height)->justify(Node::END)->align(Node::CENTER);
           foreach ($messages as $i => $m) {
-              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(4, 12, 0.18)->role(Role::STATUS);
+              $this->key("toast/$i")->row($t->space(2.5), 0, 0, $t->surface)->round($t->space(2))->shadow(0, 4, 12, 0, 0x000000, 0.18)->role(Role::STATUS);
                 $this->text($m);
               $this->end();
           }
@@ -2710,7 +2765,7 @@ final class Context
             if ($r === null || $headRect === null) {
                 continue;
             }
-            $grip = $this->key('g' . $col->id())->box(0, 0, 0)->at($r[0] - $headRect[0] + $r[2] - 3, 0)->size(6, $rowH)->cursor('resizeEW');
+            $grip = $this->key('g' . $col->id())->box(0, 0, 0)->at($r[0] - $headRect[0] + $r[2] - 3, 0)->size(6, $rowH)->cursor(Cursor::ResizeEW);
             $grip->alpha = 0.0;
             $d = $rt->dragged($grip->id);
             if ($d !== null) { // from the width it has (a shared column's as laid out last frame), by what the pointer moved
@@ -2761,7 +2816,7 @@ final class Context
           $this->end();
           // The handle the pointer drags spans a few points over either pane, above them.
           $handle = $this->box(0, 0, 0)->at($vertical ? 0 : $size - ($grip - 1) / 2, $vertical ? $size - ($grip - 1) / 2 : 0)
-              ->size($vertical ? ($r[2] ?? 0) : $grip, $vertical ? $grip : ($r[3] ?? 0))->cursor($vertical ? 'resizeNS' : 'resizeEW');
+              ->size($vertical ? ($r[2] ?? 0) : $grip, $vertical ? $grip : ($r[3] ?? 0))->cursor($vertical ? Cursor::ResizeNS : Cursor::ResizeEW);
           $handle->alpha = 0.0;
         $this->end();
         if ($rt !== null) {

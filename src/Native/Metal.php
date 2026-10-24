@@ -27,27 +27,32 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art; kind 14 (a box: DisplayList::box) and 15 (a box shadow: boxShadow) take the slot after them too, its kind -1
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
-    struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]]; };
+    struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]];
+               float4 r4 [[flat]]; float4 b4 [[flat]]; float4 e4 [[flat]]; float4 g4 [[flat]]; };   // kinds 14 and 15: the slot after the quad (DisplayList::box, boxShadow)
     struct Xform { float4 abcd; float4 xygh; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                          const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]], const device Xform* xf [[buffer(2)]]) {
         Inst i = in[iid];
+        V o;
+        if (i.params.y < 0.0) {   // the second slot of a box or a box shadow: no quad of its own
+            o.pos = float4(0.0, 0.0, 0.0, 1.0);
+            return o;
+        }
         float entry = floor(i.params.y / 16.0);   // the kind carries the quad's transform, as kind + 16 * entry
         float kind = i.params.y - entry * 16.0;
         Xform m = xf[uint(entry)];
         float2 corner = float2(vid & 1, vid >> 1);
-        bool sdf = kind < 0.5 || (kind > 2.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5) || (kind > 8.5 && kind < 11.5);
+        bool sdf = kind < 0.5 || (kind > 2.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5) || (kind > 8.5 && kind < 11.5) || kind > 13.5;
         float pad = entry > 0.5 && sdf ? 1.0 : 0.0;   // turned or scaled, a shape's edge is smoothed past the quad's: the quad grows to take it in
         float2 p = i.rect.xy - pad + corner * (i.rect.zw + 2.0 * pad);
         float w = m.xygh.z * p.x + m.xygh.w * p.y + 1.0;
         float2 q = float2(m.abcd.x * p.x + m.abcd.z * p.y + m.xygh.x, m.abcd.y * p.x + m.abcd.w * p.y + m.xygh.y);   // times w: divided by it after interpolation, in perspective
-        V o;
         o.pos = float4(q.x / u.viewport.x * 2.0 - w, w - q.y / u.viewport.y * 2.0, 0.0, w);
         o.local = (corner - 0.5) * (i.rect.zw + 2.0 * pad);
         o.extent = i.rect.zw * 0.5;
-        bool image = kind > 1.5 && (kind < 2.5 || kind > 11.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
+        bool image = (kind > 1.5 && kind < 2.5) || (kind > 11.5 && kind < 13.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
         o.uv = kind > 2.5 && !image ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade
              : (i.params.zw + corner * (image ? i.color.xy : i.rect.zw * u.atlasScale)) / u.atlas;
         o.color = i.color;
@@ -55,6 +60,13 @@ final class Metal
         o.kind = kind;
         o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
         o.rect = i.rect * u.scale;   // the quad in pixels, for the glass
+        if (kind > 13.5) {
+            Inst x = in[iid + 1];
+            o.r4 = x.rect; o.b4 = x.color; o.e4 = x.params; o.g4 = x.clip;
+            if (kind > 14.5) { o.b4.xy -= i.rect.xy; }   // a shadow's other box, from the quad's top left
+        } else {
+            o.r4 = float4(0.0); o.b4 = float4(0.0); o.e4 = float4(0.0); o.g4 = float4(0.0);
+        }
         return o;
     }
 
@@ -120,12 +132,165 @@ final class Metal
         }
         return float4(c, 1.0 - smoothstep(-0.5, 0.5, sd));
     }
+    // Boxes (14) and box shadows (15), as mygo's shader paints its fills and shadows: p from the box's top left, in points; coverage in pixels.
+    float sdBox(float2 p, float2 size, float4 radii) {   // radii: top left, top right, bottom right, bottom left
+        float2 h = size * 0.5;
+        float2 q = p - h;
+        float r = q.x < 0.0 ? (q.y < 0.0 ? radii.x : radii.w) : (q.y < 0.0 ? radii.y : radii.z);
+        float2 a = abs(q) - h + r;
+        return length(max(a, float2(0.0))) + min(max(a.x, a.y), 0.0) - r;
+    }
+    float cover(float d, float scale) { return saturate(0.5 - d * scale); }
+    float4 fitRadii(float2 size, float4 r) {   // as CSS, scaled down together where two of a side's overlap
+        float f = 1.0;
+        if (r.x + r.y > size.x) { f = min(f, size.x / (r.x + r.y)); }
+        if (r.w + r.z > size.x) { f = min(f, size.x / (r.w + r.z)); }
+        if (r.x + r.w > size.y) { f = min(f, size.y / (r.x + r.w)); }
+        if (r.y + r.z > size.y) { f = min(f, size.y / (r.y + r.z)); }
+        return max(r * f, float4(0.0));
+    }
+    float3 unpackRGB(float v) {
+        uint p = uint(v + 0.5);
+        return float3(float((p >> 16) & 255u), float((p >> 8) & 255u), float(p & 255u)) / 255.0;
+    }
+    float3 toLinear(float3 c) { float3 a = abs(c); return sign(c) * select(pow((a + 0.055) / 1.055, float3(2.4)), a / 12.92, a <= 0.04045); }
+    float3 toSRGB(float3 c) { float3 a = abs(c); return sign(c) * select(1.055 * pow(a, float3(1.0 / 2.4)) - 0.055, a * 12.92, a <= 0.0031308); }
+    float3 cbrt3(float3 v) { return sign(v) * pow(abs(v), float3(1.0 / 3.0)); }
+    float3 oklab(float3 srgb) {
+        float3 c = toLinear(srgb);
+        float3 lms = cbrt3(float3(0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b,
+                                  0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b,
+                                  0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b));
+        return float3(0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
+                      1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
+                      0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
+    }
+    float3 fromOklab(float3 lab) {
+        float3 lms = float3(lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z,
+                            lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z,
+                            lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z);
+        lms = lms * lms * lms;
+        return toSRGB(float3(4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+                             -1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+                             -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z));
+    }
+    float4 premul(float4 c) { return float4(c.rgb * c.a, c.a); }
+    // The premultiplied color at p of a plain color (0), a gradient from g.xy to g.zw mixed in sRGB (1) or Oklab (2), or stripes (3) of c1 over c2, g.xy across them, g.z wide every g.w.
+    float4 paintAt(float2 p, float mode, float4 c1, float4 c2, float4 g, float scale) {
+        if (mode < 0.5) { return premul(c1); }
+        if (mode < 2.5) {
+            float2 d = g.zw - g.xy;
+            float t = saturate(dot(p - g.xy, d) / max(dot(d, d), 0.0001));
+            float a = mix(c1.a, c2.a, t);
+            if (mode < 1.5) { return float4(mix(c1.rgb * c1.a, c2.rgb * c2.a, t), a); }
+            if (a <= 0.0) { return float4(0.0); }
+            float3 lab = mix(oklab(c1.rgb) * c1.a, oklab(c2.rgb) * c2.a, t);
+            return float4(saturate(fromOklab(lab / a)) * a, a);
+        }
+        float s = dot(p, g.xy);
+        float phase = s - g.w * floor(s / g.w);
+        float cov = cover(min(max(-phase, phase - g.z), g.w - phase), scale);
+        return premul(c1) * cov + premul(c2) * (1.0 - cov);
+    }
+    // How much of a dashed border shows at p: each side, the one p is nearest in widths of its border, has an odd number of dashes and gaps of equal length, about three widths, starting and ending with a dash.
+    float dash(float2 q, float2 size, float4 w, float scale) {
+        float dt = w.x > 0.0 ? q.y / w.x : 1e9;
+        float dr = w.y > 0.0 ? (size.x - q.x) / w.y : 1e9;
+        float db = w.z > 0.0 ? (size.y - q.y) / w.z : 1e9;
+        float dl = w.w > 0.0 ? q.x / w.w : 1e9;
+        float s, len, bw;
+        if (dt <= dr && dt <= db && dt <= dl) { s = q.x; len = size.x; bw = w.x; }
+        else if (dr <= db && dr <= dl) { s = q.y; len = size.y; bw = w.y; }
+        else if (db <= dl) { s = size.x - q.x; len = size.x; bw = w.z; }
+        else { s = size.y - q.y; len = size.y; bw = w.w; }
+        float n = max(1.0, floor((len / (3.0 * bw) + 1.0) * 0.5 + 0.5));
+        float period = 6.0 * bw;
+        n += n * period <= len ? 1.0 : 0.0;   // counted again by multiplying back: GPUs divide less exactly
+        n -= (n - 1.0) * period > len ? 1.0 : 0.0;
+        float seg = len / (2.0 * n - 1.0);
+        float k = floor(s / seg);
+        float f = s - k * seg;
+        float edge = min(f, seg - f);
+        return cover(k - 2.0 * floor(k * 0.5) < 0.5 ? -edge : edge, scale);
+    }
+    float2 erf2(float2 x) {   // Abramowitz and Stegun 7.1.27
+        float2 s = sign(x), a = abs(x);
+        x = 1.0 + (0.278393 + (0.230389 + 0.078108 * (a * a)) * a) * a;
+        x *= x;
+        return s - s / (x * x);
+    }
+    float gaussian(float x, float sigma) { return exp(-(x * x) / (2.0 * sigma * sigma)) / (2.50662827463 * sigma); }
+    float shadowX(float x, float y, float sigma, float corner, float2 h) {
+        float delta = min(h.y - corner - abs(y), 0.0);
+        float curved = h.x - corner + sqrt(max(0.0, corner * corner - delta * delta));
+        float2 integral = 0.5 + 0.5 * erf2((x + float2(-curved, curved)) * (sqrt(0.5) / sigma));
+        return integral.y - integral.x;
+    }
+    float boxShadow(float2 p, float2 size, float sigma, float4 radii) {   // the blurred rounded box of Evan Wallace: exact along x, four samples along y
+        float corner = max(max(radii.x, radii.y), max(radii.z, radii.w));
+        float2 h = size * 0.5;
+        p -= h;
+        float from = clamp(-3.0 * sigma, p.y - h.y, p.y + h.y);
+        float to = clamp(3.0 * sigma, p.y - h.y, p.y + h.y);
+        float dy = (to - from) / 4.0;
+        float y = from + dy * 0.5;
+        float v = 0.0;
+        for (int n = 0; n < 4; n++) {
+            v += shadowX(p.x, p.y - y, sigma, corner, h) * gaussian(y, sigma) * dy;
+            y += dy;
+        }
+        return v;
+    }
+    float4 box(V v, float scale) {   // the slot after: radii, border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 4 when dashed, the paint's g
+        float2 size = 2.0 * v.extent;
+        float2 p = v.local + v.extent;
+        float4 rad = v.r4;
+        float outer = cover(sdBox(p, size, rad), scale);
+        float flags = v.e4.w;
+        float4 res = paintAt(p, flags > 3.5 ? flags - 4.0 : flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale) * outer;
+        float4 bw = v.b4;
+        if (any(bw > 0.0)) {
+            float2 isz = size - bw.yz - bw.wx;
+            float inner = 0.0;
+            if (isz.x > 0.0 && isz.y > 0.0) {
+                float4 ir = max(rad - float4(max(bw.x, bw.w), max(bw.x, bw.y), max(bw.z, bw.y), max(bw.z, bw.w)), float4(0.0));
+                inner = cover(sdBox(p - bw.wx, isz, fitRadii(isz, ir)), scale);
+            }
+            float bc = saturate(outer - inner);
+            if (flags > 3.5) { bc *= dash(p, size, bw, scale); }
+            float4 b = float4(unpackRGB(v.e4.x) * v.e4.z, v.e4.z) * bc;
+            res = b + res * (1.0 - b.a);
+        }
+        return float4(res.a > 0.0 ? res.rgb / res.a : float3(0.0), res.a);
+    }
+    float4 boxShadowQuad(V v, float scale) {   // u = sigma, v = 1 inside; the slot after: the shape's radii, the other box (cut out, or the hole) and its radii
+        float2 size = 2.0 * v.extent;
+        float2 p = v.local + v.extent;
+        float sigma = v.uv.x;
+        float4 other = v.b4;
+        float4 orad = float4(v.e4.x, v.e4.z, v.e4.w, v.g4.x);
+        bool hasOther = other.z > 0.0 && other.w > 0.0;
+        float a;
+        if (v.uv.y < 0.5) {   // outside: the shape, the quad less three sigmas, blurred, outside the box casting it
+            float e = 3.0 * sigma;
+            float2 ss = size - 2.0 * e;
+            a = sigma > 0.0 ? boxShadow(p - e, ss, sigma, v.r4) : cover(sdBox(p - e, ss, v.r4), scale);
+            if (hasOther) { a *= 1.0 - cover(sdBox(p - other.xy, other.zw, orad), scale); }
+        } else {   // inside the quad, what the hole, blurred, leaves
+            float hole = 0.0;
+            if (hasOther) { hole = sigma > 0.0 ? boxShadow(p - other.xy, other.zw, sigma, orad) : cover(sdBox(p - other.xy, other.zw, orad), scale); }
+            a = cover(sdBox(p, size, v.r4), scale) * (1.0 - hole);
+        }
+        return float4(v.color.rgb, v.color.a * a);
+    }
     fragment float4 quad_fragment(V v [[stage_in]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d_array<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
         constexpr sampler s(filter::linear);
         constexpr sampler nearest(filter::nearest);
+        if (v.kind > 14.5) { return boxShadowQuad(v, u.scale); }
+        if (v.kind > 13.5) { return box(v, u.scale); }
         if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color; pixelated (13)
             float4 c = v.kind > 12.5 ? images.sample(nearest, v.uv, uint(v.color.z + 0.5)) : images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }

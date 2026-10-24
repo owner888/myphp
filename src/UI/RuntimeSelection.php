@@ -37,7 +37,7 @@ trait RuntimeSelection
     /** The scope of node $n's text for a selection, 0 for none: its own when Selectable alone, its container's, or none for text a control owns or Unselectable text (mygo's prepareSelectable). */
     private static function textScope(Node $n, ?Node $parent): int
     {
-        if (($n->kind !== Node::TEXT && $n->kind !== Node::RICH) || $parent?->kind === Node::RICH || $n->unselectable || $n->focusable || $n->url !== null || $n->disabled) {
+        if (($n->kind !== Node::TEXT && $n->kind !== Node::RICH) || $parent?->kind === Node::RICH || $n->unselectable || $n->focusable || $n->url !== null || $n->isDisabled()) {
             return 0;
         }
         return $n->scope !== 0 ? $n->scope : ($n->selectable ? $n->id : 0);
@@ -58,7 +58,7 @@ trait RuntimeSelection
             $this->textIndex[$n->id] = count($this->texts);
             $this->texts[] = $n;
             if ($this->hovered($n->id)) {
-                $this->cursor = 'ibeam';
+                $this->cursor = Cursor::Text;
             }
         }
     }
@@ -125,7 +125,7 @@ trait RuntimeSelection
     /** Whether a selection in paragraph $n shows: the window is key and the focus is in its container (mygo's textSelectionVisible). */
     private function selectionVisible(Node $n): bool
     {
-        if (!$this->windowFocus || $n->disabled) {
+        if (!$this->windowFocus || $n->isDisabled()) {
             return false;
         }
         $f = $this->focus === null ? null : ($this->textIndex[$this->focus] ?? null);
@@ -195,7 +195,7 @@ trait RuntimeSelection
     {
         $top = null;
         foreach ($this->texts as $n) {
-            if ($n->textScope === $scope && !$n->disabled && $this->under($n->id, $x, $y) && ($top === null || $this->order[$n->id] > $this->order[$top->id])) {
+            if ($n->textScope === $scope && !$n->isDisabled() && $this->under($n->id, $x, $y) && ($top === null || $this->order[$n->id] > $this->order[$top->id])) {
                 $top = $n; // the topmost paragraph under the point
             }
         }
@@ -264,7 +264,7 @@ trait RuntimeSelection
         $scope = 0; $at = -1;
         foreach ($this->texts as $n) {
             if ($this->under($n->id, $x, $y) && $this->order[$n->id] > $at) {
-                $scope = $n->disabled ? 0 : $n->textScope; $at = $this->order[$n->id];
+                $scope = $n->isDisabled() ? 0 : $n->textScope; $at = $this->order[$n->id];
             }
         }
         if ($at < 0) { // in a container, around its paragraphs: the innermost

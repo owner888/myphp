@@ -86,7 +86,7 @@ final class EditorTest
         $this->h->frame();
     }
 
-    public function cursor(): string { return $this->h->rt->cursor; }
+    public function cursor(): \MyPHP\UI\Cursor { return $this->h->rt->cursor; }
 
     /**
      * The color [r, g, b] the last frame painted at $x, $y of the window:

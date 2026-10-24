@@ -52,7 +52,7 @@ trait EditorBuild
         $e->role(Role::TEXT_FIELD)->label($o->label !== '' ? $o->label : $this->texts->get(match ($o->diffSide) { Options::DIFF_NEW => 'newText', Options::DIFF_OLD => 'oldText', default => 'codeEditor' }))
             ->access($this->accessibility(...));
         $e->handleInput(fn(InputEvent $ev) => $this->input($ev));
-        $e->cursor($this->region === self::REGION_TEXT ? 'ibeam' : 'arrow');
+        $e->cursor($this->region === self::REGION_TEXT ? \MyPHP\UI\Cursor::Text : \MyPHP\UI\Cursor::Default);
         $e->draw(function (DisplayList $list, Node $n, UITheme $t, TextPainter $text) { $this->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
         if ($c->rightClicked($e) && ($w = Window::focused()) !== null) { (new Menu($this->menu()))->popup($w); }
         $last = $rt?->rectOf($e->id);
@@ -185,7 +185,7 @@ trait EditorBuild
         if ($f->queryField->text !== $f->query) { $f->queryField->text = $f->query; $f->queryField->setCursor(strlen($f->query)); }
         if ($f->replaceField->text !== $f->replace) { $f->replaceField->text = $f->replace; $f->replaceField->setCursor(strlen($f->replace)); }
         // Over the top right corner: as wide as it was last frame.
-        $bar = $c->key('code find')->row()->cursor('arrow')->handleInput(self::shield(...))->role(Role::TOOLBAR)->label($c->texts()->get('find'));
+        $bar = $c->key('code find')->row()->cursor(\MyPHP\UI\Cursor::Default)->handleInput(self::shield(...))->role(Role::TOOLBAR)->label($c->texts()->get('find'));
         $last = $c->runtime?->rectOf($bar->id);
         $bar->at(max(0.0, $this->r[2] - $t->space(4) - ($last[2] ?? 0.0)), $t->space(1));
         ($this->o->renderFindBar ?? FindBar::default(...))($c, $bar, new FindBar($c, $this));
@@ -206,7 +206,7 @@ trait EditorBuild
     {
         $t = $c->theme;
         $g = $this->goTo;
-        $bar = $c->key('code go to line')->row()->cursor('arrow')->handleInput(self::shield(...))->role(Role::DIALOG)->label($c->texts()->get('goToLine'));
+        $bar = $c->key('code go to line')->row()->cursor(\MyPHP\UI\Cursor::Default)->handleInput(self::shield(...))->role(Role::DIALOG)->label($c->texts()->get('goToLine'));
         $last = $c->runtime?->rectOf($bar->id);
         $bar->at(max(0.0, ($this->r[2] - ($last[2] ?? 0.0)) / 2), $t->space(1));
         ($this->o->renderGoToLine ?? GoToLineBar::default(...))($c, $bar, new GoToLineBar($c, $this));
@@ -226,7 +226,7 @@ trait EditorBuild
     {
         $cc = $this->complete;
         $c->overlay(function () use ($c, $cc, $anchor) {
-            $panel = $c->key('code completions')->column()->at($anchor[0], $anchor[1] + $anchor[3])->cursor('arrow')->keepFocus()->handleInput(self::shield(...))
+            $panel = $c->key('code completions')->column()->at($anchor[0], $anchor[1] + $anchor[3])->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(self::shield(...))
                 ->role(Role::LIST)->label($c->texts()->get('completions'));
             $m = new CompletionMenu($c, $this);
             ($this->o->renderCompletions ?? CompletionMenu::default(...))($c, $panel, $m);

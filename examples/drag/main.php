@@ -71,7 +71,7 @@ function view(Context $c, object $s): void
       $c->end();
     $c->end();
     // A sheet at the bottom, below the rest even pulled all the way up: it rests at three heights, past them on a rubber band.
-    $sheet = $c->draggable($c->column(16, 8, 0, $t->surface)->at(0, $c->height - 240)->size($c->width, 240)->round(16)->shadow(-4, 24, 0.2), $s->sheet,
+    $sheet = $c->draggable($c->column(16, 8, 0, $t->surface)->at(0, $c->height - 240)->size($c->width, 240)->round(16)->shadow(0, -4, 24, 0, 0x000000, 0.2), $s->sheet,
         new DraggableOptions(Node::VERTICAL, bounds: [0, 0, 0, 180], snap: Motion::nearest([0, 0], [0, 90], [0, 180])));
       $c->box(40, 5, $t->border)->round(3)->alignSelf(Node::CENTER);
       $c->text('A sheet', 16, style: Font::BOLD);

@@ -14,6 +14,8 @@ final class Node
     public const ROW = 0, COLUMN = 1;
     /** Alignments for align(), alignSelf() and justify(); AUTO is a row's CENTER and a column's STRETCH across, START along. */
     public const AUTO = -1, START = 0, CENTER = 1, END = 2, STRETCH = 3;
+    /** How justify() and alignContent() share the free room: between the children, around each, or evenly with the edges (mygo's SpaceBetween, SpaceAround, SpaceEvenly). */
+    public const SPACE_BETWEEN = 4, SPACE_AROUND = 5, SPACE_EVENLY = 6;
     /** How this container places its children across its axis (align) and along it when none grows (justify), and how it sits across its parent's (self). */
     public int $align = self::AUTO, $self = self::AUTO, $justify = self::START;
     /** How a grid places its children in their cells across (Node::justifyItems), and how this child is placed over that (justifySelf): STRETCH unless said. */
@@ -51,8 +53,8 @@ final class Node
     public bool $bordered = false;
     public ?int $borderColor = null;
     public float $borderWidth = 1.0;
-    /** A soft shadow under this container: [dy, blur, alpha], or null. */
-    public ?array $shadow = null;
+    /** @var list<array{0: float, 1: float, 2: float, 3: float, 4: int, 5: float, 6: bool}> the box shadows, outside (shadow) and inside (insetShadow), in the order added: x, y, blur, spread, color, alpha, inset */
+    public array $shadows = [];
     /** Padding across (top and bottom) and along (left and right) when they differ from $pad: set by padding(); null means $pad. */
     public ?float $padY = null, $padX = null;
     /** @var ?array{0: float, 1: float, 2: float, 3: float} the padding of each side, top, right, bottom and left, when padding() set them apart; null for $padY and $padX */
@@ -67,8 +69,8 @@ final class Node
     public float $bgAlpha = 1.0;
     /** Paints this node itself, given the display list, the node (laid out) and the theme, before its children (mygo's Draw): icons, custom marks. */
     public ?\Closure $draw = null;
-    /** The pointer over this node: 'pointer', 'ibeam', 'resizeEW', 'resizeNS', or null for the arrow. */
-    public ?string $cursor = null;
+    /** The pointer over this node, or null for the arrow (mygo's Cursor). */
+    public ?Cursor $cursor = null;
     /** Takes this node's input as it comes (handleInput), and the client its text comes to from the system's input methods (handleTextInput). */
     public ?\Closure $input = null;
     public ?TextInputClient $textClient = null;
@@ -137,8 +139,26 @@ final class Node
     public bool $draggable = false;
     /** Lays a row out from right to left and a column from bottom to top, as CSS's row-reverse and column-reverse (mygo's Reverse): justify()'s START is then the right or the bottom. A check box or radio button puts its box after its label, a progress bar fills from the right. Rows that wrap and grids keep their order. */
     public bool $reverse = false;
-    /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled. */
-    public bool $disabled = false;
+    /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled; set on a container, it is painted at half its opacity. And whether a container around it was disabled as it was built (isDisabled). */
+    public bool $disabled = false, $disabledIn = false;
+    /** Keeps its room in the layout but paints nothing and, with what is inside it, takes neither the pointer nor the focus (mygo's Invisible); outlined with what is inside it, margins, padding and content (mygo's Debug); passes the pointer to what is under it (mygo's PassThrough). */
+    public bool $invisible = false, $debug = false, $passThrough = false;
+    /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
+    public ?array $radii = null;
+    /** A gradient filling the node in place of its color (gradient, linearGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
+    public ?LinearGradient $gradient = null;
+    public ?array $stripes = null;
+    /** Whether the border is solid or dashed (mygo's BorderStyle). */
+    public BorderStyle $borderStyle = BorderStyle::Solid;
+    /** Lines between the children (mygo's Dividers): [width, color, alpha], or null. */
+    public ?array $dividers = null;
+    /** A list's rows' least width (rowWidth), past which it scrolls sideways; and the scroll container whose sideways scrolling this node's content follows (scrollWith). */
+    public float $rowMinW = 0;
+    public ?Node $followX = null;
+    /** @var list<TextRange> the runs of an input's text styled this frame (textRanges) */
+    public array $ranges = [];
+    /** How far a scroll container's bars keep in from its edges, top, right, bottom and left (mygo's ScrollbarInsets). @var array{0: float, 1: float, 2: float, 3: float} */
+    public array $barInsets = [0.0, 0.0, 0.0, 0.0];
     /** For a checkbox or radio: whether it is on; for a slider: its value as a share of the range, and whether it is held. */
     public bool $on = false;
     /** Drawn over the children (mygo's DrawOver): a list's drop line. */
@@ -178,8 +198,8 @@ final class Node
     /** What of the node's children the node cuts off at its edges: CLIP_X, CLIP_Y or both (clip(), clipY()). */
     public int $clip = 0;
     public const CLIP_X = 1, CLIP_Y = 2;
-    /** Whether a control changed its value this frame: Context::changed(). */
-    public bool $changed = false;
+    /** Whether a control changed its value this frame: Context::changed(); whether Escape or a press outside closed this dialog or popover: Context::dismissed(). */
+    public bool $changed = false, $dismissed = false;
     /** Shown in a tip when the pointer rests on the node: tooltip(). */
     public ?string $tooltip = null;
     /** For text: an underline (links). */
@@ -193,10 +213,33 @@ final class Node
     public bool $rtl = false, $dirSet = false;
     /** Which of the horizontal edges were set by their start or end (LOG_*), which move to the other side when the direction changes. */
     public int $logical = 0;
-    private const LOG_PAD_START = 1, LOG_PAD_END = 2, LOG_MARGIN_START = 4, LOG_MARGIN_END = 8, LOG_BORDER_START = 16, LOG_BORDER_END = 32;
-    private const LOG_PAD = 3, LOG_MARGIN = 12, LOG_BORDER = 48;
-    /** @var array{0: ?float, 1: ?float, 2: ?float, 3: ?float} an absolute node's left, top, width and height as fractions of its parent's content box (leftPercent…), null where at() and its size place it */
-    public array $pct = [null, null, null, null];
+    private const LOG_PAD_START = 1, LOG_PAD_END = 2, LOG_MARGIN_START = 4, LOG_MARGIN_END = 8, LOG_BORDER_START = 16, LOG_BORDER_END = 32, LOG_INSET_START = 64, LOG_INSET_END = 128;
+    private const LOG_PAD = 3, LOG_MARGIN = 12, LOG_BORDER = 48, LOG_INSET = 192;
+    /**
+     * The insets from the sides of the parent, top, right, bottom and left
+     * (mygo's Top, Right, Bottom, Left and their percentages): [points,
+     * whether a percentage of the parent's padding box] or null. They place
+     * an absolute node (absolute()); a node in the flow they move from where
+     * the layout put it, relative to it, as CSS's position: relative.
+     * @var array{0: ?array{0: float, 1: bool}, 1: ?array{0: float, 1: bool}, 2: ?array{0: float, 1: bool}, 3: ?array{0: float, 1: bool}}
+     */
+    public array $insets = [null, null, null, null];
+    /** Width and height as fractions of the parent's content box (widthPercent(), fill()), null for their own; and the least and largest sizes so (min/maxWidthPercent…), and the basis (basisPercent). */
+    public ?float $wPct = null, $hPct = null, $minWPct = null, $minHPct = null, $maxWPct = null, $maxHPct = null, $basisPct = null;
+    /** The largest width and height, in points (maxWidth, maxHeight); INF for none. */
+    public float $maxW = INF, $maxH = INF;
+    /** Width over height, which sets the side not given (aspectRatio); 0 for none. */
+    public float $aspect = 0;
+    /** The gaps between columns and between rows, where they differ from $gap (gapX, gapY). */
+    public ?float $gapX = null, $gapY = null;
+    /** How the lines of a wrapping row share its height (alignContent): AUTO stacks them at its start; and whether they go from its bottom (wrapReverse). */
+    public int $alignContent = self::AUTO;
+    public bool $wrapReverse = false;
+    /** Attached to a point of the parent's padding box, or of $attachTarget's box in the window (attach, attachTo): [the point there, the node's own point] as Anchor cases. @var ?array{0: Anchor, 1: Anchor} */
+    public ?array $attach = null;
+    public ?Node $attachTarget = null;
+    /** Whether arrange() placed it this frame: what attachTo reads its target's box from. */
+    public bool $laid = false;
     /** A material painted in place of the color (Node::material). */
     public ?Material $material = null;
     /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
@@ -247,16 +290,101 @@ final class Node
     }
 
     /**
-     * Places this node, out of its parent's flow as at() does, from the
-     * left of its parent's content box by $p percent of its width (mygo's
-     * LeftPercent); topPercent() from its top by a percentage of its
-     * height, widthPercent() and heightPercent() size it so, as a chart's
-     * marks follow their plot. Its margins move it from there.
+     * Takes this node out of its parent's flow (mygo's Absolute): its
+     * insets place it in the parent's padding box (top(), right(),
+     * bottom(), left() and their percentages, start() and end() by the
+     * direction), both of a pair setting the size between them; without
+     * insets it sits at the top left, or the top right right to left.
+     * Later siblings paint over earlier ones.
      */
-    public function leftPercent(float $p): static { $this->absolute = true; $this->pct[0] = $p / 100; return $this; }
-    public function topPercent(float $p): static { $this->absolute = true; $this->pct[1] = $p / 100; return $this; }
-    public function widthPercent(float $p): static { $this->absolute = true; $this->pct[2] = $p / 100; return $this; }
-    public function heightPercent(float $p): static { $this->absolute = true; $this->pct[3] = $p / 100; return $this; }
+    public function absolute(): static
+    {
+        $this->absolute = true;
+        return $this;
+    }
+
+    /** The insets (mygo's Top, Right, Bottom, Left, and their percentages of the parent's padding box). */
+    public function top(float $v): static { $this->insets[0] = [$v, false]; return $this; }
+    public function right(float $v): static { $this->insets[1] = [$v, false]; $this->logical &= ~self::LOG_INSET; return $this; }
+    public function bottom(float $v): static { $this->insets[2] = [$v, false]; return $this; }
+    public function left(float $v): static { $this->insets[3] = [$v, false]; $this->logical &= ~self::LOG_INSET; return $this; }
+    public function topPercent(float $p): static { $this->insets[0] = [$p / 100, true]; return $this; }
+    public function rightPercent(float $p): static { $this->insets[1] = [$p / 100, true]; $this->logical &= ~self::LOG_INSET; return $this; }
+    public function bottomPercent(float $p): static { $this->insets[2] = [$p / 100, true]; return $this; }
+    public function leftPercent(float $p): static { $this->insets[3] = [$p / 100, true]; $this->logical &= ~self::LOG_INSET; return $this; }
+    /** The inset on the side lines start, or end: the left and the right, or the reverse right to left (mygo's Start, End and their percentages). */
+    public function start(float $v): static { return $this->logicalInset($this->startSide(), [$v, false], self::LOG_INSET_START); }
+    public function end(float $v): static { return $this->logicalInset(4 - $this->startSide(), [$v, false], self::LOG_INSET_END); }
+    public function startPercent(float $p): static { return $this->logicalInset($this->startSide(), [$p / 100, true], self::LOG_INSET_START); }
+    public function endPercent(float $p): static { return $this->logicalInset(4 - $this->startSide(), [$p / 100, true], self::LOG_INSET_END); }
+
+    private function logicalInset(int $side, array $v, int $bit): static
+    {
+        $this->insets[$side] = $v;
+        $this->logical |= $bit;
+        return $this;
+    }
+
+    /**
+     * Places this absolute node with its point $self on the point $at of
+     * its parent's padding box (mygo's Attach): Anchor::BottomRight on
+     * Anchor::BottomRight puts it in the corner; its insets move it from
+     * there. Start and End anchors follow the direction.
+     */
+    public function attach(Anchor $at, Anchor $self): static
+    {
+        $this->absolute = true;
+        $this->attach = [$at, $self]; $this->attachTarget = null;
+        return $this;
+    }
+
+    /**
+     * Places this absolute node with its point $self on the point $at of
+     * $target's box in the window, as a popover of it (mygo's AttachTo):
+     * on the other side of $target, or the other way along it, where that
+     * overflows the window less, then moved into the window along it, 4
+     * points from its edges. Give it the window's root (Context::overlay)
+     * as its parent, to show over everything.
+     */
+    public function attachTo(Node $target, Anchor $at, Anchor $self): static
+    {
+        $this->absolute = true;
+        $this->attach = [$at, $self]; $this->attachTarget = $target;
+        return $this;
+    }
+
+    /** Sets the width and the height, in points (mygo's Width, Height); 0 leaves one to the content. */
+    public function width(float $v): static { $this->fw = $v; $this->wPct = null; return $this; }
+    public function height(float $v): static { $this->fh = $v; $this->hPct = null; return $this; }
+    /** Sets the width or height as a percentage of the parent's content box (mygo's WidthPercent, HeightPercent); fill() is both at 100, fillWidth() and fillHeight() one. */
+    public function widthPercent(float $p): static { $this->wPct = $p / 100; return $this; }
+    public function heightPercent(float $p): static { $this->hPct = $p / 100; return $this; }
+    public function fill(): static { $this->wPct = $this->hPct = 1.0; return $this; }
+    public function fillWidth(): static { $this->wPct = 1.0; return $this; }
+    public function fillHeight(): static { $this->hPct = 1.0; return $this; }
+    /** The least width and height (mygo's MinWidth, MinHeight); min() sets both. */
+    public function minWidth(float $v): static { $this->minW = $v; $this->minSet = true; return $this; }
+    public function minHeight(float $v): static { $this->minH = $v; return $this; }
+    /** The largest width and height, which growing, stretching and the content stop at (mygo's MaxWidth, MaxHeight). */
+    public function maxWidth(float $v): static { $this->maxW = $v; return $this; }
+    public function maxHeight(float $v): static { $this->maxH = $v; return $this; }
+    /** The least and largest sizes as percentages of the parent's content box (mygo's MinWidthPercent…). */
+    public function minWidthPercent(float $p): static { $this->minWPct = $p / 100; return $this; }
+    public function minHeightPercent(float $p): static { $this->minHPct = $p / 100; return $this; }
+    public function maxWidthPercent(float $p): static { $this->maxWPct = $p / 100; return $this; }
+    public function maxHeightPercent(float $p): static { $this->maxHPct = $p / 100; return $this; }
+    /** The basis as a percentage of the parent's content box along its axis (mygo's BasisPercent). */
+    public function basisPercent(float $p): static { $this->basisPct = $p / 100; $this->basis = null; return $this; }
+    /** Keeps width over height at $r, the side not given following the other (mygo's AspectRatio): 16/9 for a video. */
+    public function aspectRatio(float $r): static { $this->aspect = max($r, 0.0); return $this; }
+    /** The gap between columns (a row's children, a grid's columns, the lines of a wrapping column) and between rows (mygo's GapX, GapY); gap() sets both. */
+    public function gapX(float $v): static { $this->gapX = $v; return $this; }
+    public function gapY(float $v): static { $this->gapY = $v; return $this; }
+    /** The gap along the container's axis, and across it, between its lines. */
+    public function mainGap(): float { return ($this->dir === self::ROW ? $this->gapX : $this->gapY) ?? $this->gap; }
+    public function crossGap(): float { return ($this->dir === self::ROW ? $this->gapY : $this->gapX) ?? $this->gap; }
+    /** How the lines of a wrapping row share the room across it (mygo's AlignContent): START, CENTER, END, STRETCH or SPACE_*. */
+    public function alignContent(int $a): static { $this->alignContent = $a; return $this; }
 
     /** Sets how much of the room left along its parent's axis this node takes, against its siblings (mygo's Grow): fractions share as numbers do. */
     public function grow(float $g): static
@@ -278,7 +406,156 @@ final class Node
     /** Rounds this container's corners by $radius (containers are square by default). */
     public function round(float $radius): static
     {
-        $this->radius = $radius;
+        $this->radius = $radius; $this->radii = null;
+        return $this;
+    }
+
+    /** Rounds the corners (mygo's Radius): one radius for all, or top left, top right, bottom right and bottom left; $radius is then the top left's. */
+    public function radius(float ...$r): static
+    {
+        if (count($r) === 1) { return $this->round($r[0]); }
+        if (count($r) !== 4) { throw new \InvalidArgumentException('Node::radius takes one radius or four, not ' . count($r)); }
+        $this->radii = [(float)$r[0], (float)$r[1], (float)$r[2], (float)$r[3]]; $this->radius = $this->radii[0];
+        return $this;
+    }
+
+    /** The radii of the corners: top left, top right, bottom right, bottom left. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function corners(): array
+    {
+        return $this->radii ?? [$this->radius, $this->radius, $this->radius, $this->radius];
+    }
+
+    /** Fills the node with a linear gradient from $from to $to, at $angle degrees clockwise from upwards as in CSS: 180 from top to bottom, 90 from left to right (mygo's Gradient). */
+    public function gradient(int $from, int $to, float $angle): static
+    {
+        return $this->linearGradient(new LinearGradient($from, 1.0, $to, 1.0, $angle));
+    }
+
+    /** Fills the node with $g, in place of its color (mygo's LinearGradient). */
+    public function linearGradient(LinearGradient $g): static
+    {
+        $this->gradient = $g; $this->stripes = null;
+        return $this;
+    }
+
+    /** Draws stripes of $rgb at $alpha over the background, $width points wide with $gap points between them, at $angle degrees clockwise from upwards: 0 vertical, 90 horizontal, 45 slanting like slashes (mygo's Stripes). */
+    public function stripes(int $rgb, float $width, float $gap, float $angle, float $alpha = 1.0): static
+    {
+        $this->stripes = [$rgb, $alpha, $width, $gap, $angle]; $this->gradient = null;
+        return $this;
+    }
+
+    /** Sets whether the border is solid, as by default, or dashed (mygo's BorderStyle). */
+    public function borderStyle(BorderStyle $s): static
+    {
+        $this->borderStyle = $s;
+        return $this;
+    }
+
+    /** Draws a line $width points thick in $rgb between each two children of a row or a column (between a list's rows), across it inside its border, in the middle of the room between them, which a gap() should give; a wrapping row draws them between the children of each line, a grid none (mygo's Dividers). */
+    public function dividers(float $width, int $rgb, float $alpha = 1.0): static
+    {
+        $this->dividers = $width > 0 && $alpha > 0 ? [$width, $rgb, $alpha] : null;
+        return $this;
+    }
+
+    /** Adds a box shadow, offset by $x and $y, blurred by $blur and grown by $spread points, in $rgb at $alpha; as CSS's box-shadow it shows only outside the box (mygo's Shadow). */
+    public function shadow(float $x, float $y, float $blur, float $spread, int $rgb, float $alpha = 1.0): static
+    {
+        $this->shadows[] = [$x, $y, $blur, $spread, $rgb, $alpha, false];
+        return $this;
+    }
+
+    /** Adds an inner box shadow, as CSS's box-shadow: inset: offset by $x and $y, blurred by $blur, grown inward by $spread points, inside the padding edge, above the background and under the content (mygo's InsetShadow). */
+    public function insetShadow(float $x, float $y, float $blur, float $spread, int $rgb, float $alpha = 1.0): static
+    {
+        $this->shadows[] = [$x, $y, $blur, $spread, $rgb, $alpha, true];
+        return $this;
+    }
+
+    /** Hides the node and what is inside it, which keep their room in the layout but paint nothing and take neither the pointer nor the focus, as CSS's visibility: hidden (mygo's Invisible). */
+    public function invisible(): static
+    {
+        $this->invisible = true;
+        return $this;
+    }
+
+    /** Outlines the node and every node inside it, their margins in orange, padding in green and boxes in blue, to see the layout (mygo's Debug). */
+    public function debug(): static
+    {
+        $this->debug = true;
+        return $this;
+    }
+
+    /** Lets the pointer reach what is under the node (mygo's PassThrough). */
+    public function passThrough(): static
+    {
+        $this->passThrough = true;
+        return $this;
+    }
+
+    /** Sets whether the keyboard focus rings the node, as by default; a node ringing a part of itself turns it off and paints its own (mygo's FocusRing). */
+    public function focusRing(bool $show): static
+    {
+        $this->ownRing = !$show;
+        return $this;
+    }
+
+    /** Disables the node and those inside it when $d (mygo's Disabled): they take no clicks and no focus, and widgets look disabled; a container paints at half its opacity. */
+    public function disabled(bool $d = true): static
+    {
+        $this->disabled = $d;
+        return $this;
+    }
+
+    /** Whether the node or a container around it, as it was built, is disabled (mygo's IsDisabled). */
+    public function isDisabled(): bool
+    {
+        return $this->disabled || $this->disabledIn;
+    }
+
+    /** Reports the node's value as changed this frame, as a control of your own whose input changed what it edits: Context::changed() returns true for it, as for the widgets' own (mygo's SetChanged). */
+    public function setChanged(): static
+    {
+        $this->changed = true;
+        return $this;
+    }
+
+    /** Makes a list's rows at least $w points wide, as a table's columns ask: where they are wider than the list, it scrolls sideways too, and its rows grow to its width where they are not; a header above the rows goes with them through scrollWith (mygo's RowWidth). */
+    public function rowWidth(float $w): static
+    {
+        $this->rowMinW = max($w, 0.0);
+        $this->scrollX = $this->rowMinW > 0;
+        return $this;
+    }
+
+    /** Moves the node's content sideways as far as $scroller, a scroll container or a list, scrolls its own, as a table's header goes with its rows; clip() the node, so that what goes out of it does not show (mygo's ScrollWith). */
+    public function scrollWith(Node $scroller): static
+    {
+        $this->followX = $scroller;
+        return $this;
+    }
+
+    /** Keeps in $l where the text area lays out its lines (mygo's TrackLines). */
+    public function trackLines(TextLines $l): static
+    {
+        if ($this->edit !== null) { $l->state = $this->edit; }
+        return $this;
+    }
+
+    /** Styles runs of an input's text in the frames that call it, in their color, the last range given winning where they overlap; a composition shows unstyled (mygo's TextRanges). */
+    public function textRanges(TextRange ...$ranges): static
+    {
+        foreach ($ranges as $r) {
+            if ($r->end > $r->start) { $this->ranges[] = $r; }
+        }
+        return $this;
+    }
+
+    /** Moves a scroll container's bars in from its edges, as padding() takes its sides: the vertical bar from top points below its top to bottom above its bottom, right in from its right, the horizontal from left to right in, bottom up; clear of what floats over the content (mygo's ScrollbarInsets). */
+    public function scrollbarInsets(float ...$v): static
+    {
+        $this->barInsets = self::edges($v);
         return $this;
     }
 
@@ -864,6 +1141,24 @@ final class Node
         return $this;
     }
 
+    /** Sets a grid's column tracks, as a sidebar and the rest: columnTracks(Track::fixed(220), Track::fr()) (mygo's ColumnTracks). */
+    public function columnTracks(Track ...$tracks): static
+    {
+        $this->gridCols = array_values($tracks);
+        return $this;
+    }
+
+    /** Sets a grid's first rows' tracks; those it adds after fit their content (mygo's RowTracks). */
+    public function rowTracks(Track ...$tracks): static
+    {
+        $this->gridRows = array_values($tracks);
+        return $this;
+    }
+
+    /** Gives a grid $n columns of equal width, Track::fr() each (mygo's Columns); rows() $n rows of equal height. */
+    public function columns(int $n): static { return $this->columnTracks(...array_fill(0, max($n, 0), Track::fr())); }
+    public function rows(int $n): static { return $this->rowTracks(...array_fill(0, max($n, 0), Track::fr())); }
+
     /** Wraps this row's children onto more lines where they overflow $width, the width it had last frame (Runtime::rectOf); a frame follows when its width differs. */
     public function wrap(float $width): static
     {
@@ -871,17 +1166,17 @@ final class Node
         return $this;
     }
 
+    /** Wraps as wrap() does, the lines going from the bottom up (mygo's WrapReverse). */
+    public function wrapReverse(float $width): static
+    {
+        $this->wrapReverse = true;
+        return $this->wrap($width);
+    }
+
     /** Draws a one-point border around this colored container, in $color or the theme's border color. */
     public function border(?int $color = null, float $width = 1.0): static
     {
         $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
-        return $this;
-    }
-
-    /** Casts a soft shadow under this container, $blur points wide, $dy points down, at $alpha. */
-    public function shadow(float $dy = 6, float $blur = 20, float $alpha = 0.18): static
-    {
-        $this->shadow = [$dy, $blur, $alpha];
         return $this;
     }
 
@@ -892,8 +1187,8 @@ final class Node
         return $this;
     }
 
-    /** Shows $cursor ('pointer', 'ibeam', 'resizeEW', 'resizeNS') while the pointer is over this node. */
-    public function cursor(string $cursor): static
+    /** Shows $cursor while the pointer is over this node (mygo's Cursor). */
+    public function cursor(Cursor $cursor): static
     {
         $this->cursor = $cursor;
         return $this;
@@ -976,6 +1271,9 @@ final class Node
         if ($this->logical & self::LOG_BORDER) {
             [$this->borders[1], $this->borders[3]] = [$this->borders[3], $this->borders[1]];
         }
+        if ($this->logical & self::LOG_INSET) {
+            [$this->insets[1], $this->insets[3]] = [$this->insets[3], $this->insets[1]];
+        }
         foreach ($this->kids as $k) {
             if (!$k->dirSet) {
                 $k->setDir($rtl, false);
@@ -1053,7 +1351,7 @@ final class Node
     /** Fills the node's box with $rgb at $alpha (mygo's Background). */
     public function background(int $rgb, float $alpha = 1.0): static
     {
-        $this->color = $rgb; $this->bgAlpha = $alpha;
+        $this->color = $rgb; $this->bgAlpha = $alpha; $this->gradient = null;
         return $this;
     }
 
@@ -1106,6 +1404,13 @@ final class Node
     public function clip(): static
     {
         $this->clip = self::CLIP_X | self::CLIP_Y;
+        return $this;
+    }
+
+    /** Cuts what its children draw off at the node's left and right only, as mygo's ClipX. */
+    public function clipX(): static
+    {
+        $this->clip |= self::CLIP_X;
         return $this;
     }
 

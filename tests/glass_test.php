@@ -24,6 +24,19 @@ function glassQuads(DisplayList $list): array
     return $out;
 }
 
+/** The line of the first box's gradient (its slot after's last four floats), from its top left. @return list<float> */
+function boxLine(Headless $h): array
+{
+    $list = $h->paint();
+    for ($i = 0; $i < $list->n; $i++) {
+        if (fmod($list->buf[$i * 16 + 9], DisplayList::KIND_STRIDE) == 14.0) {
+            $k = ($i + 1) * 16;
+            return array_map(fn(float $v): float => round($v, 6) + 0.0, [$list->buf[$k + 12], $list->buf[$k + 13], $list->buf[$k + 14], $list->buf[$k + 15]]);
+        }
+    }
+    return [];
+}
+
 /** The quads of kind $kind among a frame's. @return list<list<float>> */
 function glassKind(Headless $h, int $kind): array
 {
@@ -134,12 +147,14 @@ $h = new Headless(function (Context $c) use (&$edge): void {
     $c->end();
 }, 200, 100);
 $h->frame();
-$soft = glassKind($h, 11);
-check(count($soft) === 1 && abs($soft[0][7] - 0.85) < 1e-6 && $soft[0][11] == 0.0, 'soft: down from 85% to nothing: ' . json_encode($soft));
+$soft = glassKind($h, 14);
+check(count($soft) === 1 && abs($soft[0][7] - 0.85) < 1e-6 && $soft[0][11] == 0.0, 'soft: from 85% to nothing: ' . json_encode($soft));
+same([100.0, 0.0, 100.0, 40.0], boxLine($h), 'down');
 $edge = new ScrollEdge(bottom: true);
 $h->frame();
-$soft = glassKind($h, 11)[0];
-check($soft[7] == 0.0 && abs($soft[11] - 0.85) < 1e-6, 'soft at the bottom: rising from it');
+$soft = glassKind($h, 14)[0];
+check(abs($soft[7] - 0.85) < 1e-6 && $soft[11] == 0.0, 'soft at the bottom: from 85% to nothing');
+same([100.0, 40.0, 100.0, 0.0], boxLine($h), 'up');
 $edge = new ScrollEdge(hard: true);
 $h->frame();
 $hard = glassKind($h, 8);
@@ -150,11 +165,8 @@ check(count($lines) === 1 && $lines[0][3] == 1.0 && abs($lines[0][7] - 0.035) < 
 same(ScrollEdge::toned(Theme::dark()->background, 0.947, 0.03), (int)round($hard[0][4] * 255) << 16 | (int)round($hard[0][5] * 255) << 8 | (int)round($hard[0][6] * 255), 'the background toned');
 same(0xffffff, ScrollEdge::toned(0xffffff, 0.947, 0.03), 'toned clamps');
 
-// fillGradient draws along the axes only.
-$threw = false;
-try {
-    (new Painter($h->paint(), $h->metrics, Theme::light()))->fillGradient([0, 0, 10, 10], new LinearGradient(angle: 45));
-} catch (\InvalidArgumentException) {
-    $threw = true;
-}
-check($threw, 'a gradient at 45° is refused');
+// fillGradient draws at any angle: at 45°, from the bottom left corner to the top right, as CSS's.
+$list = $h->paint(); $list->reset();
+(new Painter($list, $h->metrics, Theme::light()))->fillGradient([0, 0, 10, 10], new LinearGradient(angle: 45));
+$g = [$list->buf[28], $list->buf[29], $list->buf[30], $list->buf[31]];
+check(abs($g[0]) < 1e-5 && abs($g[1] - 10) < 1e-5 && abs($g[2] - 10) < 1e-5 && abs($g[3]) < 1e-5, 'a gradient at 45°: ' . json_encode($g));

@@ -93,7 +93,7 @@ final class InspectorPanel
     /** The panel's left edge, which the pointer drags to resize it. */
     private static function resizer(Context $c, Runtime $rt, Inspector $in, float $h): void
     {
-        $edge = $c->box(6, $h, 0)->at(-4, 0)->cursor('resizeEW')->label('Resize developer tools');
+        $edge = $c->box(6, $h, 0)->at(-4, 0)->cursor(Cursor::ResizeEW)->label('Resize developer tools');
         $edge->color = null;
         if (($d = $rt->dragged($edge->id)) !== null && $d[0] != 0) {
             $in->width = max($in->width - $d[0], 260);
@@ -122,7 +122,7 @@ final class InspectorPanel
               $rt->changed();
           }
           if ($n > 0) {
-              $badge = $c->row(0, 3)->paddingX(6)->align(Node::CENTER)->cursor('pointer')->label("$n issues");
+              $badge = $c->row(0, 3)->paddingX(6)->align(Node::CENTER)->cursor(Cursor::Pointer)->label("$n issues");
                 $c->icon($icons['warn'], 13, $pal['warn']);
                 $c->text((string)$n, 11, $pal['muted']);
               $c->end();

@@ -225,7 +225,7 @@ $doc = new Document(Text::of(
     new Paragraph(runs: [new Run('see '), new Run('the site', new Attributes(link: 'https://example.com'))]),
 ));
 $h = richTester($doc);
-$find = function (string $want) use ($h): ?array {
+$find = function (\MyPHP\UI\Cursor $want) use ($h): ?array {
     for ($y = 2; $y < 80; $y += 4) {
         for ($x = 0; $x < 200; $x += 4) {
             richMove($h, $x, $y);
@@ -234,15 +234,15 @@ $find = function (string $want) use ($h): ?array {
     }
     return null;
 };
-$p = $find('arrow');
+$p = $find(\MyPHP\UI\Cursor::Default);
 check($p !== null, "an arrow over the task's box");
 if ($p !== null) {
     $h->click($p[0], $p[1]);
     check($doc->text()->paragraphStyleAt(0)->checked, 'a click where the arrow shows checks the task');
     richMove($h, $p[0] + 60, $p[1]);
-    same('ibeam', $h->rt->cursor, "an I-beam over the task's text");
+    same(\MyPHP\UI\Cursor::Text, $h->rt->cursor, "an I-beam over the task's text");
 }
-check($find('pointer') !== null, 'a hand over the link');
+check($find(\MyPHP\UI\Cursor::Pointer) !== null, 'a hand over the link');
 
 // TestRichTextComposeUndo
 $doc = new Document(new Text);
@@ -322,7 +322,7 @@ $opened = [];
 $h->rt->openURL = function (string $u) use (&$opened) { $opened[] = $u; };
 for ($y = 2; $y < 80; $y += 4) {
     richMove($h, 10, $y);
-    if ($h->rt->cursor === 'pointer') { $h->click(10, $y); }
+    if ($h->rt->cursor === \MyPHP\UI\Cursor::Pointer) { $h->click(10, $y); }
 }
 check($opened !== [] && array_unique($opened) === ['https://example.com'], 'opened ' . json_encode($opened));
 

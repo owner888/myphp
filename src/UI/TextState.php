@@ -122,6 +122,21 @@ final class TextState
         $this->cursor = strlen($this->text);
     }
 
+    /** Selects the runes of the text from $start to $end, or puts the caret at $start when they are equal, kept within the text, as after a word the app completed; the field brings the caret into view (mygo's SetTextSelection). */
+    public function setTextSelection(int $start, int $end): void
+    {
+        $n = mb_strlen($this->text);
+        $byte = fn(int $r): int => strlen(mb_substr($this->text, 0, max(0, min($r, $n))));
+        $this->marked = null;
+        $this->anchor = $byte($start); $this->cursor = $byte($end);
+    }
+
+    /** The wrapped lines the area was last laid out in (layout), null before. */
+    public function lastLayout(): ?TextLayout
+    {
+        return $this->layout;
+    }
+
     public function setCursor(int $byte, bool $extend = false): void
     {
         $this->marked = null;

@@ -50,7 +50,7 @@ trait RuntimeMenu
     private function recordMenus(Node $n): void
     {
         $f = ($n->contextMenu ? 1 : 0) | ($n->menuButton ? 2 : 0);
-        if ($f !== 0 && !$n->disabled) {
+        if ($f !== 0 && !$n->isDisabled()) {
             $this->menuNodes[$n->id] = $f;
         }
     }

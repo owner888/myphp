@@ -113,7 +113,7 @@ final class View implements TextInputClient
         $e->ownRing = true; // no focus ring
         $e->role(Role::GROUP)->label('Terminal');
         $v->update($c, $c->focused($e));
-        $e->cursor($v->hoverLink ? 'pointer' : 'ibeam');
+        $e->cursor($v->hoverLink ? \MyPHP\UI\Cursor::Pointer : \MyPHP\UI\Cursor::Text);
         $e->handleInput($v->input(...));
         $e->handleTextInput($v);
         $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });

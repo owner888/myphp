@@ -81,7 +81,7 @@ $nodes = []; $walk($h->root, $nodes); $ibeam = 0; $other = [];
 foreach ($nodes as $n) {
     if ($n->w <= 0 || $n->h <= 0) { continue; }
     $h->hover($n->x + min(5, $n->w / 2), $n->y + $n->h / 2);
-    if ($h->rt->cursor === 'ibeam') { $ibeam++; } elseif ($h->rt->cursor !== 'arrow') { $other[] = $h->rt->cursor; }
+    if ($h->rt->cursor === \MyPHP\UI\Cursor::Text) { $ibeam++; } elseif ($h->rt->cursor !== \MyPHP\UI\Cursor::Default) { $other[] = $h->rt->cursor; }
 }
 check($ibeam >= 5, "an I-beam over the fields ($ibeam)"); same([], $other, 'no other cursor in the widgets');
 

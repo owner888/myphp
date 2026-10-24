@@ -71,7 +71,7 @@ final class View implements TextInputClient
     public array $dragStart = [0, 0];
     public string $pressLink = '';
     /** The pointer's shape where it hovers: an arrow over task boxes and the scroll bar, a hand over links, an I-beam over text. */
-    public string $cursor = 'ibeam';
+    public \MyPHP\UI\Cursor $cursor = \MyPHP\UI\Cursor::Text;
     public bool $thumb = false;
     public float $thumbGrab = 0;
     public bool $focused = false;

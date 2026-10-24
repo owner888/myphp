@@ -48,6 +48,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Objective-C bridge (`objc_msgSend`, classes with PHP methods) | works |
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
 | Native UI: Metal renderer, CoreText text, flex layout, scrolling on either axis, clicks, hover | works (`examples/native`, `form`) |
+| mygo's element API: CSS flexbox (gaps, `alignContent`, `wrapReverse`, automatic margins, `justify`'s spaces, least and largest sizes, percentages, aspect ratios), absolute and relative insets, `attach`/`attachTo` anchors, grid tracks; per-corner radii, gradients at any angle (sRGB or Oklab), stripes, dashed borders, box shadows inside and out with spread, dividers, `debug`, `invisible`, `passThrough`, inherited `disabled`, `focusRing(false)`, scroll bars' insets, every cursor; `pointerPosition`, `dragVelocity`, `dragEnded`, `pressedOutside`, `overlayShortcut`, `dismissed`, a list's `rowWidth` with `scrollWith`, `TextLines`, `textRanges`, `setTextSelection` | works |
 | Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
 | Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded, fitted (contain, cover, fill, scale-down, natural size), in grayscale | works (`examples/native`, `widgets`) |
 | Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
@@ -72,6 +73,7 @@ Early. What works today, on macOS / Apple Silicon:
 | `UI\Canvas` (mygo's): a bitmap a painter draws on the GPU, kept until drawn anew, shown as any image (pixelated for pixel art); `UI\Chart` (mygo's ui/chart): `Linear`, `Band` and `Time` scales with d3's ticks, `Chart::plot` with axes, marks that are nodes (`rect`, `point`, `ruleX`, `ruleY`, `anchor`), lines, areas and pie sectors as paths, stacks, a selection for the pointer and the keys | works (`examples/charts`, `examples/game`) |
 | `UI\Direction` (mygo's): right to left for windows in such a language or a subtree of its own (`Node::direction`), logical edges (`paddingStart`, `marginEnd`, `borderStartWidth`…), rows, columns, grids and sideways scrolling mirrored, text from the right, the arrow keys of sliders, ratings, trees, calendars and the like along the line; text fields not yet | works (`MYPHP_DIRECTION=rtl`) |
 | `UI\Inspector` (mygo's): developer tools for native UI, docked beside the content: the tree of nodes as markup, the styles, box model and properties of the node chosen or picked in the window, highlighted over it, frame times against the display's, issues such as duplicate keys, a right-to-left toggle; F12, Alt+Cmd+I, the menu role `toggleDevTools`; `WindowOptions::$devTools` (`DevTools`), which opens a page's web inspector too; see docs/inspector.md | works |
+| `Audio\Audio` (mygo's package audio): sounds decoded into memory that play over themselves, streams decoded a second ahead, `Decoder`s an app writes (a synthesizer); players with volume, pan, speed, loops and loop ranges without a gap, seeking, 5 ms ramps; mixed in PHP into an Audio Queue; WAV and Ogg Vorbis decoded in PHP, MP3, AAC, ALAC, FLAC, AIFF and CAF by the system; see docs/audio.md | works (`examples/piano`) |
 | Plugins (mygo's Use), in PHP: `App::use(Plugin)` binds a plugin's service as `plugin:<name>`, its page side a TypeScript client of its own; a `CallContext` parameter tells the calling page and ends as it goes; `App::onQuit` | works |
 | File watches (mygo's WatchFiles): `App::watchFiles` on a file or a directory, recursive or not, `Ignore` leaving out what is never opened; batches of create, write, remove and rename once changes stop, a file saved as editors do a write, the end when the root goes away; kqueue through FFI | works |
 | watch (mygo's plugins/watch): pages watch the directories and files the app names (`src/Plugins/Watch/client/index.ts`, `@myphp-plugins/watch`), recursive only where the app allows, `Resolve` and `Allow`, quotas per page and in all, failures as codes that never say a path | works (`examples/watch`) |
@@ -155,6 +157,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh updater --demo   # the update window, with a made-up update to install (--native: in native UI)
 ./run.sh game             # a little game: WASD, the arrows or a gamepad, the wheel zooms
 ./run.sh charts           # charts: bars, a live line, stacked areas, a scatter plot, a donut
+./run.sh piano            # a piano of synthesized keys: the pointer, the keyboard, a sustain pedal, tunes
 ./run.sh services         # the app's services from a page: network, clipboard, Keychain, cookies, find, PDF…
 ./run.sh documents [x.md] # document notes: a window per file, the File menu, autosave, crash recovery
 ./run.sh protocol         # a frontend at myphp://localhost/, images a scheme draws, a streamed body, a download
@@ -225,6 +228,7 @@ App::run();
 | Objective-C 桥（`objc_msgSend`、方法为 PHP 闭包的类） | 可用 |
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
 | 原生 UI：Metal 渲染、CoreText 文字、flex 布局、横竖滚动、点击、hover | 可用（`examples/native`、`form`） |
+| mygo 的元素 API：CSS flexbox（间距、`alignContent`、`wrapReverse`、自动外边距、`justify` 的分布方式、最小最大尺寸、百分比、宽高比），绝对和相对定位的 inset，`attach`/`attachTo` 锚点，网格轨道；每角圆角、任意角度的渐变（sRGB 或 Oklab）、条纹、虚线边框、带扩展的内外阴影、分隔线、`debug`、`invisible`、`passThrough`、可继承的 `disabled`、`focusRing(false)`、滚动条内缩、全部光标；`pointerPosition`、`dragVelocity`、`dragEnded`、`pressedOutside`、`overlayShortcut`、`dismissed`、列表的 `rowWidth` 配合 `scrollWith`、`TextLines`、`textRanges`、`setTextSelection` | 可用 |
 | 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
 | 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明、五种适配方式（contain/cover/fill/scale-down/natural）、可灰度 | 可用（`examples/native`、`widgets`） |
 | 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/native`、`logview`） |
@@ -251,6 +255,7 @@ App::run();
 | `UI\Canvas`（mygo 的）：画笔在 GPU 上绘制的位图，重画之前一直保留，像图片一样显示（像素画可 pixelated）；`UI\Chart`（mygo 的 ui/chart）：按 d3 取刻度的 `Linear`、`Band`、`Time` 比例尺，带坐标轴的 `Chart::plot`，本身就是节点的标记（`rect`、`point`、`ruleX`、`ruleY`、`anchor`），折线、面积和扇形路径，堆叠，指针和键盘都能移动的选择 | 可用（`examples/charts`、`examples/game`） |
 | `UI\Direction`（mygo 的）：从右到左书写语言的窗口或单独一棵子树（`Node::direction`），逻辑边（`paddingStart`、`marginEnd`、`borderStartWidth`…），行、列、网格和横向滚动镜像，文字从右起，滑块、评分、树、日历等的方向键顺着行走；文本框尚未支持 | 可用（`MYPHP_DIRECTION=rtl`） |
 | `UI\Inspector`（mygo 的）：原生 UI 的开发者工具，停靠在内容旁边：节点树（标记形式）、所选或在窗口中拾取的节点的样式、盒模型和属性并在内容上高亮、对照显示器刷新率的帧耗时、重复 key 等问题、从右到左开关；F12、Alt+Cmd+I、菜单角色 `toggleDevTools`；`WindowOptions::$devTools`（`DevTools`）也打开网页的 Web 检查器；见 docs/inspector.md | 可用 |
+| `Audio\Audio`（mygo 的 audio 包）：解码进内存、可叠加播放的音效，提前一秒解码的流，应用自己写的 `Decoder`（合成器）；播放器支持音量、声像、速度、无缝循环和循环区间、跳转、5 ms 渐变；在 PHP 里混音后送进 Audio Queue；WAV 和 Ogg Vorbis 用 PHP 解码，MP3、AAC、ALAC、FLAC、AIFF、CAF 用系统解码器；见 docs/audio.md | 可用（`examples/piano`） |
 | 插件（mygo 的 Use），PHP 插件：`App::use(Plugin)` 把插件的服务绑定为 `plugin:<名字>`，网页侧是插件自带的 TypeScript 客户端；`CallContext` 参数告诉方法是哪个页面调用的，页面离开时结束；`App::onQuit` | 可用 |
 | 文件监视（mygo 的 WatchFiles）：`App::watchFiles` 监视文件或目录，可递归，`Ignore` 排除的目录从不打开；改动停下后成批给出 create、write、remove、rename，编辑器式保存算一次 write，根目录没了监视即结束；kqueue 经 FFI | 可用 |
 | watch（mygo 的 plugins/watch）：网页按名字监视应用开放的目录和文件（`src/Plugins/Watch/client/index.ts`，`@myphp-plugins/watch`），只在应用允许处递归，`Resolve` 与 `Allow`，每页和总数配额，失败只给代码、从不暴露路径 | 可用（`examples/watch`） |
@@ -328,6 +333,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh updater --demo   # 更新窗口，用一个虚构的更新演示安装流程（--native：原生 UI 版）
 ./run.sh game             # 一个小游戏：WASD、方向键或手柄移动，滚轮缩放
 ./run.sh charts           # 图表：柱状图、实时折线、堆叠面积、散点图、环形图
+./run.sh piano            # 合成音色的钢琴：鼠标、键盘、延音踏板、自动演奏曲子
 ./run.sh services         # 从网页调用 App 服务：网络、剪贴板、钥匙串、Cookie、页内查找、PDF…
 ./run.sh documents [x.md] # 文档型笔记：每个文件一个窗口、文件菜单、自动保存、崩溃恢复
 ./run.sh protocol         # myphp://localhost/ 上的前端、自定义 scheme 画的图、流式响应、下载

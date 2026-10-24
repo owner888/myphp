@@ -59,8 +59,8 @@ final class Runtime
     private array $lastPointer = [-1.0, -1.0];
     public ?array $tip = null;
     public const TIP_DELAY = 0.6;
-    /** The pointer the window should show over the hovered node: 'arrow' or 'pointer' (links). */
-    public string $cursor = 'arrow';
+    /** The pointer the window should show over the hovered node. */
+    public Cursor $cursor = Cursor::Default;
     private bool $animating = false;
     /** The time of frames for tests (mygo's clock): nanoseconds, hrtime's when null. */
     public ?Closure $clock = null;
@@ -153,6 +153,12 @@ final class Runtime
      * @var array<int, int> $parents @var array<int, int> $pageOf
      */
     private array $parents = [], $pageOf = [], $kept = [], $inertIds = [], $targets = [];
+    /** @var array<int, true> the nodes the pointer goes through (Node::passThrough), and those disabled, or inside a disabled one (Node::isDisabled), last frame */
+    private array $passing = [], $disabledIds = [];
+    /** @var array<int, int> the node each attached node is attached to (Node::attachTo), last frame; @var array<int, true> the overlays that asked for keys last frame, and this one (overlayShortcut) */
+    private array $attachedTo = [], $overlayAskers = [], $overlayAsked = [];
+    /** @var array<int, true> the nodes pressedOutside told of this frame's press */
+    private array $outsideSaid = [];
     /** The routers' boxes built this pass, in order, and those of the last frame (Router::view). */
     private array $routers = [], $lastRouters = [];
     /** The overlays of the last frame, while this one is built. */
@@ -309,6 +315,8 @@ final class Runtime
         $this->jumps = [];
         $this->keys = [];
         $this->presses = [];
+        [$this->overlayAskers, $this->overlayAsked] = [$this->overlayAsked, []];
+        $this->outsideSaid = [];
         $now = hrtime(true);
         $this->frameNumber++;
         $this->now = $this->clock !== null ? ($this->clock)() : $now;
@@ -517,7 +525,7 @@ final class Runtime
         $this->scrollAxes = [];
         $this->areas = [];
         $this->tips = [];
-        $this->cursor = 'arrow';
+        $this->cursor = Cursor::Default;
         $this->focusables = [];
         $this->memberOf = []; $this->groups = [];
         $this->fields = [];
@@ -525,7 +533,7 @@ final class Runtime
         $this->lists = [];
         $this->needsFrame = false;
         $this->shown = []; $this->worlds = []; $this->visible = [];
-        $this->parents = []; $this->inertIds = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
+        $this->parents = []; $this->inertIds = []; $this->passing = []; $this->disabledIds = []; $this->attachedTo = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
         $this->menuNodes = [];
@@ -1000,6 +1008,63 @@ final class Runtime
         return $this->dropped[$id];
     }
 
+    /** A velocity in the window's axes in node $id's, as its transform turns and scales it last frame. @param array{0: float, 1: float} $v @return array{0: float, 1: float} */
+    public function alongAxes(int $id, array $v): array
+    {
+        $inv = isset($this->worlds[$id]) ? $this->worlds[$id]->inverse() : null;
+        if ($inv === null) {
+            return $v;
+        }
+        [$ox, $oy] = $inv->point(0, 0);
+        [$x, $y] = $inv->point($v[0], $v[1]);
+        return [$x - $ox, $y - $oy];
+    }
+
+    /** Whether the last press since the last frame was outside node $id: on neither it, nor what is in it, nor the node it is attached to, nor what is attached to a node inside it (Context::pressedOutside); once a frame, as a click is. */
+    public function pressedOutside(int $id): bool
+    {
+        if ($this->presses === [] || !isset($this->rects[$id]) || isset($this->outsideSaid[$id])) {
+            return false;
+        }
+        [$x, $y] = $this->presses[array_key_last($this->presses)];
+        foreach ($this->rects as $other => $_) {
+            if ($this->under($other, $x, $y) && $this->inside($other, $id)) {
+                return false;
+            }
+        }
+        $this->consumed = true;
+        $this->outsideSaid[$id] = true;
+        return true;
+    }
+
+    /** Whether node $id is $of, inside it or inside the node $of is attached to (Node::attachTo), an attached node going with what it is attached to, last frame. */
+    private function inside(int $id, int $of): bool
+    {
+        $anchor = $this->attachedTo[$of] ?? null;
+        $seen = [];
+        while ($id !== 0 && !isset($seen[$id])) { // attachments may go round
+            if ($id === $of || $id === $anchor) {
+                return true;
+            }
+            $seen[$id] = true;
+            $id = $this->attachedTo[$id] ?? $this->parents[$id] ?? 0;
+        }
+        return false;
+    }
+
+    /** Whether $key with $mods was pressed for overlay $id: none built over it last frame asked for keys (Context::overlayShortcut). */
+    public function overlayShortcut(int $id, int|string $key, int $mods): bool
+    {
+        $this->overlayAsked[$id] = true;
+        $at = $this->order[$id] ?? 0;
+        foreach ($this->overlayAskers as $other => $_) {
+            if ($other !== $id && ($this->order[$other] ?? 0) > $at && $this->reachable($other)) {
+                return false; // the one on top takes them
+            }
+        }
+        return $this->shortcut($key, $mods);
+    }
+
     /** The left press on node $id: still down, or let go since the last frame; null for none. @return ?array{id: ?int, track: DragTrack, down: bool, released: bool, v: array{0: float, 1: float}} */
     public function pressOf(int $id): ?array
     {
@@ -1157,21 +1222,25 @@ final class Runtime
         return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
-    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false): void
+    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false, bool $hidden = false): void
     {
+        $hidden = $hidden || $n->invisible; // in its room, but showing nothing and taking neither the pointer nor the focus (mygo's Invisible)
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         if ($n->frags !== []) { $this->frags[$n->id] = $n->frags; } // text inside a paragraph: its words are its area
         $this->parents[$n->id] = $parent?->id ?? 0;
         $this->pageOf[$n->id] = $page;
-        $inert = $inert || $n->inert;
+        $inert = $inert || $n->inert || $hidden;
         if ($inert) { $this->inertIds[$n->id] = true; }
+        if ($n->passThrough) { $this->passing[$n->id] = true; }
+        if ($n->attachTarget !== null) { $this->attachedTo[$n->id] = $n->attachTarget->id; }
+        if ($n->isDisabled()) { $this->disabledIds[$n->id] = true; }
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);
         }
         if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
         if ($n->dataSource !== null) { $this->dataSources[$n->id] = $n->dataSource; }
-        if (!$n->disabled) {
+        if (!$n->isDisabled()) {
             if ($n->accepts !== null) { $this->dropTargets[$n->id] = $n->accepts; }
             if ($n->dataTarget !== null) { $this->dataTargets[$n->id] = $n->dataTarget; }
             if ($n->takesFiles) { $this->fileTargets[$n->id] = true; }
@@ -1193,7 +1262,7 @@ final class Runtime
         }
         [$bx, $by, $bw, $bh] = $n->world->bounds($n->x, $n->y, $n->w, $n->h); // as it shows in the window
         $clip ??= [$n->x, $n->y, $n->x + $n->w, $n->y + $n->h]; // the root: the window
-        if (min($bx + $bw, $clip[2]) > max($bx, $clip[0]) && min($by + $bh, $clip[3]) > max($by, $clip[1]) && !($n->backface && $n->transform->facesAway())) {
+        if (min($bx + $bw, $clip[2]) > max($bx, $clip[0]) && min($by + $bh, $clip[3]) > max($by, $clip[1]) && !($n->backface && $n->transform->facesAway()) && !$hidden) {
             $this->shown[$n->id] = true;
         }
         $vx = max($bx, $clip[0]); $vy = max($by, $clip[1]);
@@ -1210,7 +1279,7 @@ final class Runtime
         if ($n->dragsWindow) {
             $this->handles[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         }
-        if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1) { // placed at the root: over what was built before it
+        if ($n->absolute && $parent !== null && $this->order[$parent->id] === 1 && !$n->passThrough && !$hidden) { // placed at the root: over what was built before it
             $this->overlays[] = [$this->counter, $bx, $by, $bw, $bh]; // as it shows, through its transform
         }
         if ($n->blocks || ($n->absolute && $parent !== null && $this->order[$parent->id] === 1)) {
@@ -1223,7 +1292,7 @@ final class Runtime
             $group = $n->id;
             $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null, 'rtl' => $n->rtl];
         }
-        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->disabled) {
+        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled()) {
             $this->focusables[] = $n->id;
             if ($group !== 0) {
                 $this->memberOf[$n->id] = $group;
@@ -1244,9 +1313,9 @@ final class Runtime
         }
         if ($n->url !== null) { $this->links[] = $n->id; }
         if ($n->url !== null && $this->hovered($n->id)) {
-            $this->cursor = 'pointer';
+            $this->cursor = Cursor::Pointer;
         } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $this->hovered($n->id)) {
-            $this->cursor = 'ibeam';
+            $this->cursor = Cursor::Text;
         } elseif ($n->cursor !== null && $this->hovered($n->id)) {
             $this->cursor = $n->cursor;
         }
@@ -1269,7 +1338,7 @@ final class Runtime
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
-            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl];
+            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl, $n->barInsets];
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
                 $this->needsFrame = true;
             }
@@ -1282,7 +1351,7 @@ final class Runtime
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
         foreach ($n->kids as $k) {
-            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert);
+            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden);
         }
     }
 
@@ -1482,8 +1551,8 @@ final class Runtime
             if (!$this->reachable($id)) {
                 continue;
             }
-            $r = $this->rects[$id];
-            [$horizontal, $vertical, $rtl] = $this->scrollAxes[$id];
+            [$horizontal, $vertical, $rtl, $inset] = $this->scrollAxes[$id];
+            $r = Scrollbar::track($this->rects[$id], $inset);
             foreach ([[false, $vertical], [true, $horizontal]] as [$axis, $on]) {
                 if (!$on) {
                     continue;
@@ -1719,6 +1788,9 @@ final class Runtime
     /** Whether a mouse-up this frame landed on the node this id had last frame, or Enter/Space pressed it while focused. */
     public function clicked(int $id): bool
     {
+        if (isset($this->disabledIds[$id])) {
+            return false; // disabled, or inside a disabled node, last frame (mygo's disabled)
+        }
         $this->clickable[$id] = true; // assistive technology presses it
         if ($this->activated === $id) {
             $this->activated = null;
@@ -2047,7 +2119,7 @@ final class Runtime
     private function under(int $id, float $x, float $y): bool
     {
         $r = $this->rects[$id] ?? null;
-        if ($r === null || !$this->reachable($id) || !isset($this->shown[$id]) && isset($this->worlds[$id])) {
+        if ($r === null || isset($this->passing[$id]) || !$this->reachable($id) || !isset($this->shown[$id]) && isset($this->worlds[$id])) {
             return false; // a node turned away from the viewer takes no pointer
         }
         if (isset($this->worlds[$id])) { // the point in the node's layout, through its transform

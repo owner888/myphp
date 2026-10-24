@@ -439,12 +439,12 @@ trait ViewInput
         }
         [$x, $y] = $this->contentPoint($ev->x, $ev->y);
         if (!$this->dragging) {
-            $cursor = 'ibeam';
+            $cursor = \MyPHP\UI\Cursor::Text;
             if ($this->taskBox($x, $y)[1] || $this->overScrollbar($ev->x)) {
-                $cursor = 'arrow';
+                $cursor = \MyPHP\UI\Cursor::Default;
             } else {
                 [$i] = $this->positionAt($x, $y);
-                if ($i < $this->shown->len() && $this->shown->attrsAt($i)->link !== '') { $cursor = 'pointer'; }
+                if ($i < $this->shown->len() && $this->shown->attrsAt($i)->link !== '') { $cursor = \MyPHP\UI\Cursor::Pointer; }
             }
             if ($cursor !== $this->cursor) {
                 $this->cursor = $cursor;
