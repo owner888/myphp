@@ -70,6 +70,29 @@ final class Runtime
     public int $instantFrame = 0;
     /** That the desktop asks for less motion (macOS's Reduce Motion, mygo's Preferences.ReduceMotion): the window sets it from App::reduceMotion. */
     public bool $reduceMotion = false;
+    /** That the window reads right to left: the window sets it from the app's language (I18n::rightToLeft of App::locale). */
+    public bool $rightToLeft = false;
+    /** The inspector's direction for debugging: 0 none, 1 left to right, 2 right to left. */
+    public int $dirOverride = 0;
+    /** MYPHP_DIRECTION, read once: 1 for "ltr", 2 for "rtl", 0 unset (mygo's MYGO_DIRECTION). */
+    private static ?int $envDirection = null;
+
+    /**
+     * Whether the window is laid out right to left (mygo's direction): the
+     * debugging override, MYPHP_DIRECTION=rtl (or ltr), which lays every
+     * window out so to try an interface right to left without translating
+     * it, as GTK's GTK_DEBUG=invert-text-dir and Qt's -reverse do, or the
+     * inspector's; else the window's.
+     */
+    public function direction(): bool
+    {
+        self::$envDirection ??= match (getenv('MYPHP_DIRECTION')) { 'ltr' => 1, 'rtl' => 2, default => 0 };
+        return match (true) {
+            self::$envDirection !== 0 => self::$envDirection === 2,
+            $this->dirOverride !== 0 => $this->dirOverride === 2,
+            default => $this->rightToLeft,
+        };
+    }
     /**
      * The values that move, by node id and key (mygo's motions,
      * colorMotions, sequences and anims): kept while their node is built.
@@ -1184,7 +1207,7 @@ final class Runtime
         }
         if ($n->focusGroup !== 0 && $group === 0) { // groups inside a group are part of it
             $group = $n->id;
-            $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null];
+            $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null, 'rtl' => $n->rtl];
         }
         if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->disabled) {
             $this->focusables[] = $n->id;
@@ -1200,7 +1223,7 @@ final class Runtime
             $n->focusVisible = $this->focusVisible && !$n->ownRing; // the painter rings it, unless it rings itself
         }
         if ($n->kind === Node::SLIDER) {
-            $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h];
+            $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h, $n->rtl];
         }
         if ($n->tooltip !== null) {
             $this->tips[$n->id] = $n->tooltip;
@@ -1232,7 +1255,7 @@ final class Runtime
         }
         if ($n->scroll !== null) {
             $this->scrolls[$n->id] = $n->scroll;
-            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY];
+            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl];
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
                 $this->needsFrame = true;
             }
@@ -1446,18 +1469,18 @@ final class Runtime
                 continue;
             }
             $r = $this->rects[$id];
-            [$horizontal, $vertical] = $this->scrollAxes[$id];
+            [$horizontal, $vertical, $rtl] = $this->scrollAxes[$id];
             foreach ([[false, $vertical], [true, $horizontal]] as [$axis, $on]) {
                 if (!$on) {
                     continue;
                 }
                 $extent = $axis ? $state->extentX() : $state->extent();
-                $t = Scrollbar::thumb($r, $extent, $this->scrollbarWidth, $axis);
+                $t = Scrollbar::thumb($r, $extent, $this->scrollbarWidth, $axis, $rtl);
                 if ($t === null || $x < $t[0] - $g || $x >= $t[0] + $t[2] + $g || $y < $t[1] - $g || $y >= $t[1] + $t[3] + $g) {
                     continue;
                 }
                 $state->stop();
-                $this->drag = [$state, $axis ? $x : $y, Scrollbar::pointsPerThumbPoint($r, $extent, $axis), $axis];
+                $this->drag = [$state, $axis ? $x : $y, Scrollbar::pointsPerThumbPoint($r, $extent, $axis) * ($axis && $rtl ? -1 : 1), $axis]; // right to left, the thumb going right goes back to the start
                 return true;
             }
         }
@@ -1552,8 +1575,9 @@ final class Runtime
         }
         if ($this->focus !== null && isset($this->sliders[$this->focus])) {
             switch ($selector) {
-                case 'moveLeft:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
-                case 'moveRight:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return true;
+                case 'moveLeft:': case 'moveRight:': // right to left, Left raises the value, which grows toward the left
+                    $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + (($selector === 'moveRight:') !== ($this->sliders[$this->focus][4] ?? false) ? 1 : -1);
+                    return true;
             }
         }
         if ($this->focus !== null && isset($this->steppers[$this->focus])) {
@@ -1665,7 +1689,7 @@ final class Runtime
         if ($g === 0) { return false; }
         $o = $this->groups[$g]['orient'];
         $dir = match ($selector) {
-            'moveLeft:' => $o & Node::HORIZONTAL ? -1 : 0, 'moveRight:' => $o & Node::HORIZONTAL ? 1 : 0,
+            'moveLeft:' => $o & Node::HORIZONTAL ? ($this->groups[$g]['rtl'] ? 1 : -1) : 0, 'moveRight:' => $o & Node::HORIZONTAL ? ($this->groups[$g]['rtl'] ? -1 : 1) : 0, // right to left, Left goes forward
             'moveUp:' => $o & Node::VERTICAL ? -1 : 0, 'moveDown:' => $o & Node::VERTICAL ? 1 : 0,
             'moveToBeginningOfDocument:' => -INF, 'moveToEndOfDocument:' => INF, default => 0,
         };
@@ -1937,7 +1961,8 @@ final class Runtime
     private function slideTo(int $id, float $x): void
     {
         $r = $this->sliders[$id];
-        $this->slid[$id] = max(0.0, min(1.0, ($x - $r[0]) / max(1.0, $r[2])));
+        $f = max(0.0, min(1.0, ($x - $r[0]) / max(1.0, $r[2])));
+        $this->slid[$id] = ($r[4] ?? false) ? 1 - $f : $f; // right to left, from the right
     }
 
     /** The width this node had last frame, for text that wraps at the width the layout gives it. */
@@ -2039,7 +2064,7 @@ final class Runtime
             $best->scrollBy(-$dy);
         }
         if ($axes[0] && $dx != 0) {
-            $best->scrollByX(-$dx);
+            $best->scrollByX(-$dx); // right to left as well: the offset counts from the right, so the content moves as the wheel does
         }
     }
 }

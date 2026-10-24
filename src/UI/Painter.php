@@ -314,11 +314,11 @@ final class Painter
             $list->rect($n->x, $y, $n->w, $h, $t->border, 1.0, $r);
             if ($n->fraction >= 0) {
                 $fill = $n->w * min(1.0, $n->fraction);
-                $list->rect($n->reverse ? $n->x + $n->w - $fill : $n->x, $y, $fill, $h, $n->color ?? $t->accent, 1.0, $r); // reversed: from the right
+                $list->rect($n->reverse !== $n->rtl ? $n->x + $n->w - $fill : $n->x, $y, $fill, $h, $n->color ?? $t->accent, 1.0, $r); // reversed, or right to left: from the right
             } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
                 $phase = fmod(hrtime(true) / 1.5e9, 1.0);
                 $bar = $n->w / 3;
-                $x = $n->reverse ? $n->x + $n->w - $phase * ($n->w + $bar) : $n->x - $bar + $phase * ($n->w + $bar);
+                $x = $n->reverse !== $n->rtl ? $n->x + $n->w - $phase * ($n->w + $bar) : $n->x - $bar + $phase * ($n->w + $bar);
                 $list->pushClip($n->x, $y, $n->w, $h);
                 $list->rect($x, $y, $bar, $h, $t->accent, 1.0, $r);
                 $list->popClip();
@@ -382,6 +382,10 @@ final class Painter
                     $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $n->w - $ew))) . '…';
                 }
             }
+            if ($n->kind === Node::TEXT && $n->rtl && !in_array($n->textStyle()->align ?? Node::START, [Node::CENTER, Node::END], true)) {
+                [$tw] = $text->measure($shown, $n->fontSize, $n->style);
+                $x += max(0.0, $n->w - $tw); // right to left, a line starts at the right of its box
+            }
             if ($n->content === null || $rt === null || $n->kind !== Node::TEXT || !self::contentText($n, $list, $text, $shown, $x, $y, $rt)) {
                 $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
             }
@@ -420,11 +424,11 @@ final class Painter
             if ($rt !== null && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
                 $r = [$n->x, $n->y, $n->w, $n->h];
                 $grow = $dragging ? 2.0 : 0.0; // the thumb being dragged thickens, as mygo's
-                $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth) : null;
+                $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
                 if ($thumb !== null) {
                     $list->rect($thumb[0] - $grow, $thumb[1], $thumb[2] + $grow, $thumb[3], $t->scrollbar, $t->scrollbarAlpha, ($thumb[2] + $grow) / 2);
                 }
-                $thumb = $n->scrollX ? Scrollbar::thumb($r, $n->scroll->extentX(), $t->scrollbarWidth, true) : null;
+                $thumb = $n->scrollX ? Scrollbar::thumb($r, $n->scroll->extentX(), $t->scrollbarWidth, true, $n->rtl) : null;
                 if ($thumb !== null) {
                     $list->rect($thumb[0], $thumb[1] - $grow, $thumb[2], $thumb[3] + $grow, $t->scrollbar, $t->scrollbarAlpha, ($thumb[3] + $grow) / 2);
                 }
@@ -574,7 +578,7 @@ final class Painter
     private static function paintToggle(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $box = $t->space(4);
-        $x = $n->reverse ? $n->x + $n->w - $box : $n->x; $y = $n->y + ($n->h - $box) / 2; // reversed: the box after the label
+        $x = $n->reverse !== $n->rtl ? $n->x + $n->w - $box : $n->x; $y = $n->y + ($n->h - $box) / 2; // reversed, or right to left: the box at the right
         $radius = $n->kind === Node::RADIO ? $t->space(2) : $t->space(1);
         $hovered = $rt?->hovered($n->id) ?? false;
         if ($n->on || $n->mixed) {
@@ -597,7 +601,7 @@ final class Painter
             self::paintFocusRing($list, $x, $y, $box, $box, $radius, $t);
         }
         [$lw, $lh] = $text->measure($n->text, $n->fontSize);
-        $text->paint($list, $n->text, $n->fontSize, $n->reverse ? $x - $t->space(2) - $lw : $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+        $text->paint($list, $n->text, $n->fontSize, $n->reverse !== $n->rtl ? $x - $t->space(2) - $lw : $x + $box + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**
@@ -634,15 +638,16 @@ final class Painter
     {
         $tw = $t->space(9); $th = $t->space(5); $in = $t->space(0.5); $d = $th - 2 * $in;
         $y = $n->y + ($n->h - $th) / 2;
-        $list->rect($n->x, $y, $tw, $th, Theme::mix(Theme::mix($t->border, $t->text, 0.15), $t->accent, $n->fraction), 1.0, $th / 2);
-        $kx = $n->x + $in + $n->fraction * ($tw - $th);
+        $sx = $n->rtl ? $n->x + $n->w - $tw : $n->x; // right to left: the switch at the right, on toward the left
+        $list->rect($sx, $y, $tw, $th, Theme::mix(Theme::mix($t->border, $t->text, 0.15), $t->accent, $n->fraction), 1.0, $th / 2);
+        $kx = $n->rtl ? $sx + $tw - $in - $d - $n->fraction * ($tw - $th) : $sx + $in + $n->fraction * ($tw - $th);
         $list->shadow($kx, $y + $in, $d, $d, 0x000000, 0.25, $d / 2, 3, 0, 1);
         $list->rect($kx, $y + $in, $d, $d, 0xffffff, 1.0, $d / 2);
         if ($n->focusVisible) {
-            self::paintFocusRing($list, $n->x, $y, $tw, $th, $th / 2, $t);
+            self::paintFocusRing($list, $sx, $y, $tw, $th, $th / 2, $t);
         }
-        [, $lh] = $text->measure($n->text, $n->fontSize);
-        $text->paint($list, $n->text, $n->fontSize, $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
+        [$lw, $lh] = $text->measure($n->text, $n->fontSize);
+        $text->paint($list, $n->text, $n->fontSize, $n->rtl ? $sx - $t->space(2) - $lw : $n->x + $tw + $t->space(2), $n->y + ($n->h - $lh) / 2, $n->fg);
     }
 
     /**
@@ -657,13 +662,13 @@ final class Painter
         $trackH = $t->space(1.5); // as thick as Progress
         $cy = $n->y + $t->space(2.5);
         $x0 = $n->x + $kw / 2; $x1 = $n->x + $n->w - $kw / 2;
-        $kx = $x0 + ($x1 - $x0) * $n->fraction;
+        $kx = $n->rtl ? $x1 - ($x1 - $x0) * $n->fraction : $x0 + ($x1 - $x0) * $n->fraction; // right to left, the value grows toward the left
         if ($n->held > 0) { // the lens lightens what is behind it, under the track
             [$x, $y, $w, $h] = self::knobRect($t, $kx, $cy, $n->held);
             $list->rect($x, $y, $w, $h, 0xffffff, 0.1 * $n->held, $h / 2);
         }
         $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
-        $list->rect($x0, $cy - $trackH / 2, $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
+        $list->rect($n->rtl ? $kx : $x0, $cy - $trackH / 2, $n->rtl ? $x1 - $kx : $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
         self::knob($list, $t, $kx, $cy, $n->held, $n->focusVisible);
     }
 

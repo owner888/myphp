@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-/** Where a scrolling container's thumb goes: along its right edge, as long as the view's share of the content. */
+/** Where a scrolling container's thumb goes: along its right edge (its left, right to left), as long as the view's share of the content. */
 final class Scrollbar
 {
     public const MIN_THUMB = 24.0;
@@ -12,10 +12,12 @@ final class Scrollbar
 
     /**
      * The thumb's rectangle for a container at [x, y, w, h] with $extent,
-     * or null when the content fits the view.
+     * or null when the content fits the view. Right to left ($rtl), the
+     * vertical thumb is at the left, and the horizontal one starts at the
+     * right, where the offset counts from.
      * @return array{0: float, 1: float, 2: float, 3: float}|null
      */
-    public static function thumb(array $r, array $extent, float $width, bool $horizontal = false): ?array
+    public static function thumb(array $r, array $extent, float $width, bool $horizontal = false, bool $rtl = false): ?array
     {
         [$offset, $range, $view] = $extent;
         if ($range <= 0 || $view <= 0) {
@@ -26,8 +28,8 @@ final class Scrollbar
         $travel = $inner - $thumb;
         $at = max(0.0, min($travel, $travel * $offset / $range));
         return $horizontal
-            ? [$r[0] + 2 + $at, $r[1] + $r[3] - $width - 2, $thumb, $width]
-            : [$r[0] + $r[2] - $width - 2, $r[1] + 2 + $at, $width, $thumb];
+            ? [$r[0] + 2 + ($rtl ? $travel - $at : $at), $r[1] + $r[3] - $width - 2, $thumb, $width]
+            : [$rtl ? $r[0] + 2 : $r[0] + $r[2] - $width - 2, $r[1] + 2 + $at, $width, $thumb];
     }
 
     /** How far the content moves when the thumb moves one point. */

@@ -271,7 +271,9 @@ final class Layout
                 $j = $k->justifySelf !== Node::AUTO ? $k->justifySelf : ($n->justifyItems !== Node::AUTO ? $n->justifyItems : Node::STRETCH); // mygo's gridJustify
                 $kh = $a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
                 $kw = $j === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT) ? $aw : $k->mw; // a text's fw is what it measured, not a size given
-                self::arrange($k, $colAt[$c] + self::across($j, $aw, $kw), $rowAt[$r] + self::across($a, $ah, $kh), $kw, $kh);
+                $kx = $colAt[$c] + self::across($j, $aw, $kw);
+                if ($n->rtl) { $kx = 2 * ($x + $px) + ($w - $pw) - $kx - $kw; } // right to left, the columns go from the right
+                self::arrange($k, $kx, $rowAt[$r] + self::across($a, $ah, $kh), $kw, $kh);
             }
             return;
         }
@@ -289,6 +291,8 @@ final class Layout
         foreach ($kids as $k) { $used += $k->basis ?? ($n->dir === Node::ROW ? $k->mw : $k->mh); $crossMax = max($crossMax, $n->dir === Node::ROW ? $k->mh : $k->mw); $grow += $k->grow; }
         $extra = $grow > 0 ? max(0, $avail - $used) / $grow : 0.0;
         $cx = $x + $px; $cy = $y + $py; $cw = $w - $pw; $ch = $h - $ph;
+        $scrollRtl = null;
+        $viewW = $cw; // the box a right-to-left node mirrors its children in
         if ($n->scroll instanceof ScrollState) {
             $s = $n->scroll;
             $contentMain = $used + $n->gap * ($cnt - 1);
@@ -304,7 +308,11 @@ final class Layout
                 $s->maxX = max(0.0, $contentW - $cw);
                 $s->viewportW = $cw;
                 $s->x = min($s->x, $s->maxX);
-                $cx -= $s->x;
+                if ($n->rtl) {
+                    $scrollRtl = $s->x; // right to left, the content starts at the right, the offset counting from there: placed mirrored, then moved by it
+                } else {
+                    $cx -= $s->x;
+                }
                 if ($n->dir === Node::COLUMN) { $cw = max($cw, $contentW); }
             }
             if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) {
@@ -352,14 +360,17 @@ final class Layout
             if ($n->dir === Node::ROW) {
                 $kw = ($k->basis ?? $k->mw) + $extra * $k->grow - ($shrink[$i] ?? 0.0) + ($autos[$i] ?? 0.0);
                 $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
-                $at = $n->reverse ? 2 * ($x + $px) + $cw - $cx - $kw : $cx; // reversed: the same place counted from the right
+                // Reversed, or right to left (not both), the same place counted from the right.
+                $at = $n->reverse !== $n->rtl ? 2 * ($x + $px) + $viewW - $cx - $kw + ($scrollRtl ?? 0.0) : $cx;
                 self::arrange($k, $at, $cy + ($autoCross ? 0.0 : self::across($a, $ch, $kh)), $kw, $kh);
                 $cx += $kw + $n->gap;
             } else {
                 $kh = ($k->basis ?? $k->mh) + $extra * $k->grow + ($autos[$i] ?? 0.0);
                 $kw = $autoCross || ($a === Node::STRETCH && $k->fw <= 0) ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
                 $at = $n->reverse ? 2 * ($y + $py) + $ch - $cy - $kh : $cy; // from the bottom
-                self::arrange($k, $cx + ($autoCross ? 0.0 : self::across($a, $cw, $kw)), $at, $kw, $kh);
+                $kx = $cx + ($autoCross ? 0.0 : self::across($a, $cw, $kw));
+                if ($n->rtl) { $kx = 2 * ($x + $px) + $viewW - $kx - $kw + ($scrollRtl ?? 0.0); } // right to left, across from the right
+                self::arrange($k, $kx, $at, $kw, $kh);
                 $cy += $kh + $n->gap;
             }
         }
@@ -510,7 +521,7 @@ final class Layout
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($k->mh <= 0) { $a = Node::STRETCH; }
             $kw = $k->mw + $extra * $k->grow - ($shrink[$i] ?? 0.0); $kh = $a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh;
-            self::arrange($k, $cx, $y + self::across($a, $h, $kh), $kw, $kh);
+            self::arrange($k, $n->rtl ? 2 * $x + $w - $cx - $kw : $cx, $y + self::across($a, $h, $kh), $kw, $kh); // right to left, from the right
             $cx += $kw + $n->gap;
         }
     }

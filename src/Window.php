@@ -391,6 +391,7 @@ final class Window
                 $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
                 $this->runtime->reduceMotion = App::reduceMotion();
+                $this->runtime->rightToLeft = I18n::rightToLeft(App::locale()); // the direction of the language the app shows
                 $this->runtime->windowFocus = $this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow'); // a selection shows in the key window
                 App::metal()->setDark(App::theme()->dark);
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds) {

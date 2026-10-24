@@ -69,7 +69,7 @@ src/Plugins/Sqlite/ mygo's plugins/sqlite (Sqlite::open, DB, Blob; plugin(), cli
 src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + style sheets), Style, Compiler → Node/Shape/
                    Gradient/ClipDef/MaskDef, Path, Matrix, Scanner, Polys, Stroker, Rasterizer (mygo's vec), Layer, Renderer,
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
-src/UI/            Node, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
+src/UI/            Node, Direction, Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
                    textarea(minLines, maxLines)/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
@@ -194,6 +194,6 @@ rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts.
+events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

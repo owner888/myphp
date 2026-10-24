@@ -76,7 +76,24 @@ final class Context
     {
         $this->theme ??= Theme::light();
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, $this->theme->background);
+        $this->root->rtl = $runtime?->direction() ?? false;
         $this->stack = [$this->root];
+    }
+
+    /** The arrow keys that go back and forth along a line of $n: Left and Right, or Right and Left right to left, as the arrows move among items laid out from the right (mygo's arrows). @return array{0: int, 1: int} */
+    private function arrows(Node $n): array
+    {
+        return $n->rtl ? [Key::RIGHT, Key::LEFT] : [Key::LEFT, Key::RIGHT];
+    }
+
+    /**
+     * The direction of the nodes built now (mygo's Direction): that of the
+     * node they go in. Widgets of an app's own read it to draw what points
+     * along the line, as an arrow forward.
+     */
+    public function direction(): Direction
+    {
+        return $this->stack[count($this->stack) - 1]->rtl ? Direction::RightToLeft : Direction::LeftToRight;
     }
 
     private function add(Node $n): Node
@@ -84,6 +101,9 @@ final class Context
         $top = $this->stack[count($this->stack) - 1];
         $top->kids[] = $n;
         $n->context = $this;
+        if (!$n->dirSet && $n->rtl !== $top->rtl) {
+            $n->setDir($top->rtl, false); // the direction of the node it is built in
+        }
         if ($top->kind === Node::RICH) {
             $n->inline = true;
         } elseif ($n->kind === Node::TEXT || $n->kind === Node::RICH) {
@@ -985,8 +1005,9 @@ final class Context
         $n = $this->row(0, $t->space(0.5))->focusable()->role(Role::SLIDER);
         $set = function (int $v) use (&$value, $max, $n) { $v = max(0, min($max, $v)); if ($v !== $value) { $value = $v; $n->changed = true; } };
         if ($rt !== null && $rt->focus === $n->id) {
-            if ($this->shortcut(Key::RIGHT) || $this->shortcut(Key::UP)) { $set($value + 1); }
-            if ($this->shortcut(Key::LEFT) || $this->shortcut(Key::DOWN)) { $set($value - 1); }
+            [$back, $forth] = $this->arrows($n);
+            if ($this->shortcut($forth) || $this->shortcut(Key::UP)) { $set($value + 1); }
+            if ($this->shortcut($back) || $this->shortcut(Key::DOWN)) { $set($value - 1); }
             if ($this->shortcut(Key::HOME)) { $set(0); }
             if ($this->shortcut(Key::END)) { $set($max); }
         }
@@ -1041,8 +1062,9 @@ final class Context
               $knob->nameFrom = $n; $knob->nameJoin = true; // "Price minimum", of a slider labeled Price
               $knobs[$which] = $knob;
               if ($rt !== null && $rt->focus === $knob->id) {
-                  if ($this->shortcut(Key::LEFT) || $this->shortcut(Key::DOWN)) { $set($which, $v - $keyStep); }
-                  if ($this->shortcut(Key::RIGHT) || $this->shortcut(Key::UP)) { $set($which, $v + $keyStep); }
+                  [$back, $forth] = $this->arrows($n);
+                  if ($this->shortcut($back) || $this->shortcut(Key::DOWN)) { $set($which, $v - $keyStep); }
+                  if ($this->shortcut($forth) || $this->shortcut(Key::UP)) { $set($which, $v + $keyStep); }
                   if ($this->shortcut(Key::HOME)) { $set($which, $which === 'low' ? $lo : $low); }
                   if ($this->shortcut(Key::END)) { $set($which, $which === 'low' ? $high : $hi); }
               }
@@ -1117,10 +1139,11 @@ final class Context
             $last = $tb['local']->items; $at = array_search($id, $last, true); $to = null;
             if ($this->shortcut(Key::DOWN) && $at !== false && $at + 1 < count($last)) { $to = $last[$at + 1]; }
             if ($this->shortcut(Key::UP) && $at !== false && $at > 0) { $to = $last[$at - 1]; }
-            if ($this->shortcut(Key::RIGHT)) {
+            [$back, $forth] = $this->arrows($n);
+            if ($this->shortcut($forth)) {
                 if ($branch && !$open) { $open = true; } elseif ($branch && $at !== false && $at + 1 < count($last)) { $to = $last[$at + 1]; }
             }
-            if ($this->shortcut(Key::LEFT)) {
+            if ($this->shortcut($back)) {
                 if ($branch && $open) { $open = false; } else { $to = $tb['local']->parents[$id] ?? null; }
             }
             if ($to !== null) { $rt->focus = $to; }
@@ -1529,8 +1552,9 @@ final class Context
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::paintFocusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
         $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
         if ($rt?->focus === $grid->id) {
-            if ($this->shortcut(Key::LEFT)) { $move($cur->modify('-1 day')); }
-            elseif ($this->shortcut(Key::RIGHT)) { $move($cur->modify('+1 day')); }
+            [$back, $forth] = $this->arrows($grid);
+            if ($this->shortcut($back)) { $move($cur->modify('-1 day')); }
+            elseif ($this->shortcut($forth)) { $move($cur->modify('+1 day')); }
             elseif ($this->shortcut(Key::UP)) { $move($cur->modify('-7 days')); }
             elseif ($this->shortcut(Key::DOWN)) { $move($cur->modify('+7 days')); }
             elseif ($this->shortcut(Key::PAGE_UP)) { $move(self::addMonths($cur, -1)); }
@@ -1636,8 +1660,8 @@ final class Context
             $step = 0;
             if ($this->shortcut(Key::UP)) { $step = 1; }
             elseif ($this->shortcut(Key::DOWN)) { $step = -1; }
-            elseif ($i + 1 < count($order) && $this->shortcut(Key::RIGHT)) { $rt->focusOn($segs[$order[$i + 1]]->id, true); $local->typed = ''; }
-            elseif ($i > 0 && $this->shortcut(Key::LEFT)) { $rt->focusOn($segs[$order[$i - 1]]->id, true); $local->typed = ''; }
+            elseif ($i + 1 < count($order) && $this->shortcut($this->arrows($segs[$order[$i]])[1])) { $rt->focusOn($segs[$order[$i + 1]]->id, true); $local->typed = ''; }
+            elseif ($i > 0 && $this->shortcut($this->arrows($segs[$order[$i]])[0])) { $rt->focusOn($segs[$order[$i - 1]]->id, true); $local->typed = ''; }
             $local->typed .= $rt->typed($seg->id);
             if ($k === 2) { // the half of the day: Up and Down switch it, as does the first letter of the other's name
                 $pmNow = $h >= 12; $want = $step !== 0 ? !$pmNow : $pmNow;
@@ -2103,7 +2127,8 @@ final class Context
         if ($cursor !== null) { $grid->activeDescendant($cursor); }
         if ($s->selects && $rt !== null && $rt->focus === $grid->id && $n > 0) { // the keys: the arrows in two dimensions, Home, End, Enter, the first letters
             $at = $s->selected; $in = $at >= 0 && $at < $n; $to = -1; $extend = false;
-            foreach ([[Key::RIGHT, 1], [Key::LEFT, -1], [Key::DOWN, $cols], [Key::UP, -$cols]] as [$key, $d]) {
+            [$back, $forth] = $this->arrows($grid);
+            foreach ([[$forth, 1], [$back, -1], [Key::DOWN, $cols], [Key::UP, -$cols]] as [$key, $d]) {
                 $plain = $this->shortcut($key); $shift = $s->selection !== null && $this->shortcut($key, Key::SHIFT);
                 if (!$plain && !$shift) { continue; }
                 $extend = $shift;
@@ -2717,8 +2742,9 @@ final class Context
                 $set($size + ($vertical ? $held[1] : $held[0]));
             }
             if ($rt->focus === $div->id) {
-                if ($this->shortcut($vertical ? Key::UP : Key::LEFT)) { $set($size - $step); }
-                if ($this->shortcut($vertical ? Key::DOWN : Key::RIGHT)) { $set($size + $step); }
+                [$back, $forth] = $vertical ? [Key::UP, Key::DOWN] : $this->arrows($div);
+                if ($this->shortcut($back)) { $set($size - $step); }
+                if ($this->shortcut($forth)) { $set($size + $step); }
             }
             if ($held !== null || $rt->hovered($handle->id)) { $div->color = $t->accent; }
         }

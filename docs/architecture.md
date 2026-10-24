@@ -2073,6 +2073,26 @@ times' zone, marks placed in percentages of the plot's area
 its margins moving it), and an axis of labels in slots of no size, spaced
 by children that grow by fractions (`Node::grow`, a float now).
 
+## Right to left
+
+A node's `rtl` is set as it is added, from the node on the stack (the
+root's from the window's locale, or `MYPHP_DIRECTION`), unless the node
+was given a direction of its own (`dirSet`); `Node::setDir` then swaps
+the logical edges it holds (bits in `$logical` say which sides were set
+as start or end, so `padding()` and the like, physical, clear them) and
+passes the direction on to children without one of their own, so a
+direction given after the children were added still reaches them.
+Layout stays left to right and mirrors positions as it places them: a
+row's child at `2·(x + left padding) + view width − cx − child width`, a
+column's cross position, a grid's columns and a wrapping row's lines
+the same way. A row scrolled sideways keeps its offset counted from the
+right: the content is placed from the right edge of the viewport and
+moved right by the offset, so the start shows at 0 and the wheel and
+the scroll bar's ratio work unchanged except for the thumb's drag.
+Controls ask `Context::arrows()` for which of Left and Right go back and
+forth along the line; the runtime's slider and group entries keep the
+node's `rtl` for the keys and the pointer.
+
 ## Accessibility
 
 VoiceOver reads native content as mygo's does (`ui/access.go`,

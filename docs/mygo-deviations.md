@@ -664,6 +664,32 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: PHP has no free functions in a package to autoload; myphp's
     immediate-mode nodes and focus.
 
+## Right to left
+
+- **Direction** (v1.04)
+  - mygo: `ui.Direction`, a window laid out right to left in a language
+    written so, `Element.Direction`, logical edges (`PaddingStart`…,
+    `MarginStart`…, `BorderStartWidth`…, `Start`/`End` insets), every
+    control mirrored (text fields and areas, popups opening toward the
+    start, the chevrons of trees, collapsibles and sidebars, a table's
+    header scrolling with it, a color picker's saturation), the
+    environment variable `MYGO_DIRECTION`.
+  - myphp: `UI\Direction`, `Node::direction()`, `Context::direction()`,
+    the same logical edges, the window's direction from
+    `I18n::rightToLeft(App::locale())`, rows, columns, wrapping rows,
+    grids and sideways scrolling mirrored (the offset counted from the
+    right, the wheel as left to right, the scroll bar on the left), text
+    starting at the right, and the controls whose arrow keys go along
+    the line (rating, slider, range slider, tree items, calendar,
+    segmented, grid view, split) and whose parts sit on a side
+    (progress, checkbox, switch, slider); not yet: text fields and
+    areas (the caret and the lines from the left), `Start`/`End`
+    insets and attach anchors, popups opening toward the start, the
+    chevrons, a table header's scrolling, the color picker; the
+    variable is `MYPHP_DIRECTION` (`ltr` or `rtl`).
+  - Why: ported in steps; the rest needs TextState laid out right to
+    left first.
+
 ## Plugins
 
 - **Plugins are PHP** (v0.91)

@@ -189,6 +189,12 @@ final class Node
     /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
     public bool $absolute = false;
     public float $ax = 0, $ay = 0;
+    /** Whether the node is laid out right to left (Direction), and whether it was given its direction rather than inheriting it. */
+    public bool $rtl = false, $dirSet = false;
+    /** Which of the horizontal edges were set by their start or end (LOG_*), which move to the other side when the direction changes. */
+    public int $logical = 0;
+    private const LOG_PAD_START = 1, LOG_PAD_END = 2, LOG_MARGIN_START = 4, LOG_MARGIN_END = 8, LOG_BORDER_START = 16, LOG_BORDER_END = 32;
+    private const LOG_PAD = 3, LOG_MARGIN = 12, LOG_BORDER = 48;
     /** @var array{0: ?float, 1: ?float, 2: ?float, 3: ?float} an absolute node's left, top, width and height as fractions of its parent's content box (leftPercent…), null where at() and its size place it */
     public array $pct = [null, null, null, null];
     /** A material painted in place of the color (Node::material). */
@@ -622,7 +628,11 @@ final class Node
             $spans[] = $sp->textSpan($runes);
         }
         $t = $this->textStyle();
-        $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $t->align ?? self::START, spans: $spans);
+        $align = $t->align ?? self::START;
+        if ($this->rtl && $align !== self::CENTER) { // lines start at the right of a node laid out right to left, whatever they read, as in CSS and AppKit's cells
+            $align = $align === self::END ? \MyPHP\Text\Params::LEFT : \MyPHP\Text\Params::RIGHT;
+        }
+        $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $align, rtl: $this->rtl, spans: $spans);
         return $this->layout = $this->metrics->textSystem()->layout($p);
     }
 
@@ -897,6 +907,7 @@ final class Node
     /** Pads this container $y points at its top and bottom and $x at its left and right (mygo's Padding(y, x)); row()/column()'s $pad is both. */
     public function padding(float ...$v): static
     {
+        $this->logical &= ~self::LOG_PAD;
         $this->pads = self::edges($v);
         $this->padY = ($this->pads[0] + $this->pads[2]) / 2; $this->padX = ($this->pads[1] + $this->pads[3]) / 2;
         return $this;
@@ -908,8 +919,67 @@ final class Node
     /** Sets the top and bottom padding (mygo's PaddingY). */
     public function paddingY(float $v): static { $p = $this->sides(); return $this->padding($v, $p[1], $v, $p[3]); }
 
-    /** Sets the padding on the side lines start: the left (mygo's PaddingStart; myphp lays out left to right). */
-    public function paddingStart(float $v): static { $p = $this->sides(); return $this->padding($p[0], $p[1], $p[2], $v); }
+    /** Sets the padding on the side lines start: the left, or the right of a node laid out right to left, as CSS's padding-inline-start (mygo's PaddingStart); paddingEnd() the other side's. */
+    public function paddingStart(float $v): static { return $this->logicalPad($this->startSide(), $v, self::LOG_PAD_START); }
+    public function paddingEnd(float $v): static { return $this->logicalPad(4 - $this->startSide(), $v, self::LOG_PAD_END); }
+
+    private function logicalPad(int $side, float $v, int $bit): static
+    {
+        $p = $this->sides();
+        $p[$side] = $v;
+        $logical = $this->logical;
+        $this->padding(...$p);
+        $this->logical = $logical | $bit;
+        return $this;
+    }
+
+    /** The index of the side lines start in the edges (top, right, bottom, left): the left (3), or the right (1) right to left. */
+    public function startSide(): int
+    {
+        return $this->rtl ? 1 : 3;
+    }
+
+    /**
+     * Lays the node and what is inside it out in $d, whatever the direction
+     * around it (mygo's Direction): LeftToRight keeps a code sample, a
+     * phone number or a player's controls left to right in a right-to-left
+     * window. The nodes built inside it inherit it. Give it right after
+     * creating the node, before its logical edges and children, as widgets
+     * do: nodes already inside take it, and logical edges move to the
+     * other side, but what read the old direction keeps it.
+     */
+    public function direction(Direction $d): static
+    {
+        $this->setDir($d === Direction::RightToLeft, true);
+        return $this;
+    }
+
+    /** @internal sets the node's direction, given or inherited, and that of the nodes inside it that inherit it, moving their logical edges where it changes */
+    public function setDir(bool $rtl, bool $explicit): void
+    {
+        $was = $this->rtl;
+        $this->rtl = $rtl;
+        $this->dirSet = $this->dirSet || $explicit;
+        if ($was === $rtl) {
+            return;
+        }
+        if ($this->logical & self::LOG_PAD) {
+            $p = $this->sides();
+            [$p[1], $p[3]] = [$p[3], $p[1]];
+            $this->pads = $p;
+        }
+        if ($this->logical & self::LOG_MARGIN) {
+            [$this->margins[1], $this->margins[3]] = [$this->margins[3], $this->margins[1]];
+        }
+        if ($this->logical & self::LOG_BORDER) {
+            [$this->borders[1], $this->borders[3]] = [$this->borders[3], $this->borders[1]];
+        }
+        foreach ($this->kids as $k) {
+            if (!$k->dirSet) {
+                $k->setDir($rtl, false);
+            }
+        }
+    }
 
     /** The padding of each side, top, right, bottom and left. @return array{0: float, 1: float, 2: float, 3: float} */
     private function sides(): array
@@ -948,12 +1018,17 @@ final class Node
      */
     public function margin(int|float ...$v): static
     {
+        $this->logical &= ~self::LOG_MARGIN;
         $this->margins = self::edges(array_map(static fn(int|float $m): float => $m === self::AUTO ? INF : (float)$m, $v));
         return $this;
     }
 
     /** Sets the left and right margins (mygo's MarginX). */
-    public function marginX(int|float $v): static { $m = $v === self::AUTO ? INF : (float)$v; $this->margins[1] = $this->margins[3] = $m; return $this; }
+    public function marginX(int|float $v): static { $m = $v === self::AUTO ? INF : (float)$v; $this->margins[1] = $this->margins[3] = $m; $this->logical &= ~self::LOG_MARGIN; return $this; }
+
+    /** Sets the margin on the side lines start (mygo's MarginStart): Node::AUTO takes the free space there, so that a row's child with marginStart(Node::AUTO) goes to its end; marginEnd() the other side's. */
+    public function marginStart(int|float $v): static { $this->margins[$this->startSide()] = $v === self::AUTO ? INF : (float)$v; $this->logical |= self::LOG_MARGIN_START; return $this; }
+    public function marginEnd(int|float $v): static { $this->margins[4 - $this->startSide()] = $v === self::AUTO ? INF : (float)$v; $this->logical |= self::LOG_MARGIN_END; return $this; }
 
     /** Sets the top and bottom margins (mygo's MarginY). */
     public function marginY(int|float $v): static { $m = $v === self::AUTO ? INF : (float)$v; $this->margins[0] = $this->margins[2] = $m; return $this; }
@@ -961,12 +1036,14 @@ final class Node
     /** Sets the widths of the border on each side, as padding() does, inside which the content is (mygo's BorderWidth), in borderColor(). */
     public function borderWidth(float ...$v): static
     {
+        $this->logical &= ~self::LOG_BORDER;
         $this->borders = self::edges($v);
         return $this;
     }
 
-    /** Sets the width of the border on the side lines start: the left (mygo's BorderStartWidth). */
-    public function borderStartWidth(float $v): static { $this->borders[3] = $v; return $this; }
+    /** Sets the width of the border on the side lines start, and on the other (mygo's BorderStartWidth and BorderEndWidth): a line between a sidebar and the content is borderEndWidth(1) on the sidebar. */
+    public function borderStartWidth(float $v): static { $this->borders[$this->startSide()] = $v; $this->logical |= self::LOG_BORDER_START; return $this; }
+    public function borderEndWidth(float $v): static { $this->borders[4 - $this->startSide()] = $v; $this->logical |= self::LOG_BORDER_END; return $this; }
 
     /** Sets the color of the border (mygo's BorderColor). */
     public function borderColor(int $rgb): static { $this->borderColor = $rgb; return $this; }
