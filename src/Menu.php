@@ -22,20 +22,34 @@ final class Menu
         'cut' => ['menuCut', 'CmdOrCtrl+X', 'cut:'],
         'copy' => ['menuCopy', 'CmdOrCtrl+C', 'copy:'],
         'paste' => ['menuPaste', 'CmdOrCtrl+V', 'paste:'],
-        'pasteAndMatchStyle' => ['menuPasteAndMatchStyle', 'CmdOrCtrl+Shift+V', 'pasteAsPlainText:'],
+        'pasteAndMatchStyle' => ['menuPasteAndMatchStyle', 'Shift+Alt+CmdOrCtrl+V', 'pasteAsPlainText:'],
         'delete' => ['menuDelete', '', 'delete:'],
         'selectAll' => ['menuSelectAll', 'CmdOrCtrl+A', 'selectAll:'],
+        'reload' => ['menuReload', 'CmdOrCtrl+R', ''],
+        'forceReload' => ['menuForceReload', 'Shift+CmdOrCtrl+R', ''],
+        'resetZoom' => ['menuActualSize', 'CmdOrCtrl+0', ''],
+        'zoomIn' => ['menuZoomIn', 'CmdOrCtrl+Plus', ''],
+        'zoomOut' => ['menuZoomOut', 'CmdOrCtrl+-', ''],
         'togglefullscreen' => ['menuToggleFullScreen', 'Ctrl+Cmd+F', 'toggleFullScreen:'],
         'toggleDevTools' => ['menuToggleDevTools', 'Alt+Cmd+I', ''],
         'minimize' => ['menuMinimize', 'CmdOrCtrl+M', 'performMiniaturize:'],
         'zoom' => ['menuZoom', '', 'performZoom:'],
         'close' => ['menuCloseWindow', 'CmdOrCtrl+W', 'performClose:'],
-        'quit' => ['menuQuitApp', 'CmdOrCtrl+Q', 'terminate:'],
+        'quit' => ['menuQuitApp', 'Cmd+Q', 'terminate:'],
         'about' => ['menuAbout', '', 'orderFrontStandardAboutPanel:'],
-        'hide' => ['menuHide', 'CmdOrCtrl+H', 'hide:'],
-        'hideOthers' => ['menuHideOthers', 'Cmd+Alt+H', 'hideOtherApplications:'],
+        'hide' => ['menuHide', 'Cmd+H', 'hide:'],
+        'hideOthers' => ['menuHideOthers', 'Alt+Cmd+H', 'hideOtherApplications:'],
         'unhide' => ['menuShowAll', '', 'unhideAllApplications:'],
         'front' => ['menuBringAllToFront', '', 'arrangeInFront:'],
+        'startSpeaking' => ['menuStartSpeaking', '', 'startSpeaking:'],
+        'stopSpeaking' => ['menuStopSpeaking', '', 'stopSpeaking:'],
+        'bold' => ['menuBold', 'CmdOrCtrl+B', ''],
+        'italic' => ['menuItalic', 'CmdOrCtrl+I', ''],
+        'underline' => ['menuUnderline', 'CmdOrCtrl+U', ''],
+        'strikethrough' => ['menuStrikethrough', 'Shift+CmdOrCtrl+X', ''],
+        'alignLeft' => ['menuAlignLeft', 'Cmd+{', ''],
+        'alignCenter' => ['menuCenter', 'Cmd+|', ''],
+        'alignRight' => ['menuAlignRight', 'Cmd+}', ''],
         'new' => ['menuNew', 'CmdOrCtrl+N', ''],
         'open' => ['menuOpen', 'CmdOrCtrl+O', ''],
         'save' => ['menuSave', 'CmdOrCtrl+S', ''],
@@ -50,8 +64,11 @@ final class Menu
         'enter' => "\r", 'return' => "\r", 'tab' => "\t", 'space' => ' ', 'escape' => "\e", 'esc' => "\e",
         'backspace' => "\x7f", 'delete' => "\u{F728}", 'up' => "\u{F700}", 'down' => "\u{F701}",
         'left' => "\u{F702}", 'right' => "\u{F703}", 'home' => "\u{F729}", 'end' => "\u{F72B}",
-        'pageup' => "\u{F72C}", 'pagedown' => "\u{F72D}",
+        'pageup' => "\u{F72C}", 'pagedown' => "\u{F72D}", 'plus' => '+', 'insert' => "\u{F727}", 'printscreen' => "\u{F72E}",
     ];
+
+    /** The page's zoom steps the zoom roles go through (mygo's zoomSteps). */
+    private const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 
     /** @var array<int, array{0: MenuItem, 1: \Closure}> items and what their clicks do, by uid */
     private static array $byUid = [];
@@ -67,7 +84,34 @@ final class Menu
             if (!$it instanceof MenuItem) {
                 throw new RuntimeException("Menu: item $i is not a MenuItem");
             }
+            $it->parent = $this;
         }
+    }
+
+    /** The menu's items (mygo's Items). @return list<MenuItem> */
+    public function items(): array
+    {
+        return array_values($this->items);
+    }
+
+    /** Adds items at the end of the menu, which the menu bar and the Dock show at once (mygo's Append). */
+    public function append(MenuItem ...$items): void
+    {
+        foreach ($items as $it) {
+            $it->parent = $this;
+            $this->items[] = $it;
+        }
+        App::refreshMenus();
+    }
+
+    /** Adds $item at $pos, kept within the menu (mygo's Insert). */
+    public function insert(int $pos, MenuItem $item): void
+    {
+        $item->parent = $this;
+        $items = array_values($this->items);
+        array_splice($items, min(max($pos, 0), count($items)), 0, [$item]);
+        $this->items = $items;
+        App::refreshMenus();
     }
 
     public function itemById(string $id): ?MenuItem
@@ -95,6 +139,7 @@ final class Menu
             new MenuItem(role: 'appMenu'),
             new MenuItem(role: 'fileMenu'),
             new MenuItem(role: 'editMenu'),
+            new MenuItem(role: 'viewMenu'),
             new MenuItem(role: 'windowMenu'),
         ]);
     }
@@ -107,6 +152,15 @@ final class Menu
         ObjC::msg('v:b', $this->native, 'setAutoenablesItems:', false);
         foreach ($this->items as $it) {
             ObjC::msg('v:p', $this->native, 'addItem:', self::buildItem($it));
+            if ($it->role === 'zoomIn' && $it->accelerator === '') { // Cmd+= too, without Shift, as other Mac apps take it: a hidden twin
+                $twin = new MenuItem($it->label, $it->click, 'CmdOrCtrl+=', 'zoomIn', disabled: $it->disabled);
+                $ns = self::buildItem($twin);
+                ObjC::msg('v:b', $ns, 'setHidden:', true);
+                if (ObjC::msg('b:p', $ns, 'respondsToSelector:', ObjC::sel('setAllowsKeyEquivalentWhenHidden:'))) {
+                    ObjC::msg('v:b', $ns, 'setAllowsKeyEquivalentWhenHidden:', true);
+                }
+                ObjC::msg('v:p', $this->native, 'addItem:', $ns);
+            }
         }
         return $this->native;
     }
@@ -114,7 +168,9 @@ final class Menu
     private static function buildItem(MenuItem $it)
     {
         if ($it->type === MenuItem::SEPARATOR) {
-            return $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
+            $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
+            ObjC::msg('v:b', $it->native, 'setHidden:', $it->hidden);
+            return $it->native;
         }
         $label = $it->label; $accel = $it->accelerator; $selector = null; $click = $it->click;
         if ($it->role !== '') { // a role's label is in the language the app shows, so that relabelMenus can say it again
@@ -124,9 +180,12 @@ final class Menu
                 $key = $it->role === 'close' && Native\Docs\Registry::has() ? 'menuClose' : $key; // a document's window closes the document
                 $label = $label !== '' ? $label : L10n::in(App::locale())->get($key, ['app' => App::name()]);
                 $accel = $accel !== '' ? $accel : $ra;
-                if ($selector === '') {
-                    $role = $it->role;
-                    [$selector, $click] = [null, $role === 'toggleDevTools' ? fn(MenuItem $m, ?Window $w) => $w?->toggleDevTools() : fn(MenuItem $m, ?Window $w) => Native\Docs\Registry::role($role, $w)];
+                if ($selector === '') { // a role PHP performs, before the item's own click (mygo's performRole)
+                    $role = $it->role; $own = $click;
+                    [$selector, $click] = [null, function (MenuItem $m, ?Window $w) use ($role, $own): void {
+                        self::performRole($role, $w);
+                        if ($own !== null) { $own($m, $w); }
+                    }];
                 }
             }
         }
@@ -143,15 +202,24 @@ final class Menu
             ObjC::msg('v:l', $ns, 'setTag:', $it->uid);
         }
         ObjC::msg('v:b', $ns, 'setEnabled:', !$it->disabled);
-        if ($it->checked) {
+        ObjC::msg('v:b', $ns, 'setHidden:', $it->hidden);
+        if ($it->checked && in_array($it->type, [MenuItem::CHECKBOX, MenuItem::RADIO], true)) {
             ObjC::msg('v:l', $ns, 'setState:', 1);
         }
-        if ($it->submenu !== []) {
+        if ($it->toolTip !== '') {
+            ObjC::msg('v:p', $ns, 'setToolTip:', ObjC::str($it->toolTip));
+        }
+        if ($it->submenu !== [] || in_array($it->role, ['services', 'window', 'help'], true)) {
             $sub = new self($it->submenu);
+            foreach ($it->submenu as $child) { $child->parent = $it; } // the item's list, not the menu built of it
             ObjC::msg('v:p', $ns, 'setSubmenu:', $sub->build($label));
-            if ($it->role === 'windowMenu') {
-                ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'setWindowsMenu:', $sub->native);
-            }
+            $app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
+            match ($it->role) {
+                'windowMenu', 'window' => ObjC::msg('v:p', $app, 'setWindowsMenu:', $sub->native),
+                'services' => ObjC::msg('v:p', $app, 'setServicesMenu:', $sub->native),
+                'help' => ObjC::msg('v:p', $app, 'setHelpMenu:', $sub->native),
+                default => null,
+            };
         }
         return $it->native = $ns;
     }
@@ -163,11 +231,19 @@ final class Menu
         $t = L10n::in(App::locale());
         return match ($role) {
             'appMenu' => [$label !== '' ? $label : App::name(), $submenu ?: [
-                $r('about'), MenuItem::separator(), $r('hide'), $r('hideOthers'), $r('unhide'), MenuItem::separator(), $r('quit')]],
+                $r('about'), MenuItem::separator(), $r('services'), MenuItem::separator(), $r('hide'), $r('hideOthers'), $r('unhide'), MenuItem::separator(), $r('quit')]],
+            'services' => [$label !== '' ? $label : $t->get('menuServices'), $submenu],
+            'window' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu],
+            'help' => [$label !== '' ? $label : $t->get('menuHelp'), $submenu],
+            'viewMenu' => [$label !== '' ? $label : $t->get('menuView'), $submenu ?: [
+                $r('reload'), $r('forceReload'), $r('toggleDevTools'), MenuItem::separator(), $r('resetZoom'), $r('zoomIn'), $r('zoomOut'), MenuItem::separator(), $r('togglefullscreen')]],
+            'formatMenu' => [$label !== '' ? $label : $t->get('menuFormat'), $submenu ?: [
+                $r('bold'), $r('italic'), $r('underline'), $r('strikethrough'), MenuItem::separator(), $r('alignLeft'), $r('alignCenter'), $r('alignRight')]],
             'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: (Native\Docs\Registry::has() ? Native\Docs\Registry::fileMenu() : [$r('close')])],
             'openRecent' => [$label !== '' ? $label : $t->get('menuOpenRecent'), Native\Docs\Registry::recentItems()], // the recent documents as the menu is built
             'editMenu' => [$label !== '' ? $label : $t->get('menuEdit'), $submenu ?: [
-                $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('pasteAndMatchStyle'), $r('delete'), $r('selectAll')]],
+                $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('pasteAndMatchStyle'), $r('delete'), $r('selectAll'),
+                MenuItem::separator(), new MenuItem($t->get('menuSpeech'), submenu: [$r('startSpeaking'), $r('stopSpeaking')])]],
             'windowMenu' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu ?: [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')]],
             default => [$label, $submenu],
         };
@@ -200,6 +276,55 @@ final class Menu
         return [$key, $mask];
     }
 
+    /**
+     * Performs a role PHP does for the window $w (mygo's performRole): the
+     * documents' roles, the page's reload and zoom, the developer tools,
+     * and the Format menu's on the selection of a rich text editor of
+     * native UI, or of an editable page.
+     */
+    private static function performRole(string $role, ?Window $w): void
+    {
+        if (in_array($role, ['new', 'open', 'save', 'saveAs', 'duplicate', 'rename', 'moveTo', 'revert'], true)) {
+            Native\Docs\Registry::role($role, $w);
+            return;
+        }
+        if ($w === null) {
+            return;
+        }
+        if ($role === 'toggleDevTools') {
+            $w->toggleDevTools();
+            return;
+        }
+        if (in_array($role, ['bold', 'italic', 'underline', 'strikethrough', 'alignLeft', 'alignCenter', 'alignRight'], true)) {
+            $w->contentCommand($role);
+            return;
+        }
+        $page = $w->page(); // a window showing native UI has no page to reload or zoom
+        match ($role) {
+            'reload' => $page?->reload(),
+            'forceReload' => $page?->reloadIgnoringCache(),
+            'resetZoom' => $page?->setZoomFactor(1.0),
+            'zoomIn' => $page?->setZoomFactor(self::nextZoom($page->zoomFactor(), 1)),
+            'zoomOut' => $page?->setZoomFactor(self::nextZoom($page->zoomFactor(), -1)),
+            default => null,
+        };
+    }
+
+    /** The zoom step after $cur, up ($dir 1) or down (mygo's nextZoom). */
+    public static function nextZoom(float $cur, int $dir): float
+    {
+        if ($dir > 0) {
+            foreach (self::ZOOM_STEPS as $s) {
+                if ($s > $cur + 0.001) { return (float)$s; }
+            }
+            return (float)self::ZOOM_STEPS[count(self::ZOOM_STEPS) - 1];
+        }
+        foreach (array_reverse(self::ZOOM_STEPS) as $s) {
+            if ($s < $cur - 0.001) { return (float)$s; }
+        }
+        return (float)self::ZOOM_STEPS[0];
+    }
+
     private static function defineTarget()
     {
         ObjC::defineClass('MyPHPMenuTarget', 'NSObject', [
@@ -210,6 +335,8 @@ final class Menu
                 }
                 if ($it->type === MenuItem::CHECKBOX) {
                     $it->setChecked(!$it->checked);
+                } elseif ($it->type === MenuItem::RADIO) {
+                    $it->setChecked(true);
                 }
                 $click($it, Window::focused());
             }],
@@ -217,9 +344,8 @@ final class Menu
         return ObjC::msg('p:', ObjC::alloc('MyPHPMenuTarget'), 'init');
     }
 
-    /** Shows the menu as a context menu at the mouse position in $window. */
-    /** Shows the menu under the node $id had last frame (a select), in $window. */
-    public function popupAt(Window $window, int $id, \MyPHP\UI\Runtime $runtime): void
+    /** @internal shows the menu under the node $id had last frame (a select's), in $window */
+    public function popupUnder(Window $window, int $id, \MyPHP\UI\Runtime $runtime): void
     {
         $r = $runtime->rectOf($id);
         if ($r === null) {
@@ -233,8 +359,8 @@ final class Menu
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 
-    /** Shows the menu with its top left at ($x, $y), points of the window's view from its top left, as a context menu or a menu button's (mygo's popupMenu). */
-    public function popupAtPoint(Window $window, float $x, float $y): void
+    /** Shows the menu as a context menu with its top left at ($x, $y), points from the top-left corner of the window's content (mygo's PopupAt). */
+    public function popupAt(Window $window, float $x, float $y): void
     {
         $native = $this->build();
         $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
@@ -243,6 +369,7 @@ final class Menu
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 
+    /** Shows the menu as a context menu at the pointer over $window (mygo's Popup). */
     public function popup(Window $window): void
     {
         $native = $this->build();

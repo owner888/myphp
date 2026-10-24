@@ -46,11 +46,11 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 
 ```
 bin/myphp          CLI: init (templates), dev (run, restart on change, TS client), build (.app), micro (spc + micro.sfx)
-src/               App (whenReady/run/quit/theme/menu/userDataPath/later/after; onOpenURL/File, single instance, recent
-                   documents, open at login), Window (+ on(event), CloseEvent, FileDropEvent, WindowState; findInPage, printToPDF,
-                   downloads, permissions), Network, Clipboard, Secrets (Keychain), Cookies,
-                   WindowOptions, Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut,
-                   Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
+src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
+                   documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
+                   WindowState(+Store), newWebView), Page (+ PageOptions, on(event), eval, find, PDF, downloads, permissions),
+                   WebView (Context::webView: a hole in the Metal view), Event, Network, Clipboard, Secrets, Cookies, WindowOptions,
+                   Menu, MenuItem, Dialog + *Options, Tray (+ TrayOptions), GlobalShortcut, Notification (+ Options), Process (a child polled on the run loop), Ipc (bound services,
                    window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), Protocol (+ Request/Response), autoload.php,
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
                    region/on*Changed), Region, I18n (tags, patterns, dates, numbers, names — over ext-intl), L10n
@@ -142,7 +142,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   A `Channel` parameter streams `{t:"chan", c, k, p|end}` (page: `new
   myphp.Channel()`, `chan-close` back); a Generator return streams each
   yield one run-loop turn apart (`App::later`). `myphp:window.*` calls are
-  the page's window controls; `WindowOptions::$preload` runs before the page.
+  the page's window controls; `PageOptions::$preloadScript` runs before the page.
   `MYPHP_GENERATE=path` makes `App::run` write the TypeScript client. Only trusted pages call (`Native\Frontend`).
   PHP plugins (`App::use`): service "plugin:<name>", page side its client/ (`bun test`, real
   bridge.js via Plugins/fake-myphp.ts); `CallContext` param = the page's life; `Channel::wait`; generators wait on flow control.
@@ -194,6 +194,6 @@ rich text (bold/italic/mono, spans); layout alignment as mygo; checkbox,
 radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, table,
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
-events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector; audio; mygo's element and layout API; widgets and context.
+events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector; audio; mygo's element and layout API; widgets and context; app, page, menus, web views in native UI.
 Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
 bridges; what building real apps turns up (see examples/logview, notes, photos, http).

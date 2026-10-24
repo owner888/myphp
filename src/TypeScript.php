@@ -20,15 +20,6 @@ final class TypeScript
 {
     /** @var array<string, string> interface name => declaration, in order of discovery */
     private static array $interfaces = [];
-    /** @var array<string, string> event name => payload type (PHP) */
-    private static array $events = [];
-
-    /** Declares an event pages can listen for, with the PHP type of its payload. */
-    public static function event(string $name, string $payloadType = 'mixed'): void
-    {
-        self::$events[$name] = $payloadType;
-    }
-
     public static function generate(): string
     {
         self::$interfaces = [];
@@ -65,7 +56,7 @@ final class TypeScript
             $services .= "\n" . self::tsdoc($svc['doc'], '') . "export const $name = {\n$methods} as const;\n";
         }
         $events = '';
-        foreach (self::$events as $ename => $ptype) {
+        foreach (Event::declared() as $ename => $ptype) {
             $t = self::docType($ptype);
             $events .= "  $ename: (fn: (payload: $t) => void) => on(\"$ename\", fn as (payload: unknown) => void),\n";
         }
@@ -73,6 +64,9 @@ final class TypeScript
             . "declare global {\n  interface Window {\n    myphp: {\n"
             . "      call<T = unknown>(method: string, ...args: unknown[]): Promise<T>;\n"
             . "      on(name: string, fn: (payload: unknown) => void): () => void;\n"
+            . "      once(name: string, fn: (payload: unknown) => void): () => void;\n"
+            . "      readonly preferences: { accent: string | null; reduceMotion: boolean; reduceTransparency: boolean; highContrast: boolean; textScale: number };\n"
+            . "      readonly locale: string;\n      readonly dir: \"ltr\" | \"rtl\";\n"
             . "      isCallError(e: unknown): boolean;\n      platform: string;\n      windowId: number;\n      version: string;\n"
             . "      Channel: new <T = unknown>() => Channel<T>;\n"
             . "      window: { minimize(): Promise<void>; maximize(): Promise<void>; unmaximize(): Promise<void>; toggleMaximize(): Promise<void>;"

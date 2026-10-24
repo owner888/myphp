@@ -6,7 +6,7 @@ namespace MyPHP;
 /**
  * Small secrets, such as access tokens and API keys, in the login Keychain
  * (mygo's Secrets), which the system encrypts for the user, unlike a file
- * in App::userDataPath():
+ * in App::path(PathName::UserData):
  *
  *     Secrets::set('github-token', $token);
  *     try { $token = Secrets::get('github-token'); } catch (SecretNotFound) { // ask the user to sign in }

@@ -12,7 +12,7 @@ use MyPHP\Plugins\NativeLibrary;
  * SQLite (mygo's plugins/sqlite): SQLite's C amalgamation and mygo's small
  * C shim, the library mygo's release carries, loaded through FFI.
  *
- *     $db = Sqlite::open(App::userDataPath() . '/app.db');
+ *     $db = Sqlite::open(App::path(PathName::UserData) . '/app.db');
  *     $db->execute('CREATE TABLE IF NOT EXISTS notes (title TEXT)');
  *     $db->transaction([new Statement('INSERT INTO notes VALUES (?)', ['first'])]);
  *     $rows = $db->query('SELECT title FROM notes'); // $rows->columns, $rows->values

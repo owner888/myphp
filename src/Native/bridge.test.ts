@@ -46,3 +46,34 @@ test("onmessage takes values as they come", async () => {
   expect(got).toEqual(["x", "y"]);
   expect(acks()).toEqual([1, 2]);
 });
+
+interface Settings {
+  on(name: string, fn: (p: unknown) => void): () => void;
+  once(name: string, fn: (p: unknown) => void): () => void;
+  readonly preferences: { accent: string | null; textScale: number };
+  readonly locale: string;
+  readonly dir: string;
+  __deliver(m: unknown): void;
+}
+const page = () => (globalThis as unknown as { window: { myphp: Settings } }).window.myphp;
+
+test("the preferences and the language PHP tells, kept for the page", () => {
+  php = fakeMyPHP({});
+  expect([page().preferences.accent, page().locale, page().dir]).toEqual([null, "en", "ltr"]);
+  const heard: unknown[] = [];
+  page().on("myphp:locale", (p) => heard.push(p));
+  page().__deliver({ t: "event", n: "myphp:preferences", p: { accent: "#007aff", reduceMotion: false, reduceTransparency: false, highContrast: true, textScale: 1 } });
+  page().__deliver({ t: "event", n: "myphp:locale", p: { locale: "en", dir: "ltr" } }); // the one it has: no news
+  page().__deliver({ t: "event", n: "myphp:locale", p: { locale: "ar", dir: "rtl" } });
+  expect([page().preferences.accent, Object.isFrozen(page().preferences), page().locale, page().dir]).toEqual(["#007aff", true, "ar", "rtl"]);
+  expect(heard).toEqual([{ locale: "ar", dir: "rtl" }]);
+});
+
+test("once hears an event a single time", () => {
+  php = fakeMyPHP({});
+  const got: unknown[] = [];
+  page().once("ping", (p) => got.push(p));
+  page().__deliver({ t: "event", n: "ping", p: 1 });
+  page().__deliver({ t: "event", n: "ping", p: 2 });
+  expect(got).toEqual([1]);
+});

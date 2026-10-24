@@ -9,7 +9,7 @@ use MyPHP\{CloseEvent, DocumentState, Window};
 /**
  * The frame of a document's Window. Its page gets the document's state
  * and reloads as the events myphp:document-state and
- * myphp:document-reload, when it is trusted (Window::isTrusted): paths are
+ * myphp:document-reload, when it is trusted (Page::isTrusted): paths are
  * none of other pages' business.
  *
  * @internal
@@ -75,15 +75,15 @@ final class WindowFrame implements Frame
         $this->w->setDocumentEdited($s->edited);
         $this->w->setRepresentedFile($s->path);
         $this->w->setTitle($s->name);
-        if ($this->w->isTrusted()) {
-            $this->w->send(self::STATE_EVENT, $s);
+        if (($p = $this->w->page()) !== null && $p->isTrusted()) {
+            $p->event(self::STATE_EVENT, $s);
         }
     }
 
     public function reloaded(): void
     {
-        if ($this->w->isTrusted()) {
-            $this->w->send(self::RELOAD_EVENT, new \stdClass);
+        if (($p = $this->w->page()) !== null && $p->isTrusted()) {
+            $p->event(self::RELOAD_EVENT, new \stdClass);
         }
     }
 }

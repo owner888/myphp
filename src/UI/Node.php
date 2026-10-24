@@ -130,6 +130,8 @@ final class Node
     /** Drags $dragValue within the window once the pointer pressing it moves a few points (Context::drag); takes values of type $accepts dragged onto it (Context::drop, dragOver). */
     public bool $drags = false;
     public mixed $dragValue = null;
+    /** The web view the node shows (Context::webView): a MyPHP\WebView, which this package knows only through the window. */
+    public ?object $webView = null;
     public ?string $accepts = null;
     /** A native drag source (Context::dragData): what makes its data as the drag starts, and its options; a native drop target's options (Context::dropData); whether it takes files dragged from other apps (Context::droppedFiles). @var ?array{0: \Closure(): \MyPHP\Transfer\Data, 1: \MyPHP\Transfer\DragOptions} */
     public ?array $dataSource = null;

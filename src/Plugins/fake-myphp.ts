@@ -65,9 +65,9 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
   };
   const source = readFileSync(new URL("../Native/bridge.js", import.meta.url), "utf8").replaceAll(
     "__CONFIG__",
-    JSON.stringify({ platform: "darwin", windowId: 1, version: "0.0.0-test", secret: "s" }),
+    JSON.stringify({ platform: "darwin", windowId: 1, version: "0.0.0-test", secret: "s", locale: "en", dir: "ltr" }),
   );
-  new Function("window", "document", "addEventListener", source)(win, { addEventListener() {} }, () => {});
+  new Function("window", "document", "addEventListener", source)(win, { addEventListener() {}, createElement: () => ({ isConnected: false }) }, () => {});
   g.window = win;
   return { calls, posted, uninstall: () => { g.window = before; } };
 }

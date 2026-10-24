@@ -44,7 +44,7 @@ final class Runtime
     public int $passes = 0;
     /** The theme's scroll bar width, for hit-testing thumbs; Window sets it. */
     public float $scrollbarWidth = 6;
-    /** Opens a URL with the system, throwing when none opens it; App sets it (App::openURL). Links and Context::openURL reach it through openURLThen. */
+    /** Opens a URL with the system, throwing when none opens it; App sets it (Shell::openExternal). Links and Context::openURL reach it through openURLThen. */
     public Closure $openURL;
     /** Moves the window with the mouse (1 click) or zooms or minimizes it (2) for a press on a Node::dragWindow handle; the window sets it. */
     public ?Closure $dragWindow = null;
@@ -667,6 +667,33 @@ final class Runtime
     public function local(int $id, Closure $make): mixed
     {
         return $this->locals[$id] ??= $make();
+    }
+
+    /**
+     * Where the last frame showed web views, in the order it painted them
+     * (mygo's webPlaces): the view, its node, its frame and the part of it
+     * that shows, in the window's points. The painter notes them.
+     * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>
+     */
+    public array $webPlaces = [];
+
+    /** Whether the focus came from the keyboard, as Tab moving it onto a web view's node, which enters its page from its first element, or its last with Shift (mygo's TabInto). */
+    public function focusFromKeyboard(): bool
+    {
+        return $this->focusVisible;
+    }
+
+    /** The web view that takes the pointer at ($x, $y) (mygo's webViewAt): one shown there, whose node is what takes the pointer there, nothing painted over it taking it. */
+    public function webViewAt(float $x, float $y): ?object
+    {
+        $top = $this->pressTarget($x, $y);
+        foreach (array_reverse($this->webPlaces) as $p) {
+            [$cx, $cy, $cw, $ch] = $p['clip'];
+            if ($p['id'] === $top && $x >= $cx && $x < $cx + $cw && $y >= $cy && $y < $cy + $ch) {
+                return $p['view'];
+            }
+        }
+        return null;
     }
 
     /** The innermost node under ($x, $y) last frame that takes the pointer (mygo's interactive): clickable, focusable, draggable, a field, a link or a slider; null for none. */

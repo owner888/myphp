@@ -5,7 +5,7 @@ namespace MyPHP\Plugins\Updater;
 
 use Closure;
 use DateTimeImmutable;
-use MyPHP\{App, Power, Updater as Core};
+use MyPHP\{App, PathName, Power, Updater as Core};
 use MyPHP\Native\Bundle;
 use Throwable;
 
@@ -83,7 +83,7 @@ final class Checker
         $this->appVersion = fn(): string => App::version();
         $this->locale = fn(): string => App::locale();
         $this->now = fn(): DateTimeImmutable => new DateTimeImmutable;
-        $this->stateDir = fn(): string => App::userDataPath();
+        $this->stateDir = fn(): string => App::path(PathName::UserData);
         $this->after = fn(float $s, Closure $fn) => App::after($s, $fn);
         $this->go = fn(Closure $fn) => App::go($fn);
         $open ??= UpdateWindow::open(...);

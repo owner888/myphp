@@ -38,10 +38,7 @@ final class FlyoutOptions
         public ?Content $content = null,
         public ?string $html = null,
         public ?string $url = null,
-        public string $preload = '',
-        /** @var list<string> as WindowOptions' */
-        public array $trustedOrigins = [],
-        /** as WindowOptions' */
-        public DevTools $devTools = DevTools::Auto,
+        /** The flyout's page, as WindowOptions' (mygo's Page). */
+        public PageOptions $page = new PageOptions(),
     ) {}
 }

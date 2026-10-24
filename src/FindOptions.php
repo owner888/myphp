@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-/** How Window::findInPage() finds (mygo's FindOptions). */
+/** How Page::findInPage() finds (mygo's FindOptions). */
 final class FindOptions
 {
     public function __construct(

@@ -12,6 +12,28 @@
   const listeners = new Map();
   const channels = new Map(); // id => Channel
   const post = (m) => window.webkit.messageHandlers.myphp.postMessage(JSON.stringify(m));
+  // The desktop's preferences and the app's language, which PHP tells at document start and as they change.
+  let preferences = Object.freeze({ accent: null, reduceMotion: false, reduceTransparency: false, highContrast: false, textScale: 1 });
+  let locale = cfg.locale || "en";
+  let dir = cfg.dir === "rtl" ? "rtl" : "ltr";
+  // CSS variables PHP keeps on :root: the room of the window controls, the accent, the text scale.
+  const vars = {};
+  let sheet = null, style = null;
+  const setVars = (v) => {
+    Object.assign(vars, v);
+    const css = Object.entries(vars).filter(([, x]) => x !== null).map(([k, x]) => `${k}:${x}`).join(";");
+    const text = css ? `:root{${css}}` : "";
+    if (document.adoptedStyleSheets) { // a constructed style sheet, which a Content Security Policy allows
+      if (!sheet) { sheet = new CSSStyleSheet(); document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; }
+      sheet.replaceSync(text);
+      return;
+    }
+    style ??= document.createElement("style");
+    style.textContent = text;
+    const add = () => { if (!style.isConnected) (document.head ?? document.documentElement)?.append(style); };
+    if (document.documentElement) add(); else document.addEventListener("DOMContentLoaded", add, { once: true });
+  };
+  const thrown = (e) => setTimeout(() => { throw e; });
 
   class CallError extends Error {
     constructor(method, message) {
@@ -107,11 +129,23 @@
     },
     /** Listens for an event PHP emits; returns a function that stops listening. */
     on(name, fn) {
+      if (typeof fn !== "function") throw new TypeError("listener must be a function");
       let set = listeners.get(name);
       if (!set) listeners.set(name, (set = new Set()));
-      set.add(fn);
-      return () => set.delete(fn);
+      const l = (p) => fn(p);
+      set.add(l);
+      return () => { set.delete(l); if (set.size === 0 && listeners.get(name) === set) listeners.delete(name); };
     },
+    /** Listens for the next time PHP emits an event. */
+    once(name, fn) {
+      const off = window.myphp.on(name, (p) => { off(); fn(p); });
+      return off;
+    },
+    /** The accent color and the accessibility settings of the desktop (MyPHP\ThemePreferences); the "myphp:preferences" event tells their changes. */
+    get preferences() { return preferences; },
+    /** The language the app shows, as "zh-Hans", and the direction it is written in; the "myphp:locale" event tells a change. */
+    get locale() { return locale; },
+    get dir() { return dir; },
     isCallError: (e) => e instanceof CallError,
     /** This window, as the page may drive it. */
     window: Object.freeze({
@@ -133,8 +167,14 @@
         if (msg.ok) p.resolve(msg.v);
         else p.reject(new CallError(p.method, msg.e));
       } else if (msg.t === "event") {
+        if (msg.n === "myphp:preferences") preferences = Object.freeze(msg.p);
+        if (msg.n === "myphp:locale") {
+          if (typeof msg.p?.locale !== "string" || msg.p.locale === locale) return; // told only of a language the page did not have
+          locale = msg.p.locale;
+          dir = msg.p.dir === "rtl" ? "rtl" : "ltr";
+        }
         const set = listeners.get(msg.n);
-        if (set) for (const fn of set) fn(msg.p);
+        if (set) for (const fn of [...set]) { try { fn(msg.p); } catch (e) { thrown(e); } }
       } else if (msg.t === "chan") {
         const c = channels.get(msg.c);
         if (!c) return;
@@ -209,8 +249,27 @@
     return { matches: n, active: findState.active + 1 };
   };
   Object.defineProperty(window, "__myphp", { value: Object.freeze({ find, stopFind }) });
-  post({ t: "page" }); // a document starts: the calls of the last one end (MyPHP\CallContext)
+  window.myphp.on("myphp:title-bar", (t) => setVars({ "--myphp-titlebar-height": `${t.height}px`, "--myphp-titlebar-inset-left": `${t.left}px`, "--myphp-titlebar-inset-right": `${t.right}px` }));
+  window.myphp.on("myphp:preferences", (p) => setVars({ "--myphp-accent": p.accent, "--myphp-text-scale": String(p.textScale) }));
   document.addEventListener("DOMContentLoaded", () => post({ t: "dom-ready" }));
+  // A press on an element whose --app-region (or -webkit-app-region) is drag moves the window; a double click zooms it as macOS is set to (mygo's drag regions). Controls stay controls.
+  const controls = 'input,textarea,select,button,a[href],summary,label,[contenteditable]:not([contenteditable="false"]),video[controls],audio[controls]';
+  const webkitRegion = typeof CSS !== "undefined" && CSS.supports("-webkit-app-region", "drag");
+  const region = (el) => {
+    const r = getComputedStyle(el).getPropertyValue("--app-region").trim();
+    if (r || !webkitRegion) return r;
+    for (let e = el; e; e = e.parentElement) {
+      const w = getComputedStyle(e).getPropertyValue("-webkit-app-region").trim();
+      if (w === "drag" || w === "no-drag") return w;
+    }
+    return "";
+  };
+  addEventListener("mousedown", (e) => {
+    if (e.button !== 0 || !(e.target instanceof Element)) return;
+    if (region(e.target) !== "drag" || e.target.closest(controls)) return;
+    e.preventDefault();
+    post({ t: e.detail === 2 ? "dblclick" : "drag" });
+  }, true);
   // An Escape no handler of the page called preventDefault on: a flyout or a panel closes on it.
   addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || e.isComposing) return;

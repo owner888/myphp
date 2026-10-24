@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Native\Docs;
 
 use Closure;
-use MyPHP\{App, Dialog, MessageOptions, MessageResult, OpenDialogOptions, SaveDialogOptions, Window};
+use MyPHP\{App, Dialog, MessageOptions, MessageResult, OpenDialogOptions, PathName, SaveDialogOptions, Window};
 
 /**
  * What documents ask of the app: dialogs, the run loop's turns and timers,
@@ -28,7 +28,7 @@ final class Host
     public static ?Closure $after = null;
     /** @var ?Closure(): float the time in seconds */
     public static ?Closure $now = null;
-    /** Where the recovery copies go, App::userDataPath() when null. */
+    /** Where the recovery copies go, App::path(PathName::UserData) when null. */
     public static ?string $dataDir = null;
     /** @var ?Closure(): void quits once the documents are taken care of (mygo's quitAgain) */
     public static ?Closure $quit = null;
@@ -68,7 +68,7 @@ final class Host
 
     public static function dataDir(): string
     {
-        return self::$dataDir ?? App::userDataPath();
+        return self::$dataDir ?? App::path(PathName::UserData);
     }
 
     public static function quit(): void

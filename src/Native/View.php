@@ -29,6 +29,8 @@ final class View
     private static bool $defined = false;
     /** @var array<int, mixed> the last left press of each view, retained, by view address: a native drag begins with it */
     private static array $lastDown = [];
+    /** @var array<int, Closure(float, float): bool> by view address: whether the pointer at a point of the view is a web view's under it (Window's web views) */
+    public static array $passThrough = [];
 
     /** Creates the view through $metal with $draw as its frame callback. */
     public static function create(Metal $metal, $frame, Input $input, Closure $draw)
@@ -53,6 +55,7 @@ final class View
     public static function forget($view): void
     {
         $key = ObjC::addr($view);
+        unset(self::$passThrough[$key]);
         if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
         unset(self::$lastDown[$key]);
     }
@@ -99,6 +102,17 @@ final class View
         };
         ObjC::defineClass('MyPHPView', 'MTKView', [
             'isFlipped' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
+            // Where a web view under the content takes the pointer, the view is not hit: AppKit looks under it, at the web view (mygo's surface hitTest:).
+            'hitTest:' => ['@@:{CGPoint=dd}', 'p(ppq)', function ($self, $cmd, $point) {
+                $pass = self::$passThrough[ObjC::addr($self)] ?? null;
+                if ($pass !== null) {
+                    $p = ObjC::msg('q:qp', $self, 'convertPoint:fromView:', $point, ObjC::msg('p:', $self, 'superview'));
+                    if ($pass($p->x, $p->y)) {
+                        return null;
+                    }
+                }
+                return ObjC::msgSuper('p:q', $self, 'MTKView', 'hitTest:', $point);
+            }],
             'acceptsFirstResponder' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
             'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => true],
             // A press in the title bar region of a hidden title bar reaches the view, not AppKit's window move and double-click zoom: Node::dragWindow handles do those.
@@ -329,6 +343,20 @@ final class View
         $input->push(['edit', $command]);
         Metal::requestFrame($self);
         return true;
+    }
+
+    /** A command of a menu role for the node taking the view's input, as the Format menu's for a rich text editor (mygo's contentCommand). */
+    public static function command($view, string $command): void
+    {
+        self::$inputs[ObjC::addr($view)]->push(['edit', $command]);
+        Metal::requestFrame($view);
+    }
+
+    /** A selector of the text system for the content, as Tab leaving a web view's page moves the focus on (mygo's WebViewTabOut). */
+    public static function keyCommand($view, string $selector): void
+    {
+        self::$inputs[ObjC::addr($view)]->push(['command', $selector]);
+        Metal::requestFrame($view);
     }
 
     /** An editing command with no field nor node taking its input: the runtime gives Copy and Select All to selectable text that has the focus. */

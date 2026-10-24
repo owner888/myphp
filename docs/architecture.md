@@ -375,7 +375,7 @@ the popup returned, so the action records the choice in `Runtime`
 (`chosen`).
 
 `link()` is accent text with an underline whose click calls
-`Runtime::$openURL` (App::openURL → `NSWorkspace openURL:`); while it is
+`Runtime::$openURL` (Shell::openExternal → `NSWorkspace openURL:`); while it is
 hovered `Runtime::$cursor` is 'pointer' and `Window::showCursor` sets
 `NSCursor pointingHandCursor`. `progress()` fills a share of its width,
 or, below zero, sweeps a third of the bar across every 1.5 s, asking for
@@ -1024,9 +1024,16 @@ user scrolling up (atEnd false) stops that until they return to the end.
 
 ## Page path
 
-`Native\WebView` builds a WKWebViewConfiguration with a user script
-(`bridge.js` with the window's config spliced in, injected at document
-start) and a script message handler named `myphp`. The page's
+A window's page, or a web view's, is a `Page` (mygo's), which owns the
+`Native\WebView`, its secret, the context of its document's calls, its
+channels and its events. `Native\WebView` builds a WKWebViewConfiguration
+with a content controller of its own (also for window.open()'s, whose
+configuration WebKit hands over: messages and scripts never leak between
+pages), its user scripts (`bridge.js` with the page's config spliced in —
+platform, window, version, secret, locale, dir — the preferences as an
+event, the title bar's room for a hidden title bar, the preload script,
+all at document start, replaced together as they change) and a script
+message handler named `myphp`. The page's
 `window.myphp.call` posts `{t:"call", id, k, m, a}` as JSON; the handler
 closure hands the body to `Ipc::handle`, which checks the secret, finds
 "Service.method" among the bound services, calls it with the JSON
@@ -1045,8 +1052,9 @@ number) and `Ipc::handle` turns the number back into a `Channel` for each
 parameter typed `MyPHP\Channel`. `send()` delivers `{t:"chan", c, k, p}`
 at once, `close()` `{..., end: true}`, and the page's `chan-close`
 (from `close()` or breaking out of `for await`) marks the channel closed
-so the next `send()` throws `ChannelClosed`; a new page (`dom-ready`) or
-the window closing closes them all. Flow control is mygo's: a channel
+so the next `send()` throws `ChannelClosed`; a new document (the
+navigation's commit) or the page going closes them all. Events sent
+before the DOM is ready wait for it (`Page::event`, at most 1024). Flow control is mygo's: a channel
 counts the bytes of the messages it sent, asks the page to acknowledge
 one every half of a 1 MiB window (`"a":1`), and the page posts
 `chan-ack` with the value's number once it takes it (from the iterator or
@@ -1070,7 +1078,7 @@ plain method does. `TypeScript` writes `Channel<T>` from a
 isMaximized, toggleFullScreen, close, setTitle) are calls to
 `myphp:window.<Name>` that `Ipc::handle` routes to the window the message
 came from, mygo's names; macOS's maximize is `zoom:`.
-`WindowOptions::$preload` is a second WKUserScript at document start,
+`PageOptions::$preloadScript` is a later WKUserScript at document start,
 after the bridge, so it sees `window.myphp` and the page's scripts see
 what it defines.
 
@@ -1101,7 +1109,7 @@ press) asks the next frame for that node's menu: its function runs
 collecting the items (`UI\Menu`, `UI\MenuItem`, a `MenuRun`), the runtime
 keeps them as `MyPHP\MenuItem`s, and once the frame is done
 `Runtime::$popupMenu` shows them; the window's pops an NSMenu at the point
-after the frame (`Menu::popupAtPoint` from `App::later`), each item
+after the frame (`Menu::popupAt` from `App::later`), each item
 reporting its place. The choice reaches the function in the next frame,
 where `chosen()` finds the item by its place and label, and the frame is
 built again. A text input's or selectable text's menu, when no context
@@ -1357,11 +1365,15 @@ could not see paths anyway.
 Window events come from `NSWindowDelegate` (one shared delegate, the
 window found by the notification's object): `windowShouldClose:` runs the
 'close' listeners with a `CloseEvent` whose `cancel()` keeps the window,
-the rest map one to one. `WindowOptions::$stateKey` keeps the frame in
-`window-state.json` under `App::userDataPath()` (~/Library/Application
-Support/<name>): captured on move and resize while not minimized or full
-screen, applied with `setFrame:display:` after creation, saved when a
-window closes and in `applicationWillTerminate:`.
+the rest map one to one. `WindowOptions::$stateKey` keeps a `WindowState`
+(mygo's: the normal bounds in top-left screen points, maximized, full
+screen) in the `WindowStateStore` (`App::setWindowStateStore`, else
+`window-state.json` under `App::path(PathName::UserData)`): captured 0.3 s
+after the window last moved, resized or changed state, as zooming and
+full screen resize it on the way, and as it closes; restored where it
+shows on a display (100 by 50 points of a work area at least), else at
+its size within the primary's, centered; saved when a window closes and
+in `applicationWillTerminate:`.
 
 `Process` runs a child without blocking the UI, which has no threads: a
 `proc_open` with non-blocking pipes, polled every 16 ms with
@@ -1923,7 +1935,7 @@ line. The window is mygo's page.html over the myphp bridge: `watch`
 streams the session's views (a generator that polls the session's change
 count), `fit` and `respond` answer it, and only the session's window may
 call them (its `CallContext`). Links of the release notes open in the
-browser through the window's `willNavigate` event, a WKNavigationDelegate
+browser through its page's `willNavigate` event, a WKNavigationDelegate
 on every page's web view that asks the window about navigations of the
 main frame the app did not start (the loads of `WindowOptions`' html and
 url pass). The tests drive the fibers with `Fibers::runUntil`; mind that
@@ -2193,6 +2205,61 @@ content box, inside their padding, as mygo's: the theme's is padded by
 half its knob. The gradient fill and stroke of a path paint its mask
 from the glyph atlas as a box quad flagged 8, its gradient in the box's
 second slot.
+
+## App, page, menus and web views (v1.09)
+
+The quit is mygo's sequence: `applicationShouldTerminate:` asks
+`App::shouldQuit`, which runs the onBeforeQuit listeners, closes each
+window as the user would (its 'close' listeners may keep it, and then the
+app), then the onWillQuit listeners; while it closes them
+`App::quitting()` is true, and documents leave the closing alone, as the
+quit took care of them. The last window closing calls
+`App::lastWindowClosed`: the onWindowAllClosed listeners, or without any,
+a quit (documents' apps register one, as mygo's do).
+
+The page runtime keeps what PHP tells it: the preferences (`Theme`, as
+`ThemePreferences` encodes them) in `window.myphp.preferences` and the
+`--myphp-accent` and `--myphp-text-scale` variables, the language in
+`locale` and `dir`, told again on `dom-ready` (a page that started
+loading as the language changed had the one before; the runtime tells
+its listeners only of a language it did not have), the room of the window
+controls in `--myphp-titlebar-*`, all in a constructed style sheet,
+which a Content Security Policy allows. A press on an element whose
+`--app-region` (or `-webkit-app-region`) is drag posts `drag`, and the
+window moves with the web view's last mouseDown (`Native\WebView::lastDown`,
+as the message comes after the event); a double click posts `dblclick`.
+`Page::eval` is mygo's: `callAsyncJavaScript` (macOS 11) of the code as an
+expression, awaited and JSON-encoded; a SyntaxError means it is no
+expression, and it runs as an async function's body, nothing having run
+twice. The JavaScript panels (alert, confirm, prompt, a file input) are
+sheets of the page's window (`Dialog`), its completion handler called
+before the delegate returns, the run loop turning meanwhile.
+`window.open()` with a handler makes a window (`Window::opened`) with
+WebKit's configuration and returns its WKWebView, which WebKit loads.
+
+A web view in native UI (`Window::newWebView`, `Context::webView`) is a
+WKWebView in a flipped clip view under the Metal view, in the window's
+content view. Its node paints a hole: `DisplayList::hole` records the box
+quad's slots, and Metal draws them with a pipeline whose blending is
+(zero, one minus source alpha) for color and alpha, so what is there goes
+by the quad's coverage — rounded corners and the opacity fade the page in
+— and what paints after it shows over the page; a pass splits its draws
+at the holes, changing the vertex buffer's offset. The runtime notes
+where each shows (`Runtime::$webPlaces`: frame and visible clip, on whole
+pixels), and the window places and stacks the clip views in paint order
+after the frame, hides the others, and makes the layer non-opaque while
+holes show. The Metal view's `hitTest:` returns nil where
+`Runtime::webViewAt` says the pointer is a web view's — its node is what
+takes the pointer there, nothing painted over it taking it — and AppKit
+hits the web view under it. A web view's node the focus goes to (Tab)
+gives its page the keyboard.
+
+`Shell`, `Screen`, `Power` and `Theme` are AppKit's and CoreGraphics'
+calls (NSWorkspace, NSScreen with CGDisplayRotation and CGDisplayIsBuiltin,
+NSProcessInfo activities, IOPSCopyPowerSourcesInfo,
+CGEventSourceSecondsSinceLastEventType, NSApp's appearance), the C ones
+through `FFI::cdef` on their framework. A file's icon is drawn into an
+sRGB bitmap of the size asked for and encoded as PNG.
 
 ## Accessibility
 

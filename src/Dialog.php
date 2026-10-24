@@ -106,7 +106,7 @@ final class Dialog
         if ($o->detail !== '') {
             ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($o->detail));
         }
-        $buttons = $o->buttons ?: ['OK'];
+        $buttons = $o->buttons ?: [L10n::in(App::locale())->get('ok')];
         foreach ($buttons as $i => $label) {
             $b = ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($label));
             if ($i === $o->defaultButton) {
@@ -126,6 +126,42 @@ final class Dialog
         $code = self::run($alert, $o->parent);
         $checked = $o->checkboxLabel !== '' && ObjC::msg('l:', ObjC::msg('p:', $alert, 'suppressionButton'), 'state') === 1;
         return new MessageResult($code - self::FIRST_BUTTON, $checked);
+    }
+
+    /** @internal a page's prompt(): an alert with a text field, as $window's sheet; the text, or null when canceled (mygo's jsPrompt) */
+    public static function prompt(Window $window, string $prompt, string $default): ?string
+    {
+        $t = L10n::in(App::locale());
+        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
+        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($prompt));
+        ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('ok')));
+        ObjC::msg('v:p', ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('cancel'))), 'setKeyEquivalent:', ObjC::str("\e"));
+        $field = ObjC::msg('p:r', ObjC::alloc('NSTextField'), 'initWithFrame:', ObjC::rect(0, 0, 280, 24));
+        ObjC::msg('v:p', $field, 'setStringValue:', ObjC::str($default));
+        ObjC::msg('v:p', $alert, 'setAccessoryView:', $field);
+        ObjC::msg('v:p', ObjC::msg('p:', $alert, 'window'), 'setInitialFirstResponder:', $field);
+        $text = self::run($alert, $window) === self::FIRST_BUTTON ? ObjC::phpStr(ObjC::msg('p:', $field, 'stringValue')) : null;
+        ObjC::msg('v:', $field, 'release');
+        ObjC::msg('v:', $alert, 'release');
+        return $text;
+    }
+
+    /** @internal a page's file input: files, folders too with $dirs, several with $multiple, as $window's sheet; null when canceled (mygo's jsFileInput) @return ?list<string> */
+    public static function chooseForPage(Window $window, bool $multiple, bool $dirs): ?array
+    {
+        $panel = ObjC::msg('p:', ObjC::cls('NSOpenPanel'), 'openPanel');
+        ObjC::msg('v:b', $panel, 'setCanChooseFiles:', true);
+        ObjC::msg('v:b', $panel, 'setCanChooseDirectories:', $dirs);
+        ObjC::msg('v:b', $panel, 'setAllowsMultipleSelection:', $multiple);
+        if (self::run($panel, $window) !== self::MODAL_OK) {
+            return null;
+        }
+        $urls = ObjC::msg('p:', $panel, 'URLs');
+        $paths = [];
+        for ($i = 0, $n = ObjC::msg('L:', $urls, 'count'); $i < $n; $i++) {
+            $paths[] = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:L', $urls, 'objectAtIndex:', $i), 'path'));
+        }
+        return $paths;
     }
 
     public static function error(string $title, string $content): void

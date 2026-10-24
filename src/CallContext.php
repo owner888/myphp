@@ -20,13 +20,19 @@ final class CallContext
     private array $after = [];
     private int $next = 0;
 
-    /** @internal Ipc makes them, one per document of a window */
-    public function __construct(private readonly ?Window $window) {}
+    /** @internal pages make them, one per document */
+    public function __construct(private readonly ?Window $window, private readonly ?Page $page = null) {}
 
-    /** The window whose page called (mygo's CallerWindow). */
+    /** The window whose page called, the one a web view is in for a web view's page (mygo's CallerWindow). */
     public function window(): ?Window
     {
         return $this->window;
+    }
+
+    /** The page that called: a window's, or a web view's (mygo's CallerPage). */
+    public function page(): ?Page
+    {
+        return $this->page;
     }
 
     /** Whether the page went away (mygo's ctx.Err() != nil). */

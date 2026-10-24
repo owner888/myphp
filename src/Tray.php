@@ -39,17 +39,16 @@ final class Tray
             $this->setTitle($o->title);
         }
         if ($o->toolTip !== '') {
-            ObjC::msg('v:p', $this->button(), 'setToolTip:', ObjC::str($o->toolTip));
+            $this->setToolTip($o->toolTip);
         }
+        self::define();
+        $button = $this->button();
+        self::$byButton[ObjC::addr($button)] = $this;
+        ObjC::msg('v:p', $button, 'setTarget:', self::$target); // a menu, while there is one, takes the clicks instead
+        ObjC::msg('v:p', $button, 'setAction:', ObjC::sel('trayClicked:'));
+        ObjC::msg('l:L', $button, 'sendActionOn:', self::LEFT_UP | self::RIGHT_UP);
         if ($o->menu !== null) {
             $this->setMenu($o->menu);
-        } else {
-            self::define();
-            $button = $this->button();
-            self::$byButton[ObjC::addr($button)] = $this;
-            ObjC::msg('v:p', $button, 'setTarget:', self::$target);
-            ObjC::msg('v:p', $button, 'setAction:', ObjC::sel('trayClicked:'));
-            ObjC::msg('l:L', $button, 'sendActionOn:', self::LEFT_UP | self::RIGHT_UP);
         }
     }
 
@@ -90,8 +89,21 @@ final class Tray
         if ($image === null) {
             throw new RuntimeException('the tray icon is not an image');
         }
+        $size = ObjC::msg('z:', $image, 'size');
+        if ($size->h > 0) { // menu bar icons are 18 points tall
+            $s = ObjC::$c->new('CGSize');
+            [$s->w, $s->h] = [$size->w * 18 / $size->h, 18.0];
+            ObjC::msg('v:z', $image, 'setSize:', $s);
+        }
         ObjC::msg('v:b', $image, 'setTemplate:', $template);
         ObjC::msg('v:p', $this->button(), 'setImage:', $image);
+        ObjC::msg('v:', $image, 'release');
+    }
+
+    /** The text shown while the pointer rests on the icon (mygo's SetToolTip). */
+    public function setToolTip(string $tip): void
+    {
+        ObjC::msg('v:p', $this->button(), 'setToolTip:', ObjC::str($tip));
     }
 
     /** The text next to the icon. */
@@ -100,10 +112,21 @@ final class Tray
         ObjC::msg('v:p', $this->button(), 'setTitle:', ObjC::str($title));
     }
 
-    public function setMenu(Menu $menu): void
+    /** Sets the menu a click shows; null removes it, so that clicks reach onClick (mygo's SetMenu). */
+    public function setMenu(?Menu $menu): void
     {
-        $this->menu = $menu->build();
+        $old = $this->menu;
+        $this->menu = $menu?->build();
         ObjC::msg('v:p', $this->item, 'setMenu:', $this->menu);
+        if ($old !== null) { ObjC::msg('v:', $old, 'release'); }
+    }
+
+    /** Shows the tray's menu, as a click would (mygo's PopUpMenu): the status item places and tracks it, the icon highlighted; nothing without one. */
+    public function popUpMenu(): void
+    {
+        if ($this->menu !== null && $this->item !== null) {
+            ObjC::msg('v:p', $this->button(), 'performClick:', null);
+        }
     }
 
     /** Called on a left click, when the tray has no menu. Returns a function that removes the listener. */
@@ -150,10 +173,14 @@ final class Tray
         return $p->x >= $b->x && $p->y >= $b->y && $p->x < $b->x + $b->w && $p->y < $b->y + $b->h;
     }
 
-    /** Takes the icon out of the menu bar. */
-    public function remove(): void
+    /** Takes the icon out of the menu bar (mygo's Destroy). */
+    public function destroy(): void
     {
+        if ($this->item === null) {
+            return;
+        }
         unset(self::$byButton[ObjC::addr($this->button())]);
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar'), 'removeStatusItem:', $this->item);
+        $this->item = null;
     }
 }

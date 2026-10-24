@@ -510,10 +510,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: `Page.OnWillNavigate(NavigateEvent)`; `Power` with
     `OnSuspend`, `OnResume`, `OnLockScreen`, `OnUnlockScreen`, `KeepAwake`,
     `IsOnBattery`.
-  - myphp: the window's `willNavigate` event (`Window::on`, a
-    `NavigateEvent`), as myphp has no `Page`; `Power::onSuspend`,
-    `onResume`, `onLockScreen`, `onUnlockScreen`, without `KeepAwake` and
-    `IsOnBattery` yet.
+  - myphp: the page's `willNavigate` event (`Page::on`, a
+    `NavigateEvent`; on the window until v1.09); `Power::onSuspend`,
+    `onResume`, `onLockScreen`, `onUnlockScreen`, and since v1.09
+    `keepAwake`, `isOnBattery`, `idleTime`.
   - Why: what the updater needs, ported first.
 
 - **The game plugin** (v0.98)
@@ -582,12 +582,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `SetPermissionHandler` (the default trusts `PageOptions.TrustedOrigins`
     and the app's own origin), `OnWillDownload`, `OnDownloadDone`; sizes
     `PageLetter`… as variables.
-  - myphp: the same on `Window` (`findInPage()`, `print()`,
-    `printToPDF()`, `setPermissionHandler()`, the events `willDownload` and
-    `downloadDone`), as myphp has no `Page`; the default grants trusted
-    pages (WindowOptions' `trustedOrigins`, since v1.02); `PageSize::letter()`…
-    static methods.
-  - Why: myphp's window holds its page.
+  - myphp: the same on `Page` (`findInPage()`, `print()`, `printToPDF()`,
+    `setPermissionHandler()`, the events `willDownload` and
+    `downloadDone`; on `Window` until v1.09); the default grants trusted
+    pages (PageOptions' `trustedOrigins`); `PageSize::letter()`… static
+    methods.
+  - Why: PHP has no package variables of a struct type.
 
 ## Documents
 
@@ -629,8 +629,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     name a document's window; files on the command line open in
     development too.
   - myphp: `App::onBeforeQuit` with `QuitEvent::cancel()` (as
-    `CloseEvent`), `App::onActivate`, `App::$quitOnLastWindowClosed`
-    turned off; the events `myphp:document-state` and
+    `CloseEvent`), `App::onActivate`, `App::onWindowAllClosed` (since
+    v1.09; a flag before); the events `myphp:document-state` and
     `myphp:document-reload`, taken with `window.myphp.on`; pages don't
     name myphp's windows anyway; files on the command line are the
     bundle's (`DeepLink`), so `examples/documents` opens its own.
@@ -959,10 +959,83 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     of the text written to it as the replacement of what changed.
   - Why: myphp's immediate mode builds in order; its inputs edit
     `TextState`s.
-- **Web views in native UI**
-  - mygo: `ui.WebView(c, v)` shows a `NativeWebView` of the window in the
-    element, a hole painted through the content; `Content.AttachContent`.
-  - myphp: none yet; it comes with the page API of windows (v1.09).
-  - Why: a web view of its own needs the page API on objects other than
-    windows.
+- **Web views in native UI** (v1.09)
+  - mygo: `ui.WebView(c, v)` shows a `NativeWebView` in an element whose
+    children paint over it; `Content.AttachContent` connects content to
+    a window; a web view moves into the accessibility tree of the
+    content.
+  - myphp: `Context::webView($v)` is a leaf node, what paints over it
+    painted after it (an absolute node, an overlay); no
+    `AttachContent`, as the window makes its view itself; the page is
+    VoiceOver's own, beside the content's elements.
+  - Why: myphp's leaves take no children; its windows build their own
+    views.
+
+## App, window, page and menus (v1.09)
+
+- **The page**
+  - mygo: `Window.Page()` returns a `Page` with `LoadURL`, `LoadFile`,
+    `Eval`, `EvalContext`, `EvalAs[T]`, `OnDOMReady`… methods, each event
+    its own `On…`; `WindowOptions.Page` a `PageOptions`.
+  - myphp: `Window::page()` returns a `Page` with the same methods,
+    `eval()` decoding to PHP's values (no `EvalContext`: a call waits,
+    the run loop turning, until the page answers or goes; no `EvalAs`),
+    the events by name, `Page::on('domReady', $fn)` as `Window::on`;
+    `WindowOptions::$page` and `FlyoutOptions::$page`; `capture()` for
+    `CapturePage` of a page (`Window::capturePage` for both).
+  - Why: PHP has no generics nor contexts; myphp's events go through
+    `on()`.
+- **Events of the app**
+  - mygo: `NewEvent[T](name)` with `Emit`, `EmitPage`, `Broadcast`;
+    `RunOnMain`.
+  - myphp: `new Event($name, $payloadType)`, the type a PHP class or
+    type name for the TypeScript client; no `RunOnMain`: everything runs
+    on the main thread (`App::later` defers).
+  - Why: PHP has no generics and one thread.
+- **App, Dock, Shell, Screen, Theme**
+  - mygo: `App.Exit`, `SetActivationPolicy`, `Focus`, `Hide`, `Show`,
+    `IsHidden`, `SetBadgeCount`, `ShowAboutPanel`, `ClearBrowsingData`,
+    `Path`/`SetPath` returning errors, `App.Dock`; `Shell.OpenExternal`…;
+    `Screen.Displays()`, `Theme.Preferences()` with a `color.NRGBA`
+    accent.
+  - myphp: static methods of `App`, `Dock`, `Shell`, `Screen`, `Theme`,
+    throwing; `App::path(PathName::Resources)` is the project's
+    resources directory, which `myphp build` copies with the app
+    (Contents/Resources/app/resources), without directories by platform;
+    `PathName::Exe` the bundle's executable, else PHP's;
+    `ThemePreferences::$accent` 0xRRGGBB or null; `App::webViewAvailable`
+    answers once the app runs.
+  - Why: PHP's statics; myphp's bundles keep the app's files in
+    Resources/app.
+- **Notifications**
+  - mygo: `Notification.Show` waits for the system and returns
+    `ErrNotificationsDenied` when the user does not allow them.
+  - myphp: `show()` returns at once and tells no denial; `onClick`,
+    `clear()` (pending ones too) are mygo's.
+  - Why: UNUserNotificationCenter answers on a background queue, where
+    PHP cannot run.
+- **Windows**
+  - mygo: `SetSkipTaskbar`, `SetIcon`, `SetMenu`, `SetAutoHideMenuBar`,
+    which do nothing on macOS; window state captured 300 ms after it
+    settles.
+  - myphp: none of the four yet, as they wait for Linux and Windows;
+    the same state, timed with `App::after`.
+  - Why: the Mac is done first.
+- **Menus and trays**
+  - mygo: `Menu.Items()`, `Append`, `Insert`, `PopupAt(win, x, y)`,
+    `MenuItem` with `Hidden`, `ToolTip`, radio items; the Format, View,
+    Speech, Services, Window and Help roles; `Tray.Destroy`.
+  - myphp: the same (`Menu::popupAt`, `Tray::destroy`, renamed from
+    `remove`); a radio item knows its group from the menu or the item
+    holding it.
+  - Why: mygo's names.
+- **Page runtime**
+  - mygo: mygo-runtime's `preferences()`, `onPreferences`, `locale()`,
+    `direction()`, `onLocaleChange`, `once`, `onFileDrop`; the bridge
+    tells the drop's place, the page's own drops keep working.
+  - myphp: `window.myphp.preferences`, `locale`, `dir`, `once`, the
+    events `myphp:preferences`, `myphp:locale`, `myphp:file-drop` and
+    `myphp:title-bar`, the CSS variables `--myphp-*`; files dropped on a
+    page are the window's, as before.
+  - Why: myphp has no runtime package; its drops are native.
 

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Access, Dock, Drag, Drop, Metal, ObjC, Pasteboard, Screens, View, WebView};
+use MyPHP\Native\{Access, Dock, Drag, Drop, Metal, ObjC, Pasteboard, Screens, View, WindowStates};
 use MyPHP\Transfer\{Data, DragOptions, Format, Operation, Result};
 use MyPHP\UI\{AccessTree, Context, DataDragEvent, DisplayList, Image, Input, Layout, Painter, Runtime};
 use RuntimeException;
@@ -78,13 +78,13 @@ final class Window
     /** The window's background (setBackgroundColor), and whether it is transparent (WindowOptions::$transparent). */
     private ?Background $background = null;
     private bool $transparent = false;
-    private ?WebView $page = null;
-    private string $secret = '';
-    private bool $pageReady = false;
-    /** The context of the calls of the page shown now, made on its first call. */
-    private ?CallContext $callContext = null;
-    /** @var list<\Closure> */
-    private array $whenPageReady = [];
+    private ?Page $page = null;
+    /** @var list<WebView> the web views of native UI (newWebView) */
+    private array $webViews = [];
+    /** The node of a web view the runtime's focus was on last frame, which gave its page the keyboard. */
+    private ?int $webFocus = null;
+    /** The WKWebViewConfiguration WebKit hands over for window.open(), while Window::opened() makes the window. */
+    private static $opening = null;
     public readonly int $id;
     public readonly ?Input $input;
     public readonly ?Runtime $runtime;
@@ -92,13 +92,7 @@ final class Window
     /** @var array<string, list<\Closure>> listeners by event */
     private array $listeners = [];
     private string $stateKey = '';
-    /** @var list<string> WindowOptions::$trustedOrigins */
-    private array $trustedOrigins = [];
-    /** Whether the window has developer tools (WindowOptions::$devTools). */
-    private bool $devTools = false;
-    /** @var array<int, Channel> open channels by the page's id */
-    private array $channels = [];
-    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop', 'willNavigate', 'willDownload', 'downloadDone'];
+    public const EVENTS = ['close', 'closed', 'focus', 'blur', 'show', 'hide', 'readyToShow', 'resize', 'move', 'maximize', 'unmaximize', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen', 'fileDrop'];
     /** @var array<int, Window> by content view address, for drops */
     private static array $byView = [];
 
@@ -107,7 +101,7 @@ final class Window
         if (!App::isReady()) {
             throw new RuntimeException('create windows from App::whenReady()');
         }
-        if ($o->content === null && $o->html === null && $o->url === null) {
+        if ($o->content === null && $o->html === null && $o->url === null && self::$opening === null) {
             throw new RuntimeException('WindowOptions needs content, html or url');
         }
         $this->id = self::$nextId++;
@@ -122,7 +116,7 @@ final class Window
         $this->input = $o->content === null ? null : new Input();
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
         if ($this->runtime !== null) {
-            $this->runtime->openURL = App::openURL(...);
+            $this->runtime->openURL = Shell::openExternal(...);
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->writeClipboardData = Pasteboard::writeData(...);
@@ -137,7 +131,7 @@ final class Window
                     }
                 };
                 $wire($items);
-                App::later(fn() => (new Menu($items))->popupAtPoint($this, $x, $y)); // after the frame, as mygo's host shows it after the event
+                App::later(fn() => (new Menu($items))->popupAt($this, $x, $y)); // after the frame, as mygo's host shows it after the event
             };
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
@@ -156,91 +150,29 @@ final class Window
         }
 
         $this->stateKey = $o->stateKey;
-        $this->trustedOrigins = $o->trustedOrigins;
-        $this->devTools = $o->devTools->on();
-        if ($this->runtime !== null && $this->devTools) {
+        if ($this->runtime !== null && $o->page->devTools->on()) {
             $this->runtime->inspector = new UI\Inspector(); // F12, Alt+Cmd+I and the menu's Toggle Developer Tools open it
         }
         $this->parent = $o->parent; $this->modal = $o->modal;
-        $saved = $o->stateKey !== '' ? WindowState::get($o->stateKey) : null;
+        $saved = $o->stateKey !== '' ? WindowStates::get($o->stateKey) : null;
+        if ($saved !== null && ($saved->width <= 0 || $saved->height <= 0)) { $saved = null; }
         if ($this->flyout !== null) {
             $this->createFlyout($o);
         } else {
-            $this->createWindow($o, $saved);
+            $this->createWindow($o);
         }
         $this->trafficLights = $o->trafficLightPosition;
         $this->setTitle($o->title ?? App::name());
 
         if ($o->content === null) {
-            $this->secret = bin2hex(random_bytes(16));
-            $this->page = WebView::create(ObjC::rect(0, 0, $o->width, $o->height),
-                ['platform' => 'darwin', 'windowId' => $this->id, 'version' => App::VERSION, 'secret' => $this->secret],
-                function (string $raw) {
-                    if ($raw === '{"t":"page"}') { // a document starts, before its scripts: the last one's calls end
-                        $this->callContext?->cancel();
-                        $this->callContext = null;
-                        return;
-                    }
-                    if ($raw === '{"t":"dom-ready"}') {
-                        $this->pageReady = true;
-                        $this->readyToShow();
-                        $this->dropChannels(); // a new page: the old one's channels are gone
-                        $callbacks = $this->whenPageReady;
-                        $this->whenPageReady = [];
-                        foreach ($callbacks as $fn) {
-                            $fn();
-                        }
-                        return;
-                    }
-                    if ($raw === '{"t":"escape"}') { // an Escape the page left (no handler called preventDefault)
-                        $this->escape();
-                        return;
-                    }
-                    $reply = Ipc::handle($raw, $this->secret, $this);
-                    if ($reply !== null) {
-                        $this->page->deliver($reply);
-                    }
-                }, $o->preload, $this->devTools);
-            $this->view = $this->page->ns;
-            $this->page->onNavigate = function (string $url, bool $user): bool {
-                $e = new NavigateEvent($url, $user);
-                foreach ($this->listeners['willNavigate'] ?? [] as $fn) {
-                    $fn($e);
-                }
-                return !$e->prevented;
-            };
-            $this->page->onPermission = function (array $kinds, string $origin): bool {
-                $req = new PermissionRequest($kinds, $origin);
-                return $this->permissionHandler !== null ? (bool)($this->permissionHandler)($req) : $origin === '://' || $this->trusts($origin); // '://': the window's html, of no origin
-            };
-            $this->page->onDownload = function (string $url, string $suggested): ?string {
-                $e = new DownloadEvent($url, self::downloadName($suggested), '');
-                $dir = getenv('HOME') . '/Downloads';
-                if (is_dir($dir) || @mkdir($dir, 0755, true)) {
-                    $e->path = self::uniquePath("$dir/{$e->suggestedName}");
-                }
-                foreach ($this->listeners['willDownload'] ?? [] as $fn) {
-                    $fn($e);
-                }
-                return $e->prevented || $e->path === '' ? null : $e->path;
-            };
-            $this->page->onDownloadDone = function (string $url, string $path, ?string $error): void {
-                $d = new Download($url, $path, $error);
-                foreach ($this->listeners['downloadDone'] ?? [] as $fn) {
-                    $fn($d);
-                }
-            };
-            $this->page->onScheme = function (array $r, Native\SchemeTask $task): void {
-                [$method, $url, $headers, $body] = $r;
-                Native\Scheme::serve(new ProtocolRequest($method, $url, $headers, $body, $this), $task, $this->trusts(...));
-            };
-            $this->page->onSchemeDownload = function (string $url): void {
-                App::later(fn() => Native\Scheme::download($url, new ProtocolRequest('GET', $url, [], '', $this), $this->page->onDownload, $this->page->onDownloadDone));
-            };
-            if ($o->html !== null) {
+            $opening = self::$opening;
+            self::$opening = null;
+            $this->page = new Page($this, null, ObjC::rect(0, 0, $o->width, $o->height), $o->page, $opening);
+            $this->view = $this->page->web->ns;
+            if ($opening === null && $o->html !== null) {
                 $this->page->loadHTML($o->html);
-            } else {
-                $this->loadURL($o->url);
+            } elseif ($opening === null) {
+                $this->page->loadURL($o->url); // WebKit loads window.open()'s itself
             }
         } else {
             $this->view = $this->nativeView($o);
@@ -294,28 +226,48 @@ final class Window
             foreach ($w->listeners['fileDrop'] ?? [] as $fn) {
                 $fn($e);
             }
+            $w->page?->filesDropped($paths, $x, $y);
         });
+        [$fullScreen, $maximized] = [$o->fullScreen, $o->maximized];
         if ($this->flyout !== null) {
             $this->placeFlyout();
-        } elseif ($saved === null && $o->x === 0 && $o->y === 0) {
-            $this->center();
-        } elseif ($saved === null) {
-            $b = $this->bounds();
-            $this->setBounds(new Rectangle($o->x, $o->y, $b->width, $b->height));
+        } elseif ($saved !== null) { // where the state key left it, as long as it shows on a display; else at its size, as far as the display allows, centered (mygo's restoreWindowState)
+            $r = new Rectangle($saved->x, $saved->y, $saved->width, $saved->height);
+            $displays = Screens::displays();
+            if (WindowStates::onDisplay($r, array_column($displays, 'workArea'))) {
+                $this->setBounds($r);
+            } else {
+                $wa = $displays[0]['workArea'] ?? null;
+                ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect(0, 0, $wa === null ? $r->width : min($r->width, $wa->width), $wa === null ? $r->height : min($r->height, $wa->height)), false);
+                $this->center();
+            }
+            [$fullScreen, $maximized] = [$saved->fullScreen, $saved->maximized];
+        } else {
+            if ($o->x === 0 && $o->y === 0) {
+                $this->center();
+            } else {
+                $b = $this->bounds();
+                $this->setBounds(new Rectangle($o->x, $o->y, $b->width, $b->height));
+            }
+            if ($this->stateKey !== '') { // the bounds it asked for, which a window that starts maximized or full screen has not shown yet (mygo's initState)
+                $b = $this->bounds();
+                WindowStates::set($this->stateKey, new WindowState($b->x, $b->y, $b->width, $b->height, $maximized, $fullScreen));
+            }
         }
-        if ($o->fullScreen) {
+        if ($fullScreen) {
             ObjC::msg('v:p', $this->ns, 'toggleFullScreen:', null);
-        } elseif ($o->maximized) {
+        } elseif ($maximized) {
             ObjC::msg('v:p', $this->ns, 'zoom:', null);
         }
         $this->maximized = $this->isMaximized();
         if (!$o->hidden) {
             $this->show();
         }
+        App::windowCreated($this);
     }
 
     /** The NSWindow of a window (not a flyout), with its style, title bar and limits. */
-    private function createWindow(WindowOptions $o, ?array $saved): void
+    private function createWindow(WindowOptions $o): void
     {
         $style = self::TITLED | ($o->disableClose ? 0 : self::CLOSABLE) | ($o->disableMinimize ? 0 : self::MINIATURIZABLE) | ($o->disableResize ? 0 : self::RESIZABLE);
         $hidden = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
@@ -327,10 +279,10 @@ final class Window
             $content = ObjC::rect(0, 0, $content->w, $content->h);
         }
         if ($this->panel) {
-            self::definePanels();
             $style |= self::NONACTIVATING; // from the start: the window server learns from the style it is created with that it never activates the app
         }
-        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc($this->panel ? 'MyPHPPanel' : 'NSWindow'), 'initWithContentRect:styleMask:backing:defer:', $content, $style, self::BACKING_BUFFERED, false);
+        self::definePanels();
+        $this->ns = ObjC::msg('p:rLLb', ObjC::alloc($this->panel ? 'MyPHPPanel' : 'MyPHPWindow'), 'initWithContentRect:styleMask:backing:defer:', $content, $style, self::BACKING_BUFFERED, false);
         ObjC::msg('v:b', $this->ns, 'setReleasedWhenClosed:', false);
         ObjC::msg('v:l', $this->ns, 'setTabbingMode:', 2); // NSWindowTabbingModeDisallowed
         if ($hidden || $o->frameless) { // as mygo's: the bar transparent and untitled, the traffic lights left; hiddenInset lowers them with an empty toolbar
@@ -358,9 +310,6 @@ final class Window
         if ($o->alwaysOnTop) { ObjC::msg('v:l', $this->ns, 'setLevel:', self::FLOATING_LEVEL); }
         ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
         if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
-        if ($saved !== null) {
-            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($saved['x'], $saved['y'], $saved['w'], $saved['h']), true);
-        }
     }
 
     /**
@@ -416,6 +365,7 @@ final class Window
                     return $c->root;
                 });
                 $paint = function () use ($root, $list, $text, $bounds, $in): void {
+                    $this->runtime->webPlaces = [];
                     $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
@@ -430,6 +380,9 @@ final class Window
                     $paint();
                 }
                 $in?->lap(2);
+                if ($this->webViews !== []) {
+                    $this->placeWebViews($bounds->h);
+                }
                 $this->showCursor($this->runtime->cursor);
                 if ($this->runtime->needsFrame) {
                     Metal::requestFrame($view);
@@ -443,31 +396,6 @@ final class Window
                 }
                 $this->readyToShow(); // it drew its first frame
             });
-    }
-
-    /** The channel the page numbered $id, for a call just made (Ipc). */
-    public function openChannel(int $id, string $secret): Channel
-    {
-        return $this->channels[$id] = new Channel(fn(array $m) => $this->page()?->deliver($m), fn() => $this->forgetChannel($id), $id, $secret);
-    }
-
-    public function channel(int $id): ?Channel
-    {
-        return $this->channels[$id] ?? null;
-    }
-
-    private function forgetChannel(int $id): void
-    {
-        unset($this->channels[$id]);
-    }
-
-    /** The page went away: every channel is closed on its side. */
-    private function dropChannels(): void
-    {
-        foreach ($this->channels as $ch) {
-            $ch->closedByPage();
-        }
-        $this->channels = [];
     }
 
     /**
@@ -543,37 +471,23 @@ final class Window
         if ($event !== null) { ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $event); }
     }
 
-    /** The window's web page, or null for native UI. */
-    public function page(): ?WebView
+    /** The web page the window shows, or null for a window showing native UI (mygo's Page). */
+    public function page(): ?Page
     {
         return $this->page;
     }
 
-    /**
-     * Opens the window's developer tools (mygo's OpenDevTools): a page's
-     * web inspector, docked in the window, or the inspector of native UI;
-     * nothing unless WindowOptions::$devTools turns them on.
-     */
-    public function openDevTools(): void
+    /** @internal the pages of the window: its own, or its web views' @return list<Page> */
+    public function pages(): array
     {
-        if (!$this->isDevToolsOpened()) { $this->toggleDevTools(); }
+        return $this->page !== null ? [$this->page] : array_values(array_map(fn(WebView $v) => $v->page(), $this->webViews));
     }
 
-    public function closeDevTools(): void
-    {
-        if ($this->isDevToolsOpened()) { $this->toggleDevTools(); }
-    }
-
-    public function isDevToolsOpened(): bool
-    {
-        return $this->page !== null ? $this->page->isDevToolsOpened() : ($this->runtime?->inspector?->open ?? false);
-    }
-
-    /** Opens or closes the developer tools: what the menu's Toggle Developer Tools does (MenuItem role toggleDevTools). */
+    /** @internal opens or closes the developer tools, as the menu's Toggle Developer Tools does: a page's web inspector, or the inspector of native UI */
     public function toggleDevTools(): void
     {
         if ($this->page !== null) {
-            $this->page->isDevToolsOpened() ? $this->page->closeDevTools() : $this->page->openDevTools();
+            $this->page->toggleDevTools();
         } elseif ($this->runtime?->inspector !== null) {
             $this->runtime->inspector->toggle($this->runtime);
         }
@@ -586,177 +500,6 @@ final class Window
         if ($screen === null || !ObjC::msg('b:p', $screen, 'respondsToSelector:', ObjC::sel('maximumFramesPerSecond'))) { return 60.0; } // macOS 12
         $hz = ObjC::msg('l:', $screen, 'maximumFramesPerSecond');
         return $hz > 0 ? (float)$hz : 60.0;
-    }
-
-    /** @internal the context of the calls of the page shown now (Ipc) */
-    public function callContext(): CallContext
-    {
-        return $this->callContext ??= new CallContext($this);
-    }
-
-    /** Sends an event to the window's page; nothing for native UI. */
-    public function send(string $name, mixed $payload = null): void
-    {
-        $this->page?->deliver(['t' => 'event', 'n' => $name, 'p' => $payload]);
-    }
-
-    /**
-     * Runs JavaScript in the page. With $then, it gets the script's value
-     * as the page's description of it (a string, "42", null) and the error
-     * message if it threw: $then(?string $value, ?string $error).
-     */
-    public function evaluate(string $js, ?\Closure $then = null): void
-    {
-        if ($this->page === null) {
-            return;
-        }
-        if ($then === null) {
-            $this->page->evaluate($js);
-            return;
-        }
-        $this->page->evaluate($js, ObjC::block('pp', function ($result, $error) use ($then) {
-            $then(
-                $result === null ? null : ObjC::phpStr(ObjC::msg('p:', $result, 'description')),
-                $error === null ? null : ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')),
-            );
-        }));
-    }
-
-    /** @var ?\Closure(PermissionRequest): bool */
-    private ?\Closure $permissionHandler = null;
-
-    /**
-     * Decides what the window's pages may use, as the camera and the
-     * microphone (mygo's Page.SetPermissionHandler): $fn returns whether
-     * to grant a request. Null restores the default: the app's own pages,
-     * those of WindowOptions' html and of file: URLs, get what they ask for,
-     * others do not. macOS may still ask the user once, which needs
-     * NSCameraUsageDescription and NSMicrophoneUsageDescription in the
-     * bundle's Info.plist, without which it ends the app.
-     */
-    public function setPermissionHandler(?\Closure $fn): void
-    {
-        $this->permissionHandler = $fn;
-    }
-
-    /**
-     * Whether the window's page may call the app's bound methods (mygo's
-     * trusted pages): the app's own (WindowOptions' html, file:, the
-     * frontend and the schemes Protocol serves), the dev server under
-     * `myphp dev`, and WindowOptions::$trustedOrigins. Documents tell
-     * these pages their paths; permissions are theirs by default.
-     */
-    public function isTrusted(): bool
-    {
-        return $this->page !== null && Native\Frontend::isTrusted($this->page->url(), $this->trustedOrigins);
-    }
-
-    /** @internal whether pages of $origin ("scheme://host") are trusted in this window, as for CORS */
-    public function trusts(string $origin): bool
-    {
-        return Native\Frontend::isTrusted($origin, $this->trustedOrigins);
-    }
-
-    /**
-     * Navigates the page to $url (mygo's Page.LoadURL). A URL without a
-     * scheme, "/" or "/settings?tab=1", is a page of the app's frontend
-     * (App::setFrontend): the dev server at devUrl during `myphp dev`, the
-     * frontend's files otherwise. Besides http(s) and file: URLs, the
-     * schemes Protocol serves load.
-     */
-    public function loadURL(string $url): void
-    {
-        $this->page ?? throw new RuntimeException('myphp: the window shows native UI, not a page');
-        $this->page->loadURL(Native\Frontend::resolve($url));
-    }
-
-    /** The file name a download suggests, without directories (mygo's DownloadStarted). */
-    public static function downloadName(string $suggested): string
-    {
-        $name = basename('/' . str_replace('\\', '/', $suggested));
-        return $name === '' || $name === '.' || $name === '..' ? 'download' : $name;
-    }
-
-    /** $path, or numbered as "name (2).ext" when a file has its name (mygo's uniquePath). */
-    public static function uniquePath(string $path): string
-    {
-        if (!file_exists($path) && !is_link($path)) {
-            return $path;
-        }
-        $ext = pathinfo($path, PATHINFO_EXTENSION);
-        $base = $ext === '' ? $path : substr($path, 0, -strlen($ext) - 1);
-        for ($i = 2; ; $i++) {
-            $p = "$base ($i)" . ($ext === '' ? '' : ".$ext");
-            if (!file_exists($p) && !is_link($p)) {
-                return $p;
-            }
-        }
-    }
-
-    /**
-     * Highlights the occurrences of $text in the page, scrolls to the
-     * active one and says how many there are, as a browser's find bar
-     * (mygo's Page.FindInPage): call it as the user types, and with
-     * findNext to go to the next match. Text split by markup, as
-     * "my<b>go</b>", is not found.
-     */
-    public function findInPage(string $text, FindOptions $opts = new FindOptions): FindResult
-    {
-        $this->page ?? throw new RuntimeException('myphp: the window shows no page');
-        $js = 'JSON.stringify(window.__myphp.find(' . json_encode($text, JSON_THROW_ON_ERROR) . ', ' . json_encode(['matchCase' => $opts->matchCase, 'backward' => $opts->backward, 'next' => $opts->findNext]) . '))';
-        $done = false;
-        $value = $error = null;
-        $this->evaluate($js, function (?string $v, ?string $e) use (&$done, &$value, &$error): void { [$done, $value, $error] = [true, $v, $e]; });
-        App::wait(function () use (&$done): bool { return $done || $this->destroyed; });
-        if ($error !== null || $value === null) {
-            throw new RuntimeException('myphp: finding in the page: ' . ($error ?? 'the window closed'));
-        }
-        $r = json_decode($value, true);
-        return new FindResult((int)($r['matches'] ?? 0), (int)($r['active'] ?? 0));
-    }
-
-    /** Removes the highlights of findInPage() (mygo's Page.StopFindInPage). */
-    public function stopFindInPage(): void
-    {
-        $this->evaluate('window.__myphp && window.__myphp.stopFind()');
-    }
-
-    /** Shows the print panel for the page (mygo's Page.Print). */
-    public function print(): void
-    {
-        ($this->page ?? throw new RuntimeException('myphp: the window shows no page'))->print($this->ns);
-    }
-
-    /**
-     * The page as a PDF document, laid out for printing (its print style
-     * sheets apply) on pages of the size $opts gives (mygo's
-     * Page.PrintToPDF): the PDF's bytes.
-     *
-     *     $pdf = $win->printToPDF(new PDFOptions(PageSize::a4(), background: true));
-     */
-    public function printToPDF(PDFOptions $opts = new PDFOptions): string
-    {
-        $page = $this->page ?? throw new RuntimeException('myphp: the window shows no page');
-        $size = $opts->pageSize ?? PageSize::letter();
-        $m = $opts->margins ?? new Margins(0.4, 0.4, 0.4, 0.4);
-        $result = null;
-        $page->printToPDF($this->ns, $size->width, $size->height, $opts->landscape, [$m->top, $m->right, $m->bottom, $m->left], $opts->background,
-            function (?string $pdf, ?string $error) use (&$result): void { $result = [$pdf, $error]; });
-        App::wait(function () use (&$result): bool { return $result !== null || $this->destroyed; });
-        if ($result === null) {
-            throw new RuntimeException('myphp: the window was closed while it printed');
-        }
-        return $result[0] ?? throw new RuntimeException($result[1]);
-    }
-
-    /** Calls $fn once the page's DOM is ready (at once if it already is). */
-    public function whenPageReady(\Closure $fn): void
-    {
-        if ($this->pageReady) {
-            $fn();
-            return;
-        }
-        $this->whenPageReady[] = $fn;
     }
 
     private static function delegate()
@@ -777,9 +520,12 @@ final class Window
                     if ($event === 'resize' || $event === 'move') {
                         $w->placeFlyouts(); // they stay next to their anchors, in the work area
                     }
+                    if ($event === 'enterFullScreen' || $event === 'leaveFullScreen') {
+                        $w->page?->sendTitleBar(); // the controls hide in full screen
+                    }
                     $w->emit($event);
-                    if ($event === 'resize' || $event === 'move') {
-                        $w->captureState();
+                    if (in_array($event, ['resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'], true)) {
+                        $w->stateChanged();
                     }
                 }
             };
@@ -867,29 +613,24 @@ final class Window
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); }
-        $this->dropChannels();
-        $this->callContext?->cancel(); // the page goes with the window
-        $this->callContext = null;
+        $this->page?->destroy(); // the page goes with the window, its web views' too
+        foreach ($this->webViews as $v) { $v->destroy(); }
         $this->captureState();
-        WindowState::save();
+        WindowStates::save();
         $this->emit('closed');
-        if (self::$closingParents === 0 && self::$open === [] && App::$quitOnLastWindowClosed) {
-            App::quit();
+        if (self::$closingParents === 0 && self::$open === []) {
+            App::lastWindowClosed();
         }
     }
 
     /**
      * Calls $fn on $event, one of EVENTS: close (with a CloseEvent to
-     * cancel), closed, focus, blur, resize, move, minimize, restore,
-     * enterFullScreen, leaveFullScreen, fileDrop (with a FileDropEvent:
-     * files dropped from other apps that no node took, Context::dropData
-     * or droppedFiles), willNavigate (with a NavigateEvent to prevent: the
-     * page going to another URL, mygo's Page.OnWillNavigate), willDownload
-     * (with a DownloadEvent, to choose where a download of the page goes or
-     * prevent it: a link with the download attribute, or a response the
-     * page cannot show; mygo's Page.OnWillDownload) and downloadDone (with
-     * a Download, mygo's Page.OnDownloadDone).
-     * Returns a function that removes it.
+     * cancel), closed, focus, blur, show, hide, readyToShow, resize, move,
+     * maximize, unmaximize, minimize, restore, enterFullScreen,
+     * leaveFullScreen, fileDrop (with a FileDropEvent: files dropped from
+     * other apps that no node took, Context::dropData or droppedFiles; a
+     * trusted page hears of them as myphp:file-drop too). The page's events
+     * are its own (Page::on). Returns a function that removes it.
      */
     public function on(string $event, \Closure $fn): \Closure
     {
@@ -909,14 +650,37 @@ final class Window
         }
     }
 
-    /** Remembers the frame under the state key, while not full screen or minimized. */
-    private function captureState(): void
+    /** The last change of the window's state captured, which stateChanged() waits to settle for. */
+    private int $stateChange = 0;
+
+    /** Captures the window's state once it stopped changing for 0.3 s (mygo's stateChanged): zooming and full screen transitions resize it on the way. */
+    private function stateChanged(): void
     {
-        if ($this->stateKey === '' || ObjC::msg('b:', $this->ns, 'isMiniaturized') || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) {
+        if ($this->stateKey === '') {
             return;
         }
-        $r = ObjC::msg('r:', $this->ns, 'frame');
-        WindowState::set($this->stateKey, $r->x, $r->y, $r->w, $r->h);
+        $n = ++$this->stateChange;
+        App::after(0.3, function () use ($n): void {
+            if ($n === $this->stateChange && !$this->destroyed) { $this->captureState(); }
+        });
+    }
+
+    /** Records the window's state under its key (mygo's captureState): whether it is maximized or full screen, and its bounds while it is neither, nor minimized. */
+    private function captureState(): void
+    {
+        if ($this->stateKey === '') {
+            return;
+        }
+        $prev = WindowStates::get($this->stateKey);
+        [$max, $full] = [$this->isMaximized(), $this->isFullScreen()];
+        $b = $prev === null ? null : new Rectangle($prev->x, $prev->y, $prev->width, $prev->height);
+        if (!$max && !$full && !$this->isMinimized()) {
+            $b = $this->bounds();
+        }
+        if ($b === null || $b->width <= 0 || $b->height <= 0) {
+            return;
+        }
+        WindowStates::set($this->stateKey, new WindowState($b->x, $b->y, $b->width, $b->height, $max, $full));
     }
 
     private \MyPHP\UI\Cursor $cursorShown = \MyPHP\UI\Cursor::Default;
@@ -980,6 +744,9 @@ final class Window
         $this->layoutTrafficLights(); // AppKit lays the title bar out again with the appearance
         if ($this->background !== null) {
             $this->applyBackground();
+        }
+        foreach ($this->webViews as $v) {
+            $v->applyBackground();
         }
         if ($this->page === null) {
             if (!$this->transparent && $this->effect === null) {
@@ -1543,6 +1310,186 @@ final class Window
         return $this->ns;
     }
 
+    /** @internal the page's DOM is ready, or it loaded: a window's own is ready to show */
+    public function pageReady(Page $p): void
+    {
+        if ($p === $this->page) {
+            $this->readyToShow();
+        }
+    }
+
+    /** @internal an Escape the window's page left: a flyout or a panel closes */
+    public function pageEscape(Page $p): void
+    {
+        if ($p === $this->page) {
+            $this->escape();
+        }
+    }
+
+    /** @internal a press on a drag region of the page ($clicks 1) moves the window, a double click ($clicks 2) zooms it as macOS is set to */
+    public function pageDrag(int $clicks): void
+    {
+        if ($clicks === 2) {
+            $this->dragWindow(2);
+        } elseif (($down = Native\WebView::lastDown()) !== null) {
+            ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $down);
+        }
+    }
+
+    /** @internal the page's <title> names the window, unless the window shows a document, which its name names */
+    public function pageTitled(string $title): void
+    {
+        if (Native\Docs\Registry::documentOf(Native\Docs\Registry::frameOf($this)) === null) {
+            $this->setTitle($title);
+        }
+    }
+
+    /** @internal whether the window hides its title bar, keeping the controls (WindowOptions::$titleBarStyle) */
+    public function hasHiddenTitleBar(): bool
+    {
+        return $this->hiddenTitleBar;
+    }
+
+    /**
+     * @internal a command of the Format menu's roles (mygo's contentCommand):
+     * on native UI, the node taking the keyboard's input runs it, as a
+     * rich text editor its selection; on a page, the editable one does
+     */
+    public function contentCommand(string $cmd): void
+    {
+        if ($this->page === null) {
+            View::command($this->view, $cmd);
+            return;
+        }
+        $exec = ['bold' => 'bold', 'italic' => 'italic', 'underline' => 'underline', 'strikethrough' => 'strikeThrough',
+            'alignLeft' => 'justifyLeft', 'alignCenter' => 'justifyCenter', 'alignRight' => 'justifyRight'][$cmd];
+        $this->page->web->evaluate("document.execCommand(\"$exec\")");
+    }
+
+    /** A PNG of what the window shows (mygo's CapturePage): its page as it shows, or its native UI as it is. */
+    public function capturePage(): string
+    {
+        if ($this->page !== null) {
+            return $this->page->capture();
+        }
+        [$frame, $w, $h] = App::metal()->lastFrame($this->view); // BGRA, premultiplied: 32-bit little-endian words with alpha first
+        $rep = ObjC::msg('p:pllllbbpLll', ObjC::alloc('NSBitmapImageRep'), 'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:',
+            null, $w, $h, 8, 4, true, false, ObjC::str('NSDeviceRGBColorSpace'), 1 | 1 << 9, $w * 4, 32) ?? throw new RuntimeException('myphp: capturePage: no bitmap');
+        \FFI::memcpy(ObjC::$c->cast('char*', ObjC::msg('p:', $rep, 'bitmapData')), $frame, strlen($frame));
+        $png = ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary')); // NSBitmapImageFileTypePNG
+        ObjC::msg('v:', $rep, 'release');
+        return $png === null ? throw new RuntimeException('myphp: capturePage: no PNG') : Native\Drag::bytes($png);
+    }
+
+    /**
+     * Creates a web view for the window's native UI, which shows it where
+     * its view places it with Context::webView (mygo's NewWebView); it
+     * closes with the window. Throws for a window showing a page.
+     */
+    public function newWebView(WebViewOptions $o = new WebViewOptions): WebView
+    {
+        if ($this->runtime === null) {
+            throw new RuntimeException('myphp: web views go in windows showing native UI (WindowOptions::$content)');
+        }
+        if ($this->destroyed) {
+            throw new RuntimeException('myphp: the window has been destroyed');
+        }
+        $v = new WebView($this, $this->container, $this->view, $o);
+        $this->webViews[] = $v;
+        View::$passThrough[ObjC::addr($this->view)] = fn(float $x, float $y): bool => $this->runtime->webViewAt($x, $y) !== null;
+        $this->invalidate();
+        return $v;
+    }
+
+    /** @internal a web view was destroyed */
+    public function forgetWebView(WebView $v): void
+    {
+        $this->webViews = array_values(array_filter($this->webViews, fn(WebView $w) => $w !== $v));
+        $this->invalidate();
+    }
+
+    /** @internal the native view of the content, which takes the keyboard back from a web view */
+    public function contentView()
+    {
+        return $this->view;
+    }
+
+    /**
+     * Shows the web views where the frame showed them, in its paint order
+     * under the native view, and hides the others (mygo's placeWebViews);
+     * the native view lets them show through its holes, and a web view's
+     * node the focus went to gives its page the keyboard.
+     */
+    private function placeWebViews(float $height): void
+    {
+        $places = [];
+        foreach ($this->runtime->webPlaces as $p) {
+            $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last
+        }
+        $layer = ObjC::msg('p:', $this->view, 'layer');
+        ObjC::msg('v:b', $layer, 'setOpaque:', $places === [] && !$this->transparent && $this->effect === null); // its holes let the web views show
+        $shown = [];
+        foreach ($this->webViews as $v) {
+            $p = $places[spl_object_id($v)] ?? null;
+            $v->place($p['frame'] ?? null, $p['clip'] ?? null, $height);
+        }
+        foreach ($places as $p) {
+            if (in_array($p['view'], $this->webViews, true)) { $shown[] = $p['view']; }
+        }
+        $this->stackWebViews($shown);
+        $focus = $this->runtime->focus;
+        $node = null;
+        foreach ($places as $p) {
+            if ($p['id'] === $focus) { $node = $p; }
+        }
+        if ($node !== null && $focus !== $this->webFocus) { // tabbed into, or focused: the page takes the keyboard
+            $this->runtime->focusFromKeyboard() ? $node['view']->tabInto(($this->input->mods & UI\Key::SHIFT) !== 0) : $node['view']->focus();
+        }
+        $this->webFocus = $node === null ? null : $focus;
+    }
+
+    /** Puts the clip views of the web views shown in the order the frame painted them, under the native view, unless they are (mygo's stackWebViews). @param list<WebView> $shown */
+    private function stackWebViews(array $shown): void
+    {
+        if (count($shown) < 2) {
+            return;
+        }
+        $subs = ObjC::msg('p:', $this->container, 'subviews');
+        $at = 0;
+        for ($i = 0, $n = ObjC::msg('L:', $subs, 'count'); $i < $n && $at < count($shown); $i++) {
+            if (ObjC::addr(ObjC::msg('p:L', $subs, 'objectAtIndex:', $i)) === ObjC::addr($shown[$at]->clipView())) { $at++; }
+        }
+        if ($at === count($shown)) {
+            return;
+        }
+        $first = ObjC::msg('p:', $this->ns, 'firstResponder'); // moving a view out of its superview takes the keyboard from it
+        foreach ($shown as $v) {
+            $clip = ObjC::msg('p:', $v->clipView(), 'retain');
+            ObjC::msg('v:', $clip, 'removeFromSuperview');
+            ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view);
+            ObjC::msg('v:', $clip, 'release');
+        }
+        if ($first !== null && ObjC::addr($first) !== ObjC::addr(ObjC::msg('p:', $this->ns, 'firstResponder'))) {
+            ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $first);
+        }
+    }
+
+    /** @internal makes the window of window.open() (mygo's NewWindow handler): with $opts, the size the page asked for, and WebKit's configuration, whose page WebKit loads */
+    public static function opened(WindowOptions $opts, int $width, int $height, $configuration): self
+    {
+        $o = clone $opts;
+        if ($width > 0 && $height > 0) {
+            [$o->width, $o->height] = [$width, $height];
+        }
+        [$o->url, $o->html, $o->content] = [null, null, null];
+        self::$opening = $configuration;
+        try {
+            return new self($o);
+        } finally {
+            self::$opening = null;
+        }
+    }
+
     /** Tells the 'readyToShow' listeners, once: the page is ready, or native UI drew its first frame. */
     private function readyToShow(): void
     {
@@ -1571,7 +1518,7 @@ final class Window
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
                 disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
-                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, preload: $o->preload, trustedOrigins: $o->trustedOrigins, devTools: $o->devTools));
+                parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, page: $o->page));
         } finally {
             self::$creating = null;
         }
@@ -2029,16 +1976,34 @@ final class Window
         }
     }
 
-    /** The panel classes: a panel (MyPHPPanel) takes the keyboard without activating the app and is never the main window; a flyout's (MyPHPFlyout) is the key window only when it takes the keyboard, its parent staying the main window. */
+    /** The window classes: a window (MyPHPWindow) and a panel give the keyboard back to native UI as Tab leaves a web view's page; a panel (MyPHPPanel) takes the keyboard without activating the app and is never the main window; a flyout's (MyPHPFlyout) is the key window only when it takes the keyboard, its parent staying the main window. */
     private static function definePanels(): void
     {
         if (self::$panelsDefined) {
             return;
         }
         self::$panelsDefined = true;
+        // WebKit moves the keyboard out of a page past its ends through the window's key view loop: a web view in native UI gives it back to the content (mygo's tabOut).
+        $keyView = fn(string $class, bool $back) => function ($self, $cmd, $view) use ($class, $back): void {
+            $w = self::$open[ObjC::addr($self)] ?? null;
+            foreach ($w?->webViews ?? [] as $v) {
+                if ($view !== null && $v->holds($view)) {
+                    ObjC::msg('b:p', $self, 'makeFirstResponder:', $w->view);
+                    View::keyCommand($w->view, $back ? 'insertBacktab:' : 'insertTab:'); // the focus moves on from the web view's node
+                    return;
+                }
+            }
+            ObjC::msgSuper('v:p', $self, $class, $back ? 'selectKeyViewPrecedingView:' : 'selectKeyViewFollowingView:', $view);
+        };
+        ObjC::defineClass('MyPHPWindow', 'NSWindow', [
+            'selectKeyViewFollowingView:' => ['v@:@', 'v(ppp)', $keyView('NSWindow', false)],
+            'selectKeyViewPrecedingView:' => ['v@:@', 'v(ppp)', $keyView('NSWindow', true)],
+        ]);
         ObjC::defineClass('MyPHPPanel', 'NSPanel', [
             'canBecomeKeyWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
             'canBecomeMainWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
+            'selectKeyViewFollowingView:' => ['v@:@', 'v(ppp)', $keyView('NSPanel', false)],
+            'selectKeyViewPrecedingView:' => ['v@:@', 'v(ppp)', $keyView('NSPanel', true)],
             // NSPanel closes on an Escape its content leaves (cancelOperation:), past windowShouldClose:: escape() closes it, as the user closing it.
             'cancelOperation:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {}],
         ]);

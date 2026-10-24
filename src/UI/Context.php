@@ -820,7 +820,7 @@ final class Context
         return $this->runtime?->focused($n->id) ?? false;
     }
 
-    /** A link: accent text, underlined, a hand pointer, focusable; clicking, or Enter while it has the focus, goes to $url: a path through the router whose page it is in (Router::push), else a URL the system opens (App::openURL). */
+    /** A link: accent text, underlined, a hand pointer, focusable; clicking, or Enter while it has the focus, goes to $url: a path through the router whose page it is in (Router::push), else a URL the system opens (Shell::openExternal). */
     public function link(string $s, string $url, ?float $size = null): Node
     {
         $n = $this->text($s, $size, $this->theme->accent)->focusable();
@@ -1027,7 +1027,7 @@ final class Context
                       $id = $k->id;
                       $menu[] = new MenuItem($label, function (MenuItem $it, ?Window $w) use ($rt, $id) { $rt->press($id); $w?->invalidate(); });
                   }
-                  if ($window !== null) { (new Menu($menu))->popupAt($window, $more->id, $rt); }
+                  if ($window !== null) { (new Menu($menu))->popupUnder($window, $more->id, $rt); }
               }
           }
         $this->toolbars--;
@@ -3492,7 +3492,7 @@ final class Context
                 $items[] = new MenuItem($o, function (MenuItem $it, ?Window $w) use ($rt, $id, $i) { $rt->chose($id, $i); $w?->invalidate(); }, checked: $i === $index, type: MenuItem::CHECKBOX);
             }
             if ($window !== null) {
-                (new Menu($items))->popupAt($window, $n->id, $rt);
+                (new Menu($items))->popupUnder($window, $n->id, $rt);
             }
         }
         return $n;
@@ -3575,5 +3575,37 @@ final class Context
     public function box(float $w, float $h, int $color): Node
     {
         return $this->add(new Node(Node::BOX, 0, 0, 0, $w, $h, 0, null, $color));
+    }
+
+    /**
+     * Shows a web view, made with Window::newWebView, in the node's content
+     * box (mygo's ui.WebView). A web view has no size of its own: the node
+     * stretches across its container, and takes the room along it with
+     * grow() or a size:
+     *
+     *     $c->row()->grow(1);
+     *       sidebar($c);
+     *       $c->webView($app->docs)->grow(1);
+     *     $c->end();
+     *
+     * The web view shows while a frame builds its node and hides when one
+     * does not, keeping its page. The node paints a hole through the
+     * window's content (the web view is under it), as rounded as its
+     * radius and cut by the scroll containers and clips around it, so that
+     * what paints after it shows over the page: popovers, menus, dialogs,
+     * tooltips and toasts. The page takes the pointer where it shows and
+     * nothing painted over it takes it, and the keyboard once clicked,
+     * focused (WebView::focus) or tabbed into: Tab stops at the node. Its
+     * background and border paint around the page, which its opacity
+     * fades.
+     */
+    public function webView(\MyPHP\WebView $v): Node
+    {
+        $n = $this->add(new Node(Node::BOX, 0, 0, 0, 0, 0, 0, null, null));
+        $n->webView = $v;
+        $n->self = Node::STRETCH;
+        $n->focusable = true; // Tab stops at it, to give its page the keyboard, which shows its own focus
+        $n->ownRing = true;
+        return $n;
     }
 }

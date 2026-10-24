@@ -10,7 +10,7 @@ Windows whose developer tools are on open it with View → Toggle Developer
 Tools (the menu role `toggleDevTools`), `F12` or `Alt+Cmd+I`, and
 `Shift+Cmd+C` opens it picking a node. Developer tools are on while the
 app runs from its project (`myphp dev`, `php app.php`), as the web
-inspector is, and `WindowOptions::$devTools` turns them on or off for a
+inspector is, and `PageOptions::$devTools` (`WindowOptions::$page`) turns them on or off for a
 window:
 
 ```php

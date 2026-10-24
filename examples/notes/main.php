@@ -8,7 +8,7 @@
 // Run: ./run.sh notes [folder]
 declare(strict_types=1);
 
-use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
+use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, ListState, Node, ScrollState, TextState};
 use MyPHP\UI\Markdown\{Markdown, Options};
 
@@ -145,8 +145,8 @@ final class Notes
     }
 }
 
-App::setName('Notes'); // before userDataPath(), which is named after the app
-$notes = new Notes($argv[1] ?? App::userDataPath() . '/notes');
+App::setName('Notes'); // before App::path(), which is named after the app
+$notes = new Notes($argv[1] ?? App::path(PathName::UserData) . '/notes');
 
 function view(Context $c, Notes $notes): void
 {

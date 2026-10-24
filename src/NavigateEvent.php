@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 /**
- * Given to a window's 'willNavigate' listeners before its page goes to
+ * Given to a page's 'willNavigate' listeners before it goes to
  * another URL, as a link or the page's script would take it (mygo's
  * NavigateEvent of Page.OnWillNavigate); preventDefault() keeps the page.
  * Loads the app starts (WindowOptions' html and url) are not told.

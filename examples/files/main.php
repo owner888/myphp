@@ -9,7 +9,7 @@
 // Run: ./run.sh files [folder]
 declare(strict_types=1);
 
-use MyPHP\{App, Menu, MenuItem, Window, WindowOptions};
+use MyPHP\{App, Menu, MenuItem, Shell, Window, WindowOptions};
 use MyPHP\UI\{Content, Context, Font, GridState, Image, Key, ListState, Node, Selection, SVG, TableColumn, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -117,7 +117,7 @@ final class Files
     {
         $e = $this->entries[$i] ?? null;
         if ($e === null) { return; }
-        if ($e['dir']) { $this->open($e['path']); } else { App::openURL('file://' . implode('/', array_map('rawurlencode', explode('/', $e['path'])))); }
+        if ($e['dir']) { $this->open($e['path']); } else { Shell::openPath($e['path']); }
     }
 
     /** Moves the entries chosen to the Trash, through Finder, and reads the folder again. */

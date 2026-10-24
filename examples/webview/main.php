@@ -8,7 +8,7 @@
 // TypeScript client: MYPHP_GENERATE=examples/webview/myphp.ts ./run.sh webview
 declare(strict_types=1);
 
-use MyPHP\{App, Channel, ChannelClosed, Ipc, TypeScript, Window, WindowOptions};
+use MyPHP\{App, Channel, ChannelClosed, Event, Ipc, PageOptions, Window, WindowOptions};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -23,6 +23,7 @@ final class Notes
 {
     /** @var Note[] */
     private array $items = [];
+    public static ?Event $added = null;
 
     /** Add creates a note and returns it. */
     public function add(string $title, ?string $body = null): Note
@@ -32,7 +33,7 @@ final class Notes
         }
         $note = new Note(count($this->items) + 1, $title, $body);
         $this->items[] = $note;
-        Ipc::emit('added', $note);
+        self::$added?->broadcast($note);
         return $note;
     }
 
@@ -76,7 +77,7 @@ final class Clock
 
 Ipc::bind(new Notes());
 Ipc::bind(new Clock());
-TypeScript::event('added', Note::class);
+Notes::$added = new Event('added', Note::class);
 
 $html = <<<'HTML'
 <!doctype html><meta charset="utf-8">
@@ -122,10 +123,11 @@ HTML;
 App::setName('Notes');
 App::whenReady(function () use ($html) {
     $w = new Window(new WindowOptions(title: 'MyPHP + WKWebView — Notes', width: 640, height: 480, html: $html,
-        preload: 'window.PRELOADED = "v' . App::VERSION . '";'));
+        page: new PageOptions(preloadScript: 'window.PRELOADED = "v' . App::VERSION . '";')));
     $w->on('fileDrop', fn($e) => printf("[PHP] dropped: %s\n", implode(', ', $e->paths))); // files dropped on the page reach PHP, not the page
     // PHP -> page -> PHP: run a script once the DOM is ready and read its value back.
-    $w->whenPageReady(fn() => $w->evaluate('document.querySelector("h2").firstChild.textContent.trim() + " / " + navigator.userAgent.split(" ").pop()',
-        fn(?string $value, ?string $error) => printf("[PHP] page says: %s\n", $error ?? $value)));
+    $w->page()->on('domReady', function () use ($w): void {
+        printf("[PHP] page says: %s\n", $w->page()->eval('document.querySelector("h2").firstChild.textContent.trim() + " / " + navigator.userAgent.split(" ").pop()'));
+    });
 });
 App::run();

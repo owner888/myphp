@@ -9,7 +9,9 @@ use RuntimeException;
 /**
  * A WKWebView with the MyPHP bridge installed: the bridge script runs at
  * document start, messages the page posts reach $onMessage, and deliver()
- * hands replies and events back to the page.
+ * hands replies and events back to the page. Its page's life — titles,
+ * navigations, loads, failures, a crash, window.open(), the JavaScript
+ * panels — reaches the hooks Page sets (mygo's darwin window.go).
  */
 final class WebView
 {
@@ -20,9 +22,9 @@ final class WebView
     private static array $views = [];
 
     public $ns;
-    /** Asked whether the page may go to a URL the app did not load: (url, userInitiated) → allowed. @var ?Closure(string, bool): bool */
+    /** Asked whether the main frame may go to a URL: (url, userInitiated, a reload, one the app started) → allowed. @var ?Closure(string, bool, bool, bool): bool */
     public ?Closure $onNavigate = null;
-    /** Loads the app starts, whose navigations are not asked about. */
+    /** Loads the app starts, whose navigations onNavigate is told it started. */
     private int $loads = 0;
     /** Asked whether the page may use the camera or the microphone: (list of "camera", "microphone", the page's origin) → granted. @var ?Closure(list<string>, string): bool */
     public ?Closure $onPermission = null;
@@ -34,6 +36,24 @@ final class WebView
     public ?Closure $onScheme = null;
     /** Serves a URL of a custom scheme into a download, which WebKit can't make of what a scheme handler serves. @var ?Closure(string): void */
     public ?Closure $onSchemeDownload = null;
+    /** The page's <title> changed. @var ?Closure(string): void */
+    public ?Closure $onTitle = null;
+    /** A navigation committed, at its URL. @var ?Closure(string): void */
+    public ?Closure $onCommit = null;
+    /** The page finished loading. @var ?Closure(): void */
+    public ?Closure $onFinish = null;
+    /** A load failed: (URL, code, description). @var ?Closure(string, int, string): void */
+    public ?Closure $onFail = null;
+    /** The page's web content process went away. @var ?Closure(string): void */
+    public ?Closure $onGone = null;
+    /** window.open(), or a target=_blank link: (URL, frame name, width, height, the configuration WebKit hands over) → the WKWebView to open it in, or null. @var ?Closure(string, string, int, int, mixed): mixed */
+    public ?Closure $onOpen = null;
+    /** The page called window.close(). @var ?Closure(): void */
+    public ?Closure $onClosedByPage = null;
+    /** Shows alert() (kind 'alert', the message), confirm() ('confirm', the message) → bool, prompt() ('prompt', the prompt, the default) → ?string, and a file input ('files', allows several, allows folders) → ?list<string>, as sheets. @var ?Closure(string, mixed...): mixed */
+    public ?Closure $onPanel = null;
+    /** The user content controller, whose scripts setUserScripts() replaces. */
+    private $ucc = null;
     private static $schemeHandler = null;
     private static $navigationDelegate = null, $uiDelegate = null;
     /** @var array<int, array{0: WebView, 1: string, 2: string}> the downloads under way by WKDownload address: their view, URL and path */
@@ -73,36 +93,174 @@ final class WebView
         return $in !== null && ObjC::msg('b:p', $in, 'respondsToSelector:', ObjC::sel('isVisible')) && ObjC::msg('b:', $in, 'isVisible');
     }
 
-    public static function create($frame, array $config, Closure $onMessage, string $preload = '', bool $devTools = false): self
+    /**
+     * A web view of $frame whose pages get $scripts at document start, the
+     * bridge first (mygo's createWebView): with the configuration WebKit
+     * handed over for window.open(), or a new one, either way with a
+     * content controller of its own, so that messages and scripts never
+     * leak between pages.
+     * @param list<string> $scripts
+     */
+    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0): self
     {
         self::define();
         $self = new self($onMessage);
-        $wk = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
-        foreach (\MyPHP\Protocol::schemes() as $scheme) { // the schemes PHP serves: handled before the view exists, as WebKit takes them only then
-            ObjC::msg('v:pp', $wk, 'setURLSchemeHandler:forURLScheme:', self::$schemeHandler, ObjC::str($scheme));
+        if ($configuration !== null) {
+            $wk = ObjC::msg('p:', $configuration, 'retain');
+        } else {
+            $wk = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
+            foreach (\MyPHP\Protocol::schemes() as $scheme) { // the schemes PHP serves: handled before the view exists, as WebKit takes them only then
+                ObjC::msg('v:pp', $wk, 'setURLSchemeHandler:forURLScheme:', self::$schemeHandler, ObjC::str($scheme));
+            }
         }
-        $ucc = ObjC::msg('p:', $wk, 'userContentController');
-        ObjC::msg('v:pp', $ucc, 'addScriptMessageHandler:name:', ObjC::msg('p:', ObjC::alloc('MyPHPScriptHandler'), 'init'), ObjC::str('myphp'));
-        $source = str_replace('__CONFIG__', json_encode($config, JSON_THROW_ON_ERROR), file_get_contents(__DIR__ . '/bridge.js'));
-        $script = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($source), self::INJECT_AT_DOCUMENT_START, true);
-        ObjC::msg('v:p', $ucc, 'addUserScript:', $script);
-        if ($preload !== '') {
-            $pre = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($preload), self::INJECT_AT_DOCUMENT_START, true);
-            ObjC::msg('v:p', $ucc, 'addUserScript:', $pre);
-        }
+        $prefs = ObjC::msg('p:', $wk, 'preferences');
+        $yes = fn(bool $b) => ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', $b);
         // The web inspector (mygo's DevTools): its context menu item, Safari's Develop menu (macOS 13.3), openDevTools.
-        ObjC::msg('v:pp', ObjC::msg('p:', $wk, 'preferences'), 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', $devTools), ObjC::str('developerExtrasEnabled'));
+        ObjC::msg('v:pp', $prefs, 'setValue:forKey:', $yes($devTools), ObjC::str('developerExtrasEnabled'));
+        ObjC::msg('v:pp', $prefs, 'setValue:forKey:', $yes(true), ObjC::str('allowFileAccessFromFileURLs'));
+        if (ObjC::msg('b:p', $prefs, 'respondsToSelector:', ObjC::sel('setElementFullscreenEnabled:'))) {
+            ObjC::msg('v:b', $prefs, 'setElementFullscreenEnabled:', true);
+        }
+        $self->ucc = ObjC::msg('p:', ObjC::alloc('WKUserContentController'), 'init');
+        ObjC::msg('v:pp', $self->ucc, 'addScriptMessageHandler:name:', ObjC::msg('p:', ObjC::alloc('MyPHPScriptHandler'), 'init'), ObjC::str('myphp'));
+        $self->setUserScripts($scripts);
+        ObjC::msg('v:p', $wk, 'setUserContentController:', $self->ucc);
         $self->ns = ObjC::msg('p:rp', ObjC::alloc('MyPHPWebView'), 'initWithFrame:configuration:', $frame, $wk);
+        ObjC::msg('v:', $wk, 'release');
         if (ObjC::msg('b:p', $self->ns, 'respondsToSelector:', ObjC::sel('setInspectable:'))) {
             ObjC::msg('v:b', $self->ns, 'setInspectable:', $devTools);
         }
         $self->devTools = $devTools;
+        if ($userAgent !== '') {
+            $self->setUserAgent($userAgent);
+        }
+        if ($zoom > 0 && $zoom != 1) {
+            $self->setZoom($zoom);
+        }
         Drop::register($self->ns);
         ObjC::msg('v:p', $self->ns, 'setNavigationDelegate:', self::$navigationDelegate); // weak: the class keeps it
         ObjC::msg('v:p', $self->ns, 'setUIDelegate:', self::$uiDelegate);
         ObjC::msg('v:L', $self->ns, 'setAutoresizingMask:', self::AUTORESIZE_WIDTH_HEIGHT);
+        ObjC::msg('v:ppLp', $self->ns, 'addObserver:forKeyPath:options:context:', self::$navigationDelegate, ObjC::str('title'), 1, null); // NSKeyValueObservingOptionNew
         self::$views[ObjC::addr($self->ns)] = $self;
         return $self;
+    }
+
+    /** Replaces the scripts pages get at document start, which a content controller can only remove all of (mygo's SetUserScripts). @param list<string> $scripts */
+    public function setUserScripts(array $scripts): void
+    {
+        ObjC::msg('v:', $this->ucc, 'removeAllUserScripts');
+        foreach ($scripts as $src) {
+            $script = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($src), self::INJECT_AT_DOCUMENT_START, true);
+            ObjC::msg('v:p', $this->ucc, 'addUserScript:', $script);
+            ObjC::msg('v:', $script, 'release');
+        }
+    }
+
+    /** Lets the web view go: its observer, scripts and delegates, its page stopped (mygo's cleanup). */
+    public function close(): void
+    {
+        if ($this->ucc === null) {
+            return;
+        }
+        ObjC::msg('v:pp', $this->ns, 'removeObserver:forKeyPath:', self::$navigationDelegate, ObjC::str('title'));
+        ObjC::msg('v:p', $this->ucc, 'removeScriptMessageHandlerForName:', ObjC::str('myphp'));
+        ObjC::msg('v:', $this->ucc, 'removeAllUserScripts');
+        ObjC::msg('v:', $this->ns, 'stopLoading');
+        ObjC::msg('v:p', $this->ns, 'setNavigationDelegate:', null);
+        ObjC::msg('v:p', $this->ns, 'setUIDelegate:', null);
+        ObjC::msg('v:', $this->ucc, 'release');
+        $this->ucc = null;
+        unset(self::$views[ObjC::addr($this->ns)]);
+    }
+
+    public function reload(bool $ignoreCache): void { $this->navigate($ignoreCache ? 'reloadFromOrigin' : 'reload'); }
+    public function stop(): void { ObjC::msg('v:', $this->ns, 'stopLoading'); }
+    public function goBack(): void { $this->navigate('goBack'); }
+    public function goForward(): void { $this->navigate('goForward'); }
+
+    /** A navigation the app starts, which the 'willNavigate' listeners are not asked about: none when WebKit starts none (nothing to go back to). */
+    private function navigate(string $sel): void
+    {
+        $this->loads++;
+        if (ObjC::msg('p:', $this->ns, $sel) === null) {
+            $this->loads--;
+        }
+    }
+    public function canGoBack(): bool { return ObjC::msg('b:', $this->ns, 'canGoBack'); }
+    public function canGoForward(): bool { return ObjC::msg('b:', $this->ns, 'canGoForward'); }
+    public function isLoading(): bool { return ObjC::msg('b:', $this->ns, 'isLoading'); }
+
+    /** The page's zoom (pageZoom, macOS 11). */
+    public function setZoom(float $f): void { ObjC::msg('v:d', $this->ns, 'setPageZoom:', $f); }
+    public function zoom(): float { return ObjC::msg('d:', $this->ns, 'pageZoom'); }
+
+    /** Overrides the user agent; '' restores WebKit's. */
+    public function setUserAgent(string $ua): void
+    {
+        ObjC::msg('v:p', $this->ns, 'setCustomUserAgent:', $ua === '' ? null : ObjC::str($ua));
+    }
+
+    /** The user agent the page is loaded with: the one set, else WebKit's. */
+    public function userAgent(): string
+    {
+        $s = ObjC::msg('p:', $this->ns, 'customUserAgent');
+        if (($s === null || ObjC::phpStr($s) === '') && ObjC::msg('b:p', $this->ns, 'respondsToSelector:', ObjC::sel('_userAgent'))) {
+            $s = ObjC::msg('p:', $this->ns, '_userAgent');
+        }
+        return $s === null ? '' : ObjC::phpStr($s);
+    }
+
+    /** Loads a local file, with read access to $readAccessDir (mygo's LoadFile). */
+    public function loadFile(string $path, string $readAccessDir): void
+    {
+        $url = fn(string $p) => ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($p));
+        $this->loads++;
+        ObjC::msg('p:pp', $this->ns, 'loadFileURL:allowingReadAccessToURL:', $url($path), $url($readAccessDir));
+    }
+
+    /**
+     * Runs $body as the body of an async function in the page's world
+     * (callAsyncJavaScript, macOS 11), not subject to the page's Content
+     * Security Policy; $done gets the string it returns, or the error: the
+     * script's exception message ("SyntaxError: …") when it threw.
+     * @param Closure(?string, ?string): void $done
+     */
+    public function callAsync(string $body, Closure $done): void
+    {
+        if (!ObjC::msg('b:p', $this->ns, 'respondsToSelector:', ObjC::sel('callAsyncJavaScript:arguments:inFrame:inContentWorld:completionHandler:'))) {
+            $done(null, 'myphp: eval needs macOS 11 or later');
+            return;
+        }
+        ObjC::msg('v:ppppp', $this->ns, 'callAsyncJavaScript:arguments:inFrame:inContentWorld:completionHandler:', ObjC::str($body), null, null,
+            ObjC::msg('p:', ObjC::cls('WKContentWorld'), 'pageWorld'), ObjC::block('pp', function ($result, $error) use ($done): void {
+                if ($error !== null) {
+                    $done(null, self::errorText($error));
+                    return;
+                }
+                $done($result === null ? '' : ObjC::phpStr($result), null);
+            }));
+    }
+
+    /** A PNG of the page as it shows (takeSnapshot); $done gets it or the error. @param Closure(?string, ?string): void $done */
+    public function capture(Closure $done): void
+    {
+        ObjC::msg('v:pp', $this->ns, 'takeSnapshotWithConfiguration:completionHandler:', null, ObjC::block('pp', function ($img, $error) use ($done): void {
+            if ($error !== null || $img === null) {
+                $done(null, $error === null ? 'myphp: no snapshot' : self::errorText($error));
+                return;
+            }
+            $rep = ObjC::msg('p:p', ObjC::cls('NSBitmapImageRep'), 'imageRepWithData:', ObjC::msg('p:', $img, 'TIFFRepresentation'));
+            $png = $rep === null ? null : ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary'));
+            $png === null ? $done(null, 'myphp: the snapshot is no image') : $done(Drag::bytes($png), null);
+        }));
+    }
+
+    /** An NSError's text: a script's exception message, else its description (mygo's nsError). */
+    private static function errorText($error): string
+    {
+        $msg = ObjC::msg('p:p', ObjC::msg('p:', $error, 'userInfo'), 'objectForKey:', ObjC::str('WKJavaScriptExceptionMessage'));
+        return ObjC::phpStr($msg ?? ObjC::msg('p:', $error, 'localizedDescription'));
     }
 
     private static function define(): void
@@ -112,7 +270,14 @@ final class WebView
         }
         self::$defined = true;
         // A WKWebView that hands dropped files to PHP (the page's own drop events do not see paths).
-        ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods(), ['NSDraggingDestination']);
+        ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods() + [
+            // The press a drag region of the page moves the window with (mygo's lastMouseDown): the page tells of it after the event.
+            'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                if (self::$lastDown !== null) { ObjC::msg('v:', self::$lastDown, 'release'); }
+                self::$lastDown = ObjC::msg('p:', $event, 'retain');
+                ObjC::msgSuper('v:p', $self, 'WKWebView', 'mouseDown:', $event);
+            }],
+        ], ['NSDraggingDestination']);
         ObjC::defineClass('MyPHPScriptHandler', 'NSObject', [
             'userContentController:didReceiveScriptMessage:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $ucc, $message) {
                 $view = self::$views[ObjC::addr(ObjC::msg('p:', $message, 'webView'))] ?? null;
@@ -158,12 +323,12 @@ final class WebView
                 $frame = ObjC::msg('p:', $action, 'targetFrame');
                 $allow = true;
                 if ($view !== null && $frame !== null && ObjC::msg('b:', $frame, 'isMainFrame')) {
-                    if ($view->loads > 0) {
-                        $view->loads--;
-                    } elseif ($view->onNavigate !== null) {
+                    $unasked = $view->loads > 0; // one the app started
+                    if ($unasked) { $view->loads--; }
+                    if ($view->onNavigate !== null) {
                         $url = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString'));
-                        $type = ObjC::msg('l:', $action, 'navigationType'); // 0 a link, 1 a form
-                        $allow = ($view->onNavigate)($url, $type === 0 || $type === 1);
+                        $type = ObjC::msg('l:', $action, 'navigationType'); // 0 a link, 1 a form, 3 a reload
+                        $allow = ($view->onNavigate)($url, $type === 0 || $type === 1, $type === 3, $unasked);
                     }
                 }
                 ObjC::callBlock('v:l', $handler, $allow ? 1 : 0); // WKNavigationActionPolicyAllow, Cancel
@@ -219,6 +384,29 @@ final class WebView
                 self::$downloads[$k] = [$view, $url, $path];
                 ObjC::callBlock('v:p', $handler, ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path)));
             }],
+            'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
+                $view = self::$views[ObjC::addr($object)] ?? null;
+                if ($view?->onTitle !== null && ObjC::phpStr($keyPath) === 'title') {
+                    $t = ObjC::msg('p:', $object, 'title');
+                    ($view->onTitle)($t === null ? '' : ObjC::phpStr($t));
+                }
+            }],
+            'webView:didCommitNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                if ($view?->onCommit !== null) { ($view->onCommit)($view->url()); }
+            }],
+            'webView:didFinishNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
+                (self::$views[ObjC::addr($wk)] ?? null)?->onFinish?->__invoke();
+            }],
+            'webView:didFailProvisionalNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
+                (self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error);
+            }],
+            'webView:didFailNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
+                (self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error);
+            }],
+            'webViewWebContentProcessDidTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
+                (self::$views[ObjC::addr($wk)] ?? null)?->onGone?->__invoke('terminated');
+            }],
             'downloadDidFinish:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $download) {
                 self::downloadEnded($download, null);
             }],
@@ -235,6 +423,49 @@ final class WebView
                 $grant = $view?->onPermission !== null && ($view->onPermission)($kinds, self::origin($origin));
                 ObjC::callBlock('v:l', $handler, $grant ? 1 : 2); // WKPermissionDecisionGrant, Deny
             }],
+            'webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:' => ['@@:@@@@', 'p(pppppp)', function ($self, $cmd, $wk, $cfg, $action, $features) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                if ($view?->onOpen === null) {
+                    return null;
+                }
+                $num = function (string $key) use ($features): int {
+                    $n = ObjC::msg('p:', $features, $key);
+                    return $n === null ? 0 : ObjC::msg('l:', $n, 'integerValue');
+                };
+                $url = ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString');
+                return ($view->onOpen)($url === null ? '' : ObjC::phpStr($url), '', $num('width'), $num('height'), $cfg);
+            }],
+            'webViewDidClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
+                (self::$views[ObjC::addr($wk)] ?? null)?->onClosedByPage?->__invoke();
+            }],
+            'webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $message, $frame, $handler) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                if ($view?->onPanel !== null) { ($view->onPanel)('alert', ObjC::phpStr($message)); }
+                ObjC::callBlock('v:', $handler);
+            }],
+            'webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $message, $frame, $handler) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                ObjC::callBlock('v:b', $handler, $view?->onPanel !== null && ($view->onPanel)('confirm', ObjC::phpStr($message)));
+            }],
+            'webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:' => ['v@:@@@@@?', 'v(ppppppp)', function ($self, $cmd, $wk, $prompt, $default, $frame, $handler) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $text = $view?->onPanel === null ? null : ($view->onPanel)('prompt', ObjC::phpStr($prompt), $default === null ? '' : ObjC::phpStr($default));
+                ObjC::callBlock('v:p', $handler, $text === null ? null : ObjC::str($text));
+            }],
+            'webView:runOpenPanelWithParameters:initiatedByFrame:completionHandler:' => ['v@:@@@@?', 'v(pppppp)', function ($self, $cmd, $wk, $params, $frame, $handler) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                $dirs = ObjC::msg('b:p', $params, 'respondsToSelector:', ObjC::sel('allowsDirectories')) && ObjC::msg('b:', $params, 'allowsDirectories');
+                $paths = $view?->onPanel === null ? null : ($view->onPanel)('files', ObjC::msg('b:', $params, 'allowsMultipleSelection'), $dirs);
+                if ($paths === null) {
+                    ObjC::callBlock('v:p', $handler, null);
+                    return;
+                }
+                $urls = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
+                foreach ($paths as $path) {
+                    ObjC::msg('v:p', $urls, 'addObject:', ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path)));
+                }
+                ObjC::callBlock('v:p', $handler, $urls);
+            }],
         ], ['WKUIDelegate']);
         self::$uiDelegate = ObjC::msg('p:', ObjC::alloc('MyPHPUIDelegate'), 'init');
         // The end of a print operation to PDF, whose window may be gone.
@@ -250,9 +481,9 @@ final class WebView
         ]);
     }
 
-    public function loadHTML(string $html, ?string $baseURL = null): void
+    public function loadHTML(string $html, string $baseURL = ''): void
     {
-        $base = $baseURL === null ? null : ObjC::msg('p:p', ObjC::cls('NSURL'), 'URLWithString:', ObjC::str($baseURL));
+        $base = $baseURL === '' ? null : ObjC::msg('p:p', ObjC::cls('NSURL'), 'URLWithString:', ObjC::str($baseURL));
         $this->loads++;
         ObjC::msg('p:pp', $this->ns, 'loadHTMLString:baseURL:', ObjC::str($html), $base);
     }
@@ -276,6 +507,17 @@ final class WebView
             return;
         }
         ObjC::msg('p:p', $this->ns, 'loadRequest:', ObjC::msg('p:p', ObjC::cls('NSURLRequest'), 'requestWithURL:', $nsurl));
+    }
+
+    /** A load failed: cancellations (-999) and interrupted frame loads (102), which a navigation replaced or denied, are none (mygo's loadFailed). */
+    private function loadFailed($error): void
+    {
+        $code = ObjC::msg('l:', $error, 'code');
+        if ($code === -999 || $code === 102 || $this->onFail === null) {
+            return;
+        }
+        $url = ObjC::msg('p:p', ObjC::msg('p:', $error, 'userInfo'), 'objectForKey:', ObjC::str('NSErrorFailingURLStringKey'));
+        ($this->onFail)($url === null ? '' : ObjC::phpStr($url), $code, ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')));
     }
 
     /** A download ended, with $error or done. */
@@ -363,6 +605,14 @@ final class WebView
     }
 
     private static $printDelegate = null;
+    /** The last press on a web view, retained. */
+    private static $lastDown = null;
+
+    /** The last press on a web view, which a drag region moves the window with; null before one. */
+    public static function lastDown()
+    {
+        return self::$lastDown;
+    }
 
     /** Runs JavaScript; $completion is an ObjC block (id result, NSError* error) or null. */
     public function evaluate(string $js, $completion = null): void

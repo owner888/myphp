@@ -19,7 +19,7 @@ use RuntimeException;
 final class Metal
 {
     private const PIXEL_FORMAT_BGRA8 = 80;
-    private const BLEND_ONE = 1, BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
+    private const BLEND_ZERO = 0, BLEND_ONE = 1, BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
     private const PIXEL_FORMAT_R8 = 10, PIXEL_FORMAT_RGBA8 = 70;
     private const PRIMITIVE_TRIANGLE_STRIP = 4; // MTLPrimitiveType: point 0, line 1, lineStrip 2, triangle 3, triangleStrip 4
     private const RING = 4;
@@ -390,6 +390,8 @@ final class Metal
 
     public $device;
     private $blurPipeline, $canvasPipeline, $canvasUniforms;
+    /** The pipeline of web views' holes: what is there goes, by the quad's coverage (DisplayList::hole). */
+    private $holePipeline;
     /** @var array<string, mixed> the textures canvases are rendered in before they are copied to their place, by size */
     private array $canvasTargets = [];
     /** The textures the glass reads: a copy of the drawable, the half-size blur in progress, the blurred backdrop. */
@@ -423,7 +425,7 @@ final class Metal
         $mtl = FFI::cdef('void* MTLCreateSystemDefaultDevice(void);', '/System/Library/Frameworks/Metal.framework/Metal');
         $this->device = ObjC::import($mtl->MTLCreateSystemDefaultDevice() ?? throw new RuntimeException('no Metal device'));
         $this->queue = ObjC::msg('p:', $this->device, 'newCommandQueue');
-        [$this->pipeline, $this->blurPipeline, $this->canvasPipeline] = $this->buildPipelines();
+        [$this->pipeline, $this->blurPipeline, $this->canvasPipeline, $this->holePipeline] = $this->buildPipelines();
         $this->canvasUniforms = ObjC::$c->new('float[8]');
         $floats = $capacity * DisplayList::FLOATS_PER_RECT;
         for ($i = 0; $i < self::RING; $i++) {
@@ -486,7 +488,7 @@ final class Metal
         if ($lib === null) {
             throw new RuntimeException('MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
         }
-        $make = function (string $vertex, string $fragment, bool $blend, int $format = self::PIXEL_FORMAT_BGRA8, int $alphaFrom = self::BLEND_SRC_ALPHA) use ($lib, $err) {
+        $make = function (string $vertex, string $fragment, bool $blend, int $format = self::PIXEL_FORMAT_BGRA8, int $alphaFrom = self::BLEND_SRC_ALPHA, int $rgbFrom = self::BLEND_SRC_ALPHA) use ($lib, $err) {
             $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
             ObjC::msg('v:p', $desc, 'setVertexFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($vertex)));
             ObjC::msg('v:p', $desc, 'setFragmentFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($fragment)));
@@ -494,7 +496,7 @@ final class Metal
             ObjC::msg('v:L', $ca, 'setPixelFormat:', $format);
             if ($blend) {
                 ObjC::msg('v:b', $ca, 'setBlendingEnabled:', true);
-                ObjC::msg('v:L', $ca, 'setSourceRGBBlendFactor:', self::BLEND_SRC_ALPHA);
+                ObjC::msg('v:L', $ca, 'setSourceRGBBlendFactor:', $rgbFrom);
                 ObjC::msg('v:L', $ca, 'setDestinationRGBBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
                 ObjC::msg('v:L', $ca, 'setSourceAlphaBlendFactor:', $alphaFrom);
                 ObjC::msg('v:L', $ca, 'setDestinationAlphaBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
@@ -505,7 +507,8 @@ final class Metal
             }
             return $ps;
         };
-        return [$make('quad_vertex', 'quad_fragment', true), $make('blur_vertex', 'blur_fragment', false), $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE)];
+        return [$make('quad_vertex', 'quad_fragment', true), $make('blur_vertex', 'blur_fragment', false), $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE),
+            $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_BGRA8, self::BLEND_ZERO, self::BLEND_ZERO)];
     }
 
     /**
@@ -666,15 +669,20 @@ final class Metal
         $start = 0;
         foreach ($list->glass as $g) {
             [$at, $sigma] = $g;
-            $this->pass($cb, $pass, $start, $at - $start, $start === 0, $buffers);
+            $this->pass($cb, $pass, $start, $at - $start, $start === 0, $buffers, $list->holes);
             $this->blur($cb, $texture, $sigma);
             $start = $at;
         }
-        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers);
+        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers, $list->holes);
     }
 
-    /** Draws quads [$from, $from + $count) of the frame's buffer onto the drawable, clearing it first for the first pass. */
-    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers): void
+    /**
+     * Draws quads [$from, $from + $count) of the frame's buffer onto the
+     * drawable, clearing it first for the first pass; the holes among them
+     * with their pipeline.
+     * @param list<array{0: int, 1: int}> $holes
+     */
+    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers, array $holes = []): void
     {
         [$quads, $xforms] = $buffers;
         if (!$first) {
@@ -695,9 +703,20 @@ final class Metal
         if ($this->backdrop !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->backdrop, 2);
         }
-        if ($count > 0) {
-            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $count);
+        $draw = function (int $at, int $n, $pipeline) use ($enc, $quads, $from): void {
+            if ($n <= 0) { return; }
+            ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $pipeline);
+            ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
+            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $n);
+        };
+        $at = $from;
+        foreach ($holes as [$h, $slots]) {
+            if ($h < $from || $h >= $from + $count) { continue; }
+            $draw($at, $h - $at, $this->pipeline);
+            $draw($h, $slots, $this->holePipeline);
+            $at = $h + $slots;
         }
+        $draw($at, $from + $count - $at, $this->pipeline);
         ObjC::msg('v:', $enc, 'endEncoding');
     }
 

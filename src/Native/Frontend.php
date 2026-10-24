@@ -9,7 +9,7 @@ use MyPHP\{App, Protocol, ProtocolRequest, ProtocolResponse};
 /**
  * The app's frontend, its web UI (mygo's frontend.go). Windows load it
  * with URLs without a scheme, "/" or "/settings" (WindowOptions::$url,
- * Window::loadURL), which resolve against the dev server at myphp.json's
+ * Page::loadURL), which resolve against the dev server at myphp.json's
  * devUrl while `myphp dev` runs the app (MYPHP_DEV_URL), and otherwise
  * against myphp://localhost/, which serves the frontend's files: the
  * directory App::setFrontend() set, frontendDist from disk under `myphp

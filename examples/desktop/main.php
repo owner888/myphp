@@ -104,7 +104,7 @@ App::whenReady(function () use (&$s, $open, $save, $ask, $context, $notify, $log
         menu: new Menu([new MenuItem('Show window', fn() => $w->show()), new MenuItem('Notify', $notify), MenuItem::separator(), new MenuItem(role: 'quit')])));
     GlobalShortcut::register('CmdOrCtrl+Shift+Space', function () use ($w, $log) {
         $w->show();
-        App::activate();
+        App::focus();
         $log('global shortcut pressed');
     });
     $log('tray icon added; Cmd+Shift+Space shows the window from any app');

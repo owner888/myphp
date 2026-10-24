@@ -49,6 +49,63 @@ final class Power
         return self::add('unlockScreen', $fn);
     }
 
+    private static ?\FFI $io = null, $cg = null;
+
+    /**
+     * Keeps the Mac from sleeping while idle, and with $display the display
+     * from turning off, as during a long task or while a video plays,
+     * until the function it returns is called (mygo's KeepAwake):
+     *
+     *     $release = Power::keepAwake('Exporting the video', false);
+     *     try { ... } finally { $release(); }
+     *
+     * $reason shows where the system lists what keeps it awake.
+     */
+    public static function keepAwake(string $reason, bool $display): Closure
+    {
+        self::needsApp();
+        $opts = (1 << 20) | ($display ? 1 << 40 : 0); // NSActivityIdleSystemSleepDisabled, NSActivityIdleDisplaySleepDisabled
+        $info = ObjC::msg('p:', ObjC::cls('NSProcessInfo'), 'processInfo');
+        $token = ObjC::msg('p:', ObjC::msg('p:Lp', $info, 'beginActivityWithOptions:reason:', $opts, ObjC::str($reason)), 'retain');
+        return function () use (&$token, $info): void {
+            if ($token === null) {
+                return; // once
+            }
+            ObjC::msg('v:p', $info, 'endActivity:', $token);
+            ObjC::msg('v:', $token, 'release');
+            $token = null;
+        };
+    }
+
+    /** Whether the Mac runs on battery power (mygo's IsOnBattery). */
+    public static function isOnBattery(): bool
+    {
+        self::$io ??= \FFI::cdef('void* IOPSCopyPowerSourcesInfo(void); void* IOPSGetProvidingPowerSourceType(void*); void CFRelease(void*);', '/System/Library/Frameworks/IOKit.framework/IOKit');
+        $info = self::$io->IOPSCopyPowerSourcesInfo();
+        if ($info === null) {
+            return false;
+        }
+        $type = self::$io->IOPSGetProvidingPowerSourceType($info);
+        $battery = $type !== null && ObjC::phpStr($type) === 'Battery Power';
+        self::$io->CFRelease($info);
+        return $battery;
+    }
+
+    /** How long, in seconds, the user has not used the keyboard or the mouse (mygo's IdleTime). */
+    public static function idleTime(): float
+    {
+        self::needsApp();
+        self::$cg ??= \FFI::cdef('double CGEventSourceSecondsSinceLastEventType(int, uint32_t);', '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics');
+        return self::$cg->CGEventSourceSecondsSinceLastEventType(0, 0xffffffff); // the combined session state, any input event
+    }
+
+    private static function needsApp(): void
+    {
+        if (!App::running()) {
+            throw new \RuntimeException('myphp: Power needs the running app (App::whenReady)');
+        }
+    }
+
     private static function add(string $event, Closure $fn): Closure
     {
         $k = self::$next++;

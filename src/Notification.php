@@ -17,7 +17,12 @@ final class Notification
 {
     private const ASK_BADGE_SOUND_ALERT = 1 | 2 | 4;
     private static bool $asked = false;
+    /** @var array<string, Notification> those shown, whose clicks reach their onClick listeners */
+    private static array $byId = [];
     public readonly string $id;
+    /** @var array<int, \Closure> */
+    private array $onClick = [];
+    private int $next = 0;
 
     public function __construct(public readonly NotificationOptions $options)
     {
@@ -62,6 +67,24 @@ final class Notification
         }
         $request = ObjC::msg('p:ppp', ObjC::cls('UNNotificationRequest'), 'requestWithIdentifier:content:trigger:', ObjC::str($this->id), $content, null);
         ObjC::msg('v:pp', $center, 'addNotificationRequest:withCompletionHandler:', $request, ObjC::noopBlock());
+        self::$byId[$this->id] = $this;
+    }
+
+    /** Calls $fn when the user clicks the notification, before App::onNotificationClick's listeners (mygo's OnClick). Returns a function that removes it. */
+    public function onClick(\Closure $fn): \Closure
+    {
+        $k = $this->next++;
+        $this->onClick[$k] = $fn;
+        return function () use ($k): void { unset($this->onClick[$k]); };
+    }
+
+    /** @internal the user clicked the notification of $id: its onClick listeners, then the app's */
+    public static function clicked(string $id): void
+    {
+        foreach ((self::$byId[$id] ?? null)?->onClick ?? [] as $fn) {
+            $fn();
+        }
+        App::notificationClicked($id);
     }
 
     /** Takes the notification out of Notification Center. */
@@ -69,13 +92,26 @@ final class Notification
     {
         $ids = ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array');
         ObjC::msg('v:p', $ids, 'addObject:', ObjC::str($this->id));
-        ObjC::msg('v:p', self::center(), 'removeDeliveredNotificationsWithIdentifiers:', $ids);
+        unset(self::$byId[$this->id]);
+        $center = self::center();
+        ObjC::msg('v:p', $center, 'removeDeliveredNotificationsWithIdentifiers:', $ids);
+        ObjC::msg('v:p', $center, 'removePendingNotificationRequestsWithIdentifiers:', $ids);
     }
 
-    /** Takes every notification of the app out of Notification Center. */
+    /**
+     * Takes every notification of the app out of Notification Center, those
+     * of earlier runs too (mygo's ClearNotifications): an app calls it as it
+     * comes to the front, so that what the user has seen in the app does
+     * not wait there:
+     *
+     *     App::onDidBecomeActive(fn() => Notification::clear());
+     */
     public static function clear(): void
     {
-        ObjC::msg('v:', self::center(), 'removeAllDeliveredNotifications');
+        self::$byId = [];
+        $center = self::center();
+        ObjC::msg('v:', $center, 'removeAllDeliveredNotifications');
+        ObjC::msg('v:', $center, 'removeAllPendingNotificationRequests');
     }
 
     /** The delegate that shows banners while the app is frontmost and reports clicks; App attaches it at launch. */
@@ -90,7 +126,7 @@ final class Notification
             }],
             'userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $center, $response, $handler) {
                 $id = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $response, 'notification'), 'request'), 'identifier'));
-                App::notificationClicked($id);
+                self::clicked($id);
                 ObjC::callBlock('v:', $handler);
             }],
         ], ['UNUserNotificationCenterDelegate']);

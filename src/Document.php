@@ -540,7 +540,7 @@ final class Document
         if ($this->closing) {
             return true;
         }
-        if ($canceled || !$this->edited) {
+        if ($canceled || App::quitting() || !$this->edited) { // a quit took care of the documents
             return false;
         }
         $this->closing = true;

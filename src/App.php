@@ -33,8 +33,11 @@ final class App
     private static ?Metal $metal = null;
     private static ?Text $text = null;
     private static float $scale = 1.0;
-    /** Quit once the last window closes, as a document-less app does. */
-    public static bool $quitOnLastWindowClosed = true;
+    private static ActivationPolicy $policy = ActivationPolicy::Regular;
+    /** Whether a quit is closing the windows, whose documents it took care of. */
+    private static bool $quitting = false;
+    /** @var array<string, string> directories App::setPath overrode, by PathName */
+    private static array $paths = [];
 
     /** @var array<int, Closure> */
     private static array $onQuit = [];
@@ -198,9 +201,20 @@ final class App
     }
 
     /** @var array<int, Closure(QuitEvent): void> */
-    private static array $onBeforeQuit = [];
+    private static array $onBeforeQuit = [], $onWillQuit = [];
     /** @var array<int, Closure(bool): void> */
     private static array $onActivate = [];
+    /** @var array<int, Closure> */
+    private static array $onReady = [], $onWindowAllClosed = [], $onDidBecomeActive = [], $onDidResignActive = [];
+    /** @var array<int, Closure(Window): void> */
+    private static array $onWindowCreated = [];
+
+    private static function listen(array &$list, Closure $fn): Closure
+    {
+        $k = self::$nextQuit++;
+        $list[$k] = $fn;
+        return function () use (&$list, $k): void { unset($list[$k]); };
+    }
 
     /**
      * Calls $fn(QuitEvent) as the app is asked to quit, by App::quit(), the
@@ -210,35 +224,118 @@ final class App
      */
     public static function onBeforeQuit(Closure $fn): Closure
     {
-        $k = self::$nextQuit++;
-        self::$onBeforeQuit[$k] = $fn;
-        return function () use ($k): void { unset(self::$onBeforeQuit[$k]); };
+        return self::listen(self::$onBeforeQuit, $fn);
     }
 
-    /** @internal asks the onBeforeQuit listeners whether the app quits */
+    /** Calls $fn(QuitEvent) once the windows closed as the app quits, right before it does (mygo's OnWillQuit): QuitEvent::cancel() keeps it running. Returns a function that removes it. */
+    public static function onWillQuit(Closure $fn): Closure
+    {
+        return self::listen(self::$onWillQuit, $fn);
+    }
+
+    /**
+     * @internal the quit sequence (mygo's prepareQuit), and whether the app
+     * may quit: the onBeforeQuit listeners, then each window is closed as
+     * the user would close it, whose 'close' listeners may keep it, then
+     * the onWillQuit listeners.
+     */
     public static function shouldQuit(): bool
     {
+        if (self::$quitting) {
+            return false;
+        }
         $e = new QuitEvent;
         foreach (self::$onBeforeQuit as $fn) {
             $fn($e);
         }
-        return !$e->canceled;
+        if ($e->canceled) {
+            return false;
+        }
+        self::$quitting = true;
+        foreach (Window::all() as $w) {
+            $w->close();
+            if (!$w->isDestroyed()) {
+                self::$quitting = false;
+                return false;
+            }
+        }
+        $will = new QuitEvent;
+        foreach (self::$onWillQuit as $fn) {
+            $fn($will);
+        }
+        self::$quitting = false; // the windows are closed: the app terminates, or stays as onWillQuit asked
+        return !$will->canceled;
+    }
+
+    /** @internal whether a quit is under way, which closes the windows: documents were taken care of before */
+    public static function quitting(): bool
+    {
+        return self::$quitting;
+    }
+
+    /** @internal the last window closed (mygo's lastWindowClosed): the onWindowAllClosed listeners, or without any, quitting */
+    public static function lastWindowClosed(): void
+    {
+        if (self::$quitting) {
+            return;
+        }
+        if (self::$onWindowAllClosed !== []) {
+            foreach (self::$onWindowAllClosed as $fn) {
+                $fn();
+            }
+            return;
+        }
+        self::quit();
+    }
+
+    /** Calls $fn when the last window closed, unless the app is quitting (mygo's OnWindowAllClosed): without listeners the app quits; one keeps it running, as Mac apps usually do. Returns a function that removes it. */
+    public static function onWindowAllClosed(Closure $fn): Closure
+    {
+        return self::listen(self::$onWindowAllClosed, $fn);
+    }
+
+    /** Calls $fn once the app finished launching (mygo's OnReady), before the whenReady() callbacks. Returns a function that removes it. */
+    public static function onReady(Closure $fn): Closure
+    {
+        return self::listen(self::$onReady, $fn);
+    }
+
+    /** Calls $fn when the app becomes the active one (mygo's OnDidBecomeActive). Returns a function that removes it. */
+    public static function onDidBecomeActive(Closure $fn): Closure
+    {
+        return self::listen(self::$onDidBecomeActive, $fn);
+    }
+
+    /** Calls $fn when the app stops being the active one (mygo's OnDidResignActive). Returns a function that removes it. */
+    public static function onDidResignActive(Closure $fn): Closure
+    {
+        return self::listen(self::$onDidResignActive, $fn);
+    }
+
+    /** Calls $fn(Window) for every new window (mygo's OnWindowCreated). Returns a function that removes it. */
+    public static function onWindowCreated(Closure $fn): Closure
+    {
+        return self::listen(self::$onWindowCreated, $fn);
+    }
+
+    /** @internal a window was created */
+    public static function windowCreated(Window $w): void
+    {
+        foreach (self::$onWindowCreated as $fn) {
+            $fn($w);
+        }
     }
 
     /** Calls $fn(bool $hasVisibleWindows) when the user activates the app again, by clicking its Dock icon or opening it while it runs (mygo's OnActivate): an app without windows usually opens one. Returns a function that removes it. */
     public static function onActivate(Closure $fn): Closure
     {
-        $k = self::$nextQuit++;
-        self::$onActivate[$k] = $fn;
-        return function () use ($k): void { unset(self::$onActivate[$k]); };
+        return self::listen(self::$onActivate, $fn);
     }
 
     /** Calls $fn as the app quits, after its windows' state is saved (mygo's OnQuit). Returns a function that removes it. */
     public static function onQuit(Closure $fn): Closure
     {
-        $k = self::$nextQuit++;
-        self::$onQuit[$k] = $fn;
-        return function () use ($k): void { unset(self::$onQuit[$k]); };
+        return self::listen(self::$onQuit, $fn);
     }
 
     public static function whenReady(Closure $fn): void
@@ -274,12 +371,14 @@ final class App
         }
         ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
-        ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', 0); // regular app, with a Dock icon
+        ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', self::$policy->native());
+        if (\MyPHP\Theme::source() !== ThemeSource::System) {
+            \MyPHP\Theme::apply(); // the appearance setSource() asked for before
+        }
         ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
             'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
                 if (ObjC::phpStr($keyPath) === 'effectiveAppearance') {
-                    self::$preferences = null; // the accent, read in the appearance
-                    self::themeChanged();
+                    self::systemChanged(); // the accent, read in the appearance
                 }
             }],
             'applicationWillFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
@@ -288,6 +387,14 @@ final class App
                 }
             }],
             'applicationShouldTerminate:' => ['Q@:@', 'L(ppp)', fn($self, $cmd, $app) => self::shouldQuit() ? 1 : 0], // NSTerminateNow, NSTerminateCancel
+            'applicationDidBecomeActive:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                foreach (self::$onDidBecomeActive as $fn) { $fn(); }
+            }],
+            'applicationDidResignActive:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                foreach (self::$onDidResignActive as $fn) { $fn(); }
+            }],
+            'applicationDockMenu:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $app) => Dock::nativeMenu()],
+            'screensChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Screen::changed(); }],
             'applicationShouldHandleReopen:hasVisibleWindows:' => ['B@:@B', 'b(pppb)', function ($self, $cmd, $app, $visible) {
                 foreach (self::$onActivate as $fn) {
                     $fn((bool)$visible);
@@ -295,7 +402,7 @@ final class App
                 return true;
             }],
             'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                WindowState::save();
+                Native\WindowStates::save();
                 try {
                     Native\Pasteboard::flush(); // the app's data stays on the clipboard once it quit
                 } catch (\Throwable $e) {
@@ -312,8 +419,7 @@ final class App
             }],
             'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
             'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change
-                self::$preferences = null;
-                self::themeChanged(); // the theme follows more contrast
+                self::systemChanged(); // the theme follows more contrast
             }],
             'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                 self::$ready = true;
@@ -322,8 +428,14 @@ final class App
                 $workspace = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
                 ObjC::msg('v:pppp', ObjC::msg('p:', $workspace, 'notificationCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('displayOptionsChanged:'), ObjC::str('NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification'), null);
                 Notification::attachDelegate(); // before the click that launched the app is delivered
+                ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('screensChanged:'), ObjC::str('NSApplicationDidChangeScreenParametersNotification'), null);
                 self::installMenu(self::$menu ?? Menu::default());
-                ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
+                if (self::$policy === ActivationPolicy::Regular) { // a plain php does not come to the front on its own
+                    ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
+                }
+                foreach (self::$onReady as $fn) {
+                    $fn();
+                }
                 $callbacks = self::$whenReady;
                 self::$whenReady = [];
                 foreach ($callbacks as $fn) {
@@ -374,12 +486,8 @@ final class App
             if (self::$nsApp === null) {
                 return self::$preferences = new UI\Preferences();
             }
-            $ws = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
-            self::$preferences = new UI\Preferences(
-                accent: Appearance::accent(self::$nsApp),
-                reduceMotion: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldReduceMotion'),
-                highContrast: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldIncreaseContrast'),
-            );
+            $p = \MyPHP\Theme::preferences();
+            self::$preferences = new UI\Preferences($p->accent, $p->reduceMotion, $p->highContrast, $p->textScale);
         }
         return self::$preferences;
     }
@@ -402,6 +510,18 @@ final class App
     {
         $dark = Appearance::isDark(self::$nsApp);
         return ($dark ? Theme::dark() : Theme::light())->follow(self::preferences());
+    }
+
+    /** The appearance or the desktop's settings changed (mygo's ThemeChanged): what was read of them is forgotten, the theme and the windows follow, then Theme's listeners hear it. */
+    private static function systemChanged(): void
+    {
+        self::$preferences = null;
+        \MyPHP\Theme::forget();
+        self::themeChanged();
+        foreach (Window::all() as $w) {
+            foreach ($w->pages() as $p) { $p->settingsChanged(false); } // the accent and the accessibility settings, which media queries do not tell pages
+        }
+        \MyPHP\Theme::changed();
     }
 
     private static function themeChanged(): void
@@ -440,6 +560,15 @@ final class App
     public static function relabelMenus(): void
     {
         if (self::$ready) { self::installMenu(self::$menu ?? Menu::default()); }
+    }
+
+    /** @internal installs the menus in use again once their items changed (mygo's refreshMenus): the menu bar and the Dock's */
+    public static function refreshMenus(): void
+    {
+        if (self::$ready) {
+            self::installMenu(self::$menu ?? Menu::default());
+            Dock::setMenu(Dock::menu());
+        }
     }
 
     /** The menu bar; Menu::default() unless set. Can be set before or after run(). */
@@ -523,14 +652,57 @@ final class App
         }
     }
 
-    /** Where the app keeps its data: ~/Library/Application Support/<name>, made on first use. */
-    public static function userDataPath(): string
+    /**
+     * A well-known directory (mygo's Path), as where the app keeps its
+     * data, App::path(PathName::UserData): what setPath() set, else the
+     * Mac's; UserData, Cache and Logs are made on first use. Throws when
+     * one cannot be made.
+     */
+    public static function path(PathName $name): string
     {
-        $dir = getenv('HOME') . '/Library/Application Support/' . self::name();
-        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-            throw new RuntimeException("cannot create $dir");
+        if (isset(self::$paths[$name->value])) {
+            return self::$paths[$name->value];
+        }
+        $home = (string)getenv('HOME');
+        $lib = "$home/Library";
+        [$dir, $make] = match ($name) {
+            PathName::Home => [$home, false],
+            PathName::AppData => ["$lib/Application Support", false],
+            PathName::UserData => ["$lib/Application Support/" . self::name(), true],
+            PathName::Cache => ["$lib/Caches/" . self::name(), true],
+            PathName::Logs => ["$lib/Logs/" . self::name(), true],
+            PathName::Temp => [rtrim(sys_get_temp_dir(), '/'), false],
+            PathName::Resources => [($app = Native\Bundle::path()) !== null ? "$app/Contents/Resources/app/resources" : dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
+            PathName::Exe => [Native\Bundle::command()[0], false],
+            PathName::Desktop => ["$home/Desktop", false],
+            PathName::Documents => ["$home/Documents", false],
+            PathName::Downloads => ["$home/Downloads", false],
+            PathName::Music => ["$home/Music", false],
+            PathName::Pictures => ["$home/Pictures", false],
+            PathName::Videos => ["$home/Movies", false],
+        };
+        if ($make && !is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException("myphp: cannot create $dir");
         }
         return $dir;
+    }
+
+    /** Overrides a directory path() returns (mygo's SetPath). */
+    public static function setPath(PathName $name, string $path): void
+    {
+        self::$paths[$name->value] = $path;
+    }
+
+    /**
+     * Keeps the states of windows (WindowOptions::$stateKey) in $store,
+     * such as the app's own database, instead of window-state.json in
+     * PathName::UserData; null restores the file (mygo's
+     * SetWindowStateStore). Call it before the first window with a state
+     * key is created.
+     */
+    public static function setWindowStateStore(?WindowStateStore $store): void
+    {
+        Native\WindowStates::$store = $store;
     }
 
     /** @var list<Closure> */
@@ -631,6 +803,12 @@ final class App
         return Native\Bundle::path() !== null;
     }
 
+    /** Whether windows can show web pages (mygo's WebViewAvailable): WKWebView is part of macOS, so wherever the app runs. */
+    public static function webViewAvailable(): bool
+    {
+        return self::$nsApp !== null && ObjC::$c->objc_getClass('WKWebView') !== null;
+    }
+
     /** Whether the app runs from its project, as `myphp dev` and `php app.php` run it, not from a bundle `myphp build` made (mygo's IsDev). */
     public static function isDev(): bool
     {
@@ -672,27 +850,100 @@ final class App
         Native\Fibers::go($fn);
     }
 
-    /** Opens a URL (http, mailto, a file…) with the system's handler, as mygo's OpenExternal: throws when it is no URL, or no app can open it. */
-    public static function openURL(string $url): void
+    /** Brings the app to the front, as a click on its Dock icon does (mygo's Focus). */
+    public static function focus(): void
     {
-        $nsurl = ObjC::msg('p:p', ObjC::cls('NSURL'), 'URLWithString:', ObjC::str($url));
-        if ($nsurl === null) {
-            throw new RuntimeException("not a URL: $url");
-        }
-        if (!ObjC::msg('b:p', ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace'), 'openURL:', $nsurl)) {
-            throw new RuntimeException("no application can open $url");
+        ObjC::msg('v:b', self::nsApp('focus'), 'activateIgnoringOtherApps:', true);
+    }
+
+    /** Hides the app's windows, as Cmd+H does (mygo's Hide). */
+    public static function hide(): void
+    {
+        ObjC::msg('v:p', self::nsApp('hide'), 'hide:', null);
+    }
+
+    /** Shows the app's windows again after hide() (mygo's Show). */
+    public static function show(): void
+    {
+        ObjC::msg('v:p', self::nsApp('show'), 'unhide:', null);
+    }
+
+    /** Whether the app is hidden (mygo's IsHidden). */
+    public static function isHidden(): bool
+    {
+        return ObjC::msg('b:', self::nsApp('isHidden'), 'isHidden');
+    }
+
+    /** Changes how the app shows in the Dock and the app switcher (mygo's SetActivationPolicy); before run() too, which starts it so. Regular brings it to the front. */
+    public static function setActivationPolicy(ActivationPolicy $p): void
+    {
+        self::$policy = $p;
+        if (self::$nsApp !== null) {
+            ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', $p->native());
+            if ($p === ActivationPolicy::Regular) {
+                ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
+            }
         }
     }
 
-    /** Brings the app to the front, as a click on its Dock icon does. */
-    public static function activate(): void
+    /** Shows $n on the app's icon; 0 clears it (mygo's SetBadgeCount). */
+    public static function setBadgeCount(int $n): void
     {
-        ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
+        Dock::setBadge($n > 0 ? (string)$n : '');
+    }
+
+    /** Shows the standard about panel, with what $opts says in place of the bundle's (mygo's ShowAboutPanel). */
+    public static function showAboutPanel(AboutPanelOptions $opts = new AboutPanelOptions): void
+    {
+        $app = self::nsApp('showAboutPanel');
+        $dict = ObjC::msg('p:', ObjC::cls('NSMutableDictionary'), 'dictionary');
+        foreach (['ApplicationName' => $opts->applicationName, 'ApplicationVersion' => $opts->applicationVersion, 'Version' => $opts->version, 'Copyright' => $opts->copyright] as $key => $v) {
+            if ($v !== '') { ObjC::msg('v:pp', $dict, 'setObject:forKey:', ObjC::str($v), ObjC::str($key)); }
+        }
+        if ($opts->credits !== '') {
+            $credits = ObjC::msg('p:p', ObjC::alloc('NSAttributedString'), 'initWithString:', ObjC::str($opts->credits));
+            ObjC::msg('v:pp', $dict, 'setObject:forKey:', $credits, ObjC::str('Credits'));
+            ObjC::msg('v:', $credits, 'release');
+        }
+        ObjC::msg('v:b', $app, 'activateIgnoringOtherApps:', true);
+        ObjC::msg('v:p', $app, 'orderFrontStandardAboutPanelWithOptions:', $dict);
+    }
+
+    /**
+     * Deletes what the app's pages stored: cookies, local and session
+     * storage, IndexedDB, service workers and caches, as when the user
+     * signs out (mygo's ClearBrowsingData). Open pages keep what they
+     * hold in memory until they reload. It returns once WebKit is done.
+     */
+    public static function clearBrowsingData(): void
+    {
+        self::nsApp('clearBrowsingData');
+        $cls = ObjC::cls('WKWebsiteDataStore');
+        $done = false;
+        ObjC::msg('v:ppp', ObjC::msg('p:', $cls, 'defaultDataStore'), 'removeDataOfTypes:modifiedSince:completionHandler:', ObjC::msg('p:', $cls, 'allWebsiteDataTypes'),
+            ObjC::msg('p:', ObjC::cls('NSDate'), 'distantPast'), ObjC::block('', function () use (&$done): void { $done = true; }));
+        self::wait(function () use (&$done): bool { return $done; });
+    }
+
+    /** NSApp, for $call, which needs the running app. */
+    private static function nsApp(string $call)
+    {
+        return self::$nsApp ?? throw new RuntimeException("myphp: App::$call needs the running app (App::whenReady)");
     }
 
     public static function quit(): void
     {
         ObjC::msg('v:p', self::$nsApp, 'terminate:', null);
+    }
+
+    /** Ends the process with $code at once, without the quit events or asking the windows (mygo's Exit); the windows' state is saved. */
+    public static function exit(int $code): never
+    {
+        foreach (Window::all() as $w) {
+            $w->destroy();
+        }
+        Native\WindowStates::save();
+        exit($code);
     }
 
     public static function name(): string

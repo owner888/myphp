@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use DateTimeImmutable;
-use MyPHP\{Cookie, Cookies, Window};
+use MyPHP\{Cookie, Cookies, Download};
 
 $bad = function (Cookie $c): string {
     try {
@@ -57,16 +57,16 @@ try { Cookies::list(new \MyPHP\CookieFilter(url: 'ftp://example.com/')); } catch
 check($threw, 'list needs an http or https URL');
 
 // Downloads: the name suggested, without directories; numbered when taken.
-same('report.pdf', Window::downloadName('../../etc/report.pdf'), 'no directories');
-same('a.txt', Window::downloadName('C:\\Users\\a.txt'), 'nor Windows ones');
-same('download', Window::downloadName(''), 'a name for none');
-same('download', Window::downloadName('..'), 'nor a parent');
+same('report.pdf', Download::fileName('../../etc/report.pdf'), 'no directories');
+same('a.txt', Download::fileName('C:\\Users\\a.txt'), 'nor Windows ones');
+same('download', Download::fileName(''), 'a name for none');
+same('download', Download::fileName('..'), 'nor a parent');
 $dir = sys_get_temp_dir() . '/myphp-dl-' . getmypid();
 @mkdir($dir);
-same("$dir/a.pdf", Window::uniquePath("$dir/a.pdf"), 'a free name stays');
+same("$dir/a.pdf", Download::uniquePath("$dir/a.pdf"), 'a free name stays');
 touch("$dir/a.pdf");
 touch("$dir/a (2).pdf");
-same("$dir/a (3).pdf", Window::uniquePath("$dir/a.pdf"), 'a taken one is numbered');
+same("$dir/a (3).pdf", Download::uniquePath("$dir/a.pdf"), 'a taken one is numbered');
 touch("$dir/b");
-same("$dir/b (2)", Window::uniquePath("$dir/b"), 'without an extension');
+same("$dir/b (2)", Download::uniquePath("$dir/b"), 'without an extension');
 exec('rm -rf ' . escapeshellarg($dir));

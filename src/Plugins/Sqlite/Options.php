@@ -7,7 +7,7 @@ namespace MyPHP\Plugins\Sqlite;
 final class Options
 {
     public function __construct(
-        /** Holds the pages' database files: App::userDataPath() when empty. Pages open file names here, or ":memory:", not paths. */
+        /** Holds the pages' database files: App::path(PathName::UserData) when empty. Pages open file names here, or ":memory:", not paths. */
         public string $directory = '',
         /** As OpenOptions::$busyTimeout, in seconds. */
         public float $busyTimeout = 0,

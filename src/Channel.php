@@ -50,7 +50,7 @@ final class Channel
     private ?\Closure $whenRoom = null;
 
     /**
-     * @internal Window::openChannel() makes it
+     * @internal Page::openChannel() makes it
      * @param \Closure(array<string, mixed>): void $deliver
      * @param \Closure(): void $forget
      */

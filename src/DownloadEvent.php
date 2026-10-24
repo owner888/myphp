@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-/** Given to a window's 'willDownload' listeners (mygo's DownloadEvent): setting $path chooses where the file goes, preventDefault() cancels the download. */
+/** Given to a page's 'willDownload' listeners (mygo's DownloadEvent): setting $path chooses where the file goes, preventDefault() cancels the download. */
 final class DownloadEvent
 {
     public bool $prevented = false;

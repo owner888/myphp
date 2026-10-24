@@ -4,51 +4,40 @@ declare(strict_types=1);
 namespace MyPHP;
 
 /**
- * What WindowOptions::$stateKey remembers of a window — its frame — in
- * window-state.json under App::userDataPath(), as mygo's window state
- * store. Frames are captured as windows move and resize, and saved when
- * a window closes and when the app quits.
+ * What WindowOptions::$stateKey remembers of a window (mygo's WindowState):
+ * its bounds in the normal state, in screen points from the primary
+ * display's top left, which it gets back once it leaves the maximized or
+ * full screen state, and that state.
  */
 final class WindowState
 {
-    private const FILE = 'window-state.json';
-    private static ?array $states = null;
-    private static bool $dirty = false;
+    public function __construct(
+        public readonly int $x = 0,
+        public readonly int $y = 0,
+        public readonly int $width = 0,
+        public readonly int $height = 0,
+        public readonly bool $maximized = false,
+        public readonly bool $fullScreen = false,
+    ) {}
 
-    private static function load(): void
+    /** The state as window-state.json keeps it, mygo's JSON. @return array<string, int|bool> */
+    public function toArray(): array
     {
-        if (self::$states !== null) {
-            return;
-        }
-        $path = App::userDataPath() . '/' . self::FILE;
-        $json = is_file($path) ? json_decode((string)file_get_contents($path), true) : null;
-        self::$states = is_array($json) ? $json : [];
+        $a = ['x' => $this->x, 'y' => $this->y, 'width' => $this->width, 'height' => $this->height];
+        if ($this->maximized) { $a['maximized'] = true; }
+        if ($this->fullScreen) { $a['fullScreen'] = true; }
+        return $a;
     }
 
-    /** @return array{x: float, y: float, w: float, h: float}|null */
-    public static function get(string $key): ?array
+    /** A state of toArray()'s shape, or null for anything else. */
+    public static function fromArray(mixed $a): ?self
     {
-        self::load();
-        $s = self::$states[$key] ?? null;
-        return is_array($s) && isset($s['x'], $s['y'], $s['w'], $s['h']) ? $s : null;
-    }
-
-    public static function set(string $key, float $x, float $y, float $w, float $h): void
-    {
-        self::load();
-        $state = ['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h];
-        if ((self::$states[$key] ?? null) !== $state) {
-            self::$states[$key] = $state;
-            self::$dirty = true;
+        if (!is_array($a)) {
+            return null;
         }
-    }
-
-    public static function save(): void
-    {
-        if (!self::$dirty) {
-            return;
+        foreach (['x', 'y', 'width', 'height'] as $k) {
+            if (!is_int($a[$k] ?? null)) { return null; }
         }
-        file_put_contents(App::userDataPath() . '/' . self::FILE, json_encode(self::$states, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
-        self::$dirty = false;
+        return new self($a['x'], $a['y'], $a['width'], $a['height'], ($a['maximized'] ?? false) === true, ($a['fullScreen'] ?? false) === true);
     }
 }

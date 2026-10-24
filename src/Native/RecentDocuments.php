@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
-use MyPHP\App;
+use MyPHP\{App, PathName};
 use RuntimeException;
 
 /**
@@ -27,7 +27,7 @@ final class RecentDocuments
 
     private static function file(): string
     {
-        return self::$file ?? App::userDataPath() . '/recent-documents.json';
+        return self::$file ?? App::path(PathName::UserData) . '/recent-documents.json';
     }
 
     /** @return list<string> */

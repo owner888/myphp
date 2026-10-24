@@ -46,6 +46,8 @@ final class DisplayList
     public int $n = 0;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
     public array $glass = [];
+    /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
+    public array $holes = [];
     private array $clip = self::NO_CLIP;
     private array $clips = [];
 
@@ -146,6 +148,7 @@ final class DisplayList
     {
         $this->n = 0;
         $this->glass = [];
+        $this->holes = [];
         $this->clip = self::NO_CLIP;
         $this->clips = [];
         $this->transforms = 1; $this->entries = [];
@@ -179,6 +182,12 @@ final class DisplayList
         return $this->world->inverse()?->bounds(...$this->clip) ?? [0.0, 0.0, 0.0, 0.0];
     }
 
+    /** The current clip in the window's coordinates, whatever is drawn through: x, y, w, h. @return array{0: float, 1: float, 2: float, 3: float} */
+    public function clip(): array
+    {
+        return $this->clip;
+    }
+
     /** Whether a rect lies entirely outside the current clip (nothing to draw). */
     public function clipped(float $x, float $y, float $w, float $h): bool
     {
@@ -200,6 +209,20 @@ final class DisplayList
         $b[$k + 8] = $radius; $b[$k + 9] = $this->xk;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
+    }
+
+    /**
+     * A hole through what was drawn before it, rounded by $radii, where a
+     * web view under the content shows (mygo's web view hole): what is
+     * drawn after it shows over the page. Metal draws it clearing what is
+     * there, by its coverage, so that the opacity fades the page in.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     */
+    public function hole(float $x, float $y, float $w, float $h, array $radii): void
+    {
+        $at = $this->n;
+        $this->box($x, $y, $w, $h, $radii, 0, 1.0);
+        $this->holes[] = [$at, $this->n - $at];
     }
 
     /** A pane of Liquid Glass over what was drawn before it: $style 0 regular, 1 clear; tinted by $tint at $tintAlpha; blurred by $sigma pixels. */

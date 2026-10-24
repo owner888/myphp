@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-/** How Window::printToPDF() prints (mygo's PDFOptions): by default Letter pages, portrait, margins of 0.4 inch, no backgrounds, as a browser's print dialog. */
+/** How Page::printToPDF() prints (mygo's PDFOptions): by default Letter pages, portrait, margins of 0.4 inch, no backgrounds, as a browser's print dialog. */
 final class PDFOptions
 {
     public function __construct(

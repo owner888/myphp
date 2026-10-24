@@ -101,7 +101,7 @@ final class Ipc
      * Handles one message a page posted. Returns the reply to deliver, or
      * null for messages that need none.
      */
-    public static function handle(string $raw, string $secret, Window $window): ?array
+    public static function handle(string $raw, string $secret, Page $page): ?array
     {
         try {
             $msg = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
@@ -116,21 +116,21 @@ final class Ipc
         if (!hash_equals($secret, (string)($msg['k'] ?? ''))) {
             return $t === 'call' ? ['t' => 'reply', 'id' => $id, 'k' => $secret, 'ok' => false, 'e' => 'rejected: wrong secret'] : null;
         }
-        if ($t === 'call' && !$window->isTrusted()) {
-            return self::reply($id, $secret, null, 'this page is not allowed to call PHP methods (see WindowOptions::$trustedOrigins)');
+        if ($t === 'call' && !$page->isTrusted()) {
+            return self::reply($id, $secret, null, 'this page is not allowed to call PHP methods (see PageOptions::$trustedOrigins)');
         }
         if ($t === 'chan-close') {
-            $window->channel((int)($msg['c'] ?? 0))?->closedByPage();
+            $page->channel((int)($msg['c'] ?? 0))?->closedByPage();
             return null;
         }
         if ($t === 'chan-ack') {
-            $window->channel((int)($msg['c'] ?? 0))?->ack((int)($msg['n'] ?? 0));
+            $page->channel((int)($msg['c'] ?? 0))?->ack((int)($msg['n'] ?? 0));
             return null;
         }
         $method = (string)($msg['m'] ?? '');
         $args = array_values($msg['a'] ?? []);
         if (str_starts_with($method, 'myphp:window.')) {
-            [$result, $error] = self::windowCall($window, substr($method, strlen('myphp:window.')), $args);
+            [$result, $error] = self::windowCall($page->window(), substr($method, strlen('myphp:window.')), $args);
             return self::reply($id, $secret, $result, $error);
         }
         [$service, $name] = array_pad(explode('.', $method, 2), 2, '');
@@ -139,8 +139,8 @@ final class Ipc
             return self::reply($id, $secret, null, self::notBound($method));
         }
         $channels = [];
-        $args = self::arguments($m, $args, $window->callContext(), function (int $chan) use ($window, $secret, &$channels): Channel {
-            return $channels[] = $window->openChannel($chan, $secret);
+        $args = self::arguments($m, $args, $page->callContext(), function (int $chan) use ($page, $secret, &$channels): Channel {
+            return $channels[] = $page->openChannel($chan, $secret);
         });
         try {
             $result = $m->invokeArgs(self::$services[$service]['object'], $args);
@@ -149,7 +149,7 @@ final class Ipc
             return self::reply($id, $secret, null, $e->getMessage());
         }
         if ($result instanceof Generator) {
-            self::pump($result, $channels, $window, $id, $secret);
+            self::pump($result, $channels, $page, $id, $secret);
             return null; // the reply comes when the generator ends
         }
         self::closeAll($channels);
@@ -222,17 +222,17 @@ final class Ipc
      * call's reply. A generator without channels may only wait.
      * @param list<Channel> $channels
      */
-    private static function pump(Generator $gen, array $channels, Window $window, int $id, string $secret): void
+    private static function pump(Generator $gen, array $channels, Page $page, int $id, string $secret): void
     {
         $out = $channels[0] ?? null;
-        $step = function () use (&$step, $gen, $channels, $out, $window, $id, $secret) {
+        $step = function () use (&$step, $gen, $channels, $out, $page, $id, $secret) {
             try {
                 if ($out !== null && $out->isClosed() && $gen->valid()) {
                     $gen->throw(new ChannelClosed("channel {$out->id} is closed"));
                 }
                 if (!$gen->valid()) {
                     self::closeAll($channels);
-                    $window->page()?->deliver(self::reply($id, $secret, $gen->getReturn(), null));
+                    $page->deliver(self::reply($id, $secret, $gen->getReturn(), null));
                     return;
                 }
                 $current = $gen->current();
@@ -252,7 +252,7 @@ final class Ipc
                 $gen->next();
             } catch (Throwable $e) {
                 self::closeAll($channels);
-                $window->page()?->deliver(self::reply($id, $secret, null, $e->getMessage()));
+                $page->deliver(self::reply($id, $secret, null, $e->getMessage()));
                 return;
             }
             App::later($step);
@@ -277,14 +277,6 @@ final class Ipc
             }, null];
         } catch (Throwable $e) {
             return [null, $e->getMessage()];
-        }
-    }
-
-    /** Sends an event to every page open. */
-    public static function emit(string $name, mixed $payload = null): void
-    {
-        foreach (Window::all() as $w) {
-            $w->send($name, $payload);
         }
     }
 }

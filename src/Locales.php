@@ -147,6 +147,9 @@ final class Locales
         foreach (Window::all() as $w) { $w->invalidate(); }
         if ($localeChanged) {
             App::relabelMenus();
+            foreach (Window::all() as $w) {
+                foreach ($w->pages() as $p) { $p->settingsChanged(true); } // pages loaded later start in it, the ones shown hear of it
+            }
             foreach (self::$onLocale as $fn) { $fn($locale); }
         }
         if ($regionChanged) { foreach (self::$onRegion as $fn) { $fn($region); } }

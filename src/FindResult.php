@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-/** The matches of Window::findInPage() (mygo's FindResult): how many there are, and which is the current one, from 1; both 0 without matches. */
+/** The matches of Page::findInPage() (mygo's FindResult): how many there are, and which is the current one, from 1; both 0 without matches. */
 final class FindResult
 {
     public function __construct(

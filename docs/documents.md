@@ -124,7 +124,7 @@ them, and ask when they close.
 
 Every document with unsaved changes that autosave doesn't write keeps a
 recovery copy, a second after the user stops editing: in
-`Recovery/<kind>` of `App::userDataPath()`, with the file's modification
+`Recovery/<kind>` of `App::path(PathName::UserData)`, with the file's modification
 time and size. It goes when the document is saved, reverted or closed
 without saving. When the app starts, the documents a crash or a forced
 quit left come back, edited; one whose file changed meanwhile is in
@@ -193,8 +193,8 @@ window.myphp.on("myphp:document-reload", async () => { editor.value = await Note
 
 The service has `content`, `setContent`, `state`, `save`, `saveAs`,
 `duplicate`, `rename`, `moveTo` and `revert`, for the window that calls
-them. The events reach trusted pages only (`Window::isTrusted`): the app's
-own, and WindowOptions' `trustedOrigins`.
+them. The events reach trusted pages only (`Page::isTrusted`): the app's
+own, and PageOptions' `trustedOrigins`.
 
 ## What is left out
 

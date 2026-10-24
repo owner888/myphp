@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Updater;
 
-use MyPHP\{App, NavigateEvent};
+use MyPHP\{NavigateEvent, Shell};
 
 /**
  * The update window as a web page (mygo's window.go and page.html): it
@@ -18,11 +18,11 @@ final class UpdateWindow
     {
         $icon = $u->icon();
         $win = $s->newWindow(null, self::page($u->text(), $icon === null ? '' : 'data:image/png;base64,' . base64_encode($icon), $s->view));
-        $win->on('willNavigate', function (NavigateEvent $e): void {
+        $win->page()->on('willNavigate', function (NavigateEvent $e): void {
             // Links of the release notes open in the browser.
             $e->preventDefault();
             if ($e->userInitiated && Markdown::safeURL($e->url)) {
-                App::openURL($e->url);
+                Shell::openExternal($e->url);
             }
         });
         $user = $s->user;

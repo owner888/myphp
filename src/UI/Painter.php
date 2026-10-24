@@ -286,6 +286,34 @@ final class Painter
         $list->setOpacity($opacity);
     }
 
+    /**
+     * The hole a web view's node paints through the content (mygo's
+     * noteWebView): its content box on whole pixels, rounded by its
+     * radii less its borders, within the clip; the runtime notes where it
+     * shows, for the window to place the web view there. Web views stay
+     * upright, covering a transformed box's bounds.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     */
+    private static function webViewHole(Node $n, DisplayList $list, TextPainter $text, array $radii, Runtime $rt): void
+    {
+        [$pt, $pr, $pb, $pl] = $n->sides();
+        [$bt, $br, $bb, $bl] = $n->borders;
+        [$x, $y, $w, $h] = [$n->x + $bl + $pl, $n->y + $bt + $pt, $n->w - $bl - $pl - $br - $pr, $n->h - $bt - $pt - $bb - $pb];
+        [$x, $y, $w, $h] = $list->world()->set ? $list->world()->bounds($x, $y, $w, $h) : [$x, $y, $w, $h];
+        $s = $text->scale();
+        [$x0, $y0, $x1, $y1] = [round($x * $s) / $s, round($y * $s) / $s, round(($x + $w) * $s) / $s, round(($y + $h) * $s) / $s];
+        [$x, $y, $w, $h] = [$x0, $y0, $x1 - $x0, $y1 - $y0];
+        $c = $list->clip();
+        $cx = max($x, $c[0]); $cy = max($y, $c[1]);
+        $cw = min($x + $w, $c[0] + $c[2]) - $cx; $ch = min($y + $h, $c[1] + $c[3]) - $cy;
+        if ($w <= 0 || $h <= 0 || $cw <= 0 || $ch <= 0) {
+            return;
+        }
+        $inner = [max(0.0, $radii[0] - max($bt, $bl)), max(0.0, $radii[1] - max($bt, $br)), max(0.0, $radii[2] - max($bb, $br)), max(0.0, $radii[3] - max($bb, $bl))];
+        $list->hole($x, $y, $w, $h, $inner);
+        $rt->webPlaces[] = ['view' => $n->webView, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch]];
+    }
+
     private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
@@ -388,6 +416,9 @@ final class Painter
                 if ($bl > 0) { $list->rect($n->x, $n->y + $bt, $bl, $n->h - $bt - $bb, $bc, $n->alpha); }
                 if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
             }
+        }
+        if ($n->webView !== null && $rt !== null) {
+            self::webViewHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) {
             $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius);

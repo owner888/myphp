@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Sqlite;
 
 use InvalidArgumentException;
-use MyPHP\{App, CallContext};
+use MyPHP\{App, CallContext, PathName};
 use RuntimeException;
 
 /**
@@ -38,7 +38,7 @@ final class Service
         $path = $name;
         if ($name !== ':memory:') {
             self::databaseName($name);
-            $dir = $this->opts->directory !== '' ? $this->opts->directory : App::userDataPath();
+            $dir = $this->opts->directory !== '' ? $this->opts->directory : App::path(PathName::UserData);
             if (!$readOnly && !is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
                 throw new RuntimeException("sqlite: cannot make $dir");
             }

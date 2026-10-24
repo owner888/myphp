@@ -8,7 +8,7 @@
 // Run: ./run.sh services
 declare(strict_types=1);
 
-use MyPHP\{App, Clipboard, Cookie, Cookies, FindOptions, Ipc, Network, NetworkStatus, PDFOptions, PageSize, SecretNotFound, Secrets, Window, WindowOptions};
+use MyPHP\{App, Clipboard, Cookie, Cookies, Event, FindOptions, Ipc, Network, NetworkStatus, PDFOptions, PageSize, SecretNotFound, Secrets, Window, WindowOptions};
 use MyPHP\Transfer\Data;
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -22,9 +22,12 @@ final class Services
 {
     public ?Window $win = null;
 
-    private function log(string $line): void
+    public function __construct(private readonly Event $logged) {}
+
+    /** Tells the page a line for its log, once there is one. */
+    public function log(string $line): void
     {
-        $this->win?->send('log', $line);
+        if ($this->win !== null) { $this->logged->emit($this->win, $line); }
     }
 
     public function network(): NetworkStatus { return Network::status(); }
@@ -71,18 +74,18 @@ final class Services
 
     public function find(string $text, bool $next): string
     {
-        $r = $this->win->findInPage($text, new FindOptions(findNext: $next));
+        $r = $this->win->page()->findInPage($text, new FindOptions(findNext: $next));
         return "{$r->active} of {$r->matches}";
     }
 
     public function pdf(): string
     {
         $path = getenv('HOME') . '/Desktop/services.pdf';
-        file_put_contents($path, $this->win->printToPDF(new PDFOptions(PageSize::a4(), background: true)));
+        file_put_contents($path, $this->win->page()->printToPDF(new PDFOptions(PageSize::a4(), background: true)));
         return "written to $path";
     }
 
-    public function print(): void { $this->win->print(); }
+    public function print(): void { $this->win->page()->print(); }
 
     public function login(bool $on): string
     {
@@ -91,15 +94,15 @@ final class Services
     }
 }
 
-$svc = new Services;
+$svc = new Services(new Event('log', 'string'));
 Ipc::bind($svc);
-App::onOpenURL(function (string $url) use ($svc) { $svc->win?->send('log', "open URL: $url"); });
-App::onOpenFile(function (string $path) use ($svc) { $svc->win?->send('log', "open file: $path"); });
+App::onOpenURL(fn(string $url) => $svc->log("open URL: $url"));
+App::onOpenFile(fn(string $path) => $svc->log("open file: $path"));
 App::onSecondInstance(function (array $args, string $wd) use ($svc) {
-    $svc->win?->send('log', 'second instance: ' . json_encode($args) . " in $wd");
+    $svc->log('second instance: ' . json_encode($args) . " in $wd");
     $svc->win?->focus();
 });
-Network::onChanged(function (NetworkStatus $s) use ($svc) { $svc->win?->send('log', 'network: ' . json_encode($s)); });
+Network::onChanged(fn(NetworkStatus $s) => $svc->log('network: ' . json_encode($s)));
 
 App::whenReady(function () use ($svc) {
     $svc->win = new Window(new WindowOptions(title: 'Services', width: 720, height: 640, html: <<<'HTML'
@@ -125,7 +128,7 @@ App::whenReady(function () use ($svc) {
         myphp.on("log", log);
         </script>
         HTML));
-    $svc->win->on('willDownload', function (MyPHP\DownloadEvent $e) use ($svc) { $svc->win->send('log', "download {$e->suggestedName} to {$e->path}"); });
-    $svc->win->on('downloadDone', function (MyPHP\Download $d) use ($svc) { $svc->win->send('log', 'downloaded ' . $d->path . ($d->error !== null ? " ({$d->error})" : '')); });
+    $svc->win->page()->on('willDownload', fn(MyPHP\DownloadEvent $e) => $svc->log("download {$e->suggestedName} to {$e->path}"));
+    $svc->win->page()->on('downloadDone', fn(MyPHP\Download $d) => $svc->log('downloaded ' . $d->path . ($d->error !== null ? " ({$d->error})" : '')));
 });
 App::run();

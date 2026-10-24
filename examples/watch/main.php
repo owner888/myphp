@@ -8,13 +8,13 @@
 // Run: ./run.sh watch [folder]
 declare(strict_types=1);
 
-use MyPHP\{App, Ipc, Window, WindowOptions};
+use MyPHP\{App, Ipc, PathName, Window, WindowOptions};
 use MyPHP\Plugins\Watch\{Options, Root, Watch};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
 App::setName('Watch');
-$dir = $argv[1] ?? App::userDataPath() . '/watched';
+$dir = $argv[1] ?? App::path(PathName::UserData) . '/watched';
 if (!is_dir($dir)) {
     mkdir($dir, 0755, true);
 }

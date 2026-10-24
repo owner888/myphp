@@ -28,6 +28,54 @@ final class Pasteboard
         return $s === null ? '' : ObjC::phpStr($s);
     }
 
+    /** The string of the pasteboard's $type ('public.html'…), '' without one. */
+    public static function string(string $type): string
+    {
+        $pb = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
+        $s = ObjC::msg('p:p', $pb, 'stringForType:', ObjC::str($type));
+        return $s === null ? '' : ObjC::phpStr($s);
+    }
+
+    /** The image on the pasteboard as PNG, a TIFF converted, or '' (mygo's ReadImage). */
+    public static function image(): string
+    {
+        $pb = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');
+        if (($d = ObjC::msg('p:p', $pb, 'dataForType:', ObjC::str('public.png'))) !== null) {
+            return Drag::bytes($d);
+        }
+        if (($d = ObjC::msg('p:p', $pb, 'dataForType:', ObjC::str('public.tiff'))) !== null
+            && ($rep = ObjC::msg('p:p', ObjC::cls('NSBitmapImageRep'), 'imageRepWithData:', $d)) !== null
+            && ($png = ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary'))) !== null) { // NSBitmapImageFileTypePNG
+            return Drag::bytes($png);
+        }
+        return '';
+    }
+
+    /** Whether $bytes are an image AppKit reads. */
+    public static function isImage(string $bytes): bool
+    {
+        $img = ObjC::msg('p:p', ObjC::alloc('NSImage'), 'initWithData:', ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $bytes, strlen($bytes)));
+        if ($img === null) {
+            return false;
+        }
+        ObjC::msg('v:', $img, 'release');
+        return true;
+    }
+
+    /** Empties the pasteboard, letting go of the app's providers (mygo's Clear). */
+    public static function clear(): void
+    {
+        ObjC::msg('l:', ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard'), 'clearContents');
+        self::release();
+    }
+
+    /** The pasteboard's types, as the system names them (mygo's AvailableFormats). @return list<string> */
+    public static function systemTypes(): array
+    {
+        $types = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard'), 'types');
+        return $types === null ? [] : array_map(ObjC::phpStr(...), Drag::array($types));
+    }
+
     public static function setText(string $text): void
     {
         $pb = ObjC::msg('p:', ObjC::cls('NSPasteboard'), 'generalPasteboard');

@@ -53,7 +53,7 @@ final class Registry
             }
         });
         // Document apps stay open without windows, and make a document when the Dock icon is clicked (applicationShouldOpenUntitledFile).
-        App::$quitOnLastWindowClosed = false;
+        App::onWindowAllClosed(function (): void {});
         App::onActivate(function (bool $visible): void {
             $k = self::$kinds[0] ?? null;
             if (!$visible && $k !== null && !$k->opts->noUntitled && self::all() === []) {

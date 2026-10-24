@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use MyPHP\Native\Pasteboard;
-use MyPHP\Transfer\{Data, Format};
+use MyPHP\Transfer\{Data, Format, Item, Representation};
 
 /**
  * The system's clipboard (mygo's Clipboard): data in several formats, as
@@ -60,6 +60,63 @@ final class Clipboard
     public static function writeFiles(string ...$paths): void
     {
         self::write(Data::files(...$paths));
+    }
+
+    /** The plain text on the clipboard, '' without any (mygo's ReadText). */
+    public static function readText(): string
+    {
+        self::guard();
+        return Pasteboard::text();
+    }
+
+    /** Puts plain text on the clipboard (mygo's WriteText). */
+    public static function writeText(string $text): void
+    {
+        self::write(Data::text($text));
+    }
+
+    /** The HTML on the clipboard, '' without any (mygo's ReadHTML). */
+    public static function readHTML(): string
+    {
+        self::guard();
+        return Pasteboard::string('public.html');
+    }
+
+    /** Puts HTML on the clipboard, which apps that paste plain text get as it is (mygo's WriteHTML). */
+    public static function writeHTML(string $markup): void
+    {
+        self::write(new Data(new Item(Representation::bytes(Format::HTML, $markup), Representation::bytes(Format::TEXT, $markup))));
+    }
+
+    /** The image on the clipboard as PNG, '' without one (mygo's ReadImage). */
+    public static function readImage(): string
+    {
+        self::guard();
+        return Pasteboard::image();
+    }
+
+    /** Puts a PNG image on the clipboard (mygo's WriteImage); throws when it is no image. */
+    public static function writeImage(string $png): void
+    {
+        self::guard();
+        if (!Pasteboard::isImage($png)) {
+            throw new \InvalidArgumentException('myphp: Clipboard::writeImage: not an image');
+        }
+        self::write(new Data(new Item(Representation::bytes(Format::PNG, $png))));
+    }
+
+    /** Empties the clipboard (mygo's Clear). */
+    public static function clear(): void
+    {
+        self::guard();
+        Pasteboard::clear();
+    }
+
+    /** The types on the clipboard as the system names them, 'public.utf8-plain-text'… (mygo's AvailableFormats); formats() names them as Transfer\Format does. @return list<string> */
+    public static function availableFormats(): array
+    {
+        self::guard();
+        return Pasteboard::systemTypes();
     }
 
     /** Gives the system every representation of the app's data on the clipboard, so that it stays once the app quits, and lets go of its providers (mygo's Flush); nothing for another app's. */
