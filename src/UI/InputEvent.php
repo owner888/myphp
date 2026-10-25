@@ -16,6 +16,8 @@ final class InputEvent
     public const KEY_UP = 2;
     /** Text typed, or committed by an input method. */
     public const TEXT = 3;
+    /** The composition of an input method, $text, with its caret at character $caret, to a node taking text (Node::textCaret); TEXT commits it. */
+    public const COMPOSE = 4;
     /** An edit command of the menus, as "copy", "cut", "paste", "selectAll", "undo", "redo" or "delete". */
     public const COMMAND = 5;
     /** The pointer's button pressed or released at x, y, with $clicks the count of quick successive presses (2 for a double click). Once the element takes a POINTER_DOWN, the pointer's moves and its release come to it wherever they are. */
@@ -30,7 +32,7 @@ final class InputEvent
         /** The key's virtual key code (Key), by position on an ANSI keyboard, whatever the layout types. */
         public int $key = 0,
         public int $mods = 0,
-        /** Text of TEXT and COMMAND, and of KEY_DOWN the characters the key types. */
+        /** Text of TEXT, COMPOSE and COMMAND, and of KEY_DOWN the characters the key types. */
         public string $text = '',
         /** The pointer, relative to the element's box. */
         public float $x = 0.0, public float $y = 0.0,
@@ -41,5 +43,7 @@ final class InputEvent
         public bool $precise = false,
         /** Marks a KEY_DOWN as the auto-repeat of a key held down. */
         public bool $repeat = false,
+        /** The character of a COMPOSE's text its caret is at. */
+        public int $caret = 0,
     ) {}
 }

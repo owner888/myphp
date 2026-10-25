@@ -288,6 +288,7 @@ final class Headless
         } elseif ($this->input->focus !== null) {
             $this->input->focus->insert($s);
         } else {
+            $this->input->composing = ''; // committed, as the view's insertText
             $this->input->push(['insert', $s]);
         }
         return $this->frame();
@@ -297,6 +298,7 @@ final class Headless
     public function compose(string $s, int $caret): Node
     {
         if ($this->input->client !== null && $this->input->inputMethod) { $this->input->client->setMarkedText(null, $s, new \MyPHP\UI\TextInputRange($caret, $caret)); }
+        elseif ($this->input->focus === null && $this->input->textCaret !== null) { $this->input->composing = $s; $this->input->push(['compose', $s, mb_strlen(substr($s, 0, \MyPHP\UI\TextState::byteIndex($s, $caret)), 'UTF-8')]); } // a node taking text (Node::textCaret)
         return $this->frame();
     }
 

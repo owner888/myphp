@@ -2,7 +2,8 @@
 // Transforms (mygo's transform_test.go and painter_transform_test.go): what a
 // node's transform does to its drawing, the pointer, the coordinates of its
 // layout and the window, and the bounds assistive technology sees; in 2D and
-// in 3D.
+// in 3D; clips nested in transforms, carets, input clients, selections,
+// transitions and inline text through them.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -205,3 +206,137 @@ $t = new Headless(function (Context $c) use (&$hits) {
 $t->frame();
 $t->clickText('Under');
 same(1, $hits, 'an overlay moved away by its transform lets the pointer through where it no longer is');
+
+// Clips nested in transforms: the turned, scaled interior takes the pointer; past the inner clip, nothing does (mygo's TestTransformedNestedClips).
+$clicks = 0; $child = null;
+$t = new Headless(function (Context $c) use (&$clicks, &$child, &$c0) {
+    $c0 = $c;
+    $c->column()->absolute()->left(50)->top(50)->size(80, 60)->rotate(30)->round(12)->clip();
+      $c->column()->size(50, 50)->clip()->scale(1.2, 0.8);
+        $child = $c->box(100, 80, 0xe60000)->shrink(0);
+        if ($c->clicked($child)) { $clicks++; }
+      $c->end();
+    $c->end();
+}, 220, 200);
+$t->frame();
+[$x, $y] = $c0->localToWindow($child, 20, 20);
+$t->click($x, $y);
+same(1, $clicks, 'the clipped interior takes the click');
+[$x, $y] = $c0->localToWindow($child, 75, 20);
+$t->click($x, $y);
+same(1, $clicks, 'past the nested clip, no click');
+
+// A transformed input: its caret as it shows, what assistive technology sees, a popover below it as it shows, not turned (mygo's TestTransformCaretAccessibilityAndAnchor).
+$value = new \MyPHP\UI\TextState('hello'); $open = true; $input = null; $panel = null;
+$t = new Headless(function (Context $c) use ($value, &$open, &$input, &$panel, &$c0) {
+    $c0 = $c;
+    $c->column()->absolute()->left(80)->top(50)->size(130, 60)->scale(1.5, 1.2)->rotate(20);
+      $input = $c->input($value, '', 100)->autoFocus()->label('transformed input');
+    $c->end();
+    $panel = $c->popover($input, $open, fn() => $c->text('anchored'));
+}, 500, 300);
+$t->frame(); $t->paint(); $t->frame(1);
+$world = $t->rt->worldOf($input->id);
+check($world->set, 'the input is transformed');
+$caret = $t->input->caretRect(5);
+[$fx, $fy, $fh] = $t->input->focusText;
+$want = $world->bounds($fx + $value->offsetX + 5 * 7.0, $fy, 1.0, $fh);
+check(abs($caret[0] - $want[0]) < 0.01 && abs($caret[1] - $want[1]) < 0.01 && abs($caret[2] - $want[2]) < 0.01 && abs($caret[3] - $want[3]) < 0.01, 'the caret the window gets shows through the transform: ' . json_encode([$caret, $want]));
+$t->input->push(['accessOn']); $t->frame();
+$n = null; foreach ($t->rt->accessTree->nodes as $an) { if ($an->role === Role::TEXT_FIELD && $an->label === 'transformed input') { $n = $an; } }
+$b = $c0->bounds($input);
+check($n !== null && abs($n->bounds[0] - $b[0]) < 0.01 && abs($n->bounds[1] - $b[1]) < 0.01 && abs($n->bounds[2] - $b[2]) < 0.01, 'assistive technology sees it as it shows');
+$p = $t->rect($panel);
+check($p[1] >= $b[1] + $b[3] - 0.01, 'the popover is below the input as it shows: ' . json_encode([$p, $b]));
+check(!$t->rt->worldOf($panel->id)->set, 'and does not take its transform');
+
+// A text input client of the app's own, transformed: the rectangles the window gets and the index at a point go through it; collapsed, nothing is hit (mygo's TestTransformedTextInputClientGeometry).
+require_once __DIR__ . '/PrimitiveClient.php';
+$client = new PrimitiveClient('hello', new \MyPHP\UI\TextInputSelection(new \MyPHP\UI\TextInputRange(3, 3)));
+$xScale = 1.5; $e = null;
+$t = new Headless(function (Context $c) use ($client, &$xScale, &$e, &$c0) {
+    $c0 = $c;
+    $e = $c->box(100, 40, 0)->absolute()->left(80)->top(60)->transformOrigin(0, 0)->scale($xScale, 1.2)->rotate(30)->focusable()->autoFocus()->handleTextInput($client);
+}, 400, 250);
+$t->frame(); $t->frame(1);
+foreach ([[3, 3], [1, 4]] as [$a, $z]) {
+    $r = new \MyPHP\UI\TextInputRange($a, $z);
+    [$local] = $client->boundsForRange($r);
+    $want = $t->rt->worldOf($e->id)->bounds($e->x + $local[0], $e->y + $local[1], $local[2], $local[3]);
+    [$got, $used] = $t->input->clientRect($r);
+    check($used == $r && abs($got[0] - $want[0]) < 0.01 && abs($got[1] - $want[1]) < 0.01 && abs($got[2] - $want[2]) < 0.01 && abs($got[3] - $want[3]) < 0.01, "the client's rectangle of $a..$z, transformed: " . json_encode([$got, $want]));
+}
+[$x, $y] = $c0->localToWindow($e, 18, 15);
+same(4, $t->input->clientIndex($x, $y), 'the index at a point, through the transform');
+$xScale = 0; $t->frame();
+same(null, $t->input->clientIndex($x, $y), 'collapsed, nothing is hit');
+
+// A selection dragged across the texts of a turned column copies what it went over (mygo's TestTransformedContainerTextSelection).
+$first = null; $second = null;
+$t = new Headless(function (Context $c) use (&$first, &$second, &$c0) {
+    $c0 = $c;
+    $c->column()->absolute()->left(100)->top(70)->width(160)->rotate(30)->selectable();
+      $first = $c->text('Alpha beta');
+      $second = $c->text('Gamma delta');
+    $c->end();
+}, 400, 250);
+$t->frame();
+[$x, $y] = $c0->localToWindow($first, 2 * 7.0, 8);
+$t->press($x, $y);
+[$x, $y] = $c0->localToWindow($second, 4 * 7.0, 8);
+$t->drag($x, $y); $t->release($x, $y);
+$t->shortcut('c', \MyPHP\UI\Key::COMMAND);
+same("pha beta\nGamm", ($t->rt->readClipboard)(), 'the turned selection copies what it went over');
+
+// A node taking text of its own, transformed: its caret as it shows, the composition and the text it hears; a press on it captures the pointer, in its layout (mygo's TestTransformedCustomCaretAndCapture).
+$got = []; $e = null;
+$t = new Headless(function (Context $c) use (&$got, &$e, &$c0) {
+    $c0 = $c;
+    $e = $c->box(50, 40, 0)->absolute()->left(60)->top(70)->scale(2, 1)->rotate(-25)->focusable()->autoFocus()->textCaret(10, 5, 1, 16)
+        ->handleInput(function (InputEvent $ev) use (&$got) { $got[] = $ev; return $ev->kind !== InputEvent::KEY_DOWN; }); // the keys it leaves type their text
+}, 300, 220);
+$t->frame(); $t->frame(1);
+$caret = $t->input->caretRect(0);
+$want = $t->rt->worldOf($e->id)->bounds($e->x + 10, $e->y + 5, 1, 16);
+check(abs($caret[0] - $want[0]) < 0.01 && abs($caret[2] - $want[2]) < 0.01, 'its caret shows through its transform: ' . json_encode([$caret, $want]));
+$t->compose('にほ', 2);
+$ev = end($got);
+check($ev->kind === InputEvent::COMPOSE && $ev->text === 'にほ' && $ev->caret === 2, 'it hears the composition, its caret in characters');
+$t->type('日本');
+$ev = end($got);
+check($ev->kind === InputEvent::TEXT && $ev->text === '日本' && $t->input->composing === '', 'and the text committed');
+[$x, $y] = $c0->localToWindow($e, 10, 10);
+$t->input->mouse($x, $y); $t->input->push(['down', $x, $y, 0, 1, 0]);
+[$x, $y] = $c0->localToWindow($e, 70, 50);
+$t->input->mouse($x, $y); $t->input->push(['drag', $x, $y]);
+$ev = end($got);
+check($ev->kind === InputEvent::POINTER_MOVE && abs($ev->x - 70) < 0.01 && abs($ev->y - 50) < 0.01, 'captured, the moves come in its layout, out of it too');
+$t->input->push(['up', $x, $y, 0, 1, 0]);
+same(InputEvent::POINTER_UP, end($got)->kind, 'and the release');
+
+// A node moving in a transition, turned: halfway, its layout is halfway, its turned shape there (mygo's TestTransformUpdatesDamageAndTransitionGeometry).
+$now = 0; $bx = 0.0; $angle = 0.0; $e = null;
+$t = poseTester(function (Context $c) use (&$bx, &$angle, &$e, &$c0) {
+    $c0 = $c;
+    $e = $c->box(50, 30, 0xf00000)->absolute()->left($bx)->top(40)->rotate($angle);
+    $c->transition($e, new \MyPHP\UI\ElementTransition(1.0, \MyPHP\UI\Easing::linear(...)));
+}, $now, 250, 160);
+[$bx, $angle] = [100.0, 45.0]; $t->frame(1);
+$now += 500_000_000; $t->frame(1);
+closeFloat(50, $c0->layoutBounds($e)[0], 'halfway, its layout halfway');
+check($t->rt->worldOf($e->id)->set, 'turned on the way');
+
+// Inline text turned and moved takes the pointer where it shows (mygo's TestInlineTransformMovesGlyphsAndInteraction).
+$link = null; $clicks = 0;
+$t = new Headless(function (Context $c) use (&$link, &$clicks, &$c0) {
+    $c0 = $c;
+    $c->text('Before ')->absolute()->left(30)->top(30)->fontSize(22)->children(function () use ($c, &$link, &$clicks): void {
+        $link = $c->text('LINK')->textColor(0xe60000)->underline()->translate(50, 30)->rotate(8);
+        if ($c->clicked($link)) { $clicks++; }
+    });
+}, 300, 180);
+$t->frame();
+$r = $c0->layoutBounds($link);
+[$x, $y] = $c0->localToWindow($link, $r[2] / 2, $r[3] / 2);
+$t->click($x, $y);
+same(1, $clicks, 'the transformed inline text takes the click where it shows');

@@ -235,7 +235,8 @@ final class View
             'hasMarkedText' => ['B@:', 'b(pp)', function ($self, $cmd) {
                 $input = self::$inputs[ObjC::addr($self)];
                 if ($input->client !== null) { return $input->client->markedRange() !== null; }
-                return ($input->focus?->marked ?? null) !== null;
+                if ($input->focus === null) { return $input->composing !== ''; } // a node taking text (Node::textCaret)
+                return $input->focus->marked !== null;
             }],
             'markedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
                 $input = self::$inputs[ObjC::addr($self)];
@@ -244,6 +245,9 @@ final class View
                     return $r === null ? ObjC::range(self::NOT_FOUND, 0) : ObjC::range($r->start, $r->end - $r->start);
                 }
                 $f = $input->focus;
+                if ($f === null && $input->composing !== '') {
+                    return ObjC::range(0, TextState::utf16Index($input->composing, strlen($input->composing))); // a node taking text: the composition is all it shows the input method
+                }
                 if ($f === null || $f->marked === null) {
                     return ObjC::range(self::NOT_FOUND, 0);
                 }
@@ -280,6 +284,11 @@ final class View
                 }
                 $f = $input->focus;
                 if ($f === null) {
+                    if ($input->textCaret !== null) { // a node taking text hears the composition, its caret in characters
+                        $input->composing = $s;
+                        $input->push(['compose', $s, mb_strlen(substr($s, 0, TextState::byteIndex($s, (int)$selected->location)), 'UTF-8')]);
+                        Metal::requestFrame($self);
+                    }
                     return;
                 }
                 $f->setMarked($s, TextState::byteIndex($s, (int)$selected->location));
@@ -288,6 +297,10 @@ final class View
             'unmarkText' => ['v@:', 'v(pp)', function ($self, $cmd) {
                 $input = self::$inputs[ObjC::addr($self)];
                 if ($input->client !== null) { $input->client->unmarkText(); Metal::requestFrame($self); return; }
+                if ($input->focus === null && $input->composing !== '') { // what a node taking text had composed is committed
+                    $s = $input->composing; $input->composing = '';
+                    $input->push(['insert', $s]); Metal::requestFrame($self); return;
+                }
                 $f = $input->focus;
                 if ($f !== null && $f->marked !== null) { $f->insert($f->marked); Metal::requestFrame($self); }
             }],
@@ -309,16 +322,19 @@ final class View
             'firstRectForCharacterRange:actualRange:' => ['{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}^{_NSRange=QQ}', 'r(ppnp)', function ($self, $cmd, $range, $actual) {
                 $input = self::$inputs[ObjC::addr($self)];
                 if ($input->client !== null) {
-                    $b = $input->client->boundsForRange(new TextInputRange((int)$range->location, (int)$range->location + (int)$range->length));
-                    [$x, $y, $w, $h] = $b === null ? [$input->clientOrigin[0], $input->clientOrigin[1], 0.0, 0.0] : [$input->clientOrigin[0] + $b[0][0], $input->clientOrigin[1] + $b[0][1], $b[0][2], $b[0][3]];
-                    if ($b !== null) { self::setRange($actual, $b[1]); }
+                    [[$x, $y, $w, $h], $used] = $input->clientRect(new TextInputRange((int)$range->location, (int)$range->location + (int)$range->length));
+                    if ($used !== null) { self::setRange($actual, $used); }
                 } else {
                     [$x, $y, $w, $h] = $input->caretRect((int)$range->location);
                 }
                 $inWindow = ObjC::msg('r:rp', $self, 'convertRect:toView:', ObjC::rect($x, $y, $w, $h), null);
                 return ObjC::msg('r:r', ObjC::msg('p:', $self, 'window'), 'convertRectToScreen:', $inWindow);
             }],
-            'characterIndexForPoint:' => ['Q@:{CGPoint=dd}', 'L(ppq)', fn($self, $cmd, $p) => self::NOT_FOUND],
+            'characterIndexForPoint:' => ['Q@:{CGPoint=dd}', 'L(ppq)', function ($self, $cmd, $p) { // a point of the screen
+                $inWindow = ObjC::msg('r:r', ObjC::msg('p:', $self, 'window'), 'convertRectFromScreen:', ObjC::rect($p->x, $p->y, 0, 0));
+                $at = ObjC::msg('r:rp', $self, 'convertRect:fromView:', $inWindow, null);
+                return self::$inputs[ObjC::addr($self)]->clientIndex($at->x, $at->y) ?? self::NOT_FOUND;
+            }],
             'doCommandBySelector:' => ['v@::', 'v(ppp)', function ($self, $cmd, $selector) {
                 $input = self::$inputs[ObjC::addr($self)];
                 if ($input->client !== null) { return; } // the keys go to the node taking its input, as mygo's surface leaves them
@@ -395,7 +411,9 @@ final class View
         }
         $f = $input->focus;
         if ($f === null) {
-            $input->push(['insert', $s]); // a focused button takes Space from here
+            $input->composing = ''; // committed
+            $input->push(['insert', $s]); // a focused button takes Space from here, a node taking text the text
+            Metal::requestFrame($self);
             return;
         }
         if ($location !== self::NOT_FOUND) {

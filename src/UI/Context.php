@@ -1932,8 +1932,7 @@ final class Context
           $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->role = Role::COMBO_BOX; $in->nameFrom = $f;
-          $arrow = $this->box($t->space(2.5), $t->space(2.5), 0); $arrow->color = null;
-          $arrow->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::chevron($list, $a->x, $a->y, $a->w, $t->textMuted));
+          $arrow = $this->chevron();
         $this->end();
         $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
         $click = false; // the input's own click, which opens the options while they are closed
@@ -2795,17 +2794,22 @@ final class Context
 
     /**
      * An SVG as an icon, as mygo's Icon: its shapes in the color of the
-     * text (or $color), whatever colors the SVG has, as high as the font
-     * size (or $size), keeping its aspect ratio. Parse the SVG once, not
-     * in the view.
+     * text around it (or $color, or its own textColor()), whatever colors
+     * the SVG has, as high as the font size around it (or $size), keeping
+     * its aspect ratio; given another size, it fits in it, centered.
+     * Parse the SVG once, not in the view.
      */
     public function icon(SVG $svg, ?float $size = null, ?int $color = null): Node
     {
-        $t = $this->theme;
-        $h = $size ?? $t->fontSize;
+        $in = $this->inheritedText();
+        $h = $size ?? $in->size;
+        $color ??= $in->color;
         $n = $this->box($h * $svg->w / $svg->h, $h, 0); $n->color = null; // the box paints no face of its own; its alpha is the icon's (fade())
         $n->svg = $svg; // an image to assistive technology once labeled; else decoration
-        $n->draw(fn(DisplayList $list, Node $a, Theme $t, TextPainter $text) => Painter::paintIcon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($color ?? $t->text) : ($color ?? $t->text), $a->alpha, $a->rotation));
+        $n->draw(function (DisplayList $list, Node $a, Theme $t, TextPainter $text) use ($svg, $color): void {
+            $rgb = $a->ts?->color ?? $color ?? $t->text;
+            Painter::paintIcon($list, $text, $svg, $a->x, $a->y, $a->w, $a->h, $a->gray ? Theme::luminance($rgb) : $rgb, $a->alpha, $a->rotation);
+        });
         return $n;
     }
 
@@ -2888,8 +2892,9 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $saved = $this->toRoot(); // at the root: over the view, placed in the window
-        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)->margin($t->space(1), 0, 0, 0)
-            ->attachTo($anchor, Anchor::BottomStart, Anchor::TopStart)->minWidth($rt?->rectOf($anchor->id)[2] ?? 0)->role(Role::POPUP); // at the anchor's start, the right right to left; above it where there is no room below
+        $panel = $this->column();
+        $this->stylePanel($panel);
+        $panel->attachTo($anchor, Anchor::BottomStart, Anchor::TopStart)->minWidth($rt?->rectOf($anchor->id)[2] ?? 0)->role(Role::POPUP); // at the anchor's start, the right right to left; above it where there is no room below
           $fn();
         $this->end();
         $this->back($saved);
@@ -3907,45 +3912,57 @@ final class Context
     }
 
     /**
-     * A popup choosing among $options (labels) into $index: clicking it
-     * shows the options as a menu at the control; changed() reports a
-     * choice. Needs the window the control is in (the key window by default).
+     * A drop-down choosing one of $options (labels) into $index, as mygo's
+     * Select on SelectBase: a button showing the choice and a chevron,
+     * whose popup below it lists the options, the choice on the surface
+     * and the one the pointer or the arrows are on in the accent; a click,
+     * Enter or Space chooses, Escape or a press outside closes it.
+     * changed() reports a choice. $width sets its width, at least
+     * Space(35) by default.
      * @param list<string> $options
      */
-    public function select(array $options, int &$index, ?float $width = null, ?Window $window = null): Node
+    public function select(array $options, int &$index, ?float $width = null): Node
     {
         $t = $this->theme;
-        $size = $t->fontSize;
+        $sel = $this->selectBase($index);
+        $b = $sel->trigger;
+        $b->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->border()->justify(Node::SPACE_BETWEEN)->min($width ?? $t->space(35), 0)->background($t->surface); // mygo's styleButton
+        if ($width !== null) { $b->width($width); }
+        if ($this->hovered($b)) { $b->color = $this->runtime->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
+        $b->gap = $t->space(1.5);
         $label = $options[$index] ?? '';
-        // A plain button's look (padding Space(1.5) by Space(3.5)), the label and a chevron Space(1.5) apart, at least Space(35) wide.
-        $w = $width ?? max($t->space(35), max(array_map(fn($o) => $this->metrics->measure($o, $size)[0], $options ?: [''])) + 2 * $t->space(3.5) + $t->space(1.5) + $t->space(2.5));
-        [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::SELECT, 0, 0, 0, $w, $h + $t->space(3), 0, $label, $t->surface, $size, $t->text));
-        $n->bordered = true; $n->chevron = true;
-        $n->focusable = true;
-        $n->role(Role::POP_UP_BUTTON)->value($label);
-        if ($this->runtime?->hovered($n->id)) {
-            $n->color = $t->surfaceHover;
-        }
-        $rt = $this->runtime;
-        if ($rt !== null && ($chosen = $rt->chosen($n->id)) !== null && $chosen !== $index && isset($options[$chosen])) {
-            $index = $chosen; // the menu's action arrived after the popup returned, on a later run-loop turn
-            $n->text = $options[$index];
-            $n->accValue = $n->text;
-            $n->changed = true;
-        }
-        if ($rt?->clicked($n->id) || ($n->id === $rt?->focus && $this->shortcut(Key::DOWN))) { // a click, Enter, Space or Down while focused, as a menu button's
-            $window ??= Window::focused();
-            $items = [];
-            $id = $n->id;
-            foreach ($options as $i => $o) {
-                $items[] = new MenuItem($o, function (MenuItem $it, ?Window $w) use ($rt, $id, $i) { $rt->chose($id, $i); $w?->invalidate(); }, checked: $i === $index, type: MenuItem::CHECKBOX);
+        $b->value($label);
+          $this->text($label, $t->fontSize, $t->text)->singleLine();
+          $this->chevron();
+        $this->end();
+        $sel->popup(function (Node $panel) use ($sel, $options, $index, $t): void {
+            $this->stylePanel($panel);
+            foreach ($options as $i => $opt) {
+                $item = $sel->item($i)->padding($t->space(1.5), $t->space(2.5))->round($t->radius);
+                $fg = $t->text;
+                if ($item->highlighted) { $item->background($t->accent); $fg = $t->accentText; }
+                elseif ($i === $index) { $item->background($t->surface); }
+                  $this->text($opt, $t->fontSize, $fg)->singleLine();
+                $this->end();
             }
-            if ($window !== null) {
-                (new Menu($items))->popupUnder($window, $n->id, $rt);
-            }
-        }
-        return $n;
+        });
+        return $b;
+    }
+
+    /** The arrow of a button opening something below it, Space(2.5) square in the muted text color (mygo's chevron). */
+    private function chevron(): Node
+    {
+        $a = $this->box($this->theme->space(2.5), $this->theme->space(2.5), 0)->shrink(0);
+        $a->color = null;
+        $a->draw(fn(DisplayList $list, Node $a, Theme $t) => Painter::chevron($list, $a->x, $a->y, $a->w, $t->textMuted));
+        return $a;
+    }
+
+    /** Gives the panel of a popup the theme's look: Space(1) below what opens it, padded Space(1), rounded, bordered, shadowed (mygo's stylePanel). */
+    private function stylePanel(Node $panel): void
+    {
+        $t = $this->theme;
+        $panel->margin($t->space(1), 0, 0, 0)->padding($t->space(1))->round($t->radius + 2)->background($t->background)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18);
     }
 
     /**

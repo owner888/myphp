@@ -1493,3 +1493,27 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   is), TestSpinnerColor's pixels (spinner_test reads the
   colors painted), TestMeter's pixels (the meter's color is read off the node).
 
+## Scopes, transforms, SVGs, colors and web views, their tests (v1.19)
+
+- **A web view's children**
+  - mygo: `WebView(c, v).Children(...)`: elements over the page, inside
+    its node, which take the pointer there.
+  - myphp: `Context::webView` is a leaf; what shows over the page is
+    built after it, at() or absolute, as the popover and the button of
+    webview_test.
+  - Why: a leaf keeps `webView()` a call without an `end()`.
+- **Borders in the tests**: mygo's `Border(w, c)` takes room in the
+  layout; myphp's is `borderWidth(w)->borderColor(c)` (`border()` rings
+  the box without room), as in webview_test.
+- **Not ported**: the pixel tests (TestIconDrawsItsShapeOnce,
+  TestPictureFollowsTheTextColor, TestPainterDrawsSVGs, TestWebViewHole's
+  and TestWebViewOpacity's pixels, TestTransformedNativeDragPreviewHotspot's
+  preview, TestTransformUpdatesDamageAndTransitionGeometry's damage,
+  TestWebViewNotOpaque: the headless text painter draws no pixels nor
+  subpixel glyphs); the wide-gamut tests past Oklch's sRGB
+  (TestMixWide, TestWideShadowStripesGradientAndText, TestWideOnlyWhereItShows,
+  TestWideDecorationsDividersAndTextBackground, TestThemeAccentTakesOklch,
+  TestPictureOfAWideColor, TestWideFramesOnGPU, TestEffectColor), as myphp
+  draws sRGB alone (Widgets and context, v1.08); TestUnhandledEscape is
+  flyout_test's.
+

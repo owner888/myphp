@@ -332,7 +332,6 @@ final class Inspector
             $n->kind === Node::RADIO => 'Radio',
             $n->kind === Node::SWITCH => 'Switch',
             $n->kind === Node::SLIDER => 'Slider',
-            $n->kind === Node::SELECT => 'Select',
             $n->kind === Node::PROGRESS => 'Progress',
             $n->kind === Node::SPINNER => 'Spinner',
             $n->kind === Node::TEXT => 'Text',

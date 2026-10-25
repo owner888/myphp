@@ -29,6 +29,16 @@ final class Input
     /** The text-input client of the focused node that has one (Node::handleTextInput), which the native view's text input client talks to in place of a field, and where its box is (x, y). */
     public ?TextInputClient $client = null;
     public array $clientOrigin = [0.0, 0.0];
+    /** The caret of the focused node taking text (Node::textCaret), in the window's layout, or null; and what an input method composes for it. @var ?array{0: float, 1: float, 2: float, 3: float} */
+    public ?array $textCaret = null;
+    public string $composing = '';
+    /** The map from the focused node's layout to the window, its transforms' (Node::$world): the caret and the client's rectangles show through it. */
+    public Affine $world;
+
+    public function __construct()
+    {
+        $this->world = Affine::identity();
+    }
     /** Whether the input methods compose text for the client (Node::inputMethod); without them, keys type their characters. */
     public bool $inputMethod = true;
     /** Delivers an event at once to the node taking its input as it comes, reporting whether it took it: set by the runtime. */
@@ -64,18 +74,46 @@ final class Input
         return false;
     }
 
-    /** The caret's rectangle for UTF-16 index $u16 of the focused field's text, in view points. */
+    /** The caret's rectangle for UTF-16 index $u16 of the focused field's text, in view points, as it shows through the field's transforms. */
     public function caretRect(int $u16): array
     {
         [$x, $y, $h, $size] = $this->focusText;
+        if ($this->focus === null && $this->textCaret !== null) {
+            return $this->shown($this->textCaret);
+        }
         if ($this->focus === null || $this->metrics === null) {
-            return [$x, $y, 1.0, $h];
+            return $this->shown([$x, $y, 1.0, $h]);
         }
         $display = $this->focus->display();
         $byte = TextState::byteIndex($display, $u16);
         if ($this->caretAt !== null) {
-            return ($this->caretAt)($byte);
+            return $this->shown(($this->caretAt)($byte));
         }
-        return [$x + ($this->focus->multiline ? 0.0 : $this->focus->offsetX) + $this->metrics->xForIndex($this->focus->shown(), $size, $this->focus->shownIndex($byte)), $y, 1.0, $h];
+        return $this->shown([$x + ($this->focus->multiline ? 0.0 : $this->focus->offsetX) + $this->metrics->xForIndex($this->focus->shown(), $size, $this->focus->shownIndex($byte)), $y, 1.0, $h]);
+    }
+
+    /** The rectangle of range $r of the client's text in view points, as it shows through the node's transforms, and the range it is of; the node's corner where the client gives none. @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: ?TextInputRange} */
+    public function clientRect(TextInputRange $r): array
+    {
+        [$ox, $oy] = $this->clientOrigin;
+        $b = $this->client?->boundsForRange($r);
+        return $b === null ? [$this->shown([$ox, $oy, 0.0, 0.0]), null] : [$this->shown([$ox + $b[0][0], $oy + $b[0][1], $b[0][2], $b[0][3]]), $b[1]];
+    }
+
+    /** The index, in UTF-16 units, of the client's text at view point ($x, $y), through the node's transforms; null where none shows, as a node collapsed to nothing (mygo's IndexForPoint). */
+    public function clientIndex(float $x, float $y): ?int
+    {
+        $inv = $this->world->inverse();
+        if ($this->client === null || $inv === null) {
+            return null;
+        }
+        [$lx, $ly] = $inv->point($x, $y);
+        return $this->client->indexForPoint($lx - $this->clientOrigin[0], $ly - $this->clientOrigin[1]);
+    }
+
+    /** $r, a rectangle of the focused node's layout, as it shows in the window. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */
+    private function shown(array $r): array
+    {
+        return $this->world->set ? $this->world->bounds(...$r) : $r;
     }
 }

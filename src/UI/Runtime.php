@@ -136,6 +136,10 @@ final class Runtime
     public int $pass = 0;
     /** @var array<int, Affine> the maps from the layout of last frame's transformed nodes to the window, by id (Node::$world): for the pointer */
     private array $worlds = [];
+    /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> the carets of last frame's nodes taking text (Node::textCaret), in their layout, by id */
+    private array $carets = [];
+    /** @var array<int, int> the node clipping each node of last frame, the nearest around it, by id; and the axes each of those clips (Node::CLIP_X, CLIP_Y) */
+    private array $clippedBy = [], $clipAxes = [];
     /** @var array<int, true> the nodes some of which showed in the window last frame, within the scrolling containers and clips around them (Context::inView) */
     private array $shown = [];
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> each node's rectangle as it shows in the window, clipped by its ancestors, last frame */
@@ -578,7 +582,7 @@ final class Runtime
         $this->inputs = []; $this->textClients = []; $this->keepers = [];
         $this->lists = [];
         $this->needsFrame = false;
-        $this->shown = []; $this->worlds = []; $this->visible = [];
+        $this->shown = []; $this->worlds = []; $this->visible = []; $this->clippedBy = []; $this->clipAxes = []; $this->carets = [];
         $this->parents = []; $this->inertIds = []; $this->passing = []; $this->disabledIds = []; $this->attachedTo = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
@@ -628,6 +632,9 @@ final class Runtime
             $was->unmarkText(); // the focus left it composing: what was composed stays, no longer marked (mygo's focus loss)
         }
         if ($this->input->client !== null) { $this->input->clientOrigin = [$this->rects[$this->focus][0], $this->rects[$this->focus][1]]; }
+        $this->input->world = $this->focus !== null ? $this->worldOf($this->focus) : Affine::identity(); // the caret and the client's rectangles show through the focused node's transforms
+        $this->input->textCaret = $this->input->client === null && $this->focus !== null ? ($this->carets[$this->focus] ?? null) : null;
+        if ($this->input->textCaret === null) { $this->input->composing = ''; }
         if ($this->focus !== null && isset($this->fields[$this->focus])) {
             [$state, $tx, $ty, $lh, $size, $width] = $this->fields[$this->focus];
             $this->input->focus = $state;
@@ -1588,7 +1595,7 @@ final class Runtime
         return $phase >= self::BLINK_FOR ? null : self::BLINK - fmod($phase, self::BLINK);
     }
 
-    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false, bool $hidden = false): void
+    private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false, bool $hidden = false, int $clipper = 0): void
     {
         $hidden = $hidden || $n->invisible; // in its room, but showing nothing and taking neither the pointer nor the focus (mygo's Invisible)
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
@@ -1633,6 +1640,12 @@ final class Runtime
         }
         $vx = max($bx, $clip[0]); $vy = max($by, $clip[1]);
         $this->visible[$n->id] = [$vx, $vy, max(0.0, min($bx + $bw, $clip[2]) - $vx), max(0.0, min($by + $bh, $clip[3]) - $vy)]; // as it shows, clipped (mygo's vx, vy, vw, vh)
+        if ($clipper !== 0) { $this->clippedBy[$n->id] = $clipper; }
+        $axes = ($n->scroll !== null ? Node::CLIP_X | Node::CLIP_Y : 0) | $n->clip;
+        if ($axes !== 0 && $parent !== null) { // what is inside it takes the pointer only within it, in its own layout (mygo's clip chain)
+            $this->clipAxes[$n->id] = $axes;
+            $clipper = $n->id;
+        }
         if ($n->scroll !== null || ($n->clip & Node::CLIP_X) !== 0) {
             $clip[0] = max($clip[0], $bx); $clip[2] = min($clip[2], $bx + $bw);
         }
@@ -1697,6 +1710,7 @@ final class Runtime
         if ($n->keepFocus) { $this->keepers[$n->id] = true; }
         if ($n->input !== null) { $this->inputs[$n->id] = $n->input; }
         if ($n->textClient !== null) { $this->textClients[$n->id] = [$n->textClient, $n->inputMethod]; }
+        if ($n->caret !== null) { $this->carets[$n->id] = [$n->x + $n->caret[0], $n->y + $n->caret[1], $n->caret[2], $n->caret[3]]; }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
             $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET - $n->insetL - $n->insetR];
@@ -1721,7 +1735,7 @@ final class Runtime
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
         foreach ($n->paintOrder() as $k) {
-            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden);
+            $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
         }
     }
 
@@ -1837,11 +1851,21 @@ final class Runtime
                 $id = $this->focus;
                 $ev = new InputEvent(InputEvent::COMMAND, text: $e[1]);
                 break;
+            case 'insert': // text typed or committed, to a node taking text (Node::textCaret)
+                $id = $this->focus !== null && isset($this->carets[$this->focus]) ? $this->focus : null;
+                if ($id === null) { return false; }
+                $ev = new InputEvent(InputEvent::TEXT, text: $e[1]);
+                break;
+            case 'compose': // ['compose', text, caret]: an input method's composition
+                $id = $this->focus !== null && isset($this->carets[$this->focus]) ? $this->focus : null;
+                if ($id === null) { return true; }
+                $ev = new InputEvent(InputEvent::COMPOSE, text: $e[1], caret: $e[2]);
+                break;
             default:
                 return false;
         }
         if ($id === null || !isset($this->inputs[$id])) { return $e[0] === 'move'; }
-        if ($ev->kind !== InputEvent::KEY_DOWN && $ev->kind !== InputEvent::KEY_UP && $ev->kind !== InputEvent::COMMAND) {
+        if (!in_array($ev->kind, [InputEvent::KEY_DOWN, InputEvent::KEY_UP, InputEvent::COMMAND, InputEvent::TEXT, InputEvent::COMPOSE], true)) {
             [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
         }
         $took = (bool)($this->inputs[$id])($ev);
@@ -2078,7 +2102,7 @@ final class Runtime
         if ($this->focusables === []) {
             return;
         }
-        $reachable = array_values(array_filter($this->focusables, $this->reachable(...)));
+        $reachable = $this->placePopovers(array_values(array_filter($this->focusables, $this->reachable(...))));
         if ($reachable === []) {
             return;
         }
@@ -2099,6 +2123,41 @@ final class Runtime
             $to = $last !== null && ($this->memberOf[$last] ?? 0) === $to ? $last : ($this->groups[$to]['on'] ?? $this->firstMember($to, $reachable));
         }
         $this->focusTo($to);
+    }
+
+    /**
+     * $order with the focusables of popovers moved after their anchors,
+     * a popover of a popover after its own (mygo's placePopovers): a
+     * popover is built at the window's root, after the view, but Tab goes
+     * into it from what opened it. @param list<int> $order @return list<int>
+     */
+    private function placePopovers(array $order): array
+    {
+        $in = array_flip($order); $after = []; $top = [];
+        foreach ($order as $id) {
+            $a = $this->popoverAnchor($id);
+            if ($a !== 0 && isset($in[$a])) { $after[$a][] = $id; } else { $top[] = $id; }
+        }
+        if ($after === []) { return $order; }
+        $out = []; $placed = [];
+        $add = function (int $id) use (&$add, &$out, &$placed, $after): void {
+            if (isset($placed[$id])) { return; }
+            $placed[$id] = true; $out[] = $id;
+            foreach ($after[$id] ?? [] as $k) { $add($k); }
+        };
+        foreach ($top as $id) { $add($id); }
+        foreach ($order as $id) { $add($id); } // popovers of anchors that cycle
+        return $out;
+    }
+
+    /** The node the popover $id is in is attached to (Node::attachTo), 0 for none, last frame. */
+    private function popoverAnchor(int $id): int
+    {
+        for ($k = 0; $id !== 0 && $k < 1000; $k++) {
+            if (isset($this->attachedTo[$id])) { return $this->attachedTo[$id]; }
+            $id = $this->parents[$id] ?? 0;
+        }
+        return 0;
     }
 
     private function firstMember(int $group, array $reachable): int
@@ -2314,23 +2373,6 @@ final class Runtime
     private array $steps = [];
     /** @var array<int, int> id => Page Up (1) and Page Down (-1) presses on a focused slider this frame */
     private array $pages = [];
-
-    /** @var array<int, int> choices menus made for selects, by node id, until the select reads them */
-    private array $choices = [];
-
-    /** A select's menu chose option $i (called from the menu's action, after the popup returned). */
-    public function chose(int $id, int $i): void
-    {
-        $this->choices[$id] = $i;
-    }
-
-    /** The option a select's menu chose since it last asked, or null. */
-    public function chosen(int $id): ?int
-    {
-        $i = $this->choices[$id] ?? null;
-        unset($this->choices[$id]);
-        return $i;
-    }
 
     /** Whether slider $id is being held (pressed, dragging). */
     public function sliding(int $id): bool
@@ -2565,8 +2607,26 @@ final class Runtime
         if ($this->inspector !== null) { $this->inspector->changed = true; }
     }
 
+    /** Whether window point ($x, $y) is inside each node clipping $id, in that node's own layout. */
+    private function withinClips(int $id, float $x, float $y): bool
+    {
+        for ($c = $this->clippedBy[$id] ?? 0; $c !== 0; $c = $this->clippedBy[$c] ?? 0) {
+            [$px, $py] = [$x, $y];
+            if (isset($this->worlds[$c])) {
+                $inv = $this->worlds[$c]->inverse();
+                if ($inv === null) { return false; }
+                [$px, $py] = $inv->point($x, $y);
+            }
+            $r = $this->rects[$c]; $axes = $this->clipAxes[$c];
+            if (($axes & Node::CLIP_X) !== 0 && ($px < $r[0] || $px >= $r[0] + $r[2])) { return false; }
+            if (($axes & Node::CLIP_Y) !== 0 && ($py < $r[1] || $py >= $r[1] + $r[3])) { return false; }
+        }
+        return true;
+    }
+
     private function under(int $id, float $x, float $y): bool
     {
+        [$wx, $wy] = [$x, $y];
         $r = $this->rects[$id] ?? null;
         if ($r === null || isset($this->passing[$id]) || !$this->reachable($id) || !isset($this->shown[$id]) && isset($this->worlds[$id])) {
             return false; // a node turned away from the viewer takes no pointer
@@ -2589,6 +2649,9 @@ final class Runtime
             if (!$on) {
                 return false;
             }
+        }
+        if (!$this->withinClips($id, $wx, $wy)) {
+            return false; // cut off by a clip around it, as it shows through the clip's own transforms
         }
         $o = $this->order[$id];
         foreach ($this->overlays as [$at, $ox, $oy, $ow, $oh]) {

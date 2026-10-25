@@ -10,7 +10,7 @@ namespace MyPHP\UI;
  */
 final class Node
 {
-    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, SELECT = 11, PROGRESS = 12, SWITCH = 13, SPINNER = 14;
+    public const CONTAINER = 0, TEXT = 1, BUTTON = 2, BOX = 3, INPUT = 4, TEXTAREA = 5, IMAGE = 6, RICH = 7, CHECKBOX = 8, RADIO = 9, SLIDER = 10, PROGRESS = 12, SWITCH = 13, SPINNER = 14;
     public const ROW = 0, COLUMN = 1;
     /** Alignments for align(), alignSelf() and justify(); AUTO is a row's CENTER and a column's STRETCH across, START along. */
     public const AUTO = -1, START = 0, CENTER = 1, END = 2, STRETCH = 3;
@@ -1551,6 +1551,21 @@ final class Node
     public function handleInput(\Closure $fn): static
     {
         $this->input = $fn;
+        return $this;
+    }
+
+    /** The caret of text the node takes from the input methods (textCaret), [x, y, w, h] in its box, or null for none. @var ?array{0: float, 1: float, 2: float, 3: float} */
+    public ?array $caret = null;
+
+    /**
+     * Has the node take text from the system's input methods while it has
+     * the keyboard focus, their composition at the caret ($x, $y, $w, $h),
+     * relative to its box, where candidate windows show: its handleInput
+     * hears COMPOSE and TEXT events (mygo's TextCaret).
+     */
+    public function textCaret(float $x, float $y, float $w, float $h): static
+    {
+        $this->caret = [$x, $y, $w, $h];
         return $this;
     }
 

@@ -367,12 +367,8 @@ panel, which grows into view as the arrow turns);
 Changed). The toggles are focusable nodes whose click flips the value;
 the slider is set from `Runtime`, which records presses and drags inside
 slider rects as a share of their width (`slid`) and Left/Right on a
-focused slider as steps (`stepped`); the select pops an `NSMenu` under
-the node's last-frame rect (`Menu::popupAt`); the popup runs its own loop
-but AppKit sends the chosen item's action on a later run-loop turn, after
-the popup returned, so the action records the choice in `Runtime`
-(`chose`) and asks for a frame, and the next build's `select()` takes it
-(`chosen`).
+focused slider as steps (`stepped`); the select opens a popup of its
+options in the window, as mygo's (`selectBase`, v1.19).
 
 `link()` is accent text with an underline whose click calls
 `Runtime::$openURL` (Shell::openExternal → `NSWorkspace openURL:`); while it is
@@ -2884,6 +2880,27 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   scroll the highlight into view once; their options are read as chosen
   where the arrows are, named by their text; the input says whether the
   popup shows. A search field's clear button keeps the focus.
+
+## Scopes, transforms, SVGs and web views (v1.19)
+
+- **Select** is mygo's: `selectBase` with a button's look and a popup of
+  the options in the window (`stylePanel`), no longer AppKit's menu; Escape
+  closes the popup on top, then the dialog. `Node::SELECT` is gone.
+- **Popovers in the Tab order** follow their anchors (`Runtime::placePopovers`),
+  though built at the window's root.
+- **Clips take the pointer too**: a node is under the pointer only inside
+  every node clipping it, in that node's own layout, through its
+  transforms (`Runtime::withinClips`).
+- **Through transforms**: the caret the window gives the input methods
+  (`Input::caretRect`), a text input client's rectangles and the index at
+  a point (`Input::clientRect`, `clientIndex`, characterIndexForPoint:),
+  and a popover's place below its anchor as it shows (`Layout::shownIn`),
+  the popover itself not turned.
+- **Nodes taking text of their own** (`Node::textCaret`): the input
+  methods compose at its caret, which hears COMPOSE and TEXT events
+  (`InputEvent`), the view keeping the composition (`Input::$composing`).
+- **Icons** take the font size and the text color around them, or their
+  own `textColor()`.
 
 ## Open items
 

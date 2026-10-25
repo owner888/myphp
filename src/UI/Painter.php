@@ -405,9 +405,9 @@ final class Painter
         if ($n->focusVisible && $n->color !== null && $n->radii !== null) { // around corners each their own
             $list->box($n->x - 3, $n->y - 3, $n->w + 6, $n->h + 6, array_map(static fn(float $r): float => $r + 3, $n->radii), 0, 0.0, [2.0, 2.0, 2.0, 2.0], $t->focus, $t->focusAlpha);
         } elseif ($n->focusVisible && $n->color !== null) { // a ring around a button or other faced node
-            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius }, $t);
+            self::paintFocusRing($list, $n->x, $n->y, $n->w, $n->h, match ($n->kind) { Node::BUTTON => $t->radius, default => $n->radius }, $t);
         }
-        $radius = match ($n->kind) { Node::BUTTON, Node::SELECT => $t->radius, default => $n->radius };
+        $radius = match ($n->kind) { Node::BUTTON => $t->radius, default => $n->radius };
         $box = [$n->x, $n->y, $n->w, $n->h];
         $radii = $n->radii ?? [$radius, $radius, $radius, $radius];
         foreach ($n->shadows as $sh) { // outside the box, under it (mygo's Shadow)
@@ -458,12 +458,12 @@ final class Painter
         }
         if ($n->text !== null) {
             $x = $n->x; $y = $n->y;
-            if ($n->kind === Node::BUTTON || $n->kind === Node::SELECT) { // the label centered in the padding; a select's at the start, its chevron at the end (mygo's Justify(SpaceBetween))
+            if ($n->kind === Node::BUTTON) { // the label centered in the padding, a menu button's chevron after it
                 [$tw, $th] = $text->measure($n->text, $n->fontSize);
                 $cw = $n->chevron ? $t->space(2.5) + $t->space(1.5) : 0;
-                $x += $n->kind === Node::SELECT ? $t->space(3.5) : ($n->w - $tw - $cw) / 2; $y += ($n->h - $th) / 2;
+                $x += ($n->w - $tw - $cw) / 2; $y += ($n->h - $th) / 2;
                 if ($n->chevron) {
-                    self::chevron($list, $n->kind === Node::SELECT ? $n->x + $n->w - $t->space(3.5) - $t->space(2.5) : $x + $tw + $t->space(1.5), $n->y + ($n->h - $t->space(2.5)) / 2, $t->space(2.5), $t->textMuted);
+                    self::chevron($list, $x + $tw + $t->space(1.5), $n->y + ($n->h - $t->space(2.5)) / 2, $t->space(2.5), $t->textMuted);
                 }
             }
             $shown = $n->text;

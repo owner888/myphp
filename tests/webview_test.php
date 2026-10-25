@@ -1,8 +1,9 @@
 <?php
 // Web views in native UI without WebKit (mygo's ui/webview_test.go): the
 // node paints a hole through the content where the web view shows, and
-// notes where; the pointer is the page's there, unless something painted
-// over it takes it.
+// notes where, in its content box, clipped; the pointer is the page's
+// there, unless something painted over it takes it; Tab stops at it; the
+// last press before a frame decides a popover.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -30,3 +31,107 @@ $cover = true; $h->frame(); $h->paint();
 check($h->rt->webViewAt(160, 50) === null && $h->rt->webViewAt(300, 200) === $docs, 'a button painted over it takes the pointer there');
 $show = false; $h->frame(); $list = $h->paint();
 same([[], []], [$list->holes, $h->rt->webPlaces], 'not built: no hole, nowhere to show');
+
+// Placed in its content box, inside its border and padding; a popover's panel over it takes the pointer, a press on the page closes it (mygo's TestWebViewPlacement).
+$page = (new \ReflectionClass(\MyPHP\WebView::class))->newInstanceWithoutConstructor();
+$open = false;
+$h = new Headless(function (Context $c) use ($page, &$open): void {
+    $c->column(0, 0, 1)->align(Node::STRETCH);
+      $menu = $c->button('Menu');
+      if ($c->clicked($menu)) { $open = !$open; }
+      $c->popover($menu, $open, fn() => $c->text('Item')->padding(4, 8));
+      $c->webView($page)->grow(1)->padding(10)->borderWidth(1)->borderColor(0x000000); // mygo's Border, in the layout
+    $c->end();
+}, 400, 300);
+$h->frame(); $h->paint();
+$p = $h->rt->webPlaces[0];
+check($p['frame'] == $p['clip'] && $p['frame'][0] == 11 && $p['frame'][2] == 378 && $p['frame'][1] + $p['frame'][3] == 289, 'in its content box: ' . json_encode($p));
+check($h->rt->webViewAt(200, 200) === $page && $h->rt->webViewAt(5, 200) === null, 'the pointer is the page\'s where it shows');
+$h->clickText('Menu'); $h->paint();
+$item = $h->rect($h->byText('Item'));
+check($h->rt->webViewAt($item[0] + 1, $item[1] + 1) === null, 'the popover\'s panel takes the pointer over the page');
+$h->click(200, 250);
+check(!$open && $h->byText('Item') === null, 'a press on the page closes the popover');
+
+// The hole is rounded as its corners inside its border; at half opacity, it is still placed (mygo's TestWebViewHole, TestWebViewOpacity).
+$h = new Headless(function (Context $c) use ($page): void {
+    $c->column(20, 0, 1)->align(Node::STRETCH);
+      $c->webView($page)->grow(1)->radius(12)->borderWidth(2)->borderColor(0x000000);
+    $c->end();
+}, 200, 140);
+$h->frame(); $list = $h->paint();
+same([[22.0, 22.0, 156.0, 96.0]], array_map(fn($p) => array_map('floatval', $p['frame']), $h->rt->webPlaces), 'the page in the content box');
+same(1, count($list->holes), 'one hole');
+$h = new Headless(function (Context $c) use ($page): void {
+    $c->column(20, 0, 1)->align(Node::STRETCH)->opacity(0.5);
+      $c->webView($page)->grow(1);
+    $c->end();
+}, 200, 140);
+$h->frame(); $h->paint();
+same(1, count($h->rt->webPlaces), 'a translucent web view is placed');
+
+// Tab stops at a web view, to give its page the keyboard, both ways (mygo's TestWebViewTab).
+$beforeField = new \MyPHP\UI\TextState(''); $afterField = new \MyPHP\UI\TextState(''); $wv = null;
+$h = new Headless(function (Context $c) use ($page, $beforeField, $afterField, &$wv): void {
+    $c->column(0, 0, 1)->align(Node::STRETCH);
+      $c->input($beforeField, '', 0)->label('Before');
+      $wv = $c->webView($page)->height(100);
+      $c->input($afterField, '', 0)->label('After');
+    $c->end();
+}, 200, 200);
+$h->frame();
+$h->tab();
+same('Before', $h->focused()?->label, 'Tab: Before');
+$h->tab();
+same($wv->id, $h->rt->focus, 'Tab: the web view');
+$h->tab();
+same('After', $h->focused()?->label, 'Tab out of the page: After');
+$h->tab(true);
+same($wv->id, $h->rt->focus, 'Shift+Tab from After: the web view');
+
+// In a scroll container, it shows the part of it in view, none once out of view or not built; a press on it takes the focus from the input (mygo's TestWebViewClipped).
+$shown = true; $text = new \MyPHP\UI\TextState(''); $scroll = new \MyPHP\UI\ScrollState;
+$h = new Headless(function (Context $c) use ($page, &$shown, $text, $scroll): void {
+    $c->column(0, 0, 1)->align(Node::STRETCH);
+      $c->input($text, '', 300)->label('Name');
+      $c->column(0, 0, 1)->align(Node::STRETCH)->scroll($scroll);
+        $c->box(0, 100, 0);
+        if ($shown) { $c->webView($page)->height(300); }
+        $c->box(0, 400, 0);
+      $c->end();
+    $c->end();
+}, 300, 300);
+$h->frame(); $h->paint();
+$p = $h->rt->webPlaces[0] ?? null;
+check($p !== null && $p['frame'][3] == 300 && $p['clip'][1] + $p['clip'][3] == 300 && $p['clip'][1] == $p['frame'][1], 'clipped by the scroll container at the window\'s bottom: ' . json_encode($p));
+$h->clickLabel('Name');
+same('Name', $h->focused()?->label, 'the input has the focus');
+$h->click(150, 200);
+check($h->focused()?->label !== 'Name', 'a press on the page takes it');
+$h->input->push(['scroll', 150, 250, 0, -1000]); $h->frame(); $h->paint();
+same([], $h->rt->webPlaces, 'scrolled out of view, it shows nowhere');
+$h->input->push(['scroll', 150, 250, 0, 1000]); $shown = false; $h->frame(); $h->paint();
+same([], $h->rt->webPlaces, 'not built, nowhere');
+
+// A press on a popover's anchor after a press elsewhere before the next frame opens it; the last press decides (mygo's TestPopoverLastPressDecides).
+$open = false; $behind = 0; $more = null; $other = null;
+$h = new Headless(function (Context $c) use (&$open, &$behind, &$more, &$other): void {
+    $c->row(10, 100)->align(Node::START);
+      $more = $c->buttonBase()->size(60, 20)->label('more'); $c->end();
+      if ($c->clicked($more)) { $open = true; }
+      $other = $c->buttonBase()->size(60, 20)->label('behind'); $c->end();
+      if ($c->clicked($other)) { $behind++; }
+      $c->popoverBase($more, $open, function (Node $panel) use ($c): void { $c->buttonBase()->size(80, 20)->label('item'); $c->end(); });
+    $c->end();
+}, 400, 300);
+$h->frame();
+$press = function (Node $n) use ($h): void {
+    [$x, $y] = $h->middle($n);
+    $h->input->mouse($x, $y);
+    $h->input->push(['down', $x, $y, 0, 1, 0]); $h->input->push(['up', $x, $y, 0, 1, 0]);
+};
+[$m, $o] = [$h->byLabel('more'), $h->byLabel('behind')];
+$press($o); $press($m); $h->frame();
+check($open && $behind === 1, "a press elsewhere then on the anchor: open, the other clicked $behind time");
+$press($m); $press($o); $h->frame();
+check(!$open, 'a press on the anchor then elsewhere leaves it closed');

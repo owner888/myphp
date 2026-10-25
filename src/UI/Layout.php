@@ -665,7 +665,7 @@ final class Layout
             [$dx, $dy] = self::relative($k, $pw, $ph);
             if ($k->attachTarget !== null) { // a popover of another node: on it, in the window
                 $tg = $k->attachTarget;
-                [$tx, $ty, $tw, $th] = $tg->laid ? [$tg->x, $tg->y, $tg->w, $tg->h] : ($tg->context?->runtime?->rectOf($tg->id) ?? [0.0, 0.0, 0.0, 0.0]);
+                [$tx, $ty, $tw, $th] = $tg->laid ? self::shownIn($n, $tg) : ($tg->context?->runtime?->rectOf($tg->id) ?? [0.0, 0.0, 0.0, 0.0]); // as it shows, through its transforms, which the popover does not take
                 $kx = self::alongTarget($tx, $tw, $ax, $sx, $iw, $m[3] - $m[1], self::$window[0]);
                 $ky = self::alongTarget($ty, $th, $ay, $sy, $ih, $m[0] - $m[2], self::$window[1]);
                 self::arrange($k, $kx + $dx - $m[3], $ky + $dy - $m[0], $iw + $mx, $ih + $my);
@@ -691,6 +691,24 @@ final class Layout
             if ($autoT && $autoB) { $ky += max($free, 0.0) / 2; } elseif ($autoT) { $ky += max($free, 0.0); }
         }
         self::arrange($k, $bx + $kx, $by + $ky, $iw + $mx, $ih + $my);
+    }
+
+    /** The box target $tg, laid out under $from, shows over in the window, through its transforms and those around it (mygo's visual bounds). @return array{0: float, 1: float, 2: float, 3: float} */
+    private static function shownIn(Node $from, Node $tg): array
+    {
+        $world = self::worldTo($from, $tg, Affine::identity());
+        return $world !== null && $world->set ? $world->bounds($tg->x, $tg->y, $tg->w, $tg->h) : [$tg->x, $tg->y, $tg->w, $tg->h];
+    }
+
+    /** The map from $tg's layout to the window, found under $n whose ancestors' map is $above, or null when $tg is not under it. */
+    private static function worldTo(Node $n, Node $tg, Affine $above): ?Affine
+    {
+        $w = $above->mul($n->transformAt());
+        if ($n === $tg) { return $w; }
+        foreach ($n->kids as $k) {
+            if (($found = self::worldTo($k, $tg, $w)) !== null) { return $found; }
+        }
+        return null;
     }
 
     /** The window's size as the layout goes: what attachTo keeps popovers in. @var array{0: float, 1: float} */
