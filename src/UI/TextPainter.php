@@ -19,6 +19,15 @@ interface TextPainter extends TextMetrics
      */
     public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void;
 
+    /**
+     * The coverage of $glyphs (Context::shape) drawn with the pen at ($x,
+     * $y) on the baseline, in points, onto $w × $h pixels at $scale pixels
+     * a point: a byte a pixel, top row first (what Context::renderGlyphs
+     * returns).
+     * @param list<\MyPHP\Text\Glyph> $glyphs
+     */
+    public function glyphCoverage(array $glyphs, float $x, float $y, int $w, int $h, float $scale): string;
+
     /** The image atlas slot of $image: u, v, w, h in pixels and its page. @return array{u: int, v: int, w: int, h: int, page: int} */
     public function imageSlot(Image $image): array;
 

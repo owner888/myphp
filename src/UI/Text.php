@@ -77,6 +77,37 @@ final class Text implements TextPainter
         }
     }
 
+    public function glyphCoverage(array $glyphs, float $x, float $y, int $w, int $h, float $scale): string
+    {
+        $out = str_repeat("\0", $w * $h);
+        foreach ($glyphs as $g) {
+            if ($g->object || $g->font === null) {
+                continue;
+            }
+            $b = $this->ct->rasterize($g->font->id, $g->id, $scale);
+            if ($b === null) {
+                continue; // no ink, as a space
+            }
+            $mask = \FFI::string($b['rows'], $b['w'] * $b['h']);
+            Mem::free($b['rows']);
+            // Placed as paintLayout places it: the pen on a whole pixel, the bitmap's bottom oy pixels below the baseline.
+            $left = (int)round(($x + $g->x) * $scale) + $b['ox'];
+            $top = (int)round(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
+            for ($r = max(0, -$top); $r < $b['h'] && $top + $r < $h; $r++) {
+                $row = ($top + $r) * $w;
+                for ($c = max(0, -$left); $c < $b['w'] && $left + $c < $w; $c++) {
+                    $v = ord($mask[$r * $b['w'] + $c]);
+                    if ($v > 0) {
+                        $i = $row + $left + $c;
+                        $o = ord($out[$i]);
+                        $out[$i] = chr($o + intdiv($v * (255 - $o) + 127, 255)); // one glyph over another, as their quads blend
+                    }
+                }
+            }
+        }
+        return $out;
+    }
+
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
     {

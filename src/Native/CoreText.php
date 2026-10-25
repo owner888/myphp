@@ -174,14 +174,15 @@ final class CoreText
     }
 
     /**
-     * Rasterizes one glyph at the backing scale. Returns null for glyphs
+     * Rasterizes one glyph at the backing scale, or at $scale pixels a
+     * point. Returns null for glyphs
      * without ink (spaces). Offsets are in device pixels from the glyph
      * origin: ox to the right, oy up to the bitmap's bottom edge. The
      * bitmap (w*h bytes, top row first) is Mem-allocated: free it with Mem::free.
      *
      * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int}|null
      */
-    public function rasterize(int $fontId, int $glyph): ?array
+    public function rasterize(int $fontId, int $glyph, ?float $scale = null): ?array
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
@@ -192,7 +193,7 @@ final class CoreText
         if ($b->size->w <= 0 || $b->size->h <= 0) {
             return null;
         }
-        $s = $this->scale;
+        $s = $scale ?? $this->scale;
         $x0 = (int)floor($b->origin->x * $s) - 1;
         $y0 = (int)floor($b->origin->y * $s) - 1;
         $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + 1 - $x0;

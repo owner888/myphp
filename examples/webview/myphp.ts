@@ -5,6 +5,10 @@ declare global {
     myphp: {
       call<T = unknown>(method: string, ...args: unknown[]): Promise<T>;
       on(name: string, fn: (payload: unknown) => void): () => void;
+      once(name: string, fn: (payload: unknown) => void): () => void;
+      readonly preferences: { accent: string | null; reduceMotion: boolean; reduceTransparency: boolean; highContrast: boolean; textScale: number };
+      readonly locale: string;
+      readonly dir: "ltr" | "rtl";
       isCallError(e: unknown): boolean;
       platform: string;
       windowId: number;
@@ -26,7 +30,17 @@ export interface Channel<T> {
 }
 export const Channel = window.myphp.Channel;
 const call = <T,>(method: string, ...args: unknown[]): Promise<T> => window.myphp.call<T>(method, ...args);
-const on = (name: string, fn: (payload: unknown) => void) => window.myphp.on(name, fn);
+/** An event PHP sends: on() listens to each, once() to the next; each returns a function that stops listening. */
+export interface PhpEvent<T> {
+  readonly name: string;
+  on(fn: (payload: T) => void): () => void;
+  once(fn: (payload: T) => void): () => void;
+}
+const event = <T,>(name: string): PhpEvent<T> => ({
+  name,
+  on: (fn) => window.myphp.on(name, fn as (payload: unknown) => void),
+  once: (fn) => window.myphp.once(name, fn as (payload: unknown) => void),
+});
 export const isCallError = (e: unknown): boolean => window.myphp.isCallError(e);
 
 /** Note is a note. */
@@ -60,7 +74,7 @@ export const Clock = {
   },
 } as const;
 
-/** Events PHP emits; each returns a function that stops listening. */
+/** Events PHP emits: subscribe with `events.name.on(listener)`. */
 export const events = {
-  added: (fn: (payload: Note) => void) => on("added", fn as (payload: unknown) => void),
+  added: event<Note>("added"),
 } as const;

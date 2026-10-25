@@ -58,7 +58,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Selectable text (mygo's Selectable): drag, double and triple clicks, Shift with the arrows across the paragraphs of a container, Copy and Select All, `selectedTexts()`, `copyData()` with data in several formats | works |
 | Soft shadows, rings; materials (`UI\Material`); the glass plugin (mygo's plugins/glass, `Plugins\Glass`): Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), progressive backdrop blur along a mask, scroll edges | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
-| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer | works (`examples/widgets`, `notes`, `http`) |
+| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer; radio groups, editable text in place (a table's names), lists whose section headers stay at the top and whose rows typing their labels chooses, trimmed paths, tinted bitmaps, glyphs shaped and drawn one by one | works (`examples/widgets`, `notes`, `http`, `gallery`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors, panels, flyouts (anchored to a rectangle or a tray icon, flipping and sliding into the screen, closing on a press outside or Escape) or in the system's popovers |
@@ -169,6 +169,25 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh widgets          # the small controls on one page
 ./run.sh native           # native UI, 300-row list, prints fps once a second
 ./run.sh native 1000      # 9 000 nodes per frame
+./run.sh hello            # mygo's examples, ported: a page greeting through a bound service
+./run.sh counter-native   # a counter in native UI, its buttons and the arrow keys
+./run.sh text-buffer 100000 # a text area over a TextBuffer of 100 000 lines
+./run.sh text-input       # a text field of the app's own drawing, through TextInputClient
+./run.sh frameless        # a frameless, transparent window with vibrancy, its page moving it
+./run.sh clipboard        # the clipboard in several formats, one made lazily; data dragged out and dropped in
+./run.sh timeline         # a timeline of tweens, placed after each other, at times and labels
+./run.sh markdown-chat    # replies streamed token by token as Markdown, revealed word by word
+./run.sh embed-webview    # web views inside native UI, and native popovers, selects and modals over them
+./run.sh menubar-flyout   # a tray icon's flyout in a system popover
+./run.sh menubar-native   # a menu bar app: a window under its tray icon that hides as it loses the focus
+./run.sh launcher         # a launcher: a global shortcut, the installed apps ranked as you type, their icons
+./run.sh vibrancy         # a window of vibrancy: a sidebar of materials sliding out
+./run.sh todo             # a todo list in a Vite page, its typed PHP service and events (needs bun)
+./run.sh confetti         # canvas-confetti's demos, every piece moved by poses that only paint
+./run.sh effort-slider    # an effort slider stepping into Galaxy, letters blurring as they change
+./run.sh farm             # a farming game: till, plant, water, harvest, day and night, music
+./run.sh mayoi            # a survivor game: sing at stage fright, gather stones, find your band
+./run.sh gallery          # the tour of the toolkit: every widget, lists, charts, motion, languages
 ```
 
 ### Layout
@@ -242,7 +261,7 @@ App::run();
 | 原生界面的右键菜单和菜单按钮（mygo 的 ContextMenu、Menu、MenuButton）：菜单项、勾选、子菜单、快捷键提示、最内层菜单优先、菜单键和 Shift+F10、输入框和可选中文字的编辑项、`editItems()` | 可用 |
 | 软阴影、描边环；材质（`UI\Material`）；glass 插件（mygo 的 plugins/glass，`Plugins\Glass`）：Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大）、沿遮罩渐变的背景模糊、滚动边缘 | 可用（`examples/glass`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
-| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位 | 可用（`examples/widgets`、`notes`、`http`） |
+| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位；单选组、原地编辑的文字（表格里的文件名）、分节标题吸顶且可输入首字母选行的列表、截取部分长度的路径、着色位图、逐个排版和绘制的字形 | 可用（`examples/widgets`、`notes`、`http`、`gallery`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色、面板、flyout（锚定到矩形或托盘图标，空间不够时翻转、滑回屏幕内，点外部或 Esc 关闭），也可以用系统 popover 样式 |
@@ -347,6 +366,25 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh widgets          # 小控件合集
 ./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
 ./run.sh native 1000      # 每帧 9 000 个节点
+./run.sh hello            # 移植自 mygo 的示例：页面通过绑定的服务打招呼
+./run.sh counter-native   # 原生 UI 计数器：按钮和方向键
+./run.sh text-buffer 100000 # 基于 TextBuffer 的十万行文本区
+./run.sh text-input       # 应用自己绘制的文本框，经 TextInputClient 接输入法
+./run.sh frameless        # 无边框透明窗口加 vibrancy，页面拖动窗口
+./run.sh clipboard        # 多种格式的剪贴板（其一延迟生成）；数据拖出与拖入
+./run.sh timeline         # tween 时间轴：先后、定时、按标签排布
+./run.sh markdown-chat    # 回复按 token 流式到达，以 Markdown 逐词显现
+./run.sh embed-webview    # 原生 UI 里的 web view，其上叠原生 popover、下拉和模态框
+./run.sh menubar-flyout   # 托盘图标的 flyout，放在系统 popover 里
+./run.sh menubar-native   # 菜单栏应用：托盘图标下的窗口，失去焦点即隐藏
+./run.sh launcher         # 启动器：全局快捷键，边输边排序的已装应用及其图标
+./run.sh vibrancy         # vibrancy 窗口：材质侧栏滑出收起
+./run.sh todo             # Vite 页面里的待办：带类型的 PHP 服务与事件（需要 bun）
+./run.sh confetti         # canvas-confetti 的演示，每片纸屑由只重绘的 pose 驱动
+./run.sh effort-slider    # 力度滑杆，越过 Max 进入 Galaxy，字母变化时模糊
+./run.sh farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐
+./run.sh mayoi            # 幸存者小游戏：对舞台恐惧唱歌、收集石子、找齐乐队
+./run.sh gallery          # 工具包总览：所有控件、列表、图表、动效、语言
 ```
 
 ### 目录

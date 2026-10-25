@@ -1638,7 +1638,7 @@ final class Runtime
         foreach ($n->ghosts as $g) {
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
-        foreach ($n->kids as $k) {
+        foreach ($n->paintOrder() as $k) {
             $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden);
         }
     }
@@ -1942,7 +1942,10 @@ final class Runtime
             };
             if ($to !== null) { $extend ? $l->extendTo($to) : $l->choose($to); return true; }
             if ($selector === 'selectAll:' && $l->selection !== null) { $l->selectAll(); return true; }
-            if ($selector === 'insertNewline:') { if ($l->selected >= 0) { $l->submit(); } return true; }
+            if ($selector === 'insertNewline:') { // Enter submits the chosen row, or edits its editable text (mygo's listInput)
+                if ($l->selected >= 0) { if ($l->editables) { $l->editAsked = true; } else { $l->submit(); } }
+                return true;
+            }
         }
         if ($this->focus !== null && isset($this->sliders[$this->focus])) {
             switch ($selector) {
@@ -2154,6 +2157,24 @@ final class Runtime
     }
 
     /** Whether a second press of a double click this frame landed on the node this id had last frame. */
+    /** Whether a click this frame landed on node $id, without taking it, which clicked() then still reports: an editable text in a row looks at the row's. */
+    public function clickOver(int $id): bool
+    {
+        foreach ($this->clicks as [$x, $y, $mods]) {
+            if ($mods === 0 && $this->under($id, $x, $y)) { return true; }
+        }
+        return false;
+    }
+
+    /** Whether a second press this frame landed on node $id, without taking it, as clickOver(). */
+    public function doubleClickOver(int $id): bool
+    {
+        foreach ($this->doubleClicks as [$x, $y]) {
+            if ($this->under($id, $x, $y)) { return true; }
+        }
+        return false;
+    }
+
     public function doubleClicked(int $id): bool
     {
         foreach ($this->doubleClicks as $i => [$x, $y]) {

@@ -2590,6 +2590,49 @@ asked for them: under 2 KB a line. The stats line (`MYPHP_STATS=1`)
 prints live and held memory, the glyphs in the atlas, the GC's runs
 and the nodes with local state.
 
+## The examples and what they needed (v1.11)
+
+mygo's examples are ported one for one; what they used that myphp lacked
+came with them.
+
+- **A tint in the radius slot.** An image quad's 16 floats are all taken
+  (place, size in the atlas, page, alpha, radius, kind, uv, clip), so a
+  tinted image (`ImageOptions::$tint`) is not rounded and its radius is
+  -1 - the packed rgb, exact in a float32 (0xffffff + 1 is 2^24); the
+  shader multiplies the premultiplied color by it and the alpha slot
+  carries the tint's alpha.
+- **A list's pinned header.** With `ListState::$header`, the header of
+  the section at the top is the header row built at the anchor, or, when
+  it is above the rows built, that row built after them out of the flow
+  (absolute). The list notes it (`Node::$pinned`) and the next header
+  built (`$pinStop`); Layout places it after the rows, at the top or
+  pushed up by the next, and `Node::paintOrder()` paints it last and
+  records it last, so it is over the rows for the eye and the pointer.
+  The kids stay in row order, which the rows' measures, the dividers and
+  the reorder read.
+- **Clicks seen without taking them.** A click is taken by the first
+  node that asks; an editable text in a row must know of the row's
+  click while the list, which asks after the row is built, still takes
+  it: `Runtime::clickOver()` and `doubleClickOver()` look without taking.
+- **Trimming a path** flattens its curves (a quarter point a line at
+  most), keeps the length asked for and replaces the commands, as the
+  masks and the atlas keys read the commands; the length kept fades a
+  stroke shorter than its width.
+- **Glyphs rasterized for the CPU.** `Context::renderGlyphs` asks Core
+  Text for each glyph's mask at the scale asked (not the display's) and
+  composites them as their quads blend (over), for an app's own effects
+  (effort-slider blurs its letters).
+- **Integers that overflow.** PHP's integers turn to floats past 2^63, so
+  the examples' hashes multiply 32-bit halves (`mul32`) where Go's
+  wrapped; `Random\Randomizer` seeds what Go's PCG did.
+- **Examples in one process.** `Headless::load()` evaluates an example in
+  a namespace of its own with its constants there (two name WINDOW_W);
+  the examples' autoloaders require any class name, so nothing in the
+  framework may autoload a name that is no class: `TypeScript` reads a
+  PHPDoc type's class in the namespace of the code it documents, loaded
+  classes first, and `Ipc::arguments` asks whether a parameter's type is
+  a backed enum only when it is no builtin type.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

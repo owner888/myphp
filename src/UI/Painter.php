@@ -105,10 +105,39 @@ final class Painter
         self::paintSpans($this->list, $this->text, $layout->layout, $layout->spans, $x, $y, $rgb, $alpha);
     }
 
+    /** Draws $glyphs (Context::shape) with the pen at ($x, $y) on the baseline, in $rgb at $alpha (mygo's Painter.Glyphs). @param list<\MyPHP\Text\Glyph> $glyphs */
+    public function glyphs(array $glyphs, float $x, float $y, int $rgb, float $alpha = 1.0): void
+    {
+        $l = new \MyPHP\Text\Layout(new \MyPHP\Text\Params(''), []);
+        $line = new \MyPHP\Text\Line();
+        $line->glyphs = $glyphs;
+        $l->lines = [$line];
+        $color = [$rgb, $alpha];
+        $this->text->paintLayout($this->list, $l, $x, $y, static fn(): array => $color);
+    }
+
     /** Draws a line of text with its top-left corner at ($x, $y). */
     public function text(float $x, float $y, string $s, float $size, int $rgb, float $alpha = 1.0): void
     {
         $this->text->paint($this->list, $s, $size, $x, $y, $rgb, $alpha);
+    }
+
+    /** The width and height richText() draws $spans in, wrapped at $width points, unwrapped for 0 (mygo's MeasureText). @return array{0: float, 1: float} */
+    public function measureText(float $width, Span ...$spans): array
+    {
+        return $this->spans($width, $spans)->size();
+    }
+
+    /** Draws $spans with their top left at ($x, $y), wrapped at $width points, unwrapped for 0, in the theme's text and size where they set none (mygo's Painter.RichText). */
+    public function richText(float $x, float $y, float $width, Span ...$spans): void
+    {
+        $this->textLayout($this->spans($width, $spans), $x, $y, $this->theme->text);
+    }
+
+    /** @param list<Span> $spans */
+    private function spans(float $width, array $spans): TextLayout
+    {
+        return TextLayout::shape($this->text->textSystem(), $spans, new TextStyle(), $this->theme->fontSize, $width);
     }
 
     /** Draws a bitmap (pixelated if it is), or an SVG in its own colors with the theme's text color for its currentColor, as $fit (Node::CONTAIN…) places it in $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
@@ -161,7 +190,7 @@ final class Painter
             $x0 = round($dst[0] * $scale) / $scale; $y0 = round($dst[1] * $scale) / $scale;
             $r = [$x0, $y0, round(($dst[0] + $dst[2]) * $scale) / $scale - $x0, round(($dst[1] + $dst[3]) * $scale) / $scale - $y0];
         }
-        $this->list->image($r[0], $r[1], $r[2], $r[3], $u, $v, $sw, $sh, $slot['page'], pixelated: $b->pixelated && $shrink <= 1);
+        $this->list->image($r[0], $r[1], $r[2], $r[3], $u, $v, $sw, $sh, $slot['page'], $o->tint === null ? 1.0 : $o->tintAlpha, pixelated: $b->pixelated && $shrink <= 1, tint: $o->tint);
     }
 
     /** Draws the ring that shows the keyboard focus around $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
@@ -248,9 +277,13 @@ final class Painter
         $this->list->pathGradient($path, $width, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
     }
 
-    /** Strokes $path $width points wide, with round joins and caps. */
+    /** Strokes $path $width points wide, with round joins and caps; trimmed shorter than its width (Path::trim), it fades with its length. */
     public function strokePath(Path $path, float $width, int $rgb, float $alpha = 1.0): void
     {
+        if ($path->kept !== null && $path->kept < $width) {
+            $alpha *= $width > 0 ? $path->kept / $width : 0.0;
+            if ($alpha <= 0) { return; }
+        }
         $this->list->path($path, $rgb, $alpha, $width);
     }
 
@@ -465,7 +498,7 @@ final class Painter
         foreach ($n->ghosts as $g) { // children leaving go under the others
             self::paint($g, $list, $text, $t, $rt);
         }
-        foreach ($n->kids as $k) {
+        foreach ($n->paintOrder() as $k) {
             self::paint($k, $list, $text, $t, $rt);
         }
         if ($n->dividers !== null && $n->gridCols === null) {

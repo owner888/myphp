@@ -1140,3 +1140,93 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     makes data).
   - Why: PHP has no package functions; a static and a method cannot
     share a name.
+
+## Examples and what they needed (v1.11)
+
+- **The context's time and size**
+  - mygo: `Context.Now()` a `time.Time`, `Size()` two `float32`s,
+    `After(d)`, `AnimationFrame()`, `Element.Pressed()`.
+  - myphp: `Context::now()` in nanoseconds (as `Painter::now()` and
+    `Runtime::$now`), `size()` an array, `after($seconds)`,
+    `animationFrame()`, `pressed($node)`.
+  - Why: myphp's times are nanoseconds and its durations seconds; its
+    queries are the context's.
+- **Styled buffer controls, sidebar icons**
+  - mygo: `TextInputBuffer` and `TextAreaBuffer` styled as `TextInput`;
+    `SidebarItem` takes an `*SVG`.
+  - myphp: `textInputBuffer()` and `textAreaBuffer()` around the bases;
+    `sidebarItem()` takes an `SVG`, a glyph or null.
+  - Why: as mygo; the bases came first.
+- **Glyphs**
+  - mygo: `ui.Shape(s, Font)` and `Font.Metrics()` are package
+    functions; `Painter.Glyphs`; `Font.Antialiased` draws without the
+    font smoothing macOS adds; `ui.Render(view, w, h, scale)` draws a
+    frame of any view into an `image.RGBA` with its CPU renderer.
+  - myphp: `Context::shape($s, $font)` and `fontMetrics($font)` (the text
+    system is the window's), `Painter::glyphs()`; glyphs always draw
+    without font smoothing, so there is no `Antialiased`;
+    `Context::renderGlyphs($glyphs, $x, $y, $w, $h, $scale)` gives the
+    coverage of glyphs only, a byte a pixel, rasterized by Core Text at
+    that scale.
+  - Why: myphp's headless runtime paints into a display list, without a
+    CPU renderer to draw a whole view; what effort-slider rasterizes is
+    letters.
+- **Painter and images**
+  - mygo: `ImageOptions.Tint` a `Color`; `Painter.MeasureText(width,
+    spans...)` and `RichText(x, y, width, spans...)`.
+  - myphp: `ImageOptions::$tint` (0xRRGGBB) and `$tintAlpha`, a tinted
+    image not rounded (its quad's radius carries the tint); the same
+    `measureText()` and `richText()`.
+  - Why: an image quad has no free slot; `imageRegion()` rounds nothing.
+- **Element queries and scrolling**
+  - mygo: `Element.Dragged()` returns dx, dy and whether it is held;
+    `ui.Scroll(c)` and `ScrollBoth(c)` keep their offsets themselves.
+  - myphp: `Context::dragged($node)` returns `[dx, dy]` or null;
+    `Context::scroll()` and `scrollBoth()` keep a `ScrollState` in the
+    node's local state, `Node::scroll($state)` takes the app's.
+  - Why: myphp's queries are the context's; scrolling took the app's
+    state first.
+- **Radio groups, editable text, trimmed paths**
+  - mygo: `RadioGroup(c, fn)` a column, `.Row()` making it a row;
+    `EditableText(c, &value)`; `Path.Trim(from, to)` trims the path as
+    it is flattened, again on each call.
+  - myphp: `radioGroup($fn, row: true)`; `editableText($value)`, which in
+    a list's row reads the row's click without taking it
+    (`Runtime::clickOver`) and gives the focus back through handles;
+    `Path::trim()` replaces the path's commands with the lines it keeps
+    (a quarter point long at most on curves), so a second trim trims
+    what the first kept, and notes the length kept, by which
+    `strokePath()` fades a stroke shorter than its width.
+  - Why: myphp's builds are immediate, its clicks taken by the first
+    node asking; its paths are their commands, which the masks and the
+    atlas keys read.
+- **Lists' labels and headers**
+  - mygo: `ListState.Label` and `Header`; the header of the section at
+    the top is cached between frames (`listHeader`).
+  - myphp: `ListState::$label` and `$header` as mygo's; the header above
+    the anchor is found scanning up from it each frame; a header above
+    the rows built is built out of the flow and painted over them; a
+    list whose rows are all built and short of it follows `justify()`
+    (END for a chat).
+  - Why: myphp's lists build from their anchor; the cache was not
+    needed for the gallery's 200 messages.
+- **The examples**
+  - mygo: keys are scoped by the parent element; goroutines update the
+    window (`Window.Update`); `math/rand`'s PCG seeds the games' maps;
+    the gallery's Select, inputs and Languages test use strings and a
+    region (`Tester.SetRegion`).
+  - myphp: keys are scoped by keyed containers, so the gallery prefixes
+    them ("tile 0", "item 3"); timers (`App::after`) and
+    `Window::update`; `Random\Randomizer` with Xoshiro256**, so the farm,
+    the street and the confetti differ from mygo's; selects choose
+    indexes and inputs edit `TextState`s; the Languages test runs in the
+    zero region; `Dialog::message` runs after the click (`App::later`),
+    its own loop; the wide-gamut card draws both columns in sRGB.
+  - Why: myphp's scoping, PHP's threads and random engines, myphp's
+    controls, and no region setter for tests.
+- **Constants of the examples in tests**
+  - mygo: an example's tests are in its package.
+  - myphp: `Headless::load()` defines an example's constants in its
+    namespace (`MyPHP\Examples\Piano\WHITE_WIDTH`), a line of several
+    staying a `const`.
+  - Why: two examples name theirs alike (`WINDOW_W`).

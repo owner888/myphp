@@ -331,7 +331,7 @@ function build(array $args): void
         copy($iconFile, "$contents/Resources/$name.icns");
     }
     $localizations = writeLocalizations($dir, $c, "$contents/Resources");
-    file_put_contents("$contents/Info.plist", plist([
+    file_put_contents("$contents/Info.plist", plist(array_replace([
         'CFBundleName' => $name,
         'CFBundleDisplayName' => $name,
         'CFBundleIdentifier' => $c['bundleId'] ?? 'com.example.' . strtolower($name),
@@ -344,7 +344,7 @@ function build(array $args): void
         'NSHighResolutionCapable' => true,
         'NSPrincipalClass' => 'NSApplication',
         'LSApplicationCategoryType' => 'public.app-category.utilities',
-    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + $localizations + updatePlist($dir, $c) + openPlist($c)));
+    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + $localizations + updatePlist($dir, $c) + openPlist($c), infoPlist($c))));
     file_put_contents("$contents/PkgInfo", 'APPL????');
     if ($launcher === 'exec') {
         buildExecLauncher("$contents/MacOS/$name", $c['entry']);
@@ -483,6 +483,14 @@ function plistValue(mixed $v, string $indent): string
         is_float($v) => "<real>$v</real>",
         default => '<string>' . $esc((string)$v) . '</string>',
     } . "\n";
+}
+
+/** myphp.json's "macos": {"infoPlist": {…}}, extra keys of the bundle's Info.plist, over those the build writes (mygo's MacOS.InfoPlist), as "LSUIElement": true for an app without a Dock icon from its start. @return array<string, mixed> */
+function infoPlist(array $c): array
+{
+    $extra = $c['macos']['infoPlist'] ?? [];
+    is_array($extra) && ($extra === [] || !array_is_list($extra)) || fail('macos.infoPlist is an object of Info.plist keys');
+    return $extra;
 }
 
 /** The Info.plist keys of myphp.json's "urlSchemes" and "fileAssociations", which the system opens with the app (mygo's bundle.go). @return array<string, mixed> */

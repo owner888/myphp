@@ -38,6 +38,8 @@ final class Node
     /** A focus group's orientation: the arrows that move the focus inside it (HORIZONTAL, VERTICAL or both); 0 for no group. And whether moving the focus chooses the member (a radio group's, a tab list's). */
     public int $focusGroup = 0;
     public bool $groupSelects = false;
+    /** A list's header pinned at its top (ListState::$header), which paints over its rows, and the header row after it that pushes it away; Context::list sets them, Layout places it. */
+    public ?Node $pinned = null, $pinStop = null;
     public const HORIZONTAL = 1, VERTICAL = 2;
     /** The least width and height this node measures to (mygo's MinWidth, MinHeight); 0 for none. */
     public float $minW = 0, $minH = 0;
@@ -623,6 +625,15 @@ final class Node
      * last to the first, Home and End to the first and the last; with
      * $selects, moving chooses the member it moves to, as a radio does.
      */
+    /** The children in the order they paint and take the pointer: a list's pinned header last, over its rows. @return list<Node> */
+    public function paintOrder(): array
+    {
+        if ($this->pinned === null) { return $this->kids; }
+        $kids = array_values(array_filter($this->kids, fn(Node $k): bool => $k !== $this->pinned));
+        $kids[] = $this->pinned;
+        return $kids;
+    }
+
     public function focusGroup(int $orientation, bool $selects = false): static
     {
         $this->focusGroup = $orientation; $this->groupSelects = $selects;

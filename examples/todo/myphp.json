@@ -1,0 +1,11 @@
+{
+  "name": "Todo",
+  "bundleId": "dev.myphp.todo",
+  "version": "1.0.0",
+  "entry": "main.php",
+  "devUrl": "http://localhost:5173",
+  "devCommand": "bun run dev:web",
+  "buildCommand": "bun run build:web",
+  "frontendDist": "dist",
+  "bindings": "src/myphp.ts"
+}

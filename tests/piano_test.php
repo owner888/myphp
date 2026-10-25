@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use function MyPHP\Examples\Piano\{events, keyAt, noteNumber, synthSamples, whites, keyboardWidth};
-use const MyPHP\Examples\Piano\SONGS; // the example's constants of one line are defined globally as it is loaded
+use const MyPHP\Examples\Piano\{LOWEST, HIGHEST, SYNTH_RATE, WHITE_WIDTH, BLACK_WIDTH, KEYBOARD_HEIGHT, BLACK_HEIGHT, SONGS, COMPUTER_KEYS}; // the example's constants, in its namespace
 
 [$view] = Headless::piano();
 $t = new Headless($view, keyboardWidth() + 48, 330);

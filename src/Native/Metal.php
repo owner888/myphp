@@ -27,7 +27,7 @@ final class Metal
     private const SHADER = <<<'MSL'
     #include <metal_stdlib>
     using namespace metal;
-    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; kind 13: an image (as 2) sampled at the nearest pixel, pixel art; kind 14 (a box: DisplayList::box) and 15 (a box shadow: boxShadow) take the slot after them too, its kind -1
+    struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; an image's radius below 0 is -1 - a tint's packed rgb; kind 13: an image (as 2) sampled at the nearest pixel, pixel art; kind 14 (a box: DisplayList::box) and 15 (a box shadow: boxShadow) take the slot after them too, its kind -1
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]];
                float4 r4 [[flat]]; float4 b4 [[flat]]; float4 e4 [[flat]]; float4 g4 [[flat]]; };   // kinds 14 and 15: the slot after the quad (DisplayList::box, boxShadow)
@@ -298,8 +298,10 @@ final class Metal
         if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color; pixelated (13)
             float4 c = v.kind > 12.5 ? images.sample(nearest, v.uv, uint(v.color.z + 0.5)) : images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
-            float2 q = abs(v.local) - (v.extent - v.radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
+            float radius = v.radius;
+            if (radius < -0.5) { c.rgb *= unpackRGB(-radius - 1.0); radius = 0.0; }   // tinted (ImageOptions): the radius carries the tint's rgb, its alpha is in color.a
+            float2 q = abs(v.local) - (v.extent - radius);
+            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
             float a = 1.0 - smoothstep(-0.5, 0.5, d);
             return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
         }

@@ -32,6 +32,8 @@ final class Context
     private int $toolbars = 0;
     /** The form being built (Context::form): its labels' boxes and the widest label, for them all to be as wide. */
     private ?object $form = null;
+    /** The list, the row and the list's node of the row being built (Context::list), for an editable text in it: [ListState, int, Node], or null. */
+    private ?array $listRow = null;
     /** The checkbox group being built (Context::checkboxGroup): references to its check boxes' values, or null outside one. */
     private ?array $checks = null;
 
@@ -326,6 +328,57 @@ final class Context
         return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, $this->stack[count($this->stack) - 1]->rtl);
     }
 
+    /**
+     * $s shaped on one line in $font over the text style here, without
+     * wrapping: its glyphs with the pen at 0 on the baseline at 0, for
+     * Painter::glyphs (mygo's ui.Shape). A line break starts a line below.
+     * @return list<\MyPHP\Text\Glyph>
+     */
+    public function shape(string $s, ?TextStyle $font = null): array
+    {
+        $l = $this->shapeText($s, 0, $font)->layout;
+        if ($l->lines === []) {
+            return [];
+        }
+        $base = $l->lines[0]->baseline;
+        $out = [];
+        foreach ($l->lines as $line) {
+            foreach ($line->glyphs as $g) {
+                $g = clone $g; // the layout is shared
+                $g->y -= $base;
+                $out[] = $g;
+            }
+        }
+        return $out;
+    }
+
+    /** The ascent, descent and line gap of $font over the text style here, in points (mygo's Font.Metrics). @return array{ascent: float, descent: float, lineGap: float} */
+    public function fontMetrics(?TextStyle $font = null): array
+    {
+        $style = ($font ?? new TextStyle())->over($this->inheritedText())->style($this->theme->fontSize);
+        [$a, $d, $lh] = $this->metrics->textSystem()->metrics($style);
+        return ['ascent' => $a, 'descent' => $d, 'lineGap' => max(0.0, $lh - $a - $d)];
+    }
+
+    /**
+     * The coverage of $glyphs (shape) drawn with the pen at ($x, $y) on the
+     * baseline, in points, onto a $w × $h point image at $scale pixels a
+     * point: a byte a pixel, ceil($w * $scale) wide and ceil($h * $scale)
+     * high, top row first; for effects the painter has not, as a blur of
+     * letters (mygo's ui.Render of a view drawing glyphs).
+     * @param list<\MyPHP\Text\Glyph> $glyphs
+     */
+    public function renderGlyphs(array $glyphs, float $x, float $y, float $w, float $h, float $scale): string
+    {
+        return $this->metrics->glyphCoverage($glyphs, $x, $y, (int)ceil($w * $scale), (int)ceil($h * $scale), $scale);
+    }
+
+    /** How far the pointer moved since the last frame while the left button is down from a press on $n: [dx, dy] in points, or null when $n is not being dragged (mygo's Element.Dragged). @return array{0: float, 1: float}|null */
+    public function dragged(Node $n): ?array
+    {
+        return $this->runtime?->dragged($n->id);
+    }
+
     /** The value of the member of $field (Node::focusBind) that has the focus, as the last frame committed it, whatever the field asks for meanwhile; null for none (mygo's FocusedValue). */
     public function focusedValue(mixed &$field): mixed
     {
@@ -390,6 +443,36 @@ final class Context
         }
         $rt->changed();
         return $rt->alongAxes($n->id, $p['v']);
+    }
+
+    /** The time of the frame being built, in nanoseconds (mygo's Now): what moves computes from it; a test's clock (Runtime::$clock) when it sets one. */
+    public function now(): int
+    {
+        return $this->runtime?->now ?? hrtime(true);
+    }
+
+    /** The size of the view being built, [width, height] in points (mygo's Size). @return array{0: float, 1: float} */
+    public function size(): array
+    {
+        return [$this->width, $this->height];
+    }
+
+    /** Asks for a frame $seconds from now, for what changes then (mygo's After). */
+    public function after(float $seconds): void
+    {
+        $this->runtime?->after($seconds);
+    }
+
+    /** Asks for the next frame as soon as the display can show it, for what moves with now(): call it in every frame while it moves (mygo's AnimationFrame). */
+    public function animationFrame(): void
+    {
+        $this->runtime?->animationFrame();
+    }
+
+    /** Whether the pointer holds $n down: pressed on it last frame and not let go (mygo's Pressed). */
+    public function pressed(Node $n): bool
+    {
+        return ($this->runtime?->pressOf($n->id)['down'] ?? false) === true;
     }
 
     /** Whether the pointer went down since the last frame outside $n: on neither it, nor what is in it, nor the node it is attached to (Node::attachTo), nor what is attached to a node inside it. A popover closes then, the press going on to what is under it; the last press decides (mygo's PressedOutside). */
@@ -468,6 +551,20 @@ final class Context
         return $this->open(new Node(Node::CONTAINER, Node::ROW, $pad, $gap, 0, 0, $grow, null, $color));
     }
 
+    /** A column that scrolls what is built in it up and down, keeping its offset while it shows, as a page of a router keeps it in the history: end() it (mygo's Scroll). */
+    public function scroll(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
+    {
+        $n = $this->column($pad, $gap, $grow, $color);
+        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState) ?? new ScrollState);
+    }
+
+    /** A column that scrolls what is built in it both ways, keeping its offsets while it shows: end() it (mygo's ScrollBoth). */
+    public function scrollBoth(float $pad = 0, float $gap = 0, int $grow = 0, ?int $color = null): Node
+    {
+        $n = $this->column($pad, $gap, $grow, $color);
+        return $n->scroll($this->runtime?->local($n->id, fn() => new ScrollState) ?? new ScrollState, true, true);
+    }
+
     public function end(): void
     {
         array_pop($this->stack);
@@ -507,17 +604,30 @@ final class Context
         }
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $state->first = $state->row;
+        $state->editables = false; // until an editable text is built in a row
         $y = -$state->offset;
         $limit = max($state->viewport, $this->height) * 1.5;
         [$scope, $ordinal] = [$this->scope, $this->ordinal];
+        $savedRow = $this->listRow;
+        $headers = []; // the kids that are headers, by row
         for ($i = $state->row; $i < $count && $y < $limit; $i++) {
             $this->scope = "$scope/L{$node->id}/$i"; // the row's nodes are keyed by its index
             $this->ordinal = 0;
             $k = count($node->kids);
+            $this->listRow = [$state, $i, $node];
             $row($i);
+            $this->listRow = $savedRow;
             if (isset($node->kids[$k])) { $node->rowStarts[$k] = $i; } // assistive technology sees row $i around its nodes
             $y += $state->height($i);
-            if ($state->selected === null || !isset($node->kids[$k])) {
+            if (!isset($node->kids[$k])) {
+                continue;
+            }
+            if ($state->label !== null) { $node->kids[$k]->label(($state->label)($i)); }
+            if ($state->isHeader($i)) {
+                $headers[$i] = $node->kids[$k];
+                continue; // headers are not chosen
+            }
+            if ($state->selected === null) {
                 continue;
             }
             $first = $node->kids[$k];
@@ -546,7 +656,37 @@ final class Context
                 $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
             }
         }
+        if ($state->header !== null && $count > 0 && ($h = $state->headerAbove($state->row)) >= 0) {
+            // The header of the section at the top, built where the others are, or out of the flow when it is above them: Layout pins it.
+            if (isset($headers[$h])) {
+                $node->pinned = $headers[$h];
+            } else {
+                $this->scope = "$scope/L{$node->id}/$h"; $this->ordinal = 0;
+                $k = count($node->kids);
+                $this->listRow = [$state, $h, $node];
+                $row($h);
+                $this->listRow = $savedRow;
+                if (isset($node->kids[$k])) {
+                    $node->pinned = $node->kids[$k]->absolute();
+                    if ($state->label !== null) { $node->pinned->label(($state->label)($h)); }
+                }
+            }
+            foreach ($headers as $i => $hn) {
+                if ($i > $h) { $node->pinStop = $hn; break; }
+            }
+        }
         [$this->scope, $this->ordinal] = [$scope, $ordinal];
+        $rt = $this->runtime;
+        if ($rt !== null && $state->label !== null && $state->selected !== null && $count > 0 && ($typed = $rt->typed($node->id)) !== '') {
+            // Typing the first letters of a row's label goes to it, from the row after the chosen one, or the chosen one once more than a letter is typed (mygo's typed).
+            $now = hrtime(true) / 1e9;
+            if ($now - $state->typedAt >= 1.0) { $state->typed = ''; }
+            $state->typed .= $typed; $state->typedAt = $now;
+            for ($k = 1; $k <= $count; $k++) {
+                $j = (max($state->selected, 0) + $k - (mb_strlen($state->typed) > 1 ? 1 : 0) + $count) % $count;
+                if (!$state->isHeader($j) && str_starts_with(mb_strtolower(($state->label)($j)), mb_strtolower($state->typed))) { $state->choose($j); break; }
+            }
+        }
         $this->end();
         if ($state->drag !== null && $this->runtime !== null) {
             $this->reorderRows($state, $node, $count);
@@ -569,6 +709,7 @@ final class Context
         // The row before which the rows dropped at $y go: that of the row of the last frame whose middle is below it, the count past the last (dropAt).
         $to = -1; $below = -1;
         foreach ($list->kids as $k => $kid) {
+            if ($kid === $list->pinned && $kid->absolute) { continue; } // a header built out of the flow
             $r = $rt->rectOf($kid->id);
             if ($r === null) { continue; }
             $row = $state->first + $k;
@@ -818,6 +959,95 @@ final class Context
     public function focused(Node $n): bool
     {
         return $this->runtime?->focused($n->id) ?? false;
+    }
+
+    /**
+     * $value as a text the user edits in place, as a file's name in Finder
+     * (mygo's EditableText): a double click on it, or Enter while it has
+     * the focus, shows a text input of it with the name before its
+     * extension selected; Enter keeps what was typed, as the focus moving
+     * away does, and Escape goes back; changed() reports a new value. In a
+     * row of a list or a table the list keeps the focus and the text takes
+     * none: Enter and F2 edit the text of the row chosen, while a double
+     * click on the row submits it; a click on the text of a row already
+     * chosen edits it once a second click would no longer make a double
+     * click.
+     */
+    public function editableText(string &$value): Node
+    {
+        $t = $this->theme; $rt = $this->runtime;
+        $box = $this->row()->align(Node::CENTER)->min(0, 0);
+        $make = fn() => (object)['editing' => false, 'fresh' => false, 'seen' => false, 'draft' => new TextState(''), 'after' => 0, 'input' => new Handle, 'back' => new Handle];
+        $st = $rt?->local($box->id, $make) ?? $make();
+        $start = false;
+        if ($this->listRow !== null) {
+            [$ls, $i, $list] = $this->listRow;
+            $ls->editables = true;
+            $list->bind($st->back);
+            $chosen = $ls->chosen($i);
+            $rowNode = end($list->kids);
+            if ($ls->editAsked && $ls->selected === $i) {
+                $ls->editAsked = false; $start = true;
+            } elseif ($chosen && $this->focused($list) && $this->shortcut(Key::F2)) {
+                $start = true;
+            } elseif ($rt !== null && $rowNode !== false) {
+                $now = $this->now();
+                if (!$chosen || $rt->doubleClickOver($rowNode->id)) {
+                    $st->after = 0;
+                } elseif ($rt->clickOver($rowNode->id) && $this->hovered($box)) {
+                    $st->after = $now + 500_000_000; // unless a second click makes it a double click
+                    $this->after(0.5);
+                } elseif ($st->after !== 0 && $now >= $st->after) {
+                    $st->after = 0; $start = true;
+                }
+            }
+        } else {
+            $box->focusable()->bind($st->back);
+            if (!$st->editing && ($this->doubleClicked($box) || ($this->focused($box) && $this->shortcut(Key::RETURN)))) { $start = true; }
+        }
+        if ($start && !$st->editing) {
+            $st->editing = true; $st->fresh = true; $st->seen = false;
+            $st->draft = new TextState($value);
+        }
+        if (!$st->editing) {
+            $this->text($value)->singleLine();
+            $this->end();
+            return $box;
+        }
+        // Where the text was, within its padding and border.
+        $pad = $t->space(0.5);
+        $in = $this->input($st->draft, '', 0)->bind($st->input)->grow(1)->min($t->space(10), 0)->margin(-$pad - 1, -$pad * 2 - 1);
+        $in->borderColor = $t->accent;
+        $this->end();
+        $done = function (bool $keep) use (&$value, $st, $box, $rt): void {
+            $st->editing = false;
+            if ($keep && $st->draft->text !== $value) {
+                $value = $st->draft->text;
+                $box->changed = true;
+            }
+            $st->back->focus($this); // back to the list, or to the text
+            $rt?->changed();
+        };
+        $focused = $rt?->focused($in->id) ?? false;
+        if ($st->fresh) {
+            $st->fresh = false;
+            $st->input->focus($this);
+            $dot = strrpos($st->draft->text, '.'); // the name before its extension, as Finder selects
+            $st->draft->setTextSelection(0, $dot !== false && $dot > 0 ? $dot : strlen($st->draft->text));
+        } elseif ($st->draft->submitted) {
+            $st->draft->submitted = false;
+            $done(true);
+        } elseif ($focused && $this->shortcut(Key::ESCAPE)) {
+            $done(false);
+        } elseif ($focused) {
+            $st->seen = true;
+        } elseif ($st->seen) {
+            // The focus went elsewhere: what was typed stays, and the focus with it.
+            $st->editing = false;
+            if ($st->draft->text !== $value) { $value = $st->draft->text; $box->changed = true; }
+            $rt?->changed();
+        }
+        return $box;
     }
 
     /** A link: accent text, underlined, a hand pointer, focusable; clicking, or Enter while it has the focus, goes to $url: a path through the router whose page it is in (Router::push), else a URL the system opens (Shell::openExternal). */
@@ -1503,12 +1733,12 @@ final class Context
     }
 
     /**
-     * An item of a sidebar choosing $id, showing $label after $icon (a
-     * glyph, or null), as mygo's SidebarItem; $trailing builds what sits at
+     * An item of a sidebar choosing $id, showing $label after $icon (an
+     * SVG in the accent, a glyph, or null), as mygo's SidebarItem; $trailing builds what sits at
      * its end, a badge say. Chosen, it is the accent while the sidebar has
      * the focus and gray otherwise, as AppKit's.
      */
-    public function sidebarItem(string $id, string $label, ?string $icon = null, ?Closure $trailing = null): Node
+    public function sidebarItem(string $id, string $label, string|SVG|null $icon = null, ?Closure $trailing = null): Node
     {
         $t = $this->theme;
         $sb = &$this->sidebars[count($this->sidebars) - 1];
@@ -1521,7 +1751,8 @@ final class Context
         if ($chosen) { $sb['chosen'] = $n; }
         if (!$chosen && $this->hovered($n)) { $n->color = $t->surfaceHover; }
         $fg = $chosen && $focused ? $t->accentText : $t->text;
-          if ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
+          if ($icon instanceof SVG) { $this->icon($icon, 16, $chosen && $focused ? $t->accentText : $t->accent); }
+          elseif ($icon !== null) { $this->text($icon, 16, $chosen && $focused ? $t->accentText : $t->accent)->role(Role::NONE); }
           $this->text($label, $t->fontSize, $fg)->singleLine();
           if ($trailing !== null) { $this->spacer(); $trailing(); }
         $this->end();
@@ -3337,6 +3568,21 @@ final class Context
         return $n;
     }
 
+    /**
+     * The radio buttons $fn builds (radio, radioBase), Space(2) apart, a
+     * column or, $row, a row: one stop of Tab, which goes to the one
+     * chosen, the arrows choosing among them, as do Home and End; seen as
+     * a radio group, named with label() (mygo's RadioGroup, its Row()).
+     */
+    public function radioGroup(Closure $fn, bool $row = false): Node
+    {
+        $g = ($row ? $this->row(0, $this->theme->space(2)) : $this->column(0, $this->theme->space(2)))
+            ->role(Role::RADIO_GROUP)->focusGroup(Node::HORIZONTAL | Node::VERTICAL, selects: true);
+          $fn();
+        $this->end();
+        return $g;
+    }
+
     /** A radio button with a label: on while $value is $option, and sets it when chosen; changed() reports it. */
     public function radio(string $label, mixed &$value, mixed $option, ?float $size = null): Node
     {
@@ -3539,6 +3785,18 @@ final class Context
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
+    }
+
+    /** input() editing a TextBuffer (mygo's TextInputBuffer): edits replace what changed in it, a change of the program's shows. */
+    public function textInputBuffer(TextBuffer $buffer, string $placeholder = '', float $width = 200, ?float $size = null): Node
+    {
+        return $this->bufferControl($buffer, fn(TextState $s) => $this->input($s, $placeholder, $width, $size));
+    }
+
+    /** textarea() editing a TextBuffer (mygo's TextAreaBuffer), for large documents. */
+    public function textAreaBuffer(TextBuffer $buffer, string $placeholder = '', float $width = 320, float $height = 120, ?float $size = null): Node
+    {
+        return $this->bufferControl($buffer, fn(TextState $s) => $this->textarea($s, $placeholder, $width, $height, $size));
     }
 
     /** Whether the field's Enter was pressed this frame (resets the flag). */

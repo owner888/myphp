@@ -251,6 +251,8 @@ final class Layout
         foreach ($n->kids as $k) {
             if (!$k->absolute) {
                 $kids[] = $k;
+            } elseif ($k === $n->pinned) {
+                // a list's header built out of the flow: placed with the rows
             } elseif ($k->attach === null && $k->insets === [null, null, null, null] && $k->wPct === null && $k->hPct === null) {
                 self::arrange($k, $x + $n->padL() + $k->ax, $y + $n->padT() + $k->ay, $k->mw, $k->mh); // at(): from the content box, at its own size
             } else {
@@ -391,9 +393,14 @@ final class Layout
             $s->atEnd = $s->first + $cnt >= $s->count && $used + $gap * ($cnt - 1) - $s->offset <= $ch + 0.5;
             if ($s->first + $cnt >= $s->count && $s->first === 0) {
                 $s->gap = 0.0; // every row is built and they are short of the view: nothing can fill it
+                $short = $ch - ($used + $gap * ($cnt - 1));
+                if ($short > 0 && ($n->justify === Node::END || $n->justify === Node::CENTER)) {
+                    $cy += $n->justify === Node::END ? $short : $short / 2; // rows short of the view at its end, as a chat's (mygo's Justify)
+                }
             }
             $flexible = false;
         }
+        [$rowX, $rowW] = [$cx, $cw]; // where a list's rows start across, and their width
         $f = $n->followX?->scroll;
         if ($f instanceof ScrollState || $f instanceof ListState) { // the content goes sideways with another's (mygo's ScrollWith)
             if ($n->rtl) { $scrollRtl = ($scrollRtl ?? 0.0) + $f->x; } else { $cx -= $f->x; }
@@ -453,6 +460,13 @@ final class Layout
                 self::arrange($k, $kx + $dx, $at + $dy, $kw, $kh);
                 $cy += $kh + $gap + $between;
             }
+        }
+        if ($n->pinned !== null && $n->scroll instanceof ListState) {
+            // The header of the section at the top stays there while its rows scroll under it, until the next header pushes it away (mygo's pinHeader).
+            $p = $n->pinned;
+            [$px0, $pw0, $ph0, $flowY] = $p->absolute ? [$rowX, $rowW, $p->mh, -INF] : [$p->x, $p->w, $p->h, $p->y];
+            $stop = $n->pinStop !== null ? $n->pinStop->y - $ph0 : INF;
+            self::arrange($p, $px0, max($flowY, min($y + $py, $stop)), $pw0, $ph0);
         }
     }
 

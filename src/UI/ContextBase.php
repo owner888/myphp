@@ -271,16 +271,17 @@ trait ContextBase
     /** textInputBase() editing a TextBuffer: what the user types replaces what changed in it, a change of the program's shows (mygo's TextInputBufferBase). */
     public function textInputBufferBase(TextBuffer $buffer): Node
     {
-        return $this->bufferBase($buffer, false);
+        return $this->bufferControl($buffer, $this->textInputBase(...));
     }
 
     /** textAreaBase() editing a TextBuffer (mygo's TextAreaBufferBase). */
     public function textAreaBufferBase(TextBuffer $buffer): Node
     {
-        return $this->bufferBase($buffer, true);
+        return $this->bufferControl($buffer, $this->textAreaBase(...));
     }
 
-    private function bufferBase(TextBuffer $buffer, bool $area): Node
+    /** The control $control makes of a TextState, editing $buffer: what the user types replaces what changed in it, a change of the program's shows. @param \Closure(TextState): Node $control */
+    protected function bufferControl(TextBuffer $buffer, \Closure $control): Node
     {
         $id = $this->nextId();
         $make = fn() => (object)['state' => new TextState($buffer->string()), 'version' => $buffer->version()];
@@ -290,7 +291,7 @@ trait ContextBase
             $s->text = $buffer->string(); $s->setCursor(min($s->cursor, strlen($s->text)));
             $local->version = $buffer->version();
         }
-        $n = $area ? $this->textAreaBase($s) : $this->textInputBase($s);
+        $n = $control($s);
         $old = $buffer->string();
         if ($s->text !== $old) { // what was typed: the edit of what lies between the start and the end the texts share
             $new = $s->text; $lo = strlen($old); $ln = strlen($new);

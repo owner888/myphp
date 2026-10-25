@@ -28,6 +28,19 @@ final class Metrics implements TextPainter
         $byte = 0;
         foreach (mb_str_split($text) as $i => $r) { [$rgb, $alpha] = $colorAt($byte); $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); $byte += strlen($r); }
     }
+    /** Each glyph's advance by its size, from the ascent above the baseline down, solid. */
+    public function glyphCoverage(array $glyphs, float $x, float $y, int $w, int $h, float $scale): string
+    {
+        $out = str_repeat("\0", $w * $h);
+        foreach ($glyphs as $g) {
+            $x0 = max(0, (int)round(($x + $g->x) * $scale)); $x1 = min($w, (int)round(($x + $g->x + $g->advance) * $scale));
+            $y0 = max(0, (int)round(($y + $g->y - 0.8 * $g->size) * $scale)); $y1 = min($h, (int)round(($y + $g->y + 0.2 * $g->size) * $scale));
+            for ($r = $y0; $r < $y1; $r++) {
+                if ($x1 > $x0) { $out = substr_replace($out, str_repeat("\xff", $x1 - $x0), $r * $w + $x0, $x1 - $x0); }
+            }
+        }
+        return $out;
+    }
     public function imageSlot(Image $image): array { return ['u' => 0, 'v' => 0, 'w' => 1, 'h' => 1, 'page' => 0]; }
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return [$x, $y, $w, $h, 0, 0]; }
     public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return ['u' => 0, 'v' => 0, 'w' => $w, 'h' => $h, 'page' => 0]; }
@@ -344,6 +357,22 @@ final class Headless
         return $this->clickOn($this->byText($text) ?? throw new \RuntimeException("no $text in " . json_encode($this->texts(), JSON_UNESCAPED_UNICODE)));
     }
 
+    /** The first node labeled $label for assistive technology, or showing it, or null. */
+    public function byLabel(string $label, ?Node $from = null): ?Node
+    {
+        $from ??= $this->root;
+        if ($from === null || $from->inert) { return null; }
+        if ($from->label === $label) { return $from; }
+        foreach ($from->kids as $k) { if (($r = $this->byLabel($label, $k)) !== null) { return $r; } }
+        return $from === $this->root ? $this->byText($label) : null;
+    }
+
+    /** A click in the middle of the node labeled $label (byLabel), which must be there. */
+    public function clickLabel(string $label): Node
+    {
+        return $this->clickOn($this->byLabel($label) ?? throw new \RuntimeException("no $label in " . json_encode($this->texts(), JSON_UNESCAPED_UNICODE)));
+    }
+
     /** The focused node, or null. */
     public function focused(): ?Node { return $this->rt->focus === null ? null : $this->find($this->rt->focus); }
 
@@ -403,6 +432,25 @@ final class Headless
     }
 
     /**
+     * Example $name loaded without its window: its file up to $stop, its
+     * view, which each example declares as view(Context, $s), and its state
+     * $s: [$view (Closure(Context)), $s].
+     */
+    public static function load(string $name, string $stop = 'App::setName', array $args = []): array
+    {
+        $s = null;
+        self::example($name, $stop, $args, $s);
+        $fn = '\\MyPHP\\Examples\\' . self::namespaceOf($name) . '\\view';
+        return [static function (Context $c) use ($fn, $s) { $fn($c, $s); }, $s];
+    }
+
+    /** The namespace of example $name: "counter-native" is CounterNative. */
+    private static function namespaceOf(string $name): string
+    {
+        return str_replace(' ', '', ucwords(str_replace('-', ' ', $name)));
+    }
+
+    /**
      * Runs example $name's file up to $stop, with $args as its arguments, its
      * constants defined, its folder as __DIR__ and its functions in
      * MyPHP\Examples\<Name> (each example declares a view()); $state gets the
@@ -417,10 +465,11 @@ final class Headless
         if ($at === false) { throw new \RuntimeException($stop); }
         $src = substr($src, 0, $at);
         // In a namespace of its own, the global classes the examples use (functions and constants fall back on their own) must be named.
-        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . ucfirst($name) . '; use Closure, DateTimeImmutable;', var_export(dirname($path), true)], $src);
-        $src = preg_replace('/^const (\w+) = (.*);$/m', 'defined(\'$1\') || define(\'$1\', $2);', $src);
+        $src = str_replace(['declare(strict_types=1);', '__DIR__'], ['namespace MyPHP\\Examples\\' . self::namespaceOf($name) . '; use Closure, DateTimeImmutable, InvalidArgumentException, RuntimeException, Throwable;', var_export(dirname($path), true)], $src);
+        // Its constants in its namespace too, as two examples name theirs alike (WINDOW_W); a line declaring several stays a const of the namespace.
+        $src = preg_replace('/^const (\w+) = ((?:(?!, [A-Z_0-9]+ = ).)*);$/m', 'defined(__NAMESPACE__ . \'\\\\$1\') || define(__NAMESPACE__ . \'\\\\$1\', $2);', $src);
         $argv = [$path, ...$args];
-        (static function () use ($src, $argv, &$state) { eval('?>' . $src); $state = $s ?? $files; })();
+        (static function () use ($src, $argv, &$state) { eval('?>' . $src); $state = $s ?? $files ?? null; })();
     }
 }
 

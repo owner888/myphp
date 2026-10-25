@@ -139,10 +139,10 @@ final class Ipc
             return self::reply($id, $secret, null, self::notBound($method));
         }
         $channels = [];
-        $args = self::arguments($m, $args, $page->callContext(), function (int $chan) use ($page, $secret, &$channels): Channel {
-            return $channels[] = $page->openChannel($chan, $secret);
-        });
         try {
+            $args = self::arguments($m, $args, $page->callContext(), function (int $chan) use ($page, $secret, &$channels): Channel {
+                return $channels[] = $page->openChannel($chan, $secret);
+            }); // an argument that is no case of its enum fails the call
             $result = $m->invokeArgs(self::$services[$service]['object'], $args);
         } catch (Throwable $e) {
             self::closeAll($channels);
@@ -179,7 +179,9 @@ final class Ipc
                 array_push($out, ...array_slice($args, $j));
                 $j = count($args);
             } elseif ($j < count($args)) {
-                $out[] = $args[$j++];
+                $v = $args[$j++];
+                // A backed enum comes as its value, as it goes (mygo decodes typed constants so): one not among its cases fails the call.
+                $out[] = $pt instanceof ReflectionNamedType && !$pt->isBuiltin() && is_subclass_of($type, \BackedEnum::class) && (is_int($v) || is_string($v)) ? $type::from($v) : $v;
             } else {
                 break; // the defaults of the rest
             }

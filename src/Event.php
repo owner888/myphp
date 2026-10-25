@@ -8,7 +8,7 @@ use InvalidArgumentException;
 /**
  * An event PHP sends to pages (mygo's Event): declare it once, with the PHP
  * type of its payload, which the TypeScript client types
- * (`events.progress(p => ...)`):
+ * (`events.progress.on(p => ...)`):
  *
  *     $progress = new Event('progress', Progress::class);
  *     $progress->emit($win, new Progress(done: 1, total: 3));

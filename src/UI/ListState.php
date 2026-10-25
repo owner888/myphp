@@ -57,6 +57,15 @@ final class ListState implements Scrollable
     /** Set by Layout each frame: the last row's bottom is in view. */
     public bool $atEnd = false;
     private bool $didChange = false;
+    /** The text of row $i (Closure(int): string, mygo's Label): typing the first letters of a row's text while the list has the keyboard focus chooses it, and assistive technology reads it as the row's name. */
+    public ?Closure $label = null;
+    /** Whether row $i heads a section (Closure(int): bool, mygo's Header): the header of the section at the top of the list stays there while the rows of its section scroll under it, until the next header pushes it away. Give headers a background. Headers are not chosen. */
+    public ?Closure $header = null;
+    /** What was typed to go to a row by its label, and when, in seconds. */
+    public string $typed = '';
+    public float $typedAt = 0.0;
+    /** That an editable text (Context::editableText) was built in a row the last frame: Enter on the chosen row then edits it rather than submits; and that Enter or F2 asked the chosen row's to edit. @internal */
+    public bool $editables = false, $editAsked = false;
     /** For a table: the widths the user dragged its columns to, by column id. */
     public array $columnWidths = [];
     /** For a table: [column id, descending] the rows are sorted by, chosen by header clicks, or null; the app sorts its rows by it. */
@@ -197,10 +206,38 @@ final class ListState implements Scrollable
         }
     }
 
-    /** Chooses row $row (clamped; -1 for none) and brings it into view; with a selection, alone. */
+    /** Whether row $row heads a section ($header). */
+    public function isHeader(int $row): bool
+    {
+        return $this->header !== null && $row >= 0 && $row < $this->count && ($this->header)($row);
+    }
+
+    /** The header at or above row $row, -1 for none. */
+    public function headerAbove(int $row): int
+    {
+        for ($j = min($row, $this->count - 1); $j >= 0; $j--) {
+            if (($this->header)($j)) { return $j; }
+        }
+        return -1;
+    }
+
+    /** $row, or past a header the nearest row that is not one, going $dir (1 down, -1 up), else the other way; -1 for none. */
+    private function rowOff(int $row, int $dir): int
+    {
+        if ($this->header === null || $row < 0) { return $row; }
+        foreach ([$dir, -$dir] as $d) {
+            for ($j = $row; $j >= 0 && $j < $this->count; $j += $d) {
+                if (!($this->header)($j)) { return $j; }
+            }
+        }
+        return -1;
+    }
+
+    /** Chooses row $row (clamped; -1 for none) and brings it into view; with a selection, alone. A header is passed over, toward where the choice moves. */
     public function choose(int $row): void
     {
         $row = max(-1, min($this->count - 1, $row));
+        $row = $this->rowOff($row, $row >= ($this->selected ?? -1) ? 1 : -1);
         if ($this->selection !== null && $row >= 0 && $this->selection->choose($row, $this->keyOf(...))) {
             $this->didChange = true;
         }
@@ -226,7 +263,8 @@ final class ListState implements Scrollable
     public function extendTo(int $row): void
     {
         if ($this->selection === null) { $this->choose($row); return; }
-        $row = max(0, min($this->count - 1, $row));
+        $row = $this->rowOff(max(0, min($this->count - 1, $row)), $row >= ($this->selected ?? -1) ? 1 : -1);
+        if ($row < 0) { return; }
         if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; }
         $this->selected = $row;
         $this->scrollIntoView($row);
@@ -235,7 +273,12 @@ final class ListState implements Scrollable
     /** Chooses every row (Cmd+A), with a selection. */
     public function selectAll(): void
     {
-        if ($this->selection !== null && $this->selection->selectAll($this->count, $this->keyOf(...))) { $this->didChange = true; }
+        if ($this->selection === null) { return; }
+        $changed = false;
+        for ($j = 0; $j < $this->count; $j++) {
+            if (!$this->isHeader($j)) { $changed = $this->selection->set($this->keyOf($j), true) || $changed; } // headers are not chosen
+        }
+        if ($changed) { $this->didChange = true; }
     }
 
     /** The rows a drag from row $i moves: those chosen when it is one of them, else row $i (mygo's listFrame.dragged). @return list<int> */

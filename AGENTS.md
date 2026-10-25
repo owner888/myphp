@@ -72,7 +72,7 @@ src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + st
 src/UI/            Node, Direction, Inspector* (dev tools), Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
                    menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
-                   textarea(minLines, maxLines)/image/box/list; clicked/doubleClicked/changed/hovered/focused/shortcut; ->tooltip()/at()/
+                   textarea(minLines, maxLines)/image/box/list/scroll/radioGroup/editableText/shape; clicked/changed/hovered/dragged/shortcut; ->tooltip()/at()/
                    round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
                    min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
@@ -88,7 +88,7 @@ examples/          native (inbox over a million rows), form (fields, text area, 
                    photos, http (real tools — a log viewer, Markdown notes, a photo browser, an HTTP client
                    over curl — the API's proving ground), files (a file manager: sidebar, breadcrumbs, grid or table of
                    the folder, one Selection shared by both, find bar, image preview, Trash), glass (Liquid Glass over a
-                   photo), widgets (the small controls), titlebar, game (Plugins\Game), piano (Audio)
+                   photo), widgets (the small controls), titlebar, game (Plugins\Game), piano (Audio); mygo's own (v1.11): hello … gallery, run headless by examples_test.php
 tests/             headless tests: php tests/run.php [name] — Headless.php (a fake TextPainter of 7×16 cells, events as the
                    view sends them, paint into an FFI buffer, the widgets and files examples without their windows), *_test.php
                    (check()/same() assertions, no PHPUnit; svg_test reads the renderer's pixels); php tests/bench.php [frames] times build/layout/record/paint

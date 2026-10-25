@@ -1,0 +1,17 @@
+{
+  "name": "todo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "../../bin/myphp dev",
+    "build": "../../bin/myphp build",
+    "generate": "../../bin/myphp generate",
+    "dev:web": "vite",
+    "build:web": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vite": "^7"
+  }
+}
