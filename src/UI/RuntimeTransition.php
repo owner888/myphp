@@ -405,13 +405,13 @@ trait RuntimeTransition
         if ($r === null || $r->frame + 1 < $this->frameNumber) {
             // Not painted in the frame before: it shows at once.
             $r = $this->contents[$n->id] = new ContentState();
-            $r->frame = $this->frameNumber; $r->text = $n->text; $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
+            $r->frame = $this->frameNumber; $r->text = self::shownText($n); $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
             $r->k = new MotionChannel(1.0, $now);
             return [$r, 1.0, false];
         }
         if ($r->frame !== $this->frameNumber) {
             $r->frame = $this->frameNumber;
-            $changed = $n->kind === Node::TEXT ? $n->text !== $r->text : ($n->svg !== $r->svg || $n->image !== $r->image);
+            $changed = $n->kind === Node::TEXT || $n->kind === Node::RICH ? self::shownText($n) !== $r->text : ($n->svg !== $r->svg || $n->image !== $r->image);
             if ($changed) {
                 if ($this->instant()) {
                     $r->k = new MotionChannel(1.0, $now);
@@ -423,7 +423,7 @@ trait RuntimeTransition
                     $r->k->headFor(1.0, $n->content->animation ?? ContentTransition::defaultAnimation(), $now);
                 }
             }
-            $r->text = $n->text; $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
+            $r->text = self::shownText($n); $r->svg = $n->svg; $r->image = $n->image; $r->draw = $n->draw;
             $r->k->advance($now);
         }
         if (!$r->k->moving && !$r->k->pending) {
@@ -432,5 +432,11 @@ trait RuntimeTransition
         }
         $this->animationFrame(); // painting: the frame after is asked for here
         return [$r, max(0.0, min($r->k->value, 1.0)), true];
+    }
+
+    /** The text a text shows, a rich text's of its spans (one made rich by its style, or in a Selectable container). */
+    private static function shownText(Node $n): ?string
+    {
+        return $n->kind === Node::RICH ? $n->plainText() : $n->text;
     }
 }

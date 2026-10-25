@@ -1544,3 +1544,21 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **The language of text** naming none is the app's through the text
   system (`System::setLanguage`, set every frame), not written into each
   text's style: `textStyle()->lang` stays null where mygo's has the locale.
+
+## Outlines, repaints, scrolling, selections and following, their tests (v1.22)
+
+- **Not ported**: TestRepaintFrames, TestHeldWhileOccluded and
+  TestFocusChangeFrames (every frame of myphp builds the view, Paint-only
+  frames, v1.14; the window draws a frame whenever it becomes or stops
+  being the key window), TestIndicatorsRepaint's pixels, TestTrackScrollList
+  (TrackScroll on a list, v1.15), TestDividers' pixels (style_test has the
+  dividers of a column and a row).
+- **Paint order, not pixels**: the headless painter composes no pixels,
+  so selection_paint_test checks the order of the quads (a highlight over
+  the backgrounds it covers, under its glyphs; a composition's underline
+  and the caret over the glyphs) where mygo's tests read the image.
+- **`width(0)`** leaves the width to the content, as `size(0, …)` does;
+  mygo's `Width(0)` is a width of nothing. A column closing to nothing
+  takes `maxWidth(0)` (motion_more_test).
+- **Dividers** are centred on the boundary of two rows, a 1-point divider
+  from half a point above it; mygo's fill the pixels below it.

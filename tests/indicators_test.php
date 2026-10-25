@@ -27,11 +27,12 @@ function indTester(\Closure $view, float $w, float $h): Headless
     return $t;
 }
 
-// A spinner is a progress of unknown length, and keeps frames coming for its next spoke.
+// A spinner is a progress of unknown length; painted, it asks for a frame for its next spoke, none before.
 $h = indTester(function (Context $c): void { $c->spinner()->label('Loading'); }, 200, 100);
 $n = indNode($h->rt->accessTree, Role::PROGRESS, 'Loading');
 check($n->now < $n->min, 'the spinner is of unknown length: ' . json_encode([$n->now, $n->min]));
-check($h->rt->needsFrame, 'it is painted again for its next spoke');
+$h->paint();
+check(!$h->rt->needsFrame && ($h->rt->nextWake() ?? 1) <= 0.075, 'it is painted again for its next spoke: ' . json_encode($h->rt->nextWake()));
 
 // A meter in the success color, the warning and danger colors at its levels, low ones for a battery.
 $levels = new MeterLevels(warning: 70, critical: 90); $battery = new MeterLevels(warning: 20, critical: 10);

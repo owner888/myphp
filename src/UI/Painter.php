@@ -349,8 +349,8 @@ final class Painter
 
     private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
-        if ($list->clipped($n->x, $n->y, $n->w, $n->h)) {
-            return;
+        if ($list->clipped($n->x, $n->y, $n->w, $n->h) && ($n->kids === [] || $n->clip !== 0 || $n->scroll !== null)) {
+            return; // out of the clip; a container that clips nothing goes on, its children reaching past its box (absolute, transformed, overflowing)
         }
         if ($n->kind === Node::INPUT) {
             self::paintField($n, $list, $text, $t, $rt);
@@ -373,7 +373,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::SPINNER) {
-            self::paintSpinner($n, $list, $t);
+            self::paintSpinner($n, $list, $t, $rt);
             return;
         }
         if ($n->kind === Node::SLIDER) {
@@ -387,7 +387,7 @@ final class Painter
                 $fill = $n->w * min(1.0, $n->fraction);
                 $list->rect($n->reverse !== $n->rtl ? $n->x + $n->w - $fill : $n->x, $y, $fill, $h, $n->color ?? $t->accent, 1.0, $r); // reversed, or right to left: from the right
             } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
-                $phase = fmod(hrtime(true) / 1.5e9, 1.0);
+                $phase = fmod(($rt?->now ?? hrtime(true)) / 1.5e9, 1.0);
                 $bar = $n->w / 3;
                 $x = $n->reverse !== $n->rtl ? $n->x + $n->w - $phase * ($n->w + $bar) : $n->x - $bar + $phase * ($n->w + $bar);
                 $list->pushClip($n->x, $y, $n->w, $h);
@@ -807,10 +807,12 @@ final class Painter
      * twelfth of 0.9 s, fading behind the one leading. A spoke is a run
      * of overlapping dots, the list having no rotated quads.
      */
-    private static function paintSpinner(Node $n, DisplayList $list, Theme $t): void
+    private static function paintSpinner(Node $n, DisplayList $list, Theme $t, ?Runtime $rt): void
     {
         $spokes = 12; $turn = 0.9;
-        $lead = (int)(fmod(hrtime(true) / 1e9, $turn) / $turn * $spokes);
+        $phase = fmod(($rt?->now ?? hrtime(true)) / 1e9, $turn) / $turn * $spokes;
+        $lead = (int)$phase;
+        $rt?->after(($lead + 1 - $phase) * $turn / $spokes); // painted again for its next spoke, not every frame (mygo's spinner)
         $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2;
         $in = $n->w * 0.22; $out = $n->w * 0.46; $w = max(1.5, $n->w * 0.09);
         $dots = 4;
@@ -1009,6 +1011,12 @@ final class Painter
         }
     }
 
+    /** The color and opacity of a selection in text of style $ts: its own (selectionColor()), else the theme's (mygo's selectionColor). @return array{int, float} */
+    private static function selectionColor(TextStyle $ts, Theme $t): array
+    {
+        return $ts->selection !== null ? [$ts->selection, $ts->selectionAlpha ?? 1.0] : [$t->selection, $t->selectionAlpha];
+    }
+
     /**
      * Rich text: its layout from its top left, with the background,
      * underline or strikethrough of its text style, and the colors,
@@ -1025,11 +1033,16 @@ final class Painter
         if (($sel = $rt?->textSelectionOf($n->id)) !== null) { // over the backgrounds, under the glyphs and lines
             $under = function () use ($list, $l, $sel, $x, $y, $ts, $t): void {
                 foreach ($l->selection($sel[0], $sel[1]) as [$sx, $sy, $sw, $sh]) {
-                    $list->rect($x + $sx, $y + $sy, $sw, $sh, $ts->selection ?? $t->selection, $ts->selection !== null ? ($ts->selectionAlpha ?? 1.0) : $t->selectionAlpha);
+                    $list->rect($x + $sx, $y + $sy, $sw, $sh, ...self::selectionColor($ts, $t));
                 }
             };
         }
-        self::paintSpans($list, $text, $l, $n->spans, $x, $y, $ts->color ?? $n->fg, ($ts->alpha ?? 1.0) * $n->alpha, $n->alpha, $ts, $under);
+        $glyphs = null;
+        if ($n->content !== null && $rt !== null && count($n->spans) === 1 && $n->kids === [] && count($l->lines) === 1) { // a text made rich (a background, a selectable container's) changes as a text does
+            $line = $l->lines[0];
+            $glyphs = fn(): bool => self::contentText($n, $list, $text, $n->spans[0]->text, $x + $line->x, $y + $line->y, $rt);
+        }
+        self::paintSpans($list, $text, $l, $n->spans, $x, $y, $ts->color ?? $n->fg, ($ts->alpha ?? 1.0) * $n->alpha, $n->alpha, $ts, $under, $glyphs);
         self::paintInline($n, $list, $t);
     }
 
@@ -1038,12 +1051,13 @@ final class Painter
      * background and the spans', what $under paints over them, the glyphs in
      * their spans' colors or $color, and the underlines and strikethroughs
      * of the spans and of $ts (mygo's Painter.TextLayout). $nodeAlpha dims
-     * the spans' own colors, as a node's opacity.
+     * the spans' own colors, as a node's opacity; $glyphs, when it returns
+     * true, painted the glyphs instead (a content transition's).
      *
      * @internal
      * @param list<Span> $spans
      */
-    public static function paintSpans(DisplayList $list, TextPainter $text, \MyPHP\Text\Layout $l, array $spans, float $x, float $y, int $color, float $alpha, float $nodeAlpha = 1.0, ?TextStyle $ts = null, ?\Closure $under = null): void
+    public static function paintSpans(DisplayList $list, TextPainter $text, \MyPHP\Text\Layout $l, array $spans, float $x, float $y, int $color, float $alpha, float $nodeAlpha = 1.0, ?TextStyle $ts = null, ?\Closure $under = null, ?\Closure $glyphs = null): void
     {
         $ends = []; $end = 0;
         foreach ($spans as $sp) { $end += mb_strlen($sp->text, 'UTF-8'); $ends[] = $end; }
@@ -1085,7 +1099,7 @@ final class Painter
             }
         }
         if ($under !== null) { $under(); }
-        $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $nodeAlpha): array {
+        if ($glyphs === null || !$glyphs()) $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $nodeAlpha): array {
             $k = $at($r);
             if ($k < 0 || $spans[$k]->color === null && $spans[$k]->alpha === null) {
                 return [$color, $alpha];
@@ -1214,25 +1228,29 @@ final class Painter
                 $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize)[0]), $ty, $t->textMuted);
             }
         } else {
+            $ts = $n->textStyle();
+            if ($ts->background !== null) { // the text's background, under the selection (mygo's textBackgrounds)
+                $list->rect($tx, $ty, $tw, $lh, $ts->background);
+            }
             if ($n->focused && $s->hasSelection() && $s->marked === null) {
                 [$a, $b] = $s->selection();
                 $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($a));
                 $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($b));
-                $list->rect($tx + $xa, $ty, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
+                $list->rect($tx + $xa, $ty, $xb - $xa, $lh, ...self::selectionColor($ts, $t));
             }
             if ($n->ranges !== [] && !$s->password) {
                 $text->paintRuns($list, $display, $n->fontSize, $tx, $ty, 0, self::rangeColors($n, $s, 0));
             } else {
-                $text->paint($list, $display, $n->fontSize, $tx, $ty, $n->fg);
+                $text->paint($list, $display, $n->fontSize, $tx, $ty, $ts->color ?? $n->fg);
             }
             if ($s->marked !== null) {
                 $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor));
                 $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor + strlen($s->marked)));
-                $list->rect($tx + $xa, $ty + $lh - 1, $xb - $xa, 1.5, $n->fg);
+                $list->rect($tx + $xa, $ty + $lh - 2, $xb - $xa, 1.0, $ts->color ?? $n->fg); // the composition's underline, over the glyphs (mygo's)
             }
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) { // read-only: selected and copied, without a caret
-            $list->rect($tx + $caretX, $ty, 1.0, $lh, $n->fg);
+            $list->rect($tx + $caretX, $ty, 1.0, $lh, $t->accent); // in the accent, over all (mygo's caret)
         }
         $list->popClip();
     }
@@ -1269,32 +1287,36 @@ final class Painter
             foreach ($ph->lines as $i => $_) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $t->textMuted); }
         }
         [$selA, $selB] = $n->focused && $s->hasSelection() && $s->marked === null ? $s->selection() : [0, 0];
+        $ts = $n->textStyle(); $selColor = self::selectionColor($ts, $t);
         $first = max(0, (int)floor($s->scrollY / $lh));
         $last = min(count($layout->lines) - 1, (int)floor(($s->scrollY + $innerH) / $lh));
         for ($i = $first; $i <= $last; $i++) {
             [$a, $b] = $layout->lines[$i];
             $line = $layout->lineText($i);
             $y = $ty + $i * $lh;
+            if ($ts->background !== null && $line !== '') { // the line's text background, under the selection
+                $list->rect($tx, $y, $text->xForIndex($line, $n->fontSize, strlen($line)), $lh, $ts->background);
+            }
             if ($selB > $selA && $selB > $a && $selA < $b) {
                 $xa = $selA > $a ? $text->xForIndex($line, $n->fontSize, $selA - $a) : 0.0;
                 $xb = $selB < $b ? $text->xForIndex($line, $n->fontSize, min($selB - $a, strlen($line))) : $text->xForIndex($line, $n->fontSize, strlen($line)) + ($selB > $b ? $n->fontSize * 0.3 : 0);
-                $list->rect($tx + $xa, $y, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
+                $list->rect($tx + $xa, $y, $xb - $xa, $lh, ...$selColor);
             }
             if ($line !== '' && $n->ranges !== []) {
                 $text->paintRuns($list, $line, $n->fontSize, $tx, $y, 0, self::rangeColors($n, $s, $a));
             } elseif ($line !== '') {
-                $text->paint($list, $line, $n->fontSize, $tx, $y, $n->fg);
+                $text->paint($list, $line, $n->fontSize, $tx, $y, $ts->color ?? $n->fg);
             }
         }
         if ($s->marked !== null) {
             [$xa, $ya] = $layout->caret($text, $s->cursor);
             [$xb, $yb] = $layout->caret($text, $s->cursor + strlen($s->marked));
             if ($yb !== $ya) { $xb = $innerW; }
-            $list->rect($tx + $xa, $ty + $ya + $lh - 1, $xb - $xa, 1.5, $n->fg);
+            $list->rect($tx + $xa, $ty + $ya + $lh - 2, $xb - $xa, 1.0, $ts->color ?? $n->fg);
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) {
             [$cx, $cy] = $layout->caret($text, $s->displayCaret());
-            $list->rect($tx + $cx, $ty + $cy, 1.0, $lh, $n->fg);
+            $list->rect($tx + $cx, $ty + $cy, 1.0, $lh, $t->accent);
         }
         $list->popClip();
     }

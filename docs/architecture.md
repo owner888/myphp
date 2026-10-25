@@ -2943,6 +2943,31 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   language, which text naming none is shaped in.
 - **Headless tooltips** paint last, as the window's.
 
+## Outlines, repaints, scrolling, selections and following (v1.22)
+
+- **`after()` and `nextWake()` go by the frame's clock** (`Runtime::clockNow`,
+  the tests' clock or hrtime), as mygo's `After`.
+- **A spinner asks for its next spoke** as it paints (`after()`), not for
+  every frame; it and a moving progress bar take their phase from the
+  frame's time.
+- **A container that clips nothing is painted though its box is out of
+  the clip**: its children can show elsewhere (absolute, transformed,
+  overflowing); one that clips or scrolls is skipped.
+- **Fields**: an input's and a text area's text background, selection
+  color and text color are their text style's; the composition's
+  underline is a point thick over the glyphs; the caret is in the accent,
+  as mygo's.
+- **A text made rich** (a text background, a Selectable container's)
+  keeps its content transition: `paintSpans` takes a `$glyphs` painter,
+  and `contentStep` compares a rich text's spans.
+- **ScrollState**: an offset is kept within the content at both ends, the
+  axis a container does not scroll is at its start, and nothing to scroll
+  puts it at the start; `scrollTo($y, Animation)` glides by the frame's
+  clock (`Scrollable::glide($dt, $now)`), the default glide for `true`.
+- **Following the end**: the list's own height changing (a composer below
+  it growing, the window resized) is no glide; rows going while it glides
+  show in place at once (`ListState::$went`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

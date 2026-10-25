@@ -316,14 +316,20 @@ final class Runtime
 
     /** Write text to the clipboard and read it (mygo's Services' WriteClipboard and ReadClipboard), for what edits text itself, as a code editor: the window sets them to the system's pasteboard; without one, a clipboard of the runtime's own. */
     public Closure $writeClipboard, $readClipboard;
-    /** When a frame is due of its own accord, as asked by after(): seconds of hrtime, or null. */
+    /** When a frame is due of its own accord, as asked by after(): seconds of the clock, or null. */
     private ?float $wakeAt = null;
 
     /** Asks for a frame $seconds from now, for what changes then, as a caret's blink or a hover's delay (mygo's Context.After and Painter.After): the earliest asked since the last frame began. */
     public function after(float $seconds): void
     {
-        $at = hrtime(true) / 1e9 + max(0.0, $seconds);
+        $at = $this->clockNow() / 1e9 + max(0.0, $seconds);
         if ($this->wakeAt === null || $at < $this->wakeAt) { $this->wakeAt = $at; }
+    }
+
+    /** The time now, in nanoseconds: the clock's (tests'), else hrtime's. */
+    private function clockNow(): int
+    {
+        return $this->clock !== null ? ($this->clock)() : hrtime(true);
     }
 
     /** Asks, while painting, for the next frame as soon as the display can show it, for a drawing that moves (mygo's Painter.AnimationFrame). */
@@ -355,14 +361,14 @@ final class Runtime
         $now = hrtime(true);
         $this->frameNumber++;
         $this->metrics?->textSystem()->setLanguage(\MyPHP\App::locale()); // text naming no language is in the app's (mygo's Style.Lang from the locale)
-        $this->now = $this->clock !== null ? ($this->clock)() : $now;
+        $this->now = $this->clockNow();
         if ($this->pointerPress !== null && !$this->pointerPress['down']) {
             $this->pointerPress = null; // the frame after it was let go saw it
         }
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
         foreach ($this->scrolls as $state) {
-            $state->glide($dt);
+            $state->glide($dt, $this->now);
         }
         $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
@@ -733,7 +739,7 @@ final class Runtime
     {
         $wake = $this->nextBlink();
         if ($this->wakeAt !== null) {
-            $at = max(0.0, $this->wakeAt - hrtime(true) / 1e9);
+            $at = max(0.0, $this->wakeAt - $this->clockNow() / 1e9);
             $wake = $wake === null ? $at : min($wake, $at);
         }
         if ($this->tipPending) {
@@ -1718,8 +1724,8 @@ final class Runtime
         } elseif ($this->hovered($n->id) && (isset($this->clickable[$n->id]) || in_array($n->role, self::CLICKABLE_ROLES, true))) {
             $this->cursor = Cursor::Default; // a cursor around stops at what is clicked, which has its own (mygo's cursor of clickable elements)
         }
-        if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
-            $this->animating = true; // an indeterminate bar or a spinner moves every frame
+        if ($n->kind === Node::PROGRESS && $n->fraction < 0) {
+            $this->animating = true; // an indeterminate bar moves every frame; a spinner asks for its next spoke as it paints
         }
         if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapLast && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
             $this->needsFrame = true; // wrapped at the width it, or its container, had last frame; this frame's differs

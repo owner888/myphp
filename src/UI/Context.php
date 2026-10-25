@@ -620,6 +620,7 @@ final class Context
      */
     public function list(ListState $state, int $count, Closure $row, ?Closure $empty = null): Node
     {
+        $state->went = $count < $state->count;
         $state->sync($count); // rows that came or went above the place and the choice, with keys
         $state->count = $count;
         if ($state->followEnd && ($state->atEnd || $state->viewport == 0) && !$state->moving()) {
@@ -638,7 +639,7 @@ final class Context
                 $this->jump($node, 'follow', $state->lag);
                 $state->grew = false;
             }
-            $state->lag = $this->animateTo($node, 'follow', 0.0, $state->followAnimation);
+            $state->lag = $state->went ? $this->jump($node, 'follow', 0.0) : $this->animateTo($node, 'follow', 0.0, $state->followAnimation); // rows gone: in place at once
             if ($state->lag != 0.0 && $this->runtime->wheeled) { $state->lag = $this->jump($node, 'follow', 0.0); } // the user scrolling stops it
         }
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);

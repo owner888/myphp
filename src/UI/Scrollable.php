@@ -17,8 +17,8 @@ interface Scrollable
      */
     public function extent(): array;
 
-    /** Advances a smooth scroll by $dt seconds; true while it is still on its way. */
-    public function glide(float $dt): bool;
+    /** Advances a smooth scroll by $dt seconds, to the frame's time $now (nanoseconds); true while it is still on its way. */
+    public function glide(float $dt, int $now): bool;
 
     /** Whether a smooth scroll is on its way. */
     public function moving(): bool;

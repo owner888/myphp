@@ -50,6 +50,8 @@ final class ListState implements Scrollable
     public bool $glides = false, $grew = false;
     public int $shownRow = -1;
     public float $shownTop = 0.0;
+    /** Rows went since last frame: the glide does not follow the end up, the rows showing in place (mygo's review_follow TestReviewFollowRemoveDuringGlide). @internal */
+    public bool $went = false;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
     /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
@@ -564,7 +566,7 @@ final class ListState implements Scrollable
         return [$this->row * $this->estimate + $this->offset, max(0.0, $content - $this->viewport), $this->viewport];
     }
 
-    public function glide(float $dt): bool
+    public function glide(float $dt, int $now): bool
     {
         if ($this->target === null) {
             return false;

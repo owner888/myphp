@@ -287,7 +287,11 @@ final class Layout
         $px = $n->padL(); $py = $n->padT(); $pw = $px + $n->padR(); $ph = $py + $n->padB(); // the content's left and top, and the room the edges take
         $cw = $w - $pw; $ch = $h - $ph;
         if ($cnt === 0) {
-            // nothing in the flow
+            if ($n->scroll instanceof ScrollState) { // nothing to scroll: at the start (mygo's TrackScroll keeps the offset within the content)
+                $s = $n->scroll;
+                $s->x = $s->y = $s->maxX = $s->maxY = 0.0;
+                $s->viewport = $ch; $s->viewportW = $cw;
+            }
         } elseif ($n->gridCols !== null) { // a grid: the tracks sized in the room there is, each child stretched over its area or placed in it as justifyItems/justifySelf (across) and alignSelf (down) say
             [$cols, $rows, $items] = self::gridTracks($n, $cw, $ch);
             $gx = $n->gapX ?? $n->gap; $gy = $n->gapY ?? $n->gap;
@@ -378,14 +382,14 @@ final class Layout
             if ($n->scrollY) {
                 $s->maxY = max(0.0, $contentH - $ch);
                 $s->viewport = $ch;
-                $s->y = min($s->y, $s->maxY);
+                $s->y = max(0.0, min($s->y, $s->maxY));
                 $cy -= $s->y;
                 if ($row) { $ch = max($ch, $contentH); } // children get their own height
             }
             if ($n->scrollX) {
                 $s->maxX = max(0.0, $contentW - $cw);
                 $s->viewportW = $cw;
-                $s->x = min($s->x, $s->maxX);
+                $s->x = max(0.0, min($s->x, $s->maxX));
                 if ($n->rtl) {
                     $scrollRtl = $s->x; // right to left, the content starts at the right, the offset counting from there: placed mirrored, then moved by it
                 } else {
@@ -393,11 +397,14 @@ final class Layout
                 }
                 if (!$row) { $cw = max($cw, $contentW); }
             }
+            if (!$n->scrollY) { $s->y = $s->maxY = 0.0; } // the axis it does not scroll stays at its start
+            if (!$n->scrollX) { $s->x = $s->maxX = 0.0; }
             if ($row ? $n->scrollX : $n->scrollY) {
                 $flexible = false; // nothing grows or shrinks along a scrolled axis
             }
         } elseif ($n->scroll instanceof ListState) {
             $s = $n->scroll;
+            $wasViewport = $s->viewport;
             $s->viewport = $ch;
             $s->rowGap = $gap;
             if ($wide) {
@@ -436,8 +443,8 @@ final class Layout
                 if ($s->glides && isset($kids[$j = $s->shownRow - $s->first])) { // the end moved: the rows stay where they showed, and glide up from there
                     $top2 = 0.0;
                     for ($i = 0; $i < $j; $i++) { $top2 += $kids[$i]->mh + $gap; }
-                    $d = $s->shownTop - ($top2 - $off);
-                    if (abs($d) > 0.01) { $s->lag += $d; $s->grew = true; }
+                    $d = $s->shownTop - ($top2 - $off) + ($wasViewport > 0 ? $ch - $wasViewport : 0.0); // the end moving in the list, not the list's bottom moving (mygo's GlideOnShrink, GlideOnWindowResize)
+                    if (abs($d) > 0.01 && !$s->went) { $s->lag += $d; $s->grew = true; }
                 }
                 [$s->offset, $s->row, $s->aligning] = [$off, $s->first, null];
                 if ($off < 0) { $n->context?->runtime?->changed(); } // rows above short of the estimates: another pass builds them
