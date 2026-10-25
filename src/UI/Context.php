@@ -507,7 +507,7 @@ final class Context
     /** Whether the pointer holds $n down: pressed on it last frame and not let go (mygo's Pressed). */
     public function pressed(Node $n): bool
     {
-        return ($this->runtime?->pressOf($n->id)['down'] ?? false) === true;
+        return $this->runtime?->holds($n->id) ?? false;
     }
 
     /** Whether the pointer went down since the last frame outside $n: on neither it, nor what is in it, nor the node it is attached to (Node::attachTo), nor what is attached to a node inside it. A popover closes then, the press going on to what is under it; the last press decides (mygo's PressedOutside). */
@@ -739,21 +739,42 @@ final class Context
         [$this->scope, $this->ordinal] = [$scope, $ordinal];
         $rt = $this->runtime;
         if ($rt !== null && $state->label !== null && $state->selected !== null && $count > 0 && ($typed = $rt->typed($node->id)) !== '') {
-            // Typing the first letters of a row's label goes to it, from the row after the chosen one, or the chosen one once more than a letter is typed (mygo's typed).
-            $now = hrtime(true) / 1e9;
+            // Typing the first letters of a row's label goes to it (mygo's typed).
+            $now = $rt->now / 1e9;
             if ($now - $state->typedAt >= 1.0) { $state->typed = ''; }
             $state->typed .= $typed; $state->typedAt = $now;
-            for ($k = 1; $k <= $count; $k++) {
-                $j = (max($state->selected, 0) + $k - (mb_strlen($state->typed) > 1 ? 1 : 0) + $count) % $count;
-                if (!$state->isHeader($j) && str_starts_with(mb_strtolower(($state->label)($j)), mb_strtolower($state->typed))) { $state->choose($j); break; }
-            }
+            $j = self::typedRow($state->typed, $state->selected, $count, $state->label, $state->isHeader(...));
+            if ($j >= 0) { $state->choose($j); }
         }
         $this->end();
         $state->remember();
+        $node->changed = $state->changedSinceBuilt(); // the choice, by the keys before the build or a click in it (mygo's List Changed)
         if ($state->drag !== null && $this->runtime !== null) {
             $this->reorderRows($state, $node, $count);
         }
         return $node;
+    }
+
+    /**
+     * The row whose label starts with $text, ignoring case, from row $cur
+     * (the one chosen, -1 for none) on and round, or -1 (mygo's typed): the
+     * same letter again goes to the next row starting with it. $skip
+     * passes over rows, as a list's headers.
+     */
+    private static function typedRow(string $text, int $cur, int $n, Closure $label, ?Closure $skip = null): int
+    {
+        if ($text === '' || $n <= 0) { return -1; }
+        $from = max($cur, 0);
+        $first = mb_substr($text, 0, 1);
+        if (str_repeat($first, mb_strlen($text)) === $text) { // one letter, again and again
+            $text = $first;
+            if ($cur >= 0) { $from = $cur + 1; }
+        }
+        for ($d = 0; $d < $n; $d++) {
+            $i = ($from + $d) % $n;
+            if (($skip === null || !$skip($i)) && mb_strtolower(mb_substr($label($i), 0, mb_strlen($text))) === mb_strtolower($text)) { return $i; }
+        }
+        return -1;
     }
 
     /** What a row's nodes are keyed by in its list: its item's key (ListState::$key), so that its state goes with the item as rows come and go above it, else its index. */
@@ -1071,7 +1092,7 @@ final class Context
             }
         } else {
             $box->focusable()->bind($st->back);
-            if (!$st->editing && ($this->doubleClicked($box) || ($this->focused($box) && $this->shortcut(Key::RETURN)))) { $start = true; }
+            if (!$st->editing && ($this->doubleClicked($box) || ($rt?->activated($box->id) ?? false))) { $start = true; } // a double click, or Enter while it has the focus (which presses what has it)
         }
         if ($start && !$st->editing) {
             $st->editing = true; $st->fresh = true; $st->seen = false;
@@ -1362,6 +1383,12 @@ final class Context
     public function dismissed(Node $n): bool
     {
         return $n->dismissed;
+    }
+
+    /** The modifiers (Key::SHIFT, CONTROL, OPTION, COMMAND) held at the last click of $n, none for a click by Enter or Space (mygo's ClickModifiers). */
+    public function clickModifiers(Node $n): int
+    {
+        return $this->runtime?->clickModifiers($n->id) ?? 0;
     }
 
     /** Whether the control just built changed its value this frame (checkbox, radio, slider, select), as mygo's Changed. */
@@ -1759,15 +1786,13 @@ final class Context
                 if ($this->shortcut(Key::UP)) { $to = $at === false ? 0 : max($at - 1, 0); }
                 if ($this->shortcut(Key::HOME)) { $to = 0; }
                 if ($this->shortcut(Key::END)) { $to = count($items) - 1; }
-                if (($typed = $rt->typed($n->id)) !== '') { // the first letters of an item: from the one after the item chosen, round to it, the same letter again going to the next starting with it (mygo's sidebar keys)
-                    $now = hrtime(true) / 1e9;
+                if (($typed = $rt->typed($n->id)) !== '') { // the first letters of an item (mygo's sidebar keys)
+                    $now = $rt->now / 1e9;
                     if ($now - $local->typedAt >= 1.0) { $local->typed = ''; }
                     $local->typed .= $typed; $local->typedAt = $now;
-                    $start = ($at === false ? -1 : $at) - (mb_strlen($local->typed) > 1 ? 1 : 0);
-                    for ($k = 1, $cnt = count($items); $k <= $cnt; $k++) {
-                        $j = (($start + $k) % $cnt + $cnt) % $cnt;
-                        if (str_starts_with(mb_strtolower($local->labels[$j]), mb_strtolower($local->typed))) { $to = $j; break; }
-                    }
+                    $labels = $local->labels;
+                    $j = self::typedRow($local->typed, $at === false ? -1 : $at, count($items), fn(int $i) => $labels[$i]);
+                    if ($j >= 0) { $to = $j; }
                 }
             }
             if ($to !== null && $items[$to] !== $selected) { $selected = $items[$to]; $n->changed = true; }
@@ -2066,7 +2091,8 @@ final class Context
         $make = fn() => (object)['open' => false, 'cursor' => $date];
         $local = $rt?->local($b->id, $make) ?? $make();
         if ($this->clicked($b)) { $local->open = !$local->open; $local->cursor = $date; }
-        $this->popover($b, $local->open, function () use (&$date, $local, $b, $rt) {
+        $this->popoverBase($b, $local->open, function (Node $panel) use (&$date, $local, $b, $rt) { // not popover(), whose panel is as wide as the field at least: the calendar keeps its own width
+            $this->stylePanel($panel);
             $grid = $this->calendarGrid($date, $local->cursor, false, function (\DateTimeImmutable $d) use (&$date, $local, $b, $rt) {
                 if (self::setDay($date, $d)) { $b->changed = true; }
                 $local->open = false;
@@ -2475,7 +2501,8 @@ final class Context
         $local = $rt?->local($b->id, $make) ?? $make();
         if ($this->clicked($b)) { $local->open = !$local->open; }
         $b->expanded($local->open);
-        $this->popover($b, $local->open, function () use (&$rgb, &$alpha, $b, $t) {
+        $this->popoverBase($b, $local->open, function (Node $panel) use (&$rgb, &$alpha, $b, $t) { // the picker keeps its own width
+            $this->stylePanel($panel);
             $this->column(0, 0)->padding($t->space(3) - $t->space(1), $t->space(3) - $t->space(1)); // the panel's Space(1) and this: Padding(Space(3))
               if ($this->colorPicker($rgb, $alpha)->changed) { $b->changed = true; }
             $this->end();
@@ -2729,17 +2756,14 @@ final class Context
             if ($s->selection !== null && $this->shortcut('a', Key::COMMAND) && $s->selection->selectAll($n, $s->keyOf(...))) { $changed = true; }
             if ($rt->activated($grid->id) && $in) { $submitted = true; }
             if ($s->label !== null && ($typed = $rt->typed($grid->id)) !== '') {
-                $now = hrtime(true) / 1e9;
+                $now = $rt->now / 1e9;
                 if ($now - $s->typedAt >= 1.0) { $s->typed = ''; }
                 $s->typed .= $typed; $s->typedAt = $now;
-                for ($k = 1; $k <= $n; $k++) { // from the next item, or this one once more than a letter is typed
-                    $j = (max($at, 0) + $k - (mb_strlen($s->typed) > 1 ? 1 : 0) + $n) % $n;
-                    if (str_starts_with(mb_strtolower(($s->label)($j)), mb_strtolower($s->typed))) { $to = $j; break; }
-                }
+                if (($j = self::typedRow($s->typed, $in ? $at : -1, $n, $s->label)) >= 0) { $to = $j; }
             }
             if ($to >= 0) {
                 if ($extend) {
-                    if ($s->selection->pivot < 0 || !$in) { $s->selection->pivot = max($at, 0); $s->selection->span = 0; }
+                    if ($s->selection->pivot < 0 || !$in) { $s->selection->pivotAt(max($at, 0), $s->keyOf(...)); }
                     $changed = $s->selection->extend($to, $n, $s->keyOf(...)) || $changed;
                     $s->selected = $to;
                 } else {
@@ -3349,6 +3373,7 @@ final class Context
         $rt = $this->runtime;
         $this->ownScope('table');
         $n = $this->column(0, 0, 1)->role(Role::TABLE);
+        $n->chooseMany = $state->selection !== null; // assistive technology hears that its rows are chosen several at a time
         $drag = $rt?->local($n->id, fn() => new TableDrag()) ?? new TableDrag();
         $state->syncSort();
         $layout = $state->columns;
@@ -3464,7 +3489,21 @@ final class Context
         $this->divider();
         $list = $this->list($state, $count, function (int $i) use ($cells, $cell, $rowH, $t, $state) {
             $row = $this->row(0, 0)->align(Node::STRETCH)->min(0, $rowH)->role(Role::NONE); // as high as its tallest cell, at least the header; the list's row holds its cells
-            if ($state->roundRows) { $row->round($t->radius); } // chosen and hovered rows rounded, as a list's (mygo's RoundRows)
+            if ($state->isHeader($i)) { // a section's header spans the columns, built as column 0 (mygo's Header rows)
+                $row->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->background($t->surface)->fontWeight(600);
+                  $cell($i, 0);
+                $this->end();
+                return;
+            }
+            if ($state->roundRows) { // chosen and hovered rows rounded, as a list's; rows chosen together one block, rounded at its ends (mygo's RoundRows)
+                $r = $t->radius;
+                if ($state->chosen($i)) {
+                    $top = $i > 0 && $state->chosen($i - 1) ? 0.0 : $r; $bottom = $i + 1 < $state->count && $state->chosen($i + 1) ? 0.0 : $r;
+                    $row->radius($top, $top, $bottom, $bottom);
+                } else {
+                    $row->round($r);
+                }
+            }
             if ($state->selected === null && $this->hovered($row)) { $row->color = $t->surfaceHover; } // chosen rows show the pointer already
               $cells(fn(int $j) => $cell($i, $j), Role::CELL);
             $this->end();

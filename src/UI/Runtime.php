@@ -497,7 +497,7 @@ final class Runtime
                     } elseif ($e[1] === ' ' && $this->focus !== null && (($this->menuNodes[$this->focus] ?? 0) & 2) !== 0) {
                         $this->openMenuButton($this->focus); // and Space
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
-                    } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus]) && hrtime(true) / 1e9 - $this->typedAt >= 1.0) {
+                    } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus]) && $this->now / 1e9 - $this->typedAt >= 1.0) {
                         $this->activated = $this->focus; // space presses a focused button; within a second of letters typed at it, it is typed too (mygo's typePause)
                         $this->focusVisible = true;
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
@@ -1199,6 +1199,14 @@ final class Runtime
     public function pressOf(int $id): ?array
     {
         return $this->pointerPress !== null && $this->pointerPress['id'] === $id ? $this->pointerPress : null;
+    }
+
+    /** Whether the pointer holds node $id down; the frame the press lands in builds again, so that what the press chose shows in it (mygo's Pressed). */
+    public function holds(int $id): bool
+    {
+        if (($this->pressOf($id)['down'] ?? false) !== true) { return false; }
+        if ($this->presses !== [] && $this->pass === 0) { $this->consumed = true; }
+        return true;
     }
 
     /** The map from the window to the axes of node $id's parent as the last frame showed them, null when it has none (a singular transform). */
@@ -2244,17 +2252,27 @@ final class Runtime
         if ($this->activated === $id) {
             $this->activated = null; $this->keyClicked = $id;
             $this->consumed = true;
+            $this->clickMods = 0; $this->clickModsOf[$id] = 0; // the keys click with none
             return true;
         }
         foreach ($this->clicks as $i => [$x, $y, $mods]) {
             if ($this->under($id, $x, $y)) {
                 unset($this->clicks[$i]);
                 $this->consumed = true;
-                $this->clickMods = $mods;
+                $this->clickMods = $mods; $this->clickModsOf[$id] = $mods;
                 return true;
             }
         }
         return false;
+    }
+
+    /** @var array<int, int> the modifiers held at the last click of each node, by id */
+    private array $clickModsOf = [];
+
+    /** The modifiers held at the last click of node $id, a click by the keys none (mygo's ClickModifiers). */
+    public function clickModifiers(int $id): int
+    {
+        return $this->clickModsOf[$id] ?? 0;
     }
 
     /** The modifiers of the Return or Enter key pressed this frame (a field's Enter with Shift: a find bar's previous match), 0 when none was. */
@@ -2269,7 +2287,7 @@ final class Runtime
     {
         if ($this->focus !== $id || $this->typed === '') { return ''; }
         $this->consumed = true;
-        $typed = $this->typed; $this->typed = ''; $this->typedAt = hrtime(true) / 1e9; // one taker, once; the pass that follows sees what it did
+        $typed = $this->typed; $this->typed = ''; $this->typedAt = $this->now / 1e9; // one taker, once; the pass that follows sees what it did
         return $typed;
     }
 

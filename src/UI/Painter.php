@@ -454,7 +454,7 @@ final class Painter
             self::webViewHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) {
-            $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius);
+            if ($n->radii !== null) { $list->box($n->x, $n->y, $n->w, $n->h, $radii, $t->selection, $t->selectionAlpha); } else { $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius); } // corners each its own: rows chosen together, one block
         }
         if ($n->text !== null) {
             $x = $n->x; $y = $n->y;

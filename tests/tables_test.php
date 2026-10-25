@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, Key, ListState, Node, Role, SortOrder, TableColumn};
+use MyPHP\UI\{Context, Key, ListState, Node, Role, Selection, SortOrder, TableColumn, Theme};
 
 /** A table of files, name, kind and size, as mygo's tableView. @param list<TableColumn> $cols @param list<string> $names */
 function tableView(ListState $s, array $cols, array $names, int $w = 500, int $h = 300): Headless
@@ -234,3 +234,73 @@ $name = headerRect($h, 'Name'); $size = headerRect($h, 'Size');
 check($name[0] > $size[0] && $name[0] >= 300, "right to left, Name at {$name[0]}, Size at {$size[0]}");
 dragAlong($h, 301, 10, [281]);
 same(120.0, $s->columns->width($cols[0]), "dragging Name's edge 20 to the left widens it");
+
+// Rows of a table rounded (mygo's TestTableRoundRows): square by default; with roundRows the chosen row, rows chosen together one block rounded at its ends, and the rows of a table that does not choose.
+$rr = ['a.txt', 'b.txt', 'c.txt'];
+$roundCols = [new TableColumn('Name'), new TableColumn('Kind', 100), new TableColumn('Size', 80, align: Node::END)];
+$corners = function (ListState $s, int $row) use ($rr, $roundCols): array {
+    $h = new Headless(function (Context $c) use ($s, $rr, $roundCols): void {
+        $c->column(0, 0, 1); $c->table($s, $roundCols, count($rr), fn(int $r, int $col) => $c->text($col === 0 ? $rr[$r] : 'x'))->grow(1); $c->end();
+    }, 500, 300);
+    $h->frame();
+    $cell = $h->byText($rr[$row]);
+    $find = function (Node $n, Node $of) use (&$find): ?Node { foreach ($n->kids as $k) { if ($k === $of) { return $n; } if (($f = $find($k, $of)) !== null) { return $f; } } return null; };
+    $r = $cell;
+    while (($p = $find($h->root, $r)) !== null && !($p->scroll instanceof ListState)) { $r = $p; } // up to the list's row
+    return $r->corners();
+};
+$theme = Theme::dark(); $r = $theme->radius;
+$s = new ListState; $s->selected = 1;
+same([0.0, 0.0, 0.0, 0.0], $corners($s, 1), 'a chosen row, by default: square');
+$s = new ListState; $s->selected = 1; $s->roundRows = true;
+same([$r, $r, $r, $r], $corners($s, 1), 'a chosen row with roundRows');
+$s = new ListState; $s->selected = -1; $s->selection = new Selection; $s->key = fn(int $i) => $rr[$i]; $s->roundRows = true;
+$s->selection->add('a.txt'); $s->selection->add('b.txt');
+same([$r, $r, 0.0, 0.0], $corners($s, 0), 'the first of two rows chosen: its top rounded');
+same([0.0, 0.0, $r, $r], $corners($s, 1), 'the second: its bottom');
+$s = new ListState; $s->roundRows = true;
+same([$r, $r, $r, $r], $corners($s, 0), 'a row of a table that does not choose, with roundRows');
+
+// The name of the chosen row, clicked once a double click is out of the question, edits; the focus leaving keeps what was typed; a double click opens, not edits (mygo's TestEditableTextInTable).
+$names = ['notes.txt', 'beach.jpeg', 'README']; $now = 0; $opened = -1;
+$ts = new ListState; $ts->selected = -1;
+$h = poseTester(function (Context $c) use ($ts, &$names, &$opened): void {
+    $c->column(10, 0, 1)->align(Node::STRETCH);
+      $c->table($ts, [new TableColumn('Name'), new TableColumn('Size', 80)], count($names), function (int $row, int $col) use ($c, &$names): void {
+          if ($col === 0) { $c->editableText($names[$row]); } else { $c->text('1 KB'); }
+      })->grow(1);
+      if ($ts->submitted()) { $opened = $ts->selected; }
+    $c->end();
+}, $now, 400, 300);
+$h->frame(1);
+$h->clickText('beach.jpeg');
+$now += 1_000_000_000; $h->frame(1);
+$h->clickText('beach.jpeg');
+check($h->byText('beach.jpeg') !== null, 'the click on the chosen row\'s name does not edit at once');
+$now += 600_000_000; $h->frame(1); $h->frame(1);
+$h->type('sea');
+$h->clickText('notes.txt');
+check($names[1] === 'sea.jpeg' && $ts->selected === 0, "after a click elsewhere: {$names[1]}, chose {$ts->selected}");
+$now += 1_000_000_000; $h->frame(1);
+[$x, $y] = $h->middle($h->byText('notes.txt'));
+$h->click($x, $y); $h->click($x, $y, clicks: 2);
+$now += 600_000_000; $h->frame(1); $h->frame(1);
+$h->type('x');
+check($opened === 0 && $names[0] === 'notes.txt', "a double click opens, and does not edit: opened $opened, {$names[0]}");
+
+// An editable text alone: a double click edits it, Tab keeps it; Enter on it edits, Enter keeps (mygo's TestEditableText).
+$title = 'Untitled.md'; $changes = 0;
+$h = new Headless(function (Context $c) use (&$title, &$changes): void {
+    $c->column(0, 8);
+      if ($c->changed($c->editableText($title))) { $changes++; }
+      $c->button('Other');
+    $c->end();
+}, 400, 300);
+$h->frame();
+[$x, $y] = $h->middle($h->byText('Untitled.md'));
+$h->click($x, $y); $h->click($x, $y, clicks: 2);
+$h->type('Notes'); $h->tab();
+check($title === 'Notes.md' && $changes === 1, "after Tab: $title ($changes)");
+$h->clickText('Notes.md'); $h->enter();
+$h->input->focus?->selectAll(); $h->type('Plan'); $h->enter();
+check($title === 'Plan' && in_array('Plan', $h->texts($h->focused()), true), "after Enter: $title, focused");

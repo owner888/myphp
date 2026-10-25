@@ -65,6 +65,8 @@ final class ListState implements Scrollable
     /** Set by Layout each frame: the last row's bottom is in view. */
     public bool $atEnd = false;
     private bool $didChange = false;
+    /** How many times the choice changed, and how many of those the list built last saw: changed() of its node reports the others (Context::list). */
+    private int $changes = 0, $changesBuilt = 0;
     /** The text of row $i (Closure(int): string, mygo's Label): typing the first letters of a row's text while the list has the keyboard focus chooses it, and assistive technology reads it as the row's name. */
     public ?Closure $label = null;
     /** Whether row $i heads a section (Closure(int): bool, mygo's Header): the header of the section at the top of the list stays there while the rows of its section scroll under it, until the next header pushes it away. Give headers a background. Headers are not chosen. */
@@ -452,11 +454,11 @@ final class ListState implements Scrollable
         $row = max(-1, min($this->count - 1, $row));
         $row = $this->rowOff($row, $row >= ($this->selected ?? -1) ? 1 : -1);
         if ($this->selection !== null && $row >= 0 && $this->selection->choose($row, $this->keyOf(...))) {
-            $this->didChange = true;
+            $this->didChange = true; $this->changes++;
         }
         if ($row !== $this->selected) {
             $this->selected = $row;
-            $this->didChange = true;
+            $this->didChange = true; $this->changes++;
         }
         if ($row >= 0) {
             $this->scrollIntoView($row);
@@ -468,7 +470,7 @@ final class ListState implements Scrollable
     {
         if ($this->selection === null) { $this->choose($row); return; }
         $row = max(0, min($this->count - 1, $row));
-        if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->didChange = true; }
+        if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->didChange = true; $this->changes++; }
         $this->scrollIntoView($row);
     }
 
@@ -478,7 +480,7 @@ final class ListState implements Scrollable
         if ($this->selection === null) { $this->choose($row); return; }
         $row = $this->rowOff(max(0, min($this->count - 1, $row)), $row >= ($this->selected ?? -1) ? 1 : -1);
         if ($row < 0) { return; }
-        if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; }
+        if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; $this->changes++; }
         $this->selected = $row;
         $this->scrollIntoView($row);
     }
@@ -491,7 +493,7 @@ final class ListState implements Scrollable
         for ($j = 0; $j < $this->count; $j++) {
             if (!$this->isHeader($j)) { $changed = $this->selection->set($this->keyOf($j), true) || $changed; } // headers are not chosen
         }
-        if ($changed) { $this->didChange = true; }
+        if ($changed) { $this->didChange = true; $this->changes++; }
     }
 
     /** The rows a drag from row $i moves: those chosen when it is one of them, else row $i (mygo's listFrame.dragged). @return list<int> */
@@ -513,6 +515,14 @@ final class ListState implements Scrollable
     public function keyOf(int $row): int|string
     {
         return $this->key === null ? $row : ($this->key)($row);
+    }
+
+    /** @internal Whether the choice changed since the list was last built, which its node's changed() reports, once. */
+    public function changedSinceBuilt(): bool
+    {
+        $c = $this->changes !== $this->changesBuilt;
+        $this->changesBuilt = $this->changes;
+        return $c;
     }
 
     /** Whether the choice changed since last asked. */

@@ -21,6 +21,8 @@ final class Selection
     private array $keys = [];
     /** The row Shift extends from (pivot), and how far it extended last (span), as mygo's: Shift chooses in place of those it last chose. */
     public int $pivot = -1, $span = 0;
+    /** The key of the pivot's item, which the pivot follows as rows come and go (mygo's anchor key). */
+    private int|string|null $pivotKey = null;
 
     public function has(int|string $key): bool { return isset($this->keys[$key]); }
     public function count(): int { return count($this->keys); }
@@ -48,7 +50,7 @@ final class Selection
     {
         $lead = $i;
         if ($mods & Key::SHIFT) { return $this->extend($i, $n, $key); }
-        if ($mods & Key::COMMAND) { $this->pivot = $i; $this->span = 0; return $this->set($key($i), !$this->has($key($i))); }
+        if ($mods & Key::COMMAND) { $this->pivotAt($i, $key); return $this->set($key($i), !$this->has($key($i))); }
         return $this->choose($i, $key);
     }
 
@@ -57,15 +59,15 @@ final class Selection
     {
         $k = $key($i); $changed = false;
         if ($this->count() !== 1 || !$this->has($k)) { $this->clear(); $this->add($k); $changed = true; }
-        $this->pivot = $i; $this->span = 0;
+        $this->pivotAt($i, $key);
         return $changed;
     }
 
     /** Chooses the rows from the pivot to $i, as Shift does on macOS: in place of those it last chose. */
     public function extend(int $i, int $n, Closure $key): bool
     {
-        $p = $this->pivot;
-        if ($p < 0 || $p >= $n) { return $this->choose($i, $key); }
+        $p = $this->pivot($n, $key);
+        if ($p < 0) { return $this->choose($i, $key); }
         $lo = min($p, $i); $hi = max($p, $i); $changed = false;
         $last = max(0, min($p + $this->span, $n - 1));
         for ($j = min($p, $last); $j <= max($p, $last); $j++) {
@@ -74,6 +76,24 @@ final class Selection
         for ($j = $lo; $j <= $hi; $j++) { $changed = $this->set($key($j), true) || $changed; }
         $this->span = $i - $p;
         return $changed;
+    }
+
+    /** Makes row $i the pivot, extended from anew. */
+    public function pivotAt(int $i, Closure $key): void
+    {
+        $this->pivot = $i; $this->span = 0; $this->pivotKey = $key($i);
+    }
+
+    /** Where the pivot's item is among $n rows, the rows above it having come or gone; -1 for none, or gone. */
+    private function pivot(int $n, Closure $key): int
+    {
+        $p = $this->pivot;
+        if ($this->pivotKey === null) { return $p >= 0 && $p < $n ? $p : -1; }
+        if ($p >= 0 && $p < $n && $key($p) === $this->pivotKey) { return $p; }
+        for ($j = 0; $j < $n; $j++) {
+            if ($key($j) === $this->pivotKey) { return $this->pivot = $j; }
+        }
+        return -1;
     }
 
     /** Chooses every one of $n rows (Cmd+A); whether that changed the choice. */

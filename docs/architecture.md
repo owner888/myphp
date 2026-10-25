@@ -2902,6 +2902,25 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **Icons** take the font size and the text color around them, or their
   own `textColor()`.
 
+## Choosing, tables, widgets and inline text (v1.20)
+
+- **A list's `changed()`** reports a new choice once, whether the keys
+  made it before the build or a click in it (`ListState::changedSinceBuilt`).
+- **Typing a row's letters** goes as mygo's `typed` (`Context::typedRow`):
+  the same letter again to the next row starting with it, letters typed
+  quickly adding up, by the frame's clock; lists, grids and sidebars.
+- **Shift extends from its item**: the selection's pivot follows its key
+  as rows come above (`Selection::pivotAt`).
+- **A press shows in its frame**: `pressed()` has the frame it lands in
+  build again (`Runtime::holds`).
+- **`clickModifiers()`** gives the modifiers of a node's last click, none
+  for Enter.
+- **Tables**: a section's header row spans the columns, built as column
+  0; rows chosen together round as one block (`roundRows`); several rows
+  chosen is said to assistive technology.
+- **Date inputs and color wells** open a popover of their own width
+  (`popoverBase` with `stylePanel`); an editable text alone edits on Enter.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

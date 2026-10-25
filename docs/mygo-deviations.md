@@ -1517,3 +1517,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   draws sRGB alone (Widgets and context, v1.08); TestUnhandledEscape is
   flyout_test's.
 
+## Choosing, tables, widgets and inline text, their tests (v1.20)
+
+- **Not ported**: TestListMovesWithoutChoosing (Ctrl with the arrows,
+  Linux's and Windows'; myphp is macOS's), the other platforms' branches of
+  TestListChoosesSeveral and TestListPageKeys, TestSelectionOfAnotherKeyPanics
+  (Go's generic `Selection[K]`; myphp's keys are ints or strings),
+  TestInlineLink's focus ring and TestInlineStyles' pixels (the headless
+  painter draws none), TestTooltipHidesOnPress (tooltips_test).
+- **A table's tall rows**: TestTableRows' long note is rich text with
+  `wrap: true`, as text wraps only so (Text, v0.81).
+- **The passes of a press**: mygo counts its build passes; myphp's
+  selection_press_test counts the view's builds, two in the frame a press
+  lands in.
+
