@@ -2864,6 +2864,27 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   first line of a text area; a fixed line height comes back to its points
   exactly (the text system rounds the multiple it is given).
 
+## Right to left, indicators, dates and comboboxes (v1.18)
+
+- **Texts stretch across a column** as other leaves do (`Layout::crossWidth`);
+  a rich text wider than its lines is laid out across its box
+  (`Node::$alignWidth`), so that `textAlign()` and the direction place the
+  lines in it.
+- **Mirrored right to left**: a range slider (knobs, fill and presses), a
+  split (its first pane at the right, its handle and drag), a text input
+  (its text, placeholder and caret at the right), a popover (attached at
+  its anchor's start, `attachTo`), a menu button's menu (shown at its
+  right and laid out right to left, `Menu::popupAt`).
+- **Assistive technology's increment** presses Up, which raises a slider
+  whichever way it runs.
+- **A press on a stepper** steps it as it lands, and a click on a range
+  slider moves its nearest knob, though released before the frame is
+  built; a held stepper counts by the frame's clock.
+- **Combobox popups** highlight under the pointer only when it moves, and
+  scroll the highlight into view once; their options are read as chosen
+  where the arrows are, named by their text; the input says whether the
+  popup shows. A search field's clear button keeps the focus.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

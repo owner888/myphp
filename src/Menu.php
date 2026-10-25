@@ -359,14 +359,21 @@ final class Menu
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
     }
 
-    /** Shows the menu as a context menu with its top left at ($x, $y), points from the top-left corner of the window's content (mygo's PopupAt). */
-    public function popupAt(Window $window, float $x, float $y): void
+    /** Shows the menu as a context menu with its top left at ($x, $y), points from the top-left corner of the window's content (mygo's PopupAt); right to left ($rtl), its top right, its items from the right and its submenus opening to the left. */
+    public function popupAt(Window $window, float $x, float $y, bool $rtl = false): void
     {
         $native = $this->build();
         $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
         $p = ObjC::$c->new('NSPoint');
         $p->x = $x; $p->y = ObjC::msg('r:', $view, 'bounds')->h - $y; // the content view is not flipped: y runs up from its bottom
+        $was = null;
+        if ($rtl) { // NSUserInterfaceLayoutDirectionRightToLeft: the items from the right, submenus to the left; a menu popped up in a view takes the view's direction, which it has only while the menu shows (mygo's popupMenu)
+            ObjC::msg('v:l', $native, 'setUserInterfaceLayoutDirection:', 1);
+            $was = ObjC::msg('l:', $view, 'userInterfaceLayoutDirection');
+            ObjC::msg('v:l', $view, 'setUserInterfaceLayoutDirection:', 1);
+        }
         ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
+        if ($was !== null) { ObjC::msg('v:l', $view, 'setUserInterfaceLayoutDirection:', $was); }
     }
 
     /** Shows the menu as a context menu at the pointer over $window (mygo's Popup). */

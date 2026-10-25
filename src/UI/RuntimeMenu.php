@@ -27,10 +27,12 @@ trait RuntimeMenu
     private string $menuLabel = '';
     /** That a menu button's menu took the press, so its release is no click; that a context menu took the secondary button's, so its release is no right-click. */
     private bool $menuRelease = false, $menuTook = false;
-    /** @var ?array{id: int, button: bool, items: list<NativeItem>, labels: list<string>, commands: ?list<string>, x: float, y: float, text: int} */
+    /** @var ?array{id: int, button: bool, items: list<NativeItem>, labels: list<string>, commands: ?list<string>, x: float, y: float, text: int, rtl: bool} */
     private ?array $menuPending = null;
     /** @var array<int, int> the nodes of last frame with a context menu (1), a menu (2) or both, by id */
     private array $menuNodes = [];
+    /** The nodes of this frame laid out right to left, whose menus open to the left (mygo's state.rtl). @var array<int, true> */
+    private array $menuRtl = [];
 
     /**
      * Shows a menu built in a frame, once the frame is done (mygo's host
@@ -49,6 +51,7 @@ trait RuntimeMenu
     /** Notes the menus of $n for this frame's presses and keys. */
     private function recordMenus(Node $n): void
     {
+        if ($n->rtl) { $this->menuRtl[$n->id] = true; }
         $f = ($n->contextMenu ? 1 : 0) | ($n->menuButton ? 2 : 0);
         if ($f !== 0 && !$n->isDisabled()) {
             $this->menuNodes[$n->id] = $f;
@@ -223,8 +226,8 @@ trait RuntimeMenu
     /** Has the next frame build the menu of menu button $id, to show below it (mygo's openMenuButton and menuCorner). */
     private function openMenuButton(int $id): void
     {
-        [$vx, $vy, , $vh] = $this->visible[$id] ?? $this->rects[$id];
-        $this->askMenu($id, $vx, $vy + $vh, true);
+        [$vx, $vy, $vw, $vh] = $this->visible[$id] ?? $this->rects[$id];
+        $this->askMenu($id, isset($this->menuRtl[$id]) ? $vx + $vw : $vx, $vy + $vh, true); // at its bottom left corner, the right one right to left, where the menu opens to the left
     }
 
     /** Keeps the menu built for node $id to show once the frame is done (mygo's openMenu). @param list<NativeItem> $items @param list<string> $labels @param ?list<string> $commands */
@@ -233,7 +236,7 @@ trait RuntimeMenu
         if ($items === []) {
             return;
         }
-        $this->menuPending = ['id' => $id, 'button' => $button, 'items' => $items, 'labels' => $labels, 'commands' => $commands, 'x' => $this->menuX, 'y' => $this->menuY, 'text' => $this->menuText];
+        $this->menuPending = ['id' => $id, 'button' => $button, 'items' => $items, 'labels' => $labels, 'commands' => $commands, 'x' => $this->menuX, 'y' => $this->menuY, 'text' => $this->menuText, 'rtl' => isset($this->menuRtl[$id])];
     }
 
     /** Opens the menu asked for that no context menu built, after the frame's build: a text input's or selectable text's, with its editing commands (mygo's resolveMenu). */
@@ -257,7 +260,7 @@ trait RuntimeMenu
             return;
         }
         $this->menuPending = null;
-        ($this->popupMenu)($p['items'], $p['x'], $p['y'], false, fn(int $choice) => $this->menuChosen($p, $choice));
+        ($this->popupMenu)($p['items'], $p['x'], $p['y'], $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice));
     }
 
     /** The item $choice (from 1) chosen from menu $p: the next frame reports it to its function, or the text does the editing command (mygo's menuChosen). @param array{id: int, button: bool, items: list<NativeItem>, labels: list<string>, commands: ?list<string>, x: float, y: float, text: int} $p */

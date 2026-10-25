@@ -1514,7 +1514,7 @@ final class Context
           foreach (['low', 'high'] as $k => $which) { // the knobs: focusable, placed over the track; the arrows move the one focused
               $v = $which === 'low' ? $low : $high;
               $frac = $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
-              $knob = $this->key($which)->box(0, 0, 0)->size($kw, $t->space(5))->at(($r === null ? 0 : ($r[2] - $kw)) * $frac - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in
+              $knob = $this->key($which)->box(0, 0, 0)->size($kw, $t->space(5))->at(($r === null ? 0 : ($r[2] - $kw)) * ($n->rtl ? 1 - $frac : $frac) - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in; right to left, lo is at the right
               $knob->color = null; $knob->ownRing = true; // the knob is painted, ring and all, by the slider's draw
               $knob->role(Role::SLIDER)->range($lo, $hi, $v, $keyStep)->label(['minimum', 'maximum'][$k]);
               $knob->nameFrom = $n; $knob->nameJoin = true; // "Price minimum", of a slider labeled Price
@@ -1531,8 +1531,10 @@ final class Context
         // A press on the track or a knob drags the knob nearest to it, and gives it the focus.
         if ($rt !== null && $r !== null && $local !== null) {
             $d = $rt->dragged($n->id) ?? $rt->dragged($knobs['low']->id) ?? $rt->dragged($knobs['high']->id);
-            if ($d !== null) {
-                $x = $lo + max(0.0, min(1.0, ($rt->input->mouseX - $r[0] - $kw / 2) / max(1.0, $r[2] - $kw))) * ($hi - $lo);
+            $press = $d === null ? $rt->pressPoint($n->id) : null; // a click let go before the frame was built
+            if ($d !== null || $press !== null) {
+                $at = max(0.0, min(1.0, (($press[0] ?? $rt->input->mouseX) - $r[0] - $kw / 2) / max(1.0, $r[2] - $kw)));
+                $x = $lo + ($n->rtl ? 1 - $at : $at) * ($hi - $lo);
                 if ($local->dragging === null) { $local->dragging = abs($x - $high) < abs($x - $low) || $x > $high ? 'high' : 'low'; }
                 $set($local->dragging, $x);
                 $rt->focus = $knobs[$local->dragging]->id;
@@ -1546,7 +1548,7 @@ final class Context
         $focusHigh = $rt !== null && $rt->focus === $knobs['high']->id && $rt->focusVisible($knobs['high']->id);
         $n->draw(function (DisplayList $list, Node $e, Theme $t) use ($low, $high, $lo, $hi, $kw, $dragging, $held, $focusLow, $focusHigh) {
             $h = $t->space(1.5); $cy = $e->y + $t->space(2.5);
-            $f = fn(float $v) => $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
+            $f = fn(float $v) => ($hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0) * ($e->rtl ? -1 : 1) + ($e->rtl ? 1 : 0); // right to left, from the right
             $x0 = $e->x + $kw / 2 + ($e->w - $kw) * $f($low); $x1 = $e->x + $kw / 2 + ($e->w - $kw) * $f($high);
             $list->rect($e->x, $cy - $h / 2, $e->w, $h, $t->border, 1.0, $h / 2);
             $list->rect(min($x0, $x1), $cy - $h / 2, abs($x1 - $x0), $h, $t->accent, 1.0, $h / 2);
@@ -1862,7 +1864,7 @@ final class Context
         $focused = $rt->focus === $in->id;
         $typed = $local->seen !== null && $local->seen !== $state->text;
         $local->seen = $state->text;
-        $open = function (bool $o, bool $typed, int $highlight) use ($local) { $local->open = $o; $local->typed = $typed; $local->highlight = $highlight; };
+        $open = function (bool $o, bool $typed, int $highlight) use ($local, $rt) { $local->open = $o; $local->typed = $typed; $local->highlight = $highlight; $local->pointer = [$rt->input->mouseX, $rt->input->mouseY]; };
         $n = count($local->values);
         if (!$focused) { if ($local->open) { $open(false, false, -1); } }
         elseif ($typed) { $open(true, true, $firstTyped ? 0 : -1); }
@@ -1887,18 +1889,22 @@ final class Context
             $panel->size($r[2], min($t->space(70), count($shown) * ($t->space(3) + $this->metrics->measure('X', $t->fontSize)[1]) + 2 * $t->space(1)));
               foreach ($shown as $i => $opt) {
                   $hl = $i === $local->highlight;
-                  $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->role(Role::LIST_ITEM);
+                  $item = $this->key("o$i")->row(0, 0, 0, $hl ? $t->accent : null)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->role(Role::LIST_ITEM)->checked($hl); // the option the arrows are on is the one assistive technology reads as chosen, as in a list box
                   $item->setPos = $i + 1; $item->setSize = count($shown); $item->choosable = true;
                   if ($hl) { $in->activeDescendant($item); } // the input has the focus for the option its arrows are on
                     $this->text($opt, $t->fontSize, $hl ? $t->accentText : $t->text)->singleLine();
                   $this->end();
-                  if ($this->hovered($item) && $rt->pressedAnywhere() === false) { $local->highlight = $i; }
+                  $p = [$rt->input->mouseX, $rt->input->mouseY];
+                  if ($this->hovered($item) && $p !== $local->pointer) { $local->pointer = $p; $local->highlight = $i; } // the pointer moved onto it: not the wheel scrolling it under a pointer at rest
+                  if ($hl && $local->shown !== $opt) { $local->shown = $opt; $item->scrollIntoView(); } // into view as the highlight moves to it, and not again, which would pull the popup back as the wheel scrolls away
                   if ($this->clicked($item)) { $chosen = $opt; }
               }
             $this->end();
             $this->back($saved);
         }
         if ($chosen !== null) { $open(false, false, -1); }
+        if (!$local->open) { $local->shown = null; }
+        $in->expanded($local->open); // what assistive technology reads of the popup
         return $chosen;
     }
 
@@ -1918,7 +1924,7 @@ final class Context
         $rt = $this->runtime;
         $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
-        $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
+        $make = fn() => (object)['text' => new TextState($selected), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0]];
         $local = $rt?->local($f->id, $make) ?? $make();
         $state = $local->text;
           [, $h] = $this->metrics->measure('X', $t->fontSize);
@@ -1964,7 +1970,7 @@ final class Context
     {
         $rt = $this->runtime;
         $in = $this->input($state, $placeholder, $width)->role(Role::COMBO_BOX);
-        $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'was' => $state->text];
+        $make = fn() => (object)['open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0], 'was' => $state->text];
         $local = $rt?->local($in->id, $make) ?? $make();
         $shown = [];
         if (($q = trim($state->text)) !== '') {
@@ -1995,7 +2001,7 @@ final class Context
         $f = $this->row(0, $t->space(1.5), 0, $t->surface)->padding($t->space(1.5), $t->space(2.5))->round($t->radius)->border()->align(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE); // mygo's field: as wide as its content in a row, stretched in a column; its label names the input
         if ($width > 0) { $f->size($width, 0); }
         $f->wrap($rt?->rectOf($f->id)[2] ?? 0.0);
-        $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState];
+        $make = fn() => (object)['text' => new TextState(''), 'open' => false, 'typed' => false, 'highlight' => -1, 'values' => [], 'seen' => null, 'scroll' => new ScrollState, 'shown' => null, 'pointer' => [0.0, 0.0]];
         $local = $rt?->local($f->id, $make) ?? $make();
         $state = $local->text; $state->leaveEmptyBackspace = true;
         $changed = false;
@@ -2401,7 +2407,8 @@ final class Context
           // Swatches: a grid of six columns, Space(1.5) apart, Space(5) high, the chosen bordered 2 in the text color.
           $this->grid(6, $t->space(1.5));
             foreach (self::SWATCHES as $name => $color) {
-                $b = $this->key($name)->row(0, 0, 0, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($name)->label($name);
+                $said = $this->texts()->get('colorName', ['color' => $name]); // "Red", in the app's language
+                $b = $this->key($name)->row(0, 0, 0, $color)->size(0, $t->space(5))->round($t->radius)->focusable()->tooltip($said)->label($said);
                 if ($rgb === $color && $alpha === 1.0) { $b->border($t->text, 2.0); }
                 $this->end();
                 if ($this->clicked($b)) { [$ph, $ps, $pv] = self::toHSV($color); $set($ph, $ps, $pv, 1.0); }
@@ -2880,17 +2887,12 @@ final class Context
         }
         $t = $this->theme;
         $rt = $this->runtime;
-        $r = $rt?->rectOf($anchor->id) ?? [0, 0, 0, 0];
-        $margin = $t->space(1);
         $saved = $this->toRoot(); // at the root: over the view, placed in the window
-        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)->at($r[0], $r[1] + $r[3] + $margin)->role(Role::POPUP);
+        $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)->margin($t->space(1), 0, 0, 0)
+            ->attachTo($anchor, Anchor::BottomStart, Anchor::TopStart)->minWidth($rt?->rectOf($anchor->id)[2] ?? 0)->role(Role::POPUP); // at the anchor's start, the right right to left; above it where there is no room below
           $fn();
         $this->end();
         $this->back($saved);
-        $last = $rt?->rectOf($panel->id);
-        if ($last !== null && $r[1] + $r[3] + $margin + $last[3] > $this->height && $r[1] - $margin - $last[3] >= 0) {
-            $panel->at($r[0], $r[1] - $margin - $last[3]); // no room below: above, as high as it was last frame
-        }
         if ($rt !== null && ($this->shortcut(Key::ESCAPE) || ($rt->pressedAnywhere() && !$rt->pressed($panel->id) && !$rt->pressed($anchor->id)))) {
             $open = false;
             $panel->dismissed = true;
@@ -2938,7 +2940,7 @@ final class Context
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
-              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))
+              $x = $this->column(0, 0, 0, $t->textMuted)->round($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
                   ->draw(function (DisplayList $list, Node $b, Theme $t) {
                       $k = $b->w * 0.3;
                       $list->line($b->x + $k, $b->y + $k, $b->x + $b->w - $k, $b->y + $b->h - $k, $t->background, 1.0, 1.5);
@@ -3537,7 +3539,8 @@ final class Context
             $second();
           $this->end();
           // The handle the pointer drags spans a few points over either pane, above them.
-          $handle = $this->box(0, 0, 0)->at($vertical ? 0 : $size - ($grip - 1) / 2, $vertical ? $size - ($grip - 1) / 2 : 0)
+          $rtl = !$vertical && $n->rtl; // right to left, the first pane is at the right
+          $handle = $this->box(0, 0, 0)->at($vertical ? 0 : ($rtl ? ($r[2] ?? 0) - $size - 1 : $size) - ($grip - 1) / 2, $vertical ? $size - ($grip - 1) / 2 : 0)
               ->size($vertical ? ($r[2] ?? 0) : $grip, $vertical ? $grip : ($r[3] ?? 0))->cursor($vertical ? Cursor::ResizeNS : Cursor::ResizeEW);
           $handle->alpha = 0.0;
         $this->end();
@@ -3545,7 +3548,7 @@ final class Context
             $held = $rt->dragged($handle->id);
             if ($held !== null) {
                 $rt->focus = $div->id; // a press there focuses the line, as a press on it would
-                $set($size + ($vertical ? $held[1] : $held[0]));
+                $set($size + ($vertical ? $held[1] : ($rtl ? -$held[0] : $held[0]))); // right to left, dragging it left widens the first pane
             }
             if ($rt->focus === $div->id) {
                 [$back, $forth] = $vertical ? [Key::UP, Key::DOWN] : $this->arrows($div);

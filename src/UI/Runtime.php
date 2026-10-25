@@ -395,7 +395,10 @@ final class Runtime
                     if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
                         $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
                     }
-                    $this->hold = [$e[1], $e[2], $now / 1e9, 0, false, $e[1], $e[2]];
+                    $this->hold = [$e[1], $e[2], $this->now / 1e9, 0, false, $e[1], $e[2]];
+                    foreach ($this->steppers as $id => $_) { // a press on a stepper's half steps it at once, though released before the frame is built (mygo's stepper press)
+                        if (!isset($this->disabledIds[$id]) && ($dir = $this->holding($id)) !== 0) { $this->steps[$id] = ($this->steps[$id] ?? 0) + $dir; $this->hold[3] = 1; }
+                    }
                     $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($e[6] ?? $this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
                     $this->pressDragger = $this->pressDragger($this->pointerPress['id']);
                     foreach ($this->sliders as $id => $r) {
@@ -579,7 +582,7 @@ final class Runtime
         $this->parents = []; $this->inertIds = []; $this->passing = []; $this->disabledIds = []; $this->attachedTo = []; $this->targets = []; $this->draggables = []; $this->dragSources = []; $this->dropTargets = [];
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
-        $this->menuNodes = [];
+        $this->menuNodes = []; $this->menuRtl = [];
         $this->modal = null;
         $this->record($root);
         $this->syncTextSelection();
@@ -1989,8 +1992,9 @@ final class Runtime
             case 'moveDown:': if ($line === count($layout->lines) - 1) { $state->setCursor(strlen($state->text), $extend); } else { $toLine($line + 1); } break;
             case 'pageUp:': $toLine(max(0, $line - $page)); break;
             case 'pageDown:': $toLine(min(count($layout->lines) - 1, $line + $page)); break;
-            case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': $state->setCursor($a, $extend); break;
-            case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': $state->setCursor($end, $extend); break;
+            case 'moveToBeginningOfLine:': $state->setCursor($a, $extend); break;
+            case 'moveToEndOfLine:': $state->setCursor($end, $extend); break;
+            case 'moveToLeftEndOfLine:': case 'moveToRightEndOfLine:': $state->setCursor(($base === 'moveToRightEndOfLine:') !== $state->paragraphRTL() ? $end : $a, $extend); break; // the way the arrow points (mygo's caretParagraphRTL)
             case 'deleteToBeginningOfLine:': if (!$state->hasSelection()) { $state->anchor = $a; } $state->insert(''); break;
             case 'deleteToEndOfLine:': // to the end of the line as it wraps, at its end joining the next
                 $state->anchor = $state->cursor; $state->cursor = $state->cursor === $end && ($state->text[$end] ?? '') === "\n" ? $end + 1 : $end;
@@ -2235,6 +2239,16 @@ final class Runtime
         return false;
     }
 
+    /** Where the mouse went down this frame on node $id (its last-frame rect), the last press there, or null. @return ?array{0: float, 1: float} */
+    public function pressPoint(int $id): ?array
+    {
+        for ($i = count($this->presses) - 1; $i >= 0; $i--) {
+            [$x, $y] = $this->presses[$i];
+            if ($this->under($id, $x, $y)) { return [$x, $y]; }
+        }
+        return null;
+    }
+
     /** Whether the mouse went down anywhere in the window this frame. */
     public function pressedAnywhere(): bool
     {
@@ -2357,7 +2371,7 @@ final class Runtime
         unset($this->steps[$id]); // given once, whatever passes the frame builds
         $dir = $this->holding($id);
         if ($dir !== 0) {
-            $held = hrtime(true) / 1e9 - $this->hold[2];
+            $held = $this->now / 1e9 - $this->hold[2]; // by the frame's clock, a test's
             $due = 1 + ($held > self::HOLD_DELAY ? (int)(($held - self::HOLD_DELAY) / self::HOLD_RATE) : 0);
             $n += ($due - $this->hold[3]) * $dir;
             $this->hold[3] = $due;

@@ -467,7 +467,8 @@ final class System
     }
 
     /** Whether a paragraph is right to left: whether its first strongly directional rune is, else $neutral. @param list<int> $para */
-    private static function isRTL(array $para, bool $neutral): bool
+    /** Whether paragraph $para (code points) reads right to left: by its first strong character, $neutral without one (mygo's paragraph direction). @param list<int> $para */
+    public static function isRTL(array $para, bool $neutral): bool
     {
         foreach ($para as $r) {
             if ($r < 0x80) {

@@ -253,11 +253,15 @@ final class TextState
             case 'moveRight:': case 'moveForward:':
                 if (!$extend && $this->hasSelection()) { $this->setCursor($this->selection()[1]); } else { $this->setCursor($this->next($this->cursor), $extend); }
                 return true;
-            case 'moveWordLeft:': case 'moveWordBackward:': $this->setCursor($this->wordLeft($this->cursor), $extend); return true;
-            case 'moveWordRight:': case 'moveWordForward:': $this->setCursor($this->wordRight($this->cursor), $extend); return true;
-            case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': case 'moveToBeginningOfDocument:': case 'moveUp:':
+            case 'moveWordLeft:': case 'moveWordRight:': case 'moveToLeftEndOfLine:': case 'moveToRightEndOfLine:': // the way the arrow points: back in a left-to-right paragraph, forward in a right-to-left one, as AppKit's (mygo's caretParagraphRTL)
+                $forward = str_contains($base, 'Right') !== $this->paragraphRTL();
+                $to = str_contains($base, 'Word') ? ($forward ? $this->wordRight($this->cursor) : $this->wordLeft($this->cursor)) : ($forward ? strlen($this->text) : 0);
+                $this->setCursor($to, $extend); return true;
+            case 'moveWordBackward:': $this->setCursor($this->wordLeft($this->cursor), $extend); return true;
+            case 'moveWordForward:': $this->setCursor($this->wordRight($this->cursor), $extend); return true;
+            case 'moveToBeginningOfLine:': case 'moveToBeginningOfDocument:': case 'moveUp:':
                 $this->setCursor(0, $extend); return true;
-            case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': case 'moveToEndOfDocument:': case 'moveDown:':
+            case 'moveToEndOfLine:': case 'moveToEndOfDocument:': case 'moveDown:':
                 $this->setCursor(strlen($this->text), $extend); return true;
             case 'deleteBackward:':
                 if ($this->leaveEmptyBackspace && $this->text === '') { return false; }
@@ -284,6 +288,16 @@ final class TextState
             case 'insertNewline:': $this->submitted = true; return true;
         }
         return false;
+    }
+
+    /** Whether the paragraph the caret is in reads right to left, by its first strong character. */
+    public function paragraphRTL(): bool
+    {
+        $start = strrpos(substr($this->text, 0, $this->cursor), "\n");
+        $start = $start === false ? 0 : $start + 1;
+        $end = strpos($this->text, "\n", $this->cursor);
+        $para = substr($this->text, $start, ($end === false ? strlen($this->text) : $end) - $start);
+        return \MyPHP\Text\System::isRTL(array_map(mb_ord(...), mb_str_split($para, 1, 'UTF-8')), false);
     }
 
     /** Commands a text area leaves to Runtime, which knows its wrapped lines. */

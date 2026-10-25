@@ -88,12 +88,12 @@ final class Headless
         $this->rt->cancelDataDrag = fn() => $this->finishDataDrag(new \MyPHP\Transfer\Result(canceled: true));
         $this->rt->setDropFormats = function (array $formats): void { $this->dropFormats = $formats; };
         $this->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, Closure $chosen): void {
-            $this->menu = ['items' => $items, 'at' => [$x, $y], 'chosen' => $chosen];
+            $this->menu = ['items' => $items, 'at' => [$x, $y], 'rtl' => $rtl, 'chosen' => $chosen];
         };
         $this->rt->snapshot = fn(float $x, float $y, int $w, int $h) => Image::fromPixels($w, $h, str_repeat("\0", $w * $h * 4));
     }
 
-    /** The menu the runtime showed and the user has not closed: its items (MyPHP\MenuItem), where it showed, and what takes the choice (mygo's headless menu). @var ?array{items: list<\MyPHP\MenuItem>, at: array{0: float, 1: float}, chosen: Closure} */
+    /** The menu the runtime showed and the user has not closed: its items (MyPHP\MenuItem), where it showed, and what takes the choice (mygo's headless menu). @var ?array{items: list<\MyPHP\MenuItem>, at: array{0: float, 1: float}, rtl: bool, chosen: Closure} */
     public ?array $menu = null;
 
     /** The labels of the menu showing, "-" for a separator, or null for none (mygo's Tester.Menu). @return ?list<string> */

@@ -281,8 +281,8 @@ trait RuntimeAccess
         if ($n->setSize > 0) { $node->posInSet = $n->setPos; $node->setSize = $n->setSize; }
         if ($n->choosesItems) { $node->states |= AccessNode::SELECTABLE; }
         if ($n->chooseMany) { $node->states |= AccessNode::MULTISELECTABLE; }
-        // Statuses are named by their content, as leaves are, but show what is inside them too, as a toast's button.
-        if ($node->label === '' && (Role::leaf($node->role) || $node->role === Role::STATUS)) { $node->label = self::innerText($n); }
+        // Rows and items of lists, and statuses, are named by their content, as leaves are, but show what is inside them too, as a toast's button.
+        if ($node->label === '' && (Role::leaf($node->role) || $node->role === Role::LIST_ITEM || $node->role === Role::ROW || $node->role === Role::STATUS)) { $node->label = self::innerText($n); }
         $node->states |= match ($n->checked) { 2 => AccessNode::CHECKED, 3 => AccessNode::MIXED, default => 0 };
         if ($n->isDisabled()) { $node->states |= AccessNode::DISABLED; }
         if ($n->expanded) { $node->states |= AccessNode::EXPANDED; }
@@ -369,9 +369,8 @@ trait RuntimeAccess
             case AccessNode::INCREMENT:
             case AccessNode::DECREMENT:
                 $this->accessFocus($id);
-                // The key, as pressed: sliders step right and left, steppers up and down.
-                $up = $action === AccessNode::INCREMENT;
-                [$code, $selector] = $n?->role === Role::STEPPER ? ($up ? [Key::UP, 'moveUp:'] : [Key::DOWN, 'moveDown:']) : ($up ? [Key::RIGHT, 'moveRight:'] : [Key::LEFT, 'moveLeft:']);
+                // The key, as pressed: Up and Down, which raise and lower sliders and steppers whatever the direction (Left raises a slider right to left).
+                [$code, $selector] = $action === AccessNode::INCREMENT ? [Key::UP, 'moveUp:'] : [Key::DOWN, 'moveDown:'];
                 $this->keys[] = ['', $code, 0, false];
                 if ($this->command($selector)) { $this->keys[array_key_last($this->keys)][3] = true; }
                 break;

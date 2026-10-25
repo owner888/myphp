@@ -1470,3 +1470,26 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   TestDemoRenders and TestListScrollsAndSelects (the demo is ported as
   ui_more_test's window and the list tests).
 
+## Right to left, indicators, dates and comboboxes, their tests (v1.18)
+
+- **Regional formats in the tests**
+  - mygo: `Tester.SetRegion` gives a tester the system's formats (en-US
+    in 12 hours with the app in Chinese, say).
+  - myphp: the tests set the language shown (`App::setLocale`), whose
+    CLDR formats the controls take without the system's (`Context::formats`);
+    Chinese then shows 24 hours, without a half of the day.
+  - Why: the formats are the system's (`App::region`), which a headless
+    window has none of; a hook for the tests alone would be code no app
+    runs.
+- **Arrows in a right-to-left paragraph**
+  - mygo: the word arrows and the line-end arrows go the way they point
+    (`caretParagraphRTL`); Left and Right alone go to the visual neighbor.
+  - myphp: the same for the word and line-end arrows (`TextState::paragraphRTL`);
+    Left and Right go back and forth in the text.
+  - Why: myphp's single-line field measures its text, without the shaped
+    runs a visual move needs.
+- **Not ported**: TestRTLTextAlign's custom widgets shaping text
+  (ShapeRichTextWith with a direction, which `TextLayout::shape`'s `$rtl`
+  is), TestSpinnerColor's pixels (spinner_test reads the
+  colors painted), TestMeter's pixels (the meter's color is read off the node).
+

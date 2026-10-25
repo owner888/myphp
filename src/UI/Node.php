@@ -90,6 +90,8 @@ final class Node
     public ?float $wrapWidth = null;
     /** That $wrapWidth is its container's last frame, so a frame follows when that differs. */
     public bool $wrapLast = false;
+    /** For rich text that wraps at no width: the width it was laid out across, wider than its lines, which an alignment or the direction places them in (Layout::arrange); 0 for none. */
+    public float $alignWidth = 0.0;
     /** That the node is built inside a rich text's children(), continuing its paragraph (mygo's isInline). */
     public bool $inline = false;
     /** That a paragraph's spans are those of the text inside it too (inlineSpans), as laid out. */
@@ -975,7 +977,7 @@ final class Node
         if ($this->rtl && $align !== self::CENTER) { // lines start at the right of a node laid out right to left, whatever they read, as in CSS and AppKit's cells
             $align = $align === self::END ? \MyPHP\Text\Params::LEFT : \MyPHP\Text\Params::RIGHT;
         }
-        $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $align, rtl: $this->rtl, spans: $spans);
+        $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? $this->alignWidth, $this->maxLines, $this->ellipsis, $this->noWrap, $align, rtl: $this->rtl, spans: $spans);
         return $this->layout = $this->metrics->textSystem()->layout($p);
     }
 

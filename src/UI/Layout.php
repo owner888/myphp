@@ -262,6 +262,10 @@ final class Layout
         }
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
         $n->laid = true;
+        if ($n->kind === Node::RICH && $n->wrapWidth === null && ($n->rtl || ($n->textStyle()->align ?? Node::START) !== Node::START) && $w > $n->textLayout()->width + 0.5) {
+            $n->alignWidth = $w; // stretched wider than its lines: laid out across the box, so that they go where the alignment and the direction put them (mygo lays a text out at its width)
+            $n->layout = null;
+        }
         if ($n->kind === Node::RICH && $n->kids !== []) {
             self::placeInline($n, $n, 0);
             return;
@@ -537,7 +541,7 @@ final class Layout
         } elseif ($k->aspect > 0 && $k->fw <= 0 && $k->fh > 0) {
             $kw = $k->fh * $k->aspect + $mx;
         } else {
-            $kw = $autoCross || ($a === Node::STRETCH && $k->fw <= 0) ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
+            $kw = $autoCross || ($a === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT || $k->kind === Node::RICH)) ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
         }
         return self::clampW($k, $kw, $cw);
     }

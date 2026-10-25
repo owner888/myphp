@@ -1204,14 +1204,14 @@ final class Painter
         $shift = $n->focused ? max(0.0, $caretX - $inner) : 0.0;
         $tx = $n->x + $inset - $shift;
         $align = $n->ts?->align ?? Node::START;
-        if ($display !== '' && $tw <= $inner && $align !== Node::START) { // a text that fits goes where textAlign() puts it (mygo's TextAlign)
-            $tx += ($inner - $tw) * ($align === Node::CENTER ? 0.5 : 1.0);
-        }
+        if ($n->rtl && $align !== Node::CENTER) { $align = $align === Node::END ? Node::START : Node::END; } // right to left, the text starts at the right, whatever it reads (mygo's RTLTextInput)
+        $at = fn(float $w): float => $w <= $inner && $align !== Node::START ? ($inner - $w) * ($align === Node::CENTER ? 0.5 : 1.0) : 0.0; // a text that fits goes where textAlign() puts it (mygo's TextAlign)
+        $tx += $at($display === '' ? 0.0 : $tw); // an empty field's caret where its text would start
         $s->offsetX = $tx - ($n->x + $inset); // where the text starts in the field, which a click and the input method's caret go by
         $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
-                $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);
+                $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize)[0]), $ty, $t->textMuted);
             }
         } else {
             if ($n->focused && $s->hasSelection() && $s->marked === null) {
