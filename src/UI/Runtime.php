@@ -254,6 +254,9 @@ final class Runtime
     /** Whether the focus came from the keyboard (Tab, the arrows, Enter, Space) and so shows a ring, as mygo's focusVisible; a press hides it. */
     private bool $focusVisible = false;
     private array $focusables = [];
+    /** @var array<int, true> the check boxes, radio buttons and switches among them; and the one Enter was pressed at, which waits for the window's shortcuts */
+    private array $toggles = [];
+    private ?int $enterToggle = null;
     /** @var array<int, array{0: TextState, 1: float, 2: float, 3: float, 4: float, 5: float}> id => state, text x, text y, line h, size, inner width (text areas) */
     private array $fields = [];
     /** @var array<int, Closure> the nodes taking their input as it comes (Node::handleInput), from last frame, and the one that took a press, which the pointer's moves and release go to wherever they are */
@@ -351,6 +354,7 @@ final class Runtime
         $this->outsideSaid = [];
         $now = hrtime(true);
         $this->frameNumber++;
+        $this->metrics?->textSystem()->setLanguage(\MyPHP\App::locale()); // text naming no language is in the app's (mygo's Style.Lang from the locale)
         $this->now = $this->clock !== null ? ($this->clock)() : $now;
         if ($this->pointerPress !== null && !$this->pointerPress['down']) {
             $this->pointerPress = null; // the frame after it was let go saw it
@@ -525,6 +529,12 @@ final class Runtime
             $this->uses = [];
             $this->actions = [];
             $root = $build();
+            if ($this->enterToggle !== null) { // Enter at a toggle no shortcut took presses it
+                foreach ($this->keys as $i => $k) {
+                    if (!$k[3] && ($k[1] === Key::RETURN || $k[1] === Key::ENTER) && $k[2] === 0) { $this->keys[$i][3] = true; $this->activated = $this->enterToggle; $this->consumed = true; }
+                }
+                $this->enterToggle = null;
+            }
             if ($this->applyFocusRequests()) { $this->consumed = true; }
             if ($this->focusFields !== [] && $this->applyFocusBindings()) { $this->consumed = true; }
             if ($this->runActions()) { $this->consumed = true; } // what they changed shows in another pass
@@ -545,9 +555,6 @@ final class Runtime
         $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
-        foreach ($this->keys as $k) {
-            if ($k[1] === Key::ESCAPE && $k[2] === 0 && $this->focus !== null && !isset($this->fields[$this->focus])) { $this->focus = null; } // the control lets the focus go, once what is around it (a toast closing) and the window had the key
-        }
         foreach ($this->keys as $i => $k) { // Escape hides the tip that shows, before what else takes it (mygo's tip OverlayShortcut)
             if ($this->tip !== null && !$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { $this->dismissTip(); $this->keys[$i][3] = true; }
         }
@@ -576,7 +583,7 @@ final class Runtime
         $this->areas = [];
         $this->tips = [];
         $this->cursor = Cursor::Default;
-        $this->focusables = [];
+        $this->focusables = []; $this->toggles = [];
         $this->memberOf = []; $this->groups = [];
         $this->fields = [];
         $this->inputs = []; $this->textClients = []; $this->keepers = [];
@@ -1614,6 +1621,7 @@ final class Runtime
         if ($inert) { $this->inertIds[$n->id] = true; }
         if ($n->passThrough) { $this->passing[$n->id] = true; }
         if ($n->attachTarget !== null) { $this->attachedTo[$n->id] = $n->attachTarget->id; }
+        if ($parent !== null && $parent->isDisabled()) { $n->disabledIn = true; } // inside a node disabled after it was built, as a fieldset (mygo's IsDisabled)
         if ($n->isDisabled()) { $this->disabledIds[$n->id] = true; }
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
@@ -1682,6 +1690,7 @@ final class Runtime
         }
         if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled()) {
             $this->focusables[] = $n->id;
+            if (in_array($n->role, [Role::CHECK_BOX, Role::RADIO, Role::SWITCH], true)) { $this->toggles[$n->id] = true; }
             if ($group !== 0) {
                 $this->memberOf[$n->id] = $group;
                 if ($n->on && $this->groups[$group]['on'] === null) { $this->groups[$group]['on'] = $n->id; }
@@ -2097,6 +2106,10 @@ final class Runtime
             case 'cancelOperation:': // Escape: a control lets the focus go once the frame is built, the key seen around it (a toast closing); a field keeps it; the window still gets the key
                 return false;
             case 'insertNewline:':
+                if ($this->focus !== null && isset($this->toggles[$this->focus])) { // a toggle takes Space before the window's shortcuts, and Enter after them (mygo's flagToggle)
+                    $this->enterToggle = $this->focus;
+                    return false;
+                }
                 if ($this->focus !== null && !isset($this->fields[$this->focus])) {
                     $this->activated = $this->focus;
                     return true;

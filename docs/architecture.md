@@ -2921,6 +2921,28 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **Date inputs and color wells** open a popover of their own width
   (`popoverBase` with `stylePanel`); an editable text alone edits on Enter.
 
+## Bases, forms, feedback, toggles and themes (v1.21)
+
+- **Enter at a toggle** goes to the window's shortcuts first: a check
+  box, radio button or switch takes Space, and Enter only when nothing
+  took it (`Runtime::$enterToggle`).
+- **Escape keeps the focus**, as mygo's: the rule dropping it is gone, so
+  an alert that must be answered keeps its button focused.
+- **An accordion's headers** are each a stop of Tab; Up, Down, Home and
+  End move between them, without going round.
+- **A toolbar's overflow** is a menu of the node (`Node::menu`), its
+  toggles checked, choosing one pressing it.
+- **A fieldset disabled after its build** disables what is in it
+  (`record()` passes `disabledIn` down).
+- **Themes**: `withAccent` follows mygo's (hover and pressed mixed, the
+  selection's and the focus's alpha, dark text on a light accent); a
+  spacing of 0 is 4; `parseHex` takes `#rgba`.
+- **Segmented controls** name their radio group by their label; a check
+  box without a label is a square.
+- **The language of text**: each frame gives the text system the app's
+  language, which text naming none is shaped in.
+- **Headless tooltips** paint last, as the window's.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

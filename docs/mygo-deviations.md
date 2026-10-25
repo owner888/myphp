@@ -1531,3 +1531,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   selection_press_test counts the view's builds, two in the frame a press
   lands in.
 
+## Bases, forms, feedback, toggles and themes, their tests (v1.21)
+
+- **Not ported**: TestOwnThemeIgnoresPreferences (an app's own theme is
+  the App's, and its check is of pixels), the closed window of
+  TestListStateInputRequiresItsActiveContext (a headless runtime is not
+  closed), TestLang's `SetRegion` (the regional formats are the App's, as
+  datetime_test has them).
+- **A table's focus**: mygo focuses the table itself, its rows' owner;
+  myphp's table is its header over its rows' list, and the list, which its
+  `ListState` shows, has the focus.
+- **The language of text** naming none is the app's through the text
+  system (`System::setLanguage`, set every frame), not written into each
+  text's style: `textStyle()->lang` stays null where mygo's has the locale.

@@ -43,7 +43,7 @@ final class Theme
         public float $scrollbarWidth = 6,
         /** Rounds the corners of controls. */
         public float $radius = 6,
-        /** The unit of paddings and gaps; widgets size in multiples of it. */
+        /** The unit of paddings and gaps; widgets size in multiples of it; 0 is the default, 4. */
         public float $spacing = 4,
         public float $fontSize = 13,
         /** Fills tooltips and toasts, the theme turned over so that they stand out from what they are over, and text on it; null for $text and $background (mygo's Inverse, InverseText). */
@@ -78,7 +78,7 @@ final class Theme
     /** n units of spacing. */
     public function space(float $n): float
     {
-        return $n * $this->spacing;
+        return $n * ($this->spacing > 0 ? $this->spacing : 4.0); // no spacing is the default's (mygo's Spacing 0)
     }
 
     /** n times the font size, as CSS's rem, to size nodes with the text (mygo's Rem): the system's 13 points for a theme without one. */
@@ -103,19 +103,22 @@ final class Theme
         return $t;
     }
 
-    /** Uses the system's accent color: hover and pressed shades are derived from it. */
+    /** Uses the system's accent color, as mygo's follow: hover and pressed shades, the selection and the focus ring of it, and text on it black where white would not stand out, as on yellow. */
     public function withAccent(int $rgb): self
     {
         $t = clone $this;
         $t->accent = $rgb;
-        $t->accentHover = self::shade($rgb, $this->dark ? 1.15 : 0.88);
-        $t->accentPressed = self::shade($rgb, $this->dark ? 0.9 : 0.76);
-        $t->selection = $rgb;
-        $t->focus = $rgb;
+        if ($this->dark) {
+            [$t->accentHover, $t->accentPressed] = [self::mix($rgb, 0xffffff, 0.2), self::mix($rgb, 0x000000, 0.15)];
+            [$t->selection, $t->selectionAlpha, $t->focus, $t->focusAlpha] = [$rgb, 0.4, self::mix($rgb, 0xffffff, 0.2), 0.6];
+        } else {
+            [$t->accentHover, $t->accentPressed] = [self::mix($rgb, 0x000000, 0.12), self::mix($rgb, 0x000000, 0.25)];
+            [$t->selection, $t->selectionAlpha, $t->focus, $t->focusAlpha] = [$rgb, 0.25, $rgb, 0.55];
+        }
+        $t->accentText = (self::luminance($rgb) & 255) > 165 ? 0x18181b : 0xffffff;
         return $t;
     }
 
-    /** $a mixed with $b by $k (0 all $a, 1 all $b), as mygo's Color.Mix. */
     /** The gray of the same lightness as $rgb (BT.709 luminance), for what is drawn in shades of gray. */
     public static function luminance(int $rgb): int
     {
@@ -123,15 +126,10 @@ final class Theme
         return $l << 16 | $l << 8 | $l;
     }
 
+    /** $a mixed with $b by $k (0 all $a, 1 all $b), as mygo's Color.Mix. */
     public static function mix(int $a, int $b, float $k): int
     {
         $ch = fn(int $x, int $y) => max(0, min(255, (int)round($x + ($y - $x) * $k)));
         return ($ch(($a >> 16) & 255, ($b >> 16) & 255) << 16) | ($ch(($a >> 8) & 255, ($b >> 8) & 255) << 8) | $ch($a & 255, $b & 255);
-    }
-
-    public static function shade(int $rgb, float $factor): int
-    {
-        $ch = fn(int $v) => max(0, min(255, (int)round($v * $factor)));
-        return ($ch(($rgb >> 16) & 255) << 16) | ($ch(($rgb >> 8) & 255) << 8) | $ch($rgb & 255);
     }
 }

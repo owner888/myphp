@@ -196,12 +196,13 @@ final class Headless
         $this->list->reset();
         $this->rt->webPlaces = []; // as the window's paint
         $this->list->pushClip(0, 0, $this->w, $this->h);
-        Painter::paint($this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
+        Painter::paint($root = $this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
         if (($in = $this->rt->inspector) !== null && $in->open) {
             \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h);
             $in->lap(2);
         }
         Painter::dragCopy($this->list, $this->metrics, $this->theme, $this->rt);
+        Painter::tooltip($root, $this->list, $this->metrics, $this->theme, $this->rt); // the text tips, last, as the window paints them
         return $this->list;
     }
 

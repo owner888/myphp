@@ -11,8 +11,8 @@ use MyPHP\UI\{AccessNode, Key, Node, Role};
 $w = Headless::widgets(); $view = $w[0]; $s = &$w[1]; // by reference: the view reads the state the test sets
 $h = new Headless($view, 900, 700);
 
-// Tab goes round every control once; groups (toolbar, segmented, tabs, accordion) are one stop; every stop shows its focus.
-foreach ([0 => 25, 1 => 22, 2 => 19] as $tab => $count) {
+// Tab goes round every control once; groups (toolbar, segmented, tabs) are one stop, an accordion's headers each one, as mygo's; every stop shows its focus.
+foreach ([0 => 25, 1 => 22, 2 => 21] as $tab => $count) {
     $s['tab'] = $tab; $s['more'] = true; $h->rt->focus = null; $h->frame();
     $stops = $h->tabStops();
     same($count, count($stops), "tab $tab: stops (" . implode(' → ', $stops) . ')');
@@ -25,16 +25,16 @@ foreach ([0 => 25, 1 => 22, 2 => 19] as $tab => $count) {
 $s['tab'] = 2; $h->rt->focus = null; $h->frame(); $stops = $h->tabStops();
 same(2, count(array_filter($stops, fn($l) => $l === 'X')), 'both knobs of the range slider are stops');
 
-// Escape: a button lets the focus go and the window still gets the key; a field keeps it.
+// Escape: a button keeps the focus, as AppKit's and mygo's, and the window gets the key; a field keeps it and takes it.
 $probe = ['esc' => false];
 $h2 = new Headless(function ($c) use ($view, &$probe) { $view($c); $probe['esc'] = $probe['esc'] || $c->shortcut(Key::ESCAPE); }, 900, 700);
 $s['tab'] = 0; $h2->frame(); $h2->tab(); $h2->tab();
 same('B(Bold)', Headless::label($h2->focused()), 'Tab twice: the toolbar');
 $probe['esc'] = false; $h2->escape();
-check($h2->focused() === null, 'Escape on a button drops the focus');
+same('B(Bold)', Headless::label($h2->focused()), 'Escape on a button keeps the focus');
 check($probe['esc'], 'the window saw the Escape');
-$h2->tab();
-same('I(Search)', Headless::label($h2->focused()), 'Tab again starts over');
+$h2->tab(true);
+same('I(Search)', Headless::label($h2->focused()), 'Shift+Tab back to the search field');
 $h2->type('abc'); $probe['esc'] = false; $h2->escape();
 same('I(Search)', Headless::label($h2->focused()), 'a search field keeps the focus on Escape');
 same('', $s['query']->text, 'and clears');

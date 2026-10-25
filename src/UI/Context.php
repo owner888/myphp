@@ -37,7 +37,7 @@ final class Context
     /** The checkbox group being built (Context::checkboxGroup): references to its check boxes' values, or null outside one. */
     private ?array $checks = null;
 
-    /** The accordion being built, innermost last: how many items it has so far (the second on gets a line above). */
+    /** The accordions being built, innermost last: the headers built so far (the second on gets a line above), and last frame's. @var list<object{heads: list<int>, last: list<int>}> */
     private array $accordions = [];
     /** The tree being built, innermost last: its local state (last frame's item ids and their parents), this frame's, the open items enclosing the one being built. */
     private array $trees = [];
@@ -1337,17 +1337,15 @@ final class Context
               $more->size($moreW, $t->space(3) + 2 * $t->space(1.5));
               if ($this->hovered($more)) { $more->color = $t->surfaceHover; }
               $this->end();
-              if ($rt !== null && ($this->clicked($more) || ($more->id === $rt->focus && $this->shortcut(Key::DOWN)))) {
-                  $window = Window::focused();
-                  $menu = [];
-                  foreach ($overflow as $k) { // choosing an item does what clicking the control does; a divider is a separator
+              $more->menu(function (\MyPHP\UI\Menu $m) use ($overflow, $rt): void { // choosing an item does what clicking the control does, a toggle checked as it is; a divider is a separator (mygo's toolbar menu)
+                  foreach ($overflow as $k) {
                       $label = $k->text ?? self::labelOf($k);
-                      if ($label === null) { $menu[] = MenuItem::separator(); continue; }
-                      $id = $k->id;
-                      $menu[] = new MenuItem($label, function (MenuItem $it, ?Window $w) use ($rt, $id) { $rt->press($id); $w?->invalidate(); });
+                      if ($label === null) { $m->separator(); continue; }
+                      $it = $m->item($label);
+                      if (in_array($k->role, [Role::TOGGLE_BUTTON, Role::CHECK_BOX, Role::SWITCH], true)) { $it->checked($k->checked === 2); }
+                      if ($it->chosen()) { $rt?->press($k->id); }
                   }
-                  if ($window !== null) { (new Menu($menu))->popupUnder($window, $more->id, $rt); }
-              }
+              });
           }
         $this->toolbars--;
         $this->end();
@@ -1403,7 +1401,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $w + $t->space(6), max($h, $t->space(4)), 0, $label, null, $size, $t->text));
+        $n = $this->add(new Node(Node::CHECKBOX, 0, 0, 0, $label === '' ? $t->space(4) : $w + $t->space(6), $label === '' ? $t->space(4) : max($h, $t->space(4)), 0, $label, null, $size, $t->text)); // without a label, its box alone
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $checked = !$checked;
@@ -1441,10 +1439,11 @@ final class Context
     public function accordion(Closure $fn): Node
     {
         $t = $this->theme;
-        $n = $this->column(0, 0, 0, $t->background)->round($t->radius)->border()->focusGroup(Node::VERTICAL);
-        $this->accordions[] = 0;
+        $n = $this->column(0, 0, 0, $t->background)->round($t->radius)->border();
+        $local = $this->runtime?->local($n->id, fn() => (object)['heads' => []]) ?? (object)['heads' => []]; // the headers of last frame, which the arrows move between
+        $this->accordions[] = (object)['heads' => [], 'last' => $local->heads];
           $fn();
-        array_pop($this->accordions);
+        $local->heads = array_pop($this->accordions)->heads;
         $this->end();
         return $n;
     }
@@ -1458,10 +1457,19 @@ final class Context
     public function accordionItem(string $title, bool &$open, Closure $fn): Node
     {
         $t = $this->theme;
-        $k = count($this->accordions) - 1;
+        $acc = $this->accordions[count($this->accordions) - 1];
         $n = $this->column(0, 0);
-          if ($this->accordions[$k]++ > 0) { $this->divider(); } // a line above all but the first
+          if ($acc->heads !== []) { $this->divider(); } // a line above all but the first
           $head = $this->row(0, $t->space(2))->padding($t->space(2.5), $t->space(3))->align(Node::CENTER)->focusable()->role(Role::DISCLOSURE);
+          $acc->heads[] = $head->id;
+          if ($this->focused($head) && ($at = array_search($head->id, $acc->last, true)) !== false) { // the arrows, Home and End between the headers, each a stop of Tab (mygo's accordion keys)
+              $to = null; $last = count($acc->last) - 1;
+              if ($this->shortcut(Key::DOWN)) { $to = min($at + 1, $last); }
+              elseif ($this->shortcut(Key::UP)) { $to = max($at - 1, 0); }
+              elseif ($this->shortcut(Key::HOME)) { $to = 0; }
+              elseif ($this->shortcut(Key::END)) { $to = $last; }
+              if ($to !== null) { $this->runtime->focusOn($acc->last[$to], true); }
+          }
           $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $n->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
@@ -2540,13 +2548,15 @@ final class Context
         return $alpha >= 1.0 ? sprintf('#%06x', $rgb) : sprintf('#%06x%02x', $rgb, (int)round($alpha * 255));
     }
 
-    /** The [rgb, alpha] of #rgb, #rrggbb or #rrggbbaa (the # optional), or null. */
+    /** The [rgb, alpha] of #rgb, #rgba, #rrggbb or #rrggbbaa (the # optional, around spaces), or null (mygo's parseHex). */
     public static function parseHex(string $s): ?array
     {
-        $s = ltrim(trim($s), '#');
+        $s = trim($s);
+        if (str_starts_with($s, '#')) { $s = substr($s, 1); }
         if (!ctype_xdigit($s)) { return null; }
         return match (strlen($s)) {
             3 => [(int)hexdec($s[0] . $s[0] . $s[1] . $s[1] . $s[2] . $s[2]), 1.0],
+            4 => [(int)hexdec($s[0] . $s[0] . $s[1] . $s[1] . $s[2] . $s[2]), hexdec($s[3] . $s[3]) / 255], // #rgba, as CSS
             6 => [(int)hexdec($s), 1.0],
             8 => [(int)hexdec(substr($s, 0, 6)), hexdec(substr($s, 6)) / 255],
             default => null,
@@ -3645,8 +3655,9 @@ final class Context
     {
         $t = $this->theme;
         $index = max(0, min($index, count($options) - 1));
-        $n = $this->row(1, 0, 0, $t->border)->round($t->radius); // the track: a border around a surface
+        $n = $this->row(1, 0, 0, $t->border)->round($t->radius)->role(Role::NONE); // the track: a border around a surface
           $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->round($t->radius - 1)->align(Node::STRETCH)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP); // a radio group: the arrows choose
+          $track->nameFrom = $n; // named by the control's label
           foreach ($options as $i => $label) {
               $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->round(max($t->radius - $t->space(0.5), 0))->focusable()->center();
               $seg->on = $i === $index; // Tab enters the group at the one chosen

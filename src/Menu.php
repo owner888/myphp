@@ -344,21 +344,6 @@ final class Menu
         return ObjC::msg('p:', ObjC::alloc('MyPHPMenuTarget'), 'init');
     }
 
-    /** @internal shows the menu under the node $id had last frame (a select's), in $window */
-    public function popupUnder(Window $window, int $id, \MyPHP\UI\Runtime $runtime): void
-    {
-        $r = $runtime->rectOf($id);
-        if ($r === null) {
-            $this->popup($window);
-            return;
-        }
-        $native = $this->build();
-        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
-        $p = ObjC::$c->new('NSPoint');
-        $p->x = $r[0]; $p->y = ObjC::msg('r:', $view, 'bounds')->h - ($r[1] + $r[3] + 2); // the content view (the window's container) is not flipped: y runs up from its bottom
-        ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
-    }
-
     /** Shows the menu as a context menu with its top left at ($x, $y), points from the top-left corner of the window's content (mygo's PopupAt); right to left ($rtl), its top right, its items from the right and its submenus opening to the left. */
     public function popupAt(Window $window, float $x, float $y, bool $rtl = false): void
     {
