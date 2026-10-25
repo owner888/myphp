@@ -2824,6 +2824,28 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   set as the list is built) or with a largest height, a list measures its
   rows built and the rest as estimated.
 
+## Text fields, input clients and toasts (v1.16)
+
+- **Escape on a control** lets the focus go after the frame is built
+  (`Runtime::frame`), no longer as the key comes: what is around the
+  focus sees it there (a toast's Escape closes it), the window still gets
+  the key, a field keeps the focus.
+- **Toasts' time** stops while the pointer rests on one of last frame's
+  toasts (`Runtime::$toastRoots`, noted by `toastBase`) or the focus is in
+  one, decided before the toasts whose time is over close;
+  `setWindowFocus` stops and starts it as the window goes to the
+  background and back.
+- **Where a field's text starts** (`TextState::$offsetX`) is what the
+  painter showed: scrolled to the caret while focused (its start
+  unfocused), or put where `textAlign()` says while it fits; a click and
+  the input method's caret rectangle go by it. A text area brings the
+  caret into view when the caret moves, not when the text changes around
+  it.
+- **Undo steps** end as the caret moves (`setCursor`,
+  `setTextSelection`), as mygo's editor ends them.
+- **Text input clients**: the client the focus leaves while composing is
+  unmarked (`unmarkText`), as mygo's.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

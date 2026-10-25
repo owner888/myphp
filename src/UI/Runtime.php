@@ -538,6 +538,9 @@ final class Runtime
         $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
+        foreach ($this->keys as $k) {
+            if ($k[1] === Key::ESCAPE && $k[2] === 0 && $this->focus !== null && !isset($this->fields[$this->focus])) { $this->focus = null; } // the control lets the focus go, once what is around it (a toast closing) and the window had the key
+        }
         foreach ($this->keys as $i => $k) { // Escape hides the tip that shows, before what else takes it (mygo's tip OverlayShortcut)
             if ($this->tip !== null && !$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { $this->dismissTip(); $this->keys[$i][3] = true; }
         }
@@ -614,7 +617,11 @@ final class Runtime
         }
         $this->input->focus = null;
         $this->input->caretAt = null;
+        $was = $this->input->client;
         [$this->input->client, $this->input->inputMethod] = $this->focus !== null && isset($this->textClients[$this->focus]) ? $this->textClients[$this->focus] : [null, true];
+        if ($was !== null && $was !== $this->input->client && $was->markedRange() !== null) {
+            $was->unmarkText(); // the focus left it composing: what was composed stays, no longer marked (mygo's focus loss)
+        }
         if ($this->input->client !== null) { $this->input->clientOrigin = [$this->rects[$this->focus][0], $this->rects[$this->focus][1]]; }
         if ($this->focus !== null && isset($this->fields[$this->focus])) {
             [$state, $tx, $ty, $lh, $size, $width] = $this->fields[$this->focus];
@@ -654,7 +661,9 @@ final class Runtime
     public function setWindowFocus(bool $on): void
     {
         if (!$on && $this->windowFocus) { $this->input->mods = 0; }
+        $changed = $on !== $this->windowFocus;
         $this->windowFocus = $on;
+        if ($changed) { $this->pauseToasts(false); } // the toasts' time stops with the window in the background, from now
     }
 
     /** Hides the tip that shows until neither the pointer nor the focus is on its node. */
@@ -1526,6 +1535,9 @@ final class Runtime
     }
 
     /** Whether the toasts' time stops (the pointer rests on them, the focus is in them), starting or stopping it. */
+    /** @var list<int> the roots of the toasts built (Context::toastBase), this frame's and, until the viewport is built, last frame's: the pointer on one stops their time @internal */
+    public array $toastRoots = [];
+
     public function pauseToasts(bool $paused): void
     {
         $paused = $paused || !$this->windowFocus; // the window in the background
@@ -1939,7 +1951,7 @@ final class Runtime
         if ($state->multiline) {
             $byte = $state->layout($this->metrics, $size, $width)->hit($this->metrics, $x - $tx, $y - $ty + $state->scrollY);
         } else {
-            $byte = $state->fromShown($this->metrics->indexForX($state->shown(), $size, $x - $tx)); // a password's bullets
+            $byte = $state->fromShown($this->metrics->indexForX($state->shown(), $size, $x - $tx - $state->offsetX)); // a password's bullets; the text scrolled or aligned as painted
         }
         $state->setCursor($byte, $extend);
     }
@@ -2044,8 +2056,7 @@ final class Runtime
         switch ($selector) {
             case 'insertTab:': $this->moveFocus(1); return true;
             case 'insertBacktab:': $this->moveFocus(-1); return true;
-            case 'cancelOperation:': // Escape: a control lets the focus go; a field keeps it (a search field clears on it); the window still gets the key
-                if ($this->focus !== null && !isset($this->fields[$this->focus])) { $this->focus = null; }
+            case 'cancelOperation:': // Escape: a control lets the focus go once the frame is built, the key seen around it (a toast closing); a field keeps it; the window still gets the key
                 return false;
             case 'insertNewline:':
                 if ($this->focus !== null && !isset($this->fields[$this->focus])) {

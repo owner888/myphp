@@ -3231,6 +3231,10 @@ final class Context
             return null;
         }
         $this->toastsBuilt = true;
+        $over = false;
+        foreach ($rt->toastRoots as $id) { $over = $over || $rt->hovered($id) || $rt->focusWithin($id); } // the pointer resting on one of last frame's toasts, or the focus in one
+        $rt->toastRoots = [];
+        $rt->pauseToasts($over); // before the toasts whose time is over close
         $list = $rt->toastList();
         if ($list === [] && !$keep) {
             return null;
@@ -3238,7 +3242,7 @@ final class Context
         $viewport = null;
         $this->overlay(function () use (&$viewport, $fn, $list, $rt): void {
             $viewport = $this->key('myphp.toasts')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->justify(Node::END)->passThrough(); // keyed: the identity of the engine's own, not of what a dialog just closed built there
-            $rt->pauseToasts($this->hovered($viewport) || $this->focusWithin($viewport));
+
               $fn($viewport, $list);
             $this->end();
         });
@@ -3260,6 +3264,7 @@ final class Context
         $key = $rt?->toastKey($t->id) ?: $t->id;
         [$age, $left] = $rt?->toastTimes($t->id) ?? [0.0, 0.0];
         $root = $this->key('toast/' . $key)->column()->role(Role::STATUS);
+        if ($rt !== null) { $rt->toastRoots[] = $root->id; }
         if ($this->focusWithin($root) && $this->shortcut(Key::ESCAPE)) {
             $this->closeToast($t->id);
         }

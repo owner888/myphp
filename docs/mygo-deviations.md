@@ -1421,3 +1421,27 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     TestListHeights, which tests mygo's tree of heights (myphp keeps them
     in a map and a bit set).
 
+## Text fields, input clients and toasts, their tests (v1.16)
+
+- **Tests of mygo's own editor, not ported**
+  - mygo: textarea_test.go tests its buffer and the text area laid out a
+    paragraph at a time (TestBuffer*, TestHeights,
+    TestTextAreaLaysOutAsWholeText, TestTextAreaSelectsAsWholeText,
+    TestTextAreaSharesValue, TestTextAreaShowsThroughPadding).
+  - myphp: a text area lays out its whole text (TextState::layout), with
+    none of that to test.
+  - Why: myphp's fields are TextStates, not mygo's editor.
+- **Tests of mygo's platform input layers, not ported**
+  - mygo: TestTextInputClientNativeEndBeforeCommit and
+    TestTextInputSurroundingUnicodeAndReversedSelection test its
+    InputComposition and GTK's surrounding text; TestTextLayoutUTF16*
+    and TestTextLayoutVisualCaretUTF16 its ShapeText.
+  - myphp: the view is the NSTextInputClient and calls the app's client
+    as AppKit calls it; text is shaped by MyPHP\Text.
+  - Why: those layers are mygo's, for Linux and Windows.
+- **A text area's view on the app's text**
+  - mygo: the view moves to the caret when the caret moves.
+  - myphp: the same, the painter now asks the caret alone (it asked the
+    text's length too, so a log growing brought the caret back).
+  - Why: (none: the same behaviour).
+

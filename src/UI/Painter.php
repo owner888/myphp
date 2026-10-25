@@ -1199,10 +1199,15 @@ final class Painter
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
         $ty = $n->y + ($n->h - $lh) / 2;
         $inner = $n->w - $inset - Runtime::FIELD_INSET - $n->insetR;
-        // Keep the caret in view when the text is wider than the field.
+        // Keep the caret in view when the text is wider than the field; without the focus, its start shows (mygo's InputShowsItsStartUnfocused).
         $caretX = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->displayCaret()));
-        $shift = max(0.0, $caretX - $inner);
+        $shift = $n->focused ? max(0.0, $caretX - $inner) : 0.0;
         $tx = $n->x + $inset - $shift;
+        $align = $n->ts?->align ?? Node::START;
+        if ($display !== '' && $tw <= $inner && $align !== Node::START) { // a text that fits goes where textAlign() puts it (mygo's TextAlign)
+            $tx += ($inner - $tw) * ($align === Node::CENTER ? 0.5 : 1.0);
+        }
+        $s->offsetX = $tx - ($n->x + $inset); // where the text starts in the field, which a click and the input method's caret go by
         $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
@@ -1248,7 +1253,7 @@ final class Painter
         // Never scroll past the text; bring the caret into view when it moved (not while the wheel scrolls away from it).
         $range = max(0.0, $layout->height() - $innerH);
         $s->scrollY = max(0.0, min($s->scrollY, $range));
-        $caret = [strlen($display), $s->displayCaret()];
+        $caret = $s->displayCaret(); // the caret alone: a text the app changes around it leaves the view (mygo's KeepsViewOnAppText)
         if ($n->focused && $caret !== $s->caretSeen) {
             $s->caretSeen = $caret;
             [, $cy] = $layout->caret($text, $s->displayCaret());

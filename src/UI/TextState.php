@@ -9,7 +9,8 @@ namespace MyPHP\UI;
  * of the selection and the anchor the fixed one (equal when nothing is
  * selected). While an input method composes, $marked holds the text under
  * composition, shown at the cursor but not yet in $text. Edits are
- * undoable: typing within a second coalesces into one step.
+ * undoable: typing within a second coalesces into one step, which a move
+ * of the caret ends.
  */
 final class TextState
 {
@@ -57,8 +58,10 @@ final class TextState
     public float $scrollY = 0;
     /** How far through its text a text area is scrolled, 0..1 (the painter sets it), for anything that follows it. */
     public float $scrollFraction = 0;
-    /** The caret the painter last brought into view: text length and cursor. */
-    public array $caretSeen = [-1, -1];
+    /** How far a single-line field's text is from its start, as the painter showed it: scrolled to the caret, or aligned. */
+    public float $offsetX = 0.0;
+    /** The caret the painter last brought into view, -1 before. */
+    public int $caretSeen = -1;
     private const UNDO_DEPTH = 200;
     /** @var list<array{0: string, 1: int, 2: int}> */
     private array $undo = [];
@@ -159,7 +162,7 @@ final class TextState
     {
         $n = mb_strlen($this->text);
         $byte = fn(int $r): int => strlen(mb_substr($this->text, 0, max(0, min($r, $n))));
-        $this->marked = null;
+        $this->marked = null; $this->lastEdit = '';
         $this->anchor = $byte($start); $this->cursor = $byte($end);
     }
 
@@ -172,6 +175,7 @@ final class TextState
     public function setCursor(int $byte, bool $extend = false): void
     {
         $this->marked = null;
+        $this->lastEdit = ''; // a caret moved ends a step of typing (mygo's editor)
         $this->cursor = max(0, min(strlen($this->text), $byte));
         if (!$extend) {
             $this->anchor = $this->cursor;
