@@ -133,7 +133,7 @@ final class System
         if ($f !== null && $f->ascent > 0) {
             $ascent = $f->ascent; $descent = $f->descent; $gap = max($f->lineGap, 0);
         }
-        $lineHeight = $style->lineHeight > 0 ? $style->lineHeight * $size : $ascent + $descent + $gap;
+        $lineHeight = $style->lineHeight > 0 ? round($style->lineHeight * $size, 9) : $ascent + $descent + $gap; // rounded: a fixed line height comes as a multiple of the size, which gives back its points
         return [$ascent, $descent, $lineHeight];
     }
 

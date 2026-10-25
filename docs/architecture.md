@@ -2846,6 +2846,24 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **Text input clients**: the client the focus leaves while composing is
   unmarked (`unmarkText`), as mygo's.
 
+## Primitives, styles and the window (v1.17)
+
+- **Into what blocks.** When the focus is behind a node that now blocks
+  (`block()`, a dialog), it goes to the first reachable focusable, inside
+  it, rather than to none; Escape's overlay gives it back to the opener.
+- **A disabled slider** is not registered for presses (`Runtime` record).
+- **onTextKey** is offered by `Input::textKey` before the field sees a
+  key, only keys that type no text; the view and `Headless::key` call it.
+- **A press holds the hover**: while the mouse is down from a press on a
+  node still built, only that node and those around it hover
+  (`Runtime::hovered`); once it is gone, what is under the pointer does.
+- **Grids** align their cells down by their own `align()` (mygo's
+  AlignItems) when the cell sets none; fit tracks take at least their
+  cells' least sizes.
+- **Text areas** wrap their placeholder; a form's label levels with the
+  first line of a text area; a fixed line height comes back to its points
+  exactly (the text system rounds the multiple it is given).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

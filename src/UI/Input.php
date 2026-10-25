@@ -34,6 +34,23 @@ final class Input
     /** Delivers an event at once to the node taking its input as it comes, reporting whether it took it: set by the runtime. */
     public ?\Closure $direct = null;
 
+    /**
+     * Offers a key pressed in the focused field to its onTextKey before the
+     * field sees it, and reports whether fn took it (mygo's OnTextKey):
+     * only keys that type no text, Enter, Tab, Escape, the arrows, Delete
+     * and chords of Command or Control among them; typing goes to the
+     * field.
+     */
+    public function textKey(int $code, string $chars, int $mods): bool
+    {
+        $f = $this->focus;
+        if ($f?->onTextKey === null) {
+            return false;
+        }
+        $types = ($mods & (Key::COMMAND | Key::CONTROL)) === 0 && $chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/^[\x{F700}-\x{F8FF}]/u', $chars) !== 1; // function keys come as Unicode's private use
+        return !$types && (bool)($f->onTextKey)($code, $chars, $mods & Key::MODIFIERS, $f);
+    }
+
     public function mouse(float $x, float $y): void
     {
         $this->mouseX = $x; $this->mouseY = $y; $this->mouseInside = true;

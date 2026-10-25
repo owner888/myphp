@@ -3032,8 +3032,8 @@ final class Context
      * A column of the fields $fn builds (field, fieldset), gap Space(3),
      * whose labels sit in a column of their own beside the controls, as
      * macOS's forms: aligned to the right, as wide as the widest, and
-     * centered on their control's first child (mygo levels them with its
-     * first line).
+     * centered on their control, or on the first line of a text area, as
+     * mygo levels them.
      */
     public function form(Closure $fn): Node
     {
@@ -3080,7 +3080,10 @@ final class Context
         if (self::namesItself($ctrl)) { $f->role(Role::GROUP)->label($label); } elseif ($ctrl->nameFrom === null || $ctrl->nameFrom->label === '') { $ctrl->nameFrom = $l; }
         if ($error !== '' || $description !== '') { $ctrl->description = implode("\n", array_filter([$error, $description], fn(string $s) => $s !== '')); } // the error first, as what to read first
         if ($error !== '') { $ctrl->invalid = true; }
-        if ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
+        if ($inForm && $ctrl->kind === Node::TEXTAREA) { // level with the first line of a text area (mygo's)
+            [, $lh] = $this->metrics->measure('X', $ctrl->fontSize);
+            $box->fh = $lh + ($ctrl->bare ? 0.0 : 2 * Runtime::FIELD_INSET_Y);
+        } elseif ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
         if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
         $l->cursor = Cursor::Default;
         if ($this->clicked($l) && $rt !== null) {

@@ -293,7 +293,7 @@ final class Layout
             foreach ($items as [$k, $c, $r, $cs, $rs]) {
                 $aw = $gx * ($cs - 1); for ($j = $c; $j < $c + $cs; $j++) { $aw += $cols[$j]; }
                 $ah = $gy * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
-                $a = $k->self === Node::AUTO ? Node::STRETCH : $k->self;
+                $a = $k->self !== Node::AUTO ? $k->self : ($n->align !== Node::AUTO ? $n->align : Node::STRETCH); // alignSelf, else the grid's align (mygo's AlignItems), else stretched
                 $j = $k->justifySelf !== Node::AUTO ? $k->justifySelf : ($n->justifyItems !== Node::AUTO ? $n->justifyItems : Node::STRETCH); // mygo's gridJustify
                 $kh = $k->hPct !== null ? $k->hPct * $ah : ($a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh); // a size of its own is kept (mygo: an explicit size is not stretched)
                 $kw = $k->wPct !== null ? $k->wPct * $aw : ($j === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT) ? $aw : $k->mw); // a text's fw is what it measured, not a size given
@@ -731,8 +731,8 @@ final class Layout
     private static function gridTracks(Node $n, float $availW, float $availH): array
     {
         [$items, $nc, $nr] = self::gridPlace($n);
-        $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gapX ?? $n->gap, array_map(fn($it) => [$it[1], $it[3], $it[0]->mw], $items));
-        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gapY ?? $n->gap, array_map(fn($it) => [$it[2], $it[4], $it[0]->mh], $items));
+        $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gapX ?? $n->gap, array_map(fn($it) => [$it[1], $it[3], max($it[0]->mw, $it[0]->minW)], $items)); // at least its least width
+        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gapY ?? $n->gap, array_map(fn($it) => [$it[2], $it[4], max($it[0]->mh, $it[0]->minH)], $items));
         return [$cols, $rows, $items];
     }
 

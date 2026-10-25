@@ -3,7 +3,9 @@
 // TestTextAreaUndoAppChanges, TestTextAreaUndoAppLog, TestTextAreaScrolls,
 // TestTextAreaRevealsWrapped, TestTextAreaKeepsViewOnAppText,
 // TestTextAreaLinesFollowWrappedText, TestTextSelection,
-// TestInputShowsItsStartUnfocused, TestInputTextAlign, TestTextRanges):
+// TestInputShowsItsStartUnfocused, TestInputTextAlign, TestTextRanges,
+// TestTextAreaInForm, TestInputPlaceholderStaysOnItsLine,
+// TestPlaceholderWithFixedLineHeight, TestTextRangesWhileComposing):
 // undo step by step, the app's changes
 // undone with the typing, the wheel and the caret, the lines a text area
 // grows to, the app moving the caret.
@@ -203,3 +205,55 @@ $red = fn() => count(array_filter(taGlyphs($h->paint(), $h->rect($h->byLabel('Li
 same(6, $red(), 'the six letters of the range red');
 $styled = false; $h->frame();
 same(0, $red(), 'none red in a frame that asks for none');
+
+// A field of a form levels its label with the first line of its text area (mygo's TestTextAreaInForm).
+$bio = new TextState('The first line');
+$h = new Headless(function (Context $c) use ($bio): void {
+    $c->form(function () use ($c, $bio): void { $c->field('About you', fn() => $c->textarea($bio, '', 300, 110)); });
+}, 500, 300);
+$h->frame(3);
+$label = $h->rect($h->byText('About you'));
+$area = $h->rect($h->root->kids[0]->kids[0]->kids[1]->kids[0]);
+same($area[1] + \MyPHP\UI\Runtime::FIELD_INSET_Y, $label[1], 'the label on the first line');
+
+// Placeholders: a field's stays on its line, cut at the box; a text area's wraps (mygo's TestInputPlaceholderStaysOnItsLine, TestPlaceholderWithFixedLineHeight).
+$line = new TextState(''); $area = new TextState('');
+$h = new Headless(function (Context $c) use ($line, $area): void {
+    $c->column(10, 10);
+      $c->input($line, 'mmmm mmmm mmmm mmmm mmmm mmmm', 120)->label('Field');
+      $c->textarea($area, 'mmmm mmmm mmmm mmmm mmmm mmmm', 120, 100)->label('Area');
+    $c->end();
+}, 300, 200);
+$h->frame();
+$list = $h->paint();
+$ys = function (string $label) use ($h, $list): array {
+    $r = $h->rect($h->byLabel($label)); $out = [];
+    for ($i = 0; $i < $list->n; $i++) {
+        $b = $list->buf; $k = $i * \MyPHP\UI\DisplayList::FLOATS_PER_RECT;
+        if ($b[$k] >= $r[0] && $b[$k] < $r[0] + $r[2] && $b[$k + 1] >= $r[1] && $b[$k + 1] < $r[1] + $r[3] && (int)round($b[$k + 4] * 255) === ($h->theme->textMuted >> 16) && (int)round($b[$k + 9]) % 16 === 1) { $out[(string)$b[$k + 1]] = true; }
+    }
+    return array_keys($out);
+};
+same(1, count($ys('Field')), "the field's placeholder on one line");
+check(count($ys('Area')) >= 2, "the text area's placeholder wraps");
+
+// textRanges keep their style while an input method composes in their text: the composition unstyled at the caret, the runs after it past it (mygo's TestTextRangesWhileComposing).
+$ok = true;
+foreach ([1, 3, 6, 9, 15] as $caret) {
+    foreach ([true, false] as $multiline) {
+        $st = new TextState('hi @Scout there');
+        $h = new Headless(function (Context $c) use ($st, $multiline): void {
+            $n = $multiline ? $c->textarea($st, '', 280, 80) : $c->input($st, '', 280);
+            $n->label('F')->textRanges(new \MyPHP\UI\TextRange(3, 9, 0xdc0000));
+        }, 300, 120);
+        $h->frame();
+        $h->clickOn($h->byLabel('F'));
+        $st->setCursor($caret); $st->setMarked('ss', 2); $h->frame();
+        $glyphs = taGlyphs($h->paint(), $h->rect($h->byLabel('F')));
+        $colors = array_map(fn(array $g) => $g[1] === 0xdc0000 ? 'r' : '.', $glyphs);
+        $want = str_split(str_repeat('.', 3) . 'rrrrrr' . str_repeat('.', 6)); // the text's own colors
+        array_splice($want, $caret, 0, ['.', '.']); // the composition, unstyled, at the caret
+        if (implode('', $colors) !== implode('', $want)) { $ok = false; echo "  caret $caret, " . ($multiline ? 'area' : 'field') . ': ' . implode('', $colors) . "\n"; }
+    }
+}
+check($ok, 'the ranges keep their letters while composing, the composition plain');

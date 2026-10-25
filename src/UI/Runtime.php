@@ -598,8 +598,10 @@ final class Runtime
             $moving = array_intersect_key($moving, $this->rects); // a node not built takes its values with it
         }
         unset($moving);
-        if ($this->focus !== null && !$this->reachable($this->focus)) {
-            $this->focus = null; // the focus was behind what now blocks it: Tab goes into that
+        if ($this->focus !== null && !$this->reachable($this->focus)) { // the focus was behind what now blocks it: into its first control, or none (mygo's Modal)
+            $into = null;
+            foreach ($this->focusables as $id) { if ($this->reachable($id)) { $into = $id; break; } }
+            $this->focus = $into;
         }
         $this->needsFrame = $this->needsFrame || $keyScrolled || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
             || ($this->inspector?->stale() ?? false); // the inspector shows the nodes of this frame in the next
@@ -1667,7 +1669,7 @@ final class Runtime
         if ($n->focused && $n->id === $this->focus) {
             $n->focusVisible = $this->focusVisible && !$n->ownRing; // the painter rings it, unless it rings itself
         }
-        if ($n->kind === Node::SLIDER) {
+        if ($n->kind === Node::SLIDER && !$n->isDisabled()) { // a disabled slider takes no press
             $this->sliders[$n->id] = [$n->x, $n->y, $n->w, $n->h, $n->rtl, $n->x + $n->padL(), max(1.0, $n->w - $n->padL() - $n->padR()), $n->y + $n->padT(), max(1.0, $n->h - $n->padT() - $n->padB()), $n->vertical]; // its box, and the content box its values span
         }
         if ($n->tooltip !== null) {
@@ -2585,7 +2587,17 @@ final class Runtime
 
     public function hovered(int $id): bool
     {
-        return $this->input->mouseInside && $this->under($id, $this->input->mouseX, $this->input->mouseY);
+        if (!$this->input->mouseInside || !$this->under($id, $this->input->mouseX, $this->input->mouseY)) {
+            return false;
+        }
+        $p = $this->input->mouseDown ? ($this->pointerPress['id'] ?? null) : null;
+        if ($p === null || $p === $id || !isset($this->rects[$p])) {
+            return true; // no press held, or the node pressed gone: what is under the pointer
+        }
+        for ($a = $this->parents[$p] ?? 0, $n = 0; $a !== 0 && $n < 1024; $a = $this->parents[$a] ?? 0, $n++) {
+            if ($a === $id) { return true; } // around the node pressed
+        }
+        return false; // while a press is held, only the node pressed and those around it hover (mygo's hover while pressed)
     }
 
     /**

@@ -247,6 +247,7 @@ final class Headless
     /** A key as the view sends it: the key event, then the text system's selector — taken by the focused field's TextState first, as the view does, else pushed as a command. */
     public function key(int $code, string $selector, int $mods = 0, string $chars = ''): Node
     {
+        if ($this->input->textKey($code, $chars, $mods)) { return $this->frame(); } // the field's onTextKey took it, as the view offers it
         if ($this->input->push(['key', $chars, $code, $mods])) { return $this->frame(); } // taken as it came
         if ($this->input->client !== null) { // to a text input client, which the view gives no commands; with input methods off, the key types its characters
             if (!$this->input->inputMethod && $chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f) { $this->input->client->replaceText(null, $chars); }

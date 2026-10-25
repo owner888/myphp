@@ -1445,3 +1445,28 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     text's length too, so a log growing brought the caret back).
   - Why: (none: the same behaviour).
 
+## Primitives, styles and the window, their tests (v1.17)
+
+- **onTextKey**
+  - mygo: `OnTextKey(fn(TextKey) bool)`, a TextKey with `Text()` and
+    `SetText()` valid while fn runs (a kept one panics); a shortcut around
+    the focus takes Escape before it.
+  - myphp: `TextState::$onTextKey`, fn(int $keyCode, string $chars, int
+    $mods, TextState $s): bool, reading and setting `$s` itself; the keys
+    that type text go to the field, as mygo's (`Input::textKey`, which the
+    view and the headless harness call); shortcuts, asked as the view
+    builds, see what fn left.
+  - Why: myphp's field is its TextState; its shortcuts are not registered
+    before the keys come.
+- **Not ported**: TestPathsLookTheSameWhateverDrewBefore and
+  TestStrokesAreAsWideAsAsked (mygo's rasterizer of masks; myphp's paths are
+  CoreGraphics' on macOS), TestPasteDuringFrame (GTK's clipboard),
+  TestOnTextKeyComposer's kept TextKey, TestKeyOnAWidget (mygo panics on a
+  key given a radio button; myphp keys any node), TestRecycledStateIsFresh
+  and TestKeyLeavesNoStateBehind (mygo's arena of states; myphp's nodes are
+  built anew each frame), TestTextInputFollowsTheFocusAtOnce (between
+  frames, the view sets the input client at the frame), TestIconRotates and
+  TestReviewedEdges (pixels; the headless text engine draws no icons),
+  TestDemoRenders and TestListScrollsAndSelects (the demo is ported as
+  ui_more_test's window and the list tests).
+

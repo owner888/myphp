@@ -165,8 +165,7 @@ final class View
             'keyDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $input = self::$inputs[ObjC::addr($self)];
                 $chars = ObjC::phpStr(ObjC::msg('p:', $event, 'characters')); $code = ObjC::msg('S:', $event, 'keyCode'); $mods = ObjC::msg('L:', $event, 'modifierFlags');
-                $f = $input->focus;
-                if ($f?->onTextKey !== null && ($f->onTextKey)($code, $chars, $mods & Key::MODIFIERS, $f)) { // the app took the key: the field and the view see nothing of it
+                if ($input->textKey($code, $chars, $mods)) { // the app took the key: the field and the view see nothing of it
                     Metal::requestFrame($self);
                     return;
                 }

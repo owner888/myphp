@@ -1264,8 +1264,9 @@ final class Painter
         $tx = $n->x + $inset; $ty = $n->y + $insetY - $s->scrollY;
         $in = $n->bare ? 0.0 : 2.0; // inside the border
         $list->pushClip($n->x + $in, $n->y + $in, $n->w - 2 * $in, $n->h - 2 * $in);
-        if ($display === '' && $n->text !== null && $n->text !== '') {
-            $text->paint($list, $n->text, $n->fontSize, $tx, $ty, $t->textMuted);
+        if ($display === '' && $n->text !== null && $n->text !== '') { // the placeholder wraps as the text would (mygo's)
+            $ph = FieldLayout::wrap($text, $n->text, $n->fontSize, $innerW);
+            foreach ($ph->lines as $i => $_) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $t->textMuted); }
         }
         [$selA, $selB] = $n->focused && $s->hasSelection() && $s->marked === null ? $s->selection() : [0, 0];
         $first = max(0, (int)floor($s->scrollY / $lh));
