@@ -2633,6 +2633,57 @@ came with them.
   classes first, and `Ipc::arguments` asks whether a parameter's type is
   a backed enum only when it is no builtin type.
 
+## Packaging (v1.12)
+
+`bin/myphp build` is mygo's `mygo build` for macOS; the work is in
+`src/Native/Build/` (internal classes the CLI calls, tested on any system
+by `tests/build_test.php`), the steps that need macOS's tools (cc,
+codesign, ditto, hdiutil, xattr, xcrun) run them.
+
+- **One directory a platform.** Each target builds in
+  `<out>/.staging-darwin-<arch>-<pid>`, which then replaces
+  `<out>/darwin-<arch>` (the old one renamed away first, so a running app
+  keeps its files): a failed build leaves the last one, and nothing stale
+  stays.
+- **The order of signing.** The code among the resources is signed from
+  the inside out (Mach-O files, then the bundles holding them), then the
+  app with `--deep`; ad hoc signing keeps the signatures that copies have.
+  The disk image is made of the signed app with `ditto --noclone` (HFS+
+  cannot keep sparse files); notarizing staples the ticket to the image
+  and the app, and the update archive is made after, of the stapled app.
+- **The disk image's window without Finder.** `DsStore` writes the
+  .DS_Store byte for byte as dmgbuild's ds_store package does
+  (`tests/testdata/dmg.DS_Store` is its output), and `binaryPlist` the
+  window's settings as Python's plistlib; no AppleScript, no automation
+  permission, works headless.
+- **hdiutil's "Resource busy".** Spotlight or an antivirus holding the
+  image: retried after 2, 4, 8 and 16 seconds, as create-dmg does; the
+  disk is detached by its device (/dev/diskN), which works after a
+  failed eject too.
+- **Universal resources.** darwin-arm64 and darwin-amd64 merge into one
+  tree; their Mach-O files become universal binaries (`MachO::writeUniversal`,
+  16 KiB aligned slices, like lipo); identical files and links ship once;
+  anything else is an error naming both files.
+- **The icon in PHP.** mygo's resize sums premultiplied colors over
+  each output pixel's source area: for 1024 pixels and the eight entries
+  (two pairs share their size) that is 1.6 s of PHP; the PNGs are 8-bit
+  RGBA rows without filters, deflated by the system's zlib.
+- **S3 without an SDK.** Signature Version 4 by hand (`S3::sign`, checked
+  against the example of AWS's documentation), the PUT done by curl with
+  `Expect:` off (a 100 Continue would come before S3's answer) and `-D -`
+  for the status line and `X-Amz-Bucket-Region`.
+
+## Windows out of sight (v1.12)
+
+- **No frames nobody sees.** AppKit keeps calling a covered, minimized or
+  other-space window's draws, so an animation went on spending a core.
+  As mygo's runtime (`held`), a native window whose `occlusionState` has
+  no `Visible` bit asks for no further frame and no wake; it marks itself
+  held, and `windowDidChangeOcclusionState:` draws it again once some of
+  it shows, its motions going on from where the clock puts them. Events
+  still draw the frame they need. A popover's window is AppKit's, whose
+  occlusion the delegate does not hear of, so popovers draw as before.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

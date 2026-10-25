@@ -1,0 +1,3 @@
+interface:
+  display_name: "MyPHP Maintenance"
+  short_description: "Maintain MyPHP apps with safe UI identity"

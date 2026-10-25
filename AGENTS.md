@@ -159,12 +159,12 @@ Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
 
 ## Projects and bundles
 
-`myphp init` writes myphp.json, boot.php (framework from `./myphp` in a
-built app, else the checkout) and app.php; `myphp build` makes `<Name>.app`
-with a C launcher that execs this php (development) or, `--launcher micro`,
-a phar combined with phpmicro by static-php-cli (release, one static
-binary), with the native libraries of the plugins the app names
-(mygo-plugin.json) in Resources; `myphp micro` builds micro.sfx once.
+`bin/myphp` is mygo's CLI (`myphp help`); myphp.json takes mygo.json's
+fields. `myphp build` makes `<out>/darwin-<arch>/<name>.app` (a C launcher
+that execs this php, or `-launcher micro`: a phar with phpmicro from
+static-php-cli), signed, with resources and plugin natives, and a .dmg;
+notarizes, writes updates, `-upload`s. Its work is `src/Native/Build/`
+(`tests/build_test.php`); the bundled agent skills are in `bin/skills`.
 static-php-cli is the one outside tool, for release builds only.
 
 ## Working on it

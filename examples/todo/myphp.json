@@ -1,6 +1,6 @@
 {
   "name": "Todo",
-  "bundleId": "dev.myphp.todo",
+  "identifier": "dev.myphp.todo",
   "version": "1.0.0",
   "entry": "main.php",
   "devUrl": "http://localhost:5173",

@@ -1,6 +1,6 @@
 {
   "name": "Quick Notes",
-  "bundleId": "dev.myphp.examples.menubar-native",
+  "identifier": "dev.myphp.examples.menubar-native",
   "entry": "main.php",
   "macos": {
     "infoPlist": { "LSUIElement": true }

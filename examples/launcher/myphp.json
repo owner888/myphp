@@ -1,6 +1,6 @@
 {
   "name": "Launcher",
-  "bundleId": "dev.myphp.examples.launcher",
+  "identifier": "dev.myphp.examples.launcher",
   "entry": "main.php",
   "macos": {
     "infoPlist": { "LSUIElement": true }

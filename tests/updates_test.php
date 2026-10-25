@@ -282,14 +282,14 @@ try {
             $out = updDir();
             $app($out, $version, $bin);
             $log = [];
-            $files = $p->write($out, 'My.app', function (string $l) use (&$log) { $log[] = $l; });
+            $files = $p->write($out, 'My.app', Format::target(), function (string $l) use (&$log) { $log[] = $l; });
             foreach ($files as $f) { copy($f, "$www/" . basename($f)); }
             return [array_map('basename', $files), $log, $p];
         };
         [$files, $log, $p] = $publish('1.0.0', $bin);
         same(['my-app-1.0.0-' . Format::target() . '.tar.gz', Format::manifestName(Format::target())], $files, 'the first version: its archive and manifest');
         same(['no delta updates for ' . Format::target() . ': no version is published yet'], $log, 'no delta without a version published');
-        same(['MyPHPUpdateFeed' => "https://downloads.example.com/my/" . Format::manifestName(Format::target()), 'MyPHPUpdateKey' => $pubText], (new \MyPHP\Native\Update\Publish($project, ['name' => 'x', 'updates' => ['publicKey' => $pubText, 'url' => 'https://downloads.example.com/my']]))->plist(), 'the feed and key the bundle gets');
+        same(['MyPHPUpdateFeed' => "https://downloads.example.com/my/" . Format::manifestName(Format::target()), 'MyPHPUpdateKey' => $pubText], (new \MyPHP\Native\Update\Publish($project, ['name' => 'x', 'updates' => ['publicKey' => $pubText, 'url' => 'https://downloads.example.com/my']]))->plist(Format::target()), 'the feed and key the bundle gets');
         [$files, $log] = $publish('1.1.0', substr_replace($bin, 'V11', 5, 3));
         same(3, count($files), 'the second version: an archive, a delta and the manifest');
         check(str_contains($log[0] ?? '', 'made the delta update from 1.0.0'), 'the delta made: ' . json_encode($log));
@@ -301,7 +301,7 @@ try {
         $sizes = [];
         $u->install(function (int $n, int $total) use (&$sizes) { $sizes[$total] = true; });
         same(['1.1.0', [$m['deltas'][0]['size']]], [file_get_contents(Updater::$target . '/Contents/version.txt'), array_keys($sizes)], 'installed from the delta myphp build made');
-        foreach ([['github' => 'nope'], ['url' => 'http://insecure'], ['deltas' => -1], ['publicKey' => 'bad']] as $bad) {
+        foreach ([['github' => 'nope'], ['url' => 'http://insecure'], ['deltas' => -1], ['publicKey' => 'bad'], ['s3' => ['prefix' => 'x']], ['s3' => ['bucket' => 'b', 'endpoint' => 'https://r2.example/path']]] as $bad) {
             check(updThrows(fn() => new \MyPHP\Native\Update\Publish($project, ['name' => 'x', 'updates' => $bad + ['publicKey' => $pubText, 'url' => 'https://x.example']])) !== '', 'refused: ' . json_encode($bad));
         }
         [, $wrongPub] = Ed25519::keyPair(random_bytes(32));

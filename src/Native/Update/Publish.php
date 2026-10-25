@@ -65,7 +65,13 @@ final class Publish
             throw new RuntimeException("updates.url \"{$this->url}\" is not an https URL");
         }
         if (isset($u['s3'])) {
-            throw new RuntimeException('updates.s3 is not supported: upload the files to the bucket yourself');
+            if ($this->url === '') {
+                throw new RuntimeException('updates.s3 needs url, the HTTPS URL that serves the files of the bucket, in place of github');
+            }
+            if (!is_array($u['s3'])) {
+                throw new RuntimeException('updates.s3 must be an object');
+            }
+            \MyPHP\Native\Build\S3::validate($u['s3']);
         }
         $deltas = $u['deltas'] ?? 3;
         if (!is_int($deltas) || $deltas < 0) {
@@ -96,10 +102,10 @@ final class Publish
         return "https://github.com/{$this->github}/releases/download/" . rawurlencode($this->tagPrefix . $this->version()) . '/' . rawurlencode($name);
     }
 
-    /** The Info.plist keys that point the app at its manifest (mygo's -ldflags of updateFlags). @return array<string, string> */
-    public function plist(): array
+    /** The Info.plist keys that point the app for $target (darwin-arm64, darwin-universal) at its manifest (mygo's -ldflags of updateFlags). @return array<string, string> */
+    public function plist(string $target): array
     {
-        return ['MyPHPUpdateFeed' => $this->file(Format::manifestName(Format::target()), true), 'MyPHPUpdateKey' => $this->publicKey];
+        return ['MyPHPUpdateFeed' => $this->file(Format::manifestName($target), true), 'MyPHPUpdateKey' => $this->publicKey];
     }
 
     /** The private key that signs updates, or null when none is available. */
@@ -133,8 +139,8 @@ final class Publish
         return $key;
     }
 
-    /** The release notes of this version, from the changelog. */
-    private function notes(): string
+    /** The release notes of this version, from the changelog (mygo's releaseNotes). */
+    public function notes(): string
     {
         $name = (string)($this->u['changelog'] ?? '');
         $file = "{$this->dir}/" . ($name === '' ? 'CHANGELOG.md' : $name);
@@ -153,7 +159,7 @@ final class Publish
     }
 
     /**
-     * With the signing key, writes next to the app $entry in $out its
+     * With the signing key, writes next to the app $entry for $target in $out its
      * signed archive, delta updates from the versions before, and the
      * manifest, and returns the files written; none without the key, which
      * $log says (mygo's writeArchive).
@@ -161,7 +167,7 @@ final class Publish
      * @param Closure(string): void $log
      * @return list<string>
      */
-    public function write(string $out, string $entry, Closure $log): array
+    public function write(string $out, string $entry, string $target, Closure $log): array
     {
         $key = $this->signingKey();
         if ($key === null) {
@@ -169,7 +175,6 @@ final class Publish
             return [];
         }
         $notes = $this->notes();
-        $target = Format::target();
         $slug = trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower((string)$this->config['name'])), '-');
         $version = $this->version();
         $name = "$slug-$version-$target.tar.gz";

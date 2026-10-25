@@ -19,7 +19,7 @@ use RuntimeException;
  */
 final class Window
 {
-    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15;
+    private const TITLED = 1, CLOSABLE = 2, MINIATURIZABLE = 4, RESIZABLE = 8, FULL_SCREEN = 1 << 14, FULL_SIZE_CONTENT = 1 << 15, OCCLUSION_VISIBLE = 1 << 1;
     private const NONACTIVATING = 1 << 7; // NSWindowStyleMaskNonactivatingPanel
     private const NORMAL_LEVEL = 0, FLOATING_LEVEL = 3, POP_UP_MENU_LEVEL = 101;
     private const FULL_SCREEN_PRIMARY = 1 << 7, FULL_SCREEN_AUXILIARY = 1 << 8, FULL_SCREEN_NONE = 1 << 9, CAN_JOIN_ALL_SPACES = 1 << 0, TRANSIENT = 1 << 3, IGNORES_CYCLE = 1 << 6;
@@ -62,6 +62,8 @@ final class Window
     private int $attention = 0;
     private bool $auxiliary = false;
     private bool $hiddenTitleBar = false;
+    /** Frames asked for while nothing of the window showed, drawn once some of it shows again (mygo's held). */
+    private bool $held = false;
     /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
     private ?array $trafficLights = null;
     private const BACKING_BUFFERED = 2;
@@ -384,11 +386,15 @@ final class Window
                     $this->placeWebViews($bounds->h);
                 }
                 $this->showCursor($this->runtime->cursor);
-                if ($this->runtime->needsFrame) {
-                    Metal::requestFrame($view);
-                }
                 $wake = $this->runtime->nextWake();
-                if ($wake !== null) {
+                if (($this->runtime->needsFrame || $wake !== null) && !$this->showing()) {
+                    // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
+                    // does (windowDidChangeOcclusionState:) rather than draw frames nobody sees, as browsers pause the
+                    // animation frames of windows out of sight (mygo's held). It goes on from where the time puts it.
+                    $this->held = true;
+                } elseif ($this->runtime->needsFrame) {
+                    Metal::requestFrame($view);
+                } elseif ($wake !== null) {
                     View::wake($view, $wake);
                 }
                 if (getenv('MYPHP_STATS')) {
@@ -577,6 +583,13 @@ final class Window
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
+                'windowDidChangeOcclusionState:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
+                    $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                    if ($w !== null && $w->held && $w->showing()) {
+                        $w->held = false; // some of it shows again: what moved goes on (mygo's SurfaceShown)
+                        $w->invalidate();
+                    }
+                }],
                 'windowDidChangeBackingProperties:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { App::rescale(); }],
                 'titleBarLaidOut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // the title bar container's frame changed: AppKit laid it out
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', ObjC::msg('p:', $note, 'object'), 'window'))] ?? null;
@@ -836,6 +849,15 @@ final class Window
     }
 
     /** Asks for a frame after state changed outside the view function (native UI, mygo's Invalidate). */
+    /** Whether some of the window shows on screen: not hidden, minimized, on another space or covered by other windows, which still get frames (mygo's surface visible). */
+    private function showing(): bool
+    {
+        if ($this->popover !== null || $this->ns === null) {
+            return true; // a popover's window is AppKit's, whose occlusion its delegate does not hear of: it draws while it shows, and it shows while it draws
+        }
+        return (ObjC::msg('L:', $this->ns, 'occlusionState') & self::OCCLUSION_VISIBLE) !== 0;
+    }
+
     public function invalidate(): void
     {
         if ($this->page === null && !$this->destroyed) {

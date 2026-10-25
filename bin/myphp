@@ -1,19 +1,42 @@
 #!/usr/bin/env php
 <?php
-// The MyPHP command line, as mygo's: init a project, run it while developing,
-// build an app bundle. Pure PHP, no dependencies.
-//
-//   myphp init <dir> [--template native|web]   scaffold a project
-//   myphp dev [dir] [--lang de]                run it, restart on changes, regenerate the TS client and the catalogs' accessors
-//   myphp generate [dir]                       write the TS client and the accessors of the catalogs
-//   myphp i18n check [dir]                     check the catalogs of the app's messages
-//   myphp build [dir] [--launcher exec|micro] [--out dist]   build <Name>.app
-//   myphp micro [--php 8.4] [--manual]         get static-php-cli and build micro.sfx (once), or print the steps
-//   myphp keygen [--out dir] [--force]         the key pair that signs updates
+// The MyPHP command line, as mygo's: create a project, run it while
+// developing, build its app. Pure PHP, no dependencies. `myphp help` lists
+// the commands, `myphp <command> -h` the flags of one.
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
+const VERSION = '1.12';
+const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
+const USAGE = <<<'TXT'
+myphp is the tool for MyPHP desktop applications.
+
+Usage:
+
+	myphp <command> [arguments]
+
+Commands:
+
+	init <dir>           create a new project (native UI, or a web frontend)
+	install-skills [dir] install or update the bundled MyPHP agent skills
+	generate             write the typed TypeScript client for bound PHP services,
+	                     and the accessors of the app's catalogs of messages
+	i18n check [dir]     check the app's catalogs of messages
+	dev                  run the app in development, restarting it on changes
+	build                build production apps (a .app and a .dmg)
+	micro                build the static PHP that apps built with -launcher micro run on
+	keygen               create the key pair that signs updates
+	doctor               check that the development environment is ready
+	version              print the MyPHP version
+
+Run "myphp <command> -h" for the flags of a command.
+
+TXT;
+
+require FRAMEWORK . '/src/autoload.php';
+
+use MyPHP\Native\Build\{Bundle, Codesign, Dmg, Icns, Resources, Upload};
 
 function fail(string $msg): never
 {
@@ -21,44 +44,155 @@ function fail(string $msg): never
     exit(1);
 }
 
+/** Prints a step done or a note, as mygo's logf. */
+function logf(string $msg): void
+{
+    echo "myphp: $msg\n";
+}
+
+/** Prints a warning, as mygo's warnf. */
+function warnf(string $msg): void
+{
+    fwrite(STDERR, "myphp: warning: $msg\n");
+}
+
+/** The value of the flag -$name or --$name ("-name v", "-name=v"), taken out of $args, or $default (Go's flag package, which mygo's commands use). */
 function option(array &$args, string $name, ?string $default = null): ?string
 {
     foreach ($args as $i => $a) {
-        if ($a === "--$name" && isset($args[$i + 1])) {
+        if (($a === "--$name" || $a === "-$name") && isset($args[$i + 1])) {
             $v = $args[$i + 1];
             array_splice($args, $i, 2);
             return $v;
         }
-        if (str_starts_with($a, "--$name=")) {
-            array_splice($args, $i, 1);
-            return substr($a, strlen($name) + 3);
+        foreach (["--$name=", "-$name="] as $p) {
+            if (str_starts_with($a, $p)) {
+                array_splice($args, $i, 1);
+                return substr($a, strlen($p));
+            }
         }
     }
     return $default;
 }
 
-/** @return array{dir: string, config: array} */
+/** Whether the boolean flag -$name or --$name is given ("-name", "-name=true"), taken out of $args. */
+function flag(array &$args, string $name): bool
+{
+    foreach ($args as $i => $a) {
+        foreach (["--$name", "-$name"] as $f) {
+            if ($a === $f || $a === "$f=true" || $a === "$f=false") {
+                array_splice($args, $i, 1);
+                return $a !== "$f=false";
+            }
+        }
+    }
+    return false;
+}
+
+/** Prints the usage of a command and exits when -h or --help is among its arguments. */
+function help(array $args, string $usage): void
+{
+    if (in_array('-h', $args, true) || in_array('--help', $args, true) || in_array('-help', $args, true)) {
+        echo "Usage: myphp $usage\n";
+        exit(0);
+    }
+}
+
+/** $s, or $or when it is empty: never ?: on a string that may be "0" (mygo's or). */
+function orElse(string $s, string $or): string
+{
+    return $s === '' ? $or : $s;
+}
+
+/** $p made absolute against the project's directory. */
+function path(string $dir, string $p): string
+{
+    return str_starts_with($p, '/') ? $p : "$dir/$p";
+}
+
+/**
+ * The project of the directory in $args and its configuration, myphp.json,
+ * with mygo's defaults and checks (mygo's loadConfig): every field is
+ * optional. name (default: the directory's), identifier (com.myphp.<name>),
+ * version (0.1.0), copyright, icon (a square PNG, default
+ * resources/icon.png), entry (the PHP file the app runs, default app.php),
+ * out (default dist), resources, urlSchemes, fileAssociations, i18n,
+ * updates, devUrl, devCommand, buildCommand, frontendDist, bindings,
+ * framework, and macos: icon (an Assets.car or an Icon Composer .icon),
+ * minimumSystemVersion (12.0), signingIdentity ("-", ad hoc),
+ * entitlements, helperEntitlements, infoPlist, dmgTitle (the name) and
+ * notarize ({"keychainProfile": …, "keychain": …}).
+ *
+ * @return array{dir: string, config: array}
+ */
 function project(array $args): array
 {
-    $dir = realpath($args[0] ?? '.') ?: fail('no such directory');
-    $file = "$dir/myphp.json";
-    is_file($file) || fail("$dir has no myphp.json; run `myphp init` first");
-    $config = json_decode(file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
-    isset($config['name'], $config['entry']) || fail('myphp.json needs "name" and "entry"');
-    foreach ($config['urlSchemes'] ?? [] as $scheme) {
-        is_string($scheme) && preg_match('/^[A-Za-z][A-Za-z0-9+.-]*$/', $scheme) === 1 || fail('urlSchemes: ' . json_encode($scheme) . ' is not a URL scheme (a letter, then letters, digits, +, - or .)');
-    }
-    foreach ($config['fileAssociations'] ?? [] as $i => $fa) {
-        ($fa['ext'] ?? []) !== [] || fail("fileAssociations[$i] has no ext");
-        foreach ($fa['ext'] as $ext) {
-            is_string($ext) && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $ext) === 1 || fail("fileAssociations[$i]: " . json_encode($ext) . ' is not a file name extension (without the dot)');
+    $dir = realpath($args[0] ?? '.') ?: fail(($args[0] ?? '.') . ' does not exist');
+    is_dir($dir) || fail("$dir is not a directory");
+    $file = "$dir/" . CONFIG;
+    $c = [];
+    if (is_file($file)) {
+        try {
+            $c = json_decode((string)file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            fail(CONFIG . ': ' . $e->getMessage());
         }
-        in_array($fa['role'] ?? 'Editor', ['Editor', 'Viewer'], true) || fail("fileAssociations[$i].role is Editor or Viewer");
+        is_array($c) && ($c === [] || !array_is_list($c)) || fail(CONFIG . ' is not an object');
     }
-    if (($config['devUrl'] ?? '') !== '') {
-        preg_match('~^https?://[^/]+~', $config['devUrl']) === 1 || fail('devUrl ' . json_encode($config['devUrl']) . ' is not an http(s) URL');
+    $bad = fn(string $msg): never => fail(CONFIG . ": $msg");
+    $c['name'] = orElse((string)($c['name'] ?? ''), basename($dir));
+    if (($c['identifier'] ?? '') === '') {
+        $c['identifier'] = 'com.myphp.' . orElse(strtolower((string)preg_replace('/[^a-zA-Z0-9]+/', '', $c['name'])), 'app');
     }
-    return ['dir' => $dir, 'config' => $config];
+    $c['version'] = orElse((string)($c['version'] ?? ''), '0.1.0');
+    $c['entry'] = orElse((string)($c['entry'] ?? ''), 'app.php');
+    $c['out'] = orElse((string)($c['out'] ?? ''), 'dist');
+    if (($c['icon'] ?? '') === '' && is_file("$dir/resources/icon.png")) {
+        $c['icon'] = 'resources/icon.png';
+    }
+    $m = $c['macos'] ?? [];
+    is_array($m) && ($m === [] || !array_is_list($m)) || $bad('macos is an object');
+    $m['minimumSystemVersion'] = orElse((string)($m['minimumSystemVersion'] ?? ''), '12.0');
+    $m['signingIdentity'] = orElse((string)($m['signingIdentity'] ?? ''), '-');
+    $m['dmgTitle'] = orElse((string)($m['dmgTitle'] ?? ''), $c['name']);
+    $m['infoPlist'] ??= [];
+    is_array($m['infoPlist']) && ($m['infoPlist'] === [] || !array_is_list($m['infoPlist'])) || $bad('macos.infoPlist is an object of Info.plist keys');
+    $m['helperEntitlements'] ??= [];
+    is_array($m['helperEntitlements']) || $bad('macos.helperEntitlements is an object');
+    foreach ($m['helperEntitlements'] as $name => $ent) {
+        $name !== '' && is_string($ent) && $ent !== '' || $bad('macos.helperEntitlements maps the path of code among the resources to a property list of entitlements, not ' . json_encode((string)$name) . ' to ' . json_encode($ent));
+    }
+    if (isset($m['notarize'])) {
+        is_array($m['notarize']) && is_string($m['notarize']['keychainProfile'] ?? null) && $m['notarize']['keychainProfile'] !== '' || $bad('macos.notarize needs a keychainProfile (see xcrun notarytool store-credentials)');
+        $m['notarize'] = ['keychainProfile' => $m['notarize']['keychainProfile'], 'keychain' => (string)($m['notarize']['keychain'] ?? '')];
+    }
+    if (($m['icon'] ?? '') !== '' && !in_array(strtolower(pathinfo($m['icon'], PATHINFO_EXTENSION)), ['car', 'icon'], true)) {
+        $bad("macos.icon {$m['icon']} is an Assets.car or an Icon Composer .icon");
+    }
+    $c['macos'] = $m;
+    $c['resources'] ??= [];
+    is_array($c['resources']) && array_is_list($c['resources']) || $bad('resources is a list of files and directories');
+    foreach ($c['urlSchemes'] ?? [] as $scheme) {
+        is_string($scheme) && preg_match('/^[a-zA-Z][a-zA-Z0-9+.-]*$/', $scheme) === 1 || $bad('urlSchemes: ' . json_encode($scheme) . ' is not a URL scheme (a letter, then letters, digits, +, - or .)');
+    }
+    foreach ($c['fileAssociations'] ?? [] as $i => $fa) {
+        ($fa['ext'] ?? []) !== [] || $bad("fileAssociations[$i] has no ext");
+        foreach ($fa['ext'] as $ext) {
+            is_string($ext) && preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_+-]*$/', $ext) === 1 || $bad("fileAssociations[$i]: " . json_encode($ext) . ' is not a file name extension (without the dot)');
+        }
+        in_array($fa['role'] ?? 'Editor', ['Editor', 'Viewer'], true) || $bad("fileAssociations[$i].role is Editor or Viewer");
+    }
+    if (($c['devUrl'] ?? '') !== '') {
+        preg_match('~^https?://[^/]+~', $c['devUrl']) === 1 || $bad('devUrl ' . json_encode($c['devUrl']) . ' is not an http(s) URL');
+    }
+    if (isset($c['updates'])) {
+        try {
+            new MyPHP\Native\Update\Publish($dir, $c);
+        } catch (RuntimeException $e) {
+            $bad($e->getMessage());
+        }
+    }
+    return ['dir' => $dir, 'config' => $c];
 }
 
 function sh(array $cmd, ?string $cwd = null): int
@@ -68,24 +202,53 @@ function sh(array $cmd, ?string $cwd = null): int
 }
 
 // ---- init ---------------------------------------------------------------
+const INIT_USAGE = <<<'TXT'
+init [flags] <dir>
+
+Creates a new MyPHP project. The native template shows a user interface
+MyPHP draws itself, written in PHP with MyPHP\UI; the web template a
+frontend of HTML, served at myphp://localhost/, calling the app's PHP
+services through window.myphp. Both get the app's icon, resources/icon.png,
+and the bundled agent skills.
+
+Flags:
+  -name name            application name (default: directory name)
+  -template native|web  the project (default native)
+TXT;
+
+/** $s as a slug: lower-case letters and digits between dashes, "app" for none (mygo's slugify). */
+function slugify(string $s): string
+{
+    return orElse(trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower($s)), '-'), 'app');
+}
+
 function init(array $args): void
 {
+    help($args, INIT_USAGE);
     $template = option($args, 'template', 'native');
-    $dir = $args[0] ?? fail('usage: myphp init <dir> [--template native|web]');
-    in_array($template, ['native', 'web'], true) || fail("unknown template $template");
-    !file_exists($dir) || fail("$dir exists");
-    mkdir($dir, 0755, true);
-    $name = ucfirst(preg_replace('/[^A-Za-z0-9]+/', '', basename($dir)));
-    if ($name === '') { $name = 'App'; } // a directory named 0 names its app 0: not ?:
-    $id = 'com.example.' . strtolower($name);
+    $name = option($args, 'name', '');
+    count($args) === 1 || fail("missing project directory\n\nUsage: myphp " . INIT_USAGE);
+    in_array($template, ['native', 'web'], true) || fail("unknown template \"$template\": native or web");
+    $dir = $args[0];
+    !is_dir($dir) || count(scandir($dir)) === 2 || fail("$dir is not empty");
+    is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
+    $dir = realpath($dir);
+    $name = $name !== '' ? $name : basename($dir);
+    $id = 'com.example.' . str_replace('-', '', slugify($name));
+    $q = var_export($name, true); // in the PHP the templates write
+    $h = htmlspecialchars($name);
+    logf("Creating $dir");
     file_put_contents("$dir/myphp.json", json_encode([
         'name' => $name,
-        'bundleId' => $id,
+        'identifier' => $id,
         'version' => '0.1.0',
         'entry' => 'app.php',
+        'out' => 'build',
         'framework' => realpath(FRAMEWORK),
-        'bindings' => $template === 'web' ? 'src/myphp.ts' : null,
-    ] + ($template === 'web' ? ['frontendDist' => 'src'] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+    ] + ($template === 'web' ? ['bindings' => 'src/myphp.ts', 'frontendDist' => 'src'] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+    mkdir("$dir/resources");
+    file_put_contents("$dir/resources/icon.png", Icns::defaultIcon());
+    writeSkills($dir);
     file_put_contents("$dir/boot.php", <<<'PHP'
     <?php
     // Loads MyPHP: from ./myphp inside a built app, else from the framework
@@ -97,7 +260,7 @@ function init(array $args): void
     require $framework . '/src/autoload.php';
 
     PHP);
-    file_put_contents("$dir/.gitignore", "/dist/\n/vendor/\n.DS_Store\n");
+    file_put_contents("$dir/.gitignore", "/build/\n/.myphp/\n/vendor/\n.DS_Store\n");
     if ($template === 'native') {
         file_put_contents("$dir/app.php", <<<PHP
         <?php
@@ -110,9 +273,9 @@ function init(array $args): void
 
         \$state = ['count' => 0];
 
-        App::setName('$name');
+        App::setName($q);
         App::whenReady(function () use (&\$state) {
-            new Window(new WindowOptions(title: '$name', width: 420, height: 260,
+            new Window(new WindowOptions(title: $q, width: 420, height: 260,
                 content: Content::view(function (Context \$c) use (&\$state) {
                     \$c->column(24, 12, 1);
                       \$c->text("Count: {\$state['count']}", 24);
@@ -149,9 +312,9 @@ function init(array $args): void
 
         Ipc::bind(new Greeter());
 
-        App::setName('$name');
+        App::setName($q);
         App::whenReady(function () {
-            new Window(new WindowOptions(title: '$name', width: 640, height: 420,
+            new Window(new WindowOptions(title: $q, width: 640, height: 420,
                 url: '/')); // the frontend: frontendDist (src) at myphp://localhost/, or devUrl under myphp dev
         });
         App::run();
@@ -160,7 +323,7 @@ function init(array $args): void
         file_put_contents("$dir/src/index.html", <<<HTML
         <!doctype html><meta charset="utf-8">
         <body style="font: 15px -apple-system, system-ui; padding: 24px">
-        <h2>$name</h2>
+        <h2>$h</h2>
         <p id="out">…</p>
         <script>
           // The typed client, src/myphp.ts, is regenerated by `myphp dev`; plain JS uses window.myphp.
@@ -169,7 +332,8 @@ function init(array $args): void
 
         HTML);
     }
-    echo "created $dir ($template)\n  cd $dir && " . basename($_SERVER['argv'][0]) . " dev\n";
+    $rel = str_starts_with($dir, getcwd() . '/') ? substr($dir, strlen(getcwd()) + 1) : $dir;
+    echo "\nCreated $name. Next steps:\n\n  cd $rel\n  myphp dev      # run it, restarting on changes\n  myphp build    # package the app\n\n";
 }
 
 // ---- dev ----------------------------------------------------------------
@@ -211,13 +375,13 @@ function generateBindings(string $dir, array $config): void
 
 function dev(array $args): void
 {
+    help($args, "dev [flags] [dir]\n\nRuns the app in development: it writes the TypeScript client of a frontend\nand the accessors of the catalogs, runs devCommand from myphp.json (such as\na Vite dev server), waits for devUrl to answer, which the app then loads in\nplace of its built frontend, and runs the entry. Without devUrl, the app\nserves frontendDist from disk. Changes to its PHP, HTML, JS, CSS or JSON\nfiles restart it.\n\nFlags:\n  -watch 0   do not restart on changes\n  -lang tag  run the app in this language (as de, or the pseudo locales en-XA and ar-XB), without keeping it");
     $watch = option($args, 'watch', '1') !== '0';
     $lang = option($args, 'lang', '');
     ['dir' => $dir, 'config' => $c] = project($args);
     $entry = "$dir/{$c['entry']}";
     $env = ['MYPHP_DEV' => '1'];
     if ($lang !== '') { // the app runs in that language, or a pseudo locale, without keeping it (MYPHP_LOCALE)
-        require_once FRAMEWORK . '/src/autoload.php';
         ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("--lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
         $env['MYPHP_LOCALE'] = $tag;
     }
@@ -280,96 +444,323 @@ function waitForURL(string $url, $server): void
 }
 
 // ---- build --------------------------------------------------------------
+const BUILD_USAGE = <<<'TXT'
+build [flags] [dir]
+
+Builds the production app for each platform. It runs buildCommand from
+myphp.json, then makes <out>/darwin-<arch>/<name>.app: the app's PHP files
+and the framework's, the frontendDist files, served at myphp://localhost/,
+the contents of the resources directory and the resources listed in
+myphp.json in Contents/Resources (resources/darwin, and resources/darwin-arm64
+or resources/darwin-amd64, only ship with the apps for that platform;
+darwin/universal combines darwin-arm64 and darwin-amd64), signed with
+macos.signingIdentity (ad hoc by default), and "<name> <version> <arch>.dmg",
+without the arch for darwin/universal, whose window invites dragging the app
+to Applications. The programs among the resources are signed with the app.
+
+Set macos.signingIdentity in myphp.json (or -sign) to a Developer ID to ship
+outside the Mac App Store, and macos.notarize to notarize the disk image.
+
+With updates in myphp.json and the key of myphp keygen in
+MYPHP_UPDATER_PRIVATE_KEY, each platform also gets a signed update archive,
+delta updates from the last versions published (updates.deltas), and
+update-<platform>.json: publish them where updates point to, or with -upload.
+
+Flags:
+  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal (default: this Mac's)
+  -launcher exec|micro  exec runs the PHP that built the app; micro makes one static binary (see myphp micro)
+  -php version          the PHP version of micro.sfx, when myphp micro builds it
+  -debug                keep development features such as the inspector
+  -skip-build-command   do not run buildCommand
+  -skip-dmg             do not create a disk image
+  -skip-notarize        do not notarize even when macos.notarize is set
+  -sign identity        signing identity (default: macos.signingIdentity, or "-" for ad hoc)
+  -o dir                output directory (default: out from myphp.json, or dist)
+  -upload               upload the disk images and updates to the GitHub release of this version (updates.github), as a draft, or to the bucket of updates.s3
+TXT;
+
+/** This Mac's architecture, as the targets name it. */
+function hostArch(): string
+{
+    return in_array(strtolower(php_uname('m')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64';
+}
+
 function build(array $args): void
 {
+    help($args, BUILD_USAGE);
+    $platforms = option($args, 'platform', 'darwin/' . hostArch());
     $launcher = option($args, 'launcher', 'exec');
-    $outDir = option($args, 'out', 'dist');
-    $icon = option($args, 'icon', null);
+    $php = option($args, 'php');
+    $sign = option($args, 'sign', '');
+    $out = option($args, 'o', '');
+    $opts = ['debug' => flag($args, 'debug'), 'skipDMG' => flag($args, 'skip-dmg'), 'skipNotarize' => flag($args, 'skip-notarize'), 'launcher' => $launcher];
+    $skipBuildCommand = flag($args, 'skip-build-command');
+    $upload = flag($args, 'upload');
     ['dir' => $dir, 'config' => $c] = project($args);
-    in_array($launcher, ['exec', 'micro'], true) || fail("--launcher is exec or micro");
-    // Check what the launcher needs before touching dist, so a failed build leaves the last one.
+    if ($out !== '') {
+        $c['out'] = $out;
+    }
+    in_array($launcher, ['exec', 'micro'], true) || fail('-launcher is exec or micro');
+    $targets = [];
+    foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
+        [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
+        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || fail("myphp builds macOS apps: the platform is darwin/arm64, darwin/amd64 or darwin/universal, not $p");
+        $launcher !== 'micro' || $arch === hostArch() || fail("-launcher micro builds for this Mac, darwin/" . hostArch() . ": micro.sfx is of its architecture");
+        $targets[] = $arch;
+    }
+    $targets !== [] || fail('-platform names no platform');
+    if ($upload) {
+        try {
+            Upload::check($c, CONFIG);
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        }
+    }
+    $opts['sign'] = $sign !== '' ? $sign : $c['macos']['signingIdentity'];
+    if (isset($c['macos']['notarize']) && !$opts['skipNotarize'] && $opts['sign'] === '-') {
+        fail('notarization needs a Developer ID signing identity: set macos.signingIdentity or pass -sign');
+    }
+    // Check what the launcher needs before touching the output, so a failed build leaves the last one.
     if ($launcher === 'exec') {
         trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
     } else {
-        [$spc, $micro] = ensureMicro(option($args, 'php', null));
+        [$opts['spc'], $opts['micro']] = ensureMicro($php);
     }
+    $started = microtime(true);
+    // The accessors of the catalogs come first, which the app calls, then the TypeScript client: the frontend build type-checks and bundles them.
     generateI18n($dir, $c);
-    // The frontend, built by buildCommand, shipped as Resources/frontend, which the app serves at myphp://localhost/ (mygo's embedded frontendDist): built before the last app goes.
-    if (($c['buildCommand'] ?? '') !== '') {
+    generateBindings($dir, $c);
+    if (($c['buildCommand'] ?? '') !== '' && !$skipBuildCommand) {
+        logf('Building the frontend');
         sh(['/bin/sh', '-c', $c['buildCommand']], $dir) === 0 || fail("{$c['buildCommand']} failed");
+        logf('Built the frontend');
     }
-    $dist = null;
     if (($c['frontendDist'] ?? '') !== '') {
-        $dist = str_starts_with($c['frontendDist'], '/') ? $c['frontendDist'] : "$dir/{$c['frontendDist']}";
+        $dist = path($dir, $c['frontendDist']);
         is_dir($dist) || fail("frontendDist $dist does not exist; set buildCommand in myphp.json to build it");
         count(scandir($dist)) > 2 || fail("frontendDist $dist is empty");
     }
-    $name = $c['name'];
-    $app = (str_starts_with($outDir, '/') ? $outDir : "$dir/$outDir") . "/$name.app";
-    $contents = "$app/Contents";
-    if (is_dir($app)) {
-        sh(['rm', '-rf', $app]);
+    $built = [];
+    foreach ($targets as $arch) {
+        try {
+            array_push($built, ...buildPlatform($dir, $c, $arch, $opts));
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        }
     }
-    foreach (["$contents/MacOS", "$contents/Resources/app/myphp"] as $d) {
-        mkdir($d, 0755, true);
+    echo buildSummary($dir, $c, $built, microtime(true) - $started);
+    if ($upload) {
+        try {
+            Upload::publish($c, $c['version'], $built, publisher($dir, $c)?->notes() ?? '', 'myphp/' . VERSION, CONFIG, logf(...));
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        }
     }
-    if ($dist !== null) {
-        copyTree($dist, "$contents/Resources/frontend", ['.DS_Store']);
+}
+
+/** What a build made, by directory, with sizes (mygo's buildSummary). @param list<string> $artifacts */
+function buildSummary(string $dir, array $c, array $artifacts, float $took): string
+{
+    $s = "\n  ✓ Built {$c['name']} {$c['version']} in " . ($took < 60 ? sprintf('%.1fs', $took) : sprintf('%dm%02ds', intdiv((int)$took, 60), (int)$took % 60)) . "\n";
+    $width = max(array_map(fn($a) => mb_strlen(basename($a)), $artifacts ?: ['']));
+    $shown = '';
+    foreach ($artifacts as $a) {
+        $d = (str_starts_with(dirname($a), "$dir/") ? substr(dirname($a), strlen($dir) + 1) : dirname($a)) . '/';
+        if ($d !== $shown) {
+            $shown = $d;
+            $s .= "\n    $d\n";
+        }
+        $name = basename($a);
+        $s .= "      $name" . str_repeat(' ', $width - mb_strlen($name)) . '  ' . sprintf('%9s', formatSize(bytesOf($a))) . "\n";
     }
-    // The app's files and the framework's src, as the bundle's Resources/app.
-    copyTree($dir, "$contents/Resources/app", ['dist', 'vendor', 'node_modules', '.git', 'myphp', '.DS_Store']);
-    copyTree(realpath($c['framework'] ?? FRAMEWORK) . '/src', "$contents/Resources/app/myphp/src", []);
-    // The native libraries of the plugins the app uses, at the top of Resources, where the plugins look first (mygo's natives).
-    foreach (natives($dir, realpath($c['framework'] ?? FRAMEWORK)) as [$file, $path]) {
-        copy($path, "$contents/Resources/$file") || fail("cannot copy $path");
-        chmod("$contents/Resources/$file", 0755);
+    return $s;
+}
+
+function bytesOf(string $path): int
+{
+    if (!is_dir($path) || is_link($path)) {
+        return is_file($path) ? (int)filesize($path) : 0;
     }
-    $iconFile = $icon ?? ($c['icon'] ?? null);
-    if ($iconFile !== null) {
-        $iconFile = str_starts_with($iconFile, '/') ? $iconFile : "$dir/$iconFile";
-        is_file($iconFile) && str_ends_with($iconFile, '.icns') || fail("icon must be an .icns file: $iconFile");
-        copy($iconFile, "$contents/Resources/$name.icns");
+    $n = 0;
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS)) as $f) {
+        if ($f->isFile() && !$f->isLink()) {
+            $n += $f->getSize();
+        }
     }
-    $localizations = writeLocalizations($dir, $c, "$contents/Resources");
-    file_put_contents("$contents/Info.plist", plist(array_replace([
-        'CFBundleName' => $name,
-        'CFBundleDisplayName' => $name,
-        'CFBundleIdentifier' => $c['bundleId'] ?? 'com.example.' . strtolower($name),
-        'CFBundleVersion' => $c['version'] ?? '0.1.0',
-        'CFBundleShortVersionString' => $c['version'] ?? '0.1.0',
-        'CFBundleExecutable' => $name,
-        'CFBundlePackageType' => 'APPL',
-        'CFBundleInfoDictionaryVersion' => '6.0',
-        'LSMinimumSystemVersion' => '11.0',
-        'NSHighResolutionCapable' => true,
-        'NSPrincipalClass' => 'NSApplication',
-        'LSApplicationCategoryType' => 'public.app-category.utilities',
-    ] + ($iconFile !== null ? ['CFBundleIconFile' => "$name.icns"] : []) + $localizations + updatePlist($dir, $c) + openPlist($c), infoPlist($c))));
-    file_put_contents("$contents/PkgInfo", 'APPL????');
-    if ($launcher === 'exec') {
-        buildExecLauncher("$contents/MacOS/$name", $c['entry']);
-    } else {
-        buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $spc, $micro);
+    return $n;
+}
+
+/** A number of bytes for messages (mygo's formatSize). */
+function formatSize(int $n): string
+{
+    return $n < 1 << 20 ? sprintf('%d KB', ($n + (1 << 10) - 1) >> 10) : sprintf('%.1f MB', $n / (1 << 20));
+}
+
+/**
+ * Builds and packages the app for darwin/$arch into <out>/darwin-$arch and
+ * returns the artifacts (mygo's buildPlatform). Everything is prepared in a
+ * staging directory that then replaces the platform directory, so a failed
+ * build keeps the previous one and nothing stale remains.
+ *
+ * @return list<string>
+ */
+function buildPlatform(string $dir, array $c, string $arch, array $opts): array
+{
+    $out = path($dir, $c['out']);
+    is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
+    $stage = "$out/.staging-darwin-$arch-" . getmypid();
+    mkdir($stage, 0755);
+    try {
+        $m = $c['macos'];
+        $framework = realpath($c['framework'] ?? FRAMEWORK) ?: fail('framework ' . $c['framework'] . ' does not exist');
+        $res = Resources::collect($dir, CONFIG, $c['resources'], 'darwin', $arch, natives($dir, $framework, $arch), Resources::reserved(($m['icon'] ?? '') !== ''));
+        if (($other = Resources::otherArch($dir, 'darwin', $arch)) !== '') {
+            warnf('No ' . Resources::DIR . "/darwin-$arch for darwin/$arch, though there is " . Resources::DIR . "/$other");
+        }
+        if (!$opts['debug'] && getenv('MYPHP_INSPECTOR') === '1') {
+            logf('Keeping the inspector of native UI (MYPHP_INSPECTOR=1)');
+        }
+        $name = orElse(Dmg::fsName($c['name']), 'app');
+        $app = "$stage/$name.app";
+        $contents = "$app/Contents";
+        foreach (["$contents/MacOS", "$contents/Resources/app/myphp"] as $d) {
+            mkdir($d, 0755, true);
+        }
+        logf("Making darwin/$arch");
+        // The app's files and the framework's src, as the bundle's Resources/app; its resources, its build output and its hidden files (.git, .agents, .myphp) stay out.
+        $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : []; // in Resources/frontend
+        copyTree($dir, "$contents/Resources/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree("$framework/src", "$contents/Resources/app/myphp/src", []);
+        // The frontend, served at myphp://localhost/ (mygo's embedded frontendDist).
+        if (($c['frontendDist'] ?? '') !== '') {
+            copyTree(path($dir, $c['frontendDist']), "$contents/Resources/frontend", ['.DS_Store']);
+        }
+        [$car, $carIcns] = appCatalog($dir, $c);
+        $icns = $carIcns ?? appIcon($dir, $c); // the .icon's own rendering for older macOS
+        if ($icns !== null) {
+            file_put_contents("$contents/Resources/" . Resources::ICON, $icns);
+        }
+        if ($car !== null) {
+            file_put_contents("$contents/Resources/" . Resources::CATALOG, $car);
+        }
+        Resources::copy($res, "$contents/Resources");
+        $localizations = writeLocalizations($dir, $c, "$contents/Resources");
+        file_put_contents("$contents/Info.plist", Bundle::xml(Bundle::infoPlist($c, $name, $icns !== null, $car !== null, $localizations, updatePlist($dir, $c, "darwin-$arch"), !$opts['debug'])));
+        file_put_contents("$contents/PkgInfo", 'APPL????');
+        if ($opts['launcher'] === 'exec') {
+            buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch);
+        } else {
+            buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $opts['spc'], $opts['micro']);
+        }
+        $entitlements = ($m['entitlements'] ?? '') !== '' ? path($dir, $m['entitlements']) : '';
+        $helpers = array_map(fn(string $f) => path($dir, $f), $m['helperEntitlements']);
+        Codesign::sign($app, $opts['sign'], $entitlements, $helpers, !$opts['debug'], CONFIG);
+        logf('Signed ' . basename($app) . ($opts['sign'] === '-' ? ' (ad hoc)' : ''));
+        $artifacts = [$app];
+        if (!$opts['skipDMG']) {
+            $notarize = $opts['skipNotarize'] ? null : ($m['notarize'] ?? null);
+            $artifacts[] = Dmg::build($app, $stage, $m['dmgTitle'], Dmg::fileName($c['name'], $c['version'], $arch), $opts['sign'], $notarize, logf(...));
+        }
+        array_push($artifacts, ...writeUpdate($dir, $c, $stage, basename($app), "darwin-$arch"));
+        $final = "$out/darwin-$arch";
+        replacePath($stage, $final);
+        return array_map(fn(string $a) => "$final/" . basename($a), $artifacts);
+    } finally {
+        if (is_dir($stage)) {
+            sh(['rm', '-rf', $stage]);
+        }
     }
-    echo "built $app ($launcher launcher)\n  open \"$app\"\n";
-    foreach (writeUpdate($dir, $c, dirname($app), basename($app)) as $f) {
-        echo "  $f\n";
+}
+
+/** Moves $src to $dst, replacing what $dst held; the old one is renamed away before it is removed, so a running app keeps its files (mygo's replacePath). */
+function replacePath(string $src, string $dst): void
+{
+    $old = '';
+    if (file_exists($dst) || is_link($dst)) {
+        $old = dirname($dst) . '/.old-' . getmypid() . '-' . basename($dst);
+        sh(['rm', '-rf', $old]);
+        rename($dst, $old) || fail("cannot move $dst away");
+    }
+    if (!rename($src, $dst)) {
+        if ($old !== '') {
+            rename($old, $dst);
+        }
+        fail("cannot move the build to $dst");
+    }
+    if ($old !== '') {
+        sh(['rm', '-rf', $old]);
+    }
+}
+
+/** The configured icon (a PNG) as .icns, or null without one (mygo's appIcon). */
+function appIcon(string $dir, array $c): ?string
+{
+    if (($c['icon'] ?? '') === '') {
+        return null;
+    }
+    $src = @file_get_contents(path($dir, $c['icon']));
+    $src !== false || fail("icon {$c['icon']}: cannot read it");
+    try {
+        return Icns::fromPng($src);
+    } catch (RuntimeException $e) {
+        fail("icon {$c['icon']}: {$e->getMessage()}");
+    }
+}
+
+/**
+ * The asset catalog of macos.icon and the .icns actool rendered from the
+ * same icon, or nulls without one (mygo's appCatalog): an Assets.car as it
+ * is, or an Icon Composer .icon compiled with actool, which needs Xcode 26
+ * or later; one that cannot be compiled leaves the app with its .icns.
+ *
+ * @return array{?string, ?string}
+ */
+function appCatalog(string $dir, array $c): array
+{
+    $src = (string)($c['macos']['icon'] ?? '');
+    if ($src === '') {
+        return [null, null];
+    }
+    $path = path($dir, $src);
+    if (strtolower(pathinfo($src, PATHINFO_EXTENSION)) !== 'icon') {
+        $car = @file_get_contents($path);
+        return [$car !== false ? $car : fail("macos.icon $src: cannot read it"), null];
+    }
+    is_dir($path) || fail("macos.icon $src is not an Icon Composer document, which is a directory");
+    $work = sys_get_temp_dir() . '/myphp-actool-' . getmypid();
+    try {
+        // actool names the app icon after the document, which is AppIcon.icon in the catalog of every app.
+        mkdir("$work/out", 0755, true);
+        sh(['cp', '-R', $path, "$work/" . Resources::ICON_NAME . '.icon']);
+        [, $msg] = MyPHP\Native\Build\Cmd::output(['xcrun', 'actool', "$work/" . Resources::ICON_NAME . '.icon', '--compile', "$work/out", '--output-format', 'human-readable-text',
+            '--platform', 'macosx', '--target-device', 'mac', '--minimum-deployment-target', $c['macos']['minimumSystemVersion'],
+            '--app-icon', Resources::ICON_NAME, '--output-partial-info-plist', "$work/out/partial.plist"]);
+        $car = @file_get_contents("$work/out/" . Resources::CATALOG);
+        $icns = @file_get_contents("$work/out/" . Resources::ICON_NAME . '.icns');
+        if ($car === false || $icns === false) {
+            warnf("Skipping $src: actool could not compile it (it needs Xcode 26 or later)\n" . trim($msg));
+            return [null, null];
+        }
+        logf('Compiled ' . basename($src));
+        return [$car, $icns];
+    } finally {
+        sh(['rm', '-rf', $work]);
     }
 }
 
 /**
  * The native libraries that the plugins the app uses name in their
  * mygo-plugin.json (src/Plugins/<Name>/), the same file and builds as
- * mygo's, downloaded into the user's cache once: [file name, path] each
- * (mygo's natives). A plugin is used when the app's PHP files name its
- * namespace (MyPHP\Plugins\<Name>), as mygo's are the packages the app
- * imports.
+ * mygo's, downloaded into the user's cache once, as resources: [file name,
+ * path], and for a universal app the darwin-amd64 build's path, which
+ * combine into one file (mygo's natives). A plugin is used when the app's
+ * PHP files name its namespace (MyPHP\Plugins\<Name>), as mygo's are the
+ * packages the app imports.
  *
- * @return list<array{0: string, 1: string}>
+ * @return list<array{0: string, 1: string, 2?: string}>
  */
-function natives(string $appDir, string $framework): array
+function natives(string $appDir, string $framework, string $arch): array
 {
-    $target = 'darwin-' . (in_array(strtolower(php_uname('m')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64');
     $sources = '';
     foreach (phpFiles($appDir, ['dist', 'vendor', 'node_modules', '.git', 'myphp']) as $f) {
         $sources .= file_get_contents($f) . "\n";
@@ -384,7 +775,14 @@ function natives(string $appDir, string $framework): array
         foreach ($n['libraries'] ?? [] as $l) {
             if (isset($seen[$l['name']])) { continue; }
             $seen[$l['name']] = true;
-            $f = $l['files'][$target] ?? fail("the $plugin plugin needs {$l['name']}, which has no build for $target");
+            $pick = fn(string $target): array => $l['files'][$target] ?? fail("the $plugin plugin needs {$l['name']}, which has no build for " . str_replace('-', '/', $target));
+            if ($arch === 'universal') {
+                $armFile = $pick('darwin-arm64'); $amdFile = $pick('darwin-amd64');
+                $armFile['name'] === $amdFile['name'] || fail("$json: {$l['name']} is {$armFile['name']} on arm64 but {$amdFile['name']} on amd64");
+                $out[] = [$armFile['name'], fetchNative($armFile), fetchNative($amdFile)];
+                continue;
+            }
+            $f = $pick("darwin-$arch");
             $out[] = [$f['name'], fetchNative($f)];
         }
     }
@@ -447,80 +845,26 @@ function fetchNative(array $f): string
     return $path;
 }
 
-function copyTree(string $from, string $to, array $skip): void
+/** Copies the tree $from to $to, but the names $skip lists, and with $hidden false those starting with a dot. */
+function copyTree(string $from, string $to, array $skip, bool $hidden = true): void
 {
     @mkdir($to, 0755, true);
     foreach (scandir($from) ?: fail("cannot read $from") as $name) {
-        if ($name === '.' || $name === '..' || in_array($name, $skip, true)) {
+        if ($name === '.' || $name === '..' || in_array($name, $skip, true) || !$hidden && $name[0] === '.') {
             continue;
         }
-        is_dir("$from/$name") ? copyTree("$from/$name", "$to/$name", $skip) : copy("$from/$name", "$to/$name");
+        is_dir("$from/$name") ? copyTree("$from/$name", "$to/$name", $skip, $hidden) : copy("$from/$name", "$to/$name");
     }
-}
-
-function plist(array $kv): string
-{
-    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n" . plistValue($kv, '') . "</plist>\n";
-}
-
-/** A value as XML property list, indented by $indent: lists are arrays, other arrays dicts (mygo's writePlistValue). */
-function plistValue(mixed $v, string $indent): string
-{
-    $esc = fn(string $s): string => htmlspecialchars($s, ENT_XML1);
-    if (is_array($v) && array_is_list($v) && $v !== []) {
-        return "$indent<array>\n" . implode('', array_map(fn($e) => plistValue($e, "$indent\t"), $v)) . "$indent</array>\n";
-    }
-    if (is_array($v)) {
-        $x = "$indent<dict>\n";
-        foreach ($v as $k => $e) {
-            $x .= "$indent\t<key>" . $esc((string)$k) . "</key>\n" . plistValue($e, "$indent\t");
-        }
-        return "$x$indent</dict>\n";
-    }
-    return $indent . match (true) {
-        is_bool($v) => $v ? '<true/>' : '<false/>',
-        is_int($v) => "<integer>$v</integer>",
-        is_float($v) => "<real>$v</real>",
-        default => '<string>' . $esc((string)$v) . '</string>',
-    } . "\n";
-}
-
-/** myphp.json's "macos": {"infoPlist": {…}}, extra keys of the bundle's Info.plist, over those the build writes (mygo's MacOS.InfoPlist), as "LSUIElement": true for an app without a Dock icon from its start. @return array<string, mixed> */
-function infoPlist(array $c): array
-{
-    $extra = $c['macos']['infoPlist'] ?? [];
-    is_array($extra) && ($extra === [] || !array_is_list($extra)) || fail('macos.infoPlist is an object of Info.plist keys');
-    return $extra;
-}
-
-/** The Info.plist keys of myphp.json's "urlSchemes" and "fileAssociations", which the system opens with the app (mygo's bundle.go). @return array<string, mixed> */
-function openPlist(array $c): array
-{
-    $d = [];
-    $docs = [];
-    foreach ($c['fileAssociations'] ?? [] as $fa) {
-        $doc = ['CFBundleTypeName' => $fa['name'] ?? strtoupper($fa['ext'][0]) . ' file', 'CFBundleTypeRole' => $fa['role'] ?? 'Editor', 'LSHandlerRank' => 'Default', 'CFBundleTypeExtensions' => array_values($fa['ext'])];
-        if (($fa['mimeType'] ?? '') !== '') {
-            $doc['CFBundleTypeMIMETypes'] = [$fa['mimeType']];
-        }
-        $docs[] = $doc;
-    }
-    if ($docs !== []) {
-        $d['CFBundleDocumentTypes'] = $docs;
-    }
-    if (($c['urlSchemes'] ?? []) !== []) {
-        $d['CFBundleURLTypes'] = [['CFBundleURLName' => $c['bundleId'] ?? 'com.example.' . strtolower($c['name']), 'CFBundleURLSchemes' => array_values($c['urlSchemes'])]];
-    }
-    return $d;
 }
 
 /**
  * A small C program as the executable: it execs the php this build found
  * (or $MYPHP_PHP) on Resources/app/<entry>. For development: the app then
  * depends on that php being installed, and the process is php's, not the
- * bundle's. Needs a C compiler (Xcode command line tools).
+ * bundle's. Needs a C compiler (Xcode command line tools), which compiles
+ * it for $arch, both of a universal app's.
  */
-function buildExecLauncher(string $out, string $entry): void
+function buildExecLauncher(string $out, string $entry, string $arch): void
 {
     $php = PHP_BINARY;
     $flags = implode(', ', array_map(fn($f) => '"' . $f . '"', PHP_FLAGS));
@@ -547,9 +891,12 @@ function buildExecLauncher(string $out, string $entry): void
     }
 
     C;
-    $cFile = tempnam(sys_get_temp_dir(), 'myphp') . '.c';
+    $tmp = tempnam(sys_get_temp_dir(), 'myphp');
+    $cFile = "$tmp.c";
+    rename($tmp, $cFile);
     file_put_contents($cFile, $src);
-    $code = sh(['cc', '-O2', '-Wall', '-o', $out, $cFile]);
+    $archs = match ($arch) { 'arm64' => ['-arch', 'arm64'], 'amd64' => ['-arch', 'x86_64'], 'universal' => ['-arch', 'arm64', '-arch', 'x86_64'] };
+    $code = sh(['cc', '-O2', '-Wall', ...$archs, '-o', $out, $cFile]);
     unlink($cFile);
     $code === 0 || fail('compiling the launcher failed (is Xcode\'s command line tools installed? xcode-select --install)');
 }
@@ -640,7 +987,8 @@ function ensureMicro(?string $phpVersion = null): array
 
 function micro(array $args): void
 {
-    if (option($args, 'manual', null) !== null || in_array('--manual', $args, true)) {
+    help($args, "micro [-php 8.4] [-manual]\n\nGets static-php-cli and builds micro.sfx once, the static PHP that apps built\nwith -launcher micro run on; -manual prints the steps instead.");
+    if (flag($args, 'manual')) {
         $ext = MICRO_EXTENSIONS; $php = MICRO_PHP; $url = SPC_NIGHTLY . 'spc-macos-aarch64';
         echo <<<TXT
         What `myphp micro` does, by hand:
@@ -688,7 +1036,6 @@ function i18nConfig(string $dir, array $c): ?array
 /** Reads and checks the catalogs of the app, against MyPHP's own, whose keys "myphp.<key>" they change. @return array{array, list<array>} */
 function loadCatalogs(array $i): array
 {
-    require_once FRAMEWORK . '/src/autoload.php';
     is_dir($i['path']) || fail("i18n.dir {$i['dir']} is not a directory: create it with {$i['source']}.json, the messages of the source language");
     [$fw, $diags] = MyPHP\Native\I18nGen::load(FRAMEWORK . '/src/l10n', 'myphp', 'en', 'myphp');
     ($e = MyPHP\Native\I18nGen::errors($diags)) === [] || fail("MyPHP's own catalog:\n" . implode("\n", $e));
@@ -698,6 +1045,7 @@ function loadCatalogs(array $i): array
 /** Checks the catalogs (mygo i18n check): that their messages parse, that translations have the arguments of the source language's messages and the plural forms of their languages, and which messages they lack. Errors exit with status 1; warnings do not. */
 function i18nCheck(array $args): void
 {
+    help($args, "i18n check [dir]\n\nChecks the catalogs of the app's messages.");
     (array_shift($args) ?? '') === 'check' || fail("usage: myphp i18n check [dir]\n\nChecks the catalogs of the app's messages (i18n in myphp.json): that their\nmessages parse, that translations have the arguments of the source\nlanguage's messages and the plural forms of their languages, and which\nmessages they lack. Errors exit with status 1; warnings do not.");
     ['dir' => $dir, 'config' => $c] = project($args);
     $i = i18nConfig($dir, $c) ?? fail('the project has no catalogs: set i18n in myphp.json, as "i18n": {"dir": "locales", "source": "en"}');
@@ -793,7 +1141,7 @@ function writeLocalizations(string $dir, array $c, string $resources): array
         $lproj = lprojName($tag);
         @mkdir("$resources/$lproj.lproj", 0755, true);
         $strings = $name !== '' && $name !== $c['name'] ? ['CFBundleName' => $name, 'CFBundleDisplayName' => $name] : [];
-        file_put_contents("$resources/$lproj.lproj/InfoPlist.strings", plist($strings));
+        file_put_contents("$resources/$lproj.lproj/InfoPlist.strings", Bundle::xml($strings));
         if (!in_array($lproj, $names, true)) { $names[] = $lproj; }
     }
     // The app's own language, which the system falls back to, and those it ships, which AppKit picks its texts' language among.
@@ -803,6 +1151,7 @@ function writeLocalizations(string $dir, array $c, string $resources): array
 /** Writes the TypeScript client and the accessors of the catalogs (mygo generate). */
 function generate(array $args): void
 {
+    help($args, "generate [dir]\n\nWrites the typed TypeScript client for bound PHP services (bindings in\nmyphp.json), and the accessors of the app's catalogs of messages.");
     ['dir' => $dir, 'config' => $c] = project($args);
     generateI18n($dir, $c);
     generateBindings($dir, $c);
@@ -814,62 +1163,109 @@ function generate(array $args): void
 // update-<target>.json, which apps built with the public key check; the
 // work is MyPHP\Native\Update\Publish's.
 
-/** The framework's Publish, with myphp.json's "updates", or null without them. */
+/** The framework's Publish, with myphp.json's "updates" (project() checked them), or null without them. */
 function publisher(string $dir, array $c): ?MyPHP\Native\Update\Publish
 {
-    if (!isset($c['updates'])) {
-        return null;
-    }
-    require_once FRAMEWORK . '/src/autoload.php';
-    try {
-        return new MyPHP\Native\Update\Publish($dir, $c);
-    } catch (RuntimeException $e) {
-        fail($e->getMessage());
-    }
+    return isset($c['updates']) ? new MyPHP\Native\Update\Publish($dir, $c) : null;
 }
 
-/** The Info.plist keys that point the app at its manifest. @return array<string, string> */
-function updatePlist(string $dir, array $c): array
+/** The Info.plist keys that point the app for $target at its manifest. @return array<string, string> */
+function updatePlist(string $dir, array $c, string $target): array
 {
-    return publisher($dir, $c)?->plist() ?? [];
+    return publisher($dir, $c)?->plist($target) ?? [];
 }
 
-/** The update files of the app $entry built in $out. @return list<string> */
-function writeUpdate(string $dir, array $c, string $out, string $entry): array
+/** The update files of the app $entry built for $target in $out. @return list<string> */
+function writeUpdate(string $dir, array $c, string $out, string $entry, string $target): array
 {
-    $p = publisher($dir, $c);
-    if ($p === null) {
-        return [];
-    }
-    try {
-        return $p->write($out, $entry, fn(string $line) => print("myphp: $line\n"));
-    } catch (RuntimeException $e) {
-        fail($e->getMessage());
-    }
+    return publisher($dir, $c)?->write($out, $entry, $target, fn(string $line) => logf($line)) ?? [];
 }
 
 /** Creates the Ed25519 key pair that signs updates (mygo's keygen). */
 function keygen(array $args): void
 {
+    help($args, "keygen [-out dir] [-force]\n\nCreates the key pair that signs updates.");
     $out = option($args, 'out', getenv('HOME') . '/Library/Application Support/myphp/update-keys');
-    require_once FRAMEWORK . '/src/autoload.php';
     try {
-        echo MyPHP\Native\Update\Publish::keygen($out, in_array('--force', $args, true));
+        echo MyPHP\Native\Update\Publish::keygen($out, flag($args, 'force'));
     } catch (RuntimeException $e) {
         fail($e->getMessage());
     }
 }
 
+// ---- doctor, skills -----------------------------------------------------
+/** Checks the tools MyPHP needs (mygo's doctor): failed checks exit with status 1. */
+function doctor(array $args): void
+{
+    help($args, "doctor\n\nChecks the tools and system libraries MyPHP needs.");
+    $ok = true;
+    $check = function (string $name, bool $good, string $detail) use (&$ok): void {
+        if (!$good) { $ok = false; }
+        printf("%s %-10s %s\n", $good ? "\033[32m✓\033[0m" : "\033[31m✗\033[0m", $name, $detail);
+    };
+    $optional = function (string $name, string $feature, string $found): void {
+        if ($found !== '') {
+            printf("\033[32m✓\033[0m %-10s %s\n", $name, $found);
+        } else {
+            printf("- %-10s not found (optional: %s)\n", $name, $feature);
+        }
+    };
+    $check('php', PHP_VERSION_ID >= 80300 && extension_loaded('ffi'), PHP_VERSION . (extension_loaded('ffi') ? ' with FFI' : ' without the FFI extension, which MyPHP needs') . ' (8.3 or later is required)');
+    $bun = trim((string)shell_exec('bun --version 2>/dev/null'));
+    $bun !== '' ? $check('bun', true, $bun) : print("- bun        not found (optional, used by the web template: https://bun.sh)\n");
+    if (PHP_OS_FAMILY === 'Darwin') {
+        $v = trim((string)shell_exec('sw_vers -productVersion'));
+        $check('macOS', (int)explode('.', $v)[0] >= 12, "$v (macOS 12 or later is required)");
+        $check('cc', trim((string)shell_exec('command -v cc')) !== '', 'the C compiler of the exec launcher (xcode-select --install)');
+    } else {
+        $check(PHP_OS_FAMILY, false, 'no MyPHP backend for this platform yet');
+    }
+    $optional('gh', 'myphp build -upload to GitHub releases, https://cli.github.com', MyPHP\Native\Build\Cmd::look('gh'));
+    if (PHP_OS_FAMILY === 'Darwin') {
+        $ids = substr_count((string)shell_exec('security find-identity -v -p codesigning 2>/dev/null'), 'Developer ID Application');
+        $optional('codesign', 'a Developer ID to sign apps for other Macs', $ids > 0 ? "$ids Developer ID identities" : '');
+    }
+    $spc = trim((string)shell_exec('command -v spc')) ?: (is_file(getenv('HOME') . '/.myphp/spc') ? getenv('HOME') . '/.myphp/spc' : '');
+    $optional('spc', 'myphp build -launcher micro, which myphp micro sets up', $spc);
+    $ok || fail('some checks failed');
+}
+
+const SKILLS = __DIR__ . '/skills'; // the bundled skills, which apps do not ship
+
+/** Installs or updates the bundled agent skills in <dir>/.agents/skills (mygo's install-skills): replaces the bundled skill files, preserving unrelated files and skills. */
+function installSkills(array $args): void
+{
+    help($args, "install-skills [dir]\n\nInstalls or updates the bundled MyPHP agent skills in .agents/skills.\nReplaces bundled skill files, preserving unrelated files and skills.");
+    count($args) <= 1 || fail('expected at most one project directory');
+    $dir = $args[0] ?? '.';
+    is_dir($dir) || fail("$dir is not a directory");
+    writeSkills($dir);
+    logf('Installed skills in ' . rtrim($dir, '/') . '/.agents/skills');
+}
+
+function writeSkills(string $dir): void
+{
+    copyTree(SKILLS, "$dir/.agents/skills", []);
+}
+
 // ---- main ---------------------------------------------------------------
 $args = array_slice($_SERVER['argv'], 1);
-$cmd = array_shift($args) ?? '';
+$cmd = array_shift($args);
+if ($cmd === null) {
+    fwrite(STDERR, USAGE);
+    exit(2);
+}
 match ($cmd) {
     'init' => init($args),
+    'install-skills' => installSkills($args),
     'dev' => dev($args),
-    'generate' => generate($args),
+    'generate', 'gen' => generate($args),
     'i18n' => i18nCheck($args),
     'build' => build($args),
     'micro' => micro($args),
     'keygen' => keygen($args),
-    default => fail("usage: myphp init <dir> [--template native|web] | dev [dir] [--watch 0] [--lang de] | generate [dir] | i18n check [dir] | build [dir] [--launcher exec|micro] [--out dist] [--icon app.icns] [--php 8.4] | micro [--php 8.4] [--manual] | keygen [--out dir] [--force]"),
+    'doctor' => doctor($args),
+    'version', '-v', '--version' => print('myphp ' . VERSION . "\n"),
+    'help', '-h', '--help' => print(USAGE),
+    default => (function () use ($cmd): never { fwrite(STDERR, "myphp: unknown command \"$cmd\"\n\n" . USAGE); exit(2); })(),
 };

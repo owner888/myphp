@@ -809,10 +809,19 @@ final class App
         return self::$nsApp !== null && ObjC::$c->objc_getClass('WKWebView') !== null;
     }
 
-    /** Whether the app runs from its project, as `myphp dev` and `php app.php` run it, not from a bundle `myphp build` made (mygo's IsDev). */
+    /**
+     * Whether the app runs in development (mygo's IsDev): true unless it
+     * was built for production with `myphp build` (its Info.plist's
+     * MyPHPProduction; `myphp build -debug` keeps development features), or
+     * MYPHP_ENV=production is set. Development builds enable the inspector
+     * and the web inspector by default.
+     */
     public static function isDev(): bool
     {
-        return !self::isPackaged();
+        if ((Native\Bundle::plist()['MyPHPProduction'] ?? false) === true) {
+            return false;
+        }
+        return getenv('MYPHP_ENV') !== 'production';
     }
 
     /**

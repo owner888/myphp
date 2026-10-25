@@ -1,6 +1,6 @@
 {
   "name": "MyPHP Notes",
-  "bundleId": "dev.myphp.examples.documents",
+  "identifier": "dev.myphp.examples.documents",
   "entry": "main.php",
   "fileAssociations": [
     { "ext": ["md", "markdown"], "name": "Markdown Document", "mimeType": "text/markdown" },

@@ -61,6 +61,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sortable, resizable columns), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer; radio groups, editable text in place (a table's names), lists whose section headers stay at the top and whose rows typing their labels chooses, trimmed paths, tinted bitmaps, glyphs shaped and drawn one by one | works (`examples/widgets`, `notes`, `http`, `gallery`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
+| Packaging as mygo's (v1.12): `-platform darwin/arm64,darwin/amd64,darwin/universal`, the resources directory and its platform directories (universal binaries combined), the icon from a PNG or an asset catalog, code signing inside out, the .dmg with its window laid out, notarization, `-upload` to GitHub releases or S3; `myphp doctor`, `install-skills`, `version`, `help` | works (signing, the .dmg and notarizing need the developer's Mac) |
 | App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors, panels, flyouts (anchored to a rectangle or a tray icon, flipping and sliding into the screen, closing on a press outside or Escape) or in the system's popovers |
 | Router (mygo's): a history of pages with paths and queries, `{name}` and `{name...}` patterns, layouts, pages keeping their state and the focus, sliding and fading in, Back and Forward buttons, Cmd+[ and Cmd+], a mouse's back and forward buttons, links to paths | works (`examples/router`) |
 | Draggable nodes (mygo's Draggable): following the pointer in the parent's axes, thrown to snap points at the pointer's speed, bounds rubber-banded or rigid, caught moving, lifting with a pose; values dragged within a window to nodes taking their type, with a copy under the pointer, scrolling at the edges, Escape giving up | works (`examples/drag`) |
@@ -110,10 +111,10 @@ scrolling; frames are only built when something changes.
 ### The command line
 
 ```sh
-bin/myphp init my-app              # a native-UI project (--template web for a page calling PHP)
+bin/myphp init my-app              # a native-UI project (-template web for a page calling PHP)
 cd my-app && ../myphp/bin/myphp dev   # runs it, restarts on changes, regenerates the TS client
-../myphp/bin/myphp build           # dist/MyApp.app, a launcher that execs this machine's php; the plugins' native libraries (the terminal's libghostty-vt) in its Resources
-../myphp/bin/myphp build --launcher micro   # one static binary: fetches static-php-cli and builds phpmicro the first time
+../myphp/bin/myphp build           # build/darwin-arm64/my-app.app and its .dmg, a launcher that execs this machine's php; the plugins' native libraries (the terminal's libghostty-vt) in its Resources
+../myphp/bin/myphp build -launcher micro    # one static binary: fetches static-php-cli and builds phpmicro the first time
 ```
 
 ### Requirements
@@ -264,6 +265,7 @@ App::run();
 | 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（可排序、可拖列宽）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位；单选组、原地编辑的文字（表格里的文件名）、分节标题吸顶且可输入首字母选行的列表、截取部分长度的路径、着色位图、逐个排版和绘制的字形 | 可用（`examples/widgets`、`notes`、`http`、`gallery`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
+| 与 mygo 一致的打包（v1.12）：`-platform darwin/arm64,darwin/amd64,darwin/universal`，resources 目录及按平台的子目录（通用二进制自动合并），PNG 或 asset catalog 生成图标，由内而外代码签名，排好窗口布局的 .dmg，公证，`-upload` 到 GitHub Releases 或 S3；`myphp doctor`、`install-skills`、`version`、`help` | 可用（签名、.dmg、公证要在开发者的 Mac 上跑） |
 | App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色、面板、flyout（锚定到矩形或托盘图标，空间不够时翻转、滑回屏幕内，点外部或 Esc 关闭），也可以用系统 popover 样式 |
 | 路由（mygo 的 Router）：带路径和查询的页面历史、`{name}` 与 `{name...}` 模式、嵌套布局、页面保留状态和焦点、滑入淡入、前进后退按钮、Cmd+[ 与 Cmd+]、鼠标侧键、指向路径的链接 | 可用（`examples/router`） |
 | 可拖动节点（mygo 的 Draggable）：按父节点坐标跟随指针、按松手速度甩到吸附点、边界橡皮筋或硬边界、移动中可接住、配合 pose 抬起；窗口内拖拽值到接收该类型的节点，指针下有半透明副本，靠近边缘自动滚动，Esc 取消 | 可用（`examples/drag`） |
@@ -308,10 +310,10 @@ App::run();
 ### 命令行
 
 ```sh
-bin/myphp init my-app              # 原生 UI 项目（--template web 是调用 PHP 的网页项目）
+bin/myphp init my-app              # 原生 UI 项目（-template web 是调用 PHP 的网页项目）
 cd my-app && ../myphp/bin/myphp dev   # 运行，文件改动自动重启，重新生成 TS client
-../myphp/bin/myphp build           # dist/MyApp.app，启动器 exec 本机的 php；插件要的原生库（终端的 libghostty-vt）放进 Resources
-../myphp/bin/myphp build --launcher micro   # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
+../myphp/bin/myphp build           # build/darwin-arm64/my-app.app 和它的 .dmg，启动器 exec 本机的 php；插件要的原生库（终端的 libghostty-vt）放进 Resources
+../myphp/bin/myphp build -launcher micro    # 单个静态二进制：第一次自动下载 static-php-cli 并构建 phpmicro
 ```
 
 ### 环境要求

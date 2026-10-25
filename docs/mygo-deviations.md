@@ -452,24 +452,28 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `mygo-update.key` in `mygo/update-keys` of the config directory.
   - myphp: `myphp build` writes them in Info.plist (`MyPHPUpdateFeed`,
     `MyPHPUpdateKey`); `myphp.json`'s `updates`;
-    `MYPHP_UPDATER_PRIVATE_KEY`; `myphp keygen --out` writes
+    `MYPHP_UPDATER_PRIVATE_KEY`; `myphp keygen -out` writes
     `myphp-update.key` in `~/Library/Application Support/myphp/update-keys`.
   - Why: a PHP app has no link step; Info.plist is in the signed bundle.
 - **What the build publishes** (v0.95)
   - mygo: `mygo build -upload` uploads to a GitHub release or S3
     (`updates.s3`); Linux and Windows archives and `install.sh`; deltas
     patch files of up to 256 MiB.
-  - myphp: macOS bundles only; no upload (publish the files yourself), and
-    `updates.s3` is refused; deltas patch files of up to 32 MiB.
+  - myphp: macOS bundles only; `myphp build -upload` uploads the disk
+    images and updates as mygo's (v1.12); deltas patch files of up to
+    32 MiB.
   - Why: myphp builds macOS apps; PHP's bsdiff takes ~70 bytes of memory a
     byte.
 - **App** (v0.95)
   - mygo: `App.Version` from the build, `IsDev` false in production builds,
     `Relaunch` starts the executable it started from.
   - myphp: `App::version()` from Info.plist (myphp.json's version),
-    `App::isDev()` true outside a bundle, `App::relaunch()` starts the
-    bundle's executable, or the script again with the PHP running it.
-  - Why: a PHP app is a project or the bundle `myphp build` made.
+    `App::isDev()` false when Info.plist has `MyPHPProduction` (what
+    `myphp build` writes but with `-debug`, v1.12) or MYPHP_ENV=production,
+    `App::relaunch()` starts the bundle's executable, or the script again
+    with the PHP running it.
+  - Why: a PHP app is a project or the bundle `myphp build` made; it has
+    no link step to set a flag in.
 
 - **The updater plugin** (v0.96)
   - mygo: package functions `updater.Plugin`, `New`, `CheckForUpdates`,
@@ -1230,3 +1234,62 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     namespace (`MyPHP\Examples\Piano\WHITE_WIDTH`), a line of several
     staying a `const`.
   - Why: two examples name theirs alike (`WINDOW_W`).
+
+## The command line and packaging (v1.12)
+
+- **Commands**
+  - mygo: init, install-skills, vet, migrate-ui, generate (gen), i18n
+    check, dev, build, keygen, doctor, version, help; flags of Go's flag
+    package; a console of spinners and colored steps.
+  - myphp: the same but vet and migrate-ui, plus micro; flags as Go's
+    (`-o`, `--o`, `-o=dist`); its steps printed as lines ("myphp: Signed
+    …"), the summary of a build as mygo's.
+  - Why: vet and migrate-ui check Go code (build lifetimes, goroutine
+    captures, the UI value API's migration); PHP has neither. One line a
+    step reads the same in a terminal and a log.
+- **myphp.json**
+  - mygo: `identifier` (default com.mygo.<name>), `main` (a Go package),
+    mygo.json or mygo.config.ts; `linux` and `windows` options.
+  - myphp: `identifier` (default com.myphp.<name>; it was `bundleId`),
+    `entry` (the PHP file the app runs, default app.php) and `framework`
+    (the checkout); myphp.json only; no `linux` or `windows` yet. The
+    other fields are mygo's, with its defaults: name, version, copyright,
+    icon (resources/icon.png), out (dist), resources, macos.{icon,
+    minimumSystemVersion 12.0, signingIdentity "-", entitlements,
+    helperEntitlements, infoPlist, dmgTitle, notarize}.
+  - Why: a PHP app has no package; myphp.config.ts comes with the
+    runtime and CLI npm packages, which are not ported yet.
+- **build**
+  - mygo: compiles the app for any GOOS/GOARCH (`-platform`), universal
+    with its own lipo; Windows, Linux, web builds; the inspector left out
+    of production binaries by a build tag.
+  - myphp: darwin/arm64, darwin/amd64 and darwin/universal: the exec
+    launcher compiled with cc for them (`-arch`), the micro launcher for
+    this Mac's only (micro.sfx is of its architecture); the app's PHP files
+    and the framework's copied into Resources/app, its hidden files, the
+    resources directory and the output left out; `MyPHPProduction` in
+    Info.plist turns App::isDev() off, which keeps the inspector off.
+    Info.plist has mygo's keys (myphp wrote LSApplicationCategoryType and
+    a minimum of macOS 11.0 before).
+  - Why: PHP is not compiled; the exec launcher runs the PHP that built
+    the app, whatever the architecture it is for.
+- **The icon**
+  - mygo: decodes the PNG with Go's image/png, encodes each size with
+    image/png (filtered rows).
+  - myphp: ImageIO decodes it, premultiplied (CoreGraphics draws into
+    nothing else), and mygo's resize runs on that; each size is written
+    as an 8-bit RGBA PNG of unfiltered rows. The colors of nearly
+    transparent pixels may differ by the 8-bit premultiplication.
+  - Why: no PNG decoder in PHP without the gd extension; ImageIO ships
+    with macOS.
+- **Uploads**
+  - mygo: S3 with net/http; .exe, .deb and install.sh among the uploads.
+  - myphp: S3 with the system's curl; the disk images, archives, deltas
+    and manifests (the other installers come with Linux and Windows).
+  - Why: a PUT of a file with headers is one curl command; libcurl through
+    FFI would need a read callback for the body.
+- **Resource directories**
+  - mygo: a misnamed platform directory "would ship to every platform:
+    name the resources of one platform after its GOOS and GOARCH".
+  - myphp: "… after its system and architecture".
+  - Why: PHP has no GOOS and GOARCH; the names are the same.
