@@ -1396,3 +1396,28 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     (`Runtime::scrollKey`); a focused field keeps them.
   - Why: myphp's shortcuts are asked for while the view builds, not
     registered before the keys come.
+
+## Lists, the tests of list_test.go (v1.15)
+
+- **ListState::scrollTo**
+  - mygo: `ScrollTo(row, align)`, at once, Start, Center or End.
+  - myphp: `scrollTo($row, $smooth = true, $align = Node::START)`: a glide
+    to the top unless `$smooth` is false, at once for CENTER and END.
+  - Why: myphp's scrollTo glided before mygo's Align came.
+- **A list as high as its rows**
+  - mygo: a list without a size is as high as its rows, which flexbox
+    shrinks into the room a column has.
+  - myphp: only in a scrolling container or with a largest height
+    (`maxHeight`); elsewhere it takes the room it is given.
+  - Why: myphp's columns shrink nothing, so a list that big would
+    overflow every window instead of scrolling.
+- **TrackScroll on a list**
+  - mygo: `TrackScroll(&ScrollState)` gives a list a place in points too.
+  - myphp: a list keeps its place by its `ListState` alone; a scroll
+    container takes its `ScrollState` with `scroll()`.
+  - Why: myphp's scroll() was that already; the ListState says it all.
+  - Not ported for this: TestListEndShowsTheEnd's and
+    TestListTrackScrollBeforeTheFirstFrame's tracked states, and
+    TestListHeights, which tests mygo's tree of heights (myphp keeps them
+    in a map and a bit set).
+

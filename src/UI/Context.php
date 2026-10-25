@@ -621,22 +621,22 @@ final class Context
     public function list(ListState $state, int $count, Closure $row, ?Closure $empty = null): Node
     {
         $state->sync($count); // rows that came or went above the place and the choice, with keys
-        $came = 0.0; // how far the end moved down as rows came, which a FollowAnimation glides
-        if ($state->followEnd && $state->atEnd && $count > $state->count && !$state->moving()) {
-            for ($i = $state->count; $i < $count; $i++) { $came += $state->height($i); }
-            $state->count = $count;
-            $state->scrollToEnd(); // rows came: stay at the end
-        }
         $state->count = $count;
+        if ($state->followEnd && ($state->atEnd || $state->viewport == 0) && !$state->moving()) {
+            $state->scrollToEnd(); // at the end, or never laid out: the end shows as rows come or grow, until the user scrolls away
+        }
         $state->row = min($state->row, max(0, $count - 1));
         // The place may have been set before the view's size was known (end() at
         // startup, say) or the rows changed under it: keep it within the rows.
         $state->scrollBy(0);
         $node = $this->column(0, 0, 1)->scroll($state)->role(Role::LIST);
         $state->own($this, $node); // for focused(), focusWithin(), focus() and shortcut() on the state
+        $node->sizedByRows = $this->stack[count($this->stack) - 2]->scroll !== null;
+        $state->glides = $state->followAnimation !== null && $state->viewport > 0 && $this->runtime !== null && !$this->runtime->reduceMotion && !$this->runtime->instant();
         if ($state->followAnimation !== null && $this->runtime !== null) { // what came rises from below as the list glides to its end (mygo's FollowAnimation)
-            if ($came > 0 && !$this->runtime->reduceMotion && !$this->runtime->instant()) {
-                $this->jump($node, 'follow', $state->lag + $came);
+            if ($state->grew) { // the end moved down last frame, as Layout measured it: the glide goes on from where that left it
+                $this->jump($node, 'follow', $state->lag);
+                $state->grew = false;
             }
             $state->lag = $this->animateTo($node, 'follow', 0.0, $state->followAnimation);
             if ($state->lag != 0.0 && $this->runtime->wheeled) { $state->lag = $this->jump($node, 'follow', 0.0); } // the user scrolling stops it
@@ -645,9 +645,9 @@ final class Context
         $start = $state->row; $y = -$state->offset;
         while ($y > 0 && $start > 0) { // the view's top above the place's row (ListState::scrollBy): the rows there, as far as their estimates go
             $start--;
-            $y -= $state->height($start);
+            $y -= $state->step($start);
         }
-        $state->first = $start; $state->builtRow = $state->row;
+        $state->first = $start;
         $state->editables = false; // until an editable text is built in a row
         $limit = max($state->viewport, $this->height) * 1.5;
         [$scope, $ordinal] = [$this->scope, $this->ordinal];
@@ -664,10 +664,11 @@ final class Context
             $row($i);
             $this->listRow = $savedRow;
             if (isset($node->kids[$k])) { $node->rowStarts[$k] = $i; } // assistive technology sees row $i around its nodes
-            $y += $state->height($i);
+            $y += $state->step($i);
             if (!isset($node->kids[$k])) {
                 continue;
             }
+            if ($this->runtime?->focusWithin($node->kids[$k]->id)) { $state->focusRow = $i; }
             if ($state->label !== null) { $node->kids[$k]->label(($state->label)($i)); }
             if ($state->isHeader($i)) {
                 $headers[$i] = $node->kids[$k];
@@ -700,6 +701,20 @@ final class Context
                 $state->submit();
             } elseif ($rt !== null && $rt->clicked($first->id)) {
                 $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
+            }
+        }
+        if ($state->focusRow !== null && ($state->focusRow < $start || $state->focusRow >= $i) && $state->focusRow < $count && $this->runtime !== null) {
+            // The row holding the focus, scrolled out of view, is built still, out of it: the focus stays and takes the keys (mygo's focusedRow).
+            $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $state->focusRow); $this->ordinal = 0;
+            $k = count($node->kids);
+            $this->listRow = [$state, $state->focusRow, $node];
+            $row($state->focusRow);
+            $this->listRow = $savedRow;
+            if (isset($node->kids[$k]) && $this->runtime->focusWithin($node->kids[$k]->id)) {
+                $node->kids[$k]->at(0, -1e6);
+            } else {
+                array_splice($node->kids, $k);
+                $state->focusRow = null;
             }
         }
         if ($state->header !== null && $count > 0 && ($h = $state->headerAbove($state->row)) >= 0) {

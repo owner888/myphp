@@ -438,8 +438,13 @@ final class Runtime
                     if ($this->sliding !== null && isset($this->sliders[$this->sliding])) {
                         $this->slideTo($this->sliding, $e[1], $e[2]);
                     } elseif ($this->drag !== null) {
-                        [$state, $last, $ratio, $horizontal] = $this->drag;
-                        if ($horizontal) {
+                        [$state, $last, $ratio, $horizontal, $from, $reach, $travel] = $this->drag;
+                        if ($state instanceof ListState && !$horizontal) {
+                            // As far through the rows as the thumb along its track, from where it started, though the rows measured
+                            // meanwhile change how far they go; the end of the track shows the end (mygo's dragTo).
+                            $along = ($reach > 0 ? $from / $reach : 0.0) + ($travel > 0 ? ($e[2] - $last) / $travel : 0.0);
+                            if ($along >= 1) { $state->scrollToEnd(); } else { $state->scrollToOffset(max(0.0, $along) * $state->extent()[1]); }
+                        } elseif ($horizontal) {
                             $state->scrollByX(($e[1] - $last) * $ratio);
                             $this->drag[1] = $e[1];
                         } else {
@@ -1911,7 +1916,8 @@ final class Runtime
                     continue;
                 }
                 $state->stop();
-                $this->drag = [$state, $axis ? $x : $y, Scrollbar::pointsPerThumbPoint($r, $extent, $axis) * ($axis && $rtl ? -1 : 1), $axis]; // right to left, the thumb going right goes back to the start
+                $ratio = Scrollbar::pointsPerThumbPoint($r, $extent, $axis);
+                $this->drag = [$state, $axis ? $x : $y, $ratio * ($axis && $rtl ? -1 : 1), $axis, $extent[0], $extent[1], $ratio > 0 ? $extent[1] / $ratio : 0.0]; // right to left, the thumb going right goes back to the start; where it started through the content, how far the content went then, and the track's travel
                 return true;
             }
         }

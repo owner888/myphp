@@ -2792,6 +2792,38 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   that list and no other, none while it is hidden; a second list of the
   same state in a pass throws.
 
+## Lists, the tests of list_test.go (v1.15)
+
+- **Aligning by what is measured.** `ListState::$aligning` ([row, align])
+  is a row to show centered, at the bottom (`scrollTo` with CENTER or
+  END, `scrollToEnd`, `scrollIntoView` from above) or under its
+  section's pinned header (`scrollTo` START with headers): the place
+  goes where the estimates put it, the rows there are built, and Layout,
+  having measured them, sets the offset from the first row built, no
+  further than the last row's end nor above the first; a wheel or key
+  step (`scrollBy` with a move) drops it.
+- **The gap between rows** is `ListState::$rowGap`, which Layout sets;
+  `step($row)` is a row and its gap, which the walks of the place add up.
+- **Short of the view.** When the rows built end short of the view and
+  more exist, Layout asks for another pass (`Runtime::changed`), so a
+  first frame of rows far smaller than estimated has no gap.
+- **Following the end** scrolls to the end in every frame the list is
+  at it (`atEnd`, which a step of the user clears until Layout finds it
+  there again). With a FollowAnimation, Layout compares where the first
+  row showed (`$shownRow`, `$shownTop`) with where the end puts it now and
+  adds the difference to the lag, which the next build glides from.
+- **The focused row** (`$focusRow`) scrolled out of view is built still,
+  `at(0, -1e6)`, so the focus stays and the field takes the keys.
+- **Revealing in a list.** Layout's reveal moves a list's offset (counted
+  from its first row built) as it moves a ScrollState's, so Tab shows the
+  next row's control; a place moved past the rows built asks another pass.
+- **The thumb** of a list drags absolutely: as far through the content
+  as along the track from where it started (`scrollToOffset`), the end of
+  the track the end, as the rows measured on the way change the estimate.
+- **Sized by its rows.** In a scrolling container (`Node::$sizedByRows`,
+  set as the list is built) or with a largest height, a list measures its
+  rows built and the rest as estimated.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

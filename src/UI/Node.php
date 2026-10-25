@@ -165,6 +165,8 @@ final class Node
     /** A step slider's tick marks (Context::stepSlider), 0 for none. */
     public int $ticks = 0;
     public ?Node $followX = null;
+    /** A list built in a scrolling container: as high as its rows. @internal */
+    public bool $sizedByRows = false;
     /** Fits a table's column to its cells as the table is measured, once (mygo's colFit). @internal */
     public ?\Closure $colFit = null;
     /** @var list<TextRange> the runs of an input's text styled this frame (textRanges) */
@@ -390,6 +392,7 @@ final class Node
     /** Keeps width over height at $r, the side not given following the other (mygo's AspectRatio): 16/9 for a video. */
     public function aspectRatio(float $r): static { $this->aspect = max($r, 0.0); return $this; }
     /** The gap between columns (a row's children, a grid's columns, the lines of a wrapping column) and between rows (mygo's GapX, GapY); gap() sets both. */
+    public function gap(float $v): static { $this->gap = $v; $this->gapX = $this->gapY = null; return $this; }
     public function gapX(float $v): static { $this->gapX = $v; return $this; }
     public function gapY(float $v): static { $this->gapY = $v; return $this; }
     /** The gap along the container's axis, and across it, between its lines. */

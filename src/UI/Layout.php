@@ -85,6 +85,17 @@ final class Layout
         $e = $chain[count($chain) - 1];
         for ($i = count($chain) - 2; $i >= 0; $i--) {
             $p = $chain[$i]; $ch = $chain[$i + 1];
+            if ($p->scroll instanceof ListState && !$ch->absolute) { // a list's rows: the place moves by as much, counted from the first row built
+                $l = $p->scroll;
+                $d = self::nearest(0.0, $e->y - $p->y - $p->padT() - $l->lag, $e->h, $l->viewport);
+                if ($d != 0) {
+                    $l->offset += $d;
+                    $l->aligning = null;
+                    if ($l->offset < 0 && $l->first > 0) { $p->context?->runtime?->changed(); } // above the rows built: another pass builds them
+                    self::arrange($p, $p->x, $p->y, $p->w, $p->h);
+                }
+                continue;
+            }
             if (!$p->scroll instanceof ScrollState || $ch->absolute) {
                 continue;
             }
@@ -201,7 +212,11 @@ final class Layout
                 $main = max($main, $lw + $padMain); $cross += $lh + ($i > 0 ? $n->crossGap() : 0);
             }
         }
-        if ($n->scroll !== null) { // a scrolling container takes the room it is given on the axes it scrolls
+        if ($n->scroll instanceof ListState && $n->dir === Node::COLUMN && ($n->maxH < INF || $n->sizedByRows)) {
+            // A list in a scrolling container, or bounded by a largest height, is as high as its rows, the rest as estimated (mygo's list sized by its rows); elsewhere it takes the room it is given, as columns here shrink nothing.
+            $l = $n->scroll;
+            $main += max(0, $l->count - $l->first - $cnt) * ($l->estimate + $l->rowGap);
+        } elseif ($n->scroll !== null) { // a scrolling container takes the room it is given on the axes it scrolls
             if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) { $main = $padMain; }
             if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = $padCross; }
         }
@@ -380,6 +395,7 @@ final class Layout
         } elseif ($n->scroll instanceof ListState) {
             $s = $n->scroll;
             $s->viewport = $ch;
+            $s->rowGap = $gap;
             if ($wide) {
                 $s->maxX = max(0.0, $cw - $viewW);
                 $s->viewportW = $viewW;
@@ -393,15 +409,44 @@ final class Layout
                     $s->measured($s->first + $i, $k->mh);
                 }
             }
-            if ($s->first < $s->row && $s->row === $s->builtRow) { // rows built above the place, measured now: it counts from the first of them (a place the build moved after the rows builds them anew)
-                for ($i = 0; $i < $s->row - $s->first && isset($kids[$i]); $i++) { $s->offset += $kids[$i]->mh + $gap; }
-                $s->row = $s->first;
+            if ($s->first !== $s->row) { // the place on a row below the first built (rows built above it, or a move after the build): it counts from the first, measured now
+                $k = $s->row - $s->first;
+                if ($k > 0 && $k < count($kids)) {
+                    for ($i = 0; $i < $k; $i++) { $s->offset += $kids[$i]->mh + $gap; }
+                    $s->row = $s->first;
+                } else {
+                    $n->context?->runtime?->changed(); // moved past the rows built: another pass builds them
+                }
             }
+            if ($s->aligning !== null && isset($kids[$k = $s->aligning[0] - $s->first])) { // a row to show in the middle or at the bottom, measured now (mygo's ScrollTo)
+                $top = 0.0; $all = 0.0;
+                foreach ($kids as $i => $kid) { if ($i < $k) { $top += $kid->mh + $gap; } $all += $kid->mh + ($i > 0 ? $gap : 0); }
+                if ($s->aligning[1] === Node::START) { // under the header of its section, pinned at the top
+                    $hk = $s->headerAbove($s->aligning[0]) - $s->first;
+                    $off = $top - ($kids[$hk]->mh ?? $n->pinned?->mh ?? 0.0);
+                } else {
+                    $off = $top - ($ch - $kids[$k]->mh) * ($s->aligning[1] === Node::CENTER ? 0.5 : 1.0);
+                }
+                if ($s->first + $cnt >= $s->count) { $off = min($off, $all - $ch); } // no room below the last row
+                if ($s->first === 0) { $off = max($off, 0.0); }
+                if ($s->glides && isset($kids[$j = $s->shownRow - $s->first])) { // the end moved: the rows stay where they showed, and glide up from there
+                    $top2 = 0.0;
+                    for ($i = 0; $i < $j; $i++) { $top2 += $kids[$i]->mh + $gap; }
+                    $d = $s->shownTop - ($top2 - $off);
+                    if (abs($d) > 0.01) { $s->lag += $d; $s->grew = true; }
+                }
+                [$s->offset, $s->row, $s->aligning] = [$off, $s->first, null];
+                if ($off < 0) { $n->context?->runtime?->changed(); } // rows above short of the estimates: another pass builds them
+            }
+            [$s->shownRow, $s->shownTop] = [$s->first, -$s->offset];
             // The view's top lies $offset below the anchor's top; built rows
             // short of the view's bottom leave a gap this frame.
             $cy -= $s->offset - $s->lag; // a glide to the end on its way: below its place
             $s->gap = max(0.0, $ch - ($used + $gap * ($cnt - 1) - $s->offset));
             $s->atEnd = $s->first + $cnt >= $s->count && $used + $gap * ($cnt - 1) - $s->offset <= $ch + 0.5;
+            if ($s->gap > 0 && $s->first + $cnt < $s->count) {
+                $n->context?->runtime?->changed(); // rows far shorter than estimated fell short of the view: another pass builds more, so the frame shows no gap (mygo's buildLate)
+            }
             if ($s->first + $cnt >= $s->count && $s->first === 0) {
                 $s->gap = 0.0; // every row is built and they are short of the view: nothing can fill it
                 $short = $ch - ($used + $gap * ($cnt - 1));

@@ -31,8 +31,10 @@ final class ListState implements Scrollable
     /** Set by Context::list and Layout each frame. */
     public int $count = 0;
     public int $first = 0;
-    /** The row the place was on as Context::list built the rows, from $first: Layout counts the place from $first only while it still is. @internal */
-    public int $builtRow = 0;
+    /** The gap between rows, which Layout sets from the list's. @internal */
+    public float $rowGap = 0.0;
+    /** The row holding the keyboard focus, which the list keeps building out of view. @internal */
+    public ?int $focusRow = null;
     public float $viewport = 0;
     public float $gap = 0;
     /** How far rows wider than the list (Node::rowWidth) are scrolled sideways, how far they can go and the list's width: Layout sets the last two. */
@@ -44,6 +46,10 @@ final class ListState implements Scrollable
     /** Gives a table's header a context menu, built as Node::contextMenu's: fn(Menu $m, int $col), $col the column clicked in the columns given, -1 past them (mygo's HeaderMenu). */
     public ?Closure $headerMenu = null;
     public float $lag = 0.0;
+    /** Whether the end glides as it moves down (a FollowAnimation, motion allowed), and that it moved last frame; the first row Layout showed and where its top was, without the lag. @internal */
+    public bool $glides = false, $grew = false;
+    public int $shownRow = -1;
+    public float $shownTop = 0.0;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
     /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
@@ -196,6 +202,8 @@ final class ListState implements Scrollable
     }
     private bool $didSubmit = false;
     private ?int $target = null;
+    /** A row to show aligned (Node::CENTER or END) once Layout has measured it: [row, align], or null (mygo's listRequest). @internal */
+    public ?array $aligning = null;
     /** How far from where it was a list looks for an item's key when its rows changed (mygo's listSearch). */
     private const SEARCH = 1000;
     /** The key of the anchor row last frame, and the row chosen then with its key: rows coming or going above them move them with their items (mygo's anchorKey, selRow, selKey). */
@@ -273,6 +281,12 @@ final class ListState implements Scrollable
         $this->known = $known;
     }
 
+    /** From the top of row $row to the next one's: its height and the gap between rows. */
+    public function step(int $row): float
+    {
+        return $this->height($row) + $this->rowGap;
+    }
+
     public function height(int $row): float
     {
         return $this->heights[$row] ?? ($this->isMeasured($row) ? $this->default : $this->estimate);
@@ -306,15 +320,16 @@ final class ListState implements Scrollable
 
     public function scrollBy(float $dy): void
     {
+        if ($dy != 0) { $this->aligning = null; $this->atEnd = false; } // the user, or the app, took over: a list following its end follows it again once Layout finds it there
         $this->offset += $dy;
         while ($this->offset < 0 && $this->row > 0 && $this->isMeasured($this->row - 1)) {
             $this->row--;
-            $this->offset += $this->height($this->row);
+            $this->offset += $this->step($this->row);
         }
         // Rows above not measured yet: the place stays on the row it knows, the view's top above it, and the list builds the
         // rows there, which Layout measures and counts the place from, so that a step moves the rows by the step (mygo's anchor).
-        while ($this->row < $this->count - 1 && $this->offset >= $this->height($this->row)) {
-            $this->offset -= $this->height($this->row);
+        while ($this->row < $this->count - 1 && $this->offset >= $this->step($this->row)) {
+            $this->offset -= $this->step($this->row);
             $this->row++;
         }
         if ($this->row === 0 && $this->offset < 0) {
@@ -324,8 +339,9 @@ final class ListState implements Scrollable
         // rows from the anchor fill the view, as far as their heights are known.
         $below = -$this->offset;
         for ($i = $this->row; $i < $this->count && $below < $this->viewport; $i++) {
-            $below += $this->height($i);
+            $below += $this->step($i);
         }
+        if ($i === $this->count) { $below -= $this->rowGap; } // no gap after the last row
         if ($below < $this->viewport) {
             $this->scrollBack($this->viewport - $below);
         }
@@ -336,34 +352,49 @@ final class ListState implements Scrollable
         $this->offset -= $dy;
         while ($this->offset < 0 && $this->row > 0) {
             $this->row--;
-            $this->offset += $this->height($this->row);
+            $this->offset += $this->step($this->row);
         }
         if ($this->offset < 0) {
             $this->offset = 0;
         }
     }
 
-    /** Puts row $row at the top of the view, gliding there over the next frames unless $smooth is false. */
-    public function scrollTo(int $row, bool $smooth = true): void
+    /**
+     * Puts row $row at the top of the view, gliding there over the next
+     * frames unless $smooth is false; with $align Node::CENTER or END, at
+     * once in the middle or at the bottom of the view (mygo's ScrollTo
+     * and its Align), as far as the rows go.
+     */
+    public function scrollTo(int $row, bool $smooth = true, int $align = Node::START): void
     {
         $row = max(0, min($this->count - 1, $row));
-        if ($smooth) {
+        if ($smooth && $align === Node::START) {
             $this->target = $row;
             return;
         }
         $this->target = null;
         $this->row = $row;
-        $this->offset = 0;
+        $room = $this->viewport - $this->height($row);
+        $this->offset = match ($align) { Node::CENTER => -$room / 2, Node::END => -$room, default => 0.0 };
+        $under = $align === Node::START && $this->header !== null && !$this->isHeader($row) && $this->headerAbove($row) >= 0; // at the top, under its section's header, which stays there
+        $this->aligning = $align === Node::START && !$under ? null : [$row, $align]; // where the estimates put it; Layout aligns it as measured
+        $this->scrollBy(0);
+    }
+
+    /** Scrolls to $y points through the rows as extent() counts them: the thumb of the scroll bar dragged there. */
+    public function scrollToOffset(float $y): void
+    {
+        $this->target = null; $this->aligning = null;
+        $est = max(1.0, $this->estimate);
+        $this->row = max(0, min($this->count - 1, (int)floor($y / $est)));
+        $this->offset = $y - $this->row * $est;
         $this->scrollBy(0);
     }
 
     /** Shows the end: the last rows fill the view (mygo's ScrollToEnd). */
     public function scrollToEnd(): void
     {
-        $this->target = null;
-        $this->row = max(0, $this->count - 1);
-        $this->offset = $this->height($this->row) - $this->viewport;
-        $this->scrollBy(0);
+        $this->scrollTo($this->count - 1, false, Node::END);
     }
 
     /** Scrolls as little as needed to bring row $row into view. */
@@ -372,23 +403,19 @@ final class ListState implements Scrollable
         $this->target = null;
         $row = max(0, min($this->count - 1, $row));
         if ($row < $this->row || ($row === $this->row && $this->offset > 0)) {
-            $this->row = $row;
-            $this->offset = 0;
-            $this->scrollBy(0);
+            $this->scrollTo($row, false); // at the top, under its section's header
             return;
         }
         if ($this->viewport > 0 && ($row - $this->row) * $this->estimate > 50 * $this->viewport) {
-            $this->row = $row; // far below: do not walk every row in between
-            $this->offset = $this->height($row) - $this->viewport;
-            $this->scrollBy(0);
+            $this->scrollTo($row, false, Node::END); // far below: do not walk every row in between
             return;
         }
         $bottom = -$this->offset; // of row $row, from the view's top
         for ($i = $this->row; $i <= $row; $i++) {
-            $bottom += $this->height($i);
+            $bottom += $this->step($i);
         }
         if ($bottom > $this->viewport) {
-            $this->scrollBy($bottom - $this->viewport);
+            $this->scrollTo($row, false, Node::END); // at the bottom, as Layout measures it
         }
     }
 
@@ -541,7 +568,7 @@ final class ListState implements Scrollable
         }
         $d = -$this->offset;
         for ($i = min($this->row, $to); $i < max($this->row, $to); $i++) {
-            $d += $this->height($i) * ($to > $this->row ? 1 : -1);
+            $d += $this->step($i) * ($to > $this->row ? 1 : -1);
         }
         if (abs($d) < 0.5) {
             $this->scrollTo($to, false);
