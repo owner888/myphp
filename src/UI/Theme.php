@@ -126,9 +126,12 @@ final class Theme
         return $l << 16 | $l << 8 | $l;
     }
 
-    /** $a mixed with $b by $k (0 all $a, 1 all $b), as mygo's Color.Mix. */
+    /** $a mixed with $b by $k (0 all $a, 1 all $b), as mygo's Color.Mix: by their wide colors when one is (WideColor::mix). */
     public static function mix(int $a, int $b, float $k): int
     {
+        if (WideColor::isWide($a) || WideColor::isWide($b)) {
+            return WideColor::mix($a, $b, max(0.0, min($k, 1.0)));
+        }
         $ch = fn(int $x, int $y) => max(0, min(255, (int)round($x + ($y - $x) * $k)));
         return ($ch(($a >> 16) & 255, ($b >> 16) & 255) << 16) | ($ch(($a >> 8) & 255, ($b >> 8) & 255) << 8) | $ch($a & 255, $b & 255);
     }

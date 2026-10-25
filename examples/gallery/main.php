@@ -13,7 +13,7 @@ declare(strict_types=1);
 use MyPHP\{App, Clipboard, DateOptions, Dialog, I18n, MessageOptions, NumberOptions, Style as DateStyle, Width, Window, WindowOptions};
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style as GlassStyle};
 use MyPHP\Text\Params;
-use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, Content, ContentTransition, Context, Cursor, Direction, DisplayList, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextPainter, TextState, Theme, Track, TransitionMotion};
+use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, Content, ContentTransition, Context, Cursor, Direction, DisplayList, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextPainter, TextState, Theme, Track, TransitionMotion, WideColor};
 use MyPHP\UI\Chart\{Axes, Band, Chart, Curve, Linear, Side, Stacking, Tick, Time};
 use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, Reveal, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, EditorOptions, FormatState, ListKind, Paragraph, ParagraphStyle, RichText, Run, Text as RichTextText};
@@ -1072,14 +1072,15 @@ final class Gallery
     /**
      * What each kind of color paints (fills, gradients, stripes, text,
      * shadows) in the sRGB color nearest to an Oklch one, on the left, and
-     * in the Oklch color itself, on the right: MyPHP draws in sRGB, so the
-     * two match.
+     * in the Oklch color itself, on the right: on a Display P3 screen the
+     * right column shows the colors sRGB cannot (a gradient's end, as
+     * stripes' ground, in its sRGB color in both).
      */
     private function wideColors(Context $c): void
     {
         $t = $c->theme;
         $vivid = Oklch::rgb(0.85, 0.3, 145); $warm = Oklch::rgb(0.7, 0.3, 30);
-        $c->text('Compare the columns on a Display P3 screen: MyPHP draws in sRGB, so they match.', 12, $t->textMuted);
+        $c->text('Compare the columns on a Display P3 screen: the right one shows what sRGB cannot.', 12, $t->textMuted);
         // pair builds a sample twice, in sRGB and then in Oklch, in equal columns.
         $pair = function (Closure $sample) use ($c): void {
             $c->row(0, 12);
@@ -1092,17 +1093,18 @@ final class Gallery
             $c->end();
             return $n;
         };
+        $in = fn(bool $wide, int $color): int => $wide ? $color : WideColor::srgb($color); // the color, or its sRGB twin
         $pair(fn(bool $wide) => $c->text($wide ? 'Oklch' : 'sRGB', 12, $t->textMuted, Font::BOLD));
-        $pair(fn(bool $wide) => $box('Fill')->background($vivid));
-        $pair(fn(bool $wide) => $box('Gradient')->linearGradient(new LinearGradient($warm, 1, $vivid, 1, 90, oklab: true)));
-        $pair(fn(bool $wide) => $box('Stripes')->background(0xffffff)->stripes($vivid, 4, 6, 45));
-        $pair(function (bool $wide) use ($c): Node {
+        $pair(fn(bool $wide) => $box('Fill')->background($in($wide, $vivid)));
+        $pair(fn(bool $wide) => $box('Gradient')->linearGradient(new LinearGradient($in($wide, $warm), 1, $in($wide, $vivid), 1, 90, oklab: true)));
+        $pair(fn(bool $wide) => $box('Stripes')->background(0xffffff)->stripes($in($wide, $vivid), 4, 6, 45));
+        $pair(function (bool $wide) use ($c, $in, $vivid): Node {
             $n = $c->row(0, 0, 0, 0x141414)->size(0, 30)->round(6)->center();
-              $c->text('Text', 14, Oklch::rgb(0.85, 0.3, 145), Font::BOLD);
+              $c->text('Text', 14, $in($wide, $vivid), Font::BOLD);
             $c->end();
             return $n;
         });
-        $pair(fn(bool $wide) => $box('Shadow')->margin(6)->background(0xffffff)->shadow(0, 4, 12, 0, $vivid));
+        $pair(fn(bool $wide) => $box('Shadow')->margin(6)->background(0xffffff)->shadow(0, 4, 12, 0, $in($wide, $vivid)));
     }
 
     public function styling(Context $c): void

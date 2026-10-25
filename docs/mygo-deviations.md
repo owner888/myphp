@@ -928,9 +928,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     shader both.
   - myphp: `Context::shapeText` and `shapeRichText` (the text system is
     the window's), `Font::register` and `Font::families`, `Oklch::rgb`
-    mapped into Display P3, then into sRGB, which myphp draws alone; no
-    `EffectColor`, as myphp has no effects of an app's own.
-  - Why: PHP has no package functions; one renderer, sRGB.
+    mapped into Display P3, keeping a wide color outside sRGB
+    (`WideColor`, since v1.25); no `EffectColor`, as myphp
+    has no effects of an app's own.
+  - Why: PHP has no package functions.
 - **Element handles and actions**
   - mygo: `Element.Bind(*Handle)`, `Handle.Focus` (`RequestFocus`),
     `CancelFocus`, `Focused`, `FocusWithin`, `Bounds`, `OnShortcut`;
@@ -1230,7 +1231,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     the street and the confetti differ from mygo's; selects choose
     indexes and inputs edit `TextState`s; the Languages test runs in the
     zero region; `Dialog::message` runs after the click (`App::later`),
-    its own loop; the wide-gamut card draws both columns in sRGB.
+    its own loop; the wide-gamut card's left column draws the sRGB twins
+    (`WideColor::srgb`).
   - Why: myphp's scoping, PHP's threads and random engines, myphp's
     controls, and no region setter for tests.
 - **Constants of the examples in tests**
@@ -1515,11 +1517,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and TestWebViewOpacity's pixels, TestTransformedNativeDragPreviewHotspot's
   preview, TestTransformUpdatesDamageAndTransitionGeometry's damage,
   TestWebViewNotOpaque: the headless text painter draws no pixels nor
-  subpixel glyphs); the wide-gamut tests past Oklch's sRGB
-  (TestMixWide, TestWideShadowStripesGradientAndText, TestWideOnlyWhereItShows,
-  TestWideDecorationsDividersAndTextBackground, TestThemeAccentTakesOklch,
-  TestPictureOfAWideColor, TestWideFramesOnGPU, TestEffectColor), as myphp
-  draws sRGB alone (Widgets and context, v1.08); TestUnhandledEscape is
+  subpixel glyphs); the wide-gamut tests then, ported since by
+  wide_color_test (Wide colors, v1.25); TestUnhandledEscape is
   flyout_test's.
 
 ## Choosing, tables, widgets and inline text, their tests (v1.20)
@@ -1584,3 +1583,29 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Two layouts a frame where text wraps** (see Text wraps at the room it
   has, v0.81): mygo finds a text's height at its width as it lays out;
   myphp lays out again once the texts that need it wrap.
+
+## Wide colors (v1.25)
+
+- **A color is an int**
+  - mygo: `Color` carries its wide twin beside R, G, B and A (`SRGB()`
+    drops it).
+  - myphp: the low 24 bits are the sRGB twin; a wide color holds the id
+    of its extended sRGB components above them (`WideColor`), so what
+    reads a color's bytes reads its twin; `WideColor::srgb` drops it. The
+    last 4096 wide colors made are kept; an older one draws its twin, as
+    mygo's past what a scene counts.
+  - Why: myphp's colors are ints throughout.
+- **What draws its sRGB twin**: the second color of a gradient, the
+  ground of stripes and a box's border (packed into one float each), a
+  tinted image's tint, canvases, the native drag's image of the last
+  frame, and SVG pictures, rasterized in sRGB; mygo draws the second
+  color and the border wide too.
+- **The switch**: `Native\Metal::useWide` draws a view's frames into
+  RGBA16Float drawables in extended sRGB while a frame within two seconds
+  had a wide color and the screen shows Display P3, and gives the layer
+  its own color space back after; mygo's GPU renderer the same, its CPU
+  renderer sRGB.
+- **Not ported**: TestPictureOfAWideColor (myphp's pictures are keyed by
+  the color, a wide one by its id), TestWideFramesOnGPU (Metal's, tested
+  on a Mac), TestEffectColor (no effects of an app's own), the pixel
+  tests.

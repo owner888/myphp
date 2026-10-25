@@ -48,6 +48,8 @@ final class DisplayList
     public array $glass = [];
     /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
     public array $holes = [];
+    /** @var list<array{0: int, 1: float, 2: float, 3: float, 4: float, 5: float, 6: float}> the quads drawn in a wide color (WideColor): their first float, their sRGB components and their wide ones (mygo's scene Wide) */
+    public array $wide = [];
     private array $clip = self::NO_CLIP;
     private array $clips = [];
 
@@ -149,6 +151,7 @@ final class DisplayList
         $this->n = 0;
         $this->glass = [];
         $this->holes = [];
+        $this->wide = [];
         $this->clip = self::NO_CLIP;
         $this->clips = [];
         $this->transforms = 1; $this->entries = [];
@@ -206,6 +209,7 @@ final class DisplayList
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        if ($rgb > 0xffffff && $b[$k + 7] > 0) { $this->noteWide($k, $rgb); } // a wide color that shows
         $b[$k + 8] = $radius; $b[$k + 9] = $this->xk;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
@@ -299,6 +303,7 @@ final class DisplayList
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        if ($rgb > 0xffffff && $b[$k + 7] > 0) { $this->noteWide($k, $rgb); } // a wide color that shows
         $b[$k + 8] = $radius; $b[$k + 9] = $kind + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
@@ -321,7 +326,7 @@ final class DisplayList
     public function box(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, array $borders = [0.0, 0.0, 0.0, 0.0], int $borderRgb = 0, float $borderAlpha = 0.0, bool $dashed = false,
                         int $paint = self::PAINT_COLOR, int $rgb2 = 0, float $alpha2 = 0.0, array $g = [0.0, 0.0, 0.0, 0.0]): void
     {
-        $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+        $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2); // a gradient's or stripes' second color and the border's are packed: they draw their sRGB twins
         $r = self::fitRadii($w, $h, $radii);
         $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? 4.0 : 0.0), $g);
     }
@@ -395,6 +400,25 @@ final class DisplayList
     }
 
     /** A glyph quad: its atlas bitmap starts at pixel ($u, $v). */
+    /** Notes the quad at float $k drawn in wide color $rgb, which shows its sRGB twin until showWide(). */
+    private function noteWide(int $k, int $rgb): void
+    {
+        $w = WideColor::wide($rgb);
+        if ($w !== null) {
+            $b = $this->buf;
+            $this->wide[] = [$k, $b[$k + 4], $b[$k + 5], $b[$k + 6], $w[0], $w[1], $w[2]];
+        }
+    }
+
+    /** Has the quads drawn in wide colors show them, in extended sRGB, for a target of a wide gamut; or their sRGB twins, for any other. */
+    public function showWide(bool $on): void
+    {
+        $b = $this->buf;
+        foreach ($this->wide as [$k, $r, $g, $bl, $wr, $wg, $wb]) {
+            [$b[$k + 4], $b[$k + 5], $b[$k + 6]] = $on ? [$wr, $wg, $wb] : [$r, $g, $bl];
+        }
+    }
+
     public function glyph(float $x, float $y, float $w, float $h, int $rgb, float $alpha, int $u, int $v): void
     {
         if ($this->n === $this->capacity) {
@@ -403,6 +427,7 @@ final class DisplayList
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
+        if ($rgb > 0xffffff && $b[$k + 7] > 0) { $this->noteWide($k, $rgb); } // a wide color that shows
         $b[$k + 8] = 0.0; $b[$k + 9] = 1.0 + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;

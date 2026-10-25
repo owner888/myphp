@@ -18,7 +18,10 @@ use RuntimeException;
  */
 final class Metal
 {
-    private const PIXEL_FORMAT_BGRA8 = 80;
+    private const PIXEL_FORMAT_BGRA8 = 80, PIXEL_FORMAT_RGBA16F = 115; // RGBA16Float: the drawables of a wide gamut, in extended sRGB
+    /** How long a view goes on drawing a wide gamut after its last frame with a wide color, so that a blinking caret or a color in transition does not switch its drawables back and forth (mygo's wideHold), in seconds. */
+    private const WIDE_HOLD = 2.0;
+    private const DISPLAY_GAMUT_P3 = 2; // NSDisplayGamutP3
     private const BLEND_ZERO = 0, BLEND_ONE = 1, BLEND_SRC_ALPHA = 4, BLEND_ONE_MINUS_SRC_ALPHA = 5;
     private const PIXEL_FORMAT_R8 = 10, PIXEL_FORMAT_RGBA8 = 70;
     private const PRIMITIVE_TRIANGLE_STRIP = 4; // MTLPrimitiveType: point 0, line 1, lineStrip 2, triangle 3, triangleStrip 4
@@ -394,11 +397,19 @@ final class Metal
     private $blurPipeline, $canvasPipeline, $canvasUniforms;
     /** The pipeline of web views' holes: what is there goes, by the quad's coverage (DisplayList::hole). */
     private $holePipeline;
+    /** @var array<int, array{0: mixed, 1: mixed, 2: mixed}> the quad, blur and hole pipelines of each pixel format drawn to: BGRA8's, and RGBA16Float's once a view draws a wide gamut */
+    private array $pipelines = [];
+    /** @var array<int, float> until when each view, by address, draws a wide gamut (hrtime seconds) */
+    private array $wideUntil = [];
+    /** @var array<int, mixed> the views drawing a wide gamut, by address: the color space their layer had before */
+    private array $wideViews = [];
+    private ?\FFI $cg = null;
+    private $extended = null, $library = null;
     /** @var array<string, mixed> the textures canvases are rendered in before they are copied to their place, by size */
     private array $canvasTargets = [];
     /** The textures the glass reads: a copy of the drawable, the half-size blur in progress, the blurred backdrop. */
     private $snapshot = null, $blurTemp = null, $backdrop = null;
-    private array $backdropSize = [0, 0];
+    private array $backdropSize = [0, 0, 0];
     /** @var array<int, string> each view's drawable size as its last frame drew it: a frame for a new size presents with the transaction */
     private array $drawn = [];
     private $blurParams;
@@ -429,7 +440,8 @@ final class Metal
         $mtl = FFI::cdef('void* MTLCreateSystemDefaultDevice(void);', '/System/Library/Frameworks/Metal.framework/Metal');
         $this->device = ObjC::import($mtl->MTLCreateSystemDefaultDevice() ?? throw new RuntimeException('no Metal device'));
         $this->queue = ObjC::msg('p:', $this->device, 'newCommandQueue');
-        [$this->pipeline, $this->blurPipeline, $this->canvasPipeline, $this->holePipeline] = $this->buildPipelines();
+        [$this->pipeline, $this->blurPipeline, $this->holePipeline] = $this->pipelines[self::PIXEL_FORMAT_BGRA8] = $this->buildPipelines(self::PIXEL_FORMAT_BGRA8);
+        $this->canvasPipeline = $this->buildPipeline('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE);
         $this->canvasUniforms = ObjC::$c->new('float[8]');
         $floats = $capacity * DisplayList::FLOATS_PER_RECT;
         for ($i = 0; $i < self::RING; $i++) {
@@ -484,35 +496,90 @@ final class Metal
         [CanvasAtlas::$w, CanvasAtlas::$h] = [$images->w, $images->h];
     }
 
-    /** The quad pipeline (blended), the blur pipeline (opaque, for the backdrop textures), and the canvases' quad pipeline (RGBA, keeping alpha premultiplied, as the image atlas holds it). */
-    private function buildPipelines(): array
+    /** The quad pipeline (blended), the blur pipeline (opaque, for the backdrop textures) and the web views' holes' pipeline, drawing to $format. @return array{0: mixed, 1: mixed, 2: mixed} */
+    private function buildPipelines(int $format): array
+    {
+        return [$this->buildPipeline('quad_vertex', 'quad_fragment', true, $format), $this->buildPipeline('blur_vertex', 'blur_fragment', false, $format),
+            $this->buildPipeline('quad_vertex', 'quad_fragment', true, $format, self::BLEND_ZERO, self::BLEND_ZERO)];
+    }
+
+    /** A pipeline of the library's $vertex and $fragment functions drawing to $format, blended or not; the canvases' (RGBA, keeping alpha premultiplied, as the image atlas holds it) take their alpha as it is. */
+    private function buildPipeline(string $vertex, string $fragment, bool $blend, int $format, int $alphaFrom = self::BLEND_SRC_ALPHA, int $rgbFrom = self::BLEND_SRC_ALPHA)
     {
         $err = ObjC::$c->new('void*[1]');
-        $lib = ObjC::msg('p:ppp', $this->device, 'newLibraryWithSource:options:error:', ObjC::str(self::SHADER), null, $err);
-        if ($lib === null) {
-            throw new RuntimeException('MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
+        $this->library ??= ObjC::msg('p:ppp', $this->device, 'newLibraryWithSource:options:error:', ObjC::str(self::SHADER), null, $err)
+            ?? throw new RuntimeException('MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
+        $lib = $this->library;
+        $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
+        ObjC::msg('v:p', $desc, 'setVertexFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($vertex)));
+        ObjC::msg('v:p', $desc, 'setFragmentFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($fragment)));
+        $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
+        ObjC::msg('v:L', $ca, 'setPixelFormat:', $format);
+        if ($blend) {
+            ObjC::msg('v:b', $ca, 'setBlendingEnabled:', true);
+            ObjC::msg('v:L', $ca, 'setSourceRGBBlendFactor:', $rgbFrom);
+            ObjC::msg('v:L', $ca, 'setDestinationRGBBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
+            ObjC::msg('v:L', $ca, 'setSourceAlphaBlendFactor:', $alphaFrom);
+            ObjC::msg('v:L', $ca, 'setDestinationAlphaBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
         }
-        $make = function (string $vertex, string $fragment, bool $blend, int $format = self::PIXEL_FORMAT_BGRA8, int $alphaFrom = self::BLEND_SRC_ALPHA, int $rgbFrom = self::BLEND_SRC_ALPHA) use ($lib, $err) {
-            $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
-            ObjC::msg('v:p', $desc, 'setVertexFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($vertex)));
-            ObjC::msg('v:p', $desc, 'setFragmentFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($fragment)));
-            $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
-            ObjC::msg('v:L', $ca, 'setPixelFormat:', $format);
-            if ($blend) {
-                ObjC::msg('v:b', $ca, 'setBlendingEnabled:', true);
-                ObjC::msg('v:L', $ca, 'setSourceRGBBlendFactor:', $rgbFrom);
-                ObjC::msg('v:L', $ca, 'setDestinationRGBBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
-                ObjC::msg('v:L', $ca, 'setSourceAlphaBlendFactor:', $alphaFrom);
-                ObjC::msg('v:L', $ca, 'setDestinationAlphaBlendFactor:', self::BLEND_ONE_MINUS_SRC_ALPHA);
+        $ps = ObjC::msg('p:pp', $this->device, 'newRenderPipelineStateWithDescriptor:error:', $desc, $err);
+        if ($ps === null) {
+            throw new RuntimeException("pipeline $fragment: " . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
+        }
+        return $ps;
+    }
+
+    /**
+     * Whether $view draws its next frame in a wide gamut, switching it
+     * (mygo's useWide): when a frame within WIDE_HOLD has a wide color and
+     * its screen shows Display P3, its drawables hold float16 components
+     * in extended sRGB; otherwise BGRA8 in its layer's own color space, as
+     * ever. Frames of sRGB colors draw the same in either.
+     */
+    private function useWide($view, DisplayList $list): bool
+    {
+        $key = ObjC::addr($view);
+        $now = hrtime(true) / 1e9;
+        if ($list->wide !== []) { $this->wideUntil[$key] = $now + self::WIDE_HOLD; }
+        $want = $now < ($this->wideUntil[$key] ?? 0.0) && self::screenWide($view);
+        if ($want !== array_key_exists($key, $this->wideViews)) {
+            $layer = ObjC::msg('p:', $view, 'layer');
+            if ($want) {
+                $this->pipelines[self::PIXEL_FORMAT_RGBA16F] ??= $this->buildPipelines(self::PIXEL_FORMAT_RGBA16F);
+                $extended = $this->extendedSRGB();
+                $own = ObjC::msg('p:', $layer, 'colorspace'); // none, as a rule: kept, held, for when the colors are sRGB again
+                $this->wideViews[$key] = $own === null ? null : ObjC::import($this->cg->CGColorSpaceRetain($this->cg->cast('void*', ObjC::addr($own))));
+                ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_RGBA16F);
+                ObjC::msg('v:p', $layer, 'setColorspace:', $extended);
+            } else {
+                $own = $this->wideViews[$key];
+                ObjC::msg('v:L', $view, 'setColorPixelFormat:', self::PIXEL_FORMAT_BGRA8);
+                ObjC::msg('v:p', $layer, 'setColorspace:', $own);
+                if ($own !== null) { $this->cg->CGColorSpaceRelease($this->cg->cast('void*', ObjC::addr($own))); }
+                unset($this->wideViews[$key]);
             }
-            $ps = ObjC::msg('p:pp', $this->device, 'newRenderPipelineStateWithDescriptor:error:', $desc, $err);
-            if ($ps === null) {
-                throw new RuntimeException("pipeline $fragment: " . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
-            }
-            return $ps;
-        };
-        return [$make('quad_vertex', 'quad_fragment', true), $make('blur_vertex', 'blur_fragment', false), $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE),
-            $make('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_BGRA8, self::BLEND_ZERO, self::BLEND_ZERO)];
+        }
+        return $want;
+    }
+
+    /** Whether the screen of $view's window shows Display P3, more than sRGB, as recent Macs' do (mygo's WideGamut). */
+    private static function screenWide($view): bool
+    {
+        $window = ObjC::msg('p:', $view, 'window');
+        $screen = $window === null ? null : ObjC::msg('p:', $window, 'screen');
+        return $screen !== null && ObjC::msg('b:p', $screen, 'respondsToSelector:', ObjC::sel('canRepresentDisplayGamut:')) && ObjC::msg('b:l', $screen, 'canRepresentDisplayGamut:', self::DISPLAY_GAMUT_P3);
+    }
+
+    /** The extended sRGB color space, whose components go past 0 to 1 (kCGColorSpaceExtendedSRGB). */
+    private function extendedSRGB()
+    {
+        if ($this->cg === null) {
+            $path = '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics';
+            $this->cg = FFI::cdef('void* dlopen(const char*, int); void* dlsym(void*, const char*); void* CGColorSpaceCreateWithName(void*); void* CGColorSpaceRetain(void*); void CGColorSpaceRelease(void*);', $path);
+            $name = $this->cg->cast('void*[1]', $this->cg->dlsym($this->cg->dlopen($path, 2), 'kCGColorSpaceExtendedSRGB') ?? throw new RuntimeException('kCGColorSpaceExtendedSRGB'))[0];
+            $this->extended = ObjC::import($this->cg->CGColorSpaceCreateWithName($name) ?? throw new RuntimeException('extended sRGB color space'));
+        }
+        return $this->extended;
     }
 
     /**
@@ -591,6 +658,7 @@ final class Metal
         $sync = ($this->drawn[ObjC::addr($view)] ?? '') !== $size;
         $this->drawn[ObjC::addr($view)] = $size;
         ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
+        $list->showWide($this->useWide($view, $list)); // its wide colors, as its drawables show them
         $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
         $drawable = ObjC::msg('p:', $view, 'currentDrawable');
         if ($pass === null || $drawable === null) {
@@ -646,6 +714,7 @@ final class Metal
         $pw = max(1, (int)$ds->w); $ph = max(1, (int)$ds->h);
         $at = ($this->frame - 1 + self::RING) % self::RING;
         $list = $this->lists[$at];
+        $list->showWide(false); // BGRA pixels: its sRGB colors
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_BGRA8, $pw, $ph, false);
         ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
         ObjC::msg('v:L', $desc, 'setStorageMode:', 0); // shared: read back here
@@ -671,6 +740,7 @@ final class Metal
     /** Draws $list onto $texture through $pass: one pass, split at each glass quad, which reads what is below it blurred. */
     private function drawList($cb, $pass, $texture, DisplayList $list, array $buffers): void
     {
+        [$this->pipeline, $this->blurPipeline, $this->holePipeline] = $this->pipelines[ObjC::msg('L:', $texture, 'pixelFormat')]; // the target's: BGRA8, or a wide gamut's float16
         $start = 0;
         foreach ($list->glass as $g) {
             [$at, $sigma] = $g;
@@ -799,12 +869,12 @@ final class Metal
     /** Copies the drawable so far and blurs it, at half size, into the backdrop the glass reads. */
     private function blur($cb, $texture, float $sigma): void
     {
-        $w = ObjC::msg('L:', $texture, 'width'); $h = ObjC::msg('L:', $texture, 'height');
-        if ($this->backdropSize !== [$w, $h]) {
-            $this->snapshot = $this->texture($w, $h);
-            $this->blurTemp = $this->texture(max(1, intdiv($w, 2)), max(1, intdiv($h, 2)));
-            $this->backdrop = $this->texture(max(1, intdiv($w, 2)), max(1, intdiv($h, 2)));
-            $this->backdropSize = [$w, $h];
+        $w = ObjC::msg('L:', $texture, 'width'); $h = ObjC::msg('L:', $texture, 'height'); $format = ObjC::msg('L:', $texture, 'pixelFormat');
+        if ($this->backdropSize !== [$w, $h, $format]) { // copied from the drawable: of its size and its pixel format
+            $this->snapshot = $this->texture($w, $h, $format);
+            $this->blurTemp = $this->texture(max(1, intdiv($w, 2)), max(1, intdiv($h, 2)), $format);
+            $this->backdrop = $this->texture(max(1, intdiv($w, 2)), max(1, intdiv($h, 2)), $format);
+            $this->backdropSize = [$w, $h, $format];
         }
         $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
         ObjC::msg('v:pp', $blit, 'copyFromTexture:toTexture:', $texture, $this->snapshot);
@@ -830,9 +900,9 @@ final class Metal
         ObjC::msg('v:', $enc, 'endEncoding');
     }
 
-    private function texture(int $w, int $h)
+    private function texture(int $w, int $h, int $format)
     {
-        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_BGRA8, $w, $h, false);
+        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', $format, $w, $h, false);
         ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
         ObjC::msg('v:L', $desc, 'setStorageMode:', 2); // private: the GPU alone touches it
         return ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('backdrop texture');

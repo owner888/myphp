@@ -2545,6 +2545,7 @@ final class Context
     /** $rgb as #rrggbb, or #rrggbbaa when not opaque. */
     public static function hexOf(int $rgb, float $alpha): string
     {
+        $rgb &= 0xffffff; // a wide color's sRGB twin
         return $alpha >= 1.0 ? sprintf('#%06x', $rgb) : sprintf('#%06x%02x', $rgb, (int)round($alpha * 255));
     }
 

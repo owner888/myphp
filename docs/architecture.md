@@ -3009,6 +3009,27 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - Text is laid out anew at each width, in the frame of a resize; a word no
   line breaks in keeps its width and overflows, as in CSS.
 
+## Wide colors (v1.25)
+
+- **mygo's Oklch colors outside sRGB keep their wide twin**, which a
+  window on a Display P3 screen shows. myphp's colors are ints:
+  `WideColor::of` returns the 0xRRGGBB of a color inside sRGB, and for
+  one outside it the nearest sRGB color (CSS Color 4's mapping,
+  `Oklch::nearestSRGB`) with, above the low 24 bits, the id of its
+  extended sRGB components, kept in fixed point (1/8192, mygo's), so that
+  a color mixed with itself is itself. `Theme::mix` mixes wide colors by
+  their components (`WideColor::mix`), a mix inside sRGB losing its twin.
+- **The display list writes the twin and notes the wide color**
+  (`DisplayList::$wide`, the quads' fills, shadows, rings, lines and
+  glyphs that show); `showWide($on)` writes either into the quads, so the
+  same list draws on a target of either gamut.
+- **Metal switches a view's drawables** to RGBA16Float in extended sRGB
+  (`useWide`) once a frame has a wide color on a screen that shows
+  Display P3 (`canRepresentDisplayGamut:`), for two seconds after the
+  last (mygo's wideHold), with the pipelines and the glass's backdrop
+  textures of that pixel format, built when first needed; the layer's
+  own color space comes back with BGRA8.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

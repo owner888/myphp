@@ -5,20 +5,27 @@ namespace MyPHP\UI;
 
 /**
  * CSS's oklch() as a color myphp draws (mygo's Oklch and internal/gamut):
- * mapped into Display P3, then, as myphp draws sRGB alone, into sRGB, each
- * time losing chroma, keeping lightness and hue, as CSS Color 4 maps a
- * color into a gamut.
+ * mapped into Display P3, losing chroma, keeping lightness and hue, as CSS
+ * Color 4 maps a color into a gamut; one outside sRGB keeps its wide color
+ * (WideColor), which a window drawing a wide gamut shows, its nearest sRGB
+ * color, mapped the same way, the one every other shows.
  */
 final class Oklch
 {
     private const JND = 0.02, EPSILON = 0.0001, IN_GAMUT = 0.00001;
 
-    /** The 0xRRGGBB of oklch($l $c $h): lightness from 0 to 1, chroma about 0 to 0.4 (negative is 0), hue in degrees. */
+    /** The color of oklch($l $c $h): lightness from 0 to 1, chroma about 0 to 0.4 (negative is 0), hue in degrees; 0xRRGGBB inside sRGB, a WideColor outside it. */
     public static function rgb(float $l, float $c, float $h): int
     {
         [$r, $g, $b] = self::map(true, $l, $c, $h);
         [$r, $g, $b] = [1.2249401 * $r - 0.2249404 * $g, -0.0420569 * $r + 1.0420571 * $g, -0.0196376 * $r - 0.0786361 * $g + 1.0982735 * $b]; // linear P3 to linear sRGB
-        if (!self::within($r, $g, $b)) { // outside sRGB: the nearest it shows
+        return WideColor::of(self::encode($r), self::encode($g), self::encode($b));
+    }
+
+    /** The nearest sRGB color, 0xRRGGBB, of linear sRGB components, which may be outside the gamut (CSS Color 4's mapping). */
+    public static function nearestSRGB(float $r, float $g, float $b): int
+    {
+        if (!self::within($r, $g, $b)) {
             [$l2, $a2, $b2] = self::oklab($r, $g, $b);
             [$r, $g, $b] = self::map(false, $l2, hypot($a2, $b2), fmod(rad2deg(atan2($b2, $a2)) + 360, 360));
         }
