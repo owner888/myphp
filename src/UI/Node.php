@@ -90,6 +90,8 @@ final class Node
     public ?float $wrapWidth = null;
     /** That $wrapWidth is its container's last frame, so a frame follows when that differs. */
     public bool $wrapLast = false;
+    /** That $wrapWidth is the width layout gave the text, narrower than its lines (Layout::wrapTexts, mygo's text wrapping at its width). */
+    public bool $autoWrap = false;
     /** For rich text that wraps at no width: the width it was laid out across, wider than its lines, which an alignment or the direction places them in (Layout::arrange); 0 for none. */
     public float $alignWidth = 0.0;
     /** That the node is built inside a rich text's children(), continuing its paragraph (mygo's isInline). */
@@ -979,6 +981,35 @@ final class Node
         }
         $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? $this->alignWidth, $this->maxLines, $this->ellipsis, $this->noWrap, $align, rtl: $this->rtl, spans: $spans);
         return $this->layout = $this->metrics->textSystem()->layout($p);
+    }
+
+    /**
+     * Whether the text wraps at the width layout gives it (mygo's Text): a
+     * text or rich text not on one line (singleLine(), noWrap()), not given
+     * a width to wrap at, not inside a paragraph, that a line can break in.
+     */
+    public function wrapsAtWidth(): bool
+    {
+        if (($this->kind !== self::TEXT && $this->kind !== self::RICH) || $this->single || $this->noWrap || $this->inline || $this->metrics === null || $this->wrapLast || ($this->wrapWidth !== null && !$this->autoWrap)) {
+            return false;
+        }
+        $text = $this->kind === self::TEXT ? (string)$this->text : $this->plainText();
+        return preg_match('/[\s\x80-\xff]/', $text) === 1; // a space, or text past ASCII (Chinese breaks between its characters): a line may break in it
+    }
+
+    /** The width of the widest part of the text no line breaks in (CSS's min-content): laid out by the text system at no width. */
+    public function minContentWidth(): float
+    {
+        $spans = []; $runes = 0; $text = '';
+        if ($this->kind === self::RICH) { $this->plainText(); } // a paragraph's spans those of the text inside it too, merged once
+        foreach ($this->kind === self::TEXT ? [$this->given((string)$this->text)] : $this->spans as $sp) {
+            $text .= $sp->text;
+            $runes += mb_strlen($sp->text, 'UTF-8');
+            $spans[] = $sp->textSpan($runes);
+        }
+        $p = new \MyPHP\Text\Params($text, $this->textStyle()->style($this->fontSize), 0.001, 0, '', false, \MyPHP\Text\Params::START, rtl: $this->rtl, spans: $spans);
+        $l = $this->metrics->textSystem()->layout($p);
+        return count($l->lines) > 1 ? $l->width : $this->fw; // one piece: as wide as it measured
     }
 
     /**

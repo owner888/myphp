@@ -69,7 +69,7 @@ function form(Context $c, array &$s): void
         if ($c->hovered($card)) { $card->color = $c->theme->surfaceHover; }
         if ($c->clicked($card)) { $s['submits']++; $s['greeting'] = 'card activated'; }
         $c->richText([new Span('A card. ', style: Font::BOLD), new Span('Tab to it and press Enter, or click it. This sentence wraps at the width the window gives the card, '
-            . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')], wrap: true);
+            . 'so make the window narrower and watch it reflow — 中文也会在合适的地方换行。')]);
       $c->end();
       // A link, a determinate bar following the slider, an indeterminate one; the Submit button has a tip.
       $c->row(0, 12);

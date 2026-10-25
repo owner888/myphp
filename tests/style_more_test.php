@@ -83,7 +83,7 @@ $b = smBoxes(function (Context $c): void {
     $c->column();
       $c->grid(2)->gapY(4)->label('grid');
         $c->text('one');
-        $c->richText([new Span(str_repeat('word ', 30))], wrap: true);
+        $c->text(str_repeat('word ', 30));
         $c->box(0, 25, 0)->label('x');
       $c->end();
     $c->end();
@@ -95,7 +95,7 @@ $b = smBoxes(function (Context $c): void {
     $c->column()->size(60, 0)->align(Node::START);
       $c->text("one\ntwo")->fixedLineHeight(30)->label('fixed');
       $c->text('a long line of words')->noWrap()->label('nowrap');
-      $c->richText([new Span('a long line of words')], wrap: true)->label('wraps');
+      $c->text('a long line of words')->label('wraps');
     $c->end();
 }, 300, 300, 'fixed', 'nowrap', 'wraps');
 same(60.0, $b['fixed'][3], 'two lines 30 high');

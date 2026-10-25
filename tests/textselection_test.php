@@ -197,7 +197,7 @@ $firstText = 'café 日本語 🎉'; $shown = true; $width = 300.0;
 $h = new Headless(function (Context $c) use (&$firstText, &$shown) {
     $c->column(12, 8)->selectable();
       if ($shown) { $c->key('first')->text($firstText); }
-      $c->key('rich')->richText([], wrap: true)->selectable()->children(function () use ($c) {
+      $c->key('rich')->richText([])->selectable()->children(function () use ($c) {
           $c->text('Read ');
           $c->link('the guide', 'https://example.com');
           $c->text(' and more.');

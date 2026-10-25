@@ -177,7 +177,7 @@ function view(Context $c, Log $log): void
           } else {
               $spans[] = new Span($line, style: Font::MONO, color: $color);
           }
-          $c->richText($spans, 12, wrap: true); // at the width the cell had last frame
+          $c->richText($spans, 12); // wrapping at the width of the cell
       });
     $c->end();
 }

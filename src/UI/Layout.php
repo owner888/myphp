@@ -45,13 +45,39 @@ final class Layout
         self::$window = [$w, $h];
         self::measure($c->root);
         self::arrange($c->root, 0, 0, $w, $h);
+        if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width)
+            self::measure($c->root);
+            self::arrange($c->root, 0, 0, $w, $h);
+        }
         $ids = $c->runtime?->takeReveals($c->reveal) ?? $c->reveal;
         if ($ids !== []) {
             self::revealAll($c->root, $ids);
         }
     }
 
-    /** Scrolls the nodes of $root with ids $ids into view, in that order (mygo's revealAll). @param list<int> $ids */
+    /** Has the texts under $n arranged narrower than their lines wrap at the width they got, laid out by the text system; whether one did. */
+    private static function wrapTexts(Node $n): bool
+    {
+        if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < $n->mw) {
+            if ($n->kind === Node::TEXT) {
+                [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it: a size given to it stays
+                $n->toRich();
+                if ($n->fw == $ow) { $n->fw = 0.0; }
+                if ($n->fh == $oh) { $n->fh = 0.0; }
+            } else {
+                $l = $n->textLayout();
+                if ($n->fw == $l->width) { $n->fw = 0.0; }
+                if ($n->fh == $l->height) { $n->fh = 0.0; }
+            }
+            $n->wrapWidth = $n->w; $n->autoWrap = true; $n->layout = null;
+            return true;
+        }
+        $wrapped = false;
+        foreach ($n->kids as $k) { $wrapped = self::wrapTexts($k) || $wrapped; }
+        return $wrapped;
+    }
+
+        /** Scrolls the nodes of $root with ids $ids into view, in that order (mygo's revealAll). @param list<int> $ids */
     private static function revealAll(Node $root, array $ids): void
     {
         $found = [];
@@ -171,7 +197,7 @@ final class Layout
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
             $n->mh = $n->fh;
-            $n->minMw = $n->single ? $n->minW : $n->fw; // a single-line text shrinks to its min width (and shows an ellipsis); other leaves keep their size
+            $n->minMw = $n->single ? $n->minW : ($n->wrapsAtWidth() ? min($n->fw, $n->minContentWidth()) : $n->fw); // a single-line text shrinks to its min width (and shows an ellipsis), one that wraps to its widest word; other leaves keep their size
             return;
         }
         if ($n->gridCols !== null) { // a grid: its tracks at the size their content asks
@@ -548,7 +574,7 @@ final class Layout
         } elseif ($k->aspect > 0 && $k->fw <= 0 && $k->fh > 0) {
             $kw = $k->fh * $k->aspect + $mx;
         } else {
-            $kw = $autoCross || ($a === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT || $k->kind === Node::RICH)) ? $cw : ($k->single ? min($k->mw, $cw) : $k->mw);
+            $kw = $autoCross || ($a === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT || $k->kind === Node::RICH)) ? $cw : ($k->single || $k->wrapsAtWidth() ? min($k->mw, $cw) : ($k->kind === Node::CONTAINER && $k->fw <= 0 ? min($k->mw, max($k->minMw, $cw)) : $k->mw)); // a text that wraps no wider than the room; a container as wide as its content, within the room down to its least (CSS's fit-content)
         }
         return self::clampW($k, $kw, $cw);
     }

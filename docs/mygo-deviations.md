@@ -19,14 +19,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     (`Node::toRich`).
   - Why: the tests and widgets were written against the old metrics
     (7 points a character, 16 a line in the headless stub).
-- **Text does not wrap at the room it has** (v0.81)
-  - mygo: a `Text` wraps at the width layout gives it.
-  - myphp: text is one line, cut by `singleLine()`; `richText()` wraps at
-    a `$width` given, or with `wrap: true` at its container's last-frame
-    width, a frame late after a resize.
-  - Why: the layout measures before it arranges and text is measured as
-    it is built; wrapping during layout needs a measure pass that asks the
-    text for its height at a width.
+- **Text wraps at the room it has** (v0.81, wrapping since v1.24)
+  - mygo: a `Text` wraps at the width layout gives it, its height found
+    at that width (`heightAt`, intrinsic sizes).
+  - myphp: the same, by a second pass: the layout measures and arranges,
+    texts arranged narrower than their lines wrap at the width they got
+    (`Layout::wrapTexts`, made rich text), and it measures and arranges
+    again; a text that wraps shrinks in a row to its widest word
+    (`Node::minContentWidth`), and a container not stretched is no wider
+    than its room, down to its content's least (fit-content).
+    `richText(wrap: true)` still wraps at the container's last-frame width.
+  - Why: myphp's layout measures before it arranges; the second pass gives
+    mygo's result without its intrinsic sizing, at the cost of a second
+    layout in a frame where text wraps.
 - **`singleLine()` keeps maxLines at 0** (v0.81)
   - mygo: `SingleLine` sets `single` and `maxLines = 1`.
   - myphp: only the single-line flag; the painter cuts it with an
@@ -1525,8 +1530,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   (Go's generic `Selection[K]`; myphp's keys are ints or strings),
   TestInlineLink's focus ring and TestInlineStyles' pixels (the headless
   painter draws none), TestTooltipHidesOnPress (tooltips_test).
-- **A table's tall rows**: TestTableRows' long note is rich text with
-  `wrap: true`, as text wraps only so (Text, v0.81).
 - **The passes of a press**: mygo counts its build passes; myphp's
   selection_press_test counts the view's builds, two in the frame a press
   lands in.
@@ -1575,3 +1578,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   fields keep a TextState).
 - **Cmd+V in the tests** is the Edit menu's Paste (`['edit', 'paste']`),
   as the window gets it: the menu's key equivalent sends `paste:`.
+
+## Text wrapping at its width (v1.24)
+
+- **Two layouts a frame where text wraps** (see Text wraps at the room it
+  has, v0.81): mygo finds a text's height at its width as it lays out;
+  myphp lays out again once the texts that need it wrap.

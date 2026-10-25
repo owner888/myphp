@@ -188,7 +188,7 @@ check($s->atEnd && $h->byText('Jump to latest') === null, 'jumped to the end');
 $s = new ListState(); $w = 400;
 $h = new Headless(function (Context $c) use ($s): void {
     $c->column(0, 0, 1)->align(Node::STRETCH);
-      $c->list($s, 1000, fn(int $i) => $c->richText([new \MyPHP\UI\Span("Row $i " . str_repeat('words that wrap ', 1 + $i % 7))], wrap: true)->label("r$i"))->grow = 1;
+      $c->list($s, 1000, fn(int $i) => $c->text("Row $i " . str_repeat('words that wrap ', 1 + $i % 7))->label("r$i"))->grow = 1;
     $c->end();
 }, 400, 400);
 $h->frame();

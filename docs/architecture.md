@@ -279,7 +279,8 @@ runs) continues its paragraph, each node's style a span over the paragraph's
 the boxes of its words (`frags`), which are its area for the pointer
 (`Runtime::under`), its focus ring and its bounds to assistive
 technology (`accessInline`). A paragraph wraps at `$width`, or at its
-container's last-frame room with `wrap: true`; otherwise at newlines.
+container's last-frame room with `wrap: true`; otherwise at the width
+layout gives it, as text does (v1.24, below).
 The width is the app's to pass (`$c->width` minus
 its paddings), or, with `wrap: true`, the room its container had last
 frame inside the container's padding (`Runtime::widthOf` of the parent,
@@ -2987,6 +2988,26 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   BMP was counted once), and native input reads it as U+FFFD.
 - **A list's rows not chosen** (no `$selected`) still reorder by a drag;
   a click is then the row's own.
+
+## Text wrapping at its width (v1.24)
+
+- **mygo's text wraps at the width it is given**; myphp's layout measured
+  every node before arranging, so a text knew no width. `Layout::layout`
+  now arranges, has `wrapTexts` wrap each text or rich text arranged
+  narrower than its lines at the width it got (a text becomes rich text,
+  `Node::$autoWrap`; a size given to it stays), and measures and arranges
+  once more, the lines' height in the columns and rows around them. It
+  goes again only when a text wrapped, so a frame without wrapping lays
+  out once.
+- **What lets a text be narrower**: a text that may wrap (`Node::wrapsAtWidth`:
+  not `singleLine()` or `noWrap()`, not given a width, not inside a
+  paragraph, with a space or text past ASCII) shrinks in a row down to its
+  widest piece no line breaks in (`Node::minContentWidth`, the text system
+  laying it out at no width); in a column it is no wider than the column;
+  a container not stretched is as wide as its content within its room,
+  down to its content's least (CSS's fit-content).
+- Text is laid out anew at each width, in the frame of a resize; a word no
+  line breaks in keeps its width and overflows, as in CSS.
 
 ## Open items
 

@@ -941,8 +941,8 @@ final class Context
      * wrap together as one paragraph, or several at newlines, at $width;
      * with $wrap at the width its container had last frame, inside its
      * padding (the window's width the first time, and a frame follows when
-     * it differs); otherwise at newlines only. The node is as wide as its
-     * widest line.
+     * it differs); otherwise at the width layout gives it, as text does
+     * (Layout::wrapTexts). The node is as wide as its widest line.
      *
      * Text built in its children() (text(), link(), richText()) continues
      * the paragraph after its spans, as HTML's inline elements do: each
@@ -950,7 +950,7 @@ final class Context
      * (clicked, hovered, the focus, a tooltip, assistive technology) with
      * the boxes of its words as its area. A link in a sentence:
      *
-     *     $c->richText([], wrap: true)->children(function () use ($c, $url) {
+     *     $c->richText([])->children(function () use ($c, $url) {
      *         $c->text('Read ');
      *         $c->link('the guide', $url);
      *         $c->text(' to get started.');

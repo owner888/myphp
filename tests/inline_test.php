@@ -14,7 +14,7 @@ $url = 'https://example.com/guide';
 $para = null; $link = null; $opened = [];
 $h = new Headless(function (Context $c) use ($url, &$para, &$link): void {
     $c->column(10);
-      $para = $c->richText([], width: 180)->children(function () use ($c, $url, &$link): void {
+      $para = $c->richText([])->children(function () use ($c, $url, &$link): void {
           $c->text('Read ');
           $link = $c->link('the documentation of the toolkit', $url);
           $c->text(' to get started.');

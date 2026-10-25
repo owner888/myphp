@@ -128,7 +128,7 @@ $h = new Headless(function (Context $c) use ($s, &$headerCols): void {
       $c->table($s, [new TableColumn('Name'), new TableColumn('Notes', 120)], 1000, function (int $row, int $col) use ($c, &$headerCols): void {
           if ($row % 10 === 0) { if ($col !== 0) { $headerCols++; } $c->text('Section ' . intdiv($row, 10)); }
           elseif ($col === 0) { $c->text("Row $row"); }
-          elseif ($row % 7 === 0) { $c->richText([new \MyPHP\UI\Span('A note long enough to wrap over a few lines of its column')], wrap: true); }
+          elseif ($row % 7 === 0) { $c->text('A note long enough to wrap over a few lines of its column'); }
           else { $c->text('Short'); }
       })->grow(1);
     $c->end();
