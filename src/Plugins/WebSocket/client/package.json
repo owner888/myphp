@@ -1,9 +1,12 @@
 {
   "name": "@myphp-plugins/websocket",
   "version": "0.1.0",
-  "description": "The page side of MyPHP's WebSocket plugin: a WebSocket with the browser's API whose connections PHP makes, over window.myphp.call",
+  "description": "The page side of MyPHP's WebSocket plugin: a WebSocket with the browser's API whose connections PHP makes, over myphp-runtime",
   "type": "module",
   "exports": "./index.ts",
   "types": "./index.ts",
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependencies": {
+    "myphp-runtime": "^1.13.0"
+  }
 }

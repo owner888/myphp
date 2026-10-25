@@ -159,13 +159,13 @@ Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
 
 ## Projects and bundles
 
-`bin/myphp` is mygo's CLI (`myphp help`); myphp.json takes mygo.json's
-fields. `myphp build` makes `<out>/darwin-<arch>/<name>.app` (a C launcher
-that execs this php, or `-launcher micro`: a phar with phpmicro from
-static-php-cli), signed, with resources and plugin natives, and a .dmg;
-notarizes, writes updates, `-upload`s. Its work is `src/Native/Build/`
-(`tests/build_test.php`); the bundled agent skills are in `bin/skills`.
-static-php-cli is the one outside tool, for release builds only.
+`bin/myphp` is mygo's CLI (`myphp help`; templates, skills in `bin/`);
+myphp.json or myphp.config.ts take mygo.json's fields. `build` makes
+`<out>/darwin-<arch>/<name>.app` (a C launcher that execs this php, or
+`-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; `dev`
+runs "<name> Dev" from .myphp/dev. Work in `src/Native/Build/`
+(`tests/build_test.php`). Pages import `packages/runtime` (myphp-runtime,
+TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli.
 
 ## Working on it
 

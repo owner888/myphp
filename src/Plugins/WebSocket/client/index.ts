@@ -20,18 +20,7 @@
  *
  * @module
  */
-/** The page runtime MyPHP installs in its pages. */
-interface Runtime {
-  call<T>(method: string, ...args: unknown[]): Promise<T>;
-  isCallError(e: unknown): e is Error;
-  Channel: new <T>() => Channel<T>;
-}
-/** A stream of values from PHP. */
-interface Channel<T> extends AsyncIterable<T> {
-  close(): void;
-  onmessage: ((value: T) => void) | null;
-}
-const myphp = () => (window as unknown as { myphp: Runtime }).myphp;
+import { Channel, call, isCallError } from "myphp-runtime";
 
 /** Options of a {@link WebSocket}, beyond the browser's. */
 export interface WebSocketOptions {
@@ -125,9 +114,9 @@ export class WebSocket extends EventTarget {
     }
     this.url = u.href;
     this.#id = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
-    this.#events = new (myphp().Channel)<PhpEvent>();
+    this.#events = new Channel<PhpEvent>();
     this.#events.onmessage = (e) => this.#receive(e);
-    myphp().call("plugin:websocket.connect", {
+    call("plugin:websocket.connect", {
       id: this.#id,
       url: this.url,
       protocols: list,
@@ -235,7 +224,7 @@ export class WebSocket extends EventTarget {
 
   #send(message: PhpMessage | Promise<PhpMessage>): Promise<void> {
     const seq = ++this.#seq;
-    return Promise.resolve(message).then((m) => myphp().call<void>("plugin:websocket.send", this.#id, seq, m));
+    return Promise.resolve(message).then((m) => call<void>("plugin:websocket.send", this.#id, seq, m));
   }
 
   #receive(e: PhpEvent): void {
@@ -318,7 +307,7 @@ function closeEvent(code: number, reason: string, wasClean: boolean): CloseEvent
 
 /** Why the connection failed. */
 function failure(err: unknown): string {
-  if (myphp().isCallError(err) && err.message.includes("plugin is not used")) {
+  if (isCallError(err) && err.message.includes("plugin is not used")) {
     return "the PHP side does not use the WebSocket plugin: call App::use(WebSocket::plugin()) before App::run";
   }
   return err instanceof Error ? err.message : String(err);

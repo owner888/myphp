@@ -1,5 +1,6 @@
 // A PHP side for the plugins' client tests (mygo's fake-go.ts): MyPHP's
-// real page runtime, src/Native/bridge.js, installed as window.myphp,
+// real page runtime, src/Native/bridge.js, installed as window.myphp (the
+// global object's myphp, as myphp-runtime finds it),
 // whose calls go to handlers written in TypeScript that stream through
 // channels as the PHP methods do. bun test, in a plugin's client/.
 import { readFileSync } from "node:fs";
@@ -22,7 +23,7 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
   const calls: [string, unknown[]][] = [];
   const posted: Record<string, unknown>[] = [];
   const aborts = new Map<number, AbortController>();
-  const g = globalThis as unknown as { window?: unknown };
+  const g = globalThis as unknown as { window?: unknown; myphp?: unknown };
   const before = g.window;
   const win: Record<string, unknown> = {};
   const deliver = (msg: unknown) => (win.myphp as { __deliver(m: unknown): void }).__deliver(msg);
@@ -69,7 +70,8 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
   );
   new Function("window", "document", "addEventListener", source)(win, { addEventListener() {}, createElement: () => ({ isConnected: false }) }, () => {});
   g.window = win;
-  return { calls, posted, uninstall: () => { g.window = before; } };
+  g.myphp = win.myphp; // in a page, window is the global object, where myphp-runtime finds it
+  return { calls, posted, uninstall: () => { g.window = before; delete g.myphp; } };
 }
 
 export const tick = () => new Promise((r) => setTimeout(r, 1));

@@ -371,6 +371,7 @@ final class App
         }
         ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
+        Native\Signals::quitOn(self::quit(...)); // SIGINT and SIGTERM quit as Quit does (mygo's quitOnSignals)
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', self::$policy->native());
         if (\MyPHP\Theme::source() !== ThemeSource::System) {
             \MyPHP\Theme::apply(); // the appearance setSource() asked for before
@@ -672,7 +673,7 @@ final class App
             PathName::Cache => ["$lib/Caches/" . self::name(), true],
             PathName::Logs => ["$lib/Logs/" . self::name(), true],
             PathName::Temp => [rtrim(sys_get_temp_dir(), '/'), false],
-            PathName::Resources => [($app = Native\Bundle::path()) !== null ? "$app/Contents/Resources/app/resources" : dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
+            PathName::Resources => [($app = Native\Bundle::path()) !== null ? "$app/Contents/Resources" : dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
             PathName::Exe => [Native\Bundle::command()[0], false],
             PathName::Desktop => ["$home/Desktop", false],
             PathName::Documents => ["$home/Documents", false],

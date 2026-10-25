@@ -1,0 +1,16 @@
+import { defineConfig } from "myphp-cli";
+
+export default defineConfig({
+  name: {{json:name}},
+  identifier: {{json:identifier}},
+  version: "0.1.0",
+  entry: "app.php",
+  // `myphp dev` runs devCommand and loads devUrl; `myphp build` runs
+  // buildCommand and puts frontendDist into the app.
+  devUrl: "http://localhost:5173",
+  devCommand: "bun run dev:web",
+  buildCommand: "bun run build:web",
+  frontendDist: "dist",
+  bindings: "src/myphp.ts",
+  out: "build",
+});

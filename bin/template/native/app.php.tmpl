@@ -1,0 +1,25 @@
+<?php
+declare(strict_types=1);
+
+use MyPHP\{App, Window, WindowOptions};
+use MyPHP\UI\{Content, Context};
+
+require __DIR__ . '/boot.php';
+
+$state = ['count' => 0];
+
+App::setName({{php:name}});
+App::whenReady(function () use (&$state) {
+    new Window(new WindowOptions(title: {{php:name}}, width: 420, height: 260,
+        content: Content::view(function (Context $c) use (&$state) {
+            $c->column(24, 12, 1);
+              $c->text("Count: {$state['count']}", 24);
+              $c->row(0, 8);
+                if ($c->clicked($c->button('Increment'))) { $state['count']++; }
+                if ($c->clicked($c->button('Reset'))) { $state['count'] = 0; }
+              $c->end();
+              $c->muted('Native UI drawn by MyPHP on the GPU. Edit app.php and save: myphp dev builds it again.');
+            $c->end();
+        })));
+});
+App::run();

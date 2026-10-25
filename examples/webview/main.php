@@ -104,13 +104,13 @@ $html = <<<'HTML'
   f.onsubmit = async (e) => {
     e.preventDefault(); err.textContent = '';
     try { await call('Notes.add', t.value); t.value = ''; }
-    catch (x) { err.textContent = myphp.isCallError(x) ? x.message + ' — from ' + x.method : x; }
+    catch (x) { err.textContent = x.name === 'CallError' ? x.message + ' — from ' + x.method : x; }
   };
   on('added', (note) => console.log('event added', note) || call('Notes.list').then(render));
   call('Notes.list').then(render);
   let ch = null;
   stream.onclick = async () => {
-    ch?.close(); ch = new myphp.Channel(); ticks.textContent = '';
+    ch?.close(); ch = myphp.channel(); ticks.textContent = '';
     const done = call('Clock.ticks', 5, ch);            // the channel rides along as an argument
     for await (const line of ch) ticks.textContent += line + ' · ';
     ticks.textContent += 'sent ' + await done;

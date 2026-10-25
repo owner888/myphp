@@ -1,0 +1,25 @@
+{
+  "name": "myphp-cli",
+  "version": "1.13.0",
+  "description": "The myphp command line tool: create, develop and package MyPHP desktop apps",
+  "keywords": ["myphp", "desktop", "webview", "php", "cli"],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "myphp": "bin/myphp.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "types": "./index.d.ts",
+  "files": ["bin", "index.js", "index.d.ts", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

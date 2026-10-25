@@ -17,7 +17,7 @@ import {
   type CatalogData,
 } from "./i18n";
 
-const fixtures = JSON.parse(readFileSync(join(import.meta.dir, "../../tests/i18n/messages.json"), "utf8")) as {
+const fixtures = JSON.parse(readFileSync(join(import.meta.dir, "../../../tests/i18n/messages.json"), "utf8")) as {
   format: { message: string; locale?: string; args?: Record<string, unknown>; want: string }[];
   errors: string[];
   pseudo: { message: string; locale: string; args?: Record<string, unknown>; want: string }[];
@@ -123,9 +123,10 @@ test("skeletons as Intl's options", () => {
 });
 
 describe("the module myphp generate writes", () => {
-  const file = join(import.meta.dir, "../../tests/i18n/app/locales.ts");
+  const file = join(import.meta.dir, "../../../tests/i18n/app/locales.ts");
   test("type-checks", () => {
-    const tsc = Bun.spawnSync(["tsc", "--noEmit", "--strict", "--noUncheckedIndexedAccess", "--target", "ES2022", "--module", "ESNext", "--moduleResolution", "bundler", "--lib", "ES2022,DOM", "--skipLibCheck", file]);
+    // The repository's tsconfig.json, which resolves myphp-runtime/i18n to its source, includes it.
+    const tsc = Bun.spawnSync(["tsc", "-p", join(import.meta.dir, "../../../tsconfig.json")]);
     expect(tsc.stdout.toString() + tsc.stderr.toString()).toBe("");
     expect(tsc.exitCode).toBe(0);
   });

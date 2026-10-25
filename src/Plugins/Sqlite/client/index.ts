@@ -2,9 +2,7 @@
 // over MyPHP's bridge): the PHP service App::use(Sqlite::plugin()) binds as
 // "plugin:sqlite". Import this file into the page's TypeScript.
 
-/** The bridge MyPHP installs in its pages. */
-const call = <T>(method: string, ...args: unknown[]): Promise<T> =>
-  (window as unknown as { myphp: { call<R>(method: string, ...args: unknown[]): Promise<R> } }).myphp.call<T>(method, ...args);
+import { call } from "myphp-runtime";
 
 /** SQLite values: integers beyond Number's safe range are returned as bigint. */
 export type Value = null | number | bigint | string | Uint8Array;

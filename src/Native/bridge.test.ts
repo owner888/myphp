@@ -8,7 +8,7 @@ afterEach(() => php?.uninstall());
 
 interface Runtime {
   call(method: string, ...args: unknown[]): Promise<unknown>;
-  Channel: new () => AsyncIterable<unknown> & { close(): void; onmessage: ((v: unknown) => void) | null };
+  channel(onmessage?: (v: unknown) => void): AsyncIterable<unknown> & { close(): void; onmessage: ((v: unknown) => void) | null };
 }
 const myphp = () => (globalThis as unknown as { window: { myphp: Runtime } }).window.myphp;
 const acks = () => php!.posted.filter((m) => m.t === "chan-ack").map((m) => m.n);
@@ -23,7 +23,7 @@ test("a value asking for it is acknowledged once taken, not before", async () =>
       return new Promise<void>((r) => (release = r));
     },
   });
-  const ch = new (myphp().Channel)();
+  const ch = myphp().channel();
   const done = myphp().call("S.stream", ch);
   await tick();
   await tick();
@@ -39,9 +39,8 @@ test("a value asking for it is acknowledged once taken, not before", async () =>
 
 test("onmessage takes values as they come", async () => {
   php = fakeMyPHP({ "S.stream": (c) => { c.send(0, "x", true); c.send(0, "y", true); } });
-  const ch = new (myphp().Channel)();
   const got: unknown[] = [];
-  ch.onmessage = (v) => got.push(v);
+  const ch = myphp().channel((v) => got.push(v));
   await myphp().call("S.stream", ch);
   expect(got).toEqual(["x", "y"]);
   expect(acks()).toEqual([1, 2]);

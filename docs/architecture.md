@@ -2633,6 +2633,48 @@ came with them.
   classes first, and `Ipc::arguments` asks whether a parameter's type is
   a backed enum only when it is no builtin type.
 
+## Development and the page packages (v1.13)
+
+- **The development app.** `myphp dev` builds "<name> Dev" in
+  `.myphp/dev/darwin-<arch>` as `myphp build` builds an app, but its
+  launcher runs the project's entry in the project (an absolute directory
+  compiled into it), so no file is copied but the resources. It is built
+  again when a poll (every 250 ms) of what it is made of sees a change:
+  the PHP files of the project and the framework, the configuration, the
+  icon, the entitlements, the resources and the catalogs, not the files
+  generated from them (the client, the catalogs' class and module), which
+  would build it twice. A build whose fingerprint (the contents of those,
+  the resources' names, modes, sizes and times, the icon, the Info.plist)
+  is the running one's does not relaunch: "No change". A build that fails
+  (`Failure`, which `fail()` throws and main prints) leaves the running app.
+- **Stopping the app.** SIGTERM, then SIGKILL after 3 seconds, as mygo's
+  dev; the app takes SIGINT and SIGTERM as Quit through `Native\Signals`:
+  `sigaction` sets them to SIG_IGN (signals the parent ignored stay so)
+  and a `DISPATCH_SOURCE_TYPE_SIGNAL` source on the main queue calls a
+  block, PHP on the main thread, as the run loop drains the queue; a
+  second signal exits with 128 + its number.
+- **The launcher names the bundle.** The process of the exec launcher is
+  php, whose path says nothing of the bundle, so the launcher sets
+  `MYPHP_BUNDLE`, which `Native\Bundle::path()` reads once and takes out
+  of the environment (the processes the app starts are not in the bundle),
+  and passes its own arguments on after the entry.
+- **myphp.config.ts.** Bun (`bun run -`) or Node.js 22.6+ (types
+  stripped) runs a loader read from its standard input, which imports the
+  file, calls its default export with the command when it is a function
+  and writes JSON to a temporary file; project() then checks it as
+  myphp.json's. What the configuration prints goes to stderr.
+- **myphp-runtime from its sources.** packages/runtime exports `.ts`
+  files: Vite transforms them, tsc with `moduleResolution: bundler`
+  checks them, and Bun runs them. In the repository, tsconfig.json's
+  `paths` resolve `myphp-runtime` and `myphp-runtime/*` for the plugins'
+  clients, `bun test` and `tsc -p .`; `tsc` on one file refuses to run
+  next to a tsconfig.json (TS5112), so the test of the generated locales
+  module checks the whole project. The tests are excluded from `tsc -p .`:
+  their Bun types are no dependency.
+- **The web template.** mygo's: Vite, TypeScript, bun, a Greeter with a
+  `tick` event, `myphp.config.ts` importing `defineConfig` from
+  myphp-cli; `myphp init` runs `bun install` and generates the client.
+
 ## Packaging (v1.12)
 
 `bin/myphp build` is mygo's `mygo build` for macOS; the work is in

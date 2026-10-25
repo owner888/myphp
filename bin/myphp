@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.12';
+const VERSION = '1.13';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -36,12 +36,14 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Codesign, Dmg, Icns, Resources, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, Resources, Upload};
+
+/** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
+final class Failure extends RuntimeException {}
 
 function fail(string $msg): never
 {
-    fwrite(STDERR, "myphp: $msg\n");
-    exit(1);
+    throw new Failure($msg);
 }
 
 /** Prints a step done or a note, as mygo's logf. */
@@ -104,14 +106,102 @@ function orElse(string $s, string $or): string
     return $s === '' ? $or : $s;
 }
 
+/** The MyPHP checkout the project runs on: its configuration's framework, else this command's (which boot.php is told as MYPHP_HOME). */
+function frameworkOf(array $c): string
+{
+    return realpath($c['framework'] ?? FRAMEWORK) ?: fail('framework ' . $c['framework'] . ' does not exist');
+}
+
 /** $p made absolute against the project's directory. */
 function path(string $dir, string $p): string
 {
     return str_starts_with($p, '/') ? $p : "$dir/$p";
 }
 
+const CONFIG_TS = 'myphp.config.ts';
+const CONFIG_LOADER = <<<'JS'
+import { writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+const mod = await import(pathToFileURL(process.env.MYPHP_CONFIG_FILE).href);
+let config = await mod.default;
+if (typeof config === "function") config = await config({ command: process.env.MYPHP_CONFIG_COMMAND });
+if (typeof config !== "object" || config === null || Array.isArray(config)) {
+  throw new Error("the default export is not a configuration object, or a function returning one");
+}
+writeFileSync(process.env.MYPHP_CONFIG_OUT, JSON.stringify(config));
+JS;
+
+/** The myphp command running, which a configuration exporting a function gets. */
+$GLOBALS['running'] = '';
+
 /**
- * The project of the directory in $args and its configuration, myphp.json,
+ * The configuration of the project in $dir as JSON, and the file it comes
+ * from (mygo's readConfig): myphp.json, or myphp.config.ts, which a
+ * JavaScript runtime evaluates; without either, null and myphp.json.
+ *
+ * @return array{?string, string}
+ */
+function readConfig(string $dir): array
+{
+    $json = is_file("$dir/" . CONFIG); $ts = is_file("$dir/" . CONFIG_TS);
+    $json && $ts && fail(CONFIG . ' configures the project too; keep one of them');
+    if ($ts) {
+        return [evalTSConfig($dir, "$dir/" . CONFIG_TS), CONFIG_TS];
+    }
+    return [$json ? (string)file_get_contents("$dir/" . CONFIG) : null, CONFIG];
+}
+
+/**
+ * Evaluates myphp.config.ts with Bun, or Node.js 22.6 and later, which strip
+ * the types (mygo's evalTSConfig): a loader read from the runtime's standard
+ * input imports the file, awaits its default export, calls it with the
+ * command when it is a function, and writes the configuration as JSON, which
+ * then goes through the checks of myphp.json.
+ */
+function evalTSConfig(string $dir, string $file): string
+{
+    $cmd = null;
+    if (($bun = Cmd::look('bun')) !== '') {
+        $cmd = [$bun, 'run', '-'];
+    } elseif (($node = Cmd::look('node')) !== '' && ($flags = nodeTypeScriptFlags($node)) !== null) {
+        $cmd = [$node, ...$flags, '--input-type=module', '-'];
+    }
+    $cmd !== null || fail('evaluating ' . CONFIG_TS . ' needs Bun (https://bun.sh) or Node.js 22.6 or later');
+    $out = tempnam(sys_get_temp_dir(), 'myphp-config-');
+    try {
+        $env = ['MYPHP_CONFIG_FILE' => $file, 'MYPHP_CONFIG_OUT' => $out, 'MYPHP_CONFIG_COMMAND' => $GLOBALS['running']] + getenv();
+        $p = proc_open($cmd, [0 => ['pipe', 'r'], 1 => ['file', 'php://stderr', 'w'], 2 => ['pipe', 'w']], $pipes, $dir, $env); // what it prints does not mix with myphp's output
+        fwrite($pipes[0], CONFIG_LOADER);
+        fclose($pipes[0]);
+        $err = trim((string)stream_get_contents($pipes[2]));
+        fclose($pipes[2]);
+        if (proc_close($p) !== 0) {
+            fail(CONFIG_TS . ': ' . ($err !== '' ? $err : basename($cmd[0]) . ' failed'));
+        }
+        $data = (string)file_get_contents($out);
+        $data !== '' || fail(CONFIG_TS . ': ' . basename($cmd[0]) . ' exited without writing the configuration');
+        return $data;
+    } finally {
+        @unlink($out);
+    }
+}
+
+/** The flags that make the Node.js at $node run TypeScript, or null when it is too old to. @return ?list<string> */
+function nodeTypeScriptFlags(string $node): ?array
+{
+    $v = explode('.', ltrim(trim((string)shell_exec(escapeshellarg($node) . ' --version')), 'v'));
+    [$major, $minor] = [(int)($v[0] ?? 0), (int)($v[1] ?? 0)];
+    return match (true) {
+        $major >= 24, $major === 23 && $minor >= 6, $major === 22 && $minor >= 18 => ['--no-warnings'], // types are stripped by default
+        $major === 23, $major === 22 && $minor >= 6 => ['--no-warnings', '--experimental-strip-types'],
+        default => null,
+    };
+}
+
+/**
+ * The project of the directory in $args and its configuration, myphp.json
+ * or myphp.config.ts,
  * with mygo's defaults and checks (mygo's loadConfig): every field is
  * optional. name (default: the directory's), identifier (com.myphp.<name>),
  * version (0.1.0), copyright, icon (a square PNG, default
@@ -129,17 +219,18 @@ function project(array $args): array
 {
     $dir = realpath($args[0] ?? '.') ?: fail(($args[0] ?? '.') . ' does not exist');
     is_dir($dir) || fail("$dir is not a directory");
-    $file = "$dir/" . CONFIG;
+    [$data, $name] = readConfig($dir);
     $c = [];
-    if (is_file($file)) {
+    if ($data !== null) {
         try {
-            $c = json_decode((string)file_get_contents($file), true, 32, JSON_THROW_ON_ERROR);
+            $c = json_decode($data, true, 32, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            fail(CONFIG . ': ' . $e->getMessage());
+            fail("$name: " . $e->getMessage());
         }
-        is_array($c) && ($c === [] || !array_is_list($c)) || fail(CONFIG . ' is not an object');
+        is_array($c) && ($c === [] || !array_is_list($c)) || fail("$name is not an object");
     }
-    $bad = fn(string $msg): never => fail(CONFIG . ": $msg");
+    $c['configFile'] = $name; // for messages, as mygo's configName
+    $bad = fn(string $msg): never => fail("$name: $msg");
     $c['name'] = orElse((string)($c['name'] ?? ''), basename($dir));
     if (($c['identifier'] ?? '') === '') {
         $c['identifier'] = 'com.myphp.' . orElse(strtolower((string)preg_replace('/[^a-zA-Z0-9]+/', '', $c['name'])), 'app');
@@ -206,10 +297,11 @@ const INIT_USAGE = <<<'TXT'
 init [flags] <dir>
 
 Creates a new MyPHP project. The native template shows a user interface
-MyPHP draws itself, written in PHP with MyPHP\UI; the web template a
-frontend of HTML, served at myphp://localhost/, calling the app's PHP
-services through window.myphp. Both get the app's icon, resources/icon.png,
-and the bundled agent skills.
+MyPHP draws itself, written in PHP with MyPHP\UI. The web template has a
+TypeScript frontend built with Vite: Bun installs its dependencies, the
+myphp-cli and myphp-runtime packages of this checkout among them, and runs
+its scripts, bun run dev and bun run build. Both get the app's icon,
+resources/icon.png, and the bundled agent skills.
 
 Flags:
   -name name            application name (default: directory name)
@@ -234,190 +326,447 @@ function init(array $args): void
     is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
     $dir = realpath($dir);
     $name = $name !== '' ? $name : basename($dir);
-    $id = 'com.example.' . str_replace('-', '', slugify($name));
-    $q = var_export($name, true); // in the PHP the templates write
-    $h = htmlspecialchars($name);
+    $data = ['name' => $name, 'slug' => slugify($name), 'identifier' => 'com.example.' . str_replace('-', '', slugify($name)), 'framework' => realpath(FRAMEWORK),
+        'runtime' => 'file:' . realpath(FRAMEWORK) . '/packages/runtime', 'cli' => 'file:' . realpath(FRAMEWORK) . '/packages/cli'];
     logf("Creating $dir");
-    file_put_contents("$dir/myphp.json", json_encode([
-        'name' => $name,
-        'identifier' => $id,
-        'version' => '0.1.0',
-        'entry' => 'app.php',
-        'out' => 'build',
-        'framework' => realpath(FRAMEWORK),
-    ] + ($template === 'web' ? ['bindings' => 'src/myphp.ts', 'frontendDist' => 'src'] : []), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+    writeTemplate(TEMPLATES . "/$template", $dir, $data);
     mkdir("$dir/resources");
     file_put_contents("$dir/resources/icon.png", Icns::defaultIcon());
     writeSkills($dir);
-    file_put_contents("$dir/boot.php", <<<'PHP'
-    <?php
-    // Loads MyPHP: from ./myphp inside a built app, else from the framework
-    // checkout myphp.json points at (or $MYPHP_HOME).
-    declare(strict_types=1);
-
-    $framework = is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp'
-        : (getenv('MYPHP_HOME') ?: json_decode(file_get_contents(__DIR__ . '/myphp.json'), true)['framework']);
-    require $framework . '/src/autoload.php';
-
-    PHP);
-    file_put_contents("$dir/.gitignore", "/build/\n/.myphp/\n/vendor/\n.DS_Store\n");
-    if ($template === 'native') {
-        file_put_contents("$dir/app.php", <<<PHP
-        <?php
-        declare(strict_types=1);
-
-        use MyPHP\\{App, Window, WindowOptions};
-        use MyPHP\\UI\\{Content, Context};
-
-        require __DIR__ . '/boot.php';
-
-        \$state = ['count' => 0];
-
-        App::setName($q);
-        App::whenReady(function () use (&\$state) {
-            new Window(new WindowOptions(title: $q, width: 420, height: 260,
-                content: Content::view(function (Context \$c) use (&\$state) {
-                    \$c->column(24, 12, 1);
-                      \$c->text("Count: {\$state['count']}", 24);
-                      \$c->row(0, 8);
-                        if (\$c->clicked(\$c->button('Increment'))) { \$state['count']++; }
-                        if (\$c->clicked(\$c->button('Reset'))) { \$state['count'] = 0; }
-                      \$c->end();
-                      \$c->muted('Native UI drawn by MyPHP on the GPU. Edit app.php and save: myphp dev restarts it.');
-                    \$c->end();
-                })));
-        });
-        App::run();
-
-        PHP);
-    } else {
-        mkdir("$dir/src");
-        file_put_contents("$dir/app.php", <<<PHP
-        <?php
-        declare(strict_types=1);
-
-        use MyPHP\\{App, Ipc, Window, WindowOptions};
-
-        require __DIR__ . '/boot.php';
-
-        /** Greeter says hello. */
-        final class Greeter
-        {
-            /** Greet returns a greeting. */
-            public function greet(string \$name): string
-            {
-                return "Hello, \$name";
-            }
-        }
-
-        Ipc::bind(new Greeter());
-
-        App::setName($q);
-        App::whenReady(function () {
-            new Window(new WindowOptions(title: $q, width: 640, height: 420,
-                url: '/')); // the frontend: frontendDist (src) at myphp://localhost/, or devUrl under myphp dev
-        });
-        App::run();
-
-        PHP);
-        file_put_contents("$dir/src/index.html", <<<HTML
-        <!doctype html><meta charset="utf-8">
-        <body style="font: 15px -apple-system, system-ui; padding: 24px">
-        <h2>$h</h2>
-        <p id="out">…</p>
-        <script>
-          // The typed client, src/myphp.ts, is regenerated by `myphp dev`; plain JS uses window.myphp.
-          myphp.call("Greeter.greet", "Ada").then(s => out.textContent = s);
-        </script>
-
-        HTML);
-    }
     $rel = str_starts_with($dir, getcwd() . '/') ? substr($dir, strlen(getcwd()) + 1) : $dir;
-    echo "\nCreated $name. Next steps:\n\n  cd $rel\n  myphp dev      # run it, restarting on changes\n  myphp build    # package the app\n\n";
+    if ($template === 'native') {
+        echo "\nCreated $name. Next steps:\n\n  cd $rel\n  myphp dev      # develop with live reload\n  myphp build    # package the app\n\n";
+        return;
+    }
+    if (Cmd::look('bun') === '') {
+        warnf('Bun not found: install it from https://bun.sh, then run bun install');
+    } else {
+        logf('Installing the dependencies');
+        sh(['bun', 'install'], $dir) === 0 || fail('bun install failed');
+        logf('Installed the dependencies');
+        try {
+            generateBindings($dir, project([$dir])['config']);
+        } catch (Failure $e) {
+            warnf("{$e->getMessage()}; run myphp generate once it can be read");
+        }
+    }
+    echo "\nCreated $name. Next steps:\n\n  cd $rel\n  bun run dev      # develop with live reload\n  bun run build    # package the app\n\n";
+}
+
+/** The templates of myphp init (mygo's template): native UI, and a TypeScript frontend built with Vite. */
+const TEMPLATES = __DIR__ . '/template';
+
+/**
+ * Writes the template $from into $dir: <name>.tmpl files with their values
+ * filled in, as {{json:name}}, {{php:name}} and {{html:name}} quote them,
+ * "gitignore" as .gitignore, the others as they are.
+ *
+ * @param array<string, string> $data
+ */
+function writeTemplate(string $from, string $dir, array $data): void
+{
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS));
+    foreach ($files as $f) {
+        $rel = substr($f->getPathname(), strlen($from) + 1);
+        $text = (string)file_get_contents($f->getPathname());
+        if (str_ends_with($rel, '.tmpl')) {
+            $rel = substr($rel, 0, -5);
+            $text = (string)preg_replace_callback('/\{\{(json|php|html):(\w+)\}\}/', fn(array $m): string => match ($m[1]) {
+                'json' => json_encode($data[$m[2]], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'php' => var_export($data[$m[2]], true),
+                'html' => htmlspecialchars($data[$m[2]]),
+            }, $text);
+        }
+        if ($rel === 'gitignore') {
+            $rel = '.gitignore';
+        }
+        @mkdir(dirname("$dir/$rel"), 0755, true);
+        file_put_contents("$dir/$rel", $text) !== false || fail("cannot write $dir/$rel");
+    }
 }
 
 // ---- dev ----------------------------------------------------------------
-/** @return array<string, int> path => mtime of the files a change of which restarts the app */
-function snapshot(string $dir, array $config): array
+/** Writes the TypeScript client of the bound PHP services (bindings), running the entry with MYPHP_GENERATE, which App::run() answers; reports whether it changed. */
+function generateBindings(string $dir, array $config): bool
 {
-    $files = [];
-    $skip = ['dist', 'vendor', 'node_modules', '.git'];
-    $bindings = "$dir/" . ($config['bindings'] ?? '');
-    $walk = function (string $root) use (&$walk, &$files, $skip, $bindings): void {
-        foreach (scandir($root) ?: [] as $name) {
-            if ($name === '.' || $name === '..' || in_array($name, $skip, true)) {
+    if (($config['bindings'] ?? '') === '') {
+        return false;
+    }
+    $out = path($dir, $config['bindings']);
+    @mkdir(dirname($out), 0755, true);
+    $before = is_file($out) ? file_get_contents($out) : null;
+    $p = proc_open([PHP_BINARY, ...PHP_FLAGS, path($dir, $config['entry'])], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_GENERATE' => $out, 'MYPHP_HOME' => frameworkOf($config)] + getenv());
+    $code = proc_close($p);
+    $code === 0 && is_file($out) || fail("generating {$config['bindings']}: {$config['entry']} exited with $code");
+    if (file_get_contents($out) === $before) {
+        return false;
+    }
+    logf("Wrote {$config['bindings']}");
+    return true;
+}
+
+const DEV_USAGE = <<<'TXT'
+dev [flags] [dir]
+
+Develops the app with live reload. It writes the TypeScript client of a
+frontend, runs devCommand from myphp.json (such as a Vite dev server),
+waits for devUrl to answer, then builds a development app, which loads
+devUrl in place of its built frontend, and launches it. Without devUrl,
+the app serves frontendDist from disk. The development app is "<name> Dev"
+with the identifier "<identifier>.dev", in .myphp/dev: a real bundle, with
+the app's icon and resources, whose launcher runs the project's files.
+
+Changes to the PHP files, myphp.json, the icon, the resources or the
+catalogs of messages rebuild the app, regenerate the TypeScript client and
+the accessors of the catalogs, and relaunch it. A build that fails keeps the
+previous one running; the next change tries again. Frontend changes are
+left to the dev server. Quitting the app ends myphp dev.
+
+On a terminal, type r and Enter to rebuild and restart the app, c to clear
+the console, q to quit, h for help.
+
+With -lang, the app runs in that language, a BCP 47 tag such as de or
+zh-Hant, or a pseudo locale: en-XA (accented and longer text) or ar-XB
+(right to left), which test layouts without translations. It does not
+keep it: the app's own setting is left as it is.
+
+Flags:
+  -lang tag           run the app in this language, without keeping it
+  -sign identity      signing identity for the development app (default "-")
+  -skip-dev-command   do not run devCommand
+TXT;
+
+/** The exit code of an app that App::relaunch() asks myphp dev to start again (mygo's devRelaunchCode). */
+const DEV_RELAUNCH_CODE = 75;
+
+/** The development app: "<name> Dev" with the identifier "<identifier>.dev", so that its data, preferences and single instance lock stay apart from the production app's (mygo's devConfig). */
+function devConfig(array $c): array
+{
+    $c['name'] .= ' Dev';
+    $c['identifier'] .= '.dev';
+    return $c;
+}
+
+/** $paths that changed, for the line of a build (mygo's changeSummary). @param list<string> $paths */
+function changeSummary(string $root, array $paths): string
+{
+    $names = array_map(fn(string $p) => str_starts_with($p, "$root/") ? substr($p, strlen($root) + 1) : $p, array_slice($paths, 0, 3));
+    $n = count($paths);
+    return match (true) {
+        $n > 3 => implode(', ', $names) . ' and ' . ($n - 3) . ' more changed',
+        $n > 1 => implode(', ', array_slice($names, 0, -1)) . ' and ' . $names[$n - 1] . ' changed',
+        $n === 1 => "{$names[0]} changed",
+        default => 'files changed',
+    };
+}
+
+/**
+ * What a development build is made of, by path: its modification time and
+ * size, polled for changes (mygo's listBuildInputs and watcher): the
+ * project's PHP files and the framework's, myphp.json, the icon, the
+ * entitlements, the resources and the catalogs of messages; not the
+ * accessors and the client written from them, the output, the hidden
+ * directories or the frontend, which is the dev server's.
+ *
+ * @return array<string, string>
+ */
+function devInputs(string $dir, array $c): array
+{
+    $skip = [path($dir, $c['out']), "$dir/vendor", "$dir/node_modules", "$dir/myphp"];
+    if (($c['frontendDist'] ?? '') !== '') {
+        $skip[] = rtrim(path($dir, $c['frontendDist']), '/');
+    }
+    $generated = [];
+    if (($c['bindings'] ?? '') !== '') {
+        $generated[] = path($dir, $c['bindings']);
+    }
+    $i18n = i18nConfig($dir, $c);
+    if ($i18n !== null) {
+        $generated[] = "{$i18n['path']}/" . MyPHP\Native\I18nGen::className($i18n['path']) . '.php';
+        if (($c['bindings'] ?? '') !== '') {
+            $generated[] = dirname(path($dir, $c['bindings'])) . '/' . basename($i18n['path']) . '.ts';
+        }
+    }
+    $out = [];
+    $add = function (string $p) use (&$out): void {
+        $st = @stat($p);
+        if ($st !== false) {
+            $out[$p] = "{$st['mtime']}:{$st['size']}";
+        }
+    };
+    $walk = function (string $root, ?string $ext) use (&$walk, $add, $skip, $generated): void {
+        foreach (@scandir($root) ?: [] as $name) {
+            $p = "$root/$name";
+            if ($name === '.' || $name === '..' || $name[0] === '.' || in_array($p, $skip, true) || in_array($p, $generated, true)) {
                 continue;
             }
-            $path = "$root/$name";
-            if (is_dir($path)) {
-                $walk($path);
-            } elseif (preg_match('/\.(php|html|js|css|json)$/', $name) && $path !== $bindings) {
-                $files[$path] = filemtime($path);
+            if (is_dir($p)) {
+                $walk($p, $ext);
+            } elseif ($ext === null || str_ends_with($name, $ext)) {
+                $add($p);
             }
         }
     };
-    $walk($dir);
-    $walk((is_dir("$dir/myphp") ? "$dir/myphp" : ($config['framework'] ?? FRAMEWORK)) . '/src');
-    return $files;
+    $walk($dir, '.php');
+    $walk(frameworkOf($c) . '/src', '.php');
+    $walk("$dir/" . Resources::DIR, null);
+    foreach ($c['resources'] as $r) {
+        is_dir(path($dir, $r)) ? $walk(path($dir, $r), null) : $add(path($dir, $r));
+    }
+    if ($i18n !== null) {
+        $walk($i18n['path'], '.json');
+    }
+    foreach (array_filter([CONFIG, CONFIG_TS, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', ...array_values($c['macos']['helperEntitlements'])]) as $f) {
+        $add(path($dir, $f));
+    }
+    ksort($out, SORT_STRING);
+    return $out;
 }
 
-function generateBindings(string $dir, array $config): void
+/**
+ * A development session (mygo's devSession): it builds the development
+ * app in .myphp/dev/darwin-<arch>, launches it with MYPHP_DEV=1 and its
+ * environment, and builds and launches it again as what it is made of
+ * changes.
+ */
+final class DevSession
 {
-    if (empty($config['bindings'])) {
-        return;
+    /** @var resource|null the running app */
+    public $app = null;
+    public string $exe = '';
+    /** The fingerprint of the running build. */
+    public string $sum = '';
+    private string $iconKey = '';
+    private ?string $icns = null;
+
+    /** @param array<string, string> $env */
+    public function __construct(public readonly string $root, public readonly string $sign, public readonly string $name, private readonly array $env) {}
+
+    /**
+     * Builds the app and launches it once it differs from the running
+     * build, stopping that one first; returns false when nothing changed.
+     */
+    public function buildAndLaunch(): bool
+    {
+        ['config' => $c] = project([$this->root]);
+        $dc = devConfig($c);
+        $arch = hostArch();
+        $dir = "{$this->root}/.myphp/dev/darwin-$arch";
+        is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
+        generateI18n($this->root, $c);
+        $framework = frameworkOf($c);
+        try {
+            $res = Resources::collect($this->root, $c['configFile'], $dc['resources'], 'darwin', $arch, natives($this->root, $framework, $arch), Resources::reserved(($dc['macos']['icon'] ?? '') !== ''));
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        }
+        $icns = $this->icon($c);
+        $name = orElse(Dmg::fsName($dc['name']), 'app');
+        $plist = Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, [], [], false));
+        // Fingerprint what the app is made of, to skip relaunching when a change did not affect it.
+        $h = hash_init('sha256');
+        foreach (devInputs($this->root, $c) as $p => $_) {
+            hash_update($h, "$p\0" . (is_file($p) ? hash_file('sha256', $p) : '') . "\0");
+        }
+        foreach ($res as $r) {
+            if ($r['src'] === '') {
+                hash_update($h, "{$r['name']}\0dir\0");
+                continue;
+            }
+            Resources::walk($r['src'], $r['nested'], function (string $path, array $st) use ($h, $r): void {
+                hash_update($h, "{$r['name']}\0" . substr($path, strlen($r['src'])) . "\0{$st['mode']}\0" . (($st['mode'] & 0170000) === 0040000 ? '' : "{$st['size']}\0{$st['mtime']}\0"));
+            });
+        }
+        hash_update($h, ($icns ?? '') . $plist . PHP_BINARY);
+        $sum = hash_final($h);
+        if ($sum === $this->sum) {
+            return false;
+        }
+        generateBindings($this->root, $c);
+        $stage = "$dir/.staging-" . getmypid();
+        sh(['rm', '-rf', $stage]);
+        mkdir("$stage/$name.app/Contents/MacOS", 0755, true);
+        try {
+            $contents = "$stage/$name.app/Contents";
+            mkdir("$contents/Resources");
+            if ($icns !== null) {
+                file_put_contents("$contents/Resources/" . Resources::ICON, $icns);
+            }
+            Resources::copy($res, "$contents/Resources");
+            $plist = Bundle::xml(Bundle::infoPlist($dc, $name, $icns !== null, false, writeLocalizations($this->root, $dc, "$contents/Resources"), [], false));
+            file_put_contents("$contents/Info.plist", $plist);
+            file_put_contents("$contents/PkgInfo", 'APPL????');
+            buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch, $this->root);
+            $m = $dc['macos'];
+            Codesign::sign("$stage/$name.app", $this->sign, ($m['entitlements'] ?? '') !== '' ? path($this->root, $m['entitlements']) : '', array_map(fn(string $f) => path($this->root, $f), $m['helperEntitlements']), false, $c['configFile']);
+            $final = "$dir/$name.app";
+            replacePath("$stage/$name.app", $final);
+        } catch (RuntimeException $e) {
+            fail($e->getMessage());
+        } finally {
+            sh(['rm', '-rf', $stage]);
+        }
+        $this->stop();
+        $this->launch("$final/Contents/MacOS/$name");
+        $this->sum = $sum;
+        return true;
     }
-    $out = "$dir/{$config['bindings']}";
-    @mkdir(dirname($out), 0755, true);
-    $p = proc_open([PHP_BINARY, ...PHP_FLAGS, "$dir/{$config['entry']}"], [2 => ['file', 'php://stderr', 'w']], $pipes, $dir, ['MYPHP_GENERATE' => $out] + getenv());
-    proc_close($p);
-    echo "myphp: wrote {$config['bindings']}\n";
+
+    /** The app icon as .icns, rendered only when it changed. */
+    private function icon(array $c): ?string
+    {
+        if (($c['icon'] ?? '') === '') {
+            return null;
+        }
+        $p = path($this->root, $c['icon']);
+        $st = @stat($p) ?: fail("icon {$c['icon']}: cannot read it");
+        $key = "$p:{$st['size']}:{$st['mtime']}";
+        if ($key !== $this->iconKey) {
+            [$this->iconKey, $this->icns] = [$key, appIcon($this->root, $c)];
+        }
+        return $this->icns;
+    }
+
+    /** Starts the build at $exe in the project, with MYPHP_DEV=1, which App::relaunch() asks to be started again. */
+    public function launch(string $exe): void
+    {
+        $this->app = proc_open([$exe], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $this->root, $this->env + ['MYPHP_DEV' => '1'] + getenv());
+        $this->app !== false || fail("cannot start $exe");
+        $this->exe = $exe;
+    }
+
+    /** The exit code of the app when it exited, null while it runs or when none runs. */
+    public function exited(): ?int
+    {
+        if ($this->app === null) {
+            return null;
+        }
+        $s = proc_get_status($this->app);
+        if ($s['running']) {
+            return null;
+        }
+        proc_close($this->app);
+        $this->app = null;
+        return $s['exitcode'];
+    }
+
+    /** Asks the app to quit, like Quit (SIGTERM, which App takes as Quit), and kills it when it has not exited after 3 seconds. */
+    public function stop(): void
+    {
+        if ($this->app === null) {
+            return;
+        }
+        proc_terminate($this->app, 15);
+        for ($end = microtime(true) + 3; proc_get_status($this->app)['running'] && microtime(true) < $end;) {
+            usleep(20_000);
+        }
+        if (proc_get_status($this->app)['running']) {
+            proc_terminate($this->app, 9);
+        }
+        proc_close($this->app);
+        $this->app = null;
+    }
 }
 
 function dev(array $args): void
 {
-    help($args, "dev [flags] [dir]\n\nRuns the app in development: it writes the TypeScript client of a frontend\nand the accessors of the catalogs, runs devCommand from myphp.json (such as\na Vite dev server), waits for devUrl to answer, which the app then loads in\nplace of its built frontend, and runs the entry. Without devUrl, the app\nserves frontendDist from disk. Changes to its PHP, HTML, JS, CSS or JSON\nfiles restart it.\n\nFlags:\n  -watch 0   do not restart on changes\n  -lang tag  run the app in this language (as de, or the pseudo locales en-XA and ar-XB), without keeping it");
-    $watch = option($args, 'watch', '1') !== '0';
+    help($args, DEV_USAGE);
     $lang = option($args, 'lang', '');
+    $sign = option($args, 'sign', '-');
+    $skipDevCommand = flag($args, 'skip-dev-command');
     ['dir' => $dir, 'config' => $c] = project($args);
-    $entry = "$dir/{$c['entry']}";
-    $env = ['MYPHP_DEV' => '1'];
-    if ($lang !== '') { // the app runs in that language, or a pseudo locale, without keeping it (MYPHP_LOCALE)
-        ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("--lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
+    $env = ['MYPHP_ENV' => 'development', 'MYPHP_HOME' => frameworkOf($c)];
+    if ($lang !== '') { // the app reads it as it starts, over the language it keeps
+        ($tag = MyPHP\I18n::normalize($lang)) !== '' || fail("-lang \"$lang\" is not a language: a BCP 47 tag, as de, zh-Hant or pt-BR, or a pseudo locale, en-XA or ar-XB");
         $env['MYPHP_LOCALE'] = $tag;
     }
-    // The frontend's dev server, which runs while myphp dev does, and the app loads in place of its built frontend (mygo dev's devCommand and devUrl).
+    // The accessors of the catalogs and the TypeScript client come first: the app and the frontend import them.
+    generateI18n($dir, $c);
+    generateBindings($dir, $c);
     $server = null;
-    if (($c['devCommand'] ?? '') !== '') {
+    if (($c['devCommand'] ?? '') !== '' && !$skipDevCommand) {
+        logf('Starting the dev server');
         $server = proc_open(['/bin/sh', '-c', $c['devCommand']], [0 => ['file', '/dev/null', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir);
         $server !== false || fail("cannot run {$c['devCommand']}");
         register_shutdown_function(fn() => proc_get_status($server)['running'] && proc_terminate($server, 15));
-        echo "myphp: started {$c['devCommand']}\n";
     }
     if (($c['devUrl'] ?? '') !== '') {
         waitForURL($c['devUrl'], $server);
         $env['MYPHP_DEV_URL'] = $c['devUrl'];
-    } elseif (($c['frontendDist'] ?? '') !== '') {
-        $env['MYPHP_FRONTEND_DIST'] = str_starts_with($c['frontendDist'], '/') ? $c['frontendDist'] : "$dir/{$c['frontendDist']}"; // served from disk
+    } elseif ($server !== null) {
+        logf("Started {$c['devCommand']}");
     }
+    if (($c['devUrl'] ?? '') === '' && ($c['frontendDist'] ?? '') !== '') {
+        $env['MYPHP_FRONTEND_DIST'] = path($dir, $c['frontendDist']); // served from disk
+    }
+    $s = new DevSession($dir, $sign, devConfig($c)['name'], $env);
+    $keys = stream_isatty(STDIN);
+    if ($keys) {
+        stream_set_blocking(STDIN, false);
+    }
+    $serverExited = false;
+    $build = function (string $title, string $verb, array $changed) use ($s, $dir): bool {
+        $why = $changed !== [] ? ' (' . changeSummary($dir, $changed) . ')' : '';
+        logf("$title {$s->name}$why");
+        try {
+            if ($s->buildAndLaunch()) {
+                logf("$verb {$s->name}$why");
+            } else {
+                logf("No change to {$s->name}$why");
+            }
+            return true;
+        } catch (Failure $e) {
+            fwrite(STDERR, "myphp: ✗ {$e->getMessage()}\n");
+            fwrite(STDERR, '  ' . ($s->app !== null ? 'The previous build keeps running: save a fix to try again.' : 'Save a fix to try again.') . "\n");
+            return false;
+        }
+    };
+    $build('Building', 'Built', []);
+    echo "\n  → Watching for changes\n" . ($keys ? "  → press h + enter to show help\n" : '') . "\n";
+    $seen = devInputs($dir, project([$dir])['config']);
     while (true) {
-        generateI18n($dir, $c);
-        generateBindings($dir, $c);
-        $seen = snapshot($dir, $c);
-        $proc = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', 'php://stdin', 'r'], 1 => ['file', 'php://stdout', 'w'], 2 => ['file', 'php://stderr', 'w']], $pipes, $dir, $env + getenv());
-        echo "myphp: running {$c['entry']}" . ($watch ? ', restarts on change' : '') . "\n";
-        $changed = false;
-        while (proc_get_status($proc)['running']) {
-            usleep(500_000);
-            if ($watch && snapshot($dir, $c) !== $seen) {
-                $changed = true;
-                echo "myphp: change detected, restarting\n";
-                proc_terminate($proc, 15);
-                break;
+        usleep(250_000);
+        if ($server !== null && !$serverExited && !proc_get_status($server)['running']) {
+            $serverExited = true; // from now on, news
+            warnf('The dev server exited');
+        }
+        $code = $s->exited();
+        if ($code === DEV_RELAUNCH_CODE) { // App::relaunch(): start the same build again
+            $s->launch($s->exe);
+            logf("Relaunched {$s->name}");
+        } elseif ($code === 0) {
+            logf("{$s->name} quit");
+            return;
+        } elseif ($code !== null) {
+            fwrite(STDERR, "myphp: ✗ {$s->name} exited (exit status $code)\n  Save a change to start it again.\n");
+            $s->sum = '';
+        }
+        $restart = false;
+        if ($keys && ($line = fgets(STDIN)) !== false) {
+            switch (strtolower(trim($line))) {
+                case 'r': $restart = true; break;
+                case 'c': echo "\033[H\033[2J"; break;
+                case 'q': $s->stop(); return;
+                case 'h': echo "\n  Shortcuts\n  press r + enter to rebuild and restart the app\n  press c + enter to clear the console\n  press q + enter to quit\n\n"; break;
             }
         }
-        $code = proc_close($proc);
-        if (!$changed && $code !== 75) { // 75: App::relaunch() asks to be started again (mygo's devRelaunchCode)
-            exit($code);
+        try {
+            $now = devInputs($dir, project([$dir])['config']);
+        } catch (Failure $e) {
+            $now = $seen; // myphp.json does not read: its next change tries again
+            fwrite(STDERR, "myphp: ✗ {$e->getMessage()}\n");
+        }
+        if ($now === $seen && !$restart) {
+            continue;
+        }
+        $changed = array_keys(array_diff_assoc($now, $seen) + array_diff_key($seen, $now));
+        sort($changed);
+        $seen = $now;
+        if ($restart) {
+            $s->sum = '';
+            $build('Restarting', 'Restarted', []);
+        } else {
+            $build('Rebuilding', 'Rebuilt', $changed);
         }
     }
 }
@@ -511,7 +860,7 @@ function build(array $args): void
     $targets !== [] || fail('-platform names no platform');
     if ($upload) {
         try {
-            Upload::check($c, CONFIG);
+            Upload::check($c, $c['configFile']);
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         }
@@ -551,7 +900,7 @@ function build(array $args): void
     echo buildSummary($dir, $c, $built, microtime(true) - $started);
     if ($upload) {
         try {
-            Upload::publish($c, $c['version'], $built, publisher($dir, $c)?->notes() ?? '', 'myphp/' . VERSION, CONFIG, logf(...));
+            Upload::publish($c, $c['version'], $built, publisher($dir, $c)?->notes() ?? '', 'myphp/' . VERSION, $c['configFile'], logf(...));
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         }
@@ -612,8 +961,8 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
     mkdir($stage, 0755);
     try {
         $m = $c['macos'];
-        $framework = realpath($c['framework'] ?? FRAMEWORK) ?: fail('framework ' . $c['framework'] . ' does not exist');
-        $res = Resources::collect($dir, CONFIG, $c['resources'], 'darwin', $arch, natives($dir, $framework, $arch), Resources::reserved(($m['icon'] ?? '') !== ''));
+        $framework = frameworkOf($c);
+        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'darwin', $arch, natives($dir, $framework, $arch), Resources::reserved(($m['icon'] ?? '') !== ''));
         if (($other = Resources::otherArch($dir, 'darwin', $arch)) !== '') {
             warnf('No ' . Resources::DIR . "/darwin-$arch for darwin/$arch, though there is " . Resources::DIR . "/$other");
         }
@@ -654,7 +1003,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         }
         $entitlements = ($m['entitlements'] ?? '') !== '' ? path($dir, $m['entitlements']) : '';
         $helpers = array_map(fn(string $f) => path($dir, $f), $m['helperEntitlements']);
-        Codesign::sign($app, $opts['sign'], $entitlements, $helpers, !$opts['debug'], CONFIG);
+        Codesign::sign($app, $opts['sign'], $entitlements, $helpers, !$opts['debug'], $c['configFile']);
         logf('Signed ' . basename($app) . ($opts['sign'] === '-' ? ' (ad hoc)' : ''));
         $artifacts = [$app];
         if (!$opts['skipDMG']) {
@@ -859,15 +1208,21 @@ function copyTree(string $from, string $to, array $skip, bool $hidden = true): v
 
 /**
  * A small C program as the executable: it execs the php this build found
- * (or $MYPHP_PHP) on Resources/app/<entry>. For development: the app then
- * depends on that php being installed, and the process is php's, not the
- * bundle's. Needs a C compiler (Xcode command line tools), which compiles
- * it for $arch, both of a universal app's.
+ * (or $MYPHP_PHP) on <dir>/<entry>, in <dir>, with the arguments it was
+ * given, naming its bundle in MYPHP_BUNDLE (Native\Bundle::path). <dir> is
+ * the bundle's Resources/app, or with $project (the development app of
+ * myphp dev) the project itself. The app then depends on that php being
+ * installed, and the process is php's, not the bundle's. Needs a C
+ * compiler (Xcode command line tools), which compiles it for $arch, both
+ * of a universal app's.
  */
-function buildExecLauncher(string $out, string $entry, string $arch): void
+function buildExecLauncher(string $out, string $entry, string $arch, ?string $project = null): void
 {
-    $php = PHP_BINARY;
-    $flags = implode(', ', array_map(fn($f) => '"' . $f . '"', PHP_FLAGS));
+    $q = fn(string $s): string => '"' . addcslashes($s, "\"\\") . '"';
+    $flags = implode(', ', array_map($q, PHP_FLAGS));
+    $dir = $project === null ? 'snprintf(dir, sizeof dir, "%s/Resources/app", contents);' : 'snprintf(dir, sizeof dir, "%s", ' . $q($project) . ');';
+    $php = $q(PHP_BINARY); $file = $q($entry);
+    $nflags = count(PHP_FLAGS);
     $src = <<<C
     #include <mach-o/dyld.h>
     #include <stdio.h>
@@ -875,17 +1230,28 @@ function buildExecLauncher(string $out, string $entry, string $arch): void
     #include <string.h>
     #include <unistd.h>
     #include <limits.h>
-    int main(void) {
-        char exe[PATH_MAX], real[PATH_MAX], app[PATH_MAX], entry[PATH_MAX];
+    int main(int argc, char **argv) {
+        char exe[PATH_MAX], contents[PATH_MAX], dir[PATH_MAX], entry[PATH_MAX];
         uint32_t n = sizeof exe;
-        if (_NSGetExecutablePath(exe, &n) != 0 || realpath(exe, real) == NULL) { perror("launcher"); return 1; }
-        char *slash = strrchr(real, '/'); *slash = 0;      /* Contents/MacOS */
-        slash = strrchr(real, '/'); *slash = 0;            /* Contents */
-        snprintf(app, sizeof app, "%s/Resources/app", real);
-        snprintf(entry, sizeof entry, "%s/%s", app, "$entry");
-        const char *php = getenv("MYPHP_PHP"); if (php == NULL) php = "$php";
-        chdir(app);
-        execl(php, php, $flags, entry, (char *)0);
+        if (_NSGetExecutablePath(exe, &n) != 0 || realpath(exe, contents) == NULL) { perror("launcher"); return 1; }
+        char *slash = strrchr(contents, '/'); *slash = 0;  /* Contents/MacOS */
+        slash = strrchr(contents, '/'); *slash = 0;        /* Contents */
+        $dir
+        snprintf(entry, sizeof entry, "%s/%s", dir, $file);
+        char bundle[PATH_MAX];
+        snprintf(bundle, sizeof bundle, "%s", contents);
+        slash = strrchr(bundle, '/'); *slash = 0;          /* the .app */
+        setenv("MYPHP_BUNDLE", bundle, 1);
+        const char *php = getenv("MYPHP_PHP"); if (php == NULL) php = $php;
+        const char *flags[] = {{$flags}};
+        char **args = calloc(argc + $nflags + 2, sizeof *args);
+        int i = 0;
+        args[i++] = (char *)php;
+        for (int f = 0; f < $nflags; f++) args[i++] = (char *)flags[f];
+        args[i++] = entry;
+        for (int a = 1; a < argc; a++) args[i++] = argv[a];
+        if (chdir(dir) != 0) { perror("launcher: chdir"); return 1; }
+        execv(php, args);
         perror("launcher: exec php");
         return 1;
     }
@@ -1070,7 +1436,7 @@ function generateI18n(string $dir, array $c): void
     $class = MyPHP\Native\I18nGen::className($i['path']);
     $files = ["{$i['path']}/$class.php" => MyPHP\Native\I18nGen::php($cat, $class)];
     if (!empty($c['bindings'])) { // the TypeScript module, next to the client, named after the catalogs' directory
-        $files[dirname("$dir/{$c['bindings']}") . '/' . basename($i['path']) . '.ts'] = MyPHP\Native\I18nGen::ts($cat, (string)file_get_contents(FRAMEWORK . '/src/Native/i18n.ts'));
+        $files[dirname("$dir/{$c['bindings']}") . '/' . basename($i['path']) . '.ts'] = MyPHP\Native\I18nGen::ts($cat);
     }
     $written = [];
     foreach ($files as $path => $src) {
@@ -1255,17 +1621,28 @@ if ($cmd === null) {
     fwrite(STDERR, USAGE);
     exit(2);
 }
-match ($cmd) {
-    'init' => init($args),
-    'install-skills' => installSkills($args),
-    'dev' => dev($args),
-    'generate', 'gen' => generate($args),
-    'i18n' => i18nCheck($args),
-    'build' => build($args),
-    'micro' => micro($args),
-    'keygen' => keygen($args),
-    'doctor' => doctor($args),
-    'version', '-v', '--version' => print('myphp ' . VERSION . "\n"),
-    'help', '-h', '--help' => print(USAGE),
-    default => (function () use ($cmd): never { fwrite(STDERR, "myphp: unknown command \"$cmd\"\n\n" . USAGE); exit(2); })(),
-};
+try {
+    run($cmd, $args);
+} catch (Failure $e) {
+    fwrite(STDERR, "myphp: {$e->getMessage()}\n");
+    exit(1);
+}
+
+function run(string $cmd, array $args): void
+{
+    $GLOBALS['running'] = $cmd === 'gen' ? 'generate' : $cmd;
+    match ($cmd) {
+        'init' => init($args),
+        'install-skills' => installSkills($args),
+        'dev' => dev($args),
+        'generate', 'gen' => generate($args),
+        'i18n' => i18nCheck($args),
+        'build' => build($args),
+        'micro' => micro($args),
+        'keygen' => keygen($args),
+        'doctor' => doctor($args),
+        'version', '-v', '--version' => print('myphp ' . VERSION . "\n"),
+        'help', '-h', '--help' => print(USAGE),
+        default => (function () use ($cmd): never { fwrite(STDERR, "myphp: unknown command \"$cmd\"\n\n" . USAGE); exit(2); })(),
+    };
+}

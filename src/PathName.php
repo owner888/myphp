@@ -16,10 +16,12 @@ enum PathName: string
     /** Where the app writes logs: ~/Library/Logs/<name>, made on first use. */
     case Logs = 'logs';
     /**
-     * The files the app ships with: the project's resources directory,
-     * which `myphp build` copies with the app, as
-     * Contents/Resources/app/resources of the bundle; next to the script
-     * the app runs, unbundled.
+     * The files the app ships with: the contents of the project's resources
+     * directory, with those of its directories for the app's platform (as
+     * resources/darwin-arm64) merged in, and the resources listed in
+     * myphp.json, which `myphp dev` and `myphp build` copy there (mygo's
+     * PathResources). It is Contents/Resources of the app's bundle;
+     * unbundled, the resources directory next to the script the app runs.
      */
     case Resources = 'resources';
     case Temp = 'temp';

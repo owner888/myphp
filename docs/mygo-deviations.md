@@ -662,9 +662,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     http://<scheme>.localhost origins.
   - myphp: the scheme `myphp`; `App::setFrontend($dir)`; `myphp build`
     copies frontendDist to the bundle's Resources/frontend; myphp.json's
-    `devUrl`, `devCommand`, `buildCommand`, `frontendDist`; `myphp dev`
-    stops the shell of devCommand, which may leave a server it started
-    behind; macOS only, no WebView2 origins. The web template loads "/".
+    (or myphp.config.ts's) `devUrl`, `devCommand`, `buildCommand`,
+    `frontendDist`; `myphp dev` stops the shell of devCommand, which may
+    leave a server it started behind; macOS only, no WebView2 origins.
+    The web template loads "/".
   - Why: myphp's names; PHP files are not compiled into anything.
 - **Trusted pages** (v1.02)
   - mygo: trust is decided as a page's navigation commits;
@@ -1003,14 +1004,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Screen.Displays()`, `Theme.Preferences()` with a `color.NRGBA`
     accent.
   - myphp: static methods of `App`, `Dock`, `Shell`, `Screen`, `Theme`,
-    throwing; `App::path(PathName::Resources)` is the project's
-    resources directory, which `myphp build` copies with the app
-    (Contents/Resources/app/resources), without directories by platform;
-    `PathName::Exe` the bundle's executable, else PHP's;
+    throwing; `App::path(PathName::Resources)` is mygo's (Contents/Resources,
+    with the platform directories merged, since v1.12), the project's
+    resources directory unbundled; `PathName::Exe` the bundle's
+    executable, else PHP's;
     `ThemePreferences::$accent` 0xRRGGBB or null; `App::webViewAvailable`
     answers once the app runs.
-  - Why: PHP's statics; myphp's bundles keep the app's files in
-    Resources/app.
+  - Why: PHP's statics.
 - **Notifications**
   - mygo: `Notification.Show` waits for the system and returns
     `ErrNotificationsDenied` when the user does not allow them.
@@ -1101,9 +1101,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Locales::in('de')->filesSelected(3)` (a `LocalesMessages`),
     registered as the app requires the file; its methods are named as
     the keys, which may not differ in case alone; the TypeScript module
-    carries the formatter (`src/Native/i18n.ts`); `myphp dev --lang de`.
+    imports `myphp-runtime/i18n` (v1.13); `myphp dev -lang de`.
   - Why: PHP has no packages: a class is the package, and the file the
-    import; myphp has no runtime package for pages.
+    import.
 
 ## Code editor, Markdown and transfer (v1.10)
 
@@ -1252,13 +1252,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     mygo.json or mygo.config.ts; `linux` and `windows` options.
   - myphp: `identifier` (default com.myphp.<name>; it was `bundleId`),
     `entry` (the PHP file the app runs, default app.php) and `framework`
-    (the checkout); myphp.json only; no `linux` or `windows` yet. The
+    (the checkout); myphp.json or myphp.config.ts (v1.13); no `linux` or
+    `windows` yet. The
     other fields are mygo's, with its defaults: name, version, copyright,
     icon (resources/icon.png), out (dist), resources, macos.{icon,
     minimumSystemVersion 12.0, signingIdentity "-", entitlements,
     helperEntitlements, infoPlist, dmgTitle, notarize}.
-  - Why: a PHP app has no package; myphp.config.ts comes with the
-    runtime and CLI npm packages, which are not ported yet.
+  - Why: a PHP app has no package.
 - **build**
   - mygo: compiles the app for any GOOS/GOARCH (`-platform`), universal
     with its own lipo; Windows, Linux, web builds; the inspector left out
@@ -1293,3 +1293,51 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     name the resources of one platform after its GOOS and GOARCH".
   - myphp: "… after its system and architecture".
   - Why: PHP has no GOOS and GOARCH; the names are the same.
+
+## Development and the page packages (v1.13)
+
+- **myphp dev**
+  - mygo: compiles the app and runs it as "<name> Dev" (identifier
+    "<identifier>.dev") from .mygo/dev, a bundle on macOS; rebuilds on
+    changes to the Go code, the configuration, the icon, the resources
+    and the catalogs, skipping the relaunch when the binary and what it is
+    made of did not change; `-web` develops native UI in browsers (wasm);
+    labeled, colored output of the app.
+  - myphp: the same bundle in .myphp/dev, whose launcher runs the
+    project's files in place (its Contents/Resources holds the merged
+    resources and the plugins' natives); its fingerprint is the contents of
+    what it is made of; no `-web`; the app's output as it is; the old
+    `-watch 0` is gone, and changes to HTML, CSS and JavaScript are the dev
+    server's, as mygo's.
+  - Why: PHP has no WebAssembly build of the framework.
+- **Signals**
+  - mygo: SIGINT and SIGTERM quit the app through a goroutine.
+  - myphp: a dispatch source on the main queue for each (Native\Signals),
+    which takes them from their default action.
+  - Why: PHP has no threads, and pcntl is not in every PHP that runs an app.
+- **The bundle the app runs from**
+  - mygo: the executable's path tells it; `PathResources` is
+    Contents/Resources.
+  - myphp: the exec launcher sets `MYPHP_BUNDLE` (and passes its arguments
+    on), the micro launcher's phar is in the bundle; `App::path(PathName::Resources)`
+    is Contents/Resources as mygo's (it was Contents/Resources/app/resources).
+  - Why: the process the exec launcher starts is php, whose path is not the
+    bundle's.
+- **myphp-runtime and myphp-cli** (packages/runtime, packages/cli)
+  - mygo: npm packages, built into dist/; mygo-cli's platform packages
+    hold prebuilt binaries of the CLI, which mygo-cli runs.
+  - myphp: not published: projects depend on them from the checkout
+    (`file:<checkout>/packages/...`), which `myphp init -template web`
+    writes; myphp-runtime's exports are its TypeScript sources, which Vite,
+    tsc and Bun take as they are; myphp-cli runs the checkout's bin/myphp
+    (or `$MYPHP_CLI_BINARY`). The repository's tsconfig.json resolves
+    myphp-runtime to its sources for the plugins' clients and the tests.
+  - Why: publishing is the developer's call; a PHP CLI needs no binaries.
+- **window.myphp**
+  - mygo: `window.mygo` is the `Runtime` of mygo-runtime's types.
+  - myphp: the same shape (`channel(onmessage)` in place of the `Channel`
+    class and `isCallError` it had, which myphp-runtime exports), and the
+    generated client imports `call`, `event` and the types it uses from
+    myphp-runtime, as mygo's does; boot.php of a project finds MyPHP in
+    `$MYPHP_HOME`, which myphp dev and generate set.
+  - Why: myphp's names.

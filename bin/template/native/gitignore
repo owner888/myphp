@@ -1,0 +1,4 @@
+/build/
+/.myphp/
+/vendor/
+.DS_Store

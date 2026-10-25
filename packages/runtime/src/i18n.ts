@@ -3,7 +3,7 @@
  * ICU MessageFormat, as MyPHP\Message formats them in PHP, with the plural
  * rules, numbers and dates of the browser's `Intl` (mygo-runtime/i18n).
  * The module `myphp generate` writes next to the TypeScript client
- * (`locales.ts`) carries this formatter:
+ * (`locales.ts`) is built on it:
  *
  * ```ts
  * import { messages } from "./locales";

@@ -3,6 +3,8 @@
 /build/
 /dist/
 composer.lock
+node_modules/
+.myphp/
 
 # tooling
 /.phpunit.cache/

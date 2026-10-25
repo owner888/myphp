@@ -1,0 +1,56 @@
+<?php
+declare(strict_types=1);
+
+use MyPHP\{App, Event, Ipc, Window, WindowOptions};
+
+require __DIR__ . '/boot.php';
+
+/** SystemInfo describes the machine the app runs on. */
+final class SystemInfo
+{
+    public function __construct(public string $os, public string $arch, public string $phpVersion) {}
+}
+
+/** Greeter is callable from the frontend: `myphp generate` turns its methods into typed TypeScript functions in src/myphp.ts. */
+final class Greeter
+{
+    /** Greet returns a greeting for name. */
+    public function greet(string $name): string
+    {
+        return 'Hello, ' . ($name === '' ? 'stranger' : $name) . '! This message comes from PHP.';
+    }
+
+    /** Info returns information about the system. */
+    public function info(): SystemInfo
+    {
+        return new SystemInfo(strtolower(PHP_OS_FAMILY), php_uname('m'), PHP_VERSION);
+    }
+}
+
+/** Tick is sent to the page every second: the time, in milliseconds since 1970. */
+$tick = new Event('tick', 'int');
+
+Ipc::bind(new Greeter());
+
+App::setName({{php:name}});
+App::whenReady(function () use ($tick) {
+    $win = new Window(new WindowOptions(
+        title: {{php:name}},
+        width: 960,
+        height: 640,
+        minWidth: 480,
+        minHeight: 360,
+        backgroundColor: 'light-dark(#f6f7f9, #0f1115)', // the page's --bg in src/style.css
+        stateKey: 'main', // opens where the user left it last time
+        url: '/', // the frontend: devUrl during `myphp dev`, frontendDist in the app `myphp build` makes (see myphp.config.ts)
+    ));
+    $send = function () use (&$send, $tick, $win): void {
+        if ($win->isDestroyed()) {
+            return; // the window was closed
+        }
+        $tick->emit($win, (int)(microtime(true) * 1000));
+        App::after(1, $send);
+    };
+    $send();
+});
+App::run();

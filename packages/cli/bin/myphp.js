@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+// Runs the myphp command of the MyPHP checkout with the arguments of this script.
+import { spawn } from "node:child_process";
+import { binaryPath } from "../index.js";
+
+const bin = binaryPath();
+const args = process.argv.slice(2);
+
+if (typeof process.execve === "function") {
+  // Become the command (Node.js 23.11 and later, Bun), so that signals and
+  // the exit status are its own.
+  process.execve(bin, [bin, ...args]);
+}
+
+const child = spawn(bin, args, { stdio: "inherit" });
+// Ctrl+C reaches the command from the terminal too: let it decide when to
+// exit, which myphp dev takes a moment for.
+process.on("SIGINT", () => {});
+process.on("SIGTERM", () => child.kill("SIGTERM"));
+child.on("error", (err) => {
+  console.error(`myphp-cli: cannot run ${bin}: ${err.message}`);
+  process.exit(1);
+});
+child.on("exit", (code, signal) => {
+  if (signal) {
+    process.removeAllListeners(signal);
+    process.kill(process.pid, signal);
+  } else {
+    process.exit(code ?? 1);
+  }
+});

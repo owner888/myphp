@@ -50,7 +50,7 @@ same(['Dismiss', 'Abbrechen'], [$lcat->format('en', 'cancel'), $lcat->format('de
 Catalog::resetRegistry();
 
 // The TypeScript module, golden.
-$ts = I18nGen::ts($c, (string)file_get_contents(__DIR__ . '/../src/Native/i18n.ts'));
+$ts = I18nGen::ts($c);
 $golden = __DIR__ . '/i18n/app/locales.ts';
 if (getenv('MYPHP_UPDATE') === '1') { file_put_contents($golden, $ts); }
 same(true, is_file($golden) && file_get_contents($golden) === $ts, 'the TypeScript module is tests/i18n/app/locales.ts (MYPHP_UPDATE=1 rewrites it)');

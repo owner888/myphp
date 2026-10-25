@@ -112,11 +112,17 @@
 
   const windowCall = (name) => () => window.myphp.call("myphp:window." + name);
 
+  // mygo's Runtime, which myphp-runtime (packages/runtime) types and wraps.
   window.myphp = {
     platform: cfg.platform,
     windowId: cfg.windowId,
     version: cfg.version,
-    Channel,
+    /** A channel to pass to a call of a PHP method that streams values through a Channel parameter; a channel serves one call. */
+    channel(onmessage) {
+      const c = new Channel();
+      if (onmessage) c.onmessage = onmessage;
+      return c;
+    },
     /** Calls a bound PHP method, e.g. call("Notes.add", "title"); a Channel argument streams values back. */
     call(method, ...args) {
       return new Promise((resolve, reject) => {
@@ -146,7 +152,6 @@
     /** The language the app shows, as "zh-Hans", and the direction it is written in; the "myphp:locale" event tells a change. */
     get locale() { return locale; },
     get dir() { return dir; },
-    isCallError: (e) => e instanceof CallError,
     /** This window, as the page may drive it. */
     window: Object.freeze({
       minimize: windowCall("Minimize"),

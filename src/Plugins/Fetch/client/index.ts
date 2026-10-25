@@ -23,13 +23,7 @@
  *
  * @module
  */
-/** The page runtime MyPHP installs in its pages. */
-interface Runtime {
-  call<T>(method: string, ...args: unknown[]): Promise<T>;
-  isCallError(e: unknown): e is Error;
-  Channel: new <T>() => AsyncIterable<T> & { close(): void };
-}
-const myphp = () => (window as unknown as { myphp: Runtime }).myphp;
+import { Channel, call, isCallError } from "myphp-runtime";
 
 /** What PHP streams back: the response's head, then chunks of its body. */
 interface Part {
@@ -78,8 +72,8 @@ export async function fetch(input: RequestInfo | URL, init: RequestInit = {}): P
     throw new TypeError(`fetch: a ${method} request cannot have a body`);
   }
 
-  const parts = new (myphp().Channel)<Part>();
-  const done = myphp().call<void>("plugin:fetch.fetch", {
+  const parts = new Channel<Part>();
+  const done = call<void>("plugin:fetch.fetch", {
     url: url.href,
     method,
     headers: [...headers],
@@ -170,7 +164,7 @@ export default fetch;
 
 /** The error a failed request rejects with. */
 function failure(err: unknown): Error {
-  if (!myphp().isCallError(err)) return err instanceof Error ? err : new TypeError(String(err));
+  if (!isCallError(err)) return err instanceof Error ? err : new TypeError(String(err));
   if (err.message.includes("plugin is not used")) {
     return new Error("@myphp-plugins/fetch: the PHP side does not use the plugin: call App::use(Fetch::plugin()) before App::run");
   }

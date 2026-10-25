@@ -20,12 +20,7 @@
  *
  * @module
  */
-/** The page runtime MyPHP installs in its pages. */
-interface Runtime {
-  call<T>(method: string, ...args: unknown[]): Promise<T>;
-  Channel: new <T>() => AsyncIterable<T> & { close(): void };
-}
-const myphp = () => (window as unknown as { myphp: Runtime }).myphp;
+import { Channel, call } from "myphp-runtime";
 
 /** The kind of a {@link FileEvent}. */
 export type FileOp = "create" | "write" | "remove" | "rename";
@@ -110,7 +105,7 @@ export async function watch(root: string, options: WatchOptions = {}): Promise<W
   const path = options.path ?? ".";
   if (typeof path !== "string") throw new TypeError("path must be a string");
   if (options.signal?.aborted) throw options.signal.reason;
-  const parts = new (myphp().Channel)<Part>();
+  const parts = new Channel<Part>();
   const stream = parts[Symbol.asyncIterator]();
   // The first error wins: the signal's reason, or the call's.
   let terminal: { error: unknown } | undefined;
@@ -127,7 +122,7 @@ export async function watch(root: string, options: WatchOptions = {}): Promise<W
     parts.close();
   };
   options.signal?.addEventListener("abort", abort, { once: true });
-  const closed = myphp().call<Outcome | null>("plugin:watch.watch", { root, path, recursive: options.recursive ?? false, debounceMs }, parts)
+  const closed = call<Outcome | null>("plugin:watch.watch", { root, path, recursive: options.recursive ?? false, debounceMs }, parts)
     .then(
       (outcome) => {
         if (outcome?.code) {
