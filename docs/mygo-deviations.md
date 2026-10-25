@@ -1562,3 +1562,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   takes `maxWidth(0)` (motion_more_test).
 - **Dividers** are centred on the boundary of two rows, a 1-point divider
   from half a point above it; mygo's fill the pixels below it.
+
+## Pastes, text lines, inline objects and buffers, their tests (v1.23)
+
+- **Not ported**: TestModifiersHeld (physical_key_test has it), the
+  allocation counts of TestMeasureTextAgain, TestControlsSayTheLanguage
+  and the TextBuffer's chunk ownership and concurrent snapshots (Go's
+  memory and goroutines), TestDecodeBitmapOfWebPAndBMP (ImageIO decodes
+  both; the headless runtime has no decoder), mygo's frame_test.go
+  (handles' generations and storage reuse, Go's) and editor_input_test.go
+  and textbuffer_input_test.go (mygo's editor client internals; myphp's
+  fields keep a TextState).
+- **Cmd+V in the tests** is the Edit menu's Paste (`['edit', 'paste']`),
+  as the window gets it: the menu's key equivalent sends `paste:`.

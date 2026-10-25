@@ -675,11 +675,8 @@ final class Context
                 $headers[$i] = $node->kids[$k];
                 continue; // headers are not chosen
             }
-            if ($state->selected === null) {
-                continue;
-            }
             $first = $node->kids[$k];
-            $first->selected = $state->chosen($i);
+            if ($state->selected !== null) { $first->selected = $state->chosen($i); }
             $rt = $this->runtime;
             if ($rt !== null && $state->reorder !== null) { // a press on the row, moved 4 points, drags it (and the rows chosen with it)
                 $d = $rt->dragged($first->id);
@@ -697,11 +694,13 @@ final class Context
             }
             if ($rt !== null && $state->drag !== null && $state->drag['far']) {
                 $rt->clicked($first->id); // the release that ends a drag is no click
-            } elseif ($rt !== null && $rt->doubleClicked($first->id)) {
-                $state->choose($i);
-                $state->submit();
-            } elseif ($rt !== null && $rt->clicked($first->id)) {
-                $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
+            } elseif ($rt !== null && $state->selected !== null) { // rows not chosen leave a click to the row's own (mygo's TestDragAroundControls)
+                if ($rt->doubleClicked($first->id)) {
+                    $state->choose($i);
+                    $state->submit();
+                } elseif ($rt->clicked($first->id)) {
+                    $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
+                }
             }
         }
         if ($state->focusRow !== null && ($state->focusRow < $start || $state->focusRow >= $i) && $state->focusRow < $count && $this->runtime !== null) {

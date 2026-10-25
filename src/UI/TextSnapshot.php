@@ -49,7 +49,10 @@ final class TextSnapshot
     public function textForRange(TextInputRange $r): array
     {
         $a = $this->runeOffset(min($r->start, $r->end)); $z = $this->runeOffset(max($r->start, $r->end));
-        return [mb_scrub($this->slice($a, $z), 'UTF-8'), new TextInputRange($this->utf16Offset($a), $this->utf16Offset($z))];
+        $was = mb_substitute_character(); mb_substitute_character(0xFFFD); // a malformed byte to native input as U+FFFD, a unit as the summaries count it (mygo's)
+        $text = mb_scrub($this->slice($a, $z), 'UTF-8');
+        mb_substitute_character($was);
+        return [$text, new TextInputRange($this->utf16Offset($a), $this->utf16Offset($z))];
     }
 
     /** The rune offsets of line $line, its newline left out; the empty line after a last newline counts, and $line clamps. @return array{0: int, 1: int} */

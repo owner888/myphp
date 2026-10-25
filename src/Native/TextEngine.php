@@ -34,6 +34,8 @@ final class TextEngine implements Engine
     private array $primary = [];
     /** @var array<int, Font> the Fonts of CTFonts, by address */
     private array $native = [];
+    /** @var array<int, float> the advance of a no-break space in each CTFont, by address: what an inline object's rune is shaped as */
+    private array $spaceAdvance = [];
     /** @var array<int, Font> fonts by their slanted copies, for italics a font lacks */
     private array $oblique = [];
 
@@ -97,6 +99,8 @@ final class TextEngine implements Engine
             unsigned int CTRunGetStatus(void*);
             void* CTRunGetAttributes(void*);
             void  CTRunGetGlyphs(void*, CFRange, CGGlyph*);
+            bool  CTFontGetGlyphsForCharacters(void*, const unsigned short*, CGGlyph*, long);
+            double CTFontGetAdvancesForGlyphs(void*, unsigned int, const CGGlyph*, CGSize*, long);
             void  CTRunGetPositions(void*, CFRange, CGPoint*);
             void  CTRunGetAdvances(void*, CFRange, CGSize*);
             void  CTRunGetStringIndices(void*, CFRange, long*);
@@ -529,10 +533,18 @@ final class TextEngine implements Engine
         if ($font === null || $runes === []) {
             return [];
         }
-        // The text in UTF-16, with the rune of each code unit and of the end.
+        // The text in UTF-16, with the rune of each code unit and of the end; an inline object's rune a no-break space, which styleSpans widens to the object.
+        $objects = [];
+        $from = 0;
+        foreach ($spans as $sp) {
+            if ($sp->objectWidth > 0) { for ($i = $from; $i < min($sp->end, count($runes)); $i++) { $objects[$i] = true; } }
+            $from = max($from, $sp->end);
+        }
         $u16 = []; $index = []; $at = [0];
         foreach ($runes as $i => $r) {
-            if ($r >= 0x10000 && $r <= 0x10FFFF) {
+            if (isset($objects[$i])) {
+                $u16[] = 0x00A0; $index[] = $i;
+            } elseif ($r >= 0x10000 && $r <= 0x10FFFF) {
                 $r -= 0x10000;
                 $u16[] = 0xD800 + ($r >> 10); $u16[] = 0xDC00 + ($r & 0x3FF);
                 $index[] = $i; $index[] = $i;
@@ -665,7 +677,11 @@ final class TextEngine implements Engine
                 $c->CFAttributedStringSetAttribute($styled, $r, $this->k['kCTTrackingAttributeName'], $t);
                 $c->CFRelease($t);
             }
-            if (self::noKerning($sp->features)) {
+            if ($sp->objectWidth > 0 && $font !== null) { // an inline object: its no-break space kerned to the object's width
+                $k = $this->float($sp->objectWidth - $this->spaceAdvance($font));
+                $c->CFAttributedStringSetAttribute($styled, $r, $this->k['kCTKernAttributeName'], $k);
+                $c->CFRelease($k);
+            } elseif (self::noKerning($sp->features)) {
                 $z = $this->float(0);
                 $c->CFAttributedStringSetAttribute($styled, $r, $this->k['kCTKernAttributeName'], $z);
                 $c->CFRelease($z);
@@ -679,7 +695,20 @@ final class TextEngine implements Engine
         return $styled;
     }
 
-    /** The runs of a line of a text that $italic says is italic, or whose runs styleSpans marked so (mygo's line). @param list<int> $index */
+    /** The advance of a no-break space in $font, which shapes an inline object's rune. */
+    private function spaceAdvance(CData $font): float
+    {
+        $a = $this->addr($font);
+        if (!isset($this->spaceAdvance[$a])) {
+            $c = $this->c;
+            $ch = $c->new('unsigned short[1]'); $ch[0] = 0x00A0;
+            $g = $c->new('CGGlyph[1]');
+            $this->spaceAdvance[$a] = $c->CTFontGetGlyphsForCharacters($font, $ch, $g, 1) ? $c->CTFontGetAdvancesForGlyphs($font, 0, $g, null, 1) : 0.0;
+        }
+        return $this->spaceAdvance[$a];
+    }
+
+        /** The runs of a line of a text that $italic says is italic, or whose runs styleSpans marked so (mygo's line). @param list<int> $index */
     private function line(CData $line, array $index, int $n, bool $italic): array
     {
         $c = $this->c;

@@ -2968,6 +2968,26 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   it growing, the window resized) is no glide; rows going while it glides
   show in place at once (`ListState::$went`).
 
+## Pastes, text lines, inline objects and buffers (v1.23)
+
+- **The Edit menu's commands go through the runtime**: the view's
+  `copy:`, `cut:`, `paste:`, `undo:`, `redo:`, `delete:` and `selectAll:`
+  push `['edit', name]` (`View::command`), which the node taking its input
+  gets, else the focused field (`RuntimeMenu::editCommand`, Undo and Redo
+  added), else the selectable text: one path, which `onPaste` sees, and
+  the headless tests too.
+- **Inline objects take their width when the text is shaped**: Core Text
+  shapes an object's rune as a no-break space kerned to the object's
+  width (`TextEngine::spaceAdvance`), so the text after it and the line
+  breaks make room for it; the stub engine gives it the width.
+- **TextLines before a layout** place lines `TextLines::LINE_HEIGHT` (18,
+  mygo's) apart.
+- **Malformed UTF-8 in a TextBuffer**: the summaries count a malformed
+  byte as one UTF-16 unit (PCRE matched nothing in it, so a rune past the
+  BMP was counted once), and native input reads it as U+FFFD.
+- **A list's rows not chosen** (no `$selected`) still reorder by a drag;
+  a click is then the row's own.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

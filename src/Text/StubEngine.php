@@ -39,11 +39,11 @@ final class StubEngine implements Engine
     public function shape(array $runes, Style $style, array $spans, float $width, bool $rtl, bool $wholeWords): array
     {
         $n = count($runes);
-        $sizes = [];
+        $sizes = []; $objects = []; // an inline object's rune is as wide as the object
         $from = 0;
         foreach ($spans as $sp) {
             $size = $sp->style($style)->fontSize();
-            for ($i = $from; $i < min($sp->end, $n); $i++) { $sizes[$i] = $size; }
+            for ($i = $from; $i < min($sp->end, $n); $i++) { $sizes[$i] = $size; if ($sp->objectWidth > 0) { $objects[$i] = $sp->objectWidth; } }
             $from = max($from, $sp->end);
         }
         $lines = [];
@@ -51,7 +51,7 @@ final class StubEngine implements Engine
         while ($start < $n || $lines === []) {
             $x = 0.0; $end = $start; $lastBreak = -1;
             while ($end < $n) {
-                $adv = ($sizes[$end] ?? $style->fontSize()) / 2;
+                $adv = $objects[$end] ?? ($sizes[$end] ?? $style->fontSize()) / 2;
                 if ($width > 0 && $x + $adv > $width && $end > $start && $runes[$end] !== 0x20) {
                     if ($lastBreak > $start) {
                         $end = $lastBreak;
@@ -75,9 +75,10 @@ final class StubEngine implements Engine
                     $run = ['font' => $font, 'start' => $i, 'end' => $i, 'glyphs' => []];
                     $f = $font;
                 }
-                $run['glyphs'][] = new Glyph($font, 0, $font->size, $pen, 0, $font->size / 2, $i, 0, $rtl);
+                $adv = $objects[$i] ?? $font->size / 2;
+                $run['glyphs'][] = new Glyph($font, 0, $font->size, $pen, 0, $adv, $i, 0, $rtl);
                 $run['end'] = $i + 1;
-                $pen += $font->size / 2;
+                $pen += $adv;
             }
             if ($run !== null) { $runs[] = $run; }
             $lines[] = ['start' => $start, 'end' => $end, 'runs' => $runs];

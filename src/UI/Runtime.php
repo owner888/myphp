@@ -493,8 +493,8 @@ final class Runtime
                         $this->keys[array_key_last($this->keys)][3] = true; // Cmd+A and Cmd+C on selectable text (mygo's textSelectionKey)
                     }
                     break;
-                case 'edit': // an editing command of the menus with no node taking its input: on selectable text, Copy and Select All
-                    $this->textSelectionCommand($e[1]);
+                case 'edit': // an editing command of the menus with no node taking its input: the focused field's, or Copy and Select All on selectable text
+                    if ($this->focus !== null && isset($this->fields[$this->focus])) { $this->editCommand($this->focus, $e[1]); } else { $this->textSelectionCommand($e[1]); }
                     break;
                 case 'command': // what the text system made of the key just pushed; a focused control taking it keeps it from shortcut()
                     if ($this->command($e[1]) && $this->keys !== []) {

@@ -282,7 +282,7 @@ trait RuntimeMenu
         }
     }
 
-    /** An editing command of a menu on text input or selectable text $id: Copy and Select All on selectable text; Cut, Copy, Paste, Delete and Select All on a field. */
+    /** An editing command of a menu on text input or selectable text $id: Copy and Select All on selectable text; Cut, Copy, Paste, Delete, Select All, Undo and Redo on a field. */
     private function editCommand(int $id, string $name): void
     {
         if (isset($this->textIndex[$id])) {
@@ -298,6 +298,8 @@ trait RuntimeMenu
             case 'cut': if ($state->copyable()) { ($this->writeClipboard)($state->selectedText()); $state->insert(''); } break;
             case 'delete': if ($state->hasSelection()) { $state->insert(''); } break;
             case 'selectAll': $state->selectAll(); break;
+            case 'undo': $state->undo(); break;
+            case 'redo': $state->redo(); break;
             case 'paste':
                 $s = str_replace(["\r\n", "\r"], "\n", ($this->readClipboard)());
                 if ($state->onPaste === null || !($state->onPaste)($s)) { // the app may take the paste

@@ -192,44 +192,16 @@ final class View
                 self::$inputs[ObjC::addr($self)]->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
                 Metal::requestFrame($self);
             }],
-            // Edit menu roles reach the first responder: the focused field, or as commands the node taking its input (mygo's SurfaceCommand).
-            'copy:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'copy')) { return; }
-                $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f === null) { self::selection($self, 'copy'); return; }
-                if ($f->copyable()) { Pasteboard::setText($f->selectedText()); }
-            }],
-            'cut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'cut')) { return; }
-                $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null && $f->copyable()) { Pasteboard::setText($f->selectedText()); $f->insert(''); Metal::requestFrame($self); }
-            }],
-            'paste:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'paste')) { return; }
-                $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null) {
-                    $s = str_replace(["\r\n", "\r"], "\n", Pasteboard::text());
-                    if ($f->onPaste === null || !($f->onPaste)($s)) { $f->insert($f->multiline ? $s : str_replace("\n", ' ', $s)); } // the app may take the paste
-                    Metal::requestFrame($self);
-                }
-            }],
-            'undo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'undo')) { return; }
-                self::$inputs[ObjC::addr($self)]->focus?->undo(); Metal::requestFrame($self);
-            }],
-            'redo:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'redo')) { return; }
-                self::$inputs[ObjC::addr($self)]->focus?->redo(); Metal::requestFrame($self);
-            }],
-            'delete:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { self::edit($self, 'delete'); }],
+            // Edit menu roles reach the first responder: as commands, the node taking its input, else the focused field or the selectable text (mygo's SurfaceCommand).
+            'copy:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'copy')],
+            'cut:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'cut')],
+            'paste:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'paste')],
+            'undo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'undo')],
+            'redo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'redo')],
+            'delete:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'delete')],
             // A frame some time from now (caret blink): see wake().
             'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self); }],
-            'selectAll:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                if (self::edit($self, 'selectAll')) { return; }
-                $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f === null) { self::selection($self, 'selectAll'); return; }
-                $f->selectAll(); Metal::requestFrame($self);
-            }],
+            'selectAll:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'selectAll')],
             'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => true],
             // NSTextInputClient
             'hasMarkedText' => ['B@:', 'b(pp)', function ($self, $cmd) {
@@ -354,17 +326,7 @@ final class View
         ObjC::msg('v:ppd', $view, 'performSelector:withObject:afterDelay:', ObjC::sel('wake:'), null, $seconds);
     }
 
-    /** An edit command of the menus to the node taking its input, when one has the focus (mygo's SurfaceCommand); reports whether one does. */
-    private static function edit($self, string $command): bool
-    {
-        $input = self::$inputs[ObjC::addr($self)];
-        if ($input->client === null) { return false; }
-        $input->push(['edit', $command]);
-        Metal::requestFrame($self);
-        return true;
-    }
-
-    /** A command of a menu role for the node taking the view's input, as the Format menu's for a rich text editor (mygo's contentCommand). */
+    /** A command of a menu role (Copy, Paste, Undo…, or the Format menu's for a rich text editor) to the runtime: the node taking the view's input, else the focused field or the selectable text with the focus (mygo's SurfaceCommand and contentCommand). */
     public static function command($view, string $command): void
     {
         self::$inputs[ObjC::addr($view)]->push(['edit', $command]);
@@ -376,13 +338,6 @@ final class View
     {
         self::$inputs[ObjC::addr($view)]->push(['command', $selector]);
         Metal::requestFrame($view);
-    }
-
-    /** An editing command with no field nor node taking its input: the runtime gives Copy and Select All to selectable text that has the focus. */
-    private static function selection($self, string $command): void
-    {
-        self::$inputs[ObjC::addr($self)]->push(['edit', $command]);
-        Metal::requestFrame($self);
     }
 
     /** Writes a range to an NSRange the text system passed a pointer to (an actualRange:), when it passed one. */

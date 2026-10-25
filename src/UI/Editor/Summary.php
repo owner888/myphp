@@ -35,6 +35,6 @@ final class Summary
     private static function unitsForRunes(string $s, int $n): int
     {
         if ($n === strlen($s)) { return $n; }
-        return $n + preg_match_all('/[\x{10000}-\x{10FFFF}]/u', $s);
+        return $n + preg_match_all('/[\x{10000}-\x{10FFFF}]/u', mb_scrub($s, 'UTF-8')); // PCRE matches nothing in malformed UTF-8: its bytes scrubbed, a unit each
     }
 }

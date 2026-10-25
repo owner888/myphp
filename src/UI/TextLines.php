@@ -23,12 +23,15 @@ final class TextLines
         return $this->state === null ? 0 : substr_count($this->state->text, "\n") + 1;
     }
 
-    /** The top of line $i in the area's content, from the top of its first line: below the padding, before the area scrolls. */
+    /** The height of a line not laid out yet, as mygo's: lines before the area's first layout are placed this far apart. */
+    public const LINE_HEIGHT = 18.0;
+
+    /** The top of line $i in the area's content, from the top of its first line: below the padding, before the area scrolls; before the area laid it out, LINE_HEIGHT a line. */
     public function top(int $i): float
     {
         $l = $this->state?->lastLayout();
         if ($l === null) {
-            return 0.0;
+            return $i * self::LINE_HEIGHT;
         }
         return $this->firstRow($l, max(0, min($i, $this->count()))) * $l->lineHeight;
     }
