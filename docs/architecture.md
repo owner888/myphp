@@ -829,17 +829,16 @@ and an action: `Runtime` keeps the toasts with the time each showed;
 the window, unless the view built them with `toastViewportBase`;
 `nextWake` wakes the window when the next one goes.
 
-`Context::table($state, $columns, $count, $cell)` is mygo's Table's core: a
-header row of `TableColumn`s (title, width or a share of the room, min
-width, alignment, sortable) over a `list()` whose rows are Space(8) high
-and hold one padded cell a column, keyed by column id; a click on a
-sortable header sets `ListState::$sort` ([id, descending], `sortBy`
-reverses on a second click, `sortChanged()` reports it) and the app sorts
-its rows; an invisible grip at each header's right edge takes
-`Runtime::dragged` and keeps the width in `ListState::$columnWidths`.
-Not ported: moving columns, fitting one to its cells, section headers,
-the header's context menu, sideways scrolling of a table wider than its
-room.
+`Context::table($state, $columns, $count, $cell)` is mygo's Table: a
+header row of `TableColumn`s (title, width or a share of the room, least
+and largest width, alignment, sortable, fixed) over a `list()` whose rows
+are Space(8) high and hold one padded cell a column, keyed by column id;
+a click on a sortable header sets `ListState::$sort` (a `SortOrder`; a
+second click reverses it, `sortChanged()` reports it), and with
+`$sortBy` a Cmd- or Shift-click sorts by several; the app sorts its rows.
+The end edge of a header resizes its column, a double click there fits
+it to its cells, a drag on the header moves it; `ListState::$columns` (a
+`TableLayout`) keeps the order and the widths. How, below (v1.14).
 
 `Context::split(&$size, $first, $second, $vertical)` is mygo's Split: two
 panes and a one-point line between them, with an invisible handle a few
@@ -2725,6 +2724,73 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   it shows, its motions going on from where the clock puts them. Events
   still draw the frame they need. A popover's window is AppKit's, whose
   occlusion the delegate does not hear of, so popovers draw as before.
+
+## Widgets, keys and lists (v1.14)
+
+- **Passwords.** `TextState::$password` holds for the frame that asks
+  for it (`Context::input` clears it each build): `shown()` is the text
+  as bullets, `shownIndex`/`fromShown` map a caret between the two, which
+  the painter, the caret's place and the input method's ranges use; Copy
+  and Cut take `copyable()`, nothing of a password, and assistive
+  technology hears only that it is one.
+- **Shortcuts behind a dialog.** `Runtime::$modal` is the last blocking
+  overlay recorded; `Context::insideModal()` tells a build outside it,
+  whose `shortcut()` and window `onShortcut` take no keys. The dialogs'
+  Escape is an `overlayShortcut`, as mygo's.
+- **Rows with keys.** `ListState::sync` (before the rows build) finds the
+  key of last frame's anchor row near where it was, and moves the place,
+  the known heights and the choice with their items; `remember` (after)
+  notes them. Rows are scoped by key (`rowScope`), so their state follows
+  them.
+- **Tables.** `TableLayout::arrange` gives the columns' order: fixed
+  columns where they are, the others in the layout's order, then in
+  theirs. Header cells are keyed by column id, so the header dragged keeps
+  its press while the columns move; `moveColumn` swaps it with a neighbour
+  whose middle the pointer passed (by last frame's rects) and takes that
+  neighbour's width off the drag, so the header stays under the pointer.
+  The end edge (`end(0)`, the left right to left, the drag mirrored) is
+  asked for before the header, so a press there resizes rather than
+  moves. A double click there sets `TableDrag::$fit`; the cells of that
+  column built in the frame are measured by `Node::$colFit`, which
+  `Layout::measure` runs before the table is measured (mygo's colFit). The
+  list's rows are `rowWidth()` of the columns' least, and the header
+  `scrollWith()` the list. The header menu's closure was typed
+  `MyPHP\Menu` (Context imports it) where the runtime passes a
+  `UI\Menu`: it never ran; it is typed by its full name now.
+- **Keys that scroll.** After the build, a key nothing took
+  (`Runtime::$keys[..][3]` unset) scrolls the innermost scroll container
+  around the focus that moves, or under the pointer without one
+  (`scrollKey`); a frame follows. A list's Page Up and Page Down left the
+  choice for this, as AppKit's do.
+- **Tooltips.** `Runtime::showTip` decides the tip once a frame, after
+  `record()`: the innermost hovered node with one (rested TIP_DELAY, or at
+  once within TIP_WARM of another), or the focused one while the focus
+  ring shows, whichever came last; a press, a click by the keys
+  (`$keyClicked`, kept even when the build asked no `clicked()`) or
+  Escape (taken before the window's Escape handler) dismisses it until
+  neither the pointer nor the focus is on it. A pointer moving within the
+  node no longer hides it.
+- **Rows never measured above.** `ListState::scrollBy` stops at the first
+  row above whose height is not measured, the offset negative: the view's
+  top above the anchor. `Context::list` builds the rows there as far as
+  their estimates go, from `$first`; `Layout` measures them and counts the
+  place from the first, adding their heights, so a step of the wheel or a
+  key moves the rows by exactly the step (mygo's anchor), and the
+  estimate never moves what shows.
+- **The physical key.** `Runtime::shortcut` matches a character shortcut
+  chorded with Command, Control or Option by the key's place
+  (`Key::usChar` of the virtual key code, which is a place on macOS) when
+  the layout typed no ASCII there; plain typing never matches by place.
+- **Photos upright.** `ImageIO::exifOrientation` reads the Orientation
+  tag of a JPEG's EXIF (mygo's parser); `orientTransform` is the
+  CoreGraphics transform, in its y-up space, that draws each orientation
+  pixel for pixel where mygo's `orient` puts it (a test maps every pixel
+  of a 4 by 3 image), concatenated before CGContextDrawImage, with the
+  bitmap's sides swapped for 5 to 8.
+- **A list's state.** `ListState::own` notes the list built with it in a
+  pass of a context: `focused`, `focusWithin`, `focus` and `shortcut` ask
+  that list and no other, none while it is hidden; a second list of the
+  same state in a pass throws.
 
 ## Open items
 

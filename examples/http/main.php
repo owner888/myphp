@@ -39,7 +39,7 @@ final class Http
     /** Reorders the history by the table's sort, keeping the chosen request chosen. */
     public function sort(): void
     {
-        [$by, $desc] = $this->list->sort;
+        $by = $this->list->sort?->column; $desc = $this->list->sort?->descending ?? false;
         $chosen = $this->history[$this->list->selected ?? -1] ?? null;
         $key = fn(array $r) => match ($by) { 'Method' => $r['method'], 'Status' => $r['status'] ?? -1, 'Time' => $r['time'], default => $r['url'] };
         usort($this->history, fn($a, $b) => $desc ? $key($b) <=> $key($a) : $key($a) <=> $key($b));

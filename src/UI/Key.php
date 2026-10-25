@@ -20,4 +20,15 @@ final class Key
     public const CONTEXT_MENU = 110;
     public const SHIFT = 1 << 17, CONTROL = 1 << 18, OPTION = 1 << 19, COMMAND = 1 << 20;
     public const MODIFIERS = self::SHIFT | self::CONTROL | self::OPTION | self::COMMAND;
+
+    /** What the key at $code types on a US layout, for shortcuts on layouts that type no Latin letter there, or null (mygo's KeyByPosition). */
+    public static function usChar(int $code): ?string
+    {
+        static $chars = [self::A => 'a', self::S => 's', self::D => 'd', self::F => 'f', self::H => 'h', self::G => 'g', self::Z => 'z', self::X => 'x', self::C => 'c', self::V => 'v',
+            self::B => 'b', self::Q => 'q', self::W => 'w', self::E => 'e', self::R => 'r', self::Y => 'y', self::T => 't', self::N1 => '1', self::N2 => '2', self::N3 => '3',
+            self::N4 => '4', self::N6 => '6', self::N5 => '5', self::EQUAL => '=', self::N9 => '9', self::N7 => '7', self::MINUS => '-', self::N8 => '8', self::N0 => '0',
+            self::BRACKET_RIGHT => ']', self::O => 'o', self::U => 'u', self::BRACKET_LEFT => '[', self::I => 'i', self::P => 'p', self::L => 'l', self::J => 'j', self::QUOTE => "'",
+            self::K => 'k', self::SEMICOLON => ';', self::BACKSLASH => '\\', self::COMMA => ',', self::SLASH => '/', self::N => 'n', self::M => 'm', self::PERIOD => '.', self::GRAVE => '`'];
+        return $chars[$code] ?? null;
+    }
 }

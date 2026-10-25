@@ -120,6 +120,11 @@ final class Layout
     /** Measures $n and what is inside it, bottom-up: the size it asks, its margins included, which its parent's arrange gives it back less them (margins()). */
     public static function measure(Node $n): void
     {
+        if ($n->colFit !== null) {
+            $fit = $n->colFit;
+            $n->colFit = null;
+            $fit();
+        }
         self::measureBox($n);
         if ($n->aspect > 0 || $n->maxW < INF || $n->maxH < INF) { // the side its aspect ratio sets, and the largest sizes
             if ($n->aspect > 0 && $n->fw > 0 && $n->fh <= 0) { $n->mh = max($n->fw / $n->aspect, $n->minH); }
@@ -383,8 +388,14 @@ final class Layout
             } else {
                 $s->x = 0.0;
             }
-            foreach ($kids as $i => $k) {
-                $s->measured($s->first + $i, $k->mh);
+            if ($s->count > 0) { // without rows, what the list shows instead is no row
+                foreach ($kids as $i => $k) {
+                    $s->measured($s->first + $i, $k->mh);
+                }
+            }
+            if ($s->first < $s->row && $s->row === $s->builtRow) { // rows built above the place, measured now: it counts from the first of them (a place the build moved after the rows builds them anew)
+                for ($i = 0; $i < $s->row - $s->first && isset($kids[$i]); $i++) { $s->offset += $kids[$i]->mh + $gap; }
+                $s->row = $s->first;
             }
             // The view's top lies $offset below the anchor's top; built rows
             // short of the view's bottom leave a gap this frame.

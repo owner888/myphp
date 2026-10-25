@@ -44,6 +44,8 @@ final class Context
     /** The router whose page is being built, which a link to a path goes through, and whether what is built is inert (a page going away). */
     private ?Router $router = null;
     private bool $inert = false;
+    /** Whether the overlay built now was opened from inside the dialog on top. */
+    private bool $overlayInModal = false;
 
     /**
      * Whether the window shows its material (WindowOptions::$vibrancy)
@@ -111,6 +113,9 @@ final class Context
             $n->setDir($top->rtl, false); // the direction of the node it is built in
         }
         if ($top->kind === Node::RICH) {
+            if ($n->kind !== Node::TEXT && $n->kind !== Node::RICH) {
+                throw new \LogicException('only text nodes (text, link, richText) go inside a text'); // they continue its paragraph (mygo's inline elements)
+            }
             $n->inline = true;
         } elseif ($n->kind === Node::TEXT || $n->kind === Node::RICH) {
             $n->scope = $this->selectScope();
@@ -299,9 +304,39 @@ final class Context
     /** Builds what $fn builds over everything else, at the window's root, wherever the build is (mygo's Overlay): popups placed with Node::at in the window's coordinates. */
     public function overlay(Closure $fn): void
     {
-        $saved = $this->stack; $this->stack = [$this->root];
+        $saved = $this->toRoot();
         $fn();
-        $this->stack = $saved;
+        $this->back($saved);
+    }
+
+    /** Builds at the root from now, over the view, as overlays are, keeping whether what opens it is inside the dialog on top (a popover is where its anchor is); back() returns to where it was. @return array{list<Node>, bool} */
+    private function toRoot(): array
+    {
+        $saved = [$this->stack, $this->overlayInModal];
+        $this->overlayInModal = $this->insideModal();
+        $this->stack = [$this->root];
+        return $saved;
+    }
+
+    /** @param array{list<Node>, bool} $saved what toRoot() returned */
+    private function back(array $saved): void
+    {
+        [$this->stack, $this->overlayInModal] = $saved;
+    }
+
+    /** Whether what is built now is inside the dialog on top, or no dialog shows (mygo's insideModal): the window's shortcuts built behind one wait. */
+    private function insideModal(): bool
+    {
+        $m = $this->runtime?->modal;
+        if ($m === null || $this->overlayInModal) {
+            return true;
+        }
+        foreach ($this->stack as $n) {
+            if ($n->id === $m) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Runs $fn when $key with exactly $mods is pressed in the scope built now: the container open, else the window wherever the focus is (mygo's Context.OnShortcut). */
@@ -310,7 +345,7 @@ final class Context
         $top = $this->stack[count($this->stack) - 1];
         if ($top !== $this->root) {
             $top->onShortcut($key, $mods, $fn);
-        } else {
+        } elseif ($this->insideModal()) { // the window's, which wait behind a dialog
             $this->runtime?->addAction(null, 'shortcut', $fn, $key, $mods);
         }
     }
@@ -579,10 +614,13 @@ final class Context
      * the rows in view are built, from the anchor $state keeps. Row heights
      * come from what layout measured last frame, so the list builds rows
      * for 1.5 views' worth of estimated height, and asks for another frame
-     * if that fell short.
+     * if that fell short. Without rows, $empty builds what the list shows
+     * instead, laid out as a column's content: a message that it is empty,
+     * say (mygo's List with children). A state shows one list at a time.
      */
-    public function list(ListState $state, int $count, Closure $row): Node
+    public function list(ListState $state, int $count, Closure $row, ?Closure $empty = null): Node
     {
+        $state->sync($count); // rows that came or went above the place and the choice, with keys
         $came = 0.0; // how far the end moved down as rows came, which a FollowAnimation glides
         if ($state->followEnd && $state->atEnd && $count > $state->count && !$state->moving()) {
             for ($i = $state->count; $i < $count; $i++) { $came += $state->height($i); }
@@ -595,6 +633,7 @@ final class Context
         // startup, say) or the rows changed under it: keep it within the rows.
         $state->scrollBy(0);
         $node = $this->column(0, 0, 1)->scroll($state)->role(Role::LIST);
+        $state->own($this, $node); // for focused(), focusWithin(), focus() and shortcut() on the state
         if ($state->followAnimation !== null && $this->runtime !== null) { // what came rises from below as the list glides to its end (mygo's FollowAnimation)
             if ($came > 0 && !$this->runtime->reduceMotion && !$this->runtime->instant()) {
                 $this->jump($node, 'follow', $state->lag + $came);
@@ -603,15 +642,22 @@ final class Context
             if ($state->lag != 0.0 && $this->runtime->wheeled) { $state->lag = $this->jump($node, 'follow', 0.0); } // the user scrolling stops it
         }
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
-        $state->first = $state->row;
+        $start = $state->row; $y = -$state->offset;
+        while ($y > 0 && $start > 0) { // the view's top above the place's row (ListState::scrollBy): the rows there, as far as their estimates go
+            $start--;
+            $y -= $state->height($start);
+        }
+        $state->first = $start; $state->builtRow = $state->row;
         $state->editables = false; // until an editable text is built in a row
-        $y = -$state->offset;
         $limit = max($state->viewport, $this->height) * 1.5;
         [$scope, $ordinal] = [$this->scope, $this->ordinal];
         $savedRow = $this->listRow;
         $headers = []; // the kids that are headers, by row
-        for ($i = $state->row; $i < $count && $y < $limit; $i++) {
-            $this->scope = "$scope/L{$node->id}/$i"; // the row's nodes are keyed by its index
+        if ($count === 0 && $empty !== null) {
+            $empty();
+        }
+        for ($i = $start; $i < $count && $y < $limit; $i++) {
+            $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $i); // the row's nodes are keyed by its item's key, else its index
             $this->ordinal = 0;
             $k = count($node->kids);
             $this->listRow = [$state, $i, $node];
@@ -661,7 +707,7 @@ final class Context
             if (isset($headers[$h])) {
                 $node->pinned = $headers[$h];
             } else {
-                $this->scope = "$scope/L{$node->id}/$h"; $this->ordinal = 0;
+                $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $h); $this->ordinal = 0;
                 $k = count($node->kids);
                 $this->listRow = [$state, $h, $node];
                 $row($h);
@@ -688,10 +734,17 @@ final class Context
             }
         }
         $this->end();
+        $state->remember();
         if ($state->drag !== null && $this->runtime !== null) {
             $this->reorderRows($state, $node, $count);
         }
         return $node;
+    }
+
+    /** What a row's nodes are keyed by in its list: its item's key (ListState::$key), so that its state goes with the item as rows come and go above it, else its index. */
+    private static function rowScope(ListState $state, int $i): string
+    {
+        return $state->key === null ? (string)$i : 'k' . $state->keyOf($i);
     }
 
     /**
@@ -748,12 +801,12 @@ final class Context
         $ghost->at($gx - $this->root->padX(), $gy - $this->root->padY());
         $this->root->kids[] = $ghost;
         if ($count > 1) {
-            $saved = $this->stack; $this->stack = [$this->root];
+            $saved = $this->toRoot();
             [$tw, $th] = $this->metrics->measure((string)$count, $t->fontSize - 2);
             $this->row(0, 0, 0, $t->accent)->size(max($tw + 10, $th + 4), $th + 4)->round(($th + 4) / 2)->center()->at($x + 10 - $this->root->padX(), $y - $th - 14 - $this->root->padY());
               $this->text((string)$count, $t->fontSize - 2, $t->accentText, Font::BOLD);
             $this->end();
-            $this->stack = $saved;
+            $this->back($saved);
         }
     }
 
@@ -1284,8 +1337,8 @@ final class Context
     /** Whether $key (a Key code or a character) was pressed this frame with exactly $mods, unless a focused control took it (mygo's Shortcut). */
     public function shortcut(int|string $key, int $mods = 0): bool
     {
-        if ($this->inert) {
-            return false; // a page going away takes no keys
+        if ($this->inert || !$this->insideModal()) {
+            return false; // a page going away takes no keys, nor a window behind a dialog
         }
         return $this->runtime?->shortcut($key, $mods) ?? false;
     }
@@ -1669,8 +1722,9 @@ final class Context
      * A sidebar of items in sections, as mygo's Sidebar (Finder's,
      * Mail's), $width wide, scrolling when they do not fit: a click
      * chooses an item, whose id $selected holds, and while the sidebar has
-     * the focus Up, Down, Home and End choose among its items; it is one
-     * stop of Tab, and changed() reports a new choice.
+     * the focus Up, Down, Home, End and typing the first letters of an
+     * item choose among its items; it is one stop of Tab, and changed()
+     * reports a new choice.
      */
     public function sidebar(string &$selected, Closure $fn, float $width = 200): Node
     {
@@ -1679,7 +1733,7 @@ final class Context
         $n = $this->column($t->space(2.5), $t->space(0.5), 0, $t->surface)->size($width)->focusable()->role(Role::TREE);
         $n->choosesItems = true; // whose sections hold their items
         if ($rt !== null) {
-            $local = $rt->local($n->id, fn() => (object)['scroll' => new ScrollState, 'items' => []]);
+            $local = $rt->local($n->id, fn() => (object)['scroll' => new ScrollState, 'items' => [], 'labels' => [], 'typed' => '', 'typedAt' => 0.0]);
             $n->scroll($local->scroll);
             // The keys choose among last frame's items, in their order.
             $items = $local->items; $at = array_search($selected, $items, true); $to = null;
@@ -1688,15 +1742,25 @@ final class Context
                 if ($this->shortcut(Key::UP)) { $to = $at === false ? 0 : max($at - 1, 0); }
                 if ($this->shortcut(Key::HOME)) { $to = 0; }
                 if ($this->shortcut(Key::END)) { $to = count($items) - 1; }
+                if (($typed = $rt->typed($n->id)) !== '') { // the first letters of an item: from the one after the item chosen, round to it, the same letter again going to the next starting with it (mygo's sidebar keys)
+                    $now = hrtime(true) / 1e9;
+                    if ($now - $local->typedAt >= 1.0) { $local->typed = ''; }
+                    $local->typed .= $typed; $local->typedAt = $now;
+                    $start = ($at === false ? -1 : $at) - (mb_strlen($local->typed) > 1 ? 1 : 0);
+                    for ($k = 1, $cnt = count($items); $k <= $cnt; $k++) {
+                        $j = (($start + $k) % $cnt + $cnt) % $cnt;
+                        if (str_starts_with(mb_strtolower($local->labels[$j]), mb_strtolower($local->typed))) { $to = $j; break; }
+                    }
+                }
             }
             if ($to !== null && $items[$to] !== $selected) { $selected = $items[$to]; $n->changed = true; }
         }
-        $this->sidebars[] = ['node' => $n, 'selected' => &$selected, 'items' => [], 'depth' => 0, 'chosen' => null];
+        $this->sidebars[] = ['node' => $n, 'selected' => &$selected, 'items' => [], 'labels' => [], 'depth' => 0, 'chosen' => null];
           $fn();
         $built = array_pop($this->sidebars);
         $this->end();
         if ($built['chosen'] !== null) { $n->activeDescendant($built['chosen']); } // the item chosen has the focus for assistive technology, as a list's row chosen does
-        if (isset($local)) { $local->items = $built['items']; }
+        if (isset($local)) { $local->items = $built['items']; $local->labels = $built['labels']; }
         return $n;
     }
 
@@ -1744,7 +1808,7 @@ final class Context
         $sb = &$this->sidebars[count($this->sidebars) - 1];
         $chosen = $sb['selected'] === $id;
         $focused = $this->focused($sb['node']);
-        $sb['items'][] = $id;
+        $sb['items'][] = $id; $sb['labels'][] = $label;
         $n = $this->key("item:$id")->row(0, $t->space(2), 0, $chosen ? ($focused ? $t->accent : $t->surfacePressed) : null)->padding($t->space(1.5), $t->space(2))->round($t->radius)->align(Node::CENTER)
             ->role(Role::TREE_ITEM)->level($sb['depth'] + 1)->checked($chosen);
         $n->choosable = true;
@@ -1801,7 +1865,7 @@ final class Context
         if ($local->highlight === -2 || $local->highlight >= count($shown)) { $local->highlight = count($shown) - 1; }
         if ($shown !== [] && $local->open) {
             $r = $rt->rectOf($anchor->id) ?? [0, 0, 0, 0];
-            $saved = $this->stack; $this->stack = [$this->root];
+            $saved = $this->toRoot();
             $panel = $this->key('combo:' . $in->id)->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)
                 ->at($r[0], $r[1] + $r[3] + $t->space(1))->size($r[2], 0)->scroll($local->scroll)->role(Role::LIST);
             $panel->choosesItems = true;
@@ -1817,7 +1881,7 @@ final class Context
                   if ($this->clicked($item)) { $chosen = $opt; }
               }
             $this->end();
-            $this->stack = $saved;
+            $this->back($saved);
         }
         if ($chosen !== null) { $open(false, false, -1); }
         return $chosen;
@@ -2549,7 +2613,7 @@ final class Context
             $this->end();
           $this->end();
         $this->end();
-        if ($chosen < 0 && $this->shortcut(Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; }
+        if ($chosen < 0 && $this->overlayShortcut($back, Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; } // the dialog on top's
         if ($chosen !== -1) { $open = false; }
         return $chosen;
     }
@@ -2803,11 +2867,11 @@ final class Context
         $rt = $this->runtime;
         $r = $rt?->rectOf($anchor->id) ?? [0, 0, 0, 0];
         $margin = $t->space(1);
-        $saved = $this->stack; $this->stack = [$this->root]; // at the root: over the view, placed in the window
+        $saved = $this->toRoot(); // at the root: over the view, placed in the window
         $panel = $this->column($t->space(1), 0, 0, $t->background)->round($t->radius + 2)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18)->at($r[0], $r[1] + $r[3] + $margin)->role(Role::POPUP);
           $fn();
         $this->end();
-        $this->stack = $saved;
+        $this->back($saved);
         $last = $rt?->rectOf($panel->id);
         if ($last !== null && $r[1] + $r[3] + $margin + $last[3] > $this->height && $r[1] - $margin - $last[3] >= 0) {
             $panel->at($r[0], $r[1] - $margin - $last[3]); // no room below: above, as high as it was last frame
@@ -3086,7 +3150,7 @@ final class Context
             $fn();
           $this->end();
         $this->end();
-        if ($this->shortcut(Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) {
+        if ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // Escape is the dialog on top's
             $open = false;
             $back->dismissed = true;
         }
@@ -3234,11 +3298,18 @@ final class Context
      * A table of $count rows under a header of $columns, as mygo's Table:
      * the rows are a list's (only those in view are built, $state keeps
      * the place and the choice, the keys move it), $cell($row, $col)
-     * builds a cell's content, usually a text. Rows are as high as their
-     * tallest cell and at least Space(8); cells pad Space(1.5) by Space(2.5). The user resizes a column by dragging the
-     * right edge of its header ($state->columnWidths keeps it) and sorts
-     * by a sortable column by clicking its header ($state->sort; the app
-     * sorts its rows and sortChanged() reports a click).
+     * builds a cell's content, usually a text, $col the column's index in
+     * $columns. Rows are as high as their tallest cell and at least
+     * Space(8); cells pad Space(1.5) by Space(2.5).
+     *
+     * The user resizes a column by dragging the end edge of its header (the
+     * right, the left right to left), fits it to its cells with a double
+     * click there, and moves it by dragging the header: $state->columns
+     * keeps the order and the widths. Columns wider than the table scroll
+     * sideways, the header with them. A click on a sortable column's header
+     * sorts by it ($state->sort; the app sorts its rows and sortChanged()
+     * reports a click); with $state->sortBy, a Cmd- or Shift-click sorts by
+     * it after the others.
      * @param list<TableColumn> $columns
      */
     public function table(ListState $state, array $columns, int $count, Closure $cell): Node
@@ -3248,55 +3319,115 @@ final class Context
         $rt = $this->runtime;
         $this->ownScope('table');
         $n = $this->column(0, 0, 1)->role(Role::TABLE);
-        $cells = function (Closure $fill, int $role) use ($columns, $state, $t, $flexMin) {
+        $drag = $rt?->local($n->id, fn() => new TableDrag()) ?? new TableDrag();
+        $state->syncSort();
+        $layout = $state->columns;
+        $order = $layout->arrange($columns);
+        $least = 0.0; // the least width of the rows: the columns', those sharing the room left at their least
+        foreach ($order as $j) { $least += $layout->width($columns[$j]) ?? max($columns[$j]->minWidth, $flexMin); }
+        $fitting = []; // the cells of the column fitting its cells
+        $cells = function (Closure $fill, int $role) use ($columns, $order, $layout, $t, $flexMin, $drag, &$fitting): array {
             $boxes = [];
-            foreach ($columns as $j => $col) {
-                $w = $state->columnWidths[$col->id()] ?? $col->width;
-                $box = $this->key('c' . $col->id())->row(0, 0, $w > 0 ? 0 : 1)->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->justify($col->align);
-                $box->size($w > 0 ? $w : max($col->minWidth, $flexMin), 0); // a shared column measures its least width and grows: its content does not push it (mygo's Shrink(1))
+            foreach ($order as $j) {
+                $col = $columns[$j];
+                $w = $layout->width($col);
+                // Keyed by its column, a cell keeps its state as the columns move: a header being dragged keeps the press.
+                $box = $this->key('c' . $col->id())->row(0, 0, $w === null ? 1 : 0)->padding($t->space(1.5), $t->space(2.5))->align(Node::CENTER)->justify($col->align);
+                if ($w === null) {
+                    $box->size(max($col->minWidth, $flexMin), 0)->min(max($col->minWidth, $flexMin), 0); // a shared column measures its least width and grows: its content does not push it (mygo's Shrink(1))
+                } else {
+                    $box->size($w, 0)->shrink(0);
+                }
                 $box->role = $role;
                   $fill($j);
                 $this->end();
+                if ($drag->fit !== null && $drag->fit === $col->id()) { $fitting[] = $box; }
                 $boxes[] = $box;
             }
             return $boxes;
         };
-        // The header: a click sorts by a sortable column; a drag at a header's right edge resizes it.
-        $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH)->role(Role::ROW);
-        $headRect = $rt?->rectOf($head->id);
-        $heads = $cells(function (int $j) use ($columns, $state, $t) {
+        // The header, which scrolls sideways with the rows: a click sorts by a sortable column, a drag moves a column, a drag at a header's end edge resizes it.
+        $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH)->role(Role::ROW)->clip();
+        $edges = [];
+        $heads = $cells(function (int $j) use ($columns, $state, $t, &$edges) {
             $col = $columns[$j];
             $this->text($col->title, $t->fontSize, $t->textMuted, Font::BOLD);
-            if ($state->sort !== null && $state->sort[0] === $col->id()) {
-                $this->text($state->sort[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted);
+            $place = $col->sortable ? $state->sortPlace($col->id()) : null;
+            if ($place !== null) {
+                if ($state->sortBy !== null && count($state->sortBy) > 1) { // its place among the columns sorted by, from 1
+                    $this->text((string)($place[0] + 1), $t->fontSize * 0.75, $t->textMuted)->role(Role::NONE)->marginStart($t->space(1));
+                }
+                $this->text($place[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted)->role(Role::NONE)->marginStart($t->space(1));
+            }
+            if (!$col->fixed) {
+                $edges[$j] = $this->key('g' . $col->id())->column()->absolute()->top(0)->bottom(0)->end(0)->size($t->space(2), 0)->cursor(Cursor::ResizeEW)->role(Role::NONE);
+                $this->end();
             }
         }, Role::COLUMN_HEADER);
         if ($state->headerMenu !== null && $rt !== null) { // the header's context menu, told the column under the pointer, -1 past them (mygo's HeaderMenu)
-            $head->contextMenu(function (Menu $m) use ($state, $heads, $rt): void {
+            $head->contextMenu(function (\MyPHP\UI\Menu $m) use ($state, $heads, $order, $rt): void {
                 $col = -1;
-                foreach ($heads as $j => $h) {
+                foreach ($heads as $k => $h) {
                     $r = $rt->rectOf($h->id);
-                    if ($r !== null && $rt->input->mouseX >= $r[0] && $rt->input->mouseX < $r[0] + $r[2]) { $col = $j; }
+                    if ($r !== null && $rt->input->mouseX >= $r[0] && $rt->input->mouseX < $r[0] + $r[2]) { $col = $order[$k]; }
                 }
                 ($state->headerMenu)($m, $col);
             });
         }
-        foreach ($columns as $j => $col) {
-            $h = $heads[$j];
+        foreach ($order as $k => $j) {
+            $col = $columns[$j]; $h = $heads[$k]; $id = $col->id();
             $h->label = $col->title; // the title alone, not the arrow beside it
-            if ($col->sortable && $state->sort !== null) { $h->sort = $state->sort[0] === $col->id() ? ($state->sort[1] ? 2 : 1) : 0; }
-            if ($col->sortable && $this->hovered($h)) { $h->color = $t->surfaceHover; }
-            if ($col->sortable && $this->clicked($h)) { $state->sortBy($col->id()); }
-            $r = $rt?->rectOf($h->id);
-            if ($r === null || $headRect === null) {
+            if ($col->sortable) {
+                $place = $state->sortPlace($id);
+                $h->sort = $place === null ? 0 : ($place[1] ? 2 : 1);
+                if ($this->hovered($h)) { $h->color = $t->surfaceHover; }
+            }
+            if ($rt === null) {
                 continue;
             }
-            $grip = $this->key('g' . $col->id())->box(0, 0, 0)->at($r[0] - $headRect[0] + $r[2] - 3, 0)->size(6, $rowH)->cursor(Cursor::ResizeEW);
-            $grip->alpha = 0.0;
-            $d = $rt->dragged($grip->id);
-            if ($d !== null) { // from the width it has (a shared column's as laid out last frame), by what the pointer moved
-                $w = $state->columnWidths[$col->id()] ?? ($col->width > 0 ? $col->width : $r[2]);
-                $state->columnWidths[$col->id()] = max($col->minWidth, $flexMin, $w + $d[0]);
+            $edge = $edges[$j] ?? null;
+            if ($edge !== null) { // asked first: a press on the edge resizes the column rather than moves it
+                $this->clicked($edge); // its clicks are not the header's
+                if ($this->doubleClicked($edge)) { $drag->fit = $id; }
+                $d = $this->dragged($edge);
+                if ($d !== null && $d[0] != 0) {
+                    $dx = $edge->rtl ? -$d[0] : $d[0]; // the edge is on the left right to left: dragging it left widens
+                    // The columns before it sharing the room left keep their widths, for the edge to follow the pointer.
+                    foreach ($order as $k2 => $j2) {
+                        if ($k2 === $k) { break; }
+                        $r2 = $rt->rectOf($heads[$k2]->id);
+                        if ($layout->width($columns[$j2]) === null && $r2 !== null) { $state->setWidth($columns[$j2], $r2[2]); }
+                    }
+                    $state->setWidth($col, ($layout->width($col) ?? $rt->rectOf($h->id)[2] ?? 0.0) + $dx);
+                }
+                $hot = $d !== null || $this->hovered($edge);
+                $rtl = $edge->rtl;
+                $color = $hot ? $t->accent : $t->border;
+                $edge->draw(static function (DisplayList $list, Node $e) use ($rtl, $color): void {
+                    $x = $rtl ? $e->x + 0.5 : $e->x + $e->w - 0.5;
+                    $list->line($x, $e->y + $e->h / 4, $x, $e->y + $e->h * 3 / 4, $color, 1.0, 1.0);
+                });
+            }
+            if (!$col->fixed) { // moving the column, once the pointer went a few points
+                $d = $this->dragged($h);
+                if ($d !== null) {
+                    if ($drag->id !== $id) { $drag->id = $id; $drag->dx = 0.0; $drag->moving = false; }
+                    $drag->dx += $d[0];
+                    if (!$drag->moving && abs($drag->dx) > 4) { $drag->moving = true; }
+                    if ($drag->moving) {
+                        $this->moveColumn($state, $drag, $heads, $order, $columns);
+                        $h->left($drag->dx)->opacity(0.9);
+                        $h->color = $t->surfacePressed;
+                    }
+                } elseif ($drag->id === $id) { // released: a click, unless it moved the column
+                    $moved = $drag->moving;
+                    $drag->id = null; $drag->dx = 0.0; $drag->moving = false;
+                    if ($moved) { $this->clicked($h); }
+                }
+            }
+            if ($col->sortable && $this->clicked($h)) {
+                $state->sortClicked($id, ($rt->clickMods & (Key::COMMAND | Key::SHIFT)) !== 0); // Cmd-click as Finder, Shift-click as web grids
+                $n->changed = true;
             }
         }
         $this->end();
@@ -3309,8 +3440,49 @@ final class Context
             $this->end();
         });
         $list->role = Role::NONE; $list->rowRole = Role::ROW; // the table's rows, under it
+        $list->rowWidth($least);
+        $head->scrollWith($list);
         $this->end();
+        if ($drag->fit !== null) { // fits the column to its cells built in this frame and its header, before the table is measured (mygo's tableFit)
+            $fit = $drag->fit;
+            $n->colFit = static function () use ($fitting, $layout, $drag, $fit): void {
+                $drag->fit = null;
+                $w = 0.0;
+                foreach ($fitting as $box) { $box->fw = 0; Layout::measure($box); $w = max($w, $box->mw); }
+                foreach ($fitting as $box) { $box->fw = $w; $box->grow = 0; $box->shrink = 0; }
+                $layout->widths[$fit] = $w;
+            };
+        }
         return $n;
+    }
+
+    /** Moves the column being dragged past a neighbor whose middle it passed, keeping it under the pointer (mygo's moveColumn). @param list<Node> $heads @param list<int> $order @param list<TableColumn> $columns */
+    private function moveColumn(ListState $state, TableDrag $drag, array $heads, array $order, array $columns): void
+    {
+        $rt = $this->runtime;
+        $at = null;
+        foreach ($order as $k => $j) { if ($columns[$j]->id() === $drag->id) { $at = $k; } }
+        if ($at === null) {
+            return;
+        }
+        $sign = $heads[$at]->rtl ? -1.0 : 1.0; // the columns after it are to its left right to left
+        $dx = $drag->dx * $sign;
+        $to = $at;
+        if ($dx > 0 && $at + 1 < count($order)) {
+            $next = $rt->rectOf($heads[$at + 1]->id);
+            if ($next !== null && $next[2] > 0 && $dx > $next[2] / 2) { $to = $at + 1; }
+        } elseif ($dx < 0 && $at > 0) {
+            $prev = $rt->rectOf($heads[$at - 1]->id);
+            if ($prev !== null && $prev[2] > 0 && -$dx > $prev[2] / 2) { $to = $at - 1; }
+        }
+        if ($to === $at || $columns[$order[$to]]->fixed) {
+            return;
+        }
+        $w = $rt->rectOf($heads[$to]->id)[2] ?? 0.0; // under the pointer still: the column's place moved by the other's width
+        $drag->dx += $to > $at ? -$sign * $w : $sign * $w;
+        $ids = array_map(fn(int $j) => $columns[$j]->id(), $order);
+        [$ids[$at], $ids[$to]] = [$ids[$to], $ids[$at]];
+        $state->columns->order = $ids;
     }
 
     /**
@@ -3374,7 +3546,7 @@ final class Context
         return $this->add(new Node(Node::CONTAINER, Node::ROW, 0, 0, 0, 0, 1, null, null));
     }
 
-    /** A spinner showing activity of unknown length, as mygo's: spokes turning, as high as the font size, in the muted text color. */
+    /** A spinner showing activity of unknown length, as mygo's: spokes turning, as high as the font size, in the muted text color, or the one textColor() gives it, as on a chosen row. */
     public function spinner(): Node
     {
         $size = $this->theme->fontSize * 1.25;
@@ -3549,7 +3721,7 @@ final class Context
         $t = $this->theme;
         $n = $this->column(1, 1, 0, $t->border)->round($t->radius)->focusable()->role(Role::STEPPER);
         $n->size($t->space(5), $t->space(7));
-        $ticks = $this->runtime?->stepper($n->id) ?? 0;
+        $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
         $holding = $this->runtime?->holding($n->id) ?? 0;
         $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
@@ -3602,8 +3774,9 @@ final class Context
 
     /**
      * A slider over [$min, $max] moving $value: a press or drag sets it
-     * where the pointer is, Left/Right move it by a hundredth of the range
-     * while it has the focus; changed() reports it.
+     * where the pointer is, the arrows move it by a hundredth of the range
+     * while it has the focus, Page Up and Page Down by a tenth, Home and
+     * End to the ends; changed() reports it.
      */
     public function slider(float &$value, float $min = 0, float $max = 1, float $width = 160): Node
     {
@@ -3663,6 +3836,11 @@ final class Context
             $steps = $this->runtime->stepped($n->id);
             if ($steps !== 0) {
                 $value = self::snap(max($min, min($max, $value + $steps * $by)), $min, $max, $step);
+                $n->changed = true;
+            }
+            $pages = $this->runtime->paged($n->id);
+            if ($pages !== 0) { // Page Up and Page Down: a tenth of the range, or a step when more
+                $value = self::snap(max($min, min($max, $value + $pages * max($by, ($max - $min) / 10))), $min, $max, $step);
                 $n->changed = true;
             }
             if (($j = $this->runtime->jumped($n->id)) !== 0 && $value != ($j < 0 ? $min : $max)) {
@@ -3757,6 +3935,7 @@ final class Context
         $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills the row's remaining width
         $n->bordered = true;
         $n->edit = $state;
+        $state->password = false; // until password() says otherwise, this frame
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
     }

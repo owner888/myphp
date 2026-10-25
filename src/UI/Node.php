@@ -165,6 +165,8 @@ final class Node
     /** A step slider's tick marks (Context::stepSlider), 0 for none. */
     public int $ticks = 0;
     public ?Node $followX = null;
+    /** Fits a table's column to its cells as the table is measured, once (mygo's colFit). @internal */
+    public ?\Closure $colFit = null;
     /** @var list<TextRange> the runs of an input's text styled this frame (textRanges) */
     public array $ranges = [];
     /** How far a scroll container's bars keep in from its edges, top, right, bottom and left (mygo's ScrollbarInsets). @var array{0: float, 1: float, 2: float, 3: float} */
@@ -972,6 +974,22 @@ final class Node
         }
         $p = new \MyPHP\Text\Params($text, $t->style($this->fontSize), $this->wrapWidth ?? 0, $this->maxLines, $this->ellipsis, $this->noWrap, $align, rtl: $this->rtl, spans: $spans);
         return $this->layout = $this->metrics->textSystem()->layout($p);
+    }
+
+    /**
+     * Hides what a text input holds, in the frames that call it (mygo's
+     * Password): bullets in its place, which nothing copies and neither the
+     * input method nor assistive technology reads; an input that stops
+     * calling it shows its text again, as a field's eye button does. It does
+     * nothing to a text area: as on every platform, only single-line fields
+     * hide their text.
+     */
+    public function password(): static
+    {
+        if ($this->edit !== null && !$this->edit->multiline) {
+            $this->edit->password = true;
+        }
+        return $this;
     }
 
     /**

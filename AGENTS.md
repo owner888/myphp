@@ -103,7 +103,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   MTKView's dispatch-queue paths); no CVDisplayLink into PHP. Nodes have no parent pointers (acyclic: no GC).
 - **Last frame answers this frame's questions**: `Runtime` keeps rects by
   node id (creation order, or xxh64 of the key path under `Context::key`;
-  list rows are keyed by index); `clicked()/hovered()/focused()` hit-test
+  list rows by their item's key, `ListState::$key`, else index); `clicked()/hovered()/focused()` hit-test
   them while building; a click that changed state re-runs the build (≤3 passes).
   `richText(..., wrap: true)` wraps at last frame's width (a frame follows when
   it differs); `->focusable()` puts any node in the Tab order; `->size(w, h)`

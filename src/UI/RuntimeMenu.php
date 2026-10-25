@@ -291,8 +291,8 @@ trait RuntimeMenu
             return;
         }
         switch ($name) {
-            case 'copy': if ($state->hasSelection()) { ($this->writeClipboard)($state->selectedText()); } break;
-            case 'cut': if ($state->hasSelection()) { ($this->writeClipboard)($state->selectedText()); $state->insert(''); } break;
+            case 'copy': if ($state->copyable()) { ($this->writeClipboard)($state->selectedText()); } break; // a password copies nothing
+            case 'cut': if ($state->copyable()) { ($this->writeClipboard)($state->selectedText()); $state->insert(''); } break;
             case 'delete': if ($state->hasSelection()) { $state->insert(''); } break;
             case 'selectAll': $state->selectAll(); break;
             case 'paste':
@@ -336,8 +336,7 @@ trait RuntimeMenu
         if ($state === null) {
             return [];
         }
-        $selected = $state->hasSelection();
-        return [[$t->get('menuCut'), 'cut', $selected && !$state->readOnly], [$t->get('menuCopy'), 'copy', $selected], [$t->get('menuPaste'), 'paste', !$state->readOnly],
+        return [[$t->get('menuCut'), 'cut', $state->copyable() && !$state->readOnly], [$t->get('menuCopy'), 'copy', $state->copyable()], [$t->get('menuPaste'), 'paste', !$state->readOnly],
             $separator, [$t->get('menuSelectAll'), 'selectAll', $state->text !== '']];
     }
 

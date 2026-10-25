@@ -418,6 +418,8 @@ final class Metal
     private const TEXTURE_2D_ARRAY = 3; // MTLTextureType
     /** @var array<int, Closure> draw callbacks by view address */
     private static array $onDraw = [];
+    /** @var array<int, Closure> what runs after a view presented a frame, by its address: a window's frame statistics */
+    public static array $afterPresent = [];
     private static $delegate = null, $commonModes = null;
     /** @var array<int, bool> the views drawing a frame now, true once a frame was asked for meanwhile */
     private static array $drawing = [];
@@ -542,6 +544,7 @@ final class Metal
             $list->reset();
             $draw($view, $list);
             $this->present($view, $list);
+            (self::$afterPresent[$key] ?? null)?->__invoke();
             $this->frame++;
             $again = self::$drawing[$key];
             unset(self::$drawing[$key]);

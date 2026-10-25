@@ -91,6 +91,8 @@ final class Window
     public readonly ?Input $input;
     public readonly ?Runtime $runtime;
     private array $stats = ['frames' => 0, 'ms' => 0, 'since' => 0];
+    /** The statistics of each frame MYPHP_FRAME_STATS asks for, or null (mygo's frameStats). */
+    private ?UI\FrameStats $frameStats = null;
     /** @var array<string, list<\Closure>> listeners by event */
     private array $listeners = [];
     private string $stateKey = '';
@@ -178,6 +180,12 @@ final class Window
             }
         } else {
             $this->view = $this->nativeView($o);
+            if (($this->frameStats = UI\FrameStats::fromEnv()) !== null) {
+                Metal::$afterPresent[ObjC::addr($this->view)] = function (): void {
+                    $this->frameStats->lap(UI\FrameStats::PRESENT);
+                    $this->frameStats->end($this->runtime->frameNumber, App::text()->made, 'Metal');
+                };
+            }
             Metal::setClearColor($this->view, App::theme()->background);
             $view = $this->view;
             $this->runtime->onAccess = fn(AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
@@ -344,13 +352,14 @@ final class Window
             function ($view, DisplayList $list) use ($content, $text) {
                 $bounds = ObjC::msg('r:', $view, 'bounds');
                 $t0 = hrtime(true);
+                $this->frameStats?->begin($text->made);
                 $text->beginFrame();
                 $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;
                 $this->runtime->preferences = App::preferences();
                 $this->runtime->reduceMotion = $this->runtime->preferences->reduceMotion;
                 $this->runtime->rightToLeft = I18n::direction(App::locale()) === Dir::RightToLeft; // the direction of the language the app shows
-                $this->runtime->windowFocus = $this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow'); // a selection shows in the key window
+                $this->runtime->setWindowFocus($this->ns !== null && ObjC::msg('b:', $this->ns, 'isKeyWindow')); // a selection shows in the key window
                 App::metal()->setDark(App::theme()->dark);
                 $in = $this->runtime->inspector;
                 if ($in !== null && $in->open) { $in->hz = $this->refreshRate(); }
@@ -362,7 +371,9 @@ final class Window
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
                     if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $bounds->w, $bounds->h); $in->lap(0); } // beside the content
+                    $this->frameStats?->lap(UI\FrameStats::BUILD);
                     Layout::layout($c, $bounds->w, $bounds->h);
+                    $this->frameStats?->lap(UI\FrameStats::LAYOUT);
                     if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->runtime, $c->root); }
                     return $c->root;
                 });
@@ -382,6 +393,7 @@ final class Window
                     $paint();
                 }
                 $in?->lap(2);
+                if ($this->frameStats !== null) { $this->frameStats->passes = $this->runtime->passes; $this->frameStats->lap(UI\FrameStats::PAINT); }
                 if ($this->webViews !== []) {
                     $this->placeWebViews($bounds->h);
                 }
@@ -615,6 +627,7 @@ final class Window
     {
         unset(self::$open[$this->key]);
         $this->destroyed = true;
+        if ($this->frameStats !== null && $this->view !== null) { unset(Metal::$afterPresent[ObjC::addr($this->view)]); }
         self::$closingParents++; // its children close with it; the last window is reported once they all are
         foreach (self::all() as $child) {
             if ($child->parent === $this) { $child->destroy(); }

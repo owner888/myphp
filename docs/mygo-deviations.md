@@ -1341,3 +1341,58 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     myphp-runtime, as mygo's does; boot.php of a project finds MyPHP in
     `$MYPHP_HOME`, which myphp dev and generate set.
   - Why: myphp's names.
+
+## Widgets, keys and lists (v1.14)
+
+- **Password fields**
+  - mygo: `TextInput(...).Password()` and the `password` of its editor.
+  - myphp: `Node::password()` on an `input()`, which sets
+    `TextState::$password` for the frame (`Context::input` clears it each
+    build, so a field shows its text again in a frame that asks no more);
+    `TextState::shown()` is what it paints, bullets for a password.
+  - Why: myphp's fields keep their state in `TextState`, not in an editor
+    of the node.
+- **Paint-only frames**
+  - mygo: a frame whose state did not change paints again without building
+    the view (repaintFrame): drawings, indicators, a content transition, a
+    draggable at rest.
+  - myphp: every frame builds the view.
+  - Why: an optimisation; it is not behaviour an app sees, and PHP's
+    build of a frame is what it is measured by (MYPHP_STATS).
+- **List keys**
+  - mygo: `ListState.Key`, with the anchor, the choice and the rows' state
+    kept by key across rows coming and going.
+  - myphp: the same, `ListState::$key`.
+  - Why: (none: the same behaviour).
+- **Table sort**
+  - mygo: headers sort the rows only with `ListState.Sort` or `SortBy` set
+    (pointers the app gives); the table's `Changed` reports a click.
+  - myphp: a sortable column's header sorts whether or not the app set
+    `ListState::$sort` (null is none), `$sortBy` (a list, null for none)
+    adds Cmd- and Shift-clicks; `sortChanged()` reports a click, as before,
+    and so does the table's `changed()`.
+  - Why: PHP has no pointers to tell whether the app asked for a sort;
+    `sortChanged()` was myphp's already.
+- **Table columns**
+  - mygo: `ListState.Columns` (a `TableLayout` of `Order` and `Widths`).
+  - myphp: `ListState::$columns`, a `TableLayout` of `$order` and `$widths`;
+    the old `$columnWidths` is gone.
+  - Why: myphp's names.
+- **What an empty list shows**
+  - mygo: the children of a List (`.Children`) show while it has no rows.
+  - myphp: `list(..., $empty)`, a builder of what it shows without rows.
+  - Why: myphp's `list()` ends its node before it returns it.
+- **Frame statistics**
+  - mygo: `MYGO_FRAME_STATS` logs frames over a threshold with the
+    allocations Go counted.
+  - myphp: `MYPHP_FRAME_STATS`, the same parts of a frame, with the memory
+    PHP came to hold (`memory_get_usage`) and its collector's runs in place
+    of allocation counts; `MYPHP_STATS`, a line a second, stays.
+  - Why: PHP counts no allocations.
+- **Keyboard scrolling**
+  - mygo: a key no element claimed as a shortcut scrolls, from the keys as
+    they come.
+  - myphp: a key nothing took during the build scrolls, after it
+    (`Runtime::scrollKey`); a focused field keeps them.
+  - Why: myphp's shortcuts are asked for while the view builds, not
+    registered before the keys come.

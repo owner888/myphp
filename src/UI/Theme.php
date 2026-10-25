@@ -81,6 +81,12 @@ final class Theme
         return $n * $this->spacing;
     }
 
+    /** n times the font size, as CSS's rem, to size nodes with the text (mygo's Rem): the system's 13 points for a theme without one. */
+    public function rem(float $n): float
+    {
+        return $n * ($this->fontSize > 0 ? $this->fontSize : 13.0);
+    }
+
     /** The theme following the desktop's settings (mygo's Theme.follow): its accent, more contrast, larger text. */
     public function follow(Preferences $p): self
     {

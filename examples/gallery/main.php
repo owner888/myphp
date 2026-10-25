@@ -875,15 +875,18 @@ final class Gallery
             }
         }
         $rows = $this->tableFiles;
-        [$column, $descending] = $this->table->sort ?? ['', false];
-        usort($rows, function (TableFile $a, TableFile $b) use ($column, $descending): int { // stable, as PHP's sorts are
-            $d = match ($column) {
-                'Name' => strcmp(strtolower($a->name), strtolower($b->name)),
-                'Kind' => strcmp($a->kind, $b->kind),
-                'Size' => $a->size - $b->size,
-                default => 0,
-            };
-            return $descending ? -$d : $d;
+        $by = $this->table->sortBy ?? [];
+        usort($rows, function (TableFile $a, TableFile $b) use ($by): int { // stable, as PHP's sorts are; by each column in turn
+            foreach ($by as $o) {
+                $d = match ($o->column) {
+                    'Name' => strcmp(strtolower($a->name), strtolower($b->name)),
+                    'Kind' => strcmp($a->kind, $b->kind),
+                    'Size' => $a->size - $b->size,
+                    default => 0,
+                };
+                if ($d !== 0) { return $o->descending ? -$d : $d; }
+            }
+            return 0;
         });
         return $rows;
     }
@@ -948,7 +951,7 @@ final class Gallery
           card($c, 'Table')->grow(1);
             $cols = [new TableColumn('Name', sortable: true), new TableColumn('Kind', 120, sortable: true), new TableColumn('Size', 90, align: Node::END, sortable: true)];
             // Several files chosen by their ids, the one last chosen opening; typing a name goes to it. The names are renamed in place.
-            $this->table->sort ??= ['', false];
+            $this->table->sortBy ??= []; // Cmd-click a header to sort by it after the others
             $files = $this->sortedFiles();
             $this->table->key = fn(int $i): int => $files[$i]->id;
             $this->table->label = fn(int $i): string => $files[$i]->name;
@@ -963,14 +966,13 @@ final class Gallery
                 };
             })->grow(1);
             if ($this->table->submitted() && $this->table->selected >= 0) { $c->toast('Opened ' . $files[$this->table->selected]->name); }
-            $c->text(sprintf('%d chosen. Shift-click or Cmd-click to choose several; type a name to go to it; Return renames. Click a header to sort, drag its edge to resize it.', $this->chosen->count()), 12, $t->textMuted);
+            $c->text(sprintf('%d chosen. Shift-click or Cmd-click to choose several; type a name to go to it; Return renames. Click a header to sort, Cmd-click to sort by several; drag a header to move it, its edge to resize it.', $this->chosen->count()), 12, $t->textMuted);
           $c->end();
         $c->end();
         card($c, 'Outline')->size(0, 340);
           // 100 folders of 100 files, in the order the Name column sorts.
-          $this->outline->list->sort ??= ['', false];
           $this->outline->list->selected ??= -1;
-          $descending = $this->outline->list->sort[1];
+          $descending = $this->outline->list->sort?->descending ?? false;
           $names = function (string $prefix, int $n) use ($descending): array {
               $items = [];
               for ($i = 0; $i < $n; $i++) { $items[] = sprintf('%s %03d', $prefix, $descending ? $n - $i : $i + 1); }

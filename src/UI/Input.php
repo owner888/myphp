@@ -59,6 +59,6 @@ final class Input
         if ($this->caretAt !== null) {
             return ($this->caretAt)($byte);
         }
-        return [$x + $this->metrics->xForIndex($display, $size, $byte), $y, 1.0, $h];
+        return [$x + $this->metrics->xForIndex($this->focus->shown(), $size, $this->focus->shownIndex($byte)), $y, 1.0, $h];
     }
 }

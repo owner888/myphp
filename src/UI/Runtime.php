@@ -54,15 +54,27 @@ final class Runtime
     private array $handles = [], $links = [];
     /** @var array<int, string> nodes with tooltips by id, from last frame */
     private array $tips = [];
-    /** When the pointer last moved, and the tip to show: text, x, y (set once the pointer rested on a node). */
-    private float $pointerRestAt = 0;
-    private array $lastPointer = [-1.0, -1.0];
+    /** The tip that shows: its text ('' for a tip of its own) and its anchor's rect, or null. */
     public ?array $tip = null;
     /** The node the tip is of: one with a tip of its own (Context::tooltipBase) builds it in the frame after. */
     public ?int $tipAnchor = null;
-    public const TIP_DELAY = 0.6;
+    /** Whether the keyboard focus brought the tip rather than the pointer. */
+    public bool $tipByFocus = false;
+    /**
+     * Which tip shows (mygo's tooltips): the innermost node with a tip
+     * under the pointer since $tipHoverSince, the one with the keyboard
+     * focus since $tipFocusSince, the one whose tip a press or Escape hid
+     * until neither the pointer nor the focus is on it, and when a tip
+     * last showed, in seconds of the frames' clock.
+     */
+    private ?int $tipHover = null, $tipFocus = null, $tipDismissed = null;
+    private float $tipHoverSince = 0.0, $tipFocusSince = 0.0, $tipLastShown = -INF;
+    /** How long the pointer rests on a node before its tip shows, and how soon after a tip goes another shows at once, as the pointer moves along a toolbar: Base UI's (mygo's tooltipDelay, tooltipWarm). */
+    public const TIP_DELAY = 0.6, TIP_WARM = 0.4;
     /** The pointer the window should show over the hovered node. */
     public Cursor $cursor = Cursor::Default;
+    /** The roles of what is clicked, where the cursor of what is around it stops. */
+    private const CLICKABLE_ROLES = [Role::BUTTON, Role::LINK, Role::CHECK_BOX, Role::RADIO, Role::SWITCH, Role::POP_UP_BUTTON, Role::MENU_BUTTON, Role::TOGGLE_BUTTON, Role::TAB, Role::DISCLOSURE, Role::COLOR_WELL, Role::MENU_ITEM, Role::MENU_ITEM_CHECK_BOX, Role::MENU_ITEM_RADIO];
     private bool $animating = false;
     /** The time of frames for tests (mygo's clock): nanoseconds, hrtime's when null. */
     public ?Closure $clock = null;
@@ -128,7 +140,7 @@ final class Runtime
     private array $shown = [];
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> each node's rectangle as it shows in the window, clipped by its ancestors, last frame */
     private array $visible = [];
-    /** Steppers built this frame, by id, for the arrow keys. */
+    /** Steppers built this frame, by id, for the arrow keys: whether right to left, where Left steps up. @var array<int, bool> */
     private array $steppers = [];
     /** Home (-1) or End (1) pressed on a focused stepper this frame, by id. */
     private array $jumps = [];
@@ -141,6 +153,8 @@ final class Runtime
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
     private array $order = [];
     private int $barrier = 0, $counter = 0;
+    /** The node of the dialog on top in the last frame (a modal's backdrop, which blocks what was built before it), or null: the window's shortcuts built outside it wait (mygo's modal). */
+    public ?int $modal = null;
     /** The overlays of the frame (a popover, a menu, a combobox's options: nodes placed at the root with Node::at), as [order, x, y, w, h]: a point in one reaches no node built before it. */
     private array $overlays = [];
     /** The overlays built last frame (a popover, a menu, a modal: ids), and for each overlay the node that had the focus as it opened, to give it back as the overlay closes with the focus inside (mygo's openers and restoreFocus). */
@@ -252,6 +266,8 @@ final class Runtime
     /** After this long without edits the caret stays on and stops asking for frames. */
     public const BLINK_FOR = 30.0;
     private ?int $activated = null;
+    /** The node the keys or assistive technology clicked this frame, whose tip goes. */
+    private ?int $keyClicked = null;
     /** What was typed this frame at a focused control that is no field. */
     private string $typed = '';
     private float $typedAt = 0.0;
@@ -325,7 +341,7 @@ final class Runtime
         $this->steps = [];
         $this->jumps = [];
         $this->keys = [];
-        $this->presses = [];
+        $this->presses = []; $this->keyClicked = null;
         $this->wheeled = false;
         [$this->overlayAskers, $this->overlayAsked] = [$this->overlayAsked, []];
         $this->outsideSaid = [];
@@ -337,12 +353,6 @@ final class Runtime
         }
         $dt = $this->lastFrame === 0 ? 1 / 60 : min(0.1, ($now - $this->lastFrame) / 1e9);
         $this->lastFrame = $now;
-        $pointer = [$this->input->mouseX, $this->input->mouseY];
-        if ($pointer !== $this->lastPointer) {
-            $this->lastPointer = $pointer;
-            $this->pointerRestAt = $this->now / 1e9; // the frame's time: a test's clock
-            $this->tip = null;
-        }
         foreach ($this->scrolls as $state) {
             $state->glide($dt);
         }
@@ -523,6 +533,9 @@ final class Runtime
         $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
         $this->dropped = []; $this->dataDropped = []; $this->filesDropped = []; // dropped on nodes the frame did not build
+        foreach ($this->keys as $i => $k) { // Escape hides the tip that shows, before what else takes it (mygo's tip OverlayShortcut)
+            if ($this->tip !== null && !$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { $this->dismissTip(); $this->keys[$i][3] = true; }
+        }
         if ($this->escape !== null) {
             foreach ($this->keys as $k) {
                 if (!$k[3] && $k[1] === Key::ESCAPE && $k[2] === 0) { // no control nor shortcut took it
@@ -530,7 +543,12 @@ final class Runtime
                 }
             }
         }
+        $keyScrolled = false;
+        foreach ($this->keys as $k) { // a key nothing took scrolls, as browsers' (mygo's scrollKey)
+            if (!$k[3] && $this->scrollKey($k[1], $k[2])) { $keyScrolled = true; }
+        }
         $this->animateLayout($root); // with the last frame's rects, before they go
+        $this->keyClicked ??= $this->activated; // clicked by the keys, whether or not the build asked
         $this->activated = null; // taken by clicked() during the build, or dropped
         $this->typed = '';
         $this->rects = [];
@@ -554,6 +572,7 @@ final class Runtime
         $this->dataSources = []; $this->dataTargets = []; $this->fileTargets = [];
         $this->forgetSelectable();
         $this->menuNodes = [];
+        $this->modal = null;
         $this->record($root);
         $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
@@ -574,21 +593,9 @@ final class Runtime
         if ($this->focus !== null && !$this->reachable($this->focus)) {
             $this->focus = null; // the focus was behind what now blocks it: Tab goes into that
         }
-        $this->needsFrame = $this->needsFrame || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
+        $this->needsFrame = $this->needsFrame || $keyScrolled || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
             || ($this->inspector?->stale() ?? false); // the inspector shows the nodes of this frame in the next
-        // A tip: the pointer rested on a node with one for TIP_DELAY.
-        $over = null;
-        foreach ($this->tips as $id => $text) {
-            if ($this->hovered($id)) {
-                $over = [$id, $text];
-            }
-        }
-        if ($over !== null && $this->tip === null && $this->now / 1e9 - $this->pointerRestAt >= self::TIP_DELAY) {
-            $this->tip = [$over[1], ...$this->rects[$over[0]]]; // the text and the anchor's rect
-            $this->tipAnchor = $over[0];
-            if ($over[1] === '') { $this->needsFrame = true; } // a tip of its own, which the next build makes
-        }
-        $this->tipPending = $over !== null && $this->tip === null;
+        $this->showTip();
         foreach ($this->overlayIds as $id => $_) { // an overlay born this frame notes who had the focus
             if (!isset($lastOverlays[$id]) && !isset($this->openers[$id])) { $this->openers[$id] = $wasFocus; }
         }
@@ -638,6 +645,56 @@ final class Runtime
 
     private bool $tipPending = false;
 
+    /** Whether the window is the key window, as of the frame: one that lost the keyboard lets go of the modifiers held, whose releases go to the window that has it (mygo's SetFocused). */
+    public function setWindowFocus(bool $on): void
+    {
+        if (!$on && $this->windowFocus) { $this->input->mods = 0; }
+        $this->windowFocus = $on;
+    }
+
+    /** Hides the tip that shows until neither the pointer nor the focus is on its node. */
+    public function dismissTip(): void
+    {
+        $this->tipDismissed = $this->tipAnchor;
+        $this->tip = null; $this->tipAnchor = null; $this->tipByFocus = false;
+    }
+
+    /**
+     * Decides the tip that shows after the frame (mygo's showTooltip): the
+     * innermost node with one under the pointer once it rested there
+     * TIP_DELAY, at once within TIP_WARM of another tip going, or the one
+     * with the keyboard focus from the keyboard, whichever came last. A
+     * press on its node, or a click by the keys, hides it as Escape does;
+     * a disabled node shows none.
+     */
+    private function showTip(): void
+    {
+        $now = $this->now / 1e9; // the frame's time: a test's clock
+        if ($this->tip !== null) { $this->tipLastShown = $now; } // the tip of the last frame showed until now
+        $hover = null;
+        foreach ($this->tips as $id => $_) {
+            if ($this->hovered($id) && !isset($this->disabledIds[$id])) { $hover = $id; } // the innermost, built after those around it
+        }
+        if ($hover !== $this->tipHover) { $this->tipHover = $hover; $this->tipHoverSince = $now; }
+        $focus = $this->focusVisible && $this->windowFocus && $this->focus !== null && isset($this->tips[$this->focus]) && !isset($this->disabledIds[$this->focus]) ? $this->focus : null;
+        if ($focus !== $this->tipFocus) { $this->tipFocus = $focus; $this->tipFocusSince = $now; }
+        if ($this->tipDismissed !== $hover && $this->tipDismissed !== $focus) { $this->tipDismissed = null; }
+        if ($hover !== null && ($this->input->mouseDown || array_filter($this->presses, fn(array $p) => $this->under($hover, $p[0], $p[1])) !== [])) { $this->tipDismissed = $hover; } // a press hides it, as Base UI's closeOnClick
+        if ($this->keyClicked !== null && isset($this->tips[$this->keyClicked])) { $this->tipDismissed = $this->keyClicked; } // a click by the keys too
+        if ($hover === $this->tipDismissed) { $hover = null; }
+        if ($focus === $this->tipDismissed) { $focus = null; }
+        $shown = null; $this->tipByFocus = false; $this->tipPending = false;
+        if ($focus !== null && ($hover === null || $this->tipFocusSince >= $this->tipHoverSince)) {
+            $shown = $focus; $this->tipByFocus = true;
+        } elseif ($hover !== null) {
+            $warm = $this->tipHoverSince - $this->tipLastShown <= self::TIP_WARM;
+            if ($warm || $now - $this->tipHoverSince >= self::TIP_DELAY) { $shown = $hover; } else { $this->tipPending = true; }
+        }
+        $this->tip = $shown === null ? null : [$this->tips[$shown], ...$this->rects[$shown]]; // the text and the anchor's rect
+        $this->tipAnchor = $shown;
+        if ($shown !== null && $this->tips[$shown] === '') { $this->needsFrame = true; } // a tip of its own, which the next build makes
+    }
+
     /** Seconds until the window should draw a frame of its own accord (a caret toggle, a tip due, a toast going), or null. */
     public function nextWake(): ?float
     {
@@ -647,7 +704,7 @@ final class Runtime
             $wake = $wake === null ? $at : min($wake, $at);
         }
         if ($this->tipPending) {
-            $tip = max(0.0, self::TIP_DELAY - (hrtime(true) / 1e9 - $this->pointerRestAt));
+            $tip = max(0.0, self::TIP_DELAY - ($this->now / 1e9 - $this->tipHoverSince));
             $wake = $wake === null ? $tip : min($wake, $tip);
         }
         foreach ($this->toastsPaused ? [] : $this->toasts as $e) { // the next toast whose time is over
@@ -1574,6 +1631,7 @@ final class Runtime
         }
         if ($n->blocks) {
             $this->barrier = $this->counter;
+            $this->modal = $n->id;
         }
         if ($n->focusGroup !== 0 && $group === 0) { // groups inside a group are part of it
             $group = $n->id;
@@ -1605,6 +1663,8 @@ final class Runtime
             $this->cursor = Cursor::Text;
         } elseif ($n->cursor !== null && $this->hovered($n->id)) {
             $this->cursor = $n->cursor;
+        } elseif ($this->hovered($n->id) && (isset($this->clickable[$n->id]) || in_array($n->role, self::CLICKABLE_ROLES, true))) {
+            $this->cursor = Cursor::Default; // a cursor around stops at what is clicked, which has its own (mygo's cursor of clickable elements)
         }
         if (($n->kind === Node::PROGRESS && $n->fraction < 0) || $n->kind === Node::SPINNER) {
             $this->animating = true; // an indeterminate bar or a spinner moves every frame
@@ -1873,7 +1933,7 @@ final class Runtime
         if ($state->multiline) {
             $byte = $state->layout($this->metrics, $size, $width)->hit($this->metrics, $x - $tx, $y - $ty + $state->scrollY);
         } else {
-            $byte = $this->metrics->indexForX($state->text, $size, $x - $tx);
+            $byte = $state->fromShown($this->metrics->indexForX($state->shown(), $size, $x - $tx)); // a password's bullets
         }
         $state->setCursor($byte, $extend);
     }
@@ -1912,6 +1972,9 @@ final class Runtime
             case 'moveToBeginningOfLine:': case 'moveToLeftEndOfLine:': $state->setCursor($a, $extend); break;
             case 'moveToEndOfLine:': case 'moveToRightEndOfLine:': $state->setCursor($end, $extend); break;
             case 'deleteToBeginningOfLine:': if (!$state->hasSelection()) { $state->anchor = $a; } $state->insert(''); break;
+            case 'deleteToEndOfLine:': // to the end of the line as it wraps, at its end joining the next
+                $state->anchor = $state->cursor; $state->cursor = $state->cursor === $end && ($state->text[$end] ?? '') === "\n" ? $end + 1 : $end;
+                $state->insert(''); break;
         }
         return true;
     }
@@ -1931,12 +1994,10 @@ final class Runtime
         }
         if ($this->focus !== null && isset($this->lists[$this->focus])) {
             $l = $this->lists[$this->focus];
-            $page = max(1, (int)($l->viewport / max(1.0, $l->estimate)) - 1);
             $extend = $l->selection !== null && str_ends_with($selector, 'AndModifySelection:'); // Shift with the keys: the choice extends
             $base = $extend ? substr($selector, 0, -strlen('AndModifySelection:')) . ':' : $selector;
             $to = match ($base) {
                 'moveUp:' => max(0, $l->selected - 1), 'moveDown:' => $l->selected + 1,
-                'pageUp:', 'scrollPageUp:' => max(0, $l->selected - $page), 'pageDown:', 'scrollPageDown:' => $l->selected + $page,
                 'moveToBeginningOfDocument:', 'scrollToBeginningOfDocument:' => 0, 'moveToEndOfDocument:', 'scrollToEndOfDocument:' => $l->count - 1,
                 default => null,
             };
@@ -1956,10 +2017,15 @@ final class Runtime
                 case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
                 case 'moveToBeginningOfDocument:': case 'moveToBeginningOfLine:': $this->jumps[$this->focus] = -1; return true; // Home: the least
                 case 'moveToEndOfDocument:': case 'moveToEndOfLine:': $this->jumps[$this->focus] = 1; return true;
+                case 'pageUp:': case 'scrollPageUp:': $this->pages[$this->focus] = ($this->pages[$this->focus] ?? 0) + 1; return true; // a tenth of the range (mygo's sliderInput)
+                case 'pageDown:': case 'scrollPageDown:': $this->pages[$this->focus] = ($this->pages[$this->focus] ?? 0) - 1; return true;
             }
         }
         if ($this->focus !== null && isset($this->steppers[$this->focus])) {
             switch ($selector) {
+                case 'moveLeft:': case 'moveRight:': // the way they point: right to left, Left steps up (mygo's Stepper)
+                    $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + (($selector === 'moveRight:') !== $this->steppers[$this->focus] ? 1 : -1);
+                    return true;
                 case 'moveUp:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) + 1; return true;
                 case 'moveDown:': $this->steps[$this->focus] = ($this->steps[$this->focus] ?? 0) - 1; return true;
                 case 'moveToBeginningOfDocument:': $this->jumps[$this->focus] = -1; return true;
@@ -2094,7 +2160,7 @@ final class Runtime
         }
         $this->clickable[$id] = true; // assistive technology presses it
         if ($this->activated === $id) {
-            $this->activated = null;
+            $this->activated = null; $this->keyClicked = $id;
             $this->consumed = true;
             return true;
         }
@@ -2128,7 +2194,7 @@ final class Runtime
     /** Whether Enter or Space pressed the focused node $id this frame (a click from the keyboard, not the mouse); clicked() reports both. */
     public function activated(int $id): bool
     {
-        if ($this->activated === $id) { $this->activated = null; $this->consumed = true; return true; }
+        if ($this->activated === $id) { $this->activated = null; $this->keyClicked = $id; $this->consumed = true; return true; }
         return false;
     }
 
@@ -2213,6 +2279,8 @@ final class Runtime
     private array $slid = [];
     /** @var array<int, int> id => arrow steps on a focused slider this frame */
     private array $steps = [];
+    /** @var array<int, int> id => Page Up (1) and Page Down (-1) presses on a focused slider this frame */
+    private array $pages = [];
 
     /** @var array<int, int> choices menus made for selects, by node id, until the select reads them */
     private array $choices = [];
@@ -2243,6 +2311,14 @@ final class Runtime
         return $this->slid[$id] ?? null;
     }
 
+    /** Page Up (positive) and Page Down (negative) presses on focused slider $id this frame, given once. */
+    public function paged(int $id): int
+    {
+        $p = $this->pages[$id] ?? 0;
+        unset($this->pages[$id]);
+        return $p;
+    }
+
     /** How many steps the arrow keys moved slider $id this frame. */
     public function stepped(int $id): int
     {
@@ -2255,9 +2331,9 @@ final class Runtime
      * half, repeated while held — after HOLD_DELAY, one every HOLD_RATE,
      * as AppKit's.
      */
-    public function stepper(int $id): int
+    public function stepper(int $id, bool $rtl = false): int
     {
-        $this->steppers[$id] = true;
+        $this->steppers[$id] = $rtl;
         $n = $this->steps[$id] ?? 0;
         unset($this->steps[$id]); // given once, whatever passes the frame builds
         $dir = $this->holding($id);
@@ -2346,13 +2422,29 @@ final class Runtime
             if ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && !in_array($k[1], $free, true)) {
                 continue; // the text system had it: typing, moves, deletes
             }
-            if (is_int($key) ? $k[1] === $key : strtolower($k[0]) === strtolower($key)) {
+            if (is_int($key) ? $k[1] === $key : (strtolower($k[0]) === strtolower($key) || $this->byPosition($k, $key))) {
                 $this->keys[$i][3] = true; // one taker, as a click has; what it changed shows in this frame's next pass
                 $this->consumed = true;
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether key $k, chorded with Command, Control or Option, matches the
+     * character $key by its place on a US keyboard, as Cmd-S does on a
+     * Cyrillic layout, which types no Latin letter there (mygo's
+     * KeyByPosition): plain typing is untouched.
+     * @param array{0: string, 1: int, 2: int, 3: bool} $k
+     */
+    private function byPosition(array $k, string $key): bool
+    {
+        if (($k[2] & (Key::COMMAND | Key::CONTROL | Key::OPTION)) === 0 || preg_match('/^[\x21-\x7e]$/', $k[0]) === 1) {
+            return false; // a key the layout types as a US one goes by what it types
+        }
+        $us = Key::usChar($k[1]);
+        return $us !== null && $us === strtolower($key);
     }
 
     /** Home (-1) or End (1) pressed on focused stepper $id this frame, or 0. */
@@ -2477,6 +2569,70 @@ final class Runtime
     public function hovered(int $id): bool
     {
         return $this->input->mouseInside && $this->under($id, $this->input->mouseX, $this->input->mouseY);
+    }
+
+    /**
+     * Scrolls with the keys that scroll pages in browsers the innermost
+     * container around the focus that can go that way, or under the
+     * pointer without one, and reports whether one moved (mygo's
+     * scrollKey): the arrows a line of 40 points, Page Up and Page Down
+     * (Space and Shift-Space) a page less a line, Home and End (Cmd-Up and
+     * Cmd-Down) to the ends. A focused field keeps them.
+     */
+    private function scrollKey(int $code, int $mods): bool
+    {
+        if ($this->focus !== null && isset($this->fields[$this->focus])) {
+            return false;
+        }
+        $line = 40.0; $dx = 0.0; $dy = 0.0; $page = 0; $end = 0;
+        $plain = $mods === 0; $cmd = $mods === Key::COMMAND;
+        match (true) {
+            $plain && $code === Key::DOWN => $dy = $line,
+            $plain && $code === Key::UP => $dy = -$line,
+            $plain && $code === Key::RIGHT => $dx = $line,
+            $plain && $code === Key::LEFT => $dx = -$line,
+            $plain && ($code === Key::PAGE_DOWN || $code === Key::SPACE) => $page = 1,
+            ($plain && $code === Key::PAGE_UP) || ($mods === Key::SHIFT && $code === Key::SPACE) => $page = -1,
+            (($plain || $cmd) && $code === Key::HOME) || ($cmd && $code === Key::UP) => $end = -1,
+            (($plain || $cmd) && $code === Key::END) || ($cmd && $code === Key::DOWN) => $end = 1,
+            default => null,
+        };
+        if ($dx == 0 && $dy == 0 && $page === 0 && $end === 0) {
+            return false;
+        }
+        $chain = []; // innermost first
+        for ($id = $this->focus, $n = 0; $id !== null && $id !== 0 && $n < 1024; $id = $this->parents[$id] ?? null, $n++) {
+            if (isset($this->scrolls[$id])) { $chain[] = $id; }
+        }
+        if ($chain === [] && $this->input->mouseInside) {
+            $under = [];
+            foreach ($this->scrolls as $id => $_) {
+                if ($this->under($id, $this->input->mouseX, $this->input->mouseY)) { $r = $this->rects[$id]; $under[$id] = $r[2] * $r[3]; }
+            }
+            asort($under);
+            $chain = array_keys($under);
+        }
+        foreach ($chain as $id) {
+            $s = $this->scrolls[$id];
+            [$sideways, $down, $rtl] = $this->scrollAxes[$id];
+            $was = [$s->extent()[0], $s->extentX()[0]];
+            if ($end !== 0 && $down) {
+                $s->stop();
+                if ($s instanceof ListState) { $end < 0 ? $s->scrollTo(0, false) : $s->scrollToEnd(); } else { $s->scrollTo($end < 0 ? 0.0 : INF, false); }
+            } elseif ($dy != 0 || $page !== 0) {
+                if ($down) {
+                    $s->stop();
+                    $s->scrollBy($page !== 0 ? $page * max($this->rects[$id][3] - $line, $this->rects[$id][3] / 2) : $dy); // a page keeps a line of the last one in view
+                }
+            } elseif ($dx != 0 && $sideways) {
+                $s->stop();
+                $s->scrollByX($rtl ? -$dx : $dx); // right to left the offset counts from the right: Right goes back toward the start
+            }
+            if ([$s->extent()[0], $s->extentX()[0]] != $was) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Scrolls the innermost scrolling container under (x, y) by the wheel's dx and dy points, on the axes it scrolls. */

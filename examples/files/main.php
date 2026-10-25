@@ -86,7 +86,7 @@ final class Files
         }
         $q = $this->finding ? trim($this->find->text) : '';
         if ($q !== '') { $entries = array_values(array_filter($entries, fn($e) => stripos($e['name'], $q) !== false)); }
-        [$by, $desc] = $this->table->sort ?? ['Name', false];
+        $by = $this->table->sort?->column ?? 'Name'; $desc = $this->table->sort?->descending ?? false;
         $key = fn(array $e) => match ($by) { 'Size' => $e['size'], 'Modified' => $e['mtime'], default => strtolower($e['name']) };
         usort($entries, fn($a, $b) => $a['dir'] !== $b['dir'] ? ($a['dir'] ? -1 : 1) : ($desc ? $key($b) <=> $key($a) : $key($a) <=> $key($b)));
         $this->entries = $entries;

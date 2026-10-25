@@ -31,6 +31,8 @@ final class ListState implements Scrollable
     /** Set by Context::list and Layout each frame. */
     public int $count = 0;
     public int $first = 0;
+    /** The row the place was on as Context::list built the rows, from $first: Layout counts the place from $first only while it still is. @internal */
+    public int $builtRow = 0;
     public float $viewport = 0;
     public float $gap = 0;
     /** How far rows wider than the list (Node::rowWidth) are scrolled sideways, how far they can go and the list's width: Layout sets the last two. */
@@ -66,11 +68,79 @@ final class ListState implements Scrollable
     public float $typedAt = 0.0;
     /** That an editable text (Context::editableText) was built in a row the last frame: Enter on the chosen row then edits it rather than submits; and that Enter or F2 asked the chosen row's to edit. @internal */
     public bool $editables = false, $editAsked = false;
-    /** For a table: the widths the user dragged its columns to, by column id. */
-    public array $columnWidths = [];
-    /** For a table: [column id, descending] the rows are sorted by, chosen by header clicks, or null; the app sorts its rows by it. */
-    public ?array $sort = null;
+    /** For a table: the order and the widths the user gave its columns by dragging their headers (mygo's Columns). */
+    public TableLayout $columns;
+    /** For a table: the column the rows are sorted by, chosen by a click on a sortable column's header, which reverses it on a second; null for none. The app sorts its rows by it (mygo's Sort). With $sortBy, the first of those. */
+    public ?SortOrder $sort = null;
+    /**
+     * For a table, null or the columns the rows are sorted by, first to
+     * last (mygo's SortBy): a Cmd-click or a Shift-click on a sortable
+     * column's header adds it after the others, a second makes it
+     * descending, a third takes it out; a click sorts by it alone. A click
+     * gives a new list, so one the app kept stays as it was.
+     * @var ?list<SortOrder>
+     */
+    public ?array $sortBy = null;
     private bool $didSort = false;
+
+    public function __construct()
+    {
+        $this->columns = new TableLayout();
+    }
+
+    /** The list built with this state in a pass of a context, the focus owner, and the pass (mygo's listFrame owner). */
+    private ?Node $owner = null;
+    private ?Context $ownerContext = null;
+    private int $ownerPass = -1;
+
+    /** Notes the list Context::list builds with this state in this pass of $c. @internal */
+    public function own(Context $c, Node $n): void
+    {
+        if ($this->current($c) !== null) {
+            throw new \LogicException('a ListState shown by two lists'); // the place, the heights and the choice are one list's (mygo's buildList)
+        }
+        [$this->owner, $this->ownerContext] = [$n, $c];
+        $this->ownerPass = $c->runtime === null ? -1 : $c->runtime->frameNumber * 8 + $c->runtime->pass;
+    }
+
+    /** The list built with this state in the current pass of $c, or null: one hidden, or not built yet, is none (mygo's current). */
+    private function current(Context $c): ?Node
+    {
+        $rt = $c->runtime;
+        return $rt !== null && $this->ownerContext === $c && $this->ownerPass === $rt->frameNumber * 8 + $rt->pass ? $this->owner : null;
+    }
+
+    /** Whether the list, table or outline using this state has the keyboard focus; false when it was not built in the current pass of $c, as when hidden. Call it after building the list, or while building its rows (mygo's Focused). */
+    public function focused(Context $c): bool
+    {
+        $n = $this->current($c);
+        return $n !== null && $c->focused($n);
+    }
+
+    /** Whether the list or one inside it has the keyboard focus, as focused() (mygo's FocusWithin): row builders can ask it before the list returns. */
+    public function focusWithin(Context $c): bool
+    {
+        $n = $this->current($c);
+        return $n !== null && $c->focusWithin($n);
+    }
+
+    /** Gives the list the keyboard focus, and reports whether it was built in the current pass of $c: a focus asked for can wait while the list is hidden (mygo's Focus). */
+    public function focus(Context $c): bool
+    {
+        $n = $this->current($c);
+        if ($n === null) {
+            return false;
+        }
+        $c->runtime->focusOn($n->id);
+        return true;
+    }
+
+    /** Whether $key with $mods was pressed while the list or one inside it had the focus (mygo's Shortcut); a list not built in the current pass of $c takes none. */
+    public function shortcut(Context $c, int|string $key, int $mods = 0): bool
+    {
+        $n = $this->current($c);
+        return $n !== null && $c->focusWithin($n) && $c->shortcut($key, $mods);
+    }
 
     /** Whether a table's sort changed since last asked. */
     public function sortChanged(): bool
@@ -80,14 +150,128 @@ final class ListState implements Scrollable
         return $s;
     }
 
-    /** Sorts by column $id, or reverses when already by it. */
-    public function sortBy(string $id): void
+    /** The sort after a click on the header of column $id, a Cmd- or Shift-click when $add (mygo's sortClicked). @internal */
+    public function sortClicked(string $id, bool $add): void
     {
-        $this->sort = [$id, $this->sort !== null && $this->sort[0] === $id && !$this->sort[1]];
+        if ($this->sortBy === null) {
+            $this->sort = new SortOrder($id, $this->sort !== null && $this->sort->column === $id && !$this->sort->descending);
+        } else {
+            $by = $this->sortBy;
+            $i = null;
+            foreach ($by as $k => $o) { if ($o->column === $id) { $i = $k; break; } }
+            if (!$add) {
+                $by = [new SortOrder($id, $i === 0 && !$by[0]->descending)];
+            } elseif ($i === null) {
+                $by[] = new SortOrder($id);
+            } elseif (!$by[$i]->descending) {
+                $by[$i] = new SortOrder($id, true);
+            } else {
+                array_splice($by, $i, 1);
+            }
+            $this->sortBy = $by;
+            $this->syncSort();
+        }
         $this->didSort = true;
+    }
+
+    /** Keeps $sort, with $sortBy, the first column $sortBy sorts by, or null when it sorts by none (mygo's syncSort). @internal */
+    public function syncSort(): void
+    {
+        if ($this->sortBy !== null) { $this->sort = $this->sortBy[0] ?? null; }
+    }
+
+    /** The place of column $id among those the rows are sorted by, from 0, and whether descending; null when they are not sorted by it (mygo's sortPlace). @return ?array{0: int, 1: bool} */
+    public function sortPlace(string $id): ?array
+    {
+        foreach ($this->sortBy ?? ($this->sort !== null ? [$this->sort] : []) as $i => $o) {
+            if ($o->column === $id) { return [$i, $o->descending]; }
+        }
+        return null;
+    }
+
+    /** Gives column $col the width $w the user chose, within its bounds (mygo's setWidth). @internal */
+    public function setWidth(TableColumn $col, float $w): void
+    {
+        $this->columns->widths[$col->id()] = $col->clampWidth($w);
     }
     private bool $didSubmit = false;
     private ?int $target = null;
+    /** How far from where it was a list looks for an item's key when its rows changed (mygo's listSearch). */
+    private const SEARCH = 1000;
+    /** The key of the anchor row last frame, and the row chosen then with its key: rows coming or going above them move them with their items (mygo's anchorKey, selRow, selKey). */
+    private int|string|null $anchorKey = null;
+    private int $anchorRow = 0;
+    private int $selRow = -1;
+    private int|string|null $selKey = null;
+
+    /**
+     * Follows what changed since the last frame, with $key (mygo's sync):
+     * rows came or went above the anchor, which moves with its item, as
+     * the heights known do; the chosen row follows its item, and is gone
+     * with it. The app choosing another row is not rows moving.
+     */
+    public function sync(int $count): void
+    {
+        if ($this->key === null || $count === 0) {
+            return;
+        }
+        if ($this->anchorKey !== null && ($j = $this->find($this->anchorKey, $this->anchorRow, $count)) !== null && $j !== $this->anchorRow) {
+            // Rows came or went above it: the heights known move with the rows around it, and the place with its item, by as much as the wheel or the app moved it since.
+            $this->shiftHeights($j - $this->anchorRow);
+            $this->row = max(0, min($count - 1, $this->row + $j - $this->anchorRow));
+        }
+        if ($this->selected !== null && $this->selected === $this->selRow && $this->selKey !== null) {
+            $this->selected = $this->selRow = $this->find($this->selKey, $this->selected, $count) ?? -1;
+        }
+    }
+
+    /** Notes the anchor and the choice of this frame, by their keys, for the next sync(). */
+    public function remember(): void
+    {
+        $this->anchorRow = $this->row;
+        $this->anchorKey = $this->key !== null && $this->row < $this->count ? $this->keyOf($this->row) : null;
+        $this->selRow = $this->selected ?? -1;
+        $this->selKey = $this->key !== null && $this->selRow >= 0 && $this->selRow < $this->count ? $this->keyOf($this->selRow) : null;
+    }
+
+    /** The row whose key is $k, looking around row $near (mygo's find). */
+    private function find(int|string $k, int $near, int $count): ?int
+    {
+        for ($d = 0; $d <= self::SEARCH; $d++) {
+            [$lo, $hi] = [$near - $d, $near + $d];
+            if ($lo < 0 && $hi >= $count) {
+                break;
+            }
+            if ($lo >= 0 && $lo < $count && $this->keyOf($lo) === $k) {
+                return $lo;
+            }
+            if ($d > 0 && $hi >= 0 && $hi < $count && $this->keyOf($hi) === $k) {
+                return $hi;
+            }
+        }
+        return null;
+    }
+
+    /** Moves the heights known by $d rows, as $d rows came above them (or went, below 0). */
+    private function shiftHeights(int $d): void
+    {
+        $heights = [];
+        foreach ($this->heights as $row => $h) {
+            if ($row + $d >= 0) { $heights[$row + $d] = $h; }
+        }
+        $this->heights = $heights;
+        $known = '';
+        for ($byte = 0, $n = strlen($this->known); $byte < $n; $byte++) {
+            if (($bits = ord($this->known[$byte])) === 0) { continue; }
+            for ($b = 0; $b < 8; $b++) {
+                if (($bits & (1 << $b)) === 0 || ($row = ($byte << 3) + $b + $d) < 0) { continue; }
+                $at = $row >> 3;
+                if ($at >= strlen($known)) { $known .= str_repeat("\0", $at + 1 - strlen($known)); }
+                $known[$at] = chr(ord($known[$at]) | (1 << ($row & 7)));
+            }
+        }
+        $this->known = $known;
+    }
 
     public function height(int $row): float
     {
@@ -123,10 +307,12 @@ final class ListState implements Scrollable
     public function scrollBy(float $dy): void
     {
         $this->offset += $dy;
-        while ($this->offset < 0 && $this->row > 0) {
+        while ($this->offset < 0 && $this->row > 0 && $this->isMeasured($this->row - 1)) {
             $this->row--;
             $this->offset += $this->height($this->row);
         }
+        // Rows above not measured yet: the place stays on the row it knows, the view's top above it, and the list builds the
+        // rows there, which Layout measures and counts the place from, so that a step moves the rows by the step (mygo's anchor).
         while ($this->row < $this->count - 1 && $this->offset >= $this->height($this->row)) {
             $this->offset -= $this->height($this->row);
             $this->row++;

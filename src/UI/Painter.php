@@ -662,7 +662,7 @@ final class Painter
         foreach ($saved as [$n, $w]) { $n->world = $w; }
     }
 
-    /** The tip the pointer rests on, if any: a small surface below and right of the pointer, kept inside the root. */
+    /** The tip that shows (Runtime::$tip), if any: a small surface above its node, centered, or below it where there is no room above, kept inside the root. */
     public static function tooltip(Node $root, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): void
     {
         if ($rt->tip === null || $rt->tip[0] === '') { // a tip of its own (Context::tooltipBase): the view built it
@@ -814,13 +814,14 @@ final class Painter
         $cx = $n->x + $n->w / 2; $cy = $n->y + $n->h / 2;
         $in = $n->w * 0.22; $out = $n->w * 0.46; $w = max(1.5, $n->w * 0.09);
         $dots = 4;
+        $color = $n->ts?->color ?? $t->textMuted; $own = $n->ts?->color !== null ? ($n->ts->alpha ?? 1.0) : 1.0; // the muted text color, or its own text color (mygo's TextColor), as on a chosen row
         for ($i = 0; $i < $spokes; $i++) {
             $a = $i / $spokes * 2 * M_PI - M_PI / 2;
             $age = ($lead - $i + $spokes) % $spokes;
             $alpha = 1 - $age / $spokes * 0.85;
             for ($d = 0; $d < $dots; $d++) {
                 $r = $in + ($out - $in) * $d / ($dots - 1);
-                $list->rect($cx + cos($a) * $r - $w / 2, $cy + sin($a) * $r - $w / 2, $w, $w, $t->textMuted, $alpha, $w / 2);
+                $list->rect($cx + cos($a) * $r - $w / 2, $cy + sin($a) * $r - $w / 2, $w, $w, $color, $alpha * $own, $w / 2);
             }
         }
     }
@@ -1194,12 +1195,12 @@ final class Painter
             $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
             $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
         }
-        $display = $s->display();
+        $display = $s->shown(); // bullets for a password
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
         $ty = $n->y + ($n->h - $lh) / 2;
         $inner = $n->w - $inset - Runtime::FIELD_INSET - $n->insetR;
         // Keep the caret in view when the text is wider than the field.
-        $caretX = $text->xForIndex($display, $n->fontSize, $s->displayCaret());
+        $caretX = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->displayCaret()));
         $shift = max(0.0, $caretX - $inner);
         $tx = $n->x + $inset - $shift;
         $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
@@ -1210,18 +1211,18 @@ final class Painter
         } else {
             if ($n->focused && $s->hasSelection() && $s->marked === null) {
                 [$a, $b] = $s->selection();
-                $xa = $text->xForIndex($display, $n->fontSize, $a);
-                $xb = $text->xForIndex($display, $n->fontSize, $b);
+                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($a));
+                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($b));
                 $list->rect($tx + $xa, $ty, $xb - $xa, $lh, $t->selection, $t->selectionAlpha);
             }
-            if ($n->ranges !== []) {
+            if ($n->ranges !== [] && !$s->password) {
                 $text->paintRuns($list, $display, $n->fontSize, $tx, $ty, 0, self::rangeColors($n, $s, 0));
             } else {
                 $text->paint($list, $display, $n->fontSize, $tx, $ty, $n->fg);
             }
             if ($s->marked !== null) {
-                $xa = $text->xForIndex($display, $n->fontSize, $s->cursor);
-                $xb = $text->xForIndex($display, $n->fontSize, $s->cursor + strlen($s->marked));
+                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor));
+                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor + strlen($s->marked)));
                 $list->rect($tx + $xa, $ty + $lh - 1, $xb - $xa, 1.5, $n->fg);
             }
         }

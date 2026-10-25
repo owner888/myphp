@@ -29,6 +29,14 @@ final class TextState
     /** Shows the text without letting the user change it (mygo's ReadOnly): still selected and copied, from the keyboard too, as it takes the focus, without a caret. */
     public bool $readOnly = false;
     /**
+     * Hides what the field holds, in the frames whose build calls
+     * Node::password() (mygo's Password): bullets in its place, nothing to
+     * copy or cut, nothing for the input method or assistive technology to
+     * read; a field that stops calling it shows its text again, as a
+     * field's eye button does. Only single-line fields hide their text.
+     */
+    public bool $password = false;
+    /**
      * Sees a paste into the field, by Cmd+V or a Paste menu item, before
      * it is inserted, as mygo's OnPaste: fn(string $text): bool with the
      * clipboard's text ('' when it holds none, as with an image, which the
@@ -69,6 +77,12 @@ final class TextState
         return $this->cursor !== $this->anchor;
     }
 
+    /** Whether Copy and Cut have something to take: a selection, not of a password. */
+    public function copyable(): bool
+    {
+        return $this->hasSelection() && !$this->password;
+    }
+
     /** @return array{0: int, 1: int} selection start and end, ordered */
     public function selection(): array
     {
@@ -85,6 +99,24 @@ final class TextState
     public function display(): string
     {
         return $this->marked === null ? $this->text : substr($this->text, 0, $this->cursor) . $this->marked . substr($this->text, $this->cursor);
+    }
+
+    /** What the field shows: display(), or a bullet for each of its characters in a password (mygo's displayText). */
+    public function shown(): string
+    {
+        return $this->password ? str_repeat('•', mb_strlen($this->display(), 'UTF-8')) : $this->display();
+    }
+
+    /** The byte of shown() at byte $b of display(). */
+    public function shownIndex(int $b): int
+    {
+        return $this->password ? strlen('•') * mb_strlen(substr($this->display(), 0, $b), 'UTF-8') : $b;
+    }
+
+    /** The byte of display() at byte $b of shown(): a click's. */
+    public function fromShown(int $b): int
+    {
+        return $this->password ? strlen(mb_substr($this->display(), 0, intdiv($b, strlen('•')), 'UTF-8')) : $b;
     }
 
     /** Where the caret is in display(), in bytes. */
@@ -239,6 +271,11 @@ final class TextState
             case 'deleteToBeginningOfLine:':
                 if (!$this->hasSelection()) { $this->anchor = 0; }
                 $this->insert(''); return true;
+            case 'deleteToEndOfParagraph:': case 'deleteToEndOfLine:': // Control-K: to the paragraph's end, at its end joining the next (mygo's emacsKey)
+                $nl = strpos($this->text, "\n", $this->cursor);
+                $end = $nl === false ? strlen($this->text) : ($nl === $this->cursor ? $nl + 1 : $nl);
+                $this->anchor = $this->cursor; $this->cursor = $end;
+                $this->insert(''); return true;
             case 'selectAll:': $this->selectAll(); return true;
             case 'insertNewline:': $this->submitted = true; return true;
         }
@@ -246,7 +283,7 @@ final class TextState
     }
 
     /** Commands a text area leaves to Runtime, which knows its wrapped lines. */
-    public const BY_LINE = ['moveUp:', 'moveDown:', 'moveToBeginningOfLine:', 'moveToLeftEndOfLine:', 'moveToEndOfLine:', 'moveToRightEndOfLine:', 'deleteToBeginningOfLine:', 'insertNewline:', 'pageUp:', 'pageDown:'];
+    public const BY_LINE = ['moveUp:', 'moveDown:', 'moveToBeginningOfLine:', 'moveToLeftEndOfLine:', 'moveToEndOfLine:', 'moveToRightEndOfLine:', 'deleteToBeginningOfLine:', 'deleteToEndOfLine:', 'insertNewline:', 'pageUp:', 'pageDown:'];
 
     /** Byte offset of the previous UTF-8 character boundary. */
     public function prev(int $i): int

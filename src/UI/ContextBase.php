@@ -168,7 +168,7 @@ trait ContextBase
               $fn($tip);
             $this->end();
             if ($tip->attach === null) { $tip->attachTo($anchor, Anchor::Top, Anchor::Bottom); }
-            if ($this->overlayShortcut($tip, Key::ESCAPE)) { $rt->tip = null; }
+            if ($this->overlayShortcut($tip, Key::ESCAPE)) { $rt->dismissTip(); }
         });
         return $tip;
     }

@@ -198,12 +198,12 @@ final class View
                 if (self::edit($self, 'copy')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
                 if ($f === null) { self::selection($self, 'copy'); return; }
-                if ($f->hasSelection()) { Pasteboard::setText($f->selectedText()); }
+                if ($f->copyable()) { Pasteboard::setText($f->selectedText()); }
             }],
             'cut:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 if (self::edit($self, 'cut')) { return; }
                 $f = self::$inputs[ObjC::addr($self)]->focus;
-                if ($f !== null && $f->hasSelection()) { Pasteboard::setText($f->selectedText()); $f->insert(''); Metal::requestFrame($self); }
+                if ($f !== null && $f->copyable()) { Pasteboard::setText($f->selectedText()); $f->insert(''); Metal::requestFrame($self); }
             }],
             'paste:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 if (self::edit($self, 'paste')) { return; }
@@ -248,7 +248,8 @@ final class View
                 if ($f === null || $f->marked === null) {
                     return ObjC::range(self::NOT_FOUND, 0);
                 }
-                return ObjC::range(TextState::utf16Index($f->text, $f->cursor), TextState::utf16Index($f->marked, strlen($f->marked)));
+                // A password's composition is all the input method knows of it (mygo's MarkedRange).
+                return ObjC::range($f->password ? 0 : TextState::utf16Index($f->text, $f->cursor), TextState::utf16Index($f->marked, strlen($f->marked)));
             }],
             'selectedRange' => ['{_NSRange=QQ}@:', 'n(pp)', function ($self, $cmd) {
                 $input = self::$inputs[ObjC::addr($self)];
@@ -261,7 +262,10 @@ final class View
                     return ObjC::range(self::NOT_FOUND, 0);
                 }
                 if ($f->marked !== null) {
-                    return ObjC::range(TextState::utf16Index($f->display(), $f->displayCaret()), 0);
+                    return ObjC::range($f->password ? TextState::utf16Index($f->marked, $f->markedCaret) : TextState::utf16Index($f->display(), $f->displayCaret()), 0);
+                }
+                if ($f->password) {
+                    return ObjC::range(0, 0); // nothing of a password
                 }
                 [$a, $b] = $f->selection();
                 $ua = TextState::utf16Index($f->text, $a);

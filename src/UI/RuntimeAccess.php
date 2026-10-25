@@ -314,10 +314,14 @@ trait RuntimeAccess
             if ($e->readOnly) { $node->states |= AccessNode::READ_ONLY; } else { $node->actions |= AccessNode::ACTION_SET_VALUE; }
             if ($e->multiline) { $node->states |= AccessNode::MULTILINE; }
             $node->placeholder = $n->text ?? '';
-            $node->value = $e->text;
-            [$a, $b] = [min($e->anchor, $e->cursor), max($e->anchor, $e->cursor)];
-            $node->selStart = mb_strlen(substr($e->text, 0, $a), 'UTF-8');
-            $node->selEnd = mb_strlen(substr($e->text, 0, $b), 'UTF-8');
+            if ($e->password) {
+                $node->states |= AccessNode::PASSWORD; // a secure text field, whose value is not read out
+            } else {
+                $node->value = $e->text;
+                [$a, $b] = [min($e->anchor, $e->cursor), max($e->anchor, $e->cursor)];
+                $node->selStart = mb_strlen(substr($e->text, 0, $a), 'UTF-8');
+                $node->selEnd = mb_strlen(substr($e->text, 0, $b), 'UTF-8');
+            }
         }
         if ($n->accFill !== null) { ($n->accFill)($node); }
     }
