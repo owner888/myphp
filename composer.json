@@ -1,5 +1,5 @@
 {
-    "name": "myphp/myphp",
+    "name": "owner888/myphp",
     "description": "Desktop apps in PHP, with native UI or a web frontend, over ext-ffi.",
     "type": "library",
     "license": "MIT",
