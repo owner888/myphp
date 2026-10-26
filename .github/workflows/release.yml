@@ -18,6 +18,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The runner's PHP loads Xdebug, which stops a call 512 deep (the Markdown
+      # parser's pathological inputs nest deeper) and slows every test: off.
+      XDEBUG_MODE: "off"
     permissions:
       contents: write # the GitHub release
       id-token: write # npm trusted publishing and provenance

@@ -24,12 +24,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The runner's PHP loads Xdebug, which stops a call 512 deep (the Markdown
+      # parser's pathological inputs nest deeper) and slows every test: off.
+      XDEBUG_MODE: "off"
     steps:
       - uses: actions/checkout@v7
       # The runner's PHP: 8.3 or later, with FFI.
       - name: Check PHP
         run: |
           php -v
+          php -m
           php -r 'exit(PHP_VERSION_ID >= 80300 && extension_loaded("ffi") ? 0 : 1);'
       - name: PHP tests
         run: php -d ffi.enable=1 tests/run.php
