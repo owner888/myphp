@@ -1,16 +1,19 @@
 #!/bin/sh
-# ./run.sh native [rows] | webview | desktop | form | logview [file] | notes [folder] | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]
+# ./run.sh inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
 OPTS="-d ffi.enable=1 -d opcache.enable_cli=1 -d opcache.jit_buffer_size=64M -d opcache.jit=1255 -d memory_limit=512M"
 case "$1" in
-  native)  exec $PHP $OPTS examples/native/main.php "${2:-300}" ;;
+  inbox)   exec $PHP $OPTS examples/inbox/main.php "${2:-300}" ;;
+  native)  exec $PHP $OPTS examples/native/main.php ;;
   webview) exec $PHP $OPTS examples/webview/main.php ;;
   desktop) exec $PHP $OPTS examples/desktop/main.php ;;
   form)    exec $PHP $OPTS examples/form/main.php ;;
   logview) exec $PHP $OPTS examples/logview/main.php ${2:+"$2"} ;;
-  notes)   exec $PHP $OPTS examples/notes/main.php ${2:+"$2"} ;;
+  markdown-notes) exec $PHP $OPTS examples/markdown-notes/main.php ${2:+"$2"} ;;
+  notes)   exec $PHP $OPTS examples/notes/main.php ;;
+  drag-drop) exec $PHP $OPTS examples/drag-drop/main.php ;;
   glass)   exec $PHP $OPTS examples/glass/main.php ;;
   widgets) exec $PHP $OPTS examples/widgets/main.php ;;
   photos)  exec $PHP $OPTS examples/photos/main.php ${2:+"$2"} ;;

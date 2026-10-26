@@ -34,7 +34,7 @@ $h = new Headless(function (Context $c) use (&$tags, $all, &$n, &$ev) { $c->colu
 $h->frame(); $r = $h->rect($n['tf']); $h->click($r[0] + $r[2] - 20, $r[1] + 14);
 $h->type('ga'); $h->down(); $h->enter(); same(['alpha', 'beta', 'gamma'], $tags, 'a suggestion taken is a token');
 $h->type('zeta, eta'); same(['alpha', 'beta', 'gamma', 'zeta'], $tags, 'a comma adds what was typed'); $h->enter(); same('eta', end($tags), 'Enter adds the rest');
-same(54.0, $h->rect($n['tf'])[3], 'five chips wrap onto two lines at 300 wide');
+same(56.0, $h->rect($n['tf'])[3], 'five chips wrap onto two lines at 300 wide, inside the border, which takes room as in mygo');
 $h->key(Key::DELETE, 'deleteBackward:'); same(['alpha', 'beta', 'gamma', 'zeta'], $tags, 'Backspace in the empty input takes the last out');
 $x = $n['tf']->kids[0]->kids[2]; $h->clickOn($x); same(['beta', 'gamma', 'zeta'], $tags, 'the × of a chip takes it out');
 

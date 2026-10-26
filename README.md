@@ -47,18 +47,18 @@ Early. What works today, on macOS / Apple Silicon:
 |---|---|
 | Objective-C bridge (`objc_msgSend`, classes with PHP methods) | works |
 | WKWebView window, JS → PHP → JS | works (`examples/webview`) |
-| Native UI: Metal renderer, CoreText text, flex layout, scrolling on either axis, clicks, hover | works (`examples/native`, `form`) |
+| Native UI: Metal renderer, CoreText text, flex layout, scrolling on either axis, clicks, hover | works (`examples/inbox`, `form`) |
 | mygo's widgets and context, v1.08: toasts with actions, ids and `closeToast`; `openURLThen`; `onClick`, `onChange`, `onSubmit`, `onShortcut`; `Handle` and `focusBind`; toggle groups, step sliders with ticks, outlines and outline tables; a list's `followAnimation`, a table's `roundRows` and `headerMenu`; path gradients; `Preferences` (accent, Reduce Motion, Increase Contrast); registered fonts and `Font::families`; `Oklch`; `Image::update`; `TextLayout` for text controls of one's own; `TextBuffer`; every base widget without a look (`checkboxBase` … `tooltipBase`, `selectBase`, `comboboxBase`, the text inputs) | works |
 | mygo's app, window, page and menus, v1.09: `Page` (`Window::page()`: loadFile, reload, back and forward, zoom, user agent, `eval`, window.open() handler, title, navigation, load and crash events, JavaScript panels as sheets); `Event` (`emit`, `emitPage`, `broadcast`); web views in native UI (`Window::newWebView`, `Context::webView`); the page's preferences, language and title bar room; `App` lifecycle events, activation policy, about panel, `path`, `exit`; `Dock`, `Shell`, `Screen`, `Theme`; `Power::keepAwake`; window state with its store; menu radio items, roles of the View, Format, Speech, Services, Window and Help menus; `Tray::popUpMenu` | works |
 | mygo's element API: CSS flexbox (gaps, `alignContent`, `wrapReverse`, automatic margins, `justify`'s spaces, least and largest sizes, percentages, aspect ratios), absolute and relative insets, `attach`/`attachTo` anchors, grid tracks; per-corner radii, gradients at any angle (sRGB or Oklab), stripes, dashed borders, box shadows inside and out with spread, dividers, `debug`, `invisible`, `passThrough`, inherited `disabled`, `focusRing(false)`, scroll bars' insets, every cursor; `pointerPosition`, `dragVelocity`, `dragEnded`, `pressedOutside`, `overlayShortcut`, `dismissed`, a list's `rowWidth` with `scrollWith`, `TextLines`, `textRanges`, `setTextSelection` | works |
-| Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/native`) |
-| Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded, fitted (contain, cover, fill, scale-down, natural size), in grayscale | works (`examples/native`, `widgets`) |
-| Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/native`, `logview`) |
+| Lists over a million rows: scroll bars, `scrollTo` glides, keyed rows, selection with keyboard navigation | works (`examples/inbox`) |
+| Images (PNG, JPEG, HEIC, ICNS…) in native UI, rounded and faded, fitted (contain, cover, fill, scale-down, natural size), in grayscale | works (`examples/inbox`, `widgets`) |
+| Bold, italic and monospace text; rich text spans with color, underline, highlight, wrapping | works (`examples/inbox`, `logview`) |
 | Text styles inherited from the nodes around (font family, size, weight, italics, line height, alignment, letter spacing, OpenType features, language, underlines, strikethrough, background), mygo's text system (CoreText typesetter, carets, selection geometry, bidi, ellipsis), paragraphs with links and styled text inside them | works |
 | Selectable text (mygo's Selectable): drag, double and triple clicks, Shift with the arrows across the paragraphs of a container, Copy and Select All, `selectedTexts()`, `copyData()` with data in several formats | works |
 | Soft shadows, rings; materials (`UI\Material`); the glass plugin (mygo's plugins/glass, `Plugins\Glass`): Liquid Glass (blur, lens bend at the edge, lit rim, tint, interactive), progressive backdrop blur along a mask, scroll edges | works (`examples/glass`) |
 | Text fields and text areas: input methods, selection, wrapping, undo, Edit menu, Tab focus; checkbox, radio, slider, select, link, progress, tooltips | works (`examples/form`) |
-| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sorted by one column or several, columns resized, fitted to their cells, moved, scrolled sideways), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer; radio groups, editable text in place (a table's names), lists whose section headers stay at the top and whose rows typing their labels chooses, trimmed paths, tinted bitmaps, glyphs shaped and drawn one by one | works (`examples/widgets`, `notes`, `http`, `gallery`) |
+| Switch, stepper, segmented control, tabs, collapsible section, split panes, table (sorted by one column or several, columns resized, fitted to their cells, moved, scrolled sideways), sidebar with sections, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form with fields and fieldsets, checkbox group, breadcrumbs, alert dialog, grid view (virtualized), multiple selection (Cmd/Shift-click, Shift+arrows, Cmd+A), rows and grid items dragged to reorder, grid layout (fixed/fr/fit tracks), SVG icons, avatars, hidden title bar (titleBar + dragWindow), toolbar with toggles, modal dialogs, popovers, menu buttons, toasts, search field, number input, meter, spinner, badge, divider, spacer; radio groups, editable text in place (a table's names), lists whose section headers stay at the top and whose rows typing their labels chooses, trimmed paths, tinted bitmaps, glyphs shaped and drawn one by one | works (`examples/widgets`, `markdown-notes`, `http`, `gallery`) |
 | Theme: light/dark after the system, its accent color, live switching | works |
 | `myphp init / dev / build`: scaffold, run with restart, .app bundle (exec or static micro launcher) | works |
 | Packaging as mygo's (v1.12): `-platform darwin/arm64,darwin/amd64,darwin/universal`, the resources directory and its platform directories (universal binaries combined), the icon from a PNG or an asset catalog, code signing inside out, the .dmg with its window laid out, notarization, `-upload` to GitHub releases or S3; `myphp doctor`, `install-skills`, `version`, `help` | works (signing, the .dmg and notarizing need the developer's Mac) |
@@ -75,6 +75,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Pastes, text lines, inline objects and buffers as mygo's tests have them (v1.23): the Edit menu's commands through the runtime (`onPaste` by the menu and Cmd+V alike, Undo and Redo of fields), inline objects as wide as they are when the text is shaped, text lines placed before their layout, malformed UTF-8 counted right in text buffers, lists reordering without a choice | works |
 | Text wrapping at the width layout gives it, as mygo's (v1.24): in columns, beside what takes a row's room down to its widest word, Chinese between its characters, up to `maxLines()`, anew at each width in the frame of a resize | works |
 | Wide colors, as mygo's (v1.25): `Oklch::rgb` outside sRGB keeps its Display P3 color, drawn on a P3 screen in float16 drawables for fills, shadows, text and decorations, its nearest sRGB color elsewhere; `WideColor::srgb` for the sRGB twin | works (`examples/gallery`, Wide colors) |
+| Go's random numbers (v1.27): `Random\Rand::pcg($a, $b)` draws what Go's `rand.New(rand.NewPCG(a, b))` draws (IntN, Float64, Shuffle, Perm, NormFloat64…), so seeded examples match mygo's; mygo's `native`, `notes` and `drag-drop` examples; text drawn with font smoothing (bolder the lighter it is, as AppKit's); borders taking room in layout; a button's label in its own style; dates in the system's time zone whatever php.ini names | works (`examples/farm`, `notes`, `native`, `drag-drop`) |
 | The examples beside mygo's (v1.26): color emoji, tinted images, text areas wrapping a paragraph at a time (a document of 100 000 lines opens at once), padding of text, borders without a background, sliders, disabled controls dimmed, local time | works (`examples/farm`, `examples/text-buffer`, `examples/text-input`) |
 | App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors, panels, flyouts (anchored to a rectangle or a tray icon, flipping and sliding into the screen, closing on a press outside or Escape) or in the system's popovers |
 | Router (mygo's): a history of pages with paths and queries, `{name}` and `{name...}` patterns, layouts, pages keeping their state and the focus, sliding and fading in, Back and Forward buttons, Cmd+[ and Cmd+], a mouse's back and forward buttons, links to paths | works (`examples/router`) |
@@ -118,7 +119,7 @@ Early. What works today, on macOS / Apple Silicon:
 | Linux and Windows | next |
 | Linux (GTK/WebKitGTK), Windows (Win32/WebView2) | planned |
 
-Measured in `examples/native 1000` on an M-series Mac: 9 000 nodes rebuilt,
+Measured in `examples/inbox 1000` on an M-series Mac: 9 000 nodes rebuilt,
 laid out and painted per frame in about 6 ms with real text, 60 fps while
 scrolling; frames are only built when something changes.
 
@@ -165,7 +166,10 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php writes the typed client
 ./run.sh flyout                        # flyouts: a menu under its button, the same in a system popover, a hover card, a tray icon's flyout; a panel above every app
 php tests/run.php                      # the headless tests of the UI (no window): layout, keys, focus, the widgets and files examples
 php tests/bench.php                    # the cost of a frame, headless: build, layout, record, paint, for the examples' views
-./run.sh notes            # Markdown notes: search, toolbar, resizable panes, live preview, autosave
+./run.sh markdown-notes   # Markdown notes: search, toolbar, resizable panes, live preview, autosave
+./run.sh notes            # mygo's notes: rich text notes, a toolbar of their formats, the Format menu, links, Copy Markdown
+./run.sh native           # mygo's native: a page calling PHP for dialogs, the clipboard, notifications, a context menu, the tray, a global shortcut, dark mode
+./run.sh drag-drop        # mygo's drag-drop: notes, a URL and a file dragged between two windows and other apps
 ./run.sh richtext         # a rich text editor with a toolbar of its formats
 ./run.sh terminal         # a terminal: your shell, emulated by Ghostty's libghostty-vt
 ./run.sh sqlite           # SQLite from a web page through the PHP plugin; Reload shows a connection ends with its page
@@ -182,8 +186,8 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh http             # an HTTP client over curl: requests kept in a list, JSON colored
 ./run.sh glass            # Liquid Glass over a photo
 ./run.sh widgets          # the small controls on one page
-./run.sh native           # native UI, 300-row list, prints fps once a second
-./run.sh native 1000      # 9 000 nodes per frame
+./run.sh inbox            # native UI, 300-row list, prints fps once a second
+./run.sh inbox 1000       # 9 000 nodes per frame
 ./run.sh hello            # mygo's examples, ported: a page greeting through a bound service
 ./run.sh counter-native   # a counter in native UI, its buttons and the arrow keys
 ./run.sh text-buffer 100000 # a text area over a TextBuffer of 100 000 lines
@@ -263,20 +267,20 @@ App::run();
 |---|---|
 | Objective-C 桥（`objc_msgSend`、方法为 PHP 闭包的类） | 可用 |
 | WKWebView 窗口，JS → PHP → JS 往返 | 可用（`examples/webview`） |
-| 原生 UI：Metal 渲染、CoreText 文字、flex 布局、横竖滚动、点击、hover | 可用（`examples/native`、`form`） |
+| 原生 UI：Metal 渲染、CoreText 文字、flex 布局、横竖滚动、点击、hover | 可用（`examples/inbox`、`form`） |
 | mygo 的部件和上下文（v1.08）：带操作、ID 和 `closeToast` 的 toast；`openURLThen`；`onClick`、`onChange`、`onSubmit`、`onShortcut`；`Handle` 和 `focusBind`；切换组、带刻度的步进滑块、大纲和大纲表格；列表的 `followAnimation`、表格的 `roundRows` 和 `headerMenu`；路径渐变；`Preferences`（强调色、减少动态效果、增强对比度）；注册字体和 `Font::families`；`Oklch`；`Image::update`；自绘文字控件用的 `TextLayout`；`TextBuffer`；全部无外观的基础部件（`checkboxBase` … `tooltipBase`、`selectBase`、`comboboxBase`、文本输入） | 可用 |
 | mygo 的 app、窗口、页面与菜单，v1.09：`Page`（`Window::page()`：loadFile、reload、前进后退、缩放、user agent、`eval`、window.open() 处理、标题/导航/加载/崩溃事件、JavaScript 弹窗以 sheet 显示）；`Event`（`emit`、`emitPage`、`broadcast`）；原生 UI 中的 web view（`Window::newWebView`、`Context::webView`）；页面的偏好设置、语言和标题栏空间；`App` 生命周期事件、激活策略、关于面板、`path`、`exit`；`Dock`、`Shell`、`Screen`、`Theme`；`Power::keepAwake`；可自定义存储的窗口状态；菜单单选项，View/Format/Speech/Services/Window/Help 菜单角色；`Tray::popUpMenu` | 可用 |
 | mygo 的元素 API：CSS flexbox（间距、`alignContent`、`wrapReverse`、自动外边距、`justify` 的分布方式、最小最大尺寸、百分比、宽高比），绝对和相对定位的 inset，`attach`/`attachTo` 锚点，网格轨道；每角圆角、任意角度的渐变（sRGB 或 Oklab）、条纹、虚线边框、带扩展的内外阴影、分隔线、`debug`、`invisible`、`passThrough`、可继承的 `disabled`、`focusRing(false)`、滚动条内缩、全部光标；`pointerPosition`、`dragVelocity`、`dragEnded`、`pressedOutside`、`overlayShortcut`、`dismissed`、列表的 `rowWidth` 配合 `scrollWith`、`TextLines`、`textRanges`、`setTextSelection` | 可用 |
-| 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/native`） |
-| 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明、五种适配方式（contain/cover/fill/scale-down/natural）、可灰度 | 可用（`examples/native`、`widgets`） |
-| 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/native`、`logview`） |
+| 百万行列表：滚动条、`scrollTo` 平滑滚动、按行 key、选中与键盘导航 | 可用（`examples/inbox`） |
+| 原生 UI 里的图片（PNG、JPEG、HEIC、ICNS…），可圆角、可透明、五种适配方式（contain/cover/fill/scale-down/natural）、可灰度 | 可用（`examples/inbox`、`widgets`） |
+| 粗体、斜体、等宽文字；富文本 span（颜色、下划线、高亮、换行） | 可用（`examples/inbox`、`logview`） |
 | 文字样式沿节点继承（字体族、字号、字重、斜体、行高、对齐、字距、OpenType 特性、语言、下划线、删除线、背景），移植 mygo 的文字系统（CoreText 排版器、光标、选区几何、双向文字、省略号），段落内可嵌链接和带样式的文字 | 可用 |
 | 可选中文字（mygo 的 Selectable）：拖选、双击选词、三击选行、Shift 加方向键跨段落扩展选区、复制与全选、`selectedTexts()`、`copyData()` 以多种格式复制 | 可用 |
 | 把节点滚动到可见（mygo 的 ScrollIntoView），Tab 移到的焦点也会滚动到可见，嵌套滚动容器逐层处理 | 可用 |
 | 原生界面的右键菜单和菜单按钮（mygo 的 ContextMenu、Menu、MenuButton）：菜单项、勾选、子菜单、快捷键提示、最内层菜单优先、菜单键和 Shift+F10、输入框和可选中文字的编辑项、`editItems()` | 可用 |
 | 软阴影、描边环；材质（`UI\Material`）；glass 插件（mygo 的 plugins/glass，`Plugins\Glass`）：Liquid Glass（模糊、边缘透镜折射、高光边、着色、按压放大）、沿遮罩渐变的背景模糊、滚动边缘 | 可用（`examples/glass`） |
 | 文本框和多行文本区：输入法、选区、自动换行、撤销、Edit 菜单、Tab 焦点；复选框、单选、滑块、下拉选择、链接、进度条、提示 | 可用（`examples/form`） |
-| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（按一列或多列排序，列可拖宽、双击适配内容、拖动换位，过宽时横向滚动）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位；单选组、原地编辑的文字（表格里的文件名）、分节标题吸顶且可输入首字母选行的列表、截取部分长度的路径、着色位图、逐个排版和绘制的字形 | 可用（`examples/widgets`、`notes`、`http`、`gallery`） |
+| 开关、步进器、分段控件、标签页、折叠区、可拖分栏、表格（按一列或多列排序，列可拖宽、双击适配内容、拖动换位，过宽时横向滚动）、分组侧栏、树、手风琴、星级、范围滑块、工具栏（含开关按钮）、模态对话框、弹出面板、菜单按钮、toast 提示、搜索框、数字输入、水平指示条、加载指示、徽标、分隔线、占位；单选组、原地编辑的文字（表格里的文件名）、分节标题吸顶且可输入首字母选行的列表、截取部分长度的路径、着色位图、逐个排版和绘制的字形 | 可用（`examples/widgets`、`markdown-notes`、`http`、`gallery`） |
 | 主题：跟随系统明暗和强调色，实时切换 | 可用 |
 | `myphp init / dev / build`：脚手架、改动重启、.app 打包（exec 或静态 micro 启动器） | 可用 |
 | 与 mygo 一致的打包（v1.12）：`-platform darwin/arm64,darwin/amd64,darwin/universal`，resources 目录及按平台的子目录（通用二进制自动合并），PNG 或 asset catalog 生成图标，由内而外代码签名，排好窗口布局的 .dmg，公证，`-upload` 到 GitHub Releases 或 S3；`myphp doctor`、`install-skills`、`version`、`help` | 可用（签名、.dmg、公证要在开发者的 Mac 上跑） |
@@ -293,6 +297,7 @@ App::run();
 | 按 mygo 测试补齐的粘贴、文本行、行内对象和文本缓冲（v1.23）：编辑菜单命令统一经由运行时处理（菜单和 Cmd+V 都会触发 `onPaste`，输入框支持撤销和重做），行内对象在排版时就占据自身宽度，文本区排版前也能估算行位置，文本缓冲正确计算非法 UTF-8，未启用选择的列表也能拖动排序 | 可用 |
 | 文字按布局分配的宽度自动折行，与 mygo 一致（v1.24）：在列中折行；在行中可收缩到最长的单词再折行；中文可在字间断行；配合 `maxLines()` 限制行数；窗口改变大小时当帧重新折行 | 可用 |
 | 广色域颜色，与 mygo 一致（v1.25）：超出 sRGB 的 `Oklch::rgb` 颜色保留 Display P3 色值，在 P3 屏幕上以 float16 绘制填充、阴影、文字和装饰线，其他情况绘制最接近的 sRGB 颜色；`WideColor::srgb` 取 sRGB 近似色 | 可用（`examples/gallery` 的 Wide colors） |
+| Go 的随机数（v1.27）：`Random\Rand::pcg($a, $b)` 与 Go 的 `rand.New(rand.NewPCG(a, b))` 产生相同序列（IntN、Float64、Shuffle、Perm、NormFloat64…），带种子的例子与 mygo 一致；移植 mygo 的 `native`、`notes`、`drag-drop` 例子；文字按字体平滑绘制（颜色越浅越粗，与 AppKit 一致）；边框在布局中占位；按钮文字可单独设样式；无论 php.ini 怎么设，日期都用系统时区 | 可用（`examples/farm`、`notes`、`native`、`drag-drop`） |
 | 对照 mygo 逐个运行例子后修正（v1.26）：彩色 emoji、带着色的图片、文本区按段落折行（10 万行文档即时打开）、文字内边距、无背景的边框、滑块、禁用控件变暗、本地时区 | 可用（`examples/farm`、`examples/text-buffer`、`examples/text-input`） |
 | App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色、面板、flyout（锚定到矩形或托盘图标，空间不够时翻转、滑回屏幕内，点外部或 Esc 关闭），也可以用系统 popover 样式 |
 | 路由（mygo 的 Router）：带路径和查询的页面历史、`{name}` 与 `{name...}` 模式、嵌套布局、页面保留状态和焦点、滑入淡入、前进后退按钮、Cmd+[ 与 Cmd+]、鼠标侧键、指向路径的链接 | 可用（`examples/router`） |
@@ -333,7 +338,7 @@ App::run();
 | Linux 和 Windows | 下一步 |
 | Linux（GTK/WebKitGTK）、Windows（Win32/WebView2） | 计划中 |
 
-在 M 系列 Mac 上用 `examples/native 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
+在 M 系列 Mac 上用 `examples/inbox 1000` 实测：每帧重建、布局并绘制 9 000 个节点（含真实文字）约 6 ms，滚动时 60 fps；没有变化时不构建帧。
 
 ### 命令行
 
@@ -377,7 +382,10 @@ App::run();   // MYPHP_GENERATE=src/myphp.ts php app.php 则只生成带类型�
 ./run.sh flyout                        # flyout：按钮下的菜单、系统 popover 里的同一个菜单、悬停卡片、托盘图标的 flyout；浮在所有应用之上的面板
 php tests/run.php                      # UI 的无窗口测试：布局、按键、焦点、widgets 和 files 例子
 php tests/bench.php                    # 无窗口压测：一帧的 build / layout / record / paint 耗时
-./run.sh notes            # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
+./run.sh markdown-notes   # Markdown 笔记：搜索、工具栏、可拖分栏、实时预览、自动保存
+./run.sh notes            # mygo 的 notes：富文本笔记、格式工具栏、格式菜单、链接、复制为 Markdown
+./run.sh native           # mygo 的 native：网页调用 PHP，演示对话框、剪贴板、通知、右键菜单、托盘、全局快捷键、深色模式
+./run.sh drag-drop        # mygo 的 drag-drop：笔记、URL 和文件在两个窗口及其他应用之间拖放
 ./run.sh richtext         # 富文本编辑器，带格式工具栏
 ./run.sh terminal         # 终端：你的 shell，由 Ghostty 的 libghostty-vt 模拟
 ./run.sh sqlite           # 网页经 PHP 插件用 SQLite；点 Reload 可以看到连接随页面结束
@@ -394,8 +402,8 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh http             # HTTP 客户端（curl 子进程）：请求列表、JSON 着色
 ./run.sh glass            # 照片上的 Liquid Glass
 ./run.sh widgets          # 小控件合集
-./run.sh native           # 原生 UI，300 行列表，每秒打印一次 fps
-./run.sh native 1000      # 每帧 9 000 个节点
+./run.sh inbox            # 原生 UI，300 行列表，每秒打印一次 fps
+./run.sh inbox 1000       # 每帧 9 000 个节点
 ./run.sh hello            # 移植自 mygo 的示例：页面通过绑定的服务打招呼
 ./run.sh counter-native   # 原生 UI 计数器：按钮和方向键
 ./run.sh text-buffer 100000 # 基于 TextBuffer 的十万行文本区

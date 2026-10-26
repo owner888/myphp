@@ -1251,8 +1251,11 @@ final class Context
         $segment = $this->segments > 0 && !$primary; // in a toggle group: a segment, padded Space(1) by Space(3), no face but pressed or hovered
         $toolbar = $this->toolbars > 0 && !$primary && !$segment;
         [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar || $segment ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($segment ? 6 : ($toolbar ? 5 : 7)), $h + $t->space($segment ? 2 : 3), 0, $s, $on ? $pressed : $base, $size, $fg));
-        $n->bordered = !$primary && !$toolbar && !$segment;
+        $bordered = !$primary && !$toolbar && !$segment;
+        $edge = $bordered ? 2.0 : 0.0; // its border, a point each side, around the padding, as mygo's
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($segment ? 6 : ($toolbar ? 5 : 7)) + $edge, $h + $t->space($segment ? 2 : 3) + $edge, 0, $s, $on ? $pressed : $base, $size, $fg));
+        $n->bordered = $bordered;
+        $n->metrics = $this->metrics; // a style of its own (bold(), italic()) measures its label again in layout
         if ($segment) {
             $n->segment = true;
             $n->radius(max($t->radius - $t->space(0.5), 0));

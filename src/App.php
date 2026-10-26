@@ -370,9 +370,8 @@ final class App
             return;
         }
         ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
-        if (ini_get('date.timezone') === '') { // the dates the app shows in the user's time zone, as a Go app's (php.ini names none: PHP's would be UTC)
-            date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
-        }
+        // The dates the app shows are in the user's time zone, as a Go app's local time, whatever zone php.ini names (the developer's own, a server's UTC).
+        date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         Native\Signals::quitOn(self::quit(...)); // SIGINT and SIGTERM quit as Quit does (mygo's quitOnSignals)
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', self::$policy->native());

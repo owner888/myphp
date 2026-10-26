@@ -423,6 +423,7 @@ final class Runtime
                     }
                     break;
                 case 'up':
+                    $pressedHere = $this->input->mouseDown; // a release whose press was elsewhere (another window, the Dock opening this one under the pointer) clicks nothing, as mygo's Clicked asks for both
                     $this->input->mouseDown = false;
                     $this->selection->dragging = false;
                     $this->sliding = null;
@@ -445,7 +446,7 @@ final class Runtime
                     unset($p);
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
-                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif (!$moved) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
+                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif (!$moved && $pressedHere) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
                     break;
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {

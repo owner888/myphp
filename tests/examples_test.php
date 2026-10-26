@@ -409,3 +409,45 @@ $missing = array_filter(['2026年1月5日星期一', '2026年1月', '上个月']
 same([], array_values($missing), 'and in Chinese');
 \MyPHP\App::setLocale($saved);
 \MyPHP\App::setLanguages('en');
+
+// notes (mygo's TestNotes): a new note takes a title and a list typed with Markdown, and its title shows in the sidebar.
+[$view, $s] = Headless::load('notes');
+$s->path = ''; $s->notes = []; $s->next = 0; $s->welcome = true; // nothing read or written: the welcome note
+$t = new Headless($view, 900, 640);
+$t->paints = true;
+$t->frame();
+same('Welcome to Notes', $s->current()->title(), 'the welcome note, its chip measured');
+$t->clickLabel('New note'); $t->frame();
+$t->press(600, 300); $t->release(600, 300); $t->frame();
+$t->type('Shopping'); $t->frame();
+$t->key(\MyPHP\UI\Key::RETURN, 'insertNewline:'); $t->frame();
+$t->type('- milk'); $t->frame();
+$n = $s->current();
+same('Shopping', $n->title(), 'the new note is titled by its first line');
+$md = $n->document()->text()->markdown();
+check(str_contains($md, '# Shopping') && str_contains($md, '- milk'), "its Markdown: $md");
+check($t->byText('Shopping') !== null, 'the sidebar shows it: ' . json_encode($t->texts()));
+
+// drag-drop: a note dropped on the other window's zone joins its notes; a URL is reported.
+[, $s] = Headless::load('drag-drop');
+$right = $s->panes[1];
+$t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\DragDrop\view($c, $right), 440, 580);
+$t->frame();
+check($t->byText('A note from Right') !== null && $t->byText('Drop here') !== null, 'the pane, its note and its zone');
+[$x, $y] = $t->middle($t->byText('Drop here'));
+$note = new \MyPHP\Transfer\Data(new \MyPHP\Transfer\Item(
+    \MyPHP\Transfer\Representation::bytes(\MyPHP\Transfer\Format::TEXT, 'A note from Left'),
+    \MyPHP\Transfer\Representation::bytes('application/vnd.myphp.example-note+json', '{"ID":1,"Title":"A note from Left"}')));
+$d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($note->formats(), \MyPHP\Transfer\Operation::COPY | \MyPHP\Transfer\Operation::MOVE, \MyPHP\Transfer\Operation::MOVE));
+check($t->dataOver($x, $y, $d), 'the zone takes a note');
+$d->data = $note;
+check($t->dataDrop($x, $y, $d), 'and its drop');
+$t->frame();
+same(['A note from Right', 'A note from Left'], array_map(fn($n) => $n->title, $right->notes), 'the note joins the pane, decoded from its JSON');
+same([3, 'Received note: A note from Left'], [$right->notes[1]->id, $right->status], 'with a new id');
+$url = \MyPHP\Transfer\Data::url('https://example.com/');
+[$x, $y] = $t->middle($t->byText('Drop here')); // below the note now
+$d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($url->formats(), \MyPHP\Transfer\Operation::COPY));
+check($t->dataOver($x, $y, $d), 'the zone takes a URL'); $d->data = $url;
+check($t->dataDrop($x, $y, $d), 'and its drop'); $t->frame();
+same('Received URLs: https://example.com/', $right->status, 'a URL dropped is reported');

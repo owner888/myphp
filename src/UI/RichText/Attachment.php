@@ -17,7 +17,7 @@ use MyPHP\UI\SVG;
 final class Attachment
 {
     /**
-     * @param ?Closure(\MyPHP\UI\DisplayList, array{0: float, 1: float, 2: float, 3: float}): void $draw
+     * @param ?Closure(\MyPHP\UI\Painter, array{0: float, 1: float, 2: float, 3: float}): void $draw
      */
     public function __construct(
         /** Drawn in the box, unless $draw draws it. */
@@ -29,7 +29,7 @@ final class Attachment
         public string $name = '',
         /** Where the attachment comes from, as a file's or an image's, which HTML and Markdown write for it. */
         public string $url = '',
-        /** Draws the attachment into the display list in its rect [x, y, w, h], instead of $image, as an app's chip for a mention or a file. */
+        /** Draws the attachment with a painter in its rect [x, y, w, h], instead of $image, as an app's chip for a mention or a file (mygo's Draw): the painter has the window's theme, and text. */
         public ?Closure $draw = null,
         /** The app's. */
         public mixed $data = null,

@@ -1,238 +1,256 @@
 <?php
-// Markdown notes, the second real tool on MyPHP: notes are .md files in a
-// folder (~/Library/Application Support/Notes/notes, or the folder on the
-// command line); a list on the left, the editor in the middle, a live
-// preview on the right (Markdown::view). Edits save themselves half a second after you stop
-// typing (Cmd+S saves now). Cmd+N makes a note, Cmd+Backspace deletes the
-// chosen one. The preview scrolls along with the editor.
-// Run: ./run.sh notes [folder]
+// Notes is a notes app in native UI (mygo's examples/notes): notes in a
+// sidebar, each edited as rich text (MyPHP\UI\RichText), with a toolbar of
+// its formats, the Format menu, links, Markdown shortcuts and export, and
+// the notes saved as JSON in the user's Application Support folder.
+// Cmd+N makes a note.
+// Run: ./run.sh notes
 declare(strict_types=1);
 
-use MyPHP\{App, Menu, MenuItem, PathName, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font, ListState, Node, ScrollState, TextState};
-use MyPHP\UI\Markdown\{Markdown, Options};
+use MyPHP\{App, Clipboard, Menu, MenuItem, Window, WindowOptions};
+use MyPHP\UI\{Content, Context, Key, Node, Painter, Span, TextState, TextStyle};
+use MyPHP\UI\RichText\{Attachment, Attributes, Document, EditorOptions, FormatState, ListKind, Paragraph, ParagraphStyle, RichText, Run, Text};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-/** The notes folder: files, the chosen one, its text in the editor, and saving. */
+/** A note: its text, saved, and the document the editor edits. */
+final class Note
+{
+    private ?Document $doc = null;
+
+    public function __construct(public int $id, public Text $text, public DateTimeImmutable $updated) {}
+
+    /** The note's document, made the first time. */
+    public function document(): Document
+    {
+        return $this->doc ??= new Document($this->text);
+    }
+
+    /** The text as it is now: the document's once there is one. */
+    public function current(): Text
+    {
+        return $this->doc?->text() ?? $this->text;
+    }
+
+    /** The first line of the note, or "New Note". */
+    public function title(): string
+    {
+        $s = $this->current()->plainText();
+        if (($i = strpos($s, "\n")) !== false) { $s = substr($s, 0, $i); }
+        return ($s = trim($s)) === '' ? 'New Note' : $s;
+    }
+}
+
 final class Notes
 {
-    /** @var list<array{path: string, title: string, mtime: int}> newest first */
-    public array $items = [];
-    public ListState $list;
-    public TextState $editor;
-    public ScrollState $preview;
-    public ?string $open = null;
-    private string $saved = '';
+    /** @var list<Note> */
+    public array $notes = [];
+    /** The id of the note shown. */
+    public string $selected = '';
+    public int $next = 0;
+    /** The popover asking for a link's URL. */
+    public bool $linkOpen = false;
+    public TextState $linkURL;
+    /** Where the notes are saved, '' for nowhere. */
+    public string $path = '';
+    /** Nothing was saved: the first frame makes the welcome note, whose chip it measures. */
+    public bool $welcome = false;
 
-    /** The text as last written to the file. */
-    public function savedText(): string
+    public function __construct()
     {
-        return $this->saved;
-    }
-    private int $edit = 0;
-    public ?Window $window = null;
-    /** The editor scroll share the preview was last moved to. */
-    public float $followed = 0;
-    /** The panes' widths, as the dividers leave them. */
-    public float $listW = 220, $editorW = 380;
-    /** The search: what is typed, and the items whose titles match it, as indexes into $items. */
-    public TextState $query;
-    /** @var list<int> */
-    public array $shown = [];
-    public bool $previewing = true, $asking = false;
-    /** How the preview shows Markdown: images from the notes' folder. */
-    public Options $md;
-
-    public function __construct(public readonly string $dir)
-    {
-        is_dir($dir) || mkdir($dir, 0755, true) || throw new RuntimeException("cannot create $dir");
-        $this->list = new ListState();
-        $this->list->selected = -1;
-        $this->editor = new TextState();
-        $this->editor->multiline = true;
-        $this->preview = new ScrollState();
-        $this->query = new TextState();
-        $this->md = new Options(loadImage: Markdown::fileImages($dir));
-        $this->scan();
+        $this->linkURL = new TextState();
     }
 
-    /** The items the search shows, in order, with the list's choice on the open one. */
-    public function filter(): void
+    public function current(): Note
     {
-        $q = trim($this->query->text);
-        $this->shown = [];
-        foreach ($this->items as $i => $it) {
-            if ($q === '' || stripos($it['title'], $q) !== false) { $this->shown[] = $i; }
+        foreach ($this->notes as $n) {
+            if ((string)$n->id === $this->selected) { return $n; }
         }
-        $this->list->selected = -1;
-        foreach ($this->shown as $row => $i) {
-            if ($this->items[$i]['path'] === $this->open) { $this->list->selected = $row; }
+        if ($this->notes === []) { $this->add(); }
+        $this->selected = (string)$this->notes[0]->id;
+        return $this->notes[0];
+    }
+
+    /** Adds an empty note at the top, and shows it. */
+    public function add(): Note
+    {
+        $n = new Note(++$this->next, Text::of(new Paragraph(new ParagraphStyle(heading: 1))), new DateTimeImmutable());
+        array_unshift($this->notes, $n);
+        $this->selected = (string)$n->id;
+        return $n;
+    }
+
+    /** Asks for the URL of a link over the selection. */
+    public function openLink(Document $doc): void
+    {
+        $this->linkURL = new TextState($doc->formatting()->link);
+        $this->linkOpen = true;
+    }
+
+    /** Reads the saved notes, or leaves the welcome note to the first frame. */
+    public function load(string $dir): void
+    {
+        $this->path = "$dir/MyPHP Notes/notes.json";
+        $json = @file_get_contents($this->path);
+        if ($json !== false) {
+            foreach (json_decode($json, true, 64, JSON_THROW_ON_ERROR) as $n) {
+                $this->notes[] = new Note($n['id'], Text::unmarshalJSON(json_encode($n['text'], JSON_THROW_ON_ERROR)), new DateTimeImmutable($n['updated']));
+                $this->next = max($this->next, $n['id']);
+            }
         }
+        $this->welcome = $this->notes === [];
     }
 
-    /** Words in the editor: runs between spaces, as mygo's notes count them. */
-    public function words(): int
-    {
-        return count(preg_split('/\s+/u', $this->editor->text, -1, PREG_SPLIT_NO_EMPTY));
-    }
-
-    /** When the open note was last written (its file's time). */
-    public function edited(): int
-    {
-        foreach ($this->items as $it) { if ($it['path'] === $this->open) { return $it['mtime']; } }
-        return 0;
-    }
-
-    public function scan(): void
-    {
-        $this->items = [];
-        foreach (glob($this->dir . '/*.md') as $path) {
-            $first = strtok((string)file_get_contents($path, false, null, 0, 200), "\n");
-            $title = trim(ltrim((string)$first, '# ')); // a note whose first line is 0 has that title: not ?:
-            $this->items[] = ['path' => $path, 'title' => $title !== '' ? $title : basename($path, '.md'), 'mtime' => filemtime($path)];
-        }
-        usort($this->items, fn($a, $b) => $b['mtime'] <=> $a['mtime']);
-    }
-
-    /** Opens the note at $path in the editor, saving the one before. */
-    public function choose(string $path): void
-    {
-        $this->save();
-        $this->open = $path;
-        $this->saved = (string)file_get_contents($path);
-        $this->editor = new TextState($this->saved);
-        $this->editor->multiline = true;
-        $this->editor->setCursor(0);
-        $this->preview->y = 0;
-        $this->scan(); // puts the selection on it
-    }
-
-    public function create(): void
-    {
-        $this->save();
-        $path = $this->dir . '/' . date('Y-m-d His') . '.md';
-        file_put_contents($path, "# New note\n\n");
-        $this->choose($path);
-    }
-
-    public function delete(): void
-    {
-        if ($this->open === null) { return; }
-        unlink($this->open);
-        $this->open = null;
-        $this->editor = new TextState();
-        $this->editor->multiline = true;
-        $this->saved = '';
-        $this->scan();
-    }
-
-    /** Writes the editor's text when it differs from the file. */
+    /** Writes the notes, where the app has a place for them. */
     public function save(): void
     {
-        if ($this->open === null || $this->editor->text === $this->saved) { return; }
-        file_put_contents($this->open, $this->editor->text);
-        $this->saved = $this->editor->text;
-        $this->scan(); // the title or order may have changed
-    }
-
-    /** Called each frame: a changed editor schedules a save half a second after the last change. */
-    public function tick(): void
-    {
-        if ($this->open === null || $this->editor->text === $this->saved) { return; }
-        $n = ++$this->edit;
-        App::after(0.5, function () use ($n) { if ($n === $this->edit) { $this->save(); $this->window?->invalidate(); } });
+        if ($this->path === '') { return; }
+        $out = [];
+        foreach ($this->notes as $n) {
+            $n->text = $n->current();
+            $out[] = ['id' => $n->id, 'text' => json_decode($n->text->marshalJSON(), true, 512, JSON_THROW_ON_ERROR), 'updated' => $n->updated->format(DATE_RFC3339_EXTENDED)];
+        }
+        if (!is_dir(dirname($this->path))) { @mkdir(dirname($this->path), 0755, true); }
+        @file_put_contents($this->path, json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
 }
 
-App::setName('Notes'); // before App::path(), which is named after the app
-$notes = new Notes($argv[1] ?? App::path(PathName::UserData) . '/notes');
-
-function view(Context $c, Notes $notes): void
+function view(Context $c, Notes $a): void
 {
     $t = $c->theme;
-    $notes->tick();
-    $notes->filter();
-    // Three panes the dividers resize: notes | editor | preview (while previewing).
-    $c->split($notes->listW, function () use ($c, $t, $notes) {
-        $c->column(0, 0, 1, $t->surface);
-          $c->column(8, 6);
-            $c->searchField($notes->query, 0); // as wide as the pane
-            $c->toolbar(function () use ($c, $notes) {
-                if ($c->clicked($c->button('New'))) { $notes->create(); }
-                if ($c->clicked($c->button('Delete…')) && $notes->open !== null) { $notes->asking = true; }
-                $c->spacer();
-                $c->toggle($notes->previewing, 'Preview');
-            });
-          $c->end();
-          $c->divider();
-          $c->list($notes->list, count($notes->shown), function (int $row) use ($c, $t, $notes) {
-              $it = $notes->items[$notes->shown[$row]];
-              $c->column(10, 2); $c->text($it['title'], 13, style: $it['path'] === $notes->open ? Font::BOLD : 0)->singleLine();
-                $c->muted(date('M j, H:i', $it['mtime']), 11); $c->end();
-          });
-          if ($notes->shown === [] && $notes->query->text !== '') { $c->column(10, 0); $c->muted('No note matches.', 12); $c->end(); }
-          if ($notes->list->changed() && $notes->list->selected >= 0 && $notes->items[$notes->shown[$notes->list->selected]]['path'] !== $notes->open) {
-              $notes->choose($notes->items[$notes->shown[$notes->list->selected]]['path']);
-          }
+    if ($a->welcome) { // the first note, its chip measured in the window's font
+        $a->welcome = false;
+        $a->notes = [new Note(++$a->next, welcome($c), new DateTimeImmutable())];
+    }
+    $n = $a->current();
+    $doc = $n->document();
+    if ($c->shortcut('n', Key::COMMAND)) {
+        $n = $a->add();
+        $doc = $n->document();
+    }
+    $c->row(0, 0, 1)->align(Node::STRETCH);
+      $c->column(0, 8, 0, $t->surface)->width(230)->shrink(0)->padding(12, 0);
+        $c->row(0, 0)->padding(0, 16)->align(Node::CENTER);
+          $c->text('Notes')->bold()->grow(1);
+          if ($c->clicked($c->button('New')->label('New note'))) { $a->add(); }
         $c->end();
-    }, function () use ($c, $t, $notes) {
-        $editor = function () use ($c, $t, $notes) {
-            $c->column(0, 0, 1);
-              if ($notes->open === null) {
-                  $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
-              } else {
-                  $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
-                  $c->row(8, 8)->align(Node::CENTER);
-                    $c->muted(sprintf('%d words · edited %s', $notes->words(), date('M j, H:i', $notes->edited())), 12); $c->spacer();
-                    $c->badge($notes->editor->text === $notes->savedText() ? 'saved' : 'editing');
-                  $c->end();
-              }
-            $c->end();
-        };
-        if (!$notes->previewing) { $editor(); return; }
-        $c->split($notes->editorW, $editor, function () use ($c, $t, $notes) {
-            // The preview follows the editor: scrolled the same share of the way through.
-            if ($notes->editor->scrollFraction !== $notes->followed) {
-                $notes->followed = $notes->editor->scrollFraction;
-                $notes->preview->scrollTo($notes->followed * $notes->preview->maxY, false);
+        $c->sidebar($a->selected, function () use ($c, $a) {
+            foreach ($a->notes as $note) {
+                $c->key($note->id)->sidebarItem((string)$note->id, $note->title());
             }
-            $c->column(16, 10, 1, $t->background)->scroll($notes->preview);
-              Markdown::view($c, $notes->editor->text, $notes->md);
-            $c->end();
-        });
-    });
-    // Deleting asks first.
-    $c->modal($notes->asking, function () use ($c, $notes) {
-        $c->text('Delete this note?', 15, style: Font::BOLD);
-        $c->muted(basename((string)$notes->open) . " goes to nowhere: there is no undo.");
-        $c->row(0, 8)->justify(Node::END);
-          if ($c->clicked($c->button('Cancel'))) { $notes->asking = false; }
-          if ($c->clicked($c->primaryButton('Delete'))) { $notes->asking = false; $notes->delete(); $c->toast('Note deleted'); }
-        $c->end();
+        }, 230)->label('Notes')->grow(1);
+      $c->end();
+      $c->column(0, 10, 1)->minWidth(0)->padding(12, 20);
+        toolbar($c, $a, $doc);
+        $editor = RichText::editor($c->key($n->id), $doc, new EditorOptions(label: 'Note', placeholder: 'Title', onLinkCommand: fn() => $a->openLink($doc)))->grow(1);
+        if ($c->changed($editor)) {
+            $n->text = $doc->text(); $n->updated = new DateTimeImmutable();
+            $a->save();
+        }
+        $words = count(preg_split('/\s+/u', $doc->text()->plainText(), -1, PREG_SPLIT_NO_EMPTY));
+        $c->text(sprintf('%d words · edited %s', $words, $n->updated->format('M j, H:i')), 12, $t->textMuted);
+      $c->end();
+    $c->end();
+}
+
+/** The toolbar: it formats the selection of $doc and shows its formats. */
+function toolbar(Context $c, Notes $a, Document $doc): void
+{
+    $t = $c->theme;
+    $f = $doc->formatting();
+    $button = function (string $label, string $tip, bool $on, Closure $run) use ($c, $t): Node {
+        $b = $c->button($label)->keepFocus()->padding(4, 9)->minWidth(30)->tooltip($tip);
+        if ($on) { $b->background($t->accent, 0.18); }
+        if ($c->clicked($b)) { $run(); }
+        return $b;
+    };
+    $divider = fn() => $c->box(1, 20, $t->border);
+    $c->row(0, 4)->wrap($c->width - 230 - 40)->align(Node::CENTER);
+      $styles = ['Title', 'Heading', 'Subheading', 'Body'];
+      $style = $f->paragraphsMixed ? -1 : [1 => 0, 2 => 1, 3 => 2][$f->paragraph->heading] ?? 3;
+      $before = $style;
+      $c->select($styles, $style, 130)->keepFocus()->label('Paragraph style');
+      if ($style !== $before && $style >= 0) {
+          $doc->setHeading([1, 2, 3, 0][$style]);
+      }
+      $divider();
+      $button('B', 'Bold (⌘B)', $f->bold === FormatState::FormatOn, $doc->toggleBold(...))->bold();
+      $button('I', 'Italic (⌘I)', $f->italic === FormatState::FormatOn, $doc->toggleItalic(...))->italic();
+      $button('U', 'Underline (⌘U)', $f->underline === FormatState::FormatOn, $doc->toggleUnderline(...))->underline();
+      $button('S', 'Strikethrough (⇧⌘X)', $f->strikethrough === FormatState::FormatOn, $doc->toggleStrikethrough(...))->strikethrough();
+      $button('</>', 'Code (⌘E)', $f->code === FormatState::FormatOn, $doc->toggleCode(...));
+      $link = $button('Link', 'Link (⌘K)', $f->link !== '', fn() => $a->openLink($doc));
+      $c->popover($link, $a->linkOpen, function () use ($c, $a, $doc, $f) {
+          $c->row(0, 6)->align(Node::CENTER);
+            $input = $c->input($a->linkURL, 'https://', 260)->autoFocus()->label('URL');
+            if ($c->submitted($input) || $c->clicked($c->primaryButton('Link'))) {
+                $doc->setLink(trim($a->linkURL->text));
+                $a->linkOpen = false;
+            }
+            if ($f->link !== '' && $c->clicked($c->button('Remove'))) {
+                $doc->setLink('');
+                $a->linkOpen = false;
+            }
+          $c->end();
+      });
+      $divider();
+      $button('•', 'Bulleted list (⇧⌘8)', $f->paragraph->list === ListKind::Bullets, fn() => $doc->toggleList(ListKind::Bullets));
+      $button('1.', 'Numbered list (⇧⌘7)', $f->paragraph->list === ListKind::Numbers, fn() => $doc->toggleList(ListKind::Numbers));
+      $button('☐', 'Checklist (⇧⌘L)', $f->paragraph->list === ListKind::Tasks, fn() => $doc->toggleList(ListKind::Tasks));
+      $button('❝', 'Quote', $f->paragraph->quote, $doc->toggleQuote(...));
+      $button('{}', 'Code block', $f->paragraph->codeBlock, $doc->toggleCodeBlock(...));
+      $divider();
+      if ($c->clicked($c->button('Copy Markdown')->keepFocus())) {
+          Clipboard::writeText($doc->text()->markdown());
+      }
+    $c->end();
+}
+
+/** The first note. */
+function welcome(Context $c): Text
+{
+    $code = new Attributes(code: true);
+    return Text::of(
+        new Paragraph(new ParagraphStyle(heading: 1), [new Run('Welcome to Notes')]),
+        new Paragraph(runs: [new Run('Write with '), new Run('bold', new Attributes(weight: 700)), new Run(', '), new Run('italic', new Attributes(italic: true)), new Run(', '),
+            new Run('links', new Attributes(link: 'https://github.com/egoist/mygo')), new Run(' and lists, from the toolbar, the Format menu or the keyboard.')]),
+        new Paragraph(new ParagraphStyle(heading: 2), [new Run('Try')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks, checked: true), [new Run('Open this note')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks), [new Run('Type '), new Run('- ', $code), new Run(' to start a list, '), new Run('# ', $code), new Run(' for a heading')]),
+        new Paragraph(new ParagraphStyle(list: ListKind::Tasks), [new Run('Copy the note as Markdown')]),
+        new Paragraph(runs: [new Run('Attachments sit in the line, as '),
+            new Run(Text::OBJECT_REPLACEMENT, new Attributes(attachment: fileChip($c, 'itinerary.pdf'))),
+            new Run(' does.')]),
+    );
+}
+
+/** An attachment drawn as a chip with a file's name. */
+function fileChip(Context $c, string $name): Attachment
+{
+    $font = new TextStyle();
+    $font->size = 12;
+    [$w] = $c->shapeText($name, 0, $font)->size();
+    return new Attachment(name: $name, width: $w + 28, height: 20, draw: function (Painter $p, array $r) use ($name): void {
+        $t = $p->theme();
+        $p->fill($r, $t->accent, $r[3] / 2, 0.12);
+        $p->fill([$r[0] + 8, $r[1] + 6, 7, 8], $t->accent, 1.5);
+        [, $lh] = $p->measureText(0, new Span($name, 12));
+        $p->richText($r[0] + 20, $r[1] + ($r[3] - $lh) / 2, 0, new Span($name, 12, color: $t->accent));
     });
 }
 
-$confirmDelete = function () use ($notes) { // the same modal the toolbar's Delete… opens
-    if ($notes->open !== null) { $notes->asking = true; $notes->window?->invalidate(); }
-};
-App::setMenu(new Menu([
-    new MenuItem(role: 'appMenu'),
-    new MenuItem('File', submenu: [
-        new MenuItem('New Note', function () use ($notes) { $notes->create(); $notes->window?->invalidate(); }, 'CmdOrCtrl+N'),
-        new MenuItem('Save', function () use ($notes) { $notes->save(); $notes->window?->invalidate(); }, 'CmdOrCtrl+S'),
-        new MenuItem('Delete Note', $confirmDelete, 'CmdOrCtrl+Backspace'),
-        MenuItem::separator(), new MenuItem(role: 'close'),
-    ]),
-    new MenuItem(role: 'editMenu'),
-    new MenuItem(role: 'windowMenu'),
-]));
-
-App::whenReady(function () use ($notes) {
-    $notes->window = new Window(new WindowOptions(title: 'Notes', width: 1100, height: 680, stateKey: 'notes',
-        content: Content::view(fn(Context $c) => view($c, $notes))));
-    if ($notes->items !== []) {
-        $notes->choose($notes->items[0]['path']);
-    }
+$s = new Notes();
+$s->load(getenv('HOME') . '/Library/Application Support');
+App::setName('Notes');
+App::whenReady(function () use ($s) {
+    App::setMenu(new Menu([
+        new MenuItem(role: 'appMenu'),
+        new MenuItem(role: 'fileMenu'),
+        new MenuItem(role: 'editMenu'),
+        new MenuItem(role: 'formatMenu'),
+        new MenuItem(role: 'windowMenu'),
+    ]));
+    new Window(new WindowOptions(title: 'Notes', width: 900, height: 640, minWidth: 560, minHeight: 400, stateKey: 'notes',
+        content: Content::view(fn(Context $c) => view($c, $s))));
 });
 App::run();

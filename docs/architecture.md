@@ -25,7 +25,7 @@ The FFI boundary is never the frame budget's problem.
 mygo rebuilds the element tree, lays it out and paints every frame it needs
 (`ui/runtime.go: runFrame`), with a cheaper `repaintFrame` when only
 animated drawings moved. The worry for PHP was per-frame object churn.
-Measured in `examples/native` on an M-series Mac, NSTimer at 60 Hz:
+Measured in `examples/inbox` on an M-series Mac, NSTimer at 60 Hz:
 
 | nodes per frame | build | layout | paint (CoreGraphics, the PoC) | total |
 |---|---|---|---|---|
@@ -778,7 +778,7 @@ the modifier flags, `Runtime::$clickMods` is the modifiers of the click
 the AppKit selectors with `AndModifySelection:` for Shift and
 `selectAll:` for Cmd+A; the grid takes Shift with the arrows and Cmd+A
 as shortcuts. A grid cell the keys moved to without choosing rings
-itself inset by 3. `examples/native` chooses several rows.
+itself inset by 3. `examples/inbox` chooses several rows.
 
 `ListState::$reorder` is mygo's Reorder, done inside `Context::list`
 (`reorderRows`) with no drag-and-drop framework: a press on a row bound
@@ -904,7 +904,7 @@ glyph upside down); and in a PHP double-quoted string `"$i："` swallows the
 full-width colon into the variable name, since identifiers may contain
 bytes ≥ 0x80 — write `{$i}` before any CJK punctuation.
 
-Measured with text (`examples/native 1000`, 9 006 nodes, ~1 200 quads of
+Measured with text (`examples/inbox 1000`, 9 006 nodes, ~1 200 quads of
 which ~1 000 glyphs): 4.9–5.5 ms per frame at 60 fps; one 23 fps second
 when a whole screen of new strings is shaped and rasterized at once.
 
@@ -2561,7 +2561,7 @@ of 63 cells, ten builder calls each, is the dearest), which leaves the 16.7 ms
 budget to CoreText (shaping is cached by line) and Metal. The display
 list is clipped to the window before the paint, so what lies outside
 costs nothing. What the benchmark cannot time is the Mac's half:
-`MYPHP_STATS=1 ./run.sh native 1000000` prints it a second at a time.
+`MYPHP_STATS=1 ./run.sh inbox 1000000` prints it a second at a time.
 
 The Mac's half, measured by the developer (`MYPHP_STATS=1 ./run.sh
 native 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
@@ -3079,6 +3079,52 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
     its methods by `respondsToSelector:`.
   - `MYPHP_FRAME_STATS` read the layouts made from `Text`, which has
     none: they are the text system's.
+
+## Go's random numbers, and mygo's examples of the same name (v1.27)
+
+- **Dates are in the system's time zone whatever php.ini names**, as
+  the developer asked: a desktop app shows the time of the computer it
+  runs on, as Go's local time (a php.ini of `date.timezone = UTC` made
+  the gallery's clock four hours off).
+- **Go's math/rand/v2 in PHP** (`Random\PCG`, `Random\Rand`): mygo's
+  examples seed `rand.New(rand.NewPCG(a, b))`, which no PHP engine
+  matches (PHP's PcgOneseq128XslRr64 is another member of the family,
+  with another increment and output, and `Randomizer` draws its ranges
+  otherwise). PCG is the 128-bit LCG with the DXSM output; `Rand` has
+  Go's `IntN` (Lemire's, with its rejection), `Float64` (53 bits),
+  `Float32`, `Shuffle`, `Perm` and `NormFloat64` (the ziggurat, Go's
+  tables, float32 steps, the edge's sum fused as on arm64). `U64` does
+  the unsigned arithmetic on PHP's signed ints, in 16- and 32-bit pieces
+  since products past 63 bits become floats. tests/go_rand_test.php
+  holds what Go printed. The farm, mayoi, the piano and the gallery's
+  charts draw from it, so they are mygo's.
+- **A border takes room**, as mygo's (its layout's sizes are border
+  boxes): `border()` adds its width inside the padding (`Node::padT()`
+  and the others), and a plain button, bordered, is a point wider and
+  taller each side than a primary one. A button's own style (`bold()`,
+  `italic()`, `underline()`, `strikethrough()`, as the notes' B, I, U and
+  S) measures and paints its label.
+- **Text is drawn with font smoothing**, as AppKit's and mygo's: Core
+  Graphics emboldens glyphs the lighter their color, even in a mask, so
+  a glyph is rasterized for each of four shades of the text's relative
+  luminance (`Text::shadeOf`, mygo's ShadeOf), filled with the shade's
+  gray (`shadeGray`), while the user leaves AppleFontSmoothing on; the
+  atlas keys a mask by its shade, a shaped line keeps its glyphs and
+  makes its quads for each shade it is painted in. A canvas's text
+  (`glyphCoverage`) stays unsmoothed. White text on the dark theme was
+  visibly thinner than mygo's.
+- A text given a width alone (`size(96, 0)`) kept no height and was
+  stretched across its row, its glyphs at the top: a text's measured
+  height stays, as mygo's `Width()` leaves it.
+- **A release whose press was elsewhere clicks nothing**: a mouse-up
+  with no mouse-down in the window (the window opened under a pointer
+  released then, a press in another window) made a click, so confetti
+  fired at its stage's corner; mygo's Clicked asks for both.
+- **mygo's native, notes and drag-drop**: ported under their names;
+  myphp's own examples of those names are `inbox` and `markdown-notes`
+  (its window's state under its own key now, as the notes' is "notes").
+  An attachment's drawing takes a `Painter` (the window's theme, text),
+  as mygo's `Draw`.
 
 ## Open items
 

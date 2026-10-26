@@ -194,6 +194,9 @@ final class Layout
             } else {
                 self::restyle($n);
             }
+        } elseif ($n->kind === Node::BUTTON && $n->metrics !== null) {
+            if ($n->ts !== null) { self::restyle($n); } // a label in a style of its own, as mygo's B, I, U and S buttons
+            $n->metrics = null;
         }
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
@@ -275,9 +278,15 @@ final class Layout
         if ($own->color !== null) { $n->fg = $own->color; }
         $n->style |= Node::fontBits($own);
         if ($own->underline) { $n->underline = true; }
+        if ($own->strike) { $n->strike = true; }
         [$w, $h] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style);
-        if ($n->fw == $ow) { $n->fw = $w; } // a size given to it stays
-        if ($n->fh == $oh) { $n->fh = $h; }
+        if ($n->kind === Node::BUTTON) { // its padding around the label as it measures now
+            if (!$n->sizedW) { $n->fw += $w - $ow; }
+            if ($n->fh > 0) { $n->fh += $h - $oh; }
+        } else {
+            if ($n->fw == $ow) { $n->fw = $w; } // a size given to it stays
+            if ($n->fh == $oh) { $n->fh = $h; }
+        }
         $n->metrics = null; // once
     }
 

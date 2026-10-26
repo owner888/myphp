@@ -128,7 +128,7 @@ final class View implements TextInputClient
         if (!$v->opts->readOnly) { $e->handleTextInput($v); }
         $e->handleInput($v->input(...));
         $e->cursor($v->cursor);
-        $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
+        $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h], $th); });
         $e->contextMenu($v->menu(...));
         if ($styled) { $e->ownRing = true; } // FocusRing(false): the border shows it has the keyboard
         if (($r = $rt?->rectOf($e->id)) !== null) {

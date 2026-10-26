@@ -25,8 +25,7 @@ use MyPHP\Audio\{Audio, Decoder, Player, Sound};
 use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
 use MyPHP\UI\{Content, Context, Image, ImageOptions, Key, Painter, Span, Transform};
-use Random\Engine\Xoshiro256StarStar;
-use Random\Randomizer;
+use MyPHP\Random\Rand;
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -246,7 +245,7 @@ final class World
     /** @var array<int, list<int>> enemies by cell, hashed */
     private array $grid = [];
 
-    public function __construct(public readonly Randomizer $rng)
+    public function __construct(public readonly Rand $rng)
     {
         $this->view = new Vec(180, 110);
         $this->reset();
@@ -255,7 +254,7 @@ final class World
 
     public static function seeded(int $seed): self
     {
-        return new self(new Randomizer(new Xoshiro256StarStar($seed)));
+        return new self(Rand::pcg($seed, $seed ^ -7046029254386353131)); // Go's math/rand/v2 seeded as mygo's: seed, seed ^ 0x9e3779b97f4a7c15
     }
 
     /** Starts a game anew. */
@@ -321,15 +320,15 @@ final class World
         $this->spawnTimer -= $dt;
         while ($this->spawnTimer <= 0) {
             $this->spawnTimer += max(0.08, 0.7 * 0.982 ** $this->time);
-            $k = KIND_STATIC; $n = 1 + $this->rng->getInt(0, (int)($this->time / 40));
-            $r = $this->rng->nextFloat();
+            $k = KIND_STATIC; $n = 1 + $this->rng->intN(1 + (int)($this->time / 40));
+            $r = $this->rng->float64();
             if ($this->time > 60 && $r < 0.15) {
                 $k = KIND_SHADOW; $n = 1;
             } elseif ($this->time > 25 && $r < 0.4) {
-                $k = KIND_CROW; $n = 1 + $this->rng->getInt(0, 1);
+                $k = KIND_CROW; $n = 1 + $this->rng->intN(2);
             }
             $at = $this->edge(14);
-            for ($i = 0; $i < $n; $i++) { $this->add($k, $at->add(new Vec($this->rng->nextFloat() * 16 - 8, $this->rng->nextFloat() * 16 - 8))); }
+            for ($i = 0; $i < $n; $i++) { $this->add($k, $at->add(new Vec($this->rng->float64() * 16 - 8, $this->rng->float64() * 16 - 8))); }
         }
         $this->waveTimer -= $dt;
         if ($this->waveTimer <= 0) {
@@ -346,7 +345,7 @@ final class World
     private function edge(float $margin): Vec
     {
         $hw = $this->view->x + $margin; $hh = $this->view->y + $margin;
-        $d = $this->rng->nextFloat() * 4 * ($hw + $hh);
+        $d = $this->rng->float64() * 4 * ($hw + $hh);
         $p = match (true) {
             $d < 2 * $hw => new Vec($d - $hw, -$hh),
             $d < 4 * $hw => new Vec($d - 3 * $hw, $hh),
@@ -359,7 +358,7 @@ final class World
     public function add(int $k, Vec $at): void
     {
         if (count($this->enemies) >= MAX_ENEMIES) { return; }
-        $this->enemies[] = new Enemy(++$this->nextID, $k, $at, KINDS[$k]['hp'] * (1 + $this->time / 100), $this->rng->nextFloat() * 10);
+        $this->enemies[] = new Enemy(++$this->nextID, $k, $at, KINDS[$k]['hp'] * (1 + $this->time / 100), $this->rng->float64() * 10);
     }
 
     /** The hashed cell of the grid a point is in. */
@@ -555,15 +554,15 @@ final class World
             if ($this->levels[$u] >= UPGRADES[$u]['max']) { continue; }
             if (UPGRADES[$u]['member'] >= 0 && $this->levels[$u] === 0) { $joining[] = $u; } else { $open[] = $u; }
         }
-        $open = $this->rng->shuffleArray($open);
-        $joining = $this->rng->shuffleArray($joining);
+        $open = $this->rng->shuffled($open);
+        $joining = $this->rng->shuffled($joining);
         $this->choices = [];
         // A bandmate is always among the choices until all have joined.
         if ($joining !== []) {
             $this->choices[] = $joining[0];
-            $open = $this->rng->shuffleArray([...$open, ...array_slice($joining, 1)]);
+            $open = $this->rng->shuffled([...$open, ...array_slice($joining, 1)]);
         }
-        $this->choices = $this->rng->shuffleArray([...$this->choices, ...array_slice($open, 0, 3 - count($this->choices))]);
+        $this->choices = $this->rng->shuffled([...$this->choices, ...array_slice($open, 0, 3 - count($this->choices))]);
         if ($this->choices !== []) { $this->state = CHOOSING; }
         $this->events[] = EV_LEVEL;
     }
@@ -692,7 +691,7 @@ function sheet(): Image
 /** The street at night: paving stones, sakura petals, a crack and a drain. */
 function ground(Pixels $img): void
 {
-    $rng = new Randomizer(new Xoshiro256StarStar(42));
+    $rng = Rand::pcg(4, 2);
     [$base, $mortar, $light] = [rgb(0x353b52), rgb(0x272c3f), rgb(0x3f465f)];
     $pave = function (int $i, int $n) use ($img, $rng, $base, $mortar, $light): Cell {
         $c = Cell::at($img, $i);
@@ -704,7 +703,7 @@ function ground(Pixels $img): void
                 $c->px($x, $y, $col);
             }
         }
-        for ($k = 0; $k < $n; $k++) { $c->px($rng->getInt(0, CELL - 1), $rng->getInt(0, CELL - 1), $mortar); }
+        for ($k = 0; $k < $n; $k++) { $c->px($rng->intN(CELL), $rng->intN(CELL), $mortar); }
         return $c;
     };
     $pave(C_PAVE, 4);
@@ -827,7 +826,7 @@ function band(Pixels $img): void
 /** Stage fright, two frames each: static, a crow and a shadow. */
 function fright(Pixels $img): void
 {
-    $rng = new Randomizer(new Xoshiro256StarStar(88));
+    $rng = Rand::pcg(8, 8);
     $grays = [rgb(0x8a86a8), rgb(0x6b6788), rgb(0xb2aed0), rgb(0x4d4a66)];
     for ($f = 0; $f < 2; $f++) {
         $c = Cell::at($img, C_STATIC + $f);
@@ -836,7 +835,7 @@ function fright(Pixels $img): void
             for ($x = 0; $x < CELL; $x++) {
                 $dx = $x - 7.5; $dy = ($y - 9.5) * (1.1 - $f * 0.15);
                 $jag = 0.8 * sin(atan2($dy, $dx) * 7 + $f * 2);
-                if (hypot($dx, $dy) < $r + $jag) { $c->px($x, $y, $grays[$rng->getInt(0, count($grays) - 1)]); }
+                if (hypot($dx, $dy) < $r + $jag) { $c->px($x, $y, $grays[$rng->intN(count($grays))]); }
             }
         }
         $c->rows(['w' => rgb(0xffffff), 'e' => rgb(0x16141f), 'S' => SHADOW_COLOR],
@@ -1097,11 +1096,11 @@ final class Tune implements Decoder
     private array $gains;
     /** @var list<array{member: int, voice: int, hits: list<array{t: float, freqs: list<float>, dur: float, drum: int, vel: float}>, times: list<float>}> */
     private array $parts = [];
-    private Randomizer $rng;
+    private Rand $rng;
 
     public function __construct()
     {
-        $this->rng = new Randomizer(new Xoshiro256StarStar(55));
+        $this->rng = Rand::pcg(5, 5);
         $this->gains = array_fill(0, MEMBER_COUNT, 0.0);
         // Chords, as the Rhodes voices them: from the bass up.
         $emaj7 = [52, 56, 59, 63]; $fsm7 = [54, 57, 61, 64]; $dmaj7 = [54, 57, 61, 62]; $gsm7 = [56, 59, 63, 66];
@@ -1250,8 +1249,8 @@ final class Tune implements Decoder
                 $r += $v * (1 + $pan);
             }
             // Vinyl: a soft hiss, and now and then a crackle.
-            $crackle = 0.004 * $this->rng->getFloat(-1, 1);
-            if ($this->rng->getInt(0, 2499) === 0) { $crackle += $this->rng->getFloat(-1, 1) * 0.1; }
+            $crackle = 0.004 * ($this->rng->float64() * 2 - 1);
+            if ($this->rng->intN(2500) === 0) { $crackle += ($this->rng->float64() * 2 - 1) * 0.1; }
             // Warm: soft saturation.
             $out[] = tanh($l * 0.9) + $crackle;
             $out[] = tanh($r * 0.9) + $crackle;
@@ -1268,15 +1267,15 @@ final class Sounds
     private array $sfx;
     public Player $music;
     public Tune $tune;
-    private Randomizer $rng;
+    private Rand $rng;
     /** Stones picked up in a row, and when the last one was, in steps. */
     private int $stones = 0;
     private float $lastStone = 0;
 
     public function __construct()
     {
-        $rng = $this->rng = new Randomizer(new Xoshiro256StarStar(97));
-        $noise = fn(): float => $rng->getFloat(-1, 1);
+        $rng = $this->rng = Rand::pcg(9, 7);
+        $noise = fn(): float => $rng->float64() * 2 - 1;
         $this->sfx = [
             // A sung "ah": a fifth up, with a little vibrato.
             EV_SING => self::synth(0.16, function (float $t): float {
@@ -1343,13 +1342,13 @@ final class Sounds
     {
         $sang = false;
         foreach ($events as $e) {
-            $volume = 1.0; $speed = 0.94 + $this->rng->getFloat(0, 0.12);
+            $volume = 1.0; $speed = 0.94 + $this->rng->float64() * 0.12;
             switch ($e) {
                 case EV_SING:
                     if ($sang) { continue 2; } // one for a volley
                     $sang = true; $volume = 0.7;
                     // On the notes of the tune's scale.
-                    $speed = 2 ** ([0, 2, 4, 7, 9][$this->rng->getInt(0, 4)] / 12);
+                    $speed = 2 ** ([0, 2, 4, 7, 9][$this->rng->intN(5)] / 12);
                     break;
                 case EV_HIT: $volume = 0.5; break;
                 case EV_KILL: $volume = 0.55; break;
@@ -1461,15 +1460,15 @@ final class Mayoi extends Game
     /** The upgrade chosen with keys or a pad. */
     public int $pick = 0;
     private State $pad;
-    private Randomizer $rng;
+    private Rand $rng;
 
     /** $snd plays the game's sounds; tests play none. */
     public function __construct(public readonly ?Sounds $snd = null)
     {
-        $this->w = World::seeded(random_int(0, PHP_INT_MAX));
+        $this->w = World::seeded(random_int(PHP_INT_MIN, PHP_INT_MAX)); // as Go's rand.Uint64()
         $this->sheet = sheet();
         $this->pad = new State();
-        $this->rng = new Randomizer(new Xoshiro256StarStar(11));
+        $this->rng = Rand::pcg(1, 1);
     }
 
     public function start(): void
@@ -1587,8 +1586,8 @@ final class Mayoi extends Game
         $tomori = $w->prev->lerp($w->pos, $alpha);
         $cam = new Camera($tomori->x, $tomori->y - 6, $z);
         if ($w->shake > 0) {
-            $cam->x += $this->rng->getFloat(-1, 1) * $w->shake * 10;
-            $cam->y += $this->rng->getFloat(-1, 1) * $w->shake * 10;
+            $cam->x += ($this->rng->float64() * 2 - 1) * $w->shake * 10;
+            $cam->y += ($this->rng->float64() * 2 - 1) * $w->shake * 10;
         }
         $cam->draw($p, $r, fn() => $this->drawWorld($p, $cam->visible($r), $alpha, $tomori));
         // Numbers of damage, in the screen's pixels, sharp at any zoom.

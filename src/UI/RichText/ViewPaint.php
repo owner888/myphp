@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\RichText;
 
 use MyPHP\Text\Layout;
-use MyPHP\UI\{DisplayList, Node, Painter, Path, Span, TextPainter};
+use MyPHP\UI\{DisplayList, Node, Painter, Path, Span, TextPainter, Theme as UITheme};
 
 /**
  * Painting an editor (mygo's richtext paint.go): its paragraphs'
@@ -15,9 +15,13 @@ use MyPHP\UI\{DisplayList, Node, Painter, Path, Span, TextPainter};
  */
 trait ViewPaint
 {
-    /** Lays out the paragraphs in view of the box $r, and paints them. @param array{0: float, 1: float, 2: float, 3: float} $r */
-    public function paint(DisplayList $list, TextPainter $text, array $r): void
+    /** The window's theme the view was last painted in: an attachment's drawing paints with it. */
+    private UITheme $uiTheme;
+
+    /** Lays out the paragraphs in view of the box $r, and paints them; $theme is the window's, which an attachment's drawing paints with. @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function paint(DisplayList $list, TextPainter $text, array $r, UITheme $theme): void
     {
+        $this->uiTheme = $theme;
         $this->rect = $r;
         $w = max($r[2] - 2 * $this->padX, 1.0); $h = max($r[3] - 2 * $this->padY, 1.0);
         $this->layout($w, $h);
@@ -195,7 +199,7 @@ trait ViewPaint
             $r = [$x + $o[0], $y + $o[1], $o[2], $o[3]];
             if ($at === null) { continue; }
             if ($at->draw !== null) {
-                ($at->draw)($list, $r);
+                ($at->draw)(new Painter($list, $text, $this->uiTheme), $r);
             } elseif ($at->image !== null) {
                 Painter::picture($list, $text, $at->image, $r[0], $r[1], $r[2], $r[3], Node::CONTAIN, $th->text[0]);
             } else {

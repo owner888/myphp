@@ -134,7 +134,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     element the app fills (`Fill()`); an attachment's `Draw` takes a
     `*ui.Painter`; theme colors are `ui.Color`s.
   - myphp: `$font` and `$fontSize`; the app sizes the node (`size()`,
-    `$grow`); `draw` takes the `DisplayList` and the box; colors are
+    `$grow`); `draw` takes a `Painter` with the window's theme and the
+    box, as mygo's since v1.27 (the `DisplayList` until then); colors are
     `[0xRRGGBB, alpha]`.
   - Why: myphp's builders and colors.
 - **macOS only** (v0.87)
@@ -1227,14 +1228,25 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     region (`Tester.SetRegion`).
   - myphp: keys are scoped by keyed containers, so the gallery prefixes
     them ("tile 0", "item 3"); timers (`App::after`) and
-    `Window::update`; `Random\Randomizer` with Xoshiro256**, so the farm,
-    the street and the confetti differ from mygo's; selects choose
+    `Window::update`; Go's PCG and Rand (`MyPHP\Random`, since v1.27), so
+    the farm, mayoi's art and band, the piano's hammers and the gallery's
+    charts are mygo's from the same seeds (the confetti and the chat draw
+    unseeded in both); selects choose
     indexes and inputs edit `TextState`s; the Languages test runs in the
     zero region; `Dialog::message` runs after the click (`App::later`),
     its own loop; the wide-gamut card's left column draws the sRGB twins
     (`WideColor::srgb`).
-  - Why: myphp's scoping, PHP's threads and random engines, myphp's
-    controls, and no region setter for tests.
+  - Why: myphp's scoping, PHP's threads, myphp's controls, and no region
+    setter for tests.
+- **Examples of the same name** (v1.27)
+  - mygo: `native` tours the desktop from a page, `notes` is rich text
+    notes, `drag-drop` drags between two windows.
+  - myphp: the same, ported; what myphp had under those names before is
+    `inbox` (the list of a million rows) and `markdown-notes`; `drag`
+    (draggable nodes) stays, mygo having no example of its own for them.
+    The notes' welcome note is made on the first frame, which measures
+    its chip (mygo shapes text without a window).
+  - Why: each of mygo's examples runs beside its twin.
 - **Constants of the examples in tests**
   - mygo: an example's tests are in its package.
   - myphp: `Headless::load()` defines an example's constants in its
@@ -1513,8 +1525,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     webview_test.
   - Why: a leaf keeps `webView()` a call without an `end()`.
 - **Borders in the tests**: mygo's `Border(w, c)` takes room in the
-  layout; myphp's is `borderWidth(w)->borderColor(c)` (`border()` rings
-  the box without room), as in webview_test.
+  layout; myphp's is `borderWidth(w)->borderColor(c)`, as in
+  webview_test (`border()` ringed the box without room until v1.27; it
+  takes its width now too, as mygo's, and a plain button is a point
+  wider each side for its border).
 - **Not ported**: the pixel tests (TestIconDrawsItsShapeOnce,
   TestPictureFollowsTheTextColor, TestPainterDrawsSVGs, TestWebViewHole's
   and TestWebViewOpacity's pixels, TestTransformedNativeDragPreviewHotspot's

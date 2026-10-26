@@ -224,6 +224,8 @@ final class Node
     public ?string $tooltip = null;
     /** For text: an underline (links). */
     public bool $underline = false;
+    /** A button's label struck through (strikethrough()). */
+    public bool $strike = false;
     /** For a link: where it goes; the pointer shows a hand over it. */
     public ?string $url = null;
     /** Placed at (ax, ay) from its parent's top left instead of in the flow, at its own size: at(). */
@@ -1424,11 +1426,17 @@ final class Node
 
     public function padX(): float { return ($this->padL() + $this->padR()) / 2; }
 
-    /** The room between the node's edge and its content on each side: its border and its padding. */
-    public function padT(): float { return ($this->pads[0] ?? $this->padY ?? $this->pad) + $this->borders[0]; }
-    public function padR(): float { return ($this->pads[1] ?? $this->padX ?? $this->pad) + $this->borders[1]; }
-    public function padB(): float { return ($this->pads[2] ?? $this->padY ?? $this->pad) + $this->borders[2]; }
-    public function padL(): float { return ($this->pads[3] ?? $this->padX ?? $this->pad) + $this->borders[3]; }
+    /** The room between the node's edge and its content on each side: its border and its padding; border()'s takes room as mygo's (its layout's border box). */
+    public function padT(): float { return ($this->pads[0] ?? $this->padY ?? $this->pad) + $this->borderSide(0); }
+    public function padR(): float { return ($this->pads[1] ?? $this->padX ?? $this->pad) + $this->borderSide(1); }
+    public function padB(): float { return ($this->pads[2] ?? $this->padY ?? $this->pad) + $this->borderSide(2); }
+    public function padL(): float { return ($this->pads[3] ?? $this->padX ?? $this->pad) + $this->borderSide(3); }
+
+    /** The border on side $i: borderWidth()'s, else border()'s all round. */
+    private function borderSide(int $i): float
+    {
+        return $this->borders[$i] > 0 ? $this->borders[$i] : ($this->bordered ? $this->borderWidth : 0.0);
+    }
 
     /**
      * Sets the space around the node, as padding() does (mygo's Margin);
@@ -1542,10 +1550,13 @@ final class Node
         return $this;
     }
 
-    /** Fixes a container's width and/or height (points) instead of its content's size; 0 leaves one to the content. */
+    /** Fixes a node's width and/or height (points) instead of its content's size; 0 leaves one to the content: a text's measured height stays, as mygo's Width() leaves it. */
     public function size(float $w = 0, float $h = 0): static
     {
-        $this->fw = $w; $this->fh = $h; $this->sizedW = $w > 0;
+        $text = $this->kind === self::TEXT || $this->kind === self::RICH;
+        if ($w > 0 || !$text) { $this->fw = $w; }
+        if ($h > 0 || !$text) { $this->fh = $h; }
+        $this->sizedW = $w > 0;
         return $this;
     }
 

@@ -35,6 +35,8 @@ final class CoreText
     private array $runFonts = [];
     /** @var array<int, bool> whether each run font draws in color, by CFHash */
     private array $colorFonts = [];
+    /** Whether the user leaves font smoothing on (AppleFontSmoothing), read when a glyph is first drawn. */
+    private ?bool $smooth = null;
 
     public function __construct(public float $scale)
     {
@@ -77,6 +79,7 @@ final class CoreText
             void  CGContextTranslateCTM(void*, double, double);
             void  CGContextScaleCTM(void*, double, double);
             void  CGContextSetShouldSmoothFonts(void*, bool);
+            void  CGContextSetRGBFillColor(void*, double, double, double, double);
         ", '/System/Library/Frameworks/CoreText.framework/CoreText');
         $lib = $this->c->dlopen('/System/Library/Frameworks/CoreText.framework/CoreText', 2);
         $cf = $this->c->dlopen('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation', 2);
@@ -88,6 +91,21 @@ final class CoreText
         $cg = $this->c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
         $this->srgb = $this->c->CGColorSpaceCreateWithName($this->c->cast('void*[1]', $this->c->dlsym($cg, 'kCGColorSpaceSRGB'))[0])
             ?? throw new RuntimeException('kCGColorSpaceSRGB');
+    }
+
+    /** Whether the user leaves font smoothing on: AppKit turns it off when AppleFontSmoothing is 0 (mygo's fontSmoothing); unset, it is on. */
+    private static function fontSmoothing(): bool
+    {
+        $defaults = ObjC::msg('p:', ObjC::cls('NSUserDefaults'), 'standardUserDefaults');
+        $key = ObjC::str('AppleFontSmoothing');
+        return ObjC::msg('p:p', $defaults, 'objectForKey:', $key) === null || ObjC::msg('l:p', $defaults, 'integerForKey:', $key) !== 0;
+    }
+
+    /** The sRGB gray of the relative luminance shade $shade stands for, a quarter a shade (mygo's shadeGray). */
+    private static function shadeGray(int $shade): float
+    {
+        $y = $shade / 4;
+        return $y <= 0.0031308 ? $y * 12.92 : 1.055 * $y ** (1 / 2.4) - 0.055;
     }
 
     /** Whether the glyphs of font $fontId are bitmaps in color (Apple Color Emoji), which rasterize() draws in their colors. */
@@ -199,9 +217,15 @@ final class CoreText
      * $color, w*h premultiplied RGBA pixels in sRGB, as mygo's) is
      * Mem-allocated: free it with Mem::free.
      *
+     * For text of $shade (Text::shadeOf, 0 to 3) the glyph is drawn with
+     * font smoothing while the user leaves it on, as AppKit draws text and
+     * mygo's: Core Graphics emboldens it the more the lighter the shade's
+     * gray is, in a mask too. A $shade of -1 draws it without, as a
+     * canvas's text.
+     *
      * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int, color: bool}|null
      */
-    public function rasterize(int $fontId, int $glyph, ?float $scale = null): ?array
+    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1): ?array
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
@@ -213,15 +237,21 @@ final class CoreText
             return null;
         }
         $s = $scale ?? $this->scale;
-        $x0 = (int)floor($b->origin->x * $s) - 1;
-        $y0 = (int)floor($b->origin->y * $s) - 1;
-        $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + 1 - $x0;
-        $h = (int)ceil(($b->origin->y + $b->size->h) * $s) + 1 - $y0;
         $color = $this->isColor($fontId);
+        $smooth = $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
+        $pad = $smooth ? 2 : 1; // smoothing spreads a glyph up to a pixel further
+        $x0 = (int)floor($b->origin->x * $s) - $pad;
+        $y0 = (int)floor($b->origin->y * $s) - $pad;
+        $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + $pad - $x0;
+        $h = (int)ceil(($b->origin->y + $b->size->h) * $s) + $pad - $y0;
         $bpp = $color ? 4 : 1;
         $ctx = ($color ? $c->CGBitmapContextCreate(null, $w, $h, 8, 4 * $w, $this->srgb, self::RGBA_PREMULTIPLIED) : $c->CGBitmapContextCreate(null, $w, $h, 8, $w, null, self::ALPHA_ONLY))
             ?? throw new RuntimeException('CGBitmapContextCreate');
-        $c->CGContextSetShouldSmoothFonts($ctx, false);
+        $c->CGContextSetShouldSmoothFonts($ctx, $smooth);
+        if ($smooth) {
+            $gray = self::shadeGray($shade);
+            $c->CGContextSetRGBFillColor($ctx, $gray, $gray, $gray, 1.0); // the lighter, the bolder, as for text of that color
+        }
         // CG coordinates run y-up, but the bitmap's first row in memory is
         // the top of the image, which is the order the atlas wants.
         $c->CGContextTranslateCTM($ctx, -$x0, -$y0);

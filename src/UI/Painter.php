@@ -468,7 +468,8 @@ final class Painter
             [$x, $y] = $n->kind === Node::TEXT ? $n->textOrigin() : [$n->x, $n->y]; // a text inside its padding
             $room = $n->kind === Node::TEXT ? $n->w - $n->padL() - $n->padR() : $n->w;
             if ($n->kind === Node::BUTTON) { // the label centered in the padding, a menu button's chevron after it
-                [$tw, $th] = $text->measure($n->text, $n->fontSize);
+                [$tw, $th] = $text->measure($n->text, $n->fontSize, $n->style);
+                $room = $tw; // its underline and strikethrough under the label
                 $cw = $n->chevron ? $t->space(2.5) + $t->space(1.5) : 0;
                 $x += ($n->w - $tw - $cw) / 2; $y += ($n->h - $th) / 2;
                 if ($n->chevron) {
@@ -492,6 +493,9 @@ final class Painter
             }
             if ($n->underline) {
                 $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $room, 1.0, $n->fg);
+            }
+            if ($n->strike) {
+                $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) * 0.65, $room, 1.0, $n->fg);
             }
         }
         if ($n->draw !== null) {
