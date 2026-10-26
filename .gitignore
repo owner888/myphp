@@ -2,6 +2,9 @@
 /vendor/
 /build/
 /dist/
+examples/*/dist/
+examples/*/build/
+examples/*/src/myphp.ts
 composer.lock
 node_modules/
 .myphp/

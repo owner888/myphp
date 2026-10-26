@@ -888,6 +888,9 @@ function build(array $args): void
         $dist = path($dir, $c['frontendDist']);
         is_dir($dist) || fail("frontendDist $dist does not exist; set buildCommand in myphp.json to build it");
         count(scandir($dist)) > 2 || fail("frontendDist $dist is empty");
+        $out = rtrim(path($dir, $c['out']), '/') . '/';
+        // The frontend is copied into the app being made under out: out inside it copied the copy into itself until the paths were too long.
+        str_starts_with($out, rtrim($dist, '/') . '/') && fail("out {$c['out']} is inside frontendDist {$c['frontendDist']}, which the app copies: set out in myphp.json, as \"build\"");
     }
     $built = [];
     foreach ($targets as $arch) {

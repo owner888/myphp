@@ -3159,6 +3159,14 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   en.json in `src/l10n`); it lists them with `scandir`, as the CLI walks
   directories. With these a micro app of the native example ran, its
   notification asking for permission as a signed bundle's does.
+- **out inside frontendDist.** The todo example had out's default,
+  dist, which is its frontendDist too: the app being made under dist
+  copied the frontend, itself among it, into itself until the paths
+  were too long (a 128 MB app, PHP warnings). Its myphp.json has
+  `"out": "build"`, as mygo's mygo.config.ts; `myphp build` refuses an
+  out inside frontendDist. Built so, beside mygo's, the two apps add,
+  tick, filter, clear, export and keep their todos alike (both under
+  Application Support/Todo, as both are named Todo).
 - **No Go generators.** `src/Random` (v1.27) is gone, as the developer
   asked: the farm, mayoi, the piano and the gallery's charts draw from
   PHP's engines again (`Random\Randomizer` with Xoshiro256**, the

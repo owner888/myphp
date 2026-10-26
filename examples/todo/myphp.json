@@ -7,5 +7,6 @@
   "devCommand": "bun run dev:web",
   "buildCommand": "bun run build:web",
   "frontendDist": "dist",
-  "bindings": "src/myphp.ts"
+  "bindings": "src/myphp.ts",
+  "out": "build"
 }
