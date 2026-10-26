@@ -14,10 +14,10 @@ const greeting = await Greeter.greet("Ada");
 events.tick.on((time) => console.log(time));
 ```
 
-The package is not published: an app depends on it from the MyPHP checkout,
-`"myphp-runtime": "file:<checkout>/packages/runtime"`, as `myphp init
--template web` writes it. Its modules are TypeScript, which Vite and Bun
-take as they are.
+Install it from npm, `npm install myphp-runtime`, or depend on it from the
+MyPHP the app runs on, `"myphp-runtime": "file:<MyPHP>/packages/runtime"`,
+as `myphp init -template web` writes it. Its modules are TypeScript, which
+Vite and Bun take as they are.
 
 Use the package directly for the window and the platform:
 

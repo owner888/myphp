@@ -3225,6 +3225,29 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
     neither mygo's gap nor its `Justify(End)`; documents' footer and
     monospaced editor were mygo's own.
 
+## Releasing (v1.29)
+
+- **myphp-cli from npm found no myphp.** Its `binaryPath` was the
+  bin/myphp two directories up, a checkout's, as a `file:` dependency
+  installs it; from npm that is the project's directory. It now runs
+  `$MYPHP_CLI_BINARY`, the checkout's bin/myphp when it is in one (bin/myphp
+  and src/App.php there), else `vendor/owner888/myphp/bin/myphp` in the
+  current directory or above it, and says to `composer require
+  owner888/myphp` when there is none (`packages/cli/index.test.ts`).
+- **One version.** `php scripts/version.php <v>` writes it into bin/myphp's
+  `VERSION` and the six npm packages (runtime, CLI, the four plugins' page
+  sides and their peer range of the runtime); `--check v<v>` is the first
+  step of the release workflow, so a tag the files do not have publishes
+  nothing (`tests/version_test.php`).
+- **Publishing.** `.github/workflows/release.yml` publishes what npm lacks
+  of the six, with `--provenance` and npm's trusted publishing (no token):
+  npm trusts the workflow per package, which needs the package to exist,
+  so a package's first version is published by hand. Packagist reads the
+  tags itself. The Packagist name is `owner888/myphp`: the vendor `myphp`
+  was another's.
+- **CI.** `.github/workflows/ci.yml` runs `tests/run.php` and the Bun
+  tests on Linux: the tests are headless.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

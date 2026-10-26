@@ -1,8 +1,11 @@
 /**
  * Returns the path of the myphp command to run: $MYPHP_CLI_BINARY when
- * set, else bin/myphp of the MyPHP checkout this package is in.
+ * set; bin/myphp of the MyPHP checkout this package is part of; else
+ * vendor/owner888/myphp/bin/myphp, which Composer installs, in `cwd` (by
+ * default the current directory) or the nearest directory above it that
+ * has one. Throws when there is none.
  */
-export declare function binaryPath(): string;
+export declare function binaryPath(cwd?: string): string;
 
 /**
  * Types the configuration of myphp.config.ts, which takes the place of

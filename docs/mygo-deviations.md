@@ -1350,13 +1350,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **myphp-runtime and myphp-cli** (packages/runtime, packages/cli)
   - mygo: npm packages, built into dist/; mygo-cli's platform packages
     hold prebuilt binaries of the CLI, which mygo-cli runs.
-  - myphp: not published: projects depend on them from the checkout
-    (`file:<checkout>/packages/...`), which `myphp init -template web`
-    writes; myphp-runtime's exports are its TypeScript sources, which Vite,
-    tsc and Bun take as they are; myphp-cli runs the checkout's bin/myphp
-    (or `$MYPHP_CLI_BINARY`). The repository's tsconfig.json resolves
-    myphp-runtime to its sources for the plugins' clients and the tests.
-  - Why: publishing is the developer's call; a PHP CLI needs no binaries.
+  - myphp: published on npm since v1.28 (with the plugins' page sides,
+    `@myphp-plugins/*`, since v1.29, all at the framework's version), and
+    `myphp init -template web` still writes `file:<MyPHP>/packages/...` of
+    the MyPHP it runs from; myphp-runtime's exports are its TypeScript
+    sources, which Vite, tsc and Bun take as they are, not a dist/; myphp-cli
+    has no binaries: it runs `$MYPHP_CLI_BINARY`, the bin/myphp of the
+    checkout it is part of, else the project's Composer-installed
+    `vendor/owner888/myphp/bin/myphp`. The repository's tsconfig.json
+    resolves myphp-runtime to its sources for the plugins' clients and the
+    tests.
+  - Why: the CLI is PHP, part of the framework, which Composer installs.
 - **window.myphp**
   - mygo: `window.mygo` is the `Runtime` of mygo-runtime's types.
   - myphp: the same shape (`channel(onmessage)` in place of the `Channel`

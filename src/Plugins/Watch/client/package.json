@@ -1,12 +1,21 @@
 {
   "name": "@myphp-plugins/watch",
-  "version": "0.1.0",
+  "version": "1.28.0",
   "description": "The page side of MyPHP's watch plugin: changes to the files in the directories the app lets its pages watch, over myphp-runtime",
   "type": "module",
   "exports": "./index.ts",
   "types": "./index.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/owner888/myphp.git",
+    "directory": "src/Plugins/Watch/client"
+  },
   "license": "MIT",
+  "files": ["index.ts"],
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
-    "myphp-runtime": "^1.13.0"
+    "myphp-runtime": "^1.28.0"
   }
 }

@@ -3,6 +3,11 @@
   "version": "1.28.0",
   "description": "The myphp command line tool: create, develop and package MyPHP desktop apps",
   "keywords": ["myphp", "desktop", "webview", "php", "cli"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/owner888/myphp.git",
+    "directory": "packages/cli"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {

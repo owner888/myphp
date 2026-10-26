@@ -1,0 +1,66 @@
+name: Release
+
+# A tag v1.2.3 publishes the npm packages at 1.2.3, which scripts/version.php
+# set before the tag, with npm's trusted publishing (no token: npm trusts
+# this workflow, as each package's settings on npmjs.com say), and makes the
+# GitHub release unless there is one. Packagist reads the tag itself.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the version
+        run: php scripts/version.php --check "$GITHUB_REF_NAME"
+      - name: PHP tests
+        run: php -d ffi.enable=1 tests/run.php
+      - uses: oven-sh/setup-bun@v2
+      - name: Bun tests
+        run: bun test packages src/Plugins
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Update npm, for trusted publishing
+        run: npm install -g npm@latest
+      # A version already on npm is left as it is: a release run again publishes what is missing.
+      - name: Publish the npm packages
+        run: |
+          for dir in packages/runtime packages/cli src/Plugins/Fetch/client src/Plugins/Sqlite/client src/Plugins/Watch/client src/Plugins/WebSocket/client; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is on npm already"
+              continue
+            fi
+            tag=latest
+            if [[ $version == *-* ]]; then
+              tag=next # a prerelease is not what npm install gets
+            fi
+            (cd "$dir" && npm publish --provenance --tag "$tag")
+          done
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            exit 0
+          fi
+          flags=()
+          if [[ $GITHUB_REF_NAME == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "MyPHP ${GITHUB_REF_NAME#v}" "${flags[@]}"

@@ -165,7 +165,7 @@ myphp.json or myphp.config.ts take mygo.json's fields. `build` makes
 `-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; `dev`
 runs "<name> Dev" from .myphp/dev. Work in `src/Native/Build/`
 (`tests/build_test.php`). Pages import `packages/runtime` (myphp-runtime,
-TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli.
+TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `php scripts/version.php <v>`, commit, tag `v<v>` (release.yml publishes npm).
 
 ## Working on it
 

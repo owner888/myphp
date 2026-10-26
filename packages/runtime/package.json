@@ -3,6 +3,11 @@
   "version": "1.28.0",
   "description": "Typed access to the MyPHP runtime in the pages of MyPHP desktop apps",
   "keywords": ["myphp", "desktop", "webview", "php"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/owner888/myphp.git",
+    "directory": "packages/runtime"
+  },
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -11,7 +16,7 @@
     "./i18n": "./src/i18n.ts"
   },
   "types": "./src/index.ts",
-  "files": ["src", "README.md"],
+  "files": ["src", "!src/**/*.test.ts", "README.md"],
   "scripts": {
     "test": "bun test"
   }

@@ -3,7 +3,13 @@
 import { spawn } from "node:child_process";
 import { binaryPath } from "../index.js";
 
-const bin = binaryPath();
+let bin;
+try {
+  bin = binaryPath();
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
 const args = process.argv.slice(2);
 
 if (typeof process.execve === "function") {
