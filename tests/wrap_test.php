@@ -82,9 +82,21 @@ $h = new Headless(function (Context $c) use (&$n): void {
 }, 400, 400);
 $h->frame(1);
 $plain = $n['plain']->minContentWidth(); $big = $n['big']->minContentWidth();
-check($plain > 0 && $plain < $n['plain']->fw && $big > $plain, "the widest word, $plain of {$n['plain']->fw}; in 26 points bold, $big");
+same(6 * 6.5, $plain, 'the widest word, bbbbbb, unbroken'); // the stub engine's runes are half the size wide
+check($big > $plain, "in 26 points bold, wider: $big");
 $sys = $h->metrics->textSystem();
 $made = $sys->made;
 $h->frame(1);
 same([$plain, $big, $made], [$n['plain']->minContentWidth(), $n['big']->minContentWidth(), $sys->made], 'the next frame measures neither again');
 check($sys->minWidth("x") === null, 'nothing kept under another key');
+
+// In a row too narrow for it, a text wraps between its words and keeps its widest word whole (v1.30): its min-content width was one glyph's.
+$n = [];
+$h = new Headless(function (Context $c) use (&$n): void {
+    $c->row(0, 0)->width(40)->align(Node::START);
+      $n['t'] = $c->text('aa bbbbbbbbbb cc');
+      $c->text('x');
+    $c->end();
+}, 400, 400);
+$h->frame(1);
+check($h->rect($n['t'])[2] >= 10 * 6.5 - 0.01, 'no narrower than bbbbbbbbbb, ten runes of the stub engine: ' . json_encode($h->rect($n['t'])));

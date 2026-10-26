@@ -3274,6 +3274,13 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   width in the text system (`System::minWidth`, cleared with its fonts and
   language); `wrapsAtWidth` asks its regex once a node. The layout of 2000
   texts is down to 5 ms, the list's to 0.14 ms (`tests/wrap_test.php`).
+- **A text's min-content width was one glyph's.** Its layout at no
+  width left `noBreakWords` off, which mygo sets: Core Text broke the text
+  at every glyph, so a text in a row too narrow for it broke inside its
+  words, and each new text on the screen cost a layout of a line a glyph
+  (the slow frames of a scrolling inbox: 10–20 ms of layout, most of a
+  megabyte held, for a dozen new rows). It breaks between words now
+  (`tests/wrap_test.php`).
 - **Every frame's tree was a cycle.** `MYPHP_STATS=1 ./run.sh inbox
   1000000`, scrolled on the developer's Mac, ran at 54–59 frames a second
   with frames of 4–9 ms, memory going up and down by tens of megabytes and

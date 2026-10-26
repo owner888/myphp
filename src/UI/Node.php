@@ -1027,7 +1027,7 @@ final class Node
             $runes += mb_strlen($sp->text, 'UTF-8');
             $spans[] = $sp->textSpan($runes);
         }
-        $p = new \MyPHP\Text\Params($text, $this->textStyle()->style($this->fontSize), 0.001, 0, '', false, \MyPHP\Text\Params::START, rtl: $this->rtl, spans: $spans);
+        $p = new \MyPHP\Text\Params($text, $this->textStyle()->style($this->fontSize), 0.001, 0, '', false, \MyPHP\Text\Params::START, rtl: $this->rtl, noBreakWords: true, spans: $spans); // broken only between words, as mygo's (p.NoBreakWords): else at every glyph, a min-content of one glyph
         $l = $this->metrics->textSystem()->layout($p);
         return count($l->lines) > 1 ? $l->width : $this->fw; // one piece: as wide as it measured
     }
