@@ -55,7 +55,7 @@ final class Operands
         }
         if (is_float($n)) {
             if (!is_finite($n)) {
-                throw new InvalidArgumentException("i18n: $n is not a finite number");
+                throw new InvalidArgumentException('i18n: ' . (is_nan($n) ? 'NAN' : ($n > 0 ? 'INF' : '-INF')) . ' is not a finite number'); // spelled out: PHP 8.5 warns of a NAN made a string
             }
             return self::parse(self::shortest($n));
         }

@@ -65,7 +65,7 @@ final class Lib
     {
         if (self::$ffi === null && self::$error === null) {
             try {
-                $ffi = FFI::cdef(self::CDEF, $path);
+                $ffi = \MyPHP\Plugins\NativeLibrary::cdef(self::CDEF, $path); // bound to its own symbols on Linux
             } catch (\FFI\Exception $e) {
                 self::$error = new RuntimeException("sqlite: $path is not the plugin's SQLite library: {$e->getMessage()}");
                 throw self::$error;

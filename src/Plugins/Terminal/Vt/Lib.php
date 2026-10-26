@@ -229,7 +229,7 @@ final class Lib
         if (self::$ffi !== null) { return; }
         if (self::$err !== null) { throw new RuntimeException(self::$err); }
         try {
-            $ffi = FFI::cdef(self::CDEF, $path);
+            $ffi = \MyPHP\Plugins\NativeLibrary::cdef(self::CDEF, $path); // bound to its own symbols on Linux
         } catch (FFI\Exception $e) {
             self::$err = "loading $path: {$e->getMessage()}";
             throw new RuntimeException(self::$err);

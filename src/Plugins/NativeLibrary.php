@@ -148,4 +148,30 @@ final class NativeLibrary
             if (is_file($tmp)) { unlink($tmp); }
         }
     }
+
+    /** The handles of the libraries cdef() bound on Linux, kept open as the FFI that uses each is. @var list<\FFI\CData> */
+    private static array $bound = [];
+
+    /**
+     * FFI::cdef($cdef, $path), the library's own symbols bound inside it.
+     * On Linux PHP's CLI (8.5) opens a library RTLD_GLOBAL without
+     * RTLD_DEEPBIND, so the calls a library makes to its own exported
+     * functions go to the first library loaded that has them: mygo's
+     * SQLite called PHP's libsqlite3 (pdo_sqlite's) and crashed. The
+     * library is opened first with RTLD_DEEPBIND, which cdef's dlopen of the
+     * same path then finds. macOS's two-level namespaces bind a library to
+     * its own symbols already.
+     */
+    public static function cdef(string $cdef, string $path): \FFI
+    {
+        if (PHP_OS_FAMILY === 'Linux') {
+            $dl = \FFI::cdef('void *dlopen(const char *, int); char *dlerror(void);');
+            $h = $dl->dlopen($path, 0x2 | 0x8); // RTLD_NOW | RTLD_DEEPBIND (glibc)
+            if ($h === null) {
+                throw new \FFI\Exception((string)$dl->dlerror());
+            }
+            self::$bound[] = $h;
+        }
+        return \FFI::cdef($cdef, $path);
+    }
 }

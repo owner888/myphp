@@ -3246,7 +3246,16 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   tags itself. The Packagist name is `owner888/myphp`: the vendor `myphp`
   was another's.
 - **CI.** `.github/workflows/ci.yml` runs `tests/run.php` and the Bun
-  tests on Linux: the tests are headless.
+  tests on Linux: the tests are headless. The runner's PHP (8.5 on
+  Ubuntu 26) showed three things a PHP 8.3 without Xdebug did not:
+  - Xdebug, which it loads, stops a call 512 deep, as the Markdown
+    parser's pathological inputs go: the workflows set `XDEBUG_MODE=off`;
+  - PHP 8.5 warns of a NAN made a string: `Operands::of` spells it out;
+  - PHP 8.5's CLI opens a library RTLD_GLOBAL without RTLD_DEEPBIND, so
+    mygo's SQLite called the functions of PHP's own libsqlite3
+    (pdo_sqlite's) for its own and crashed: `NativeLibrary::cdef` opens a
+    plugin's library with RTLD_DEEPBIND first on Linux, which FFI's
+    dlopen of it then finds (SQLite, libghostty-vt).
 
 ## Open items
 
