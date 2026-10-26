@@ -154,3 +154,17 @@ foreach ([120, 200, 120, 37, 200, 120, 200, 5, 300, 120] as $k => $step) {
     if ($r === null || $h->rect($r)[1] != $was + $step) { $exact = false; echo "  step $k, $step: row $first from $was to ", $r === null ? 'gone' : $h->rect($r)[1], "\n"; }
 }
 check($exact, 'each step moved the rows by the step');
+
+// A scrolling list leaves no cycles for PHP's collector (v1.30): the tree a frame replaces goes as its last reference does, its nodes' context cut.
+$ls = new ListState;
+$h = new Headless(function (Context $c) use ($ls) {
+    $c->column(0, 0, 1);
+      $c->list($ls, 100000, function (int $i) use ($c) { $c->row(8, 8); $c->text("Sender $i"); $c->text("Subject $i"); $c->end(); });
+    $c->end();
+}, 600, 400);
+$h->frame(2);
+gc_collect_cycles();
+$gcBefore = gc_status()["collected"];
+for ($f = 0; $f < 60; $f++) { $ls->scrollBy(37); $h->frame(1); }
+gc_collect_cycles();
+same(0, gc_status()["collected"] - $gcBefore, 'nothing left for the collector');

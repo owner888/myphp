@@ -535,6 +535,7 @@ final class Runtime
             $this->kept = []; $this->routers = [];
             $this->uses = [];
             $this->actions = [];
+            if (isset($root)) { self::detach($root); } // the pass before's tree, which this one replaces
             $root = $build();
             if ($this->enterToggle !== null) { // Enter at a toggle no shortcut took presses it
                 foreach ($this->keys as $i => $k) {
@@ -668,10 +669,26 @@ final class Runtime
         } else {
             $this->blinkSeen = null;
         }
+        if ($this->root !== null && $this->root !== $root) { self::detach($this->root); } // the frame before's, which nothing draws or asks again
         $this->root = $root;
         $this->describe();
         $this->showMenu();
         return $root;
+    }
+
+    /**
+     * Lets a tree no frame uses go when the last reference to it does: each
+     * node's context, which holds the root, made the tree a cycle that only
+     * PHP's collector freed, a run long enough to drop a frame every few
+     * frames of a scrolling list.
+     */
+    private static function detach(Node $root): void
+    {
+        $stack = [$root];
+        while (($n = array_pop($stack)) !== null) {
+            $n->context = null;
+            foreach ($n->kids as $k) { $stack[] = $k; }
+        }
     }
 
     /** Whether the focused field's caret is in the shown half of its blink (always, once it has rested a while). */

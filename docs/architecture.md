@@ -2564,7 +2564,7 @@ costs nothing. What the benchmark cannot time is the Mac's half:
 `MYPHP_STATS=1 ./run.sh inbox 1000000` prints it a second at a time.
 
 The Mac's half, measured by the developer (`MYPHP_STATS=1 ./run.sh
-native 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
+inbox 1000000`, scrolling): 55–59 frames a second at 1.4–2.5 ms a
 frame, rising to 3–4 ms as faster scrolling shows more never-seen
 strings a second (CoreText shapes each new line once; the line cache
 sweeps by age and stays near 300–2000 lines). What that run also showed
@@ -3274,6 +3274,15 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   width in the text system (`System::minWidth`, cleared with its fonts and
   language); `wrapsAtWidth` asks its regex once a node. The layout of 2000
   texts is down to 5 ms, the list's to 0.14 ms (`tests/wrap_test.php`).
+- **Every frame's tree was a cycle.** `MYPHP_STATS=1 ./run.sh inbox
+  1000000`, scrolled on the developer's Mac, ran at 54–59 frames a second
+  with frames of 4–9 ms, memory going up and down by tens of megabytes and
+  PHP's collector running several times a second, freeing some 12 000
+  cycles each second: each node's `context` holds the Context, which holds
+  the root, so a tree a frame replaced waited for the collector, whose runs
+  take long enough to drop a frame. `Runtime::frame` cuts the contexts of
+  the tree it replaces (and of a pass's it builds again), and the tree goes
+  as its last reference does (`tests/lists_test.php`).
 - **Timing on a shared machine.** Medians of a frame moved by half between
   runs; the least of 80 frames, run in turn against the snapshot before,
   held within a few percent. Xdebug's profiler inflated function calls so
