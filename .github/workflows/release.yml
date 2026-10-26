@@ -32,6 +32,9 @@ jobs:
       - name: PHP tests
         run: php -d ffi.enable=1 tests/run.php
       - uses: oven-sh/setup-bun@v2
+      # The runtime's tests type-check the module myphp generate writes with tsc, of TypeScript 7 as the web template's.
+      - name: Install TypeScript
+        run: npm install -g typescript@7
       - name: Bun tests
         run: bun test packages src/Plugins
       - uses: actions/setup-node@v6
