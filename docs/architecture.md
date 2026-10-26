@@ -3261,6 +3261,25 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
     missing file), which root reads anyway; it renames a new file into
     place, as `Files::replaceItem` does.
 
+## What wrapping text cost a frame (v1.30)
+
+- **v1.24's text wrapping made layout several times dearer.** Run against
+  the snapshots of each version on one machine, the layout of 2000 texts
+  went from 2 ms (v1.23) to 14 ms, a million-row list's from 0.07 to
+  0.35 ms: each text that may wrap had its min-content width (its widest
+  word) laid out by the text system every frame, which made the parameters
+  of a layout and their key to find it in the cache, about 6 µs a text.
+  `Node::minContentWidth` now keys a text by what decides it (its text,
+  size, Font bits, direction and the style it inherits) and keeps the
+  width in the text system (`System::minWidth`, cleared with its fonts and
+  language); `wrapsAtWidth` asks its regex once a node. The layout of 2000
+  texts is down to 5 ms, the list's to 0.14 ms (`tests/wrap_test.php`).
+- **Timing on a shared machine.** Medians of a frame moved by half between
+  runs; the least of 80 frames, run in turn against the snapshot before,
+  held within a few percent. Xdebug's profiler inflated function calls so
+  much that a closure in `fixedMargins` looked like 12 % of a frame and
+  removing it changed nothing measurable.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

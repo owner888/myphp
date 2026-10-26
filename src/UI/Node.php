@@ -997,12 +997,28 @@ final class Node
         if (($this->kind !== self::TEXT && $this->kind !== self::RICH) || $this->single || $this->noWrap || $this->inline || $this->metrics === null || $this->wrapLast || ($this->wrapWidth !== null && !$this->autoWrap)) {
             return false;
         }
-        $text = $this->kind === self::TEXT ? (string)$this->text : $this->plainText();
-        return preg_match('/[\s\x80-\xff]/', $text) === 1; // a space, or text past ASCII (Chinese breaks between its characters): a line may break in it
+        return $this->breaks ??= preg_match('/[\s\x80-\xff]/', $this->kind === self::TEXT ? (string)$this->text : $this->plainText()) === 1; // a space, or text past ASCII (Chinese breaks between its characters): a line may break in it; asked a few times a layout
     }
+
+    /** Whether a line may break in the node's text, once known (wrapsAtWidth). */
+    private ?bool $breaks = null;
 
     /** The width of the widest part of the text no line breaks in (CSS's min-content): laid out by the text system at no width. */
     public function minContentWidth(): float
+    {
+        if ($this->kind !== self::TEXT) {
+            return $this->measureMinContent();
+        }
+        $a = $this->ts; $b = $this->inherit; // the style textStyle() makes of them, field by field
+        $line = $a?->lineHeight !== null ? [$a->lineHeight, $a->fixedLine] : [$b?->lineHeight, $b?->fixedLine];
+        $key = $this->text . "\1" . $this->fontSize . "\1" . $this->style . "\1" . (int)$this->rtl . "\1" . ($a?->family ?? $b?->family) . "\1" . ($a?->size ?? $b?->size)
+            . "\1" . ($a?->weight ?? $b?->weight) . "\1" . (int)($a?->italic ?? $b?->italic) . "\1" . $line[0] . "\1" . (int)$line[1] . "\1" . ($a?->spacing ?? $b?->spacing)
+            . "\1" . ($a?->features ?? $b?->features) . "\1" . ($a?->lang ?? $b?->lang) . "\1" . $this->fw;
+        $sys = $this->metrics->textSystem();
+        return $sys->minWidth($key) ?? $sys->keepMinWidth($key, $this->measureMinContent());
+    }
+
+    private function measureMinContent(): float
     {
         $spans = []; $runes = 0; $text = '';
         if ($this->kind === self::RICH) { $this->plainText(); } // a paragraph's spans those of the text inside it too, merged once
