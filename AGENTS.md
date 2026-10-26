@@ -99,8 +99,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
 
 - **Immediate mode**, as mygo's `ui`: each frame rebuilds the tree, `Layout`
   measures and arranges, `Painter` emits quads. Frames run on demand
-  (`Metal::requestFrame`: `draw` performed from the run loop, never from
-  MTKView's dispatch-queue paths); no CVDisplayLink into PHP. Nodes have no parent pointers (acyclic: no GC).
+  (`Metal::requestFrame`: `draw` from the run loop, paced by the view's
+  display link, never from MTKView's dispatch-queue paths). A replaced tree's nodes lose their context (`Runtime::detach`): freed without the GC.
 - **Last frame answers this frame's questions**: `Runtime` keeps rects by
   node id (creation order, or xxh64 of the key path under `Context::key`;
   list rows by their item's key, `ListState::$key`, else index); `clicked()/hovered()/focused()` hit-test

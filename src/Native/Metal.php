@@ -435,6 +435,17 @@ final class Metal
     private static $delegate = null, $commonModes = null;
     /** @var array<int, bool> the views drawing a frame now, true once a frame was asked for meanwhile */
     private static array $drawing = [];
+    /**
+     * How each view paces its frames (mygo's surface): its display link
+     * (macOS 14), which runs while frames follow each other, and whether its
+     * next tick draws one; without a link, whether a delayed draw is due;
+     * when its last frame began.
+     * @var array<int, array{link: mixed, running: bool, due: bool, timing: bool, last: float}>
+     */
+    private static array $pace = [];
+    /** @var array<int, mixed> the views by their display links' addresses, for the ticker */
+    private static array $linked = [];
+    private static $ticker = null;
 
     public function __construct(public int $capacity = 65536)
     {
@@ -608,6 +619,7 @@ final class Metal
             $key = ObjC::addr($view);
             if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
             self::$drawing[$key] = false;
+            if (isset(self::$pace[$key])) { self::$pace[$key]['last'] = microtime(true); self::$pace[$key]['timing'] = false; }
             $list = $this->lists[$this->frame % self::RING];
             $list->reset();
             $draw($view, $list);
@@ -629,12 +641,109 @@ final class Metal
         ObjC::msg('v:k', $view, 'setClearColor:', $c);
     }
 
-    /** Asks a view for a frame on the next turn of the run loop, in any of its common modes (a live resize, a modal panel); asked again before then, it draws once. */
+    /**
+     * Asks a view for a frame at the display's next refresh (mygo's
+     * RequestFrame): after a pause it draws at once, on the next turn of the
+     * run loop; frames that follow each other draw at the refreshes of the
+     * view's display link, which runs while they come, or, before macOS 14,
+     * a refresh after the last one began. Asked again before then, it
+     * draws once. Frames drawn as soon as asked came faster than the
+     * display took them: the next drawable kept a frame waiting a refresh
+     * or two, and scrolling showed 40 to 58 frames a second.
+     */
     public static function requestFrame($view): void
+    {
+        $key = ObjC::addr($view);
+        $p = &self::$pace[$key];
+        $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0];
+        $refresh = self::refresh($view);
+        if ($p['link'] !== null) {
+            if ($p['running']) {
+                $p['due'] = true;
+            } elseif (microtime(true) - $p['last'] > 2 * $refresh && self::visible($view)) {
+                self::drawLater($view, 0.0); // a window out of sight waits for the link, which ticks once it shows
+            } else {
+                $p['due'] = $p['running'] = true;
+                ObjC::msg('v:b', $p['link'], 'setPaused:', false);
+            }
+            return;
+        }
+        if ($p['timing']) {
+            return;
+        }
+        $p['timing'] = true; // until the frame begins
+        self::drawLater($view, max(0.0, $refresh - (microtime(true) - $p['last'])));
+    }
+
+    /** Stops pacing a view whose window closed: its link goes. */
+    public static function forget($view): void
+    {
+        $key = ObjC::addr($view);
+        $link = self::$pace[$key]['link'] ?? null;
+        if ($link !== null) {
+            unset(self::$linked[ObjC::addr($link)]);
+            ObjC::msg('v:', $link, 'invalidate');
+            ObjC::msg('v:', $link, 'release');
+        }
+        unset(self::$pace[$key], self::$onDraw[$key]);
+        ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
+    }
+
+    /** Draws $view after $delay seconds from the run loop, in any of its common modes (a live resize, a modal panel); asked again before then, once. */
+    private static function drawLater($view, float $delay): void
     {
         self::$commonModes ??= ObjC::msg('p:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', ObjC::str('kCFRunLoopCommonModes')), 'retain'); // kept past the autorelease pool
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
-        ObjC::msg('v:ppdp', $view, 'performSelector:withObject:afterDelay:inModes:', ObjC::sel('draw'), null, 0.0, self::$commonModes);
+        ObjC::msg('v:ppdp', $view, 'performSelector:withObject:afterDelay:inModes:', ObjC::sel('draw'), null, $delay, self::$commonModes);
+    }
+
+    /** The display link of $view, paused, in the main run loop's common modes; null before macOS 14, which has none for views. */
+    private static function linkOf($view)
+    {
+        if (!ObjC::msg('b:p', $view, 'respondsToSelector:', ObjC::sel('displayLinkWithTarget:selector:'))) {
+            return null;
+        }
+        if (self::$ticker === null) {
+            ObjC::defineClass('MyPHPFrameTicker', 'NSObject', [
+                'tick:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $link) { self::tick($link); }],
+            ]);
+            self::$ticker = ObjC::msg('p:', ObjC::alloc('MyPHPFrameTicker'), 'init');
+        }
+        $link = ObjC::msg('p:', ObjC::msg('p:pp', $view, 'displayLinkWithTarget:selector:', self::$ticker, ObjC::sel('tick:')), 'retain');
+        ObjC::msg('v:b', $link, 'setPaused:', true);
+        ObjC::msg('v:pp', $link, 'addToRunLoop:forMode:', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'mainRunLoop'), ObjC::str('kCFRunLoopCommonModes'));
+        self::$linked[ObjC::addr($link)] = $view;
+        return $link;
+    }
+
+    /** A refresh of a view's display: its frame if one was asked for since the last, else the link pauses. */
+    private static function tick($link): void
+    {
+        $view = self::$linked[ObjC::addr($link)] ?? null;
+        $p = $view === null ? null : (self::$pace[ObjC::addr($view)] ?? null);
+        if ($p === null || !$p['due']) {
+            ObjC::msg('v:b', $link, 'setPaused:', true);
+            if ($p !== null) { self::$pace[ObjC::addr($view)]['running'] = false; }
+            return;
+        }
+        self::$pace[ObjC::addr($view)]['due'] = false;
+        ObjC::msg('v:', $view, 'draw');
+    }
+
+    /** The time between two refreshes of the view's display, as ProMotion screens vary it (mygo's refresh). */
+    private static function refresh($view): float
+    {
+        $window = ObjC::msg('p:', $view, 'window');
+        $screen = $window === null ? null : ObjC::msg('p:', $window, 'screen');
+        $fps = $screen !== null && ObjC::msg('b:p', $screen, 'respondsToSelector:', ObjC::sel('maximumFramesPerSecond')) ? ObjC::msg('l:', $screen, 'maximumFramesPerSecond') : 0;
+        return 1 / ($fps > 0 ? max($fps, 30) : 60);
+    }
+
+    /** Whether some of the view's window shows (NSWindowOcclusionStateVisible). */
+    private static function visible($view): bool
+    {
+        $window = ObjC::msg('p:', $view, 'window');
+        return $window !== null && (ObjC::msg('L:', $window, 'occlusionState') & 2) !== 0;
     }
 
     private static function defineDelegate()

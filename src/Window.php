@@ -638,7 +638,7 @@ final class Window
         }
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
-        if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); }
+        if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         $this->page?->destroy(); // the page goes with the window, its web views' too
         foreach ($this->webViews as $v) { $v->destroy(); }
         $this->captureState();

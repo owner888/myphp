@@ -105,10 +105,11 @@ MTKView never draws by itself (paused, `enableSetNeedsDisplay` off): its
 display link and its `setNeedsDisplay:` both draw from the main dispatch
 queue, and a frame that waits for a sheet there (`App::wait`, under a
 button's click) holds the serial queue the sheet's completion is to run
-on. `Metal::requestFrame` instead performs `draw` on the next turn of the
-run loop in its common modes (coalesced), and `windowDidResize:` calls
-`draw` directly; a frame asked for while one is drawing (waiting) is drawn
-after it.
+on. `Metal::requestFrame` instead performs `draw` from the run loop in its
+common modes (coalesced): after a pause on its next turn, else at the next
+tick of the view's own display link, added to the run loop (v1.30, below);
+`windowDidResize:` calls `draw` directly; a frame asked for while one is
+drawing (waiting) is drawn after it.
 
 The quad kinds, by `params.y` (less the transform's entry, below): 0 a rounded rect, 1 a glyph, 2 an image,
 3 a soft shadow (the rect inset by the blur, feathered over it), 4 a ring
@@ -3290,6 +3291,15 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   take long enough to drop a frame. `Runtime::frame` cuts the contexts of
   the tree it replaces (and of a pass's it builds again), and the tree goes
   as its last reference does (`tests/lists_test.php`).
+- **Frames drawn as soon as asked.** The slow frames left, with 2–4 ms of
+  work, spent 14–31 ms in `present`: `Metal::requestFrame` drew on the next
+  turn of the run loop, faster than the display took frames, so the next
+  drawable kept one waiting. It paces them as mygo's surface does: after a
+  pause a frame draws at once; frames that follow each other draw at the
+  ticks of the view's display link (macOS 14), which runs while they come
+  and pauses after a tick with none asked for, or, before macOS 14, a
+  refresh after the last frame began. `Metal::forget` ends a closed
+  window's link.
 - **Timing on a shared machine.** Medians of a frame moved by half between
   runs; the least of 80 frames, run in turn against the snapshot before,
   held within a few percent. Xdebug's profiler inflated function calls so
@@ -3326,5 +3336,3 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   above); text is selectable (mygo's Selectable).
 - VoiceOver is in (Accessibility above); Linux's and Windows's assistive
   technology come with those platforms.
-- NSTimer is not locked to the display (the CoreGraphics path ran 50–58
-  fps with identical PHP time per frame); MTKView pacing is what gives 60.
