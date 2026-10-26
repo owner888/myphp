@@ -10,7 +10,8 @@ namespace MyPHP\UI;
  * a line (mygo's TextLines). The lines are the text's, between newlines;
  * a line the area wraps takes several rows. Between a frame's build and
  * its paint they are the last frame's, at the area's last width; before
- * the area is first painted, each line is one row and every top is 0.
+ * the area is first painted, each line is LINE_HEIGHT high, and a line it
+ * has not wrapped yet (out of view) is one row.
  */
 final class TextLines
 {
@@ -33,7 +34,7 @@ final class TextLines
         if ($l === null) {
             return $i * self::LINE_HEIGHT;
         }
-        return $this->firstRow($l, max(0, min($i, $this->count()))) * $l->lineHeight;
+        return $l->firstLineOf($i) * $l->lineHeight;
     }
 
     /** The height of the text: the top of the line after the last. */
@@ -49,8 +50,7 @@ final class TextLines
         if ($l === null) {
             return 0;
         }
-        $row = max(0, min((int)floor(max($y, 0.0) / $l->lineHeight), count($l->lines) - 1));
-        return substr_count($l->text, "\n", 0, $l->lines[$row][0]);
+        return $l->paragraphAt((int)floor(max($y, 0.0) / $l->lineHeight));
     }
 
     /** Where the rows of line $i start, in runes from the start of the line: [0] for a line on one row. @return list<int> */
@@ -60,27 +60,8 @@ final class TextLines
         if ($l === null || $i < 0 || $i >= $this->count()) {
             return [0];
         }
-        $first = $this->firstRow($l, $i);
-        $start = $l->lines[$first][0];
-        $out = [];
-        for ($r = $first; $r < count($l->lines) && ($r === $first || $l->lines[$r][0] > 0 && $l->text[$l->lines[$r][0] - 1] !== "\n"); $r++) {
-            $out[] = mb_strlen(substr($l->text, $start, $l->lines[$r][0] - $start));
-        }
-        return $out;
-    }
-
-    /** The row line $i starts on: the rows before it, counted past the newlines. */
-    private function firstRow(FieldLayout $l, int $i): int
-    {
-        if ($i === 0) {
-            return 0;
-        }
-        $seen = 0;
-        foreach ($l->lines as $r => [$a]) {
-            if ($a > 0 && $l->text[$a - 1] === "\n" && ++$seen === $i) {
-                return $r;
-            }
-        }
-        return count($l->lines);
+        $rows = $l->lines($i);
+        $start = $rows[0][0];
+        return array_map(static fn(array $r): int => mb_strlen(substr($l->text, $start, $r[0] - $start)), $rows);
     }
 }

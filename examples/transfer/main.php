@@ -39,7 +39,7 @@ function view(Context $c, object $s): void
           $c->text('Text and links', 13, style: Font::BOLD);
           $o = new DropOptions([Format::URI_LIST, Format::MARKDOWN, Format::TEXT]);
           $over = $c->dataDragOver($well, $o, $offer);
-          $c->muted($over ? 'Takes ' . $offer->preferred(...$o->formats) : ($s->dropped === '' ? 'Drop here' : mb_strimwidth($s->dropped, 0, 120, '…')), 12)->wrap(236);
+          $c->muted($over ? 'Takes ' . $offer->preferred(...$o->formats) : ($s->dropped === '' ? 'Drop here' : mb_strimwidth($s->dropped, 0, 120, '…')), 12);
         $c->end();
         if ($over) { $well->border($t->accent, 2); }
         if ($c->dropData($well, $o, $drop)) {

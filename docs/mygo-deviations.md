@@ -231,8 +231,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     shadow (15), each with a second slot; circular corners; rectangular
     clips; boxes unsnapped; borders under clipped children; dividers
     after all children; a nested `debug()` outlines its own subtree;
-    only containers dim when disabled (widgets look disabled their own
-    way); `Cursor` a string-backed enum named as CSS names them.
+    a disabled node dims as mygo's (only containers did until v1.26);
+    `Cursor` a string-backed enum named as CSS names them.
   - Why: the display list's quads hold one radius and rectangular clips;
     myphp's widgets drew their disabled look before.
 - **Input queries** (v1.07)
@@ -1435,8 +1435,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     paragraph at a time (TestBuffer*, TestHeights,
     TestTextAreaLaysOutAsWholeText, TestTextAreaSelectsAsWholeText,
     TestTextAreaSharesValue, TestTextAreaShowsThroughPadding).
-  - myphp: a text area lays out its whole text (TextState::layout), with
-    none of that to test.
+  - myphp: a text area wraps a paragraph at a time too since v1.26
+    (FieldLayout, tests/field_layout_test.php), those out of view one line
+    each until they are wrapped, where mygo estimates their heights by the
+    average of those measured; its lines are all as high, so there is no
+    tree of heights to test, nor mygo's editor buffer.
   - Why: myphp's fields are TextStates, not mygo's editor.
 - **Tests of mygo's platform input layers, not ported**
   - mygo: TestTextInputClientNativeEndBeforeCommit and

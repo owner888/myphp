@@ -180,6 +180,7 @@ trait RuntimeSelection
     private function textHit(Node $n, float $x, float $y): array
     {
         [$lx, $ly] = $this->toLocal($n->id, $x, $y) ?? [0.0, 0.0];
+        [$ox, $oy] = $n->textOrigin(); $lx -= $ox - $n->x; $ly -= $oy - $n->y; // from its lines' start, inside its padding
         $l = $n->textLayout();
         if ($ly < 0) {
             return [$n->id, 0];
@@ -209,7 +210,8 @@ trait RuntimeSelection
                 continue;
             }
             foreach ($n->textLayout()->lines as $line) {
-                [$bx, $by, $bw, $bh] = $n->world->bounds($n->x + $line->x, $n->y + $line->y, $line->width, $line->height);
+                [$ox, $oy] = $n->textOrigin();
+                [$bx, $by, $bw, $bh] = $n->world->bounds($ox + $line->x, $oy + $line->y, $line->width, $line->height);
                 $x0 = max($bx, $vx); $y0 = max($by, $vy); $x1 = min($bx + $bw, $vx + $vw); $y1 = min($by + $bh, $vy + $vh);
                 if ($x1 <= $x0 || $y1 <= $y0) {
                     continue;
@@ -477,7 +479,7 @@ trait RuntimeSelection
             case 'moveUp:': case 'moveDown:':
                 $direction = $base === 'moveUp:' ? -1 : 1;
                 [$x, $y, $h] = $l->caret($at);
-                $t->desiredX ??= $s->x + $x;
+                $t->desiredX ??= $s->textOrigin()[0] + $x;
                 $y += $h / 2 + $direction * $h;
                 if ($y < 0 || $y >= $l->height) {
                     $next = $this->neighboringText($t->caret, $direction);
@@ -488,7 +490,7 @@ trait RuntimeSelection
                     $s = $next; $l = $s->textLayout();
                     $y = $direction < 0 ? $l->height - 1 : 0.0;
                 }
-                $t->caret = [$s->id, $l->indexAt($t->desiredX - $s->x, $y)];
+                $t->caret = [$s->id, $l->indexAt($t->desiredX - $s->textOrigin()[0], $y)];
                 return true;
         }
         $t->desiredX = null;

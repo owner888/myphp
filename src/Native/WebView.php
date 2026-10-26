@@ -413,7 +413,7 @@ final class WebView
             'download:didFailWithError:resumeData:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $download, $error, $resume) {
                 self::downloadEnded($download, ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')));
             }],
-        ], ['WKNavigationDelegate', 'WKDownloadDelegate']);
+        ], ['WKNavigationDelegate']); // WebKit asks the download delegate's methods by respondsToSelector:; its protocol is not always registered at run time (objc_getProtocol finds none), so it is not declared
         self::$navigationDelegate = ObjC::msg('p:', ObjC::alloc('MyPHPNavigationDelegate'), 'init');
         ObjC::defineClass('MyPHPUIDelegate', 'NSObject', [
             // Camera and microphone requests (macOS 12).

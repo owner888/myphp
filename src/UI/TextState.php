@@ -60,6 +60,8 @@ final class TextState
     public float $scrollFraction = 0;
     /** How far a single-line field's text is from its start, as the painter showed it: scrolled to the caret, or aligned. */
     public float $offsetX = 0.0;
+    /** The Font bits the field shows its text in (a monospace family's, bold's), as its node's text style has them: what it is measured and painted with. */
+    public int $style = 0;
     /** The caret the painter last brought into view, -1 before. */
     public int $caretSeen = -1;
     private const UNDO_DEPTH = 200;
@@ -226,8 +228,8 @@ final class TextState
     {
         $display = $this->display();
         $l = $this->layout;
-        if ($l === null || $l->text !== $display || $l->size !== $size || $l->width !== $width) {
-            $l = $this->layout = FieldLayout::wrap($m, $display, $size, $width);
+        if ($l === null || $l->text !== $display || $l->size !== $size || $l->width !== $width || $l->style !== $this->style) {
+            $l = $this->layout = FieldLayout::wrap($m, $display, $size, $width, $l, $this->style); // an edit's keeps the lines of the paragraphs it left
         }
         return $l;
     }

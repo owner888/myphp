@@ -183,7 +183,7 @@ final class Window
             if (($this->frameStats = UI\FrameStats::fromEnv()) !== null) {
                 Metal::$afterPresent[ObjC::addr($this->view)] = function (): void {
                     $this->frameStats->lap(UI\FrameStats::PRESENT);
-                    $this->frameStats->end($this->runtime->frameNumber, App::text()->made, 'Metal');
+                    $this->frameStats->end($this->runtime->frameNumber, App::text()->textSystem()->made, 'Metal');
                 };
             }
             Metal::setClearColor($this->view, App::theme()->background);
@@ -352,7 +352,7 @@ final class Window
             function ($view, DisplayList $list) use ($content, $text) {
                 $bounds = ObjC::msg('r:', $view, 'bounds');
                 $t0 = hrtime(true);
-                $this->frameStats?->begin($text->made);
+                $this->frameStats?->begin($text->textSystem()->made);
                 $text->beginFrame();
                 $list->pathQuad ??= $text->pathQuad(...);
                 $this->runtime->scrollbarWidth = App::theme()->scrollbarWidth;

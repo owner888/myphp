@@ -21,15 +21,20 @@ final class CoreText
     private const UI_FONT_USER_FIXED_PITCH = 1;
     private const TRAIT_ITALIC = 1 << 0, TRAIT_BOLD = 1 << 1; // CTFontSymbolicTraits
     private const ALPHA_ONLY = 7;            // kCGImageAlphaOnly
+    private const RGBA_PREMULTIPLIED = 1 | 4 << 12; // kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big: R G B A in memory
+    private const TRAIT_COLOR_GLYPHS = 1 << 13; // kCTFontTraitColorGlyphs: Apple Color Emoji's
 
     public FFI $c;
     private $fontKey;         // kCTFontAttributeName
     private $keyCallbacks;    // &kCFTypeDictionaryKeyCallBacks
     private $valueCallbacks;  // &kCFTypeDictionaryValueCallBacks
+    private $srgb;            // the sRGB color space color glyphs are drawn in
     /** @var array<string, CData> CTFont by "size" */
     private array $fonts = [];
     /** @var array<int, CData> fonts runs used, retained, by CFHash */
     private array $runFonts = [];
+    /** @var array<int, bool> whether each run font draws in color, by CFHash */
+    private array $colorFonts = [];
 
     public function __construct(public float $scale)
     {
@@ -56,6 +61,8 @@ final class CoreText
             double CTFontGetDescent(void*);
             CGRect CTFontGetBoundingRectsForGlyphs(void*, unsigned int, const CGGlyph*, CGRect*, long);
             void  CTFontDrawGlyphs(void*, const CGGlyph*, const CGPoint*, unsigned long, void*);
+            unsigned int CTFontGetSymbolicTraits(void*);
+            void* CGColorSpaceCreateWithName(void*);
             void* CTLineCreateWithAttributedString(void*);
             void* CTLineGetGlyphRuns(void*);
             double CTLineGetTypographicBounds(void*, double*, double*, double*);
@@ -78,6 +85,16 @@ final class CoreText
             ?? throw new RuntimeException('kCTFontAttributeName');
         $this->keyCallbacks = $this->c->dlsym($cf, 'kCFTypeDictionaryKeyCallBacks');
         $this->valueCallbacks = $this->c->dlsym($cf, 'kCFTypeDictionaryValueCallBacks');
+        $cg = $this->c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
+        $this->srgb = $this->c->CGColorSpaceCreateWithName($this->c->cast('void*[1]', $this->c->dlsym($cg, 'kCGColorSpaceSRGB'))[0])
+            ?? throw new RuntimeException('kCGColorSpaceSRGB');
+    }
+
+    /** Whether the glyphs of font $fontId are bitmaps in color (Apple Color Emoji), which rasterize() draws in their colors. */
+    public function isColor(int $fontId): bool
+    {
+        $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
+        return $this->colorFonts[$fontId] ??= ($this->c->CTFontGetSymbolicTraits($font) & self::TRAIT_COLOR_GLYPHS) !== 0;
     }
 
     /** The system font (or the fixed-pitch one) at $size with UI\Font style bits. */
@@ -178,9 +195,11 @@ final class CoreText
      * point. Returns null for glyphs
      * without ink (spaces). Offsets are in device pixels from the glyph
      * origin: ox to the right, oy up to the bitmap's bottom edge. The
-     * bitmap (w*h bytes, top row first) is Mem-allocated: free it with Mem::free.
+     * bitmap (w*h bytes of coverage, top row first; for a color glyph,
+     * $color, w*h premultiplied RGBA pixels in sRGB, as mygo's) is
+     * Mem-allocated: free it with Mem::free.
      *
-     * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int}|null
+     * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int, color: bool}|null
      */
     public function rasterize(int $fontId, int $glyph, ?float $scale = null): ?array
     {
@@ -198,7 +217,9 @@ final class CoreText
         $y0 = (int)floor($b->origin->y * $s) - 1;
         $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + 1 - $x0;
         $h = (int)ceil(($b->origin->y + $b->size->h) * $s) + 1 - $y0;
-        $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w, null, self::ALPHA_ONLY)
+        $color = $this->isColor($fontId);
+        $bpp = $color ? 4 : 1;
+        $ctx = ($color ? $c->CGBitmapContextCreate(null, $w, $h, 8, 4 * $w, $this->srgb, self::RGBA_PREMULTIPLIED) : $c->CGBitmapContextCreate(null, $w, $h, 8, $w, null, self::ALPHA_ONLY))
             ?? throw new RuntimeException('CGBitmapContextCreate');
         $c->CGContextSetShouldSmoothFonts($ctx, false);
         // CG coordinates run y-up, but the bitmap's first row in memory is
@@ -207,10 +228,10 @@ final class CoreText
         $c->CGContextScaleCTM($ctx, $s, $s);
         $origin = $c->new('CGPoint[1]');
         $c->CTFontDrawGlyphs($font, $ids, $origin, 1, $ctx);
-        $rows = Mem::alloc($w * $h);
+        $rows = Mem::alloc($bpp * $w * $h);
         $addr = Mem::addr($rows);
-        Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $w * $h);
+        Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $bpp * $w * $h);
         $c->CGContextRelease($ctx);
-        return ['w' => $w, 'h' => $h, 'ox' => $x0, 'oy' => $y0, 'rows' => $rows, 'addr' => $addr];
+        return ['w' => $w, 'h' => $h, 'ox' => $x0, 'oy' => $y0, 'rows' => $rows, 'addr' => $addr, 'color' => $color];
     }
 }

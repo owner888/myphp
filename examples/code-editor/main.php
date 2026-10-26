@@ -76,7 +76,7 @@ function view(Context $c, EditorApp $a): void
           }
           $c->spacer();
           $c->text('Wrap', null, $t->textMuted);
-          $c->switch('Soft wrap', $a->wrap);
+          $c->switch('', $a->wrap)->label('Soft wrap'); // named for assistive technology, as mygo's: the text before it shows
         $c->end();
         $c->divider();
         if ($a->page === 0) { editorPage($c, $f); } else { diffPage($c, $a, $f); }

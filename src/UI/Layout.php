@@ -17,14 +17,15 @@ final class Layout
     private static function placeInline(Node $para, Node $e, int $offset): void
     {
         $l = $para->textLayout();
+        [$px, $py] = $para->textOrigin();
         foreach ($e->kids as $k) {
             $a = $offset + $k->runes[0]; $b = $offset + $k->runes[1];
             $k->frags = [];
             $x0 = $y0 = INF; $x1 = $y1 = -INF;
             foreach ($l->appendSelection([], $a, $b, false) as [$rx, $ry, $rw, $rh]) {
-                $k->frags[] = [$para->x + $rx, $para->y + $ry, $rw, $rh];
-                $x0 = min($x0, $para->x + $rx); $y0 = min($y0, $para->y + $ry);
-                $x1 = max($x1, $para->x + $rx + $rw); $y1 = max($y1, $para->y + $ry + $rh);
+                $k->frags[] = [$px + $rx, $py + $ry, $rw, $rh];
+                $x0 = min($x0, $px + $rx); $y0 = min($y0, $py + $ry);
+                $x1 = max($x1, $px + $rx + $rw); $y1 = max($y1, $py + $ry + $rh);
             }
             if ($k->frags === []) {
                 $k->x = $k->y = $k->w = $k->h = 0.0;
@@ -69,7 +70,7 @@ final class Layout
                 if ($n->fw == $l->width) { $n->fw = 0.0; }
                 if ($n->fh == $l->height) { $n->fh = 0.0; }
             }
-            $n->wrapWidth = $n->w; $n->autoWrap = true; $n->layout = null;
+            $n->wrapWidth = $n->w - $n->padL() - $n->padR(); $n->autoWrap = true; $n->layout = null; // inside its padding
             return true;
         }
         $wrapped = false;
@@ -198,6 +199,12 @@ final class Layout
             $n->mw = $n->fw;
             $n->mh = $n->fh;
             $n->minMw = $n->single ? $n->minW : ($n->wrapsAtWidth() ? min($n->fw, $n->minContentWidth()) : $n->fw); // a single-line text shrinks to its min width (and shows an ellipsis), one that wraps to its widest word; other leaves keep their size
+            if (($n->kind === Node::TEXT || $n->kind === Node::RICH) && !$n->inline) { // a text's padding and border around its lines (mygo's)
+                $px = $n->padL() + $n->padR(); $py = $n->padT() + $n->padB();
+                $n->mw += $px; $n->mh += $py; $n->minMw += $px;
+            }
+            $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH); // a leaf's least size too, as a slider's (mygo's MinWidth)
+            if ($n->minSet) { $n->minMw = max($n->minMw, $n->minW); }
             return;
         }
         if ($n->gridCols !== null) { // a grid: its tracks at the size their content asks
@@ -288,8 +295,8 @@ final class Layout
         }
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
         $n->laid = true;
-        if ($n->kind === Node::RICH && $n->wrapWidth === null && ($n->rtl || ($n->textStyle()->align ?? Node::START) !== Node::START) && $w > $n->textLayout()->width + 0.5) {
-            $n->alignWidth = $w; // stretched wider than its lines: laid out across the box, so that they go where the alignment and the direction put them (mygo lays a text out at its width)
+        if ($n->kind === Node::RICH && $n->wrapWidth === null && ($n->rtl || ($n->textStyle()->align ?? Node::START) !== Node::START) && $w - $n->padL() - $n->padR() > $n->textLayout()->width + 0.5) {
+            $n->alignWidth = $w - $n->padL() - $n->padR(); // stretched wider than its lines: laid out across the box, so that they go where the alignment and the direction put them (mygo lays a text out at its width)
             $n->layout = null;
         }
         if ($n->kind === Node::RICH && $n->kids !== []) {
@@ -574,7 +581,7 @@ final class Layout
         } elseif ($k->aspect > 0 && $k->fw <= 0 && $k->fh > 0) {
             $kw = $k->fh * $k->aspect + $mx;
         } else {
-            $kw = $autoCross || ($a === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT || $k->kind === Node::RICH)) ? $cw : ($k->single || $k->wrapsAtWidth() ? min($k->mw, $cw) : ($k->kind === Node::CONTAINER && $k->fw <= 0 ? min($k->mw, max($k->minMw, $cw)) : $k->mw)); // a text that wraps no wider than the room; a container as wide as its content, within the room down to its least (CSS's fit-content)
+            $kw = $autoCross || ($a === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT || $k->kind === Node::RICH || ($k->kind === Node::BUTTON && !$k->sizedW))) ? $cw : ($k->single || $k->wrapsAtWidth() ? min($k->mw, $cw) : ($k->kind === Node::CONTAINER && $k->fw <= 0 ? min($k->mw, max($k->minMw, $cw)) : $k->mw)); // a text that wraps no wider than the room; a container as wide as its content, within the room down to its least (CSS's fit-content)
         }
         return self::clampW($k, $kw, $cw);
     }

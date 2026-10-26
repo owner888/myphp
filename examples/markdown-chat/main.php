@@ -92,7 +92,7 @@ function view(Context $c, Chat $app): void
         $c->segmented(REVEAL_NAMES, $app->reveal)->label('Stream by');
       $c->end();
       if ($app->messages === []) {
-          $c->column(0, 0, 1)->align(Node::CENTER)->justify(Node::CENTER);
+          $c->column(16, 0, 1)->align(Node::CENTER); // at the top, centered, as mygo's list shows it with no message
             $c->muted('Ask anything: the replies are canned, streamed as a model streams them.');
           $c->end();
       } else {

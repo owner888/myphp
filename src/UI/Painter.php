@@ -305,7 +305,7 @@ final class Painter
             return;
         }
         $world = $list->world(); $opacity = $list->opacity();
-        $dim = $n->disabled && $n->kind === Node::CONTAINER; // a disabled container at half its opacity (widgets look disabled their own way)
+        $dim = $n->disabled; // disabled, at half its opacity, and what is inside it with it (mygo's paint)
         if ($n->opacity < 1 || $n->poseFade > 0 || $dim) {
             $o = $opacity * $n->opacity * (1 - $n->poseFade) * ($dim ? 0.5 : 1.0);
             if ($o <= 0.001) {
@@ -358,10 +358,6 @@ final class Painter
         }
         if ($n->kind === Node::TEXTAREA) {
             self::paintArea($n, $list, $text, $t, $rt);
-            return;
-        }
-        if ($n->kind === Node::RICH) {
-            self::paintRich($n, $list, $text, $t, $rt);
             return;
         }
         if ($n->kind === Node::CHECKBOX || $n->kind === Node::RADIO) {
@@ -433,7 +429,15 @@ final class Painter
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
             }
         }
-        foreach ($n->shadows as $sh) { // inside the padding edge, over the background (mygo's InsetShadow)
+        if ($n->bordered && $n->color === null && $n->material === null) { // a border without a face (mygo's Border on a box with no background): its ring, or dashed
+            if ($n->borderStyle === BorderStyle::Dashed) {
+                $bw = $n->borderWidth;
+                $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, $n->alpha, true);
+            } else {
+                $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, $n->alpha, $radius, $n->borderWidth);
+            }
+        }
+                foreach ($n->shadows as $sh) { // inside the padding edge, over the background (mygo's InsetShadow)
             if ($sh[6]) { self::insetShadow($list, $box, $radii, $n->borders, $sh); }
         }
         [$bt, $br, $bb, $bl] = $n->borders;
@@ -456,8 +460,13 @@ final class Painter
         if ($n->selected) {
             if ($n->radii !== null) { $list->box($n->x, $n->y, $n->w, $n->h, $radii, $t->selection, $t->selectionAlpha); } else { $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius); } // corners each its own: rows chosen together, one block
         }
+        if ($n->kind === Node::RICH) {
+            self::paintRich($n, $list, $text, $t, $rt); // over its box (a background, a border, a radius), the text inside it with it
+            return;
+        }
         if ($n->text !== null) {
-            $x = $n->x; $y = $n->y;
+            [$x, $y] = $n->kind === Node::TEXT ? $n->textOrigin() : [$n->x, $n->y]; // a text inside its padding
+            $room = $n->kind === Node::TEXT ? $n->w - $n->padL() - $n->padR() : $n->w;
             if ($n->kind === Node::BUTTON) { // the label centered in the padding, a menu button's chevron after it
                 [$tw, $th] = $text->measure($n->text, $n->fontSize);
                 $cw = $n->chevron ? $t->space(2.5) + $t->space(1.5) : 0;
@@ -469,20 +478,20 @@ final class Painter
             $shown = $n->text;
             if ($n->single && $n->kind === Node::TEXT) {
                 [$tw] = $text->measure($shown, $n->fontSize, $n->style);
-                if ($tw > $n->w + 0.5) { // cut to the room, ending in an ellipsis
+                if ($tw > $room + 0.5) { // cut to the room, ending in an ellipsis
                     [$ew] = $text->measure('…', $n->fontSize, $n->style);
-                    $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $n->w - $ew))) . '…';
+                    $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $room - $ew))) . '…';
                 }
             }
             if ($n->kind === Node::TEXT && $n->rtl && !in_array($n->textStyle()->align ?? Node::START, [Node::CENTER, Node::END], true)) {
                 [$tw] = $text->measure($shown, $n->fontSize, $n->style);
-                $x += max(0.0, $n->w - $tw); // right to left, a line starts at the right of its box
+                $x += max(0.0, $room - $tw); // right to left, a line starts at the right of its box
             }
             if ($n->content === null || $rt === null || $n->kind !== Node::TEXT || !self::contentText($n, $list, $text, $shown, $x, $y, $rt)) {
                 $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
             }
             if ($n->underline) {
-                $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $n->w, 1.0, $n->fg);
+                $list->rect($x, $y + $text->ascent($n->fontSize, $n->style) + 1, $room, 1.0, $n->fg);
             }
         }
         if ($n->draw !== null) {
@@ -872,8 +881,9 @@ final class Painter
             $x = $x0 + ($x1 - $x0) * $i / max($n->ticks - 1, 1);
             $list->rect($x - 0.5, $cy + $kh / 2 + $t->space(1), 1.0, $t->space(1.5), $t->textMuted, 0.6);
         }
-        $list->rect($x0, $cy - $trackH / 2, $x1 - $x0, $trackH, $t->border, 1.0, $trackH / 2);
-        $list->rect($n->rtl ? $kx : $x0, $cy - $trackH / 2, $n->rtl ? $x1 - $kx : $kx - $x0, $trackH, $t->accent, 1.0, $trackH / 2);
+        // The track spans the slider, the knob's center its content box, as mygo's.
+        $list->rect($n->x, $cy - $trackH / 2, $n->w, $trackH, $t->border, 1.0, $trackH / 2);
+        $list->rect($n->rtl ? $kx : $n->x, $cy - $trackH / 2, $n->rtl ? $n->x + $n->w - $kx : $kx - $n->x, $trackH, $t->accent, 1.0, $trackH / 2);
         self::knob($list, $t, $kx, $cy, $n->held, $n->focusVisible);
     }
 
@@ -1028,7 +1038,7 @@ final class Painter
     {
         $l = $n->textLayout();
         $ts = $n->textStyle();
-        $x = $n->x; $y = $n->y;
+        [$x, $y] = $n->textOrigin();
         $under = null;
         if (($sel = $rt?->textSelectionOf($n->id)) !== null) { // over the backgrounds, under the glyphs and lines
             $under = function () use ($list, $l, $sel, $x, $y, $ts, $t): void {
@@ -1210,11 +1220,11 @@ final class Painter
             $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
         }
         $display = $s->shown(); // bullets for a password
-        [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize);
+        [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize, $s->style);
         $ty = $n->y + ($n->h - $lh) / 2;
         $inner = $n->w - $inset - Runtime::FIELD_INSET - $n->insetR;
         // Keep the caret in view when the text is wider than the field; without the focus, its start shows (mygo's InputShowsItsStartUnfocused).
-        $caretX = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->displayCaret()));
+        $caretX = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->displayCaret()), $s->style);
         $shift = $n->focused ? max(0.0, $caretX - $inner) : 0.0;
         $tx = $n->x + $inset - $shift;
         $align = $n->ts?->align ?? Node::START;
@@ -1225,7 +1235,7 @@ final class Painter
         $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
-                $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize)[0]), $ty, $t->textMuted);
+                $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize, $s->style)[0]), $ty, $t->textMuted, 1.0, $s->style);
             }
         } else {
             $ts = $n->textStyle();
@@ -1234,18 +1244,18 @@ final class Painter
             }
             if ($n->focused && $s->hasSelection() && $s->marked === null) {
                 [$a, $b] = $s->selection();
-                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($a));
-                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($b));
+                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($a), $s->style);
+                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($b), $s->style);
                 $list->rect($tx + $xa, $ty, $xb - $xa, $lh, ...self::selectionColor($ts, $t));
             }
             if ($n->ranges !== [] && !$s->password) {
-                $text->paintRuns($list, $display, $n->fontSize, $tx, $ty, 0, self::rangeColors($n, $s, 0));
+                $text->paintRuns($list, $display, $n->fontSize, $tx, $ty, $s->style, self::rangeColors($n, $s, 0));
             } else {
-                $text->paint($list, $display, $n->fontSize, $tx, $ty, $ts->color ?? $n->fg);
+                $text->paint($list, $display, $n->fontSize, $tx, $ty, $ts->color ?? $n->fg, 1.0, $s->style);
             }
             if ($s->marked !== null) {
-                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor));
-                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor + strlen($s->marked)));
+                $xa = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor), $s->style);
+                $xb = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->cursor + strlen($s->marked)), $s->style);
                 $list->rect($tx + $xa, $ty + $lh - 2, $xb - $xa, 1.0, $ts->color ?? $n->fg); // the composition's underline, over the glyphs (mygo's)
             }
         }
@@ -1276,36 +1286,40 @@ final class Painter
             $s->caretSeen = $caret;
             [, $cy] = $layout->caret($text, $s->displayCaret());
             if ($cy < $s->scrollY) { $s->scrollY = $cy; }
-            if ($cy + $lh > $s->scrollY + $innerH) { $s->scrollY = $cy + $lh - $innerH; }
+            if ($cy + $lh > $s->scrollY + $innerH) {
+                // The paragraphs above the caret's that the view will show are wrapped first, so that the caret ends at its bottom whatever lines they make (mygo's reveal).
+                $layout->measureAbove($caret, (int)ceil($innerH / $lh));
+                [, $cy] = $layout->caret($text, $caret);
+                $s->scrollY = $cy + $lh - $innerH;
+            }
         }
         $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
         $tx = $n->x + $inset; $ty = $n->y + $insetY - $s->scrollY;
         $in = $n->bare ? 0.0 : 2.0; // inside the border
         $list->pushClip($n->x + $in, $n->y + $in, $n->w - 2 * $in, $n->h - 2 * $in);
         if ($display === '' && $n->text !== null && $n->text !== '') { // the placeholder wraps as the text would (mygo's)
-            $ph = FieldLayout::wrap($text, $n->text, $n->fontSize, $innerW);
-            foreach ($ph->lines as $i => $_) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $t->textMuted); }
+            $ph = FieldLayout::wrap($text, $n->text, $n->fontSize, $innerW, null, $s->style);
+            for ($i = 0; $i < $ph->count(); $i++) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $t->textMuted, 1.0, $s->style); }
         }
         [$selA, $selB] = $n->focused && $s->hasSelection() && $s->marked === null ? $s->selection() : [0, 0];
         $ts = $n->textStyle(); $selColor = self::selectionColor($ts, $t);
         $first = max(0, (int)floor($s->scrollY / $lh));
-        $last = min(count($layout->lines) - 1, (int)floor(($s->scrollY + $innerH) / $lh));
-        for ($i = $first; $i <= $last; $i++) {
-            [$a, $b] = $layout->lines[$i];
+        for ($i = $first; $i < $layout->count() && $i <= (int)floor(($s->scrollY + $innerH) / $lh); $i++) { // the paragraphs in view are wrapped as they are reached
+            [$a, $b] = $layout->line($i);
             $line = $layout->lineText($i);
             $y = $ty + $i * $lh;
             if ($ts->background !== null && $line !== '') { // the line's text background, under the selection
-                $list->rect($tx, $y, $text->xForIndex($line, $n->fontSize, strlen($line)), $lh, $ts->background);
+                $list->rect($tx, $y, $text->xForIndex($line, $n->fontSize, strlen($line), $s->style), $lh, $ts->background);
             }
             if ($selB > $selA && $selB > $a && $selA < $b) {
-                $xa = $selA > $a ? $text->xForIndex($line, $n->fontSize, $selA - $a) : 0.0;
-                $xb = $selB < $b ? $text->xForIndex($line, $n->fontSize, min($selB - $a, strlen($line))) : $text->xForIndex($line, $n->fontSize, strlen($line)) + ($selB > $b ? $n->fontSize * 0.3 : 0);
+                $xa = $selA > $a ? $text->xForIndex($line, $n->fontSize, $selA - $a, $s->style) : 0.0;
+                $xb = $selB < $b ? $text->xForIndex($line, $n->fontSize, min($selB - $a, strlen($line)), $s->style) : $text->xForIndex($line, $n->fontSize, strlen($line), $s->style) + ($selB > $b ? $n->fontSize * 0.3 : 0);
                 $list->rect($tx + $xa, $y, $xb - $xa, $lh, ...$selColor);
             }
             if ($line !== '' && $n->ranges !== []) {
-                $text->paintRuns($list, $line, $n->fontSize, $tx, $y, 0, self::rangeColors($n, $s, $a));
+                $text->paintRuns($list, $line, $n->fontSize, $tx, $y, $s->style, self::rangeColors($n, $s, $a));
             } elseif ($line !== '') {
-                $text->paint($list, $line, $n->fontSize, $tx, $y, $ts->color ?? $n->fg);
+                $text->paint($list, $line, $n->fontSize, $tx, $y, $ts->color ?? $n->fg, 1.0, $s->style);
             }
         }
         if ($s->marked !== null) {

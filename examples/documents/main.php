@@ -24,7 +24,7 @@ function note(Context $c, Document $doc, TextState $text): void
             if ($c->clicked($c->primaryButton('Save'))) { App::later(fn() => $doc->saveAnyway()); }
           $c->end();
       }
-      $c->textarea($text, 'Note', 0, 0, 14); // 0, 0: fills the window
+      $c->key('text')->textarea($text, '', 0, 0, 14)->label('Note')->autoFocus(); // 0, 0: fills the window
       if ($text->text !== $doc->content()) {
           $doc->set($text->text);
       }

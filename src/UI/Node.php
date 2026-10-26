@@ -90,6 +90,8 @@ final class Node
     public ?float $wrapWidth = null;
     /** That $wrapWidth is its container's last frame, so a frame follows when that differs. */
     public bool $wrapLast = false;
+    /** That the app gave the node its width (width(), size()), which a column's stretch keeps: a button's own is its label's. */
+    public bool $sizedW = false;
     /** That $wrapWidth is the width layout gave the text, narrower than its lines (Layout::wrapTexts, mygo's text wrapping at its width). */
     public bool $autoWrap = false;
     /** For rich text that wraps at no width: the width it was laid out across, wider than its lines, which an alignment or the direction places them in (Layout::arrange); 0 for none. */
@@ -372,7 +374,7 @@ final class Node
     }
 
     /** Sets the width and the height, in points (mygo's Width, Height); 0 leaves one to the content. */
-    public function width(float $v): static { $this->fw = $v; $this->wPct = null; return $this; }
+    public function width(float $v): static { $this->fw = $v; $this->wPct = null; $this->sizedW = $v > 0; return $this; }
     public function height(float $v): static { $this->fh = $v; $this->hPct = null; return $this; }
     /** Sets the width or height as a percentage of the parent's content box (mygo's WidthPercent, HeightPercent); fill() is both at 100, fillWidth() and fillHeight() one. */
     public function widthPercent(float $p): static { $this->wPct = $p / 100; return $this; }
@@ -1286,7 +1288,7 @@ final class Node
         return $this->wrap($width);
     }
 
-    /** Draws a one-point border around this colored container, in $color or the theme's border color. */
+    /** Draws a border $width points wide around this container, in $color or the theme's border color, over its background if it has one (mygo's Border). */
     public function border(?int $color = null, float $width = 1.0): static
     {
         $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
@@ -1414,6 +1416,12 @@ final class Node
 
     /** The padding at the top and bottom, and at the left and right, the border inside the node's edges included: the mean of the two sides where they differ. */
     public function padY(): float { return ($this->padT() + $this->padB()) / 2; }
+    /** Where a text's lines start: inside its padding and border, a paragraph's text inside it at the paragraph's. @return array{0: float, 1: float} */
+    public function textOrigin(): array
+    {
+        return $this->inline ? [$this->x, $this->y] : [$this->x + $this->padL(), $this->y + $this->padT()];
+    }
+
     public function padX(): float { return ($this->padL() + $this->padR()) / 2; }
 
     /** The room between the node's edge and its content on each side: its border and its padding. */
@@ -1537,7 +1545,7 @@ final class Node
     /** Fixes a container's width and/or height (points) instead of its content's size; 0 leaves one to the content. */
     public function size(float $w = 0, float $h = 0): static
     {
-        $this->fw = $w; $this->fh = $h;
+        $this->fw = $w; $this->fh = $h; $this->sizedW = $w > 0;
         return $this;
     }
 

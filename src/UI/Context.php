@@ -1534,7 +1534,7 @@ final class Context
         $kw = $t->space(5);
         $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
         $this->ownScope('range slider');
-        $n = $this->row(0, 0, $width <= 0 ? 1 : 0)->padding(0, $kw / 2)->min($t->space(25), $t->space(5))->role(Role::GROUP);
+        $n = $this->row(0, 0, $this->growsAlong($width, $kw))->padding(0, $kw / 2)->min($t->space(25), $t->space(5))->role(Role::GROUP);
         if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
         $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
         $snap = fn(float $v) => $step > 0 ? round(($v - $lo) / $step) * $step + $lo : $v;
@@ -3880,6 +3880,7 @@ final class Context
         $n->focusable = true;
         $n->ticks = $ticks;
         $n->paddingX($t->space(5) / 2); // the knob's half width each side: its center spans the values
+        $n->minWidth($t->space(20)); // as mygo's: a slider of no width, growing in a row, keeps a track to drag
         $this->slide($n, $value, $min, $max, $step);
         $n->held = $this->animate($n, 'held', ($this->runtime?->sliding($n->id) ?? false) ? 1 : 0, 0.15);
         return $n;
@@ -4026,7 +4027,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $width <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills the row's remaining width
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $this->growsAlong($width, $h + $t->space(3)), $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills a row's remaining width, a column's across
         $n->bordered = true;
         $n->edit = $state;
         $state->password = false; // until password() says otherwise, this frame
@@ -4038,7 +4039,8 @@ final class Context
      * A text area editing $state: wraps at its width, scrolls with the wheel
      * and to keep the caret in view, Enter inserts a line, Up/Down move by
      * wrapped lines, Cmd+Z undoes. A $width or $height of 0 fills the room
-     * its container has left along that axis (grow). With $maxLines, the
+     * its container has left along its axis (grow), or stretches across
+     * it, as its align says. With $maxLines, the
      * area is as high as its text wrapped at its width, from $minLines up
      * to $maxLines, past which it scrolls, as a message field grows with
      * what is typed (mygo's Lines): $height is then the least it is.
@@ -4052,15 +4054,23 @@ final class Context
             $id = $this->nextId();
             $w = $width > 0 ? $width : ($this->runtime?->rectOf($id)[2] ?? $this->width);
             $lines = $state->layout($this->metrics, $size, $w - 2 * Runtime::FIELD_INSET);
-            $height = max($height, max($minLines, min($maxLines, count($lines->lines))) * $lines->lineHeight + 2 * Runtime::FIELD_INSET_Y);
+            $lines->measureFirst($maxLines); // the lines past those it shows need not be wrapped, as mygo's wrappedHeight
+            $height = max($height, max($minLines, min($maxLines, $lines->count())) * $lines->lineHeight + 2 * Runtime::FIELD_INSET_Y);
         }
-        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $width <= 0 || $height <= 0 ? 1 : 0, $placeholder, $t->surface, $size, $t->text));
+        $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $this->growsAlong($width, $height), $placeholder, $t->surface, $size, $t->text));
         $n->edit = $state;
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
     }
 
-    /** input() editing a TextBuffer (mygo's TextInputBuffer): edits replace what changed in it, a change of the program's shows. */
+    /** The grow of a control of size $w × $h, 0 for a side the room decides: 1 where that side is along its container, which it then fills; across one, it stretches as its container's align does (a column's width). */
+    private function growsAlong(float $w, float $h): int
+    {
+        $parent = $this->stack[count($this->stack) - 1];
+        return ($parent->dir === Node::ROW ? $w : $h) <= 0 ? 1 : 0;
+    }
+
+        /** input() editing a TextBuffer (mygo's TextInputBuffer): edits replace what changed in it, a change of the program's shows. */
     public function textInputBuffer(TextBuffer $buffer, string $placeholder = '', float $width = 200, ?float $size = null): Node
     {
         return $this->bufferControl($buffer, fn(TextState $s) => $this->input($s, $placeholder, $width, $size));

@@ -89,7 +89,7 @@ final class Input
         if ($this->caretAt !== null) {
             return $this->shown(($this->caretAt)($byte));
         }
-        return $this->shown([$x + ($this->focus->multiline ? 0.0 : $this->focus->offsetX) + $this->metrics->xForIndex($this->focus->shown(), $size, $this->focus->shownIndex($byte)), $y, 1.0, $h]);
+        return $this->shown([$x + ($this->focus->multiline ? 0.0 : $this->focus->offsetX) + $this->metrics->xForIndex($this->focus->shown(), $size, $this->focus->shownIndex($byte), $this->focus->style), $y, 1.0, $h]);
     }
 
     /** The rectangle of range $r of the client's text in view points, as it shows through the node's transforms, and the range it is of; the node's corner where the client gives none. @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: ?TextInputRange} */

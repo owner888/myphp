@@ -22,6 +22,10 @@ final class Text implements TextPainter
     private array $lines = [];
     /** @var array<string, array{0: int, 1: int}> bitmap offsets by glyph key, in device pixels */
     private array $offsets = [];
+    /** @var list<Image> the pictures of color glyphs, in the order made */
+    private array $colors = [];
+    /** @var array<string, int> the index in $colors of each color glyph, by glyph key */
+    private array $colorIndex = [];
     private int $gen = 0;
     /** How many times the atlas filled and was rebuilt; a diagnostic. */
     public int $resets = 0;
@@ -53,26 +57,20 @@ final class Text implements TextPainter
                 if ($g->object || $g->font === null) {
                     continue;
                 }
-                $key = $g->font->id . ':' . $g->id;
-                $slot = $this->atlas->get($key);
-                if ($slot === null) {
-                    $bitmap = $this->ct->rasterize($g->font->id, $g->id);
-                    if ($bitmap === null) {
-                        continue; // no ink, as a space
-                    }
-                    if (!$this->atlas->fits($bitmap['w'], $bitmap['h'])) {
-                        $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
-                    }
-                    $slot = $this->atlas->add($key, $bitmap['w'], $bitmap['h'], $bitmap['addr']);
-                    Mem::free($bitmap['rows']);
-                    $this->offsets[$key] = [$bitmap['ox'], $bitmap['oy']];
+                $glyph = $this->glyph($g->font->id, $g->id);
+                if ($glyph === null) {
+                    continue; // no ink, as a space
                 }
-                [$ox, $oy] = $this->offsets[$key];
+                [$slot, $color, $ox, $oy, $w, $h] = $glyph;
                 if ($g->cluster !== $lastC) { [$rgb, $alpha] = $colorAt($g->cluster); $lastC = $g->cluster; }
                 // The pen and the baseline on device pixels, so the bitmap lands on its own grid.
-                $px = round(($x + $g->x) * $s) / $s;
-                $py = round(($y + $g->y) * $s) / $s;
-                $list->glyph($px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $rgb, $alpha, $slot['u'], $slot['v']);
+                $px = round(($x + $g->x) * $s) / $s + $ox / $s;
+                $py = round(($y + $g->y) * $s) / $s - ($oy + $h) / $s;
+                if ($color !== null) {
+                    $this->paintColor($list, $color, $px, $py, $alpha);
+                } else {
+                    $list->glyph($px, $py, $w / $s, $h / $s, $rgb, $alpha, $slot['u'], $slot['v']);
+                }
             }
         }
     }
@@ -88,8 +86,11 @@ final class Text implements TextPainter
             if ($b === null) {
                 continue; // no ink, as a space
             }
-            $mask = \FFI::string($b['rows'], $b['w'] * $b['h']);
+            $mask = \FFI::string($b['rows'], ($b['color'] ? 4 : 1) * $b['w'] * $b['h']);
             Mem::free($b['rows']);
+            if ($b['color']) { // a color glyph covers as its alpha
+                $mask = implode('', array_map(static fn(string $px): string => $px[3], str_split($mask, 4)));
+            }
             // Placed as paintLayout places it: the pen on a whole pixel, the bitmap's bottom oy pixels below the baseline.
             $left = (int)round(($x + $g->x) * $scale) + $b['ox'];
             $top = (int)round(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
@@ -118,6 +119,7 @@ final class Text implements TextPainter
         $this->atlas->reset();
         $this->lines = [];
         $this->offsets = [];
+        $this->colors = []; $this->colorIndex = [];
         $this->repaint = true;
     }
 
@@ -162,7 +164,7 @@ final class Text implements TextPainter
         $slot = $this->atlas->get($key);
         if ($slot === null) {
             if (!$this->atlas->fits($cw, $ch)) {
-                $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
+                $this->resetAtlas();
             }
             $pix = $rotate != 0 ? $svg->doc->rotated($pw, $ph, $cw, $ch, $rotate) : $svg->doc->pixels($pw, $ph);
             $mask = ''; // the coverage of the SVG, whatever its colors: its alpha
@@ -213,7 +215,7 @@ final class Text implements TextPainter
         $slot = $this->atlas->get($key);
         if ($slot === null) {
             if (!$this->atlas->fits($w, $h)) {
-                $this->atlas->reset(); $this->lines = []; $this->offsets = []; $this->resets++; $this->repaint = true;
+                $this->resetAtlas();
             }
             $rows = Mem::alloc($w * $h);
             \FFI::memcpy($rows, Svg\Mask::of($path, $width, $s, $x0, $y0, $w, $h), $w * $h);
@@ -221,6 +223,60 @@ final class Text implements TextPainter
             Mem::free($rows);
         }
         return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];
+    }
+
+    /**
+     * A glyph's bitmap: its mask's atlas slot, or, for a color glyph (an
+     * emoji's), its picture, which the image atlas holds as mygo's color
+     * atlas; with its offsets and size in pixels; null without ink.
+     * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int}
+     */
+    private function glyph(int $font, int $id): ?array
+    {
+        $key = "$font:$id";
+        if (isset($this->colorIndex[$key])) {
+            $img = $this->colors[$this->colorIndex[$key]];
+            [$ox, $oy] = $this->offsets[$key];
+            return [null, $img, $ox, $oy, $img->w, $img->h];
+        }
+        $slot = $this->atlas->get($key);
+        if ($slot === null) {
+            $b = $this->ct->rasterize($font, $id);
+            if ($b === null) {
+                return null;
+            }
+            if ($b['color']) {
+                $img = Image::fromPixels($b['w'], $b['h'], \FFI::string($b['rows'], 4 * $b['w'] * $b['h']));
+                Mem::free($b['rows']);
+                $this->colorIndex[$key] = count($this->colors);
+                $this->colors[] = $img;
+                $this->offsets[$key] = [$b['ox'], $b['oy']];
+                return [null, $img, $b['ox'], $b['oy'], $b['w'], $b['h']];
+            }
+            if (!$this->atlas->fits($b['w'], $b['h'])) {
+                $this->resetAtlas();
+            }
+            $slot = $this->atlas->add($key, $b['w'], $b['h'], $b['addr']);
+            Mem::free($b['rows']);
+            $this->offsets[$key] = [$b['ox'], $b['oy']];
+        }
+        [$ox, $oy] = $this->offsets[$key];
+        return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+    }
+
+    /** Starts the atlas over: every cached line refers to slots that are gone; the color glyphs, in the image atlas, keep theirs. */
+    private function resetAtlas(): void
+    {
+        $this->atlas->reset(); $this->lines = []; $this->resets++; $this->repaint = true;
+        $this->offsets = array_intersect_key($this->offsets, $this->colorIndex);
+    }
+
+    /** A color glyph's picture with its top left at ($x, $y), at $alpha: in its own colors, as mygo's. */
+    private function paintColor(DisplayList $list, Image $img, float $x, float $y, float $alpha): void
+    {
+        $s = $this->ct->scale;
+        $slot = $this->imageSlot($img);
+        $list->image($x, $y, $img->w / $s, $img->h / $s, $slot['u'], $slot['v'], $img->w, $img->h, $slot['page'], $alpha);
     }
 
     /** Call once per frame: ages the cache and sweeps stale lines now and then. */
@@ -296,6 +352,10 @@ final class Text implements TextPainter
         if ($l['quads'] === '') { return; }
         $q = $this->lines[$l['key']]['hot'] ??= unpack('g*', $l['quads']); // unpacked once for the lines in view (1-based), dropped by the sweep once they leave it
         for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
+            if ($q[$i + 4] < 0) { // a color glyph: v is its picture
+                $this->paintColor($list, $this->colors[(int)$q[$i + 5]], $x + $q[$i], $baseline + $q[$i + 1], $alpha);
+                continue;
+            }
             $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, (int)$q[$i + 4], (int)$q[$i + 5]);
         }
     }
@@ -316,6 +376,10 @@ final class Text implements TextPainter
         for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
             $u = (int)$q[$i + 6];
             if ($u !== $lastU) { [$rgb, $alpha] = $colorAt($bytes === null ? $u : $bytes[$u]); $lastU = $u; }
+            if ($q[$i + 4] < 0) {
+                $this->paintColor($list, $this->colors[(int)$q[$i + 5]], $x + $q[$i], $baseline + $q[$i + 1], $alpha);
+                continue;
+            }
             $list->glyph($x + $q[$i], $baseline + $q[$i + 1], $q[$i + 2], $q[$i + 3], $rgb, $alpha, (int)$q[$i + 4], (int)$q[$i + 5]);
         }
     }
@@ -349,30 +413,16 @@ final class Text implements TextPainter
         $shaped = $this->ct->shape($text, $size, $style);
         $quads = '';
         foreach ($shaped['glyphs'] as $g) {
-            $key = $g['font'] . ':' . $g['glyph'];
-            $slot = $this->atlas->get($key);
-            if ($slot === null) {
-                $bitmap = $this->ct->rasterize($g['font'], $g['glyph']);
-                if ($bitmap === null) {
-                    continue;
-                }
-                if (!$this->atlas->fits($bitmap['w'], $bitmap['h'])) {
-                    // Start over: every cached line refers to atlas slots that are gone.
-                    $this->atlas->reset();
-                    $this->lines = [];
-                    $this->offsets = [];
-                    $this->resets++;
-                    $this->repaint = true;
-                }
-                $slot = $this->atlas->add($key, $bitmap['w'], $bitmap['h'], $bitmap['addr']);
-                Mem::free($bitmap['rows']);
-                $this->offsets[$key] = [$bitmap['ox'], $bitmap['oy']];
+            $glyph = $this->glyph($g['font'], $g['glyph']);
+            if ($glyph === null) {
+                continue;
             }
-            [$ox, $oy] = $this->offsets[$key];
+            [$slot, $color, $ox, $oy, $w, $h] = $glyph;
             // Snap the pen to device pixels so the bitmap lands on its own grid.
             $px = round($g['x'] * $s) / $s;
             $py = round(-$g['y'] * $s) / $s;
-            $quads .= pack('g7', $px + $ox / $s, $py - ($oy + $slot['h']) / $s, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v'], $g['index']);
+            [$u, $v] = $color === null ? [$slot['u'], $slot['v']] : [-1, $this->colorIndex["{$g['font']}:{$g['glyph']}"]]; // a color glyph's u is -1, its v the index of its picture
+            $quads .= pack('g7', $px + $ox / $s, $py - ($oy + $h) / $s, $w / $s, $h / $s, $u, $v, $g['index']);
         }
         return [
             'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],

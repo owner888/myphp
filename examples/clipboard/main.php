@@ -72,7 +72,7 @@ function view(Context $c, Demo $d): void
     $t = $c->theme;
     $c->column(20, 12, 1);
       $c->text('Clipboard and drag data', 24, style: Font::BOLD);
-      $c->muted('Copy or drag the same note as text, HTML, or lazy JSON. Paste in another app to use its preferred representation.')->wrap(600);
+      $c->muted('Copy or drag the same note as text, HTML, or lazy JSON. Paste in another app to use its preferred representation.');
       $c->input($d->title, 'Title', 0);
       $c->textarea($d->body, '', 0, 90);
       $c->row(0, 8);
@@ -113,7 +113,7 @@ function view(Context $c, Demo $d): void
         }
       $c->end();
       $c->muted("JSON requests: {$d->providers} · Clipboard releases: {$d->releases}");
-      $c->text($d->status)->wrap(600);
+      $c->text($d->status);
     $c->end();
 }
 

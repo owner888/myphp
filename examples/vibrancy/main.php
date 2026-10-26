@@ -134,10 +134,10 @@ function pane(Context $c, Vibrancy $a, bool $vibrant, float $titleLeft): void
         $c->column(0, 16)->padding(24, 28)->maxWidth(560);
           $c->text($about, 15);
           $c->text("new WindowOptions(vibrancy: '$value')  // or \$win->setVibrancy('$value')", 12)->font('monospace')->padding(12, 14)->round(8)->background($t->surface)->selectable();
-          $c->text('A material shows wherever the view draws no background: the sidebar has none, this pane has one.')->wrap(500);
+          $c->text('A material shows wherever the view draws no background: the sidebar has none, this pane has one.');
           $c->checkbox('Show the material behind this pane too', $a->seeThrough)->disabled(!$vibrant);
           $c->text($vibrant ? 'The material is the system\'s, behind the window, and follows the appearance and the desktop.'
-              : 'This window shows no material here, so the sidebar draws a background of its own: materials show on macOS.', 12, $t->textMuted)->wrap(500)->margin(8, 0, 0, 0);
+              : 'This window shows no material here, so the sidebar draws a background of its own: materials show on macOS.', 12, $t->textMuted)->margin(8, 0, 0, 0);
         $c->end();
       $c->end();
     $c->end();

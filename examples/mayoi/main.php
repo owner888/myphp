@@ -1376,18 +1376,34 @@ final class Sounds
 
 // The game.
 
-/** A 32-bit product of $a and $b, without the float a 64-bit product can overflow to. */
-function mul32(int $a, int $b): int
+/** The low 64 bits of $a times $b, as Go's uint64 product wraps them, in 16-bit limbs: PHP's ints are signed, and its products past them floats. */
+function mul64(int $a, int $b): int
 {
-    return ($a * ($b & 0xffff) + ((($a * ($b >> 16)) & 0xffff) << 16)) & 0xffffffff;
+    $limb = static fn(int $v, int $i): int => ($v >> (16 * $i)) & 0xffff;
+    $r = 0; $carry = 0;
+    for ($k = 0; $k < 4; $k++) {
+        $sum = $carry;
+        for ($i = 0; $i <= $k; $i++) { $sum += $limb($a, $i) * $limb($b, $k - $i); }
+        $r |= ($sum & 0xffff) << (16 * $k);
+        $carry = $sum >> 16;
+    }
+    return $r;
 }
 
-/** The street's tile at ($x, $y): paving, here and there sakura petals, a crack or a drain. */
+/** $n, the bits of a uint64, shifted right by $s (1 to 63) as Go shifts it. */
+function shr64(int $n, int $s): int
+{
+    return ($n >> $s) & (PHP_INT_MAX >> ($s - 1));
+}
+
+/** The street's tile at ($x, $y): paving, here and there sakura petals, a crack or a drain, where mygo's hash puts them. */
 function tileAt(int $x, int $y): int
 {
-    $n = mul32($x & 0xffffffff, 0x9e3779b1) ^ mul32($y & 0xffffffff, 0x85ebca77);
-    $n = mul32($n ^ ($n >> 15), 0x2c1b3c6d);
-    $v = ($n ^ ($n >> 13)) % 100;
+    // mygo's constants, 0x9e3779b97f4a7c15, 0xc2b2ae3d27d4eb4f and 0xbf58476d1ce4e5b9, as the signed ints of their bits.
+    $n = mul64($x, -7046029254386353131) ^ mul64($y, -4417276706812531889);
+    $n = mul64($n ^ shr64($n, 31), -4658895280553007687);
+    $n ^= shr64($n, 27);
+    $v = (2 * (shr64($n, 1) % 50) + ($n & 1)) % 100; // the uint64's remainder
     return match (true) {
         $v < 3 => C_PETALS,
         $v < 5 => C_PETALS2,

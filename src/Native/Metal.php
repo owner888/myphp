@@ -153,7 +153,7 @@ final class Metal
         return max(r * f, float4(0.0));
     }
     float3 unpackRGB(float v) {
-        uint p = uint(v + 0.5);
+        uint p = uint(rint(v));   // not v + 0.5: past 2^23 a float32 holds no halves, and white (16777215) + 0.5 rounds up to 2^24, black
         return float3(float((p >> 16) & 255u), float((p >> 8) & 255u), float(p & 255u)) / 255.0;
     }
     float3 toLinear(float3 c) { float3 a = abs(c); return sign(c) * select(pow((a + 0.055) / 1.055, float3(2.4)), a / 12.92, a <= 0.04045); }
@@ -305,11 +305,12 @@ final class Metal
             if (radius < -0.5) { c.rgb *= unpackRGB(-radius - 1.0); radius = 0.0; }   // tinted (ImageOptions): the radius carries the tint's rgb, its alpha is in color.a
             float2 q = abs(v.local) - (v.extent - radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-            float a = 1.0 - smoothstep(-0.5, 0.5, d);
+            float aa = max(fwidth(d), 1e-4);   // a pixel of the screen, in the quad's units: zoomed by a transform, an image's edge stays one pixel soft, and tiles side by side show no seam between them
+            float a = 1.0 - smoothstep(-0.5 * aa, 0.5 * aa, d);
             return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
         }
         if (v.kind > 9.5) {   // a two-color gradient across (10) or down (11) the rounded rect; u packs the other color's rgb, v is its alpha
-            uint p = uint(v.uv.x + 0.5);
+            uint p = uint(rint(v.uv.x));
             float4 to = float4(float((p >> 16) & 255u), float((p >> 8) & 255u), float(p & 255u), 0.0) / 255.0;
             to.a = v.uv.y;
             float t = v.kind > 10.5 ? (v.local.y + v.extent.y) / max(2.0 * v.extent.y, 1.0) : (v.local.x + v.extent.x) / max(2.0 * v.extent.x, 1.0);

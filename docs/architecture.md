@@ -3030,6 +3030,56 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   textures of that pixel format, built when first needed; the layer's
   own color space comes back with BGRA8.
 
+## Running the examples beside mygo's (v1.26)
+
+- **Each example ran beside its mygo twin on a Mac** and their windows
+  were compared; what differed was fixed:
+  - A tinted image drew black: the shader unpacked the tint, packed as
+    -1 - rgb in the quad's radius, with `uint(v + 0.5)`, and a float32
+    holds no halves past 2^23, so white (16777215) rounded up to 2^24, 0
+    in its bytes. `unpackRGB` rounds with `rint` (farm's world, which
+    draws its tiles through the day's tint, was black; a box's border and
+    a gradient's second color unpack the same way).
+  - Color glyphs (Apple Color Emoji) drew as masks in the text color:
+    `CoreText::rasterize` draws a font with color glyphs
+    (kCTFontTraitColorGlyphs) into premultiplied RGBA in sRGB, as mygo's,
+    and `Text` keeps the bitmap as an `Image` in the image atlas, drawn
+    as an image at the text's alpha; its quads mark it with a u of -1.
+  - A text area wrapped its whole text as it painted, ten seconds and
+    half a gigabyte for text-buffer's 100 000 lines: `FieldLayout` now
+    wraps a paragraph when asked for its lines, as mygo's area, counting
+    the others a line each in a Fenwick tree of the paragraphs' lines; an
+    edit's layout takes the lines of the paragraphs it left, where they
+    were or as many paragraphs on as it added. Revealing the caret below
+    the view wraps the paragraphs above it first (mygo's reveal).
+  - A field ignored its font: `font('monospace')` or `bold()` on an input
+    or a text area now sets `TextState::$style`, the Font bits it is
+    wrapped, hit and painted in.
+  - Tiles zoomed by a camera showed seams: an image's edge was smoothed
+    over a point of its own units, six pixels at farm's zoom. It is
+    smoothed over a pixel of the screen (`fwidth`), so tiles side by side
+    meet.
+  - A leaf's least size (`minWidth`, `minHeight`) was kept only by
+    containers; a slider of no width growing in a row of fit content had
+    none, mygo's keeping `Space(20)`.
+  - mayoi's street used a hash of its own: its tiles are where mygo's
+    64-bit hash puts them (`mul64`, `shr64`, Go's wrapping arithmetic).
+    The art's speckles still differ, as PHP has no PCG of Go's.
+  - Text and rich leaves were placed without their padding, inputs grew
+    along a column, a border without a background was not drawn, nor a
+    dashed one, a button did not stretch across its column, a disabled
+    leaf did not dim, rich text drew no box of its own, a slider's track
+    was inside its padding and a slider of no width had none: each as
+    mygo's now (`Node::textOrigin`, `Context::growsAlong`, `$sizedW`).
+  - Dates showed UTC with no `date.timezone`: `App::run` sets the
+    system's zone (`NSTimeZone localTimeZone`), as Go's local time; a
+    php.ini that names a zone keeps it.
+  - WebKit's WKDownloadDelegate protocol is not always registered at run
+    time: the navigation delegate no longer declares it, as WebKit asks
+    its methods by `respondsToSelector:`.
+  - `MYPHP_FRAME_STATS` read the layouts made from `Text`, which has
+    none: they are the text system's.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

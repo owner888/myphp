@@ -1734,12 +1734,15 @@ final class Runtime
         if ($n->input !== null) { $this->inputs[$n->id] = $n->input; }
         if ($n->textClient !== null) { $this->textClients[$n->id] = [$n->textClient, $n->inputMethod]; }
         if ($n->caret !== null) { $this->carets[$n->id] = [$n->x + $n->caret[0], $n->y + $n->caret[1], $n->caret[2], $n->caret[3]]; }
+        if (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $n->edit !== null) {
+            $n->edit->style = $n->style | Node::fontBits($n->ts); // font('monospace'), bold(): what the field is measured, hit and painted in
+        }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
-            [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
+            [, $lh] = $this->metrics?->measure('X', $n->fontSize, $n->edit->style) ?? [0, $n->h];
             $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET - $n->insetL - $n->insetR];
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
             $this->areas[$n->id] = $n->edit;
-            [, $lh] = $this->metrics?->measure('X', $n->fontSize) ?? [0, $n->h];
+            [, $lh] = $this->metrics?->measure('X', $n->fontSize, $n->edit->style) ?? [0, $n->h];
             [$ix, $iy] = $n->bare ? [0.0, 0.0] : [self::FIELD_INSET, self::FIELD_INSET_Y];
             $this->fields[$n->id] = [$n->edit, $n->x + $ix, $n->y + $iy, $lh, $n->fontSize, $n->w - 2 * $ix];
         }
@@ -2003,7 +2006,7 @@ final class Runtime
         if ($state->multiline) {
             $byte = $state->layout($this->metrics, $size, $width)->hit($this->metrics, $x - $tx, $y - $ty + $state->scrollY);
         } else {
-            $byte = $state->fromShown($this->metrics->indexForX($state->shown(), $size, $x - $tx - $state->offsetX)); // a password's bullets; the text scrolled or aligned as painted
+            $byte = $state->fromShown($this->metrics->indexForX($state->shown(), $size, $x - $tx - $state->offsetX, $state->style)); // a password's bullets; the text scrolled or aligned as painted
         }
         $state->setCursor($byte, $extend);
     }
@@ -2026,7 +2029,7 @@ final class Runtime
         $m = $this->metrics;
         $layout = $state->layout($m, $size, $width);
         $line = $layout->lineOf($state->cursor);
-        [$a, $b] = $layout->lines[$line];
+        [$a, $b] = $layout->line($line);
         $end = $b > $a && $state->text[$b - 1] === "\n" ? $b - 1 : $b;
         $page = max(1, (int)(($this->rects[$this->focus][3] - 2 * self::FIELD_INSET_Y) / $lh) - 1);
         $toLine = function (int $l) use ($state, $layout, $m, $extend) {
@@ -2036,9 +2039,9 @@ final class Runtime
         switch ($base) {
             case 'insertNewline:': $state->insert("\n"); break;
             case 'moveUp:': if ($line === 0) { $state->setCursor(0, $extend); } else { $toLine($line - 1); } break;
-            case 'moveDown:': if ($line === count($layout->lines) - 1) { $state->setCursor(strlen($state->text), $extend); } else { $toLine($line + 1); } break;
+            case 'moveDown:': if ($line === $layout->count() - 1) { $state->setCursor(strlen($state->text), $extend); } else { $toLine($line + 1); } break;
             case 'pageUp:': $toLine(max(0, $line - $page)); break;
-            case 'pageDown:': $toLine(min(count($layout->lines) - 1, $line + $page)); break;
+            case 'pageDown:': $toLine(min($layout->count() - 1, $line + $page)); break;
             case 'moveToBeginningOfLine:': $state->setCursor($a, $extend); break;
             case 'moveToEndOfLine:': $state->setCursor($end, $extend); break;
             case 'moveToLeftEndOfLine:': case 'moveToRightEndOfLine:': $state->setCursor(($base === 'moveToRightEndOfLine:') !== $state->paragraphRTL() ? $end : $a, $extend); break; // the way the arrow points (mygo's caretParagraphRTL)
