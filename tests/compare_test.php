@@ -1,8 +1,9 @@
 <?php
-// What running the examples beside mygo's showed (v1.26, v1.27): a slider given
-// no width growing in a row of fit content keeps mygo's least width, a
-// leaf keeps the least size it is given, the track spans the slider, and a
-// button's label shows in a style of its own.
+// What running the examples beside mygo's showed (v1.26 to v1.28): a slider
+// given no width growing in a row of fit content keeps mygo's least width,
+// a leaf keeps the least size it is given, the track spans the slider, a
+// button's label shows in a style of its own, and a popover leaves the ids
+// of what is built after it.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -62,3 +63,19 @@ $h->release($bx, $by); $h->frame();
 same(0, $hits, 'a release alone is no click');
 $h->click($bx, $by); $h->frame();
 same(1, $hits, 'a press and its release are');
+
+// A popover opening before a focused text area leaves it its id: the field in the popover takes the focus and the typing, as the notes' link (v1.28).
+$body = new \MyPHP\UI\TextState('hello'); $url = new \MyPHP\UI\TextState(''); $linkOpen = false; $link = null;
+$h = new Headless(function (Context $c) use ($body, $url, &$linkOpen, &$link): void {
+    $c->column(10, 0, 1);
+      $link = $c->button('Link')->keepFocus();
+      if ($c->clicked($link)) { $linkOpen = true; }
+      $c->popover($link, $linkOpen, function () use ($c, $url): void { $c->input($url, 'https://', 260)->autoFocus()->label('URL'); });
+      $c->textarea($body)->autoFocus();
+    $c->end();
+}, 400, 300);
+$h->frame();
+[$lx, $ly] = $h->middle($link);
+$h->click($lx, $ly); $h->frame(3);
+$h->type('abc');
+same(['abc', 'hello'], [$url->text, $body->text], 'the popover field takes the typing, the text area keeps its text');

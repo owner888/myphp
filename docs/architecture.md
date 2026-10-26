@@ -3126,11 +3126,41 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   An attachment's drawing takes a `Painter` (the window's theme, text),
   as mygo's `Draw`.
 
+## Clicking through the examples on the Mac (v1.28)
+
+- **A tray stays in the menu bar.** `statusItemWithLength:` hands back
+  an autoreleased item the status bar keeps no reference to: the native
+  example's icon left the menu bar as the pool drained, without an
+  error. The tray retains it (mygo's `retain`) and releases it after
+  `removeStatusItem:`.
+- **A drag's image is the element's colors.** The preview went to an
+  `NSBitmapImageRep` as BGRA with the alpha-first, 32-bit little-endian
+  format, which the rep read as ARGB: a card's gray showed a saturated
+  blue. `Drag::start` gives it RGBA (format 0, premultiplied), as mygo's
+  PNG of the preview is.
+- **A popover keeps the ids of what is built after it.** An unkeyed
+  node's id is its place in the build order, and `popover()` built its
+  panel unkeyed, so the notes' editor, built after the toolbar's link
+  popover, became a new node as the popover opened: its `autoFocus()`
+  took the focus back from the popover's field, and the URL typed went
+  into the note. The panel is keyed by its anchor (`popover:<id>`), as
+  `popoverBase`'s and the combobox's are.
+- **The exec launcher's app has no process in LaunchServices.** Once the
+  launcher execs php, `NSRunningApplication` (and so
+  `frontmostApplication`, accessibility clients, automation) reports the
+  app with pid -1, whatever the php is, even a copy inside the bundle;
+  with php itself as the bundle's executable (no exec) the pid is the
+  process's. The micro launcher, one executable, has its pid.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 
 
+- The exec launcher (`myphp build`, `myphp dev`) leaves the app without
+  a pid in LaunchServices (above); php as the bundle's executable would
+  keep it, but needs its INI beside it (`php-cli.ini`, in place of the
+  user's php.ini) and a copy of php in each bundle.
 - The glyph atlas starts over when full and is re-rasterized whole; an
   image page is emptied whole. Eviction per glyph or image would avoid
   the restart, at the cost of free-space bookkeeping the shelves lack.

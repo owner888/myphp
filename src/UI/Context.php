@@ -2930,7 +2930,7 @@ final class Context
         $t = $this->theme;
         $rt = $this->runtime;
         $saved = $this->toRoot(); // at the root: over the view, placed in the window
-        $panel = $this->column();
+        $panel = $this->key('popover:' . $anchor->id)->column(); // keyed as popoverBase's: what is built after it keeps its ids, the editor its focus under the notes' link popover
         $this->stylePanel($panel);
         $panel->attachTo($anchor, Anchor::BottomStart, Anchor::TopStart)->minWidth($rt?->rectOf($anchor->id)[2] ?? 0)->role(Role::POPUP); // at the anchor's start, the right right to left; above it where there is no room below
           $fn();

@@ -140,9 +140,14 @@ final class Drag
         [$width, $height] = [$r['width'], $r['height']];
         if ($r['preview'] !== null) {
             $rep = ObjC::msg('p:pllllbbpLll', ObjC::alloc('NSBitmapImageRep'), 'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:',
-                null, $width, $height, 8, 4, true, false, ObjC::str('NSDeviceRGBColorSpace'), 1 | 1 << 9 /* alpha first, 32 bits little endian: BGRA, premultiplied */, $width * 4, 32)
+                null, $width, $height, 8, 4, true, false, ObjC::str('NSDeviceRGBColorSpace'), 0 /* RGBA, premultiplied */, $width * 4, 32)
                 ?? throw new \RuntimeException('drag image');
-            \FFI::memcpy(ObjC::$c->cast('char*', ObjC::msg('p:', $rep, 'bitmapData')), $r['preview'], strlen($r['preview']));
+            // RGBA, as mygo's PNG of it: the rep took BGRA's alpha-first little-endian format as ARGB, the gray of a card showing a saturated blue.
+            $pix = $r['preview'];
+            for ($i = 0, $n = strlen($pix); $i < $n; $i += 4) {
+                [$pix[$i], $pix[$i + 2]] = [$pix[$i + 2], $pix[$i]];
+            }
+            \FFI::memcpy(ObjC::$c->cast('char*', ObjC::msg('p:', $rep, 'bitmapData')), $pix, strlen($pix));
             $size = ObjC::$c->new('CGSize');
             $size->w = $width; $size->h = $height;
             $img = ObjC::msg('p:', ObjC::msg('p:z', ObjC::alloc('NSImage'), 'initWithSize:', $size), 'autorelease');

@@ -31,7 +31,8 @@ final class Tray
             throw new RuntimeException('create trays from App::whenReady()');
         }
         $bar = ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar');
-        $this->item = ObjC::msg('p:d', $bar, 'statusItemWithLength:', self::VARIABLE_LENGTH);
+        // The status bar keeps no reference: the item leaves the menu bar when the pool that holds it drains, so the tray owns it (as mygo's retain).
+        $this->item = ObjC::msg('p:', ObjC::msg('p:d', $bar, 'statusItemWithLength:', self::VARIABLE_LENGTH), 'retain');
         if ($o->icon !== null) {
             $this->setIcon($o->icon, $o->iconIsTemplate);
         }
@@ -181,6 +182,7 @@ final class Tray
         }
         unset(self::$byButton[ObjC::addr($this->button())]);
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar'), 'removeStatusItem:', $this->item);
+        ObjC::msg('v:', $this->item, 'release');
         $this->item = null;
     }
 }
