@@ -3256,6 +3256,10 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
     (pdo_sqlite's) for its own and crashed: `NativeLibrary::cdef` opens a
     plugin's library with RTLD_DEEPBIND first on Linux, which FFI's
     dlopen of it then finds (SQLite, libghostty-vt).
+  - The runner is not root: the documents test's stand-in for
+    NSFileManager gave a new file the mode of none (`fileperms` of a
+    missing file), which root reads anyway; it renames a new file into
+    place, as `Files::replaceItem` does.
 
 ## Open items
 

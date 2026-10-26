@@ -106,8 +106,8 @@ Host::$message = function (MessageOptions $o): MessageResult {
 Host::$save = fn() => DocLoop::$savePath;
 Host::$quit = function (): void { DocLoop::$quits++; };
 Host::$focused = fn() => null;
-Files::$replace = function (string $path, string $tmp): void { // NSFileManager's keeps the file's permissions too
-    @chmod($tmp, fileperms($path) & 0777);
+Files::$replace = function (string $path, string $tmp): void { // NSFileManager's keeps the file's permissions too; a new file is renamed into place, as Files::replaceItem does
+    if (file_exists($path)) { chmod($tmp, fileperms($path) & 0777); }
     rename($tmp, $path) || throw new \RuntimeException("cannot replace $path");
 };
 $docsRoot = sys_get_temp_dir() . '/myphp-docs-' . getmypid();
