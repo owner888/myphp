@@ -122,6 +122,25 @@ foreach ([1000, 3000] as $i => $size) {
 check(bldThrows(fn() => MachO::writeUniversal("$d/x", "$d/missing")) !== '', 'a missing slice');
 same(['arm64 code', 'x86_64 code', '', 'universal or 32-bit code'], [MachO::kind("$d/arm"), MachO::kind("$d/amd"), MachO::kind("$d/text"), MachO::kind("$d/fat")], 'what code is');
 
+// A micro.sfx takes its payload inside __LINKEDIT, which codesign signs, and its section says where (v1.28): the signature comes off, the segment grows over the payload.
+$microSfx = function (bool $section): string {
+    $cmds = pack('VV', 0x19, 72 + 80) . str_pad('__DATA', 16, "\0") . pack('PPPPVVVV', 0x4000, 0x4000, 0x1000, 0x1000, 3, 3, 1, 0)
+        . str_pad($section ? MachO::MICRO_SECTION : '__data', 16, "\0") . str_pad('__DATA', 16, "\0") . pack('PPVVVVVVVV', 0x4000, 16, 0x1000, 0, 0, 0, 0, 0, 0, 0)
+        . pack('VV', 0x19, 72) . str_pad('__LINKEDIT', 16, "\0") . pack('PPPPVVVV', 0x8000, 0x4000, 0x2000, 0x1100, 1, 1, 0, 0)
+        . pack('VVVV', 0x1d, 16, 0x3000, 0x100);
+    $head = pack('V8', 0xfeedfacf, MachO::CPU_ARM64, 0, 2, 3, strlen($cmds), 0, 0) . $cmds;
+    return str_pad($head, 0x2000, "\0") . str_repeat("L", 0x1000) . str_repeat("S", 0x100);
+};
+MachO::embed($microSfx(true), MachO::microPayload("memory_limit=1G", 'PHAR'), "$d/embedded");
+$embedded = file_get_contents("$d/embedded");
+$payloadAt = 0x3000;
+same(["\xfd\xf6\x69\xe6" . pack('N', 15) . 'memory_limit=1G' . 'PHAR', [$payloadAt, $payloadAt + 27]], [substr($embedded, $payloadAt), array_values(unpack('J2', $embedded, 0x1000))], 'the payload after __LINKEDIT\'s data, where the section says');
+same([2, 0x1000 + 27, 0x4000], [unpack('V', $embedded, 16)[1], unpack('P', $embedded, 32 + 152 + 48)[1], unpack('P', $embedded, 32 + 152 + 32)[1]], 'the signature\'s command gone, __LINKEDIT over the payload');
+file_put_contents("$d/nosection", $microSfx(false));
+same([[true, false], true, false], [MachO::read("$d/embedded"), MachO::hasMicroSection("$d/embedded"), MachO::hasMicroSection("$d/nosection")], 'unsigned, for the bundle\'s signature; a micro.sfx without the section');
+check(str_contains(bldThrows(fn() => MachO::embed($microSfx(false), 'x', "$d/refused")), MachO::MICRO_SECTION) && !is_file("$d/refused"), 'one without the section is refused');
+check(bldThrows(fn() => MachO::embed(substr($microSfx(true), 0, 100), 'x', "$d/refused")) !== '', 'a truncated one too');
+
 // Resources: the directory's entries, the listed ones under their names, hidden files left out, links inside kept.
 $p = bldDir();
 bldWrite($p, ['resources/icon.png' => 'png', 'resources/data/words.txt' => 'hello', 'resources/data/.DS_Store' => 'junk', 'resources/.gitkeep' => '',

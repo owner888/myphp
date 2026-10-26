@@ -1228,16 +1228,21 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     region (`Tester.SetRegion`).
   - myphp: keys are scoped by keyed containers, so the gallery prefixes
     them ("tile 0", "item 3"); timers (`App::after`) and
-    `Window::update`; Go's PCG and Rand (`MyPHP\Random`, since v1.27), so
-    the farm, mayoi's art and band, the piano's hammers and the gallery's
-    charts are mygo's from the same seeds (the confetti and the chat draw
-    unseeded in both); selects choose
+    `Window::update`; PHP's `Random\Randomizer` (Xoshiro256**, the
+    piano's `mt_rand`) where mygo seeds Go's PCG, so the farm, mayoi's art
+    and band, the piano's hammers and the gallery's charts are alike but
+    not mygo's draw for draw (the confetti and the chat draw unseeded in
+    both); selects choose
     indexes and inputs edit `TextState`s; the Languages test runs in the
     zero region; `Dialog::message` runs after the click (`App::later`),
     its own loop; the wide-gamut card's left column draws the sRGB twins
     (`WideColor::srgb`).
   - Why: myphp's scoping, PHP's threads, myphp's controls, and no region
-    setter for tests.
+    setter for tests; Go's generators, ported for v1.27, were dropped in
+    v1.28 as the developer asked: PHP's engines are of the same quality
+    for an app (Go's PCG-DXSM and PHP's PcgOneseq128XslRr64 differ only
+    for many close-seeded streams in parallel), and the port drew a
+    number some 170 times slower than the engine's.
 - **Examples of the same name** (v1.27)
   - mygo: `native` tours the desktop from a page, `notes` is rich text
     notes, `drag-drop` drags between two windows.

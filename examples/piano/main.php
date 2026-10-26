@@ -108,11 +108,11 @@ function synthSteps(int $note): \Generator
         yield;
     }
     // The hammer: a short burst of noise, and an attack of 2 ms.
-    $rng = \MyPHP\Random\Rand::pcg($note, 1); // Go's math/rand/v2, as mygo's: the same hammer
+    mt_srand($note);
     $lp = 0.0;
     for ($i = 0, $m = min($n, intdiv(SYNTH_RATE, 20)); $i < $m; $i++) {
         $t = $i / SYNTH_RATE;
-        $lp += 0.3 * ($rng->float64() * 2 - 1 - $lp);
+        $lp += 0.3 * (mt_rand() / mt_getrandmax() * 2 - 1 - $lp);
         $out[$i] += 0.4 * $lp * exp(-$t / 0.006);
         $out[$i] *= min($t / 0.002, 1);
     }

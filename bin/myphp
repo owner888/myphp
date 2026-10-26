@@ -36,7 +36,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, Resources, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -873,7 +873,7 @@ function build(array $args): void
     if ($launcher === 'exec') {
         trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
     } else {
-        [$opts['spc'], $opts['micro']] = ensureMicro($php);
+        [, $opts['micro']] = ensureMicro($php);
     }
     $started = microtime(true);
     // The accessors of the catalogs come first, which the app calls, then the TypeScript client: the frontend build type-checks and bundles them.
@@ -999,7 +999,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         if ($opts['launcher'] === 'exec') {
             buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch);
         } else {
-            buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $opts['spc'], $opts['micro']);
+            buildMicroLauncher("$contents/MacOS/$name", "$contents/Resources/app", $c['entry'], $opts['micro']);
         }
         $entitlements = ($m['entitlements'] ?? '') !== '' ? path($dir, $m['entitlements']) : '';
         $helpers = array_map(fn(string $f) => path($dir, $f), $m['helperEntitlements']);
@@ -1268,11 +1268,12 @@ function buildExecLauncher(string $out, string $entry, string $arch, ?string $pr
 }
 
 /**
- * The app as one static binary: the project packed as a phar, combined
- * with phpmicro by static-php-cli (`spc micro:combine`), the INI the app
- * needs embedded. Needs spc on PATH and micro.sfx (see `myphp micro`).
+ * The app as one static binary: the project packed as a phar after
+ * phpmicro, with the INI the app needs, inside its __LINKEDIT so that
+ * codesign signs it (MachO::embed). Needs a micro.sfx with the section
+ * saying where (see `myphp micro`).
  */
-function buildMicroLauncher(string $out, string $appDir, string $entry, string $spc, string $micro): void
+function buildMicroLauncher(string $out, string $appDir, string $entry, string $micro): void
 {
     $phar = sys_get_temp_dir() . '/myphp-' . getmypid() . '.phar';
     @unlink($phar);
@@ -1281,14 +1282,15 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
     \$p->setStub("<?php Phar::mapPhar('app.phar'); if ((\\\$argv[1] ?? '') === '--myphp-pty-spawn') { require 'phar://app.phar/myphp/src/Plugins/Terminal/Pty/spawn.php'; exit(127); } require 'phar://app.phar/$entry'; __HALT_COMPILER();");
     PHP]);
     $code === 0 || fail('building the phar failed');
-    $ini = [];
-    foreach (MICRO_INI as $setting) {
-        $ini[] = '-I';
-        $ini[] = $setting;
+    $sfx = @file_get_contents($micro);
+    $sfx !== false || fail("cannot read $micro");
+    try {
+        MachO::embed($sfx, MachO::microPayload(implode("\n", MICRO_INI), (string)file_get_contents($phar)), $out);
+    } catch (RuntimeException $e) {
+        fail("$micro: " . $e->getMessage());
+    } finally {
+        unlink($phar);
     }
-    $code = sh([$spc, 'micro:combine', $phar, '-M', $micro, '-O', $out, ...$ini]);
-    unlink($phar);
-    $code === 0 || fail('spc micro:combine failed');
     chmod($out, 0755);
 }
 
@@ -1297,8 +1299,30 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
 // phar:// timestamps (SIGBUS in zend_get_file_handle_timestamp) and its JIT
 // segfaults on arm64 macOS, so the micro build runs the plain interpreter.
 const MICRO_INI = ['ffi.enable=1', 'memory_limit=512M'];
-const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json';
+// What the framework calls: intl from the start (I18n), xmlreader for SVG icons, curl for fetch and updates, sockets for one instance, filter.
+const MICRO_EXTENSIONS = 'ffi,mbstring,ctype,phar,json,intl,xmlreader,curl,sockets,filter';
 const MICRO_PHP = '8.4';
+/**
+ * The patch spc applies to phpmicro (`spc build -P`) as `myphp micro`
+ * builds it: a __DATA,__micro_sfxsize section, which phpmicro reads for
+ * where its payload starts and ends when it is set, so that the payload
+ * can be inside __LINKEDIT, which codesign signs (MachO::embed). All zeros,
+ * as linked, it leaves phpmicro to the end of __LINKEDIT, so spc's checks
+ * of a micro.sfx with a script after it pass.
+ */
+const MICRO_PATCH = <<<'PHP'
+<?php
+if (patch_point() === 'before-php-make') {
+    $f = SOURCE_PATH . '/php-src/sapi/micro/php_micro_fileinfo.c';
+    $c = file_get_contents($f);
+    if (!str_contains($c, 'myphp_micro_sfxsize')) {
+        $find = 'if (NULL == section) {';
+        if (substr_count($c, $find) !== 1) { throw new RuntimeException("myphp: $f is not the phpmicro MICRO_PATCH knows"); }
+        $c = "#include <string.h>\n" . str_replace($find, 'if (NULL == section || 0 == memcmp(section, (const char[16]){0}, 16)) {', $c);
+        file_put_contents($f, $c . "\n#ifdef __APPLE__\n__attribute__((used, section(\"__DATA,__micro_sfxsize\"))) unsigned char myphp_micro_sfxsize[16] = {0};\n#endif\n");
+    }
+}
+PHP;
 const SPC_NIGHTLY = 'https://dl.static-php.dev/static-php-cli/spc-bin/nightly/';
 
 /** The spc binary: on PATH, or downloaded once to ~/.myphp/spc. */
@@ -1331,9 +1355,15 @@ function ensureSpc(): string
 function ensureMicro(?string $phpVersion = null): array
 {
     $spc = ensureSpc();
-    $micro = getenv('MYPHP_MICRO') ?: (getenv('HOME') . '/.myphp/micro.sfx');
-    if (is_file($micro)) {
+    $own = getenv('MYPHP_MICRO');
+    $micro = $own ?: (getenv('HOME') . '/.myphp/micro.sfx');
+    $lacks = is_file($micro) ? microLacks($micro) : '';
+    if (is_file($micro) && $lacks === '') {
         return [$spc, $micro];
+    }
+    if (is_file($micro)) {
+        $own === false || fail("$micro $lacks: build micro.sfx as `myphp micro` does (`myphp micro -manual`)");
+        echo "myphp: $micro $lacks, as one of a myphp before 1.28; building it again\n";
     }
     $php = $phpVersion ?? getenv('MYPHP_PHP_VERSION') ?: MICRO_PHP;
     $build = getenv('HOME') . '/.myphp/build';
@@ -1342,13 +1372,34 @@ function ensureMicro(?string $phpVersion = null): array
     sh([$spc, 'doctor', '--auto-fix'], $build) === 0 || fail('spc doctor found problems it could not fix');
     echo "myphp: building phpmicro $php with " . MICRO_EXTENSIONS . " in $build (once; this compiles PHP and takes a while)\n";
     sh([$spc, 'download', '--for-extensions=' . MICRO_EXTENSIONS, "--with-php=$php"], $build) === 0 || fail('spc download failed');
-    sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro'], $build) === 0 || fail('spc build failed');
+    file_put_contents("$build/myphp-micro-patch.php", MICRO_PATCH) !== false || fail("cannot write $build/myphp-micro-patch.php");
+    sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro', '-P', "$build/myphp-micro-patch.php"], $build) === 0 || fail('spc build failed');
     $built = "$build/buildroot/bin/micro.sfx";
     is_file($built) || fail("spc built nothing at $built");
+    ($lacks = microLacks($built)) === '' || fail("spc built $built, which $lacks");
     copy($built, $micro);
     chmod($micro, 0755);
     echo "myphp: micro.sfx ready at $micro\n";
     return [$spc, $micro];
+}
+
+/**
+ * What the micro.sfx at $path lacks that MyPHP's apps need, '' for
+ * nothing: the section MICRO_PATCH adds, which a signed app needs, and
+ * MICRO_EXTENSIONS, which it reports run with a script after it.
+ */
+function microLacks(string $path): string
+{
+    if (!MachO::hasMicroSection($path)) {
+        return 'has no __DATA,' . MachO::MICRO_SECTION . ' section, which a signed app needs';
+    }
+    $probe = tempnam(sys_get_temp_dir(), 'myphp-micro');
+    copy($path, $probe) && file_put_contents($probe, '<?php echo implode(",", get_loaded_extensions());', FILE_APPEND) || fail("cannot write $probe");
+    chmod($probe, 0755);
+    $loaded = array_map('strtolower', explode(',', (string)shell_exec(escapeshellarg($probe) . ' 2>/dev/null')));
+    unlink($probe);
+    $missing = array_diff(explode(',', MICRO_EXTENSIONS), $loaded);
+    return $missing === [] ? '' : 'has no ' . implode(', ', $missing);
 }
 
 function micro(array $args): void
@@ -1363,7 +1414,7 @@ function micro(array $args): void
           mkdir -p ~/.myphp/build && cd ~/.myphp/build   # doctor, download and build share this directory
           ~/.myphp/spc doctor --auto-fix
           ~/.myphp/spc download --for-extensions=$ext --with-php=$php
-          ~/.myphp/spc build $ext --build-micro
+          ~/.myphp/spc build $ext --build-micro -P myphp-micro-patch.php   # MICRO_PATCH of bin/myphp, saved there
           cp buildroot/bin/micro.sfx ~/.myphp/micro.sfx
 
         \$MYPHP_MICRO points `myphp build --launcher micro` at another micro.sfx,

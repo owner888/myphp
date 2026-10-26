@@ -160,4 +160,126 @@ final class MachO
         }
         chmod($out, 0755);
     }
+
+    /** The section phpmicro reads where its payload is (a big-endian offset and limit), which `myphp micro` links into micro.sfx. */
+    public const MICRO_SECTION = '__micro_sfxsize';
+
+    /**
+     * $payload inside the 64-bit Mach-O executable $sfx (a micro.sfx), so
+     * that codesign signs it: past the end of the file codesign refuses
+     * the executable ("main executable failed strict validation"), so the
+     * signature comes off, __LINKEDIT grows over the payload, and the
+     * __DATA,__micro_sfxsize section says where it starts and ends, which
+     * phpmicro reads instead of the end of __LINKEDIT. The executable is
+     * written to $out unsigned, a piece at a time (micro.sfx with ICU is
+     * some 50 MB); signing the bundle signs it.
+     */
+    public static function embed(string $sfx, string $payload, string $out): void
+    {
+        [$cpu, $ncmds, $sizeofcmds, $linkedit, $section, $signature] = self::microLayout($sfx);
+        if ($section === null || $section['size'] < 16) {
+            throw new RuntimeException('micro.sfx has no __DATA,' . self::MICRO_SECTION . ' section of 16 bytes, which `myphp micro` links into it');
+        }
+        if ($linkedit === null) {
+            throw new RuntimeException('micro.sfx has no __LINKEDIT segment');
+        }
+        ['fileoff' => $fileoff, 'filesize' => $filesize] = unpack('Pfileoff/Pfilesize', $sfx, $linkedit + 40);
+        if ($fileoff + $filesize !== strlen($sfx)) {
+            throw new RuntimeException('micro.sfx has data after its __LINKEDIT segment');
+        }
+        $head = substr($sfx, 0, 32 + $sizeofcmds);
+        $end = strlen($sfx); // where what is kept of micro.sfx ends
+        if ($signature !== null) { // the signature, at the end of __LINKEDIT, comes off with its load command, the last
+            [$cmdAt, $off, $sigSize] = $signature;
+            if ($off < $fileoff || $off + $sigSize !== strlen($sfx)) {
+                throw new RuntimeException('micro.sfx has its code signature elsewhere than at its end');
+            }
+            if ($cmdAt + 16 !== 32 + $sizeofcmds) {
+                throw new RuntimeException('micro.sfx has load commands after its code signature');
+            }
+            $head = substr_replace(substr_replace($head, str_repeat("\0", 16), $cmdAt, 16), pack('VV', $ncmds - 1, $sizeofcmds - 16), 16, 8);
+            $end = $off;
+            $filesize = $off - $fileoff;
+        }
+        $at = $section['offset'];
+        if ($at < strlen($head) || $at + 16 > $end) {
+            throw new RuntimeException('micro.sfx has its ' . self::MICRO_SECTION . ' section outside its data');
+        }
+        $filesize += strlen($payload);
+        $page = $cpu === self::CPU_ARM64 ? 0x4000 : 0x1000;
+        $head = substr_replace($head, pack('PPP', intdiv($filesize + $page - 1, $page) * $page, $fileoff, $filesize), $linkedit + 32, 24);
+        $f = @fopen($out, 'wb') ?: throw new RuntimeException("cannot write $out");
+        try {
+            $put = function (int $from, int $to) use ($f, $sfx): void {
+                for ($p = $from; $p < $to; $p += 1 << 20) {
+                    fwrite($f, substr($sfx, $p, min(1 << 20, $to - $p)));
+                }
+            };
+            fwrite($f, $head);
+            $put(strlen($head), $at);
+            fwrite($f, pack('JJ', $end, $end + strlen($payload)));
+            $put($at + 16, $end);
+            fwrite($f, $payload) === strlen($payload) || throw new RuntimeException("cannot write $out");
+        } finally {
+            fclose($f);
+        }
+    }
+
+    /** Whether the micro.sfx at $path has the section embed() writes where its payload is. */
+    public static function hasMicroSection(string $path): bool
+    {
+        $sfx = @file_get_contents($path, false, null, 0, 1 << 20); // the load commands are at its start
+        try {
+            $section = $sfx === false ? null : self::microLayout($sfx)[4];
+        } catch (RuntimeException) {
+            return false;
+        }
+        return $section !== null && $section['size'] >= 16;
+    }
+
+    /**
+     * What embed() changes in a 64-bit Mach-O executable: its CPU, load
+     * commands, __LINKEDIT's load command, the micro section and the code
+     * signature's load command with where the signature is.
+     *
+     * @return array{int, int, int, ?int, ?array{size: int, offset: int}, ?array{int, int, int}}
+     */
+    private static function microLayout(string $sfx): array
+    {
+        if (strlen($sfx) < 32 || unpack('V', $sfx)[1] !== 0xfeedfacf) {
+            throw new RuntimeException('micro.sfx is not a 64-bit Mach-O executable');
+        }
+        ['cpu' => $cpu, 'ncmds' => $ncmds, 'sizeofcmds' => $sizeofcmds] = unpack('Vmagic/Vcpu/Vsub/Vtype/Vncmds/Vsizeofcmds', $sfx);
+        $linkedit = $section = $signature = null;
+        for ($i = 0, $at = 32; $i < $ncmds; $i++) {
+            if ($at + 8 > 32 + $sizeofcmds || 32 + $sizeofcmds > strlen($sfx)) {
+                throw new RuntimeException('micro.sfx has load commands past its header');
+            }
+            ['cmd' => $cmd, 'size' => $size] = unpack('Vcmd/Vsize', $sfx, $at);
+            if ($size < 8 || $at + $size > 32 + $sizeofcmds) {
+                throw new RuntimeException('micro.sfx has a load command past its header');
+            }
+            if ($cmd === 0x19) { // LC_SEGMENT_64
+                $seg = rtrim(substr($sfx, $at + 8, 16), "\0");
+                if ($seg === '__LINKEDIT') { $linkedit = $at; }
+                $nsects = $size >= 72 ? unpack('V', $sfx, $at + 64)[1] : 0;
+                for ($k = 0; $k < $nsects && 72 + ($k + 1) * 80 <= $size; $k++) {
+                    $s = $at + 72 + $k * 80;
+                    if ($seg === '__DATA' && rtrim(substr($sfx, $s, 16), "\0") === self::MICRO_SECTION) {
+                        $section = unpack('Psize/Voffset', $sfx, $s + 40);
+                    }
+                }
+            } elseif ($cmd === 0x1d) { // LC_CODE_SIGNATURE
+                $signature = [$at, ...array_values(unpack('Voff/Vsize', $sfx, $at + 8))];
+            }
+            $at += $size;
+        }
+        return [$cpu, $ncmds, $sizeofcmds, $linkedit, $section, $signature];
+    }
+
+    /** What phpmicro reads after itself: the INI it runs with (a magic, its length) and the app's phar. */
+    public static function microPayload(string $ini, string $phar): string
+    {
+        return "\xfd\xf6\x69\xe6" . pack('N', strlen($ini)) . $ini . $phar;
+    }
 }

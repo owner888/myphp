@@ -214,12 +214,13 @@ final class GalleryCharts
     /** The page's data, the same at every start. */
     public function __construct()
     {
-        $r = \MyPHP\Random\Rand::pcg(1, 2); // Go's math/rand/v2, as mygo's: the same charts
-        foreach (CHART_MONTHS as $i => $_) { $this->sales[] = 40 + 50 * sin($i / 3.5) + 20 * $r->float64(); }
+        $r = new \Random\Randomizer(new \Random\Engine\Xoshiro256StarStar(12));
+        $normal = fn(): float => sqrt(-2 * log(max(1e-12, $r->nextFloat()))) * cos(2 * M_PI * $r->nextFloat());
+        foreach (CHART_MONTHS as $i => $_) { $this->sales[] = 40 + 50 * sin($i / 3.5) + 20 * $r->nextFloat(); }
         foreach ($this->scatter as $k => $_) {
             for ($i = 0; $i < 24; $i++) {
-                $w = 1100 + 450 * $k + 170 * $r->normFloat64();
-                $this->scatter[$k][] = [$w, 3 + $w / 420 + 0.9 * $r->normFloat64()];
+                $w = 1100 + 450 * $k + 170 * $normal();
+                $this->scatter[$k][] = [$w, 3 + $w / 420 + 0.9 * $normal()];
             }
         }
     }

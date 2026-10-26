@@ -101,8 +101,11 @@ final class Catalog
             throw new InvalidArgumentException("i18n: $dir is not a directory");
         }
         $files = [];
-        foreach (glob(rtrim($dir, '/') . '/*.json') ?: [] as $path) {
-            $name = basename($path);
+        foreach (scandir($dir) ?: [] as $name) { // not glob, which finds nothing in a phar (a micro app's catalogs)
+            if (!str_ends_with($name, '.json') || $name[0] === '.') {
+                continue;
+            }
+            $path = rtrim($dir, '/') . "/$name";
             $tag = substr($name, 0, -5);
             $norm = I18n::normalize($tag);
             if ($norm === '' || $norm !== $tag) {

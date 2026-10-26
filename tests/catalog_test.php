@@ -81,6 +81,14 @@ same([['en', 'de', 'zh-Hant'], 'Rückgängig', 'Rückgängig', 'Redo', '復原']
 foreach ([['de.json' => '{}'], ['german.json' => '{}']] as $fs) {
     try { $c->add($files($fs)); check(false, 'added ' . key($fs)); } catch (\InvalidArgumentException) { check(true, 'not added: ' . key($fs)); }
 }
+
+// A catalog in a phar, as a micro app's are (v1.28): glob finds nothing there.
+$pharFile = $files([]) . "/catalogs.phar";
+$made = shell_exec(escapeshellarg(PHP_BINARY) . ' -d phar.readonly=0 -r ' . escapeshellarg('$p = new Phar($argv[1]); $p["l10n/en.json"] = "{\"hello\": \"Hello\"}"; $p["l10n/de.json"] = "{\"hello\": \"Hallo\"}"; echo "ok";') . ' ' . escapeshellarg($pharFile));
+same('ok', $made, 'a phar of catalogs');
+$inPhar = new Catalog("phar://$pharFile/l10n", 'en');
+same([['en', 'de'], 'Hallo'], [$inPhar->languages(), $inPhar->format('de', 'hello')], 'its languages and messages');
+
 foreach (glob("$tmp/*/*") as $f) { unlink($f); }
 foreach (glob("$tmp/*") as $d) { rmdir($d); }
 rmdir($tmp);

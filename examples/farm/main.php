@@ -17,10 +17,11 @@ declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Decoder, Player, Sound};
-use MyPHP\Random\Rand;
 use MyPHP\Plugins\Game\{Camera, Game, Input};
 use MyPHP\Plugins\Game\Gamepad\{Button, Gamepad, State};
 use MyPHP\UI\{Content, Context, Image, ImageOptions, Key, Painter, Span};
+use Random\Engine\Xoshiro256StarStar;
+use Random\Randomizer;
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -95,11 +96,11 @@ final class World
     /** Lays out a farm: a field of grass with a pond, a path, trees around it and some bushes and rocks, and the farmer by the house. */
     public function __construct()
     {
-        $rng = Rand::pcg(7, 11); // Go's math/rand/v2, as mygo's: the same farm
+        $rng = new Randomizer(new Xoshiro256StarStar(711));
         for ($y = 0; $y < MAP_H; $y++) {
             for ($x = 0; $x < MAP_W; $x++) {
                 $t = new Tile();
-                $r = $rng->intN(10);
+                $r = $rng->getInt(0, 9);
                 $t->variant = $r < 2 ? 1 : ($r < 3 ? 2 : 0);
                 if ($x < 2 || $y < 2 || $x >= MAP_W - 2 || $y >= MAP_H - 2) { $t->object = TREE; }
                 $this->tiles[$y][$x] = $t;
@@ -122,9 +123,9 @@ final class World
             if ($x !== 12) { $this->tiles[11][$x]->object = FENCE; }
         }
         for ($i = 0; $i < 25; $i++) {
-            $x = 2 + $rng->intN(MAP_W - 4); $y = 2 + $rng->intN(MAP_H - 4);
+            $x = 2 + $rng->getInt(0, MAP_W - 5); $y = 2 + $rng->getInt(0, MAP_H - 5);
             $t = $this->tiles[$y][$x];
-            if ($t->ground === GRASS && $t->object === NONE && ($x < 18 || $x > 23)) { $t->object = [BUSH, ROCK][$rng->intN(2)]; }
+            if ($t->ground === GRASS && $t->object === NONE && ($x < 18 || $x > 23)) { $t->object = [BUSH, ROCK][$rng->getInt(0, 1)]; }
         }
     }
 
@@ -283,11 +284,11 @@ function rgb(int $hex): array { return [$hex >> 16 & 0xff, $hex >> 8 & 0xff, $he
 function sheet(): Image
 {
     $img = new Pixels();
-    $rng = Rand::pcg(1, 2);
+    $rng = new Randomizer(new Xoshiro256StarStar(12));
     [$grass, $grassDark, $grassLight] = [rgb(0x6abe30), rgb(0x4b9a2a), rgb(0x8fd14f)];
     $speckle = function (Cell $c, array $base, array ...$spots) use ($rng): void {
         $c->rect(0, 0, CELL, CELL, $base);
-        for ($i = 0; $i < 18; $i++) { $c->px($rng->intN(CELL), $rng->intN(CELL), $spots[$rng->intN(count($spots))]); }
+        for ($i = 0; $i < 18; $i++) { $c->px($rng->getInt(0, CELL - 1), $rng->getInt(0, CELL - 1), $spots[$rng->getInt(0, count($spots) - 1)]); }
     };
     $speckle(Cell::at($img, C_GRASS), $grass, $grassDark, $grassLight);
     $g2 = Cell::at($img, C_GRASS2);
@@ -594,12 +595,12 @@ final class Sounds
     /** @var array<int, Sound> by event */
     private array $sfx = [];
     public Player $music;
-    private Rand $rng;
+    private Randomizer $rng;
 
     public function __construct()
     {
-        $rng = $this->rng = Rand::pcg(3, 5);
-        $noise = fn(): float => $rng->float64() * 2 - 1;
+        $rng = $this->rng = new Randomizer(new Xoshiro256StarStar(35));
+        $noise = fn(): float => $rng->getFloat(-1, 1);
         $this->sfx = [
             EV_STEP => self::synth(0.07, fn(float $t) => $noise() * exp(-$t * 60) * 0.5),
             EV_TILL => self::synth(0.18, fn(float $t) => (0.6 * sin(2 * M_PI * 90 * $t * (1 - $t * 2)) + 0.5 * $noise()) * exp(-$t * 25)),
@@ -636,7 +637,7 @@ final class Sounds
     {
         foreach ($events as $e) {
             $volume = match ($e) { EV_STEP => 0.35, EV_NOTHING => 0.6, default => 1.0 };
-            $this->sfx[$e]->newPlayer()->setVolume($volume)->setPan($pan)->setSpeed(0.94 + $this->rng->float64() * 0.12)->play();
+            $this->sfx[$e]->newPlayer()->setVolume($volume)->setPan($pan)->setSpeed(0.94 + $this->rng->getFloat(0, 0.12))->play();
         }
     }
 }

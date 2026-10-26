@@ -2462,10 +2462,10 @@ the php that built it with the same flags `dev` uses; the Dock entry is
 the app's, but the process image is Homebrew's php, so `NSBundle
 mainBundle` is not the bundle and the TSM/IMK log lines stay. For release,
 `--launcher micro` packs `Resources/app` (project plus the framework's
-`src`) into a phar whose stub requires the entry, and `spc micro:combine`
-appends it to phpmicro, a static PHP with ext-ffi, with `ffi.enable=1`
-and `memory_limit` embedded as INI (`-I`): one Mach-O, a proper main
-bundle, signable and notarizable. The micro build carries no opcache: in
+`src`) into a phar whose stub requires the entry, which `MachO::embed`
+puts in phpmicro, a static PHP with ext-ffi, with `ffi.enable=1` and
+`memory_limit` as its INI: one Mach-O, a proper main bundle, signable
+and notarizable (the payload inside `__LINKEDIT`, v1.28 below). The micro build carries no opcache: in
 the micro SAPI opcache's `zend_get_file_handle_timestamp` takes a
 `phar://` path as a pointer (SIGBUS at an ASCII address) and its JIT
 segfaults on arm64 even on a plain file, so the static launcher runs the
@@ -3064,7 +3064,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
     none, mygo's keeping `Space(20)`.
   - mayoi's street used a hash of its own: its tiles are where mygo's
     64-bit hash puts them (`mul64`, `shr64`, Go's wrapping arithmetic).
-    The art's speckles still differ, as PHP has no PCG of Go's.
+    The art's speckles differ, drawn from PHP's engines.
   - Text and rich leaves were placed without their padding, inputs grew
     along a column, a border without a background was not drawn, nor a
     dashed one, a button did not stretch across its column, a disabled
@@ -3086,18 +3086,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the developer asked: a desktop app shows the time of the computer it
   runs on, as Go's local time (a php.ini of `date.timezone = UTC` made
   the gallery's clock four hours off).
-- **Go's math/rand/v2 in PHP** (`Random\PCG`, `Random\Rand`): mygo's
-  examples seed `rand.New(rand.NewPCG(a, b))`, which no PHP engine
-  matches (PHP's PcgOneseq128XslRr64 is another member of the family,
-  with another increment and output, and `Randomizer` draws its ranges
-  otherwise). PCG is the 128-bit LCG with the DXSM output; `Rand` has
-  Go's `IntN` (Lemire's, with its rejection), `Float64` (53 bits),
-  `Float32`, `Shuffle`, `Perm` and `NormFloat64` (the ziggurat, Go's
-  tables, float32 steps, the edge's sum fused as on arm64). `U64` does
-  the unsigned arithmetic on PHP's signed ints, in 16- and 32-bit pieces
-  since products past 63 bits become floats. tests/go_rand_test.php
-  holds what Go printed. The farm, mayoi, the piano and the gallery's
-  charts draw from it, so they are mygo's.
+- **Go's math/rand/v2 in PHP** (`Random\PCG`, `Random\Rand`) drew what
+  mygo's seeded examples draw; v1.28 took it out again (below).
 - **A border takes room**, as mygo's (its layout's sizes are border
   boxes): `border()` adds its width inside the padding (`Node::padT()`
   and the others), and a plain button, bordered, is a point wider and
@@ -3145,22 +3135,48 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   took the focus back from the popover's field, and the URL typed went
   into the note. The panel is keyed by its anchor (`popover:<id>`), as
   `popoverBase`'s and the combobox's are.
+- **A micro app is signed again.** `spc micro:combine` appends the phar
+  after micro.sfx, and codesign refuses an executable with data after
+  it ("main executable failed strict validation", macOS 27; a fat
+  binary alike), so `myphp build -launcher micro` failed at signing.
+  `MachO::embed` takes the signature off, grows `__LINKEDIT` over the
+  INI and the phar, which codesign signs then, and writes where they
+  start and end in a `__DATA,__micro_sfxsize` section, which phpmicro
+  reads instead of the end of `__LINKEDIT`. phpmicro has the reading but
+  not the section: `myphp micro` builds micro.sfx with `MICRO_PATCH`
+  (`spc build -P`), which adds it, zeros taken as absent so that spc's
+  checks of a plain concatenation pass; a micro.sfx without it is built
+  again. A micro app signed so ran its phar with its INI on macOS 27.
+- **A micro app has the extensions the framework calls.** micro.sfx had
+  ffi, mbstring, ctype, phar and json, and an app stopped at its start
+  (`Locale` not found, in `I18n`): `MICRO_EXTENSIONS` adds intl,
+  xmlreader (SVG icons), curl (fetch, updates), sockets (one instance)
+  and filter. `microLacks` runs micro.sfx with a script after it, which
+  the patch leaves working, for what it has; one short of either is
+  built again (`MYPHP_MICRO`'s own is refused).
+- **A catalog in a phar.** `Catalog` listed its files with `glob`, which
+  finds nothing in a phar, so a micro app stopped at its first menu (no
+  en.json in `src/l10n`); it lists them with `scandir`, as the CLI walks
+  directories. With these a micro app of the native example ran, its
+  notification asking for permission as a signed bundle's does.
+- **No Go generators.** `src/Random` (v1.27) is gone, as the developer
+  asked: the farm, mayoi, the piano and the gallery's charts draw from
+  PHP's engines again (`Random\Randomizer` with Xoshiro256**, the
+  piano's `mt_rand`), alike to mygo's but not draw for draw
+  (mygo-deviations.md, the examples).
 - **The exec launcher's app has no process in LaunchServices.** Once the
   launcher execs php, `NSRunningApplication` (and so
   `frontmostApplication`, accessibility clients, automation) reports the
   app with pid -1, whatever the php is, even a copy inside the bundle;
   with php itself as the bundle's executable (no exec) the pid is the
-  process's. The micro launcher, one executable, has its pid.
+  process's. The micro launcher, one executable, has its pid, so it
+  stays so: what it leaves out is tools driving a development build.
 
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 
 
-- The exec launcher (`myphp build`, `myphp dev`) leaves the app without
-  a pid in LaunchServices (above); php as the bundle's executable would
-  keep it, but needs its INI beside it (`php-cli.ini`, in place of the
-  user's php.ini) and a copy of php in each bundle.
 - The glyph atlas starts over when full and is re-rasterized whole; an
   image page is emptied whole. Eviction per glyph or image would avoid
   the restart, at the cost of free-space bookkeeping the shelves lack.
