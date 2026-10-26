@@ -151,6 +151,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   kept alive in holder structs; blocks via `ObjC::block`; `App::wait` makes a
   block-delivered result synchronous; PHP is entered on the main thread only.
   `FFI::new/cast/type` only on an instance (static: deprecated since 8.3);
+  a pointer's address is `ObjC::addr`, never a cast of `void*` to an integer (it reads through it);
   never `?:` on a string that may be `"0"` (`mb_chr`, `substr`, `basename`).
 
 Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in

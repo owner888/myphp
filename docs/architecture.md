@@ -3159,6 +3159,18 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   en.json in `src/l10n`); it lists them with `scandir`, as the CLI walks
   directories. With these a micro app of the native example ran, its
   notification asking for permission as a signed bundle's does.
+- **A pointer's address is `ObjC::addr`.** `AudioQueue` keyed its queues
+  by `$c->cast('intptr_t', $q)->cdata`, but FFI's cast of a `void*` to an
+  integer type reads what the pointer points to, not the pointer: the
+  first 8 bytes of the queue went for its address, and an AudioQueueRef
+  that points to nothing readable (macOS 27) crashed the process
+  (SIGSEGV in `zend_ffi_cdata_get`) as farm took its first step and its
+  first sound opened the queue, mayoi or the piano likewise on their
+  first. lldb found the line (`zend_get_executed_filename()`/`_lineno()`
+  at the stop). Addresses come from `ObjC::addr`, which reads the
+  pointer's own bytes through a slot (AGENTS.md, FFI discipline);
+  tests/ffi_addr_test.php shows the cast reading through and fails on any
+  `cast('intptr_t'|'uintptr_t'` in src.
 - **out inside frontendDist.** The todo example had out's default,
   dist, which is its frontendDist too: the app being made under dist
   copied the frontend, itself among it, into itself until the paths

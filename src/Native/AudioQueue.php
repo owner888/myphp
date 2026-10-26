@@ -49,7 +49,7 @@ final class AudioQueue implements Device
     {
         $c = self::c();
         self::$callback ??= function ($user, $q, $buf): void {
-            $self = $q === null ? null : (self::$open[self::c()->cast('intptr_t', $q)->cdata] ?? null); // a queue being disposed calls back no more
+            $self = $q === null ? null : (self::$open[ObjC::addr($q)] ?? null); // a queue being disposed calls back no more
             if ($self === null || $self->closed) { return; }
             try {
                 $self->fill($buf);
@@ -66,7 +66,7 @@ final class AudioQueue implements Device
             throw new \RuntimeException("audio: AudioQueueNewOutput failed (OSStatus $st)");
         }
         $this->q = $q;
-        self::$open[$c->cast('intptr_t', $q)->cdata] = $this;
+        self::$open[ObjC::addr($q)] = $this; // the queue's address (a cast of void* to an integer reads what it points to, which an AudioQueueRef need not: farm crashed at its first step)
     }
 
     public function start(): void
@@ -119,7 +119,7 @@ final class AudioQueue implements Device
         if ($this->closed) { return; }
         $this->closed = true;
         $c = self::c();
-        unset(self::$open[$c->cast('intptr_t', $this->q)->cdata]);
+        unset(self::$open[ObjC::addr($this->q)]);
         $c->AudioQueueStop($this->q, 1);
         $c->AudioQueueDispose($this->q, 1);
     }
