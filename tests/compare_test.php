@@ -79,3 +79,25 @@ $h->frame();
 $h->click($lx, $ly); $h->frame(3);
 $h->type('abc');
 same(['abc', 'hello'], [$url->text, $body->text], 'the popover field takes the typing, the text area keeps its text');
+
+// A button given a width alone keeps its height, as mygo's Width(44): the counter's primary + was its row's height (v1.28).
+$plain = $prim = null;
+$h = new Headless(function (Context $c) use (&$plain, &$prim): void {
+    $c->row(0, 8);
+      $plain = $c->button('−')->size(44, 0);
+      $prim = $c->primaryButton('+')->size(44, 0);
+    $c->end();
+}, 300, 100);
+$h->frame();
+[$pr, $qr] = [$h->rect($plain), $h->rect($prim)];
+same([44.0, $pr[3] - 2, $pr[1] + 1], [$qr[2], $qr[3], $qr[1]], 'the primary button two points lower than the bordered one, centered beside it');
+
+// A select is at least Space(35) wide whatever width it is given, as mygo's MinWidth: the web views' zoom of width 100 was 140 in mygo (v1.28).
+$zoomI = 1; $zsel = null;
+$h = new Headless(function (Context $c) use (&$zoomI, &$zsel): void {
+    $c->row(0, 8);
+      $zsel = $c->select(['75%', '100%', '125%'], $zoomI, 100);
+    $c->end();
+}, 400, 100);
+$h->frame();
+same(140.0, $h->rect($zsel)[2], 'the select Space(35) wide');

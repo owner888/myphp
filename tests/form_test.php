@@ -93,7 +93,7 @@ $nameIn = $box(Role::TEXT_FIELD, 'Name'); $emailIn = $box(Role::TEXT_FIELD, 'Ema
 check($near($nameIn[0], $emailIn[0]) && $near($nameIn[0], $cityIn[0]) && $near($nameIn[0], $box(Role::CHECK_BOX, 'Send emails')[0]), 'the controls start at one edge: ' . json_encode([$nameIn[0], $emailIn[0], $cityIn[0]]));
 $nameL = $h->rect($h->byText('Name')); $emailL = $h->rect($h->byText('Email address'));
 check($near($nameL[0] + $nameL[2], $emailL[0] + $emailL[2]) && $emailL[0] + $emailL[2] <= $emailIn[0], 'the labels end at one edge, before the controls');
-check($near($nameL[1], $nameIn[1] + 6) && $near($emailL[1], $emailIn[1] + 6), 'labels level with the text inside the inputs: ' . json_encode([$nameL[1], $nameIn[1]]));
+check($near($nameL[1], $nameIn[1] + 7) && $near($emailL[1], $emailIn[1] + 7), 'labels level with the text inside the inputs, their border and padding, as mygo\'s: ' . json_encode([$nameL[1], $nameIn[1]]));
 $notifyL = $h->rect($h->byText('Notifications')); $own = $h->rect($h->byText('Send emails') ?? $h->byLabel('Send emails'));
 check($near($notifyL[1] + $notifyL[3] / 2, $own[1] + $own[3] / 2), 'on the check box\'s text');
 $sw = $box(Role::SWITCH, 'Express'); $l = $h->rect($h->byText('Express'));

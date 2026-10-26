@@ -197,6 +197,9 @@ final class Layout
         } elseif ($n->kind === Node::BUTTON && $n->metrics !== null) {
             if ($n->ts !== null) { self::restyle($n); } // a label in a style of its own, as mygo's B, I, U and S buttons
             $n->metrics = null;
+        } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $n->metrics !== null) {
+            if ($n->ts !== null) { self::restyleField($n); } // a field in a style of its own: a launcher's query in 22 points (mygo's FontSize on a TextInput)
+            $n->metrics = null;
         }
         if ($n->kind !== Node::CONTAINER) {
             $n->mw = $n->fw;
@@ -288,6 +291,18 @@ final class Layout
             if ($n->fh == $oh) { $n->fh = $h; }
         }
         $n->metrics = null; // once
+    }
+
+    /** A text field given a text style of its own: the size, color and Font bits its text shows in, a single line's field as much higher as its line. */
+    private static function restyleField(Node $n): void
+    {
+        $own = $n->ts;
+        [, $oh] = $n->metrics->measure('X', $n->fontSize, $n->style); // as the field measured its line
+        if ($own->size !== null) { $n->fontSize = $own->size; }
+        if ($own->color !== null) { $n->fg = $own->color; }
+        $n->style |= Node::fontBits($own);
+        [, $h] = $n->metrics->measure('X', $n->fontSize, $n->style);
+        if ($n->kind === Node::INPUT && $n->fh > 0) { $n->fh += $h - $oh; }
     }
 
     /**
@@ -503,7 +518,7 @@ final class Layout
             if ($s->first + $cnt >= $s->count && $s->first === 0) {
                 $s->gap = 0.0; // every row is built and they are short of the view: nothing can fill it
                 $short = $ch - ($used + $gap * ($cnt - 1));
-                if ($short > 0 && ($n->justify === Node::END || $n->justify === Node::CENTER)) {
+                if ($short > 0 && $s->count > 0 && ($n->justify === Node::END || $n->justify === Node::CENTER)) { // what shows without rows stays at the top, as mygo's
                     $cy += $n->justify === Node::END ? $short : $short / 2; // rows short of the view at its end, as a chat's (mygo's Justify)
                 }
             }

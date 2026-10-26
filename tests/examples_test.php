@@ -33,10 +33,15 @@ $t->clickText('Restart'); $t->frame(); same(1, $s->run, 'Restart plays it again'
 [$view, $s] = Headless::load('markdown-chat');
 $t = new Headless($view, 820, 720);
 $t->frame();
+$hint = $t->rect($t->byText('Ask anything: the replies are canned, streamed as a model streams them.'));
+check(abs($hint[0] + $hint[2] / 2 - 410) < 1 && $hint[1] < 100, 'the hint at the top of the empty list, centered: ' . json_encode($hint));
 $t->type('How do I cache?'); $t->frame();
 $t->clickText('Send'); $t->frame(3);
 check($t->byText('How do I cache?') !== null, 'the message shows');
 check($t->byText('A few things to note:') !== null && $t->byText('Copy') !== null, 'the reply, with its code block\'s Copy: ' . json_encode(array_slice($t->texts(), 0, 20)));
+$s->messages = [$s->messages[0]]; $s->messages[0]->done = true; $t->frame(2);
+$mine = $t->rect($t->byText('How do I cache?'));
+check($mine[1] > 500, 'rows short of the list at its end, as mygo\'s Justify(End): ' . json_encode($mine));
 
 // clipboard: the note as data, and data received.
 [$view, $s] = Headless::load('clipboard');
@@ -78,6 +83,11 @@ $s->query->text = 's'; $s->filter(); $t->frame();
 same(['Safari', 'Script Editor', 'Visual Studio Code'], array_map(fn($a) => $a->name, $s->results), 'what starts with s, then the rest that has it');
 $t->down(); $t->frame();
 same(1, $s->chosen(), 'Down chooses the next');
+$s->query->text = ''; $s->filter(); $t->frame();
+$q = $t->byLabel('Search apps');
+same(22.0, $q->fontSize, 'the query in 22 points');
+$t->clickOn($q); $t->type('saf'); $t->frame();
+same(['Safari'], array_map(fn($a) => $a->name, $s->results), 'typing the query filters, as its field reports the change');
 same(['System/Utilities', '~/Applications'], [\MyPHP\Examples\Launcher\where($s->apps[2]), \MyPHP\Examples\Launcher\where(new \MyPHP\InstalledApp('X', 'x', getenv('HOME') . '/Applications/X.app'))], 'where apps are');
 
 // menubar-native: the note, its Clear and its status.
@@ -96,6 +106,21 @@ $t->frame();
 check($t->byText('Sessions of 25 minutes') !== null, 'the session length');
 $t->clickLabel('Focus mode'); $t->frame();
 check($s->focus, 'the switch turns focus mode on');
+
+// flyout: the window's buttons, and the list of colors chosen from the keys and the mouse.
+Headless::load('flyout', '$a = new Flyouts');
+$a = new \MyPHP\Examples\Flyout\Flyouts();
+$t = new Headless($a->view(...), 300, 240);
+$t->frame();
+check($t->byText('Red ▾') !== null && $t->byText('No note') !== null, 'the color and the note at first');
+$t = new Headless($a->listView(...), 180, 180);
+$t->frame();
+$t->down(); $t->down();
+same(2, $a->hover, 'Down moves along the list');
+$t->key(Key::UP, 'moveUp:');
+same(1, $a->hover, 'Up moves back');
+$t->hover(40, 6 + 4 * 28 + 14); $t->frame();
+same(4, $a->hover, 'the pointer moves the choice'); // choosing closes the flyout and redraws the window, which a headless test has not
 
 // vibrancy: a material chosen in the sidebar, and the sidebar hidden and shown.
 [$view, $s] = Headless::load('vibrancy');

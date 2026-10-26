@@ -251,7 +251,8 @@ trait ContextBase
         $t = $this->theme;
         [, $h] = $this->metrics->measure('X', $t->fontSize);
         $n = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 0, '', null, $t->fontSize, $t->text));
-        $n->edit = $state; $n->bare = true;
+        $n->edit = $state; $n->bare = true; $n->changed = $state->editedSinceBuilt();
+        $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
         $n->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET)->min($t->space(20), 0);
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
@@ -263,7 +264,8 @@ trait ContextBase
         $t = $this->theme;
         $state->multiline = true;
         $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, 0, 0, 1, '', null, $t->fontSize, $t->text));
-        $n->edit = $state; $n->bare = true;
+        $n->edit = $state; $n->bare = true; $n->changed = $state->editedSinceBuilt();
+        $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
     }

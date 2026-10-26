@@ -63,6 +63,13 @@ $h->frame(); $list = $h->paint();
 same([[22.0, 22.0, 156.0, 96.0]], array_map(fn($p) => array_map('floatval', $p['frame']), $h->rt->webPlaces), 'the page in the content box');
 same(1, count($list->holes), 'one hole');
 $h = new Headless(function (Context $c) use ($page): void {
+    $c->column(20, 0, 1)->align(Node::STRETCH);
+      $c->webView($page)->grow(1)->round(12)->border(0x888888); // border(), as the web views example: its point inside the page's edge (v1.28)
+    $c->end();
+}, 200, 140);
+$h->frame(); $h->paint();
+same([[21.0, 21.0, 158.0, 98.0]], array_map(fn($p) => array_map('floatval', $p['frame']), $h->rt->webPlaces), 'the page inside border()\'s border');
+$h = new Headless(function (Context $c) use ($page): void {
     $c->column(20, 0, 1)->align(Node::STRETCH)->opacity(0.5);
       $c->webView($page)->grow(1);
     $c->end();

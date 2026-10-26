@@ -24,11 +24,11 @@ function note(Context $c, Document $doc, TextState $text): void
             if ($c->clicked($c->primaryButton('Save'))) { App::later(fn() => $doc->saveAnyway()); }
           $c->end();
       }
-      $c->key('text')->textarea($text, '', 0, 0, 14)->label('Note')->autoFocus(); // 0, 0: fills the window
+      $c->key('text')->textarea($text, '', 0, 0)->font('monospace')->label('Note')->autoFocus(); // 0, 0: fills the window
       if ($text->text !== $doc->content()) {
           $doc->set($text->text);
       }
-      $c->row(6, 12)->align(Node::CENTER);
+      $c->row(0, 12)->padding(6, 12)->align(Node::CENTER); // mygo's Padding(6, 12).Gap(12)
         $c->muted(sprintf('%d words', count(preg_split('/\s+/u', $text->text, -1, PREG_SPLIT_NO_EMPTY))), 12);
         $c->spacer();
         $c->muted(match (true) { $state->path === '' => 'Not saved', $state->readOnly => 'Read-only', $state->edited => 'Edited', default => 'Saved' }, 12);

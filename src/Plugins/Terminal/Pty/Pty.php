@@ -60,7 +60,8 @@ final class Pty
         $s = fopen("php://fd/$slave", 'r+');
         $arg = base64_encode(json_encode(['path' => $o->path, 'args' => $o->args, 'dir' => $o->dir, 'env' => $o->env], JSON_THROW_ON_ERROR));
         // A static app (phpmicro) runs its own stub whatever it is given, which runs spawn.php on --myphp-pty-spawn (bin/myphp's micro launcher).
-        $argv = PHP_SAPI === 'micro' ? [PHP_BINARY, '--myphp-pty-spawn', $arg] : [PHP_BINARY, '-d', 'ffi.enable=1', __DIR__ . '/spawn.php', $arg];
+        $php = \MyPHP\Native\Bundle::executable(); // a static app's PHP constant of its binary is empty: the shell got nothing to run and the window closed at once
+        $argv = PHP_SAPI === 'micro' ? [$php, '--myphp-pty-spawn', $arg] : [$php, '-d', 'ffi.enable=1', __DIR__ . '/spawn.php', $arg];
         $proc = proc_open($argv, [$s, $s, $s], $pipes);
         fclose($s);
         $c->close($slave); // the child has its own copies

@@ -45,7 +45,7 @@ final class NativeLibrary
      * The library a plugin loads, the first of (mygo's Find and
      * LibraryPath): the file $env names; the one among the app's resources
      * (Contents/Resources of the .app the framework runs from); the one
-     * next to the executable (PHP_BINARY); the one in the user's cache,
+     * next to the executable (Bundle::executable); the one in the user's cache,
      * where mygo's CLI downloads it (<cache>/mygo/natives/<sha256>/),
      * which programs that are not packaged apps download there when it
      * is missing, checking its SHA-256. Packaged apps never download it.
@@ -60,7 +60,7 @@ final class NativeLibrary
         $resources = self::resources();
         $dirs = [];
         if ($resources !== null) { $dirs[] = $resources; }
-        $dirs[] = dirname(PHP_BINARY);
+        $dirs[] = dirname(\MyPHP\Native\Bundle::executable());
         $cached = self::cachePath($f);
         $dirs[] = dirname($cached);
         foreach ($dirs as $dir) {

@@ -1965,7 +1965,7 @@ final class Context
         $state = $local->text;
           [, $h] = $this->metrics->measure('X', $t->fontSize);
           $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, in the field's box
-          $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
+          $in->edit = $state; $in->changed = $state->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->role = Role::COMBO_BOX; $in->nameFrom = $f;
           $arrow = $this->chevron();
@@ -2053,7 +2053,7 @@ final class Context
           }
           [, $h] = $this->metrics->measure('X', $t->fontSize);
           $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips, keeping its identity whatever they are
-          $in->edit = $state; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
+          $in->edit = $state; $in->changed = $state->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->nameFrom = $f;
           if ($suggestions !== []) { $in->role = Role::COMBO_BOX; } // else a text field
@@ -3043,7 +3043,7 @@ final class Context
             $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
             [, $h] = $this->metrics->measure('X', $t->fontSize);
             $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $this->texts()->get('find'), null, $t->fontSize, $t->text));
-            $in->edit = $query; $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
+            $in->edit = $query; $in->changed = $query->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
             $in->focused = $rt?->focused($in->id) ?? false;
             $in->search = true; $in->nameFrom = $f;
           $this->end();
@@ -3981,7 +3981,7 @@ final class Context
         $t = $this->theme;
         $sel = $this->selectBase($index);
         $b = $sel->trigger;
-        $b->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->border()->justify(Node::SPACE_BETWEEN)->min($width ?? $t->space(35), 0)->background($t->surface); // mygo's styleButton
+        $b->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->border()->justify(Node::SPACE_BETWEEN)->min($t->space(35), 0)->background($t->surface); // mygo's styleButton, at least Space(35) wide whatever width it is given, as mygo's MinWidth
         if ($width !== null) { $b->width($width); }
         if ($this->hovered($b)) { $b->color = $this->runtime->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
         $b->gap = $t->space(1.5);
@@ -4030,9 +4030,12 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [, $h] = $this->metrics->measure('X', $size);
-        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $h + $t->space(3), $this->growsAlong($width, $h + $t->space(3)), $placeholder, $t->surface, $size, $t->text)); // mygo's: padding Space(1.5) by Space(2.5), the surface, bordered; 0: fills a row's remaining width, a column's across
+        $fh = $h + $t->space(3) + 2; // mygo's: padding Space(1.5) by Space(2.5) and its border, a point each side, as a plain button's
+        $n = $this->add(new Node(Node::INPUT, 0, 0, 0, $width, $fh, $this->growsAlong($width, $fh), $placeholder, $t->surface, $size, $t->text)); // the surface, bordered; 0: fills a row's remaining width, a column's across
         $n->bordered = true;
         $n->edit = $state;
+        $n->changed = $state->editedSinceBuilt(); // typed, deleted, pasted or undone in since the last build (mygo's Changed)
+        $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
         $state->password = false; // until password() says otherwise, this frame
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
@@ -4062,6 +4065,8 @@ final class Context
         }
         $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $this->growsAlong($width, $height), $placeholder, $t->surface, $size, $t->text));
         $n->edit = $state;
+        $n->changed = $state->editedSinceBuilt(); // typed, deleted, pasted or undone in since the last build (mygo's Changed)
+        $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout
         $n->focused = $this->runtime?->focused($n->id) ?? false;
         return $n;
     }

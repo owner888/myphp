@@ -77,11 +77,13 @@ final class Protocol
      */
     public static function fileServer(string $dir): Closure
     {
-        $root = realpath($dir);
+        // realpath knows no stream: a static app's frontend is in its phar, which has no links to resolve.
+        $stream = str_starts_with($dir, 'phar://');
+        $root = $stream ? rtrim($dir, '/') : realpath($dir);
         if ($root === false || !is_dir($root)) {
             throw new InvalidArgumentException("myphp: $dir is not a directory");
         }
-        return function (ProtocolRequest $r) use ($root): ProtocolResponse {
+        return function (ProtocolRequest $r) use ($root, $stream): ProtocolResponse {
             $parts = [];
             foreach (explode('/', $r->path()) as $seg) { // the path cleaned, as path.Clean("/" + p)
                 if ($seg === '..') {
@@ -98,7 +100,7 @@ final class Protocol
             if (!is_file($path) && pathinfo($name, PATHINFO_EXTENSION) === '') {
                 $path = "$root/index.html"; // a client-side route
             }
-            $real = realpath($path);
+            $real = $stream ? $path : realpath($path); // the path cleaned of .. already
             if ($real === false || !is_file($real) || !str_starts_with($real, $root . '/')) {
                 return new ProtocolResponse(404, ['Content-Type' => 'text/plain; charset=utf-8'], "404 page not found\n");
             }

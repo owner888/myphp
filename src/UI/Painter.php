@@ -329,9 +329,11 @@ final class Painter
      */
     private static function webViewHole(Node $n, DisplayList $list, TextPainter $text, array $radii, Runtime $rt): void
     {
+        // Inside the padding and the border, border() as borderWidth(): the page covered border()'s, which the web views' tab showed none of.
         [$pt, $pr, $pb, $pl] = $n->sides();
-        [$bt, $br, $bb, $bl] = $n->borders;
-        [$x, $y, $w, $h] = [$n->x + $bl + $pl, $n->y + $bt + $pt, $n->w - $bl - $pl - $br - $pr, $n->h - $bt - $pt - $bb - $pb];
+        [$it, $ir, $ib, $il] = [$n->padT(), $n->padR(), $n->padB(), $n->padL()];
+        [$bt, $br, $bb, $bl] = [$it - $pt, $ir - $pr, $ib - $pb, $il - $pl];
+        [$x, $y, $w, $h] = [$n->x + $il, $n->y + $it, $n->w - $il - $ir, $n->h - $it - $ib];
         [$x, $y, $w, $h] = $list->world()->set ? $list->world()->bounds($x, $y, $w, $h) : [$x, $y, $w, $h];
         $s = $text->scale();
         [$x0, $y0, $x1, $y1] = [round($x * $s) / $s, round($y * $s) / $s, round(($x + $w) * $s) / $s, round(($y + $h) * $s) / $s];
@@ -411,10 +413,9 @@ final class Painter
         }
         if ($n->material !== null) {
             $n->material->paintMaterial(new self($list, $text, $t, $rt), $box, $n->radius);
-        } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box
-            $bw = $n->borderWidth;
-            $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius);
-            $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color, 1.0, $radius - $bw);
+        } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box; its ring over the face, which shows through neither when it is dimmed (a disabled button's border stays a ring, as mygo's)
+            $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
+            $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius, $n->borderWidth);
         } elseif ($n->gradient !== null) {
             $g = $n->gradient;
             $list->box($n->x, $n->y, $n->w, $n->h, $radii, $g->from, $g->fromAlpha * $n->alpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha * $n->alpha, g: self::gradientLine($n->w, $n->h, $g));

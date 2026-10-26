@@ -1553,9 +1553,10 @@ final class Node
     /** Fixes a node's width and/or height (points) instead of its content's size; 0 leaves one to the content: a text's measured height stays, as mygo's Width() leaves it. */
     public function size(float $w = 0, float $h = 0): static
     {
-        $text = $this->kind === self::TEXT || $this->kind === self::RICH;
-        if ($w > 0 || !$text) { $this->fw = $w; }
-        if ($h > 0 || !$text) { $this->fh = $h; }
+        // A text's or button's measured side stays where 0 is given, as mygo's Width() leaves the height (a primary button of size(44, 0) took its row's height).
+        $measured = $this->kind === self::TEXT || $this->kind === self::RICH || $this->kind === self::BUTTON;
+        if ($w > 0 || !$measured) { $this->fw = $w; }
+        if ($h > 0 || !$measured) { $this->fh = $h; }
         $this->sizedW = $w > 0;
         return $this;
     }

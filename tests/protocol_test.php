@@ -147,6 +147,14 @@ same('789', $serve('GET', 'files://localhost/video.mp4', ['Range' => 'bytes=-3']
 same(416, $serve('GET', 'files://localhost/video.mp4', ['Range' => 'bytes=20-'])->status, 'a range past the end');
 Protocol::unhandle('files');
 
+// A frontend in a phar, as a static app's (v1.28): realpath knows no phar, and the server took none.
+$pharFile = "$dir/site.phar";
+$made = shell_exec(escapeshellarg(PHP_BINARY) . ' -d phar.readonly=0 -r ' . escapeshellarg('$p = new Phar($argv[1]); $p["site/index.html"] = "<p>in phar</p>"; $p["site/app.js"] = "go()"; $p["secret.txt"] = "no"; echo "ok";') . ' ' . escapeshellarg($pharFile));
+same('ok', $made, 'a phar of a site');
+Protocol::handle('files', Protocol::fileServer("phar://$pharFile/site"));
+same(['go()', '<p>in phar</p>', 404], [$serve('GET', 'files://localhost/app.js')->body, $serve('GET', 'files://localhost/todos/1')->body, $serve('GET', 'files://localhost/../secret.txt')->status], 'its files, its routes, nothing outside');
+Protocol::unhandle('files');
+
 // The frontend: URLs without a scheme are its pages.
 same('myphp://localhost/settings?tab=1', Frontend::resolve('/settings?tab=1'), 'a path is the frontend\'s');
 same('myphp://localhost/index.html', Frontend::resolve('index.html'), 'relative too');

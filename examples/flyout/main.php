@@ -1,106 +1,142 @@
 <?php
-// Flyouts and panels: a menu that opens under its button, takes the
-// keyboard and closes on a press outside it, on its button or on Escape;
-// the same menu in a popover of the system, with its material and
-// arrow; a hover card that never takes the keyboard; a flyout of a tray icon in
-// the menu bar; a panel above every app, which leaves the app the user is
-// in active and closes on Escape.
+// Flyouts from a small window of native UI (mygo's examples/flyout): a list
+// of colors, a note to edit and an About box with the look of the system's
+// popovers on macOS. They take the keyboard, and close as the user clicks
+// elsewhere or presses Escape. They extend beyond the window, and flip or
+// slide to stay on the screen.
 // Run: ./run.sh flyout
 declare(strict_types=1);
 
-use MyPHP\{App, FlyoutOptions, Rectangle, Tray, TrayOptions, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, Font};
+use MyPHP\{App, FlyoutOptions, Rectangle, Window, WindowOptions};
+use MyPHP\UI\{Content, Context, Key, Node, TextState};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
-$s = ['menu' => null, 'card' => null, 'chosen' => '—', 'placement' => FlyoutOptions::BOTTOM_START, 'panel' => null, 'trayFlyout' => null, 'popover' => null];
+const COLORS = [['Red', 0xff3b30], ['Orange', 0xff9500], ['Yellow', 0xffcc00], ['Green', 0x34c759], ['Blue', 0x007aff], ['Purple', 0xaf52de]];
 
-/** A flyout's content: a rounded card on the theme's background, as a flyout draws all of itself. */
-function card(Context $c, \Closure $fn): void
+/** The app's state, read and changed on the main thread by the views and the flyouts' callbacks. */
+final class Flyouts
 {
-    $c->column(12, 6, 1, $c->theme->background)->round(10)->border($c->theme->border);
-      $fn($c);
-    $c->end();
+    public ?Window $win = null;
+    /** The open list of colors, the open note editor and the open About box, or null. */
+    public ?Window $list = null, $editor = null, $about = null;
+    /** The chosen color, and the one the keys move to in the list. */
+    public int $color = 0, $hover = 0;
+    public TextState $note;
+
+    public function __construct() { $this->note = new TextState(); }
+
+    public function view(Context $c): void
+    {
+        $t = $c->theme;
+        $c->column(16, 12)->fill()->center();
+          $c->row(0, 8)->align(Node::CENTER);
+            $c->box(14, 14, COLORS[$this->color][1])->round(7);
+            $b = $c->key('color')->button(COLORS[$this->color][0] . ' ▾');
+            if ($c->clicked($b)) { $this->toggleList(anchor($c, $b)); }
+          $c->end();
+          $b = $c->key('note')->button('Edit note…');
+          if ($c->clicked($b)) { $this->openEditor(anchor($c, $b)); }
+          $b = $c->key('about')->button('About');
+          if ($c->clicked($b)) { $this->openAbout(anchor($c, $b)); }
+          $c->text($this->note->text === '' ? 'No note' : $this->note->text, 12, $t->textMuted);
+        $c->end();
+    }
+
+    /** Opens the list of colors below the button, or closes it. */
+    private function toggleList(Rectangle $button): void
+    {
+        if ($this->list !== null) { $this->list->close(); return; }
+        $this->hover = $this->color;
+        $this->list = Window::flyout(new FlyoutOptions(parent: $this->win, anchor: $button, gap: 4, width: 180, height: count(COLORS) * 28 + 12,
+            focusable: true, shadow: true, content: Content::view($this->listView(...))));
+        $this->list->on('closed', function () { $this->list = null; $this->win->invalidate(); });
+        $this->win->invalidate();
+    }
+
+    public function listView(Context $c): void
+    {
+        $t = $c->theme;
+        $n = count(COLORS);
+        if ($c->shortcut(Key::DOWN)) { $this->hover = ($this->hover + 1) % $n; }
+        if ($c->shortcut(Key::UP)) { $this->hover = ($this->hover + $n - 1) % $n; }
+        if ($c->shortcut(Key::RETURN)) { $this->choose($this->hover); }
+        $c->root->color = null;
+        panel($c)->padding(6);
+          foreach (COLORS as $i => [$name, $color]) {
+              $row = $c->key($i)->row(0, 8)->height(28)->padding(0, 8)->align(Node::CENTER)->round(6);
+              if ($i === $this->hover) { $row->background($t->accent); }
+              if ($c->hovered($row) && $this->hover !== $i) { $this->hover = $i; $c->runtime?->animate(); }
+              if ($c->clicked($row)) { $this->choose($i); }
+                $c->box(12, 12, $color)->round(6);
+                $text = $c->text($name);
+                if ($i === $this->hover) { $text->textColor($t->accentText); }
+              $c->end();
+          }
+        $c->end();
+    }
+
+    private function choose(int $i): void
+    {
+        $this->color = $i;
+        $this->list?->close();
+        $this->win->invalidate();
+    }
+
+    /** Opens the note editor to the right of the button, which takes the keyboard. */
+    private function openEditor(Rectangle $button): void
+    {
+        if ($this->editor !== null) { return; }
+        $this->editor = Window::flyout(new FlyoutOptions(parent: $this->win, anchor: $button, placement: FlyoutOptions::RIGHT_START, gap: 8, width: 260, height: 96,
+            focusable: true, shadow: true, content: Content::view($this->editorView(...))));
+        $this->editor->on('closed', function () { $this->editor = null; $this->win->invalidate(); });
+    }
+
+    public function editorView(Context $c): void
+    {
+        $c->root->color = null;
+        panel($c)->padding(12)->gap(8);
+          $c->text('Note')->bold();
+          $c->key('note')->input($this->note, 'Write something', 0)->autoFocus();
+          if ($c->shortcut(Key::RETURN)) { $this->editor?->close(); }
+        $c->end();
+    }
+
+    /** Opens the About box above the button, as a popover on macOS. */
+    private function openAbout(Rectangle $button): void
+    {
+        if ($this->about !== null) { return; }
+        $this->about = Window::flyout(new FlyoutOptions(parent: $this->win, anchor: $button, placement: FlyoutOptions::TOP, gap: 6, width: 240, height: 84,
+            focusable: true, shadow: true, popover: true, content: Content::view($this->aboutView(...))));
+        $this->about->on('closed', function () { $this->about = null; });
+    }
+
+    public function aboutView(Context $c): void
+    {
+        $c->root->color = null;
+        $box = $c->vibrancy() ? $c->column()->fill() : panel($c); // over the popover's material; without one, a panel
+        $box->padding(12)->gap(4);
+          $c->text('Flyout')->bold();
+          $c->text('Windows owned by their parent, placed next to an anchor.', 12, $c->theme->textMuted);
+        $c->end();
+    }
+}
+
+/** The box a flyout draws, the window itself drawing nothing: the window's shadow outlines it on macOS. */
+function panel(Context $c): Node
+{
+    return $c->column()->fill()->background($c->theme->surface)->round(10);
 }
 
 /** The box of $n as an anchor, in points from the top-left of the window's content. */
-function anchorOf(Context $c, $n): Rectangle
+function anchor(Context $c, Node $n): Rectangle
 {
     [$x, $y, $w, $h] = $c->bounds($n);
-    return new Rectangle((int)round($x), (int)round($y), (int)round($w), (int)round($h));
+    return new Rectangle((int)$x, (int)$y, (int)$w, (int)$h);
 }
 
-/** $w is null in the frame the window's creation draws. */
-function view(Context $c, array &$s, ?Window $w): void
-{
-    $c->column(24, 14, 1);
-      $c->text('Flyouts', 22, style: Font::BOLD);
-      $c->row(0, 8);
-        foreach ([FlyoutOptions::BOTTOM_START, FlyoutOptions::BOTTOM, FlyoutOptions::RIGHT_START, FlyoutOptions::TOP_END] as $p) {
-          if ($c->clicked($c->button($p === $s['placement'] ? "• $p" : $p))) { $s['placement'] = $p; }
-        }
-      $c->end();
-      $menu = $c->button('Open the menu');
-      if ($c->clicked($menu) && $w !== null && $s['menu'] === null) {
-          $s['menu'] = Window::flyout(new FlyoutOptions(parent: $w, anchor: anchorOf($c, $menu), placement: $s['placement'], gap: 4, width: 220, height: 168, focusable: true, shadow: true,
-              content: Content::view(function (Context $c) use (&$s) {
-                  card($c, function (Context $c) use (&$s) {
-                      foreach (['Cut', 'Copy', 'Paste', 'Select all'] as $item) {
-                          if ($c->clicked($c->button($item))) { $s['chosen'] = $item; $s['menu']?->close(); }
-                      }
-                  });
-              })));
-          $s['menu']->on('closed', function () use (&$s, $w) { $s['menu'] = null; $w->invalidate(); });
-      }
-      $pop = $c->button('Open a popover');
-      if ($c->clicked($pop) && $w !== null && $s['popover'] === null) {
-          $s['popover'] = Window::flyout(new FlyoutOptions(parent: $w, anchor: anchorOf($c, $pop), placement: $s['placement'], width: 220, height: 150, focusable: true, popover: true,
-              content: Content::view(function (Context $c) use (&$s) {
-                  if ($c->vibrancy()) { $c->root->color = null; } // the popover draws its material
-                  $c->column(12, 6, 1);
-                    foreach (['Cut', 'Copy', 'Paste', 'Select all'] as $item) {
-                        if ($c->clicked($c->button($item))) { $s['chosen'] = "$item (popover)"; $s['popover']?->close(); }
-                    }
-                  $c->end();
-              })));
-          $s['popover']->on('closed', function () use (&$s, $w) { $s['popover'] = null; $w->invalidate(); });
-      }
-      $c->muted("chosen: {$s['chosen']}");
-      $hover = $c->text('Hover here for a card', 15);
-      if ($c->hovered($hover) && $w !== null && $s['card'] === null) {
-          $s['card'] = Window::flyout(new FlyoutOptions(parent: $w, anchor: anchorOf($c, $hover), placement: FlyoutOptions::RIGHT, gap: 8, width: 200, height: 70,
-              content: Content::view(function (Context $c) { card($c, function (Context $c) { $c->muted('A hover card: the keyboard stays in the window.', 12); }); })));
-      } elseif (!$c->hovered($hover) && $s['card'] !== null) {
-          $s['card']->destroy();
-          $s['card'] = null;
-      }
-      if ($c->clicked($c->button('Open a panel')) && $s['panel'] === null) {
-          $s['panel'] = new Window(new WindowOptions(title: 'Panel', width: 420, height: 120, panel: true, frameless: true,
-              content: Content::view(function (Context $c) {
-                  $c->column(16, 8, 1);
-                    $c->text('A panel above every app', 16, style: Font::BOLD);
-                    $c->muted('Switch apps: it stays, and the app you were in stays active. Escape closes it.', 12);
-                  $c->end();
-              })));
-          $s['panel']->on('closed', function () use (&$s) { $s['panel'] = null; });
-      }
-      $c->muted('The tray icon "Fly" opens a flyout under it.', 12);
-    $c->end();
-}
-
-App::setName('Flyout');
-App::whenReady(function () use (&$s) {
-    $w = new Window(new WindowOptions(title: 'MyPHP native — Flyouts', width: 640, height: 400,
-        content: Content::view(function (Context $c) use (&$s, &$w) { view($c, $s, $w); })));
-    $tray = new Tray(new TrayOptions(title: 'Fly'));
-    $tray->onClick(function () use (&$s, $tray) {
-        if ($s['trayFlyout'] !== null) {
-            $s['trayFlyout']->close();
-            return;
-        }
-        $s['trayFlyout'] = Window::flyout(new FlyoutOptions(tray: $tray, placement: FlyoutOptions::BOTTOM, gap: 2, width: 260, height: 120, focusable: true, shadow: true,
-            content: Content::view(function (Context $c) { card($c, function (Context $c) { $c->text('A menu bar flyout', 15, style: Font::BOLD); $c->muted('Press outside or Escape to close.', 12); }); })));
-        $s['trayFlyout']->on('closed', function () use (&$s) { $s['trayFlyout'] = null; });
-    });
+$a = new Flyouts();
+App::whenReady(function () use ($a) {
+    $a->win = new Window(new WindowOptions(title: 'Flyout', width: 300, height: 240, content: Content::view($a->view(...))));
 });
 App::run();

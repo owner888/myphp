@@ -91,13 +91,8 @@ function view(Context $c, Chat $app): void
         $c->muted('Stream by');
         $c->segmented(REVEAL_NAMES, $app->reveal)->label('Stream by');
       $c->end();
-      if ($app->messages === []) {
-          $c->column(16, 0, 1)->align(Node::CENTER); // at the top, centered, as mygo's list shows it with no message
-            $c->muted('Ask anything: the replies are canned, streamed as a model streams them.');
-          $c->end();
-      } else {
-          $c->list($app->list, count($app->messages), fn(int $i) => message($c, $app, $app->messages[$i]))->grow(1)->padding(16, 20);
-      }
+      $c->list($app->list, count($app->messages), fn(int $i) => message($c, $app, $app->messages[$i]),
+          fn() => $c->muted('Ask anything: the replies are canned, streamed as a model streams them.')->margin(Node::AUTO))->grow(1)->padding(16, 20)->gap(16)->justify(Node::END);
       $c->row(0, 8)->padding(12, 20)->borderWidth(1, 0, 0, 0)->borderColor($t->border);
         $in = $c->input($app->input, 'Message', 0)->autoFocus();
         $last = $app->messages === [] ? null : $app->messages[count($app->messages) - 1];
@@ -115,15 +110,15 @@ function view(Context $c, Chat $app): void
 function message(Context $c, Chat $app, Message $m): void
 {
     $t = $c->theme;
-    $c->row(0, 0)->padding(8, 0);
-      if ($m->mine) {
+    if ($m->mine) {
+        $c->row();
           $c->spacer();
           $c->text($m->text)->selectable()->padding(8, 12)->round(14)->background($t->surface)->maxWidth(520);
-      } else {
-          $c->column()->maxWidth(760)->grow(1);
-            $m->done ? Markdown::view($c, $m->text, $app->md) : Markdown::stream($c, $m->text, $app->md);
-          $c->end();
-      }
+        $c->end();
+        return;
+    }
+    $c->column()->maxWidth(760);
+      $m->done ? Markdown::view($c, $m->text, $app->md) : Markdown::stream($c, $m->text, $app->md);
     $c->end();
 }
 

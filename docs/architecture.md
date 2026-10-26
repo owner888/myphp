@@ -3192,6 +3192,39 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   process's. The micro launcher, one executable, has its pid, so it
   stays so: what it leaves out is tools driving a development build.
 
+- **A static app runs from its phar.** In micro `PHP_BINARY` is empty:
+  what runs PHP again (the terminal plugin's pty child, a native
+  library beside the executable) asks `Bundle::executable()`, the phar's
+  path there; `glob` and `realpath` see nothing in `phar://`, so the
+  catalogs are listed with `scandir` and `Protocol::fileServer` serves a
+  frontend in the phar by its path. `static_app_test` keeps
+  `PHP_BINARY` and `glob(` to the files that may use them.
+- **The 14 examples beside mygo's, pair by pair.** Each built as an app
+  of both (`-launcher micro`, a bundle of mygo's binary), shown side by
+  side and compared by eye; what differed was the framework's but for
+  two examples:
+  - a field's height left out its border (2 points short of mygo's); a
+    button given `size(44, 0)` lost its measured height; a select had
+    no least width (mygo's `MinWidth(Space(35))`); a web view in a
+    bordered box covered the border (its hole now inside the padding
+    and border);
+  - a bordered face painted its border as a rect under the face, which
+    a disabled button's half opacity showed through: the face is
+    painted, then its ring, as mygo's;
+  - `fontSize()` on a field did nothing (its line is measured again in
+    layout), and `changed()` on a field never reported typing: a
+    `TextState` counts the user's edits (typing, deleting, pasting,
+    undo), which the field built next reports once, as mygo's Changed;
+    what the program sets is no edit;
+  - a list's rows short of the view went to its end with
+    `justify(END)`, and what it shows without rows stays at the top,
+    as mygo's;
+  - the flyout example was another than mygo's (placements, a hover
+    card, a panel, a tray flyout): it is mygo's now (a list of colors,
+    a note's editor, an About popover); markdown-chat's list had
+    neither mygo's gap nor its `Justify(End)`; documents' footer and
+    monospaced editor were mygo's own.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

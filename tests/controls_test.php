@@ -93,7 +93,7 @@ $h = new Headless(function (Context $c) use (&$n, &$ev, &$open, $q, &$cur, $name
     $c->end();
 }, 600, 500);
 $h->frame(); check($n['bar'] === null, 'a closed find bar builds nothing');
-$l1 = $h->rect($n['f1']->kids[0]); $l2 = $h->rect($n['f2']->kids[0]); same($l1[2], $l2[2], 'the labels of a form are as wide as the widest'); same(28.0, $l1[3], 'and as high as their control');
+$l1 = $h->rect($n['f1']->kids[0]); $l2 = $h->rect($n['f2']->kids[0]); same($l1[2], $l2[2], 'the labels of a form are as wide as the widest'); same(30.0, $l1[3], 'and as high as their control, its border in');
 same('Required', $n['f2']->kids[1]->kids[1]->text, 'the error below the control'); same($h->theme->danger, $n['f2']->kids[1]->kids[1]->fg, 'in the danger color');
 $h->clickOn($n['f1']->kids[0]->kids[0]); same($n['f1']->kids[1]->kids[0]->id, $h->rt->focus, 'a click on the label focuses the input');
 $h->clickOn($n['f2']->kids[0]->kids[0]); check($agree, 'a click on a check box label checks it');
@@ -238,3 +238,19 @@ $h->clickOn($n['l']); $h->type('x'); $h->key(Key::DELETE, 'deleteBackward:'); sa
 $h->key(0, 'selectAll:', Key::COMMAND, 'a'); same("kept\nas is", $log->selectedText(), 'but the text is selected');
 $list = $h->paint(); $carets = 0; for ($q = 0; $q < $list->n; $q++) { if ($list->buf[$q * 16 + 2] === 1.0 && $list->buf[$q * 16 + 3] === 16.0) { $carets++; } }
 same(0, $carets, 'and no caret shows');
+
+// A disabled button at half its opacity: its border a ring over its face, not a rect of the border's color under it, which the dimmed face lets show through (mygo's).
+$n = [];
+$h = new Headless(function (Context $c) use (&$n) {
+    $c->column(10);
+      $n['b'] = $c->button('Clear')->disabled();
+    $c->end();
+}, 200, 100);
+$h->frame();
+$list = $h->paint(); [$bx, $by, $bw, $bh] = $h->rect($n['b']);
+$kinds = [];
+for ($q = 0; $q < $list->n; $q++) {
+    $o = $q * 16;
+    if (abs($list->buf[$o] - $bx) < 0.01 && abs($list->buf[$o + 1] - $by) < 0.01 && abs($list->buf[$o + 2] - $bw) < 0.01) { $kinds[] = [(int)$list->buf[$o + 9], round($list->buf[$o + 7], 2)]; }
+}
+same([[0, 0.5], [4, 0.5]], $kinds, 'the face, then its ring, both dimmed');

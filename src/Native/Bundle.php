@@ -58,6 +58,19 @@ final class Bundle
         return self::$info;
     }
 
+    /**
+     * The executable running this PHP: a static app's own (phpmicro leaves
+     * PHP_BINARY empty, and its phar is the executable), else PHP_BINARY.
+     */
+    public static function executable(): string
+    {
+        if (PHP_SAPI !== 'micro') {
+            return PHP_BINARY;
+        }
+        $phar = class_exists(\Phar::class) ? \Phar::running(false) : '';
+        return $phar !== '' ? $phar : throw new \RuntimeException('myphp: a static app runs from no phar');
+    }
+
     /** The executable that starts the app: the bundle's, else the PHP that runs it with the script. @return list<string> */
     public static function command(): array
     {

@@ -130,12 +130,25 @@ final class TextState
         return $this->marked === null ? $this->cursor : $this->cursor + $this->markedCaret;
     }
 
+    /** The user's edits so far, which a field built reports once as changed (mygo's Changed: what the program sets is no edit). @internal */
+    public int $edits = 0;
+    private int $editsBuilt = 0;
+
+    /** Whether the user edited the text since a field of it was built last; the field built now has seen it. @internal */
+    public function editedSinceBuilt(): bool
+    {
+        $edited = $this->edits !== $this->editsBuilt;
+        $this->editsBuilt = $this->edits;
+        return $edited;
+    }
+
     public function insert(string $s): void
     {
         $this->marked = null;
         if ($this->readOnly) { return; }
         [$a, $b] = $this->selection();
         $this->snapshot($s === '' ? 'delete' : ($a === $b && !str_contains($s, "\n") ? 'type' : 'edit'));
+        if ($a !== $b || $s !== '') { $this->edits++; }
         $this->text = substr($this->text, 0, $a) . $s . substr($this->text, $b);
         $this->cursor = $this->anchor = $a + strlen($s);
     }
@@ -146,6 +159,7 @@ final class TextState
         if ($this->hasSelection()) {
             [$a, $b] = $this->selection();
             $this->snapshot('edit');
+            $this->edits++;
             $this->text = substr($this->text, 0, $a) . substr($this->text, $b);
             $this->cursor = $this->anchor = $a;
         }
@@ -208,6 +222,7 @@ final class TextState
         }
         $this->redo[] = [$this->text, $this->cursor, $this->anchor];
         [$this->text, $this->cursor, $this->anchor] = array_pop($this->undo);
+        $this->edits++;
         $this->marked = null;
         $this->lastEdit = '';
     }
@@ -219,6 +234,7 @@ final class TextState
         }
         $this->undo[] = [$this->text, $this->cursor, $this->anchor];
         [$this->text, $this->cursor, $this->anchor] = array_pop($this->redo);
+        $this->edits++;
         $this->marked = null;
         $this->lastEdit = '';
     }
