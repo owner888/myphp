@@ -60,7 +60,7 @@ final class Renderers
             ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
             return;
         }
-        $format = $this->formats[$t->number] ??= CoreMedia::format($t);
+        $format = $this->formats[$t->number] ??= CoreMedia::format($t, $p->data); // the first packet a keyframe: playing starts at one
         if ($video) {
             $sb = CoreMedia::videoSample($p, $format, $show);
         } else {
@@ -69,8 +69,9 @@ final class Renderers
             if ($this->nextAudio === null || abs($at - $this->nextAudio) > $rate / 10) { // the first, or the file's time jumping (a gap): its time again
                 $this->nextAudio = $at;
             }
-            $sb = CoreMedia::audioSample($p, $format, $this->nextAudio, $rate);
-            $this->nextAudio += CoreMedia::c()->CMAudioFormatDescriptionGetStreamBasicDescription($format)->framesPerPacket;
+            $frames = CoreMedia::frames($p);
+            $sb = CoreMedia::audioSample($p, $format, $this->nextAudio, $rate, $frames);
+            $this->nextAudio += $frames;
         }
         ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
         CoreMedia::c()->CFRelease($sb);

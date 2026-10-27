@@ -18,12 +18,19 @@ use RuntimeException;
  */
 final class CoreMedia
 {
-    /** Matroska's video codecs the system decodes: their CoreMedia codec type and the atom their CodecPrivate is. */
-    public const VIDEO = ['V_MPEG4/ISO/AVC' => ['avc1', 'avcC'], 'V_MPEGH/ISO/HEVC' => ['hvc1', 'hvcC']];
-    /** Its audio codecs: their CoreAudio format and the frames a packet holds. */
-    public const AUDIO = ['A_AAC' => ['aac ', 1024], 'A_AC3' => ['ac-3', 1536], 'A_EAC3' => ['ec-3', 1536], 'A_MPEG/L3' => ['.mp3', 1152]];
+    /**
+     * Matroska's video codecs the system decodes: their CoreMedia codec type
+     * and the atom their format takes (AV1's CodecPrivate is its av1C;
+     * VP9's vpcC is made from its first keyframe). VP9 and AV1 play where
+     * the Mac decodes them in hardware (VP9 on Apple silicon, AV1 from M3).
+     */
+    public const VIDEO = ['V_MPEG4/ISO/AVC' => ['avc1', 'avcC'], 'V_MPEGH/ISO/HEVC' => ['hvc1', 'hvcC'], 'V_VP9' => ['vp09', 'vpcC'], 'V_AV1' => ['av01', 'av1C']];
+    /** Those the system decodes only with the decoders it adds (VTRegisterSupplementalVideoDecoderIfAvailable), in hardware. */
+    private const SUPPLEMENTAL = ['vp09', 'av01'];
+    /** Its audio codecs: their CoreAudio format and the frames a packet holds, 0 for as many as each packet says (Opus's, by its TOC byte). */
+    public const AUDIO = ['A_AAC' => ['aac ', 1024], 'A_AC3' => ['ac-3', 1536], 'A_EAC3' => ['ec-3', 1536], 'A_MPEG/L3' => ['.mp3', 1152], 'A_OPUS' => ['opus', 0]];
 
-    private static ?FFI $c = null;
+    private static ?FFI $c = null, $vt = null;
 
     public static function c(): FFI
     {
@@ -61,8 +68,24 @@ final class CoreMedia
                 extern void* kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms;
                 extern void* kCFBooleanTrue;
             ', '/System/Library/Frameworks/CoreMedia.framework/CoreMedia');
+            self::vt(); // its VP9 and AV1 decoders, before a reader or a layer meets them
         }
         return self::$c;
+    }
+
+    /** VideoToolbox, its VP9 and AV1 decoders registered in the process (macOS 11), which the display layer and AVFoundation's readers then use. */
+    private static function vt(): FFI
+    {
+        if (self::$vt === null) {
+            self::$vt = FFI::cdef('
+                unsigned char VTIsHardwareDecodeSupported(unsigned int);
+                void VTRegisterSupplementalVideoDecoderIfAvailable(unsigned int);
+            ', '/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox');
+            foreach (self::SUPPLEMENTAL as $type) {
+                self::$vt->VTRegisterSupplementalVideoDecoderIfAvailable(self::fourcc($type));
+            }
+        }
+        return self::$vt;
     }
 
     /** A pointer of ObjC's (or another instance's) as one of this instance's. */
@@ -81,7 +104,7 @@ final class CoreMedia
     public static function playable(Track $t): bool
     {
         return match ($t->type) {
-            Track::VIDEO => isset(self::VIDEO[$t->codec]),
+            Track::VIDEO => isset(self::VIDEO[$t->codec]) && (!in_array($type = self::VIDEO[$t->codec][0], self::SUPPLEMENTAL, true) || self::vt()->VTIsHardwareDecodeSupported(self::fourcc($type)) !== 0),
             Track::AUDIO => self::audio($t) !== null,
             default => false,
         };
@@ -98,14 +121,18 @@ final class CoreMedia
         return null;
     }
 
-    /** The format description of track $t, owned (CFRelease it). */
-    public static function format(Track $t): CData
+    /** The format description of track $t, owned (CFRelease it); $first is its first packet's bytes, a keyframe, which VP9's is made from. */
+    public static function format(Track $t, string $first = ''): CData
     {
         $c = self::c();
         $out = $c->new('void*');
         if ($t->type === Track::VIDEO) {
             [$type, $atom] = self::VIDEO[$t->codec] ?? throw new RuntimeException("myphp: no decoder for {$t->codec}");
-            $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $t->private, strlen($t->private));
+            $record = $type === 'vp09' ? self::vpcC($t, $first) : $t->private;
+            if ($record === '') {
+                throw new RuntimeException("myphp: track {$t->number} ({$t->codec}) has no $atom");
+            }
+            $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $record, strlen($record));
             $atoms = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', $data, ObjC::str($atom));
             $ext = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', $atoms, ObjC::import($c->kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms));
             $st = $c->CMVideoFormatDescriptionCreate(null, self::fourcc($type), $t->width, $t->height, self::ptr($ext), FFI::addr($out));
@@ -114,7 +141,11 @@ final class CoreMedia
             $asbd = $c->new('ASBD');
             $asbd->rate = $t->sampleRate; $asbd->channels = $t->channels;
             $asbd->format = self::fourcc($format); $asbd->framesPerPacket = $frames;
-            $cookie = $format === 'aac ' ? ($t->private !== '' ? $t->private : self::audioSpecificConfig($t)) : '';
+            $cookie = match ($format) {
+                'aac ' => $t->private !== '' ? $t->private : self::audioSpecificConfig($t),
+                'opus' => $t->private, // its OpusHead: the channels, their mapping, the pre-skip
+                default => '',
+            };
             $buf = null;
             if ($cookie !== '') {
                 $buf = $c->new('unsigned char[' . strlen($cookie) . ']');
@@ -175,12 +206,83 @@ final class CoreMedia
         return $sb;
     }
 
-    /** The sample buffer of audio packet $p in $format, one packet of its frames, starting at sample $at of $rate a second, owned. */
-    public static function audioSample(Packet $p, CData $format, int $at, int $rate): CData
+    /**
+     * VP9's codec configuration (the vpcC box's content, version 1, of the
+     * VP9 ISO-BMFF binding) of track $t, from the uncompressed header of its
+     * keyframe $frame: its profile, bit depth, chroma subsampling, range and
+     * color space; the level the least whose picture size holds the frame.
+     */
+    private static function vpcC(Track $t, string $frame): string
+    {
+        $bit = 0;
+        $read = function (int $n) use ($frame, &$bit): int {
+            $v = 0;
+            for ($i = 0; $i < $n; $i++, $bit++) {
+                $byte = ord($frame[$bit >> 3] ?? throw new RuntimeException('myphp: a VP9 frame ends in its header'));
+                $v = ($v << 1) | (($byte >> (7 - ($bit & 7))) & 1);
+            }
+            return $v;
+        };
+        if ($read(2) !== 2) {
+            throw new RuntimeException("myphp: track {$t->number} starts with no VP9 frame");
+        }
+        $profile = $read(1); $profile |= $read(1) << 1;
+        if ($profile === 3) { $read(1); }
+        if ($read(1) === 1 || $read(1) !== 0) { // show_existing_frame, frame_type: a keyframe is 0
+            throw new RuntimeException("myphp: track {$t->number}'s first VP9 frame is no keyframe");
+        }
+        $read(2); // show_frame, error_resilient_mode
+        if ($read(24) !== 0x498342) {
+            throw new RuntimeException("myphp: track {$t->number}'s VP9 keyframe has no sync code");
+        }
+        $depth = $profile >= 2 ? ($read(1) === 1 ? 12 : 10) : 8;
+        $space = $read(3);
+        if ($space !== 7) { // not RGB
+            $full = $read(1);
+            [$sx, $sy] = $profile === 1 || $profile === 3 ? [$read(1), $read(1)] : [1, 1];
+        } else {
+            $full = 1;
+            [$sx, $sy] = [0, 0];
+        }
+        $chroma = match (true) { $sx === 1 && $sy === 1 => 1, $sx === 1 => 2, default => 3 }; // 4:2:0 at the luma's first sample, 4:2:2, 4:4:4
+        // The color space's matrix (ISO/IEC 23091-2): BT.601 and SMPTE 170 are 6, BT.709 1, SMPTE 240 7, BT.2020 9, RGB 0; unknown 2.
+        $matrix = [0 => 2, 1 => 6, 2 => 1, 3 => 6, 4 => 7, 5 => 9, 6 => 2, 7 => 0][$space];
+        [$primaries, $transfer] = match ($space) { 2 => [1, 1], 5 => [9, 14], 1, 3 => [6, 6], 4 => [7, 7], default => [2, 2] };
+        $area = $t->width * $t->height;
+        $level = 62;
+        foreach ([10 => 36864, 11 => 73728, 20 => 122880, 21 => 245760, 30 => 552960, 31 => 983040, 40 => 2228224, 50 => 8912896, 60 => 35651584] as $l => $max) {
+            if ($area <= $max) { $level = $l; break; }
+        }
+        return pack('CC3CCCCCCn', 1, 0, 0, 0, $profile, $level, $depth << 4 | $chroma << 1 | $full, $primaries, $transfer, $matrix, 0);
+    }
+
+    /**
+     * The frames audio packet $p holds: its codec's, or for Opus as its TOC
+     * byte says (RFC 6716 3.1: the frame size of its configuration, 2.5 to
+     * 60 ms at 48 kHz, times the frames in it).
+     */
+    public static function frames(Packet $p): int
+    {
+        $f = self::audio($p->track) ?? throw new RuntimeException("myphp: no decoder for {$p->track->codec}");
+        if ($f[1] > 0) {
+            return $f[1];
+        }
+        $toc = ord($p->data[0] ?? "\0");
+        $config = $toc >> 3;
+        $size = match (true) { $config < 12 => [480, 960, 1920, 2880][$config % 4], $config < 16 => [480, 960][$config % 2], default => [120, 240, 480, 960][$config % 4] }; // SILK, hybrid, CELT
+        $count = match ($toc & 3) { 0 => 1, 1, 2 => 2, 3 => ord($p->data[1] ?? "\0") & 0x3f };
+        return $size * $count;
+    }
+
+    /** The sample buffer of audio packet $p in $format, one packet of $frames frames, starting at sample $at of $rate a second, owned. */
+    public static function audioSample(Packet $p, CData $format, int $at, int $rate, int $frames): CData
     {
         $c = self::c();
         $bb = self::block($p->data);
         $desc = $c->new('ASPD'); $desc->size = strlen($p->data);
+        if ($c->CMAudioFormatDescriptionGetStreamBasicDescription($format)->framesPerPacket === 0) {
+            $desc->variableFrames = $frames; // a format of packets of their own lengths (Opus)
+        }
         $pts = $c->new('CMTime'); $pts->value = $at; $pts->timescale = $rate; $pts->flags = 1;
         $sb = $c->new('void*');
         $st = $c->CMAudioSampleBufferCreateReadyWithPacketDescriptions(null, $bb, $format, 1, $pts, FFI::addr($desc), FFI::addr($sb));

@@ -3563,6 +3563,32 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   starts, not up to a tick late; a wake come before the clock (which
   starts a moment after `play()`) waits again.
 
+## VP9 and AV1 in hardware, Opus (v1.37)
+
+- **The system's decoders, registered.** VP9 and AV1 are supplemental
+  decoders of VideoToolbox: a process registers them
+  (`VTRegisterSupplementalVideoDecoderIfAvailable`, as `CoreMedia::c()`
+  boots) before a display layer or AVFoundation's reader meets them. A
+  VP9 or AV1 track plays where the Mac decodes it in hardware
+  (`VTIsHardwareDecodeSupported`: VP9 on Apple silicon, AV1 from M3);
+  elsewhere the film plays its sound alone, as one of a video codec the
+  system has no decoder for.
+- **Their formats.** AV1's CodecPrivate in Matroska is its av1C record,
+  given as is. VP9 has none in Matroska: its vpcC (version 1 of the VP9
+  ISO-BMFF binding) is made from the uncompressed header of the track's
+  first packet, a keyframe as playing starts at one: the profile, bit
+  depth, chroma subsampling, range and color space (its matrix; BT.709
+  and BT.2020 their primaries and transfer too), the level the least
+  whose picture size holds the frame. MP4's vp09 and av01 tracks are
+  AVFoundation's, their samples passed through.
+- **Opus**, as WebM files have it: the system's decoder (`'opus'`), its
+  cookie the OpusHead of the CodecPrivate, its packets of as many frames
+  as their TOC byte says (RFC 6716 3.1: 2.5 to 60 ms at 48 kHz, one, two
+  or as many frames as the count byte holds), each sample buffer's packet
+  description telling them, the next packet's time counted on by them.
+  The pre-skip (312 frames, 6.5 ms) is decoded and played, not trimmed:
+  the sound runs that much ahead of the picture.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

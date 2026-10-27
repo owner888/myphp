@@ -1,6 +1,8 @@
 <?php
 // Reading Matroska (Media\Matroska): the tracks, the duration and cues of
-// files ffmpeg wrote (H.264 with AAC, HEVC with AC-3), their frames in
+// files ffmpeg wrote (H.264 with AAC, HEVC with AC-3, VP9 and AV1 with
+// AAC: AV1's av1C its CodecPrivate, VP9's vpcC made from its first
+// keyframe's header), their frames in
 // order with their times and keyframes, seeking by the cues; and, in a
 // file built here, the three kinds of lacing, block groups, header
 // stripping and a segment of unknown size.
@@ -99,3 +101,26 @@ same([
     [0.095, 0.03, false, '>grouped'],
 ], $got, 'Xiph, EBML and fixed lacing, a block group with its duration and reference, the stripped header put back');
 unlink($file);
+
+// VP9 and AV1: AV1's CodecPrivate is its av1C record (marker and version 1, Main profile); VP9 has none, its vpcC made from the keyframe's header.
+$m = new Matroska(__DIR__ . '/testdata/clip-av1.mkv');
+same(['V_AV1', "\x81\x00"], [$m->tracks()[0]->codec, substr($m->tracks()[0]->private, 0, 2)], 'an AV1 track keeps its av1C');
+$m = new Matroska(__DIR__ . '/testdata/clip-vp9.mkv');
+[$v] = $m->tracks();
+same(['V_VP9', ''], [$v->codec, $v->private], 'a VP9 track, of no CodecPrivate');
+while (($p = $m->next()) !== null && $p->track !== $v) {}
+$vpcC = new \ReflectionMethod(\MyPHP\Native\CoreMedia::class, 'vpcC');
+same(bin2hex(pack('CC3CCCCCCn', 1, 0, 0, 0, 0, 10, 8 << 4 | 1 << 1 | 0, 2, 2, 2, 0)), bin2hex($vpcC->invoke(null, $v, $p->data)), 'its vpcC: version 1, profile 0, level 1 (160 by 90), 8 bits, 4:2:0, limited range, colors unknown');
+$err = null;
+try { $vpcC->invoke(null, $v, "\x00\x00"); } catch (RuntimeException $e) { $err = $e->getMessage(); }
+same('myphp: track 1 starts with no VP9 frame', $err, 'what is no VP9 frame throws');
+
+// Opus: its CodecPrivate the OpusHead (2 channels, a pre-skip of 312), its packets of as many frames as their TOC byte says (20 ms: 960 at 48 kHz).
+$m = new Matroska(__DIR__ . '/testdata/clip-opus.mkv');
+$a = $m->tracks()[1];
+same(['A_OPUS', 48000.0, 2, 'OpusHead', 312], [$a->codec, $a->sampleRate, $a->channels, substr($a->private, 0, 8), unpack('v', $a->private, 10)[1]], 'an Opus track and its OpusHead');
+while (($p = $m->next()) !== null && $p->track !== $a) {}
+same(960, \MyPHP\Native\CoreMedia::frames($p), 'a 20 ms packet, 960 frames');
+$toc = fn(int $toc, string $more = '') => \MyPHP\Native\CoreMedia::frames(new Packet($a, 0.0, 0.0, true, chr($toc) . $more));
+same([480, 2880, 1920, 120, 1920, 2880], [$toc(0 << 3), $toc(3 << 3), $toc(13 << 3 | 1), $toc(16 << 3), $toc(31 << 3 | 2), $toc(19 << 3 | 3, "\x03")], 'SILK, hybrid and CELT sizes, two frames, three by the count byte');
+

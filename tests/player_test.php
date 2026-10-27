@@ -2,7 +2,8 @@
 // Playing media, on macOS (Media\Player): a Matroska file (H.264 with AAC)
 // and an MP4 of the same (AVFoundation's reader), their size, duration,
 // video track and audio tracks; the clock running while it plays and holding while paused;
-// seeking, paused and playing; playing to the end, which is told.
+// seeking, paused and playing; playing to the end, which is told; VP9 and
+// AV1 where the Mac decodes them in hardware.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -55,6 +56,34 @@ if (PHP_OS_FAMILY === 'Darwin') {
         try { $p->setRate(0); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
         check($err !== null, 'a rate of 0 throws: pause() stops');
     }
+
+    // VP9 and AV1, in Matroska and MP4, where this Mac decodes them in hardware (VP9 on Apple silicon, AV1 from M3): the picture plays with the sound.
+    foreach (['clip-vp9.mkv', 'clip-vp9.mp4', 'clip-vp9.webm', 'clip-av1.mkv', 'clip-av1.mp4'] as $file) {
+        $p = new Player(__DIR__ . "/testdata/$file");
+        if ($p->videoTrack() === null) {
+            echo "  note: $file: this Mac decodes its video in no hardware, its sound plays alone\n";
+            continue;
+        }
+        same([160, 90], $p->size(), "$file: the video's size");
+        $p->play();
+        for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+        $from = $p->time();
+        $run(0.5);
+        $failed = $p->out->failure();
+        check($failed === null && $p->time() - $from > 0.3, "$file: it plays, decoded by the system: " . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
+        $p->pause();
+    }
+
+    // Opus, as WebM files have it: the system decodes it, and the clock runs on its sound.
+    $p = new Player(__DIR__ . '/testdata/clip-opus.mkv');
+    check($p->audioTrack()?->codec === 'A_OPUS', 'an Opus track plays');
+    $p->play();
+    for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+    $from = $p->time();
+    $run(0.5);
+    $failed = $p->out->failure();
+    check($failed === null && $p->time() - $from > 0.3, 'Opus: it plays, decoded by the system: ' . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
+    $p->pause();
 
     // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
     $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');

@@ -1668,7 +1668,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Media\Player and Context::video**
   - mygo: no video; `Bitmap.Update` shows frames an app decodes itself.
   - myphp: `Media\Player` plays Matroska, WebM, MP4, MOV and M4V (H.264,
-    HEVC; AAC, AC-3, E-AC-3, MP3) with the system's decoders, and
+    HEVC, and VP9 and AV1 where the Mac decodes them in hardware; AAC,
+    AC-3, E-AC-3, MP3, Opus) with the system's decoders, and
     `Context::video` shows its picture under the window's content, through
     a hole of its node, as web views show; macOS only.
   - Why: the developer asked for a video player as fast as the system
