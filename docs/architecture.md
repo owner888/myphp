@@ -3619,11 +3619,11 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   `setRotation` change where the window puts the picture
   (`Media\Picture::fit`): the picture at its aspect, cut to the crop's
   around its middle, turned, fitted in the node's box and centered. A
-  video's host keeps a crop layer between its clip view and the display
-  layer: the crop layer is the part that shows (masking), the display
-  layer the whole picture in it, stretched to its bounds
-  (`AVLayerVideoGravityResize`), positioned at the middle and turned by
-  `transform.rotation.z` (clockwise, y going up). The picture as the file
+  video's host keeps a crop view between its clip view and the picture's
+  view: the crop view is the part that shows (masking), the picture's
+  view the whole picture in it, its display layer stretched to its bounds
+  (`AVLayerVideoGravityResize`), centered and turned by
+  `setFrameCenterRotation:` (clockwise, AppKit's counterclockwise). The picture as the file
   has it stays as before: the display layer fits it itself
   (`ResizeAspect`) and stretches with the window as it resizes.
 - **The sound's delay** (`Player::setAudioDelay`) shifts the audio
@@ -3648,6 +3648,90 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   its last 5, telling it; it notes where it is every 10 s of playing, at
   a pause and when another player comes, and forgets a film played to
   its end. A quit loses at most the last 10 s.
+
+## The playlist, picture in picture (v1.40)
+
+- **The state opens films.** `VideoPlayerState::open($path)` makes the
+  player of a film (`setPlayer` takes one the app made), and
+  `Context::videoPlayer($state, $options)` builds over the one it plays:
+  going to another film is the player's own (the playlist, the next at
+  an end), the app's code a call. A player taken is gone back to where it
+  was left at the first build with it, which knows the options.
+- **The playlist** (`Media\Playlist`): the films of the opened film's
+  folder (`Playlist::folder`, their names in Finder's order:
+  `strnatcasecmp`, episode 2 before episode 10), the one playing, next
+  and previous, adding and taking out; durations read from the files'
+  headers as the sidebar asks (`Player::durationOf`), once. Its sidebar
+  slides in from the left as IINA's (the tabs, the rows of the films,
+  the one playing marked, a double click playing one, the time of them
+  all, add, remove, clear); the next film plays at the end of one;
+  Cmd+Right and Cmd+Left go to the next and the one before.
+- **Picture in picture** (`Native\PictureInPicture`, macOS 12): AVKit's
+  controller of the player's display layer
+  (`AVPictureInPictureControllerContentSource` of a sample buffer display
+  layer), its delegate telling the system's window the film's time range
+  (the clock's timeline, from 0) and whether it is paused, and playing,
+  pausing and skipping from its buttons (the skip's completion block
+  called); the state tells it when it plays, pauses or seeks
+  (`invalidatePlaybackState`). It starts once the system says it can (a
+  moment after the picture shows). The system's window takes the display
+  layer, and shows where it was what says so (the player draws nothing of
+  its own there, AGENTS.md rule 11).
+- **Trap: a display layer as a sublayer.** Picture in picture maps a
+  sample buffer display layer through the view that hosts it: as a
+  sublayer of a view's layer it showed a corner of it, at the size it had
+  in the window, in a gray box. The video's host is views all the way
+  down: a clip view, a crop view (masking), the picture's view, layer
+  hosting with the display layer as its layer (`setLayer:` before
+  `setWantsLayer:`), laid out by frames and turned by
+  `setFrameCenterRotation:`.
+- **macOS mirrors the layer unscaled** (FB22411168; Apple's forums,
+  thread 821582): the system's window shows a sample buffer display layer
+  through a CALayerHost, pixel for pixel, a corner of a large layer and
+  black around a small one. As AetherEngine does, with public AppKit: the
+  window that comes as it starts (a visible panel, not among the app's
+  windows before, of the picture's shape, the only one so, looked for 5 s)
+  is found, and the picture's view laid out at its content view's size,
+  followed through its frame's notifications and the render size the
+  controller tells; the player's window, hidden, shows none of it.
+- **Trap: the view by the layer's delegate.** The picture's view was
+  first reached as its display layer's `delegate`; for a layer hosting
+  view (the layer set before `setWantsLayer:`) that is not the view, and
+  laying it out changed nothing, the picture still a corner in black. The
+  window keeps the view it made (`Renderers::$view`, set as it places the
+  video, cleared as it closes) and the controller lays that out.
+- **Trap: taking the layer back.** `placeVideos` put a video's layer back
+  in its host whenever it was elsewhere: in picture in picture, every
+  frame took it out of the system's window, which then showed a corner of
+  it in a gray box. The host leaves it while it is elsewhere
+  (`Renderers::$elsewhere`, from the start's beginning, as the system's
+  animation sizes it, to the stop's end), as the file has it (fitted,
+  upright, sizable with the system's window).
+- **The window goes with it.** As IINA's, the player's window hides while
+  the film plays in picture in picture and shows again as it stops (and
+  when the system asks to restore it, before the picture goes back):
+  from the controller's delegate, outside any frame, so through
+  `Runtime::$showWindow`, which the window sets (a hidden window draws
+  no frame that could show it).
+- **Trap: going back faded out.** As it stops, the system's window
+  animates into where the layer is in the app's window, if that window
+  shows with the picture in its place when the restore's completion is
+  called; the picture's view was still at the system's window's size and
+  left (`elsewhere`), so the small window faded and the large one came
+  after. The restore gives the layer back first (`elsewhere` off, the
+  panel let go) and `Runtime::$showWindow(true)` places the videos at
+  once, from the last frame's places, before calling the completion: the
+  small window grows into the large one, as IINA's.
+- **Trap: the close button as IINA's.** IINA's close button (a private
+  PIPViewController's `replacementWindow`) grows the small window into
+  the large one and pauses. With AVKit, giving the layer back at
+  `WillStop` and pausing at a stop with no restore went worse (the
+  developer's call): its close button is left as AVKit has it, the
+  window and the picture back at `DidStop`, playing on.
+- **The playlist's tabs slide.** The playlist and the chapters are two
+  pages side by side in a clipped box, both moved by the tab's animated
+  place (0.25 s), each built while any of it shows, as IINA's tabs go
+  from one to the other.
 
 ## Open items
 

@@ -5,8 +5,10 @@ namespace MyPHP\UI;
 
 use Closure;
 use MyPHP\Media\PlaybackPositions;
+use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
 use MyPHP\Media\Track;
+use MyPHP\Native\PictureInPicture;
 use RuntimeException;
 
 /**
@@ -61,34 +63,94 @@ final class VideoPlayerState
     /** Seconds between two notes of where a film playing is. */
     public const NOTE_EVERY = 10.0;
 
+    /** The films it goes through (open() makes it of the film's folder), and the one chosen in the playlist's sidebar. */
+    public ?Playlist $playlist = null;
+    /** @internal */
+    public int $chosen = -1;
+    /** The playlist sidebar's tab: 'playlist' or 'chapters'. */
+    public string $playlistTab = 'playlist';
+    /** @internal whether the player taken last has not been built with yet: where it was left is gone back to then */
+    private bool $fresh = false;
+    /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
+    public bool $pictureInPicture = false;
+    /** The picture in picture of the player, where this Mac has it. */
+    private ?PictureInPicture $pip = null;
+
     /**
-     * Takes player $p, built with in $rt's window: its volume this state's,
-     * a frame asked for when what shows of its time changes (look), at its
-     * end and when it fails; with $resume, from where it was left (more
-     * than 5 s in and before its last 5), noting where it is every
-     * NOTE_EVERY seconds, at a pause and when another player comes, and
-     * forgetting it at its end.
-     * @internal Context::videoPlayer
+     * Opens the film at $path and plays it: a player of it, the title its
+     * name, the playlist the films of its folder unless it is in the one
+     * there is. What fails to open shows as the error, the film playing
+     * going on. Returns whether it opened.
      */
-    public function attach(Player $p, Runtime $rt, bool $resume): void
+    public function open(string $path): bool
     {
-        $this->runtime = \WeakReference::create($rt);
+        try {
+            $p = new Player($path);
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+            $this->changed();
+            return false;
+        }
+        if ($this->playlist === null || !$this->playlist->select($path)) {
+            $this->playlist = Playlist::folder($path);
+        }
+        $this->chosen = $this->playlist->index();
+        $this->title = basename($path);
+        $this->setPlayer($p);
+        $p->play();
+        return true;
+    }
+
+    /** Plays the next film of the playlist; false after the last. */
+    public function next(): bool
+    {
+        $path = $this->playlist?->next();
+        return $path !== null && $this->open($path);
+    }
+
+    /** Plays the film before; false before the first. */
+    public function previous(): bool
+    {
+        $path = $this->playlist?->previous();
+        return $path !== null && $this->open($path);
+    }
+
+    /**
+     * Takes player $p, of a film the app opened itself (open() opens one):
+     * the one playing paused and its place noted; its volume this state's,
+     * a frame asked for when what shows of its time changes (look), at its
+     * end (where the next film of the playlist plays) and when it fails.
+     * Where it is is noted every NOTE_EVERY seconds, at a pause and when
+     * another player comes, and forgotten at its end, with
+     * VideoPlayerOptions::$resume.
+     */
+    public function setPlayer(Player $p): void
+    {
         if ($this->player === $p) {
             return;
         }
         foreach ($this->off as $off) { $off(); }
-        if ($this->resume && $this->player !== null) { $this->note(); }
+        if ($this->player !== null) {
+            if ($this->resume) { $this->note(); }
+            $this->player->pause();
+        }
+        $this->pip = null; // the last one's stops with it
+        $this->pictureInPicture = false;
         $this->player = $p;
-        $this->resume = $resume;
+        $this->fresh = true;
+        if (PictureInPicture::supported()) {
+            $this->pip = new PictureInPicture($p, function (bool $on): void { // the window goes while the film plays in the system's, as IINA's, and comes back with it
+                if ($on === $this->pictureInPicture) { return; }
+                $this->pictureInPicture = $on;
+                ($this->runtime?->get()?->showWindow)?->__invoke(!$on);
+                $this->changed();
+            });
+        }
         $this->error = '';
         $this->speedAt = log($p->rate() / 0.25, 64);
         $p->setVolume($this->volume);
         $this->moved = microtime(true);
         $noted = 0.0;
-        if ($resume && ($at = $this->positions()->get($p->path())) !== null && $at > 5 && $at < $p->duration() - 5) {
-            $p->seek($at);
-            $this->say($this->t('videoResumedAt', ['time' => self::clock($at)]));
-        }
         $this->off = [
             $p->on('time', function () use (&$noted) { // a frame only when what shows changed: none while the controls are hidden and the subtitles stay
                 $look = $this->look();
@@ -97,10 +159,33 @@ final class VideoPlayerState
             }),
             $p->on('ended', function () {
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
-                $this->changed();
+                if (!$this->next()) { $this->changed(); } // the next film plays
             }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
         ];
+        $this->changed();
+    }
+
+    /**
+     * Notes the window's runtime it is built in, to ask it for frames, and
+     * whether it goes on from where films were left: the first build with
+     * a player taken goes back there (more than 5 s in and before its last
+     * 5), telling it.
+     * @internal Context::videoPlayer
+     */
+    public function attach(Runtime $rt, bool $resume): void
+    {
+        $this->runtime = \WeakReference::create($rt);
+        $this->resume = $resume;
+        $p = $this->player;
+        if (!$this->fresh || $p === null) {
+            return;
+        }
+        $this->fresh = false;
+        if ($resume && ($at = $this->positions()->get($p->path())) !== null && $at > 5 && $at < $p->duration() - 5) {
+            $p->seek($at);
+            $this->say($this->t('videoResumedAt', ['time' => self::clock($at)]));
+        }
     }
 
     private function positions(): PlaybackPositions
@@ -154,6 +239,7 @@ final class VideoPlayerState
         $p = $this->player;
         if ($p === null) { return; }
         $p->playing() ? $p->pause() : $p->play();
+        $this->played();
         if ($this->resume && !$p->playing()) { $this->note(); }
         $this->say($this->t($p->playing() ? 'videoResume' : 'videoPause'), 'time');
     }
@@ -162,6 +248,7 @@ final class VideoPlayerState
     {
         $this->player?->pause();
         $this->player?->seek(0);
+        $this->played();
         $this->say($this->t('videoStop'));
     }
 
@@ -170,6 +257,7 @@ final class VideoPlayerState
         $p = $this->player;
         if ($p === null) { return; }
         $p->seek($p->time() + $s);
+        $this->played();
         $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()));
     }
 
@@ -201,6 +289,7 @@ final class VideoPlayerState
     {
         $rate = max(0.25, min(16.0, round($rate, 2)));
         $this->player?->setRate($rate);
+        $this->played();
         $this->speedAt = log($rate / 0.25, 64);
         $this->say($this->t('videoSpeedTo', ['speed' => self::number($rate)]));
     }
@@ -255,7 +344,7 @@ final class VideoPlayerState
     public function cycleSubtitles(): void
     {
         $p = $this->player;
-        $p?->setSubtitleTrack(self::next($p->subtitleTracks(), $p->subtitleTrack()));
+        $p?->setSubtitleTrack(self::nextTrack($p->subtitleTracks(), $p->subtitleTrack()));
     }
 
     /** Plays the next audio track the system decodes, round to the first. */
@@ -264,8 +353,27 @@ final class VideoPlayerState
         $p = $this->player;
         if ($p === null) { return; }
         $tracks = array_values(array_filter($p->audioTracks(), [Player::class, 'playable']));
-        $next = self::next($tracks, $p->audioTrack()) ?? $tracks[0] ?? null;
+        $next = self::nextTrack($tracks, $p->audioTrack()) ?? $tracks[0] ?? null;
         if ($next !== null) { $p->setAudioTrack($next); }
+    }
+
+    /** Shows the film in the system's floating window, or back in this one; nothing where this Mac has no picture in picture, or before it can start (a moment after the film shows). */
+    public function togglePictureInPicture(): void
+    {
+        if ($this->pip === null) { return; }
+        if ($this->pip->active()) { $this->pip->stop(); } elseif ($this->pip->possible()) { $this->pip->start(); }
+    }
+
+    /** Whether picture in picture can start now. */
+    public function pictureInPicturePossible(): bool
+    {
+        return $this->pip?->possible() ?? false;
+    }
+
+    /** Tells the picture in picture's window that the player played, paused or sought. */
+    private function played(): void
+    {
+        $this->pip?->invalidate();
     }
 
     /** Loads subtitle file $path over the film and shows it; what fails shows as the error. */
@@ -280,7 +388,7 @@ final class VideoPlayerState
     }
 
     /** The track after $current in $tracks, null after the last. @param list<Track> $tracks */
-    private static function next(array $tracks, ?Track $current): ?Track
+    private static function nextTrack(array $tracks, ?Track $current): ?Track
     {
         $i = $current === null ? -1 : (int)array_search($current, $tracks, true);
         return $tracks[$i + 1] ?? null;

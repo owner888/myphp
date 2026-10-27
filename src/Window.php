@@ -149,6 +149,11 @@ final class Window
             $this->runtime->readClipboard = Pasteboard::text(...);
             $this->runtime->escape = $this->escape(...);
             $this->runtime->requestFrame = $this->invalidate(...); // a router's page changed from outside a frame
+            $this->runtime->showWindow = function (bool $on): void {
+                if (!$on) { $this->hide(); return; }
+                $this->show();
+                $this->placeVideos(ObjC::msg('r:', $this->view, 'bounds')->h); // a video given back (picture in picture) in its place now, as the last frame placed it: the system animates into it before a frame comes
+            };
             $this->runtime->startDataDrag = function (Data $data, mixed $local, DragOptions $o, float $x, float $y): ?\Throwable {
                 try {
                     $this->dragData($data, $local, $o, $x, $y);
@@ -668,11 +673,10 @@ final class Window
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         $this->page?->destroy(); // the page goes with the window, its web views' too
         foreach ($this->webViews as $v) { $v->destroy(); }
-        foreach ($this->videoHosts as ['player' => $ref, 'clip' => $clip]) {
+        foreach ($this->videoHosts as ['player' => $ref, 'clip' => $clip, 'video' => $video]) {
+            ObjC::msg('v:p', $video, 'setLayer:', null); // the player's layer, free for another window
             $player = $ref->get();
-            if ($player !== null && ObjC::addr(ObjC::msg('p:', $player->out->layer, 'superlayer')) === ObjC::addr(ObjC::msg('p:', $clip, 'layer'))) {
-                ObjC::msg('v:', $player->out->layer, 'removeFromSuperlayer');
-            }
+            if ($player !== null && $player->out->view === $video) { $player->out->view = null; }
             ObjC::msg('v:', $clip, 'removeFromSuperview');
             ObjC::msg('v:', $clip, 'release');
         }
@@ -1614,17 +1618,26 @@ final class Window
                 ObjC::msg('v:b', $clip, 'setWantsLayer:', true);
                 ObjC::msg('v:b', ObjC::msg('p:', $clip, 'layer'), 'setMasksToBounds:', true);
                 ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view); // NSWindowBelow
-                $crop = ObjC::msg('p:', ObjC::alloc('CALayer'), 'init'); // what of the picture shows: a crop cuts it to this
-                ObjC::msg('v:b', $crop, 'setMasksToBounds:', true);
-                ObjC::msg('v:p', ObjC::msg('p:', $clip, 'layer'), 'addSublayer:', $crop);
-                ObjC::msg('v:', $crop, 'release'); // the clip's layer holds it
-                $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip, 'crop' => $crop];
+                // Views all the way down, the display layer the layer of the last (layer hosting): picture in picture maps a
+                // sample buffer display layer through the view that hosts it, and showed a corner of a sublayer, unscaled.
+                $crop = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0)); // what of the picture shows: a crop cuts it to this
+                ObjC::msg('v:b', $crop, 'setWantsLayer:', true);
+                ObjC::msg('v:b', ObjC::msg('p:', $crop, 'layer'), 'setMasksToBounds:', true);
+                ObjC::msg('v:p', $clip, 'addSubview:', $crop);
+                ObjC::msg('v:', $crop, 'release'); // the clip holds it
+                $video = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
+                ObjC::msg('v:p', $video, 'setLayer:', $p['view']->out->layer);
+                $p['view']->out->view = $video;
+                ObjC::msg('v:b', $video, 'setWantsLayer:', true); // after setLayer: a layer hosting view, the layer the player's
+                ObjC::msg('v:p', $crop, 'addSubview:', $video);
+                ObjC::msg('v:', $video, 'release');
+                $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip, 'crop' => $crop, 'video' => $video];
                 $added = true;
             }
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'begin');
         ObjC::msg('v:b', ObjC::cls('CATransaction'), 'setDisableActions:', true);
-        foreach ($this->videoHosts as $k => ['player' => $ref, 'clip' => $clip, 'crop' => $crop]) {
+        foreach ($this->videoHosts as $k => ['player' => $ref, 'clip' => $clip, 'crop' => $crop, 'video' => $video]) {
             $player = $ref->get();
             if ($player === null) { // gone, its layer with it
                 ObjC::msg('v:', $clip, 'removeFromSuperview');
@@ -1644,29 +1657,28 @@ final class Window
             $wide = $cx <= 0 && $cx + $cw >= $width; $tall = $cy <= 0 && $cy + $ch >= $height;
             ObjC::msg('v:L', $clip, 'setAutoresizingMask:', ($wide ? 2 : 0) | ($tall ? 16 : 8)); // NSViewWidthSizable, NSViewHeightSizable, else NSViewMinYMargin
             ObjC::msg('v:r', $clip, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
-            $layer = $player->out->layer;
-            if (ObjC::addr(ObjC::msg('p:', $layer, 'superlayer')) !== ObjC::addr($crop)) {
-                ObjC::msg('v:p', $crop, 'addSublayer:', $layer);
+            if ($player->out->elsewhere) { // in picture in picture's window, which maps the layer as it was: left so until it stops
+                ObjC::msg('v:b', $clip, 'setHidden:', false);
+                continue;
             }
+            $layer = $player->out->layer;
             [$rx, $ry] = [$fx - $cx, $ch - ($fy - $cy) - $fh]; // the node's box in the clip view, which is not flipped: y up from its bottom
+            ObjC::msg('v:d', $video, 'setFrameCenterRotation:', 0.0); // upright before its frame is set, which a turned view's is not
             if ($player->plainPicture()) { // the layer fits the picture in the box itself, and stretches with it as the window resizes
                 $fills = [$fx, $fy, $fw, $fh] == [$cx, $cy, $cw, $ch];
                 ObjC::msg('v:r', $crop, 'setFrame:', ObjC::rect($rx, $ry, $fw, $fh));
-                ObjC::msg('v:i', $crop, 'setAutoresizingMask:', $fills ? 18 : 0); // kCALayerWidthSizable | kCALayerHeightSizable: with its view, when it fills it
+                ObjC::msg('v:L', $crop, 'setAutoresizingMask:', $fills ? 18 : 0); // NSViewWidthSizable | NSViewHeightSizable: with the clip, when it fills it
                 ObjC::msg('v:p', $layer, 'setVideoGravity:', ObjC::str('AVLayerVideoGravityResizeAspect'));
-                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', 0.0), ObjC::str('transform.rotation.z'));
-                ObjC::msg('v:r', $layer, 'setFrame:', ObjC::rect(0, 0, $fw, $fh));
-                ObjC::msg('v:i', $layer, 'setAutoresizingMask:', 18);
-            } else { // laid out here: the crop layer the part that shows, the picture its whole size in it, stretched to it and turned
+                ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(0, 0, $fw, $fh));
+                ObjC::msg('v:L', $video, 'setAutoresizingMask:', 18);
+            } else { // laid out here: the crop view the part that shows, the picture's view its whole size in it, stretched to it and turned
                 [[$vx, $vy, $vw, $vh], [$pw, $ph]] = $player->picture($fw, $fh);
                 ObjC::msg('v:r', $crop, 'setFrame:', ObjC::rect($rx + $vx, $ry + $fh - $vy - $vh, $vw, $vh));
-                ObjC::msg('v:i', $crop, 'setAutoresizingMask:', 0);
-                ObjC::msg('v:i', $layer, 'setAutoresizingMask:', 0);
+                ObjC::msg('v:L', $crop, 'setAutoresizingMask:', 0);
+                ObjC::msg('v:L', $video, 'setAutoresizingMask:', 0);
                 ObjC::msg('v:p', $layer, 'setVideoGravity:', ObjC::str('AVLayerVideoGravityResize'));
-                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', 0.0), ObjC::str('transform.rotation.z'));
-                ObjC::msg('v:r', $layer, 'setBounds:', ObjC::rect(0, 0, $pw, $ph));
-                ObjC::msg('v:q', $layer, 'setPosition:', ObjC::point($vw / 2, $vh / 2));
-                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', -deg2rad($player->rotation())), ObjC::str('transform.rotation.z')); // clockwise, y going up
+                ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(($vw - $pw) / 2, ($vh - $ph) / 2, $pw, $ph));
+                ObjC::msg('v:d', $video, 'setFrameCenterRotation:', -(float)$player->rotation()); // clockwise: AppKit turns counterclockwise
             }
             ObjC::msg('v:b', $clip, 'setHidden:', false);
         }

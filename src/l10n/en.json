@@ -1044,5 +1044,41 @@
   "videoResumedAt": "Resumed from {time}",
   "@videoResumedAt": {
     "description": "The video player's message as a film goes on from where it was left last time."
+  },
+  "videoChapters": "Chapters",
+  "@videoChapters": {
+    "description": "The video player's playlist sidebar tab of the film's chapters."
+  },
+  "videoNoChapters": "No chapters",
+  "@videoNoChapters": {
+    "description": "The video player's chapters tab, the film having none it reads."
+  },
+  "videoTotal": "Total {time}",
+  "@videoTotal": {
+    "description": "How long the films of the video player's playlist last together."
+  },
+  "videoRepeat": "Repeat",
+  "@videoRepeat": {
+    "description": "The tooltip of a button of the video player's playlist."
+  },
+  "videoShuffle": "Shuffle",
+  "@videoShuffle": {
+    "description": "The tooltip of a button of the video player's playlist."
+  },
+  "videoSort": "Sort",
+  "@videoSort": {
+    "description": "The tooltip of a button of the video player's playlist."
+  },
+  "videoAddFiles": "Add Files…",
+  "@videoAddFiles": {
+    "description": "The tooltip of the button that adds films to the video player's playlist, and its dialog's title."
+  },
+  "videoRemoveChosen": "Remove",
+  "@videoRemoveChosen": {
+    "description": "The tooltip of the button that takes the chosen film out of the video player's playlist."
+  },
+  "videoClearPlaylist": "Clear Playlist",
+  "@videoClearPlaylist": {
+    "description": "The tooltip of the button that takes every film but the one playing out of the video player's playlist."
   }
 }

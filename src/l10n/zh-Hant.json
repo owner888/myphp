@@ -225,5 +225,14 @@
   "videoSettings": "設定",
   "videoNotYet": "尚未支援",
   "videoLayoutNotYet": "版面設定尚未支援",
-  "videoResumedAt": "從 {time} 繼續播放"
+  "videoResumedAt": "從 {time} 繼續播放",
+  "videoChapters": "章節",
+  "videoNoChapters": "沒有章節",
+  "videoTotal": "總計 {time}",
+  "videoRepeat": "重複播放",
+  "videoShuffle": "隨機播放",
+  "videoSort": "排序",
+  "videoAddFiles": "加入檔案…",
+  "videoRemoveChosen": "移除",
+  "videoClearPlaylist": "清除播放列表"
 }

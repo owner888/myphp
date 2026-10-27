@@ -43,6 +43,25 @@ for ($i = 0; $i < \MyPHP\Media\PlaybackPositions::KEEP; $i++) { $pos->set("/film
 same([null, 1.0], [$pos->get('/films/b.mkv'), $pos->get('/films/0.mkv')], 'the least recent forgotten past KEEP');
 unlink($file);
 
+// A playlist (Media\Playlist): the films of a folder in Finder's order, the one opened playing; next and previous; adding, taking out; durations read as asked.
+$dir = sys_get_temp_dir() . '/myphp-playlist-' . getmypid();
+@mkdir($dir);
+foreach (['ep 10.mkv', 'ep 2.mkv', 'Ep 1.mkv', 'notes.txt', '.hidden.mkv'] as $f) { copy(__DIR__ . '/testdata/clip.mkv', "$dir/$f"); }
+$list = \MyPHP\Media\Playlist::folder("$dir/ep 2.mkv");
+same([['Ep 1.mkv', 'ep 2.mkv', 'ep 10.mkv'], 1, "$dir/ep 2.mkv"], [array_map('basename', $list->files()), $list->index(), $list->current()], 'the films of the folder, numbers by their value, the one opened playing');
+same(["$dir/ep 10.mkv", null, "$dir/ep 2.mkv"], [$list->next(), $list->next(), $list->previous()], 'next, none after the last, previous');
+check(abs($list->duration(0) - 2.023) < 0.01, 'a film\'s duration, read from its header: ' . $list->duration(0));
+$list->add("$dir/ep 2.mkv"); $list->add("$dir/notes.txt");
+same(4, $list->count(), 'a film added once');
+$list->remove(0);
+same([0, "$dir/ep 2.mkv"], [$list->index(), $list->current()], 'one before the one playing taken out: it stays the one playing');
+same(null, $list->duration(2), 'no duration for what is no film');
+$list->remove(0);
+same([-1, null], [$list->index(), $list->current()], 'the one playing taken out: none plays');
+same(['solo.webm'], array_map('basename', \MyPHP\Media\Playlist::folder("$dir/../solo.webm")->files()), 'a film alone: its playlist itself');
+foreach (scandir($dir) as $f) { if ($f[0] !== '.' || $f === '.hidden.mkv') { @unlink("$dir/$f"); } }
+@rmdir($dir);
+
 if (PHP_OS_FAMILY === 'Darwin') {
     $run = function (float $seconds): void {
         $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
@@ -50,9 +69,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
     };
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
     $s = new VideoPlayerState();
+    $s->setPlayer($p);
     $s->positions = new \MyPHP\Media\PlaybackPositions($scratch = sys_get_temp_dir() . '/myphp-positions-ui-' . getmypid() . '.json'); // not the user's
     $s->title = 'clip.mkv';
-    $h = new Headless(fn(Context $c) => $c->videoPlayer($p, $s), 960, 540);
+    $h = new Headless(fn(Context $c) => $c->videoPlayer($s), 960, 540);
     $h->frame();
     check($h->byText('clip.mkv') !== null && $h->byText('00:00') !== null && $h->byText('00:02') !== null, 'the title, where it plays and how long it lasts');
     same([16 / 9, true], [$h->rt->windowAsks['aspect'] ?? null, $h->rt->windowAsks['buttons'] ?? null], 'the window asked to keep the picture\'s shape, its traffic lights showing with the controls');
@@ -94,16 +114,33 @@ if (PHP_OS_FAMILY === 'Darwin') {
     // Where it was left noted at a pause, for the next time (more than 5 s in, which a clip of 2 s is not: noted, not gone back to).
     $posFile = sys_get_temp_dir() . '/myphp-positions-player-' . getmypid() . '.json';
     $s2 = new VideoPlayerState(); $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
-    $p2 = new Player(__DIR__ . '/testdata/clip.mp4');
-    $h2 = new Headless(fn(Context $c) => $c->videoPlayer($p2, $s2), 960, 540);
+    $p2 = new Player(__DIR__ . '/testdata/clip.mp4'); $s2->setPlayer($p2);
+    $h2 = new Headless(fn(Context $c) => $c->videoPlayer($s2), 960, 540);
     $h2->frame();
     $p2->play(); $s2->togglePause();
     same(round($p2->time(), 3), (new \MyPHP\Media\PlaybackPositions($posFile))->get($p2->path()), 'where it was paused noted');
     @unlink($posFile);
-    $off = new Headless(fn(Context $c) => $c->videoPlayer($p, $s, new VideoPlayerOptions(titleBar: false, osd: false, sidebar: false, keys: false)), 960, 540);
+    $off = new Headless(fn(Context $c) => $c->videoPlayer($s, new VideoPlayerOptions(titleBar: false, osd: false, sidebar: false, keys: false)), 960, 540);
     $off->frame();
     check($off->byText('clip.mkv') === null && !isset($off->rt->windowAsks['buttons']), 'without its title bar: no title, the traffic lights left alone');
     $off->key(Key::SPACE, 'insertText:', 0, ' '); $off->frame();
     check(!$p->playing(), 'without its keys: Space is the app\'s');
     @unlink($scratch);
+    // Opening films: a player of each, the playlist of its folder; the next at the end of one; the playlist's sidebar, a double click playing a row.
+    $s3 = new VideoPlayerState(); $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    check($s3->open(__DIR__ . '/testdata/clip.mkv') && $s3->player?->path() === __DIR__ . '/testdata/clip.mkv' && $s3->title === 'clip.mkv', 'a film opened: its player, its title');
+    $names = array_map('basename', $s3->playlist->files());
+    check(in_array('clip-av1.mkv', $names, true) && $names[$s3->playlist->index()] === 'clip.mkv', 'its playlist the films of its folder: ' . implode(', ', $names));
+    $first = $s3->player;
+    check($s3->next() && $s3->player !== $first && !$first->playing(), 'the next one plays, the last one paused');
+    check(!$s3->open(__DIR__ . '/testdata/upright.jpg') && $s3->error !== '' && $s3->player !== $first, 'what is no film: its error, the film playing going on');
+    $h3 = new Headless(fn(Context $c) => $c->videoPlayer($s3), 960, 540);
+    $s3->sidebar = 'playlist'; $h3->frame(); $run(0.3); $h3->frame();
+    check($h3->byText('clip.mkv') !== null && count(array_filter($h3->texts(), fn($t) => str_starts_with($t, 'Total '))) === 1, 'the playlist\'s sidebar: its films, how long they last together');
+    [$mx, $my] = $h3->middle($h3->byText('clip.mkv'));
+    $h3->click($mx, $my); $h3->click($mx, $my, 0, 2); $h3->frame();
+    same('clip.mkv', basename($s3->player->path()), 'a double click on a film plays it');
+    $s3->player->pause();
+    @unlink($scratch);
 }
+

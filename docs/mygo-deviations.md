@@ -1686,6 +1686,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Going on where a film was left** (v1.39): `Media\PlaybackPositions`,
   `Player::path` and `VideoPlayerOptions::$resume` are myphp's, as IINA's
   "resume last playback position": mygo has no video.
+- **The playlist, picture in picture** (v1.40): `Media\Playlist`,
+  `Player::durationOf`, `VideoPlayerState::open`, `setPlayer`, `next`,
+  `previous`, `togglePictureInPicture` are myphp's, as IINA's; mygo has
+  no video.
 - **System materials, SF Symbols, the traffic lights** (v1.35):
   `Node::systemMaterial`, `Image::symbol`, `Window::setWindowButtonVisibility`,
   `Window::setAspectRatio` and `Player::videoTrack` are myphp's: the developer asked for the video

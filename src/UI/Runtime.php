@@ -236,6 +236,8 @@ final class Runtime
     private ?int $pressDragger = null;
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
+    /** Shows (true) or hides the window at once, from outside a frame too (a film gone to picture in picture, and back); the window sets it. */
+    public ?Closure $showWindow = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
     /**

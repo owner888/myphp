@@ -24,6 +24,10 @@ final class Renderers
     private array $formats = [];
     /** The sample the next audio packet starts at, of the track playing: packets follow one another exactly, Matroska's times being whole milliseconds. */
     private ?int $nextAudio = null;
+    /** The view whose layer the display layer is, in the window that shows it (Window::placeVideos), null in none. */
+    public $view = null;
+    /** Whether the display layer shows in picture in picture's window, which took it: the app's window leaves it there (PictureInPicture). */
+    public bool $elsewhere = false;
     /** Seconds the sound plays after its time in the file (Player::setAudioDelay). */
     public float $audioDelay = 0.0;
 

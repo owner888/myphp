@@ -36,16 +36,23 @@ final class VideoPlayer
     /** What a point the wheel moves does: of the volume (0 to 1, 200 points all of it), and seconds of a seek. */
     public const VOLUME_A_POINT = 0.005, SEEK_A_POINT = 0.1;
 
-    public static function build(Context $c, Player $p, VideoPlayerState $s, VideoPlayerOptions $o): Node
+    public static function build(Context $c, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
-        if ($c->runtime !== null) { $s->attach($p, $c->runtime, $o->resume); }
+        if ($c->runtime !== null) { $s->attach($c->runtime, $o->resume); }
         $box = $c->column(0, 0, 1, 0x000000);
+        $p = $s->player;
+        if ($p === null) { // nothing opened yet: black, and what failed to open
+            if ($s->error !== '') { $box->center(); $c->text($s->error, 13, 0xff6b6b); }
+            $c->end();
+            return $box;
+        }
         if ($o->keys) { self::keys($c, $s, $p); }
         $picture = $c->video($p)->grow(1);
         $width = $c->width;
         $picture->handleInput(function (InputEvent $e) use ($s, $width): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
-            if ($e->kind !== InputEvent::SCROLL || $s->sidebar !== null && $e->x >= $width - self::SIDEBAR) {
-                return false; // the rest goes on to the frame (a press, a click), the wheel over the sidebar to its scroll
+            $onSide = $s->sidebar === 'playlist' ? $e->x < self::SIDEBAR : $s->sidebar !== null && $e->x >= $width - self::SIDEBAR;
+            if ($e->kind !== InputEvent::SCROLL || $onSide) {
+                return false; // the rest goes on to the frame (a press, a click), the wheel over a sidebar to its scroll
             }
             if (abs($e->dy) >= abs($e->dx)) {
                 $s->setVolume($s->volume - $e->dy * self::VOLUME_A_POINT);
@@ -67,21 +74,23 @@ final class VideoPlayer
         [$px, $py] = $c->pointerPosition($box);
         $now = microtime(true);
         if ([$px, $py] !== $s->pointer) { $s->pointer = [$px, $py]; $s->moved = $now; }
-        $slide = $c->animate($box, 'sidebar', $o->sidebar && $s->sidebar !== null ? 1 : 0, 0.25); // the sidebar sliding in from the right
-        $right = self::SIDEBAR * $slide;
-        $area = $c->width - $right; // the controls center over what the sidebar leaves
+        // The quick settings slide in from the right, the playlist from the left, as IINA's.
+        $slide = $c->animate($box, 'sidebar', $o->sidebar && $s->sidebar !== null && $s->sidebar !== 'playlist' ? 1 : 0, 0.25);
+        $slideList = $c->animate($box, 'playlist', $o->sidebar && $s->sidebar === 'playlist' ? 1 : 0, 0.25);
+        [$left, $right] = [self::SIDEBAR * $slideList, self::SIDEBAR * $slide];
+        $area = $c->width - $left - $right; // the controls center over what the sidebars leave
         $c->runtime?->askWindow('aspect', self::shownAspect($p)); // the window keeps the picture's shape, as IINA's
 
         // The title bar and the control bar show while the pointer moves and while it is on them, and fade.
         // Each built and closed before the next: an open node takes the next as its child.
         $bars = [];
         if ($o->titleBar) {
-            $bars[] = $title = $c->row(0, 6)->absolute()->top(0)->left(0)->right($right)->height(32)->align(Node::CENTER)->paddingStart(84)->systemMaterial('titlebar', true)->dragWindow();
+            $bars[] = $title = $c->row(0, 6)->absolute()->top(0)->left($left)->right($right)->height(32)->align(Node::CENTER)->paddingStart($left > 0 ? 12 : 84)->systemMaterial('titlebar', true)->dragWindow(); // after the traffic lights, but over the playlist
               self::sf($c, 'doc.fill', 11, 0.6);
               $c->text($s->title, 13, 0xffffff)->fontWeight(600)->opacity(0.85)->noWrap()->ellipsis('…')->grow(1);
             $c->end();
         }
-        $bars[] = $osc = $c->column()->absolute()->left(($area - 460) / 2)->bottom($c->height * 0.1)->size(460, 80)->systemMaterial('glass')->round(12)->keepFocus();
+        $bars[] = $osc = $c->column()->absolute()->left($left + ($area - 460) / 2)->bottom($c->height * 0.1)->size(460, 80)->systemMaterial('glass')->round(12)->keepFocus();
           self::controlBar($c, $s, $p, $o);
         $c->end();
         $shown = $now - $s->moved < VideoPlayerState::LINGER;
@@ -96,8 +105,8 @@ final class VideoPlayer
         }
         $c->clicked($osc); // a click on the bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
 
-        if ($s->subtitlesVisible && ($lines = $p->subtitles()) !== []) {
-            self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right);
+        if ($s->subtitlesVisible && !$s->pictureInPicture && ($lines = $p->subtitles()) !== []) {
+            self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
         }
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->error !== '') {
@@ -105,11 +114,15 @@ final class VideoPlayer
         }
         // A press outside the sidebar closes it, as IINA's, but on the control bar (its gear toggles it) or the title bar (which drags the window) while they show:
         // not a click, which the release of a drag begun in the sidebar (a slider let go over the picture) makes on what is under the pointer.
-        if ($slide > 0) {
-            $side = self::sidebar($c, $s, $p, $slide);
+        $sides = [];
+        if ($slide > 0) { $sides[] = self::sidebar($c, $s, $p, $slide); }
+        if ($slideList > 0) { $sides[] = self::playlistSidebar($c, $s, $slideList); }
+        if ($sides !== [] && $s->sidebar !== null) {
+            $outside = true;
+            foreach ($sides as $n) { $outside = $outside && $c->pressedOutside($n); }
             $onBars = false;
             if ($fade > 0.001) { foreach ($bars as $n) { $onBars = $onBars || !$c->pressedOutside($n); } }
-            if ($s->sidebar !== null && $c->pressedOutside($side) && !$onBars) { $s->sidebar = null; }
+            if ($outside && !$onBars) { $s->sidebar = null; }
         }
         // A click goes to the first node built that asks for it where it is: the picture asks after what is over it.
         if ($c->rightClicked($picture)) { $s->togglePause(); }
@@ -159,6 +172,8 @@ final class VideoPlayer
         if ($c->shortcut('v')) { $s->toggleSubtitles(); }
         if ($c->shortcut('o') || $c->shortcut('p', $shift)) { $s->showProgress(); }
         if ($c->shortcut('.', $cmd)) { $s->stop(); }
+        if ($c->shortcut(Key::RIGHT, $cmd)) { $s->next(); } // playlist-next, playlist-prev
+        if ($c->shortcut(Key::LEFT, $cmd)) { $s->previous(); }
         if ($c->shortcut('s', $ctrl | $cmd)) { $s->cycleSubtitles(); }
         if ($c->shortcut('a', $ctrl | $cmd)) { $s->cycleAudio(); }
         $full = $c->runtime?->fullScreen ?? false;
@@ -226,10 +241,12 @@ final class VideoPlayer
         if ($c->clicked(self::barButton($c, 'forward.fill', 17, 277, 24))) { $s->seekBy(10); }
         $held = self::t($c, 'videoNotYet');
         self::barButton($c, 'puzzlepiece.extension', 14, 364, 24, self::t($c, 'videoPlugins') . " ($held)");
-        self::barButton($c, 'pip', 14, 388, 24, self::t($c, 'videoPictureInPicture') . " ($held)");
-        self::barButton($c, 'list.bullet.rectangle', 14, 412, 24, self::t($c, 'videoPlaylist') . " ($held)");
+        $pip = self::barButton($c, 'pip', 14, 388, 24, self::t($c, 'videoPictureInPicture'));
+        if ($c->clicked($pip)) { $s->togglePictureInPicture(); }
+        $list = self::barButton($c, 'list.bullet.rectangle', 14, 412, 24, self::t($c, 'videoPlaylist'));
+        if ($o->sidebar && $c->clicked($list)) { $s->sidebar = $s->sidebar === 'playlist' ? null : 'playlist'; }
         $gear = self::barButton($c, 'gearshape', 15, 436, 24, self::t($c, 'videoSettings'));
-        if ($o->sidebar && $c->clicked($gear)) { $s->sidebar = $s->sidebar === null ? $s->tab : null; }
+        if ($o->sidebar && $c->clicked($gear)) { $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' ? $s->tab : null; }
         $c->text(VideoPlayerState::clock($p->time()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->left(17.5)->top(50.5); // the system font, its digits of one width
         $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->absolute()->left(58)->top(49)->size(344, 18)->paddingX(1.5);
         if (!$c->pressed($seek)) { $s->at = $p->time(); }
@@ -267,9 +284,9 @@ final class VideoPlayer
     }
 
     /** $text over the picture, centered $bottom points from its foot: white, outlined in black as mpv draws subtitles (copies of it around, under it). */
-    public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0): void
+    public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0, float $left = 0): void
     {
-        $c->column()->absolute()->left(0)->right($right)->bottom($bottom)->align(Node::CENTER)->passThrough();
+        $c->column()->absolute()->left($left)->right($right)->bottom($bottom)->align(Node::CENTER)->passThrough();
           $c->column()->maxWidth($c->width * 0.9);
             $d = $size / 16;
             foreach ([[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]] as [$x, $y]) {
@@ -299,6 +316,88 @@ final class VideoPlayer
           $c->end();
         $c->end();
         $c->clicked($side); // a click on the sidebar is its own, not the picture's
+        return $side;
+    }
+
+    /**
+     * The playlist, 360 points wide over the left of the window, sliding in
+     * by $slide, as IINA's: the tabs (the playlist, the chapters) and the
+     * back button above; the films in rows, the one playing marked, one
+     * chosen by a click, played by a double click; under them the time
+     * they last together and the buttons to add films, take the chosen one
+     * out and take out all but the one playing.
+     */
+    private static function playlistSidebar(Context $c, VideoPlayerState $s, float $slide): Node
+    {
+        $side = $c->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+          $c->row(3, 0)->absolute()->left(96)->top(9)->height(36)->align(Node::CENTER)->systemMaterial('glass')->round(18);
+            foreach ([['playlist', 'music.note.list', 'videoPlaylist'], ['chapters', 'list.and.film', 'videoChapters']] as [$id, $icon, $label]) {
+                $t = $c->row()->size(34, 30)->center()->round(15)->tooltip(self::t($c, $label));
+                if ($s->playlistTab === $id) { $t->background(0xffffff, 0.16); }
+                  self::sf($c, $icon, 14, $s->playlistTab === $id || $c->hovered($t) ? 0.95 : 0.7);
+                $c->end();
+                if ($c->clicked($t)) { $s->playlistTab = $id; }
+            }
+          $c->end();
+          $back = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial('glass')->round(19)->tooltip(self::t($c, 'videoHide'));
+            self::sf($c, 'chevron.left', 14, $c->hovered($back) ? 0.9 : 0.6, 0.2);
+          $c->end();
+          if ($c->clicked($back)) { $s->sidebar = null; }
+          $list = $s->playlist;
+          // The two tabs side by side, sliding across as one goes to the other, as IINA's: each page built while any of it shows.
+          $page = $c->animate($side, 'playlistTab', $s->playlistTab === 'chapters' ? 1 : 0, 0.25);
+          $c->column()->absolute()->top(53)->left(0)->right(0)->bottom(33)->clip();
+          if ($page < 1) {
+              $c->scroll()->absolute()->top(0)->left(0)->right(0)->bottom(0)->translate(-self::SIDEBAR * $page, 0);
+                $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+                  foreach ($list?->files() ?? [] as $i => $path) {
+                      $playing = $i === $list->index();
+                      $row = $c->row(0, 6)->height(32)->paddingStart(28)->paddingEnd(9)->align(Node::CENTER)->fillWidth();
+                      if ($i === $s->chosen) { // the chosen row as AppKit's lists choose: the accent in the key window, gray in another
+                          ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(0xffffff, 0.12);
+                      }
+                        if ($playing) { $c->column()->absolute()->left(9)->top(9)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
+                        $c->text(basename($path), 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->grow(1);
+                        $d = $list->duration($i);
+                        if ($d !== null) { $c->text(VideoPlayerState::clock($d), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.55); }
+                      $c->end();
+                      if ($c->doubleClicked($row)) { $s->open($path); } elseif ($c->clicked($row)) { $s->chosen = $i; }
+                  }
+                $c->end();
+                $c->column()->fillWidth()->height(max(0.0, $c->height - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
+                    for ($y = $n->y + 32; $y < $n->y + $n->h; $y += 32) { $l->rect($n->x, $y, $n->w, 1, 0xffffff, 0.1); }
+                });
+                $c->end();
+              $c->end();
+          }
+          if ($page > 0) {
+              $c->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->center()->translate(self::SIDEBAR * (1 - $page), 0);
+                $c->text(self::t($c, 'videoNoChapters'), 13, 0xffffff)->opacity(0.5);
+              $c->end();
+          }
+          $c->end();
+          // The bar under the list: repeat, shuffle and sort (held), the time of them all, add, remove, clear.
+          $c->row(0, 12)->absolute()->left(0)->right(0)->bottom(0)->height(33)->paddingX(12)->align(Node::CENTER)->background(0x000000, 0.18);
+            foreach ([['repeat', 'videoRepeat'], ['shuffle', 'videoShuffle'], ['arrow.up.arrow.down', 'videoSort']] as [$icon, $tip]) {
+                $c->column()->tooltip(self::t($c, $tip) . ' (' . self::t($c, 'videoNotYet') . ')'); self::sf($c, $icon, 12, 0.6); $c->end();
+            }
+            $total = 0.0;
+            for ($i = 0, $n = $list?->count() ?? 0; $i < $n; $i++) { $total += $list->duration($i) ?? 0.0; }
+            $c->text(self::t($c, 'videoTotal', ['time' => VideoPlayerState::clock($total)]), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.5)->textAlign(Node::CENTER)->grow(1);
+            $add = $c->column()->tooltip(self::t($c, 'videoAddFiles')); self::sf($c, 'plus', 12, $c->hovered($add) ? 0.95 : 0.7); $c->end();
+            if ($c->clicked($add) && $list !== null) {
+                foreach (Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoAddFiles'), multiSelections: true)) ?? [] as $path) { $list->add($path); }
+            }
+            $remove = $c->column()->tooltip(self::t($c, 'videoRemoveChosen')); self::sf($c, 'minus', 12, $c->hovered($remove) ? 0.95 : 0.7); $c->end();
+            if ($c->clicked($remove) && $list !== null && $s->chosen >= 0 && $s->chosen !== $list->index()) { $list->remove($s->chosen); $s->chosen = -1; }
+            $clear = $c->column()->tooltip(self::t($c, 'videoClearPlaylist')); self::sf($c, 'trash', 12, $c->hovered($clear) ? 0.95 : 0.7); $c->end();
+            if ($c->clicked($clear) && $list !== null) {
+                for ($i = $list->count() - 1; $i >= 0; $i--) { if ($i !== $list->index()) { $list->remove($i); } }
+                $s->chosen = -1;
+            }
+          $c->end();
+        $c->end();
+        $c->clicked($side); // a click on the playlist is its own, not the picture's
         return $side;
     }
 

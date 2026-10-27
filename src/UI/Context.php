@@ -4186,7 +4186,8 @@ final class Context
     }
 
     /**
-     * A video player of $p, laid out as IINA's window (UI\VideoPlayer): the
+     * A video player of the film $s plays (VideoPlayerState::open), laid
+     * out as IINA's window (UI\VideoPlayer), black before one opens: the
      * picture, its control bar in the system's glass, the title bar over
      * it (for a window whose title bar is hidden), the messages at the top
      * left, the sidebar of quick settings, IINA's keys; $s keeps its state
@@ -4194,8 +4195,8 @@ final class Context
      * out. It fills what it is built in; the window keeps the picture's
      * shape and hides the traffic lights with the controls.
      */
-    public function videoPlayer(\MyPHP\Media\Player $p, VideoPlayerState $s, ?VideoPlayerOptions $o = null): Node
+    public function videoPlayer(VideoPlayerState $s, ?VideoPlayerOptions $o = null): Node
     {
-        return VideoPlayer::build($this, $p, $s, $o ?? new VideoPlayerOptions());
+        return VideoPlayer::build($this, $s, $o ?? new VideoPlayerOptions());
     }
 }

@@ -66,8 +66,7 @@ final class Player
 
     public function __construct(private readonly string $path)
     {
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        $this->source = in_array($ext, ['mkv', 'mka', 'webm'], true) ? new Matroska($path) : new AssetReader($path);
+        $this->source = self::source($path);
         $this->duration = $this->source->duration();
         foreach ($this->source->tracks() as $t) {
             if ($t->type === Track::VIDEO && $this->video === null && CoreMedia::playable($t)) {
@@ -211,6 +210,19 @@ final class Player
         }
         $this->audio = $t;
         $this->seek($this->time()); // from the keyframe before, its frames up to now decoded and not shown
+    }
+
+    /** The reader of the file at $path: Matroska's in PHP for Matroska and WebM, AVFoundation's for the rest. */
+    private static function source(string $path): Source
+    {
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        return in_array($ext, ['mkv', 'mka', 'webm'], true) ? new Matroska($path) : new AssetReader($path);
+    }
+
+    /** How long the film at $path lasts, in seconds, read from its header (a playlist's). */
+    public static function durationOf(string $path): float
+    {
+        return self::source($path)->duration();
     }
 
     /** The file it plays. */
