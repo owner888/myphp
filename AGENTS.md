@@ -5,19 +5,16 @@ the reasoning, the numbers and the pitfalls behind the rules here.
 
 ## Rules
 
-1. **This file stays under 200 lines.** Check with `wc -l AGENTS.md` after
-   editing. When it nears the limit, first condense what is here; only
-   when nothing more can be condensed, move detail to `docs/`.
+1. **This file stays under 200 lines** (`wc -l AGENTS.md`): near the limit,
+   condense what is here first; only then move detail to `docs/`.
 2. No third-party packages without asking the developer first; small
-   things are written here instead. `composer.json` requires only `php` and
-   `ext-ffi`, and that is the intent.
+   things are written here (`composer.json`: only `php` and `ext-ffi`).
 3. Git is the developer's: no commit, push, branch, tag or patch export.
    Change files, run checks, report which files changed.
 4. Files that go into git never carry the developer's name: write "the
    developer" / 「开发者」 when a reference is needed.
-5. GUI examples run only on the developer's Mac (display, Apple
-   frameworks): ask them to run and paste output. `php -l` and pure-PHP
-   checks run anywhere.
+5. GUI examples run only on the developer's Mac: ask them to run and paste
+   output. `php -l` and pure-PHP checks run anywhere.
 6. Small and literal: no speculative abstractions, no silent fallbacks, no
    magic numbers that make a symptom go away. Unclear? Ask before changing.
 7. Delete dead code when you touch it; never comment it out.
@@ -31,6 +28,10 @@ the reasoning, the numbers and the pitfalls behind the rules here.
     the Go name, never one of our own. Anything that is not mygo's yet —
     left out, done differently, named otherwise — goes in
     `docs/mygo-deviations.md` as it is found; take it out once it matches.
+11. **Native is native** (the developer's rule): a system view (glass,
+    materials, controls) is used as the system draws it, its defaults left
+    alone; never force its appearance, tint or style to chase a look. If it
+    looks wrong, find why (what it samples, how it is placed), not a knob.
 
 ## What this is
 
@@ -180,8 +181,7 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 - New ObjC calls: selector and types from Apple's headers, signature letters
   in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
   methods (`arrayWithObjects:`) avoided.
-- Record each solved problem in `docs/architecture.md` (one paragraph) so
-  the next session does not rediscover it.
+- Record each solved problem in `docs/architecture.md` (one paragraph).
 
 ## Roadmap
 

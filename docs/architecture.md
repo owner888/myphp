@@ -3486,6 +3486,67 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   text outline), above the controls while they show; a subtitle file
   dropped on the window loads over the film.
 
+## A player laid out as IINA's (v1.35)
+
+- **System materials under a hole.** `Node::systemMaterial($name, $dark)`
+  puts an `NSVisualEffectView` of one of `Window::MATERIALS`, or an
+  `NSGlassEffectView` (`glass`, `clear-glass`; macOS 26) under the node,
+  as web views and videos are: the node paints a hole inside its border
+  (padding and all: the material is its background), rounded as its
+  corners inside the border, and the window places the view there, in
+  the appearance asked (`DarkAqua`, `Aqua`, or the window's), at the
+  node's opacity, so a material fades with its node. The views stack
+  right under the Metal view in the order the frame painted them, over
+  the videos' layers they blur.
+- **SF Symbols.** `Image::symbol($name, $size, $rgb, $weight)` draws the
+  system's symbol at a point size and weight into a bitmap at the
+  window's scale, in one color (a template image draws black in its
+  alpha: the color, premultiplied by it); a name of no symbol throws.
+- **The traffic lights** hide and show with
+  `Window::setWindowButtonVisibility`, Electron's name.
+- **The window keeps the picture's shape** (`Window::setAspectRatio`,
+  NSWindow's `contentAspectRatio`; 0 sets the resize increments back to
+  1 by 1, as AppKit undoes it): resized by any side, as IINA's.
+- **The example.** `examples/video` is laid out as IINA's window,
+  measured on it (960 by 540): the title bar (32 high, the file's name
+  after the traffic lights), the control bar (460 by 80 in glass, 10% of
+  the height from the foot; the volume, back, play, on and four buttons
+  above, the times and the bar of the time below), the message at the
+  top left (OSD: IINA's words, a second), the sidebar of quick settings
+  (360 wide, glass, its tabs in a pill; video, audio, subtitle cards
+  with IINA's lists, segmented controls, sliders and switches); the keys
+  are IINA's defaults (`iina-default-input.conf`) the player has the
+  means for, a right click plays and pauses. What the player has no
+  means for (crop, rotation, aspect, the equalizer, secondary and online
+  subtitles, plugins, picture in picture, the playlist, audio delay) is
+  shown and held. IINA's icons are its own (GPL): SF Symbols stand in.
+  `Player::videoTrack` gives the video track's codec, size and rate for
+  the video tab.
+- **Trap: forcing the glass's appearance.** The example first set the
+  glass to the dark appearance (too dark next to IINA's), then to the
+  light one (a flat gray over the picture). IINA uses the system's glass
+  as it comes; so does the example now (`systemMaterial('glass')`, the
+  window's appearance), and a glass view gets an empty `contentView` as
+  AppKit asks. Don't tune a system view's defaults to match a look
+  (AGENTS.md rule 11).
+- **The picture goes with the window's animations.** A video's view
+  across the window (or down it) is width- (height-) sizable, and its
+  layer, when it fills the view, sizable with it: a resize stretches the
+  picture before the next frame places it exactly. AppKit's full-screen
+  animation crossfades a picture of the window from before with one from
+  after, and the video showed its old size in the grown window; a window
+  showing a video goes in and out of full screen by its own animation
+  (`customWindowsToEnterFullScreenForWindow:`,
+  `window:startCustomAnimationToEnterFullScreenWithDuration:` and the
+  exit's), its frame animated to the screen's and back, as IINA's: each
+  step is a resize, drawn at once, the picture growing with the window.
+- **Trap: closing the sidebar on a click of the picture.** A slider's
+  release is a click where the pointer is let go: a drag of the speed
+  begun in the sidebar and let go over the picture clicked the picture,
+  and the sidebar closed with nothing clicked. It closes on a press
+  outside it (`pressedOutside`), the control bar and the title bar
+  excepted while they show, as a press is where the hand went down.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

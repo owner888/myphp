@@ -142,6 +142,8 @@ final class Node
     public ?object $webView = null;
     /** The player whose picture the node shows (Context::video): a MyPHP\Media\Player, which the window places. */
     public ?object $video = null;
+    /** The system's material the node's box shows (systemMaterial()): its name and appearance, dark, light or null for the app's. @var ?array{0: string, 1: ?bool} */
+    public ?array $systemMaterial = null;
     public ?string $accepts = null;
     /** A native drag source (Context::dragData): what makes its data as the drag starts, and its options; a native drop target's options (Context::dropData); whether it takes files dragged from other apps (Context::droppedFiles). @var ?array{0: \Closure(): \MyPHP\Transfer\Data, 1: \MyPHP\Transfer\DragOptions} */
     public ?array $dataSource = null;
@@ -425,6 +427,28 @@ final class Node
             $material = $material->buildMaterial($this->context, $this);
         }
         $this->material = $material;
+        return $this;
+    }
+
+    /**
+     * Fills the box with one of the system's materials, blurring what
+     * shows under it in the window, a video's picture as well (which
+     * myphp's own materials, Plugins\Glass, do not reach, as the system
+     * draws it): one of WindowOptions::$vibrancy's names (hud, titlebar,
+     * sidebar, menu, popover…), an NSVisualEffectView blending within the
+     * window, or glass and clear-glass, macOS 26's Liquid Glass
+     * (NSGlassEffectView). $dark sets its appearance, null the app's. The
+     * node paints a hole through the window's content where the window
+     * places the material, inside its border and rounded by its radius
+     * (the largest of its corners'); its children draw over it. macOS only.
+     */
+    public function systemMaterial(string $material, ?bool $dark = null): static
+    {
+        if ($material !== 'glass' && $material !== 'clear-glass' && !isset(\MyPHP\Window::MATERIALS[$material])) {
+            throw new \InvalidArgumentException("no system material \"$material\"");
+        }
+        $this->systemMaterial = [$material, $dark];
+        $this->color = null;
         return $this;
     }
 

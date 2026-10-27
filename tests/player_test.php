@@ -1,7 +1,7 @@
 <?php
 // Playing media, on macOS (Media\Player): a Matroska file (H.264 with AAC)
-// and an MP4 of the same (AVFoundation's reader), their size, duration and
-// audio tracks; the clock running while it plays and holding while paused;
+// and an MP4 of the same (AVFoundation's reader), their size, duration,
+// video track and audio tracks; the clock running while it plays and holding while paused;
 // seeking, paused and playing; playing to the end, which is told.
 declare(strict_types=1);
 
@@ -19,6 +19,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     foreach (['clip.mkv', 'clip.mp4'] as $file) {
         $p = new Player(__DIR__ . "/testdata/$file");
         same([160, 90], $p->size(), "$file: the video's size");
+        same(['V_MPEG4/ISO/AVC', 160, 90], [$p->videoTrack()?->codec, $p->videoTrack()?->width, $p->videoTrack()?->height], "$file: its video track");
         check(abs($p->duration() - 2.02) < 0.05, "$file: its duration, {$p->duration()}");
         same(['A_AAC'], array_map(fn(Track $t) => $t->codec, $p->audioTracks()), "$file: its audio track");
         check(Player::playable($p->audioTrack()), "$file: which plays");

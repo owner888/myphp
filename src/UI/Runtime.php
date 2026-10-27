@@ -797,6 +797,13 @@ final class Runtime
      * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>
      */
     public array $videoPlaces = [];
+    /**
+     * Where the last frame showed system materials (Node::systemMaterial):
+     * the node, its frame and the part of it that shows, the material, its
+     * appearance, corner radius and opacity, for the window to place them.
+     * @var list<array{id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, material: string, dark: ?bool, radius: float, alpha: float}>
+     */
+    public array $materialPlaces = [];
 
     /** Whether the focus came from the keyboard, as Tab moving it onto a web view's node, which enters its page from its first element, or its last with Shift (mygo's TabInto). */
     public function focusFromKeyboard(): bool

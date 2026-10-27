@@ -64,6 +64,8 @@ final class Window
     private bool $hiddenTitleBar = false;
     /** Frames asked for while nothing of the window showed, drawn once some of it shows again (mygo's held). */
     private bool $held = false;
+    /** The frame the window had before it went full screen by its own animation, which it goes back to. */
+    private $windowedFrame = null;
     /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
     private ?array $trafficLights = null;
     private const BACKING_BUFFERED = 2;
@@ -85,6 +87,8 @@ final class Window
     private array $webViews = [];
     /** @var array<int, array{player: \WeakReference<\MyPHP\Media\Player>, clip: mixed}> the videos the window showed, by player: the view under the native one that holds the picture's layer */
     private array $videoHosts = [];
+    /** @var array<int, array{view: mixed, kind: string}> the system materials the window showed (Node::systemMaterial), by node: an NSVisualEffectView or NSGlassEffectView under the native view, over the videos, and what it is */
+    private array $materials = [];
     /** The node of a web view the runtime's focus was on last frame, which gave its page the keyboard. */
     private ?int $webFocus = null;
     /** The WKWebViewConfiguration WebKit hands over for window.open(), while Window::opened() makes the window. */
@@ -380,7 +384,7 @@ final class Window
                     return $c->root;
                 });
                 $paint = function () use ($root, $list, $text, $bounds, $in): void {
-                    $this->runtime->webPlaces = []; $this->runtime->videoPlaces = [];
+                    $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = [];
                     $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
@@ -396,7 +400,7 @@ final class Window
                 }
                 $in?->lap(2);
                 if ($this->frameStats !== null) { $this->frameStats->passes = $this->runtime->passes; $this->frameStats->lap(UI\FrameStats::PAINT); }
-                if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== []) {
+                if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== [] || $this->materials !== [] || $this->runtime->materialPlaces !== []) {
                     $this->placeWebViews($bounds->h);
                 }
                 $this->showCursor($this->runtime->cursor);
@@ -597,6 +601,22 @@ final class Window
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
                 'windowDidExitFullScreen:' => ['v@:@', 'v(ppp)', $fire('leaveFullScreen')],
+                // A window showing a video goes in and out of full screen by its own animation, as video players do (IINA): AppKit's
+                // crossfades a picture of the window from before with one from after, and a video's picture then showed its old size
+                // in the grown window; animated by its frame instead, each step resizes the window (windowDidResize: draws it at once)
+                // and the video's view, which stretches with it (placeVideos), so the playing picture grows with the window.
+                'customWindowsToEnterFullScreenForWindow:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $ns) => self::ownAnimation($ns)],
+                'customWindowsToExitFullScreenForWindow:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $ns) => self::ownAnimation($ns)],
+                'window:startCustomAnimationToEnterFullScreenWithDuration:' => ['v@:@d', 'v(pppd)', function ($self, $cmd, $ns, $duration) {
+                    $w = self::$open[ObjC::addr($ns)] ?? null;
+                    if ($w === null) { return; }
+                    $w->windowedFrame = ObjC::msg('r:', $ns, 'frame'); // where it goes back to
+                    $w->animateFrame(ObjC::msg('r:', ObjC::msg('p:', $ns, 'screen'), 'frame'), $duration);
+                }],
+                'window:startCustomAnimationToExitFullScreenWithDuration:' => ['v@:@d', 'v(pppd)', function ($self, $cmd, $ns, $duration) {
+                    $w = self::$open[ObjC::addr($ns)] ?? null;
+                    if ($w?->windowedFrame !== null) { $w->animateFrame($w->windowedFrame, $duration); }
+                }],
                 'windowDidChangeOcclusionState:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
                     if ($w !== null && $w->held && $w->showing()) {
@@ -652,6 +672,11 @@ final class Window
             ObjC::msg('v:', $clip, 'release');
         }
         $this->videoHosts = [];
+        foreach ($this->materials as $m) {
+            ObjC::msg('v:', $m['view'], 'removeFromSuperview');
+            ObjC::msg('v:', $m['view'], 'release');
+        }
+        $this->materials = [];
         $this->captureState();
         WindowStates::save();
         $this->emit('closed');
@@ -828,8 +853,8 @@ final class Window
         Metal::setClearColor($this->view, 0, 0.0);
     }
 
-    /** The NSVisualEffectView materials of WindowOptions::$vibrancy, as mygo's (Windows 11's backdrops as their nearest). */
-    private const MATERIALS = [
+    /** The NSVisualEffectView materials of WindowOptions::$vibrancy, as mygo's (Windows 11's backdrops as their nearest), and Node::systemMaterial's. */
+    public const MATERIALS = [
         'titlebar' => 3, 'selection' => 4, 'menu' => 5, 'popover' => 6, 'sidebar' => 7, 'header' => 10,
         'sheet' => 11, 'window' => 12, 'hud' => 13, 'fullscreen-ui' => 15, 'tooltip' => 17, 'content' => 18,
         'under-window' => 21, 'under-page' => 22, 'mica' => 21, 'tabbed' => 21, 'acrylic' => 13,
@@ -874,6 +899,22 @@ final class Window
 
     /** Asks for a frame after state changed outside the view function (native UI, mygo's Invalidate). */
     /** Whether some of the window shows on screen: not hidden, minimized, on another space or covered by other windows, which still get frames (mygo's surface visible). */
+    /** The windows to go full screen by an animation of their own for $ns, a window of a video: itself; else nil, AppKit's animation. */
+    private static function ownAnimation($ns)
+    {
+        $w = self::$open[ObjC::addr($ns)] ?? null;
+        return $w === null || $w->videoHosts === [] ? null : ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $ns);
+    }
+
+    /** Moves the window to $frame over $seconds, its frame animated (NSAnimationContext): each step a resize, drawn at once. */
+    private function animateFrame($frame, float $seconds): void
+    {
+        ObjC::msg('v:', ObjC::cls('NSAnimationContext'), 'beginGrouping');
+        ObjC::msg('v:d', ObjC::msg('p:', ObjC::cls('NSAnimationContext'), 'currentContext'), 'setDuration:', $seconds);
+        ObjC::msg('v:rb', ObjC::msg('p:', $this->ns, 'animator'), 'setFrame:display:', $frame, true);
+        ObjC::msg('v:', ObjC::cls('NSAnimationContext'), 'endGrouping');
+    }
+
     private function showing(): bool
     {
         if ($this->popover !== null || $this->ns === null) {
@@ -1238,6 +1279,19 @@ final class Window
         ObjC::msg('v:z', $this->ns, 'setMaxSize:', $s);
     }
 
+    /** Keeps the content's width over its height at $ratio as the user resizes the window (Electron's setAspectRatio); 0 lets it go. */
+    public function setAspectRatio(float $ratio): void
+    {
+        $s = ObjC::$c->new('CGSize');
+        if ($ratio > 0) {
+            $s->w = $ratio; $s->h = 1.0;
+            ObjC::msg('v:z', $this->ns, 'setContentAspectRatio:', $s);
+            return;
+        }
+        $s->w = 1.0; $s->h = 1.0;
+        ObjC::msg('v:z', $this->ns, 'setContentResizeIncrements:', $s); // what AppKit's docs give to undo an aspect ratio
+    }
+
     private function setStyle(int $bit, bool $on): void
     {
         $mask = ObjC::msg('L:', $this->ns, 'styleMask');
@@ -1285,6 +1339,12 @@ final class Window
 
     public function setHasShadow(bool $on): void { ObjC::msg('v:b', $this->ns, 'setHasShadow:', $on); }
     public function hasShadow(): bool { return ObjC::msg('b:', $this->ns, 'hasShadow'); }
+
+    /** Shows or hides the traffic lights (Electron's setWindowButtonVisibility): a player hides them with its controls. */
+    public function setWindowButtonVisibility(bool $visible): void
+    {
+        for ($i = 0; $i < 3; $i++) { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setHidden:', !$visible); }
+    }
 
     /** Lets the pointer through the window, to what is under it. */
     public function setIgnoreMouseEvents(bool $on): void
@@ -1468,13 +1528,13 @@ final class Window
      */
     private function placeWebViews(float $height): void
     {
-        $this->placeVideos($height);
+        $this->placeMaterials($height, $this->placeVideos($height));
         $places = [];
         foreach ($this->runtime->webPlaces as $p) {
             $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last
         }
         $layer = ObjC::msg('p:', $this->view, 'layer');
-        ObjC::msg('v:b', $layer, 'setOpaque:', $places === [] && $this->runtime->videoPlaces === [] && !$this->transparent && $this->effect === null); // its holes let the web views and videos show
+        ObjC::msg('v:b', $layer, 'setOpaque:', $places === [] && $this->runtime->videoPlaces === [] && $this->runtime->materialPlaces === [] && !$this->transparent && $this->effect === null); // its holes let the web views, videos and materials show
         $shown = [];
         foreach ($this->webViews as $v) {
             $p = $places[spl_object_id($v)] ?? null;
@@ -1502,8 +1562,10 @@ final class Window
      * moved here from another window's if it showed there. The layer's
      * frame changes without the implicit animation of Core Animation.
      */
-    private function placeVideos(float $height): void
+    private function placeVideos(float $height): bool
     {
+        $width = ObjC::msg('r:', $this->container, 'bounds')->w;
+        $added = false;
         $places = [];
         foreach ($this->runtime->videoPlaces as $p) {
             $places[spl_object_id($p['view'])] = $p;
@@ -1513,9 +1575,9 @@ final class Window
                 $clip = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
                 ObjC::msg('v:b', $clip, 'setWantsLayer:', true);
                 ObjC::msg('v:b', ObjC::msg('p:', $clip, 'layer'), 'setMasksToBounds:', true);
-                ObjC::msg('v:L', $clip, 'setAutoresizingMask:', 8); // NSViewMinYMargin: it keeps its distance to the top of the unflipped content view
                 ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view); // NSWindowBelow
                 $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip];
+                $added = true;
             }
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'begin');
@@ -1535,6 +1597,10 @@ final class Window
             }
             [$cx, $cy, $cw, $ch] = $p['clip'];
             [$fx, $fy, $fw, $fh] = $p['frame'];
+            // A video across the window, or down it, stretches with it as AppKit resizes the window (the full screen's animation, a live resize), before
+            // the next frame places it: the picture goes with the window, as a player's view does; elsewhere it keeps its distance to the top.
+            $wide = $cx <= 0 && $cx + $cw >= $width; $tall = $cy <= 0 && $cy + $ch >= $height;
+            ObjC::msg('v:L', $clip, 'setAutoresizingMask:', ($wide ? 2 : 0) | ($tall ? 16 : 8)); // NSViewWidthSizable, NSViewHeightSizable, else NSViewMinYMargin
             ObjC::msg('v:r', $clip, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
             $host = ObjC::msg('p:', $clip, 'layer');
             $layer = $player->out->layer;
@@ -1542,9 +1608,96 @@ final class Window
                 ObjC::msg('v:p', $host, 'addSublayer:', $layer);
             }
             ObjC::msg('v:r', $layer, 'setFrame:', ObjC::rect($fx - $cx, $ch - ($fy - $cy) - $fh, $fw, $fh)); // the clip view is not flipped: y up from its bottom
+            $fills = [$fx, $fy, $fw, $fh] == [$cx, $cy, $cw, $ch];
+            ObjC::msg('v:i', $layer, 'setAutoresizingMask:', $fills ? 18 : 0); // kCALayerWidthSizable | kCALayerHeightSizable: the layer with its view, when it fills it
             ObjC::msg('v:b', $clip, 'setHidden:', false);
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');
+        return $added; // a view of a video made: right under the native view, over the materials, which go back over it
+    }
+
+    /**
+     * Shows the system materials where the frame showed them
+     * (Node::systemMaterial): a view of each node under the native view,
+     * over the videos (it blurs them, blending within the window), made
+     * the first frame it shows and removed the first it does not. A
+     * material of another kind than its view's makes it anew. $restack:
+     * a view of a video was put right under the native view.
+     */
+    private function placeMaterials(float $height, bool $restack): void
+    {
+        $shown = [];
+        $added = $restack;
+        ObjC::msg('v:', ObjC::cls('CATransaction'), 'begin');
+        ObjC::msg('v:b', ObjC::cls('CATransaction'), 'setDisableActions:', true);
+        foreach ($this->runtime->materialPlaces as $p) {
+            $glass = $p['material'] === 'glass' || $p['material'] === 'clear-glass'; // a name Node::systemMaterial took
+            $id = $p['id'];
+            $m = $this->materials[$id] ?? null;
+            if ($m !== null && $m['kind'] !== $p['material']) {
+                ObjC::msg('v:', $m['view'], 'removeFromSuperview');
+                ObjC::msg('v:', $m['view'], 'release');
+                $m = null;
+            }
+            if ($m === null) {
+                $m = ['view' => $this->materialView($p['material']), 'kind' => $p['material']];
+                $this->materials[$id] = $m;
+                $added = true;
+            }
+            $v = $m['view'];
+            [$cx, $cy, $cw, $ch] = $p['clip'];
+            ObjC::msg('v:r', $v, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
+            $appearance = $p['dark'] === null ? null : ObjC::msg('p:p', ObjC::cls('NSAppearance'), 'appearanceNamed:', ObjC::str($p['dark'] ? 'NSAppearanceNameDarkAqua' : 'NSAppearanceNameAqua'));
+            ObjC::msg('v:p', $v, 'setAppearance:', $appearance);
+            if ($glass) {
+                ObjC::msg('v:d', $v, 'setCornerRadius:', $p['radius']);
+            } else {
+                ObjC::msg('v:d', ObjC::msg('p:', $v, 'layer'), 'setCornerRadius:', $p['radius']);
+            }
+            ObjC::msg('v:d', $v, 'setAlphaValue:', $p['alpha']); // the node's opacity: a material fades with it
+            $shown[$id] = true;
+        }
+        foreach ($this->materials as $id => $m) {
+            if (!isset($shown[$id])) {
+                ObjC::msg('v:', $m['view'], 'removeFromSuperview');
+                ObjC::msg('v:', $m['view'], 'release');
+                unset($this->materials[$id]);
+            }
+        }
+        if ($added) { // the materials over the videos, in the order the frame painted them
+            foreach ($this->runtime->materialPlaces as $p) {
+                $v = ObjC::msg('p:', $this->materials[$p['id']]['view'], 'retain');
+                ObjC::msg('v:', $v, 'removeFromSuperview');
+                ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $v, -1, $this->view); // NSWindowBelow: right under the native view
+                ObjC::msg('v:', $v, 'release');
+            }
+        }
+        ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');
+    }
+
+    /** A view of system material $material, blending within the window: an NSGlassEffectView for glass (macOS 26), else an NSVisualEffectView. */
+    private function materialView(string $material)
+    {
+        if ($material === 'glass' || $material === 'clear-glass') {
+            $cls = ObjC::$c->objc_getClass('NSGlassEffectView') ?? throw new RuntimeException('myphp: glass needs macOS 26');
+            $v = ObjC::msg('p:r', ObjC::msg('p:', $cls, 'alloc'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
+            if ($material === 'clear-glass') {
+                ObjC::msg('v:l', $v, 'setStyle:', 1); // NSGlassEffectViewStyleClear
+            }
+            $content = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
+            ObjC::msg('v:p', $v, 'setContentView:', $content); // empty: the glass draws as the system's, what the node holds drawing over it
+            ObjC::msg('v:', $content, 'release');
+        } else {
+            $v = ObjC::msg('p:r', ObjC::alloc('NSVisualEffectView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
+            ObjC::msg('v:l', $v, 'setBlendingMode:', 1); // NSVisualEffectBlendingModeWithinWindow: what the window shows under it, the videos too
+            ObjC::msg('v:l', $v, 'setState:', 1); // NSVisualEffectStateActive
+            ObjC::msg('v:l', $v, 'setMaterial:', self::MATERIALS[$material]);
+            ObjC::msg('v:b', $v, 'setWantsLayer:', true);
+            ObjC::msg('v:b', ObjC::msg('p:', $v, 'layer'), 'setMasksToBounds:', true);
+        }
+        ObjC::msg('v:L', $v, 'setAutoresizingMask:', 8); // NSViewMinYMargin, as the videos' views
+        ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $v, -1, $this->view);
+        return $v;
     }
 
     /** Puts the clip views of the web views shown in the order the frame painted them, under the native view, unless they are (mygo's stackWebViews). @param list<WebView> $shown */

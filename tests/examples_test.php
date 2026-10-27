@@ -482,7 +482,7 @@ same('Received URLs: https://example.com/', $right->status, 'a URL dropped is re
 [$view, $s] = Headless::load('video', '$openDialog');
 $t = new Headless($view, 900, 600);
 $t->frame();
-check($t->byText('Open a video (Cmd+O) or drop one on the window') !== null, 'the video player asks for a file');
+check($t->byText('打开视频（⌘O）或将文件拖到窗口') !== null, 'the video player asks for a file');
 $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
 check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");
@@ -491,6 +491,10 @@ check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null,
 $t = new Headless(function (Context $c) { $c->column(0, 0, 1); \MyPHP\Examples\Video\subtitle($c, "two\nlines", 20, 40); $c->end(); }, 900, 600);
 $t->frame();
 same(9, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'the video example outlines its subtitles');
+// Its labels, as IINA's: the clock, numbers without trailing zeros, a track's row with its codec, what it is and its language.
+same(['07:09', '1:58:37', '1.5', '2', '0.25'], [\MyPHP\Examples\Video\clock(429), \MyPHP\Examples\Video\clock(7117), \MyPHP\Examples\Video\number(1.5), \MyPHP\Examples\Video\number(2.0), \MyPHP\Examples\Video\number(0.25)], 'the video example writes times and numbers as IINA');
+$track = new \MyPHP\Media\Track(2, \MyPHP\Media\Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);
+same(['国语 (ac3, 2ch, 44.1kHz, 默认)', '中文'], \MyPHP\Examples\Video\trackRow($track, '2ch, 44.1kHz'), 'an audio track as IINA lists it');
 
 // The video example's controls over a picture that pauses when clicked: the controls take their clicks (the picture asks after them, and the bar for the end of a drag of its slider), and a press on them leaves the keyboard with the window's shortcuts.
 $pc = ['plays' => 0, 'pictures' => 0, 'spaces' => 0, 'lefts' => 0, 'track' => 0, 'at' => 0.5, 'slider' => null];
@@ -516,3 +520,27 @@ $t->press($r[0] + 10, $r[1] + $r[3] / 2); $t->drag($r[0] + 150, $r[1] + $r[3] / 
 $t->clickText('国语'); $t->clickText('潮汕话');
 $t->key(Key::SPACE, 'insertText:', 0, ' '); $t->left();
 same([1, 0, 1, 1, 1], [$pc['plays'], $pc['pictures'], $pc['track'], $pc['spaces'], $pc['lefts']], 'the button, the slider and the select take their clicks, not the picture under them; Space and the arrows stay the window\'s');
+
+// The video example's sidebar closes on a press outside it, not on the control bar or the title bar, and not when a slider in it is let go over the picture (whose release clicks what is under the pointer).
+$sideOpen = true; $sideAt = 0.5;
+$t = new Headless(function (Context $c) use (&$sideOpen, &$sideAt) {
+    $box = $c->column(0, 0, 1, 0x000000);
+      $picture = $c->column()->grow(1); $c->end();
+      $osc = $c->column()->absolute()->left(100)->bottom(50)->size(460, 80); $c->end();
+      $title = $c->row()->absolute()->top(0)->left(0)->right(360)->height(32); $c->end();
+      if ($sideOpen) {
+          $side = $c->column()->absolute()->top(0)->right(0)->bottom(0)->width(360)->translate(0, 0)->keepFocus();
+            $c->sliderBase($sideAt, 0, 1)->absolute()->left(20)->top(100)->size(300, 20);
+          $c->end();
+          $c->clicked($side);
+          $bars = $c->pressedOutside($osc) && $c->pressedOutside($title);
+          if ($c->pressedOutside($side) && $bars) { $sideOpen = false; }
+      }
+    $c->end();
+}, 900, 600);
+$t->frame(); $t->frame();
+$t->click(700, 300); $t->frame(); check($sideOpen, 'press in the sidebar keeps it');
+$t->click(300, 520); $t->frame(); check($sideOpen, 'press on the bar keeps it');
+$t->click(300, 10); $t->frame(); check($sideOpen, 'press on the title bar keeps it');
+$t->press(700, 110); $t->drag(400, 110); $t->release(400, 110); $t->frame(); check($sideOpen, 'a slider let go over the picture keeps it');
+$t->click(300, 200); $t->frame(); check(!$sideOpen, 'press on the picture closes it');

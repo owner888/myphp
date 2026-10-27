@@ -324,7 +324,9 @@ final class Painter
      * (mygo's noteWebView): its content box on whole pixels, rounded by
      * its radii less its borders, within the clip; the runtime notes where
      * it shows, for the window to place the web view or the video's layer
-     * there. They stay upright, covering a transformed box's bounds.
+     * there. A system material's node opens its box inside its border,
+     * padding and all, as the material is its background. They stay
+     * upright, covering a transformed box's bounds.
      * @param array{0: float, 1: float, 2: float, 3: float} $radii
      */
     private static function nativeHole(Node $n, DisplayList $list, TextPainter $text, array $radii, Runtime $rt): void
@@ -333,6 +335,9 @@ final class Painter
         [$pt, $pr, $pb, $pl] = $n->sides();
         [$it, $ir, $ib, $il] = [$n->padT(), $n->padR(), $n->padB(), $n->padL()];
         [$bt, $br, $bb, $bl] = [$it - $pt, $ir - $pr, $ib - $pb, $il - $pl];
+        if ($n->systemMaterial !== null) {
+            [$it, $ir, $ib, $il] = [$bt, $br, $bb, $bl];
+        }
         [$x, $y, $w, $h] = [$n->x + $il, $n->y + $it, $n->w - $il - $ir, $n->h - $it - $ib];
         [$x, $y, $w, $h] = $list->world()->set ? $list->world()->bounds($x, $y, $w, $h) : [$x, $y, $w, $h];
         $s = $text->scale();
@@ -349,8 +354,10 @@ final class Painter
         $place = ['view' => $n->webView ?? $n->video, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch]];
         if ($n->webView !== null) {
             $rt->webPlaces[] = $place;
-        } else {
+        } elseif ($n->video !== null) {
             $rt->videoPlaces[] = $place;
+        } else {
+            $rt->materialPlaces[] = ['id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'material' => $n->systemMaterial[0], 'dark' => $n->systemMaterial[1], 'radius' => max($inner), 'alpha' => $list->opacity()];
         }
     }
 
@@ -460,7 +467,7 @@ final class Painter
                 if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
             }
         }
-        if (($n->webView !== null || $n->video !== null) && $rt !== null) {
+        if (($n->webView !== null || $n->video !== null || $n->systemMaterial !== null) && $rt !== null) {
             self::nativeHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) {

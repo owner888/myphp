@@ -36,4 +36,16 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $err = null;
     try { Image::fromBytes('not an image'); } catch (RuntimeException $e) { $err = $e->getMessage(); }
     same('not an image ImageIO can read', $err, 'what is no image throws');
+
+    // SF Symbols: the system's icon, at its size, in the color asked, its pixels twice its points.
+    $g = Image::symbol('gearshape', 16, 0xff0000);
+    check($g->w >= 28 && $g->w <= 40 && $g->h >= 28 && $g->h <= 40, "a 16-point gear at 2x: {$g->w}x{$g->h}");
+    $px = $g->pixels(); $opaque = 0; $red = true;
+    for ($i = 0; $i < strlen($px); $i += 4) { if (ord($px[$i + 3]) === 255) { $opaque++; if (ord($px[$i]) !== 255 || ord($px[$i + 1]) !== 0) { $red = false; } } }
+    check($opaque > 50 && $red, "drawn in the color asked: $opaque opaque pixels");
+    check(Image::symbol('gearshape', 32)->w > $g->w, 'larger at a larger size');
+    $err = null;
+    try { Image::symbol('no.such.symbol', 16); } catch (RuntimeException $e) { $err = $e->getMessage(); }
+    check(str_contains((string)$err, 'no SF Symbol'), 'a name of no symbol throws');
 }
+

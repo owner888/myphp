@@ -1678,3 +1678,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `loadSubtitles`, `subtitles`, `setSubtitleDelay` and `Media\Subtitles`
   are myphp's too, as IINA's behavior has them (files beside the film
   loaded): mygo has no video.
+- **System materials, SF Symbols, the traffic lights** (v1.35):
+  `Node::systemMaterial`, `Image::symbol`, `Window::setWindowButtonVisibility`,
+  `Window::setAspectRatio` and `Player::videoTrack` are myphp's: the developer asked for the video
+  example laid out as IINA's, which draws in the system's glass and
+  symbols; mygo has neither. The two window methods take Electron's names.

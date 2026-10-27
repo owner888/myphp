@@ -207,6 +207,12 @@ final class Player
         $this->seek($this->time()); // from the keyframe before, its frames up to now decoded and not shown
     }
 
+    /** The video track shown, or null for none (a file of audio). */
+    public function videoTrack(): ?Track
+    {
+        return $this->video;
+    }
+
     /** The video's size in pixels, [0, 0] without video. @return array{0: int, 1: int} */
     public function size(): array
     {

@@ -70,6 +70,20 @@ final class Image
         return $img;
     }
 
+    /**
+     * SF Symbol $name (gearshape, play.fill, speaker.wave.2.fill…), the
+     * system's icon of that name, at $size points in $rgb, of $weight
+     * (NSFontWeight: -0.8 ultra-light, 0 regular, 0.23 semibold, 0.4 bold,
+     * 0.62 black), in $scale pixels a point (2 for a Retina screen, which
+     * Context::image shows it at its size on): macOS only. Throws for a
+     * name the system has no symbol of.
+     */
+    public static function symbol(string $name, float $size, int $rgb = 0xffffff, float $weight = 0.0, float $scale = 2.0): self
+    {
+        [$w, $h, $rgba] = \MyPHP\Native\Symbols::draw($name, $size, $weight, $rgb, $scale);
+        return self::fromPixels($w, $h, $rgba);
+    }
+
     /** The image of file $path, as fromBytes decodes it. */
     public static function fromFile(string $path, int $max = 1024): self
     {
