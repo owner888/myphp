@@ -1130,6 +1130,16 @@ final class Painter
             }
         }
         if ($under !== null) { $under(); }
+        // Its shadow (its outline's, outlined) and its outline under the glyphs: the glyphs grown by the outline (Node::textOutline, textShadow).
+        $stroke = $ts?->outline[0] ?? 0.0;
+        if ($ts?->textShadow !== null) {
+            [$dx, $dy, $src, $sa] = $ts->textShadow;
+            $text->paintLayout($list, $l, $x + $dx, $y + $dy, static fn(): array => [$src, $sa * $nodeAlpha], $stroke);
+        }
+        if ($ts?->outline !== null) {
+            [, $orgb, $oa] = $ts->outline;
+            $text->paintLayout($list, $l, $x, $y, static fn(): array => [$orgb, $oa * $nodeAlpha], $stroke);
+        }
         if ($glyphs === null || !$glyphs()) $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $nodeAlpha): array {
             $k = $at($r);
             if ($k < 0 || $spans[$k]->color === null && $spans[$k]->alpha === null) {

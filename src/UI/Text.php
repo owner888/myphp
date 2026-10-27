@@ -50,9 +50,10 @@ final class Text implements TextPainter
         return $this->system;
     }
 
-    public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt): void
+    public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void
     {
         $s = $this->ct->scale;
+        $stroke = round($stroke * 4) / 4; // the outlines of a few widths in the atlas, a quarter point apart
         foreach ($l->lines as $line) {
             $lastC = -2; $rgb = 0; $alpha = 1.0; $shade = 0;
             foreach ($line->glyphs as $g) {
@@ -60,7 +61,7 @@ final class Text implements TextPainter
                     continue;
                 }
                 if ($g->cluster !== $lastC) { [$rgb, $alpha] = $colorAt($g->cluster); $lastC = $g->cluster; $shade = self::shadeOf($rgb); }
-                $glyph = $this->glyph($g->font->id, $g->id, $shade);
+                $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke);
                 if ($glyph === null) {
                     continue; // no ink, as a space
                 }
@@ -233,9 +234,28 @@ final class Text implements TextPainter
      * atlas; with its offsets and size in pixels; null without ink.
      * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int}
      */
-    private function glyph(int $font, int $id, int $shade): ?array
+    private function glyph(int $font, int $id, int $shade, float $stroke = 0.0): ?array
     {
         $base = "$font:$id";
+        if ($stroke > 0) { // its outline: a mask of the glyph grown by it, unsmoothed, of no shade
+            $key = "$base:o$stroke";
+            $slot = $this->atlas->get($key);
+            if ($slot === null) {
+                if (isset($this->colorIndex[$base])) { return null; }
+                $b = $this->ct->rasterize($font, $id, null, -1, $stroke);
+                if ($b === null) {
+                    return null;
+                }
+                if (!$this->atlas->fits($b['w'], $b['h'])) {
+                    $this->resetAtlas();
+                }
+                $slot = $this->atlas->add($key, $b['w'], $b['h'], $b['addr']);
+                Mem::free($b['rows']);
+                $this->offsets[$key] = [$b['ox'], $b['oy']];
+            }
+            [$ox, $oy] = $this->offsets[$key];
+            return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+        }
         if (isset($this->colorIndex[$base])) {
             $img = $this->colors[$this->colorIndex[$base]];
             [$ox, $oy] = $this->offsets[$base];

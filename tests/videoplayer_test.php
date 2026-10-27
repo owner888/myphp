@@ -14,11 +14,16 @@ namespace MyPHP\Tests;
 use MyPHP\App;
 use MyPHP\Media\{Player, Track};
 use MyPHP\Native\ObjC;
-use MyPHP\UI\{Context, Key, VideoPlayer, VideoPlayerOptions, VideoPlayerState};
+use MyPHP\UI\{Context, Key, Node, VideoPlayer, VideoPlayerOptions, VideoPlayerState};
 
 $t = new Headless(function (Context $c) { $c->column(0, 0, 1); VideoPlayer::subtitle($c, "two\nlines", 20, 40); $c->end(); }, 900, 600);
 $t->frame();
-same(9, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'its subtitles outlined: the text in white over eight copies in black');
+same(1, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'its subtitles: the text once');
+same([1.25, 0x000000, 1.0], $t->byText("two\nlines")?->textStyle()->outline, 'outlined in black, a sixteenth of its size wide: its glyphs grown, not copies of it');
+$quads = $t->paint()->n;
+$plain = new Headless(function (Context $c) { $c->column(0, 0, 1); $c->text("two\nlines", 20, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->letterSpacing(0.001); $c->end(); }, 900, 600); // laid out as it is, without the outline
+$plain->frame();
+same(8, $quads - $plain->paint()->n, 'its outline painted under it: a quad more for each of its eight glyphs');
 same(['07:09', '1:58:37', '1.5', '2', '0.25'], [VideoPlayerState::clock(429), VideoPlayerState::clock(7117), VideoPlayerState::number(1.5), VideoPlayerState::number(2.0), VideoPlayerState::number(0.25)], 'times and numbers as IINA writes them');
 App::setLanguages('en', 'zh-Hans'); App::setLocale('zh-Hans');
 $track = new Track(2, Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);
@@ -220,7 +225,9 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $copies = $all($h4->root, 'At three quarters');
     [$x, $y, $w, $h] = $h4->rect(end($copies));
     check(abs($x + $w / 2 - 720) < 2 && abs($y + $h / 2 - 270) < 2, "\\an5 at \\pos: centered on (720, 270): " . round($x + $w / 2, 1) . ', ' . round($y + $h / 2, 1));
-    same(33, count($copies), 'over its outline, 16 copies around it (\\bord6, three points wide here), and its shadow, those moved (its style\'s Shadow 3)');
+    same(1, count($copies), 'once, its outline and shadow its glyphs\' own');
+    $ts = end($copies)->textStyle();
+    same([[3.0, 0x008000, 1.0], [1.5, 1.5, 0x000000, 0.5]], [array_map(fn($v) => is_float($v) ? round($v, 2) : $v, $ts->outline ?? []), array_map(fn($v) => is_float($v) ? round($v, 2) : $v, $ts->textShadow ?? [])], '\\bord6 in \\3c green, three points here; its style\'s Shadow 3 in its BackColour at half');
     $box = $all($h4->root, 'A box behind');
     same(1, count($box), 'BorderStyle 3: a box behind, no copies');
     $top = $all($h4->root, 'Top: yellow, bold, dark blue outline');

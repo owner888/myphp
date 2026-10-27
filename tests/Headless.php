@@ -56,11 +56,11 @@ final class Metrics implements TextPainter
     public function scale(): float { return $this->scale; }
     private ?\MyPHP\Text\System $system = null;
     public function textSystem(): \MyPHP\Text\System { return $this->system ??= new \MyPHP\Text\System(new \MyPHP\Text\StubEngine()); }
-    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void
     {
         foreach ($l->lines as $line) {
-            foreach ($line->glyphs as $g) {
-                if (!$g->object) { [$rgb, $alpha] = $colorAt($g->cluster); $list->glyph($x + $g->x, $y + $line->y, $g->advance, $line->height, $rgb, $alpha, 0, 0); }
+            foreach ($line->glyphs as $g) { // an outline's glyph grown by its stroke all round
+                if (!$g->object) { [$rgb, $alpha] = $colorAt($g->cluster); $list->glyph($x + $g->x - $stroke, $y + $line->y - $stroke, $g->advance + 2 * $stroke, $line->height + 2 * $stroke, $rgb, $alpha, 0, 0); }
             }
         }
     }

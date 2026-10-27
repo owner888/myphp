@@ -402,10 +402,10 @@ final class VideoPlayer
     }
 
     /**
-     * A row of runs: the text in its colors over its outline (copies of it
-     * around it, $border wide) and its shadow (those copies moved by
-     * $shadow), or for BorderStyle 3 over a box of the outline's color; an
-     * empty row is the height of its font. Fontsize is the height of a
+     * A row of runs: the text in its colors over its outline ($border wide)
+     * and its shadow (the outlined glyphs moved by $shadow), or for
+     * BorderStyle 3 over a box of the outline's color; an empty row is the
+     * height of its font. Fontsize is the height of a
      * font's ascent and descent, as libass sizes it, not its em.
      * @param list<AssRun> $runs
      */
@@ -439,30 +439,16 @@ final class VideoPlayer
               $c->end();
               return;
           }
-          $text = static fn(?int $color, ?float $alpha) => $c->richText($spans($color, $alpha), width: $wrap, wrap: $wrap !== null)->textAlign($across);
           if ($first->borderStyle === 3) { // an opaque box of the outline's color behind it, its shadow the box moved
               if ($shadow > 0) { $c->column()->absolute()->left($shadow - $border)->top($shadow - $border)->right(-$shadow - $border)->bottom(-$shadow - $border)->background($first->shadowColor, $first->shadowAlpha); $c->end(); }
               $c->column()->absolute()->left(-$border)->top(-$border)->right(-$border)->bottom(-$border)->background($first->outlineColor, $first->outlineAlpha); $c->end();
-          } else {
-              $ring = $border > 0 ? self::ring($border) : [[0.0, 0.0]];
-              if ($shadow > 0) {
-                  foreach ($ring as [$dx, $dy]) { $text($first->shadowColor, $first->shadowAlpha)->absolute()->left($dx + $shadow)->top($dy + $shadow)->right(-$dx - $shadow); }
-              }
-              if ($border > 0) {
-                  foreach ($ring as [$dx, $dy]) { $text($first->outlineColor, $first->outlineAlpha)->absolute()->left($dx)->top($dy)->right(-$dx); }
-              }
           }
-          $text(null, null);
+          $text = $c->richText($spans(null, null), width: $wrap, wrap: $wrap !== null)->textAlign($across);
+          if ($first->borderStyle !== 3) { // its outline and its shadow (of the outlined glyphs), as libass draws them: the glyphs grown
+              if ($border > 0) { $text->textOutline($border, $first->outlineColor, $first->outlineAlpha); }
+              if ($shadow > 0) { $text->textShadow($shadow, $shadow, $first->shadowColor, $first->shadowAlpha); }
+          }
         $c->end();
-    }
-
-    /** Offsets around a point $r away, as many as an outline that wide needs to close: 8, or 16 past a point and a half. @return list<array{0: float, 1: float}> */
-    private static function ring(float $r): array
-    {
-        $n = $r > 1.5 ? 16 : 8;
-        $out = [];
-        for ($i = 0; $i < $n; $i++) { $out[] = [$r * cos(2 * M_PI * $i / $n), $r * sin(2 * M_PI * $i / $n)]; }
-        return $out;
     }
 
     /**
@@ -527,16 +513,12 @@ final class VideoPlayer
         }
     }
 
-    /** $text over the picture, centered $bottom points from its foot: white, outlined in black as mpv draws subtitles (copies of it around, under it). */
+    /** $text over the picture, centered $bottom points from its foot: white, outlined in black as mpv draws subtitles. */
     public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0, float $left = 0): void
     {
         $c->column()->absolute()->left($left)->right($right)->bottom($bottom)->align(Node::CENTER)->passThrough();
           $c->column()->maxWidth($c->width * 0.9);
-            $d = $size / 16;
-            foreach ([[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]] as [$x, $y]) {
-                $c->text($text, $size, 0x000000)->fontWeight(500)->textAlign(Node::CENTER)->absolute()->left($x * $d)->top($y * $d)->right(-$x * $d);
-            }
-            $c->text($text, $size, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER);
+            $c->text($text, $size, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->textOutline($size / 16, 0x000000);
           $c->end();
         $c->end();
     }

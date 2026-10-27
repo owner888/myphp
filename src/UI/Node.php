@@ -938,6 +938,25 @@ final class Node
     /** Strikes text through. */
     public function strikethrough(): static { $this->ts()->strike = true; return $this; }
 
+    /**
+     * Outlines text: its glyphs grown by $width points all round, in $rgb at
+     * $alpha, under them, as subtitles are outlined; the glyphs' own masks,
+     * not copies of the text around it (a color glyph has none).
+     */
+    public function textOutline(float $width, int $rgb, float $alpha = 1.0): static
+    {
+        if (!is_finite($width) || $width < 0) { throw new \InvalidArgumentException('an outline of a width of 0 or more'); }
+        $this->ts()->outline = $width > 0 ? [$width, $rgb, max(0.0, min(1.0, $alpha))] : null;
+        return $this;
+    }
+
+    /** Shadows text: its glyphs (outlined, with textOutline) moved by ($dx, $dy) points, in $rgb at $alpha, under them. */
+    public function textShadow(float $dx, float $dy, int $rgb, float $alpha = 1.0): static
+    {
+        $this->ts()->textShadow = [$dx, $dy, $rgb, max(0.0, min(1.0, $alpha))];
+        return $this;
+    }
+
     /** Adds $v points after every character of text, or tightens it with a negative $v, as for labels in capitals. */
     public function letterSpacing(float $v): static { $this->ts()->spacing = $v; return $this; }
 

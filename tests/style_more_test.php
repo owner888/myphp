@@ -201,3 +201,21 @@ $p = new Painter($list, $h->metrics, $h->theme);
 check($mw > 0 && $mh >= 20 && [$mw, $mh] == $p->measureText(0, ...$spans), "measured $mw by $mh, as drawn");
 $p->richText(10, 10, 0, ...$spans);
 check($list->n >= 5, 'drawn, a glyph a letter');
+
+// An outline and a shadow of text (Node::textOutline, textShadow): laid out by the text system; painted under the glyphs, the shadow first, at the node's opacity.
+$outlined = null;
+$h = new Headless(function (\MyPHP\UI\Context $c) use (&$outlined) {
+    $c->column(0, 0, 1)->opacity(0.5);
+      $outlined = $c->text('ab', 20, 0xffffff)->textOutline(2, 0x000000)->textShadow(1, 1, 0x111111, 0.5);
+    $c->end();
+}, 300, 200);
+$h->frame();
+$l = $h->paint();
+same([\MyPHP\UI\Node::RICH, true], [$outlined->kind, $outlined->textStyle()->needsLayout()], 'outlined text: laid out as rich text');
+$bare = new Headless(function (\MyPHP\UI\Context $c) { $c->column(0, 0, 1)->opacity(0.5); $c->text('ab', 20, 0xffffff)->letterSpacing(0.001); $c->end(); }, 300, 200); // laid out as it is, neither outlined nor shadowed
+$bare->frame();
+same(4, $l->n - $bare->paint()->n, 'its two glyphs twice more, under them: the shadow, then the outline');
+$err = null;
+try { $outlined->textOutline(-1, 0); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
+same('an outline of a width of 0 or more', $err, 'an outline of a negative width throws');
+same(null, $outlined->textOutline(0, 0)->textStyle()->outline, 'one of no width: none');

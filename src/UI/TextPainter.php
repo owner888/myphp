@@ -17,7 +17,7 @@ interface TextPainter extends TextMetrics
      * $colorAt(int $rune): array{0: int, 1: float} gives the rune its
      * cluster starts at; inline objects draw nothing.
      */
-    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt): void;
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void;
 
     /**
      * The coverage of $glyphs (Context::shape) drawn with the pen at ($x,

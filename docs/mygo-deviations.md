@@ -1700,6 +1700,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.
+- **Outlines of text** (v1.45): `Node::textOutline` and `textShadow` are
+  myphp's, for subtitles; mygo's text has neither.
 - **ASS in its styles** (v1.44): `Media\Ass`, `AssLine`, `AssRun`,
   `Subtitles::styled`, `assFile`, `assPacket` and `Player::subtitleLines`
   are myphp's, as IINA (libass) shows ASS; mygo has no video.

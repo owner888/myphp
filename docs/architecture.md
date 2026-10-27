@@ -3940,6 +3940,19 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   paints, paints it again.
 - The player's subtitles (text, ASS, PGS and VobSub) are one node
   belowMaterials(), built before the bars.
+- **Outlines of text** (`Node::textOutline`, `textShadow`): a glyph's
+  outline is its own mask, the glyph's path filled and stroked twice its
+  width (round joins, no font smoothing) by CoreText into the atlas, of
+  widths a quarter point apart; a rich text paints its shadow (the
+  outlined glyphs moved), its outline, then its glyphs. A color glyph has
+  none. Outlined or shadowed text is laid out as rich text.
+- **Trap: outlines of copies.** Subtitles were outlined by copies of
+  their text around them (8 for a text track's, 16 and 16 more for an ASS
+  line's outline and shadow): a screen of moving ASS was over two hundred
+  rich texts laid out and painted 30 times a second, 17 % of the CPU on
+  solid video against 1.4 % without, the layer under the materials as
+  dear as the window's frame. Each row is one text now, painted three
+  times.
 
 ## Open items
 
@@ -3961,9 +3974,10 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   mygo's `Margin` comes with the Markdown view, which uses it.
 - Video: ASS's drawings, blur, 3D rotation and shearing are left out, a
   \kf is sung whole, a line turns by its first run (its styles, places
-  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
-  Opus, v1.37), nor DTS or TrueHD, which the system has no decoder of;
-  text has no outline of its own.
+  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43).
+  Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and Opus, v1.37),
+  nor DTS or TrueHD, which the system has no decoder of. A size
+  animated by \t rasterizes its glyphs anew each frame.
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser

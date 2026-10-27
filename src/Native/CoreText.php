@@ -92,6 +92,10 @@ final class CoreText
             void  CGContextScaleCTM(void*, double, double);
             void  CGContextSetShouldSmoothFonts(void*, bool);
             void  CGContextSetRGBFillColor(void*, double, double, double, double);
+            void  CGContextAddPath(void*, void*);
+            void  CGContextSetLineWidth(void*, double);
+            void  CGContextSetLineJoin(void*, int);
+            void  CGContextDrawPath(void*, int);
         ", '/System/Library/Frameworks/CoreText.framework/CoreText');
         $lib = $this->c->dlopen('/System/Library/Frameworks/CoreText.framework/CoreText', 2);
         $cf = $this->c->dlopen('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation', 2);
@@ -233,11 +237,13 @@ final class CoreText
      * font smoothing while the user leaves it on, as AppKit draws text and
      * mygo's: Core Graphics emboldens it the more the lighter the shade's
      * gray is, in a mask too. A $shade of -1 draws it without, as a
-     * canvas's text.
+     * canvas's text. A $stroke (points) draws the glyph grown by it all
+     * round, without smoothing, the mask an outline of the text paints
+     * under it (Node::textOutline); a color glyph has none.
      *
      * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int, color: bool}|null
      */
-    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1): ?array
+    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0): ?array
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
@@ -250,8 +256,11 @@ final class CoreText
         }
         $s = $scale ?? $this->scale;
         $color = $this->isColor($fontId);
-        $smooth = $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
-        $pad = $smooth ? 2 : 1; // smoothing spreads a glyph up to a pixel further
+        if ($stroke > 0 && $color) {
+            return null; // a color glyph is its own picture: no outline of it
+        }
+        $smooth = $stroke <= 0 && $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
+        $pad = ($smooth ? 2 : 1) + (int)ceil($stroke * $s); // smoothing spreads a glyph up to a pixel further, an outline its width
         $x0 = (int)floor($b->origin->x * $s) - $pad;
         $y0 = (int)floor($b->origin->y * $s) - $pad;
         $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + $pad - $x0;
@@ -268,8 +277,21 @@ final class CoreText
         // the top of the image, which is the order the atlas wants.
         $c->CGContextTranslateCTM($ctx, -$x0, -$y0);
         $c->CGContextScaleCTM($ctx, $s, $s);
-        $origin = $c->new('CGPoint[1]');
-        $c->CTFontDrawGlyphs($font, $ids, $origin, 1, $ctx);
+        if ($stroke > 0) { // the glyph grown by $stroke all round: its outline filled and stroked twice as wide, joins round
+            $path = $c->CTFontCreatePathForGlyph($font, $glyph, null);
+            if ($path === null) {
+                $c->CGContextRelease($ctx);
+                return null;
+            }
+            $c->CGContextAddPath($ctx, $path);
+            $c->CGContextSetLineWidth($ctx, 2 * $stroke);
+            $c->CGContextSetLineJoin($ctx, 1); // kCGLineJoinRound
+            $c->CGContextDrawPath($ctx, 3); // kCGPathFillStroke
+            $c->CGPathRelease($path);
+        } else {
+            $origin = $c->new('CGPoint[1]');
+            $c->CTFontDrawGlyphs($font, $ids, $origin, 1, $ctx);
+        }
         $rows = Mem::alloc($bpp * $w * $h);
         $addr = Mem::addr($rows);
         Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $bpp * $w * $h);

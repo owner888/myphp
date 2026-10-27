@@ -36,6 +36,10 @@ final class TextStyle
     public ?int $background = null;
     public ?int $selection = null;
     public ?float $selectionAlpha = null;
+    /** Node::textOutline: its width in points, color and opacity. @var ?array{0: float, 1: int, 2: float} */
+    public ?array $outline = null;
+    /** Node::textShadow: its offset, color and opacity. @var ?array{0: float, 1: float, 2: int, 3: float} */
+    public ?array $textShadow = null;
 
     /** This style over $base: what this leaves null, $base's. */
     public function over(?self $base): self
@@ -65,7 +69,7 @@ final class TextStyle
             || ($this->weight !== null && $this->weight !== 400 && $this->weight !== 700)
             || $this->lineHeight !== null || ($this->align ?? 0) !== 0 || $this->wavy || $this->strike
             || ($this->spacing ?? 0.0) != 0 || ($this->features ?? '') !== '' || $this->lang !== null
-            || $this->decoColor !== null || $this->decoThick !== null || $this->background !== null;
+            || $this->decoColor !== null || $this->decoThick !== null || $this->background !== null || $this->outline !== null || $this->textShadow !== null;
     }
 
     /** The engine's style of this one, $size for none. */
