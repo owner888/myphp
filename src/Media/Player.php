@@ -66,6 +66,8 @@ final class Player
     /** What keeps the display awake while it plays, and whether it does (setKeepAwake). */
     private Awake $awake;
     private bool $keepAwake = true;
+    /** @var array<int, Ass> the headers of the ASS tracks, by track (its object id): their styles */
+    private array $assHeaders = [];
     /** @var array<int, Pgs|VobSub> the decoders of the image subtitle tracks, by track (its object id): a PGS track's sets reuse what came before */
     private array $pictureDecoders = [];
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
@@ -143,6 +145,9 @@ final class Player
     public function loadSubtitles(string $path): Track
     {
         [$codec, $cues] = Subtitles::file($path);
+        if (Subtitles::styled($codec)) { // its lines in their styles, which subtitles() gives as text
+            $cues = Subtitles::assFile($path);
+        }
         $parts = explode('.', basename($path));
         $t = new Track(number: -1 - count($this->external), type: Track::SUBTITLE, codec: $codec, private: '', language: count($parts) > 2 ? $parts[count($parts) - 2] : 'und',
             name: basename($path), isDefault: false, frameDuration: 0.0, width: 0, height: 0, sampleRate: 0.0, channels: 0);
@@ -176,7 +181,27 @@ final class Player
      */
     public function subtitles(): array
     {
-        return array_values(array_filter($this->showing(), 'is_string'));
+        $out = [];
+        foreach ($this->showing() as $s) {
+            if (is_string($s)) { $out[] = $s; } elseif ($s instanceof AssLine) { $out[] = $s->text(); }
+        }
+        return $out;
+    }
+
+    /**
+     * The lines showing now of an ASS or SSA track shown, in their styles
+     * and where they are as they are now (moved, faded, animated, sung:
+     * AssLine::at); none of another. subtitles() gives their text.
+     * @return list<AssLine>
+     */
+    public function subtitleLines(): array
+    {
+        $t = $this->time() - $this->subtitleDelay;
+        $out = [];
+        foreach ($this->showing() as $s) {
+            if ($s instanceof AssLine) { $out[] = $s->at($t - $s->start); }
+        }
+        return $out;
     }
 
     /**
@@ -207,7 +232,7 @@ final class Player
         return [$sx + ($sw - $pw) / 2, $sy + ($sh - $ph) / 2, $pw, $ph];
     }
 
-    /** What the subtitles of the track shown show now, texts or pictures. @return list<string|list<SubtitlePicture>> */
+    /** What the subtitles of the track shown show now, texts, ASS lines or pictures. @return list<string|AssLine|list<SubtitlePicture>> */
     private function showing(): array
     {
         return $this->subtitle === null ? [] : ($this->cues[spl_object_id($this->subtitle)] ?? new Cues())->at($this->time() - $this->subtitleDelay);
@@ -228,6 +253,13 @@ final class Player
             if ($shown !== null) {
                 [$from, $to, $pic] = $shown;
                 $cues->add($p->time + $from, $to !== null ? $p->time + $to : ($p->duration > 0 ? $p->time + $p->duration : INF), [$pic]);
+            }
+            return;
+        }
+        if (Subtitles::styled($p->track->codec)) { // a dialogue line in the styles of the track's header
+            $line = Subtitles::assPacket($this->assHeaders[spl_object_id($p->track)] ??= new Ass($p->track->private), $p->data, $p->time, $p->duration > 0 ? $p->duration : INF);
+            if ($line !== null) {
+                $cues->add($p->time, $p->duration > 0 ? $p->time + $p->duration : INF, $line);
             }
             return;
         }

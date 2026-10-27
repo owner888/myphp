@@ -6,6 +6,7 @@ namespace MyPHP\UI;
 use Closure;
 use Locale;
 use MyPHP\Dialog;
+use MyPHP\Media\{AssLine, AssRun};
 use MyPHP\Media\Player;
 use MyPHP\Media\SubtitlePicture;
 use MyPHP\Media\Track;
@@ -107,7 +108,9 @@ final class VideoPlayer
         }
         $c->clicked($osc); // a click on the bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
 
-        if ($s->subtitlesVisible && !$s->pictureInPicture && ($lines = $p->subtitles()) !== []) {
+        if ($s->subtitlesVisible && !$s->pictureInPicture && ($styled = $p->subtitleLines()) !== []) { // an ASS track's lines, in their styles where they are
+            self::assLines($c, $p, $styled);
+        } elseif ($s->subtitlesVisible && !$s->pictureInPicture && ($lines = $p->subtitles()) !== []) {
             self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
         }
         if ($s->subtitlesVisible && !$s->pictureInPicture && ($pictures = $p->subtitlePictures()) !== []) {
@@ -286,6 +289,215 @@ final class VideoPlayer
               $c->end();
           }
         $c->end();
+    }
+
+    /**
+     * The lines of an ASS track in their styles, as libass lays them out
+     * over the picture (the plane of their PlayRes, Player::subtitlePlane):
+     * at \pos, the point of their alignment there, else within the
+     * margins at their alignment, those of one alignment and margins
+     * stacked (the later above at the bottom, below elsewhere), wrapped at
+     * the margins; the lower layers first.
+     * @param list<AssLine> $lines
+     */
+    private static function assLines(Context $c, Player $p, array $lines): void
+    {
+        $order = array_keys($lines);
+        usort($order, fn(int $a, int $b): int => [$lines[$a]->layer, $a] <=> [$lines[$b]->layer, $b]);
+        $groups = [];
+        foreach ($order as $i) {
+            $l = $lines[$i];
+            $groups[$l->alone() ? "alone $i" : "$l->alignment/$l->marginLeft/$l->marginRight/$l->marginVertical"][] = $l;
+        }
+        foreach ($groups as $group) {
+            $l = $group[0];
+            [$px, $py, $pw, $ph] = $p->subtitlePlane($c->width, $c->height, $l->playResX, $l->playResY);
+            $l->alone() ? self::assAlone($c, $p, $l, $px, $py, $pw, $ph) : self::assGroup($c, $p, $group, $px, $py, $pw, $ph);
+        }
+        foreach ($lines as $l) {
+            if ($l->changes()) { $c->after(1 / 30); break; } // moving, fading, animated, sung: frames while it shows
+        }
+    }
+
+    /**
+     * A line laid out on its own (placed, turned, scaled or clipped), in
+     * boxes of the plane one in the other: cut to \clip, turned by \frz
+     * around \org (else the point of its alignment), scaled by \fscx and
+     * \fscy around that point, as libass draws it.
+     */
+    private static function assAlone(Context $c, Player $p, AssLine $l, float $px, float $py, float $pw, float $ph): void
+    {
+        $sx = $pw / $l->playResX; $sy = $ph / $l->playResY;
+        $r = $l->runs[0];
+        $opened = 0;
+        if ($l->clip !== null) {
+            [$x1, $y1, $x2, $y2] = $l->clip;
+            $c->column()->absolute()->left($px + $x1 * $sx)->top($py + $y1 * $sy)->size(max(0.0, ($x2 - $x1) * $sx), max(0.0, ($y2 - $y1) * $sy))->clip()->passThrough();
+            [$px, $py] = [-$x1 * $sx, -$y1 * $sy];
+            $opened++;
+        }
+        [$ax, $ay] = self::assAnchor($l);
+        [$ox, $oy] = $l->origin ?? [$ax, $ay];
+        $plane = fn() => $c->column()->absolute()->left(0)->top(0)->size($pw, $ph)->passThrough();
+        $c->column()->absolute()->left($px)->top($py)->size($pw, $ph)->passThrough(); $opened++;
+        if ($r->rotation != 0) { $plane()->transformOrigin($ox / $l->playResX, $oy / $l->playResY)->rotate(-$r->rotation); $opened++; } // \frz turns counterclockwise
+        if ($r->scaleX != 1 || $r->scaleY != 1) { $plane()->transformOrigin($ax / $l->playResX, $ay / $l->playResY)->scale($r->scaleX, $r->scaleY); $opened++; }
+        self::assGroup($c, $p, [$l], 0, 0, $pw, $ph);
+        for (; $opened > 0; $opened--) { $c->end(); }
+    }
+
+    /** The point of $line's alignment in PlayRes: \pos, else on its margins by its alignment. @return array{0: float, 1: float} */
+    private static function assAnchor(AssLine $l): array
+    {
+        if ($l->position !== null) {
+            return $l->position;
+        }
+        $col = ($l->alignment - 1) % 3; $row = intdiv($l->alignment - 1, 3);
+        $x = [$l->marginLeft, $l->marginLeft + ($l->playResX - $l->marginLeft - $l->marginRight) / 2, $l->playResX - $l->marginRight][$col];
+        $y = [$l->playResY - $l->marginVertical, $l->playResY / 2, $l->marginVertical][$row];
+        return [(float)$x, (float)$y];
+    }
+
+    /** Lines of one place, on the plane at ($px, $py) $pw by $ph: of one alignment and margins, or one laid out on its own. @param list<AssLine> $group */
+    private static function assGroup(Context $c, Player $p, array $group, float $px, float $py, float $pw, float $ph): void
+    {
+        $l = $group[0];
+        $sx = $pw / $l->playResX; $sy = $ph / $l->playResY;
+        $col = ($l->alignment - 1) % 3; $row = intdiv($l->alignment - 1, 3); // 0, 1, 2: left, center, right; bottom, middle, top
+        $across = [Node::START, Node::CENTER, Node::END][$col];
+        $along = [Node::END, Node::CENTER, Node::START][$row];
+        if ($l->position !== null) { // the point of its alignment at \pos: a box around it as large as the plane, packed to it
+            [$ax, $ay] = [$px + $l->position[0] * $sx, $py + $l->position[1] * $sy];
+            $box = $c->column()->absolute()->left($ax - [0, $pw, 2 * $pw][$col])->top($ay - [2 * $ph, $ph, 0][$row])->size(2 * $pw, 2 * $ph);
+            $wrap = null;
+        } else {
+            $box = $c->column()->absolute()->left($px + $l->marginLeft * $sx)->top($py + $l->marginVertical * $sy)
+                ->size(max(1.0, $pw - ($l->marginLeft + $l->marginRight) * $sx), max(1.0, $ph - 2 * $l->marginVertical * $sy));
+            $wrap = $l->wraps ? max(1.0, $pw - ($l->marginLeft + $l->marginRight) * $sx) : null;
+        }
+        $box->align($across)->justify($along)->passThrough();
+          foreach ($row === 0 ? array_reverse($group) : $group as $line) { // at the bottom a later line goes above the ones before
+              foreach (self::assRows($line) as $runs) {
+                  self::assRow($c, $p, $line, $runs, $sx, $sy, $wrap, $across);
+              }
+          }
+        $c->end();
+    }
+
+    /** The runs of $line split at its \N, a row each. @return list<list<AssRun>> */
+    private static function assRows(AssLine $line): array
+    {
+        $rows = [[]];
+        foreach ($line->runs as $r) {
+            if ($r->text === "\n") { $rows[] = []; continue; }
+            $rows[count($rows) - 1][] = $r;
+        }
+        return $rows;
+    }
+
+    /**
+     * A row of runs: the text in its colors over its outline (copies of it
+     * around it, $border wide) and its shadow (those copies moved by
+     * $shadow), or for BorderStyle 3 over a box of the outline's color; an
+     * empty row is the height of its font. Fontsize is the height of a
+     * font's ascent and descent, as libass sizes it, not its em.
+     * @param list<AssRun> $runs
+     */
+    private static function assRow(Context $c, Player $p, AssLine $line, array $runs, float $sx, float $sy, ?float $wrap, int $across): void
+    {
+        $first = $runs[0] ?? $line->runs[0];
+        [, $videoHeight] = $p->size();
+        $px = $line->scaledBorder ? $sy : ($videoHeight > 0 ? $sy * $line->playResY / $videoHeight : $sy); // outlines and shadows of the plane's units, or of the video's pixels
+        $pieces = [];
+        foreach ($runs as $r) {
+            foreach (self::assPieces($c, $r) as [$text, $em]) { $pieces[] = [$r, $text, $em]; }
+        }
+        $spans = static function (?int $color, ?float $alpha) use ($pieces, $sx, $sy): array {
+            $out = [];
+            foreach ($pieces as [$r, $text, $em]) {
+                $out[] = new Span($text, size: $em * $sy, color: $color ?? $r->color, alpha: $alpha ?? $r->alpha, font: $r->font, weight: $r->weight, italic: $r->italic,
+                    underline: $r->underline, strikethrough: $r->strikeout, letterSpacing: $r->spacing * $sx);
+            }
+            return $out;
+        };
+        $border = $first->border * $px; $shadow = $first->shadow * $px;
+        $row = $c->column()->alignSelf($across)->passThrough();
+        if ($wrap !== null) { // as wide as it wraps at, its lines aligned in it by the text's layout (a text of its lines' width would be moved twice)
+            $row->width($wrap);
+        }
+        if ($line->alpha < 1) { // \fad, \fade
+            $row->opacity($line->alpha);
+        }
+          if ($runs === []) { // a \N on its own: a blank row
+              $c->box(1, self::assEm($c, $first) * $sy * 1.2, 0);
+              $c->end();
+              return;
+          }
+          $text = static fn(?int $color, ?float $alpha) => $c->richText($spans($color, $alpha), width: $wrap, wrap: $wrap !== null)->textAlign($across);
+          if ($first->borderStyle === 3) { // an opaque box of the outline's color behind it, its shadow the box moved
+              if ($shadow > 0) { $c->column()->absolute()->left($shadow - $border)->top($shadow - $border)->right(-$shadow - $border)->bottom(-$shadow - $border)->background($first->shadowColor, $first->shadowAlpha); $c->end(); }
+              $c->column()->absolute()->left(-$border)->top(-$border)->right(-$border)->bottom(-$border)->background($first->outlineColor, $first->outlineAlpha); $c->end();
+          } else {
+              $ring = $border > 0 ? self::ring($border) : [[0.0, 0.0]];
+              if ($shadow > 0) {
+                  foreach ($ring as [$dx, $dy]) { $text($first->shadowColor, $first->shadowAlpha)->absolute()->left($dx + $shadow)->top($dy + $shadow)->right(-$dx - $shadow); }
+              }
+              if ($border > 0) {
+                  foreach ($ring as [$dx, $dy]) { $text($first->outlineColor, $first->outlineAlpha)->absolute()->left($dx)->top($dy)->right(-$dx); }
+              }
+          }
+          $text(null, null);
+        $c->end();
+    }
+
+    /** Offsets around a point $r away, as many as an outline that wide needs to close: 8, or 16 past a point and a half. @return list<array{0: float, 1: float}> */
+    private static function ring(float $r): array
+    {
+        $n = $r > 1.5 ? 16 : 8;
+        $out = [];
+        for ($i = 0; $i < $n; $i++) { $out[] = [$r * cos(2 * M_PI * $i / $n), $r * sin(2 * M_PI * $i / $n)]; }
+        return $out;
+    }
+
+    /**
+     * The pieces of run $r's text by the font each is drawn in (its own, or
+     * one the system falls back on for runes it lacks, as Chinese in Arial),
+     * each with its em in the plane's units: libass sizes every font so that
+     * its ascent and descent are the run's Fontsize.
+     * @return list<array{0: string, 1: float}>
+     */
+    private static function assPieces(Context $c, AssRun $r): array
+    {
+        $style = new \MyPHP\Text\Style($r->font, 100.0, $r->weight, $r->italic);
+        $layout = $c->metrics()->textSystem()->layout(new \MyPHP\Text\Params($r->text, $style, keepSpaces: true));
+        $runes = mb_str_split($r->text, 1, 'UTF-8');
+        $ems = array_fill(0, count($runes), self::assEm($c, $r));
+        foreach ($layout->lines as $line) {
+            foreach ($line->glyphs as $g) {
+                if ($g->font !== null && $g->font->ascent + $g->font->descent > 0) {
+                    for ($i = $g->cluster; $i < $g->cluster + max(1, $g->runes); $i++) { $ems[$i] = $r->size * $g->font->size / ($g->font->ascent + $g->font->descent); }
+                }
+            }
+        }
+        $out = [];
+        foreach ($runes as $i => $ch) {
+            $em = $ems[$i] ?? $ems[0];
+            if ($out !== [] && abs($out[count($out) - 1][1] - $em) < 1e-6) { $out[count($out) - 1][0] .= $ch; } else { $out[] = [$ch, $em]; }
+        }
+        return $out;
+    }
+
+    /** The em of run $r's font in the plane's units: its Fontsize the font's ascent and descent, as libass takes it. */
+    private static function assEm(Context $c, AssRun $r): float
+    {
+        static $ratios = [];
+        $key = "$r->font/$r->weight/" . (int)$r->italic;
+        if (!isset($ratios[$key])) {
+            $style = new TextStyle(); $style->family = $r->font; $style->size = 100.0; $style->weight = $r->weight; $style->italic = $r->italic;
+            $m = $c->fontMetrics($style);
+            $ratios[$key] = $m['ascent'] + $m['descent'] > 0 ? 100 / ($m['ascent'] + $m['descent']) : 1.0; // a font of no vertical metrics (a test's text engine): its Fontsize its em
+        }
+        return $r->size * $ratios[$key];
     }
 
     /**

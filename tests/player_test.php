@@ -162,6 +162,16 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $pics = function (float $t) use (&$p): array { $p->seek($t); return array_map(fn($q) => [$q->x, $q->y], $p->subtitlePictures()); };
     same([[[713, 900]], [], [[755, 120]], []], [$pics(0.5), $pics(1.1), $pics(1.5), $pics(1.95)], 'a VobSub track\'s, until each stops');
 
+    // ASS: a track's lines in their styles where the player is (their text as subtitles() gives it); an .ass file loaded, its lines so too.
+    $p = new Player(__DIR__ . '/testdata/clip-ass.mkv');
+    check($p->subtitleTrack()?->codec === 'S_TEXT/ASS', 'an ASS track, shown as the file marks it default');
+    $p->seek(1.0);
+    same([2, 8, 5, 7], array_map(fn($l) => $l->alignment, $p->subtitleLines()), 'its lines in their styles');
+    same('Top: yellow, bold, dark blue outline', $p->subtitles()[1], 'and their text');
+    $p->setSubtitleTrack($p->loadSubtitles(__DIR__ . '/testdata/styled.ass'));
+    $p->seek(0.3);
+    same([2, 8, 5], array_map(fn($l) => $l->alignment, $p->subtitleLines()), "an .ass file's, before its box shows");
+
     // Chapters: an MP4's chapter track as AVFoundation reads it, the one playing the last started.
     $p = new Player(__DIR__ . '/testdata/clip-chapters.mp4');
     same([['Opening', 0.0], ['', 1.0], ['第三章', 1.5]], array_map(fn(\MyPHP\Media\Chapter $c) => [$c->title, round($c->start, 3)], $p->chapters()), "an MP4's chapters");

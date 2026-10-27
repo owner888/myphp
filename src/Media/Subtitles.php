@@ -50,6 +50,44 @@ final class Subtitles
         return [$codec, $cues];
     }
 
+    /** Whether codec $codec is ASS's or SSA's, whose lines have styles (Ass). */
+    public static function styled(string $codec): bool
+    {
+        return in_array($codec, ['S_TEXT/ASS', 'S_TEXT/SSA', 'S_ASS', 'S_SSA'], true);
+    }
+
+    /**
+     * The cues of ASS or SSA file $path in their styles: [start, end, line]
+     * by start, as Ass reads its header and its dialogue.
+     * @return list<array{0: float, 1: float, 2: AssLine}>
+     */
+    public static function assFile(string $path): array
+    {
+        $bytes = @file_get_contents($path);
+        if ($bytes === false) {
+            throw new RuntimeException("cannot read $path");
+        }
+        $s = str_replace(["\r\n", "\r"], "\n", self::utf8($bytes));
+        $ass = new Ass($s);
+        $cues = [];
+        foreach (self::events($s) as $f) {
+            [$start, $end] = [self::clock(trim($f['start'] ?? '')), self::clock(trim($f['end'] ?? ''))];
+            $line = $ass->line($f['text'] ?? '', $f['style'] ?? 'Default', (int)($f['layer'] ?? 0), (int)($f['marginl'] ?? 0), (int)($f['marginr'] ?? 0), (int)($f['marginv'] ?? 0), $start, $end - $start);
+            if ($line !== null) {
+                $cues[] = [$start, $end, $line];
+            }
+        }
+        usort($cues, fn(array $a, array $b): int => $a[0] <=> $b[0]);
+        return $cues;
+    }
+
+    /** The line of a Matroska ASS or SSA packet in its styles, as $ass reads it, showing from $start for $duration seconds: ReadOrder, Layer (SSA's Marked), Style, Name, MarginL, MarginR, MarginV, Effect, Text. */
+    public static function assPacket(Ass $ass, string $data, float $start = 0.0, float $duration = INF): ?AssLine
+    {
+        $f = explode(',', str_replace(["\r\n", "\r"], "\n", $data), 9);
+        return count($f) < 9 ? null : $ass->line($f[8], trim($f[2]), (int)$f[1], (int)$f[4], (int)$f[5], (int)$f[6], $start, $duration);
+    }
+
     /** The text of a subtitle packet of codec $codec. */
     public static function packet(string $codec, string $data): string
     {
@@ -95,7 +133,20 @@ final class Subtitles
     /** The cues of the [Events] of ASS or SSA text, by its Format line. @return list<array{0: float, 1: float, 2: string}> */
     private static function ass(string $s): array
     {
-        $cues = []; $format = null; $events = false;
+        $cues = [];
+        foreach (self::events($s) as $f) {
+            $text = self::assText($f['text'] ?? '');
+            if ($text !== '') {
+                $cues[] = [self::clock(trim($f['start'] ?? '')), self::clock(trim($f['end'] ?? '')), $text];
+            }
+        }
+        return $cues;
+    }
+
+    /** The Dialogue lines of the [Events] of ASS or SSA text, their fields by its Format line, lowercase. @return list<array<string, string>> */
+    private static function events(string $s): array
+    {
+        $out = []; $format = null; $events = false;
         foreach (explode("\n", $s) as $line) {
             $line = trim($line);
             if (str_starts_with($line, '[')) {
@@ -108,14 +159,10 @@ final class Subtitles
             if (stripos($line, 'Format:') === 0) {
                 $format = array_map(fn($f) => strtolower(trim($f)), explode(',', substr($line, 7)));
             } elseif (stripos($line, 'Dialogue:') === 0 && $format !== null) {
-                $f = array_combine($format, array_pad(explode(',', substr($line, 9), count($format)), count($format), ''));
-                $text = self::assText($f['text'] ?? '');
-                if ($text !== '') {
-                    $cues[] = [self::clock(trim($f['start'] ?? '')), self::clock(trim($f['end'] ?? '')), $text];
-                }
+                $out[] = array_combine($format, array_pad(explode(',', substr($line, 9), count($format)), count($format), ''));
             }
         }
-        return $cues;
+        return $out;
     }
 
     /** ASS dialogue text as plain lines: override tags {\…} left out, \N and \n break lines, \h is a space. */

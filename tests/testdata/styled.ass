@@ -1,0 +1,19 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,4,3,2,40,40,60,1
+Style: Top,Arial,60,&H0000FFFF,&H000000FF,&H00402000,&H00000000,-1,0,0,0,100,100,0,0,1,3,0,8,40,40,40,1
+Style: Box,Georgia,54,&H00FFFFFF,&H000000FF,&HA0000000,&H00000000,0,1,0,0,100,100,0,0,3,10,0,7,60,60,60,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.10,0:00:01.90,Default,,0,0,0,,白色描边 {\c&H0000FF&}红色{\r} 与{\i1}斜体{\i0}\N第二行 {\b1}粗体{\b0} {\u1}下划线{\u0}
+Dialogue: 0,0:00:00.10,0:00:01.90,Top,,0,0,0,,Top: yellow, bold, dark blue outline
+Dialogue: 0,0:00:00.50,0:00:01.90,Box,,0,0,0,,A box behind
+Dialogue: 1,0:00:00.10,0:00:01.90,Default,,0,0,0,,{\an5\pos(1440,540)\fs48\3c&H008000&\bord6}At three quarters

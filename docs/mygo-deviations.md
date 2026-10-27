@@ -1697,6 +1697,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `sortByPath` are myphp's, as IINA's, and `Player::awake`,
   `setKeepAwake` and `VideoPlayerOptions::$keepAwake` (the display kept
   awake while it plays, as IINA's); mygo has no video.
+- **ASS in its styles** (v1.44): `Media\Ass`, `AssLine`, `AssRun`,
+  `Subtitles::styled`, `assFile`, `assPacket` and `Player::subtitleLines`
+  are myphp's, as IINA (libass) shows ASS; mygo has no video.
 - **Image subtitles** (v1.43): `Media\Pgs`, `Media\VobSub`,
   `Media\SubtitlePicture`, `Player::subtitlePictures` and
   `subtitlePlane` are myphp's, as IINA (mpv) shows them; mygo has no

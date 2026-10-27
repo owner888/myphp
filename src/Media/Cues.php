@@ -5,22 +5,23 @@ namespace MyPHP\Media;
 
 /**
  * The cues of a subtitle track, as they are read: each a start and an end
- * in seconds and what shows, a text or the pictures of an image track
- * (none for one that clears what showed), the same cue read again (after
- * a seek) kept once; a cue of no end lasts until the next one starts.
+ * in seconds and what shows, a text, an ASS line in its styles, or the
+ * pictures of an image track (none for one that clears what showed), the
+ * same cue read again (after a seek) kept once; a cue of no end lasts
+ * until the next one starts.
  */
 final class Cues
 {
-    /** @var array<string, array{0: float, 1: float, 2: string|list<SubtitlePicture>}> by start and text (one of pictures a start) */
+    /** @var array<string, array{0: float, 1: float, 2: string|AssLine|list<SubtitlePicture>}> by start and text (one of pictures a start) */
     private array $cues = [];
-    /** @var ?list<array{0: float, 1: float, 2: string|list<SubtitlePicture>}> the cues by start, made as at() asks after an add */
+    /** @var ?list<array{0: float, 1: float, 2: string|AssLine|list<SubtitlePicture>}> the cues by start, made as at() asks after an add */
     private ?array $list = [];
 
-    /** Adds a cue of a text or of pictures (none: it clears); INF for its end makes it last until the next. @param string|list<SubtitlePicture> $shown */
-    public function add(float $start, float $end, string|array $shown): void
+    /** Adds a cue of a text, an ASS line or pictures (none: it clears); INF for its end makes it last until the next. @param string|AssLine|list<SubtitlePicture> $shown */
+    public function add(float $start, float $end, string|AssLine|array $shown): void
     {
-        $key = sprintf('%.3f', $start) . "\0" . (is_string($shown) ? $shown : "\1"); // pictures read again are the same cue
-        if (is_array($shown) && isset($this->cues[$key])) {
+        $key = sprintf('%.3f', $start) . "\0" . match (true) { is_string($shown) => $shown, $shown instanceof AssLine => "\2" . $shown->layer . "\0" . $shown->text(), default => "\1" }; // read again, the same cue
+        if (!is_string($shown) && isset($this->cues[$key])) {
             return;
         }
         $this->cues[$key] = [$start, $end, $shown];
@@ -32,7 +33,7 @@ final class Cues
         return count($this->cues);
     }
 
-    /** What the cues showing at $t seconds show, texts or pictures, in the order they started; a cue that clears shows nothing. @return list<string|list<SubtitlePicture>> */
+    /** What the cues showing at $t seconds show, texts, ASS lines or pictures, in the order they started; a cue that clears shows nothing. @return list<string|AssLine|list<SubtitlePicture>> */
     public function at(float $t): array
     {
         if ($this->list === null) {

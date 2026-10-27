@@ -3854,6 +3854,71 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   clip-vobsub.mkv is ffmpeg's dvdsub of it (`-fix_sub_duration`, else
   its subpictures stop at the largest delay).
 
+## ASS in its styles (v1.44)
+
+- **The script** (`Media\Ass`): [Script Info]'s PlayResX and PlayResY
+  as libass takes them (384 by 288 when neither is given; 1280 wide for
+  1024 high alone, else 4:3), WrapStyle (2 breaks only at \N),
+  ScaledBorderAndShadow; the styles of [V4+ Styles] or SSA's [V4 Styles]
+  (its TertiaryColour the outline, its old alignment on the numpad) by
+  their Format line. A Matroska track's header is its CodecPrivate, a
+  packet a Dialogue without its times (`Subtitles::assPacket`); a file's
+  are read whole (`Subtitles::assFile`). `subtitles()` gives their text
+  as before; `Player::subtitleLines()` the lines (`AssLine`) in runs of
+  their styles (`AssRun`).
+- **Override tags**, scanned as libass scans them (a tag to the next
+  backslash, or its closing parenthesis, \t's holding tags of their
+  own): \b \i \u \s, \fn \fs \fsp, \c \1c to \4c, \alpha \1a to \4a,
+  \bord \shad, \fscx \fscy \frz, \an \a, \pos, \r, \p (a drawing, left
+  out). \be, \blur, \fax \fay, \frx \fry, borders and shadows apart in
+  x and y, and a drawing's \clip and \iclip are left out.
+- **Lines that change as they show** (`AssLine::at`, `changes`): a line
+  knows its start and duration; \move goes between its points over its
+  times (its whole time without), \fad and \fade set its opacity, \t
+  takes what follows it to its tags between its times by its
+  acceleration (sizes, spacing, borders, shadows, scales, rotation,
+  colors by channel, alphas), \k \K \kf \ko sing its syllables (the
+  secondary colour until then; \kf at its start, not swept; \ko its
+  outline). `Player::subtitleLines` gives them as they are now; while one
+  changes the view asks for frames, 30 a second.
+- **Lines laid out alone**: one placed (\pos, \move), turned, scaled or
+  clipped is not stacked with others; it is drawn in boxes of the plane
+  one in the other: cut to \clip's rectangle, turned by \frz around
+  \org (else the point of its alignment, as libass), scaled by \fscx and
+  \fscy around that point. A line turns and scales by its first run's.
+- **Trap: a wrapped text aligned twice.** A rich text given a width to
+  wrap at lays its lines out aligned within it, but is itself as wide as
+  its widest line: put in the middle by its column too, a centered line
+  went right by half the room left (the test's text engine aligns no
+  lines, so only the Mac showed it). A row that wraps is as wide as it
+  wraps at, its text stretched in it, the alignment the layout's alone.
+- **Trap: a font fallen back on.** Chinese in a style of Arial is drawn
+  in a font the system falls back on, whose ascent and descent are not
+  Arial's: sized as Arial's, it was a fifth larger than libass draws it.
+  A run is laid out at 100 to find the font of each rune, and cut into
+  pieces by font, each its em from its own font's ascent and descent,
+  as libass sizes every face.
+- **Laid out as libass lays it**: over the plane of PlayRes on the
+  picture (`subtitlePlane`, x and y scaled apart), a line at \pos the
+  point of its alignment there, else within the margins at its
+  alignment, those of one alignment and margins stacked (at the bottom
+  the later above), wrapped at the margins; lower layers first. Each row
+  is a rich text of its runs over its outline (copies around it, 8, or 16
+  past a point and a half) and its shadow (those moved), or for
+  BorderStyle 3 over a box of the outline's color.
+- **Trap: Fontsize is no em.** libass sizes a font so that its ascent and
+  descent are Fontsize high (FreeType's real dimensions), not its em:
+  Arial's em is 0.9 of it. The em is Fontsize times 100 over the font's
+  ascent and descent at 100 (`Context::fontMetrics`), by family, weight
+  and italic.
+- **The fixtures**: clip-ass-motion.mkv muxes motion.ass (\move,
+  \fad, \t, \k, \frz with \org, \fscx, \clip), held to libass at 0.5,
+  1 and 1.5 s. clip-ass.mkv muxes tests/testdata/styled.ass (styles
+  of an outline and shadow, of a bold top line, a box; \c, \i, \b, \u,
+  \N, \pos at 3/4 across); libass's rendering of it (ffmpeg's
+  `subtitles` filter) is what the player is held to. An .ass beside a
+  film of its name loads as its subtitles: the file is named apart.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3872,8 +3937,11 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Video: ASS's styling and placement are not read (image subtitles,
-  PGS and VobSub, are: v1.43); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
+- Video: ASS's drawings, blur, 3D rotation and shearing are left out, a
+  \kf is sung whole, a line turns by its first run (its styles, places
+  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43);
+  subtitles are drawn over the control bar, whose glass is under the
+  window's content (mpv draws them into the picture, under it); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
   Opus, v1.37), nor DTS or TrueHD, which the system has no decoder of;
   text has no outline of its own.
 - `text()` measures with the old metrics unless its style needs the

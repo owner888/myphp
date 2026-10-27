@@ -205,6 +205,40 @@ if (PHP_OS_FAMILY === 'Darwin') {
     };
     $shown = array_map(fn($n) => array_map(fn($v) => round($v, 1), $h3->rect($n)), $images($h3->root));
     same([[356.5, 450.0, 247.0, 39.0]], $shown, 'the PGS picture where it shows, at half size');
+    // ASS lines over the picture where they are, as libass puts them: the point of \an5 at \pos (1440, 540 of 1920 by 1080), the top line within its margin, the bottom rows above theirs.
+    $s4 = new VideoPlayerState(); $s4->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    $s4->setPlayer(new Player(__DIR__ . '/testdata/clip-ass.mkv'));
+    $s4->player->seek(1.0);
+    $h4 = new Headless(fn(Context $c) => $c->videoPlayer($s4), 960, 540);
+    $h4->frame(); $run(0.3); $h4->frame();
+    $all = function (?\MyPHP\UI\Node $n, string $text) use (&$all): array { // the text's nodes: its shadow's and outline's copies, then the text, drawn last
+        if ($n === null) { return []; }
+        $out = $n->kind === \MyPHP\UI\Node::RICH && $n->plainText() === $text ? [$n] : [];
+        foreach ($n->kids as $k) { array_push($out, ...$all($k, $text)); }
+        return $out;
+    };
+    $copies = $all($h4->root, 'At three quarters');
+    [$x, $y, $w, $h] = $h4->rect(end($copies));
+    check(abs($x + $w / 2 - 720) < 2 && abs($y + $h / 2 - 270) < 2, "\\an5 at \\pos: centered on (720, 270): " . round($x + $w / 2, 1) . ', ' . round($y + $h / 2, 1));
+    same(33, count($copies), 'over its outline, 16 copies around it (\\bord6, three points wide here), and its shadow, those moved (its style\'s Shadow 3)');
+    $box = $all($h4->root, 'A box behind');
+    same(1, count($box), 'BorderStyle 3: a box behind, no copies');
+    $top = $all($h4->root, 'Top: yellow, bold, dark blue outline');
+    [, $ty] = $h4->rect(end($top) ?: throw new \RuntimeException('no top line'));
+    check(abs($ty - 20) < 2, "the top line within its margin, 40 of 1080: at $ty");
+    $second = $all($h4->root, '第二行 粗体 下划线');
+    [, $by, , $bh] = $h4->rect(end($second) ?: throw new \RuntimeException('no second row'));
+    check(abs($by + $bh - 510) < 4, 'the bottom row on its margin, 60 of 1080: ends at ' . round($by + $bh, 1));
+    $s4->player->pause();
+    // ASS that moves: \move halfway at 1 s of 2, its center at (960, 120) of 1920 by 1080; frames asked for while it moves.
+    $s4->setPlayer(new Player(__DIR__ . '/testdata/clip-ass-motion.mkv'));
+    $s4->player->seek(1.0);
+    $h4->frame(); $run(0.3); $h4->frame();
+    $moving = $all($h4->root, 'Moving across');
+    [$x, $y, $w, $h] = $h4->rect(end($moving) ?: throw new \RuntimeException('no moving line'));
+    check(abs($x + $w / 2 - 480) < 2 && abs($y + $h / 2 - 60) < 2, '\\move halfway at 1 s: centered on (480, 60): ' . round($x + $w / 2, 1) . ', ' . round($y + $h / 2, 1));
+    check($h4->rt->nextWake() !== null, 'a frame asked for while it moves');
+    $s4->player->pause();
     // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.
     $s3->open("$films/clip-chapters.mkv");
     $s3->player->pause();
