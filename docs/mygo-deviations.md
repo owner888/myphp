@@ -1674,4 +1674,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: the developer asked for a video player as fast as the system
     plays video; mygo has none to follow, so the names follow mygo's way
     of naming (`Player`, `Track`, `Packet`, `video()`).
-
+- **Subtitles** (v1.34): `Player::subtitleTracks`, `setSubtitleTrack`,
+  `loadSubtitles`, `subtitles`, `setSubtitleDelay` and `Media\Subtitles`
+  are myphp's too, as IINA's behavior has them (files beside the film
+  loaded): mygo has no video.

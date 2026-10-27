@@ -8,9 +8,11 @@ use RuntimeException;
 
 /**
  * Reads what AVFoundation reads (MP4, MOV, M4V) as a Player's source: an
- * AVAssetReader with an output of each audio and video track that passes
- * their samples through as stored, and their sample buffers go to the
- * renderers as they are. Its tracks name their codecs as Matroska does.
+ * AVAssetReader with an output of each audio, video and text subtitle
+ * track that passes their samples through as stored: the sample buffers
+ * of the audio and video go to the renderers as they are, the subtitles'
+ * text comes out as Matroska's does. Its tracks name their codecs as
+ * Matroska does.
  * A seek reads anew from the time, which the reader starts at the
  * keyframe before.
  *
@@ -20,7 +22,9 @@ final class AssetReader implements Source
 {
     /** Matroska's codec ids of the FourCCs AVFoundation's tracks have. */
     private const CODECS = ['avc1' => 'V_MPEG4/ISO/AVC', 'avc3' => 'V_MPEG4/ISO/AVC', 'hvc1' => 'V_MPEGH/ISO/HEVC', 'hev1' => 'V_MPEGH/ISO/HEVC',
-        'aac ' => 'A_AAC', 'ac-3' => 'A_AC3', 'ec-3' => 'A_EAC3', '.mp3' => 'A_MPEG/L3'];
+        'aac ' => 'A_AAC', 'ac-3' => 'A_AC3', 'ec-3' => 'A_EAC3', '.mp3' => 'A_MPEG/L3', 'tx3g' => 'S_TEXT/TX3G'];
+    /** The track types of AVFoundation's media types: text subtitles are 'sbtl', or 'text' in QuickTime files. */
+    private const TYPES = ['vide' => Track::VIDEO, 'soun' => Track::AUDIO, 'sbtl' => Track::SUBTITLE, 'text' => Track::SUBTITLE];
 
     private $asset;
     /** @var list<Track> */
@@ -47,8 +51,8 @@ final class AssetReader implements Source
         $cm = CoreMedia::c();
         for ($i = 0, $n = ObjC::msg('L:', $all, 'count'); $i < $n; $i++) {
             $tr = ObjC::msg('p:L', $all, 'objectAtIndex:', $i);
-            $kind = ObjC::phpStr(ObjC::msg('p:', $tr, 'mediaType'));
-            if ($kind !== 'vide' && $kind !== 'soun') {
+            $type = self::TYPES[ObjC::phpStr(ObjC::msg('p:', $tr, 'mediaType'))] ?? null;
+            if ($type === null) {
                 continue;
             }
             $formats = ObjC::msg('p:', $tr, 'formatDescriptions');
@@ -59,18 +63,18 @@ final class AssetReader implements Source
             $fourcc = pack('N', $cm->CMFormatDescriptionGetMediaSubType($fmt));
             $lang = ObjC::msg('p:', $tr, 'languageCode');
             $number = ObjC::msg('i:', $tr, 'trackID');
-            $size = $kind === 'vide' ? ObjC::msg('z:', $tr, 'naturalSize') : null;
-            $asbd = $kind === 'soun' ? $cm->CMAudioFormatDescriptionGetStreamBasicDescription($fmt) : null;
+            $size = $type === Track::VIDEO ? ObjC::msg('z:', $tr, 'naturalSize') : null;
+            $asbd = $type === Track::AUDIO ? $cm->CMAudioFormatDescriptionGetStreamBasicDescription($fmt) : null;
             $fps = ObjC::msg('f:', $tr, 'nominalFrameRate');
             $this->tracks[] = new Track(
                 number: $number,
-                type: $kind === 'vide' ? Track::VIDEO : Track::AUDIO,
+                type: $type,
                 codec: self::CODECS[$fourcc] ?? "fourcc:$fourcc",
                 private: '',
                 language: $lang === null ? 'und' : ObjC::phpStr($lang),
                 name: '',
                 isDefault: ObjC::msg('b:', $tr, 'isEnabled'),
-                frameDuration: $kind === 'vide' && $fps > 0 ? 1 / $fps : 0.0,
+                frameDuration: $type === Track::VIDEO && $fps > 0 ? 1 / $fps : 0.0,
                 width: $size === null ? 0 : (int)$size->w,
                 height: $size === null ? 0 : (int)$size->h,
                 sampleRate: $asbd === null ? 0.0 : $asbd->rate,
@@ -78,7 +82,7 @@ final class AssetReader implements Source
             );
             $this->native[$number] = $tr;
         }
-        if ($this->tracks === []) {
+        if (!array_filter($this->tracks, fn(Track $t) => $t->type !== Track::SUBTITLE)) {
             throw new RuntimeException("$path has no audio or video AVFoundation reads");
         }
         $this->start(0.0);
@@ -169,8 +173,12 @@ final class AssetReader implements Source
             if ($cm->CMSampleBufferGetNumSamples($buf->buffer) === 0) {
                 continue;
             }
-            return new Packet($track, CoreMedia::seconds($cm->CMSampleBufferGetPresentationTimeStamp($buf->buffer)) ?? 0.0, CoreMedia::seconds($cm->CMSampleBufferGetDuration($buf->buffer)) ?? 0.0,
-                $track->type === Track::AUDIO || CoreMedia::isSync($buf->buffer), '', $buf);
+            $time = CoreMedia::seconds($cm->CMSampleBufferGetPresentationTimeStamp($buf->buffer)) ?? 0.0;
+            $duration = CoreMedia::seconds($cm->CMSampleBufferGetDuration($buf->buffer)) ?? 0.0;
+            if ($track->type === Track::SUBTITLE) { // its text, as Matroska's subtitle packets carry it
+                return new Packet($track, $time, $duration, true, CoreMedia::bytes($buf->buffer));
+            }
+            return new Packet($track, $time, $duration, $track->type === Track::AUDIO || CoreMedia::isSync($buf->buffer), '', $buf);
         }
     }
 

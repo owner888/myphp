@@ -3461,6 +3461,31 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   itself (`ObjC::boot` adds frameworks since v1.31), which the farm's
   test, run alone on macOS, had not.
 
+## Subtitles (v1.34)
+
+- **Text subtitles, drawn by the UI.** `Media\Subtitles` reads SubRip,
+  ASS and SSA, and WebVTT files (UTF-8, UTF-16 by its mark, else
+  GB18030, as Chinese subtitles often are) and the text of Matroska's
+  subtitle packets (`S_TEXT/UTF8`, `S_TEXT/ASS` and SSA, whose text is the
+  ninth of the fields, `S_TEXT/WEBVTT`) and of MP4's tx3g samples (its
+  16-bit length and text, the style boxes after it left out; the asset
+  reader has an output of its text tracks too) as plain lines: ASS's
+  override tags and SubRip's and WebVTT's markup left out, `\N` and
+  `<br>` breaking lines. `Media\Cues` keeps a track's cues by start, the
+  same cue read again kept once, one without an end lasting until the
+  next, and gives those showing at a time by a binary search.
+- **In the player.** Every text track's packets are noted as the film is
+  read (two seconds ahead of the clock), so a track chosen later has what
+  was read; the files beside the film named after it (`movie.srt`,
+  `movie.zh.ass`) load as tracks and the first shows, as IINA does, else
+  the first track the file marks default. `subtitles()` is the lines
+  showing at the clock less the delay (`setSubtitleDelay`). A seek into a
+  part not read yet misses a cue begun before its keyframe.
+- **In the example.** The lines show over the picture, white and bold,
+  over eight copies in black around them for an outline (myphp draws no
+  text outline), above the controls while they show; a subtitle file
+  dropped on the window loads over the film.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3479,9 +3504,10 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Video: subtitles (Matroska's text tracks, drawn by the UI over the
-  picture) are the next step; VP9, AV1, FLAC, Opus and Vorbis are not
-  decoded yet, nor DTS or TrueHD, which the system has no decoder of.
+- Video: image subtitles (PGS, VobSub) are not read, nor ASS's styling
+  and placement; VP9, AV1, FLAC, Opus and Vorbis are not decoded yet, nor
+  DTS or TrueHD, which the system has no decoder of; text has no outline
+  of its own.
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser

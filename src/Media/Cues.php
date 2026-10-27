@@ -1,0 +1,52 @@
+<?php
+declare(strict_types=1);
+
+namespace MyPHP\Media;
+
+/**
+ * The cues of a subtitle track, as they are read: each a start and an end
+ * in seconds and its text, the same cue read again (after a seek) kept
+ * once; a cue of no end lasts until the next one starts.
+ */
+final class Cues
+{
+    /** @var array<string, array{0: float, 1: float, 2: string}> by start and text */
+    private array $cues = [];
+    /** @var ?list<array{0: float, 1: float, 2: string}> the cues by start, made as at() asks after an add */
+    private ?array $list = [];
+
+    /** Adds a cue; INF for its end makes it last until the next. */
+    public function add(float $start, float $end, string $text): void
+    {
+        $this->cues[sprintf('%.3f', $start) . "\0" . $text] = [$start, $end, $text];
+        $this->list = null;
+    }
+
+    public function count(): int
+    {
+        return count($this->cues);
+    }
+
+    /** The texts of the cues showing at $t seconds, in the order they started. @return list<string> */
+    public function at(float $t): array
+    {
+        if ($this->list === null) {
+            $this->list = array_values($this->cues);
+            usort($this->list, fn(array $a, array $b): int => $a[0] <=> $b[0]);
+        }
+        $list = $this->list;
+        $lo = 0; $hi = count($list) - 1; $at = -1; // the last cue starting at or before $t
+        while ($lo <= $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            if ($list[$mid][0] <= $t) { $at = $mid; $lo = $mid + 1; } else { $hi = $mid - 1; }
+        }
+        $out = [];
+        for ($i = $at; $i >= 0 && $i > $at - 16; $i--) { // the cues showing together: a few at most
+            [, $end, $text] = $list[$i];
+            if ($t < (is_infinite($end) ? ($list[$i + 1][0] ?? INF) : $end)) {
+                array_unshift($out, $text);
+            }
+        }
+        return $out;
+    }
+}

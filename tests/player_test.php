@@ -54,4 +54,25 @@ if (PHP_OS_FAMILY === 'Darwin') {
         try { $p->setRate(0); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
         check($err !== null, 'a rate of 0 throws: pause() stops');
     }
+
+    // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
+    $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');
+    $subs = $p->subtitleTracks();
+    same([['S_TEXT/UTF8', 'chi'], ['S_TEXT/ASS', 'eng'], ['S_TEXT/UTF8', 'zh']], array_map(fn(Track $t) => [$t->codec, $t->language], $subs), 'subtitles: two tracks of the file, a file beside it');
+    same('clip-subs.zh.srt', $p->subtitleTrack()?->name, 'the file beside it shows');
+    $at = function (float $t) use (&$p): array { $p->seek($t); return $p->subtitles(); }; // the player of the moment
+    same([['第一句 字幕'], ["Second line\ntwo rows"], []], [$at(0.5), $at(1.1), $at(1.9)], 'its lines where the player is');
+    $p->setSubtitleTrack($subs[1]);
+    same([["ASS 一行, 带逗号\n第二行", 'overlapping'], []], [$at(1.1), $at(1.7)], 'an ASS track of the file, two lines at once');
+    $p->setSubtitleTrack($subs[0]);
+    same(['第一句 字幕'], $at(0.6), 'a SubRip track of the file');
+    $p->setSubtitleDelay(0.5);
+    same(['第一句 字幕'], $at(1.1), 'half a second late');
+    $p->setSubtitleTrack(null);
+    same([], $at(1.1), 'none');
+    $p = new Player(__DIR__ . '/testdata/clip-subs.mp4');
+    $tx3g = array_values(array_filter($p->subtitleTracks(), fn(Track $t) => $t->codec === 'S_TEXT/TX3G'));
+    check(count($tx3g) === 1, 'an MP4\'s text track');
+    $p->setSubtitleTrack($tx3g[0]);
+    same(['第一句 字幕'], $at(0.5), 'its lines');
 }

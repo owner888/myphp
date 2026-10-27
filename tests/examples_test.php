@@ -487,6 +487,11 @@ $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
 check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");
 
+// The video example's subtitles: the text in white over eight copies of it in black around it, which take no pointer.
+$t = new Headless(function (Context $c) { $c->column(0, 0, 1); \MyPHP\Examples\Video\subtitle($c, "two\nlines", 20, 40); $c->end(); }, 900, 600);
+$t->frame();
+same(9, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'the video example outlines its subtitles');
+
 // The video example's controls over a picture that pauses when clicked: the controls take their clicks (the picture asks after them, and the bar for the end of a drag of its slider), and a press on them leaves the keyboard with the window's shortcuts.
 $pc = ['plays' => 0, 'pictures' => 0, 'spaces' => 0, 'lefts' => 0, 'track' => 0, 'at' => 0.5, 'slider' => null];
 $t = new Headless(function (Context $c) use (&$pc) {

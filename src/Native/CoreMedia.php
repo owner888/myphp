@@ -48,6 +48,9 @@ final class CoreMedia
                 CMTime CMSampleBufferGetDecodeTimeStamp(void*);
                 CMTime CMSampleBufferGetDuration(void*);
                 void* CMSampleBufferGetFormatDescription(void*);
+                void* CMSampleBufferGetDataBuffer(void*);
+                size_t CMBlockBufferGetDataLength(void*);
+                int  CMBlockBufferCopyDataBytes(void*, size_t, size_t, void*);
                 long CFArrayGetCount(void*);
                 void* CFArrayGetValueAtIndex(void*, long);
                 void* CFDictionaryGetValue(void*, const void*);
@@ -210,6 +213,20 @@ final class CoreMedia
         }
         $v = $c->CFDictionaryGetValue($c->CFArrayGetValueAtIndex($arr, 0), $c->kCMSampleAttachmentKey_NotSync);
         return $v === null || ObjC::addr($v) !== ObjC::addr($c->kCFBooleanTrue);
+    }
+
+    /** The bytes of sample buffer $sb, as stored. */
+    public static function bytes(CData $sb): string
+    {
+        $c = self::c();
+        $bb = $c->CMSampleBufferGetDataBuffer($sb);
+        $n = $bb === null ? 0 : $c->CMBlockBufferGetDataLength($bb);
+        if ($n === 0) {
+            return '';
+        }
+        $buf = $c->new("char[$n]");
+        $c->CMBlockBufferCopyDataBytes($bb, 0, $n, $buf);
+        return FFI::string($buf, $n);
     }
 
     /** A block buffer holding a copy of $data, owned. */

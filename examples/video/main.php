@@ -2,13 +2,15 @@
 // A video player: a Matroska, WebM, MP4 or MOV file, decoded and shown by
 // the system (Media\Player), with controls built over the picture that
 // hide while the pointer rests: play and pause, the time and a bar to
-// seek, the audio tracks, the volume, full screen. Space plays and
-// pauses, the arrows go 10 s back and on, F goes full screen.
+// seek, the audio tracks, the subtitles, the volume, full screen; the
+// subtitles over the picture, a subtitle file dropped on the window
+// loaded. Space plays and pauses, the arrows go 10 s back and on, F goes
+// full screen.
 // Run: ./run.sh video [file]
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Window, WindowOptions};
-use MyPHP\Media\{Player, Track};
+use MyPHP\Media\{Player, Subtitles, Track};
 use MyPHP\UI\{Content, Context, Cursor, Font, Key, Node};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -23,6 +25,8 @@ final class Videos
     /** Where the bar is, which follows the player but for a drag of it. */
     public float $at = 0, $volume = 1;
     public int $track = 0;
+    /** The subtitle track chosen: 0 for none, else its place in the player's subtitle tracks plus one. */
+    public int $subtitle = 0;
     /** Where the pointer was last frame, and when it last moved. */
     public array $pointer = [0.0, 0.0];
     public float $moved = 0;
@@ -41,6 +45,7 @@ final class Videos
         $this->file = basename($path);
         $this->error = '';
         $this->track = (int)array_search($p->audioTrack(), $p->audioTracks(), true);
+        $this->subtitle = self::subtitleIndex($p);
         $p->setVolume($this->volume);
         $p->on('time', fn() => $this->window?->invalidate()); // the time and the bar move
         $p->on('ended', fn() => $this->window?->invalidate());
@@ -48,6 +53,24 @@ final class Videos
         $this->window?->setTitle($this->file);
         $p->play();
         $this->moved = microtime(true);
+    }
+
+    /** Opens a dropped file: a subtitle file over the film playing, else a film. */
+    public function drop(string $path): void
+    {
+        if ($this->player !== null && isset(Subtitles::FILES[strtolower(pathinfo($path, PATHINFO_EXTENSION))])) {
+            try { $this->player->loadSubtitles($path); } catch (RuntimeException $e) { $this->error = $e->getMessage(); }
+            $this->subtitle = self::subtitleIndex($this->player);
+            $this->window?->invalidate();
+            return;
+        }
+        $this->open($path);
+    }
+
+    public static function subtitleIndex(Player $p): int
+    {
+        $i = array_search($p->subtitleTrack(), $p->subtitleTracks(), true);
+        return $i === false ? 0 : $i + 1;
     }
 }
 
@@ -98,17 +121,40 @@ function view(Context $c, Videos $v): void
               if (Player::playable($tracks[$v->track])) { $p->setAudioTrack($tracks[$v->track]); } else { $v->track = (int)array_search($p->audioTrack(), $tracks, true); }
           }
       }
+      $subs = $p->subtitleTracks();
+      if ($subs !== []) {
+          $labels = ['No Subtitles', ...array_map(fn(Track $t) => $t->name !== '' ? $t->name : $t->language, $subs)];
+          $sel = $c->select($labels, $v->subtitle, 150);
+          if ($c->changed($sel)) { $p->setSubtitleTrack($v->subtitle === 0 ? null : $subs[$v->subtitle - 1]); }
+      }
       $vol = $c->slider($v->volume, 0, 1, 80);
       if ($c->changed($vol)) { $p->setVolume($v->volume); }
       if ($c->clicked($c->button('Full Screen'))) { $v->window?->toggleFullScreen(); }
     $c->end();
     $c->clicked($bar); // a click on the controls that none of them took (the end of a drag of the bar) is theirs, not the picture's
+    if (($lines = $p->subtitles()) !== []) {
+        subtitle($c, implode("\n", $lines), max(18.0, $c->height / 22), $shown ? 92 : 40); // over the picture, above the controls while they show
+    }
     if ($v->error !== '') {
         $c->text($v->error, 13, 0xff6b6b)->absolute()->left(16)->top(16);
     }
     // A click goes to the first node built that asks for it where it is: the picture asks after the controls over it, and the controls themselves.
     if ($c->clicked($picture)) { $p->playing() ? $p->pause() : $p->play(); }
     if ($c->doubleClicked($picture)) { $v->window?->toggleFullScreen(); }
+    $c->end();
+}
+
+/** $text over the picture, centered $bottom points from its foot: white, outlined in black as players draw subtitles (copies of it a point and a half around, under it). */
+function subtitle(Context $c, string $text, float $size, float $bottom): void
+{
+    $c->column()->absolute()->left(0)->right(0)->bottom($bottom)->align(Node::CENTER)->passThrough();
+      $c->column()->maxWidth($c->width * 0.9);
+        $d = $size / 14;
+        foreach ([[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]] as [$x, $y]) {
+            $c->text($text, $size, 0x000000, Font::BOLD)->textAlign(Node::CENTER)->absolute()->left($x * $d)->top($y * $d)->right(-$x * $d);
+        }
+        $c->text($text, $size, 0xffffff, Font::BOLD)->textAlign(Node::CENTER);
+      $c->end();
     $c->end();
 }
 
@@ -126,7 +172,7 @@ App::setName('Video');
 App::whenReady(function () use ($s, $argv) {
     $s->window = new Window(new WindowOptions(title: 'Video', width: 1100, height: 660, stateKey: 'video', backgroundColor: '#000000',
         content: Content::view(fn(Context $c) => view($c, $s))));
-    $s->window->on('fileDrop', fn(FileDropEvent $e) => $s->open($e->paths[0]));
+    $s->window->on('fileDrop', fn(FileDropEvent $e) => $s->drop($e->paths[0]));
     if (isset($argv[1])) {
         $s->open($argv[1]);
     }

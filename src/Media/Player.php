@@ -50,6 +50,13 @@ final class Player
     private float $rate = 1.0, $volume = 1.0;
     /** @var array<string, list<Closure>> */
     private array $listeners = [];
+    /** The subtitle track shown, null for none; the subtitle files loaded, as tracks; how late the subtitles show, in seconds. */
+    private ?Track $subtitle = null;
+    /** @var list<Track> */
+    private array $external = [];
+    private float $subtitleDelay = 0.0;
+    /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
+    private array $cues = [];
 
     public function __construct(string $path)
     {
@@ -67,7 +74,106 @@ final class Player
             throw new RuntimeException("myphp: nothing in $path the system decodes");
         }
         $this->out = new Renderers();
+        $this->loadSubtitleFiles($path);
         $this->feed();
+    }
+
+    /**
+     * Loads the subtitle files beside $path that are named after it
+     * (movie.srt, movie.zh.ass, movie.English.vtt), as IINA does, and
+     * shows the first; else the first embedded track the file marks
+     * default.
+     */
+    private function loadSubtitleFiles(string $path): void
+    {
+        $base = pathinfo($path, PATHINFO_FILENAME);
+        $dir = dirname($path);
+        foreach (scandir($dir) ?: [] as $f) {
+            if (isset(Subtitles::FILES[strtolower(pathinfo($f, PATHINFO_EXTENSION))]) && str_starts_with($f, $base . '.')) {
+                $this->loadSubtitles("$dir/$f");
+            }
+        }
+        $this->subtitle = $this->external[0] ?? null;
+        if ($this->subtitle === null) {
+            foreach ($this->subtitleTracks() as $t) {
+                if ($t->isDefault) { $this->subtitle = $t; break; }
+            }
+        }
+    }
+
+    /** The subtitle tracks of the file the player reads (its text ones) and the subtitle files loaded. @return list<Track> */
+    public function subtitleTracks(): array
+    {
+        return [...array_values(array_filter($this->source->tracks(), [Subtitles::class, 'readable'])), ...$this->external];
+    }
+
+    /** The subtitle track shown, or null for none. */
+    public function subtitleTrack(): ?Track
+    {
+        return $this->subtitle;
+    }
+
+    /** Shows subtitle track $t, one of subtitleTracks(), or none for null. */
+    public function setSubtitleTrack(?Track $t): void
+    {
+        if ($t !== null && !in_array($t, $this->subtitleTracks(), true)) {
+            throw new RuntimeException("myphp: track {$t->number} is no subtitle track of the player");
+        }
+        $this->subtitle = $t;
+    }
+
+    /**
+     * Loads subtitle file $path (.srt, .ass, .ssa, .vtt) as a track, which
+     * it shows, and returns: its language what the name says between the
+     * film's and the extension (movie.zh.srt), its name the file's.
+     */
+    public function loadSubtitles(string $path): Track
+    {
+        [$codec, $cues] = Subtitles::file($path);
+        $parts = explode('.', basename($path));
+        $t = new Track(number: -1 - count($this->external), type: Track::SUBTITLE, codec: $codec, private: '', language: count($parts) > 2 ? $parts[count($parts) - 2] : 'und',
+            name: basename($path), isDefault: false, frameDuration: 0.0, width: 0, height: 0, sampleRate: 0.0, channels: 0);
+        $this->external[] = $t;
+        $all = $this->cues[spl_object_id($t)] = new Cues();
+        foreach ($cues as [$start, $end, $text]) {
+            $all->add($start, $end, $text);
+        }
+        $this->subtitle = $t;
+        return $t;
+    }
+
+    /** Shows the subtitles $seconds later (earlier, negative), as a file timed for another cut of the film needs. */
+    public function setSubtitleDelay(float $seconds): void
+    {
+        $this->subtitleDelay = $seconds;
+    }
+
+    public function subtitleDelay(): float
+    {
+        return $this->subtitleDelay;
+    }
+
+    /**
+     * The lines of the subtitles showing now, of the track shown, in the
+     * order they started; none without one. An embedded track's cues come
+     * as the film is read, a little ahead of where it plays, and stay: a
+     * seek into a part not read yet misses one begun before the keyframe
+     * the reading starts at.
+     * @return list<string>
+     */
+    public function subtitles(): array
+    {
+        return $this->subtitle === null ? [] : ($this->cues[spl_object_id($this->subtitle)] ?? new Cues())->at($this->time() - $this->subtitleDelay);
+    }
+
+    /** Notes the cue subtitle packet $p carries. */
+    private function cue(Packet $p): void
+    {
+        $text = Subtitles::packet($p->track->codec, $p->data);
+        if ($text === '') {
+            return;
+        }
+        ($this->cues[spl_object_id($p->track)] ??= new Cues())->add($p->time, $p->duration > 0 ? $p->time + $p->duration : INF, $text);
     }
 
     /** Whether the system decodes track $t: the player plays an audio track only if so. */
@@ -256,6 +362,8 @@ final class Player
                 $this->queued['video'][] = $p;
             } elseif ($p->track === $this->audio && $p->time + $p->duration > $this->target) { // the audio from where the seek went
                 $this->queued['audio'][] = $p;
+            } elseif (Subtitles::readable($p->track)) { // every text track's, for one shown later
+                $this->cue($p);
             }
         }
         foreach (['video', 'audio'] as $k) {
