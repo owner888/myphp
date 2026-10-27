@@ -17,6 +17,13 @@ final class Metrics implements TextPainter
 {
     public function ascent(float $size, int $style = 0): float { return 12.0; }
     public function measure(string $s, float $size, int $style = 0): array { return [mb_strlen($s) * 7.0, 16.0]; }
+    /** @var array<string, float> min-content widths by text, kept as the Mac's line cache keeps them with the line */
+    private array $mins = [];
+    public function minContentWidth(string $s, float $size, int $style = 0): float
+    {
+        if (!isset($this->mins[$s])) { $r = \MyPHP\Text\System::runes($s); $this->mins[$s] = \MyPHP\Text\LineBreaks::widest($r, array_map(fn(int $i) => $i * 7.0, range(0, count($r)))); }
+        return $this->mins[$s];
+    }
     public function xForIndex(string $s, float $size, int $i, int $style = 0): float { return mb_strlen(substr($s, 0, $i)) * 7.0; }
     public function indexForX(string $s, float $size, float $x, int $style = 0): int { return strlen(mb_substr($s, 0, max(0, min((int)round($x / 7), mb_strlen($s))))); }
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void

@@ -320,6 +320,11 @@ final class Text implements TextPainter
         return [$l['w'], $l['h']];
     }
 
+    public function minContentWidth(string $text, float $size, int $style = 0): float
+    {
+        return $this->line($text, $size, $style)['min'];
+    }
+
     public function ascent(float $size, int $style = 0): float
     {
         return $this->line('X', $size, $style)['ascent'];
@@ -455,9 +460,23 @@ final class Text implements TextPainter
             $glyphs .= pack('eeqVV', round($g['x'] * $s) / $s, round(-$g['y'] * $s) / $s, $g['font'], $g['glyph'], $g['index']);
         }
         return [
-            'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'h' => $shaped['ascent'] + $shaped['descent'],
+            'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'min' => self::minOf($text, $shaped['carets']), 'h' => $shaped['ascent'] + $shaped['descent'],
             'ascent' => $shaped['ascent'], 'glyphs' => $glyphs, 'quads' => [], 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
         ];
+    }
+
+    /** The min-content width of a shaped line, by its carets (UTF-16 indexes to x): the pen before each rune, a rune inside a cluster at the cluster's. @param array<int, float> $carets */
+    private static function minOf(string $text, array $carets): float
+    {
+        $runes = \MyPHP\Text\System::runes($text);
+        $x = []; $u = 0; $last = 0.0;
+        foreach ($runes as $i => $r) {
+            $last = $carets[$u] ?? $last;
+            $x[$i] = $last;
+            $u += $r >= 0x10000 ? 2 : 1;
+        }
+        $x[count($runes)] = $carets[$u] ?? $last;
+        return \MyPHP\Text\LineBreaks::widest($runes, $x);
     }
 
     /**

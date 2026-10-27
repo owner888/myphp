@@ -70,25 +70,19 @@ check($lines($two) === 2 && $two->textLayout()->truncated, 'at most two lines, c
 check($lines($h->byLabel('one')) === 1 && $h->rect($h->byLabel('one'))[2] <= 150.5, 'single line: one, cut to the room');
 check($lines($h->byLabel('nowrap')) === 1 && $h->rect($h->byLabel('nowrap'))[2] > 150, 'not wrapping: one line, wider than the room');
 
-// A text's min-content width is kept by what decides it (v1.29): the same words in another size or weight are measured again, and kept for the next frame.
+// A text's min-content width, its widest word, comes from the line that measured it (v1.30): no layout of the text system each frame, as it took.
 $n = [];
 $h = new Headless(function (Context $c) use (&$n): void {
     $c->row(0, 0);
-      $n['plain'] = $c->text('aa bbbbbb');
-      $c->column()->fontSize(26)->bold();
-        $n['big'] = $c->text('aa bbbbbb');
-      $c->end();
+      $n['plain'] = $c->text('aa bbbbbb  ');
+      $n['zh'] = $c->text('中文排版');
     $c->end();
 }, 400, 400);
 $h->frame(1);
-$plain = $n['plain']->minContentWidth(); $big = $n['big']->minContentWidth();
-same(6 * 6.5, $plain, 'the widest word, bbbbbb, unbroken'); // the stub engine's runes are half the size wide
-check($big > $plain, "in 26 points bold, wider: $big");
 $sys = $h->metrics->textSystem();
 $made = $sys->made;
 $h->frame(1);
-same([$plain, $big, $made], [$n['plain']->minContentWidth(), $n['big']->minContentWidth(), $sys->made], 'the next frame measures neither again');
-check($sys->minWidth("x") === null, 'nothing kept under another key');
+same([6 * 7.0, 7.0, $made], [$n['plain']->minContentWidth(), $n['zh']->minContentWidth(), $sys->made], 'bbbbbb, its spaces after it left out; Chinese between its characters; nothing laid out again');
 
 // In a row too narrow for it, a text wraps between its words and keeps its widest word whole (v1.30): its min-content width was one glyph's.
 $n = [];
@@ -99,4 +93,4 @@ $h = new Headless(function (Context $c) use (&$n): void {
     $c->end();
 }, 400, 400);
 $h->frame(1);
-check($h->rect($n['t'])[2] >= 10 * 6.5 - 0.01, 'no narrower than bbbbbbbbbb, ten runes of the stub engine: ' . json_encode($h->rect($n['t'])));
+check($h->rect($n['t'])[2] >= 10 * 6.5 - 0.01, 'no narrower than bbbbbbbbbb, laid out by the stub engine: ' . json_encode($h->rect($n['t'])));

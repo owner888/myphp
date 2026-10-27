@@ -582,7 +582,7 @@ final class TextEngine implements Engine
         $typesetter = $c->CTTypesetterCreateWithAttributedString($attributed);
         $lines = [];
         if ($typesetter !== null) {
-            $breaks = $wholeWords && $width > 0 ? self::lineBreaks($runes) : null;
+            $breaks = $wholeWords && $width > 0 ? \MyPHP\Text\LineBreaks::at($runes) : null;
             $range = $c->new('CFRange');
             for ($start = 0; $start < $n;) {
                 $count = $n - $start;
@@ -611,26 +611,6 @@ final class TextEngine implements Engine
         $c->CFRelease($str);
         foreach ($owned as $o) { $c->CFRelease($o); }
         return $lines;
-    }
-
-    /** Where a line may break, before each rune index set: after whitespace and between ideographs, the rough cut of UAX #14 that keeps a word whole. @param list<int> $runes @return array<int, true> */
-    private static function lineBreaks(array $runes): array
-    {
-        $out = [];
-        $n = count($runes);
-        for ($i = 1; $i <= $n; $i++) {
-            $p = $runes[$i - 1];
-            $q = $runes[$i] ?? 0x20;
-            if ($p === 0x20 || $p === 0x09 || $p === 0x2D || self::isIdeograph($p) || $i < $n && self::isIdeograph($q)) {
-                $out[$i] = true;
-            }
-        }
-        return $out;
-    }
-
-    private static function isIdeograph(int $r): bool
-    {
-        return $r >= 0x2E80 && $r <= 0x9FFF || $r >= 0xAC00 && $r <= 0xD7AF || $r >= 0xF900 && $r <= 0xFAFF || $r >= 0xFF00 && $r <= 0xFFEF || $r >= 0x20000 && $r <= 0x2FFFF;
     }
 
     /** Whether features turn kerning off, which Core Text does by a kern of 0 rather than by the feature. */

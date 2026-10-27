@@ -9,6 +9,7 @@ final class CanvasText implements TextPainter
     public function __construct(private readonly TextPainter $t) {}
 
     public function measure(string $text, float $size, int $style = 0): array { return $this->t->measure($text, $size, $style); }
+    public function minContentWidth(string $text, float $size, int $style = 0): float { return $this->t->minContentWidth($text, $size, $style); }
     public function ascent(float $size, int $style = 0): float { return $this->t->ascent($size, $style); }
     public function xForIndex(string $text, float $size, int $byte, int $style = 0): float { return $this->t->xForIndex($text, $size, $byte, $style); }
     public function indexForX(string $text, float $size, float $x, int $style = 0): int { return $this->t->indexForX($text, $size, $x, $style); }

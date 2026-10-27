@@ -9,6 +9,9 @@ interface TextMetrics
     /** @return array{0: float, 1: float} width and line height in points; $style is Font bits */
     public function measure(string $text, float $size, int $style = 0): array;
 
+    /** The width of the widest part of $text no line breaks in (CSS's min-content, Text\LineBreaks), as measure() measures it: what a text that wraps keeps whole. */
+    public function minContentWidth(string $text, float $size, int $style = 0): float;
+
     /** The baseline's distance from the line's top, for $size and $style. */
     public function ascent(float $size, int $style = 0): float;
 

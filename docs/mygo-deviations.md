@@ -26,7 +26,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     texts arranged narrower than their lines wrap at the width they got
     (`Layout::wrapTexts`, made rich text), and it measures and arranges
     again; a text that wraps shrinks in a row to its widest word
-    (`Node::minContentWidth`), and a container not stretched is no wider
+    (`Node::minContentWidth`: mygo lays the text out at a width of 1 with
+    `NoBreakWords` each frame; a plain text here takes it from the line
+    that measured it, its carets between `Text\LineBreaks`'s breaks, which
+    the line cache keeps, as a layout a text a frame was dear in PHP; rich
+    text asks the text system as mygo does), and a container not stretched is no wider
     than its room, down to its content's least (fit-content).
     `richText(wrap: true)` still wraps at the container's last-frame width.
   - Why: myphp's layout measures before it arranges; the second pass gives

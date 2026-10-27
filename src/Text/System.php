@@ -25,8 +25,6 @@ final class System
     private string $lang = '';
     /** @var array<string, float> the width of the ellipsis of each style */
     private array $marks = [];
-    /** @var array<string, float> the min-content widths of texts by what decides them (UI\Node::minContentWidth), the oldest going first past MAX_LAYOUTS */
-    private array $minWidths = [];
 
     public function __construct(public readonly Engine $engine) {}
 
@@ -39,7 +37,6 @@ final class System
         $this->lang = $tag;
         $this->layouts = [];
         $this->marks = [];
-        $this->minWidths = [];
     }
 
     public function language(): string { return $this->lang; }
@@ -51,7 +48,6 @@ final class System
         $this->fonts = [];
         $this->layouts = [];
         $this->marks = [];
-        $this->minWidths = [];
     }
 
     /** The font families text can use, as a font setting offers them: the app's registered ones first, then the system's, each once, sorted without regard to case (mygo's FontFamilies). @return list<\MyPHP\UI\FontFamily> */
@@ -91,26 +87,6 @@ final class System
                 }
             }
         }
-    }
-
-    /**
-     * A text's min-content width kept by keepMinWidth under $key, or null:
-     * layout asks it of every text that wraps each frame, keyed by what
-     * decides it without making the parameters of its layout (mygo measures
-     * it once a frame; a frame of 2000 texts took five times as long).
-     */
-    public function minWidth(string $key): ?float
-    {
-        return $this->minWidths[$key] ?? null;
-    }
-
-    /** Keeps $width as the min-content width of $key's text, the oldest going first past MAX_LAYOUTS. */
-    public function keepMinWidth(string $key, float $width): float
-    {
-        if (count($this->minWidths) >= self::MAX_LAYOUTS) {
-            $this->minWidths = array_slice($this->minWidths, intdiv(self::MAX_LAYOUTS, 4), null, true);
-        }
-        return $this->minWidths[$key] = $width;
     }
 
     /** $p laid out, shared: not to be changed. */
