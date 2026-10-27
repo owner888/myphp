@@ -25,6 +25,8 @@ final class System
     private string $lang = '';
     /** @var array<string, float> the width of the ellipsis of each style */
     private array $marks = [];
+    /** @var array<string, array{0: float, 1: float}|false> where glyphs' outlines cross underlines (inkInBand), by font, glyph and band */
+    private array $bands = [];
 
     public function __construct(public readonly Engine $engine) {}
 
@@ -317,7 +319,8 @@ final class System
      * underlines and strikethroughs, with their thickness, or, if $thick is
      * positive, $thick points around their middle, rounded to whole pixels
      * (at least one) and on whole pixels. Spaces at the ends of the line
-     * are left out. Each is x0, x1, top and bottom in points.
+     * are left out; an underline skips the ink of the glyphs crossing it,
+     * as AppKit's does, in pieces. Each is x0, x1, top and bottom in points.
      *
      * @return list<array{0: float, 1: float, 2: float, 3: float}>
      */
@@ -361,13 +364,113 @@ final class System
                 if (($gf = $gs[$k]->font) !== null) { $center = max($center, $gf->underlineCenter); $th = max($th, $gf->underlineThick); }
             }
         }
+        $pieces = [[$x0, $x1]];
+        if ($d === self::UNDERLINE) {
+            $cuts = []; // around the ink of each glyph crossing the line, a thickness further on either side
+            for ($k = $i; $k < $j; $k++) {
+                $g = $gs[$k];
+                if ($g->font === null || $g->object || !self::skipsInk($rune($k))) {
+                    continue;
+                }
+                $ink = $this->inkInBand($g->font, $g->id, -($center + $th / 2), -($center - $th / 2));
+                if ($ink !== false) {
+                    $cuts[] = [$g->x + $ink[0] - $th, $g->x + $ink[1] + $th];
+                }
+            }
+            $pieces = self::cut($x0, $x1, $cuts, 0.75 * $th);
+        }
         $base = round(($y + $line->baseline) * $scale);
         $top = $base + ($center - $th / 2) * $scale; $bottom = $base + ($center + $th / 2) * $scale;
         if ($thick > 0) {
             $h = max(round($thick * $scale), 1.0);
             $top = round(($top + $bottom - $h) / 2); $bottom = $top + $h;
         }
-        return [[$x + $x0, $x + $x1, $top / $scale, $bottom / $scale]];
+        return array_map(fn(array $p): array => [$x + $p[0], $x + $p[1], $top / $scale, $bottom / $scale], $pieces);
+    }
+
+    /** Whether rune $r's glyph cuts the underlines skipping ink: Han, Kana and Hangul do not, as in AppKit (mygo's skipsInk). */
+    private static function skipsInk(int $r): bool
+    {
+        return !self::isSpace($r) && preg_match('/[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/u', (string)mb_chr($r, 'UTF-8')) !== 1;
+    }
+
+    /**
+     * How far left and right of its origin the outline of glyph $glyph of
+     * $f reaches between $lo and $hi points above the baseline, or false
+     * where it does not (mygo's inkInBand); kept, 4096 at most.
+     *
+     * @return array{0: float, 1: float}|false
+     */
+    private function inkInBand(Font $f, int $glyph, float $lo, float $hi): array|false
+    {
+        $key = spl_object_id($f) . ":$glyph:$lo:$hi";
+        if (array_key_exists($key, $this->bands)) {
+            return $this->bands[$key];
+        }
+        if (count($this->bands) >= 4096) {
+            $this->bands = [];
+        }
+        return $this->bands[$key] = self::bandX($this->engine->outline($f, $glyph), $lo, $hi);
+    }
+
+    /**
+     * The left and right of the parts of $segments ([x0, y0, x1, y1] each)
+     * within $lo ≤ y ≤ $hi, or false where none is (mygo's bandX).
+     *
+     * @param list<array{0: float, 1: float, 2: float, 3: float}> $segments
+     * @return array{0: float, 1: float}|false
+     */
+    public static function bandX(array $segments, float $lo, float $hi): array|false
+    {
+        $a = INF; $b = -INF;
+        foreach ($segments as [$px, $py, $qx, $qy]) {
+            $t0 = 0.0; $t1 = 1.0;
+            $dy = $qy - $py;
+            if ($dy == 0) {
+                if ($py < $lo || $py > $hi) {
+                    continue;
+                }
+            } else {
+                $ta = ($lo - $py) / $dy; $tb = ($hi - $py) / $dy;
+                if ($ta > $tb) {
+                    [$ta, $tb] = [$tb, $ta];
+                }
+                $t0 = max($t0, $ta); $t1 = min($t1, $tb);
+                if ($t0 > $t1) {
+                    continue;
+                }
+            }
+            $xa = $px + ($qx - $px) * $t0; $xb = $px + ($qx - $px) * $t1;
+            $a = min($a, $xa, $xb); $b = max($b, $xa, $xb);
+        }
+        return $a <= $b ? [$a, $b] : false;
+    }
+
+    /**
+     * [$x0, $x1] less the intervals of $cuts, leaving out pieces no longer
+     * than $min (mygo's cut).
+     *
+     * @param list<array{0: float, 1: float}> $cuts
+     * @return list<array{0: float, 1: float}>
+     */
+    public static function cut(float $x0, float $x1, array $cuts, float $min): array
+    {
+        usort($cuts, fn(array $p, array $q): int => $p[0] <=> $q[0]);
+        $out = [];
+        $at = $x0;
+        foreach ($cuts as [$c0, $c1]) {
+            if ($c0 > $at && ($end = min($c0, $x1)) - $at > $min) {
+                $out[] = [$at, $end];
+            }
+            $at = max($at, $c1);
+            if ($at >= $x1) {
+                break;
+            }
+        }
+        if ($x1 - $at > $min) {
+            $out[] = [$at, $x1];
+        }
+        return $out;
     }
 
     /** @param list<Span> $spans */

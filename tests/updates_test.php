@@ -21,6 +21,17 @@ function updDir(): string
     return $d;
 }
 
+/** A gzipped tar of one file named $name holding $data, written by hand: no tar of the system writes such a name the same way (GNU's --transform, bsdtar's -s). */
+function updTar(string $name, string $data): string
+{
+    $h = str_pad($name, 100, "\0") . sprintf('%07o', 0644) . "\0" . sprintf('%07o', 0) . "\0" . sprintf('%07o', 0) . "\0"
+        . sprintf('%011o', strlen($data)) . "\0" . sprintf('%011o', 0) . "\0" . '        ' . '0' . str_repeat("\0", 100) . "ustar\0" . '00';
+    $h = str_pad($h, 512, "\0");
+    $sum = array_sum(array_map('ord', str_split($h))); // the checksum field counted as spaces
+    $h = substr_replace($h, sprintf('%06o', $sum) . "\0 ", 148, 8);
+    return gzencode($h . str_pad($data, (int)ceil(strlen($data) / 512) * 512, "\0") . str_repeat("\0", 1024));
+}
+
 /** Whether $fn throws, and its message. */
 function updThrows(\Closure $fn): string
 {
@@ -97,8 +108,7 @@ function updThrows(\Closure $fn): string
     // Refused: paths out of the directory, links out of it.
     foreach (['../evil' => 'invalid path', '/etc/x' => 'invalid path'] as $bad => $why) {
         $evil = updDir();
-        mkdir("$evil/x");
-        exec('cd ' . escapeshellarg("$evil/x") . ' && echo x > f && tar czf ../bad.tar.gz --transform ' . escapeshellarg('s|^f$|' . $bad . '|') . ' -P f 2>&1');
+        file_put_contents("$evil/bad.tar.gz", updTar($bad, "x\n"));
         check(str_contains(updThrows(fn() => Archive::extract("$evil/bad.tar.gz", updDir())), $why), "refused: $bad");
     }
     $evil = updDir();

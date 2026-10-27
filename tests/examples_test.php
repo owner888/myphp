@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\Key;
+use MyPHP\UI\{Context, Key};
 
 // counter-native: the buttons and the arrow keys count.
 [$view, $s] = Headless::load('counter-native');
@@ -170,6 +170,7 @@ check(abs($s->bursts[0]->x - $x) <= 1 && abs($s->bursts[0]->y - $y - 100) <= 1, 
 // Pressing a demo again and again lets the oldest pieces go first: Realistic Look throws 50, 40, 70, 20 and 20 pieces.
 $s = new \MyPHP\Examples\Confetti\Confetti();
 $t = new Headless(fn(\MyPHP\UI\Context $c) => \MyPHP\Examples\Confetti\view($c, $s), 980, 700);
+$t->rt->clock = function () use (&$clock) { return $clock; }; // still: on the wall's clock, a slow run let the first bursts fade before the last were thrown
 $t->frame();
 for ($i = 0; $i < 8; $i++) { $t->clickText('Realistic Look'); $t->frame(); }
 same([\MyPHP\Examples\Confetti\MAX_PIECES, 60, 10], [$s->inAir(), count($s->bursts[0]->pieces), $s->bursts[0]->pieces[0]->id], 'the oldest go first');
@@ -476,3 +477,37 @@ $d = new \MyPHP\UI\DataDragEvent(new \MyPHP\Transfer\Offer($url->formats(), \MyP
 check($t->dataOver($x, $y, $d), 'the zone takes a URL'); $d->data = $url;
 check($t->dataDrop($x, $y, $d), 'and its drop'); $t->frame();
 same('Received URLs: https://example.com/', $right->status, 'a URL dropped is reported');
+
+// video: without a file, it asks for one; a file the system cannot read says why (playing is tests/player_test.php's, on macOS).
+[$view, $s] = Headless::load('video', '$openDialog');
+$t = new Headless($view, 900, 600);
+$t->frame();
+check($t->byText('Open a video (Cmd+O) or drop one on the window') !== null, 'the video player asks for a file');
+$s->open(__DIR__ . '/testdata/upright.jpg');
+$t->frame();
+check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");
+
+// The video example's controls over a picture that pauses when clicked: the controls take their clicks (the picture asks after them, and the bar for the end of a drag of its slider), and a press on them leaves the keyboard with the window's shortcuts.
+$pc = ['plays' => 0, 'pictures' => 0, 'spaces' => 0, 'lefts' => 0, 'track' => 0, 'at' => 0.5, 'slider' => null];
+$t = new Headless(function (Context $c) use (&$pc) {
+    if ($c->shortcut(Key::SPACE)) { $pc['spaces']++; }
+    if ($c->shortcut(Key::LEFT)) { $pc['lefts']++; }
+    $c->column(0, 0, 1, 0x000000);
+      $picture = $c->column()->grow(1);
+      $c->end();
+      $bar = $c->row(10, 10)->absolute()->left(16)->bottom(16)->keepFocus();
+        if ($c->clicked($c->button('Play'))) { $pc['plays']++; }
+        $pc['slider'] = $c->slider($pc['at'], 0, 1, 200);
+        $c->select(['国语', '潮汕话'], $pc['track'], 150);
+      $c->end();
+      $c->clicked($bar);
+      if ($c->clicked($picture)) { $pc['pictures']++; }
+    $c->end();
+}, 900, 600);
+$t->frame();
+$t->clickText('Play');
+$r = $t->rt->rectOf($pc['slider']->id);
+$t->press($r[0] + 10, $r[1] + $r[3] / 2); $t->drag($r[0] + 150, $r[1] + $r[3] / 2); $t->release($r[0] + 150, $r[1] + $r[3] / 2); $t->frame();
+$t->clickText('国语'); $t->clickText('潮汕话');
+$t->key(Key::SPACE, 'insertText:', 0, ' '); $t->left();
+same([1, 0, 1, 1, 1], [$pc['plays'], $pc['pictures'], $pc['track'], $pc['spaces'], $pc['lefts']], 'the button, the slider and the select take their clicks, not the picture under them; Space and the arrows stay the window\'s');

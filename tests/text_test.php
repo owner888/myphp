@@ -79,6 +79,25 @@ $l = $sys->layout(new Params(' ab', new Style(size: 20)));
 same(10.0, $sys->decorate($l, 0, 0, 3, 0, 0, 2, System::UNDERLINE, 0)[0][0], 'spaces starting the line are not underlined');
 same([], $sys->decorate($l, 0, 0, 1, 0, 0, 2, System::UNDERLINE, 0), 'nor is a run of them alone');
 
+// An underline skips the ink of descenders (mygo's TestDecorate): the stub's g, p and y reach across it at 3 to 7 points of their 10, cut a thickness (1) further on either side.
+$l = $sys->layout(new Params('gypsy', new Style(size: 20)));
+$under = $sys->decorate($l, 0, 0, 5, 0, 0, 2, System::UNDERLINE, 0);
+same([[0.0, 2.0], [8.0, 12.0], [18.0, 22.0], [28.0, 42.0], [48.0, 50.0]], array_map(fn(array $s) => [$s[0], $s[1]], $under), 'the underline of gypsy in pieces around g, y, p and y');
+same(1, count(array_unique(array_map(fn(array $s) => $s[2] . ':' . $s[3], $sys->decorate($l, 0, 0, 5, 0, 0, 2, System::UNDERLINE, 1.2)))), 'every piece of a thickness of the app on the same pixels');
+same(1, count($sys->decorate($l, 0, 0, 5, 0, 0, 2, System::STRIKETHROUGH, 0)), 'a strikethrough is whole');
+same([[0.0, 2.0], [6.0, 10.0]], System::cut(0, 10, [[3.0, 6.0], [2.0, 4.0]], 0.5), 'overlapping cuts make one gap');
+same([[0.0, 1.0]], System::cut(0, 10, [[1.0, 2.0], [2.3, 9.8]], 0.5), 'pieces no longer than the least are left out');
+same([2.5, 3.5], System::bandX([[2.0, -1.0, 4.0, 3.0], [9.0, 5.0, 9.0, 6.0]], 0, 2), 'where a slanted stroke crosses a band, a stroke above it left out');
+same(false, System::bandX([[0.0, 5.0, 4.0, 5.0]], 0, 2), 'an outline that misses the band');
+if (PHP_OS_FAMILY === 'Darwin') {
+    \MyPHP\Native\ObjC::boot(['Foundation', 'AppKit']); // NSFont, the system font's
+    $mac = new System(new \MyPHP\Native\TextEngine(new \MyPHP\Native\CoreText(2.0)));
+    $l = $mac->layout(new Params('gypsy', new Style(size: 24)));
+    check(count($mac->decorate($l, 0, 0, count($l->lines[0]->glyphs), 0, 0, 2, System::UNDERLINE, 0)) >= 3, 'on macOS, the underline of gypsy in at least 3 pieces');
+    $l = $mac->layout(new Params('ace 直', new Style(size: 24)));
+    same(1, count($mac->decorate($l, 0, 0, count($l->lines[0]->glyphs), 0, 0, 2, System::UNDERLINE, 0)), 'nothing crosses the underline of ace 直');
+}
+
 // Visual carets in mixed directions, from fixed advances (mygo's caret_test.go).
 $mixed = function (): Layout {
     $runes = System::runes('abc אבג def');

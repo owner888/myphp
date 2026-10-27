@@ -59,6 +59,11 @@ the cycle collector never ran. Headroom to the 16.6 ms budget is about
   into GPU memory). So `cast('unsigned long', $obj)` reads the object's first
   word, the isa, not its address; `ObjC::addr()` goes through a `void*[1]`
   slot instead.
+- A pointer-typed CData takes no `->cdata`: `$c->new('void*')->cdata =
+  $p` throws "Attempt to assign field 'cdata' of non C struct/union"
+  (`cdata` is a scalar's). A slot that must hold a pointer by value, as
+  an NSInvocation's argument (`CoreImage::run`, v1.31), is an `unsigned
+  long` of `ObjC::addr($p)`: the same bytes on arm64.
 - There is no pointer arithmetic on CData (`$p + 1` is a TypeError). `Native\Mem`
   works on integer addresses: `addr()` reads a pointer's value through the
   slot trick, `copy()` casts `int` back to `unsigned char*` for `FFI::memcpy`.
@@ -272,7 +277,7 @@ spacing, features, language, inline objects) over the node's style;
 `Layout::measure` lays it out once a frame (`Node::textLayout`) and the
 painter draws mygo's textLayout: line and span backgrounds, glyphs in
 their spans' colors, then underlines and strikethroughs where the fonts
-place them (`System::decorate`; underlines do not skip descenders yet).
+place them (`System::decorate`; an underline skips descenders, v1.32).
 `Node::children` on a rich text is mygo's Children on one: the text
 built inside it (`Context::within` pushes the node while the closure
 runs) continues its paragraph, each node's style a span over the paragraph's
@@ -867,9 +872,9 @@ quad carries its slot origin in `u, v`, the slot's pixel size in the
 color's `r, g` and the page in `b` (the vertex shader scales the uv by
 the slot size instead of the quad size, so an image stretches to its
 node). The fragment un-premultiplies what CG produced, applies the
-quad's alpha and the same SDF for rounded corners. `Native\ImageIO`
-decodes anything ImageIO reads (PNG, JPEG, HEIC, ICNS…) through a
-CGBitmapContext, scaled down to fit `$max` pixels on a side; `UI\Image`
+quad's alpha and the same SDF for rounded corners. `Native\CoreImage`
+decodes anything ImageIO reads (PNG, JPEG, HEIC…) off the main thread,
+upright and scaled down to fit `$max` pixels on a side (v1.31); `UI\Image`
 keeps the pixels until the first paint puts them in a page, then frees
 them. An image goes on the first page with room, a new page opens while
 there are fewer than MAX (an image up to a page's size has one to
@@ -2779,12 +2784,6 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   chorded with Command, Control or Option by the key's place
   (`Key::usChar` of the virtual key code, which is a place on macOS) when
   the layout typed no ASCII there; plain typing never matches by place.
-- **Photos upright.** `ImageIO::exifOrientation` reads the Orientation
-  tag of a JPEG's EXIF (mygo's parser); `orientTransform` is the
-  CoreGraphics transform, in its y-up space, that draws each orientation
-  pixel for pixel where mygo's `orient` puts it (a test maps every pixel
-  of a 4 by 3 image), concatenated before CGContextDrawImage, with the
-  bitmap's sides swapped for 5 to 8.
 - **A list's state.** `ListState::own` notes the list built with it in a
   pass of a context: `focused`, `focusWithin`, `focus` and `shortcut` ask
   that list and no other, none while it is hidden; a second list of the
@@ -3312,6 +3311,156 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   much that a closure in `fixedMargins` looked like 12 % of a frame and
   removing it changed nothing measurable.
 
+## Images decoded off the main thread (v1.31)
+
+- **What a decode cost.** Measured on the developer's Mac (a 13.6 MB
+  JPEG photo, and the HEIC `sips` made of it): `ImageIO::decode`, which drew the whole image
+  into a smaller CGBitmapContext, took 200–250 ms for the HEIC at any
+  size asked and 40 ms for the JPEG at 1024 pixels (230 ms at 2048), all
+  of it on the main thread. ImageIO's thumbnails, decoded at the size
+  asked, took 50–100 ms, and their lazy kind decodes as it is made: no
+  ImageIO call leaves the work for later.
+- **Off the thread without PHP there.** PHP must not run on another
+  thread, and a C function cannot be sent to one with fewer arguments
+  than it takes; an Objective-C message can, in an NSInvocation that an
+  NSInvocationOperation runs on an NSOperationQueue. `Native\CoreImage`
+  sends two: `+[CIImage imageWithData:options:]` (which reads the file:
+  9 ms for the HEIC, 33 ms for the JPEG, measured on the main thread),
+  upright as its orientation says, then, once the main thread has
+  scaled the image with `CILanczosScaleTransform` to whole pixels (a
+  tenth of a millisecond), `-[CIContext
+  render:toBitmap:rowBytes:bounds:format:colorSpace:]` into the
+  `Mem` buffer the image keeps, which decodes it. The main thread spends
+  about 0.2 ms an image; the pixels are there 25–30 ms (HEIC) and 50 ms
+  (JPEG) later, sooner than the decode took on the main thread. Its
+  colors are those CoreGraphics drew within one level of 255 (five, for
+  a thumbnail of 128 pixels, Lanczos against CoreGraphics' filter), its
+  first row the top.
+- **Waiting.** In a fiber (`App::go`) the decoding waits with
+  `Fibers::until`, looking every 4 to 16 ms while the app draws; outside
+  one it blocks (`waitUntilFinished`), as decoding did, rather than turn
+  the run loop under a view being built. Autorelease pools are drained
+  before each wait, as a fiber's wait is no scope of the main thread's
+  pools; what outlives one is retained (the invocations retain their
+  arguments and results). The photos and files examples decode their
+  thumbnails and full-size images in fibers, the full-size photo shown
+  as its thumbnail until it is there; the Markdown view loads each image
+  in a fiber of its own, its description showing until then, as mygo's
+  goroutine (`tests/markdown_view_test.php`, `tests/image_test.php`).
+- **`ObjC::boot` adds frameworks.** An image decoded before `App::run`
+  boots the bridge with CoreImage; `App::run`'s boot then dlopens the
+  frameworks the first lacked instead of making a second FFI instance,
+  which would have orphaned the classes and selectors found by the first.
+- **Trap: HEIC photos showed sideways.** `ImageIO::exifOrientation` read
+  the orientation of JPEGs only; a HEIC's (its `irot`) was ignored, so a
+  portrait HEIC decoded landscape. CoreImage's
+  `kCIImageApplyOrientationProperty` applies either, so mygo's EXIF
+  parser and the transform made from it are gone; `tests/image_test.php`
+  decodes a JPEG of orientation 6 on macOS. `ImageIO::decode` remains
+  for `Build\Icns`: the largest of a PNG's or an ICNS's images, on the
+  calling thread.
+
+## Underlines skipping ink (v1.32)
+
+- **As AppKit and mygo draw them.** `System::decorate` cuts an
+  underline around the ink of each glyph crossing it, a thickness of the
+  line further on either side, and leaves out pieces no longer than three
+  quarters of one (mygo's `cut`); Han, Kana and Hangul, and spaces, do
+  not cut it (`skipsInk`), nor do inline objects. Where a glyph crosses
+  the band of the line comes from its outline (`bandX`), kept by font,
+  glyph and band, 4096 at most (`inkInBand`); a strikethrough stays whole,
+  and a thickness of the app's (`$thick`) puts every piece on the same
+  pixels.
+- **Outlines from the engine.** `Engine::outline` gives a glyph's outline
+  as line segments, y up from its origin: `Native\CoreText::outline`
+  reads `CTFontCreatePathForGlyph` through `CGPathApply`, its curves in 16
+  lines each (mygo's `glyphOutline`), with one callback made once and
+  held in a struct field; the oblique fonts of synthetic italics have
+  their slant in the path. mygo keeps the band cache in its CoreText
+  engine; here it is the system's, so the stub engine's outlines (a bar
+  down through the descender of g, j, p, q and y, a glyph's id now its
+  rune) test the cutting on Linux (`tests/text_test.php`), and on macOS
+  "gypsy" at 24 points comes in at least three pieces, as mygo's test asks.
+
+## Video, decoded and shown by the system (v1.33)
+
+- **The pipeline.** `Media\Player` reads a file's packets in PHP and
+  gives them, encoded, to the system, which decodes and plays them on
+  threads of its own: an `AVSampleBufferDisplayLayer` the video (shown by
+  the window server, no frame of it through PHP or myphp's renderer), an
+  `AVSampleBufferAudioRenderer` the audio, an
+  `AVSampleBufferRenderSynchronizer` both on one clock (`Native\Renderers`).
+  Nothing calls back: `Native\MediaTicker`, an `NSTimer` in the main run
+  loop's common modes (so a live resize or an open menu does not starve
+  it), tops the renderers up 20 times a second to two seconds past the
+  clock, each renderer from its own queue, so that one full never starves
+  the other. PHP never runs off the main thread: VideoToolbox decoding to
+  pixels would have called back on its own thread, which ruled it out.
+- **Where the packets come from.** `Media\Matroska` reads Matroska and
+  WebM in PHP (EBML; Xiph, EBML and fixed lacing; block groups; header
+  stripping; segments and the cues after the clusters, found by the seek
+  head): AVFoundation reads no Matroska. `Native\AssetReader` reads MP4,
+  MOV and M4V with an `AVAssetReader` whose track outputs pass the
+  samples through as stored, their sample buffers going to the
+  renderers as they are. Both are a `Media\Source`; their tracks name
+  their codecs as Matroska does. `Native\CoreMedia` makes a Matroska
+  track's format (`CMVideoFormatDescriptionCreate` with its CodecPrivate as
+  the `avcC` or `hvcC` atom; an AudioStreamBasicDescription, AAC's
+  AudioSpecificConfig its magic cookie) and a packet's sample buffer.
+  Codecs: H.264, HEVC; AAC, AC-3, E-AC-3, MP3.
+- **What it costs.** Measured on the developer's Mac with a 1080p H.264
+  film of two hours (AC-3 and AAC, 5.7 GB): opening it, its header,
+  tracks and 7599 cues, 15–20 ms; reading its packets 0.46 ms of PHP a
+  second of film; topping the renderers up 2.4 ms a second; the process
+  2–3.5 % of a core while it plays.
+- **Seeking.** A seek goes to the cue before the time (Matroska; the
+  reader starts at the keyframe before it), flushes the renderers, marks
+  the video's frames before the time `kCMSampleAttachmentKey_DoNotDisplay`
+  (decoded for those after it, not shown), drops the audio before it, and
+  starts the clock at the time itself (`setRate:time:`): it lands on the
+  time, not the keyframe. Another audio track is a seek to where the
+  player is. Matroska leaves out the frames of the cue's cluster before
+  the cue, where a cluster holds several.
+- **The picture in the UI.** `Context::video` paints a hole as a web
+  view's node does (`Painter::nativeHole`, shared): the window puts the
+  player's layer, in a view of its own that clips it, under the native
+  view where the frame showed the node (`Window::placeVideos`, without
+  Core Animation's implicit animation of the frame), so what is built
+  over the node shows over the picture. The picture takes no pointer;
+  one player shows in one window at a time, its layer moving to the
+  window that showed it last.
+- **`ObjC` takes CMTimes.** The letters `T` (CMTime) and `X`
+  (CMTimeRange) pass and return them by value, as the synchronizer's
+  `currentTime` and `setRate:time:` and the reader's `setTimeRange:` do;
+  larger than 16 bytes, libffi passes them by reference as arm64 does.
+- **Trap: a float rate passed as a double.** The synchronizer's `rate` is
+  a float: sent as `d`, the value lands in the register's other half and
+  the clock never ran (rate 0, the window black). `setRate:`,
+  `setVolume:` and `rate` go as `f`.
+- **Trap: audio stuttered at Matroska's millisecond times.** An AC-3
+  packet is 1536 / 44100 s, 34.83 ms; its time, in whole milliseconds,
+  left gaps and overlaps the renderer played as breaks. A track's packets
+  now follow one another sample for sample from the first one's time
+  (`Renderers::$nextAudio`), the file's time taken again where it jumps
+  by more than 0.1 s.
+- **Trap: a seek stalled for 5 s.** From macOS 11.3 the synchronizer holds
+  a rate change until both renderers report enough data for a reliable
+  start (`delaysRateChangeUntilHasSufficientMediaData`), which a player
+  keeping two seconds ahead of a clock that has not started never gives;
+  it is off. (Splitting the renderers' queues, tried first, was not it.)
+- **Trap: the controls over the picture lost their clicks and keys.** A
+  click goes to the first node built that asks for it where it is: the
+  example's picture, which pauses when clicked, asked before the controls
+  over it, so a press on the seek bar or the audio tracks' select paused
+  the film. The picture asks after them, and the bar after its children
+  (the end of a drag of its slider is a click none of them takes). A
+  press on a slider or a button focused it, which then took the arrows
+  and Space from the window's shortcuts: the bar `keepFocus()`
+  (`tests/examples_test.php`).
+- **Outside an app.** The gamepad's GameController boots the bridge
+  itself (`ObjC::boot` adds frameworks since v1.31), which the farm's
+  test, run alone on macOS, had not.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3323,9 +3472,6 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache is swept by age but the
   burst itself is CoreText's.
-- Image decoding (`ImageIO`) runs on the main thread: a 12 MP HEIC takes
-  a frame or two; `Process` is the only way off the thread, and it costs
-  a child process. Apps decode between frames (`App::later`) meanwhile.
 - An icon turned every frame rasterizes a mask a frame (mygo does too);
   the atlas starts over when it fills.
 - Text glyphs still come from CoreText: the SVG renderer could draw
@@ -3333,9 +3479,11 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Underlines do not skip descenders (mygo's ink skipping reads glyph
-  outlines), and `text()` measures with the old metrics unless its style
-  needs the text system (`TextStyle::needsLayout`).
+- Video: subtitles (Matroska's text tracks, drawn by the UI over the
+  picture) are the next step; VP9, AV1, FLAC, Opus and Vorbis are not
+  decoded yet, nor DTS or TrueHD, which the system has no decoder of.
+- `text()` measures with the old metrics unless its style needs the
+  text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
   are in, with mygo's text system and paragraphs of inline text; the
   RichText editor, Markdown view and Terminal are in (their sections

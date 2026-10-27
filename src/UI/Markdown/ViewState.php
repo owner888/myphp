@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Markdown;
 
 use Closure;
+use MyPHP\App;
 use MyPHP\UI\{Context, Key, Menu, Node, Role, Router, SelectedText, Span, SVG, DisplayList, Theme as UITheme, TextPainter, Path};
 use MyPHP\UI\Markdown\Parser\{Block, Document, Inline};
 use MyPHP\Transfer\{Data, Format, Item, Representation};
@@ -662,7 +663,12 @@ final class ViewState
 
     // Images (mygo's image.go).
 
-    /** The image at $url once loaded, loading it the first time (mygo's image): on the main thread, as the frame first asks for it. */
+    /**
+     * The image at $url once loaded, starting to load it the first time
+     * (mygo's image): in a fiber of its own (App::go), where Image's
+     * decoding waits off the main thread; the window draws again once it
+     * is done.
+     */
     private function image(string $url): \MyPHP\UI\Image|SVG|null
     {
         $o = $this->o;
@@ -670,11 +676,19 @@ final class ViewState
             return null;
         }
         if (!isset($o->images[$url])) {
-            try {
-                $o->images[$url] = [true, ($o->loadImage)($url)];
-            } catch (\Throwable) {
-                $o->images[$url] = [true, null];
-            }
+            $o->images[$url] = [false, null];
+            $frame = $this->c->runtime?->requestFrame;
+            App::go(function () use ($o, $url, $frame) {
+                try {
+                    $img = ($o->loadImage)($url);
+                } catch (\Throwable) {
+                    $img = null;
+                }
+                $o->images[$url] = [true, $img];
+                if ($frame !== null) {
+                    $frame();
+                }
+            });
         }
         return $o->images[$url][1];
     }

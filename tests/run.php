@@ -3,9 +3,15 @@
 // reports; exits 1 when one fails. php tests/run.php [name...]
 declare(strict_types=1);
 
+// The temporary folder as the system resolves it, before anything asks PHP for it (PHP keeps the first answer): macOS's is under /var, a link to /private/var, which getcwd() and the system's paths give.
+$tmp = getenv('TMPDIR');
+if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
+    putenv("TMPDIR=$real");
+}
 require __DIR__ . '/Headless.php';
 
 $checks = 0; $failures = [];
+ini_set('memory_limit', '-1'); // the whole suite in one process, as CI runs it: an icon's 1024² sums alone take more than PHP's default 128M
 // Deprecations, warnings and notices fail the run, as PHP's defaults hide deprecations (the static FFI::new() did, docs/architecture.md); @ still silences what it marks.
 error_reporting(E_ALL);
 set_error_handler(function (int $no, string $msg, string $file, int $line) use (&$failures): bool {

@@ -320,14 +320,14 @@ final class Painter
     }
 
     /**
-     * The hole a web view's node paints through the content (mygo's
-     * noteWebView): its content box on whole pixels, rounded by its
-     * radii less its borders, within the clip; the runtime notes where it
-     * shows, for the window to place the web view there. Web views stay
-     * upright, covering a transformed box's bounds.
+     * The hole a web view's or a video's node paints through the content
+     * (mygo's noteWebView): its content box on whole pixels, rounded by
+     * its radii less its borders, within the clip; the runtime notes where
+     * it shows, for the window to place the web view or the video's layer
+     * there. They stay upright, covering a transformed box's bounds.
      * @param array{0: float, 1: float, 2: float, 3: float} $radii
      */
-    private static function webViewHole(Node $n, DisplayList $list, TextPainter $text, array $radii, Runtime $rt): void
+    private static function nativeHole(Node $n, DisplayList $list, TextPainter $text, array $radii, Runtime $rt): void
     {
         // Inside the padding and the border, border() as borderWidth(): the page covered border()'s, which the web views' tab showed none of.
         [$pt, $pr, $pb, $pl] = $n->sides();
@@ -346,7 +346,12 @@ final class Painter
         }
         $inner = [max(0.0, $radii[0] - max($bt, $bl)), max(0.0, $radii[1] - max($bt, $br)), max(0.0, $radii[2] - max($bb, $br)), max(0.0, $radii[3] - max($bb, $bl))];
         $list->hole($x, $y, $w, $h, $inner);
-        $rt->webPlaces[] = ['view' => $n->webView, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch]];
+        $place = ['view' => $n->webView ?? $n->video, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch]];
+        if ($n->webView !== null) {
+            $rt->webPlaces[] = $place;
+        } else {
+            $rt->videoPlaces[] = $place;
+        }
     }
 
     private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
@@ -455,8 +460,8 @@ final class Painter
                 if ($br > 0) { $list->rect($n->x + $n->w - $br, $n->y + $bt, $br, $n->h - $bt - $bb, $bc, $n->alpha); }
             }
         }
-        if ($n->webView !== null && $rt !== null) {
-            self::webViewHole($n, $list, $text, $radii, $rt);
+        if (($n->webView !== null || $n->video !== null) && $rt !== null) {
+            self::nativeHole($n, $list, $text, $radii, $rt);
         }
         if ($n->selected) {
             if ($n->radii !== null) { $list->box($n->x, $n->y, $n->w, $n->h, $radii, $t->selection, $t->selectionAlpha); } else { $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius); } // corners each its own: rows chosen together, one block

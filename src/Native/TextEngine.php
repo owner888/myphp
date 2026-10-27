@@ -456,6 +456,11 @@ final class TextEngine implements Engine
         return $f === null ? null : $this->fontOf($f);
     }
 
+    public function outline(Font $font, int $glyph): array
+    {
+        return $this->ct->outline($font->id, $glyph);
+    }
+
     /** The Font of a CTFont, registered for rasterizing. */
     private function fontOf(CData $font): Font
     {

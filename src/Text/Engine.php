@@ -32,6 +32,15 @@ interface Engine
      */
     public function shape(array $runes, Style $style, array $spans, float $width, bool $rtl, bool $wholeWords): array;
 
+    /**
+     * The outline of glyph $glyph of $font in points from its origin, y
+     * up, as line segments [x0, y0, x1, y1] (mygo's glyphOutline), which
+     * underlines skip where it crosses them; none for a glyph without one.
+     *
+     * @return list<array{0: float, 1: float, 2: float, 3: float}>
+     */
+    public function outline(Font $font, int $glyph): array;
+
     /** Adds a TrueType or OpenType font, or collection, under $family, or its own family name for '', throwing what it is not (mygo's register). */
     public function register(string $data, string $family): void;
 

@@ -4157,4 +4157,31 @@ final class Context
         $n->ownRing = true;
         return $n;
     }
+
+    /**
+     * Shows the picture of a player (MyPHP\Media\Player) in the node's
+     * content box, fitted and centered in it, black around it. Like a web
+     * view's node, it has no size of its own and stretches across its
+     * container; it paints a hole through the window's content, the
+     * system showing the picture under it, so that what is built over it
+     * shows over the picture (controls, a title, a spinner), rounded by
+     * its radius and cut by the scroll containers and clips around it.
+     * The picture takes no pointer: the node and what is over it do, as
+     * any. It shows while a frame builds its node; one player shows in one
+     * window at a time.
+     *
+     *     $c->column()->grow(1);
+     *       $c->video($app->player)->grow(1);
+     *       $c->row(12, 8)->absolute()->left(0)->right(0)->bottom(0); // over the picture
+     *         controls($c, $app->player);
+     *       $c->end();
+     *     $c->end();
+     */
+    public function video(\MyPHP\Media\Player $p): Node
+    {
+        $n = $this->add(new Node(Node::BOX, 0, 0, 0, 0, 0, 0, null, null));
+        $n->video = $p;
+        $n->self = Node::STRETCH;
+        return $n;
+    }
 }

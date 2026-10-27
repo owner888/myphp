@@ -140,6 +140,8 @@ final class Node
     public mixed $dragValue = null;
     /** The web view the node shows (Context::webView): a MyPHP\WebView, which this package knows only through the window. */
     public ?object $webView = null;
+    /** The player whose picture the node shows (Context::video): a MyPHP\Media\Player, which the window places. */
+    public ?object $video = null;
     public ?string $accepts = null;
     /** A native drag source (Context::dragData): what makes its data as the drag starts, and its options; a native drop target's options (Context::dropData); whether it takes files dragged from other apps (Context::droppedFiles). @var ?array{0: \Closure(): \MyPHP\Transfer\Data, 1: \MyPHP\Transfer\DragOptions} */
     public ?array $dataSource = null;

@@ -188,7 +188,7 @@ final class Scan
             }
             if ($this->file) {
                 $this->stats['.'] = true;
-                if ($n->kind === Notice::WRITE) {
+                if ($n->kind === Notice::WRITE && $n->name !== '') { // a write named for the file; kqueue names nothing, and its directory's write is a sibling's as well: the stat tells
                     $this->writes['.'] = true;
                 }
             } else {

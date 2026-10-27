@@ -39,7 +39,7 @@ final class Options
          * nothing.
          */
         public ?Closure $onLink = null,
-        /** Loads the image at a URL for the views to show; until it has, they show its description, as they do without it. Markdown::fileImages loads files. */
+        /** Loads the image at a URL for the views to show, in a fiber of its own (App::go), so a loader that waits (Image decoding off the main thread, a download) lets the app run; until it has, they show its description, as they do without it. Markdown::fileImages loads files. */
         public ?Closure $loadImage = null,
         /** Builds code blocks in place of Markdown::defaultCodeBlock, which it can call to wrap it; $code builds those of the languages it lists, as "mermaid", in place of either. */
         public ?Closure $codeBlock = null,

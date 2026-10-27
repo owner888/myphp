@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]
+# ./run.sh inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -17,6 +17,7 @@ case "$1" in
   glass)   exec $PHP $OPTS examples/glass/main.php ;;
   widgets) exec $PHP $OPTS examples/widgets/main.php ;;
   photos)  exec $PHP $OPTS examples/photos/main.php ${2:+"$2"} ;;
+  video)   exec $PHP $OPTS examples/video/main.php ${2:+"$2"} ;;
   http)    exec $PHP $OPTS examples/http/main.php ;;
   titlebar) exec $PHP $OPTS examples/titlebar/main.php ${2:+"$2"} ${3:+"$3"} ;;
   files)   exec $PHP $OPTS examples/files/main.php ${2:+"$2"} ;;
@@ -57,5 +58,5 @@ case "$1" in
   mayoi)   exec $PHP $OPTS examples/mayoi/main.php ;;
   gallery) exec $PHP $OPTS examples/gallery/main.php ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | gen [out.ts]"; exit 1 ;;
 esac

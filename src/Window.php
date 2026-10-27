@@ -83,6 +83,8 @@ final class Window
     private ?Page $page = null;
     /** @var list<WebView> the web views of native UI (newWebView) */
     private array $webViews = [];
+    /** @var array<int, array{player: \WeakReference<\MyPHP\Media\Player>, clip: mixed}> the videos the window showed, by player: the view under the native one that holds the picture's layer */
+    private array $videoHosts = [];
     /** The node of a web view the runtime's focus was on last frame, which gave its page the keyboard. */
     private ?int $webFocus = null;
     /** The WKWebViewConfiguration WebKit hands over for window.open(), while Window::opened() makes the window. */
@@ -378,7 +380,7 @@ final class Window
                     return $c->root;
                 });
                 $paint = function () use ($root, $list, $text, $bounds, $in): void {
-                    $this->runtime->webPlaces = [];
+                    $this->runtime->webPlaces = []; $this->runtime->videoPlaces = [];
                     $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
@@ -394,7 +396,7 @@ final class Window
                 }
                 $in?->lap(2);
                 if ($this->frameStats !== null) { $this->frameStats->passes = $this->runtime->passes; $this->frameStats->lap(UI\FrameStats::PAINT); }
-                if ($this->webViews !== []) {
+                if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== []) {
                     $this->placeWebViews($bounds->h);
                 }
                 $this->showCursor($this->runtime->cursor);
@@ -641,6 +643,15 @@ final class Window
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         $this->page?->destroy(); // the page goes with the window, its web views' too
         foreach ($this->webViews as $v) { $v->destroy(); }
+        foreach ($this->videoHosts as ['player' => $ref, 'clip' => $clip]) {
+            $player = $ref->get();
+            if ($player !== null && ObjC::addr(ObjC::msg('p:', $player->out->layer, 'superlayer')) === ObjC::addr(ObjC::msg('p:', $clip, 'layer'))) {
+                ObjC::msg('v:', $player->out->layer, 'removeFromSuperlayer');
+            }
+            ObjC::msg('v:', $clip, 'removeFromSuperview');
+            ObjC::msg('v:', $clip, 'release');
+        }
+        $this->videoHosts = [];
         $this->captureState();
         WindowStates::save();
         $this->emit('closed');
@@ -1457,12 +1468,13 @@ final class Window
      */
     private function placeWebViews(float $height): void
     {
+        $this->placeVideos($height);
         $places = [];
         foreach ($this->runtime->webPlaces as $p) {
             $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last
         }
         $layer = ObjC::msg('p:', $this->view, 'layer');
-        ObjC::msg('v:b', $layer, 'setOpaque:', $places === [] && !$this->transparent && $this->effect === null); // its holes let the web views show
+        ObjC::msg('v:b', $layer, 'setOpaque:', $places === [] && $this->runtime->videoPlaces === [] && !$this->transparent && $this->effect === null); // its holes let the web views and videos show
         $shown = [];
         foreach ($this->webViews as $v) {
             $p = $places[spl_object_id($v)] ?? null;
@@ -1481,6 +1493,58 @@ final class Window
             $this->runtime->focusFromKeyboard() ? $node['view']->tabInto(($this->input->mods & UI\Key::SHIFT) !== 0) : $node['view']->focus();
         }
         $this->webFocus = $node === null ? null : $focus;
+    }
+
+    /**
+     * Shows the pictures of the players where the frame showed their videos
+     * (Context::video), under the native view, and hides the others: each
+     * player's display layer in a view of this window's that clips it,
+     * moved here from another window's if it showed there. The layer's
+     * frame changes without the implicit animation of Core Animation.
+     */
+    private function placeVideos(float $height): void
+    {
+        $places = [];
+        foreach ($this->runtime->videoPlaces as $p) {
+            $places[spl_object_id($p['view'])] = $p;
+        }
+        foreach ($places as $k => $p) {
+            if (!isset($this->videoHosts[$k])) {
+                $clip = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
+                ObjC::msg('v:b', $clip, 'setWantsLayer:', true);
+                ObjC::msg('v:b', ObjC::msg('p:', $clip, 'layer'), 'setMasksToBounds:', true);
+                ObjC::msg('v:L', $clip, 'setAutoresizingMask:', 8); // NSViewMinYMargin: it keeps its distance to the top of the unflipped content view
+                ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view); // NSWindowBelow
+                $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip];
+            }
+        }
+        ObjC::msg('v:', ObjC::cls('CATransaction'), 'begin');
+        ObjC::msg('v:b', ObjC::cls('CATransaction'), 'setDisableActions:', true);
+        foreach ($this->videoHosts as $k => ['player' => $ref, 'clip' => $clip]) {
+            $player = $ref->get();
+            if ($player === null) { // gone, its layer with it
+                ObjC::msg('v:', $clip, 'removeFromSuperview');
+                ObjC::msg('v:', $clip, 'release');
+                unset($this->videoHosts[$k]);
+                continue;
+            }
+            $p = $places[$k] ?? null;
+            if ($p === null) {
+                ObjC::msg('v:b', $clip, 'setHidden:', true);
+                continue;
+            }
+            [$cx, $cy, $cw, $ch] = $p['clip'];
+            [$fx, $fy, $fw, $fh] = $p['frame'];
+            ObjC::msg('v:r', $clip, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
+            $host = ObjC::msg('p:', $clip, 'layer');
+            $layer = $player->out->layer;
+            if (ObjC::addr(ObjC::msg('p:', $layer, 'superlayer')) !== ObjC::addr($host)) {
+                ObjC::msg('v:p', $host, 'addSublayer:', $layer);
+            }
+            ObjC::msg('v:r', $layer, 'setFrame:', ObjC::rect($fx - $cx, $ch - ($fy - $cy) - $fh, $fw, $fh)); // the clip view is not flipped: y up from its bottom
+            ObjC::msg('v:b', $clip, 'setHidden:', false);
+        }
+        ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');
     }
 
     /** Puts the clip views of the web views shown in the order the frame painted them, under the native view, unless they are (mygo's stackWebViews). @param list<WebView> $shown */

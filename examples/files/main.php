@@ -138,7 +138,7 @@ final class Files
         return !$e['dir'] && preg_match('/\.(jpe?g|png|gif|heic|heif|webp|tiff?|bmp)$/i', $e['name']) === 1;
     }
 
-    /** The thumbnail of an image entry if decoded; wanted otherwise, decoded between frames one a run-loop turn. */
+    /** The thumbnail of an image entry if decoded; wanted otherwise, which a fiber decodes off the main thread. */
     public function thumb(array $e): ?Image
     {
         if (isset($this->thumbs[$e['path']])) { return $this->thumbs[$e['path']]; }
@@ -151,11 +151,11 @@ final class Files
     {
         if ($this->decoding) { return; }
         $this->decoding = true;
-        App::later($next = function () use (&$next) {
-            $p = array_shift($this->wanted);
-            if ($p === null) { $this->decoding = false; return; }
-            if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); $this->window?->invalidate(); }
-            App::later($next);
+        App::go(function () { // off the main thread, one after the other
+            while (($p = array_shift($this->wanted)) !== null) {
+                if (!isset($this->thumbs[$p])) { $this->thumbs[$p] = Image::fromFile($p, 128); $this->window?->invalidate(); }
+            }
+            $this->decoding = false;
         });
     }
 
@@ -209,7 +209,13 @@ function view(Context $c, Files $f): void
     $c->end();
     // Space previews the image chosen, Escape or Space closes the preview.
     $one = $f->chosenEntries(); $one = count($one) === 1 ? $one[0] : null;
-    if (!$f->previewing && $one !== null && Files::isImage($one) && !$f->finding && $c->shortcut(Key::SPACE)) { $f->preview = Image::fromFile($one['path'], 2048); $f->previewing = true; }
+    if (!$f->previewing && $one !== null && Files::isImage($one) && !$f->finding && $c->shortcut(Key::SPACE)) {
+        $f->previewing = true;
+        App::go(function () use ($f, $one) { // shown once decoded, if the preview is still open on it
+            $img = Image::fromFile($one['path'], 2048);
+            if ($f->previewing && $f->preview === null && ($f->chosenEntries()[0]['path'] ?? null) === $one['path']) { $f->preview = $img; $f->window?->invalidate(); }
+        });
+    }
     $modal = $c->modal($f->previewing, function () use ($c, $f, $one) {
         if ($f->preview === null) { return; }
         $k = min(($c->width - 120) / $f->preview->w, ($c->height - 160) / $f->preview->h, 1 / $c->scale); // fits the window, never larger than its pixels

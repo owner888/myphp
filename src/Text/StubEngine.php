@@ -6,7 +6,10 @@ namespace MyPHP\Text;
 /**
  * Lays out text without fonts (mygo's stubEngine): every rune takes half
  * an em, lines are an em high, ascent 0.8 of it, and nothing draws; lines
- * break after spaces where a width wraps them. The tests' engine.
+ * break after spaces where a width wraps them. A glyph's id is its rune;
+ * the outlines of g, j, p, q and y are a bar from the x-height down to
+ * the descent across the middle of their advance, which underlines skip.
+ * The tests' engine.
  */
 final class StubEngine implements Engine
 {
@@ -34,6 +37,15 @@ final class StubEngine implements Engine
     {
         $size = $style->fontSize();
         return $this->fonts[(string)$size] ??= new Font($size, $size * 0.8, $size * 0.2, 0, 0, $size * 0.1, $size * 0.05, -$size * 0.25, $size * 0.05);
+    }
+
+    public function outline(Font $font, int $glyph): array
+    {
+        if (!in_array($glyph, [0x67, 0x6A, 0x70, 0x71, 0x79], true)) {
+            return [];
+        }
+        $s = $font->size; [$x0, $x1, $y0, $y1] = [0.15 * $s, 0.35 * $s, -$font->descent, 0.5 * $s];
+        return [[$x0, $y0, $x1, $y0], [$x1, $y0, $x1, $y1], [$x1, $y1, $x0, $y1], [$x0, $y1, $x0, $y0]];
     }
 
     public function shape(array $runes, Style $style, array $spans, float $width, bool $rtl, bool $wholeWords): array
@@ -76,7 +88,7 @@ final class StubEngine implements Engine
                     $f = $font;
                 }
                 $adv = $objects[$i] ?? $font->size / 2;
-                $run['glyphs'][] = new Glyph($font, 0, $font->size, $pen, 0, $adv, $i, 0, $rtl);
+                $run['glyphs'][] = new Glyph($font, $runes[$i], $font->size, $pen, 0, $adv, $i, 0, $rtl);
                 $run['end'] = $i + 1;
                 $pen += $adv;
             }

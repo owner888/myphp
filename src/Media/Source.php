@@ -1,0 +1,25 @@
+<?php
+declare(strict_types=1);
+
+namespace MyPHP\Media;
+
+/**
+ * Where a Player's packets come from: a file's tracks and its frames in
+ * the order stored, encoded, with a seek to a time. Matroska reads
+ * Matroska and WebM in PHP; Native\AssetReader reads what AVFoundation
+ * does (MP4, MOV, M4V).
+ */
+interface Source
+{
+    /** @return list<Track> */
+    public function tracks(): array;
+
+    /** In seconds, 0 when the file does not say. */
+    public function duration(): float;
+
+    /** The next frame of any track, or null at the end. */
+    public function next(): ?Packet;
+
+    /** Goes back to where decoding $seconds starts, a keyframe of the video at or before it, where next() goes on. */
+    public function seek(float $seconds): void;
+}

@@ -231,3 +231,19 @@ for ($i = 1; $i < $st->doc->len(); $i++) { if ($st->doc->block($i)->kind === \My
 [$line] = $st->doc->line($code, 0);
 $len = mb_strlen($line);
 same('ba', $st->copyMarkdown([$part($elemOf($st, $code), $line, $len - 3, $len - 1)]), 'a code line with a tab partly taken by indentation');
+
+// An image loads in a fiber of its own (mygo's goroutine): its description shows while the loader waits, the window is asked to draw again once it is done, and the image shows.
+$asked = [];
+$o = new Options(loadImage: function (string $url) use (&$asked) {
+    $asked[] = $url;
+    \MyPHP\Native\Fibers::sleep(0.01); // a loader that waits, as Image's decoding does off the main thread
+    return \MyPHP\UI\SVG::parse('<svg viewBox="0 0 20 10"><rect width="20" height="10" fill="red"/></svg>');
+});
+$h = $view('![a red box](box.svg)', $o); $redrawn = 0; $h->rt->requestFrame = function () use (&$redrawn) { $redrawn++; }; $h->frame();
+check($hasText($h, 'a red box'), 'the description shows while the image loads');
+$h->frame();
+same(['box.svg'], $asked, 'the image is loaded once');
+\MyPHP\Native\Fibers::drain();
+same(1, $redrawn, 'the window is asked to draw again once it loaded');
+$h->frame();
+check(!$hasText($h, 'a red box'), 'the image shows in place of its description');

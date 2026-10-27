@@ -42,18 +42,27 @@ final class ObjC
         'p' => '@', 'd' => 'd', 'f' => 'f', 'l' => 'q', 'L' => 'Q', 'i' => 'i', 'S' => 'S', 'b' => 'B',
         's' => '*', 'v' => 'v', 'r' => '{CGRect={CGPoint=dd}{CGSize=dd}}', 'q' => '{CGPoint=dd}', 'z' => '{CGSize=dd}',
         'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}', 'n' => '{_NSRange=QQ}',
-        'o' => '{MTLOrigin=QQQ}', 'Z' => '{MTLSize=QQQ}',
+        'o' => '{MTLOrigin=QQQ}', 'Z' => '{MTLSize=QQQ}', 'T' => '{?=qiIq}', 'X' => '{?={?=qiIq}{?=qiIq}}',
     ];
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
         'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
         'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange', 'o' => 'MTLOrigin', 'Z' => 'MTLSize',
-        's' => 'const char*', 'v' => 'void',
+        's' => 'const char*', 'v' => 'void', 'T' => 'CMTime', 'X' => 'CMTimeRange',
     ];
 
+    /**
+     * Loads the runtime and $frameworks; booted already (an image decoded
+     * before App::run), it loads the frameworks it lacks and keeps the rest,
+     * as the classes and selectors it found are of its FFI instance.
+     */
     public static function boot(array $frameworks = ['Foundation', 'AppKit']): void
     {
+        if (isset(self::$c)) {
+            self::load($frameworks);
+            return;
+        }
         if (PHP_OS_FAMILY !== 'Darwin' || php_uname('m') !== 'arm64') {
             // Intel Macs return NSRect through objc_msgSend_stret, which this bridge does not map.
             throw new RuntimeException('MyPHP\Native\ObjC needs macOS on Apple Silicon');
@@ -67,6 +76,8 @@ final class ObjC
             typedef struct { unsigned long x, y, z; } MTLOrigin;
             typedef struct { unsigned long w, h, d; } MTLSize;
             typedef struct { unsigned long location, length; } NSRange;
+            typedef struct { long long value; int timescale; unsigned int flags; long long epoch; } CMTime;
+            typedef struct { CMTime start, duration; } CMTimeRange;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
             typedef struct { void* receiver; void* super_class; } objc_super;
@@ -81,17 +92,23 @@ final class ObjC
             void* objc_getProtocol(const char*);
             bool  class_addProtocol(void*, void*);
         ", '/usr/lib/libobjc.A.dylib');
-        foreach ($frameworks as $f) {
-            if (self::$c->dlopen("/System/Library/Frameworks/$f.framework/$f", 2) === null) {
-                throw new RuntimeException("dlopen $f failed");
-            }
-        }
+        self::load($frameworks);
         self::$msgSend = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSend');
         self::$msgSendSuper = self::$c->dlsym(self::$c->dlopen('/usr/lib/libobjc.A.dylib', 2), 'objc_msgSendSuper');
         self::$globalBlockIsa = self::$c->dlsym(self::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), '_NSConcreteGlobalBlock')
             ?? throw new RuntimeException('_NSConcreteGlobalBlock');
         self::$slot = self::$c->new('void*[1]');
         self::$slotInt = self::$c->cast('unsigned long[1]', self::$slot);
+    }
+
+    /** @param list<string> $frameworks system frameworks to dlopen: their classes register with the runtime */
+    private static function load(array $frameworks): void
+    {
+        foreach ($frameworks as $f) {
+            if (self::$c->dlopen("/System/Library/Frameworks/$f.framework/$f", 2) === null) {
+                throw new RuntimeException("dlopen $f failed");
+            }
+        }
     }
 
     public static function cls(string $name)

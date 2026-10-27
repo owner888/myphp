@@ -7,7 +7,7 @@ namespace MyPHP\Tests;
 
 use MyPHP\UI\{Key, Node};
 
-$dir = sys_get_temp_dir() . '/myphp-files-' . getmypid();
+$dir = realpath('/tmp') . '/myphp-files-' . getmypid(); // a short path: the breadcrumbs of macOS's temporary folder, nine deep, leave the toolbar no room to show them
 mkdir("$dir/Docs", 0777, true); mkdir("$dir/Docs/Inner");
 file_put_contents("$dir/a.txt", str_repeat('a', 10)); file_put_contents("$dir/b.txt", str_repeat('b', 3000)); file_put_contents("$dir/zed.txt", 'z'); file_put_contents("$dir/.hidden", '');
 [$view, $f] = Headless::files($dir);

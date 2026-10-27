@@ -37,9 +37,9 @@ final class GameController implements Device
     public static function load(): bool
     {
         if (self::$loaded === null) {
-            self::$loaded = PHP_OS_FAMILY === 'Darwin'
-                && ObjC::$c->dlopen('/System/Library/Frameworks/GameController.framework/GameController', 2) !== null;
+            self::$loaded = PHP_OS_FAMILY === 'Darwin';
             if (self::$loaded) {
+                ObjC::boot(['Foundation', 'GameController']); // the bridge too, outside an app (a test of the farm)
                 self::$pool = FFI::cdef('void* objc_autoreleasePoolPush(void); void objc_autoreleasePoolPop(void*);', '/usr/lib/libobjc.A.dylib');
             }
         }

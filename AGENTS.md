@@ -59,9 +59,9 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
-                   (dark/light, accent), Pasteboard, ImageIO (decode to RGBA), Mem (calloc/free, address memcpy),
-                   Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/
-src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder)
+                   (dark/light, accent), Pasteboard, CoreImage (images off the main thread), ImageIO (icons), Mem (calloc/free, address memcpy),
+                   Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/, CoreMedia/Renderers/AssetReader/MediaTicker (Media\Player)
+src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder); src/Media/ video (Player, Matroska in PHP, Context::video)
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)
@@ -151,8 +151,8 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   kept alive in holder structs; blocks via `ObjC::block`; `App::wait` makes a
   block-delivered result synchronous; PHP is entered on the main thread only.
   `FFI::new/cast/type` only on an instance (static: deprecated since 8.3);
-  a pointer's address is `ObjC::addr`, never a cast of `void*` to an integer (it reads through it);
-  never `?:` on a string that may be `"0"` (`mb_chr`, `substr`, `basename`).
+  a pointer's address is `ObjC::addr`, never a cast of `void*` to an integer (it reads through it); a slot
+  for a pointer is an `unsigned long` of it (`->cdata` takes none); no `?:` on a maybe-`"0"` string (`mb_chr`, `substr`, `basename`).
 
 Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
 ~4–6 ms per frame at 60 fps; a million-row list ~1.3 ms, 8 MB flat.

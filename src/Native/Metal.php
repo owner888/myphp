@@ -701,8 +701,9 @@ final class Metal
      * The run loop's common modes, kCFRunLoopCommonModes itself: a string
      * of its name is a mode of that name, whose display links never ticked
      * (the main run loop runs the default mode and those it tracks with).
+     * @internal also MediaTicker's
      */
-    private static function commonMode()
+    public static function commonMode()
     {
         static $cf = null;
         $cf ??= FFI::cdef('void* kCFRunLoopCommonModes;', '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation');

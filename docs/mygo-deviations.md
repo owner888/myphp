@@ -49,11 +49,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Context::within` (public, `@internal`) pushes the node while the
     closure runs, as a node cannot reach the context's stack.
   - Why: the builder's stack is the Context's.
-- **Underlines do not skip descenders** (v0.81)
-  - mygo: `coreText.decorate` cuts the underline around the ink of
-    glyphs that cross it (`inkInBand`), as AppKit does.
-  - myphp: `System::decorate` draws the whole run.
-  - Why: needs glyph outlines from CoreText; not ported yet.
 - **Whole-word line breaks on macOS** (v0.81)
   - mygo: the CoreText engine's `noBreakWords` breaks by its own
     word-boundary rules.
@@ -272,10 +267,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: `LoadImage` runs on a goroutine of its own and the view shows the
     description until it is done; an image is at most 100% of the view's
     width (`MaxWidthPercent`) with its aspect ratio (`AspectRatio`).
-  - myphp: the image loads on the main thread the first frame it is asked
-    for; it is fitted to the width its row had last frame.
-  - Why: PHP has no threads here; myphp has no percentage sizes or aspect
-    ratios yet.
+  - myphp: the image loads in a fiber of its own (`App::go`), where
+    `Image`'s decoding waits off the main thread, the description showing
+    until it is done (v1.31); it is fitted to the width its row had last
+    frame.
+  - Why: myphp has no percentage sizes or aspect ratios yet.
 - **Right to left** (v0.85)
   - mygo: code reads left to right in a right-to-left interface
     (`Direction(LeftToRight)`), a quote's bar is on the side lines start.
@@ -409,6 +405,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     the write (it does, for files watched); paths are checked by `lstat`
     before and after a directory is listed.
   - Why: PHP's stat API; PHP has no openat.
+- **A file's directory, on macOS** (v1.33)
+  - mygo: a write noticed on the directory of a file watched marks the
+    file written, which kqueue, naming nothing, gives for a sibling's
+    write too: a sibling created or written is reported as the file's.
+  - myphp: only a write named for the file does; one kqueue gives the
+    directory only has the file looked at, and the file's own descriptor
+    reports its writes.
+  - Why: the system test of a sibling not reported failed on macOS.
 - **Linux** (v0.93)
   - mygo: one inotify instance for the whole app.
   - myphp: an instance per watch.
@@ -1639,3 +1643,35 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   the color, a wide one by its id), TestWideFramesOnGPU (Metal's, tested
   on a Mac), TestEffectColor (no effects of an app's own), the pixel
   tests.
+
+## Images off the main thread (v1.31)
+
+- **Decoding**
+  - mygo: `DecodeBitmap` decodes PNG, JPEG, GIF, WebP and BMP with Go's
+    decoders, whole, on the goroutine that calls it; a JPEG comes upright
+    as its EXIF orientation says.
+  - myphp: `Image::fromBytes` and `fromFile` decode what ImageIO reads
+    (HEIC too), upright as the file's orientation says, whatever its
+    format, scaled down with Lanczos to `$max` pixels on a side, by
+    CoreImage on an NSOperationQueue's thread; in a fiber they wait while
+    the app runs, outside one they block until done.
+  - Why: PHP runs the app on one thread; fibers are its goroutines (the
+    developer's choice), and Objective-C messages sent through
+    NSInvocations take the work to another thread with no PHP there.
+- **Not ported**: mygo's `exifOrientation`, `tiffOrientation` and
+  `orient` (CoreImage orients), and with them the parser half of
+  TestDecodeBitmapTurnsPhotosUpright; `tests/image_test.php` decodes a
+  turned JPEG instead, on macOS.
+
+## Video (v1.33)
+
+- **Media\Player and Context::video**
+  - mygo: no video; `Bitmap.Update` shows frames an app decodes itself.
+  - myphp: `Media\Player` plays Matroska, WebM, MP4, MOV and M4V (H.264,
+    HEVC; AAC, AC-3, E-AC-3, MP3) with the system's decoders, and
+    `Context::video` shows its picture under the window's content, through
+    a hole of its node, as web views show; macOS only.
+  - Why: the developer asked for a video player as fast as the system
+    plays video; mygo has none to follow, so the names follow mygo's way
+    of naming (`Player`, `Track`, `Packet`, `video()`).
+

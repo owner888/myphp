@@ -1,7 +1,8 @@
 <?php
 // A photo browser: a folder's images in a grid of thumbnails, one at a
-// time full size. Built to shake out the image path: lazy decoding a few
-// per frame, the image atlas's room, window-level shortcuts, drops.
+// time full size. Built to shake out the image path: decoding off the main
+// thread as the images show, the image atlas's room, window-level
+// shortcuts, drops.
 // Run: ./run.sh photos [folder]
 declare(strict_types=1);
 
@@ -19,15 +20,17 @@ final class Photos
     /** @var array<string, Image> thumbnails by path, least recently shown first, at most KEEP of them */
     public array $thumbs = [];
     public const KEEP = 200;
-    /** @var list<string> files in view whose thumbnails are wanted, in order; decoded one a run-loop turn */
+    /** @var list<string> files in view whose thumbnails are wanted, in order; a fiber decodes them one after the other */
     public array $wanted = [];
     private bool $decoding = false;
     public int $thumbPixels = 160;
     /** @var array<string, Image> full-size images by path: the one shown and its neighbors */
     public array $full = [];
+    /** @var array<string, true> the full-size images decoding */
+    public array $loading = [];
     public int $selected = 0;
     public bool $viewing = false;
-    /** The selection whose neighbors were last queued for decoding, so each frame of the viewer does not queue them again. */
+    /** The selection whose neighbors were last asked for, so each frame of the viewer does not ask again. */
     public int $prefetched = -1;
     public GridState $grid;
     public ?Window $window = null;
@@ -60,28 +63,25 @@ final class Photos
         $this->selected = max(0, min(count($this->files) - 1, $i));
     }
 
-    /** Decodes the wanted thumbnails one a run-loop turn, between frames, and shows each as it comes. */
+    /** Decodes the wanted thumbnails in a fiber, off the main thread, one after the other, and shows each as it comes. */
     public function decode(): void
     {
         if ($this->decoding) {
             return;
         }
         $this->decoding = true;
-        App::later($next = function () use (&$next) {
-            while ($this->wanted !== [] && isset($this->thumbs[$this->wanted[0]])) {
-                array_shift($this->wanted);
+        App::go(function () {
+            while (($f = array_shift($this->wanted)) !== null) {
+                if (isset($this->thumbs[$f])) {
+                    continue;
+                }
+                $this->thumbs[$f] = Image::fromFile($f, $this->thumbPixels);
+                while (count($this->thumbs) > self::KEEP) {
+                    unset($this->thumbs[array_key_first($this->thumbs)]);
+                }
+                $this->window->invalidate();
             }
-            if ($this->wanted === []) {
-                $this->decoding = false;
-                return;
-            }
-            $f = array_shift($this->wanted);
-            $this->thumbs[$f] = Image::fromFile($f, $this->thumbPixels);
-            while (count($this->thumbs) > self::KEEP) {
-                unset($this->thumbs[array_key_first($this->thumbs)]);
-            }
-            $this->window->invalidate();
-            App::later($next);
+            $this->decoding = false;
         });
     }
 
@@ -96,10 +96,23 @@ final class Photos
         return $img;
     }
 
-    /** The full-size image of file $i, decoded now if need be. */
-    public function fullImage(int $i): Image
+    /** The full-size image of file $i, or null while a fiber decodes it, which the first ask starts. */
+    public function fullImage(int $i): ?Image
     {
-        return $this->full[$this->files[$i]] ??= Image::fromFile($this->files[$i], self::FULL);
+        $f = $this->files[$i];
+        if (!isset($this->full[$f]) && !isset($this->loading[$f])) {
+            $this->loading[$f] = true;
+            App::go(function () use ($f) {
+                $img = Image::fromFile($f, self::FULL);
+                unset($this->loading[$f]);
+                if (in_array($f, $this->files, true)) { // still of the folder open
+                    $this->full[$f] = $img;
+                    $this->trimFull();
+                    $this->window->invalidate();
+                }
+            });
+        }
+        return $this->full[$f] ?? null;
     }
 
     /** Keeps the full-size images of the file shown and its neighbors; drops the rest. */
@@ -133,7 +146,7 @@ function view(Context $c, Photos $p): void
 function grid(Context $c, Photos $p): void
 {
     $t = $c->theme; $s = Photos::THUMB;
-    // A grid view: rows are built only as they show, so only their thumbnails are wanted; they decode between frames, in order.
+    // A grid view: rows are built only as they show, so only their thumbnails are wanted; they decode off the main thread, in order.
     $p->wanted = [];
     $p->grid->selected = $p->selected;
     $grid = $c->gridView($p->grid, count($p->files), $s, $s, function (int $i) use ($c, $t, $p, $s) {
@@ -162,29 +175,28 @@ function viewer(Context $c, Photos $p): void
     if ($c->shortcut(Key::LEFT)) { $p->select($p->selected - 1); }
     if ($c->shortcut(Key::RIGHT)) { $p->select($p->selected + 1); }
     if ($c->shortcut(Key::ESCAPE) || $c->shortcut(Key::RETURN) || $c->shortcut(Key::SPACE)) { $p->viewing = false; }
-    $img = $p->fullImage($p->selected);
     $f = $p->files[$p->selected];
+    $full = $p->fullImage($p->selected);
+    $img = $full ?? $p->thumb($f); // the thumbnail, larger, until the full-size image is decoded
     $c->column(0, 8, 1, 0x000000)->center();
-      $room = $c->height - 48;
-      $k = min($c->width / $img->w, $room / $img->h, 1 / $c->scale);
-      $shown = $c->image($img, $img->w * $k, $img->h * $k);
-      if ($c->doubleClicked($shown)) { $p->viewing = false; }
+      if ($img !== null) {
+          $room = $c->height - 48;
+          $k = min($c->width / $img->w, $room / $img->h, ($full === null ? Photos::FULL / max($img->w, $img->h) : 1) / $c->scale);
+          $shown = $c->image($img, $img->w * $k, $img->h * $k);
+          if ($c->doubleClicked($shown)) { $p->viewing = false; }
+      }
       $c->row(0, 12);
         $c->text(basename($f), 13, 0xffffff);
         $c->muted(sprintf('%d / %d · %s', $p->selected + 1, count($p->files), size($f)), 12);
       $c->end();
     $c->end();
-    // The neighbors decode after this frame, one a run-loop turn, so the arrows do not wait; queued once per selection.
+    // The neighbors start decoding too, so the arrows do not wait; asked once per selection.
     if ($p->prefetched !== $p->selected) {
         $p->prefetched = $p->selected;
         $p->trimFull();
-        $next = function () use ($p, &$next) {
-            if (!$p->viewing) { return; }
-            foreach ([$p->selected - 1, $p->selected + 1] as $i) {
-                if (isset($p->files[$i]) && !isset($p->full[$p->files[$i]])) { $p->fullImage($i); App::later($next); return; }
-            }
-        };
-        App::later($next);
+        foreach ([$p->selected - 1, $p->selected + 1] as $i) {
+            if (isset($p->files[$i])) { $p->fullImage($i); }
+        }
     }
 }
 

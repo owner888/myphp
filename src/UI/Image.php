@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use FFI\CData;
-use MyPHP\Native\ImageIO;
+use MyPHP\Native\CoreImage;
 use MyPHP\Native\Mem;
 use RuntimeException;
 
@@ -39,9 +39,16 @@ final class Image
         $this->pix = $decoded['pix']; $this->addr = $decoded['addr'];
     }
 
+    /**
+     * Decodes a PNG, JPEG, HEIC or whatever else ImageIO reads, upright as
+     * its orientation says, at most $max pixels on a side (mygo's
+     * DecodeBitmap), off the main thread: in a fiber (App::go) it waits
+     * while the app draws and takes events; outside one, it blocks until
+     * the image is there.
+     */
     public static function fromBytes(string $bytes, int $max = 1024): self
     {
-        return new self(ImageIO::decode($bytes, $max));
+        return new self(CoreImage::decode($bytes, $max));
     }
 
     /** An image of $w × $h premultiplied RGBA pixels, four bytes a pixel, top row first. */
@@ -63,6 +70,7 @@ final class Image
         return $img;
     }
 
+    /** The image of file $path, as fromBytes decodes it. */
     public static function fromFile(string $path, int $max = 1024): self
     {
         $bytes = @file_get_contents($path);

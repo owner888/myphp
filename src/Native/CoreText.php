@@ -37,6 +37,12 @@ final class CoreText
     private array $colorFonts = [];
     /** Whether the user leaves font smoothing on (AppleFontSmoothing), read when a glyph is first drawn. */
     private ?bool $smooth = null;
+    /** The callback CGPathApply hands an outline's elements, made once and held (outline()). */
+    private ?CData $applier = null;
+    /** @var list<array{0: float, 1: float, 2: float, 3: float}> the segments of the outline being read */
+    private array $segs = [];
+    /** The current point of the outline being read, and the start of its subpath. */
+    private float $atX = 0, $atY = 0, $fromX = 0, $fromY = 0;
 
     public function __construct(public float $scale)
     {
@@ -46,6 +52,12 @@ final class CoreText
             typedef struct { double w, h; } CGSize;
             typedef struct { CGPoint origin; CGSize size; } CGRect;
             typedef unsigned short CGGlyph;
+            typedef struct { int type; CGPoint* points; } CGPathElement;
+            typedef void (*CGPathApplier)(void*, const CGPathElement*);
+            typedef struct { CGPathApplier fn; } PathApplierHolder;
+            void* CTFontCreatePathForGlyph(void*, CGGlyph, void*);
+            void  CGPathApply(void*, void*, CGPathApplier);
+            void  CGPathRelease(void*);
             void* dlopen(const char*, int);
             void* dlsym(void*, const char*);
             void* CFStringCreateWithCString(void*, const char*, unsigned int);
@@ -263,5 +275,72 @@ final class CoreText
         Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $bpp * $w * $h);
         $c->CGContextRelease($ctx);
         return ['w' => $w, 'h' => $h, 'ox' => $x0, 'oy' => $y0, 'rows' => $rows, 'addr' => $addr, 'color' => $color];
+    }
+
+    /**
+     * The outline of glyph $glyph of font $fontId in points from its
+     * origin, y up, as line segments [x0, y0, x1, y1], its curves each in
+     * 16 lines (mygo's glyphOutline); none for a glyph without one (a
+     * bitmap's, a space).
+     *
+     * @return list<array{0: float, 1: float, 2: float, 3: float}>
+     */
+    public function outline(int $fontId, int $glyph): array
+    {
+        $c = $this->c;
+        $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
+        if ($this->applier === null) {
+            $this->applier = $c->new('PathApplierHolder'); // assigning the closure makes the C-callable thunk
+            $this->applier->fn = function ($info, $el): void {
+                $pt = fn(int $i): array => [$el->points[$i]->x, $el->points[$i]->y];
+                switch ($el->type) {
+                    case 0: // move
+                        [$this->atX, $this->atY] = $pt(0);
+                        [$this->fromX, $this->fromY] = [$this->atX, $this->atY];
+                        break;
+                    case 1: // line
+                        $this->lineTo(...$pt(0));
+                        break;
+                    case 2: // a quadratic curve, and
+                    case 3: // a cubic one, in 16 lines
+                        $cp = [[$this->atX, $this->atY], $pt(0), $pt(1)];
+                        if ($el->type === 3) {
+                            $cp[] = $pt(2);
+                        }
+                        for ($k = 1; $k <= 16; $k++) {
+                            $this->lineTo(...self::bezier($cp, $k / 16));
+                        }
+                        break;
+                    case 4: // close
+                        $this->lineTo($this->fromX, $this->fromY);
+                        break;
+                }
+            };
+        }
+        $path = $c->CTFontCreatePathForGlyph($font, $glyph, null);
+        if ($path === null) {
+            return [];
+        }
+        $this->segs = [];
+        $c->CGPathApply($path, null, $this->applier->fn);
+        $c->CGPathRelease($path);
+        return $this->segs;
+    }
+
+    private function lineTo(float $x, float $y): void
+    {
+        $this->segs[] = [$this->atX, $this->atY, $x, $y];
+        $this->atX = $x; $this->atY = $y;
+    }
+
+    /** The point at $t of the Bézier curve of control points $cp (mygo's bezier). @param list<array{0: float, 1: float}> $cp @return array{0: float, 1: float} */
+    private static function bezier(array $cp, float $t): array
+    {
+        for ($n = count($cp) - 1; $n > 0; $n--) {
+            for ($k = 0; $k < $n; $k++) {
+                $cp[$k] = [$cp[$k][0] + ($cp[$k + 1][0] - $cp[$k][0]) * $t, $cp[$k][1] + ($cp[$k + 1][1] - $cp[$k][1]) * $t];
+            }
+        }
+        return $cp[0];
     }
 }

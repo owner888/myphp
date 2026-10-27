@@ -790,6 +790,13 @@ final class Runtime
      * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>
      */
     public array $webPlaces = [];
+    /**
+     * Where the last frame showed videos (Context::video), as $webPlaces
+     * for their players. The picture takes no pointer: what is built over
+     * it, or the node itself, does.
+     * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>
+     */
+    public array $videoPlaces = [];
 
     /** Whether the focus came from the keyboard, as Tab moving it onto a web view's node, which enters its page from its first element, or its last with Shift (mygo's TabInto). */
     public function focusFromKeyboard(): bool
