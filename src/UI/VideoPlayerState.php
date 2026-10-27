@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
+use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Player;
 use MyPHP\Media\Track;
 use RuntimeException;
@@ -45,38 +46,73 @@ final class VideoPlayerState
     public float $moved = 0.0, $at = 0.0, $speedAt = 1 / 3;
     /** @internal */
     public bool $shown = true;
+    /** @internal seconds the wheel moved across and not sought yet, and when it last sought */
+    public float $wheelSeek = 0.0, $wheelSeekAt = 0.0;
     /** @internal */
     public string $drawn = '';
     private ?\WeakReference $runtime = null;
+    /** Whether the player built last goes on from where it was left (VideoPlayerOptions::$resume). */
+    private bool $resume = false;
     /** @var list<Closure> the player's listeners, removed for another player */
     private array $off = [];
+
+    /** Where films were left (VideoPlayerOptions::$resume): the app's, PlaybackPositions::default(), unless set. */
+    public ?PlaybackPositions $positions = null;
+    /** Seconds between two notes of where a film playing is. */
+    public const NOTE_EVERY = 10.0;
 
     /**
      * Takes player $p, built with in $rt's window: its volume this state's,
      * a frame asked for when what shows of its time changes (look), at its
-     * end and when it fails.
+     * end and when it fails; with $resume, from where it was left (more
+     * than 5 s in and before its last 5), noting where it is every
+     * NOTE_EVERY seconds, at a pause and when another player comes, and
+     * forgetting it at its end.
      * @internal Context::videoPlayer
      */
-    public function attach(Player $p, Runtime $rt): void
+    public function attach(Player $p, Runtime $rt, bool $resume): void
     {
         $this->runtime = \WeakReference::create($rt);
         if ($this->player === $p) {
             return;
         }
         foreach ($this->off as $off) { $off(); }
+        if ($this->resume && $this->player !== null) { $this->note(); }
         $this->player = $p;
+        $this->resume = $resume;
         $this->error = '';
         $this->speedAt = log($p->rate() / 0.25, 64);
         $p->setVolume($this->volume);
         $this->moved = microtime(true);
+        $noted = 0.0;
+        if ($resume && ($at = $this->positions()->get($p->path())) !== null && $at > 5 && $at < $p->duration() - 5) {
+            $p->seek($at);
+            $this->say($this->t('videoResumedAt', ['time' => self::clock($at)]));
+        }
         $this->off = [
-            $p->on('time', function () { // a frame only when what shows changed: none while the controls are hidden and the subtitles stay
+            $p->on('time', function () use (&$noted) { // a frame only when what shows changed: none while the controls are hidden and the subtitles stay
                 $look = $this->look();
                 if ($look !== $this->drawn) { $this->drawn = $look; $this->changed(); }
+                if ($this->resume && abs($this->player->time() - $noted) >= self::NOTE_EVERY) { $noted = $this->player->time(); $this->note(); }
             }),
-            $p->on('ended', fn() => $this->changed()),
+            $p->on('ended', function () {
+                if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
+                $this->changed();
+            }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
         ];
+    }
+
+    private function positions(): PlaybackPositions
+    {
+        return $this->positions ??= PlaybackPositions::default();
+    }
+
+    /** Notes where the film is, to go on from there next time. */
+    public function note(): void
+    {
+        $p = $this->player;
+        if ($p !== null && !$p->ended()) { $this->positions()->set($p->path(), $p->time()); }
     }
 
     /**
@@ -118,6 +154,7 @@ final class VideoPlayerState
         $p = $this->player;
         if ($p === null) { return; }
         $p->playing() ? $p->pause() : $p->play();
+        if ($this->resume && !$p->playing()) { $this->note(); }
         $this->say($this->t($p->playing() ? 'videoResume' : 'videoPause'), 'time');
     }
 

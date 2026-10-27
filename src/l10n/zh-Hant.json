@@ -224,5 +224,6 @@
   "videoPlaylist": "播放列表",
   "videoSettings": "設定",
   "videoNotYet": "尚未支援",
-  "videoLayoutNotYet": "版面設定尚未支援"
+  "videoLayoutNotYet": "版面設定尚未支援",
+  "videoResumedAt": "從 {time} 繼續播放"
 }

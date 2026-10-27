@@ -64,7 +64,7 @@ final class Player
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
-    public function __construct(string $path)
+    public function __construct(private readonly string $path)
     {
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         $this->source = in_array($ext, ['mkv', 'mka', 'webm'], true) ? new Matroska($path) : new AssetReader($path);
@@ -211,6 +211,12 @@ final class Player
         }
         $this->audio = $t;
         $this->seek($this->time()); // from the keyframe before, its frames up to now decoded and not shown
+    }
+
+    /** The file it plays. */
+    public function path(): string
+    {
+        return $this->path;
     }
 
     /** The video track shown, or null for none (a file of audio). */

@@ -20,7 +20,8 @@ use MyPHP\Window;
  * the time below), the messages at the top left, the sidebar of quick
  * settings (360 wide: the video, audio and subtitle tabs), IINA's default
  * keys (iina-default-input.conf) that the player has the means for, a
- * right click to play and pause, a double click to go full screen. The
+ * right click to play and pause, a double click to go full screen, the
+ * wheel up and down for the volume and across to seek. The
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
  * layout tab, the equalizer, external audio, secondary and online
@@ -32,13 +33,37 @@ use MyPHP\Window;
 final class VideoPlayer
 {
     public const SIDEBAR = 360.0;
+    /** What a point the wheel moves does: of the volume (0 to 1, 200 points all of it), and seconds of a seek. */
+    public const VOLUME_A_POINT = 0.005, SEEK_A_POINT = 0.1;
 
     public static function build(Context $c, Player $p, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
-        if ($c->runtime !== null) { $s->attach($p, $c->runtime); }
+        if ($c->runtime !== null) { $s->attach($p, $c->runtime, $o->resume); }
         $box = $c->column(0, 0, 1, 0x000000);
         if ($o->keys) { self::keys($c, $s, $p); }
         $picture = $c->video($p)->grow(1);
+        $width = $c->width;
+        $picture->handleInput(function (InputEvent $e) use ($s, $width): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
+            if ($e->kind !== InputEvent::SCROLL || $s->sidebar !== null && $e->x >= $width - self::SIDEBAR) {
+                return false; // the rest goes on to the frame (a press, a click), the wheel over the sidebar to its scroll
+            }
+            if (abs($e->dy) >= abs($e->dx)) {
+                $s->setVolume($s->volume - $e->dy * self::VOLUME_A_POINT);
+            } else {
+                $s->wheelSeek += -$e->dx * self::SEEK_A_POINT; // a seek a tenth of a second at the most (build)
+                $s->moved = microtime(true);
+            }
+            return true;
+        });
+        if ($s->wheelSeek != 0.0) { // what the wheel moved across, a seek every tenth of a second at the most: one costs reading from a keyframe
+            $wait = 0.1 - (microtime(true) - $s->wheelSeekAt);
+            if ($wait <= 0) {
+                $s->seekBy($s->wheelSeek);
+                [$s->wheelSeek, $s->wheelSeekAt] = [0.0, microtime(true)];
+            } else {
+                $c->after($wait);
+            }
+        }
         [$px, $py] = $c->pointerPosition($box);
         $now = microtime(true);
         if ([$px, $py] !== $s->pointer) { $s->pointer = [$px, $py]; $s->moved = $now; }

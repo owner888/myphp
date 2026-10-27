@@ -1683,6 +1683,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Player::setAspectRatio`, `setCrop`, `setRotation`, `setAudioDelay`,
   `Context::videoPlayer`, `VideoPlayerState` and `VideoPlayerOptions` are
   myphp's, as IINA's window has them: mygo has no video.
+- **Going on where a film was left** (v1.39): `Media\PlaybackPositions`,
+  `Player::path` and `VideoPlayerOptions::$resume` are myphp's, as IINA's
+  "resume last playback position": mygo has no video.
 - **System materials, SF Symbols, the traffic lights** (v1.35):
   `Node::systemMaterial`, `Image::symbol`, `Window::setWindowButtonVisibility`,
   `Window::setAspectRatio` and `Player::videoTrack` are myphp's: the developer asked for the video

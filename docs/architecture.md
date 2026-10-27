@@ -3632,6 +3632,23 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   sound reads the film that much further ahead, and after a seek the
   audio comes from where it plays delayed.
 
+## The wheel, going on from where a film was left (v1.39)
+
+- **The wheel over the picture** (`UI\VideoPlayer`), as IINA's: taken as
+  it comes (`Node::handleInput`, `InputEvent::SCROLL`), up and down the
+  volume (200 points all of it), across a seek (a tenth of a second a
+  point), the seeks at most one a tenth of a second, what the wheel moved
+  between them added up (one reads from a keyframe). Over the open
+  sidebar it goes on to the sidebar's scroll.
+- **Where films were left** (`Media\PlaybackPositions`, `Player::path`):
+  by the file's path in a JSON file (playback-positions.json in the
+  app's user data), written through a temporary one, the most recent 500
+  kept. The player (`VideoPlayerOptions::$resume`, on by default) goes
+  on from where a film was left when it is more than 5 s in and before
+  its last 5, telling it; it notes where it is every 10 s of playing, at
+  a pause and when another player comes, and forgets a film played to
+  its end. A quit loses at most the last 10 s.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

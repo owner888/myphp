@@ -5,7 +5,8 @@
 // on macOS, built over a film: the title, the times, the window asked to
 // keep the picture's shape and to show the traffic lights with the
 // controls, a message at a pause, the sidebar opened by its gear and its
-// tabs, the aspect, crop and rotation it sets, IINA's keys.
+// tabs, the aspect, crop and rotation it sets, IINA's keys, the wheel;
+// where films were left, noted and gone back to.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -29,6 +30,19 @@ same(['English', '日本語'], [VideoPlayer::language('eng', 'en'), VideoPlayer:
 App::setLocale(''); App::setLanguages();
 same('', VideoPlayer::language('und', 'en'), 'none for an undetermined language');
 
+// Where films were left (Media\PlaybackPositions): by path, in its JSON file, read again by another; forgotten; the most recent KEEP kept.
+$file = sys_get_temp_dir() . '/myphp-positions-' . getmypid() . '.json';
+@unlink($file);
+$pos = new \MyPHP\Media\PlaybackPositions($file);
+same(null, $pos->get('/films/a.mkv'), 'a film never left: nowhere');
+$pos->set('/films/a.mkv', 431.25); $pos->set('/films/b.mkv', 12.0);
+same([431.25, 12.0], [(new \MyPHP\Media\PlaybackPositions($file))->get('/films/a.mkv'), (new \MyPHP\Media\PlaybackPositions($file))->get('/films/b.mkv')], 'where each was left, in its file');
+$pos->forget('/films/a.mkv');
+same(null, (new \MyPHP\Media\PlaybackPositions($file))->get('/films/a.mkv'), 'one watched to the end forgotten');
+for ($i = 0; $i < \MyPHP\Media\PlaybackPositions::KEEP; $i++) { $pos->set("/films/$i.mkv", 1.0); }
+same([null, 1.0], [$pos->get('/films/b.mkv'), $pos->get('/films/0.mkv')], 'the least recent forgotten past KEEP');
+unlink($file);
+
 if (PHP_OS_FAMILY === 'Darwin') {
     $run = function (float $seconds): void {
         $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
@@ -36,6 +50,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     };
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
     $s = new VideoPlayerState();
+    $s->positions = new \MyPHP\Media\PlaybackPositions($scratch = sys_get_temp_dir() . '/myphp-positions-ui-' . getmypid() . '.json'); // not the user's
     $s->title = 'clip.mkv';
     $h = new Headless(fn(Context $c) => $c->videoPlayer($p, $s), 960, 540);
     $h->frame();
@@ -70,9 +85,25 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h->key(Key::SPACE, 'insertText:', 0, ' '); $h->frame();
     check($p->playing(), 'Space plays');
     $p->pause();
+    // The wheel over the picture: up and down the volume, across a seek (at most one a tenth of a second).
+    $h->input->push(['scroll', 300.0, 200.0, 0.0, -20.0, true]); $h->frame();
+    check(abs($s->volume - 0.85) < 1e-9, 'the wheel down 20 points: the volume 10 lower: ' . $s->volume);
+    $p->seek(1.5); $from = $p->time();
+    $h->input->push(['scroll', 300.0, 200.0, -5.0, 0.0, true]); $h->frame();
+    check(abs($p->time() - ($from - 0.5)) < 0.01, 'across 5 points: half a second back: ' . $p->time());
+    // Where it was left noted at a pause, for the next time (more than 5 s in, which a clip of 2 s is not: noted, not gone back to).
+    $posFile = sys_get_temp_dir() . '/myphp-positions-player-' . getmypid() . '.json';
+    $s2 = new VideoPlayerState(); $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
+    $p2 = new Player(__DIR__ . '/testdata/clip.mp4');
+    $h2 = new Headless(fn(Context $c) => $c->videoPlayer($p2, $s2), 960, 540);
+    $h2->frame();
+    $p2->play(); $s2->togglePause();
+    same(round($p2->time(), 3), (new \MyPHP\Media\PlaybackPositions($posFile))->get($p2->path()), 'where it was paused noted');
+    @unlink($posFile);
     $off = new Headless(fn(Context $c) => $c->videoPlayer($p, $s, new VideoPlayerOptions(titleBar: false, osd: false, sidebar: false, keys: false)), 960, 540);
     $off->frame();
     check($off->byText('clip.mkv') === null && !isset($off->rt->windowAsks['buttons']), 'without its title bar: no title, the traffic lights left alone');
     $off->key(Key::SPACE, 'insertText:', 0, ' '); $off->frame();
     check(!$p->playing(), 'without its keys: Space is the app\'s');
+    @unlink($scratch);
 }

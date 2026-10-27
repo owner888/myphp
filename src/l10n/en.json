@@ -1040,5 +1040,9 @@
   "videoLayoutNotYet": "The layout settings are not supported yet",
   "@videoLayoutNotYet": {
     "description": "The video player's layout tab, whose settings it has no means for yet."
+  },
+  "videoResumedAt": "Resumed from {time}",
+  "@videoResumedAt": {
+    "description": "The video player's message as a film goes on from where it was left last time."
   }
 }
