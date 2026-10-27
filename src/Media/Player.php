@@ -14,7 +14,8 @@ use RuntimeException;
  * M4V through AVFoundation's reader) and the system decodes and plays
  * them, the video shown straight by the window server, on threads of its
  * own: a timer on the main thread keeps two seconds ahead of the clock.
- * Codecs: H.264 and HEVC; AAC, AC-3, E-AC-3 and MP3. It opens paused on
+ * Codecs: H.264 and HEVC (VP9 and AV1 where decoded in hardware); AAC,
+ * AC-3, E-AC-3, MP3, Opus and FLAC. It opens paused on
  * its first frame. While it plays the display stays awake, its screen
  * saver off, as IINA keeps it (setKeepAwake, awake()).
  *

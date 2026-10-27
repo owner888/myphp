@@ -141,3 +141,14 @@ check(abs($shown[3] - 30) < 1e-9 && abs($shown[2] - 30 * 9 / 16) < 1e-9 && abs($
 $m = new Matroska(__DIR__ . '/testdata/clip-chapters.mkv');
 same([['Opening', 0.0], ['', 1.0], ['第三章', 1.5]], array_map(fn(\MyPHP\Media\Chapter $c) => [$c->title, $c->start], $m->chapters()), "a Matroska file's chapters");
 same([], (new Matroska(__DIR__ . '/testdata/clip.mkv'))->chapters(), 'a file of no chapters');
+
+// FLAC: its STREAMINFO made the dfLa box AVFoundation makes of an MP4's, the frames a packet from its frame header (4608 here, the last fewer).
+$m = new Matroska(__DIR__ . '/testdata/clip-flac.mkv');
+$a = $m->tracks()[1];
+same(['A_FLAC', 44100.0, 2], [$a->codec, $a->sampleRate, $a->channels], 'a FLAC track');
+$dfLa = (new \ReflectionMethod(\MyPHP\Native\CoreMedia::class, 'dfLa'))->invoke(null, $a);
+same(['00000032', 'dfLa', '00000000', '80000022', substr($a->private, 8, 34)], [bin2hex(substr($dfLa, 0, 4)), substr($dfLa, 4, 4), bin2hex(substr($dfLa, 8, 4)), bin2hex(substr($dfLa, 12, 4)), substr($dfLa, 16)], 'its magic cookie, a dfLa box of its STREAMINFO');
+$frames = [];
+while (($p = $m->next()) !== null) { if ($p->track === $a) { $frames[] = \MyPHP\Native\CoreMedia::frames($p); } }
+check(count($frames) > 2 && count(array_unique(array_slice($frames, 0, -1))) === 1 && $frames[0] === 4608 && end($frames) <= 4608, 'its packets of 4608 frames, the last no more: ' . implode(',', array_unique($frames)));
+same([90112, 2560], [array_sum($frames), end($frames)], 'all of them as ffprobe counts: 19 of 4608 and the last of 2560');

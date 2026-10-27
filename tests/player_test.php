@@ -107,6 +107,18 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $failed = $p->out->failure();
     check($failed === null && $p->time() - $from > 0.3, 'Opus: it plays, decoded by the system: ' . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
     $p->pause();
+    // FLAC, in Matroska (its dfLa cookie made of the STREAMINFO) and in MP4 (AVFoundation's sample buffers): decoded by the system.
+    foreach (['clip-flac.mkv', 'clip-flac.mp4'] as $file) {
+        $p = new Player(__DIR__ . "/testdata/$file");
+        check($p->audioTrack()?->codec === 'A_FLAC', "$file: a FLAC track plays");
+        $p->play();
+        for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+        $from = $p->time();
+        $run(0.5);
+        $failed = $p->out->failure();
+        check($failed === null && $p->time() - $from > 0.3, "$file: FLAC plays, decoded by the system: " . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
+        $p->pause();
+    }
 
     // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
     $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');

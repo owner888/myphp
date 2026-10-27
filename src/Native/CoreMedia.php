@@ -28,7 +28,7 @@ final class CoreMedia
     /** Those the system decodes only with the decoders it adds (VTRegisterSupplementalVideoDecoderIfAvailable), in hardware. */
     private const SUPPLEMENTAL = ['vp09', 'av01'];
     /** Its audio codecs: their CoreAudio format and the frames a packet holds, 0 for as many as each packet says (Opus's, by its TOC byte). */
-    public const AUDIO = ['A_AAC' => ['aac ', 1024], 'A_AC3' => ['ac-3', 1536], 'A_EAC3' => ['ec-3', 1536], 'A_MPEG/L3' => ['.mp3', 1152], 'A_OPUS' => ['opus', 0]];
+    public const AUDIO = ['A_AAC' => ['aac ', 1024], 'A_AC3' => ['ac-3', 1536], 'A_EAC3' => ['ec-3', 1536], 'A_MPEG/L3' => ['.mp3', 1152], 'A_OPUS' => ['opus', 0], 'A_FLAC' => ['flac', 0]];
 
     private static ?FFI $c = null, $vt = null;
 
@@ -140,10 +140,11 @@ final class CoreMedia
             [$format, $frames] = self::audio($t) ?? throw new RuntimeException("myphp: no decoder for {$t->codec}");
             $asbd = $c->new('ASBD');
             $asbd->rate = $t->sampleRate; $asbd->channels = $t->channels;
-            $asbd->format = self::fourcc($format); $asbd->framesPerPacket = $frames;
+            $asbd->format = self::fourcc($format); $asbd->framesPerPacket = $format === 'flac' ? self::flacBlock($t) : $frames;
             $cookie = match ($format) {
                 'aac ' => $t->private !== '' ? $t->private : self::audioSpecificConfig($t),
                 'opus' => $t->private, // its OpusHead: the channels, their mapping, the pre-skip
+                'flac' => self::dfLa($t),
                 default => '',
             };
             $buf = null;
@@ -157,6 +158,56 @@ final class CoreMedia
             throw new RuntimeException("myphp: the format of {$t->codec} (track {$t->number}): CoreMedia error $st");
         }
         return $out;
+    }
+
+    /** The STREAMINFO of FLAC track $t: Matroska's CodecPrivate is "fLaC" and the stream's metadata blocks, STREAMINFO the first (34 bytes after its 4 of header). */
+    private static function streamInfo(Track $t): string
+    {
+        if (!str_starts_with($t->private, 'fLaC') || strlen($t->private) < 42 || (ord($t->private[4]) & 0x7f) !== 0) {
+            throw new RuntimeException("myphp: track {$t->number} (A_FLAC) has no STREAMINFO");
+        }
+        return substr($t->private, 8, 34);
+    }
+
+    /**
+     * The magic cookie of FLAC track $t, as AVFoundation makes it of an
+     * MP4's: a whole dfLa box (its size, "dfLa", version and flags 0), with
+     * the STREAMINFO block alone, marked the last.
+     */
+    private static function dfLa(Track $t): string
+    {
+        return pack('N', 50) . 'dfLa' . "\0\0\0\0" . "\x80\x00\x00\x22" . self::streamInfo($t);
+    }
+
+    /** The largest block of FLAC track $t, in frames (STREAMINFO's maximum block size): the frames a packet, as AVFoundation's format says them. */
+    private static function flacBlock(Track $t): int
+    {
+        return unpack('n', self::streamInfo($t), 2)[1];
+    }
+
+    /**
+     * The frames of FLAC frame $b, from its header (FLAC format, "FRAME
+     * HEADER"): the block size's code, which for 6 and 7 is in the byte or
+     * two after the frame's number, UTF-8 coded.
+     */
+    private static function flacFrames(string $b): int
+    {
+        if (strlen($b) < 5 || ord($b[0]) !== 0xff || (ord($b[1]) & 0xfe) !== 0xf8) {
+            throw new RuntimeException('myphp: a FLAC packet of no frame header');
+        }
+        $code = ord($b[2]) >> 4;
+        if ($code === 1) { return 192; }
+        if ($code >= 2 && $code <= 5) { return 576 << ($code - 2); }
+        if ($code >= 8) { return 256 << ($code - 8); }
+        if ($code === 6 || $code === 7) {
+            $lead = ord($b[4]);
+            $n = 1; // the bytes of the frame's number: as many as its first byte's leading ones, else one
+            for ($bit = 0x80; $lead & $bit && $bit > 1; $bit >>= 1) { $n++; }
+            $n = $n === 1 ? 1 : $n - 1;
+            $at = 4 + $n;
+            return $code === 6 ? ord($b[$at] ?? "\0") + 1 : unpack('n', $b, $at)[1] + 1;
+        }
+        throw new RuntimeException("myphp: a FLAC frame of block size code $code");
     }
 
     /** The AudioSpecificConfig of AAC-LC at the track's rate and channels, for old Matroska files that carry none (A_AAC/MPEG2/LC). */
@@ -257,7 +308,8 @@ final class CoreMedia
     }
 
     /**
-     * The frames audio packet $p holds: its codec's, or for Opus as its TOC
+     * The frames audio packet $p holds: its codec's, for FLAC as its frame
+     * header says, or for Opus as its TOC
      * byte says (RFC 6716 3.1: the frame size of its configuration, 2.5 to
      * 60 ms at 48 kHz, times the frames in it).
      */
@@ -266,6 +318,9 @@ final class CoreMedia
         $f = self::audio($p->track) ?? throw new RuntimeException("myphp: no decoder for {$p->track->codec}");
         if ($f[1] > 0) {
             return $f[1];
+        }
+        if ($f[0] === 'flac') {
+            return self::flacFrames($p->data);
         }
         $toc = ord($p->data[0] ?? "\0");
         $config = $toc >> 3;

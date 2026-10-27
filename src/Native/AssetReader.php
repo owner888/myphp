@@ -22,7 +22,7 @@ final class AssetReader implements Source
 {
     /** Matroska's codec ids of the FourCCs AVFoundation's tracks have. */
     private const CODECS = ['avc1' => 'V_MPEG4/ISO/AVC', 'avc3' => 'V_MPEG4/ISO/AVC', 'hvc1' => 'V_MPEGH/ISO/HEVC', 'hev1' => 'V_MPEGH/ISO/HEVC', 'vp09' => 'V_VP9', 'av01' => 'V_AV1',
-        'aac ' => 'A_AAC', 'ac-3' => 'A_AC3', 'ec-3' => 'A_EAC3', '.mp3' => 'A_MPEG/L3', 'opus' => 'A_OPUS', 'tx3g' => 'S_TEXT/TX3G'];
+        'aac ' => 'A_AAC', 'ac-3' => 'A_AC3', 'ec-3' => 'A_EAC3', '.mp3' => 'A_MPEG/L3', 'opus' => 'A_OPUS', 'flac' => 'A_FLAC', 'tx3g' => 'S_TEXT/TX3G'];
     /** The track types of AVFoundation's media types: text subtitles are 'sbtl', or 'text' in QuickTime files. */
     private const TYPES = ['vide' => Track::VIDEO, 'soun' => Track::AUDIO, 'sbtl' => Track::SUBTITLE, 'text' => Track::SUBTITLE];
 

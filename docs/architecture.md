@@ -3797,6 +3797,24 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   chosen by none; before macOS 14 menus have none and the item is left
   out, as IINA leaves it.
 
+## FLAC (v1.42)
+
+- **FLAC in Matroska** (`A_FLAC`, CoreAudio's `flac`): its magic cookie
+  is the one AVFoundation makes of an MP4's, read off its format
+  description: a whole dfLa box (size 50, "dfLa", version and flags 0)
+  holding the STREAMINFO block alone, marked the last, which Matroska's
+  CodecPrivate carries after "fLaC". The format's frames a packet are
+  STREAMINFO's largest block (4608 as ffmpeg writes), as AVFoundation's;
+  each packet's frames, which the sound's timeline adds up, come from its
+  frame header (the block size's code, or the byte or two after the
+  UTF-8 coded frame number), the last block fewer.
+- **FLAC in MP4**: AVFoundation's sample buffers go to the renderer as
+  they are; the reader names `flac` A_FLAC, which the system decodes.
+- **Vorbis** is not taken: the system decodes it (`vorb` is among
+  kAudioFormatProperty_DecodeFormatIDs), but a packet's frames are of its
+  mode's block, which only the setup header's modes say (read from its
+  end, past the codebooks), and the decoder's magic cookie is not known.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3816,8 +3834,8 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
 - Video: image subtitles (PGS, VobSub) are not read, nor ASS's styling
-  and placement; FLAC and Vorbis are not decoded yet (VP9, AV1 and Opus
-  are, v1.37), nor DTS or TrueHD, which the system has no decoder of;
+  and placement; Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
+  Opus, v1.37), nor DTS or TrueHD, which the system has no decoder of;
   text has no outline of its own.
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
