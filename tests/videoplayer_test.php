@@ -148,9 +148,14 @@ if (PHP_OS_FAMILY === 'Darwin') {
     @unlink($scratch);
     // Opening films: a player of each, the playlist of its folder; the next at the end of one; the playlist's sidebar, a double click playing a row.
     $s3 = new VideoPlayerState(); $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
-    check($s3->open(__DIR__ . '/testdata/clip.mkv') && $s3->player?->path() === __DIR__ . '/testdata/clip.mkv' && $s3->title === 'clip.mkv', 'a film opened: its player, its title');
+    // A folder of a few films, all of whose rows show in the sidebar (testdata's are more than it shows).
+    $films = sys_get_temp_dir() . '/myphp-films-' . getmypid();
+    @mkdir($films);
+    foreach (['clip.mkv', 'clip.mp4', 'clip-chapters.mkv', 'clip-pgs.mkv'] as $f) { copy(__DIR__ . "/testdata/$f", "$films/$f"); }
+    check($s3->open("$films/clip.mkv") && $s3->player?->path() === "$films/clip.mkv" && $s3->title === 'clip.mkv', 'a film opened: its player, its title');
     $names = array_map('basename', $s3->playlist->files());
-    check(in_array('clip-av1.mkv', $names, true) && $names[$s3->playlist->index()] === 'clip.mkv', 'its playlist the films of its folder: ' . implode(', ', $names));
+    same(['clip-chapters.mkv', 'clip-pgs.mkv', 'clip.mkv', 'clip.mp4'], $names, 'its playlist the films of its folder, by name');
+    same('clip.mkv', $names[$s3->playlist->index()], 'the one opened playing');
     $first = $s3->player;
     check($s3->next() && $s3->player !== $first && !$first->playing(), 'the next one plays, the last one paused');
     check(!$s3->open(__DIR__ . '/testdata/upright.jpg') && $s3->error !== '' && $s3->player !== $first, 'what is no film: its error, the film playing going on');
@@ -188,10 +193,22 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h3->chooseMenuItem('Filename Descending');
     $names = array_map('basename', $s3->playlist->files());
     same([$names, $playing], [array_reverse(array_map('basename', (function ($f) { usort($f, fn($a, $b) => strcmp(basename($a), basename($b))); return $f; })($s3->playlist->files()))), $s3->playlist->current()], 'sorted by name down, the one playing still playing');
+    // Image subtitles over the picture: a PGS picture where it is on the plane, scaled with it (1920 by 1080 over 960 by 540).
+    $s3->open("$films/clip-pgs.mkv");
+    $s3->player->pause(); $s3->player->seek(0.5); $s3->sidebar = null;
+    $h3->frame(); $run(0.3); $h3->frame();
+    $images = function (?\MyPHP\UI\Node $n) use (&$images): array {
+        if ($n === null) { return []; }
+        $out = $n->kind === \MyPHP\UI\Node::IMAGE && $n->passThrough ? [$n] : [];
+        foreach ($n->kids as $k) { array_push($out, ...$images($k)); }
+        return $out;
+    };
+    $shown = array_map(fn($n) => array_map(fn($v) => round($v, 1), $h3->rect($n)), $images($h3->root));
+    same([[356.5, 450.0, 247.0, 39.0]], $shown, 'the PGS picture where it shows, at half size');
     // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.
-    $s3->open(__DIR__ . '/testdata/clip-chapters.mkv');
+    $s3->open("$films/clip-chapters.mkv");
     $s3->player->pause();
-    $s3->playlistTab = 'chapters'; $h3->frame(); $run(0.3); $h3->frame();
+    $s3->sidebar = 'playlist'; $s3->playlistTab = 'chapters'; $h3->frame(); $run(0.3); $h3->frame();
     check($h3->byText('Opening') !== null && $h3->byText('Chapter 1') !== null && $h3->byText('第三章') !== null, 'the chapters, the untitled one by its place');
     check($h3->byText('00:00 → 00:01') !== null && $h3->byText('00:01 → End') !== null, 'their times, the last to the end');
     [$mx, $my] = $h3->middle($h3->byText('第三章'));
@@ -199,5 +216,8 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(abs($s3->player->time() - 1.5) < 0.1 && $s3->player->playing() && $s3->player->chapter() === 2, 'a double click goes to a chapter and plays: ' . $s3->player->time());
     $s3->player->pause();
     @unlink($scratch);
+    $s3->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv')); // the folder's films let go before it goes
+    foreach (glob("$films/*") ?: [] as $f) { unlink($f); }
+    rmdir($films);
 }
 

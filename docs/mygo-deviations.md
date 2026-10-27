@@ -1697,6 +1697,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `sortByPath` are myphp's, as IINA's, and `Player::awake`,
   `setKeepAwake` and `VideoPlayerOptions::$keepAwake` (the display kept
   awake while it plays, as IINA's); mygo has no video.
+- **Image subtitles** (v1.43): `Media\Pgs`, `Media\VobSub`,
+  `Media\SubtitlePicture`, `Player::subtitlePictures` and
+  `subtitlePlane` are myphp's, as IINA (mpv) shows them; mygo has no
+  video.
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

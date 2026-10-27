@@ -146,6 +146,22 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p->setSubtitleTrack($tx3g[0]);
     same(['第一句 字幕'], $at(0.5), 'its lines');
 
+    // Image subtitles: a PGS track's pictures where the player is, cleared between; a VobSub's; the plane over the picture, cut with a crop.
+    $p = new Player(__DIR__ . '/testdata/clip-pgs.mkv');
+    $pgs = array_values(array_filter($p->subtitleTracks(), fn(Track $t) => $t->codec === 'S_HDMV/PGS'));
+    check(count($pgs) === 1 && $p->subtitleTrack() === $pgs[0], 'a PGS track, shown as the file marks it default');
+    $pics = function (float $t) use (&$p): array { $p->seek($t); return array_map(fn($q) => [$q->x, $q->y], $p->subtitlePictures()); };
+    same([[[713, 900]], [], [[770, 120], [755, 900]], []], [$pics(0.5), $pics(1.1), $pics(1.5), $pics(1.95)], 'its pictures where the player is');
+    same([], $p->subtitles(), 'no lines of text');
+    same([0.0, 0.0, 960.0, 540.0], $p->subtitlePlane(960, 540, 1920, 1080), 'the plane over the picture of a 16:9 box');
+    $p->setCrop(4 / 3);
+    same([-120.0, 0.0, 960.0, 540.0], $p->subtitlePlane(720, 540, 1920, 1080), 'cut with it by a crop, as the picture is: wider than the box of 4:3');
+    $p->setCrop(null);
+    $p = new Player(__DIR__ . '/testdata/clip-vobsub.mkv');
+    $p->setSubtitleTrack($p->subtitleTracks()[0]);
+    $pics = function (float $t) use (&$p): array { $p->seek($t); return array_map(fn($q) => [$q->x, $q->y], $p->subtitlePictures()); };
+    same([[[713, 900]], [], [[755, 120]], []], [$pics(0.5), $pics(1.1), $pics(1.5), $pics(1.95)], 'a VobSub track\'s, until each stops');
+
     // Chapters: an MP4's chapter track as AVFoundation reads it, the one playing the last started.
     $p = new Player(__DIR__ . '/testdata/clip-chapters.mp4');
     same([['Opening', 0.0], ['', 1.0], ['第三章', 1.5]], array_map(fn(\MyPHP\Media\Chapter $c) => [$c->title, round($c->start, 3)], $p->chapters()), "an MP4's chapters");

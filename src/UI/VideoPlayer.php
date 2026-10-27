@@ -7,6 +7,7 @@ use Closure;
 use Locale;
 use MyPHP\Dialog;
 use MyPHP\Media\Player;
+use MyPHP\Media\SubtitlePicture;
 use MyPHP\Media\Track;
 use MyPHP\OpenDialogOptions;
 use MyPHP\Window;
@@ -108,6 +109,9 @@ final class VideoPlayer
 
         if ($s->subtitlesVisible && !$s->pictureInPicture && ($lines = $p->subtitles()) !== []) {
             self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
+        }
+        if ($s->subtitlesVisible && !$s->pictureInPicture && ($pictures = $p->subtitlePictures()) !== []) {
+            self::subtitlePictures($c, $p, $pictures);
         }
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->error !== '') {
@@ -282,6 +286,27 @@ final class VideoPlayer
               $c->end();
           }
         $c->end();
+    }
+
+    /**
+     * The pictures of image subtitles (PGS, VobSub) where they are on the
+     * subtitles' plane, which lies over the picture (Player::subtitlePlane),
+     * scaled with it; their images made once, the last few kept.
+     * @param list<SubtitlePicture> $pictures
+     */
+    private static function subtitlePictures(Context $c, Player $p, array $pictures): void
+    {
+        static $images = []; // by picture: [its weak reference, its image], the last made last
+        foreach ($pictures as $pic) {
+            [$px, $py, $pw, $ph] = $p->subtitlePlane($c->width, $c->height, $pic->planeWidth, $pic->planeHeight);
+            $k = spl_object_id($pic);
+            if (($images[$k][0] ?? null)?->get() !== $pic) {
+                $images[$k] = [\WeakReference::create($pic), Image::fromPixels($pic->width, $pic->height, $pic->rgba())];
+                if (count($images) > 8) { unset($images[array_key_first($images)]); }
+            }
+            $sx = $pw / max(1, $pic->planeWidth); $sy = $ph / max(1, $pic->planeHeight);
+            $c->image($images[$k][1], $pic->width * $sx, $pic->height * $sy)->absolute()->left($px + $pic->x * $sx)->top($py + $pic->y * $sy)->passThrough();
+        }
     }
 
     /** $text over the picture, centered $bottom points from its foot: white, outlined in black as mpv draws subtitles (copies of it around, under it). */
@@ -596,7 +621,7 @@ final class VideoPlayer
             $codec === 'V_MPEG4/ISO/AVC' => 'h264', $codec === 'V_MPEGH/ISO/HEVC' => 'hevc', str_starts_with($codec, 'V_VP9') => 'vp9', str_starts_with($codec, 'V_AV1') => 'av1',
             str_starts_with($codec, 'A_AAC') => 'aac', $codec === 'A_AC3' => 'ac3', $codec === 'A_EAC3' => 'eac3', str_starts_with($codec, 'A_DTS') => 'dts', $codec === 'A_OPUS' => 'opus',
             $codec === 'A_FLAC' => 'flac', $codec === 'A_MPEG/L3' => 'mp3', $codec === 'A_TRUEHD' => 'truehd', $codec === 'A_VORBIS' => 'vorbis',
-            $codec === 'S_TEXT/UTF8' => 'subrip', in_array($codec, ['S_TEXT/ASS', 'S_ASS'], true) => 'ass', in_array($codec, ['S_TEXT/SSA', 'S_SSA'], true) => 'ssa', $codec === 'S_TEXT/WEBVTT' => 'webvtt', $codec === 'S_TEXT/TX3G' => 'mov_text',
+            $codec === 'S_TEXT/UTF8' => 'subrip', in_array($codec, ['S_TEXT/ASS', 'S_ASS'], true) => 'ass', in_array($codec, ['S_TEXT/SSA', 'S_SSA'], true) => 'ssa', $codec === 'S_TEXT/WEBVTT' => 'webvtt', $codec === 'S_TEXT/TX3G' => 'mov_text', $codec === 'S_HDMV/PGS' => 'hdmv_pgs_subtitle', $codec === 'S_VOBSUB' => 'dvd_subtitle',
             default => strtolower(preg_replace('/^[VAS]_/', '', $codec) ?? $codec),
         };
     }

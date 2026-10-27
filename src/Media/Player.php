@@ -66,6 +66,8 @@ final class Player
     /** What keeps the display awake while it plays, and whether it does (setKeepAwake). */
     private Awake $awake;
     private bool $keepAwake = true;
+    /** @var array<int, Pgs|VobSub> the decoders of the image subtitle tracks, by track (its object id): a PGS track's sets reuse what came before */
+    private array $pictureDecoders = [];
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
@@ -174,17 +176,66 @@ final class Player
      */
     public function subtitles(): array
     {
+        return array_values(array_filter($this->showing(), 'is_string'));
+    }
+
+    /**
+     * The pictures of the image subtitles showing now (PGS, VobSub), of the
+     * track shown, each where it is on the subtitles' plane, which lies over
+     * the picture (subtitlePlane); none without one, or of a text track.
+     * @return list<SubtitlePicture>
+     */
+    public function subtitlePictures(): array
+    {
+        return array_merge(...array_values(array_filter($this->showing(), 'is_array')));
+    }
+
+    /**
+     * Where the subtitles' plane of an image track lies in a box $w by $h,
+     * [x, y, w, h]: over the whole picture as picture() lays it out (a crop
+     * cuts it with the picture), fitted in what shows of a turned one, of
+     * the plane's own aspect, $planeWidth by $planeHeight.
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    public function subtitlePlane(float $w, float $h, int $planeWidth, int $planeHeight): array
+    {
+        [[$sx, $sy, $sw, $sh], [$pw, $ph]] = $this->picture($w, $h);
+        if ($this->rotation === 90 || $this->rotation === 270) {
+            [[$x, $y, $fw, $fh]] = Picture::fit($sw, $sh, $planeWidth / max(1, $planeHeight), null, 0);
+            return [$sx + $x, $sy + $y, $fw, $fh];
+        }
+        return [$sx + ($sw - $pw) / 2, $sy + ($sh - $ph) / 2, $pw, $ph];
+    }
+
+    /** What the subtitles of the track shown show now, texts or pictures. @return list<string|list<SubtitlePicture>> */
+    private function showing(): array
+    {
         return $this->subtitle === null ? [] : ($this->cues[spl_object_id($this->subtitle)] ?? new Cues())->at($this->time() - $this->subtitleDelay);
     }
 
     /** Notes the cue subtitle packet $p carries. */
     private function cue(Packet $p): void
     {
+        $cues = $this->cues[spl_object_id($p->track)] ??= new Cues();
+        if ($p->track->codec === 'S_HDMV/PGS') { // a display set: its pictures, or none to clear, until the next
+            $d = $this->pictureDecoders[spl_object_id($p->track)] ??= new Pgs();
+            $cues->add($p->time, INF, $d->displaySet($p->data));
+            return;
+        }
+        if ($p->track->codec === 'S_VOBSUB') { // a subpicture: from and to when it says, after the packet's time
+            $d = $this->pictureDecoders[spl_object_id($p->track)] ??= new VobSub($p->track->private);
+            $shown = $d->packet($p->data);
+            if ($shown !== null) {
+                [$from, $to, $pic] = $shown;
+                $cues->add($p->time + $from, $to !== null ? $p->time + $to : ($p->duration > 0 ? $p->time + $p->duration : INF), [$pic]);
+            }
+            return;
+        }
         $text = Subtitles::packet($p->track->codec, $p->data);
         if ($text === '') {
             return;
         }
-        ($this->cues[spl_object_id($p->track)] ??= new Cues())->add($p->time, $p->duration > 0 ? $p->time + $p->duration : INF, $text);
+        $cues->add($p->time, $p->duration > 0 ? $p->time + $p->duration : INF, $text);
     }
 
     /** Whether the system decodes track $t: the player plays an audio track only if so. */
@@ -535,7 +586,7 @@ final class Player
                 $this->queued['video'][] = $p;
             } elseif ($p->track === $this->audio && $p->time + $p->duration + $this->out->audioDelay > $this->target) { // the audio from where the seek went, as it plays delayed
                 $this->queued['audio'][] = $p;
-            } elseif (Subtitles::readable($p->track)) { // every text track's, for one shown later
+            } elseif (Subtitles::readable($p->track)) { // every subtitle track's, for one shown later
                 $this->cue($p);
             }
         }

@@ -12,19 +12,21 @@ use RuntimeException;
  * MP4's tx3g), as plain lines: styling left out (ASS's override tags,
  * SubRip's and WebVTT's markup), \N and <br> breaking lines. A file in
  * UTF-16 or, failing UTF-8, in GB18030 (Chinese subtitles often are) is
- * read as such.
+ * read as such. Image tracks (PICTURES) are read by Pgs and VobSub.
  */
 final class Subtitles
 {
     /** Matroska's codec ids of the text subtitles read. */
     public const CODECS = ['S_TEXT/UTF8', 'S_TEXT/ASS', 'S_TEXT/SSA', 'S_ASS', 'S_SSA', 'S_TEXT/WEBVTT', 'S_TEXT/TX3G'];
+    /** Matroska's codec ids of the image subtitles read: Blu-ray's (Pgs) and DVD's (VobSub). */
+    public const PICTURES = ['S_HDMV/PGS', 'S_VOBSUB'];
     /** The extensions of subtitle files, by their codec id. */
     public const FILES = ['srt' => 'S_TEXT/UTF8', 'ass' => 'S_TEXT/ASS', 'ssa' => 'S_TEXT/SSA', 'vtt' => 'S_TEXT/WEBVTT'];
 
-    /** Whether the player reads subtitle track $t. */
+    /** Whether the player reads subtitle track $t: text or images. */
     public static function readable(Track $t): bool
     {
-        return $t->type === Track::SUBTITLE && in_array($t->codec, self::CODECS, true);
+        return $t->type === Track::SUBTITLE && (in_array($t->codec, self::CODECS, true) || in_array($t->codec, self::PICTURES, true));
     }
 
     /**

@@ -3815,6 +3815,45 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   mode's block, which only the setup header's modes say (read from its
   end, past the codebooks), and the decoder's magic cookie is not known.
 
+## Image subtitles: PGS and VobSub (v1.43)
+
+- **PGS** (`Media\Pgs`, Matroska's S_HDMV/PGS): a packet is a display
+  set, its segments without the "PG" and times of a .sup. The
+  composition places objects (bitmaps of indexes in runs, in fragments
+  over several segments) on the plane in a palette's colors (Y, Cr, Cb,
+  alpha: BT.709 for a plane of 720 lines or more, else BT.601, limited
+  range, as ffmpeg's decoder takes them), each maybe cut (its crop).
+  Objects and palettes last through an epoch, which later sets reuse, so
+  one decoder reads a track's sets in order; a set of no objects clears,
+  a cue of no pictures that ends the one before (a set's cue lasts until
+  the next). An object of before a seek, in the epoch it began in, is
+  left out until a set that has it.
+- **VobSub** (`Media\VobSub`, S_VOBSUB): the .idx header is the track's
+  CodecPrivate (the plane's size, 16 RGB colors); a packet is a
+  subpicture unit: its bitmap of two-bit pixels in runs of nibbles, its
+  even and odd lines apart, then control sequences of when it shows and
+  stops (in ticks of 1024 of 90 kHz after the packet's time; Matroska's
+  block durations from ffmpeg are of no use), the four colors and alphas
+  its pixels take, its box, where each field's runs start.
+- **Pictures, not pixels, kept** (`Media\SubtitlePicture`): where it is on
+  the plane and the plane's size; its premultiplied RGBA decoded from
+  the runs as asked for (a film has hundreds, a megabyte or more each
+  decoded). The player's window makes the image of the few shown last.
+- **Cues of pictures** (`Cues::add` of a text or pictures): a set read
+  again after a seek is the same cue; one of none shows nothing.
+  `Player::subtitles` gives the texts showing, `subtitlePictures` the
+  pictures, `subtitlePlane` where the plane lies in a box: over the whole
+  picture as `picture()` lays it out (a crop cuts it with the picture),
+  fitted in what shows of a turned picture.
+- **The fixtures**: no ffmpeg encodes PGS, nor draws text into image
+  subtitles. A .sup of two display sets and their clears was drawn (text
+  in Noto Sans CJK, white outlined in black) and encoded for the test,
+  checked against ffmpeg's decoder (its overlay), and muxed into
+  clip-pgs.mkv (`-copyts`, else ffmpeg starts its times at the first;
+  its track marked default, which alone a player shows unasked, as mpv);
+  clip-vobsub.mkv is ffmpeg's dvdsub of it (`-fix_sub_duration`, else
+  its subpictures stop at the largest delay).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3833,8 +3872,8 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Video: image subtitles (PGS, VobSub) are not read, nor ASS's styling
-  and placement; Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
+- Video: ASS's styling and placement are not read (image subtitles,
+  PGS and VobSub, are: v1.43); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
   Opus, v1.37), nor DTS or TrueHD, which the system has no decoder of;
   text has no outline of its own.
 - `text()` measures with the old metrics unless its style needs the

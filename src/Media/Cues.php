@@ -5,20 +5,25 @@ namespace MyPHP\Media;
 
 /**
  * The cues of a subtitle track, as they are read: each a start and an end
- * in seconds and its text, the same cue read again (after a seek) kept
- * once; a cue of no end lasts until the next one starts.
+ * in seconds and what shows, a text or the pictures of an image track
+ * (none for one that clears what showed), the same cue read again (after
+ * a seek) kept once; a cue of no end lasts until the next one starts.
  */
 final class Cues
 {
-    /** @var array<string, array{0: float, 1: float, 2: string}> by start and text */
+    /** @var array<string, array{0: float, 1: float, 2: string|list<SubtitlePicture>}> by start and text (one of pictures a start) */
     private array $cues = [];
-    /** @var ?list<array{0: float, 1: float, 2: string}> the cues by start, made as at() asks after an add */
+    /** @var ?list<array{0: float, 1: float, 2: string|list<SubtitlePicture>}> the cues by start, made as at() asks after an add */
     private ?array $list = [];
 
-    /** Adds a cue; INF for its end makes it last until the next. */
-    public function add(float $start, float $end, string $text): void
+    /** Adds a cue of a text or of pictures (none: it clears); INF for its end makes it last until the next. @param string|list<SubtitlePicture> $shown */
+    public function add(float $start, float $end, string|array $shown): void
     {
-        $this->cues[sprintf('%.3f', $start) . "\0" . $text] = [$start, $end, $text];
+        $key = sprintf('%.3f', $start) . "\0" . (is_string($shown) ? $shown : "\1"); // pictures read again are the same cue
+        if (is_array($shown) && isset($this->cues[$key])) {
+            return;
+        }
+        $this->cues[$key] = [$start, $end, $shown];
         $this->list = null;
     }
 
@@ -27,7 +32,7 @@ final class Cues
         return count($this->cues);
     }
 
-    /** The texts of the cues showing at $t seconds, in the order they started. @return list<string> */
+    /** What the cues showing at $t seconds show, texts or pictures, in the order they started; a cue that clears shows nothing. @return list<string|list<SubtitlePicture>> */
     public function at(float $t): array
     {
         if ($this->list === null) {
@@ -42,9 +47,9 @@ final class Cues
         }
         $out = [];
         for ($i = $at; $i >= 0 && $i > $at - 16; $i--) { // the cues showing together: a few at most
-            [, $end, $text] = $list[$i];
-            if ($t < (is_infinite($end) ? ($list[$i + 1][0] ?? INF) : $end)) {
-                array_unshift($out, $text);
+            [, $end, $shown] = $list[$i];
+            if ($shown !== [] && $t < (is_infinite($end) ? ($list[$i + 1][0] ?? INF) : $end)) {
+                array_unshift($out, $shown);
             }
         }
         return $out;
