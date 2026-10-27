@@ -3299,7 +3299,12 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   ticks of the view's display link (macOS 14), which runs while they come
   and pauses after a tick with none asked for, or, before macOS 14, a
   refresh after the last frame began. `Metal::forget` ends a closed
-  window's link.
+  window's link. Two traps on the way: the first frame, which a window
+  waits for before it shows, must draw at once (a link of a window not on
+  screen never ticks); and a link added to the run loop for an NSString
+  "kCFRunLoopCommonModes" never ticked, as that is a mode of that name:
+  `Metal::commonMode` reads CoreFoundation's `kCFRunLoopCommonModes`
+  itself.
 - **Timing on a shared machine.** Medians of a frame moved by half between
   runs; the least of 80 frames, run in turn against the snapshot before,
   held within a few percent. Xdebug's profiler inflated function calls so

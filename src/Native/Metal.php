@@ -660,8 +660,8 @@ final class Metal
         if ($p['link'] !== null) {
             if ($p['running']) {
                 $p['due'] = true;
-            } elseif (microtime(true) - $p['last'] > 2 * $refresh && self::visible($view)) {
-                self::drawLater($view, 0.0); // a window out of sight waits for the link, which ticks once it shows
+            } elseif (microtime(true) - $p['last'] > 2 * $refresh) {
+                self::drawLater($view, 0.0); // the first frame too, which a window waits for before it shows (readyToShow): a link of a window not on screen yet never ticks; the window holds the frames of one out of sight (Window::showing)
             } else {
                 $p['due'] = $p['running'] = true;
                 ObjC::msg('v:b', $p['link'], 'setPaused:', false);
@@ -692,9 +692,21 @@ final class Metal
     /** Draws $view after $delay seconds from the run loop, in any of its common modes (a live resize, a modal panel); asked again before then, once. */
     private static function drawLater($view, float $delay): void
     {
-        self::$commonModes ??= ObjC::msg('p:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', ObjC::str('kCFRunLoopCommonModes')), 'retain'); // kept past the autorelease pool
+        self::$commonModes ??= ObjC::msg('p:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', self::commonMode()), 'retain'); // kept past the autorelease pool
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
         ObjC::msg('v:ppdp', $view, 'performSelector:withObject:afterDelay:inModes:', ObjC::sel('draw'), null, $delay, self::$commonModes);
+    }
+
+    /**
+     * The run loop's common modes, kCFRunLoopCommonModes itself: a string
+     * of its name is a mode of that name, whose display links never ticked
+     * (the main run loop runs the default mode and those it tracks with).
+     */
+    private static function commonMode()
+    {
+        static $cf = null;
+        $cf ??= FFI::cdef('void* kCFRunLoopCommonModes;', '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation');
+        return $cf->kCFRunLoopCommonModes;
     }
 
     /** The display link of $view, paused, in the main run loop's common modes; null before macOS 14, which has none for views. */
@@ -711,7 +723,7 @@ final class Metal
         }
         $link = ObjC::msg('p:', ObjC::msg('p:pp', $view, 'displayLinkWithTarget:selector:', self::$ticker, ObjC::sel('tick:')), 'retain');
         ObjC::msg('v:b', $link, 'setPaused:', true);
-        ObjC::msg('v:pp', $link, 'addToRunLoop:forMode:', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'mainRunLoop'), ObjC::str('kCFRunLoopCommonModes'));
+        ObjC::msg('v:pp', $link, 'addToRunLoop:forMode:', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'mainRunLoop'), self::commonMode());
         self::$linked[ObjC::addr($link)] = $view;
         return $link;
     }
@@ -739,12 +751,6 @@ final class Metal
         return 1 / ($fps > 0 ? max($fps, 30) : 60);
     }
 
-    /** Whether some of the view's window shows (NSWindowOcclusionStateVisible). */
-    private static function visible($view): bool
-    {
-        $window = ObjC::msg('p:', $view, 'window');
-        return $window !== null && (ObjC::msg('L:', $window, 'occlusionState') & 2) !== 0;
-    }
 
     private static function defineDelegate()
     {
