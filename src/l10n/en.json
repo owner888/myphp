@@ -1049,10 +1049,6 @@
   "@videoChapters": {
     "description": "The video player's playlist sidebar tab of the film's chapters."
   },
-  "videoNoChapters": "No chapters",
-  "@videoNoChapters": {
-    "description": "The video player's chapters tab, the film having none it reads."
-  },
   "videoTotal": "Total {time}",
   "@videoTotal": {
     "description": "How long the films of the video player's playlist last together."
@@ -1065,9 +1061,37 @@
   "@videoShuffle": {
     "description": "The tooltip of a button of the video player's playlist."
   },
-  "videoSort": "Sort",
+  "videoSort": "Sort the playlist",
   "@videoSort": {
     "description": "The tooltip of a button of the video player's playlist."
+  },
+  "videoChapterNumber": "Chapter {n}",
+  "@videoChapterNumber": {
+    "description": "A chapter of no title in the video player's chapters tab, by its place from 0, as IINA's."
+  },
+  "videoChapterEnd": "End",
+  "@videoChapterEnd": {
+    "description": "Where the last chapter ends, in the video player's chapters tab: the film's end."
+  },
+  "videoSorting": "Sorting",
+  "@videoSorting": {
+    "description": "The header of the menu sorting the video player's playlist."
+  },
+  "videoSortNameAscending": "Filename Ascending",
+  "@videoSortNameAscending": {
+    "description": "An item of the menu sorting the video player's playlist."
+  },
+  "videoSortNameDescending": "Filename Descending",
+  "@videoSortNameDescending": {
+    "description": "An item of the menu sorting the video player's playlist."
+  },
+  "videoSortPathAscending": "File Path Ascending",
+  "@videoSortPathAscending": {
+    "description": "An item of the menu sorting the video player's playlist."
+  },
+  "videoSortPathDescending": "File Path Descending",
+  "@videoSortPathDescending": {
+    "description": "An item of the menu sorting the video player's playlist."
   },
   "videoAddFiles": "Add Files…",
   "@videoAddFiles": {

@@ -138,7 +138,7 @@ final class Window
             $this->runtime->popupMenu = function (array $items, float $x, float $y, bool $rtl, \Closure $chosen): void {
                 $wire = function (array $items) use (&$wire, $chosen): void { // each item reports its place
                     foreach ($items as $it) {
-                        if ($it->type === MenuItem::SEPARATOR) { continue; }
+                        if ($it->type === MenuItem::SEPARATOR || $it->type === MenuItem::HEADER) { continue; }
                         if ($it->submenu !== []) { $wire($it->submenu); continue; }
                         $it->click = function (MenuItem $chosenItem) use ($chosen) { $chosen((int)$chosenItem->id); };
                     }
@@ -760,6 +760,11 @@ final class Window
     /** The pointer over the content (mygo's nsCursor): AppKit's cursor of each shape; the diagonal resize cursors macOS 15's frame resize cursors, else AppKit's older ones; the columns' and rows' macOS 15's, else the two-way arrows; none a cursor of a transparent image, which hides the pointer over the view alone. */
     private function showCursor(\MyPHP\UI\Cursor $cursor): void
     {
+        if ($cursor === \MyPHP\UI\Cursor::None) {
+            // Hidden as IINA hides it, until the mouse moves, again each frame: AppKit sets its own cursor back (a full screen
+            // window's), and from macOS 11 a click shows it again without a move (IINA's workaround of FB11963121).
+            ObjC::msg('v:b', ObjC::cls('NSCursor'), 'setHiddenUntilMouseMoves:', true);
+        }
         if ($cursor === $this->cursorShown) {
             return;
         }

@@ -3733,6 +3733,70 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   place (0.25 s), each built while any of it shows, as IINA's tabs go
   from one to the other.
 
+## Chapters; the playlist looped, shuffled and sorted (v1.41)
+
+- **Chapters** (`Media\Chapter`, `Source::chapters`, `Player::chapters`,
+  `Player::chapter`): Matroska's of the default edition (else the
+  first), its top-level atoms but the hidden and disabled, as mpv lists
+  them, titled by their first display, their start in nanoseconds
+  whatever the timestamp scale; read with the other top-level elements,
+  through the seek head when they come after the clusters. An MP4's, a
+  QuickTime chapter track, as AVFoundation reads it
+  (`chapterMetadataGroupsBestMatchingPreferredLanguages:`, the common
+  title of each group), once asked for.
+- **Trap: an undetermined chapter track.** ffmpeg and HandBrake write
+  the chapter track's language undetermined ("und", or 0 read as it),
+  which matches no preferred language: the best match gave no chapters
+  for a user of English. With none matching, the chapters are read in
+  the file's first language (`availableChapterLocales`,
+  `chapterMetadataGroupsWithTitleLocale:containingItemsWithCommonKeys:`).
+- **Trap: a CMTimeRange returned by value.** The group's `timeRange`
+  sent through `ObjC::msg('X:', …)` came back as numbers of nothing (the
+  titles right, the starts in millions of seconds, out of order), where
+  a CMTime returned (`'T:'`) and a CMTimeRange passed (`setTimeRange:`)
+  are right. The chapter's start is read from its items' `time`, a
+  CMTime; why the 48-byte return goes wrong is not found yet. The one playing is the last
+  started (`chapter()`, -1 before the first).
+- **The chapters' tab**, as IINA's `SidebarChaptersPane`: a row of 40 a
+  chapter, the one playing marked, the title (or "Chapter n", n from 0
+  as IINA counts) over "start → next start", the last's "End"; lines
+  between and below; a double click goes to it and plays
+  (`VideoPlayerState::playChapter`, IINA's `playChapter`). IINA writes
+  "Chapter" and "End" in English whatever the language; the strings here
+  are translated. The progress bar has no chapter marks: IINA's
+  `showChapterPos` is off by default. With the sidebar open, which
+  chapter plays is part of the look that asks for a frame.
+- **The loop** (`VideoPlayerState::$loop`, `nextLoop`): IINA's button
+  goes off, the file (`repeat.1`), the playlist (`repeat`), off, in the
+  accent while on. The file's plays the film again at its end; the
+  playlist's goes from the last to the first at an end and for Cmd+Right
+  (and from the first to the last for Cmd+Left), as mpv's loop-playlist.
+- **Shuffle and sort** (`Playlist::shuffle`, `unshuffle`, `shuffled`,
+  `sortByName`, `sortByPath`): as mpv's playlist-shuffle and
+  playlist-unshuffle, the one playing staying the one playing, the order
+  before coming back with what was added since after it; the button in
+  the accent while shuffled. The sort button's menu, as IINA's: a header
+  and four items, the names or the paths compared by their bytes, up or
+  down. IINA's two name items sort by path (both call `sortPath`); here
+  they sort by name, which a playlist of one folder cannot tell apart.
+- **The display kept awake** (`Native\Awake`, `Player::awake`): while a
+  player plays, a ProcessInfo activity of idle display sleep disabled, as
+  IINA's SleepPreventer (its default: the screen saver off, sound alone
+  too), ended as it pauses, ends or fails, and with the player;
+  `pmset -g assertions` lists it as "Playing <file>". `Player::setKeepAwake`
+  turns it off, as `VideoPlayerOptions::$keepAwake` (on) asks.
+- **Trap: the pointer shown in full screen.** A cursor of `Cursor::None`
+  was a transparent NSCursor set once, as the shape changed: in a full
+  screen window AppKit set its own back, and the pointer showed over the
+  film. It is hidden as IINA hides it besides,
+  `setHiddenUntilMouseMoves:` each frame it is none (from macOS 11 a click
+  shows it again without a move: IINA's workaround of FB11963121); the
+  transparent cursor keeps it unseen between a move and the frame after.
+- **Menu headers** (`UI\Menu::header`, `MenuItem::HEADER`,
+  `MenuItem::header`): NSMenuItem's `sectionHeaderWithTitle:` (macOS 14),
+  chosen by none; before macOS 14 menus have none and the item is left
+  out, as IINA leaves it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3752,9 +3816,9 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
 - Video: image subtitles (PGS, VobSub) are not read, nor ASS's styling
-  and placement; VP9, AV1, FLAC, Opus and Vorbis are not decoded yet, nor
-  DTS or TrueHD, which the system has no decoder of; text has no outline
-  of its own.
+  and placement; FLAC and Vorbis are not decoded yet (VP9, AV1 and Opus
+  are, v1.37), nor DTS or TrueHD, which the system has no decoder of;
+  text has no outline of its own.
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser

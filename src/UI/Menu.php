@@ -37,6 +37,9 @@ final class Menu
     /** Adds a line between groups of items. */
     public function separator(): void { $this->add('', NativeItem::SEPARATOR); }
 
+    /** Adds the title $label of the group of items under it, chosen by none (NativeItem::HEADER, macOS 14). */
+    public function header(string $label): void { $this->add($label, NativeItem::HEADER); }
+
     /** Adds an item showing $label that opens a submenu, which $build fills as the menu's function fills the menu. @param \Closure(Menu): void $build */
     public function submenu(string $label, \Closure $build): MenuItem
     {

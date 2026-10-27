@@ -103,10 +103,10 @@ final class Headless
     /** The menu the runtime showed and the user has not closed: its items (MyPHP\MenuItem), where it showed, and what takes the choice (mygo's headless menu). @var ?array{items: list<\MyPHP\MenuItem>, at: array{0: float, 1: float}, rtl: bool, chosen: Closure} */
     public ?array $menu = null;
 
-    /** The labels of the menu showing, "-" for a separator, or null for none (mygo's Tester.Menu). @return ?list<string> */
+    /** The labels of the menu showing, "-" for a separator, "# label" for a header, or null for none (mygo's Tester.Menu). @return ?list<string> */
     public function menuLabels(): ?array
     {
-        return $this->menu === null ? null : array_map(fn(\MyPHP\MenuItem $it) => $it->type === \MyPHP\MenuItem::SEPARATOR ? '-' : $it->label, $this->menu['items']);
+        return $this->menu === null ? null : array_map(fn(\MyPHP\MenuItem $it) => match ($it->type) { \MyPHP\MenuItem::SEPARATOR => '-', \MyPHP\MenuItem::HEADER => "# $it->label", default => $it->label }, $this->menu['items']);
     }
 
     /** Chooses the item at $path (a label, then a submenu's) of the menu showing, which closes, and runs a frame; false when there is no such item, or it is disabled (mygo's ChooseMenuItem). */
@@ -116,7 +116,7 @@ final class Headless
         $it = null;
         foreach ($path as $label) {
             $it = null;
-            foreach ($items as $candidate) { if ($candidate->label === $label && $candidate->type !== \MyPHP\MenuItem::SEPARATOR) { $it = $candidate; break; } }
+            foreach ($items as $candidate) { if ($candidate->label === $label && $candidate->type !== \MyPHP\MenuItem::SEPARATOR && $candidate->type !== \MyPHP\MenuItem::HEADER) { $it = $candidate; break; } }
             if ($it === null) { return false; }
             $items = $it->submenu;
         }

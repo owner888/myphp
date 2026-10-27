@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
-use MyPHP\Media\{Packet, Source, Track};
+use MyPHP\Media\{Chapter, Packet, Source, Track};
 use RuntimeException;
 
 /**
@@ -32,6 +32,8 @@ final class AssetReader implements Source
     /** @var array<int, mixed> the asset's tracks by number */
     private array $native = [];
     private float $duration;
+    /** @var ?list<Chapter> read as first asked for */
+    private ?array $chapters = null;
     private $reader = null;
     /** @var array<int, mixed> the reader's outputs, by track number */
     private array $outputs = [];
@@ -96,6 +98,46 @@ final class AssetReader implements Source
     public function duration(): float
     {
         return $this->duration;
+    }
+
+    /**
+     * The chapters AVFoundation reads (a QuickTime chapter track): in the
+     * language the user prefers of those their titles come in, else in the
+     * file's first (an undetermined one, "und", as ffmpeg and HandBrake
+     * write it, matches no preferred language); each group's start and its
+     * common title.
+     */
+    public function chapters(): array
+    {
+        if ($this->chapters !== null) {
+            return $this->chapters;
+        }
+        $this->chapters = [];
+        $langs = ObjC::msg('p:', ObjC::cls('NSLocale'), 'preferredLanguages');
+        $groups = ObjC::msg('p:p', $this->asset, 'chapterMetadataGroupsBestMatchingPreferredLanguages:', $langs);
+        if ($groups === null || ObjC::msg('L:', $groups, 'count') === 0) {
+            $locales = ObjC::msg('p:', $this->asset, 'availableChapterLocales');
+            $groups = $locales === null || ObjC::msg('L:', $locales, 'count') === 0 ? null
+                : ObjC::msg('p:pp', $this->asset, 'chapterMetadataGroupsWithTitleLocale:containingItemsWithCommonKeys:', ObjC::msg('p:L', $locales, 'objectAtIndex:', 0), null);
+        }
+        for ($i = 0, $n = $groups === null ? 0 : ObjC::msg('L:', $groups, 'count'); $i < $n; $i++) {
+            $items = ObjC::msg('p:', ObjC::msg('p:L', $groups, 'objectAtIndex:', $i), 'items');
+            // The chapter's start is its items' time (a CMTime, as the group's timeRange starts), its title the common title's value.
+            $title = ''; $start = null;
+            for ($k = 0, $m = ObjC::msg('L:', $items, 'count'); $k < $m; $k++) {
+                $it = ObjC::msg('p:L', $items, 'objectAtIndex:', $k);
+                $start ??= CoreMedia::seconds(ObjC::msg('T:', $it, 'time'));
+                $key = ObjC::msg('p:', $it, 'commonKey');
+                if ($key !== null && ObjC::phpStr($key) === 'title') {
+                    $v = ObjC::msg('p:', $it, 'stringValue');
+                    $title = $v === null ? '' : ObjC::phpStr($v);
+                }
+            }
+            if ($start !== null) { // a group of no valid time is no chapter one can go to
+                $this->chapters[] = new Chapter($title, $start);
+            }
+        }
+        return $this->chapters;
     }
 
     public function seek(float $seconds): void

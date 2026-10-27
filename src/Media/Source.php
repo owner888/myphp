@@ -17,6 +17,9 @@ interface Source
     /** In seconds, 0 when the file does not say. */
     public function duration(): float;
 
+    /** The film's chapters, by their start; none when the file has none. @return list<Chapter> */
+    public function chapters(): array;
+
     /** The next frame of any track, or null at the end. */
     public function next(): ?Packet;
 

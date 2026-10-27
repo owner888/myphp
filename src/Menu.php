@@ -151,6 +151,9 @@ final class Menu
         $this->native = ObjC::msg('p:p', ObjC::alloc('NSMenu'), 'initWithTitle:', ObjC::str($title));
         ObjC::msg('v:b', $this->native, 'setAutoenablesItems:', false);
         foreach ($this->items as $it) {
+            if ($it->type === MenuItem::HEADER && !ObjC::msg('b:p', ObjC::cls('NSMenuItem'), 'respondsToSelector:', ObjC::sel('sectionHeaderWithTitle:'))) {
+                continue; // macOS 14's; before it menus have no headers, and the item is left out, as IINA leaves it
+            }
             ObjC::msg('v:p', $this->native, 'addItem:', self::buildItem($it));
             if ($it->role === 'zoomIn' && $it->accelerator === '') { // Cmd+= too, without Shift, as other Mac apps take it: a hidden twin
                 $twin = new MenuItem($it->label, $it->click, 'CmdOrCtrl+=', 'zoomIn', disabled: $it->disabled);
@@ -169,6 +172,11 @@ final class Menu
     {
         if ($it->type === MenuItem::SEPARATOR) {
             $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
+            ObjC::msg('v:b', $it->native, 'setHidden:', $it->hidden);
+            return $it->native;
+        }
+        if ($it->type === MenuItem::HEADER) {
+            $it->native = ObjC::msg('p:p', ObjC::cls('NSMenuItem'), 'sectionHeaderWithTitle:', ObjC::str($it->label));
             ObjC::msg('v:b', $it->native, 'setHidden:', $it->hidden);
             return $it->native;
         }

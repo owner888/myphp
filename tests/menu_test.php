@@ -16,6 +16,7 @@ $chosen = []; $pinned = false; $locked = true; $rightClicked = 0; $n = [];
 $h = new Headless(function (Context $c) use (&$chosen, &$pinned, &$locked, &$rightClicked, &$n) {
     $c->column(20, 10, 1);
       $n['row'] = $c->row(8)->contextMenu(function (Menu $m) use (&$chosen, &$pinned, &$locked) {
+          $m->header('Report');
           if ($m->item('Open')->shortcut(Key::COMMAND, Key::O)->chosen()) { $chosen[] = 'Open'; }
           if ($m->item('Pinned')->checked($pinned)->chosen()) { $pinned = !$pinned; }
           $m->separator();
@@ -36,8 +37,9 @@ $h = new Headless(function (Context $c) use (&$chosen, &$pinned, &$locked, &$rig
 $h->frame();
 same(null, $h->menuLabels(), 'no menu before a click');
 $h->rightClick(...$h->middle($n['row']));
-same(['Open', 'Pinned', '-', 'Move to', 'Delete'], $h->menuLabels(), 'the menu');
-$items = $h->menu['items'];
+same(['# Report', 'Open', 'Pinned', '-', 'Move to', 'Delete'], $h->menuLabels(), 'the menu, under its header');
+check(!$h->chooseMenuItem('Report') && $h->menu !== null, 'a header is chosen by none');
+$items = array_slice($h->menu['items'], 1);
 same('Super+o', $items[0]->accelerator, 'Open shows its shortcut');
 same([\MyPHP\MenuItem::CHECKBOX, false], [$items[1]->type, $items[1]->checked], 'Pinned is an unchecked check box item');
 check($items[4]->disabled, 'Delete is disabled while locked');
@@ -46,7 +48,7 @@ check($h->chooseMenuItem('Pinned'), 'Pinned is chosen');
 same(null, $h->menuLabels(), 'the menu goes with the choice');
 check($pinned && $h->byText('pinned') !== null, 'choosing Pinned pins, and the frame shows it');
 $h->rightClick(...$h->middle($n['row']));
-check($h->menu['items'][1]->checked, 'Pinned has its check mark once pinned');
+check($h->menu['items'][2]->checked, 'Pinned has its check mark once pinned');
 check($h->chooseMenuItem('Move to', 'Documents'), 'an item of the submenu');
 $locked = false; $h->frame();
 $h->rightClick(...$h->middle($n['row']));

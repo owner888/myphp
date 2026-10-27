@@ -136,3 +136,8 @@ check(abs($shown[2] - 90) < 1e-9 && abs($shown[3] - 90 / (21 / 9)) < 1e-9 && abs
 [$shown, $whole] = Picture::fit(40, 30, 16 / 9, null, 90);
 check(abs($shown[3] - 30) < 1e-9 && abs($shown[2] - 30 * 9 / 16) < 1e-9 && abs($whole[0] - 30) < 1e-9 && abs($whole[1] - 30 * 9 / 16) < 1e-9, 'turned a quarter: upright in the box, as tall as it, the picture its width that height');
 
+
+// Chapters: those of the default edition by their start, titled by their first display ('' for one of no title); none in a file of none.
+$m = new Matroska(__DIR__ . '/testdata/clip-chapters.mkv');
+same([['Opening', 0.0], ['', 1.0], ['第三章', 1.5]], array_map(fn(\MyPHP\Media\Chapter $c) => [$c->title, $c->start], $m->chapters()), "a Matroska file's chapters");
+same([], (new Matroska(__DIR__ . '/testdata/clip.mkv'))->chapters(), 'a file of no chapters');

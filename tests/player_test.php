@@ -34,7 +34,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $t = $p->time() - $from;
         check($p->playing() && $t > 0.3 && $t < 1.0, "$file: the clock runs while it plays: $t s in 0.6, after {$waited} waits of 50 ms to start");
         check($ticks >= 2, "$file: time is told as it plays, four times a second: $ticks times in 0.6 s");
+        $held = (string)shell_exec('pmset -g assertions 2>/dev/null');
+        check($p->awake() && str_contains($held, 'Playing ' . $file), "$file: the display kept awake while it plays");
         $p->pause();
+        check(!$p->awake() && !str_contains((string)shell_exec('pmset -g assertions 2>/dev/null'), 'Playing ' . $file), "$file: and let sleep once paused");
         $at = $p->time();
         $run(0.3);
         check(abs($p->time() - $at) < 0.01, "$file: and holds while paused: {$p->time()} after $at");
@@ -130,4 +133,11 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(count($tx3g) === 1, 'an MP4\'s text track');
     $p->setSubtitleTrack($tx3g[0]);
     same(['第一句 字幕'], $at(0.5), 'its lines');
+
+    // Chapters: an MP4's chapter track as AVFoundation reads it, the one playing the last started.
+    $p = new Player(__DIR__ . '/testdata/clip-chapters.mp4');
+    same([['Opening', 0.0], ['', 1.0], ['第三章', 1.5]], array_map(fn(\MyPHP\Media\Chapter $c) => [$c->title, round($c->start, 3)], $p->chapters()), "an MP4's chapters");
+    same(0, $p->chapter(), 'the first plays at the start');
+    $p = new Player(__DIR__ . '/testdata/clip-chapters.mkv');
+    same(3, count($p->chapters()), "a Matroska file's, through the player");
 }

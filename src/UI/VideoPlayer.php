@@ -25,8 +25,9 @@ use MyPHP\Window;
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
  * layout tab, the equalizer, external audio, secondary and online
- * subtitles, plugins, picture in picture, the playlist) shows, held.
- * Icons are SF Symbols.
+ * subtitles, plugins) shows, held. The playlist's sidebar (its films,
+ * their loop, shuffle and sort; the film's chapters) slides in from the
+ * left; picture in picture from the control bar. Icons are SF Symbols.
  *
  * @internal Context::videoPlayer
  */
@@ -38,7 +39,7 @@ final class VideoPlayer
 
     public static function build(Context $c, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
-        if ($c->runtime !== null) { $s->attach($c->runtime, $o->resume); }
+        if ($c->runtime !== null) { $s->attach($c->runtime, $o); }
         $box = $c->column(0, 0, 1, 0x000000);
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open
@@ -185,16 +186,16 @@ final class VideoPlayer
     }
 
     /** SF Symbol $name at $size points in white, at the window's scale: drawn once. */
-    private static function symbol(Context $c, string $name, float $size, float $weight = 0.0): Image
+    private static function symbol(Context $c, string $name, float $size, float $weight = 0.0, int $rgb = 0xffffff): Image
     {
         static $drawn = [];
-        return $drawn["$name/$size/$weight/{$c->scale}"] ??= Image::symbol($name, $size, 0xffffff, $weight, $c->scale);
+        return $drawn["$name/$size/$weight/$rgb/{$c->scale}"] ??= Image::symbol($name, $size, $rgb, $weight, $c->scale);
     }
 
-    /** SF Symbol $name, white at $alpha. */
-    private static function sf(Context $c, string $name, float $size, float $alpha = 1.0, float $weight = 0.0): Node
+    /** SF Symbol $name, white (or $rgb) at $alpha. */
+    private static function sf(Context $c, string $name, float $size, float $alpha = 1.0, float $weight = 0.0, int $rgb = 0xffffff): Node
     {
-        $img = self::symbol($c, $name, $size, $weight);
+        $img = self::symbol($c, $name, $size, $weight, $rgb);
         return $c->image($img, $img->w / $c->scale, $img->h / $c->scale, 0, $alpha);
     }
 
@@ -371,16 +372,34 @@ final class VideoPlayer
               $c->end();
           }
           if ($page > 0) {
-              $c->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->center()->translate(self::SIDEBAR * (1 - $page), 0);
-                $c->text(self::t($c, 'videoNoChapters'), 13, 0xffffff)->opacity(0.5);
-              $c->end();
+              self::chapterList($c, $s)->translate(self::SIDEBAR * (1 - $page), 0);
           }
           $c->end();
           // The bar under the list: repeat, shuffle and sort (held), the time of them all, add, remove, clear.
           $c->row(0, 12)->absolute()->left(0)->right(0)->bottom(0)->height(33)->paddingX(12)->align(Node::CENTER)->background(0x000000, 0.18);
-            foreach ([['repeat', 'videoRepeat'], ['shuffle', 'videoShuffle'], ['arrow.up.arrow.down', 'videoSort']] as [$icon, $tip]) {
-                $c->column()->tooltip(self::t($c, $tip) . ' (' . self::t($c, 'videoNotYet') . ')'); self::sf($c, $icon, 12, 0.6); $c->end();
-            }
+            // As IINA's: the loop button off, the file (repeat.1) or the playlist, in the accent while on; shuffle in it while shuffled; sort a menu.
+            $loop = $c->column()->tooltip(self::t($c, 'videoRepeat'));
+              $on = $s->loop !== 'off';
+              self::sf($c, $s->loop === 'file' ? 'repeat.1' : 'repeat', 12, $on || $c->hovered($loop) ? 0.95 : 0.7, 0.0, $on ? $c->theme->accent : 0xffffff);
+            $c->end();
+            if ($c->clicked($loop)) { $s->nextLoop(); }
+            $mixed = $list?->shuffled() ?? false;
+            $shuffle = $c->column()->tooltip(self::t($c, 'videoShuffle'));
+              self::sf($c, 'shuffle', 12, $mixed || $c->hovered($shuffle) ? 0.95 : 0.7, 0.0, $mixed ? $c->theme->accent : 0xffffff);
+            $c->end();
+            if ($c->clicked($shuffle) && $list !== null) { $mixed ? $list->unshuffle() : $list->shuffle(); $s->chosen = -1; }
+            $sort = $c->column()->tooltip(self::t($c, 'videoSort'));
+              self::sf($c, 'arrow.up.arrow.down', 12, $c->hovered($sort) ? 0.95 : 0.7);
+            $c->end();
+            $sort->menu(function (Menu $m) use ($c, $s, $list): void {
+                $m->header(self::t($c, 'videoSorting'));
+                foreach ([['videoSortNameAscending', false, true], ['videoSortNameDescending', false, false], ['videoSortPathAscending', true, true], ['videoSortPathDescending', true, false]] as [$label, $path, $up]) {
+                    if ($m->item(self::t($c, $label))->chosen() && $list !== null) {
+                        $path ? $list->sortByPath($up) : $list->sortByName($up);
+                        $s->chosen = -1;
+                    }
+                }
+            });
             $total = 0.0;
             for ($i = 0, $n = $list?->count() ?? 0; $i < $n; $i++) { $total += $list->duration($i) ?? 0.0; }
             $c->text(self::t($c, 'videoTotal', ['time' => VideoPlayerState::clock($total)]), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.5)->textAlign(Node::CENTER)->grow(1);
@@ -490,6 +509,38 @@ final class VideoPlayer
         $c->end();
         if (!$enabled) { $sw->tooltip(self::t($c, 'videoNotYet')); return false; }
         return $c->clicked($sw);
+    }
+
+    /**
+     * The chapters' tab, as IINA's: a row of 40 a chapter, the one playing
+     * marked, its title (or "Chapter n", from 0) over when it starts and
+     * when the next does (the last's "End"), lines between them and below;
+     * a double click goes to one and plays.
+     */
+    private static function chapterList(Context $c, VideoPlayerState $s): Node
+    {
+        $p = $s->player;
+        $chapters = $p?->chapters() ?? [];
+        $playing = $p?->chapter() ?? -1;
+        $list = $c->scroll()->absolute()->top(0)->left(0)->right(0)->bottom(0);
+          $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+            foreach ($chapters as $i => $ch) {
+                $row = $c->column(0, 1)->height(40)->paddingStart(28)->paddingEnd(9)->justify(Node::CENTER)->fillWidth();
+                  if ($i === $playing) { $c->column()->absolute()->left(9)->top(13)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
+                  $title = $ch->title !== '' ? $ch->title : self::t($c, 'videoChapterNumber', ['n' => (string)$i]);
+                  $c->text($title, 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->tooltip($title);
+                  $end = isset($chapters[$i + 1]) ? VideoPlayerState::clock($chapters[$i + 1]->start) : self::t($c, 'videoChapterEnd');
+                  $c->text(VideoPlayerState::clock($ch->start) . ' → ' . $end, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.55)->noWrap();
+                $c->end();
+                if ($c->doubleClicked($row)) { $s->playChapter($i); }
+            }
+          $c->end();
+          $c->column()->fillWidth()->height(max(0.0, $c->height - 86 - 40 * count($chapters)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
+              for ($y = $n->y + 40; $y < $n->y + $n->h; $y += 40) { $l->rect($n->x, $y, $n->w, 1, 0xffffff, 0.1); }
+          });
+          $c->end();
+        $c->end();
+        return $list;
     }
 
     /**

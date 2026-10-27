@@ -59,6 +59,20 @@ same(null, $list->duration(2), 'no duration for what is no film');
 $list->remove(0);
 same([-1, null], [$list->index(), $list->current()], 'the one playing taken out: none plays');
 same(['solo.webm'], array_map('basename', \MyPHP\Media\Playlist::folder("$dir/../solo.webm")->files()), 'a film alone: its playlist itself');
+// Shuffled and sorted as IINA's, the one playing staying the one playing; unshuffled back to the order before, one added since after.
+$list = new \MyPHP\Media\Playlist(['/m/b/2.mkv', '/m/a/3.mkv', '/m/c/1.mkv', '/m/a/4.mkv', '/m/b/5.mkv', '/m/c/6.mkv']);
+$list->select('/m/a/4.mkv');
+mt_srand(1);
+$list->shuffle();
+check($list->shuffled() && $list->current() === '/m/a/4.mkv' && $list->count() === 6, 'shuffled, the one playing still playing');
+$list->add('/m/z/0.mkv');
+$list->unshuffle();
+same([['/m/b/2.mkv', '/m/a/3.mkv', '/m/c/1.mkv', '/m/a/4.mkv', '/m/b/5.mkv', '/m/c/6.mkv', '/m/z/0.mkv'], 3, false], [$list->files(), $list->index(), $list->shuffled()], 'unshuffled: the order before, the one added since after');
+$list->sortByName();
+same(['0', '1', '2', '3', '4', '5', '6'], array_map(fn($f) => basename($f, '.mkv'), $list->files()), 'sorted by name');
+same('/m/a/4.mkv', $list->current(), 'the one playing still playing');
+$list->sortByPath(false);
+same(['/m/z/0.mkv', '/m/c/6.mkv', '/m/c/1.mkv', '/m/b/5.mkv', '/m/b/2.mkv', '/m/a/4.mkv', '/m/a/3.mkv'], $list->files(), 'by path, down');
 foreach (scandir($dir) as $f) { if ($f[0] !== '.' || $f === '.hidden.mkv') { @unlink("$dir/$f"); } }
 @rmdir($dir);
 
@@ -125,6 +139,12 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check($off->byText('clip.mkv') === null && !isset($off->rt->windowAsks['buttons']), 'without its title bar: no title, the traffic lights left alone');
     $off->key(Key::SPACE, 'insertText:', 0, ' '); $off->frame();
     check(!$p->playing(), 'without its keys: Space is the app\'s');
+    $p->play();
+    check($p->awake(), 'playing, the display kept awake');
+    $sleepy = new Headless(fn(Context $c) => $c->videoPlayer($s, new VideoPlayerOptions(keepAwake: false)), 960, 540);
+    $sleepy->frame();
+    check($p->playing() && !$p->awake(), 'without keepAwake: the display may sleep while it plays');
+    $p->pause();
     @unlink($scratch);
     // Opening films: a player of each, the playlist of its folder; the next at the end of one; the playlist's sidebar, a double click playing a row.
     $s3 = new VideoPlayerState(); $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
@@ -140,6 +160,43 @@ if (PHP_OS_FAMILY === 'Darwin') {
     [$mx, $my] = $h3->middle($h3->byText('clip.mkv'));
     $h3->click($mx, $my); $h3->click($mx, $my, 0, 2); $h3->frame();
     same('clip.mkv', basename($s3->player->path()), 'a double click on a film plays it');
+    $s3->player->pause();
+    // The loop: off, the file, the playlist; the playlist's goes from the last to the first, the file's plays it again at its end.
+    $s3->nextLoop();
+    same('file', $s3->loop, 'the loop button: the file');
+    $h3->frame();
+    $s3->nextLoop(); same('playlist', $s3->loop, 'then the playlist');
+    $last = $s3->playlist->files()[$s3->playlist->count() - 1];
+    $s3->open($last);
+    check($s3->next() && $s3->playlist->index() === 0, 'after the last, the first');
+    check($s3->previous() && $s3->player->path() === $last, 'before the first, the last');
+    $s3->nextLoop(); same('off', $s3->loop, 'then off');
+    check(!$s3->next(), 'off: none after the last');
+    $s3->player->pause();
+    // The sort button: a menu under its header, as IINA's; by name down, the one playing still playing.
+    $byTip = function (?\MyPHP\UI\Node $n, string $tip) use (&$byTip): ?\MyPHP\UI\Node {
+        if ($n === null || $n->tooltip === $tip) { return $n; }
+        foreach ($n->kids as $k) { if (($r = $byTip($k, $tip)) !== null) { return $r; } }
+        return null;
+    };
+    $s3->playlistTab = 'playlist'; $h3->frame(); $run(0.3); $h3->frame();
+    $sortBtn = $byTip($h3->root, 'Sort the playlist');
+    check($sortBtn !== null, 'the sort button');
+    $h3->press(...$h3->middle($sortBtn)); $h3->release(...$h3->middle($sortBtn));
+    same(['# Sorting', 'Filename Ascending', 'Filename Descending', 'File Path Ascending', 'File Path Descending'], $h3->menuLabels(), 'its menu');
+    $playing = $s3->playlist->current();
+    $h3->chooseMenuItem('Filename Descending');
+    $names = array_map('basename', $s3->playlist->files());
+    same([$names, $playing], [array_reverse(array_map('basename', (function ($f) { usort($f, fn($a, $b) => strcmp(basename($a), basename($b))); return $f; })($s3->playlist->files()))), $s3->playlist->current()], 'sorted by name down, the one playing still playing');
+    // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.
+    $s3->open(__DIR__ . '/testdata/clip-chapters.mkv');
+    $s3->player->pause();
+    $s3->playlistTab = 'chapters'; $h3->frame(); $run(0.3); $h3->frame();
+    check($h3->byText('Opening') !== null && $h3->byText('Chapter 1') !== null && $h3->byText('第三章') !== null, 'the chapters, the untitled one by its place');
+    check($h3->byText('00:00 → 00:01') !== null && $h3->byText('00:01 → End') !== null, 'their times, the last to the end');
+    [$mx, $my] = $h3->middle($h3->byText('第三章'));
+    $h3->click($mx, $my); $h3->click($mx, $my, 0, 2); $h3->frame();
+    check(abs($s3->player->time() - 1.5) < 0.1 && $s3->player->playing() && $s3->player->chapter() === 2, 'a double click goes to a chapter and plays: ' . $s3->player->time());
     $s3->player->pause();
     @unlink($scratch);
 }

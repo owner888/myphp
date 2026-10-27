@@ -17,7 +17,8 @@ use MyPHP\Native\ObjC;
  */
 final class MenuItem
 {
-    public const SEPARATOR = 'separator', CHECKBOX = 'checkbox', RADIO = 'radio', NORMAL = 'normal', SUBMENU = 'submenu';
+    /** HEADER: the title of the group of items under it (NSMenuItem's section header, macOS 14), chosen by none; left out before macOS 14, which has none. */
+    public const SEPARATOR = 'separator', CHECKBOX = 'checkbox', RADIO = 'radio', NORMAL = 'normal', SUBMENU = 'submenu', HEADER = 'header';
 
     /** Set when the item is built; the native NSMenuItem. */
     public $native = null;
@@ -53,6 +54,12 @@ final class MenuItem
     public static function separator(): self
     {
         return new self(type: self::SEPARATOR);
+    }
+
+    /** The title $label of the group of items under it (HEADER). */
+    public static function header(string $label): self
+    {
+        return new self($label, type: self::HEADER);
     }
 
     public function setEnabled(bool $enabled): void

@@ -1690,6 +1690,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Player::durationOf`, `VideoPlayerState::open`, `setPlayer`, `next`,
   `previous`, `togglePictureInPicture` are myphp's, as IINA's; mygo has
   no video.
+- **Chapters, the playlist's loop, shuffle and sort** (v1.41):
+  `Media\Chapter`, `Source::chapters`, `Player::chapters`, `chapter`,
+  `VideoPlayerState::playChapter`, `$loop`, `nextLoop`, and
+  `Playlist::shuffle`, `unshuffle`, `shuffled`, `sortByName`,
+  `sortByPath` are myphp's, as IINA's, and `Player::awake`,
+  `setKeepAwake` and `VideoPlayerOptions::$keepAwake` (the display kept
+  awake while it plays, as IINA's); mygo has no video.
+- **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
+  are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
+  items, separators and submenus only.
 - **System materials, SF Symbols, the traffic lights** (v1.35):
   `Node::systemMaterial`, `Image::symbol`, `Window::setWindowButtonVisibility`,
   `Window::setAspectRatio` and `Player::videoTrack` are myphp's: the developer asked for the video

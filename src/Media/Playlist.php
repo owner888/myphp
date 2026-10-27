@@ -7,7 +7,9 @@ namespace MyPHP\Media;
  * The films a player goes through, as IINA's playlist: their paths in
  * order and the one playing; the films of a folder in the order Finder
  * sorts their names (numbers by their value: episode 2 before episode
- * 10), their durations read as they are first asked for.
+ * 10), their durations read as they are first asked for. Shuffled
+ * and sorted as IINA's (mpv's playlist-shuffle and playlist-unshuffle),
+ * the one playing staying the one playing.
  */
 final class Playlist
 {
@@ -18,6 +20,8 @@ final class Playlist
     /** @var array<string, ?float> the durations read, by path; null for a file that is no film the player reads */
     private array $durations = [];
     private int $index = -1;
+    /** @var ?list<string> the order before shuffle(), which unshuffle() goes back to; null while not shuffled */
+    private ?array $unshuffled = null;
 
     /** @param list<string> $files */
     public function __construct(array $files = [])
@@ -111,6 +115,56 @@ final class Playlist
         } elseif ($i < $this->index) {
             $this->index--;
         }
+    }
+
+    /** Puts the films in an order of chance, the one playing still the one playing. */
+    public function shuffle(): void
+    {
+        $this->unshuffled ??= $this->files;
+        $this->reorder(function (array $files): array { shuffle($files); return $files; });
+    }
+
+    /** Goes back to the order before shuffle(), those added since after them; what was taken out stays out. */
+    public function unshuffle(): void
+    {
+        if ($this->unshuffled === null) {
+            return;
+        }
+        $before = $this->unshuffled;
+        $this->unshuffled = null;
+        $this->reorder(fn(array $files): array => [...array_values(array_intersect($before, $files)), ...array_values(array_diff($files, $before))]);
+    }
+
+    /** Whether the films are in the order shuffle() put them in. */
+    public function shuffled(): bool
+    {
+        return $this->unshuffled !== null;
+    }
+
+    /** Sorts the films by their names (as IINA compares strings: by their bytes), up or down. */
+    public function sortByName(bool $ascending = true): void
+    {
+        $this->reorder(function (array $files) use ($ascending): array {
+            usort($files, fn(string $a, string $b): int => ($ascending ? 1 : -1) * strcmp(basename($a), basename($b)));
+            return $files;
+        });
+    }
+
+    /** Sorts the films by their paths, up or down. */
+    public function sortByPath(bool $ascending = true): void
+    {
+        $this->reorder(function (array $files) use ($ascending): array {
+            usort($files, fn(string $a, string $b): int => ($ascending ? 1 : -1) * strcmp($a, $b));
+            return $files;
+        });
+    }
+
+    /** Puts the films in the order $order makes of them, the one playing still the one playing. @param \Closure(list<string>): list<string> $order */
+    private function reorder(\Closure $order): void
+    {
+        $current = $this->current();
+        $this->files = $order($this->files);
+        $this->index = $current === null ? -1 : (int)array_search($current, $this->files, true);
     }
 
     /** How long the $i-th film lasts, in seconds, read once; null for one the player does not read. */

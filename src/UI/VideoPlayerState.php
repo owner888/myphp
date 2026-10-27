@@ -67,6 +67,13 @@ final class VideoPlayerState
     public ?Playlist $playlist = null;
     /** @internal */
     public int $chosen = -1;
+    /**
+     * What plays again, as IINA's loop button sets it (nextLoop): 'off', the
+     * next film at an end and none after the last; 'file', the film again
+     * from its start; 'playlist', the first after the last (and the last
+     * before the first).
+     */
+    public string $loop = 'off';
     /** The playlist sidebar's tab: 'playlist' or 'chapters'. */
     public string $playlistTab = 'playlist';
     /** @internal whether the player taken last has not been built with yet: where it was left is gone back to then */
@@ -101,18 +108,27 @@ final class VideoPlayerState
         return true;
     }
 
-    /** Plays the next film of the playlist; false after the last. */
+    /** Plays the next film of the playlist; false after the last, unless the playlist loops, which goes to the first. */
     public function next(): bool
     {
-        $path = $this->playlist?->next();
+        $l = $this->playlist;
+        $path = $l?->next() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[0] ?? null) : null);
         return $path !== null && $this->open($path);
     }
 
-    /** Plays the film before; false before the first. */
+    /** Plays the film before; false before the first, unless the playlist loops, which goes to the last. */
     public function previous(): bool
     {
-        $path = $this->playlist?->previous();
+        $l = $this->playlist;
+        $path = $l?->previous() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[$l->count() - 1] ?? null) : null);
         return $path !== null && $this->open($path);
+    }
+
+    /** The loop after the one there is, as IINA's button goes: off, the file, the playlist, off. */
+    public function nextLoop(): void
+    {
+        $this->loop = match ($this->loop) { 'off' => 'file', 'file' => 'playlist', default => 'off' };
+        $this->changed();
     }
 
     /**
@@ -159,6 +175,7 @@ final class VideoPlayerState
             }),
             $p->on('ended', function () {
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
+                if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
                 if (!$this->next()) { $this->changed(); } // the next film plays
             }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
@@ -170,14 +187,15 @@ final class VideoPlayerState
      * Notes the window's runtime it is built in, to ask it for frames, and
      * whether it goes on from where films were left: the first build with
      * a player taken goes back there (more than 5 s in and before its last
-     * 5), telling it.
+     * 5), telling it; and whether the player keeps the display awake.
      * @internal Context::videoPlayer
      */
-    public function attach(Runtime $rt, bool $resume): void
+    public function attach(Runtime $rt, VideoPlayerOptions $o): void
     {
         $this->runtime = \WeakReference::create($rt);
-        $this->resume = $resume;
+        $this->resume = $resume = $o->resume;
         $p = $this->player;
+        $p?->setKeepAwake($o->keepAwake);
         if (!$this->fresh || $p === null) {
             return;
         }
@@ -212,7 +230,8 @@ final class VideoPlayerState
         if ($p === null) { return ''; }
         $t = $p->time();
         $clock = $this->shown || microtime(true) < $this->message[2] ? (int)$t . '/' . (int)round($t / max($p->duration(), 0.001) * 344) : '';
-        return $clock . "\0" . implode("\n", $this->subtitlesVisible ? $p->subtitles() : []);
+        $chapter = $this->sidebar === 'playlist' ? (string)$p->chapter() : ''; // the chapters' tab marks the one playing
+        return $clock . "\0" . $chapter . "\0" . implode("\n", $this->subtitlesVisible ? $p->subtitles() : []);
     }
 
     /** Asks the window for a frame. */
@@ -259,6 +278,17 @@ final class VideoPlayerState
         $p->seek($p->time() + $s);
         $this->played();
         $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()));
+    }
+
+    /** Goes to the start of the $i-th chapter of the player's and plays, as IINA's playChapter. */
+    public function playChapter(int $i): void
+    {
+        $p = $this->player;
+        $ch = $p?->chapters()[$i] ?? null;
+        if ($ch === null) { return; }
+        $p->seek($ch->start);
+        $p->play();
+        $this->played();
     }
 
     /** Shows where it plays, as IINA's show-progress. */

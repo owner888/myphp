@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, CoreMedia, MediaTicker, Renderers};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, MediaTicker, Renderers};
 use RuntimeException;
 
 /**
@@ -15,7 +15,8 @@ use RuntimeException;
  * them, the video shown straight by the window server, on threads of its
  * own: a timer on the main thread keeps two seconds ahead of the clock.
  * Codecs: H.264 and HEVC; AAC, AC-3, E-AC-3 and MP3. It opens paused on
- * its first frame.
+ * its first frame. While it plays the display stays awake, its screen
+ * saver off, as IINA keeps it (setKeepAwake, awake()).
  *
  *     $player = new Player('/path/movie.mkv');
  *     $player->on('time', fn() => $win->invalidate());   // the progress bar moves
@@ -61,6 +62,9 @@ final class Player
     private int $rotation = 0;
     /** The change of the subtitles the player wakes for, once (wakeForCue). */
     private ?float $cueWake = null;
+    /** What keeps the display awake while it plays, and whether it does (setKeepAwake). */
+    private Awake $awake;
+    private bool $keepAwake = true;
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
@@ -79,6 +83,7 @@ final class Player
             throw new RuntimeException("myphp: nothing in $path the system decodes");
         }
         $this->out = new Renderers();
+        $this->awake = new Awake('Playing ' . basename($path));
         $this->loadSubtitleFiles($path);
         $this->feed();
     }
@@ -248,6 +253,24 @@ final class Player
         return $this->duration;
     }
 
+    /** The film's chapters, by their start; none when the file has none. @return list<Chapter> */
+    public function chapters(): array
+    {
+        return $this->source->chapters();
+    }
+
+    /** The place of the chapter playing in chapters(): the last that starts at or before where it plays; -1 before the first, or with none. */
+    public function chapter(): int
+    {
+        $t = $this->time();
+        $at = -1;
+        foreach ($this->chapters() as $i => $ch) {
+            if ($ch->start > $t + 1e-3) { break; }
+            $at = $i;
+        }
+        return $at;
+    }
+
     /** Where it plays, in seconds. */
     public function time(): float
     {
@@ -257,6 +280,19 @@ final class Player
     public function playing(): bool
     {
         return $this->playing;
+    }
+
+    /** Whether it keeps the display awake, its screen saver off: while it plays, unless setKeepAwake(false). */
+    public function awake(): bool
+    {
+        return $this->awake->held();
+    }
+
+    /** Whether it keeps the display awake while it plays (as IINA's "prevent the screen saver", on by default); off, it lets it sleep now. */
+    public function setKeepAwake(bool $on): void
+    {
+        $this->keepAwake = $on;
+        $on && $this->playing ? $this->awake->hold() : $this->awake->release();
     }
 
     /** Whether it played to the end, which play() starts again from. */
@@ -271,6 +307,7 @@ final class Player
             $this->seek(0);
         }
         $this->playing = true;
+        if ($this->keepAwake) { $this->awake->hold(); }
         $this->out->setRate($this->rate);
         $this->feed();
         MediaTicker::add($this, $this->tick(...));
@@ -280,6 +317,7 @@ final class Player
     public function pause(): void
     {
         $this->playing = false;
+        $this->awake->release(); // paused, ended or failed: the display may sleep
         $this->out->setRate(0);
         MediaTicker::remove($this);
     }

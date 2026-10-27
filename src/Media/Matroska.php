@@ -22,6 +22,8 @@ final class Matroska implements Source
         AUDIO = 0xE1, SAMPLING_FREQUENCY = 0xB5, CHANNELS = 0x9F, CONTENT_ENCODINGS = 0x6D80, CONTENT_ENCODING = 0x6240, CONTENT_COMPRESSION = 0x5034,
         CONTENT_COMP_ALGO = 0x4254, CONTENT_COMP_SETTINGS = 0x4255;
     private const CUES = 0x1C53BB6B, CUE_POINT = 0xBB, CUE_TIME = 0xB3, CUE_TRACK_POSITIONS = 0xB7, CUE_TRACK = 0xF7, CUE_CLUSTER_POSITION = 0xF1;
+    private const CHAPTERS = 0x1043A770, EDITION_ENTRY = 0x45B9, EDITION_FLAG_DEFAULT = 0x45DB, CHAPTER_ATOM = 0xB6, CHAPTER_TIME_START = 0x91,
+        CHAPTER_FLAG_HIDDEN = 0x98, CHAPTER_FLAG_ENABLED = 0x4598, CHAPTER_DISPLAY = 0x80, CHAP_STRING = 0x85;
     private const CLUSTER = 0x1F43B675, TIMESTAMP = 0xE7, SIMPLE_BLOCK = 0xA3, BLOCK_GROUP = 0xA0, BLOCK = 0xA1, BLOCK_DURATION = 0x9B, REFERENCE_BLOCK = 0xFB;
     /** The size of an element whose size is unknown (all its bits set), as a cluster being written live has. */
     private const UNKNOWN = -1;
@@ -35,6 +37,8 @@ final class Matroska implements Source
     /** @var list<Track> */
     private array $tracks = [];
     private float $duration = 0;
+    /** @var list<Chapter> */
+    private array $chapters = [];
     /** @var list<array{0: float, 1: int}> */
     private array $cues = [];
     /** Where the next cluster is read from. */
@@ -117,6 +121,9 @@ final class Matroska implements Source
             case self::CUES:
                 $this->readCues($this->read($data, $size));
                 break;
+            case self::CHAPTERS:
+                $this->chapters = self::readChapters($this->read($data, $size));
+                break;
         }
         $seen[$id] = true;
     }
@@ -186,9 +193,49 @@ final class Matroska implements Source
         usort($this->cues, fn(array $a, array $b): int => $a[0] <=> $b[0]);
     }
 
+    /**
+     * The chapters of the default edition (else the first), as mpv lists
+     * them: its top-level atoms but the hidden and disabled ones, each
+     * titled by its first display, by their start (ChapterTimeStart is in
+     * nanoseconds, whatever the timestamp scale).
+     * @return list<Chapter>
+     */
+    private static function readChapters(string $s): array
+    {
+        $editions = [];
+        foreach (self::children($s) as [$id, $e]) {
+            if ($id === self::EDITION_ENTRY) { $editions[] = $e; }
+        }
+        $chosen = $editions[0] ?? '';
+        foreach ($editions as $e) {
+            $f = self::fields($e);
+            if (isset($f[self::EDITION_FLAG_DEFAULT]) && self::uint($f[self::EDITION_FLAG_DEFAULT]) === 1) { $chosen = $e; break; }
+        }
+        $out = [];
+        foreach (self::children($chosen) as [$id, $atom]) {
+            if ($id !== self::CHAPTER_ATOM) {
+                continue;
+            }
+            $f = self::fields($atom);
+            if ((isset($f[self::CHAPTER_FLAG_HIDDEN]) && self::uint($f[self::CHAPTER_FLAG_HIDDEN]) === 1)
+                || (isset($f[self::CHAPTER_FLAG_ENABLED]) && self::uint($f[self::CHAPTER_FLAG_ENABLED]) === 0)) {
+                continue;
+            }
+            $display = isset($f[self::CHAPTER_DISPLAY]) ? self::fields($f[self::CHAPTER_DISPLAY]) : [];
+            $out[] = new Chapter(rtrim($display[self::CHAP_STRING] ?? '', "\0"), self::uint($f[self::CHAPTER_TIME_START] ?? '') / 1e9);
+        }
+        usort($out, fn(Chapter $a, Chapter $b): int => $a->start <=> $b->start);
+        return $out;
+    }
+
     public function tracks(): array
     {
         return $this->tracks;
+    }
+
+    public function chapters(): array
+    {
+        return $this->chapters;
     }
 
     public function duration(): float
