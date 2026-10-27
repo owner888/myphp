@@ -432,6 +432,8 @@ final class Metal
     private static array $onDraw = [];
     /** @var array<int, Closure> what runs after a view presented a frame, by its address: a window's frame statistics */
     public static array $afterPresent = [];
+    /** @var array<int, Closure> what runs once a view's frame is done, its list and buffers let go, by its address: a window's layer under its materials draws then, in the same turn, with the next of the ring */
+    public static array $afterFrame = [];
     private static $delegate = null, $commonModes = null;
     /** @var array<int, bool> the views drawing a frame now, true once a frame was asked for meanwhile */
     private static array $drawing = [];
@@ -626,6 +628,7 @@ final class Metal
             $this->present($view, $list);
             (self::$afterPresent[$key] ?? null)?->__invoke();
             $this->frame++;
+            (self::$afterFrame[$key] ?? null)?->__invoke();
             $again = self::$drawing[$key];
             unset(self::$drawing[$key]);
             if ($again) { self::requestFrame($view); }
@@ -685,7 +688,7 @@ final class Metal
             ObjC::msg('v:', $link, 'invalidate');
             ObjC::msg('v:', $link, 'release');
         }
-        unset(self::$pace[$key], self::$onDraw[$key]);
+        unset(self::$pace[$key], self::$onDraw[$key], self::$afterFrame[$key], self::$afterPresent[$key]);
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
     }
 

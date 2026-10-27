@@ -304,6 +304,10 @@ final class Painter
         if ($n->invisible || $n->backface && $n->transform->facesAway()) {
             return;
         }
+        if ($n->belowMaterials && $rt !== null && $rt->underLayer && !$rt->paintingUnder) { // the window paints it under its materials, from where its painting is now
+            $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip()];
+            return;
+        }
         $world = $list->world(); $opacity = $list->opacity();
         $dim = $n->disabled; // disabled, at half its opacity, and what is inside it with it (mygo's paint)
         if ($n->opacity < 1 || $n->poseFade > 0 || $dim) {

@@ -157,6 +157,8 @@ final class Node
     public bool $disabled = false, $disabledIn = false;
     /** Keeps its room in the layout but paints nothing and, with what is inside it, takes neither the pointer nor the focus (mygo's Invisible); outlined with what is inside it, margins, padding and content (mygo's Debug); passes the pointer to what is under it (mygo's PassThrough). */
     public bool $invisible = false, $debug = false, $passThrough = false;
+    /** @internal belowMaterials() */
+    public bool $belowMaterials = false;
     /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
     public ?array $radii = null;
     /** A gradient filling the node in place of its color (gradient, linearGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
@@ -533,6 +535,19 @@ final class Node
     public function debug(): static
     {
         $this->debug = true;
+        return $this;
+    }
+
+    /**
+     * Paints the node and what is in it under the window's system
+     * materials (Node::systemMaterial) and over its videos, as a player's
+     * subtitles show under its control bar's glass, blurred by it: in a
+     * layer of the window's of its own, its place and its pointer as they
+     * are. A window of no such layer (a test's) paints it where it is.
+     */
+    public function belowMaterials(): static
+    {
+        $this->belowMaterials = true;
         return $this;
     }
 

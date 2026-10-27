@@ -201,7 +201,7 @@ final class Headless
         $this->list ??= new DisplayList($ffi->new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity, $ffi->new('float[' . (4096 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4096);
         $this->list->pathQuad ??= fn(Path $p, float $w) => ($b = $p->bounds()) === null ? null : [$b[0], $b[1], $b[2] - $b[0], $b[3] - $b[1], 0, 0]; // a path's quad is its bounds; no mask
         $this->list->reset();
-        $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; // as the window's paint
+        $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; $this->rt->underPaints = []; // as the window's paint
         $this->list->pushClip(0, 0, $this->w, $this->h);
         Painter::paint($root = $this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
         if (($in = $this->rt->inspector) !== null && $in->open) {

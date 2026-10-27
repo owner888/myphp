@@ -82,6 +82,9 @@ final class Window
     private $view = null;
     /** The window's content view, which holds the page or the native view, and the material behind it (setVibrancy), as mygo's: AppKit draws a broken title bar for a web inspector docked in the window's frame view. */
     private $container = null, $effect = null;
+    /** The view of the nodes painted under the materials (Node::belowMaterials), over the videos, made as a frame first has some; whether it shows any, and whether it is to be put in its place among the views. */
+    private $under = null;
+    private bool $underShown = false, $underNew = false;
     /** The window's background (setBackgroundColor), and whether it is transparent (WindowOptions::$transparent). */
     private ?Background $background = null;
     private bool $transparent = false;
@@ -202,6 +205,10 @@ final class Window
             }
             Metal::setClearColor($this->view, App::theme()->background);
             $view = $this->view;
+            $this->runtime->underLayer = true; // nodes belowMaterials() painted in a view of their own, under the materials
+            Metal::$afterFrame[ObjC::addr($this->view)] = function (): void { // the layer under the materials drawn in the same turn as the frame, the list it used let go
+                if ($this->under !== null && ($this->runtime->underPaints !== [] || $this->underShown)) { ObjC::msg('v:', $this->under, 'draw'); }
+            };
             $this->runtime->onAccess = fn(AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
         }
         $bounds = ObjC::msg('r:', $this->view, 'frame');
@@ -393,7 +400,7 @@ final class Window
                     return $c->root;
                 });
                 $paint = function () use ($root, $list, $text, $bounds, $in): void {
-                    $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = [];
+                    $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
                     $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
@@ -407,9 +414,12 @@ final class Window
                     $list->reset();
                     $paint();
                 }
+                if ($this->runtime->underPaints !== [] && $this->under === null) {
+                    $this->under = $this->underView();
+                }
                 $in?->lap(2);
                 if ($this->frameStats !== null) { $this->frameStats->passes = $this->runtime->passes; $this->frameStats->lap(UI\FrameStats::PAINT); }
-                if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== [] || $this->materials !== [] || $this->runtime->materialPlaces !== []) {
+                if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== [] || $this->materials !== [] || $this->runtime->materialPlaces !== [] || $this->underNew) {
                     $this->placeWebViews($bounds->h);
                 }
                 $this->showCursor($this->runtime->cursor);
@@ -671,6 +681,12 @@ final class Window
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
+        if ($this->under !== null) {
+            Metal::forget($this->under);
+            ObjC::msg('v:', $this->under, 'removeFromSuperview');
+            ObjC::msg('v:', $this->under, 'release');
+            $this->under = null;
+        }
         $this->page?->destroy(); // the page goes with the window, its web views' too
         foreach ($this->webViews as $v) { $v->destroy(); }
         foreach ($this->videoHosts as ['player' => $ref, 'clip' => $clip, 'video' => $video]) {
@@ -1568,6 +1584,71 @@ final class Window
     }
 
     /**
+     * The view the nodes belowMaterials() paint in: of the window's size,
+     * clear, under the materials and over the videos (stackUnder); it
+     * draws after each frame that has some or had (Metal::$afterFrame),
+     * each where the frame met it, its clip, transform and opacity as they
+     * were there.
+     */
+    private function underView()
+    {
+        $b = ObjC::msg('r:', $this->container, 'bounds');
+        $text = App::text();
+        $view = App::metal()->createView(ObjC::rect(0, 0, $b->w, $b->h), function ($view, DisplayList $list) use ($text): void {
+            $bounds = ObjC::msg('r:', $view, 'bounds');
+            $paint = function () use ($list, $text, $bounds): void {
+                $plain = $list->world();
+                $list->pushClip(0, 0, $bounds->w, $bounds->h);
+                $this->runtime->paintingUnder = true;
+                try {
+                    foreach ($this->runtime->underPaints as $u) {
+                        $list->setWorld($plain); // the clip as the frame had it, in the window's coordinates
+                        $list->pushClip(...$u['clip']);
+                        $list->setWorld($u['world']);
+                        $list->setOpacity($u['opacity']);
+                        Painter::paint($u['node'], $list, $text, App::theme(), $this->runtime);
+                        $list->popClip();
+                    }
+                } finally {
+                    $this->runtime->paintingUnder = false;
+                }
+                $list->setWorld($plain);
+                $list->setOpacity(1.0);
+                $list->popClip();
+            };
+            $paint();
+            if ($text->repaint) { // the atlas started over: what this painted points at slots that are gone
+                $text->repaint = false;
+                $list->reset();
+                $paint();
+            }
+            $this->underShown = $this->runtime->underPaints !== [];
+        }, 'MTKView', 60, [0, 0, 0, 0]);
+        ObjC::msg('v:L', $view, 'setAutoresizingMask:', 18); // width and height sizable, as the window's view
+        ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setOpaque:', false);
+        $this->underNew = true;
+        return $view;
+    }
+
+    /** Puts the view under the materials right over the top video, or at the back without one; the materials go right under the window's view (placeMaterials). */
+    private function stackUnder(): void
+    {
+        $clips = [];
+        foreach ($this->videoHosts as $h) { $clips[ObjC::addr($h['clip'])] = true; }
+        $subviews = ObjC::msg('p:', $this->container, 'subviews');
+        $top = null;
+        for ($i = 0, $n = ObjC::msg('L:', $subviews, 'count'); $i < $n; $i++) {
+            $v = ObjC::msg('p:L', $subviews, 'objectAtIndex:', $i);
+            if (isset($clips[ObjC::addr($v)])) { $top = $v; }
+        }
+        ObjC::msg('v:', $this->under, 'retain');
+        ObjC::msg('v:', $this->under, 'removeFromSuperview');
+        ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $this->under, $top === null ? -1 : 1, $top); // NSWindowBelow of none: the back; NSWindowAbove the video
+        ObjC::msg('v:', $this->under, 'release');
+        $this->underNew = false;
+    }
+
+    /**
      * Shows the web views where the frame showed them, in its paint order
      * under the native view, and hides the others (mygo's placeWebViews);
      * the native view lets them show through its holes, and a web view's
@@ -1575,7 +1656,11 @@ final class Window
      */
     private function placeWebViews(float $height): void
     {
-        $this->placeMaterials($height, $this->placeVideos($height));
+        $added = $this->placeVideos($height);
+        $this->placeMaterials($height, $added);
+        if ($this->under !== null && ($added || $this->underNew)) {
+            $this->stackUnder();
+        }
         $places = [];
         foreach ($this->runtime->webPlaces as $p) {
             $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last

@@ -84,6 +84,20 @@ final class VideoPlayer
         $area = $c->width - $left - $right; // the controls center over what the sidebars leave
         $c->runtime?->askWindow('aspect', self::shownAspect($p)); // the window keeps the picture's shape, as IINA's
 
+        // The subtitles, under the bars' glass as mpv draws them into the picture: in the window's layer under its materials.
+        if ($s->subtitlesVisible && !$s->pictureInPicture) {
+            $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
+              if (($styled = $p->subtitleLines()) !== []) { // an ASS track's lines, in their styles where they are
+                  self::assLines($c, $p, $styled);
+              } elseif (($lines = $p->subtitles()) !== []) {
+                  self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
+              }
+              if (($pictures = $p->subtitlePictures()) !== []) {
+                  self::subtitlePictures($c, $p, $pictures);
+              }
+            $c->end();
+        }
+
         // The title bar and the control bar show while the pointer moves and while it is on them, and fade.
         // Each built and closed before the next: an open node takes the next as its child.
         $bars = [];
@@ -108,14 +122,6 @@ final class VideoPlayer
         }
         $c->clicked($osc); // a click on the bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
 
-        if ($s->subtitlesVisible && !$s->pictureInPicture && ($styled = $p->subtitleLines()) !== []) { // an ASS track's lines, in their styles where they are
-            self::assLines($c, $p, $styled);
-        } elseif ($s->subtitlesVisible && !$s->pictureInPicture && ($lines = $p->subtitles()) !== []) {
-            self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
-        }
-        if ($s->subtitlesVisible && !$s->pictureInPicture && ($pictures = $p->subtitlePictures()) !== []) {
-            self::subtitlePictures($c, $p, $pictures);
-        }
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->error !== '') {
             $c->text($s->error, 13, 0xff6b6b)->absolute()->left(16)->bottom(16);

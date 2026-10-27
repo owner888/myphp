@@ -817,6 +817,15 @@ final class Runtime
      * @var list<array{id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, material: string, dark: ?bool, radius: float, alpha: float}>
      */
     public array $materialPlaces = [];
+    /** @internal Window: whether it paints the nodes belowMaterials() in a layer of their own, under its materials (else they paint where they are) */
+    public bool $underLayer = false;
+    /**
+     * @internal the subtrees the window paints in that layer, as the frame met them: its transform, opacity and clip there
+     * @var list<array{node: Node, world: Affine, opacity: float, clip: array{0: float, 1: float, 2: float, 3: float}}>
+     */
+    public array $underPaints = [];
+    /** @internal while the window paints its layer under the materials */
+    public bool $paintingUnder = false;
 
     /** Whether the focus came from the keyboard, as Tab moving it onto a web view's node, which enters its page from its first element, or its last with Shift (mygo's TabInto). */
     public function focusFromKeyboard(): bool

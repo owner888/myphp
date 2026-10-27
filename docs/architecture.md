@@ -3919,6 +3919,28 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   `subtitles` filter) is what the player is held to. An .ass beside a
   film of its name loads as its subtitles: the file is named apart.
 
+## Subtitles under the glass (v1.45)
+
+- **A layer under the materials** (`Node::belowMaterials`): mpv draws
+  subtitles into the picture, under IINA's control bar, whose glass blurs
+  them; drawn with the content they lay over the glass. A window of
+  native content paints such a node, and what is in it, in a view of its
+  own: an MTKView of the window's size, clear and not opaque, right over
+  the top video and under the materials (`stackUnder`, put back as videos
+  come; the materials go right under the window's view). Its place and
+  its pointer are the node's as ever; the frame notes it with the
+  transform, opacity and clip its painting had there (`Runtime::
+  $underPaints`) and paints it in that view instead. A window of no such
+  layer (a test's) paints it where it is.
+- **In the same turn**: the frame's list and buffers are of a ring the
+  frames go round; the view under the materials draws once the window's
+  frame is done and the ring has moved on (`Metal::$afterFrame`), in the
+  same turn of the run loop, so the two present together, and only when
+  a frame has some or had (to clear it). An atlas that starts over as it
+  paints, paints it again.
+- The player's subtitles (text, ASS, PGS and VobSub) are one node
+  belowMaterials(), built before the bars.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -3939,9 +3961,7 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   mygo's `Margin` comes with the Markdown view, which uses it.
 - Video: ASS's drawings, blur, 3D rotation and shearing are left out, a
   \kf is sung whole, a line turns by its first run (its styles, places
-  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43);
-  subtitles are drawn over the control bar, whose glass is under the
-  window's content (mpv draws them into the picture, under it); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
+  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43); Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and
   Opus, v1.37), nor DTS or TrueHD, which the system has no decoder of;
   text has no outline of its own.
 - `text()` measures with the old metrics unless its style needs the
