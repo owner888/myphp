@@ -1,0 +1,14 @@
+{
+  "name": "Video",
+  "identifier": "dev.myphp.examples.video",
+  "version": "1.0.0",
+  "entry": "main.php",
+  "out": "build",
+  "macos": { "minimumSystemVersion": "26.0" },
+  "fileAssociations": [
+    { "ext": ["mkv"], "name": "Matroska video", "role": "Viewer" },
+    { "ext": ["webm"], "name": "WebM media", "role": "Viewer" },
+    { "ext": ["mp4", "m4v"], "name": "MPEG-4 video", "role": "Viewer" },
+    { "ext": ["mov"], "name": "QuickTime media", "role": "Viewer" }
+  ]
+}

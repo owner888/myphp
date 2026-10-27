@@ -5,15 +5,17 @@
 // the control bar, the messages, the sidebars of quick settings and of
 // the playlist, picture in picture, IINA's keys). File > Open, or a film
 // dropped on the window, opens a film, the films of its folder its
-// playlist; a subtitle file dropped on it loads over the film playing.
-// Run: ./run.sh video [file]
+// playlist, as one opened from the Finder; a subtitle file dropped on it
+// loads over the film playing.
+// Run: ./run.sh video [file]; in examples/video, ../../bin/myphp build makes Video.app and its .dmg.
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\Subtitles;
 use MyPHP\UI\{Content, Context, VideoPlayerState};
 
-spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
+// MyPHP from inside the built app, else from this checkout.
+require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
 
 /** Opens a dropped file: a subtitle file over the film playing, else a film. */
 function drop(VideoPlayerState $s, string $path): void
@@ -48,12 +50,15 @@ App::setMenu(new Menu([
     new MenuItem(role: 'windowMenu'),
 ]));
 App::setName('Video');
+// From the Finder (myphp.json's fileAssociations) or the Dock icon; from the command line too in the built app, which the film given
+// below already plays.
+App::onOpenFile(fn(string $path) => $s->player !== null && realpath($s->player->path()) === realpath($path) ? null : drop($s, $path));
 App::whenReady(function () use ($s, $argv) {
     Theme::setSource(ThemeSource::Dark); // as IINA's window: dark whatever the system's
     $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',
         content: Content::view(fn(Context $c) => view($c, $s))));
     $w->on('fileDrop', fn(FileDropEvent $e) => drop($s, $e->paths[0]));
-    if (isset($argv[1])) {
+    if (isset($argv[1])) { // ./run.sh video file: no bundle, whose document types onOpenFile takes files from the command line by
         $s->open($argv[1]);
     }
 });
