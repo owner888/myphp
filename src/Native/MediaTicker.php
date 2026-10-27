@@ -6,15 +6,17 @@ namespace MyPHP\Native;
 use Closure;
 
 /**
- * The timer that tops up the players' renderers, 20 times a second while
- * one plays: an NSTimer in the main run loop's common modes, so that it
- * runs on while a window is resized or a menu is open.
+ * The timer that tops up the players' renderers, 4 times a second while
+ * one plays (they hold two seconds ahead, which a quarter of a second
+ * keeps; a wake each tick is PHP's time): an NSTimer in the main run
+ * loop's common modes, so that it runs on while a window is resized or a
+ * menu is open.
  *
  * @internal
  */
 final class MediaTicker
 {
-    public const INTERVAL = 0.05;
+    public const INTERVAL = 0.25;
     /** @var array<int, Closure(): void> what each player does at a tick, by its object id */
     private static array $ticks = [];
     private static $timer = null, $target = null;

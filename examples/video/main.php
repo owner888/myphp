@@ -33,6 +33,8 @@ final class Videos
     /** Where the pointer was last frame, and when it last moved. */
     public array $pointer = [0.0, 0.0];
     public float $moved = 0;
+    /** What the last frame asked for by the time showed (look()). */
+    public string $drawn = '';
     /** Whether the controls showed last frame: the traffic lights go with them. */
     public bool $shown = true;
     /** The sidebar's tab ('video', 'audio', 'sub'), or null while it is closed; the tab it slid away with. */
@@ -60,7 +62,10 @@ final class Videos
         $this->file = basename($path);
         $this->error = '';
         $p->setVolume($this->volume);
-        $p->on('time', fn() => $this->window?->invalidate()); // the time and the bar move
+        $p->on('time', function () { // a frame only when what shows changed: none while the controls are hidden and the subtitles stay
+            $look = $this->look();
+            if ($look !== $this->drawn) { $this->drawn = $look; $this->window?->invalidate(); }
+        });
         $p->on('ended', fn() => $this->window?->invalidate());
         $p->on('error', function (string $why) { $this->error = $why; $this->window?->invalidate(); });
         $this->window?->setTitle($this->file);
@@ -92,6 +97,20 @@ final class Videos
             $this->error = $e->getMessage();
         }
         $this->window?->invalidate();
+    }
+
+    /**
+     * What the frame shows of the time: the second and the knob's point
+     * while the controls or a message with the time show, and the
+     * subtitles; the same look needs no frame.
+     */
+    public function look(): string
+    {
+        $p = $this->player;
+        if ($p === null) { return ''; }
+        $t = $p->time();
+        $clock = $this->shown || microtime(true) < $this->osd[2] ? (int)$t . '/' . (int)round($t / max($p->duration(), 0.001) * 344) : '';
+        return $clock . "\0" . implode("\n", $this->subVisible ? $p->subtitles() : []);
     }
 
     /** Shows $text at the top left, with the time or the volume under it, as IINA's OSD. */

@@ -3547,6 +3547,22 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   outside it (`pressedOutside`), the control bar and the title bar
   excepted while they show, as a press is where the hand went down.
 
+## Playing for less CPU (v1.36)
+
+- **A frame only when what shows changed.** The player told the time 20
+  times a second and the example drew a frame at each, the controls hidden
+  or not. It draws now when what the frame shows of the time changes
+  (`look()`: the second and the bar's point while the controls or a
+  message with the time show; the subtitles' lines), so with the controls
+  hidden and the subtitles still, it draws none.
+- **Four ticks a second.** `MediaTicker` tops the renderers up every
+  quarter of a second (they hold two seconds ahead; at a rate over 1 the
+  player reads that many times two seconds of the film). A change of the
+  subtitles between two ticks wakes the player at it (`Cues::next`,
+  `App::after`) and it tells the time then, so a cue shows when it
+  starts, not up to a tick late; a wake come before the clock (which
+  starts a moment after `play()`) waits again.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

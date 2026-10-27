@@ -49,4 +49,21 @@ final class Cues
         }
         return $out;
     }
+
+    /** When after $t the text showing changes next, a cue starting or one showing ending; null for no more. @internal the player wakes for it */
+    public function next(float $t): ?float
+    {
+        $this->at($t); // sorts the list
+        $list = $this->list;
+        $lo = 0; $hi = count($list) - 1; $first = count($list); // the first cue starting after $t
+        while ($lo <= $hi) {
+            $mid = intdiv($lo + $hi, 2);
+            if ($list[$mid][0] > $t) { $first = $mid; $hi = $mid - 1; } else { $lo = $mid + 1; }
+        }
+        $next = $list[$first][0] ?? INF;
+        for ($i = $first - 1; $i >= 0 && $i > $first - 17; $i--) { // the ends of those showing: a few at most, as at() finds them
+            if (is_finite($list[$i][1]) && $list[$i][1] > $t) { $next = min($next, $list[$i][1]); }
+        }
+        return is_finite($next) ? $next : null;
+    }
 }

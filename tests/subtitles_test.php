@@ -31,6 +31,7 @@ $c = new Cues();
 $c->add(1.0, 2.0, 'a'); $c->add(1.5, 3.0, 'b'); $c->add(4.0, INF, 'c'); $c->add(6.0, 7.0, 'd'); $c->add(1.0, 2.0, 'a');
 same([[], ['a'], ['a', 'b'], ['b'], ['c'], ['c'], ['d'], []], [$c->at(0.5), $c->at(1.2), $c->at(1.7), $c->at(2.5), $c->at(4.0), $c->at(5.9), $c->at(6.5), $c->at(9)], 'the cues showing: together where they overlap, one of no end until the next');
 same(4, $c->count(), 'a cue read again is kept once');
+same([1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 7.0, null], [$c->next(0.5), $c->next(1.2), $c->next(1.7), $c->next(2.5), $c->next(3.5), $c->next(5.0), $c->next(6.5), $c->next(7.0)], 'when the text showing changes next: a cue starting, or one showing ending');
 
 $m = new Matroska(__DIR__ . '/testdata/clip-subs.mkv');
 $tracks = array_values(array_filter($m->tracks(), fn(Track $t) => $t->type === Track::SUBTITLE));

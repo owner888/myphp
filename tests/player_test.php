@@ -32,7 +32,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $run(0.6);
         $t = $p->time() - $from;
         check($p->playing() && $t > 0.3 && $t < 1.0, "$file: the clock runs while it plays: $t s in 0.6, after {$waited} waits of 50 ms to start");
-        check($ticks >= 5, "$file: time is told as it plays: $ticks times");
+        check($ticks >= 2, "$file: time is told as it plays, four times a second: $ticks times in 0.6 s");
         $p->pause();
         $at = $p->time();
         $run(0.3);
@@ -69,6 +69,11 @@ if (PHP_OS_FAMILY === 'Darwin') {
     same(['第一句 字幕'], $at(0.6), 'a SubRip track of the file');
     $p->setSubtitleDelay(0.5);
     same(['第一句 字幕'], $at(1.1), 'half a second late');
+    $p->setSubtitleDelay(0);
+    $shownAt = null;
+    $p->on('time', function () use (&$p, &$shownAt) { if ($shownAt === null && $p->subtitles() === ["Second line\ntwo rows"]) { $shownAt = $p->time(); } });
+    $p->seek(0.85); $p->play(); $run(0.5); $p->pause();
+    check($shownAt !== null && $shownAt < 1.08, "playing, a cue is told as it starts, not a tick late: at $shownAt for 1.0");
     $p->setSubtitleTrack(null);
     same([], $at(1.1), 'none');
     $p = new Player(__DIR__ . '/testdata/clip-subs.mp4');

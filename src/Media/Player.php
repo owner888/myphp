@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Media;
 
 use Closure;
+use MyPHP\App;
 use MyPHP\Native\{AssetReader, CoreMedia, MediaTicker, Renderers};
 use RuntimeException;
 
@@ -55,6 +56,8 @@ final class Player
     /** @var list<Track> */
     private array $external = [];
     private float $subtitleDelay = 0.0;
+    /** The change of the subtitles the player wakes for, once (wakeForCue). */
+    private ?float $cueWake = null;
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
@@ -250,6 +253,7 @@ final class Player
         $this->out->setRate($this->rate);
         $this->feed();
         MediaTicker::add($this, $this->tick(...));
+        $this->wakeForCue();
     }
 
     public function pause(): void
@@ -269,6 +273,7 @@ final class Player
         $this->target = $seconds; $this->fedTo = $seconds;
         $this->out->setRate($this->playing ? $this->rate : 0.0, $seconds);
         $this->feed($seconds);
+        if ($this->playing) { $this->cueWake = null; $this->wakeForCue(); } // from where it went
     }
 
     /** Plays at $rate times the speed (0.5 to 2 sound best). */
@@ -351,12 +356,36 @@ final class Player
             return;
         }
         $this->emit('time');
+        $this->wakeForCue();
+    }
+
+    /**
+     * Tells the time again where the subtitles shown change before the next
+     * tick, a quarter of a second off: a cue shows when it starts, not up
+     * to a tick late. Once for each change.
+     */
+    private function wakeForCue(): void
+    {
+        $cues = $this->subtitle === null ? null : $this->cues[spl_object_id($this->subtitle)] ?? null;
+        $at = $this->time() - $this->subtitleDelay;
+        $next = $cues?->next($at);
+        if ($next === null || $next === $this->cueWake || ($wait = ($next - $at) / $this->rate) >= MediaTicker::INTERVAL) {
+            return;
+        }
+        $this->cueWake = $next;
+        App::after($wait + 0.002, function () use ($next): void { // just past it
+            if ($this->playing && $this->cueWake === $next) {
+                $this->cueWake = null;
+                $this->emit('time');
+                $this->wakeForCue(); // the next change, or this one again if the clock was not there yet (it starts a moment after play())
+            }
+        });
     }
 
     /** Reads the packets up to AHEAD seconds past the clock (or past $at, where a seek went), and gives each renderer its own while it takes them. */
     private function feed(?float $at = null): void
     {
-        $until = ($at ?? $this->out->time()) + self::AHEAD;
+        $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate); // two seconds of the clock's, faster than the film's at a rate over 1
         $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : $q[count($q) - 1]->time;
         while (!$this->drained && max($last('video'), $last('audio')) <= $until) {
             $p = $this->source->next();
