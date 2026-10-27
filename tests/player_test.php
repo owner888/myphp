@@ -74,6 +74,26 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $p->pause();
     }
 
+    // The picture's aspect, crop and rotation (the window lays it out by Media\Picture), and the sound's delay, which plays on.
+    $p = new Player(__DIR__ . '/testdata/clip.mkv');
+    check($p->plainPicture(), 'the picture as the file has it');
+    $p->setAspectRatio(4 / 3); $p->setCrop(21 / 9); $p->setRotation(90);
+    same([4 / 3, 21 / 9, 90, false], [$p->aspectRatio(), $p->crop(), $p->rotation(), $p->plainPicture()], 'an aspect, a crop and a rotation asked');
+    $errs = [];
+    foreach ([fn() => $p->setRotation(45), fn() => $p->setCrop(0.0), fn() => $p->setAspectRatio(-1.0)] as $bad) {
+        try { $bad(); } catch (\RuntimeException $e) { $errs[] = $e->getMessage(); }
+    }
+    same(['myphp: a rotation is 0, 90, 180 or 270 degrees, not 45', 'myphp: a crop is positive, not 0', 'myphp: an aspect ratio is positive, not -1'], $errs, 'what is no rotation or ratio throws');
+    $p->setAspectRatio(null); $p->setCrop(null); $p->setRotation(0);
+    $p->setAudioDelay(0.3);
+    $p->play();
+    for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+    $from = $p->time();
+    $run(0.5);
+    $failed = $p->out->failure();
+    check($p->plainPicture() && $p->audioDelay() === 0.3 && $failed === null && $p->time() - $from > 0.3, 'the sound 0.3 s late, it plays on: ' . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
+    $p->pause();
+
     // Opus, as WebM files have it: the system decodes it, and the clock runs on its sound.
     $p = new Player(__DIR__ . '/testdata/clip-opus.mkv');
     check($p->audioTrack()?->codec === 'A_OPUS', 'an Opus track plays');

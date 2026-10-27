@@ -856,5 +856,189 @@
   "clearScrollback": "Clear Scrollback",
   "@clearScrollback": {
     "description": "An item of a terminal's menu, which clears the lines scrolled out of view."
+  },
+  "videoResume": "Resume",
+  "@videoResume": {
+    "description": "The video player's message (OSD) as it plays again."
+  },
+  "videoPause": "Pause",
+  "@videoPause": {
+    "description": "The video player's message as it pauses."
+  },
+  "videoStop": "Stop",
+  "@videoStop": {
+    "description": "The video player's message as it stops and goes back to the start."
+  },
+  "videoVolume": "Volume: {volume}",
+  "@videoVolume": {
+    "description": "The video player's message of the volume, 0 to 100."
+  },
+  "videoMute": "Mute",
+  "@videoMute": {
+    "description": "The video player's message as the sound is muted."
+  },
+  "videoUnmute": "Unmute",
+  "@videoUnmute": {
+    "description": "The video player's message as the sound comes back."
+  },
+  "videoSpeedTo": "Speed: {speed}x",
+  "@videoSpeedTo": {
+    "description": "The video player's message of the speed it plays at, as 1.5."
+  },
+  "videoAspectTo": "Aspect Ratio: {ratio}",
+  "@videoAspectTo": {
+    "description": "The video player's message of the picture's aspect ratio, as 16:9 or Default."
+  },
+  "videoCropTo": "Crop: {ratio}",
+  "@videoCropTo": {
+    "description": "The video player's message of the crop, as 21:9 or None."
+  },
+  "videoRotateTo": "Rotate: {degrees}°",
+  "@videoRotateTo": {
+    "description": "The video player's message of the picture's rotation, in degrees."
+  },
+  "videoAudioDelayNone": "Audio Delay: No Delay",
+  "@videoAudioDelayNone": {
+    "description": "The video player's message as the sound's delay goes back to none."
+  },
+  "videoAudioDelayLater": "Audio Delay: {seconds}s Later",
+  "@videoAudioDelayLater": {
+    "description": "The video player's message of the sound playing after the picture."
+  },
+  "videoAudioDelayEarlier": "Audio Delay: {seconds}s Earlier",
+  "@videoAudioDelayEarlier": {
+    "description": "The video player's message of the sound playing before the picture."
+  },
+  "videoSubDelayNone": "Subtitle Delay: No Delay",
+  "@videoSubDelayNone": {
+    "description": "The video player's message as the subtitles' delay goes back to none."
+  },
+  "videoSubDelayLater": "Subtitle Delay: {seconds}s Later",
+  "@videoSubDelayLater": {
+    "description": "The video player's message of the subtitles showing late."
+  },
+  "videoSubDelayEarlier": "Subtitle Delay: {seconds}s Earlier",
+  "@videoSubDelayEarlier": {
+    "description": "The video player's message of the subtitles showing early."
+  },
+  "videoSubHidden": "Subtitles Hidden",
+  "@videoSubHidden": {
+    "description": "The video player's message as the subtitles are hidden."
+  },
+  "videoSubVisible": "Subtitles Visible",
+  "@videoSubVisible": {
+    "description": "The video player's message as the subtitles show again."
+  },
+  "videoDefault": "Default",
+  "@videoDefault": {
+    "description": "The video player's aspect ratio of the picture's own; a track the file marks default."
+  },
+  "videoNone": "None",
+  "@videoNone": {
+    "description": "The video player's crop of none."
+  },
+  "videoNoTrack": "<None>",
+  "@videoNoTrack": {
+    "description": "The row of the video player's track lists that chooses no track."
+  },
+  "videoUnplayable": "unplayable",
+  "@videoUnplayable": {
+    "description": "Marks a track of the video player's lists that the system cannot decode."
+  },
+  "videoLayout": "Layout",
+  "@videoLayout": {
+    "description": "The video player's sidebar tab of the window's layout."
+  },
+  "videoVideo": "Video",
+  "@videoVideo": {
+    "description": "The video player's sidebar tab of the picture."
+  },
+  "videoAudio": "Audio",
+  "@videoAudio": {
+    "description": "The video player's sidebar tab of the sound."
+  },
+  "videoSubtitles": "Subtitles",
+  "@videoSubtitles": {
+    "description": "The video player's sidebar tab of the subtitles."
+  },
+  "videoAspectRatio": "Aspect Ratio",
+  "@videoAspectRatio": {
+    "description": "A heading of the video player's video tab."
+  },
+  "videoCrop": "Crop",
+  "@videoCrop": {
+    "description": "A heading of the video player's video tab."
+  },
+  "videoRotation": "Rotation",
+  "@videoRotation": {
+    "description": "A heading of the video player's video tab."
+  },
+  "videoSpeed": "Speed",
+  "@videoSpeed": {
+    "description": "A heading of the video player's video tab."
+  },
+  "videoHardwareDecoding": "Hardware Decoding",
+  "@videoHardwareDecoding": {
+    "description": "A setting of the video player's video tab, which the system always does."
+  },
+  "videoLoadAudio": "Load External Audio Track…",
+  "@videoLoadAudio": {
+    "description": "A button of the video player's audio tab."
+  },
+  "videoDelay": "Delay",
+  "@videoDelay": {
+    "description": "A heading of the video player's audio and subtitle tabs."
+  },
+  "videoEqualizer": "Equalizer",
+  "@videoEqualizer": {
+    "description": "A heading of the video player's audio tab."
+  },
+  "videoManual": "Manual",
+  "@videoManual": {
+    "description": "The equalizer's preset of the video player's audio tab, set by hand."
+  },
+  "videoPrimary": "Primary",
+  "@videoPrimary": {
+    "description": "The video player's primary subtitles."
+  },
+  "videoSecondary": "Secondary",
+  "@videoSecondary": {
+    "description": "The video player's secondary subtitles."
+  },
+  "videoLoadSubtitles": "Load Subtitle…",
+  "@videoLoadSubtitles": {
+    "description": "A button of the video player's subtitle tab, and its dialog's title."
+  },
+  "videoSearchOnline": "Search Online…",
+  "@videoSearchOnline": {
+    "description": "A button of the video player's subtitle tab."
+  },
+  "videoHide": "Hide",
+  "@videoHide": {
+    "description": "The tooltip of the button that closes the video player's sidebar."
+  },
+  "videoPlugins": "Plugins",
+  "@videoPlugins": {
+    "description": "The tooltip of a button of the video player's control bar."
+  },
+  "videoPictureInPicture": "Picture in Picture",
+  "@videoPictureInPicture": {
+    "description": "The tooltip of a button of the video player's control bar."
+  },
+  "videoPlaylist": "Playlist",
+  "@videoPlaylist": {
+    "description": "The tooltip of a button of the video player's control bar."
+  },
+  "videoSettings": "Settings",
+  "@videoSettings": {
+    "description": "The tooltip of the button of the video player's control bar that opens its sidebar."
+  },
+  "videoNotYet": "Not supported yet",
+  "@videoNotYet": {
+    "description": "The tooltip of what the video player shows and has no means for yet."
+  },
+  "videoLayoutNotYet": "The layout settings are not supported yet",
+  "@videoLayoutNotYet": {
+    "description": "The video player's layout tab, whose settings it has no means for yet."
   }
 }

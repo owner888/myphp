@@ -124,3 +124,15 @@ same(960, \MyPHP\Native\CoreMedia::frames($p), 'a 20 ms packet, 960 frames');
 $toc = fn(int $toc, string $more = '') => \MyPHP\Native\CoreMedia::frames(new Packet($a, 0.0, 0.0, true, chr($toc) . $more));
 same([480, 2880, 1920, 120, 1920, 2880], [$toc(0 << 3), $toc(3 << 3), $toc(13 << 3 | 1), $toc(16 << 3), $toc(31 << 3 | 2), $toc(19 << 3 | 3, "\x03")], 'SILK, hybrid and CELT sizes, two frames, three by the count byte');
 
+// Where the picture shows (Media\Picture, the player's aspect ratio, crop and rotation): a 16:9 picture in a 4:3 box, at 4:3, cut to 21:9, turned.
+use MyPHP\Media\Picture;
+same([[0.0, 3.75, 40.0, 22.5], [40.0, 22.5]], Picture::fit(40, 30, 16 / 9, null, 0), 'its own aspect: as wide as the box, centered');
+same([[0.0, 0.0, 40.0, 30.0], [40.0, 30.0]], Picture::fit(40, 30, 4 / 3, null, 0), 'at 4:3: the box');
+[$shown, $whole] = Picture::fit(40, 30, 16 / 9, 4 / 3, 0);
+same([[0.0, 0.0, 40.0, 30.0], 30.0], [$shown, $whole[1]], 'cut to 4:3: the part fills the box, the picture as tall');
+check(abs($whole[0] - 30 * 16 / 9) < 1e-9, 'and wider, at its own aspect');
+[$shown, $whole] = Picture::fit(90, 40, 16 / 9, 21 / 9, 0);
+check(abs($shown[2] - 90) < 1e-9 && abs($shown[3] - 90 / (21 / 9)) < 1e-9 && abs($whole[1] - 90 / (16 / 9)) < 1e-9, 'cut to 21:9: as wide as the box, the picture as wide and taller');
+[$shown, $whole] = Picture::fit(40, 30, 16 / 9, null, 90);
+check(abs($shown[3] - 30) < 1e-9 && abs($shown[2] - 30 * 9 / 16) < 1e-9 && abs($whole[0] - 30) < 1e-9 && abs($whole[1] - 30 * 9 / 16) < 1e-9, 'turned a quarter: upright in the box, as tall as it, the picture its width that height');
+

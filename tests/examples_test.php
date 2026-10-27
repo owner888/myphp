@@ -482,19 +482,10 @@ same('Received URLs: https://example.com/', $right->status, 'a URL dropped is re
 [$view, $s] = Headless::load('video', '$openDialog');
 $t = new Headless($view, 900, 600);
 $t->frame();
-check($t->byText('打开视频（⌘O）或将文件拖到窗口') !== null, 'the video player asks for a file');
+check($t->byText('Open a video (Cmd+O) or drop one on the window') !== null, 'the video player asks for a file');
 $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
 check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");
-
-// The video example's subtitles: the text in white over eight copies of it in black around it, which take no pointer.
-$t = new Headless(function (Context $c) { $c->column(0, 0, 1); \MyPHP\Examples\Video\subtitle($c, "two\nlines", 20, 40); $c->end(); }, 900, 600);
-$t->frame();
-same(9, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'the video example outlines its subtitles');
-// Its labels, as IINA's: the clock, numbers without trailing zeros, a track's row with its codec, what it is and its language.
-same(['07:09', '1:58:37', '1.5', '2', '0.25'], [\MyPHP\Examples\Video\clock(429), \MyPHP\Examples\Video\clock(7117), \MyPHP\Examples\Video\number(1.5), \MyPHP\Examples\Video\number(2.0), \MyPHP\Examples\Video\number(0.25)], 'the video example writes times and numbers as IINA');
-$track = new \MyPHP\Media\Track(2, \MyPHP\Media\Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);
-same(['国语 (ac3, 2ch, 44.1kHz, 默认)', '中文'], \MyPHP\Examples\Video\trackRow($track, '2ch, 44.1kHz'), 'an audio track as IINA lists it');
 
 // The video example's controls over a picture that pauses when clicked: the controls take their clicks (the picture asks after them, and the bar for the end of a drag of its slider), and a press on them leaves the keyboard with the window's shortcuts.
 $pc = ['plays' => 0, 'pictures' => 0, 'spaces' => 0, 'lefts' => 0, 'track' => 0, 'at' => 0.5, 'slider' => null];

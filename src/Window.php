@@ -64,6 +64,9 @@ final class Window
     private bool $hiddenTitleBar = false;
     /** Frames asked for while nothing of the window showed, drawn once some of it shows again (mygo's held). */
     private bool $held = false;
+    /** What the view last asked of the window (answer): whether the traffic lights show, the aspect it keeps. */
+    private ?bool $buttonsAsked = null;
+    private ?float $aspectAsked = null;
     /** The frame the window had before it went full screen by its own animation, which it goes back to. */
     private $windowedFrame = null;
     /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
@@ -369,6 +372,7 @@ final class Window
                 App::metal()->setDark(App::theme()->dark);
                 $in = $this->runtime->inspector;
                 if ($in !== null && $in->open) { $in->hz = $this->refreshRate(); }
+                $this->runtime->fullScreen = $this->isFullScreen();
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
                     $in?->startPass();
                     $c = new Context($text, $this->runtime, $in?->contentWidth($bounds->w) ?? $bounds->w, $bounds->h, App::theme(), App::scale());
@@ -404,6 +408,7 @@ final class Window
                     $this->placeWebViews($bounds->h);
                 }
                 $this->showCursor($this->runtime->cursor);
+                $this->answer($this->runtime->windowAsks);
                 $wake = $this->runtime->nextWake();
                 if (($this->runtime->needsFrame || $wake !== null) && !$this->showing()) {
                     // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
@@ -899,6 +904,39 @@ final class Window
 
     /** Asks for a frame after state changed outside the view function (native UI, mygo's Invalidate). */
     /** Whether some of the window shows on screen: not hidden, minimized, on another space or covered by other windows, which still get frames (mygo's surface visible). */
+    /**
+     * Does what the view asked of the window this frame (Runtime::windowAsks),
+     * once for each change: the traffic lights shown or hidden; the aspect
+     * kept as the user resizes it, the window first made of that shape, its
+     * width kept; full screen or not. Resizing redraws the window at once
+     * (windowDidResize:): it waits for the frame to end.
+     * @param array<string, mixed> $asks
+     */
+    private function answer(array $asks): void
+    {
+        if (array_key_exists('buttons', $asks) && $asks['buttons'] !== $this->buttonsAsked) {
+            $this->buttonsAsked = $asks['buttons'];
+            $this->setWindowButtonVisibility($asks['buttons']);
+        }
+        if (array_key_exists('aspect', $asks) && $asks['aspect'] !== $this->aspectAsked) {
+            $a = $this->aspectAsked = $asks['aspect'];
+            App::later(function () use ($a): void {
+                if ($this->destroyed) { return; }
+                $this->setAspectRatio($a ?? 0.0);
+                if ($a !== null && !$this->isFullScreen()) {
+                    $w = $this->contentSize()[0];
+                    $this->setContentSize($w, (int)round($w / $a));
+                }
+            });
+        }
+        if (array_key_exists('fullScreen', $asks) && $asks['fullScreen'] !== $this->isFullScreen()) {
+            $on = $asks['fullScreen'];
+            App::later(function () use ($on): void {
+                if (!$this->destroyed) { $this->setFullScreen($on); }
+            });
+        }
+    }
+
     /** The windows to go full screen by an animation of their own for $ns, a window of a video: itself; else nil, AppKit's animation. */
     private static function ownAnimation($ns)
     {
@@ -1576,13 +1614,17 @@ final class Window
                 ObjC::msg('v:b', $clip, 'setWantsLayer:', true);
                 ObjC::msg('v:b', ObjC::msg('p:', $clip, 'layer'), 'setMasksToBounds:', true);
                 ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view); // NSWindowBelow
-                $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip];
+                $crop = ObjC::msg('p:', ObjC::alloc('CALayer'), 'init'); // what of the picture shows: a crop cuts it to this
+                ObjC::msg('v:b', $crop, 'setMasksToBounds:', true);
+                ObjC::msg('v:p', ObjC::msg('p:', $clip, 'layer'), 'addSublayer:', $crop);
+                ObjC::msg('v:', $crop, 'release'); // the clip's layer holds it
+                $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip, 'crop' => $crop];
                 $added = true;
             }
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'begin');
         ObjC::msg('v:b', ObjC::cls('CATransaction'), 'setDisableActions:', true);
-        foreach ($this->videoHosts as $k => ['player' => $ref, 'clip' => $clip]) {
+        foreach ($this->videoHosts as $k => ['player' => $ref, 'clip' => $clip, 'crop' => $crop]) {
             $player = $ref->get();
             if ($player === null) { // gone, its layer with it
                 ObjC::msg('v:', $clip, 'removeFromSuperview');
@@ -1602,14 +1644,30 @@ final class Window
             $wide = $cx <= 0 && $cx + $cw >= $width; $tall = $cy <= 0 && $cy + $ch >= $height;
             ObjC::msg('v:L', $clip, 'setAutoresizingMask:', ($wide ? 2 : 0) | ($tall ? 16 : 8)); // NSViewWidthSizable, NSViewHeightSizable, else NSViewMinYMargin
             ObjC::msg('v:r', $clip, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
-            $host = ObjC::msg('p:', $clip, 'layer');
             $layer = $player->out->layer;
-            if (ObjC::addr(ObjC::msg('p:', $layer, 'superlayer')) !== ObjC::addr($host)) {
-                ObjC::msg('v:p', $host, 'addSublayer:', $layer);
+            if (ObjC::addr(ObjC::msg('p:', $layer, 'superlayer')) !== ObjC::addr($crop)) {
+                ObjC::msg('v:p', $crop, 'addSublayer:', $layer);
             }
-            ObjC::msg('v:r', $layer, 'setFrame:', ObjC::rect($fx - $cx, $ch - ($fy - $cy) - $fh, $fw, $fh)); // the clip view is not flipped: y up from its bottom
-            $fills = [$fx, $fy, $fw, $fh] == [$cx, $cy, $cw, $ch];
-            ObjC::msg('v:i', $layer, 'setAutoresizingMask:', $fills ? 18 : 0); // kCALayerWidthSizable | kCALayerHeightSizable: the layer with its view, when it fills it
+            [$rx, $ry] = [$fx - $cx, $ch - ($fy - $cy) - $fh]; // the node's box in the clip view, which is not flipped: y up from its bottom
+            if ($player->plainPicture()) { // the layer fits the picture in the box itself, and stretches with it as the window resizes
+                $fills = [$fx, $fy, $fw, $fh] == [$cx, $cy, $cw, $ch];
+                ObjC::msg('v:r', $crop, 'setFrame:', ObjC::rect($rx, $ry, $fw, $fh));
+                ObjC::msg('v:i', $crop, 'setAutoresizingMask:', $fills ? 18 : 0); // kCALayerWidthSizable | kCALayerHeightSizable: with its view, when it fills it
+                ObjC::msg('v:p', $layer, 'setVideoGravity:', ObjC::str('AVLayerVideoGravityResizeAspect'));
+                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', 0.0), ObjC::str('transform.rotation.z'));
+                ObjC::msg('v:r', $layer, 'setFrame:', ObjC::rect(0, 0, $fw, $fh));
+                ObjC::msg('v:i', $layer, 'setAutoresizingMask:', 18);
+            } else { // laid out here: the crop layer the part that shows, the picture its whole size in it, stretched to it and turned
+                [[$vx, $vy, $vw, $vh], [$pw, $ph]] = $player->picture($fw, $fh);
+                ObjC::msg('v:r', $crop, 'setFrame:', ObjC::rect($rx + $vx, $ry + $fh - $vy - $vh, $vw, $vh));
+                ObjC::msg('v:i', $crop, 'setAutoresizingMask:', 0);
+                ObjC::msg('v:i', $layer, 'setAutoresizingMask:', 0);
+                ObjC::msg('v:p', $layer, 'setVideoGravity:', ObjC::str('AVLayerVideoGravityResize'));
+                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', 0.0), ObjC::str('transform.rotation.z'));
+                ObjC::msg('v:r', $layer, 'setBounds:', ObjC::rect(0, 0, $pw, $ph));
+                ObjC::msg('v:q', $layer, 'setPosition:', ObjC::point($vw / 2, $vh / 2));
+                ObjC::msg('v:pp', $layer, 'setValue:forKeyPath:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', -deg2rad($player->rotation())), ObjC::str('transform.rotation.z')); // clockwise, y going up
+            }
             ObjC::msg('v:b', $clip, 'setHidden:', false);
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');

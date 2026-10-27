@@ -3589,6 +3589,49 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   The pre-skip (312 frames, 6.5 ms) is decoded and played, not trimmed:
   the sound runs that much ahead of the picture.
 
+## A video player for apps; the picture's aspect, crop and rotation; the sound's delay (v1.38)
+
+- **`Context::videoPlayer(Player, VideoPlayerState, ?VideoPlayerOptions)`**
+  builds what the `video` example built, for any app (`UI\VideoPlayer`):
+  the picture, the title bar, the control bar, the messages, the sidebar
+  of quick settings, IINA's keys; the options leave the title bar, the
+  messages, the sidebar or the keys out. `VideoPlayerState` keeps what
+  lasts across builds (the title, the volume, which a player built next
+  takes, whether the subtitles show, the sidebar's tab, what failed) and
+  does what the controls do, telling it as IINA's messages do, for an
+  app's own menus and keys. Its strings are MyPHP's (`src/l10n`, keys
+  `video…`, in English, Simplified and Traditional Chinese), the
+  languages of tracks the locale's names of them (ICU, ISO 639-2's
+  bibliographic codes as their terminology ones).
+- **Trap: a variable before a non-ASCII character in a string.** PHP's
+  names take the bytes 0x80 to 0xff: `"$d°"` reads the variable `$d°`
+  (undefined, the rotation's labels empty). Brace it: `"{$d}°"`.
+- **What it asks of the window.** A view has no window: it asks its
+  runtime (`Runtime::askWindow`: whether the traffic lights show, the
+  content's aspect to keep, full screen), and the window does it once the
+  frame is built, once for each change; a resize or full screen waits for
+  the frame to end (`App::later`), as a resize draws the window at once.
+  The window tells the runtime whether it is full screen before each
+  frame. The state asks for a frame itself as the player plays
+  (`Runtime::changed`), when what shows of its time changes.
+
+- **Laid out by the window.** `Player::setAspectRatio`, `setCrop` and
+  `setRotation` change where the window puts the picture
+  (`Media\Picture::fit`): the picture at its aspect, cut to the crop's
+  around its middle, turned, fitted in the node's box and centered. A
+  video's host keeps a crop layer between its clip view and the display
+  layer: the crop layer is the part that shows (masking), the display
+  layer the whole picture in it, stretched to its bounds
+  (`AVLayerVideoGravityResize`), positioned at the middle and turned by
+  `transform.rotation.z` (clockwise, y going up). The picture as the file
+  has it stays as before: the display layer fits it itself
+  (`ResizeAspect`) and stretches with the window as it resizes.
+- **The sound's delay** (`Player::setAudioDelay`) shifts the audio
+  packets' times as the renderers are given them, and goes again from
+  where the player is (a seek, as another audio track does); an earlier
+  sound reads the film that much further ahead, and after a seek the
+  audio comes from where it plays delayed.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

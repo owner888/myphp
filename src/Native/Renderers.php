@@ -24,6 +24,8 @@ final class Renderers
     private array $formats = [];
     /** The sample the next audio packet starts at, of the track playing: packets follow one another exactly, Matroska's times being whole milliseconds. */
     private ?int $nextAudio = null;
+    /** Seconds the sound plays after its time in the file (Player::setAudioDelay). */
+    public float $audioDelay = 0.0;
 
     public function __construct()
     {
@@ -65,7 +67,7 @@ final class Renderers
             $sb = CoreMedia::videoSample($p, $format, $show);
         } else {
             $rate = (int)$t->sampleRate;
-            $at = (int)round($p->time * $rate);
+            $at = (int)round(($p->time + $this->audioDelay) * $rate);
             if ($this->nextAudio === null || abs($at - $this->nextAudio) > $rate / 10) { // the first, or the file's time jumping (a gap): its time again
                 $this->nextAudio = $at;
             }

@@ -56,6 +56,9 @@ final class Player
     /** @var list<Track> */
     private array $external = [];
     private float $subtitleDelay = 0.0;
+    /** The aspect, crop and rotation the picture shows at (setAspectRatio, setCrop, setRotation). */
+    private ?float $aspect = null, $crop = null;
+    private int $rotation = 0;
     /** The change of the subtitles the player wakes for, once (wakeForCue). */
     private ?float $cueWake = null;
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
@@ -317,9 +320,87 @@ final class Player
         return $this->muted;
     }
 
+    /** Shows the picture at aspect $ratio (its width over its height, as IINA's 4:3, 16:9…), null for its own. */
+    public function setAspectRatio(?float $ratio): void
+    {
+        $this->aspect = self::ratio($ratio, 'an aspect ratio');
+    }
+
+    /** The aspect asked of the picture, null for its own. */
+    public function aspectRatio(): ?float
+    {
+        return $this->aspect;
+    }
+
+    /** Cuts the picture to aspect $ratio around its middle, null for none. */
+    public function setCrop(?float $ratio): void
+    {
+        $this->crop = self::ratio($ratio, 'a crop');
+    }
+
+    public function crop(): ?float
+    {
+        return $this->crop;
+    }
+
+    /** Turns the picture clockwise by $degrees: 0, 90, 180 or 270. */
+    public function setRotation(int $degrees): void
+    {
+        if (!in_array($degrees, [0, 90, 180, 270], true)) {
+            throw new RuntimeException("myphp: a rotation is 0, 90, 180 or 270 degrees, not $degrees");
+        }
+        $this->rotation = $degrees;
+    }
+
+    public function rotation(): int
+    {
+        return $this->rotation;
+    }
+
+    /**
+     * Where the picture shows in a box $w by $h, as setAspectRatio,
+     * setCrop and setRotation lay it out: see Picture::fit.
+     * @internal the window places the video's layer by it
+     * @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float}}
+     */
+    public function picture(float $w, float $h): array
+    {
+        [$vw, $vh] = $this->size();
+        return Picture::fit($w, $h, $this->aspect ?? ($vh > 0 ? $vw / $vh : 16 / 9), $this->crop, $this->rotation);
+    }
+
+    /** Whether the picture shows as the file has it: its own aspect, uncut, upright. */
+    public function plainPicture(): bool
+    {
+        return $this->aspect === null && $this->crop === null && $this->rotation === 0;
+    }
+
+    /** Plays the sound $seconds later than the picture (earlier when negative), from where it is. */
+    public function setAudioDelay(float $seconds): void
+    {
+        if ($seconds == $this->out->audioDelay) {
+            return;
+        }
+        $this->out->audioDelay = $seconds;
+        $this->seek($this->time()); // the sound given again at its new times
+    }
+
+    public function audioDelay(): float
+    {
+        return $this->out->audioDelay;
+    }
+
+    private static function ratio(?float $r, string $what): ?float
+    {
+        if ($r !== null && $r <= 0) {
+            throw new RuntimeException("myphp: $what is positive, not $r");
+        }
+        return $r;
+    }
+
     /**
      * Calls $fn on $event, one of EVENTS: time, at each tick while it plays
-     * (20 a second, for a progress bar); ended, when it played to the end;
+     * (4 a second, and where the subtitles change); ended, when it played to the end;
      * error, with what failed, when the system cannot decode it (the player
      * pauses). Returns a function that removes it.
      */
@@ -385,7 +466,7 @@ final class Player
     /** Reads the packets up to AHEAD seconds past the clock (or past $at, where a seek went), and gives each renderer its own while it takes them. */
     private function feed(?float $at = null): void
     {
-        $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate); // two seconds of the clock's, faster than the film's at a rate over 1
+        $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate) + max(0.0, -$this->out->audioDelay); // two seconds of the clock's (faster than the film's at a rate over 1), and the sound an earlier delay plays now
         $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : $q[count($q) - 1]->time;
         while (!$this->drained && max($last('video'), $last('audio')) <= $until) {
             $p = $this->source->next();
@@ -395,7 +476,7 @@ final class Player
             }
             if ($p->track === $this->video) {
                 $this->queued['video'][] = $p;
-            } elseif ($p->track === $this->audio && $p->time + $p->duration > $this->target) { // the audio from where the seek went
+            } elseif ($p->track === $this->audio && $p->time + $p->duration + $this->out->audioDelay > $this->target) { // the audio from where the seek went, as it plays delayed
                 $this->queued['audio'][] = $p;
             } elseif (Subtitles::readable($p->track)) { // every text track's, for one shown later
                 $this->cue($p);

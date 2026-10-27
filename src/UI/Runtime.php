@@ -236,6 +236,16 @@ final class Runtime
     private ?int $pressDragger = null;
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
+    /** Whether the window is full screen: the window sets it before each frame. */
+    public bool $fullScreen = false;
+    /**
+     * What the view asked of its window this frame, which the window does
+     * once it is built (Context::videoPlayer's): 'buttons' => whether the
+     * traffic lights show, 'aspect' => the content's width over its height
+     * to keep (null for none), 'fullScreen' => whether to be full screen.
+     * @var array<string, mixed>
+     */
+    public array $windowAsks = [];
     /** @var list<array{t: Toast, key: int, spent: float, at: float}> the toasts, oldest first: how long each showed before $at, in seconds of $now, while the time of the toasts runs; the newest TOASTS show (mygo's toasts) */
     private array $toasts = [];
     private int $nextToast = 0;
@@ -356,6 +366,7 @@ final class Runtime
         $this->keys = [];
         $this->presses = []; $this->keyClicked = null;
         $this->wheeled = false;
+        $this->windowAsks = [];
         [$this->overlayAskers, $this->overlayAsked] = [$this->overlayAsked, []];
         $this->outsideSaid = [];
         $now = hrtime(true);
@@ -1505,6 +1516,12 @@ final class Runtime
         }
         $this->opened[] = static fn() => $done($err);
         if ($this->building) { $this->animating = true; } elseif ($this->requestFrame !== null) { ($this->requestFrame)(); } // the next frame comes
+    }
+
+    /** Asks the window for $what (windowAsks) once this frame is built. */
+    public function askWindow(string $what, mixed $value): void
+    {
+        $this->windowAsks[$what] = $value;
     }
 
     /** Shows a change of the state the view shows (a router's page): another pass of the frame being built, else a frame. */
