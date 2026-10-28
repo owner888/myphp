@@ -185,6 +185,8 @@
   "videoAbLoopA": "AB循環：A",
   "videoAbLoopB": "AB循環：B",
   "videoAbLoopClear": "AB循環：清除",
+  "videoOpeningStream": "開啟串流中⋯⋯",
+  "videoBuffering": "緩衝處理中⋯ {percent}%",
   "videoScreenshot": "已儲存畫面截圖",
   "videoVolume": "音量：{volume}",
   "videoMute": "靜音",

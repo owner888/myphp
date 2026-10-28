@@ -20,8 +20,11 @@ interface Source
     /** The film's chapters, by their start; none when the file has none. @return list<Chapter> */
     public function chapters(): array;
 
-    /** The next frame of any track, or null at the end. */
+    /** The next frame of any track; null at the end, or when what it reads is not here yet (ready() false: a film over HTTP). */
     public function next(): ?Packet;
+
+    /** Whether next() has what it reads, without waiting (false asks for it); true at the end. */
+    public function ready(): bool;
 
     /** Goes back to where decoding $seconds starts, a keyframe of the video at or before it, where next() goes on. */
     public function seek(float $seconds): void;

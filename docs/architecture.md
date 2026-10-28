@@ -4093,6 +4093,93 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   points, round by one), and dragged they move (`moveLoopPoint`), told
   with the point's time. Another film clears it.
 
+## Films over HTTP (v1.49)
+
+- **The run loop drives libcurl** (`Native\CurlLoop`): one multi handle,
+  its sockets watched by CFFileDescriptors of the main run loop
+  (CURLMOPT_SOCKETFUNCTION; their callbacks fire once, armed again after
+  each) and its timeouts by timers (CURLMOPT_TIMERFUNCTION), so that a
+  transfer runs as its socket is ready: nothing waits on the main thread,
+  nothing is polled. Off macOS, with no run loop, `pump()` drives it
+  (curl_multi_poll and perform), which the tests of Linux use. A fiber
+  waits for what a transfer brings (`waitUntil`), resumed once it came,
+  looked at as each socket's data is read; outside one the run loop
+  turns meanwhile (App::wait).
+- **Bytes** (`Media\Bytes`, `FileBytes`, `HttpBytes`): Matroska reads its
+  bytes through them. A film's over HTTP, as mpv's stream and demuxer
+  cache: one transfer at a time from where the reader is (a Range
+  request, its first from 0 saying the size), into a cache of 256 KiB
+  blocks, what came of the block it fills read as it comes; a read of
+  what is not near the transfer starts another there; it stops once
+  the cache holds 150 MiB ahead (IINA's defaultCacheSize) and goes on as
+  it is read, the blocks least recently read going past that. A server
+  of no ranges is read from its start, and a read behind what it kept
+  fails. `has()` says, without waiting, whether bytes are here, and asks
+  for them; `read()` waits.
+- **Never waiting in a tick**: `Source::ready()` (Matroska's: the next
+  element's head here, and the bytes of the block it reads) is asked before next(),
+  which returns null for what is not here yet as for the end; the
+  player's feed stops there and goes on as it comes. Opening a film over
+  HTTP reads its header and cues, waiting: `VideoPlayerState::open` does
+  it in a fiber of its own (App::go), the window going on, IINA's
+  "Opening stream…" in the middle meanwhile.
+- **Paused for the cache** (mpv's paused-for-cache, the buffering event):
+  once less than 0.1 s is given to the renderers ahead of the clock and
+  the next is not here, the clock stops, and goes on once 1 s is (IINA's
+  cachePauseWait), or the end; looked at every 50 ms meanwhile, how much
+  of the second came the percent (`bufferingPercent`). IINA's
+  BufferIndicatorView shows it, with what is cached and how fast it
+  comes, as IINA's FloatingPointByteCountFormatter writes them.
+- **As IINA's**: no thumbnails of a film over the network, nor subtitle
+  files looked for beside it; the playlist of a URL is itself.
+- **Trap: a cache past PHP's memory_limit.** The blocks were PHP strings:
+  read at a local server's 114 MB/s, the cache passed 128 MiB, PHP's
+  default memory_limit, and the process died in the transfer's callback
+  (the player stood "Buffering… 0%", nothing coming). They are native
+  memory now (Mem::alloc), as mpv's cache is, which memory_limit counts
+  none of: a film of 225 MB read through within 128M, the cache held at
+  its 150 MiB. Whether the cache is full ahead is looked at as a block is
+  kept, not at each piece the callback is given (thousands a second).
+- **Trap: a socket's callback tells a change, not a state.** At a local
+  server's 44 MB/s the transfer stood still, 128 KiB into a block, at
+  0 B/s: curl reads a buffer at a time, and what it left in the socket
+  (the server waiting for room to send more) woke the descriptor no more.
+  After each act on a socket, poll() says whether it is ready still, and
+  it is acted on again, 64 times a turn at most, the next turn going on
+  with it (`CurlLoop::drain`).
+- **Trap: a CFFileDescriptor invalidated takes the next socket's kevent.**
+  curl lets a socket go (CURL_POLL_REMOVE), closes it, and opens the
+  next transfer's at once, of the same number: the descriptor of the one
+  gone, invalidated, took the kevent of the new one a moment later, and
+  that transfer stood still, 64 KiB at a time in, the server waiting to
+  send more (a trace: armed, then nothing for 5 s). A descriptor of each
+  socket number is kept for the process, its callbacks disabled when
+  curl lets the socket go and enabled for the next.
+- **Trap: a sample a piece.** The speed was of a list of every piece the
+  callback was given in the last second, pruned only when the speed was
+  asked: at a local server's 3.3 GB/s, 200,000 a second and none asked
+  while it played (the indicator asks only while it waits), so the list
+  grew to 512 MiB, the app's memory_limit, and the indicator's prune,
+  each frame, starved the main thread: "Buffering… 0%" with the cache
+  full. The bytes are summed by tenths of a second, ten kept.
+- **Trap: a whole cluster before a frame.** Matroska read a cluster at
+  once, so ready() waited for all of it: some megabytes, seconds at a
+  slow speed, the percent of the wait standing still until it came and
+  went on at once. A cluster is read element by element now, each block
+  as its bytes come, as a stream demuxer reads; a cluster of unknown
+  size (a live one's) ends at the next top-level element.
+- **The reader is where it was asked to be**: a read asked of a block not
+  here (has()) puts the reader there, so that the cache reads ahead of,
+  and keeps, what it reads next: opening read the cues at the film's end,
+  and the transfer from its start counted as behind them.
+- **A connection that breaks** (curl's PARTIAL_FILE, RECV_ERROR, a timeout,
+  nothing got) is gone on from the block it filled, as ffmpeg's reconnect
+  does, 3 times in a row at most (0.5, 1 and 2 s apart, counted again once
+  bytes come), before what failed is told.
+- **Trap: a film whose cues follow its clusters** (most muxers write them
+  last) reads its end before it plays: the cache's transfer goes there
+  and back. A film smaller than a block waits for all of it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

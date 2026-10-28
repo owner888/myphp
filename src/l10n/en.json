@@ -881,6 +881,14 @@
   "@videoAbLoopClear": {
     "description": "The video player's message as the A-B loop goes."
   },
+  "videoOpeningStream": "Opening stream…",
+  "@videoOpeningStream": {
+    "description": "The video player's indicator as it opens a film over the network."
+  },
+  "videoBuffering": "Buffering… {percent}%",
+  "@videoBuffering": {
+    "description": "The video player's indicator while it waits for the network: how much of what it waits for came, 0 to 100."
+  },
   "videoScreenshot": "Screenshot Captured",
   "@videoScreenshot": {
     "description": "The video player's message as it saves a screenshot of the frame showing."

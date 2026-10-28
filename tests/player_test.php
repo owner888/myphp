@@ -250,4 +250,33 @@ if (PHP_OS_FAMILY === 'Darwin') {
     same(0, $p->chapter(), 'the first plays at the start');
     $p = new Player(__DIR__ . '/testdata/clip-chapters.mkv');
     same(3, count($p->chapters()), "a Matroska file's, through the player");
+
+    // A film over HTTP (testdata/range_server.php): read as it comes, played; sent slowly, the clock waits for it (the buffering event, how much came), then goes on.
+    $dir = sys_get_temp_dir() . '/myphp-player-http-' . getmypid();
+    @mkdir($dir);
+    copy(__DIR__ . '/testdata/clip.mkv', "$dir/clip.mkv");
+    copy(__DIR__ . '/testdata/clip-cues-front.mkv', "$dir/front.mkv"); // its cues before its clusters: it plays as its first bytes come
+    [$base, $stop] = rangeServer($dir);
+    try {
+        $p = new Player("$base/clip.mkv");
+        check($p->remote() && abs($p->duration() - 2.02) < 0.05 && $p->size() === [160, 90], 'over HTTP: its duration and size, from its header');
+        same(null, $p->thumbnail(1.0, 80), 'no thumbnail of a film over the network, as IINA makes none');
+        $p->play(); $run(0.6); $p->pause();
+        check($p->time() > 0.3, "it plays: {$p->time()}");
+        $p = new Player("$base/front.mkv?rate=6000"); // 19 kB in some three seconds: slower than it plays
+        $told = []; $percents = [];
+        $p->on('buffering', function (bool $on) use (&$told, &$p) { $told[] = $on; });
+        $p->play();
+        for ($waited = 0; !$p->ended() && $waited < 160; $waited++) { $run(0.05); if (($pc = $p->bufferingPercent()) !== null) { $percents[] = $pc; } }
+        check($p->ended(), 'sent slowly, it plays to the end: ' . $p->time());
+        check(count($told) >= 2 && $told[0] === true && end($told) === false, 'the clock waited for the network, and went on: ' . json_encode($told));
+        check($percents !== [] && max($percents) <= 100 && $p->cacheBytes() > 0, 'how much came, as it waited: up to ' . ($percents === [] ? '-' : max($percents)) . ' %, ' . $p->cacheBytes() . ' bytes cached');
+        same(null, $p->bufferingPercent(), 'none once it played on');
+        $err = null;
+        try { new Player("$base/clip.mkv?fail"); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+        check($err !== null && str_contains($err, '404'), 'a film the server fails: said, ' . $err);
+    } finally {
+        $stop();
+        @unlink("$dir/clip.mkv"); @unlink("$dir/front.mkv"); @rmdir($dir);
+    }
 }

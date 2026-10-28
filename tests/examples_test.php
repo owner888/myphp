@@ -482,7 +482,7 @@ same('Received URLs: https://example.com/', $right->status, 'a URL dropped is re
 [$view, $s] = Headless::load('video', '$openDialog');
 $t = new Headless($view, 900, 600);
 $t->frame();
-check($t->byText('Open a video (Cmd+O) or drop one on the window') !== null, 'the video player asks for a file');
+check($t->byText('Open a video (Cmd+O), a URL (Cmd+Shift+O), or drop one on the window') !== null, 'the video player asks for a file, or a URL');
 $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
 check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");

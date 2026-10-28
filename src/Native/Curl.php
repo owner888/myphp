@@ -8,7 +8,7 @@ use FFI\CData;
 use RuntimeException;
 
 /**
- * The system's libcurl through FFI, for the updater and the fetch and WebSocket plugins:
+ * The system's libcurl through FFI, for the updater, the fetch and WebSocket plugins and a film read over HTTP (CurlLoop):
  * one easy handle a request, driven by a multi handle without blocking,
  * its callbacks run from perform() on the main thread. A WebSocket's
  * handle only connects (CONNECT_ONLY) and stays in its multi handle, which
@@ -35,6 +35,9 @@ final class Curl
         int curl_multi_add_handle(CURLM *m, CURL *h);
         int curl_multi_remove_handle(CURLM *m, CURL *h);
         int curl_multi_perform(CURLM *m, int *running);
+        int curl_multi_setopt(CURLM *m, int option, ...);
+        int curl_multi_socket_action(CURLM *m, int s, int ev_bitmask, int *running);
+        int curl_multi_poll(CURLM *m, void *extra_fds, unsigned int extra_nfds, int timeout_ms, int *numfds);
         CURLMsg *curl_multi_info_read(CURLM *m, int *left);
         int curl_easy_send(CURL *h, const char *buf, size_t len, size_t *n);
         int curl_easy_recv(CURL *h, char *buf, size_t len, size_t *n);

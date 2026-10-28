@@ -145,6 +145,12 @@ final class AssetReader implements Source
         $this->start($seconds);
     }
 
+    /** A file's: always. */
+    public function ready(): bool
+    {
+        return true;
+    }
+
     /** The first keyframe of the video from a seek to $seconds; null for none. */
     public function keyframe(float $seconds): ?Packet
     {

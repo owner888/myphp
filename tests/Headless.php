@@ -485,6 +485,19 @@ final class Headless
 }
 
 /** Fails the test unless $cond, with $what. */
+/**
+ * Serves the files of $dir as a server of films does (testdata/range_server.php
+ * under php -S: ranges, ?rate=, ?norange, ?fail); its base URL, and a
+ * function that stops it. @return array{0: string, 1: \Closure(): void}
+ */
+function rangeServer(string $dir): array
+{
+    $port = 19000 + (getmypid() + random_int(0, 499)) % 1000;
+    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
+    for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
+    return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];
+}
+
 function check(bool $cond, string $what): void
 {
     global $checks, $failures;

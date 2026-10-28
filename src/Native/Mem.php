@@ -46,6 +46,18 @@ final class Mem
         return self::$slotInt[0];
     }
 
+    /** Writes $s at integer address $addr. */
+    public static function write(int $addr, string $s): void
+    {
+        if ($s !== '') { FFI::memcpy(self::c()->cast('unsigned char*', $addr), $s, strlen($s)); }
+    }
+
+    /** The $n bytes at integer address $addr. */
+    public static function read(int $addr, int $n): string
+    {
+        return $n > 0 ? FFI::string(self::c()->cast('char*', $addr), $n) : '';
+    }
+
     /** Copies $n bytes between integer addresses. */
     public static function copy(int $dst, int $src, int $n): void
     {

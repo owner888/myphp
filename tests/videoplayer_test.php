@@ -24,6 +24,11 @@ $quads = $t->paint()->n;
 $plain = new Headless(function (Context $c) { $c->column(0, 0, 1); $c->text("two\nlines", 20, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->letterSpacing(0.001); $c->end(); }, 900, 600); // laid out as it is, without the outline
 $plain->frame();
 same(8, $quads - $plain->paint()->n, 'its outline painted under it: a quad more for each of its eight glyphs');
+same(['12.5 Mi', '850 K', '0 ', '1 Gi'], [VideoPlayerState::byteCount(12.5 * 1024 * 1024, true), VideoPlayerState::byteCount(850000, false), VideoPlayerState::byteCount(0, true), VideoPlayerState::byteCount(1024 ** 3, true)], 'bytes as IINA writes them, binary and decimal');
+$opening = new VideoPlayerState(); $opening->opening = 'https://example.com/film.mkv';
+$t = new Headless(fn(Context $c) => $c->videoPlayer($opening), 960, 540);
+$t->frame();
+check($t->byText('Opening stream…') !== null, 'a URL opening, no film yet: IINA\'s "Opening stream…"');
 same(['07:09', '1:58:37', '1.5', '2', '0.25'], [VideoPlayerState::clock(429), VideoPlayerState::clock(7117), VideoPlayerState::number(1.5), VideoPlayerState::number(2.0), VideoPlayerState::number(0.25)], 'times and numbers as IINA writes them');
 App::setLanguages('en', 'zh-Hans'); App::setLocale('zh-Hans');
 $track = new Track(2, Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);

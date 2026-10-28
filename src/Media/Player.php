@@ -27,11 +27,18 @@ use RuntimeException;
  */
 final class Player
 {
-    public const EVENTS = ['time', 'ended', 'error', 'play', 'pause', 'rate', 'seek', 'track'];
+    public const EVENTS = ['time', 'ended', 'error', 'play', 'pause', 'rate', 'seek', 'track', 'buffering'];
     /** Seconds of packets the renderers are given ahead of the clock. */
     private const AHEAD = 2.0;
+    /** A film over HTTP: the clock waits once less than STALL seconds are given ahead and the next are not here, until CACHE_WAIT are (IINA's cachePauseWait, mpv's cache-pause-wait); looked at every BUFFER_LOOK seconds meanwhile. */
+    private const STALL = 0.1, CACHE_WAIT = 1.0, BUFFER_LOOK = 0.05;
 
     private Source $source;
+    /** The bytes of a film over HTTP, null for a file's. */
+    private ?HttpBytes $http = null;
+    /** Whether the clock waits for the network (mpv's paused-for-cache), and what failed reading the film. */
+    private bool $buffering = false;
+    private ?string $readError = null;
     /** @internal the renderers, whose layer the window shows */
     public readonly Renderers $out;
     private ?Track $video = null, $audio = null;
@@ -90,9 +97,18 @@ final class Player
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
+    /** Plays the file at $path, or the film at an http(s) URL (Matroska and WebM), read as it comes. */
     public function __construct(private readonly string $path)
     {
-        $this->source = self::source($path);
+        if (self::isUrl($path)) {
+            $this->http = new HttpBytes($path);
+            if ($this->http->read(0, 4) !== "\x1A\x45\xDF\xA3") {
+                throw new RuntimeException("myphp: $path: over HTTP only Matroska and WebM play yet");
+            }
+            $this->source = new Matroska($this->http);
+        } else {
+            $this->source = self::source($path);
+        }
         $this->duration = $this->source->duration();
         foreach ($this->source->tracks() as $t) {
             if ($t->type === Track::VIDEO && $this->video === null && CoreMedia::playable($t)) {
@@ -107,7 +123,7 @@ final class Player
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers();
         $this->awake = new Awake('Playing ' . basename($path));
-        $this->loadSubtitleFiles($path);
+        if ($this->http === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
     }
 
@@ -324,6 +340,87 @@ final class Player
         $this->emit('track', 'audio');
     }
 
+    /** Whether $path is an http(s) URL. */
+    private static function isUrl(string $path): bool
+    {
+        return preg_match('~^https?://~i', $path) === 1;
+    }
+
+    /** Whether it plays a film over the network (an http(s) URL), IINA's isNetworkResource. */
+    public function remote(): bool
+    {
+        return $this->http !== null;
+    }
+
+    /** While the clock waits for the network (the buffering event), how much of what it waits for is here, 0 to 100 (mpv's cache-buffering-state); else null. */
+    public function bufferingPercent(): ?int
+    {
+        if (!$this->buffering) {
+            return null;
+        }
+        return (int)min(100, max(0.0, $this->given() - $this->out->time()) / self::CACHE_WAIT * 100);
+    }
+
+    /** The bytes of the film its cache holds (a film over HTTP's; 0 for a file). */
+    public function cacheBytes(): int
+    {
+        return $this->http?->cached() ?? 0;
+    }
+
+    /** How fast the film comes, bytes a second over the last (0 for a file). */
+    public function cacheSpeed(): float
+    {
+        return $this->http?->speed() ?? 0.0;
+    }
+
+    /** Where what was read of the film ends: given to the renderers, or waiting for them. */
+    private function given(): float
+    {
+        $end = $this->fedTo;
+        foreach ($this->queued as $q) {
+            if ($q !== []) { $p = $q[count($q) - 1]; $end = max($end, $p->time + $p->duration); }
+        }
+        return $end;
+    }
+
+    /**
+     * A film over HTTP: the clock waits (mpv's paused-for-cache, told by the
+     * buffering event) once less than STALL seconds are given ahead of it
+     * and the next are not here, and goes on once CACHE_WAIT seconds are, or
+     * the end; looked at every BUFFER_LOOK seconds while it waits.
+     */
+    private function cache(): void
+    {
+        if ($this->http === null) {
+            return;
+        }
+        $ahead = $this->given() - $this->out->time();
+        if (!$this->buffering) {
+            if ($this->playing && !$this->drained && $ahead < self::STALL && !$this->source->ready()) {
+                $this->buffering = true;
+                $this->out->setRate(0);
+                $this->emit('buffering', true);
+                $this->lookAtCache();
+            }
+            return;
+        }
+        if ($ahead >= self::CACHE_WAIT || $this->drained || !$this->playing) {
+            $this->buffering = false;
+            if ($this->playing) { $this->out->setRate($this->rate); }
+            $this->emit('buffering', false);
+        }
+    }
+
+    private function lookAtCache(): void
+    {
+        App::after(self::BUFFER_LOOK, function (): void {
+            if (!$this->buffering) { return; }
+            $this->feed();
+            $this->cache();
+            if ($this->buffering) { $this->lookAtCache(); }
+        });
+    }
+
     /** The reader of the file at $path: Matroska's in PHP for Matroska and WebM, AVFoundation's for the rest. */
     private static function source(string $path): Source
     {
@@ -331,9 +428,12 @@ final class Player
         return in_array($ext, ['mkv', 'mka', 'webm'], true) ? new Matroska($path) : new AssetReader($path);
     }
 
-    /** How long the film at $path lasts, in seconds, read from its header (a playlist's). */
+    /** How long the film at $path lasts, in seconds, read from its header (a playlist's); not of one over the network, which it does not open for that. */
     public static function durationOf(string $path): float
     {
+        if (self::isUrl($path)) {
+            throw new RuntimeException("myphp: $path is read only as it plays");
+        }
         return self::source($path)->duration();
     }
 
@@ -436,6 +536,7 @@ final class Player
         $this->out->setRate(0);
         MediaTicker::remove($this);
         $this->emit('pause');
+        $this->cache(); // no wait for the network while paused
     }
 
     /**
@@ -487,12 +588,13 @@ final class Player
      * A thumbnail of the film at $seconds, $width pixels wide: the keyframe
      * at or before it, decoded by a reader and a decoder of its own (what
      * plays goes on as it was), as IINA's thumbnails of the seek bar are;
-     * null for a film of no video. A few milliseconds: a keyframe read and
+     * null for a film of no video, or over the network (IINA makes none
+     * of one). A few milliseconds: a keyframe read and
      * decoded, on this thread.
      */
     public function thumbnail(float $seconds, int $width): ?Thumbnail
     {
-        if ($this->video === null) {
+        if ($this->video === null || $this->http !== null) { // none of a film over the network, as IINA makes none
             return null;
         }
         $this->thumbSource ??= self::source($this->path);
@@ -520,8 +622,9 @@ final class Player
         $this->out->flush();
         $this->queued = ['video' => [], 'audio' => []]; $this->drained = false; $this->ended = false;
         $this->target = $seconds; $this->fedTo = $seconds; $this->landed = null;
-        $this->out->setRate($this->playing ? $this->rate : 0.0, $seconds);
+        $this->out->setRate($this->playing && !$this->buffering ? $this->rate : 0.0, $seconds);
         $this->feed($seconds);
+        $this->cache(); // over HTTP, the clock waits there for what is not here
         if ($this->playing) { $this->cueWake = null; $this->wakeForCue(); } // from where it went
         $this->passedTo = $seconds; $this->boundaryWake = null; // a seek passes none
         if ($this->playing) { $this->wakeForBoundary(); }
@@ -684,7 +787,9 @@ final class Player
      * pauses); play and pause, when it starts and stops playing (at its
      * end and on an error too); rate, with the new rate; seek, with where
      * a seek went, once it is there; track, with 'audio' or 'subtitle', when
-     * that track changes. Returns a function that removes it.
+     * that track changes; buffering, true as the clock starts waiting for
+     * the network (a film over HTTP) and false as it goes on. Returns a
+     * function that removes it.
      */
     public function on(string $event, Closure $fn): Closure
     {
@@ -707,7 +812,8 @@ final class Player
     private function tick(): void
     {
         $this->feed();
-        if (($why = $this->out->failure()) !== null) {
+        if (($why = $this->out->failure() ?? $this->readError) !== null) {
+            $this->readError = null;
             $this->pause();
             $this->emit('error', $why);
             return;
@@ -718,6 +824,7 @@ final class Player
             $this->emit('ended');
             return;
         }
+        $this->cache();
         $this->pass();
         $this->emit('time');
         $this->wakeForCue();
@@ -806,7 +913,15 @@ final class Player
         $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate) + max(0.0, -$this->out->audioDelay); // two seconds of the clock's (faster than the film's at a rate over 1), and the sound an earlier delay plays now
         $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : $q[count($q) - 1]->time;
         while (!$this->drained && max($last('video'), $last('audio')) <= $until) {
-            $p = $this->ahead !== [] ? array_shift($this->ahead) : $this->source->next();
+            try {
+                $p = $this->ahead !== [] ? array_shift($this->ahead) : $this->source->next();
+                if ($p === null && !$this->source->ready()) { // not here yet (over HTTP): on as it comes
+                    break;
+                }
+            } catch (RuntimeException $e) { // the network failed: told at the next tick
+                $this->readError = $e->getMessage();
+                break;
+            }
             if ($p === null) {
                 $this->drained = true;
                 break;

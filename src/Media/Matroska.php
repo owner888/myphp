@@ -28,8 +28,7 @@ final class Matroska implements Source
     /** The size of an element whose size is unknown (all its bits set), as a cluster being written live has. */
     private const UNKNOWN = -1;
 
-    /** @var resource */
-    private $f;
+    private Bytes $bytes;
     /** Where the segment's data starts, which positions in it count from, and where it ends. */
     private int $segment = 0, $segmentEnd = 0;
     /** Nanoseconds a timestamp unit. */
@@ -41,20 +40,20 @@ final class Matroska implements Source
     private array $chapters = [];
     /** @var list<array{0: float, 1: int}> */
     private array $cues = [];
-    /** Where the next cluster is read from. */
+    /** Where the next element of the segment is read from (a cluster, else what is skipped). */
     private int $at = 0;
+    /** The cluster being read, element by element (its blocks as their bytes come, a film's over HTTP): where it ends, -1 for none; where its next element is; its timestamp. */
+    private int $inCluster = -1, $clusterAt = 0, $base = 0;
     /** @var list<Packet> the frames of the cluster read, not yet taken */
     private array $pending = [];
     /** The time of the cue a seek went to: the frames of its cluster before it are left out, its keyframe the first of the video. */
     private float $from = -INF;
 
-    public function __construct(string $path)
+    /** Reads the file at $path, or $bytes (a film's over HTTP, HttpBytes). */
+    public function __construct(string|Bytes $source)
     {
-        $f = @fopen($path, 'rb');
-        if ($f === false) {
-            throw new RuntimeException("cannot open $path");
-        }
-        $this->f = $f;
+        $this->bytes = $source instanceof Bytes ? $source : new FileBytes($source);
+        $path = $source instanceof HttpBytes ? $source->url : (is_string($source) ? $source : 'the film');
         [$id, $size, $data] = $this->header(0);
         if ($id !== self::EBML) {
             throw new RuntimeException("$path is no Matroska file");
@@ -63,7 +62,7 @@ final class Matroska implements Source
         if ($id !== self::SEGMENT) {
             throw new RuntimeException("$path has no segment");
         }
-        $this->segmentEnd = $size === self::UNKNOWN ? (int)fstat($f)['size'] : $this->segment + $size;
+        $this->segmentEnd = $size === self::UNKNOWN ? $this->bytes->size() : min($this->segment + $size, $this->bytes->size());
         $seen = [];
         $first = 0; // the first cluster
         for ($p = $this->segment; $p < $this->segmentEnd;) {
@@ -253,7 +252,7 @@ final class Matroska implements Source
     public function next(): ?Packet
     {
         while ($this->pending === []) {
-            if (!$this->cluster()) {
+            if (!$this->ready() || !$this->cluster()) { // what is not here yet (ready() says which), or the end
                 return null;
             }
         }
@@ -275,6 +274,7 @@ final class Matroska implements Source
         $this->at = $this->cues[$found][1];
         $this->from = $this->cues[$found][0];
         $this->pending = [];
+        $this->inCluster = -1;
     }
 
     /**
@@ -340,36 +340,51 @@ final class Matroska implements Source
         return self::vint($this->read($pos, 8), 0)[0];
     }
 
-    /** Reads the cluster at $this->at into $pending; false at the end of the segment. */
+    /**
+     * Reads the next element: a cluster's head, or one of its elements, its
+     * blocks' frames into $pending, or a top-level one skipped; false at the
+     * end of the segment. A cluster of unknown size (a live one's) ends at
+     * the next top-level element.
+     */
     private function cluster(): bool
     {
-        if ($this->at >= $this->segmentEnd) {
-            return false;
-        }
-        [$id, $size, $data] = $this->header($this->at);
-        if ($id !== self::CLUSTER) { // what follows the clusters (cues, tags), or something between them
-            if ($size === self::UNKNOWN) {
+        if ($this->inCluster < 0) {
+            if ($this->at >= $this->segmentEnd) {
                 return false;
             }
-            $this->at = $data + $size;
+            [$id, $size, $data] = $this->header($this->at);
+            if ($id !== self::CLUSTER) { // what follows the clusters (cues, tags), or something between them
+                if ($size === self::UNKNOWN) {
+                    return false;
+                }
+                $this->at = $data + $size;
+                return true;
+            }
+            $this->inCluster = $size === self::UNKNOWN ? $this->segmentEnd : min($data + $size, $this->segmentEnd);
+            $this->clusterAt = $data;
+            $this->base = 0;
             return true;
         }
-        if ($size === self::UNKNOWN) {
-            throw new RuntimeException('a cluster of unknown size');
+        if ($this->clusterAt >= $this->inCluster) {
+            $this->at = $this->inCluster;
+            $this->inCluster = -1;
+            return true;
         }
-        $this->at = $data + $size;
-        $s = $this->read($data, $size);
-        $base = 0;
-        foreach (self::children($s) as [$cid, $c]) {
-            if ($cid === self::TIMESTAMP) {
-                $base = self::uint($c);
-            } elseif ($cid === self::SIMPLE_BLOCK) {
-                $this->block($c, $base, null, null);
-            } elseif ($cid === self::BLOCK_GROUP) {
-                $e = self::fields($c);
-                if (isset($e[self::BLOCK])) {
-                    $this->block($e[self::BLOCK], $base, isset($e[self::BLOCK_DURATION]) ? self::uint($e[self::BLOCK_DURATION]) : null, !isset($e[self::REFERENCE_BLOCK]));
-                }
+        [$cid, $csize, $cdata] = $this->header($this->clusterAt);
+        if ($cid > 0xFFFFFF || $csize === self::UNKNOWN) { // a top-level element (its id of four bytes): the end of a cluster of unknown size
+            $this->at = $this->clusterAt;
+            $this->inCluster = -1;
+            return true;
+        }
+        $this->clusterAt = $cdata + $csize;
+        if ($cid === self::TIMESTAMP) {
+            $this->base = self::uint($this->read($cdata, $csize));
+        } elseif ($cid === self::SIMPLE_BLOCK) {
+            $this->block($this->read($cdata, $csize), $this->base, null, null);
+        } elseif ($cid === self::BLOCK_GROUP) {
+            $e = self::fields($this->read($cdata, $csize));
+            if (isset($e[self::BLOCK])) {
+                $this->block($e[self::BLOCK], $this->base, isset($e[self::BLOCK_DURATION]) ? self::uint($e[self::BLOCK_DURATION]) : null, !isset($e[self::REFERENCE_BLOCK]));
             }
         }
         return true;
@@ -450,9 +465,30 @@ final class Matroska implements Source
 
     private function read(int $pos, int $n): string
     {
-        fseek($this->f, $pos);
-        $s = $n > 0 ? fread($this->f, $n) : '';
-        return $s === false ? '' : $s;
+        return $this->bytes->read($pos, $n);
+    }
+
+    /**
+     * Whether next() reads only what is here: the frames read, or the next
+     * element's head and, for one of a cluster's it reads (a block, its
+     * timestamp), its bytes; false asks for them (a film over HTTP: a block
+     * at a time, as it comes), true at the end.
+     */
+    public function ready(): bool
+    {
+        if ($this->pending !== []) {
+            return true;
+        }
+        $at = $this->inCluster < 0 ? $this->at : $this->clusterAt;
+        if ($at >= ($this->inCluster < 0 ? $this->segmentEnd : $this->inCluster)) {
+            return true;
+        }
+        if (!$this->bytes->has($at, 12)) {
+            return false;
+        }
+        [$id, $size, $data] = $this->header($at);
+        $reads = $this->inCluster >= 0 && in_array($id, [self::TIMESTAMP, self::SIMPLE_BLOCK, self::BLOCK_GROUP], true);
+        return !$reads || $size === self::UNKNOWN || $this->bytes->has($data, $size);
     }
 
     /**
@@ -510,8 +546,4 @@ final class Matroska implements Source
         return match (strlen($s)) { 4 => unpack('G', $s)[1], 8 => unpack('E', $s)[1], default => 0.0 };
     }
 
-    public function __destruct()
-    {
-        fclose($this->f);
-    }
 }

@@ -185,6 +185,8 @@
   "videoAbLoopA": "AB循环：A",
   "videoAbLoopB": "AB循环：B",
   "videoAbLoopClear": "AB循环：清除",
+  "videoOpeningStream": "正在打开流媒体……",
+  "videoBuffering": "缓冲中… {percent}%",
   "videoScreenshot": "已截图",
   "videoVolume": "音量：{volume}",
   "videoMute": "静音",

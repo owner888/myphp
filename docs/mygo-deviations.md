@@ -1704,6 +1704,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
   `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
   mygo has no video.
+- **Films over HTTP** (v1.49): `Media\Bytes`, `FileBytes`, `HttpBytes`,
+  `Source::ready`, `Player::remote`, `bufferingPercent`, `cacheBytes`,
+  `cacheSpeed`, the buffering event, `VideoPlayerState::$opening` and
+  `byteCount`, and `Native\CurlLoop` are myphp's, as mpv's network
+  cache and IINA's; mygo has no video.
 - **Boundaries and the A-B loop** (v1.48): `Player::at`,
   `VideoPlayerState::abLoop`, `moveLoopPoint`, `$loopA` and `$loopB` are
   myphp's, as AVPlayer's and IINA's; mygo has no video.

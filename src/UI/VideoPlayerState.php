@@ -101,26 +101,41 @@ final class VideoPlayerState
     /** The picture in picture of the player, where this Mac has it. */
     private ?PictureInPicture $pip = null;
 
+    /** The URL open() opens (a film over the network, read in a fiber), null when none: the player shows IINA's "Opening stream…" meanwhile. */
+    public ?string $opening = null;
+
     /**
-     * Opens the film at $path and plays it: a player of it, the title its
-     * name, the playlist the films of its folder unless it is in the one
-     * there is. What fails to open shows as the error, the film playing
-     * going on. Returns whether it opened.
+     * Opens the film at $path (or an http(s) URL) and plays it: a player of
+     * it, the title its name, the playlist the films of its folder (a URL's
+     * itself) unless it is in the one there is. A URL opens in a fiber of
+     * its own (App::go) while the app runs, the window going on meanwhile
+     * ($opening). What fails to open shows as the error, the film playing
+     * going on. Returns whether it opened (a URL: began to).
      */
     public function open(string $path): bool
     {
+        $url = preg_match('~^https?://~i', $path) === 1;
+        if ($url && App::running() && \Fiber::getCurrent() === null) {
+            $this->opening = $path;
+            $this->error = '';
+            $this->changed();
+            App::go(function () use ($path): void { $this->open($path); });
+            return true;
+        }
         try {
             $p = new Player($path);
         } catch (RuntimeException $e) {
+            $this->opening = null;
             $this->error = $e->getMessage();
             $this->changed();
             return false;
         }
+        $this->opening = null;
         if ($this->playlist === null || !$this->playlist->select($path)) {
-            $this->playlist = Playlist::folder($path);
+            $this->playlist = $url ? new Playlist([$path]) : Playlist::folder($path);
         }
         $this->chosen = $this->playlist->index();
-        $this->title = basename($path);
+        $this->title = $url ? rawurldecode(basename((string)parse_url($path, PHP_URL_PATH))) : basename($path);
         $this->setPlayer($p);
         $p->play();
         return true;
@@ -200,6 +215,7 @@ final class VideoPlayerState
                 if (!$this->next()) { NowPlaying::end($this); $this->changed(); } // the next film plays, else nothing does
             }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
+            $p->on('buffering', fn() => $this->changed()), // the indicator shows, and goes
         ];
         if ($this->nowPlaying) { $this->showNowPlaying(); }
         $this->makeThumbnails($p);
@@ -225,7 +241,7 @@ final class VideoPlayerState
     private function makeThumbnails(Player $p): void
     {
         $this->thumbnails = [];
-        if ($p->videoTrack() === null || $p->duration() <= 0) { return; }
+        if ($p->videoTrack() === null || $p->duration() <= 0 || $p->remote()) { return; } // none of a film over the network, as IINA's
         $cache = $this->thumbnailCache ??= ThumbnailCache::default();
         if (($kept = $cache->get($p->path(), self::THUMBNAIL_WIDTH)) !== null) {
             $this->thumbnails = $kept;
@@ -639,6 +655,16 @@ final class VideoPlayerState
     {
         $s = (int)$s;
         return $s >= 3600 ? sprintf('%d:%02d:%02d', intdiv($s, 3600), intdiv($s, 60) % 60, $s % 60) : sprintf('%02d:%02d', intdiv($s, 60), $s % 60);
+    }
+
+    /** $bytes as IINA's FloatingPointByteCountFormatter writes them: of the largest prefix they reach, binary (KiB, MiB) or decimal (KB, MB), two digits at most after the point: "12.5 Mi". */
+    public static function byteCount(float $bytes, bool $binary): string
+    {
+        $prefixes = $binary ? ['' => 1, 'Ki' => 1024, 'Mi' => 1024 ** 2, 'Gi' => 1024 ** 3] : ['' => 1, 'K' => 1000, 'M' => 1000 ** 2, 'G' => 1000 ** 3];
+        foreach (array_reverse($prefixes, true) as $p => $f) {
+            if ($bytes >= $f) { return self::number($bytes / $f) . " $p"; }
+        }
+        return '0 ';
     }
 
     /** $v as IINA writes a number: no trailing zeros. */

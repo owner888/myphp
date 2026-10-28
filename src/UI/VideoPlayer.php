@@ -44,8 +44,9 @@ final class VideoPlayer
         if ($c->runtime !== null) { $s->attach($c->runtime, $o); }
         $box = $c->column(0, 0, 1, 0x000000);
         $p = $s->player;
-        if ($p === null) { // nothing opened yet: black, and what failed to open
+        if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
             if ($s->error !== '') { $box->center(); $c->text($s->error, 13, 0xff6b6b); }
+            if ($s->opening !== null) { self::bufferIndicator($c, self::t($c, 'videoOpeningStream')); }
             $c->end();
             return $box;
         }
@@ -127,8 +128,15 @@ final class VideoPlayer
         }
 
         if ($o->osd) { self::osd($c, $s, $p, $now); }
+        if ($s->opening !== null) {
+            self::bufferIndicator($c, self::t($c, 'videoOpeningStream'));
+        } elseif (($percent = $p->bufferingPercent()) !== null) {
+            self::bufferIndicator($c, self::t($c, 'videoBuffering', ['percent' => $percent]),
+                VideoPlayerState::byteCount($p->cacheBytes(), true) . 'B (' . VideoPlayerState::byteCount($p->cacheSpeed(), false) . 'B/s)');
+            $c->after(0.25); // its numbers as they go
+        }
         if ($s->error !== '') {
-            $c->text($s->error, 13, 0xff6b6b)->absolute()->left(16)->bottom(16);
+            $c->text($s->error, 13, 0xff6b6b)->absolute()->left(16)->right(16)->bottom(16); // wrapped, all of it said (a URL's is long)
         }
         // A press outside the sidebar closes it, as IINA's, but on the control bar (its gear toggles it) or the title bar (which drags the window) while they show:
         // not a click, which the release of a drag begun in the sidebar (a slider let go over the picture) makes on what is under the pointer.
@@ -336,6 +344,22 @@ final class VideoPlayer
         }
         $c->text(VideoPlayerState::clock($p->duration()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->right(12.5)->top(50.5);
         return $seek;
+    }
+
+    /**
+     * IINA's BufferIndicatorView, in the middle: a spinner, $text under it
+     * and $detail (what is cached, how fast it comes) under that, 150 points
+     * wide, in glass.
+     */
+    private static function bufferIndicator(Context $c, string $text, ?string $detail = null): void
+    {
+        $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->center()->passThrough();
+          $c->column(0, 4)->padding(12, 20)->systemMaterial('glass')->round(16)->align(Node::CENTER)->width(150 + 40);
+            $c->spinner();
+            $c->text($text, 13, 0xffffff)->textAlign(Node::CENTER);
+            if ($detail !== null) { $c->text($detail, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7)->textAlign(Node::CENTER); }
+          $c->end();
+        $c->end();
     }
 
     /** The message at the top left: its text, with the time or the volume's level under it (or a line of its own), fading out. */
