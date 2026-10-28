@@ -1696,6 +1696,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Download` and `Hls`, `Native\Dav1d` and `SoftVideo` are myphp's, as
   mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
   mygo has no video.
+- **The equalizer** (v1.55): `Player::setEqualizer`, `equalizer`,
+  `EQUALIZER_BANDS`, `VideoPlayerState::EQUALIZER_PRESETS`, `$equalizer`,
+  `$equalizerPreset` and `setEqualizer` are myphp's, as IINA's audio
+  equalizer (its presets, its filter for mpv); mygo has no video. Flat
+  turns it off (IINA adds the filter all the same, of no effect); its
+  saved profiles are not yet.
 - **External audio** (v1.55): `Player::loadAudio`,
   `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no video.

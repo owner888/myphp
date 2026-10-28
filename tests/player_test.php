@@ -282,6 +282,27 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $err = null;
     try { $p->loadAudio(__DIR__ . '/testdata/clip-subs.zh.srt'); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
     check($err !== null, "what is no audio: $err");
+    // The equalizer (IINA's): on, the audio decoded here (by the system, Vorbis in PHP), filtered and played as PCM, from where it is; Flat, as before.
+    foreach (['clip.mkv', 'clip.mp4', 'clip-vorbis.mkv'] as $file) {
+        $p = new Player(__DIR__ . "/testdata/$file");
+        $p->setEqualizer(\MyPHP\UI\VideoPlayerState::EQUALIZER_PRESETS['Rock']);
+        $p->play();
+        for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+        $from = $p->time();
+        $run(0.4);
+        check($p->out->failure() === null && $p->time() - $from > 0.25, "$file: the equalizer on, it plays filtered: " . ($p->out->failure() ?? round($p->time() - $from, 2) . ' s in 0.4'));
+        $p->setEqualizer(array_fill(0, 10, 0));
+        $from = $p->time();
+        $run(0.3);
+        check($p->out->failure() === null && $p->time() - $from > 0.15, "$file: Flat, it plays on as the system decodes it: " . ($p->out->failure() ?? round($p->time() - $from, 2) . ' s in 0.3'));
+        $p->pause();
+    }
+    same(\MyPHP\Native\Equalizer::FREQUENCIES, Player::EQUALIZER_BANDS, "the equalizer's bands, IINA's");
+    foreach ([[1, 2], array_fill(0, 10, 13)] as $bad) {
+        $err = null;
+        try { $p->setEqualizer($bad); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+        check($err !== null, "an equalizer of $err");
+    }
 
     // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
     $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');

@@ -27,7 +27,7 @@ use MyPHP\Window;
  * wheel up and down for the volume and across to seek. The
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
- * layout tab, the equalizer, online
+ * layout tab, online
  * subtitles, plugins) shows, held. The playlist's sidebar (its films,
  * their loop, shuffle and sort; the film's chapters) slides in from the
  * left; picture in picture from the control bar. Icons are SF Symbols.
@@ -1020,29 +1020,45 @@ final class VideoPlayer
         $c->end();
         self::card($c);
           self::heading($c, 'slider.vertical.3', self::t($c, 'videoEqualizer'));
-          $c->row()->tooltip(self::t($c, 'videoNotYet'));
-            self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->align(Node::CENTER), 0.12, 0, 6);
-              $c->text(self::t($c, 'videoManual'), 13, 0xffffff)->opacity(0.9)->grow(1);
+          $c->row();
+            $pop = self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->align(Node::CENTER), 0.12, 0, 6);
+              $c->text(self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, 0xffffff)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
               self::sf($c, 'chevron.up.chevron.down', 10, 0.8);
             $c->end();
+            $pop->menu(function (Menu $m) use ($c, $s): void { // IINA's pop-up: Manual, then its presets
+                if ($m->item(self::t($c, 'videoManual'))->checked($s->equalizerPreset === '')->chosen()) { $s->equalizerPreset = ''; } // the gains as they are, called Manual
+                $m->separator();
+                foreach (VideoPlayerState::EQUALIZER_PRESETS as $name => $gains) {
+                    if ($m->item(self::t($c, "videoEq$name"))->checked($s->equalizerPreset === $name)->chosen()) { $s->setEqualizer($gains, $name); }
+                }
+            });
           $c->end();
-          self::equalizer($c);
+          self::equalizer($c, $s);
         $c->end();
     }
 
-    /** IINA's ten bands, each a vertical slider at 0 dB, their frequencies under them and the scale at the right: held, the player having no equalizer yet. */
-    private static function equalizer(Context $c): void
+    /**
+     * IINA's ten bands, each a vertical slider of -12 to 12 dB, their
+     * frequencies under them and the scale at the right. A slider dragged
+     * sets its gain as it is let go (the sound given again from where it
+     * is, filtered), the arrows at once; either makes the preset Manual.
+     */
+    private static function equalizer(Context $c, VideoPlayerState $s): void
     {
-        $c->row(0, 0)->fillWidth()->height(150)->tooltip(self::t($c, 'videoNotYet'));
-          foreach (['32', '64', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'] as $band) {
+        $gains = $s->equalizerDraft ?? $s->equalizer;
+        $moved = false;
+        $c->row(0, 0)->fillWidth()->height(150);
+          foreach (['32', '64', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'] as $i => $band) {
               $c->column(0, 10)->width(26.8)->align(Node::CENTER);
-                $c->column()->size(16, 120)->draw(static function (DisplayList $l, Node $n): void { // the track, dots at +12, 0 and -12, the knob at 0
+                $g = $gains[$i];
+                $sl = $c->sliderBase($g, -12, 12, 0.0, true)->size(16, 120)->label("$band Hz");
+                $sl->draw(static function (DisplayList $l, Node $n): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
                     $cx = $n->x + $n->w / 2;
                     $l->rect($cx - 1.5, $n->y, 3, $n->h, 0xffffff, 0.15, 1.5);
                     foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $l->rect($cx + 5, $n->y + $n->h * $f - 0.75, 1.5, 1.5, 0xffffff, 0.3, 0.75); }
-                    $l->rect($n->x, $n->y + $n->h / 2 - 4, 16, 8, 0xffffff, 0.92, 4);
+                    $l->rect($n->x, $n->y + $n->h * (1 - $n->fraction) - 4, 16, 8, 0xffffff, 0.92, 4);
                 });
-                $c->end();
+                if ($c->changed($sl)) { $gains[$i] = round($g, 2); $moved = true; }
                 $c->text($band, 10, 0xffffff)->opacity(0.5);
               $c->end();
           }
@@ -1052,6 +1068,10 @@ final class VideoPlayer
             $c->text('-12 dB', 10, 0xffffff)->opacity(0.8)->absolute()->right(0)->top(114);
           $c->end();
         $c->end();
+        if ($moved) { $s->equalizerDraft = $gains; $s->equalizerPreset = ''; }
+        if ($s->equalizerDraft !== null && !($c->runtime?->input->mouseDown ?? false)) { // let go (or an arrow): set
+            $s->setEqualizer($s->equalizerDraft);
+        }
     }
 
     private static function subtitleTab(Context $c, VideoPlayerState $s, Player $p): void

@@ -35,6 +35,26 @@ final class VideoPlayerState
     /** The volume, 0 to 1, of this player and the next. */
     public float $volume = 1.0;
     public bool $subtitlesVisible = true;
+    /** IINA's presets of the equalizer (Equalizations.swift), their gains of Player::EQUALIZER_BANDS, by the name of their strings (videoEq…). */
+    public const EQUALIZER_PRESETS = [
+        'Flat' => [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'Acoustic' => [5.0, 4.9, 3.95, 1.05, 2.15, 1.75, 3.5, 4.1, 3.55, 2.15],
+        'Classical' => [4.75, 3.75, 3, 2.5, -1.5, -1.5, 0, 2.25, 3.25, 3.75], 'Dance' => [3.57, 6.55, 4.99, 0, 1.92, 3.65, 5.15, 4.54, 3.59, 0],
+        'Deep' => [4.95, 3.55, 1.75, 1.00, 2.85, 2.50, 1.45, -2.15, -3.55, -4.60], 'Electronic' => [4.25, 3.8, 1.2, 0, -2.15, 2.25, 0.85, 1.25, 3.95, 4.8],
+        'HipHop' => [5, 4.25, 1.5, 3, -1, -1, 1.5, -0.5, 2, 3], 'IncreaseBass' => [5.5, 4.25, 3.5, 2.5, 1.25, 0, 0, 0, 0, 0],
+        'IncreaseTreble' => [0, 0, 0, 0, 0, 1.25, 2.5, 3.5, 4.25, 5.5], 'IncreaseVocal' => [-1.50, -3.00, -3.00, 1.50, 3.75, 3.75, 3.00, 1.50, 0, -1.50],
+        'Jazz' => [4, 3, 1.5, 2.25, -1.5, -1.5, 0, 1.5, 3, 3.75], 'Latin' => [4.5, 3, 0, 0, -1.5, -1.5, -1.5, 0, 3, 4.5],
+        'Loudness' => [6, 4, 0, 0, -2, 0, -1, -5, 5, 1], 'Lounge' => [-3.00, -1.50, -0.50, 1.50, 4.00, 2.50, 0, -1.50, 2.00, 1.00],
+        'Piano' => [3, 2, 0, 2.5, 3, 1.5, 3.5, 4.5, 3, 3.5], 'Pop' => [-1.5, -1, 0, 2, 4, 4, 2, 0, -1, -1.5],
+        'Rnb' => [2.62, 6.92, 5.65, 1.33, -2.19, -1.50, 2.32, 2.65, 3.0, 3.75], 'ReduceBass' => [-5.5, -4.25, -3.5, -2.5, -1.25, 0, 0, 0, 0, 0],
+        'ReduceTreble' => [0, 0, 0, 0, 0, -1.25, -2.5, -3.5, -4.25, -5.5], 'Rock' => [5, 4, 3, 1.5, -0.5, -1, 0.5, 2.5, 3.5, 4.5],
+        'SmallSpeaker' => [5.5, 4.25, 3.5, 2.5, 1.25, 0, -1.25, -2.5, -3.5, -4.25], 'SpokenWord' => [-3.46, -0.47, 0, 0.69, 3.46, 4.61, 4.84, 4.28, 2.54, 0],
+    ];
+    /** @var list<float> the equalizer's gains, of this player and the next (mpv's af stays as films change); the preset they are (EQUALIZER_PRESETS), '' for Manual */
+    public array $equalizer = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    public string $equalizerPreset = '';
+    /** @var ?list<float> the gains of the sliders while one is dragged, set as it is let go @internal VideoPlayer */
+    public ?array $equalizerDraft = null;
+
     /** Whether the secondary subtitles show (mpv's secondary-sub-visibility): their track read all the same. */
     public bool $secondarySubtitlesVisible = true;
     /** The sidebar's tab ('layout', 'video', 'audio', 'subtitles'), null while it is closed; the tab it opens at. */
@@ -207,6 +227,7 @@ final class VideoPlayerState
         $this->error = '';
         $this->speedAt = log($p->rate() / 0.25, 64);
         $p->setVolume($this->volume);
+        $p->setEqualizer($this->equalizer);
         $this->moved = microtime(true);
         $noted = 0.0;
         $this->off = [
@@ -653,6 +674,25 @@ final class VideoPlayerState
     {
         try {
             $this->player?->setSubtitleTrack($this->player->loadSubtitles($path));
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+        }
+        $this->changed();
+    }
+
+    /**
+     * Sets the equalizer's gains (Player::setEqualizer), of this player and
+     * the next, as preset $preset names them ('' for Manual, IINA's when a
+     * slider moves); what fails shows as the error.
+     * @param list<float> $gains
+     */
+    public function setEqualizer(array $gains, string $preset = ''): void
+    {
+        $this->equalizerDraft = null;
+        try {
+            $this->player?->setEqualizer($gains);
+            $this->equalizer = array_map('floatval', array_values($gains));
+            $this->equalizerPreset = $preset;
         } catch (RuntimeException $e) {
             $this->error = $e->getMessage();
         }

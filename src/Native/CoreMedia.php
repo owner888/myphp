@@ -45,6 +45,9 @@ final class CoreMedia
                 int  CMAudioFormatDescriptionCreate(void*, const ASBD*, size_t, const void*, size_t, const void*, void*, void**);
                 unsigned int CMFormatDescriptionGetMediaSubType(void*);
                 const ASBD* CMAudioFormatDescriptionGetStreamBasicDescription(void*);
+                const void* CMAudioFormatDescriptionGetMagicCookie(void*, size_t*);
+                const void* CMAudioFormatDescriptionGetChannelLayout(void*, size_t*);
+                int  CMSampleBufferGetAudioStreamPacketDescriptionsPtr(void*, const void**, size_t*);
                 int  CMBlockBufferCreateWithMemoryBlock(void*, void*, size_t, void*, void*, size_t, size_t, unsigned int, void**);
                 int  CMBlockBufferReplaceDataBytes(const void*, void*, size_t, size_t);
                 int  CMSampleBufferCreateReady(void*, void*, void*, long, long, const CMSampleTimingInfo*, long, const size_t*, void**);
@@ -331,23 +334,33 @@ final class CoreMedia
 
     /**
      * The format description of 32-bit float PCM, interleaved, of
-     * $channels at $rate, in WAVE's order of them ($bits, CoreAudio's
-     * channel bits), owned: what a decoder of the player's own gives.
+     * $channels at $rate, in the order $layout says (an AudioChannelLayout's
+     * bytes; '' for the system's default, of mono and stereo), owned: what
+     * a decoder of the player's own gives.
      */
-    public static function pcmFormat(int $rate, int $channels, int $bits): CData
+    public static function pcmFormat(int $rate, int $channels, string $layout): CData
     {
         $c = self::c();
         $asbd = $c->new('ASBD');
         $asbd->rate = $rate; $asbd->format = self::fourcc('lpcm'); $asbd->flags = 9; // kAudioFormatFlagIsFloat | IsPacked
         $asbd->bytesPerPacket = $asbd->bytesPerFrame = 4 * $channels; $asbd->framesPerPacket = 1; $asbd->channels = $channels; $asbd->bits = 32;
-        $layout = $c->new('unsigned int[3]'); // AudioChannelLayout with no descriptions: kAudioChannelLayoutTag_UseChannelBitmap, the bitmap, 0
-        $layout[0] = 1 << 16; $layout[1] = $bits; $layout[2] = 0;
+        $buf = null;
+        if ($layout !== '') {
+            $buf = $c->new('unsigned char[' . strlen($layout) . ']');
+            FFI::memcpy($buf, $layout, strlen($layout));
+        }
         $out = $c->new('void*');
-        $st = $c->CMAudioFormatDescriptionCreate(null, FFI::addr($asbd), 12, FFI::addr($layout[0]), 0, null, null, FFI::addr($out));
+        $st = $c->CMAudioFormatDescriptionCreate(null, FFI::addr($asbd), strlen($layout), $buf === null ? null : FFI::addr($buf[0]), 0, null, null, FFI::addr($out));
         if ($st !== 0) {
             throw new RuntimeException("myphp: the format of PCM of $channels channels: CoreMedia error $st");
         }
         return $out;
+    }
+
+    /** An AudioChannelLayout of channel bits $bits (kAudioChannelLayoutTag_UseChannelBitmap, no descriptions): the channels in WAVE's order. */
+    public static function bitmapLayout(int $bits): string
+    {
+        return pack('V3', 1 << 16, $bits, 0);
     }
 
     /** The sample buffer of $frames frames of PCM $pcm in $format, starting at sample $at of $rate a second, owned. */

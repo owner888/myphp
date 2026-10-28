@@ -4489,7 +4489,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   with no word of why looked like a hang, the developer's ask.
 
 
-## Vorbis and external audio in the video player (v1.55)
+## Vorbis, external audio and the equalizer in the video player (v1.55)
 - **Vorbis is decoded by the app's own codec** (`Native\SoftAudio`,
   `Audio\Vorbis\Codec`): CoreAudio has none; mpv decodes it with
   FFmpeg's. The Ogg decoder of the sound API (mygo's, jfreymuth's
@@ -4514,12 +4514,36 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   they have no name), the first chosen and played from where the film
   is (`setAudioTrack`'s seek, which seeks every source). A URL's reader
   joins the film's cache; a local film then waits for the network too.
-- **Left for later (IINA's)**: the equalizer (ten bands, IINA's lavfi
-  `equalizer=f=…:t=h:width=f/1.2247:g=…` each, presets and saved
-  profiles) needs the audio decoded here (AudioConverter for what the
-  system decodes, AVAssetReader's LPCM for its files) and filtered
-  (vDSP_biquad), every audio path changed; online subtitles need a
-  provider and its API key (IINA's OpenSubtitles key is IINA's).
+- **The equalizer is on only while a band has a gain**
+  (`Player::setEqualizer`, `Native\Equalizer`, `Native\AudioDecoder`):
+  Flat, the audio goes to the renderer as it always did, the system
+  decoding it; otherwise each packet is decoded here, the system's
+  codecs by AudioConverter (a Matroska track's format description, or
+  the sample buffers' of AVFoundation's reader, their packet
+  descriptions with them; Vorbis by SoftAudio), filtered and given as
+  float PCM in the order the converter's output layout says. The filter
+  is IINA's for mpv, FFmpeg's `equalizer=f=…:t=h:width=f/1.224744871:g=…`
+  a band (af_biquads.c's peaking biquad: A = 10^(g/40), alpha = sin(w0) /
+  2Q), the bands of a gain in a cascade by vDSP_biquad over each channel
+  strided through the interleaved frames, its delay lines kept from one
+  buffer to the next and cleared at a seek; a band past half the rate is
+  none (FFmpeg bypasses it). Turning it on, off or changing a gain feeds
+  the sound again from where it is (`go`), so a slider sets its gain as
+  it is let go (the arrows at once). The converter's input callback is
+  held in a struct (an FFI callback passed per call would be made anew
+  each). IINA's presets and its Manual are in the pop-up; its saved
+  profiles (save, rename, remove) are not yet. A file's AAC priming
+  (AVFoundation's trim attachments) is not cut while it is on.
+- **AudioConverter takes an AAC's cookie as an ES descriptor**: a
+  Matroska track's CodecPrivate is the bare AudioSpecificConfig, which
+  the format description (and the audio renderer) take, but the
+  converter refused ('!dat'); `AudioDecoder::esds` wraps it as FFmpeg's
+  audiotoolboxdec does (AVFoundation's readers' cookies are one already).
+  vDSP_biquad's state is in floats: its cascade is 2e-4 from the same in
+  doubles over ten bands of a few dB (as FFmpeg's float filter is).
+- **Left for later (IINA's)**: the equalizer's saved profiles; online
+  subtitles, which need a provider and its API key (IINA's OpenSubtitles
+  key is IINA's).
 
 ## Open items
 

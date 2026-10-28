@@ -211,6 +211,23 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $ids = [];
     foreach ([0.5, 1.9, 1.1] as $at3) { $p3->seek($at3); $h3->frame(); $ids[] = $h3->byText('Load Subtitle…')?->id; }
     check($ids[0] !== null && count(array_unique($ids)) === 1, 'the sidebar\'s nodes keep their ids as the subtitles, first and secondary, come and go: ' . json_encode($ids));
+    // The audio tab's equalizer: a preset chosen from its pop-up sets its gains, of this player and the next; an arrow on a band's slider makes it Manual.
+    $s4 = new VideoPlayerState(); $s4->thumbnailCache = $thumbCache;
+    $p4 = new Player(__DIR__ . '/testdata/clip.mkv'); $s4->setPlayer($p4);
+    $s4->sidebar = 'audio'; $s4->tab = 'audio';
+    $h4 = new Headless(fn(Context $c) => $c->videoPlayer($s4), 960, 900);
+    $h4->rt->reduceMotion = true;
+    $h4->frame();
+    $h4->clickText('Manual');
+    check(($h4->menuLabels() ?? [])[0] === 'Manual' && in_array('Rock', $h4->menuLabels() ?? [], true), "the pop-up: Manual, then IINA's presets");
+    $h4->chooseMenuItem('Rock');
+    same([array_map('floatval', VideoPlayerState::EQUALIZER_PRESETS['Rock']), 'Rock'], [$p4->equalizer(), $s4->equalizerPreset], 'Rock chosen: its gains the player\'s');
+    check($h4->byText('Rock') !== null, 'the pop-up says it');
+    $band = $h4->byLabel('1k Hz');
+    $h4->rt->focus = $band->id; $h4->up(); $h4->frame();
+    check($s4->equalizerPreset === '' && $p4->equalizer()[5] > VideoPlayerState::EQUALIZER_PRESETS['Rock'][5], 'an arrow up the 1 kHz band: higher, and Manual: ' . $p4->equalizer()[5]);
+    $p5 = new Player(__DIR__ . '/testdata/clip.mp4'); $s4->setPlayer($p5);
+    same($p4->equalizer(), $p5->equalizer(), 'the next player takes the gains');
     check($p->playing() && !$p->awake(), 'without keepAwake: the display may sleep while it plays');
     $p->pause();
     @unlink($scratch);

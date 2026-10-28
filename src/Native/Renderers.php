@@ -38,6 +38,12 @@ final class Renderers
     private array $soft = [];
     /** @var array<int, SoftAudio> the decoders of the audio tracks decoded in PHP (Vorbis), by track number */
     private array $softAudio = [];
+    /** The equalizer's gains (IINA's ten bands, dB), null while it is off (flat): the audio then goes to the renderer as it comes. */
+    private ?array $gains = null;
+    /** @var array<int, AudioDecoder> the system's decoders of the audio the equalizer filters, by track number */
+    private array $decoders = [];
+    /** @var array<string, Equalizer> the equalizer's filters, by rate and channels; @var array<string, CData> the formats of the PCM filtered, by rate, channels and layout */
+    private array $eqs = [], $pcmFormats = [];
 
     /** Renderers whose video the system decodes, unless $hardware is off (IINA's hardware decoding, mpv's hwdec): then what libdav1d decodes (AV1) is decoded so. */
     public function __construct(private readonly bool $hardware = true)
@@ -89,6 +95,10 @@ final class Renderers
     {
         $t = $p->track;
         $video = $t->type === Track::VIDEO;
+        if (!$video && $this->gains !== null) { // the equalizer on: decoded here, filtered, given as PCM
+            $this->enqueueFiltered($p);
+            return;
+        }
         if ($p->sample !== null) {
             $sb = $p->sample->buffer;
             if (!$show) {
@@ -107,7 +117,7 @@ final class Renderers
             if ($frames === 0) {
                 return; // the first packet after a start: it only overlaps the next
             }
-            $format = $this->formats[$t->number] ??= CoreMedia::pcmFormat($soft->rate(), $soft->channels(), SoftAudio::BITS[$soft->channels()]);
+            $format = $this->formats[$t->number] ??= CoreMedia::pcmFormat($soft->rate(), $soft->channels(), CoreMedia::bitmapLayout(SoftAudio::BITS[$soft->channels()]));
             $sb = CoreMedia::pcmSample($pcm, $format, $this->audioAt($p, $soft->rate(), $frames), $soft->rate(), $frames);
         } else {
             $format = $this->formats[$t->number] ??= CoreMedia::format($t, $p->data); // the first packet a keyframe: playing starts at one
@@ -120,6 +130,43 @@ final class Renderers
             }
         }
         ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
+        CoreMedia::c()->CFRelease($sb);
+    }
+
+    /**
+     * Turns the equalizer on with $gains (IINA's ten bands, dB), or off for
+     * null or none of a gain (IINA's Flat): the audio then goes to the
+     * renderer as it did. Flush and feed again after (Player::setEqualizer).
+     * @param ?list<float> $gains
+     */
+    public function setEqualizer(?array $gains): void
+    {
+        $this->gains = $gains === null || Equalizer::flat($gains) ? null : $gains;
+        $this->eqs = []; // made again of the gains as the audio comes
+    }
+
+    /** Audio packet $p decoded (by the system, Vorbis by SoftAudio), filtered by the equalizer and given to the renderer as float PCM. */
+    private function enqueueFiltered(Packet $p): void
+    {
+        $t = $p->track;
+        if (SoftAudio::wanted($t)) {
+            $soft = $this->softAudio[$t->number] ??= new SoftAudio($t);
+            [$pcm, $frames] = $soft->decode($p->data);
+            [$rate, $ch, $layout] = [$soft->rate(), $soft->channels(), CoreMedia::bitmapLayout(SoftAudio::BITS[$soft->channels()])];
+        } else {
+            $d = $this->decoders[$t->number] ??= new AudioDecoder($p->sample !== null
+                ? CoreMedia::c()->CMSampleBufferGetFormatDescription($p->sample->buffer) // AVFoundation's reader's
+                : ($this->formats[$t->number] ??= CoreMedia::format($t, $p->data)));
+            [$pcm, $frames] = $d->decode($p);
+            [$rate, $ch, $layout] = [$d->rate, $d->channels, $d->layout];
+        }
+        if ($frames === 0) {
+            return; // the codec holds them yet
+        }
+        $pcm = ($this->eqs["$rate/$ch"] ??= new Equalizer($this->gains, $rate, $ch))->process($pcm, $frames);
+        $format = $this->pcmFormats["$rate/$ch/" . bin2hex($layout)] ??= CoreMedia::pcmFormat($rate, $ch, $layout);
+        $sb = CoreMedia::pcmSample($pcm, $format, $this->audioAt($p, $rate, $frames), $rate, $frames);
+        ObjC::msg('v:p', $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
         CoreMedia::c()->CFRelease($sb);
     }
 
@@ -169,6 +216,8 @@ final class Renderers
         ObjC::msg('v:', $this->audio, 'flush');
         foreach ($this->soft as $s) { $s->flush(); }
         foreach ($this->softAudio as $s) { $s->reset(); }
+        foreach ($this->decoders as $d) { $d->reset(); }
+        foreach ($this->eqs as $e) { $e->reset(); }
         $this->nextAudio = null;
     }
 
@@ -215,7 +264,7 @@ final class Renderers
     public function __destruct()
     {
         ObjC::msg('v:f', $this->sync, 'setRate:', 0.0);
-        foreach ($this->formats as $f) {
+        foreach ([...$this->formats, ...$this->pcmFormats] as $f) {
             CoreMedia::c()->CFRelease($f);
         }
         ObjC::msg('v:', $this->layer, 'removeFromSuperlayer');

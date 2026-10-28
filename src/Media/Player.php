@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, MediaTicker, Renderers, SoftAudio, SoftVideo, VideoDecoder};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, Equalizer, MediaTicker, Renderers, SoftAudio, SoftVideo, VideoDecoder};
 use RuntimeException;
 
 /**
@@ -1079,6 +1079,46 @@ final class Player
     public function audioDelay(): float
     {
         return $this->out->audioDelay;
+    }
+
+    /** IINA's equalizer's bands, their frequencies in Hz (FFmpeg's equalizer a band, as IINA's filter for mpv). */
+    public const EQUALIZER_BANDS = Equalizer::FREQUENCIES;
+
+    /** @var list<float> the equalizer's gains, dB: all 0, flat, it is off */
+    private array $eq = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    /**
+     * Sets IINA's equalizer: a gain of each of EQUALIZER_BANDS, -12 to 12
+     * dB, as its sliders; all 0 (Flat) turns it off, the audio then played
+     * as the system decodes it, untouched. Otherwise the audio is decoded
+     * here, filtered (FFmpeg's equalizer a band, IINA's filter for mpv) and
+     * played as PCM; it goes on from where it is, filtered so.
+     * @param list<float> $gains
+     */
+    public function setEqualizer(array $gains): void
+    {
+        if (count($gains) !== count(self::EQUALIZER_BANDS)) {
+            throw new RuntimeException('myphp: the equalizer has ' . count(self::EQUALIZER_BANDS) . ' bands, not ' . count($gains));
+        }
+        $gains = array_map('floatval', array_values($gains));
+        foreach ($gains as $g) {
+            if (!is_finite($g) || abs($g) > 12) { throw new RuntimeException("myphp: an equalizer's gain is from -12 to 12 dB, not $g"); }
+        }
+        if ($gains === $this->eq) {
+            return;
+        }
+        $was = $this->eq;
+        $this->eq = $gains;
+        $this->out->setEqualizer($gains);
+        if (!Equalizer::flat($was) || !Equalizer::flat($gains)) {
+            $this->go($this->time(), true); // the sound given again, filtered from here
+        }
+    }
+
+    /** The equalizer's gains, dB, of EQUALIZER_BANDS. @return list<float> */
+    public function equalizer(): array
+    {
+        return $this->eq;
     }
 
     private static function ratio(?float $r, string $what): ?float

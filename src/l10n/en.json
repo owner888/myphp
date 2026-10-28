@@ -1025,6 +1025,95 @@
   "@videoManual": {
     "description": "The equalizer's preset of the video player's audio tab, set by hand."
   },
+  "videoEqFlat": "Flat",
+  "@videoEqFlat": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqAcoustic": "Acoustic",
+  "@videoEqAcoustic": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqClassical": "Classical",
+  "@videoEqClassical": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqDance": "Dance",
+  "@videoEqDance": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqDeep": "Deep",
+  "@videoEqDeep": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqElectronic": "Electronic",
+  "@videoEqElectronic": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqHipHop": "Hip Hop",
+  "@videoEqHipHop": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqIncreaseBass": "Increase Bass",
+  "@videoEqIncreaseBass": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqIncreaseTreble": "Increase Treble",
+  "@videoEqIncreaseTreble": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqIncreaseVocal": "Increase Vocal",
+  "@videoEqIncreaseVocal": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqJazz": "Jazz",
+  "@videoEqJazz": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqLatin": "Latin",
+  "@videoEqLatin": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqLoudness": "Loundness",
+  "@videoEqLoudness": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqLounge": "Lounge",
+  "@videoEqLounge": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqPiano": "Piano",
+  "@videoEqPiano": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqPop": "Pop",
+  "@videoEqPop": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqRnb": "R&B",
+  "@videoEqRnb": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqReduceBass": "Reduce Bass",
+  "@videoEqReduceBass": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqReduceTreble": "Reduce Treble",
+  "@videoEqReduceTreble": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqRock": "Rock",
+  "@videoEqRock": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqSmallSpeaker": "Small Speaker",
+  "@videoEqSmallSpeaker": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+  "videoEqSpokenWord": "Spoken Word",
+  "@videoEqSpokenWord": {
+    "description": "A preset of the video player's equalizer, IINA's."
+  },
+
   "videoPrimary": "Primary",
   "@videoPrimary": {
     "description": "The video player's primary subtitles."
