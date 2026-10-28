@@ -4,9 +4,11 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
+use MyPHP\App;
 use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
+use MyPHP\Media\ThumbnailCache;
 use MyPHP\Media\Track;
 use MyPHP\Native\NowPlaying;
 use MyPHP\Native\PictureInPicture;
@@ -81,6 +83,13 @@ final class VideoPlayerState
     public string $playlistTab = 'playlist';
     /** @internal whether the player taken last has not been built with yet: where it was left is gone back to then */
     private bool $fresh = false;
+    /**
+     * The seek bar's thumbnails of the player's film, as IINA's: of the
+     * keyframes at each hundredth of it (101 at most), 240 pixels wide,
+     * made a few at a time after it opens and here once all are.
+     * @var list<\MyPHP\Media\Thumbnail>
+     */
+    public array $thumbnails = [];
     /** Where screenshots go (IINA's default), unless set. */
     public string $screenshots = '~/Pictures/Screenshots';
     /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
@@ -188,7 +197,65 @@ final class VideoPlayerState
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
         ];
         if ($this->nowPlaying) { $this->showNowPlaying(); }
+        $this->makeThumbnails($p);
         $this->changed();
+    }
+
+    /** IINA's count of the seek bar's thumbnails less one, their width in pixels (twice the 120 points they show at), and the seconds at most between two made. */
+    private const THUMBNAILS = 100, THUMBNAIL_WIDTH = 240, THUMBNAIL_EVERY = 0.02;
+
+    /** Where the seek bar's thumbnails of films seen are kept: the app's, ThumbnailCache::default(), unless set. */
+    public ?ThumbnailCache $thumbnailCache = null;
+
+    /**
+     * The thumbnails of $p's film: from the cache when it has them, else
+     * made one at a time (a keyframe read and decoded, some 5 ms of the
+     * main thread, as IINA's FFmpegController does on a thread of its own)
+     * right after the window presents a frame, where the next has the most
+     * time, or THUMBNAIL_EVERY seconds on when it draws none: at each
+     * hundredth, the keyframe at or before it, one kept of each keyframe.
+     * They are the state's once all are made, for the player still its,
+     * and kept in the cache.
+     */
+    private function makeThumbnails(Player $p): void
+    {
+        $this->thumbnails = [];
+        if ($p->videoTrack() === null || $p->duration() <= 0) { return; }
+        $cache = $this->thumbnailCache ??= ThumbnailCache::default();
+        if (($kept = $cache->get($p->path(), self::THUMBNAIL_WIDTH)) !== null) {
+            $this->thumbnails = $kept;
+            return;
+        }
+        $made = []; $jpegs = []; $i = 0;
+        $next = null;
+        $step = function () use ($p, $cache, &$made, &$jpegs, &$i, &$next): void {
+            if ($this->player !== $p) { $next = null; return; } // another film took its place
+            $t = $p->thumbnail($p->duration() * $i / self::THUMBNAILS, self::THUMBNAIL_WIDTH);
+            if ($t !== null && ($made === [] || $made[count($made) - 1]->time !== $t->time)) { $made[] = $t; $jpegs[] = ThumbnailCache::jpeg($t); }
+            if (++$i <= self::THUMBNAILS) { $next(); return; }
+            $next = null; // the closures let themselves go
+            $this->thumbnails = $made;
+            $cache->put($p->path(), self::THUMBNAIL_WIDTH, $made, $jpegs);
+            $this->changed();
+        };
+        $next = function () use (&$step): void { // after the next frame presented, or the timer, whichever comes first
+            $done = false;
+            $once = function () use (&$done, &$step): void { if (!$done) { $done = true; $step(); } };
+            $this->runtime?->get()?->afterFrame($once);
+            App::after(self::THUMBNAIL_EVERY, $once);
+        };
+        $next();
+    }
+
+    /** The thumbnail for $seconds, as IINA's getThumbnail: the one before the first at or after it (the first for none before), else the last; null before they are made. */
+    public function thumbnailAt(float $seconds): ?\MyPHP\Media\Thumbnail
+    {
+        $all = $this->thumbnails;
+        if ($all === []) { return null; }
+        foreach ($all as $i => $t) {
+            if ($t->time >= $seconds) { return $all[max(0, $i - 1)]; }
+        }
+        return $all[count($all) - 1];
     }
 
     /**

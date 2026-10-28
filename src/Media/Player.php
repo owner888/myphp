@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, MediaTicker, Renderers};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, MediaTicker, Renderers, VideoDecoder};
 use RuntimeException;
 
 /**
@@ -54,6 +54,9 @@ final class Player
     private float $frameTime = 0.0;
     /** The time of the last frame of the video read at or before where the last seek went, null before one: the frame it shows. */
     private ?float $landed = null;
+    /** A reader of the file and a decoder of its video of their own, for thumbnails (thumbnail()), made at the first. */
+    private ?Source $thumbSource = null;
+    private ?VideoDecoder $thumbDecoder = null;
     /** @var list<Packet> what a seek to a keyframe read past to find it, which the source's next packets come after */
     private array $ahead = [];
     private bool $playing = false, $ended = false, $muted = false;
@@ -470,6 +473,30 @@ final class Player
     public function snapshot(): ?string
     {
         return $this->out->snapshot();
+    }
+
+    /**
+     * A thumbnail of the film at $seconds, $width pixels wide: the keyframe
+     * at or before it, decoded by a reader and a decoder of its own (what
+     * plays goes on as it was), as IINA's thumbnails of the seek bar are;
+     * null for a film of no video. A few milliseconds: a keyframe read and
+     * decoded, on this thread.
+     */
+    public function thumbnail(float $seconds, int $width): ?Thumbnail
+    {
+        if ($this->video === null) {
+            return null;
+        }
+        $this->thumbSource ??= self::source($this->path);
+        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new VideoDecoder($this->video, $width); }
+        $p = $this->thumbSource->keyframe(max(0.0, min($seconds, $this->duration)));
+        if ($p === null) {
+            return null;
+        }
+        $d = $this->thumbDecoder;
+        $rgba = $d->frame($p);
+        [$w, $h] = [$d->width, $d->height];
+        return new Thumbnail($p->time, $w, $h, fn(): string => $rgba);
     }
 
     /** Goes to $seconds as seek() does, telling nothing; returns where it went. */

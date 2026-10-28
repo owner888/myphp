@@ -107,8 +107,9 @@ final class VideoPlayer
               $c->text($s->title, 13, 0xffffff)->fontWeight(600)->opacity(0.85)->noWrap()->ellipsis('…')->grow(1);
             $c->end();
         }
-        $bars[] = $osc = $c->column()->absolute()->left($left + ($area - 460) / 2)->bottom($c->height * 0.1)->size(460, 80)->systemMaterial('glass')->round(12)->keepFocus();
-          self::controlBar($c, $s, $p, $o);
+        $oscX = $left + ($area - 460) / 2; $oscY = $c->height - $c->height * 0.1 - 80;
+        $bars[] = $osc = $c->column()->absolute()->left($oscX)->bottom($c->height * 0.1)->size(460, 80)->systemMaterial('glass')->round(12)->keepFocus();
+          $seek = self::controlBar($c, $s, $p, $o);
         $c->end();
         $shown = $now - $s->moved < VideoPlayerState::LINGER;
         foreach ($bars as $n) { $shown = $shown || $c->hovered($n); }
@@ -121,6 +122,9 @@ final class VideoPlayer
             $fade > 0.001 ? $n->opacity($fade) : $n->invisible(); // faded out: nothing to click either
         }
         $c->clicked($osc); // a click on the bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
+        if ($fade > 0.001 && ([$sx, , $over] = $c->pointerPosition($seek)) && $over) {
+            self::seekPreview($c, $s, $p, $oscX + self::SEEK_X, $oscY + self::SEEK_Y, $sx, $fade);
+        }
 
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->error !== '') {
@@ -239,8 +243,49 @@ final class VideoPlayer
         return $b;
     }
 
-    /** The control bar's inside, 460 by 80: the volume, back, play, on and the bar's buttons above, the times and the bar of the time below. */
-    private static function controlBar(Context $c, VideoPlayerState $s, Player $p, VideoPlayerOptions $o): void
+    /** Where the bar of the time is in the control bar, and how wide. */
+    private const SEEK_X = 58, SEEK_Y = 49, SEEK_W = 344, SEEK_H = 18;
+
+    /**
+     * Over the bar of the time under the pointer, $x from the bar's left
+     * at ($bx, $by) of the player: the time there (and its chapter's title
+     * above it) in a box of glass 5 points above the bar, and the thumbnail
+     * of the film there 5 points above that, 120 points wide, round by 4,
+     * ringed and shadowed, as IINA's TimePreviewView and ThumbnailPeekView,
+     * centered on the pointer.
+     */
+    private static function seekPreview(Context $c, VideoPlayerState $s, Player $p, float $bx, float $by, float $x, float $alpha): void
+    {
+        $f = max(0.0, min(1.0, ($x - 1.5) / (self::SEEK_W - 3)));
+        $t = $p->duration() * $f;
+        $text = VideoPlayerState::clock($t);
+        $chapter = null;
+        foreach ($p->chapters() as $ch) { if ($ch->start <= $t + 1e-3) { $chapter = $ch; } }
+        if ($chapter !== null) { $text = $chapter->title . "\n" . $text; }
+        $cx = $bx + $x;
+        $thumb = $s->thumbnailAt($t);
+        // A column centered on the pointer, its foot 5 points above the bar: the thumbnail over the time.
+        $c->column(0, 5)->absolute()->left($cx - 200)->width(400)->bottom($c->height - $by + 5)->align(Node::CENTER)->passThrough()->opacity($alpha);
+          if ($thumb !== null) {
+              static $images = null;
+              $images ??= new \WeakMap(); // by thumbnail: its image
+              $img = $images[$thumb] ??= Image::fromPixels($thumb->width, $thumb->height, $thumb->rgba());
+              $w = 120.0; $h = round($w / (self::shownAspect($p) ?? $thumb->width / max(1, $thumb->height)));
+              $turned = $p->rotation() % 180 === 90;
+              $c->column()->size($w, $h)->round(4)->shadow(0, 0, 2, 0, 0x000000)->center()->drawOver(static function (DisplayList $l, Node $n): void {
+                  $l->ring($n->x, $n->y, $n->w, $n->h, 0x999999, 0.5, 4, 1);
+              });
+                $c->image($img, $turned ? $h : $w, $turned ? $w : $h, 4)->rotate($p->rotation());
+              $c->end();
+          }
+          $c->column()->padding(4, 8)->systemMaterial('glass')->round(16);
+            $c->text($text, 11, 0xffffff)->fontFeatures('tnum')->textAlign(Node::CENTER);
+          $c->end();
+        $c->end();
+    }
+
+    /** The control bar's inside, 460 by 80: the volume, back, play, on and the bar's buttons above, the times and the bar of the time below; returns the bar of the time. */
+    private static function controlBar(Context $c, VideoPlayerState $s, Player $p, VideoPlayerOptions $o): Node
     {
         $vol = $p->muted() || $s->volume == 0 ? 'speaker.slash.fill' : ($s->volume < 0.34 ? 'speaker.wave.1.fill' : ($s->volume < 0.67 ? 'speaker.wave.2.fill' : 'speaker.wave.3.fill'));
         if ($c->clicked(self::barButton($c, $vol, 13, 27, 24))) { $s->toggleMute(); }
@@ -265,7 +310,7 @@ final class VideoPlayer
         $gear = self::barButton($c, 'gearshape', 15, 436, 24, self::t($c, 'videoSettings'));
         if ($o->sidebar && $c->clicked($gear)) { $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' ? $s->tab : null; }
         $c->text(VideoPlayerState::clock($p->time()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->left(17.5)->top(50.5); // the system font, its digits of one width
-        $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->absolute()->left(58)->top(49)->size(344, 18)->paddingX(1.5);
+        $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->absolute()->left(self::SEEK_X)->top(self::SEEK_Y)->size(self::SEEK_W, self::SEEK_H)->paddingX(1.5);
         if (!$c->pressed($seek)) { $s->at = $p->time(); }
         $seek->draw(static function (DisplayList $l, Node $n): void { // a 4-point track, lighter where it played, and a white upright knob
             $x0 = $n->x + 1.5; $w = $n->w - 3; $cy = $n->y + $n->h / 2; $k = $x0 + $w * $n->fraction;
@@ -275,6 +320,7 @@ final class VideoPlayer
         });
         if ($c->changed($seek)) { $p->seek($s->at); }
         $c->text(VideoPlayerState::clock($p->duration()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->right(12.5)->top(50.5);
+        return $seek;
     }
 
     /** The message at the top left: its text, with the time or the volume's level under it, fading out. */

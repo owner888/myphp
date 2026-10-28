@@ -4021,6 +4021,61 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   fails where the signature's arguments, the selector's colons and the
   arguments given differ, or a letter is none ObjC maps.
 
+## The seek bar's thumbnails (v1.47)
+
+- **A decoder of our own** (`Native\VideoDecoder`, `Player::thumbnail`):
+  the display layer gives only the frame it shows on screen (v1.46), so a
+  thumbnail is decoded apart from what plays: a second reader of the file
+  reads the keyframe at or before the time alone (`Source::keyframe`:
+  Matroska's cluster walked by its elements' headers, the other tracks'
+  blocks skipped), and a VideoToolbox decompression session decodes it
+  synchronously into BGRA of the thumbnail's size, VideoToolbox scaling
+  as it decodes; vImage makes it RGBA.
+- **Measured** (101 thumbnails of a 1080p H.264 Matroska film, per
+  thumbnail): reading its whole cluster 1.5 ms, the keyframe alone a
+  fraction of that; decoding 3.7 ms then CoreImage's conversion and
+  Lanczos 2.8 ms, against VideoToolbox's own scaled output 4.7 ms and 0.02
+  ms after it. About 10 ms a thumbnail first, about 5 now; the first
+  of a film 20 ms more, its session made.
+- **Trap: VideoToolbox's callback is on a thread of its own**, even for a
+  synchronous decode (`pthread_main_np()` 0 in every one of some 1500
+  decodes of H.264 and HEVC, 160 by 90 to 1080p, by a probe). PHP
+  runs there only because the main thread waits in the decode until the
+  callback returns: one thread runs PHP at a time. The callback keeps the
+  frame (CVPixelBufferRetain) and nothing more, in an object of its own
+  (no cycle to the decoder); it stood 200 calls deep (PHP's stack limit,
+  8.5) on that thread. Never decode asynchronously: the callback would
+  run PHP beside the main thread.
+- **As IINA's** (FFmpegController, TimePreviewView, ThumbnailPeekView):
+  101 thumbnails, the keyframe at each hundredth, one kept of each
+  keyframe, 240 pixels wide shown at 120 points; made one at a time on
+  the main thread after a film opens (some 5 ms each: IINA's thread),
+  each right after the window presents a frame (`Runtime::afterFrame`),
+  where the next frame has the most time, or 20 ms on when it draws none;
+  the state's once all are (`VideoPlayerState::$thumbnails`,
+  `thumbnailAt`: the one before the first at or after the time). Over the
+  bar of the time: the time there (its chapter's title above it) in glass
+  5 points above the bar, the thumbnail 5 above that, round by 4, ringed
+  and shadowed, turned as the picture is.
+- **Kept on disk** (`Media\ThumbnailCache`, IINA's ThumbnailCache and
+  CacheManager): a file a film, by the md5 of its path, in thumb_cache of
+  the app's caches, valid while the film's size and modification time
+  are those it was made of; JPEGs of quality 0.75, each made as its
+  thumbnail is (a fraction of a millisecond), written at once through a
+  temporary file; read back at once when the film opens again, each
+  decoded when first shown. Past 500 MiB, the least recently used go
+  until half of that is free; a file cut short goes.
+- **Trap: a `const char*` return is a PHP string.** FFI turns a function's
+  `const char*` result into a string cut at its first NUL (as
+  `sel_getName`'s is meant to be): `CFDataGetBytePtr` of a JPEG came back
+  four bytes, `\xFF\xD8\xFF\xE0`, no pointer. Bytes are `void*`, read
+  with FFI::string and their length.
+- **Trap: no cue at 0.** A Matroska film whose first frame (and cue) is
+  a moment in (0.023 s, of muxers that start at the audio's) threw "no
+  cue at or before 0s" on a seek to the start: the first thumbnail, and
+  play() after the end of such a film. A time before the first cue goes
+  to it, where decoding starts.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

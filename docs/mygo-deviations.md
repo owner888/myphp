@@ -1704,6 +1704,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
   `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
   mygo has no video.
+- **The seek bar's thumbnails** (v1.47): `Media\Thumbnail`,
+  `Player::thumbnail`, `Source::keyframe`, `VideoPlayerState::$thumbnails`,
+  `thumbnailAt`, `$thumbnailCache`, `Media\ThumbnailCache` and
+  `Runtime::afterFrame`
+  are myphp's, as IINA's; mygo has no video.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.

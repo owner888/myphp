@@ -87,7 +87,9 @@ if (PHP_OS_FAMILY === 'Darwin') {
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'currentRunLoop'), 'runUntilDate:', $until);
     };
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
-    $s = new VideoPlayerState();
+    $thumbDir = sys_get_temp_dir() . '/myphp-thumbs-' . getmypid(); // not the user's cache
+    $thumbCache = new \MyPHP\Media\ThumbnailCache($thumbDir);
+    $s = new VideoPlayerState(); $s->thumbnailCache = $thumbCache;
     $s->setPlayer($p);
     $s->positions = new \MyPHP\Media\PlaybackPositions($scratch = sys_get_temp_dir() . '/myphp-positions-ui-' . getmypid() . '.json'); // not the user's
     $s->title = 'clip.mkv';
@@ -98,6 +100,32 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h->paint();
     same(1, count($h->rt->videoPlaces), 'the picture under the controls');
     check(count($h->rt->materialPlaces) >= 2, 'the title bar and the control bar in the system\'s materials');
+    // The seek bar's thumbnails (IINA's): made a few at a time, one of each keyframe (at 0 and 1 s of the clip); over the bar, the time there and its thumbnail above it.
+    for ($waited = 0; $s->thumbnails === [] && $waited < 100; $waited++) { $run(0.1); }
+    same([0.0, 1.0], array_map(fn($t) => round($t->time, 3), $s->thumbnails), 'the thumbnails, one of each keyframe');
+    same([240, 135], [$s->thumbnails[0]->width ?? 0, $s->thumbnails[0]->height ?? 0], '240 pixels wide, of the film\'s shape');
+    same(1.0, $s->thumbnailAt(1.5)?->time, 'the thumbnail at a time: the keyframe before');
+    // Kept on disk: another state of the film has them at once, from JPEGs, their pixels close to those made.
+    $again = new VideoPlayerState(); $again->thumbnailCache = $thumbCache;
+    $again->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv'));
+    same([0.0, 1.0], array_map(fn($t) => round($t->time, 3), $again->thumbnails), 'the thumbnails from the cache, at once');
+    $a = $again->thumbnails[1]->rgba(); $b = $s->thumbnails[1]->rgba();
+    [$sum, $n, $max] = [0, 0, 0];
+    for ($k = 0; $k < strlen($a); $k++) { if ($k % 4 !== 3) { $d = abs(ord($a[$k]) - ord($b[$k])); $sum += $d; $n++; $max = max($max, $d); } }
+    $mean = round($sum / max(1, $n), 2);
+    check(strlen($a) === 240 * 135 * 4 && $mean < 6, "their pixels, decoded: within JPEG's loss, on the mean (a channel swapped would be tens off): $mean, at most $max");
+    $h->hover(308 + 1.5 + 0.75 * 341, 406 + 49 + 9); $run(0.3); $h->frame(); // the controls fading in again
+    $images = function (?\MyPHP\UI\Node $n) use (&$images): array {
+        if ($n === null) { return []; }
+        $out = $n->image !== null && $n->image->w === 240 ? [$n] : [];
+        foreach ($n->kids as $k) { array_push($out, ...$images($k)); }
+        return $out;
+    };
+    $peek = $images($h->root)[0] ?? null;
+    check($h->byText('00:01') !== null, 'over the bar at three quarters: the time there');
+    check($peek !== null && [round($peek->w), round($peek->h)] === [120.0, 68.0], 'and its thumbnail, 120 points wide');
+    $h->hover(100, 100); $h->frame();
+    check($images($h->root) === [] && $h->byText('00:01') === null, 'off the bar, neither');
     $s->togglePause();
     $h->frame();
     check($p->playing() && $h->byText('Resume') !== null, 'playing, told at the top left');
@@ -137,7 +165,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(abs($p->time() - ($from - 0.5)) < 0.01, 'across 5 points: half a second back: ' . $p->time());
     // Where it was left noted at a pause, for the next time (more than 5 s in, which a clip of 2 s is not: noted, not gone back to).
     $posFile = sys_get_temp_dir() . '/myphp-positions-player-' . getmypid() . '.json';
-    $s2 = new VideoPlayerState(); $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
+    $s2 = new VideoPlayerState(); $s2->thumbnailCache = $thumbCache; $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
     $p2 = new Player(__DIR__ . '/testdata/clip.mp4'); $s2->setPlayer($p2);
     $h2 = new Headless(fn(Context $c) => $c->videoPlayer($s2), 960, 540);
     $h2->frame();
@@ -157,7 +185,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p->pause();
     @unlink($scratch);
     // Opening films: a player of each, the playlist of its folder; the next at the end of one; the playlist's sidebar, a double click playing a row.
-    $s3 = new VideoPlayerState(); $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    $s3 = new VideoPlayerState(); $s3->thumbnailCache = $thumbCache; $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
     // A folder of a few films, all of whose rows show in the sidebar (testdata's are more than it shows).
     $films = sys_get_temp_dir() . '/myphp-films-' . getmypid();
     @mkdir($films);
@@ -216,7 +244,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $shown = array_map(fn($n) => array_map(fn($v) => round($v, 1), $h3->rect($n)), $images($h3->root));
     same([[356.5, 450.0, 247.0, 39.0]], $shown, 'the PGS picture where it shows, at half size');
     // ASS lines over the picture where they are, as libass puts them: the point of \an5 at \pos (1440, 540 of 1920 by 1080), the top line within its margin, the bottom rows above theirs.
-    $s4 = new VideoPlayerState(); $s4->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    $s4 = new VideoPlayerState(); $s4->thumbnailCache = $thumbCache; $s4->positions = new \MyPHP\Media\PlaybackPositions($scratch);
     $s4->setPlayer(new Player(__DIR__ . '/testdata/clip-ass.mkv'));
     $s4->player->seek(1.0);
     $h4 = new Headless(fn(Context $c) => $c->videoPlayer($s4), 960, 540);
@@ -290,5 +318,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $s3->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv')); // the folder's films let go before it goes
     foreach (glob("$films/*") ?: [] as $f) { unlink($f); }
     rmdir($films);
+    foreach (scandir($thumbDir) ?: [] as $f) { if ($f[0] !== '.') { unlink("$thumbDir/$f"); } }
+    rmdir($thumbDir);
 }
 

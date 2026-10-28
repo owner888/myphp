@@ -208,6 +208,7 @@ final class Window
             $this->runtime->underLayer = true; // nodes belowMaterials() painted in a view of their own, under the materials
             Metal::$afterFrame[ObjC::addr($this->view)] = function (): void { // the layer under the materials drawn in the same turn as the frame, the list it used let go
                 if ($this->under !== null && ($this->runtime->underPaints !== [] || $this->underShown)) { ObjC::msg('v:', $this->under, 'draw'); }
+                $this->runtime->framePresented();
             };
             $this->runtime->onAccess = fn(AccessTree $t) => Access::update($view, $t); // VoiceOver reads each frame once it asked
         }

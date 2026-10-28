@@ -35,6 +35,19 @@ $p = $m->next();
 check($p->time <= 1.0 + 1e-9 && $p->time > 0.9, "a seek goes on from the cluster of the cue at or before the time: {$p->time}");
 $m->seek(0);
 same(0.0, $m->next()->time, 'a seek to the start');
+$m = new Matroska(__DIR__ . '/testdata/clip-subs.mkv'); // its first frame, and cue, at 0.023 s
+$m->seek(0);
+same(0.023, round($m->next()->time, 3), 'a seek before the first cue goes to it');
+// A keyframe read alone (a thumbnail's): the same frame a seek and next() give, the cluster's other blocks skipped.
+foreach (['clip.mkv' => [[1.5, 1.0], [0.0, 0.0], [0.99, 0.0]], 'clip-subs.mkv' => [[0.0, 0.023], [1.2, 1.023]]] as $file => $cases) {
+    $m = new Matroska(__DIR__ . "/testdata/$file");
+    foreach ($cases as [$at, $want]) {
+        $k = $m->keyframe($at);
+        $m->seek($at);
+        while (($q = $m->next()) !== null && !($q->track->type === Track::VIDEO && $q->keyframe)) {}
+        same([$want, true, Track::VIDEO, true], [round($k?->time ?? -1, 3), $k?->keyframe, $k?->track->type, $k !== null && $q !== null && $k->data === $q->data], "$file: the keyframe for {$at} s, alone, as a seek reads it");
+    }
+}
 
 $m = new Matroska(__DIR__ . '/testdata/clip-hevc.mkv');
 same(['V_MPEGH/ISO/HEVC', 'A_AC3'], array_map(fn(Track $t) => $t->codec, $m->tracks()), 'HEVC and AC-3');

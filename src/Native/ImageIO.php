@@ -11,8 +11,9 @@ use RuntimeException;
  * Decodes a PNG or an ICNS, the largest of its images, into RGBA pixels
  * (premultiplied, top row first), scaled down to fit $max pixels on a
  * side when larger, through a CGBitmapContext, on the calling thread:
- * the icons myphp build makes (Build\Icns). The UI's images decode off
- * the main thread, through CoreImage.
+ * the icons myphp build makes (Build\Icns), and a video player's cached
+ * thumbnails; and encodes RGBA as a JPEG (the thumbnails' cache). The
+ * UI's images decode off the main thread, through CoreImage.
  */
 final class ImageIO
 {
@@ -42,6 +43,14 @@ final class ImageIO
                 void  CGContextDrawImage(void*, CGRect, void*);
                 void  CGContextSetInterpolationQuality(void*, int);
                 void  CGContextRelease(void*);
+                void* CGBitmapContextCreateImage(void*);
+                void* CFDataCreateMutable(void*, long);
+                long  CFDataGetLength(void*);
+                void* CFDataGetBytePtr(void*); // void*: a const char* return arrives as a PHP string, cut at its first NUL
+                void* CGImageDestinationCreateWithData(void*, void*, size_t, void*);
+                void  CGImageDestinationAddImage(void*, void*, void*);
+                bool  CGImageDestinationFinalize(void*);
+                extern void* kCGImageDestinationLossyCompressionQuality;
             ', '/System/Library/Frameworks/ImageIO.framework/ImageIO');
             self::$c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
             self::$colorSpace = self::$c->CGColorSpaceCreateDeviceRGB();
@@ -95,5 +104,31 @@ final class ImageIO
         Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $w * $h * 4);
         $c->CGContextRelease($ctx);
         return ['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => $addr];
+    }
+
+    /** $w by $h pixels $rgba (premultiplied, top row first, opaque) as a JPEG of $quality, 0 to 1. */
+    public static function jpeg(string $rgba, int $w, int $h, float $quality): string
+    {
+        $c = self::c();
+        ObjC::boot(['Foundation']);
+        if (strlen($rgba) !== $w * $h * 4) {
+            throw new RuntimeException("myphp: $w by $h pixels are not " . strlen($rgba) . ' bytes');
+        }
+        $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w * 4, self::$colorSpace, self::RGBA_PREMULTIPLIED_BIG)
+            ?? throw new RuntimeException('CGBitmapContextCreate');
+        FFI::memcpy($c->cast('char*', $c->CGBitmapContextGetData($ctx)), $rgba, $w * $h * 4); // its first row the top, as decode() reads one
+        $image = $c->CGBitmapContextCreateImage($ctx);
+        $c->CGContextRelease($ctx);
+        $data = $c->CFDataCreateMutable(null, 0);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.jpeg'))), 1, null);
+        $options = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $quality), ObjC::import($c->kCGImageDestinationLossyCompressionQuality));
+        $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', ObjC::addr($options)));
+        $ok = $c->CGImageDestinationFinalize($dest);
+        $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
+        $c->CFRelease($dest); $c->CFRelease($data); $c->CGImageRelease($image);
+        if (!$ok) {
+            throw new RuntimeException('myphp: the JPEG could not be made');
+        }
+        return $out;
     }
 }

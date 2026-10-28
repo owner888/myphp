@@ -145,6 +145,18 @@ final class AssetReader implements Source
         $this->start($seconds);
     }
 
+    /** The first keyframe of the video from a seek to $seconds; null for none. */
+    public function keyframe(float $seconds): ?Packet
+    {
+        $this->start($seconds);
+        while (($p = $this->next()) !== null) {
+            if ($p->track->type === Track::VIDEO && $p->keyframe) {
+                return $p;
+            }
+        }
+        return null;
+    }
+
     /** A reader from $seconds to the end, with an output of each track passing its samples through. */
     private function start(float $seconds): void
     {

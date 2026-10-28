@@ -108,6 +108,16 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check($png !== null && str_starts_with($png, "\x89PNG"), 'a snapshot of the frame on screen: a PNG');
     same([160, 90], $png === null ? null : array_values(unpack('N2', $png, 16)), 'of the film\'s size');
 
+    // Thumbnails: the keyframe at or before a time, decoded by a reader and a decoder of their own: what plays stays where it is.
+    foreach (['clip.mkv', 'clip.mp4', 'clip-hevc.mkv'] as $file) {
+        $p = new Player(__DIR__ . "/testdata/$file");
+        $p->seek(0.4);
+        $t = $p->thumbnail(1.5, 80);
+        check($t !== null && $t->time > 0.9 && $t->time < 1.1 && [$t->width, $t->height] === [80, 45] && strlen($t->rgba()) === 80 * 45 * 4, "$file: a thumbnail of the keyframe at 1 s, 80 by 45: " . ($t === null ? 'none' : "{$t->time} s, {$t->width} by {$t->height}"));
+        check($t !== null && trim($t->rgba(), "\0") !== '' && count(array_unique(str_split(substr($t->rgba(), 0, 4000), 4))) > 4, "$file: of the picture's pixels");
+        check(abs($p->time() - 0.4) < 0.01, "$file: the player where it was: {$p->time()}");
+    }
+
     // VP9 and AV1, in Matroska and MP4, where this Mac decodes them in hardware (VP9 on Apple silicon, AV1 from M3): the picture plays with the sound.
     foreach (['clip-vp9.mkv', 'clip-vp9.mp4', 'clip-vp9.webm', 'clip-av1.mkv', 'clip-av1.mp4'] as $file) {
         $p = new Player(__DIR__ . "/testdata/$file");

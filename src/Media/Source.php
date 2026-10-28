@@ -25,4 +25,7 @@ interface Source
 
     /** Goes back to where decoding $seconds starts, a keyframe of the video at or before it, where next() goes on. */
     public function seek(float $seconds): void;
+
+    /** The keyframe of the video a seek to $seconds goes to, read alone (a thumbnail's), null for none; next() goes on only after a seek(). */
+    public function keyframe(float $seconds): ?Packet;
 }

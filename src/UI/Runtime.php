@@ -344,6 +344,29 @@ final class Runtime
         return $this->clock !== null ? ($this->clock)() : hrtime(true);
     }
 
+    /** @var list<Closure(): void> what runs once the window presented its next frame, once (afterFrame) */
+    public array $afterFrame = [];
+
+    /**
+     * Runs $fn once the window has presented its next frame, in the same
+     * turn of the run loop: work of a few milliseconds that waits for no
+     * frame there (a video player's thumbnails), done where the next frame
+     * has the most time. A window that draws no frame (a test's) never
+     * runs it: give it a timer too.
+     */
+    public function afterFrame(Closure $fn): void
+    {
+        $this->afterFrame[] = $fn;
+    }
+
+    /** Runs what waited for the frame just presented. @internal Window */
+    public function framePresented(): void
+    {
+        $fns = $this->afterFrame;
+        $this->afterFrame = [];
+        foreach ($fns as $fn) { $fn(); }
+    }
+
     /** Asks for the next frame as soon as the display can show it, for what moves (mygo's AnimationFrame, Painter.AnimationFrame): while the frame is built (Context::animationFrame) or painted. */
     public function animationFrame(): void
     {
