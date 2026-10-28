@@ -27,7 +27,7 @@ use RuntimeException;
  */
 final class Player
 {
-    public const EVENTS = ['time', 'ended', 'error'];
+    public const EVENTS = ['time', 'ended', 'error', 'play', 'pause', 'rate', 'seek', 'track'];
     /** Seconds of packets the renderers are given ahead of the clock. */
     private const AHEAD = 2.0;
 
@@ -49,6 +49,13 @@ final class Player
     /** The end of the last packet given, and whether the source has no more. */
     private float $fedTo = 0.0;
     private bool $drained = false;
+    /** The time of a frame of the video read and how long the frames last (the track's, else its packets'): the frames' grid a step goes by. */
+    private ?float $frameAt = null;
+    private float $frameTime = 0.0;
+    /** The time of the last frame of the video read at or before where the last seek went, null before one: the frame it shows. */
+    private ?float $landed = null;
+    /** @var list<Packet> what a seek to a keyframe read past to find it, which the source's next packets come after */
+    private array $ahead = [];
     private bool $playing = false, $ended = false, $muted = false;
     private float $rate = 1.0, $volume = 1.0;
     /** @var array<string, list<Closure>> */
@@ -87,6 +94,7 @@ final class Player
         if ($this->video === null && $this->audio === null) {
             throw new RuntimeException("myphp: nothing in $path the system decodes");
         }
+        $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers();
         $this->awake = new Awake('Playing ' . basename($path));
         $this->loadSubtitleFiles($path);
@@ -134,7 +142,11 @@ final class Player
         if ($t !== null && !in_array($t, $this->subtitleTracks(), true)) {
             throw new RuntimeException("myphp: track {$t->number} is no subtitle track of the player");
         }
+        if ($t === $this->subtitle) {
+            return;
+        }
         $this->subtitle = $t;
+        $this->emit('track', 'subtitle');
     }
 
     /**
@@ -298,7 +310,8 @@ final class Player
             throw new RuntimeException("myphp: track {$t->number} ({$t->codec}) is no audio track the player plays");
         }
         $this->audio = $t;
-        $this->seek($this->time()); // from the keyframe before, its frames up to now decoded and not shown
+        $this->go($this->time(), true); // from the keyframe before, its frames up to now decoded and not shown
+        $this->emit('track', 'audio');
     }
 
     /** The reader of the file at $path: Matroska's in PHP for Matroska and WebM, AVFoundation's for the rest. */
@@ -388,7 +401,10 @@ final class Player
     public function play(): void
     {
         if ($this->ended) {
-            $this->seek(0);
+            $this->go(0.0, true);
+        }
+        if ($this->playing) {
+            return;
         }
         $this->playing = true;
         if ($this->keepAwake) { $this->awake->hold(); }
@@ -396,27 +412,109 @@ final class Player
         $this->feed();
         MediaTicker::add($this, $this->tick(...));
         $this->wakeForCue();
+        $this->emit('play');
     }
 
     public function pause(): void
     {
+        if (!$this->playing) {
+            return;
+        }
         $this->playing = false;
         $this->awake->release(); // paused, ended or failed: the display may sleep
         $this->out->setRate(0);
         MediaTicker::remove($this);
+        $this->emit('pause');
     }
 
-    /** Goes to $seconds: decoding starts at the keyframe before and shows from the time itself. */
-    public function seek(float $seconds): void
+    /**
+     * Goes to $seconds, and tells where it went (the seek event). Exact,
+     * decoding starts at the keyframe before and it shows from the time
+     * itself; else it goes to the keyframe nearest in the way it goes, as
+     * mpv's keyframe seeks (IINA's of the arrow keys): the first at or
+     * after a time ahead, the last at or before one behind (the one before
+     * when none comes after), which shows at once, nothing decoded unseen.
+     */
+    public function seek(float $seconds, bool $exact = true): void
+    {
+        $this->emit('seek', $this->go($seconds, $exact));
+    }
+
+    /**
+     * Pauses and goes $frames frames on (back when negative) from the one
+     * showing, as mpv's frame-step and frame-back-step: the frame nearest
+     * its place on the frames' grid (their duration, from the time of one),
+     * not before the first nor past the last, at its own time.
+     */
+    public function step(int $frames): void
+    {
+        if ($this->video === null || $this->frameAt === null || $this->frameTime <= 0) {
+            throw new RuntimeException("myphp: no frames to step by in {$this->path}");
+        }
+        $this->pause();
+        $d = $this->frameTime;
+        $last = (int)floor(($this->duration - $this->frameAt) / $d - 1e-6);
+        // The one showing: where it is, a quarter of a frame early let pass (a container's rounded times of frames land up to half a millisecond off the grid).
+        $k = max(0, min($last, (int)floor(($this->time() - $this->frameAt) / $d + 0.25) + $frames));
+        $this->go($this->frameAt + ($k + 0.5) * $d, true); // half a frame on: the nearest frame shows
+        if ($this->landed !== null) { $this->out->setRate(0.0, $this->landed); } // the clock at its time
+        $this->emit('seek', $this->time());
+    }
+
+    /**
+     * The frame showing, as a PNG of the film's pixels (its aspect, crop
+     * and rotation not applied, its subtitles not on it); null before one
+     * shows, and while it shows in no window (the system gives the frame
+     * of a layer on screen). From macOS 14.4.
+     */
+    public function snapshot(): ?string
+    {
+        return $this->out->snapshot();
+    }
+
+    /** Goes to $seconds as seek() does, telling nothing; returns where it went. */
+    private function go(float $seconds, bool $exact): float
     {
         $seconds = max(0.0, $this->duration > 0 ? min($seconds, $this->duration) : $seconds);
+        $forward = $seconds > $this->time();
         $this->source->seek($seconds);
+        $this->ahead = [];
+        if (!$exact && $this->video !== null) {
+            $seconds = $this->keyframe($seconds, $forward);
+        }
         $this->out->flush();
         $this->queued = ['video' => [], 'audio' => []]; $this->drained = false; $this->ended = false;
-        $this->target = $seconds; $this->fedTo = $seconds;
+        $this->target = $seconds; $this->fedTo = $seconds; $this->landed = null;
         $this->out->setRate($this->playing ? $this->rate : 0.0, $seconds);
         $this->feed($seconds);
         if ($this->playing) { $this->cueWake = null; $this->wakeForCue(); } // from where it went
+        return $seconds;
+    }
+
+    /**
+     * The time of the keyframe a keyframe seek to $seconds goes to, the
+     * source just gone to the one at or before it: that one's, or ahead
+     * ($forward) the first at or after $seconds, read up to; $seconds
+     * itself where there is none (ahead past the last, as mpv goes to the
+     * end). What was read from it on is $ahead, which the next packets come
+     * from; the video before it is left out, decoding starting at it.
+     */
+    private function keyframe(float $seconds, bool $forward): float
+    {
+        $read = []; $at = null;
+        while (($p = $this->source->next()) !== null) {
+            $read[] = $p;
+            if ($p->track === $this->video && $p->keyframe && (!$forward || $p->time >= $seconds - 1e-3)) {
+                $at = $p->time;
+                break;
+            }
+        }
+        if ($at === null) { // as an exact seek
+            $this->ahead = $read;
+            return $seconds;
+        }
+        $this->ahead = array_values(array_filter($read, fn(Packet $q) => $q->track !== $this->video || $q->time >= $at - 1e-6));
+        return max(0.0, $at);
     }
 
     /** Plays at $rate times the speed (0.5 to 2 sound best). */
@@ -425,11 +523,15 @@ final class Player
         if ($rate <= 0) {
             throw new RuntimeException('myphp: a rate is positive (pause() stops)');
         }
+        if ($rate == $this->rate) {
+            return;
+        }
         $this->rate = $rate;
         if ($this->playing) {
             $this->out->setRate($rate);
             $this->feed();
         }
+        $this->emit('rate', $rate);
     }
 
     public function rate(): float
@@ -522,7 +624,7 @@ final class Player
             return;
         }
         $this->out->audioDelay = $seconds;
-        $this->seek($this->time()); // the sound given again at its new times
+        $this->go($this->time(), true); // the sound given again at its new times
     }
 
     public function audioDelay(): float
@@ -542,7 +644,10 @@ final class Player
      * Calls $fn on $event, one of EVENTS: time, at each tick while it plays
      * (4 a second, and where the subtitles change); ended, when it played to the end;
      * error, with what failed, when the system cannot decode it (the player
-     * pauses). Returns a function that removes it.
+     * pauses); play and pause, when it starts and stops playing (at its
+     * end and on an error too); rate, with the new rate; seek, with where
+     * a seek went, once it is there; track, with 'audio' or 'subtitle', when
+     * that track changes. Returns a function that removes it.
      */
     public function on(string $event, Closure $fn): Closure
     {
@@ -609,13 +714,16 @@ final class Player
         $until = ($at ?? $this->out->time()) + self::AHEAD * max(1.0, $this->rate) + max(0.0, -$this->out->audioDelay); // two seconds of the clock's (faster than the film's at a rate over 1), and the sound an earlier delay plays now
         $last = fn(string $k): float => ($q = $this->queued[$k]) === [] ? -INF : $q[count($q) - 1]->time;
         while (!$this->drained && max($last('video'), $last('audio')) <= $until) {
-            $p = $this->source->next();
+            $p = $this->ahead !== [] ? array_shift($this->ahead) : $this->source->next();
             if ($p === null) {
                 $this->drained = true;
                 break;
             }
             if ($p->track === $this->video) {
                 $this->queued['video'][] = $p;
+                $this->frameAt ??= $p->time;
+                if ($this->frameTime <= 0 && $p->duration > 0) { $this->frameTime = $p->duration; } // a container's are rounded (Matroska's to its milliseconds): the track's, when it says
+                if ($p->time <= $this->target + 1e-9 && ($this->landed === null || $p->time > $this->landed)) { $this->landed = $p->time; }
             } elseif ($p->track === $this->audio && $p->time + $p->duration + $this->out->audioDelay > $this->target) { // the audio from where the seek went, as it plays delayed
                 $this->queued['audio'][] = $p;
             } elseif (Subtitles::readable($p->track)) { // every subtitle track's, for one shown later

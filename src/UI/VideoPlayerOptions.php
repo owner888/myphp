@@ -8,7 +8,8 @@ namespace MyPHP\UI;
  * bar: the title bar over the picture (for a window of a hidden title
  * bar), the messages at the top left, the sidebar of quick settings,
  * IINA's default keys (off, the app binds its own), going on from where
- * a film was left, and keeping the display awake while a film plays.
+ * a film was left, keeping the display awake while a film plays, and
+ * the system's Now Playing and media keys.
  */
 final class VideoPlayerOptions
 {
@@ -21,5 +22,7 @@ final class VideoPlayerOptions
         public readonly bool $resume = true,
         /** Keeps the display awake, its screen saver off, while a film plays (Player::setKeepAwake), as IINA does by default. */
         public readonly bool $keepAwake = true,
+        /** Shows the film in the system's Now Playing and takes its commands, the media keys' too, as IINA's "Use system media control", on by default. */
+        public readonly bool $nowPlaying = true,
     ) {}
 }

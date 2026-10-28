@@ -3968,6 +3968,59 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   or stopped. Asked while building it is kept as the frame's own
   (animating, as an opened sheet's), else needsFrame as before.
 
+## The player's events, keyframe seeks, Now Playing, frame steps, screenshots (v1.46)
+
+- **Events as it changes** (`Player::EVENTS`): play and pause (its end
+  and an error pause it too), rate, seek (with where it went) and track
+  ('audio', 'subtitle'), each once, when it changes: play() playing and
+  setRate() at the rate tell nothing. A seek inside the player (a track
+  of sound changed, a delay set, play() after the end) goes by go(),
+  which tells nothing.
+- **Keyframe seeks** (`seek($s, exact: false)`), as mpv's (IINA's arrow
+  keys, buttons and wheel, `VideoPlayerState::seekBy`): the source goes
+  to the keyframe at or before the time as ever; behind, that one; ahead,
+  the packets are read on to the first keyframe at or after it, kept
+  (`$ahead`, which the next packets come from) but for the video before
+  it, so it shows at once and nothing is decoded unseen. None ahead (past
+  the last): to the time itself, as mpv goes to the end. Exact stays the
+  default, the bar's (IINA's slider seeks exactly).
+- **Now Playing** (`Native\NowPlaying`, `VideoPlayerOptions::$nowPlaying`):
+  IINA's NowPlayingInfoManager and RemoteCommandController. One for the
+  process: the state that showed it last takes the commands (play,
+  pause, the two, stop, next, previous, 15 s either way exactly, the
+  loop, the rates 0.5 to 2, a place), its handlers static closures given
+  it, held weakly, so that a state let go ends it (its destructor). It is
+  shown again at each play, pause, rate, seek and chapter, the rate 0
+  while paused (else Now Playing's bar runs on); a film opened paused is
+  set playing then paused, as IINA does, else Now Playing drops it for
+  Music's. Nothing playing after the last film, it ends: the system's own
+  takes it back (IINA's issue 4331).
+- **Frame steps** (`Player::step`, IINA's `.` `,` and Option+arrows):
+  by the frames' grid, the track's frame duration from the time of the
+  first frame read; to half a frame past the grid's place, exactly, so
+  that the nearest frame shows, and the clock set back to that frame's
+  own time (the last read at or before where it went, `$landed`).
+  **Trap: rounded times.** Matroska's frames are at whole milliseconds
+  (0.042, 0.083 of 1/24 s) and its block durations rounded too (0.041,
+  which drifts a frame in a second): the grid is the track's duration,
+  the packets' only when it has none, and the frame showing is found a
+  quarter of a frame early let pass, else 0.083 reads as the frame
+  before 0.0833 and a step stands still.
+- **Snapshots** (`Player::snapshot`, `VideoPlayerState::screenshot`, ⌘S):
+  the display layer's video renderer gives the pixel buffer it shows
+  (`copyDisplayedPixelBuffer`, macOS 14.4), made a PNG by CoreImage and
+  NSBitmapImageRep; no decoder of our own. Only of a layer on screen:
+  one in no window (a test's player alone) gives none, null. The film's pixels: no
+  subtitles on it, unlike mpv's screenshots of IINA's default. Saved as
+  IINA's are, ~/Pictures/Screenshots/movie-0001.png, the first number
+  not taken.
+- **Trap: a message given the wrong arguments.** `ObjC::msg('v:p', $w,
+  'orderFrontRegardless')` passes `php -l` and every test off macOS; the
+  FFI of macOS throws only when the line runs. `tests/objc_sig_test.php`
+  reads each message of a literal signature and selector, everywhere, and
+  fails where the signature's arguments, the selector's colons and the
+  arguments given differ, or a letter is none ObjC maps.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

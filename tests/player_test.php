@@ -43,6 +43,12 @@ if (PHP_OS_FAMILY === 'Darwin') {
         check(abs($p->time() - $at) < 0.01, "$file: and holds while paused: {$p->time()} after $at");
         $p->seek(1.4);
         check(abs($p->time() - 1.4) < 0.01, "$file: a seek goes to the time itself, not the keyframe before: {$p->time()}");
+        $first = $file === 'clip.mp4' ? 0.083 : 0.0; // the keyframes: at 0 and 1 s from the first frame's time (AVFoundation's, of the MP4's composition offsets)
+        $p->seek(0.6, false);
+        check(abs($p->time() - $first) < 0.03, "$file: a keyframe seek back goes to the keyframe at or before: {$p->time()}");
+        $p->seek(0.3, false);
+        check(abs($p->time() - ($first + 1.0)) < 0.03, "$file: and one ahead to the first at or after: {$p->time()}");
+        $p->seek(1.4);
         $ended = 0;
         $p->on('ended', function () use (&$ended) { $ended++; });
         $p->play();
@@ -59,6 +65,48 @@ if (PHP_OS_FAMILY === 'Darwin') {
         try { $p->setRate(0); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
         check($err !== null, 'a rate of 0 throws: pause() stops');
     }
+
+    // What it tells as it changes: play and pause, the rate, where a seek went, a track; each once, when it changes.
+    $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');
+    $told = [];
+    foreach (['play', 'pause', 'rate', 'seek', 'track'] as $e) {
+        $p->on($e, function (mixed ...$a) use (&$told, $e) { $told[] = implode(' ', [$e, ...array_map(fn($v) => is_float($v) ? sprintf('%.1f', $v) : $v, $a)]); });
+    }
+    $p->play(); $p->play();
+    $p->setRate(1.5); $p->setRate(1.5);
+    $p->pause(); $p->pause();
+    $p->seek(0.5);
+    $p->seek(0.4, false); // back to the keyframe at 0
+    $p->setSubtitleTrack($p->subtitleTracks()[0]); $p->setSubtitleTrack($p->subtitleTracks()[0]);
+    $p->setSubtitleTrack(null);
+    same(['play', 'rate 1.5', 'pause', 'seek 0.5', 'seek 0.0', 'track subtitle', 'track subtitle'], $told, 'the player tells each change once');
+    $told = [];
+    $p->play();
+    $run(2.5);
+    same(['play', 'pause'], $told, 'it tells the pause at the end too');
+
+    // Frame steps (24 a second, the frames' times Matroska's milliseconds), pausing; the last at 1.958 s. A snapshot of the frame showing, as a PNG.
+    $p = new Player(__DIR__ . '/testdata/clip.mkv');
+    $p->seek(1.0);
+    $steps = [];
+    foreach ([1, -2, -1000, 1000, -1] as $n) { $p->step($n); $steps[] = round($p->time(), 3); }
+    same([1.042, 0.958, 0.0, 1.958, 1.917], $steps, 'steps: on, back two, to the first, to the last, back one, each at its frame\'s time');
+    $p->play(); $run(0.1); $p->step(1);
+    check(!$p->playing(), 'a step pauses');
+    check($p->snapshot() === null, 'no snapshot of a layer nothing shows: the system gives the frame of one on screen');
+    // On screen: its layer in a window of its own, as the app's window has it.
+    $win = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', ObjC::rect(0, 0, 160, 90), 0, 2, false); // borderless, buffered
+    $content = ObjC::msg('p:', $win, 'contentView');
+    ObjC::msg('v:b', $content, 'setWantsLayer:', true);
+    ObjC::msg('v:r', $p->out->layer, 'setFrame:', ObjC::rect(0, 0, 160, 90));
+    ObjC::msg('v:p', ObjC::msg('p:', $content, 'layer'), 'addSublayer:', $p->out->layer);
+    ObjC::msg('v:', $win, 'orderFrontRegardless');
+    $p->seek(0.5); $run(0.3);
+    $png = $p->snapshot();
+    ObjC::msg('v:', $p->out->layer, 'removeFromSuperlayer');
+    ObjC::msg('v:', $win, 'close');
+    check($png !== null && str_starts_with($png, "\x89PNG"), 'a snapshot of the frame on screen: a PNG');
+    same([160, 90], $png === null ? null : array_values(unpack('N2', $png, 16)), 'of the film\'s size');
 
     // VP9 and AV1, in Matroska and MP4, where this Mac decodes them in hardware (VP9 on Apple silicon, AV1 from M3): the picture plays with the sound.
     foreach (['clip-vp9.mkv', 'clip-vp9.mp4', 'clip-vp9.webm', 'clip-av1.mkv', 'clip-av1.mp4'] as $file) {

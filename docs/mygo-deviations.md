@@ -1697,6 +1697,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `sortByPath` are myphp's, as IINA's, and `Player::awake`,
   `setKeepAwake` and `VideoPlayerOptions::$keepAwake` (the display kept
   awake while it plays, as IINA's); mygo has no video.
+- **The player's events, keyframe seeks, Now Playing** (v1.46): the
+  events play, pause, rate, seek and track of `Player::on`, the `$exact`
+  of `Player::seek` and `VideoPlayerState::seekBy`, and
+  `VideoPlayerOptions::$nowPlaying` are myphp's, as AVPlayer's and IINA's,
+  and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
+  `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
+  mygo has no video.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.

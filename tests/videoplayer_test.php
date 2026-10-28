@@ -121,6 +121,11 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(abs($p->volume() - 0.95) < 1e-9, 'Down lowers it by 5');
     $h->key(Key::RIGHT, 'moveRight:'); $h->frame();
     check(abs($p->time() - 5.0) < 0.01 || abs($p->time() - $p->duration()) < 0.01, 'Right goes 5 s on: ' . $p->time());
+    $p->seek(1.0);
+    $h->key(Key::PERIOD, 'insertText:', 0, '.'); $h->frame();
+    $on = round($p->time(), 3);
+    $h->key(Key::LEFT, 'moveLeft:', Key::OPTION); $h->frame();
+    same([1.042, 1.0], [$on, round($p->time(), 3)], '. steps a frame on, Option+Left one back');
     $h->key(Key::SPACE, 'insertText:', 0, ' '); $h->frame();
     check($p->playing(), 'Space plays');
     $p->pause();
@@ -259,6 +264,28 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h3->click($mx, $my); $h3->click($mx, $my, 0, 2); $h3->frame();
     check(abs($s3->player->time() - 1.5) < 0.1 && $s3->player->playing() && $s3->player->chapter() === 2, 'a double click goes to a chapter and plays: ' . $s3->player->time());
     $s3->player->pause();
+    // The system's Now Playing (VideoPlayerOptions::$nowPlaying): the film, its chapter and rate (0 while paused) as it changes; ended without it.
+    $nowPlaying = function (): array {
+        $center = ObjC::msg('p:', ObjC::cls('MPNowPlayingInfoCenter'), 'defaultCenter');
+        $info = ObjC::msg('p:', $center, 'nowPlayingInfo');
+        $out = ['state' => ObjC::msg('L:', $center, 'playbackState')];
+        if ($info === null) { return $out; }
+        $keys = ObjC::msg('p:', $info, 'allKeys');
+        for ($i = 0, $n = ObjC::msg('L:', $keys, 'count'); $i < $n; $i++) {
+            $k = ObjC::msg('p:L', $keys, 'objectAtIndex:', $i);
+            $out[ObjC::phpStr($k)] = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:p', $info, 'objectForKey:', $k), 'description'));
+        }
+        return $out;
+    };
+    $np = $nowPlaying();
+    same(['clip-chapters', '3', '2', '0', 2], [$np['title'] ?? null, $np['MPNowPlayingInfoPropertyChapterCount'] ?? null, $np['MPNowPlayingInfoPropertyChapterNumber'] ?? null, $np['MPNowPlayingInfoPropertyPlaybackRate'] ?? null, $np['state']], 'Now Playing: the film, its chapters, paused');
+    $s3->player->play();
+    $np = $nowPlaying();
+    same(['1', 1], [$np['MPNowPlayingInfoPropertyPlaybackRate'] ?? null, $np['state']], 'and playing, told by the player');
+    $s3->player->pause();
+    $off3 = new Headless(fn(Context $c) => $c->videoPlayer($s3, new VideoPlayerOptions(nowPlaying: false)), 960, 540);
+    $off3->frame();
+    same(['state' => 3], $nowPlaying(), 'without it: nothing in Now Playing, stopped');
     @unlink($scratch);
     $s3->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv')); // the folder's films let go before it goes
     foreach (glob("$films/*") ?: [] as $f) { unlink($f); }

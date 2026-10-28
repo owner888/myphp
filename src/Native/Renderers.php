@@ -5,6 +5,7 @@ namespace MyPHP\Native;
 
 use FFI\CData;
 use MyPHP\Media\{Packet, Track};
+use RuntimeException;
 
 /**
  * What decodes and plays a Player's packets, all of it the system's on
@@ -81,6 +82,33 @@ final class Renderers
         }
         ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
         CoreMedia::c()->CFRelease($sb);
+    }
+
+    /**
+     * The frame the display layer shows, as a PNG of the film's pixels;
+     * null before one shows. Its video renderer's displayed pixel buffer
+     * (macOS 14.4), through CoreImage and AppKit's bitmap.
+     */
+    public function snapshot(): ?string
+    {
+        $renderer = ObjC::msg('p:', $this->layer, 'sampleBufferRenderer');
+        if (!ObjC::msg('b:p', $renderer, 'respondsToSelector:', ObjC::sel('copyDisplayedPixelBuffer'))) {
+            throw new RuntimeException('myphp: a snapshot of a film needs macOS 14.4');
+        }
+        $pixels = ObjC::msg('p:', $renderer, 'copyDisplayedPixelBuffer');
+        if ($pixels === null) {
+            return null;
+        }
+        ObjC::boot(['CoreImage']);
+        $pool = ObjC::msg('p:', ObjC::alloc('NSAutoreleasePool'), 'init');
+        $image = ObjC::msg('p:p', ObjC::cls('CIImage'), 'imageWithCVPixelBuffer:', $pixels);
+        $rep = ObjC::msg('p:', ObjC::msg('p:p', ObjC::alloc('NSBitmapImageRep'), 'initWithCIImage:', $image), 'autorelease');
+        $png = ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary')); // NSBitmapImageFileTypePNG
+        $n = ObjC::msg('L:', $png, 'length');
+        $bytes = \FFI::string(ObjC::$c->cast('char*', ObjC::msg('p:', $png, 'bytes')), $n);
+        ObjC::msg('v:', $pool, 'drain');
+        CoreMedia::c()->CFRelease($pixels); // a copy, the caller's
+        return $bytes;
     }
 
     /** Drops what the renderers hold, for a seek or another audio track. */

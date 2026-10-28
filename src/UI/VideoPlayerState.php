@@ -8,6 +8,7 @@ use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
 use MyPHP\Media\Track;
+use MyPHP\Native\NowPlaying;
 use MyPHP\Native\PictureInPicture;
 use RuntimeException;
 
@@ -53,8 +54,10 @@ final class VideoPlayerState
     /** @internal */
     public string $drawn = '';
     private ?\WeakReference $runtime = null;
-    /** Whether the player built last goes on from where it was left (VideoPlayerOptions::$resume). */
-    private bool $resume = false;
+    /** Whether the player built last goes on from where it was left (VideoPlayerOptions::$resume), and shows in Now Playing ($nowPlaying). */
+    private bool $resume = false, $nowPlaying = false;
+    /** The chapter Now Playing shows, to show the next as it comes. */
+    private int $shownChapter = -1;
     /** @var list<Closure> the player's listeners, removed for another player */
     private array $off = [];
 
@@ -78,6 +81,8 @@ final class VideoPlayerState
     public string $playlistTab = 'playlist';
     /** @internal whether the player taken last has not been built with yet: where it was left is gone back to then */
     private bool $fresh = false;
+    /** Where screenshots go (IINA's default), unless set. */
+    public string $screenshots = '~/Pictures/Screenshots';
     /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
     public bool $pictureInPicture = false;
     /** The picture in picture of the player, where this Mac has it. */
@@ -172,14 +177,17 @@ final class VideoPlayerState
                 $look = $this->look();
                 if ($look !== $this->drawn) { $this->drawn = $look; $this->changed(); }
                 if ($this->resume && abs($this->player->time() - $noted) >= self::NOTE_EVERY) { $noted = $this->player->time(); $this->note(); }
+                if ($this->nowPlaying && $this->player->chapter() !== $this->shownChapter) { $this->showNowPlaying(); }
             }),
+            ...array_map(fn(string $e) => $p->on($e, function (): void { if ($this->nowPlaying) { $this->showNowPlaying(); } }), ['play', 'pause', 'rate', 'seek']),
             $p->on('ended', function () {
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
                 if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
-                if (!$this->next()) { $this->changed(); } // the next film plays
+                if (!$this->next()) { NowPlaying::end($this); $this->changed(); } // the next film plays, else nothing does
             }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
         ];
+        if ($this->nowPlaying) { $this->showNowPlaying(); }
         $this->changed();
     }
 
@@ -196,6 +204,10 @@ final class VideoPlayerState
         $this->resume = $resume = $o->resume;
         $p = $this->player;
         $p?->setKeepAwake($o->keepAwake);
+        if ($o->nowPlaying !== $this->nowPlaying) {
+            $this->nowPlaying = $o->nowPlaying;
+            $o->nowPlaying ? $this->showNowPlaying() : NowPlaying::end($this);
+        }
         if (!$this->fresh || $p === null) {
             return;
         }
@@ -235,6 +247,38 @@ final class VideoPlayerState
         return $clock . "\0" . $chapter . "\0" . implode("\n", $this->subtitlesVisible ? $p->subtitles() : []) . "\0" . $pictures;
     }
 
+    /**
+     * Shows the player's film in the system's Now Playing, taking its
+     * commands as IINA does: play, pause and the two, stop, the next and
+     * the film before, 15 s on and back (to the time itself), the loop, a
+     * rate, a place in the film.
+     */
+    private function showNowPlaying(): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        $this->shownChapter = $p->chapter();
+        $l = $this->playlist;
+        NowPlaying::show($this, [ // of the state given, not this one held
+            'play' => static function (self $s): void { if (!$s->player?->playing()) { $s->togglePause(); } },
+            'pause' => static function (self $s): void { if ($s->player?->playing()) { $s->togglePause(); } },
+            'toggle' => static fn(self $s) => $s->togglePause(),
+            'stop' => static fn(self $s) => $s->stop(),
+            'next' => static fn(self $s) => $s->next(),
+            'previous' => static fn(self $s) => $s->previous(),
+            'skipForward' => static fn(self $s, float $by) => $s->seekBy($by, true),
+            'skipBackward' => static fn(self $s, float $by) => $s->seekBy(-$by, true),
+            'loop' => static fn(self $s) => $s->nextLoop(),
+            'rate' => static fn(self $s, float $rate) => $s->setSpeed($rate),
+            'position' => static function (self $s, float $at): void { $s->player?->seek($at); $s->played(); $s->changed(); },
+        ], $p->path(), $p->duration(), $p->time(), $p->rate(), !$p->playing(), $l?->index() ?? -1, $l?->count() ?? 0, $this->shownChapter, count($p->chapters()));
+    }
+
+    public function __destruct()
+    {
+        NowPlaying::end($this);
+    }
+
     /** Asks the window for a frame. */
     private function changed(): void
     {
@@ -272,13 +316,45 @@ final class VideoPlayerState
         $this->say($this->t('videoStop'));
     }
 
-    public function seekBy(float $s): void
+    /** Goes $s seconds on (back when negative): to the keyframe nearest that way, as IINA's arrow keys, buttons and wheel; $exact to the time itself. */
+    public function seekBy(float $s, bool $exact = false): void
     {
         $p = $this->player;
         if ($p === null) { return; }
-        $p->seek($p->time() + $s);
+        $p->seek($p->time() + $s, $exact);
         $this->played();
         $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()));
+    }
+
+    /** Pauses and shows the next frame, or the one before ($back), as IINA's frame-step and frame-back-step. */
+    public function frameStep(bool $back = false): void
+    {
+        $this->player?->step($back ? -1 : 1);
+        $this->played();
+    }
+
+    /**
+     * Saves the frame showing (Player::snapshot) in $screenshots, made if
+     * it is not there, named as IINA's (mpv's %F-%n): the film's name and
+     * the first number of four digits not taken, movie-0001.png; tells it.
+     * Returns the file's path, null before a frame shows.
+     */
+    public function screenshot(): ?string
+    {
+        $p = $this->player;
+        $png = $p?->snapshot();
+        if ($png === null) { return null; }
+        $dir = str_starts_with($this->screenshots, '~/') ? getenv('HOME') . substr($this->screenshots, 1) : $this->screenshots;
+        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+            throw new RuntimeException("myphp: no folder $dir for screenshots");
+        }
+        $name = pathinfo($p->path(), PATHINFO_FILENAME);
+        for ($n = 1; file_exists($path = sprintf('%s/%s-%04d.png', $dir, $name, $n)); $n++) {}
+        if (file_put_contents($path, $png) === false) {
+            throw new RuntimeException("myphp: the screenshot could not be written to $path");
+        }
+        $this->say($this->t('videoScreenshot'));
+        return $path;
     }
 
     /** Goes to the start of the $i-th chapter of the player's and plays, as IINA's playChapter. */

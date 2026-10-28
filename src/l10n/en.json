@@ -869,6 +869,10 @@
   "@videoStop": {
     "description": "The video player's message as it stops and goes back to the start."
   },
+  "videoScreenshot": "Screenshot Captured",
+  "@videoScreenshot": {
+    "description": "The video player's message as it saves a screenshot of the frame showing."
+  },
   "videoVolume": "Volume: {volume}",
   "@videoVolume": {
     "description": "The video player's message of the volume, 0 to 100."

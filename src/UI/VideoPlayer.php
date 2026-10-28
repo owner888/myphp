@@ -161,6 +161,9 @@ final class VideoPlayer
         if ($c->shortcut(Key::SPACE) || $c->shortcut('p')) { $s->togglePause(); }
         if ($c->shortcut(Key::RIGHT)) { $s->seekBy(5); }
         if ($c->shortcut(Key::LEFT)) { $s->seekBy(-5); }
+        if ($c->shortcut(Key::RIGHT, $alt) || $c->shortcut('.')) { $s->frameStep(); }
+        if ($c->shortcut(Key::LEFT, $alt) || $c->shortcut(',')) { $s->frameStep(true); }
+        if ($c->shortcut('s', $cmd)) { $s->screenshot(); }
         if ($c->shortcut(Key::PAGE_UP, $shift)) { $s->seekBy(600); }
         if ($c->shortcut(Key::PAGE_DOWN, $shift)) { $s->seekBy(-600); }
         if ($c->shortcut(Key::UP)) { $s->setVolume($s->volume + 0.05); }

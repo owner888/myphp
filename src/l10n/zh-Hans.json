@@ -182,6 +182,7 @@
   "videoResume": "继续",
   "videoPause": "暂停",
   "videoStop": "停止",
+  "videoScreenshot": "已截图",
   "videoVolume": "音量：{volume}",
   "videoMute": "静音",
   "videoUnmute": "取消静音",
