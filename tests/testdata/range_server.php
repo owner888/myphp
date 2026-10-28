@@ -5,7 +5,8 @@
 // bytes a second; ?cut=N breaks the connection after N bytes of each
 // response; ?fail answers 404.
 $root = (string)getenv('MYPHP_FILES');
-$path = $root . '/' . rawurldecode(basename((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH)));
+$name = rawurldecode(ltrim((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/'));
+$path = $root . '/' . (str_contains("/$name/", '/../') ? '' : $name); // the folder's files, those of its folders too
 parse_str((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY), $q);
 if (isset($q['fail']) || !is_file($path)) {
     http_response_code(404);

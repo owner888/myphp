@@ -716,6 +716,7 @@ final class App
     public static function later(Closure $fn): void
     {
         if (self::$laterTarget === null) {
+            ObjC::boot(['Foundation']); // before App::run too: a transfer's timer (Native\CurlLoop), a test's
             ObjC::defineClass('MyPHPLater', 'NSObject', [
                 'tick:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                     $queue = self::$later;

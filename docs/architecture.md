@@ -4180,6 +4180,129 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   last) reads its end before it plays: the cache's transfer goes there
   and back. A film smaller than a block waits for all of it.
 
+## MP4 over HTTP (v1.50)
+- **An MP4 or MOV over HTTP is read in PHP** (`Media\Mp4`), as FFmpeg's
+  mov demuxer and so mpv and IINA read it: AVFoundation's reader takes
+  only a file, and AVPlayer's own loading has neither mpv's cache nor its
+  pause for it. `Player` tells the two kinds of film apart by their first
+  bytes (EBML's magic, or the type of an ISO box: ftyp, moov, mdat, free,
+  skip, wide, pnot); a local MP4 is AVFoundation's still.
+- **The movie box is where it is**: at the start (a "fast start" film) or
+  after the samples (most cameras and muxers); the top-level boxes are
+  walked by their sizes, so a film whose moov is last reads its end
+  before it plays, as a Matroska film whose cues are last does.
+- **The sample table is packed**: the samples' offsets, sizes, times and
+  durations are each one packed string (`P`, `V`, `q`, `V`), built in one
+  pass over stsz, stco/co64, stsc, stts and ctts, and the order the
+  samples are stored in (all tracks, by offset) another: an hour of film,
+  241,441 samples, opens in 0.36 s at an 18.5 MB peak, where a PHP array
+  of a sample each took ten times that.
+- **Codecs as Matroska names them**: the sample entry's four characters
+  map to Matroska's codec ids and its configuration box to what
+  CodecPrivate holds (avcC, hvcC, av1C, vpcC whole; esds's
+  AudioSpecificConfig, its object types 0x69 and 0x6B MP3; dOps rebuilt
+  as an OpusHead; dfLa as `fLaC` and its blocks; tx3g as `S_TEXT/TX3G`),
+  so the decoders and the subtitle reader take them as they take
+  Matroska's.
+- **The edit list shifts the times** (its first entry's media time, as
+  FFmpeg applies it): AAC's priming, a B-frame film's composition delay;
+  an empty first entry delays the track.
+- **Chapters**: a QuickTime chapter track (`tref/chap`, its text samples
+  the titles) or Nero's `chpl` in udta, as FFmpeg reads them.
+- **Trap: App::later before the runtime.** `App::later` and `after`
+  defined their target class through ObjC as if `App::run` had booted
+  it; a transfer started before it (`tests/http_bytes_test.php` run
+  alone, a tool with no window) called them from curl's timer callback:
+  "must not be accessed before initialization", fatal from an FFI
+  callback. `App::later` boots Foundation itself, as the natives do.
+- Checked packet for packet against ffprobe (time, size, keyframe) on the
+  test films and an hour-long one; `clip-subs.mp4` has an empty tx3g
+  sample ffprobe drops, which shows nothing.
+
+## MPEG-TS and HLS (v1.51)
+- **HLS is read in PHP** (`Media\Hls`, `HlsStream`), as FFmpeg's hls
+  demuxer and so mpv and IINA read it; AVPlayer plays HLS but with no
+  cache of mpv's, no pause for it and none of the player's own pipeline
+  (subtitles, steps, the A-B loop), so the segments go through the
+  demuxers the rest does: MPEG-TS (`Media\Ts`), fragmented MP4
+  (`Media\Fragment`, of the init segment's `Mp4`) or packed audio
+  (`Media\PackedAudio`: ADTS, AC-3, E-AC-3 or MP3 frames after an ID3
+  tag whose PRIV frame com.apple.streaming.transportStreamTimestamp is
+  the first's PTS; Apple's examples' AC-3 renditions), told apart by a
+  segment's first bytes as FFmpeg probes them. `Player` takes a URL
+  whose path ends .m3u8 or .m3u (or whose first bytes are #EXTM3U) as HLS.
+- **The variant of the highest bandwidth** (mpv's hls-bitrate=max); its
+  audio group's renditions with playlists of their own are audio tracks
+  (EXT-X-MEDIA's LANGUAGE, NAME, DEFAULT), each probed at the start as
+  FFmpeg probes them, only the one played downloaded: `Source::choose`,
+  which `Player` calls as it opens and as the audio track changes (a
+  file's sources read all their tracks anyway).
+- **Segments download one after the other, ahead**: each stream's next
+  starts once the one before is done, while what the streams hold ahead
+  of where they read is under 90% of IINA's 150 MiB (mpv's demuxer cache);
+  `Media\Download` keeps a segment in native memory as `HttpBytes` keeps a
+  film, read as it comes (a segment plays as its first bytes come),
+  AES-128 decrypted as it comes (CommonCrypto, libcrypto off macOS, by
+  FFI: `Native\Aes`), its last block kept back for PKCS#7's padding.
+  The IV is the tag's, else the segment's sequence number (RFC 8216).
+- **The times are lined up on the playlist's**: each stream's own (a
+  TS's PTS, an fMP4's tfdt) less what the earliest frame of the first
+  segment read was ahead of the segment's start, for each discontinuity
+  sequence (the streams of one share their clock, RFC 8216 3), so that a
+  film starts at 0 as FFmpeg's start_time has it. A discontinuity met as
+  it plays goes on from where the frames given end: the segments before
+  are often longer than their EXTINF (a test's, 31 ms), and from the
+  playlist's start the next frames would come before the last.
+- **Live**: a playlist of no EXT-X-ENDLIST is read again every target
+  duration, half of it when nothing was added (FFmpeg's); it starts 3
+  segments from its end (live_start_index -3) at 0, has no duration, and
+  a seek goes no further back than where it started.
+- **Trap: a segment's frames are not in the order of their times.** A
+  video frame of a TS is held until the next one's decode time says its
+  duration, and B-frames come in decode order: within a stream the times
+  go back and forth, and `Hls::next` orders only between the streams
+  (the earliest next frame of each), which is all the renderers need.
+- **MPEG-TS in PHP** (`Media\Ts`), a file's too (.ts, .m2ts, .mts,
+  which AVFoundation does not read): PAT and PMT (one packet each, as
+  muxers write them), PES packets gathered by PID, H.264's and HEVC's
+  Annex B made lengths, their SPS, PPS (and VPS) an avcC or hvcC record,
+  the size from the SPS (`Media\Elementary`); AAC's ADTS frames a packet
+  each, their AudioSpecificConfig of the header; AC-3, E-AC-3 and MP3 a
+  frame a packet. A file seeks by a binary search of its PES times, back
+  to a random access point (or an IDR), as FFmpeg's generic seek does;
+  its duration is its last PTS less its first. Checked packet for packet
+  against ffprobe (time, duration, keyframe) on H.264, HEVC, AAC, AC-3,
+  E-AC-3 and MP3 streams and the HLS fixtures.
+- **Trap: a rendition's URI is the master playlist's.** Resolved from the
+  variant's playlist (it was the Download at hand), Apple's examples'
+  a1/prog_index.m3u8 became v9/a1/prog_index.m3u8, beside the variant in
+  its folder: HTTP 401. The master's renditions are made absolute as it
+  is read; the test server serves folders now, as one did not see it.
+- **Trap: a PES is no frame.** A video PES was taken as an access unit,
+  as FFmpeg's muxer writes them; Apple's segmenter splits a frame of
+  1080p over several, the rest of no PTS, and those were dropped (a
+  frame cut short) or, of no start code, made empty frames, which
+  CoreMedia's CMBlockBufferCreateWithMemoryBlock refuses. The stream's
+  bytes are made NAL units and access units by where a picture starts
+  (AUD, SPS, PPS, SEI, a picture's first slice) as FFmpeg's h264 and hevc
+  parsers do, each timed by the first PES that started in it (a PES's
+  4-byte start code's zero counted as its start); one of none goes on
+  from the frame before by a frame (wrong for B-frames, as two frames in
+  a PES are rare). `tests/ts_test.php` splits and joins clip.ts's PES.
+- **The first segments are probed only as far as a frame of each track**
+  (a 1080p segment is megabytes); all the streams' first segments start
+  downloading before any is probed, and the renditions' playlists with
+  the variant's.
+- **Trap: an arrow function holds what it captured as it was.** The
+  probe's "a frame of each track yet?" was an fn() over $first, which it
+  had captured empty: it never held, and the probe read the whole first
+  segment (Apple's example: 5.35 s of its 9 s to open, 6 MB). The test
+  sends a segment at 8 kB/s and wants it open in under 2 s.
+- **Trap: nothing thrown from a transfer's end.** A segment's Download is
+  driven by the run loop as HttpBytes is; its end (its finished callback)
+  starts the next from the loop's callback, where nothing may throw: what
+  fails there is kept and thrown by the next read (`HlsStream::peek`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

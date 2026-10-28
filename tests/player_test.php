@@ -251,11 +251,23 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p = new Player(__DIR__ . '/testdata/clip-chapters.mkv');
     same(3, count($p->chapters()), "a Matroska file's, through the player");
 
+    // MPEG-TS (Media\Ts): a .ts played, a seek to its keyframe before.
+    $p = new Player(__DIR__ . '/testdata/clip.ts');
+    check(abs($p->duration() - 2.02) < 0.05 && $p->size() === [160, 90] && $p->audioTrack()?->codec === 'A_AAC', 'an MPEG-TS file: its duration, size and sound');
+    $p->play(); $run(0.6); $p->pause();
+    check($p->time() > 0.3, "it plays: {$p->time()}");
+    $p->seek(1.9);
+    $p->seek(1.4, false); // back: to the keyframe before
+    check(abs($p->time() - 1.023) < 0.01, "a keyframe seek: {$p->time()}");
+
     // A film over HTTP (testdata/range_server.php): read as it comes, played; sent slowly, the clock waits for it (the buffering event, how much came), then goes on.
     $dir = sys_get_temp_dir() . '/myphp-player-http-' . getmypid();
     @mkdir($dir);
     copy(__DIR__ . '/testdata/clip.mkv', "$dir/clip.mkv");
     copy(__DIR__ . '/testdata/clip-cues-front.mkv', "$dir/front.mkv"); // its cues before its clusters: it plays as its first bytes come
+    copy(__DIR__ . '/testdata/clip.mp4', "$dir/clip.mp4");
+    copy(__DIR__ . '/testdata/clip-chapters.mp4', "$dir/chapters.mp4"); // its movie box after its samples
+    foreach (glob(__DIR__ . '/testdata/hls/*') ?: [] as $f) { copy($f, "$dir/" . basename($f)); }
     [$base, $stop] = rangeServer($dir);
     try {
         $p = new Player("$base/clip.mkv");
@@ -272,11 +284,34 @@ if (PHP_OS_FAMILY === 'Darwin') {
         check(count($told) >= 2 && $told[0] === true && end($told) === false, 'the clock waited for the network, and went on: ' . json_encode($told));
         check($percents !== [] && max($percents) <= 100 && $p->cacheBytes() > 0, 'how much came, as it waited: up to ' . ($percents === [] ? '-' : max($percents)) . ' %, ' . $p->cacheBytes() . ' bytes cached');
         same(null, $p->bufferingPercent(), 'none once it played on');
+        // MP4 over HTTP (Media\Mp4): played, its movie box where it is, its chapters.
+        $p = new Player("$base/clip.mp4");
+        check(abs($p->duration() - 2.04) < 0.05 && $p->size() === [160, 90] && $p->audioTrack()?->codec === 'A_AAC', 'an MP4 over HTTP: its duration, size and sound');
+        $p->play(); $run(0.6); $p->pause();
+        check($p->time() > 0.3, "it plays: {$p->time()}");
+        $p = new Player("$base/chapters.mp4");
+        same(['Opening', '', '第三章'], array_map(fn($c) => $c->title, $p->chapters()), 'its movie box after its samples, its chapters');
+        $p->play(); $run(0.6); $p->pause();
+        check($p->time() > 0.3, "it plays too: {$p->time()}");
+        // HLS (Media\Hls): played; a master playlist's audio renditions, the one chosen played.
+        $p = new Player("$base/ts.m3u8");
+        check($p->remote() && abs($p->duration() - 2.042) < 0.01 && $p->size() === [160, 90], 'HLS: its duration and size');
+        $p->play(); $run(0.6); $p->pause();
+        check($p->time() > 0.3 && $p->cacheSpeed() >= 0, "it plays: {$p->time()}");
+        $p = new Player("$base/master.m3u8");
+        same(['English', 'Français'], array_map(fn(Track $t) => $t->name, $p->audioTracks()), 'its audio renditions, as tracks');
+        same('English', $p->audioTrack()?->name, 'the default one plays');
+        $p->play(); $run(0.3);
+        $p->setAudioTrack($p->audioTracks()[1]);
+        $from = $p->time();
+        $run(0.6); $p->pause();
+        check($p->audioTrack()?->name === 'Français' && $p->time() > $from + 0.3, "another chosen plays on: from $from to {$p->time()}");
         $err = null;
         try { new Player("$base/clip.mkv?fail"); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
         check($err !== null && str_contains($err, '404'), 'a film the server fails: said, ' . $err);
     } finally {
         $stop();
-        @unlink("$dir/clip.mkv"); @unlink("$dir/front.mkv"); @rmdir($dir);
+        foreach (glob("$dir/*") ?: [] as $f) { @unlink($f); }
+        @rmdir($dir);
     }
 }

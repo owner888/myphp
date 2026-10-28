@@ -10,8 +10,9 @@ use RuntimeException;
  * cues, and its frames one after the other in the order they are stored,
  * each a Packet of one track, and seeks to a time through the cues. It
  * decodes nothing: the system's decoders take the packets (Native\Video).
- * A cluster is read whole when its size is known, a few megabytes, and
- * its blocks parsed from memory.
+ * A cluster is read element by element, each block as its bytes come
+ * (a film's over HTTP); one of unknown size ends at the next top-level
+ * element.
  */
 final class Matroska implements Source
 {
@@ -283,6 +284,9 @@ final class Matroska implements Source
      * other tracks skipped, only the video's first block read (1.5 ms less
      * than its cluster of megabytes, a thumbnail of 1080p).
      */
+    /** All its tracks are read: they are of one file. */
+    public function choose(?Track $video, ?Track $audio): void {}
+
     public function keyframe(float $seconds): ?Packet
     {
         $video = null;

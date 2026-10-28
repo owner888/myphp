@@ -22,7 +22,7 @@ use RuntimeException;
  * The blocks are of native memory, as mpv's cache is: PHP's memory_limit
  * (128 MiB by default) counts none of it.
  */
-final class HttpBytes implements Bytes
+final class HttpBytes implements Bytes, Cache
 {
     /** A block of the cache; IINA's defaultCacheSize, 153600 KiB. */
     public const BLOCK = 256 << 10, MAX = 153600 << 10;

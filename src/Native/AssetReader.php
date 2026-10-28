@@ -152,6 +152,9 @@ final class AssetReader implements Source
     }
 
     /** The first keyframe of the video from a seek to $seconds; null for none. */
+    /** All its tracks are read: they are of one file. */
+    public function choose(?Track $video, ?Track $audio): void {}
+
     public function keyframe(float $seconds): ?Packet
     {
         $this->start($seconds);

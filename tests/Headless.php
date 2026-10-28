@@ -484,7 +484,6 @@ final class Headless
     }
 }
 
-/** Fails the test unless $cond, with $what. */
 /**
  * Serves the files of $dir as a server of films does (testdata/range_server.php
  * under php -S: ranges, ?rate=, ?norange, ?fail); its base URL, and a
@@ -498,6 +497,7 @@ function rangeServer(string $dir): array
     return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];
 }
 
+/** Fails the test unless $cond, with $what. */
 function check(bool $cond, string $what): void
 {
     global $checks, $failures;

@@ -14,7 +14,7 @@ namespace MyPHP\Media;
 final class Playlist
 {
     /** The extensions of the films a folder's playlist takes. */
-    public const FILMS = ['mkv', 'webm', 'mp4', 'm4v', 'mov'];
+    public const FILMS = ['mkv', 'webm', 'mp4', 'm4v', 'mov', 'ts', 'm2ts', 'mts'];
     /** @var list<string> */
     private array $files = [];
     /** @var array<string, ?float> the durations read, by path; null for a file that is no film the player reads */

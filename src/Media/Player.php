@@ -34,8 +34,8 @@ final class Player
     private const STALL = 0.1, CACHE_WAIT = 1.0, BUFFER_LOOK = 0.05;
 
     private Source $source;
-    /** The bytes of a film over HTTP, null for a file's. */
-    private ?HttpBytes $http = null;
+    /** What reads a film over HTTP ahead (its bytes, or HLS's segments), null for a file's. */
+    private ?Cache $net = null;
     /** Whether the clock waits for the network (mpv's paused-for-cache), and what failed reading the film. */
     private bool $buffering = false;
     private ?string $readError = null;
@@ -97,15 +97,21 @@ final class Player
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
 
-    /** Plays the file at $path, or the film at an http(s) URL (Matroska and WebM), read as it comes. */
+    /** Plays the file at $path, or the film at an http(s) URL (Matroska, WebM, MP4, MOV, MPEG-TS, an HLS playlist), read as it comes. */
     public function __construct(private readonly string $path)
     {
-        if (self::isUrl($path)) {
-            $this->http = new HttpBytes($path);
-            if ($this->http->read(0, 4) !== "\x1A\x45\xDF\xA3") {
-                throw new RuntimeException("myphp: $path: over HTTP only Matroska and WebM play yet");
-            }
-            $this->source = new Matroska($this->http);
+        if (self::isUrl($path) && preg_match('~\.m3u8?$~i', (string)parse_url($path, PHP_URL_PATH)) === 1) {
+            $this->source = $this->net = new Hls($path);
+        } elseif (self::isUrl($path)) {
+            $http = $this->net = new HttpBytes($path);
+            $head = $http->read(0, 8);
+            $this->source = match (true) { // by what it starts with, as FFmpeg probes: EBML's id, an ISO base media box, a TS packet's sync byte
+                str_starts_with($head, "\x1A\x45\xDF\xA3") => new Matroska($http),
+                in_array(substr($head, 4, 4), ['ftyp', 'moov', 'mdat', 'free', 'skip', 'wide', 'pnot'], true) => new Mp4($http),
+                str_starts_with($head, '#EXTM3U') => $this->net = new Hls($path),
+                $head[0] === 'G' || ($head[4] ?? '') === 'G' => new Ts($http),
+                default => throw new RuntimeException("myphp: $path is no Matroska, WebM, MP4, MOV, MPEG-TS or HLS film"),
+            };
         } else {
             $this->source = self::source($path);
         }
@@ -120,10 +126,11 @@ final class Player
         if ($this->video === null && $this->audio === null) {
             throw new RuntimeException("myphp: nothing in $path the system decodes");
         }
+        $this->source->choose($this->video, $this->audio);
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers();
         $this->awake = new Awake('Playing ' . basename($path));
-        if ($this->http === null) { $this->loadSubtitleFiles($path); }
+        if ($this->net === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
     }
 
@@ -336,6 +343,7 @@ final class Player
             throw new RuntimeException("myphp: track {$t->number} ({$t->codec}) is no audio track the player plays");
         }
         $this->audio = $t;
+        $this->source->choose($this->video, $t); // HLS's renditions: the one played read from here
         $this->go($this->time(), true); // from the keyframe before, its frames up to now decoded and not shown
         $this->emit('track', 'audio');
     }
@@ -349,7 +357,7 @@ final class Player
     /** Whether it plays a film over the network (an http(s) URL), IINA's isNetworkResource. */
     public function remote(): bool
     {
-        return $this->http !== null;
+        return $this->net !== null;
     }
 
     /** While the clock waits for the network (the buffering event), how much of what it waits for is here, 0 to 100 (mpv's cache-buffering-state); else null. */
@@ -364,13 +372,13 @@ final class Player
     /** The bytes of the film its cache holds (a film over HTTP's; 0 for a file). */
     public function cacheBytes(): int
     {
-        return $this->http?->cached() ?? 0;
+        return $this->net?->cached() ?? 0;
     }
 
     /** How fast the film comes, bytes a second over the last (0 for a file). */
     public function cacheSpeed(): float
     {
-        return $this->http?->speed() ?? 0.0;
+        return $this->net?->speed() ?? 0.0;
     }
 
     /** Where what was read of the film ends: given to the renderers, or waiting for them. */
@@ -391,7 +399,7 @@ final class Player
      */
     private function cache(): void
     {
-        if ($this->http === null) {
+        if ($this->net === null) {
             return;
         }
         $ahead = $this->given() - $this->out->time();
@@ -421,11 +429,14 @@ final class Player
         });
     }
 
-    /** The reader of the file at $path: Matroska's in PHP for Matroska and WebM, AVFoundation's for the rest. */
+    /** The reader of the file at $path: Matroska's and MPEG-TS's in PHP, AVFoundation's for the rest. */
     private static function source(string $path): Source
     {
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        return in_array($ext, ['mkv', 'mka', 'webm'], true) ? new Matroska($path) : new AssetReader($path);
+        return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
+            'mkv', 'mka', 'webm' => new Matroska($path),
+            'ts', 'm2ts', 'mts', 'm2t' => new Ts($path),
+            default => new AssetReader($path),
+        };
     }
 
     /** How long the film at $path lasts, in seconds, read from its header (a playlist's); not of one over the network, which it does not open for that. */
@@ -594,7 +605,7 @@ final class Player
      */
     public function thumbnail(float $seconds, int $width): ?Thumbnail
     {
-        if ($this->video === null || $this->http !== null) { // none of a film over the network, as IINA makes none
+        if ($this->video === null || $this->net !== null) { // none of a film over the network, as IINA makes none
             return null;
         }
         $this->thumbSource ??= self::source($this->path);

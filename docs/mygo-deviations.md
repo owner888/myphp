@@ -1704,6 +1704,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
   `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
   mygo has no video.
+- **MPEG-TS and HLS** (v1.51): `Media\Ts`, `Hls`, `HlsStream`,
+  `Fragment`, `PackedAudio`, `Download`, `Elementary`, `Bits`, `Cache`, `Native\Aes` and
+  `Source::choose` are myphp's, as FFmpeg's mpegts and hls demuxers
+  (mpv's, IINA's); mygo has no video.
+- **MP4 over HTTP** (v1.50): `Media\Mp4` is myphp's, as FFmpeg's mov
+  demuxer (mpv's, IINA's); mygo has no video.
 - **Films over HTTP** (v1.49): `Media\Bytes`, `FileBytes`, `HttpBytes`,
   `Source::ready`, `Player::remote`, `bufferingPercent`, `cacheBytes`,
   `cacheSpeed`, the buffering event, `VideoPlayerState::$opening` and

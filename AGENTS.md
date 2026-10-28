@@ -62,7 +62,7 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, CoreImage (images off the main thread), ImageIO (icons), Mem (calloc/free, address memcpy),
                    Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/, CoreMedia/Renderers/AssetReader/MediaTicker (Media\Player)
-src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder); src/Media/ video (Player, Matroska in PHP, Context::video)
+src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder); src/Media/ video (Player; Matroska, Mp4, Ts, Hls in PHP; Context::video)
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
                    build: Library finds it), Pty (/dev/ptmx; spawn.php in a PHP of its own becomes the program)

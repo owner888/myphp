@@ -5,9 +5,9 @@ namespace MyPHP\Media;
 
 /**
  * Where a Player's packets come from: a file's tracks and its frames in
- * the order stored, encoded, with a seek to a time. Matroska reads
- * Matroska and WebM in PHP; Native\AssetReader reads what AVFoundation
- * does (MP4, MOV, M4V).
+ * the order stored, encoded, with a seek to a time. Matroska, Mp4, Ts and
+ * Hls read in PHP; Native\AssetReader reads what AVFoundation does (a
+ * local MP4, MOV, M4V).
  */
 interface Source
 {
@@ -28,6 +28,13 @@ interface Source
 
     /** Goes back to where decoding $seconds starts, a keyframe of the video at or before it, where next() goes on. */
     public function seek(float $seconds): void;
+
+    /**
+     * The tracks the player plays, null for none: a source whose tracks
+     * come from apart (HLS's audio renditions) reads only theirs from the
+     * next seek on; one of a file's reads all its tracks anyway.
+     */
+    public function choose(?Track $video, ?Track $audio): void;
 
     /** The keyframe of the video a seek to $seconds goes to, read alone (a thumbnail's), null for none; next() goes on only after a seek(). */
     public function keyframe(float $seconds): ?Packet;

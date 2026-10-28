@@ -9,6 +9,7 @@
     { "ext": ["mkv"], "name": "Matroska video", "role": "Viewer" },
     { "ext": ["webm"], "name": "WebM media", "role": "Viewer" },
     { "ext": ["mp4", "m4v"], "name": "MPEG-4 video", "role": "Viewer" },
-    { "ext": ["mov"], "name": "QuickTime media", "role": "Viewer" }
+    { "ext": ["mov"], "name": "QuickTime media", "role": "Viewer" },
+    { "ext": ["ts", "m2ts", "mts"], "name": "MPEG transport stream", "role": "Viewer" }
   ]
 }
