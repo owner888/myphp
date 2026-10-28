@@ -18,9 +18,10 @@ use RuntimeException;
  * ($hardware off), is decoded by libdav1d (Native\SoftVideo) into pixel
  * buffers the layer shows; the layer takes few of those (a fifth of a
  * second of 60 frames), fewer than a tick's quarter of a second plays, so
- * while it will take no more, it is asked to say when it will
+ * while it will take no more video, it is asked to say when it will
  * (requestMediaDataWhenReadyOnQueue, on the main queue), and is given the
- * video queued then ($videoWanted).
+ * video queued then ($videoWanted). The video is given 10 ms of the main
+ * thread at a time (SLICE), the rest a few milliseconds on (POLL).
  *
  * @internal
  */
@@ -42,7 +43,7 @@ final class Renderers
     private array $soft = [];
     /** @var array<int, SoftAudio> the decoders of the audio tracks decoded in PHP (Vorbis), by track number */
     private array $softAudio = [];
-    /** What gives the layer the video queued (the player's), when the layer that would take no more of a software decoder's pictures will. */
+    /** What gives the layer the video queued (the player's): when the layer that would take no more will, or a poll fires. */
     public ?\Closure $videoWanted = null;
     /** Whether the layer is to say when it takes more; the renderers that asked it, for the block (one for the process) the layers call. @var array<int, \WeakReference<self>> */
     private bool $asking = false;
@@ -53,11 +54,12 @@ final class Renderers
     /** Seconds between looks at a software decoder whose threads decode what it refused more for (a seek's frames from its keyframe). */
     private const POLL = 0.004;
     /**
-     * Seconds of the main thread a software decoder takes at a time: dav1d's
-     * send waits while its frame threads are all at work (dav1d_send_data
+     * Seconds of the main thread the video takes at a time: dav1d's send
+     * waits while its frame threads are all at work (dav1d_send_data
      * submits the frame), so a seek's frames from its keyframe would hold
-     * the window as long as they decode (250 ms of a 60-frame 1080p film);
-     * they go on after a POLL instead. When the slice started (hrtime).
+     * the window as long as they decode (250 ms of a 60-frame 1080p film),
+     * and VideoToolbox's sample buffers of them, made here, take a while
+     * too; they go on after a POLL instead. When the slice started (hrtime).
      */
     private const SLICE = 0.010;
     private int $burst = 0;
@@ -93,18 +95,23 @@ final class Renderers
     {
         $soft = $this->soft[$t->number] ?? null;
         $ready = ObjC::msg('b:', $t->type === Track::VIDEO ? $this->layer : $this->audio, 'isReadyForMoreMediaData'); // asked once: the layer turns ready on its own thread
-        if ($soft !== null && $ready && (hrtime(true) - $this->burst > self::SLICE * 1e9 || !$soft->unclog($this->layer))) {
-            $this->poll(); // dav1d full, or its slice of the main thread spent: on again soon, the window drawn meanwhile (a paused player has no tick)
+        if ($t->type === Track::VIDEO && $ready && hrtime(true) - $this->burst > self::SLICE * 1e9) {
+            $this->poll(); // the video's slice of the main thread spent: on soon, the window drawn meanwhile (a paused player has no tick)
             return false;
         }
-        if (!$ready && $soft !== null && !$this->asking) { $this->ask(); }
+        if ($soft !== null && $ready && !$soft->unclog($this->layer)) {
+            $this->poll(); // dav1d full, its threads at work: looked at again soon
+            return false;
+        }
+        if (!$ready && $t->type === Track::VIDEO && !$this->asking) { $this->ask(); } // the layer to say when it takes more: a paused player has no tick to give it the rest of a seek's frames
         return $ready;
     }
 
     /**
      * Has the video queued given again in POLL seconds, while a software
-     * decoder holds a packet it refused: an NSTimer in the common modes,
-     * one for the process, which stops once no renderer waits so.
+     * decoder holds a packet it refused or the video's slice was spent: an
+     * NSTimer in the common modes, one for the process, which stops once
+     * no renderer waits so.
      */
     private function poll(): void
     {
@@ -137,7 +144,7 @@ final class Renderers
         $this->burst = hrtime(true);
     }
 
-    /** Has the layer say, on the main queue, when it takes more of the software decoder's pictures. */
+    /** Has the layer say, on the main queue, when it takes more video. */
     private function ask(): void
     {
         self::$askBlock ??= ObjC::block('', static function (): void { // every renderer asking given its video: each looks at its own layer

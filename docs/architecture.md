@@ -4650,6 +4650,32 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the window's play and pause. The press goes through `pressAt` now,
   which leaves the focus inside what keeps it, then opens the menu.
 
+## A slider dragged: the video in slices, seeks kept while one lands (v1.58)
+- **All the video is given in slices** (`Renderers::SLICE`, v1.57's of
+  the software decoder's): after a seek a hardware-decoded film took
+  74 ms of the main thread as well (a bench of the developer's), most of
+  it the sample buffers made here of the frames from the keyframe on and
+  the audio renderer's flush (some 45 ms while it plays, as of v1.53).
+  The video goes 10 ms at a time, the rest at the next poll; while the
+  layer takes no more video, of either decoder, it is asked to say when
+  it will (a paused player has no tick to give it the rest).
+- **An exact seek while the last one lands is kept, the last of them
+  made once it landed** (`Player::$pending`), as mpv's seeks while one
+  decodes: a slider dragged asked one a frame of the window, each a
+  flush and the frames from a keyframe again, none of which showed. A
+  seek lands once the frames before its time were given to the video's
+  renderer (`catchingUp`); the seek event and `time()` say the time
+  kept at once. A keyframe seek (the arrow keys') and any other going
+  elsewhere (a step, a track) go at once, dropping the one kept.
+- **A slider's change is one of its value, as mygo's**: the log showed
+  each step of a drag seeking two or three times at once, the same time:
+  `Context::slide` reported a change at each move of the pointer pressed
+  on it, and at an arrow at an end, its value as it was. mygo's
+  sliderInput marks it changed only when its set() gives another value;
+  `slide` now compares the value before and after its input (a test in
+  primitives_test). Every other control already reported only a value
+  of its own, or a click.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

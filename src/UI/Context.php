@@ -3933,26 +3933,24 @@ final class Context
     private function slide(Node $n, float &$value, float $min, float $max, float $step): void
     {
         $by = $step > 0 ? $step : ($max - $min) / 100; // the arrows move a step, or a hundredth of the range
+        $was = $value;
         if ($this->runtime !== null) {
             $f = $this->runtime->slid($n->id);
             if ($f !== null) {
                 $value = self::snap($min + $f * ($max - $min), $min, $max, $step);
-                $n->changed = true;
             }
             $steps = $this->runtime->stepped($n->id);
             if ($steps !== 0) {
                 $value = self::snap(max($min, min($max, $value + $steps * $by)), $min, $max, $step);
-                $n->changed = true;
             }
             $pages = $this->runtime->paged($n->id);
             if ($pages !== 0) { // Page Up and Page Down: a tenth of the range, or a step when more
                 $value = self::snap(max($min, min($max, $value + $pages * max($by, ($max - $min) / 10))), $min, $max, $step);
-                $n->changed = true;
             }
-            if (($j = $this->runtime->jumped($n->id)) !== 0 && $value != ($j < 0 ? $min : $max)) {
+            if (($j = $this->runtime->jumped($n->id)) !== 0) {
                 $value = $j < 0 ? $min : self::snap($max, $min, $max, $step);
-                $n->changed = true;
             }
+            if ($value != $was) { $n->changed = true; } // only a value of its own, as mygo's set(): a move to where it is, an arrow at an end, is none
         }
         $n->fraction = $max > $min ? max(0.0, min(1.0, ($value - $min) / ($max - $min))) : 0.0;
         $n->role(Role::SLIDER)->range($min, $max, $value, $by);

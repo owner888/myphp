@@ -213,6 +213,18 @@ $h->clickOn($h->byLabel('h'));
 same(50.0, $hh, 'pressing the middle');
 $h->right(); $h->key(Key::PAGE_UP, 'scrollPageUp:');
 same(100.0, $hh, 'Right and Page Up by steps of 25 from 50');
+// A change only of its value, as mygo's: a move to where it is, an arrow at an end, is none.
+$changes = 0;
+$h2 = new Headless(function (Context $c) use (&$hh, &$changes): void {
+    if ($c->changed($c->sliderBase($hh, 0, 100, 25)->size(100, 20)->label('h2'))) { $changes++; }
+}, 300, 200);
+$h2->frame();
+$r2 = $h2->rect($h2->byLabel('h2'));
+$h2->press($r2[0] + 50, $r2[1] + 10); $h2->drag($r2[0] + 51, $r2[1] + 10); $h2->drag($r2[0] + 51, $r2[1] + 10); $h2->release($r2[0] + 51, $r2[1] + 10);
+same([50.0, 1], [$hh, $changes], 'pressed in the middle, then moved within the step: one change');
+$hh = 100.0; $changes = 0; $h2->frame();
+$h2->rt->focus = $h2->byLabel('h2')->id; $h2->right(); $h2->key(Key::END, 'moveToEndOfLine:');
+same([100.0, 0], [$hh, $changes], 'Right and End at the end: none');
 $tree = pmTree($h);
 check((pmAccess($tree, Role::SLIDER, 'v')?->states & AccessNode::VERTICAL) !== 0, 'vertical to assistive technology');
 $disabled = true; $h->frame();

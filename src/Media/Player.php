@@ -78,6 +78,8 @@ final class Player
     private float $target = 0.0;
     /** The end of the last packet given, and whether the source has no more. */
     private float $fedTo = 0.0;
+    /** An exact seek asked while the last one's frames before its time were still being given (its time), made once they are: null for none. */
+    private ?float $pending = null;
     private bool $drained = false;
     /** The time of a frame of the video read and how long the frames last (the track's, else its packets'): the frames' grid a step goes by. */
     private ?float $frameAt = null;
@@ -183,7 +185,11 @@ final class Player
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers($this->hardware);
         $self = \WeakReference::create($this); // the renderers hold no cycle to the player
-        $this->out->videoWanted = static function () use ($self): void { $self->get()?->give('video'); }; // a software decoder's layer taking more between ticks
+        $this->out->videoWanted = static function () use ($self): void { // the layer taking more between ticks, a software decoder's slice spent
+            $p = $self->get();
+            $p?->give('video');
+            $p?->landPending();
+        };
         $this->awake = new Awake('Playing ' . basename($path));
         if ($this->net === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
@@ -789,7 +795,7 @@ final class Player
     /** Where it plays, in seconds. */
     public function time(): float
     {
-        return max(0.0, min($this->out->time(), $this->duration > 0 ? $this->duration : INF));
+        return max(0.0, min($this->pending ?? $this->out->time(), $this->duration > 0 ? $this->duration : INF));
     }
 
     public function playing(): bool
@@ -857,7 +863,27 @@ final class Player
      */
     public function seek(float $seconds, bool $exact = true): void
     {
+        if ($exact && $this->catchingUp()) { // as mpv's seeks while one decodes: the last kept, made once it landed (a slider dragged)
+            $this->pending = $seconds = max(0.0, $this->duration > 0 ? min($seconds, $this->duration) : $seconds);
+            $this->emit('seek', $seconds);
+            return;
+        }
         $this->emit('seek', $this->go($seconds, $exact));
+    }
+
+    /** Whether the last seek's frames before its time are still to be given the video's renderer (decoded unseen, from the keyframe). */
+    private function catchingUp(): bool
+    {
+        $q = $this->queued['video'];
+        return $q !== [] && $q[0]->time + $q[0]->duration <= $this->target;
+    }
+
+    /** The exact seek kept while the last one decoded, made once it landed (at a tick, or as the renderer took more). */
+    private function landPending(): void
+    {
+        if ($this->pending !== null && !$this->catchingUp()) {
+            $this->go($this->pending, true);
+        }
     }
 
     /**
@@ -920,6 +946,7 @@ final class Player
     /** Goes to $seconds as seek() does, telling nothing; returns where it went. */
     private function go(float $seconds, bool $exact): float
     {
+        $this->pending = null; // this one instead
         $seconds = max(0.0, $this->duration > 0 ? min($seconds, $this->duration) : $seconds);
         $forward = $seconds > $this->time();
         $this->source->seek($seconds);
@@ -1163,6 +1190,7 @@ final class Player
     private function tick(): void
     {
         $this->feed();
+        $this->landPending();
         if (($why = $this->out->failure() ?? $this->readError) !== null) {
             $this->readError = null;
             $this->pause();
