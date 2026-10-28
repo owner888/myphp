@@ -7,14 +7,11 @@ the reasoning, the numbers and the pitfalls behind the rules here.
 
 1. **This file stays under 200 lines** (`wc -l AGENTS.md`): near the limit,
    condense what is here first; only then move detail to `docs/`.
-2. No third-party packages without asking the developer first; small
-   things are written here (`composer.json`: only `php` and `ext-ffi`).
+2. No third-party packages without asking the developer; small things are written here (`composer.json`: `php`, `ext-ffi`).
 3. Git is the developer's: no commit, push, branch, tag or patch export.
    Change files, run checks, report which files changed.
-4. Files that go into git never carry the developer's name: write "the
-   developer" / 「开发者」 when a reference is needed.
-5. GUI examples run only on the developer's Mac: ask them to run and paste
-   output. `php -l` and pure-PHP checks run anywhere.
+4. Files in git never carry the developer's name: "the developer" / 「开发者」 when one is needed.
+5. GUI examples run only on the developer's Mac (ask for the output); `php -l` and pure-PHP checks run anywhere.
 6. Small and literal: no speculative abstractions, no silent fallbacks, no
    magic numbers that make a symptom go away. Unclear? Ask before changing.
 7. Delete dead code when you touch it; never comment it out.
@@ -32,6 +29,9 @@ the reasoning, the numbers and the pitfalls behind the rules here.
     materials, controls) is used as the system draws it, its defaults left
     alone; never force its appearance, tint or style to chase a look. If it
     looks wrong, find why (what it samples, how it is placed), not a knob.
+12. **An arrow function copies what it reads as it is made**: a closure run
+    later that must see a variable change (`CurlLoop::waitUntil`, `App::wait`,
+    a stored `->key`) is `function () use (&$v)`; `$this` and objects are fine.
 
 ## What this is
 

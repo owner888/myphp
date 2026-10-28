@@ -676,7 +676,7 @@ final class VideoPlayer
                           ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(0xffffff, 0.12);
                       }
                         if ($playing) { $c->column()->absolute()->left(9)->top(9)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
-                        $c->text(basename($path), 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->grow(1);
+                        $c->text($list->title($path), 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->grow(1);
                         $d = $list->duration($i);
                         if ($d !== null) { $c->text(VideoPlayerState::clock($d), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.55); }
                       $c->end();

@@ -30,7 +30,7 @@ final class VideoPlayerState
     public const ASPECTS = [[null, null], ['4:3', 4 / 3], ['16:9', 16 / 9], ['16:10', 16 / 10], ['21:9', 21 / 9], ['5:4', 5 / 4]];
     public const ROTATIONS = [0, 90, 180, 270];
 
-    /** What the title bar shows, a file's name. */
+    /** What the title bar shows: the film's title (a page's, else its file's name). */
     public string $title = '';
     /** The volume, 0 to 1, of this player and the next. */
     public float $volume = 1.0;
@@ -106,8 +106,9 @@ final class VideoPlayerState
 
     /**
      * Opens the film at $path (or an http(s) URL) and plays it: a player of
-     * it, the title its name, the playlist the films of its folder (a URL's
-     * itself) unless it is in the one there is. A URL opens in a fiber of
+     * it, the title its (Player::title), the playlist the films of its folder
+     * (a URL's itself, a web playlist's its videos) unless it is in the one
+     * there is. A URL opens in a fiber of
      * its own (App::go) while the app runs, the window going on meanwhile
      * ($opening). What fails to open shows as the error, the film playing
      * going on. Returns whether it opened (a URL: began to).
@@ -131,11 +132,13 @@ final class VideoPlayerState
             return false;
         }
         $this->opening = null;
-        if ($this->playlist === null || !$this->playlist->select($path)) {
+        if ($p->playlist() !== null) { // a web page's (yt-dlp's): its videos, the one playing chosen
+            $this->playlist = $p->playlist();
+        } elseif ($this->playlist === null || !$this->playlist->select($path)) {
             $this->playlist = $url ? new Playlist([$path]) : Playlist::folder($path);
         }
         $this->chosen = $this->playlist->index();
-        $this->title = $url ? rawurldecode(basename((string)parse_url($path, PHP_URL_PATH))) : basename($path);
+        $this->title = $p->title();
         $this->setPlayer($p);
         $p->play();
         return true;

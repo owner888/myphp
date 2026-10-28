@@ -43,6 +43,22 @@ $f = new Mp4(__DIR__ . '/testdata/clip-flac.mp4');
 check(str_starts_with($f->tracks()[1]->private, 'fLaC') && $f->tracks()[1]->codec === 'A_FLAC', 'FLAC: its metadata blocks, as Matroska\'s CodecPrivate');
 same(['V_AV1', 16], [(new Mp4(__DIR__ . '/testdata/clip-av1.mp4'))->tracks()[0]->codec, strlen((new Mp4(__DIR__ . '/testdata/clip-av1.mp4'))->tracks()[0]->private)], 'AV1: its av1C');
 
+// Fragmented (DASH's, YouTube's): the samples of the movie fragments after the movie box, at ffprobe's times; a seek by the
+// segment index (sidx) to a subsegment that starts at a keyframe (FFmpeg's marks them all), or, of none, the fragments walked.
+$count = function (Mp4 $m): array {
+    $n = 0; $keys = [];
+    while (($p = $m->next()) !== null) { $n++; if ($p->keyframe && $p->track->type === Track::VIDEO) { $keys[] = round($p->time, 3); } }
+    return [$n, $keys];
+};
+$dv = new Mp4(__DIR__ . '/testdata/clip-dash.mp4');
+same([[48, [0.083, 1.083]], 1.999], [$count($dv), round($dv->duration(), 3)], 'a fragmented MP4 of a segment index: its samples, its duration');
+$at = function (Mp4 $m, float $s): array { $m->seek($s); $p = $m->next(); return [round($p?->time ?? -1, 3), $p?->keyframe]; };
+same([[0.083, true], [1.083, true], [1.083, true]], [$at($dv, 0.3), $at($dv, 1.2), $at($dv, 1.9)], 'a seek: to the subsegment of a keyframe before (not 1.583\'s, of none)');
+$da = new Mp4(__DIR__ . '/testdata/clip-dash.m4a');
+same([[88, []], [1.021, true]], [$count($da), $at($da, 1.2)], 'its sound, apart (YouTube\'s m4a)');
+$plain = new Mp4(__DIR__ . '/testdata/clip-frag.mp4'); // frag_keyframe+empty_moov: no index, no duration said
+same([[136, [0.083, 1.083]], 2.103, [1.083, true]], [$count($plain), round($plain->duration(), 3), $at($plain, 1.9)], 'one of no index: its duration its last fragment\'s end, a seek walking the fragments');
+
 // Over HTTP: sample for sample as from the file, its movie box read where it is.
 try { \MyPHP\Native\Curl::ffi(); } catch (\Throwable $e) { echo "  skipped: over HTTP: {$e->getMessage()}\n"; return; }
 [$base, $stop] = rangeServer(__DIR__ . '/testdata');
@@ -56,7 +72,7 @@ try {
         }
         return $out;
     };
-    foreach (['clip.mp4', 'clip-chapters.mp4'] as $file) {
+    foreach (['clip.mp4', 'clip-chapters.mp4', 'clip-dash.mp4', 'clip-dash.m4a'] as $file) {
         same($read(new Mp4(__DIR__ . "/testdata/$file")), $read(new Mp4(new HttpBytes("$base/$file"))), "$file over HTTP: sample for sample as from its file");
     }
 } finally {

@@ -1704,6 +1704,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
   `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
   mygo has no video.
+- **yt-dlp, two sources, AV1 in software** (v1.52): `Media\YtDlp`,
+  `Merged`, `CacheBudget`, `CacheMember`, `Player::title`, `Player::playlist`, `Player::$hardwareDecoding`,
+  `Playlist::title` (and its titles), the headers of `HttpBytes`,
+  `Download` and `Hls`, `Native\Dav1d` and `SoftVideo` are myphp's, as
+  mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
+  mygo has no video. yt-dlp is started as a URL opens, beside the direct
+  open (stopped when that succeeds), where mpv runs it once the URL failed
+  to open: what plays is the same, sooner over a slow network.
 - **MPEG-TS and HLS** (v1.51): `Media\Ts`, `Hls`, `HlsStream`,
   `Fragment`, `PackedAudio`, `Download`, `Elementary`, `Bits`, `Cache`, `Native\Aes` and
   `Source::choose` are myphp's, as FFmpeg's mpegts and hls demuxers

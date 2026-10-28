@@ -34,11 +34,18 @@ final class VideoDecoder
     /** What the callback gave: its status and the frame, retained, until taken (an object of its own: the callback holds no cycle to this). */
     private \stdClass $out;
 
-    /** A decoder of $track's keyframes into pictures $width wide, as tall as the track's shape has it. */
-    public function __construct(private readonly Track $track, int $width)
+    /** libdav1d's, for a track decoded in software (SoftVideo::wanted): a keyframe in, its picture out. */
+    private ?Dav1d $dav1d = null;
+
+    /** A decoder of $track's keyframes into pictures $width wide, as tall as the track's shape has it; in software as the player decodes it ($hardware off: Renderers'). */
+    public function __construct(private readonly Track $track, int $width, bool $hardware = true)
     {
         $this->width = max(1, $width);
         $this->height = max(1, (int)round($this->width * $track->height / max(1, $track->width)));
+        if (SoftVideo::wanted($track, $hardware)) {
+            $this->dav1d = new Dav1d(1, 1);
+            return;
+        }
         $vt = self::vt();
         $out = $this->out = (object)['status' => 0, 'image' => null];
         $this->holder = $vt->new('struct { void (*fn)(void*, void*, int, unsigned int, void*); }');
@@ -83,6 +90,76 @@ final class VideoDecoder
         ', '/System/Library/Frameworks/Accelerate.framework/Accelerate');
     }
 
+    private static ?FFI $yuv = null;
+
+    /** vImage's YCbCr to ARGB and its scaling, for libdav1d's pictures. */
+    private static function yuv(): FFI
+    {
+        return self::$yuv ??= FFI::cdef('
+            typedef struct { void* data; unsigned long height, width; size_t rowBytes; } vImage_Buffer;
+            typedef struct { int Yp_bias, CbCr_bias, YpRangeMax, CbCrRangeMax, YpMax, YpMin, CbCrMax, CbCrMin; } vImage_YpCbCrPixelRange;
+            typedef struct { char opaque[128]; } vImage_YpCbCrToARGB;
+            typedef struct { float Yp, Cr_R, Cr_G, Cb_G, Cb_B; } vImage_YpCbCrToARGBMatrix;
+            extern const vImage_YpCbCrToARGBMatrix* kvImage_YpCbCrToARGBMatrix_ITU_R_709_2;
+            extern const vImage_YpCbCrToARGBMatrix* kvImage_YpCbCrToARGBMatrix_ITU_R_601_4;
+            long vImageConvert_YpCbCrToARGB_GenerateConversion(const vImage_YpCbCrToARGBMatrix*, const vImage_YpCbCrPixelRange*, vImage_YpCbCrToARGB*, int, int, unsigned int);
+            long vImageConvert_420Yp8_Cb8_Cr8ToARGB8888(const vImage_Buffer*, const vImage_Buffer*, const vImage_Buffer*, const vImage_Buffer*, const vImage_YpCbCrToARGB*, const unsigned char*, unsigned char, unsigned int);
+            long vImageScale_ARGB8888(const vImage_Buffer*, const vImage_Buffer*, void*, unsigned int);
+            long vImagePermuteChannels_ARGB8888(const vImage_Buffer*, const vImage_Buffer*, const unsigned char*, unsigned int);
+        ', '/System/Library/Frameworks/Accelerate.framework/Accelerate');
+    }
+
+    /** Keyframe $p decoded by libdav1d, scaled to the decoder's size: RGBA, top row first, of the matrix and range its sequence header says (mpv's guess by the size where it says none, as SoftVideo's). */
+    private function softFrame(Packet $p): string
+    {
+        $this->dav1d->flush();
+        $this->dav1d->send($p->data, 0);
+        $pic = $this->dav1d->picture() ?? $this->dav1d->picture(); // the second drains: the one frame
+        if ($pic === null) {
+            throw new RuntimeException(sprintf('myphp: libdav1d decoded no picture of the frame at %.3f s', $p->time));
+        }
+        $y = self::yuv();
+        $w = $pic->p->w; $h = $pic->p->h;
+        $full = $y->new('char[' . ($w * $h * 4) . ']');
+        $small = $y->new('char[' . ($this->width * $this->height * 4) . ']');
+        try {
+            if ($pic->p->layout !== 1 || $pic->p->bpc !== 8) {
+                throw new RuntimeException("myphp: AV1 of {$pic->p->bpc}-bit samples: only 8-bit 4:2:0 decodes in software yet");
+            }
+            $seq = FFI::isNull($pic->seq_hdr) ? null : $pic->seq_hdr;
+            $wholeRange = $seq !== null && $seq->color_range === 1;
+            $mtrx = $seq?->mtrx ?? 2;
+            $sd = $mtrx === 5 || $mtrx === 6 || $mtrx === 2 && $w < 1280 && $h <= 576;
+            $range = $y->new('vImage_YpCbCrPixelRange');
+            [$range->Yp_bias, $range->CbCr_bias, $range->YpRangeMax, $range->CbCrRangeMax, $range->YpMax, $range->YpMin, $range->CbCrMax, $range->CbCrMin]
+                = $wholeRange ? [0, 128, 255, 255, 255, 0, 255, 0] : [16, 128, 235, 240, 235, 16, 240, 16];
+            $info = $y->new('vImage_YpCbCrToARGB');
+            $y->vImageConvert_YpCbCrToARGB_GenerateConversion($sd ? $y->kvImage_YpCbCrToARGBMatrix_ITU_R_601_4 : $y->kvImage_YpCbCrToARGBMatrix_ITU_R_709_2, FFI::addr($range), FFI::addr($info), 3, 0, 0); // kvImage420Yp8_Cb8_Cr8, kvImageARGB8888
+            $plane = function (int $k, int $pw, int $ph, int $stride) use ($y, $pic) {
+                $b = $y->new('vImage_Buffer');
+                $b->data = $y->cast('void*', Mem::addr($pic->data[$k])); $b->width = $pw; $b->height = $ph; $b->rowBytes = $stride;
+                return $b;
+            };
+            $yp = $plane(0, $w, $h, $pic->stride[0]); $cb = $plane(1, ($w + 1) >> 1, ($h + 1) >> 1, $pic->stride[1]); $cr = $plane(2, ($w + 1) >> 1, ($h + 1) >> 1, $pic->stride[1]);
+            $argb = $y->new('vImage_Buffer');
+            $argb->data = $y->cast('void*', FFI::addr($full)); $argb->width = $w; $argb->height = $h; $argb->rowBytes = $w * 4;
+            $map = $y->new('unsigned char[4]');
+            [$map[0], $map[1], $map[2], $map[3]] = [0, 1, 2, 3];
+            $st = $y->vImageConvert_420Yp8_Cb8_Cr8ToARGB8888(FFI::addr($yp), FFI::addr($cb), FFI::addr($cr), FFI::addr($argb), FFI::addr($info), $map, 255, 0);
+            $out = $y->new('vImage_Buffer');
+            $out->data = $y->cast('void*', FFI::addr($small)); $out->width = $this->width; $out->height = $this->height; $out->rowBytes = $this->width * 4;
+            $st = $st ?: $y->vImageScale_ARGB8888(FFI::addr($argb), FFI::addr($out), null, 0x10); // kvImageHighQualityResampling
+            [$map[0], $map[1], $map[2], $map[3]] = [1, 2, 3, 0]; // A R G B to R G B A
+            $st = $st ?: $y->vImagePermuteChannels_ARGB8888(FFI::addr($out), FFI::addr($out), $map, 0);
+            if ($st !== 0) {
+                throw new RuntimeException("myphp: vImage error $st");
+            }
+            return FFI::string($small, $this->width * $this->height * 4);
+        } finally {
+            Dav1d::release($pic);
+        }
+    }
+
     /** The session's output: BGRA of the pictures' size, which VideoToolbox scales to. */
     private function attributes()
     {
@@ -98,6 +175,9 @@ final class VideoDecoder
     /** Keyframe $p decoded, as a picture of the decoder's size: RGBA (opaque), top row first. */
     public function frame(Packet $p): string
     {
+        if ($this->dav1d !== null) {
+            return $this->softFrame($p);
+        }
         $vt = self::vt();
         $cm = CoreMedia::c();
         if ($p->sample !== null) {

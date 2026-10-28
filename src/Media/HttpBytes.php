@@ -18,18 +18,21 @@ use RuntimeException;
  * where the transfer is starts another there; the transfer stops once the
  * cache holds MAX bytes ahead of the reader, and goes on as it reads.
  * Past MAX in all, the blocks least recently read go (IINA's 150 MiB),
- * never those ahead of the reader not read yet.
+ * never those ahead of the reader not read yet; of a film of readers
+ * sharing it (CacheBudget: a video's and an audio's), of them all.
  * The blocks are of native memory, as mpv's cache is: PHP's memory_limit
  * (128 MiB by default) counts none of it.
  */
-final class HttpBytes implements Bytes, Cache
+final class HttpBytes implements Bytes, CacheMember
 {
     /** A block of the cache; IINA's defaultCacheSize, 153600 KiB. */
-    public const BLOCK = 256 << 10, MAX = 153600 << 10;
+    public const BLOCK = 256 << 10, MAX = CacheBudget::MAX;
     /** How far ahead of the transfer a read may be and wait for it rather than start another. */
     private const NEAR = 2 << 20;
     /** CURLOPT_RANGE, CURLOPT_CONNECTTIMEOUT; CURLE_WRITE_ERROR, what a transfer stopped by its callback ends with. */
     private const OPT_RANGE = 10007, OPT_CONNECTTIMEOUT = 78, E_WRITE = 23;
+    /** CURLOPT_LOW_SPEED_LIMIT and _TIME: a transfer of under a byte a second for STALL seconds ends (CURLE_OPERATION_TIMEDOUT), gone on from where it was. */
+    private const OPT_LOW_SPEED_LIMIT = 19, OPT_LOW_SPEED_TIME = 20, STALL = 20;
     /**
      * What a connection that broke ends with, which a transfer goes on from
      * where it was, as ffmpeg's reconnect does (mpv's network streams):
@@ -47,10 +50,12 @@ final class HttpBytes implements Bytes, Cache
     private array $blocks = [];
     /** @var array<int, int> when each block was last read, by its index (a counter) */
     private array $used = [];
-    private int $clock = 0, $cached = 0;
+    private int $cached = 0;
+    /** The cache it is of: its own, or the film's of its readers. */
+    private CacheBudget $budget;
     /** Where the reader was last: the cache reads ahead of it. */
     private int $reader = 0;
-    /** The transfer: its handle, its callbacks, where its next byte goes, the block it fills, whether it is to stop. @var ?array{easy: CData, cbs: CData, at: int, part: string, stop: bool} */
+    /** The transfer: its handle, its callbacks, where its next byte goes, the block it fills, whether it is to stop. @var ?array{easy: CData, cbs: CData, at: int, part: string, stop: bool, list: ?CData} */
     private ?array $transfer = null;
     private ?string $error = null;
     /** @var array<int, int> bytes that came in each tenth of a second, by it (microtime × 10), the last second's: the speed */
@@ -58,8 +63,21 @@ final class HttpBytes implements Bytes, Cache
     /** Bytes that came in all. */
     private int $received = 0;
 
-    public function __construct(public readonly string $url)
+    /** The bytes a request asks for at most (whole blocks), 0 for all from where it starts. */
+    private readonly int $chunk;
+
+    /**
+     * Reads $url, each request with $headers too (name => value: yt-dlp's
+     * http_headers, a User-Agent, a Referer, the cookies a site wants), and
+     * of $chunk bytes at most, one after the other, when it is not 0
+     * (yt-dlp's http_chunk_size: YouTube sends a request of a whole film at
+     * the speed it plays, 10 MB ones as fast as they go).
+     * @param array<string, string> $headers
+     */
+    public function __construct(public readonly string $url, private readonly array $headers = [], int $chunk = 0)
     {
+        $this->chunk = $chunk <= 0 ? 0 : max(1, intdiv($chunk, self::BLOCK)) * self::BLOCK;
+        $this->share(new CacheBudget());
         $this->fetch(0);
         CurlLoop::waitUntil(fn(): bool => $this->size >= 0 || $this->error !== null);
         $this->fail();
@@ -104,7 +122,7 @@ final class HttpBytes implements Bytes, Cache
             $from = max($pos - $b * self::BLOCK, 0);
             $len = min(self::BLOCK, $end - $b * self::BLOCK) - $from;
             if (isset($this->blocks[$b])) {
-                $this->used[$b] = ++$this->clock;
+                $this->used[$b] = $this->budget->tick();
                 $out .= Mem::read($this->blocks[$b][1] + $from, $len);
             } else { // the block the transfer fills, as far as it came (has() said)
                 $out .= substr($this->transfer['part'], $from, $len);
@@ -112,6 +130,7 @@ final class HttpBytes implements Bytes, Cache
         }
         $this->reader = $end;
         $this->readAhead();
+        $this->budget->resume($this); // the film's other readers: room, maybe, as this read
         return $out;
     }
 
@@ -155,13 +174,37 @@ final class HttpBytes implements Bytes, Cache
         }
         $b = intdiv($this->reader, self::BLOCK);
         while (isset($this->blocks[$b])) { $b++; }
-        if ($b * self::BLOCK < $this->size && $this->ahead() < self::MAX / 2) {
+        if ($b * self::BLOCK < $this->size && $this->budget->ahead() < self::MAX / 2) {
             $this->fetch($b * self::BLOCK);
         }
     }
 
+    public function share(CacheBudget $b): void
+    {
+        $this->budget = $b;
+        $b->join($this);
+    }
+
+    public function resume(): void
+    {
+        $this->readAhead();
+    }
+
+    public function evictable(): array
+    {
+        $from = intdiv($this->reader, self::BLOCK); // never what lies ahead of the reader and is not read yet (the transfer stops before that is all there is)
+        for ($to = $from; isset($this->blocks[$to]); $to++) {}
+        $out = [];
+        foreach ($this->used as $b => $when) {
+            if ($b < $from || $b >= $to) {
+                $out[] = [$when, function () use ($b): int { $n = $this->blocks[$b][2] ?? 0; $this->drop($b); return $n; }];
+            }
+        }
+        return $out;
+    }
+
     /** The bytes the cache holds from the reader on. */
-    private function ahead(): int
+    public function ahead(): int
     {
         $n = 0;
         for ($b = intdiv($this->reader, self::BLOCK); isset($this->blocks[$b]); $b++) { $n += $this->blocks[$b][2]; }
@@ -203,14 +246,19 @@ final class HttpBytes implements Bytes, Cache
         $set(Curl::OPT_FOLLOWLOCATION, 1);
         $set(Curl::OPT_MAXREDIRS, 20);
         $set(self::OPT_CONNECTTIMEOUT, 30);
-        $set(self::OPT_RANGE, "$at-");
+        $set(self::OPT_LOW_SPEED_LIMIT, 1);
+        $set(self::OPT_LOW_SPEED_TIME, self::STALL);
+        $set(self::OPT_RANGE, $this->chunk > 0 ? "$at-" . ($at + $this->chunk - 1) : "$at-");
         $set(Curl::OPT_HEADERFUNCTION, $cbs->header);
         $set(Curl::OPT_WRITEFUNCTION, $cbs->write);
-        $this->transfer = ['easy' => $easy, 'cbs' => $cbs, 'at' => $at, 'part' => '', 'stop' => false];
-        CurlLoop::start($easy, static function (int $result) use ($self, $easy, &$status): void {
+        $list = Curl::headers($this->headers);
+        if ($list !== null) { $set(Curl::OPT_HTTPHEADER, $list); }
+        $this->transfer = ['easy' => $easy, 'cbs' => $cbs, 'at' => $at, 'part' => '', 'stop' => false, 'list' => $list];
+        CurlLoop::start($easy, static function (int $result) use ($self, $easy, $list, &$status): void {
             $b = $self->get();
             $b?->ended($easy, $result, $status);
             Curl::ffi()->curl_easy_cleanup($easy);
+            if ($list !== null) { Curl::ffi()->curl_slist_free_all($list); }
         });
     }
 
@@ -265,7 +313,7 @@ final class HttpBytes implements Bytes, Cache
             $t['part'] = '';
             $kept = true;
         }
-        if ($kept && $this->ahead() >= self::MAX * 0.9) { // room for the reader: on once it read some (looked at as a block is kept, not at each piece)
+        if ($kept && $this->budget->ahead() >= self::MAX * 0.9) { // room for the reader: on once it read some (looked at as a block is kept, not at each piece)
             $t['stop'] = true;
             return false;
         }
@@ -281,18 +329,8 @@ final class HttpBytes implements Bytes, Cache
         Mem::write($addr, $block);
         $this->blocks[$b] = [$mem, $addr, strlen($block)];
         $this->cached += strlen($block);
-        $this->used[$b] = ++$this->clock;
-        if ($this->cached > self::MAX) {
-            // The least recently read go, but never what lies ahead of the reader and is not read yet (the transfer
-            // stops before that is all there is): those just ahead are the least recently kept, and the next it reads.
-            $from = intdiv($this->reader, self::BLOCK);
-            for ($to = $from; isset($this->blocks[$to]); $to++) {}
-            asort($this->used);
-            foreach ($this->used as $old => $when) {
-                if ($this->cached <= self::MAX * 0.9) { break; }
-                if ($old < $from || $old >= $to) { $this->drop($old); }
-            }
-        }
+        $this->used[$b] = $this->budget->tick();
+        $this->budget->trim(); // past MAX of the film's readers in all, the least recently read go
     }
 
     /** Lets block $b go, its memory freed. */
@@ -327,6 +365,8 @@ final class HttpBytes implements Bytes, Cache
                 $this->error = "myphp: {$this->url}: " . ($status >= 300 ? "HTTP $status" : (string)Curl::ffi()->curl_easy_strerror($result));
             } elseif ($status >= 300) {
                 $this->error = "myphp: {$this->url}: HTTP $status";
+            } elseif ($result === 0 && $this->chunk > 0) {
+                $this->readAhead(); // a chunk done: the next, while the cache has room
             }
         }
     }
@@ -337,10 +377,11 @@ final class HttpBytes implements Bytes, Cache
         if ($this->transfer === null) {
             return;
         }
-        $easy = $this->transfer['easy'];
+        ['easy' => $easy, 'list' => $list] = $this->transfer;
         $this->transfer = null;
         CurlLoop::stop($easy);
         Curl::ffi()->curl_easy_cleanup($easy);
+        if ($list !== null) { Curl::ffi()->curl_slist_free_all($list); }
     }
 
     /** Throws what failed. */

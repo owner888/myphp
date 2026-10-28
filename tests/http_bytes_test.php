@@ -34,6 +34,12 @@ try {
         $all = $b->read(0, strlen($big));
         check($all === $big, 'all of it');
         check($b->cached() === strlen($big), 'the cache holds it: ' . $b->cached());
+        // Of requests of a block each (yt-dlp's http_chunk_size, YouTube's 10 MB): one after the other, all of it, read ahead.
+        $chunked = new HttpBytes("$base/big.bin", [], HttpBytes::BLOCK);
+        same(strlen($big), $chunked->size(), 'requests of a chunk at most: the size, of the first\'s range');
+        check($chunked->read(0, strlen($big)) === $big, 'all of it, a chunk after the other');
+        $far = new HttpBytes("$base/big.bin", [], HttpBytes::BLOCK);
+        check($far->read(2 * HttpBytes::BLOCK + 7, 100) === substr($big, 2 * HttpBytes::BLOCK + 7, 100), 'a chunk far on, asked for alone');
 
         // Slowly sent: what is far ahead is not here, and asked for; it comes.
         $slow = new HttpBytes("$base/big.bin?rate=200000");
@@ -79,4 +85,40 @@ try {
         foreach (['big.bin', 'clip.mkv', 'front.mkv'] as $f) { @unlink("$dir/$f"); }
         @rmdir($dir);
     }
+})();
+
+// One cache of a film's readers (Media\CacheBudget, a video's and an
+// audio's as Merged plays them): what they hold ahead counted together,
+// past MAX in all the least recently read of them all going, the others
+// read on as one reads.
+(function () {
+    $member = fn(string $name, array &$log) => new class($name, $log) implements \MyPHP\Media\CacheMember {
+        /** @var array<int, array{0: int, 1: int}> */
+        public array $blocks = [];
+        public int $held = 0;
+        public function __construct(public string $name, public array &$log) {}
+        public function cached(): int { return array_sum(array_column($this->blocks, 1)) + $this->held; }
+        public function speed(): float { return 0.0; }
+        public function share(\MyPHP\Media\CacheBudget $b): void { $b->join($this); }
+        public function ahead(): int { return $this->held; }
+        public function evictable(): array
+        {
+            return array_map(fn(int $k) => [$this->blocks[$k][0], function () use ($k): int { $this->log[] = "{$this->name}$k"; $n = $this->blocks[$k][1]; unset($this->blocks[$k]); return $n; }], array_keys($this->blocks));
+        }
+        public function resume(): void { $this->log[] = "{$this->name} resumed"; }
+    };
+    $log = [];
+    $b = new \MyPHP\Media\CacheBudget();
+    $video = $member('v', $log); $audio = $member('a', $log);
+    $video->share($b); $audio->share($b);
+    $third = \MyPHP\Media\CacheBudget::MAX / 3;
+    $video->held = (int)$third; $audio->held = 100;
+    same((int)$third + 100, $b->ahead(), 'what the readers hold ahead, together');
+    $video->blocks = [0 => [$b->tick(), (int)$third], 1 => [$b->tick(), (int)$third]];
+    $audio->blocks = [0 => [$b->tick(), (int)$third]];
+    $b->trim();
+    same(['v0', 'v1'], $log, 'past MAX in all: the least recently read of them all go (the video\'s, not the audio\'s since read), to 90%');
+    $log = [];
+    $b->resume($audio);
+    same(['v resumed'], $log, 'one read on: the others read ahead again');
 })();

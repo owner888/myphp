@@ -17,7 +17,7 @@ case "$1" in
   glass)   exec $PHP $OPTS examples/glass/main.php ;;
   widgets) exec $PHP $OPTS examples/widgets/main.php ;;
   photos)  exec $PHP $OPTS examples/photos/main.php ${2:+"$2"} ;;
-  video)   exec $PHP $OPTS examples/video/main.php ${2:+"$2"} ;;
+  video)   MYPHP_VIDEO_LOG=1 exec $PHP $OPTS examples/video/main.php ${2:+"$2"} ;;
   http)    exec $PHP $OPTS examples/http/main.php ;;
   titlebar) exec $PHP $OPTS examples/titlebar/main.php ${2:+"$2"} ${3:+"$3"} ;;
   files)   exec $PHP $OPTS examples/files/main.php ${2:+"$2"} ;;

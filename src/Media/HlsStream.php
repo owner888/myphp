@@ -192,7 +192,7 @@ final class HlsStream
             return;
         }
         $self = \WeakReference::create($this);
-        $this->reloading = new Download($this->url, finished: static function () use ($self): void { $self->get()?->reloaded(); });
+        $this->reloading = new Download($this->url, finished: static function () use ($self): void { $self->get()?->reloaded(); }, headers: $this->hls->headers);
     }
 
     /** The playlist read again came: merged, the next reading set (half the target duration when it added nothing). */
@@ -286,7 +286,7 @@ final class HlsStream
     private function init(array $map, bool $wait = false): ?Mp4
     {
         $id = "{$map[0]}@{$map[1]}";
-        $this->inits[$id] ??= [new Download($map[0], $map[1], $map[2], null, null, $this->pumper()), null];
+        $this->inits[$id] ??= [new Download($map[0], $map[1], $map[2], null, null, $this->pumper(), $this->hls->headers), null];
         if ($wait) { $this->inits[$id][0]->wait(); }
         if ($this->inits[$id][1] === null && $this->inits[$id][0]->done()) {
             $this->inits[$id][1] = new Mp4($this->inits[$id][0]);
@@ -316,6 +316,12 @@ final class HlsStream
     {
         $self = \WeakReference::create($this);
         return static function () use ($self): void { $self->get()?->pumpQuietly(); };
+    }
+
+    /** Downloads on, the film's cache having room again (another reader read). @internal Media\Hls */
+    public function resume(): void
+    {
+        $this->pumpQuietly();
     }
 
     /** pump() from a transfer's end: what fails is told by peek(), not thrown in the loop's callback. */
@@ -349,19 +355,19 @@ final class HlsStream
         }
         foreach ($this->downloads as $d) { if (!$d->over()) { return; } }
         $next = $this->downloads === [] ? $this->seq : array_key_last($this->downloads) + 1;
-        if (!isset($this->segments[$next]) || ($this->downloads !== [] && $this->hls->ahead() >= Hls::MAX * 0.9)) {
+        if (!isset($this->segments[$next]) || ($this->downloads !== [] && $this->hls->shared() >= Hls::MAX * 0.9)) {
             return;
         }
         $seg = $this->segments[$next];
         $key = null;
         if ($seg['key'] !== null) {
-            $k = $this->keys[$seg['key'][0]] ??= new Download($seg['key'][0], finished: $this->pumper());
+            $k = $this->keys[$seg['key'][0]] ??= new Download($seg['key'][0], finished: $this->pumper(), headers: $this->hls->headers);
             if (!$k->done()) { return; }
             $key = [$k->text(), $seg['key'][1]];
         }
         if ($seg['map'] !== null) { $this->init($seg['map']); }
         $hls = $this->hls;
-        $this->downloads[$next] = new Download($seg['uri'], $seg['offset'], $seg['length'], $key, static function (int $n) use ($hls): void { $hls->count($n); }, $this->pumper());
+        $this->downloads[$next] = new Download($seg['uri'], $seg['offset'], $seg['length'], $key, static function (int $n) use ($hls): void { $hls->count($n); }, $this->pumper(), $hls->headers);
     }
 
     /** The bytes its segments hold from the one read on. */
@@ -419,6 +425,7 @@ final class HlsStream
                 $this->seq++;
                 $this->reader = null;
                 $this->pump();
+                $this->hls->released();
                 continue;
             }
             $track = $this->tracks[$p->track->number] ?? null;

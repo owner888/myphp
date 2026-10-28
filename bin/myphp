@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.51.0';
+const VERSION = '1.52.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -1138,7 +1138,29 @@ function natives(string $appDir, string $framework, string $arch): array
             $out[] = [$f['name'], fetchNative($f)];
         }
     }
+    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'VideoPlayer')) {
+        array_push($out, ...dav1d($arch));
+    }
     return $out;
+}
+
+/**
+ * libdav1d, which the video player decodes AV1 with where the system does
+ * not (Native\Dav1d), from this Mac's Homebrew, for an app that plays video:
+ * a build of the app's architecture, none (a warning) when there is none.
+ * @return list<array{0: string, 1: string}>
+ */
+function dav1d(string $arch): array
+{
+    $want = ['arm64' => MachO::CPU_ARM64, 'amd64' => MachO::CPU_AMD64][$arch] ?? null;
+    foreach (['/opt/homebrew/lib/libdav1d.7.dylib', '/usr/local/lib/libdav1d.7.dylib'] as $lib) {
+        $real = realpath($lib);
+        if ($real !== false && $want !== null && MachO::cpu($real) === $want) {
+            return [['libdav1d.7.dylib', $real]];
+        }
+    }
+    warnf("no libdav1d for darwin/$arch (brew install dav1d): the app decodes AV1 only where the system does");
+    return [];
 }
 
 /** The .php files under $dir, but in the directories $skip names. @return list<string> */

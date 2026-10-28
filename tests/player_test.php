@@ -149,6 +149,72 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $p->pause();
     }
 
+    // AV1 in software (libdav1d), hardware decoding off (IINA's preference), as on a Mac without AV1's decoder: it plays, its
+    // frames on screen (a snapshot of them, as the hardware's), its thumbnails.
+    if (($why = \MyPHP\Native\Dav1d::unavailable()) !== null) {
+        echo "  skipped: AV1 in software: $why\n";
+    } else {
+        $frame = function (Player $p, float $at) use ($run): ?string { // on screen, at $at: the frame's PNG
+            $win = ObjC::msg('p:rLLb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', ObjC::rect(0, 0, 160, 90), 0, 2, false);
+            $content = ObjC::msg('p:', $win, 'contentView');
+            ObjC::msg('v:b', $content, 'setWantsLayer:', true);
+            ObjC::msg('v:r', $p->out->layer, 'setFrame:', ObjC::rect(0, 0, 160, 90));
+            ObjC::msg('v:p', ObjC::msg('p:', $content, 'layer'), 'addSublayer:', $p->out->layer);
+            ObjC::msg('v:', $win, 'orderFrontRegardless');
+            $p->seek($at); $run(0.4);
+            $png = $p->snapshot();
+            for ($i = 0, $then = $png; $i < 10; $i++, $then = $png) { // until it shows one frame a while: how long that took, told
+                $run(0.1);
+                $png = $p->snapshot();
+                if ($png === $then) { break; }
+            }
+            if ($i > 0) { echo "  note: the frame on screen changed for " . (0.1 * $i) . " s more after the seek's 0.4\n"; }
+            ObjC::msg('v:', $p->out->layer, 'removeFromSuperlayer');
+            ObjC::msg('v:', $win, 'close');
+            return $png;
+        };
+        $pixels = function (?string $png): ?string { // the PNG's RGBA, of the film's size
+            if ($png === null) { return null; }
+            $img = \MyPHP\Native\ImageIO::decode($png, 160);
+            $rgba = \FFI::string($img['pix'], $img['w'] * $img['h'] * 4);
+            \MyPHP\Native\Mem::free($img['pix']);
+            return $rgba;
+        };
+        $mean = fn(string $a, string $b): float => array_sum(array_map(fn($x, $y) => abs($x - $y), unpack('C*', $a), unpack('C*', $b))) / strlen($a);
+        Player::$hardwareDecoding = false;
+        try {
+            $p = new Player(__DIR__ . '/testdata/clip-av1.mkv');
+            check($p->videoTrack()?->codec === 'V_AV1', 'AV1 in software: its video track');
+            $p->play();
+            for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+            $from = $p->time();
+            $run(0.5);
+            $failed = $p->out->failure();
+            check($failed === null && $p->time() - $from > 0.3, 'it plays, decoded by libdav1d: ' . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
+            $p->pause();
+            // The frame of the time sought, from wherever it was: at 1 s from a pause at about 0.5, and from 1.5 s, the same picture,
+            // another than 1.5 s's (a frame shown of before the seek, or of the hidden ones decoded for it, would differ).
+            $soft = $pixels($frame($p, 1.0));
+            $other = $pixels($frame($p, 1.5));
+            $again = $pixels($frame($p, 1.0));
+            check($soft !== null && strlen($soft) === 160 * 90 * 4, 'its frame on screen: a snapshot of the film\'s size');
+            $same = $soft === null || $again === null ? INF : $mean($soft, $again);
+            $apart = $soft === null || $other === null ? 0.0 : $mean($soft, $other);
+            check($same < 1 && $apart > 10, 'the frame of the time sought, from wherever it was: ' . round($same, 2) . ' apart, against ' . round($apart, 2) . ' to 1.5 s\'s');
+            $thumb = $p->thumbnail(1.5, 80);
+            check($thumb !== null && [$thumb->width, $thumb->height] === [80, 45] && abs($thumb->time - 1.0) < 0.1, 'a thumbnail, decoded by libdav1d: ' . ($thumb === null ? 'none' : "{$thumb->time} s"));
+            Player::$hardwareDecoding = true;
+            $h = new Player(__DIR__ . '/testdata/clip-av1.mkv');
+            if (\MyPHP\Native\CoreMedia::playable($h->videoTrack())) { // this Mac's hardware: the thumbnails alike (its frames on screen are not
+                // compared: a seek's snapshot of the hardware's AV1 now and then shows a frame decoded on the way, 0.375 s's for 1 s)
+                $ht = $h->thumbnail(1.5, 80);
+                check($thumb !== null && $ht !== null && $mean($thumb->rgba(), $ht->rgba()) < 8, 'its thumbnail as the hardware\'s: mean error ' . ($thumb === null || $ht === null ? '-' : round($mean($thumb->rgba(), $ht->rgba()), 2)));
+            }
+        } finally {
+            Player::$hardwareDecoding = true;
+        }
+    }
+
     // The picture's aspect, crop and rotation (the window lays it out by Media\Picture), and the sound's delay, which plays on.
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
     check($p->plainPicture(), 'the picture as the file has it');
@@ -268,7 +334,12 @@ if (PHP_OS_FAMILY === 'Darwin') {
     copy(__DIR__ . '/testdata/clip.mp4', "$dir/clip.mp4");
     copy(__DIR__ . '/testdata/clip-chapters.mp4', "$dir/chapters.mp4"); // its movie box after its samples
     foreach (glob(__DIR__ . '/testdata/hls/*') ?: [] as $f) { copy($f, "$dir/" . basename($f)); }
+    foreach (['clip-dash.mp4', 'clip-dash.m4a', 'clip-subs.zh.srt'] as $f) { copy(__DIR__ . "/testdata/$f", "$dir/$f"); }
     [$base, $stop] = rangeServer($dir);
+    $fake = "$dir/yt-dlp"; // testdata/fake-yt-dlp.php, as Media\YtDlp runs a program
+    file_put_contents($fake, "#!/bin/sh\nMYPHP_YTDLP_BASE='$base' exec '" . PHP_BINARY . "' '" . __DIR__ . "/testdata/fake-yt-dlp.php' \"\$@\"\n");
+    chmod($fake, 0755);
+    $ytdlp = \MyPHP\Media\YtDlp::$path;
     try {
         $p = new Player("$base/clip.mkv");
         check($p->remote() && abs($p->duration() - 2.02) < 0.05 && $p->size() === [160, 90], 'over HTTP: its duration and size, from its header');
@@ -306,11 +377,32 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $from = $p->time();
         $run(0.6); $p->pause();
         check($p->audioTrack()?->name === 'Français' && $p->time() > $from + 0.3, "another chosen plays on: from $from to {$p->time()}");
+        // A page (yt-dlp's, as mpv's ytdl_hook): a video's format and an audio's played as one, read with the page's headers; its
+        // title, chapters, subtitles (downloaded once chosen); a playlist's entries, the first playing.
+        \MyPHP\Media\YtDlp::$path = $fake;
+        $p = new Player("$base/watch?v=x");
+        same(['A clip of x', ['One', 'Two'], [1, 1001]], [$p->title(), array_map(fn($c) => $c->title, $p->chapters()), [$p->videoTrack()?->number, $p->audioTrack()?->number]],
+            'a page: its title, chapters, the video\'s and the audio\'s tracks');
+        $sub = array_values(array_filter($p->subtitleTracks(), fn(Track $t) => $t->name === 'Chinese'))[0] ?? null;
+        check($sub !== null && $p->subtitleTrack() === null, 'its subtitles, listed, none shown');
+        $p->setSubtitleTrack($sub);
+        $p->play();
+        for ($waited = 0; $p->subtitles() === [] && $waited < 40; $waited++) { $run(0.05); }
+        check($p->time() > 0.2 && $p->subtitles() === ['第一句 字幕'], 'it plays, the subtitles chosen downloaded and shown: ' . json_encode($p->subtitles()) . " at {$p->time()}");
+        $p->pause();
+        $p = new Player("$base/list?id=L");
+        same([['First', 'Second'], 0, 'A clip of a'], [array_map(fn($f) => $p->playlist()?->title($f), $p->playlist()?->files() ?? []), $p->playlist()?->index(), $p->title()], 'a playlist: its entries, the first playing');
+        $err = null;
+        try { new Player("$base/nothing.html?fail"); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+        check($err !== null && str_contains($err, '404') && str_contains($err, 'Unsupported URL'), "a URL of no film, nor a page yt-dlp reads: both said: $err");
+        \MyPHP\Media\YtDlp::$path = $ytdlp;
+
         $err = null;
         try { new Player("$base/clip.mkv?fail"); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
         check($err !== null && str_contains($err, '404'), 'a film the server fails: said, ' . $err);
     } finally {
         $stop();
+        \MyPHP\Media\YtDlp::$path = $ytdlp;
         foreach (glob("$dir/*") ?: [] as $f) { @unlink($f); }
         @rmdir($dir);
     }

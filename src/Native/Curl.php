@@ -58,6 +58,14 @@ final class Curl
 
     private static ?FFI $ffi = null;
 
+    /** The list of request headers $headers (name => value), owned (curl_slist_free_all it once its transfer ended); null for none. @param array<string, string> $headers */
+    public static function headers(array $headers): ?CData
+    {
+        $list = null;
+        foreach ($headers as $name => $value) { $list = self::ffi()->curl_slist_append($list, "$name: $value"); }
+        return $list;
+    }
+
     /** libcurl: the system's, /usr/lib/libcurl.4.dylib on macOS. */
     public static function ffi(): FFI
     {

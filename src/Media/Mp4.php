@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Media;
 
+use MyPHP\Native\CurlLoop;
 use RuntimeException;
 
 /**
@@ -50,6 +51,18 @@ final class Mp4 implements Source
      * @var array<int, array{track: Track, scale: int, shift: int, duration: int, size: int, flags: int}>
      */
     private array $fragmentTracks = [];
+    /** A fragmented film's (its movie extended: mvex): its samples in the fragments after the movie box, read by $fragment from $first on. */
+    private bool $fragmented = false;
+    private int $first = 0;
+    private ?Fragment $fragment = null;
+    /**
+     * Where a fragmented film's fragments start and when (seconds, the
+     * reference track's presentation): its segment index's (sidx), else
+     * the movie fragments found as a seek looked for them.
+     * @var list<array{0: int, 1: float, 2: bool}> offset, time, whether it starts with a keyframe (SAP)
+     */
+    private array $index = [];
+    private bool $indexed = false;
 
     /** Reads the file at $path, or $bytes (a film's over HTTP). */
     public function __construct(string|Bytes $source)
@@ -59,7 +72,7 @@ final class Mp4 implements Source
         $moov = null;
         for ($p = 0, $end = $this->bytes->size(); $p + 8 <= $end;) { // the top-level boxes: the movie's, wherever it is
             [$type, $size, $data] = $this->box($p, $end);
-            if ($type === 'moov') { $moov = $this->bytes->read($data, $p + $size - $data); break; }
+            if ($type === 'moov') { $moov = $this->bytes->read($data, $p + $size - $data); $p += $size; break; }
             if ($size <= 0) { break; }
             $p += $size;
         }
@@ -70,7 +83,132 @@ final class Mp4 implements Source
         if ($this->tracks === []) {
             throw new RuntimeException("$name has no track the player reads");
         }
+        if ($this->fragmented) {
+            $this->fragments($p, $end);
+        }
         $this->interleave();
+    }
+
+    /**
+     * A fragmented film's (DASH's, YouTube's): past the movie box, its
+     * segment index (sidx: each subsegment's offset, duration, whether it
+     * starts at a keyframe), its first movie fragment; its duration the
+     * index's, when the movie says none.
+     */
+    private function fragments(int $p, int $end): void
+    {
+        while ($p + 8 <= $end) {
+            [$type, $size, $data] = $this->box($p, $end);
+            if ($type === 'moof' || $size <= 0) { break; }
+            if ($type === 'sidx' && !$this->indexed) { $this->sidx($this->bytes->read($data, $p + $size - $data), $p + $size); }
+            $p += $size;
+        }
+        $this->first = $p;
+        $this->fragment = new Fragment($this->bytes, $this->fragmentTracks, $p);
+        if ($this->duration <= 0 && $this->index !== []) {
+            $this->duration = $this->sidxEnd;
+        } elseif ($this->duration <= 0) { // neither the movie nor an index says: the fragments walked, the last one's end (FFmpeg reads them all as it opens)
+            CurlLoop::waitUntil(fn(): bool => $this->fragmentAt(INF) !== null);
+            $last = $this->index === [] ? null : (new Fragment($this->bytes, $this->fragmentTracks, $this->index[count($this->index) - 1][0]))->end();
+            $this->duration = $last ?? 0.0;
+        }
+    }
+
+    /**
+     * Where the fragment a seek to $seconds reads from starts: the last of
+     * the index starting at a keyframe at or before it (FFmpeg's mov seeks
+     * by its sidx so), its own first video sample's flags looked at (a
+     * muxer's sidx marks every subsegment SAP, FFmpeg's of fragments cut by
+     * duration too); without an index, the movie fragments walked from the
+     * first, their video's tfdt read (each kept), as far as $seconds. Null
+     * while what it reads is not here (asked for): never waited for, the
+     * player's seek going on at once, as it does over the network (a seek
+     * that waited, its slider dragged, waited in each of its frames).
+     */
+    private function fragmentAt(float $seconds): ?int
+    {
+        $video = null;
+        foreach ($this->fragmentTracks as $id => $t) { if ($t['track']->type === Track::VIDEO) { $video = $id; break; } }
+        if (!$this->indexed) {
+            $id = $video ?? array_key_first($this->fragmentTracks);
+            $t = $this->fragmentTracks[$id];
+            $this->walked ??= $this->first;
+            for ($end = $this->bytes->size(); $this->walked + 8 <= $end && ($this->index === [] || $this->index[count($this->index) - 1][1] <= $seconds);) {
+                if (!$this->bytes->has($this->walked, 16)) { return null; }
+                [$type, $size] = $this->box($this->walked, $end);
+                if ($size <= 0) { break; }
+                if ($type === 'moof') {
+                    $first = Fragment::first($this->bytes, $this->walked, $id, $t['scale'], $t['flags']);
+                    if ($first === false) { return null; }
+                    if ($first === null) { break; }
+                    $this->index[] = [$this->walked, $first[0] - $t['shift'] / $t['scale'], $first[1] || $t['track']->type !== Track::VIDEO];
+                    $this->checked[count($this->index) - 1] = true;
+                }
+                $this->walked += $size;
+            }
+        }
+        for ($i = count($this->index) - 1; $i >= 0; $i--) {
+            [$offset, $time, $key] = $this->index[$i];
+            if ($time > $seconds + 1e-6 || !$key) { continue; }
+            if ($video !== null && !isset($this->checked[$i])) {
+                $t = $this->fragmentTracks[$video];
+                $first = Fragment::first($this->bytes, $offset, $video, $t['scale'], $t['flags']);
+                if ($first === false) { return null; }
+                $this->checked[$i] = true;
+                $this->index[$i][2] = $first === null || $first[1];
+                if (!$this->index[$i][2]) { continue; }
+            }
+            return $offset;
+        }
+        return $this->first;
+    }
+
+    /** Where walking the fragments goes on (a film of no index), null before it began; the time a seek goes to, until its fragment is found. */
+    private ?int $walked = null;
+    private ?float $seekTo = null;
+
+    /** The fragment of the seek asked found, reading from it: whether it is (false: what it reads is not here yet). */
+    private function sought(): bool
+    {
+        if ($this->seekTo === null) {
+            return true;
+        }
+        $at = $this->fragmentAt($this->seekTo);
+        if ($at === null) {
+            return false;
+        }
+        $this->fragment = new Fragment($this->bytes, $this->fragmentTracks, $at);
+        $this->seekTo = null;
+        return true;
+    }
+
+    /** @var array<int, true> the entries of $index whose video's first sample was looked at, by their place */
+    private array $checked = [];
+
+    /** Where the segment index ends, in seconds. */
+    private float $sidxEnd = 0.0;
+
+    /** A segment index (ISO/IEC 14496-12 8.16.3) ending at $anchor: its subsegments, of the track it references, as $index. */
+    private function sidx(string $d, int $anchor): void
+    {
+        $v1 = ord($d[0]) === 1;
+        $id = unpack('N', $d, 4)[1];
+        $scale = max(1, unpack('N', $d, 8)[1]);
+        [$time, $offset, $p] = $v1 ? [unpack('J', $d, 12)[1], unpack('J', $d, 20)[1], 28] : [unpack('N', $d, 12)[1], unpack('N', $d, 16)[1], 20];
+        $n = unpack('n', $d, $p + 2)[1];
+        $p += 4;
+        $t = $this->fragmentTracks[$id] ?? null;
+        $shift = $t === null ? 0.0 : $t['shift'] / $t['scale'];
+        $at = $anchor + $offset;
+        for ($i = 0; $i < $n && $p + 12 <= strlen($d); $i++, $p += 12) {
+            [$ref, $dur, $sap] = array_values(unpack('N3', $d, $p));
+            if ($ref & 0x80000000) { return; } // an index of indexes: found as a seek looks for fragments instead
+            $this->index[] = [$at, $time / $scale - $shift, ($sap & 0x80000000) !== 0];
+            $at += $ref & 0x7fffffff;
+            $time += $dur;
+        }
+        $this->sidxEnd = $time / $scale - $shift;
+        $this->indexed = true;
     }
 
     /** The box at $p (before $end): its type, its whole size (to $end for a size of 0) and where its data starts. @return array{0: string, 1: int, 2: int} */
@@ -131,8 +269,10 @@ final class Mp4 implements Source
             } elseif ($type === 'udta') {
                 $udta = $d;
             } elseif ($type === 'mvex') { // a fragmented film's: its samples in fragments, their defaults these
+                $this->fragmented = true;
                 foreach (self::boxes($d) as [$t, $x]) {
                     if ($t === 'trex' && strlen($x) >= 24) { $trex[unpack('N', $x, 4)[1]] = array_values(unpack('N3', $x, 12)); }
+                    if ($t === 'mehd' && strlen($x) >= 8 && isset($movieScale)) { $this->duration = (ord($x[0]) === 1 ? unpack('J', $x, 4)[1] : unpack('N', $x, 4)[1]) / max(1, $movieScale); }
                 }
             }
         }
@@ -466,6 +606,9 @@ final class Mp4 implements Source
 
     public function ready(): bool
     {
+        if ($this->fragmented) {
+            return $this->sought() && $this->fragment->ready();
+        }
         if ($this->at >= $this->count) {
             return true;
         }
@@ -475,6 +618,9 @@ final class Mp4 implements Source
 
     public function next(): ?Packet
     {
+        if ($this->fragmented) {
+            return $this->sought() ? $this->fragment->next() : null;
+        }
         if ($this->at >= $this->count || !$this->ready()) {
             return null;
         }
@@ -494,6 +640,10 @@ final class Mp4 implements Source
      */
     public function seek(float $seconds): void
     {
+        if ($this->fragmented) {
+            $this->seekTo = $seconds; // found as it reads on: sought()
+            return;
+        }
         $time = fn(array $tab, int $s): float => unpack('q', $tab['times'], 8 * $s)[1] / $tab['scale'];
         $offset = fn(array $tab, int $s): int => unpack('P', $tab['offsets'], 8 * $s)[1];
         $from = $seconds;
@@ -529,6 +679,12 @@ final class Mp4 implements Source
     public function keyframe(float $seconds): ?Packet
     {
         $this->seek($seconds);
+        if ($this->fragmented) {
+            while (($p = $this->next()) !== null) {
+                if ($p->track->type === Track::VIDEO && $p->keyframe) { return $p; }
+            }
+            return null; // the end, or not here yet
+        }
         while ($this->at < $this->count) {
             [$t] = $this->entry($this->at);
             if ($this->tracks[$t]->type !== Track::VIDEO) { $this->at++; continue; }

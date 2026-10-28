@@ -491,7 +491,11 @@ final class Headless
  */
 function rangeServer(string $dir): array
 {
-    $port = 19000 + (getmypid() + random_int(0, 499)) % 1000;
+    do { // a port nothing listens on: an earlier test's server (its workers outlive it a moment) would answer of its own folder
+        $port = 19000 + random_int(0, 999);
+        $busy = @fsockopen('127.0.0.1', $port);
+        if ($busy !== false) { fclose($busy); }
+    } while ($busy !== false);
     $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];

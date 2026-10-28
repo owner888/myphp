@@ -14,15 +14,63 @@ namespace MyPHP\Media;
  */
 final class Fragment
 {
-    /** Where the next box is. */
-    private int $pos = 0;
     private bool $end = false;
     /** @var list<array{0: Track, 1: float, 2: float, 3: bool, 4: int, 5: int}> the samples of the fragment read: track, time, duration, sync, offset, size; by offset */
     private array $samples = [];
     private int $at = 0;
 
-    /** @param array<int, array{track: Track, scale: int, shift: int, duration: int, size: int, flags: int}> $tracks by id */
-    public function __construct(private readonly Bytes $bytes, private readonly array $tracks) {}
+    /** @var array<int, int> where each track's samples go on, decode time (its timescale's), for a fragment of no tfdt (one of old muxers'), by track id */
+    private array $dts = [];
+
+    /** The fragments of $bytes from $pos on (a segment's from its start, a file's past its movie box). @param array<int, array{track: Track, scale: int, shift: int, duration: int, size: int, flags: int}> $tracks by id */
+    public function __construct(private readonly Bytes $bytes, private readonly array $tracks, private int $pos = 0) {}
+
+    /**
+     * Of the movie fragment at $pos of $bytes, track $id's first sample:
+     * its decode time (its tfdt, of timescale $scale) and whether it is a
+     * sync sample (the trun's first sample flags, its own, the tfhd's
+     * default, else $default, the trex's); null when it has none; false
+     * while its bytes are not here (asked for: never waited for, as a seek
+     * of the player's goes on at once).
+     * @return array{0: float, 1: bool}|null|false
+     * @internal Media\Mp4
+     */
+    public static function first(Bytes $bytes, int $pos, int $id, int $scale, int $default): array|null|false
+    {
+        if (!$bytes->has($pos, 8)) { return false; }
+        $h = $bytes->read($pos, 8);
+        if (strlen($h) < 8 || substr($h, 4, 4) !== 'moof') { return null; }
+        if (!$bytes->has($pos, unpack('N', $h)[1])) { return false; }
+        $moof = $bytes->read($pos + 8, unpack('N', $h)[1] - 8);
+        foreach (Mp4::boxes($moof) as [$type, $traf]) {
+            $tfhd = $type === 'traf' ? Mp4::find($traf, 'tfhd') ?? '' : '';
+            $tfdt = Mp4::find($traf, 'tfdt');
+            $trun = Mp4::find($traf, 'trun');
+            if (strlen($tfhd) < 8 || unpack('N', $tfhd, 4)[1] !== $id || $tfdt === null || $trun === null) { continue; }
+            $flags = $default;
+            $hf = unpack('N', $tfhd)[1] & 0xffffff;
+            if ($hf & 0x20) { $flags = unpack('N', $tfhd, 8 + (($hf & 1) ? 8 : 0) + (($hf & 2) ? 4 : 0) + (($hf & 8) ? 4 : 0) + (($hf & 0x10) ? 4 : 0))[1]; }
+            $tf = unpack('N', $trun)[1] & 0xffffff;
+            $q = 8 + (($tf & 1) ? 4 : 0);
+            if ($tf & 0x04) { $flags = unpack('N', $trun, $q)[1]; }
+            elseif ($tf & 0x400) { $flags = unpack('N', $trun, $q + (($tf & 0x100) ? 4 : 0) + (($tf & 0x200) ? 4 : 0))[1]; }
+            return [(ord($tfdt[0]) === 1 ? unpack('J', $tfdt, 4)[1] : unpack('N', $tfdt, 4)[1]) / $scale, ($flags & 0x10000) === 0];
+        }
+        return null;
+    }
+
+    /** Where the samples of the movie fragment it starts at end (seconds: the latest's time and duration), waited for; null for no fragment there. @internal Media\Mp4 */
+    public function end(): ?float
+    {
+        $h = $this->bytes->read($this->pos, 8);
+        if (strlen($h) < 8 || substr($h, 4, 4) !== 'moof') {
+            return null;
+        }
+        $this->moof($this->pos, $this->bytes->read($this->pos + 8, unpack('N', $h)[1] - 8));
+        $end = null;
+        foreach ($this->samples as [, $time, $duration]) { $end = max($end ?? $time + $duration, $time + $duration); }
+        return $end;
+    }
 
     /** Whether next() has what it reads, without waiting; true at the end. */
     public function ready(): bool
@@ -87,7 +135,7 @@ final class Fragment
             if ($flags & 0x10) { $dSize = unpack('N', $tfhd, $p)[1]; $p += 4; }
             if ($flags & 0x20) { $dFlags = unpack('N', $tfhd, $p)[1]; }
             $tfdt = Mp4::find($traf, 'tfdt');
-            $dts = $tfdt === null ? 0 : (ord($tfdt[0]) === 1 ? unpack('J', $tfdt, 4)[1] : unpack('N', $tfdt, 4)[1]);
+            $dts = $tfdt === null ? ($this->dts[$id] ?? 0) : (ord($tfdt[0]) === 1 ? unpack('J', $tfdt, 4)[1] : unpack('N', $tfdt, 4)[1]);
             $off = $base;
             foreach (Mp4::boxes($traf) as [$bt, $trun]) {
                 if ($bt !== 'trun' || strlen($trun) < 8) { continue; }
@@ -109,6 +157,7 @@ final class Fragment
                     $off += $size;
                 }
             }
+            $this->dts[$id] = $dts;
         }
         usort($samples, fn(array $a, array $b) => $a[4] <=> $b[4]);
         $this->samples = $samples;

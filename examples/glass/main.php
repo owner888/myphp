@@ -33,7 +33,7 @@ function view(Context $c, array &$s): void
         $c->end();
       $c->end();
       // The toolbar: a glass row floating over the content.
-      $glass = fn() => new Glass($s['clear'] ? Style::Clear : Style::Regular, $s['tinted'] ? $t->accent : null, 0.5);
+      $glass = function () use (&$s, $t) { return new Glass($s['clear'] ? Style::Clear : Style::Regular, $s['tinted'] ? $t->accent : null, 0.5); }; // by reference: the checkboxes below change $s in this frame
       $c->row(10, 14)->at(16, 16)->round(22)->material($glass());
         $c->text('Liquid Glass', 15, style: Font::BOLD);
         $c->checkbox('Clear', $s['clear']);

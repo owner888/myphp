@@ -23,11 +23,24 @@ final class Playlist
     /** @var ?list<string> the order before shuffle(), which unshuffle() goes back to; null while not shuffled */
     private ?array $unshuffled = null;
 
-    /** @param list<string> $files */
-    public function __construct(array $files = [])
+    /** @var array<string, string> the titles of the films that have them, by path (a web playlist's, yt-dlp's) */
+    private array $titles = [];
+
+    /** @param list<string> $files @param array<string, string> $titles the films' titles, by path, for those not named by their file (a web playlist's) */
+    public function __construct(array $files = [], array $titles = [])
     {
         foreach ($files as $f) { $this->add($f); }
+        $this->titles = $titles;
         $this->index = $this->files === [] ? -1 : 0;
+    }
+
+    /** The title of the film at $path: its own (a web playlist's), else its file's name (a URL's, decoded). */
+    public function title(string $path): string
+    {
+        if (isset($this->titles[$path])) {
+            return $this->titles[$path];
+        }
+        return preg_match('~^https?://~i', $path) === 1 ? rawurldecode(basename((string)parse_url($path, PHP_URL_PATH))) : basename($path);
     }
 
     /** The films of the folder of $path, by name as Finder sorts them, $path the one playing. */
@@ -141,11 +154,11 @@ final class Playlist
         return $this->unshuffled !== null;
     }
 
-    /** Sorts the films by their names (as IINA compares strings: by their bytes), up or down. */
+    /** Sorts the films by their names, their titles (as IINA compares strings: by their bytes), up or down. */
     public function sortByName(bool $ascending = true): void
     {
         $this->reorder(function (array $files) use ($ascending): array {
-            usort($files, fn(string $a, string $b): int => ($ascending ? 1 : -1) * strcmp(basename($a), basename($b)));
+            usort($files, fn(string $a, string $b): int => ($ascending ? 1 : -1) * strcmp($this->title($a), $this->title($b)));
             return $files;
         });
     }

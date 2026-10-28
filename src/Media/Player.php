@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, MediaTicker, Renderers, VideoDecoder};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, MediaTicker, Renderers, SoftVideo, VideoDecoder};
 use RuntimeException;
 
 /**
@@ -33,11 +33,34 @@ final class Player
     /** A film over HTTP: the clock waits once less than STALL seconds are given ahead and the next are not here, until CACHE_WAIT are (IINA's cachePauseWait, mpv's cache-pause-wait); looked at every BUFFER_LOOK seconds meanwhile. */
     private const STALL = 0.1, CACHE_WAIT = 1.0, BUFFER_LOOK = 0.05;
 
+    /**
+     * Whether the system's decoders decode the video, IINA's "Enable
+     * hardware decoder" (mpv's hwdec); off, what decodes in software does
+     * (AV1, by libdav1d: the system's other decoders are its only ones).
+     * Read as a film opens: those playing keep theirs. AV1 the system does
+     * not decode (before Apple's M3) decodes in software anyway.
+     */
+    public static bool $hardwareDecoding = true;
+
     private Source $source;
+    /** Whether this film's video decodes on the system's decoders (self::$hardwareDecoding as it opened). */
+    private bool $hardware;
     /** What reads a film over HTTP ahead (its bytes, or HLS's segments), null for a file's. */
     private ?Cache $net = null;
     /** Whether the clock waits for the network (mpv's paused-for-cache), and what failed reading the film. */
     private bool $buffering = false;
+    /**
+     * Where what the buffering indicator counts starts (the clock's time as
+     * it began waiting; null: the first packet read since the seek it began
+     * in), and the times of the first and the last packet read since the
+     * last seek: the indicator counts what came from the keyframe a seek
+     * decodes from, as mpv's cache-buffering-state counts what is cached
+     * ahead of what its decoders read (not of the clock, which waits at
+     * the target meanwhile).
+     */
+    private ?float $bufferFrom = null, $readFrom = null;
+    private float $readTo = -INF;
+    private bool $seeking = false;
     private ?string $readError = null;
     /** @internal the renderers, whose layer the window shows */
     public readonly Renderers $out;
@@ -96,28 +119,46 @@ final class Player
     private array $pictureDecoders = [];
     /** @var array<int, Cues> the cues of each subtitle track read so far, by track (its object id) */
     private array $cues = [];
+    /** The page's title, chapters and playlist (yt-dlp's), for a film read from a page. @var list<Chapter> */
+    private ?string $title = null;
+    private array $pageChapters = [];
+    private ?Playlist $playlist = null;
+    /** @var array<int, array{0: string, 1: array<string, string>, 2: string, 3: ?Download}> the page's subtitles not loaded yet: their URL, headers, extension and download, by track (its object id) */
+    private array $remote = [];
 
-    /** Plays the file at $path, or the film at an http(s) URL (Matroska, WebM, MP4, MOV, MPEG-TS, an HLS playlist), read as it comes. */
+    /**
+     * Plays the file at $path, or the film at an http(s) URL (Matroska,
+     * WebM, MP4, MOV, MPEG-TS, an HLS playlist), read as it comes; a URL that
+     * is no film (a web page) read by yt-dlp, as mpv's ytdl_hook does when
+     * the URL does not open (Media\YtDlp): the video of the page, or the
+     * first of its playlist (playlist()).
+     */
     public function __construct(private readonly string $path)
     {
-        if (self::isUrl($path) && preg_match('~\.m3u8?$~i', (string)parse_url($path, PHP_URL_PATH)) === 1) {
-            $this->source = $this->net = new Hls($path);
-        } elseif (self::isUrl($path)) {
-            $http = $this->net = new HttpBytes($path);
-            $head = $http->read(0, 8);
-            $this->source = match (true) { // by what it starts with, as FFmpeg probes: EBML's id, an ISO base media box, a TS packet's sync byte
-                str_starts_with($head, "\x1A\x45\xDF\xA3") => new Matroska($http),
-                in_array(substr($head, 4, 4), ['ftyp', 'moov', 'mdat', 'free', 'skip', 'wide', 'pnot'], true) => new Mp4($http),
-                str_starts_with($head, '#EXTM3U') => $this->net = new Hls($path),
-                $head[0] === 'G' || ($head[4] ?? '') === 'G' => new Ts($http),
-                default => throw new RuntimeException("myphp: $path is no Matroska, WebM, MP4, MOV, MPEG-TS or HLS film"),
-            };
+        if (self::isUrl($path)) {
+            // yt-dlp read the page as the URL opens, not after (mpv's ytdl_hook runs it once the URL failed to open): over a slow
+            // network a web page's response alone takes seconds; stopped once the URL opens as a film.
+            $page = YtDlp::find() === null ? null : new YtDlp($path);
+            try {
+                [$this->source, $this->net] = self::open($path);
+                $page = null;
+            } catch (RuntimeException $direct) {
+                if ($page === null) {
+                    throw new RuntimeException($direct->getMessage() . ', and there is no yt-dlp to read it as a page (brew install yt-dlp)');
+                }
+                try {
+                    $this->page($path, $page);
+                } catch (RuntimeException $e) {
+                    throw new RuntimeException($direct->getMessage() . '; read as a page, ' . $e->getMessage());
+                }
+            }
         } else {
             $this->source = self::source($path);
         }
+        $this->hardware = self::$hardwareDecoding;
         $this->duration = $this->source->duration();
         foreach ($this->source->tracks() as $t) {
-            if ($t->type === Track::VIDEO && $this->video === null && CoreMedia::playable($t)) {
+            if ($t->type === Track::VIDEO && $this->video === null && self::playable($t)) {
                 $this->video = $t;
             }
         }
@@ -128,7 +169,7 @@ final class Player
         }
         $this->source->choose($this->video, $this->audio);
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
-        $this->out = new Renderers();
+        $this->out = new Renderers($this->hardware);
         $this->awake = new Awake('Playing ' . basename($path));
         if ($this->net === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
@@ -179,6 +220,7 @@ final class Player
             return;
         }
         $this->subtitle = $t;
+        if ($t !== null) { $this->fetchSubtitles($t); } // a page's: downloaded from now
         $this->emit('track', 'subtitle');
     }
 
@@ -280,6 +322,7 @@ final class Player
     /** What the subtitles of the track shown show now, texts, ASS lines or pictures. @return list<string|AssLine|list<SubtitlePicture>> */
     private function showing(): array
     {
+        if ($this->subtitle !== null) { $this->fetchSubtitles($this->subtitle); }
         return $this->subtitle === null ? [] : ($this->cues[spl_object_id($this->subtitle)] ?? new Cues())->at($this->time() - $this->subtitleDelay);
     }
 
@@ -315,10 +358,10 @@ final class Player
         $cues->add($p->time, $p->duration > 0 ? $p->time + $p->duration : INF, $text);
     }
 
-    /** Whether the system decodes track $t: the player plays an audio track only if so. */
+    /** Whether the system decodes track $t, or libdav1d does (AV1): the player plays a track only if so. */
     public static function playable(Track $t): bool
     {
-        return CoreMedia::playable($t);
+        return CoreMedia::playable($t) || SoftVideo::wanted($t, false);
     }
 
     /** The file's audio tracks, playable or not, in its order. @return list<Track> */
@@ -366,7 +409,12 @@ final class Player
         if (!$this->buffering) {
             return null;
         }
-        return (int)min(100, max(0.0, $this->given() - $this->out->time()) / self::CACHE_WAIT * 100);
+        $from = $this->bufferFrom ?? $this->readFrom;
+        $goal = $this->out->time() + self::CACHE_WAIT;
+        if ($from === null) {
+            return 0;
+        }
+        return $goal <= $from ? 100 : (int)min(100, max(0.0, max($this->readTo, $this->given()) - $from) / ($goal - $from) * 100);
     }
 
     /** The bytes of the film its cache holds (a film over HTTP's; 0 for a file). */
@@ -406,6 +454,7 @@ final class Player
         if (!$this->buffering) {
             if ($this->playing && !$this->drained && $ahead < self::STALL && !$this->source->ready()) {
                 $this->buffering = true;
+                $this->bufferFrom = $this->seeking ? null : $this->out->time();
                 $this->out->setRate(0);
                 $this->emit('buffering', true);
                 $this->lookAtCache();
@@ -427,6 +476,146 @@ final class Player
             $this->cache();
             if ($this->buffering) { $this->lookAtCache(); }
         });
+    }
+
+    /**
+     * The reader of the film at URL $url and what reads it ahead, each
+     * request with $headers, of $chunk bytes at most (0: all): HLS by its path's extension (.m3u8) or
+     * yt-dlp's $protocol (m3u8, m3u8_native), else by what its first bytes
+     * are, as FFmpeg probes: EBML's id, an ISO base media box, an HLS
+     * playlist, a TS packet's sync byte.
+     * @param array<string, string> $headers
+     * @return array{0: Source, 1: Cache}
+     */
+    private static function open(string $url, array $headers = [], string $protocol = '', int $chunk = 0): array
+    {
+        if (str_starts_with($protocol, 'm3u8') || preg_match('~\.m3u8?$~i', (string)parse_url($url, PHP_URL_PATH)) === 1) {
+            $h = new Hls($url, $headers);
+            return [$h, $h];
+        }
+        if (!in_array($protocol, ['', 'http', 'https'], true)) {
+            throw new RuntimeException("myphp: $url comes by $protocol, which the player does not read");
+        }
+        $http = new HttpBytes($url, $headers, $chunk);
+        $head = $http->read(0, 8);
+        $source = match (true) {
+            str_starts_with($head, "\x1A\x45\xDF\xA3") => new Matroska($http),
+            in_array(substr($head, 4, 4), ['ftyp', 'moov', 'mdat', 'free', 'skip', 'wide', 'pnot', 'styp', 'sidx'], true) => new Mp4($http),
+            str_starts_with($head, '#EXTM3U') => null,
+            ($head[0] ?? '') === 'G' || ($head[4] ?? '') === 'G' => new Ts($http),
+            default => throw new RuntimeException("myphp: $url is no Matroska, WebM, MP4, MOV, MPEG-TS or HLS film"),
+        };
+        if ($source === null) {
+            $h = new Hls($url, $headers);
+            return [$h, $h];
+        }
+        return [$source, $http];
+    }
+
+    /**
+     * The results of $jobs, run at once: each in a fiber of its own, their
+     * waits for the network together (in a fiber of the app; one after
+     * the other outside one, as each waits there); what failed thrown, once
+     * all are over.
+     * @template T
+     * @param list<Closure(): T> $jobs
+     * @return list<T>
+     */
+    private static function together(array $jobs): array
+    {
+        $done = [];
+        foreach ($jobs as $k => $job) {
+            (new \Fiber(function () use ($job, $k, &$done): void {
+                try { $done[$k] = [$job(), null]; } catch (\Throwable $e) { $done[$k] = [null, $e]; }
+            }))->start();
+        }
+        CurlLoop::waitUntil(function () use (&$done, $jobs): bool { return count($done) === count($jobs); }); // not an arrow function: it would hold $done as it was
+        ksort($done);
+        foreach ($done as [, $e]) { if ($e !== null) { throw $e; } }
+        return array_column($done, 0);
+    }
+
+    /**
+     * The page at $url, as yt-dlp reads it: a video's formats (one, or a
+     * video's and an audio's, Merged), its title, chapters and subtitles
+     * (loaded as they are chosen); a playlist's entries, the one to play
+     * first read again.
+     */
+    private function page(string $url, YtDlp $run): void
+    {
+        $info = $run->json();
+        if (($info['_type'] ?? 'video') === 'playlist') {
+            [$entries, $start] = YtDlp::entries($info, $url);
+            if ($entries === []) {
+                throw new RuntimeException("myphp: $url: yt-dlp found a playlist of no videos");
+            }
+            $this->playlist = new Playlist(array_column($entries, 0), array_combine(array_column($entries, 0), array_column($entries, 1)));
+            $this->playlist->select($entries[$start][0]);
+            $info = YtDlp::info($entries[$start][0]);
+        }
+        $opened = self::together(array_map(fn(array $f) => fn(): array => self::open($f['url'], $f['headers'], $f['protocol'], $f['chunk']), YtDlp::formats($info))); // the video's and the audio's at once
+        if (count($opened) === 1) {
+            [$this->source, $this->net] = $opened[0];
+        } else {
+            $this->source = $this->net = new Merged(array_column($opened, 0), array_column($opened, 1));
+        }
+        $this->title = is_string($info['title'] ?? null) ? $info['title'] : null;
+        $this->pageChapters = YtDlp::chapters($info);
+        foreach (YtDlp::subtitles($info) as $s) {
+            $t = new Track(number: -1 - count($this->external), type: Track::SUBTITLE, codec: Subtitles::FILES[$s['ext']], private: '', language: $s['language'],
+                name: $s['name'], isDefault: false, frameDuration: 0.0, width: 0, height: 0, sampleRate: 0.0, channels: 0);
+            $this->external[] = $t;
+            $this->remote[spl_object_id($t)] = [$s['url'], $s['headers'], $s['ext'], null];
+        }
+    }
+
+    /** The film's title: the page's (yt-dlp's), else its file's name (a URL's, decoded): IINA's media-title. */
+    public function title(): string
+    {
+        if ($this->title !== null) {
+            return $this->title;
+        }
+        return self::isUrl($this->path) ? rawurldecode(basename((string)parse_url($this->path, PHP_URL_PATH))) : basename($this->path);
+    }
+
+    /** The playlist of the page the URL is (yt-dlp's entries, each a video's page, the one playing chosen), null for a film's. */
+    public function playlist(): ?Playlist
+    {
+        return $this->playlist;
+    }
+
+    /**
+     * Subtitle track $t, of the page's (remote: yt-dlp's), loaded once its
+     * file came: downloaded as it is first shown, read as a file of its kind
+     * (a temporary one), its cues then shown as a file's are.
+     */
+    private function fetchSubtitles(Track $t): void
+    {
+        $id = spl_object_id($t);
+        if (!isset($this->remote[$id])) {
+            return;
+        }
+        [$url, $headers, $ext, $d] = $this->remote[$id];
+        if ($d === null) {
+            $this->remote[$id][3] = new Download($url, headers: $headers);
+            return;
+        }
+        if (!$d->over()) {
+            return;
+        }
+        unset($this->remote[$id]);
+        $file = sys_get_temp_dir() . '/myphp-subtitles-' . getmypid() . "-$id.$ext";
+        try {
+            file_put_contents($file, $d->text());
+            $cues = Subtitles::styled($t->codec) ? Subtitles::assFile($file) : Subtitles::file($file)[1];
+        } catch (RuntimeException $e) {
+            $this->readError = $e->getMessage();
+            return;
+        } finally {
+            @unlink($file);
+        }
+        $all = $this->cues[$id] = new Cues();
+        foreach ($cues as [$start, $end, $text]) { $all->add($start, $end, $text); }
     }
 
     /** The reader of the file at $path: Matroska's and MPEG-TS's in PHP, AVFoundation's for the rest. */
@@ -474,7 +663,7 @@ final class Player
     /** The film's chapters, by their start; none when the file has none. @return list<Chapter> */
     public function chapters(): array
     {
-        return $this->source->chapters();
+        return $this->pageChapters !== [] ? $this->pageChapters : $this->source->chapters();
     }
 
     /** The place of the chapter playing in chapters(): the last that starts at or before where it plays; -1 before the first, or with none. */
@@ -609,7 +798,7 @@ final class Player
             return null;
         }
         $this->thumbSource ??= self::source($this->path);
-        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new VideoDecoder($this->video, $width); }
+        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new VideoDecoder($this->video, $width, $this->hardware); }
         $p = $this->thumbSource->keyframe(max(0.0, min($seconds, $this->duration)));
         if ($p === null) {
             return null;
@@ -627,6 +816,7 @@ final class Player
         $forward = $seconds > $this->time();
         $this->source->seek($seconds);
         $this->ahead = [];
+        $this->readFrom = null; $this->readTo = -INF;
         if (!$exact && $this->video !== null) {
             $seconds = $this->keyframe($seconds, $forward);
         }
@@ -635,7 +825,9 @@ final class Player
         $this->target = $seconds; $this->fedTo = $seconds; $this->landed = null;
         $this->out->setRate($this->playing && !$this->buffering ? $this->rate : 0.0, $seconds);
         $this->feed($seconds);
+        $this->seeking = true;
         $this->cache(); // over HTTP, the clock waits there for what is not here
+        $this->seeking = false;
         if ($this->playing) { $this->cueWake = null; $this->wakeForCue(); } // from where it went
         $this->passedTo = $seconds; $this->boundaryWake = null; // a seek passes none
         if ($this->playing) { $this->wakeForBoundary(); }
@@ -937,6 +1129,10 @@ final class Player
                 $this->drained = true;
                 break;
             }
+            if ($p->track === $this->video || $p->track === $this->audio) {
+                $this->readFrom ??= $p->time;
+                $this->readTo = max($this->readTo, $p->time + $p->duration);
+            }
             if ($p->track === $this->video) {
                 $this->queued['video'][] = $p;
                 $this->frameAt ??= $p->time;
@@ -948,6 +1144,7 @@ final class Player
                 $this->cue($p);
             }
         }
+        $this->out->pump($this->drained); // at the end, what the software decoder holds
         foreach (['video', 'audio'] as $k) {
             while ($this->queued[$k] !== [] && $this->out->ready($this->queued[$k][0]->track)) {
                 $p = array_shift($this->queued[$k]);

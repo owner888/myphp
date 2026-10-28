@@ -16,7 +16,7 @@ use RuntimeException;
  * the streams are given in the order of their times; the times are each
  * stream's own lined up on the playlists' (align()).
  */
-final class Hls implements Source, Cache
+final class Hls implements Source, CacheMember
 {
     /** The bytes the segments downloaded ahead may hold, of all the streams: IINA's cache, 150 MiB, as HttpBytes::MAX. */
     public const MAX = HttpBytes::MAX;
@@ -37,18 +37,19 @@ final class Hls implements Source, Cache
     /** Where the frames given end, on the line, since the last seek. */
     private float $end = -INF;
 
-    /** Reads the playlist at $url: a master playlist, or a media one. */
-    public function __construct(public readonly string $url)
+    /** Reads the playlist at $url: a master playlist, or a media one; each request with $headers too (name => value: yt-dlp's http_headers). @param array<string, string> $headers */
+    public function __construct(public readonly string $url, public readonly array $headers = [])
     {
-        $d = Download::get($url);
+        $this->share(new CacheBudget());
+        $d = Download::get($url, $headers);
         $text = $d->text();
         $renditions = [];
         $audio = []; // the renditions of playlists of their own: read with the variant's, at once
         if (str_contains($text, '#EXT-X-STREAM-INF')) {
             [$variant, $renditions] = self::master($text, $d->effectiveUrl());
-            $d = new Download($variant);
+            $d = new Download($variant, headers: $headers);
             foreach ($renditions as $r) {
-                if (isset($r['URI'])) { $audio[] = [$r, new Download($r['URI'])]; }
+                if (isset($r['URI'])) { $audio[] = [$r, new Download($r['URI'], headers: $headers)]; }
             }
             $text = $d->text();
         }
@@ -144,7 +145,39 @@ final class Hls implements Source, Cache
         }
     }
 
-    /** The bytes the streams hold ahead of what they read. @internal Media\HlsStream */
+    /** The cache it is of: its own, or the film's of its readers (yt-dlp's video and audio, one an HLS's). */
+    private CacheBudget $budget;
+
+    public function share(CacheBudget $b): void
+    {
+        $this->budget = $b;
+        $b->join($this);
+    }
+
+    /** The bytes the film's readers hold ahead in all: those its streams download to. @internal Media\HlsStream */
+    public function shared(): int
+    {
+        return $this->budget->ahead();
+    }
+
+    /** A stream read on: the film's other readers read ahead again. @internal Media\HlsStream */
+    public function released(): void
+    {
+        $this->budget->resume($this);
+    }
+
+    public function resume(): void
+    {
+        foreach ($this->streams as $s) { $s->resume(); }
+    }
+
+    /** Its segments go as they are read, not as the cache fills. */
+    public function evictable(): array
+    {
+        return [];
+    }
+
+    /** The bytes the streams hold ahead of what they read. */
     public function ahead(): int
     {
         $n = 0;

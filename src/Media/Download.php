@@ -39,6 +39,8 @@ final class Download implements Bytes
     private string $pending = '';
     private ?Aes $aes;
     private ?CData $easy = null;
+    /** The transfer's list of request headers, freed with it. */
+    private ?CData $list = null;
     private int $retries = 0;
     /** Where it was read from, redirects followed (relative URIs go from it), once done. */
     private string $effective;
@@ -47,12 +49,14 @@ final class Download implements Bytes
      * Starts reading $url, from $offset for $length bytes (null: all of it),
      * decrypting with AES-128 key and IV $key ([key, iv]); $counted is told
      * each piece's bytes as they come (the speed of what reads them),
-     * $finished that it is done, or failed.
+     * $finished that it is done, or failed; each request with $headers too
+     * (name => value).
      * @param ?array{0: string, 1: string} $key
      * @param ?Closure(int): void $counted
      * @param ?Closure(): void $finished
+     * @param array<string, string> $headers
      */
-    public function __construct(public readonly string $url, private readonly int $offset = 0, private readonly ?int $range = null, ?array $key = null, private readonly ?Closure $counted = null, private readonly ?Closure $finished = null)
+    public function __construct(public readonly string $url, private readonly int $offset = 0, private readonly ?int $range = null, ?array $key = null, private readonly ?Closure $counted = null, private readonly ?Closure $finished = null, private readonly array $headers = [])
     {
         $this->aes = $key === null ? null : new Aes($key[0], $key[1]);
         $this->effective = $url;
@@ -60,10 +64,10 @@ final class Download implements Bytes
         $this->fetch();
     }
 
-    /** The whole of $url, waited for: a playlist's, a key's. */
-    public static function get(string $url): self
+    /** The whole of $url, waited for: a playlist's, a key's. @param array<string, string> $headers */
+    public static function get(string $url, array $headers = []): self
     {
-        $d = new self($url);
+        $d = new self($url, headers: $headers);
         $d->wait();
         return $d;
     }
@@ -169,13 +173,18 @@ final class Download implements Bytes
         $set(Curl::OPT_FOLLOWLOCATION, 1);
         $set(Curl::OPT_MAXREDIRS, 20);
         $set(self::OPT_CONNECTTIMEOUT, 30);
+        $set(19, 1); // CURLOPT_LOW_SPEED_LIMIT and _TIME: stalled 20 s, the transfer ends (a timeout) and goes on from where it was
+        $set(20, 20);
         $from = $this->offset + $this->got;
         if ($from > 0 || $this->range !== null) {
             $set(self::OPT_RANGE, $from . '-' . ($this->range === null ? '' : $this->offset + $this->range - 1));
         }
         $set(Curl::OPT_HEADERFUNCTION, $cbs->header);
         $set(Curl::OPT_WRITEFUNCTION, $cbs->write);
-        CurlLoop::start($easy, static function (int $result) use ($self, $easy, $cbs, &$status): void {
+        $list = $this->list = Curl::headers($this->headers);
+        if ($list !== null) { $set(Curl::OPT_HTTPHEADER, $list); }
+        CurlLoop::start($easy, static function (int $result) use ($self, $easy, $cbs, $list, &$status): void {
+            if ($list !== null) { Curl::ffi()->curl_slist_free_all($list); }
             $d = $self->get();
             if ($d !== null && $d->easy === $easy) {
                 $url = Curl::ffi()->new('char*');
@@ -279,6 +288,7 @@ final class Download implements Bytes
         if ($this->easy !== null) {
             CurlLoop::stop($this->easy);
             Curl::ffi()->curl_easy_cleanup($this->easy);
+            if ($this->list !== null) { Curl::ffi()->curl_slist_free_all($this->list); }
         }
         foreach ($this->blocks as [$mem]) { Mem::free($mem); }
     }

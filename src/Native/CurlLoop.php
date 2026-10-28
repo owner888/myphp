@@ -219,11 +219,34 @@ final class CurlLoop
         self::wake();
     }
 
+    /** Seconds between looks at the fibers' waits while there are any. */
+    private const POLL = 0.05;
+    private static bool $polling = false;
+
+    /** Looks at the fibers' waits every POLL seconds while there are any. */
+    private static function poll(): void
+    {
+        if (self::$polling) {
+            return;
+        }
+        self::$polling = true;
+        App::after(self::POLL, static function (): void {
+            self::$polling = false;
+            self::wake();
+            if (self::$waiters !== []) { self::poll(); }
+        });
+    }
+
     /** Resumes the fibers whose wait is over, each on its own turn of the run loop. */
     private static function wake(): void
     {
         foreach (self::$waiters as $k => [$done, $fiber]) {
-            if ($done()) {
+            try {
+                $over = $done();
+            } catch (\Throwable) { // what it waits for failed: thrown in the fiber, which looks again, not in the loop's callback
+                $over = true;
+            }
+            if ($over) {
                 unset(self::$waiters[$k]);
                 App::later(static fn() => $fiber->resume());
             }
@@ -264,6 +287,7 @@ final class CurlLoop
     public static function pump(float $seconds): void
     {
         if (self::driven()) {
+            ObjC::boot(['Foundation']); // before anything booted it: a tool's wait for yt-dlp, the first thing it does
             $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
             ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'currentRunLoop'), 'runUntilDate:', $until);
             return;
@@ -283,7 +307,9 @@ final class CurlLoop
 
     /**
      * Waits until $done() holds, the transfers going on: in a fiber of the
-     * running app, the fiber (App::go); outside one, the run loop turning
+     * running app, the fiber (App::go), looked at as transfers move and
+     * every POLL seconds (what it waits for may be no transfer's: a child
+     * process's end, yt-dlp's); outside one, the run loop turning
      * (App::wait); without the app, pump().
      */
     public static function waitUntil(Closure $done): void
@@ -293,6 +319,7 @@ final class CurlLoop
         }
         if (App::running() && ($fiber = Fiber::getCurrent()) !== null) {
             self::$waiters[] = [$done, $fiber];
+            self::poll();
             Fiber::suspend();
         } elseif (App::running()) {
             App::wait($done);

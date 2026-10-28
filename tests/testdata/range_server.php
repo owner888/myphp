@@ -3,11 +3,17 @@
 // MYPHP_FILES names, as a server of films sends them: a range asked for
 // (206, Content-Range), unless ?norange (all of it, 200); ?rate=N sends N
 // bytes a second; ?cut=N breaks the connection after N bytes of each
-// response; ?fail answers 404.
+// response; ?fail answers 404; ?need answers 403 to a request without the
+// header X-Myphp-Test: yes (a site's that wants yt-dlp's http_headers).
 $root = (string)getenv('MYPHP_FILES');
 $name = rawurldecode(ltrim((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/'));
 $path = $root . '/' . (str_contains("/$name/", '/../') ? '' : $name); // the folder's files, those of its folders too
 parse_str((string)parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY), $q);
+if (isset($q['need']) && ($_SERVER['HTTP_X_MYPHP_TEST'] ?? '') !== 'yes') {
+    http_response_code(403);
+    echo 'forbidden';
+    return;
+}
 if (isset($q['fail']) || !is_file($path)) {
     http_response_code(404);
     echo 'not found';

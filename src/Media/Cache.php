@@ -17,4 +17,7 @@ interface Cache
 
     /** How fast bytes came over the last second, a second. */
     public function speed(): float;
+
+    /** Counts its bytes in $b with the others' of the film (one cache of all its readers). */
+    public function share(CacheBudget $b): void;
 }

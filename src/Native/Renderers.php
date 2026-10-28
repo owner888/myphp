@@ -13,7 +13,10 @@ use RuntimeException;
  * shows it (the window places the layer where Context::video's node is),
  * an AVSampleBufferAudioRenderer the audio, and an
  * AVSampleBufferRenderSynchronizer runs both on one clock. Nothing calls
- * back: the player tops them up while they ask for more.
+ * back: the player tops them up while they ask for more. A video track the
+ * system does not decode (AV1 without its decoder), or that it is not to
+ * ($hardware off), is decoded by libdav1d (Native\SoftVideo) into pixel
+ * buffers the layer shows.
  *
  * @internal
  */
@@ -31,8 +34,11 @@ final class Renderers
     public bool $elsewhere = false;
     /** Seconds the sound plays after its time in the file (Player::setAudioDelay). */
     public float $audioDelay = 0.0;
+    /** @var array<int, SoftVideo> the decoders of the video tracks decoded in software, by track number */
+    private array $soft = [];
 
-    public function __construct()
+    /** Renderers whose video the system decodes, unless $hardware is off (IINA's hardware decoding, mpv's hwdec): then what libdav1d decodes (AV1) is decoded so. */
+    public function __construct(private readonly bool $hardware = true)
     {
         CoreMedia::c();
         ObjC::boot(['AppKit', 'QuartzCore']);
@@ -51,7 +57,29 @@ final class Renderers
     /** Whether the renderer of $t's packets takes more now. */
     public function ready(Track $t): bool
     {
+        $soft = $this->soft[$t->number] ?? null;
+        if ($soft !== null && ObjC::msg('b:', $this->layer, 'isReadyForMoreMediaData')) {
+            $soft->unclog($this->layer); // dav1d full: its pictures taken, as the layer takes them, now (a paused player has no tick to wait for)
+        }
         return ObjC::msg('b:', $t->type === Track::VIDEO ? $this->layer : $this->audio, 'isReadyForMoreMediaData');
+    }
+
+    /** The software decoder of video track $t, made at its first packet; null for one the layer decodes. */
+    private function softVideo(Track $t): ?SoftVideo
+    {
+        if (!isset($this->soft[$t->number]) && SoftVideo::wanted($t, $this->hardware)) {
+            $this->soft[$t->number] = new SoftVideo($t);
+        }
+        return $this->soft[$t->number] ?? null;
+    }
+
+    /** At the end of the film ($drain), the pictures the software decoders hold, given to the layer. */
+    public function pump(bool $drain): void
+    {
+        if (!$drain) {
+            return;
+        }
+        foreach ($this->soft as $s) { $s->take($this->layer, true); }
     }
 
     /** Gives $p to its renderer: a video frame shown unless $show is false (decoded for those after it). */
@@ -65,6 +93,10 @@ final class Renderers
                 CoreMedia::mark($sb, false, true);
             }
             ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
+            return;
+        }
+        if ($video && ($soft = $this->softVideo($t)) !== null) {
+            $soft->send($p, $show, $this->layer);
             return;
         }
         $format = $this->formats[$t->number] ??= CoreMedia::format($t, $p->data); // the first packet a keyframe: playing starts at one
@@ -116,6 +148,7 @@ final class Renderers
     {
         ObjC::msg('v:', $this->layer, 'flush');
         ObjC::msg('v:', $this->audio, 'flush');
+        foreach ($this->soft as $s) { $s->flush(); }
         $this->nextAudio = null;
     }
 

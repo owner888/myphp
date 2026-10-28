@@ -4303,6 +4303,143 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   starts the next from the loop's callback, where nothing may throw: what
   fails there is kept and thrown by the next read (`HlsStream::peek`).
 
+## yt-dlp, two sources, AV1 in software (v1.52)
+- **A URL that opens as no film is read by yt-dlp** (`Media\YtDlp`), as
+  mpv's ytdl_hook does on load failure for IINA: `yt-dlp --no-warnings -J
+  --flat-playlist --sub-format ass/srt/vtt/best -- URL`, its default
+  format (bestvideo+bestaudio/best), its JSON read: the formats' URLs and
+  their http_headers (sent with every request: `HttpBytes`, `Download`,
+  `Hls` take headers), the title (`Player::title`, the title bar's), the
+  chapters, the subtitles (not the automatic captions; each a track,
+  downloaded once it is chosen), a playlist's entries (`Player::playlist`,
+  the sidebar's, titled: `Playlist::title`; each entry read by yt-dlp as
+  it plays, from the one a watch?v=…&list=… URL names). The program is
+  `YtDlp::$path`, else the first yt-dlp (or youtube-dl) in PATH,
+  /opt/homebrew/bin or /usr/local/bin: an app the Finder opens has only
+  the system's PATH. What the direct open said and what yt-dlp said are
+  told together when both fail.
+- **Trap: YouTube sends a whole film's request at the speed it plays.**
+  A request from a place to the end (Range: N-) came at the film's rate,
+  a 4K AV1's 8 MB in 3 s and then a stall; a seek waited on it for ever.
+  yt-dlp reads YouTube in requests of 10 MB (its formats'
+  downloader_options.http_chunk_size), which come as fast as the network
+  goes: `HttpBytes` takes that size (whole blocks), one request after the
+  other as the cache reads ahead. A transfer under a byte a second for
+  20 s now ends (curl's low speed limit) and goes on from where it was.
+- **Two sources as one** (`Media\Merged`): yt-dlp's video and audio
+  formats are two films (DASH's MP4 and M4A, WebM, or HLS), each read and
+  cached apart, their tracks together (the second's numbered from 1000),
+  their frames given in the order of their times, a seek of both, as mpv
+  plays a video with an audio-file.
+- **Fragmented MP4 files** (DASH's, YouTube's): `Mp4` reads the movie
+  fragments after the movie box (`Fragment` from a place of the file),
+  seeks by the segment index (sidx), or, of none, by the fragments walked
+  (their video's tfdt), and takes the duration from mehd, the index, or
+  the last fragment's end.
+- **Trap: a sidx's SAP is no keyframe.** FFmpeg marks every subsegment
+  as starting with a SAP, those its -frag_duration cut between keyframes
+  too: a seek to 1.9 s of clip-dash.mp4 landed on 1.583's P frame. The
+  candidate's own first video sample flags (trun's, tfhd's, trex's) are
+  looked at, and the one before taken where it is no sync sample.
+- **AV1 in software** (`Native\Dav1d`, `Native\SoftVideo`), as mpv
+  decodes what the system does not: libdav1d by FFI where VideoToolbox
+  has no AV1 (before M3), or where `Player::$hardwareDecoding` is off
+  (IINA's "Enable hardware decoder", read as a film opens). Each picture
+  is made an NV12 CVPixelBuffer of IOSurfaces from a pool (luma copied a
+  plane or a row at a time, chroma interleaved by vImage), its colors the
+  sequence header's (H.273's matrix, primaries, transfer; 709 where it
+  says none), its range '420v' or '420f', and a sample buffer at the
+  picture's time the display layer shows; snapshots are
+  the layer's as ever. Thumbnails decode by a dav1d of their own, scaled
+  by vImage. `bin/myphp build` copies Homebrew's libdav1d.7.dylib into
+  Contents/Resources of an app that plays video (as the plugins'
+  libraries); the app finds it there, else in Homebrew's lib. Only 8-bit
+  4:2:0 decodes yet (10-bit throws, said).
+- **Trap: dav1d drains when asked twice.** `dav1d_get_picture` with
+  nothing sent since the last call drains (waits on its frame threads, as
+  at the end); mid-stream, a packet still queued in it (EAGAIN), that wait
+  never ends. As FFmpeg's libdav1d.c: a picture is taken once a packet
+  sent, and a refused packet is sent again before each take (a send, even
+  refused, ends the drain); the loop that drains is only the end's
+  (`Renderers::pump`).
+- **Trap: a paused player has no tick.** The decoder full, its pictures
+  were taken on the player's ticks; paused after a seek, there were none,
+  and the layer showed the frame of before for every seek (the same
+  snapshot at 0.5, 1 and 1.5 s, a mean error of 28 against the
+  hardware's). `Renderers::ready` takes them then and there
+  (`SoftVideo::unclog`), the main thread waiting on dav1d as on
+  VideoToolbox. `tests/dav1d_test.php` checks every frame bit for bit
+  against FFmpeg's libdav1d (framemd5).
+- **The hardware's AV1, paused, sometimes shows a frame on the way.** A
+  seek to 1 s of clip-av1.mkv on M3's decoder showed 0.375 s's frame now
+  and then (one run in three; the frames before the target are enqueued
+  marked DoNotDisplay), where the software's showed 1 s's every time. The
+  test compares the software's frames with themselves (the same at 1 s
+  from anywhere, another at 1.5 s) and the thumbnails with the
+  hardware's; why the display layer shows a hidden frame of VideoToolbox's
+  AV1 is open (H.264 and HEVC show none).
+- **Fibers' waits are looked at every 50 ms** (`CurlLoop::waitUntil`):
+  they were only as transfers moved, and a wait for a child process's end
+  (yt-dlp's) would never have been. A condition that throws resumes the
+  fiber, which throws it itself, not the loop's callback.
+- **A fragmented MP4's seek never waits** (`Mp4::seek` keeps the time,
+  `sought()` finds its fragment as `ready()`/`next()` go on, each read
+  `has()`-gated, `Fragment::first` false while its moof is not here). It
+  read the moofs it looked at, waiting: on the main thread outside a fiber
+  that wait ran the run loop, which drew the window again, whose seek bar,
+  dragged, sought again inside it, nested a level a frame: the UI froze
+  dragging YouTube's seek bar. Only the opening waits (the duration, the
+  fragments walked).
+- **A web page opens without waiting in turn** (`Player::__construct`,
+  `Player::together`): yt-dlp starts as the URL opens (stopped once it
+  opens as a film), not once the direct open failed, as mpv's
+  on_load_fail hook runs it: over a slow network the page's response alone
+  took 8 s. Its video's and audio's formats open together, each in a fiber
+  of its own whose waits are the run loop's (a fiber started in the app's
+  fiber suspends to it; the loop resumes it): one after the other, each
+  first response and its index read took 18 s. The wait for them all is
+  a closure taking `$done` by reference: an arrow function's copy of it,
+  empty, never filled, and the film never opened (the CLI, its jobs run
+  to their end in turn, never saw it). yt-dlp's own run (39 s
+  of a slow network, its requests to the site) and the 4K the default
+  format picks are as IINA's.
+- **A film of two readers has one cache** (`Media\CacheBudget`, which
+  Merged makes its readers share): yt-dlp's video and audio, each an
+  HttpBytes (or an Hls), had 150 MiB each, 300 MiB in all, where IINA's
+  is the whole film's (mpv's demuxer cache, of all its streams). What
+  they hold ahead is counted together (each reads ahead while all of it
+  is under half, stops at 90%), past it the least recently read of all
+  go (one clock of reads), and a read of one resumes the others, whose
+  transfer may have stopped for want of room.
+- **The buffering indicator counts from the keyframe a seek decodes
+  from** (`Player::bufferingPercent`): it counted the seconds given past
+  the clock, which waits at the target, and a seek reads from the keyframe
+  before it (seconds of 4K AV1 over the network): 0% all the while, then
+  done. It counts what was read since the seek's first packet (or since
+  the clock began waiting, a stall as it plays) of what reaches
+  CACHE_WAIT past the clock, as mpv's cache-buffering-state counts what is
+  cached past what its decoders read.
+- `./run.sh video` logs the player to the terminal (`MYPHP_VIDEO_LOG=1`
+  in examples/video): what opened, its events, a frame drawn inside
+  another, a frame over 0.1 s; with pcntl, every 3 s, where PHP is in a
+  frame held up 3 s, and while a film opens, where each fiber waiting
+  waits. No sampling by a flood of signals (SIGUSR1 every 10 ms): the
+  app hung in its first seek with it (likely: a signal lands on any thread,
+  dav1d's too, whose PHP handler there is not safe).
+- **A seek while it plays holds the main thread some 45 ms** (measured,
+  4K AV1 over the network): `AVSampleBufferAudioRenderer`'s flush waits
+  for the audio it is rendering (the display layer's and dav1d's take no
+  time). Stopping the synchronizer first only moves the wait there (30 ms
+  of `setRate:0`, then 12 of the flush). Paused, it is nothing. Left as
+  it is: once a seek, as the picture goes elsewhere anyway.
+- **An arrow function copies what it reads as it is made** (AGENTS.md
+  rule 12): `Player::together`'s wait read its `$done` empty for ever.
+  Looked for across the code (each arrow function reading a variable
+  its scope writes later): the widgets example's list key kept the steps
+  as they were before a drag reordered them, the glass example's toolbar
+  the checkboxes' state before their click; both take `$s` by reference
+  now. The others read `$this`, objects, or values meant as they were.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -4327,6 +4464,15 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and Opus, v1.37),
   nor DTS or TrueHD, which the system has no decoder of. A size
   animated by \t rasterizes its glyphs anew each frame.
+- Video: a seek while it plays holds the main thread some 45 ms in
+  `AVSampleBufferAudioRenderer`'s flush (v1.52). IINA never waits: mpv
+  queues the seek and its play thread flushes the audio output. Here
+  PHP runs on the main thread only; the flush could go elsewhere by
+  `performSelectorInBackground:` (no PHP on that thread) or by
+  `flushFromSourceTime:completionHandler:`, either with audio enqueued
+  only once it is done (and a backward seek's times before the old).
+  The hardware AV1 decoder's display layer sometimes shows a hidden
+  frame (v1.52, its section).
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
