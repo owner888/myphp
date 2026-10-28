@@ -242,8 +242,11 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $s4->player->seek(1.0);
     $h4->frame(); $run(0.3); $h4->frame();
     $moving = $all($h4->root, 'Moving across');
-    [$x, $y, $w, $h] = $h4->rect(end($moving) ?: throw new \RuntimeException('no moving line'));
-    check(abs($x + $w / 2 - 480) < 2 && abs($y + $h / 2 - 60) < 2, '\\move halfway at 1 s: centered on (480, 60): ' . round($x + $w / 2, 1) . ', ' . round($y + $h / 2, 1));
+    $mn = end($moving) ?: throw new \RuntimeException('no moving line');
+    [$x, $y, $w, $h] = $h4->rect($mn);
+    check(abs($x + $w / 2 - 150) < 2 && abs($y + $h / 2 - 60) < 2, '\\move: laid out at its start, centered on (150, 60): ' . round($x + $w / 2, 1) . ', ' . round($y + $h / 2, 1));
+    [$cx, $cy] = $mn->world->point($x + $w / 2, $y + $h / 2);
+    check(abs($cx - 480) < 2 && abs($cy - 60) < 2, '\\move halfway at 1 s: shown centered on (480, 60), moved by its transform: ' . round($cx, 1) . ', ' . round($cy, 1));
     check($h4->rt->nextWake() !== null, 'a frame asked for while it moves');
     $s4->player->pause();
     // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.

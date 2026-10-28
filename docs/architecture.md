@@ -3880,7 +3880,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   colors by channel, alphas), \k \K \kf \ko sing its syllables (the
   secondary colour until then; \kf at its start, not swept; \ko its
   outline). `Player::subtitleLines` gives them as they are now; while one
-  changes the view asks for frames, 30 a second.
+  changes the view asks for a frame at each refresh of the display.
 - **Lines laid out alone**: one placed (\pos, \move), turned, scaled or
   clipped is not stacked with others; it is drawn in boxes of the plane
   one in the other: cut to \clip's rectangle, turned by \frz around
@@ -3953,6 +3953,20 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   solid video against 1.4 % without, the layer under the materials as
   dear as the window's frame. Each row is one text now, painted three
   times.
+- **Trap: a moving line juddered.** A line of \move (a danmaku's) was
+  asked frames 30 a second by a timer, out of step with the display, and
+  laid out again at each place: its glyphs land on whole pixels, so it
+  went by uneven steps of them. It is asked a frame at each refresh of the
+  display (`animationFrame`), laid out where it starts and moved by a
+  transform (`AssLine::$moved`), in fractions of a pixel the atlas's
+  linear sampling draws, as a browser moves one.
+- **Trap: animationFrame() asked as a frame is built was lost.** It set
+  the runtime's needsFrame, which the frame's end clears before it adds
+  what this frame asks for: asked from a build (a moving subtitle, a
+  Markdown view's reveal, a router's page going, a drag coming to rest),
+  no frame came, and what moved went by the player's four ticks a second,
+  or stopped. Asked while building it is kept as the frame's own
+  (animating, as an opened sheet's), else needsFrame as before.
 
 ## Open items
 

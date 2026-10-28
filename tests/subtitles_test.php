@@ -123,7 +123,7 @@ same([[0.1, 1.9, 2], [0.1, 1.9, 8], [0.1, 1.9, 5], [0.5, 1.9, 7]], array_map(fn(
 $motion = [];
 foreach (Subtitles::assFile(__DIR__ . '/testdata/motion.ass') as [$start, $end, $l]) { $motion[$l->text()] = $l; }
 $mv = $motion['Moving across'];
-same([true, [300.0, 120.0], [960.0, 120.0], [1620.0, 120.0]], [$mv->changes(), $mv->at(0)->position, $mv->at(1.0)->position, $mv->at(2.0)->position], '\move: from its start to its end over the line\'s time');
+same([true, [300.0, 120.0], [0.0, 0.0], [660.0, 0.0], [1320.0, 0.0]], [$mv->changes(), $mv->at(1.0)->position, $mv->at(0)->moved, $mv->at(1.0)->moved, $mv->at(2.0)->moved], '\move: at its start, moved from it to its end over the line\'s time (as a whole, to glide)');
 $fd = $motion['Fading in and out'];
 same([0.0, 0.5, 1.0, 1.0, 0.5, 0.0], array_map(fn(float $t) => round($fd->at($t)->alpha, 3), [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]), '\fad(800,800): in from clear, out to clear at its end');
 $gy = $motion['Growing yellow'];

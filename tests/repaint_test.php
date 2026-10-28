@@ -4,7 +4,8 @@
 // myphp builds the view (docs/mygo-deviations.md, paint-only frames), so
 // what is checked is what painting asks for: nothing for a drawing out of
 // view, a frame when after() is due by the frame's clock, the spinner's
-// next spoke and a moving progress bar's next frame.
+// next spoke and a moving progress bar's next frame; animationFrame() asked as
+// the frame is built, kept past the frame's end.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -49,3 +50,14 @@ $wake = $h->rt->nextWake();
 check(!$h->rt->needsFrame && $wake !== null && $wake <= 0.075, 'the spinner alone: its next spoke in ' . json_encode($wake));
 $value = -1.0; $h->frame(1); $h->paint();
 check($h->rt->needsFrame, 'a moving progress bar asks for the next frame');
+
+// animationFrame() as the frame is built (what moves with now() asks for every frame): the next frame comes, as one asked while painting.
+$moving = true;
+$h = new Headless(function (Context $c) use (&$moving): void {
+    $c->column()->size(10, 10); $c->end();
+    if ($moving) { $c->animationFrame(); }
+}, 100, 100);
+$h->frame();
+check($h->rt->needsFrame, 'asked as it is built: a frame to come');
+$moving = false; $h->frame();
+check(!$h->rt->needsFrame, 'asked for no more: none');

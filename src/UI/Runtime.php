@@ -344,10 +344,14 @@ final class Runtime
         return $this->clock !== null ? ($this->clock)() : hrtime(true);
     }
 
-    /** Asks, while painting, for the next frame as soon as the display can show it, for a drawing that moves (mygo's Painter.AnimationFrame). */
+    /** Asks for the next frame as soon as the display can show it, for what moves (mygo's AnimationFrame, Painter.AnimationFrame): while the frame is built (Context::animationFrame) or painted. */
     public function animationFrame(): void
     {
-        $this->needsFrame = true;
+        if ($this->building) { // asked as the frame is built: kept past its end, which clears what came before
+            $this->animating = true;
+        } else {
+            $this->needsFrame = true;
+        }
     }
 
     /**

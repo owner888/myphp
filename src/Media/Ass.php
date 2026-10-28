@@ -112,12 +112,12 @@ final class Ass
                 $runs[] = self::run($piece, $state);
             }
             [$align, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration] = $shape;
-            $pos = $line['pos'];
+            $pos = $line['pos']; $moved = [0.0, 0.0];
             if ($line['move'] !== null) { // \move: from its start to its end between its times (its whole time when it gives none)
                 [$x1, $y1, $x2, $y2, $t1, $t2] = $line['move'];
                 [$t1, $t2] = $t2 > $t1 ? [$t1, $t2] : [0.0, is_finite($duration) ? $duration : 0.0];
                 $k = $t2 > $t1 ? max(0.0, min(1.0, ($t - $t1) / ($t2 - $t1))) : 0.0;
-                $pos = [$x1 + ($x2 - $x1) * $k, $y1 + ($y2 - $y1) * $k];
+                [$pos, $moved] = [[$x1, $y1], [($x2 - $x1) * $k, ($y2 - $y1) * $k]]; // laid out at its start, moved from it
             }
             $alpha = 1.0;
             if ($line['fade'] !== null) { // \fade: its alphas (0 opaque, 255 clear) between its times, \fad's from and to clear
@@ -127,7 +127,7 @@ final class Ass
                 $a = match (true) { $t < $t1 => $a1, $t < $t2 => $a1 + ($a2 - $a1) * ($t - $t1) / max(1e-9, $t2 - $t1), $t < $t3 => $a2, $t < $t4 => $a2 + ($a3 - $a2) * ($t - $t3) / max(1e-9, $t4 - $t3), default => $a3 };
                 $alpha = 1 - $a / 255;
             }
-            return new AssLine($runs, $align, $pos, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration, $alpha, $line['clip'], $line['org']);
+            return new AssLine($runs, $align, $pos, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration, $alpha, $line['clip'], $line['org'], $moved);
         };
         $first = $make(0.0);
         if ($first->text() === '') {

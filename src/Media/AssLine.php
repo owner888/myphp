@@ -28,7 +28,7 @@ final class AssLine
         public readonly array $runs,
         /** As a numpad: 1, 2, 3 at the bottom, 4, 5, 6 in the middle, 7, 8, 9 at the top. */
         public readonly int $alignment,
-        /** \pos (or where \move has it): where the point of the alignment is, [x, y]; null for the margins'. */
+        /** \pos (or where \move starts, $moved from it): where the point of the alignment is, [x, y]; null for the margins'. */
         public readonly ?array $position,
         public readonly int $marginLeft,
         public readonly int $marginRight,
@@ -49,6 +49,8 @@ final class AssLine
         public readonly ?array $clip = null,
         /** \org: the point it turns around; null for that of its alignment. */
         public readonly ?array $origin = null,
+        /** How far \move has taken it from its start ($position), [dx, dy]: moved as a whole, not laid out again, so that it glides. @var array{0: float, 1: float} */
+        public readonly array $moved = [0.0, 0.0],
     ) {}
 
     /** Its text as plain lines. */

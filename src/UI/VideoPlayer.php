@@ -321,7 +321,7 @@ final class VideoPlayer
             $l->alone() ? self::assAlone($c, $p, $l, $px, $py, $pw, $ph) : self::assGroup($c, $p, $group, $px, $py, $pw, $ph);
         }
         foreach ($lines as $l) {
-            if ($l->changes()) { $c->after(1 / 30); break; } // moving, fading, animated, sung: frames while it shows
+            if ($l->changes()) { $c->animationFrame(); break; } // moving, fading, animated, sung: a frame each refresh of the display while it shows, as a page's animation
         }
     }
 
@@ -344,10 +344,13 @@ final class VideoPlayer
         }
         [$ax, $ay] = self::assAnchor($l);
         [$ox, $oy] = $l->origin ?? [$ax, $ay];
-        $plane = fn() => $c->column()->absolute()->left(0)->top(0)->size($pw, $ph)->passThrough();
-        $c->column()->absolute()->left($px)->top($py)->size($pw, $ph)->passThrough(); $opened++;
-        if ($r->rotation != 0) { $plane()->transformOrigin($ox / $l->playResX, $oy / $l->playResY)->rotate(-$r->rotation); $opened++; } // \frz turns counterclockwise
-        if ($r->scaleX != 1 || $r->scaleY != 1) { $plane()->transformOrigin($ax / $l->playResX, $ay / $l->playResY)->scale($r->scaleX, $r->scaleY); $opened++; }
+        $inner = fn() => $c->column()->absolute()->left(0)->top(0)->size($pw, $ph)->passThrough();
+        $plane = $c->column()->absolute()->left($px)->top($py)->size($pw, $ph)->passThrough(); $opened++;
+        if ($l->moved !== [0.0, 0.0]) { // \move: laid out where it starts, moved by a transform, in fractions of a pixel, not by its glyphs' places on whole ones
+            $plane->translate($l->moved[0] * $sx, $l->moved[1] * $sy);
+        }
+        if ($r->rotation != 0) { $inner()->transformOrigin($ox / $l->playResX, $oy / $l->playResY)->rotate(-$r->rotation); $opened++; } // \frz turns counterclockwise
+        if ($r->scaleX != 1 || $r->scaleY != 1) { $inner()->transformOrigin($ax / $l->playResX, $ay / $l->playResY)->scale($r->scaleX, $r->scaleY); $opened++; }
         self::assGroup($c, $p, [$l], 0, 0, $pw, $ph);
         for (; $opened > 0; $opened--) { $c->end(); }
     }
