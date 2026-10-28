@@ -15,17 +15,22 @@ final class Context
     use ContextBase;
 
     public Node $root;
-    public int $count = 0;
     /** @var Node[] */
     private array $stack;
-    /** Identity for the next node, from key(); and the key path of the innermost keyed container with its node count. */
+    /** Identity for the next node, from key(). */
     private string|int|null $nextKey = null;
     /** @var array<int, true> the ids keys gave nodes in this pass, which another node given one tells of (Runtime::duplicateKey) */
     private array $keyed = [];
-    private string $scope = '';
-    private int $ordinal = 0;
-    /** @var list<array{0: string, 1: int}|null> per open container: the scope it replaced, or null */
-    private array $scopes = [null];
+    /**
+     * Where the nodes built at the root are numbered: the view's, and the
+     * overlays' apart (mygo's overlay layer), while one is built; the row
+     * of a list being built, whose nodes are numbered under its key, not
+     * among the list's (the rows in view change as it scrolls).
+     */
+    private int $rootCount = 0, $overlayCount = 0;
+    private bool $inOverlay = false;
+    /** @var ?array{0: Node, 1: int, 2: int} the list's node, the row's base id, the row's nodes so far */
+    private ?array $row = null;
     /** The sidebar being built, innermost last: its node, the chosen id (by reference), the items built so far. */
     private array $sidebars = [];
     /** How many toolbars enclose what is being built: their buttons take no face until hovered. */
@@ -106,6 +111,7 @@ final class Context
     private function add(Node $n): Node
     {
         $top = $this->stack[count($this->stack) - 1];
+        $placed = $this->place($top); // before it is one of the kids
         $top->kids[] = $n;
         $n->context = $this;
         $n->disabledIn = $top->isDisabled(); // inside a disabled node (mygo's IsDisabled)
@@ -121,18 +127,18 @@ final class Context
             $n->scope = $this->selectScope();
         }
         $in = $this->runtime?->inspector;
+        [$base, $index] = $placed;
+        $this->took($top);
         if ($this->nextKey !== null) {
-            $n->id = self::hash($this->scope . '/' . $this->nextKey);
+            $n->id = self::mix($base, self::keyHash($this->nextKey));
             if (isset($this->keyed[$n->id])) {
                 $this->runtime?->duplicateKey($n->id, $this->nextKey, Inspector::callSite());
             }
             $this->keyed[$n->id] = true;
             if ($in !== null && $in->open) { $in->keys[$n->id] = $this->nextKey; } // the tree shows it
             $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
-        } elseif ($this->scope !== '') {
-            $n->id = self::hash($this->scope . '#' . ++$this->ordinal);
         } else {
-            $n->id = ++$this->count;
+            $n->id = self::mix($base, $index | $n->kind << 40); // mygo's: its parent's, mixed with its place among its children and its kind
         }
         if ($in !== null && $in->open && $n->id === $in->selected) {
             $in->source = Inspector::callSite(); // where the app builds the node the inspector shows
@@ -141,22 +147,54 @@ final class Context
     }
 
     /**
-     * Keys the container the widget builds next, unless the app keyed it,
-     * so that the nodes the widget keys inside it are in a scope of their
-     * own: another such widget in the scope keys its nodes alike (two range
-     * sliders' knobs), which would share their ids (Runtime::duplicateKey).
+     * The id nodes built in $top are numbered from and the place the next
+     * takes there: its id and how many it holds, the root's view and
+     * overlays apart, a list's row by its key.
+     * @return array{0: int, 1: int}
      */
-    private function ownScope(string $what): void
+    private function place(Node $top): array
     {
-        if ($this->nextKey === null) { $this->key($what . ' ' . $this->nextId()); }
+        if ($this->row !== null && $top === $this->row[0]) { return [$this->row[1], $this->row[2]]; }
+        if ($top === $this->root) { return $this->inOverlay ? [self::OVERLAY, $this->overlayCount] : [$top->id, $this->rootCount]; }
+        return [$top->id, count($top->kids)];
+    }
+
+    /** Counts the node just built in $top where place() does not count its kids. */
+    private function took(Node $top): void
+    {
+        if ($this->row !== null && $top === $this->row[0]) { $this->row[2]++; }
+        elseif ($top === $this->root) { $this->inOverlay ? $this->overlayCount++ : $this->rootCount++; }
+    }
+
+    /** The id of the overlays' layer, which the nodes of overlays are numbered under (mygo's overlayID). */
+    private const OVERLAY = 0x6f7665726c6179;
+
+    /**
+     * $a mixed with $b, as mygo's mix (a splitmix64 finalizer) mixes a
+     * parent's id with a child's place or key, by shifts and exclusive ors
+     * alone (xorshift64 twice): PHP's integers multiplied past 64 bits turn
+     * to floats, and a hash call a node cost some 4 ms a frame of 9 000.
+     */
+    private static function mix(int $a, int $b): int
+    {
+        $h = $a ^ $b ^ ($b << 23) ^ 0x632BE59BD9B4E019;
+        $h ^= $h << 13; $h ^= ($h >> 7) & 0x01FFFFFFFFFFFFFF; $h ^= $h << 17;
+        $h ^= $h << 13; $h ^= ($h >> 7) & 0x01FFFFFFFFFFFFFF; $h ^= $h << 17;
+        return $h;
+    }
+
+    /** Key $key hashed (a string and an int apart, as mygo's keys of different types are). */
+    private static function keyHash(string|int $key): int
+    {
+        return self::hash((is_int($key) ? 'i' : 's') . $key) ^ 0x25A5A5A5A5A5A5A5;
     }
 
     /** The id add() will give the next node, for what is computed from its last-frame rect before it is built (a grid's columns). */
-    private function nextId(): int
+    private function nextId(int $kind = Node::CONTAINER): int
     {
-        if ($this->nextKey !== null) { return self::hash($this->scope . '/' . $this->nextKey); }
-        if ($this->scope !== '') { return self::hash($this->scope . '#' . ($this->ordinal + 1)); }
-        return $this->count + 1;
+        $top = $this->stack[count($this->stack) - 1];
+        [$base, $index] = $this->place($top);
+        return self::mix($base, $this->nextKey !== null ? self::keyHash($this->nextKey) : $index | $kind << 40);
     }
 
     /** The language the app shows (App::locale), a BCP 47 tag such as "en" or "zh-Hans", for what the view says in it. */
@@ -206,7 +244,7 @@ final class Context
     /** The id key($key) gives the next node built here, for the state of a node not built (a router keeps its pages'). */
     public function keyedId(string|int $key): int
     {
-        return self::hash($this->scope . '/' . $key);
+        return self::mix($this->place($this->stack[count($this->stack) - 1])[0], self::keyHash($key));
     }
 
     /** The router whose page is being built, which links to paths go through, or null outside one (mygo's Router). */
@@ -282,16 +320,8 @@ final class Context
 
     private function open(Node $n): Node
     {
-        $key = $this->nextKey;
         $this->add($n);
         $this->stack[] = $n;
-        if ($key !== null) { // a keyed container scopes the nodes inside it
-            $this->scopes[] = [$this->scope, $this->ordinal];
-            $this->scope .= '/' . $key;
-            $this->ordinal = 0;
-        } else {
-            $this->scopes[] = null;
-        }
         return $n;
     }
 
@@ -309,19 +339,20 @@ final class Context
         $this->back($saved);
     }
 
-    /** Builds at the root from now, over the view, as overlays are, keeping whether what opens it is inside the dialog on top (a popover is where its anchor is); back() returns to where it was. @return array{list<Node>, bool} */
+    /** Builds at the root from now, over the view, as overlays are, keeping whether what opens it is inside the dialog on top (a popover is where its anchor is); back() returns to where it was. @return array{list<Node>, bool, bool} */
     private function toRoot(): array
     {
-        $saved = [$this->stack, $this->overlayInModal];
+        $saved = [$this->stack, $this->overlayInModal, $this->inOverlay];
         $this->overlayInModal = $this->insideModal();
         $this->stack = [$this->root];
+        $this->inOverlay = true;
         return $saved;
     }
 
-    /** @param array{list<Node>, bool} $saved what toRoot() returned */
+    /** @param array{list<Node>, bool, bool} $saved what toRoot() returned */
     private function back(array $saved): void
     {
-        [$this->stack, $this->overlayInModal] = $saved;
+        [$this->stack, $this->overlayInModal, $this->inOverlay] = $saved;
     }
 
     /** Whether what is built now is inside the dialog on top, or no dialog shows (mygo's insideModal): the window's shortcuts built behind one wait. */
@@ -603,10 +634,6 @@ final class Context
     public function end(): void
     {
         array_pop($this->stack);
-        $saved = array_pop($this->scopes);
-        if ($saved !== null) {
-            [$this->scope, $this->ordinal] = $saved;
-        }
     }
 
     /**
@@ -651,15 +678,14 @@ final class Context
         $state->first = $start;
         $state->editables = false; // until an editable text is built in a row
         $limit = max($state->viewport, $this->height) * 1.5;
-        [$scope, $ordinal] = [$this->scope, $this->ordinal];
+        $outer = $this->row; // a list in a row of another
         $savedRow = $this->listRow;
         $headers = []; // the kids that are headers, by row
         if ($count === 0 && $empty !== null) {
             $empty();
         }
         for ($i = $start; $i < $count && $y < $limit; $i++) {
-            $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $i); // the row's nodes are keyed by its item's key, else its index
-            $this->ordinal = 0;
+            $this->row = [$node, self::rowBase($node, $state, $i), 0]; // the row's nodes are numbered under its item's key, else its index
             $k = count($node->kids);
             $this->listRow = [$state, $i, $node];
             $row($i);
@@ -705,7 +731,7 @@ final class Context
         }
         if ($state->focusRow !== null && ($state->focusRow < $start || $state->focusRow >= $i) && $state->focusRow < $count && $this->runtime !== null) {
             // The row holding the focus, scrolled out of view, is built still, out of it: the focus stays and takes the keys (mygo's focusedRow).
-            $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $state->focusRow); $this->ordinal = 0;
+            $this->row = [$node, self::rowBase($node, $state, $state->focusRow), 0];
             $k = count($node->kids);
             $this->listRow = [$state, $state->focusRow, $node];
             $row($state->focusRow);
@@ -722,7 +748,7 @@ final class Context
             if (isset($headers[$h])) {
                 $node->pinned = $headers[$h];
             } else {
-                $this->scope = "$scope/L{$node->id}/" . self::rowScope($state, $h); $this->ordinal = 0;
+                $this->row = [$node, self::rowBase($node, $state, $h), 0];
                 $k = count($node->kids);
                 $this->listRow = [$state, $h, $node];
                 $row($h);
@@ -736,7 +762,7 @@ final class Context
                 if ($i > $h) { $node->pinStop = $hn; break; }
             }
         }
-        [$this->scope, $this->ordinal] = [$scope, $ordinal];
+        $this->row = $outer;
         $rt = $this->runtime;
         if ($rt !== null && $state->label !== null && $state->selected !== null && $count > 0 && ($typed = $rt->typed($node->id)) !== '') {
             // Typing the first letters of a row's label goes to it (mygo's typed).
@@ -778,9 +804,10 @@ final class Context
     }
 
     /** What a row's nodes are keyed by in its list: its item's key (ListState::$key), so that its state goes with the item as rows come and go above it, else its index. */
-    private static function rowScope(ListState $state, int $i): string
+    /** The id the nodes of row $i of list $node are numbered under: of its item's key, else its index. */
+    private static function rowBase(Node $node, ListState $state, int $i): int
     {
-        return $state->key === null ? (string)$i : 'k' . $state->keyOf($i);
+        return self::mix($node->id, self::keyHash($state->key === null ? "row $i" : 'k' . $state->keyOf($i)));
     }
 
     /**
@@ -984,7 +1011,6 @@ final class Context
     public function within(Node $n, \Closure $fn): void
     {
         $this->stack[] = $n;
-        $this->scopes[] = null;
         try {
             $fn();
         } finally {
@@ -1308,7 +1334,6 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $this->ownScope('toolbar');
         $n = $this->row($t->space(1), $t->space(1))->align(Node::CENTER)->focusGroup(Node::HORIZONTAL)->role(Role::TOOLBAR); // one stop of Tab; Left and Right move inside
         $this->toolbars++;
           $fn();
@@ -1536,7 +1561,6 @@ final class Context
         $rt = $this->runtime;
         $kw = $t->space(5);
         $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
-        $this->ownScope('range slider');
         $n = $this->row(0, 0, $this->growsAlong($width, $kw))->padding(0, $kw / 2)->min($t->space(25), $t->space(5))->role(Role::GROUP);
         if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
         $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
@@ -2052,7 +2076,8 @@ final class Context
               if ($this->clicked($x)) { array_splice($tokens, $i, 1); $changed = true; }
           }
           [, $h] = $this->metrics->measure('X', $t->fontSize);
-          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips, keeping its identity whatever they are
+          $this->key('input'); // mygo's: the input keeps its identity, whatever tokens come before it
+          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips
           $in->edit = $state; $in->changed = $state->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->nameFrom = $f;
@@ -2166,7 +2191,6 @@ final class Context
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
         $title = I18n::formatDate($locale, $month, new DateOptions(skeleton: 'yMMMM'));
         $first = $region->firstWeekday;
-        $this->ownScope('calendar'); // another month shown in the scope (a date input's popup) has the keys of its days
         $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
         $visible = $rt?->focusVisible($grid->id) ?? false;
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::paintFocusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
@@ -2245,7 +2269,6 @@ final class Context
         [$sep, $periodFirst] = self::timeLayout((new DateFormatter($locale, new DateOptions(skeleton: 'jmm', hourCycle: $twelve ? 12 : 24)))->pattern());
         [$am, $pm] = I18n::dayPeriods($locale);
         $order = $twelve ? ($periodFirst ? [2, 0, 1] : [0, 1, 2]) : [0, 1];
-        $this->ownScope('time input');
         $f = $this->row(0, 0, 0, $t->surface)->padding($t->space(1.5), $t->space(2))->round($t->radius)->border()->align(Node::CENTER)->role(Role::GROUP);
         $h = (int)$time->format('G'); $m = (int)$time->format('i');
         $set = function (int $nh, int $nm) use (&$time, $f) {
@@ -2367,7 +2390,6 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $this->ownScope('color picker');
         $panel = $this->column(0, $t->space(2.5))->size($t->space(60), 0);
         $make = fn() => (object)['hsv' => self::toHSV($rgb), 'last' => [$rgb, $alpha], 'hex' => new TextState(self::hexOf($rgb, $alpha)), 'hue' => 0.0, 'opacity' => 0.0];
         $st = $rt?->local($panel->id, $make) ?? $make();
@@ -2609,7 +2631,6 @@ final class Context
     public function breadcrumbs(array $items, int &$chosen): Node
     {
         $t = $this->theme;
-        $this->ownScope('breadcrumbs');
         $e = $this->row(0, $t->space(0.5))->align(Node::CENTER)->role(Role::GROUP);
           $n = count($items);
           foreach ($items as $i => $item) {
@@ -3385,7 +3406,6 @@ final class Context
         $t = $this->theme;
         $rowH = $t->space(8); $flexMin = $t->space(15);
         $rt = $this->runtime;
-        $this->ownScope('table');
         $n = $this->column(0, 0, 1)->role(Role::TABLE);
         $n->chooseMany = $state->selection !== null; // assistive technology hears that its rows are chosen several at a time
         $drag = $rt?->local($n->id, fn() => new TableDrag()) ?? new TableDrag();
@@ -4057,7 +4077,7 @@ final class Context
         $state->multiline = true;
         $size ??= $t->fontSize;
         if ($maxLines > 0) { // as high as its lines, between min and max: wrapped at the width it had last frame when it grows
-            $id = $this->nextId();
+            $id = $this->nextId(Node::TEXTAREA);
             $w = $width > 0 ? $width : ($this->runtime?->rectOf($id)[2] ?? $this->width);
             $lines = $state->layout($this->metrics, $size, $w - 2 * Runtime::FIELD_INSET);
             $lines->measureFirst($maxLines); // the lines past those it shows need not be wrapped, as mygo's wrappedHeight
@@ -4081,13 +4101,13 @@ final class Context
         /** input() editing a TextBuffer (mygo's TextInputBuffer): edits replace what changed in it, a change of the program's shows. */
     public function textInputBuffer(TextBuffer $buffer, string $placeholder = '', float $width = 200, ?float $size = null): Node
     {
-        return $this->bufferControl($buffer, fn(TextState $s) => $this->input($s, $placeholder, $width, $size));
+        return $this->bufferControl($buffer, fn(TextState $s) => $this->input($s, $placeholder, $width, $size), Node::INPUT);
     }
 
     /** textarea() editing a TextBuffer (mygo's TextAreaBuffer), for large documents. */
     public function textAreaBuffer(TextBuffer $buffer, string $placeholder = '', float $width = 320, float $height = 120, ?float $size = null): Node
     {
-        return $this->bufferControl($buffer, fn(TextState $s) => $this->textarea($s, $placeholder, $width, $height, $size));
+        return $this->bufferControl($buffer, fn(TextState $s) => $this->textarea($s, $placeholder, $width, $height, $size), Node::TEXTAREA);
     }
 
     /** Whether the field's Enter was pressed this frame (resets the flag). */
@@ -4197,6 +4217,7 @@ final class Context
      */
     public function videoPlayer(VideoPlayerState $s, ?VideoPlayerOptions $o = null): Node
     {
+        if ($this->nextKey === null) { $this->key('video player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
         return VideoPlayer::build($this, $s, $o ?? new VideoPlayerOptions());
     }
 }

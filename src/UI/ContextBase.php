@@ -273,19 +273,19 @@ trait ContextBase
     /** textInputBase() editing a TextBuffer: what the user types replaces what changed in it, a change of the program's shows (mygo's TextInputBufferBase). */
     public function textInputBufferBase(TextBuffer $buffer): Node
     {
-        return $this->bufferControl($buffer, $this->textInputBase(...));
+        return $this->bufferControl($buffer, $this->textInputBase(...), Node::INPUT);
     }
 
     /** textAreaBase() editing a TextBuffer (mygo's TextAreaBufferBase). */
     public function textAreaBufferBase(TextBuffer $buffer): Node
     {
-        return $this->bufferControl($buffer, $this->textAreaBase(...));
+        return $this->bufferControl($buffer, $this->textAreaBase(...), Node::TEXTAREA);
     }
 
-    /** The control $control makes of a TextState, editing $buffer: what the user types replaces what changed in it, a change of the program's shows. @param \Closure(TextState): Node $control */
-    protected function bufferControl(TextBuffer $buffer, \Closure $control): Node
+    /** The control $control makes of a TextState, a node of $kind, editing $buffer: what the user types replaces what changed in it, a change of the program's shows. @param \Closure(TextState): Node $control */
+    protected function bufferControl(TextBuffer $buffer, \Closure $control, int $kind): Node
     {
-        $id = $this->nextId();
+        $id = $this->nextId($kind);
         $make = fn() => (object)['state' => new TextState($buffer->string()), 'version' => $buffer->version()];
         $local = $this->runtime?->local($id, $make) ?? $make();
         $s = $local->state;

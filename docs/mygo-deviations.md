@@ -780,20 +780,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     it; building's time takes in every pass of a frame; `MYPHP_STATS`.
   - Why: PHP has no build tags, and a file not loaded costs nothing;
     myphp's nodes.
-- **Duplicate keys** (v1.05)
-  - mygo: two elements with one key under one parent; a Tester panics,
-    apps log it once.
-  - myphp: two nodes with one key in one scope (a keyed container's),
-    as myphp's ids are; the headless tests throw `LogicException`
-    (`Runtime::$strict`), apps `error_log` it once; the widgets that key
-    nodes inside them key their own container, unless the app did, so
-    that two of them in a scope do not share their nodes' ids: toolbar,
-    range slider, calendar, time input, color picker, breadcrumbs,
-    table; a diff viewer keys its sides `old` and `new`.
-  - Why: myphp's keys are a scope's, and keying found where two such
-    widgets met: a date input's calendar beside a calendar, a color
-    well's picker beside a picker, a diff's two find bars.
-
 ## Audio
 
 - **Audio** (v1.06)
@@ -1709,9 +1695,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Playlist::title` (and its titles), the headers of `HttpBytes`,
   `Download` and `Hls`, `Native\Dav1d` and `SoftVideo` are myphp's, as
   mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
-  mygo has no video. yt-dlp is started as a URL opens, beside the direct
-  open (stopped when that succeeds), where mpv runs it once the URL failed
-  to open: what plays is the same, sooner over a slow network.
+  mygo has no video.
+- **Secondary subtitles** (v1.53): `Player::secondarySubtitleTrack`,
+  `setSecondarySubtitleTrack`, `secondarySubtitles`,
+  `setSecondarySubtitleDelay`, `secondarySubtitleDelay`,
+  `VideoPlayerState::$secondarySubtitlesVisible` and
+  `toggleSecondarySubtitles` are myphp's, as mpv's secondary-sid,
+  secondary-sub-delay and secondary-sub-visibility (IINA's); mygo has no
+  video. Image subtitle tracks are not taken as secondary ones (mpv draws
+  them where they are).
 - **MPEG-TS and HLS** (v1.51): `Media\Ts`, `Hls`, `HlsStream`,
   `Fragment`, `PackedAudio`, `Download`, `Elementary`, `Bits`, `Cache`, `Native\Aes` and
   `Source::choose` are myphp's, as FFmpeg's mpegts and hls demuxers

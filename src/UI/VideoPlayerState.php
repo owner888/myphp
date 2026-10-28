@@ -35,6 +35,8 @@ final class VideoPlayerState
     /** The volume, 0 to 1, of this player and the next. */
     public float $volume = 1.0;
     public bool $subtitlesVisible = true;
+    /** Whether the secondary subtitles show (mpv's secondary-sub-visibility): their track read all the same. */
+    public bool $secondarySubtitlesVisible = true;
     /** The sidebar's tab ('layout', 'video', 'audio', 'subtitles'), null while it is closed; the tab it opens at. */
     public ?string $sidebar = null;
     public string $tab = 'video';
@@ -335,7 +337,8 @@ final class VideoPlayerState
         $clock = $this->shown || microtime(true) < $this->message[2] ? (int)$t . '/' . (int)round($t / max($p->duration(), 0.001) * 344) : '';
         $chapter = $this->sidebar === 'playlist' ? (string)$p->chapter() : ''; // the chapters' tab marks the one playing
         $pictures = $this->subtitlesVisible ? implode(',', array_map('spl_object_id', $p->subtitlePictures())) : '';
-        return $clock . "\0" . $chapter . "\0" . implode("\n", $this->subtitlesVisible ? $p->subtitles() : []) . "\0" . $pictures;
+        $secondary = $this->secondarySubtitlesVisible ? implode("\n", $p->secondarySubtitles()) : '';
+        return $clock . "\0" . $chapter . "\0" . implode("\n", $this->subtitlesVisible ? $p->subtitles() : []) . "\0" . $pictures . "\0" . $secondary;
     }
 
     /**
@@ -597,6 +600,13 @@ final class VideoPlayerState
     {
         $this->subtitlesVisible = !$this->subtitlesVisible;
         $this->say($this->t($this->subtitlesVisible ? 'videoSubVisible' : 'videoSubHidden'));
+    }
+
+    /** Shows or hides the secondary subtitles (IINA's switch of the second subtitle), quietly as IINA's quick settings do. */
+    public function toggleSecondarySubtitles(): void
+    {
+        $this->secondarySubtitlesVisible = !$this->secondarySubtitlesVisible;
+        $this->changed();
     }
 
     /** Shows the next subtitle track, after the last none. */

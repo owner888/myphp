@@ -41,62 +41,54 @@ final class YtDlp
      */
     public static function info(string $url): array
     {
-        return (new self($url))->json();
-    }
-
-    /** @var resource the run of yt-dlp, until it ended */
-    private $proc;
-    /** @var array<int, resource> its output's and its errors' */
-    private array $pipes;
-    private string $out = '', $err = '';
-    private bool $ended = false;
-
-    /**
-     * Starts yt-dlp on $url, not waited for (json() waits): the player
-     * starts it as a URL opens, whose page it reads at once if the URL is
-     * no film; a run let go before its end is stopped.
-     * @internal Media\Player
-     */
-    public function __construct(string $url)
-    {
         $bin = self::find() ?? throw new RuntimeException('myphp: no yt-dlp to read the page with (brew install yt-dlp, or set Media\YtDlp::$path)');
         // mpv's ytdl_hook's: the JSON, a playlist's entries flat (each read as it plays), its subtitles' formats.
         $proc = proc_open([$bin, '--no-warnings', '-J', '--flat-playlist', '--sub-format', 'ass/srt/vtt/best', '--', $url], [['file', '/dev/null', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
         if ($proc === false) {
             throw new RuntimeException("myphp: cannot run $bin");
         }
-        $this->proc = $proc;
-        $this->pipes = $pipes;
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);
-    }
-
-    /** What it says: its JSON, decoded, waited for; its error, thrown. @return array<string, mixed> @internal Media\Player */
-    public function json(): array
-    {
-        CurlLoop::waitUntil(function (): bool {
-            $this->out .= (string)stream_get_contents($this->pipes[1]);
-            $this->err .= (string)stream_get_contents($this->pipes[2]);
-            return feof($this->pipes[1]) && feof($this->pipes[2]);
+        $out = ''; $err = '';
+        CurlLoop::waitUntil(function () use ($pipes, &$out, &$err): bool {
+            $out .= (string)stream_get_contents($pipes[1]);
+            $err .= (string)stream_get_contents($pipes[2]);
+            return feof($pipes[1]) && feof($pipes[2]);
         });
-        fclose($this->pipes[1]); fclose($this->pipes[2]);
-        $code = proc_close($this->proc);
-        $this->ended = true;
-        $json = $code === 0 ? json_decode($this->out, true) : null;
+        fclose($pipes[1]); fclose($pipes[2]);
+        $code = proc_close($proc);
+        $json = $code === 0 ? json_decode($out, true) : null;
         if (!is_array($json)) {
-            $why = trim((string)preg_replace('~^ERROR:\s*~m', '', trim($this->err)));
+            $why = trim((string)preg_replace('~^ERROR:\s*~m', '', trim($err)));
             throw new RuntimeException('myphp: yt-dlp: ' . ($why !== '' ? $why : "exit status $code"));
         }
         return $json;
     }
 
-    public function __destruct()
+    /** The sites whose pages yt-dlp reads before the URL is opened as a film (mpv's ytdl_hook's include, IINA's): YouTube's, Twitch's. */
+    private const FIRST = '~^https?://(?:[\w-]+\.)?(?:youtube\.com|youtu\.be|twitch\.tv)/~i';
+
+    /** Whether $url is read by yt-dlp first (mpv's on_load hook for those it includes), else once it failed to open (its on_load_fail). @internal Media\Player */
+    public static function first(string $url): bool
     {
-        if (!$this->ended) { // the URL opened as a film: its page not wanted
-            proc_terminate($this->proc);
-            fclose($this->pipes[1]); fclose($this->pipes[2]);
-            proc_close($this->proc);
+        return preg_match(self::FIRST, $url) === 1;
+    }
+
+    /**
+     * The seconds until a video's formats can be read (yt-dlp's
+     * available_at: YouTube's ad before it, which the site makes a client
+     * wait out, its URLs refused meanwhile), 0 when they can at once: what
+     * mpv's ytdl_hook waits before it opens them.
+     * @param array<string, mixed> $info
+     * @internal Media\Player
+     */
+    public static function wait(array $info): float
+    {
+        $at = 0;
+        foreach ($info['requested_formats'] ?? [$info] as $f) {
+            if (is_array($f) && is_int($f['available_at'] ?? null)) { $at = max($at, $f['available_at']); }
         }
+        return $at > 0 ? max(0.0, $at - microtime(true)) : 0.0;
     }
 
     /**

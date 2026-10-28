@@ -4,7 +4,8 @@
 // (testdata/fake-yt-dlp.php) of a video of a video's format and an
 // audio's, read with the headers it says, its chapters, its subtitles (not
 // its automatic captions), a playlist's entries from the one the URL
-// names, yt-dlp's error; and, where yt-dlp is installed, the real one
+// names, yt-dlp's error, the sites read by it first, the wait for an
+// ad's available_at; and, where yt-dlp is installed, the real one
 // reading a page of an HTML5 video of the local server.
 declare(strict_types=1);
 
@@ -72,6 +73,12 @@ try {
         $list = YtDlp::info("$base/list?id=L");
         same([[["$base/watch?v=a", 'First'], ["$base/watch?v=b", 'Second']], 0], YtDlp::entries($list, "$base/list?id=L"), 'a playlist: its entries, from the first');
         same(1, YtDlp::entries($list, "$base/list?v=b&list=L")[1], 'from the one the URL names besides its list (watch?v=…&list=…)');
+
+        check(YtDlp::first('https://www.youtube.com/watch?v=x') && YtDlp::first('https://youtu.be/x') && YtDlp::first('https://m.youtube.com/x') && YtDlp::first('https://www.twitch.tv/x')
+            && !YtDlp::first('https://example.com/youtube.com/x') && !YtDlp::first("$base/watch?v=x"), 'YouTube\'s and Twitch\'s pages read by yt-dlp first, as mpv\'s include; others once they fail to open');
+        $now = time();
+        check(abs(YtDlp::wait(['requested_formats' => [['available_at' => $now + 15], ['available_at' => $now + 5]]]) - 15) < 1.5 && YtDlp::wait(['available_at' => $now - 3]) === 0.0
+            && YtDlp::wait(['url' => 'x']) === 0.0, 'the seconds till its formats can be read: the latest available_at (an ad\'s), none past it');
 
         $err = null;
         try { YtDlp::info("$base/nothing"); } catch (RuntimeException $e) { $err = $e->getMessage(); }

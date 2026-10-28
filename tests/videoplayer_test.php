@@ -198,6 +198,15 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check($p->awake(), 'playing, the display kept awake');
     $sleepy = new Headless(fn(Context $c) => $c->videoPlayer($s, new VideoPlayerOptions(keepAwake: false)), 960, 540);
     $sleepy->frame();
+    // The sidebar's nodes keep their ids as the subtitles come and go (the overlays keyed, their nodes scoped): its scroll stays.
+    $s3 = new VideoPlayerState(); $s3->thumbnailCache = $thumbCache;
+    $p3 = new Player(__DIR__ . '/testdata/clip-subs.mkv'); $s3->setPlayer($p3);
+    $p3->setSecondarySubtitleTrack($p3->subtitleTracks()[1]);
+    $s3->sidebar = 'subtitles'; $s3->tab = 'subtitles';
+    $h3 = new Headless(fn(Context $c) => $c->videoPlayer($s3), 960, 540);
+    $ids = [];
+    foreach ([0.5, 1.9, 1.1] as $at3) { $p3->seek($at3); $h3->frame(); $ids[] = $h3->byText('Load Subtitle…')?->id; }
+    check($ids[0] !== null && count(array_unique($ids)) === 1, 'the sidebar\'s nodes keep their ids as the subtitles, first and secondary, come and go: ' . json_encode($ids));
     check($p->playing() && !$p->awake(), 'without keepAwake: the display may sleep while it plays');
     $p->pause();
     @unlink($scratch);

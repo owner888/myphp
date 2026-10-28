@@ -276,6 +276,19 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p->on('time', function () use (&$p, &$shownAt) { if ($shownAt === null && $p->subtitles() === ["Second line\ntwo rows"]) { $shownAt = $p->time(); } });
     $p->seek(0.85); $p->play(); $run(0.5); $p->pause();
     check($shownAt !== null && $shownAt < 1.08, "playing, a cue is told as it starts, not a tick late: at $shownAt for 1.0");
+    // A secondary track (mpv's secondary-sid): its text beside the first's, styles left out, its own delay; one track shows once.
+    $p->setSecondarySubtitleTrack($subs[1]);
+    $p->seek(1.1);
+    same([["Second line\ntwo rows"], ["ASS 一行, 带逗号\n第二行", 'overlapping']], [$p->subtitles(), $p->secondarySubtitles()], 'a secondary track: the ASS one\'s text beside the first\'s');
+    $p->setSecondarySubtitleDelay(-0.5);
+    $p->seek(0.6);
+    same([['第一句 字幕'], ["ASS 一行, 带逗号\n第二行", 'overlapping']], [$p->subtitles(), $p->secondarySubtitles()], 'half a second early, the first not');
+    $p->setSecondarySubtitleDelay(0);
+    $err = null;
+    try { $p->setSubtitleTrack($subs[1]); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+    check($err !== null && $p->subtitleTrack() === $subs[0], 'the secondary track is refused as the first, as mpv\'s ("already selected")');
+    $p->setSecondarySubtitleTrack(null);
+    same([], $p->secondarySubtitles(), 'no secondary track: none');
     $p->setSubtitleTrack(null);
     same([], $at(1.1), 'none');
     $p = new Player(__DIR__ . '/testdata/clip-subs.mp4');
@@ -290,6 +303,9 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(count($pgs) === 1 && $p->subtitleTrack() === $pgs[0], 'a PGS track, shown as the file marks it default');
     $pics = function (float $t) use (&$p): array { $p->seek($t); return array_map(fn($q) => [$q->x, $q->y], $p->subtitlePictures()); };
     same([[[713, 900]], [], [[770, 120], [755, 900]], []], [$pics(0.5), $pics(1.1), $pics(1.5), $pics(1.95)], 'its pictures where the player is');
+    $err = null;
+    try { $p->setSecondarySubtitleTrack($pgs[0]); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+    check($err !== null && $p->secondarySubtitleTrack() === null, 'an image track is no secondary one');
     same([], $p->subtitles(), 'no lines of text');
     same([0.0, 0.0, 960.0, 540.0], $p->subtitlePlane(960, 540, 1920, 1080), 'the plane over the picture of a 16:9 box');
     $p->setCrop(4 / 3);

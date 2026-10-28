@@ -998,11 +998,9 @@ during layout, so it never shows a gap; that is the remaining difference.
 
 Each row is built under a key scope (`/L<list id>/<row>`), so the nodes of
 row 7 keep their ids whatever the anchor is: a Reply button clicked while
-a glide or momentum scroll moves the rows still lands on its own row. The
-same mechanism serves `Context::key()`: inside a keyed container ids are
-`xxh64` of the key path plus the node's order within it, unkeyed nodes
-keep creation order, and the two never collide in practice (small ints
-against 64-bit hashes).
+a glide or momentum scroll moves the rows still lands on its own row.
+(Since v1.53 a row's nodes are numbered under its key's id, a node's id
+its parent's mixed with its place, as mygo's: see that version.)
 
 With `ListState::$selected` set (−1 for none), a click on a row's first
 node chooses it (`choose()` also reveals it), the list joins the focus
@@ -4390,11 +4388,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   dragged, sought again inside it, nested a level a frame: the UI froze
   dragging YouTube's seek bar. Only the opening waits (the duration, the
   fragments walked).
-- **A web page opens without waiting in turn** (`Player::__construct`,
-  `Player::together`): yt-dlp starts as the URL opens (stopped once it
-  opens as a film), not once the direct open failed, as mpv's
-  on_load_fail hook runs it: over a slow network the page's response alone
-  took 8 s. Its video's and audio's formats open together, each in a fiber
+- **A web page's formats open together** (`Player::together`): its
+  video's and audio's formats open together, each in a fiber
   of its own whose waits are the run loop's (a fiber started in the app's
   fiber suspends to it; the loop resumes it): one after the other, each
   first response and its index read took 18 s. The wait for them all is
@@ -4439,6 +4434,50 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   as they were before a drag reordered them, the glass example's toolbar
   the checkboxes' state before their click; both take `$s` by reference
   now. The others read `$this`, objects, or values meant as they were.
+
+
+## yt-dlp's order, YouTube's ads, secondary subtitles (v1.53)
+- **YouTube's and Twitch's pages go to yt-dlp first** (`YtDlp::first`,
+  mpv's ytdl_hook `include`, its on_load hook), others to it once they
+  fail to open as a film (on_load_fail): opened as a film first, the
+  page's response alone took 8 s over a slow network. v1.52 started
+  yt-dlp beside every direct open instead (a process for every film over
+  HTTP); mpv's order is back.
+- **A video's formats are read once its ad is over** (`YtDlp::wait`,
+  yt-dlp's `available_at`): YouTube's TV clients' URLs answer HTTP 403
+  until the seconds of the ad before the video went by (its URL marked
+  `epbp=1`); 206 twenty seconds later, for curl too. yt-dlp's downloader
+  sleeps till then, mpv's ytdl_hook defers the load (`get_stream_delay`);
+  the player waits so before it opens them (the indicator shows opening).
+- **Secondary subtitles are mpv's** (`Player::setSecondarySubtitleTrack`,
+  secondary-sid): a text track's lines as plain text (secondary-sub-ass-
+  override strip), at the top as far from it as the first are from the
+  foot (mpv's toptitle), their own delay and visibility (the sidebar's
+  switch, quietly, and the Primary/Secondary segments over the delay).
+  A track shows once: the first's refused as the secondary and the other
+  way round, as mpv's "already selected"; image tracks are no secondary
+  ones here (mpv draws them where they are, over the first). The wake for
+  a cue's change takes the sooner of the two tracks', each by its delay.
+- **A node's id is mygo's: its parent's mixed with its place there**
+  (`Context::add`, `mix`, `place`): with its kind for an unkeyed node, its
+  key's hash for a keyed one (a key is its parent's, as mygo's); the
+  root's view and the overlays numbered apart (mygo's overlay layer), a
+  list's row under its item's key. An unkeyed node's id was its place in
+  the frame's build order (in a keyed container, its place in that): what
+  came and went renumbered every node built after it, wherever it was.
+  The subtitles' lines coming with each cue moved the sidebar's scroll
+  (it jumped as the picture played), an open collapsible, a field's
+  error or a search field's clear button renumbered what followed
+  (`tests/ids_test.php`), and widgets keyed their own container to keep
+  their keys apart (gone: the keys are their parent's). mygo mixes by
+  multiplying (splitmix64); PHP's integers turn to floats past 64 bits
+  and a hash call a node cost some 4 ms a frame of 9 000, so `mix` takes
+  shifts and exclusive ors (xorshift64 twice), the benchmark's build
+  times as they were. `nextId` says the kind of the node it foresees
+  (a buffer's input or text area). The token field keys its input
+  `input`, as mygo's: its chips before it, keyed, no longer took no
+  place. The subtitles' overlays and the sidebars stay keyed, and
+  `Context::videoPlayer` keys its player by its state.
 
 ## Open items
 

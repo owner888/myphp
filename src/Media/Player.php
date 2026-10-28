@@ -98,6 +98,9 @@ final class Player
     /** @var list<Track> */
     private array $external = [];
     private float $subtitleDelay = 0.0;
+    /** The secondary subtitle track shown (mpv's secondary-sid), null for none, and how late it shows (secondary-sub-delay). */
+    private ?Track $secondary = null;
+    private float $secondaryDelay = 0.0;
     /** The aspect, crop and rotation the picture shows at (setAspectRatio, setCrop, setRotation). */
     private ?float $aspect = null, $crop = null;
     private int $rotation = 0;
@@ -135,19 +138,25 @@ final class Player
      */
     public function __construct(private readonly string $path)
     {
-        if (self::isUrl($path)) {
-            // yt-dlp read the page as the URL opens, not after (mpv's ytdl_hook runs it once the URL failed to open): over a slow
-            // network a web page's response alone takes seconds; stopped once the URL opens as a film.
-            $page = YtDlp::find() === null ? null : new YtDlp($path);
+        if (self::isUrl($path) && YtDlp::first($path) && YtDlp::find() !== null) { // YouTube's, Twitch's: read by yt-dlp first, then as a film (mpv's on_load hook)
+            try {
+                $this->page($path);
+            } catch (RuntimeException $page) {
+                try {
+                    [$this->source, $this->net] = self::open($path);
+                } catch (RuntimeException $direct) {
+                    throw new RuntimeException($page->getMessage() . '; opened as a film, ' . $direct->getMessage());
+                }
+            }
+        } elseif (self::isUrl($path)) { // else as a film, then by yt-dlp once that failed (its on_load_fail)
             try {
                 [$this->source, $this->net] = self::open($path);
-                $page = null;
             } catch (RuntimeException $direct) {
-                if ($page === null) {
+                if (YtDlp::find() === null) {
                     throw new RuntimeException($direct->getMessage() . ', and there is no yt-dlp to read it as a page (brew install yt-dlp)');
                 }
                 try {
-                    $this->page($path, $page);
+                    $this->page($path);
                 } catch (RuntimeException $e) {
                     throw new RuntimeException($direct->getMessage() . '; read as a page, ' . $e->getMessage());
                 }
@@ -219,9 +228,74 @@ final class Player
         if ($t === $this->subtitle) {
             return;
         }
+        if ($t !== null && $t === $this->secondary) { // one track shows once, as mpv refuses it ("already selected")
+            throw new RuntimeException("myphp: track {$t->number} is the secondary subtitle track");
+        }
         $this->subtitle = $t;
         if ($t !== null) { $this->fetchSubtitles($t); } // a page's: downloaded from now
         $this->emit('track', 'subtitle');
+    }
+
+    /** The secondary subtitle track shown (mpv's secondary-sid, IINA's second subtitle), or null for none. */
+    public function secondarySubtitleTrack(): ?Track
+    {
+        return $this->secondary;
+    }
+
+    /**
+     * Shows text subtitle track $t, one of subtitleTracks() but the one
+     * shown first, as the secondary subtitles, or none for null: their text
+     * at the top of the picture, their styles left out (mpv's
+     * secondary-sub-ass-override strip). Image tracks (PGS, VobSub) are
+     * none of them here.
+     */
+    public function setSecondarySubtitleTrack(?Track $t): void
+    {
+        if ($t !== null && !in_array($t, $this->subtitleTracks(), true)) {
+            throw new RuntimeException("myphp: track {$t->number} is no subtitle track of the player");
+        }
+        if ($t !== null && in_array($t->codec, Subtitles::PICTURES, true)) {
+            throw new RuntimeException("myphp: track {$t->number} is of image subtitles, which show as the first subtitles only");
+        }
+        if ($t === $this->secondary) {
+            return;
+        }
+        if ($t !== null && $t === $this->subtitle) {
+            throw new RuntimeException("myphp: track {$t->number} is the subtitle track shown");
+        }
+        $this->secondary = $t;
+        if ($t !== null) { $this->fetchSubtitles($t); }
+        $this->emit('track', 'secondarySubtitle');
+    }
+
+    /** Shows the secondary subtitles $seconds later (earlier, negative): mpv's secondary-sub-delay. */
+    public function setSecondarySubtitleDelay(float $seconds): void
+    {
+        $this->secondaryDelay = $seconds;
+    }
+
+    public function secondarySubtitleDelay(): float
+    {
+        return $this->secondaryDelay;
+    }
+
+    /**
+     * The text of the secondary subtitles showing now, a line a cue in the
+     * order they started (an ASS line's text, its styles left out); none
+     * without a secondary track.
+     * @return list<string>
+     */
+    public function secondarySubtitles(): array
+    {
+        if ($this->secondary === null) {
+            return [];
+        }
+        $this->fetchSubtitles($this->secondary);
+        $out = [];
+        foreach (($this->cues[spl_object_id($this->secondary)] ?? new Cues())->at($this->time() - $this->secondaryDelay) as $s) {
+            if (is_string($s)) { $out[] = $s; } elseif ($s instanceof AssLine) { $out[] = $s->text(); }
+        }
+        return $out;
     }
 
     /**
@@ -541,9 +615,9 @@ final class Player
      * (loaded as they are chosen); a playlist's entries, the one to play
      * first read again.
      */
-    private function page(string $url, YtDlp $run): void
+    private function page(string $url): void
     {
-        $info = $run->json();
+        $info = YtDlp::info($url);
         if (($info['_type'] ?? 'video') === 'playlist') {
             [$entries, $start] = YtDlp::entries($info, $url);
             if ($entries === []) {
@@ -552,6 +626,10 @@ final class Player
             $this->playlist = new Playlist(array_column($entries, 0), array_combine(array_column($entries, 0), array_column($entries, 1)));
             $this->playlist->select($entries[$start][0]);
             $info = YtDlp::info($entries[$start][0]);
+        }
+        if (($wait = YtDlp::wait($info)) > 0) { // the ad before it waited out, its URLs refused till then (HTTP 403), as mpv waits
+            $until = microtime(true) + $wait;
+            CurlLoop::waitUntil(fn(): bool => microtime(true) >= $until);
         }
         $opened = self::together(array_map(fn(array $f) => fn(): array => self::open($f['url'], $f['headers'], $f['protocol'], $f['chunk']), YtDlp::formats($info))); // the video's and the audio's at once
         if (count($opened) === 1) {
@@ -989,7 +1067,7 @@ final class Player
      * error, with what failed, when the system cannot decode it (the player
      * pauses); play and pause, when it starts and stops playing (at its
      * end and on an error too); rate, with the new rate; seek, with where
-     * a seek went, once it is there; track, with 'audio' or 'subtitle', when
+     * a seek went, once it is there; track, with 'audio', 'subtitle' or 'secondarySubtitle', when
      * that track changes; buffering, true as the clock starts waiting for
      * the network (a film over HTTP) and false as it goes on. Returns a
      * function that removes it.
@@ -1094,10 +1172,13 @@ final class Player
      */
     private function wakeForCue(): void
     {
-        $cues = $this->subtitle === null ? null : $this->cues[spl_object_id($this->subtitle)] ?? null;
-        $at = $this->time() - $this->subtitleDelay;
-        $next = $cues?->next($at);
-        if ($next === null || $next === $this->cueWake || ($wait = ($next - $at) / $this->rate) >= MediaTicker::INTERVAL) {
+        $now = $this->time();
+        $next = null; // the clock's time of the next change of the subtitles shown, first or secondary
+        foreach ([[$this->subtitle, $this->subtitleDelay], [$this->secondary, $this->secondaryDelay]] as [$t, $delay]) {
+            $cue = $t === null ? null : ($this->cues[spl_object_id($t)] ?? null)?->next($now - $delay);
+            if ($cue !== null) { $next = min($next ?? INF, $cue + $delay); }
+        }
+        if ($next === null || $next === $this->cueWake || ($wait = ($next - $now) / $this->rate) >= MediaTicker::INTERVAL) {
             return;
         }
         $this->cueWake = $next;

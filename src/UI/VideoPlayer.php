@@ -9,6 +9,7 @@ use MyPHP\Dialog;
 use MyPHP\Media\{AssLine, AssRun};
 use MyPHP\Media\Player;
 use MyPHP\Media\SubtitlePicture;
+use MyPHP\Media\Subtitles;
 use MyPHP\Media\Track;
 use MyPHP\OpenDialogOptions;
 use MyPHP\Window;
@@ -26,7 +27,7 @@ use MyPHP\Window;
  * wheel up and down for the volume and across to seek. The
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
- * layout tab, the equalizer, external audio, secondary and online
+ * layout tab, the equalizer, external audio, online
  * subtitles, plugins) shows, held. The playlist's sidebar (its films,
  * their loop, shuffle and sort; the film's chapters) slides in from the
  * left; picture in picture from the control bar. Icons are SF Symbols.
@@ -42,7 +43,7 @@ final class VideoPlayer
     public static function build(Context $c, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
         if ($c->runtime !== null) { $s->attach($c->runtime, $o); }
-        $box = $c->column(0, 0, 1, 0x000000);
+        $box = $c->column(0, 0, 1, 0x000000); // keyed by its state (Context::videoPlayer)
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
             if ($s->error !== '') { $box->center(); $c->text($s->error, 13, 0xff6b6b); }
@@ -86,8 +87,10 @@ final class VideoPlayer
         $c->runtime?->askWindow('aspect', self::shownAspect($p)); // the window keeps the picture's shape, as IINA's
 
         // The subtitles, under the bars' glass as mpv draws them into the picture: in the window's layer under its materials.
+        // Keyed: shown and hidden (their switch, picture in picture), they renumber none of the siblings after them (the
+        // sidebar's scroll among them, whose place jumped as the subtitles changed).
         if ($s->subtitlesVisible && !$s->pictureInPicture) {
-            $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
+            $c->key('subtitles')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
               if (($styled = $p->subtitleLines()) !== []) { // an ASS track's lines, in their styles where they are
                   self::assLines($c, $p, $styled);
               } elseif (($lines = $p->subtitles()) !== []) {
@@ -95,6 +98,13 @@ final class VideoPlayer
               }
               if (($pictures = $p->subtitlePictures()) !== []) {
                   self::subtitlePictures($c, $p, $pictures);
+              }
+            $c->end();
+        }
+        if ($s->secondarySubtitlesVisible && !$s->pictureInPicture) { // mpv's toptitle: plain, as far from the top as the first from the foot
+            $c->key('secondary subtitles')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
+              if (($lines = $p->secondarySubtitles()) !== []) {
+                  self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left, true);
               }
             $c->end();
         }
@@ -606,10 +616,11 @@ final class VideoPlayer
         }
     }
 
-    /** $text over the picture, centered $bottom points from its foot: white, outlined in black as mpv draws subtitles. */
-    public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0, float $left = 0): void
+    /** $text over the picture, centered $bottom points from its foot (from its top, $top: a toptitle): white, outlined in black as mpv draws subtitles. */
+    public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0, float $left = 0, bool $top = false): void
     {
-        $c->column()->absolute()->left($left)->right($right)->bottom($bottom)->align(Node::CENTER)->passThrough();
+        $box = $c->column()->absolute()->left($left)->right($right)->align(Node::CENTER)->passThrough();
+        $top ? $box->top($bottom) : $box->bottom($bottom);
           $c->column()->maxWidth($c->width * 0.9);
             $c->text($text, $size, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->textOutline($size / 16, 0x000000);
           $c->end();
@@ -619,7 +630,9 @@ final class VideoPlayer
     /** The quick settings, 360 points wide over the right of the window, sliding in by $slide: the back button, the tabs, the chosen tab's cards. */
     private static function sidebar(Context $c, VideoPlayerState $s, Player $p, float $slide): Node
     {
-        $side = $c->column()->absolute()->top(0)->right(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+        // Keyed, as the playlist's: the messages, the buffering indicator and the seek bar's preview built before it come and go,
+        // which would renumber its nodes (its scroll's place, the state of its controls).
+        $side = $c->key('quick settings')->column()->absolute()->top(0)->right(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(self::SIDEBAR * (1 - $slide), 0)->keepFocus();
           $back = $c->column()->absolute()->left(9)->top(7)->size(38, 38)->center()->systemMaterial('glass')->round(19)->tooltip(self::t($c, 'videoHide'));
             self::sf($c, 'chevron.right', 14, $c->hovered($back) ? 0.9 : 0.6, 0.2);
           $c->end();
@@ -648,7 +661,7 @@ final class VideoPlayer
      */
     private static function playlistSidebar(Context $c, VideoPlayerState $s, float $slide): Node
     {
-        $side = $c->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+        $side = $c->key('playlist')->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
           $c->row(3, 0)->absolute()->left(96)->top(9)->height(36)->align(Node::CENTER)->systemMaterial('glass')->round(18);
             foreach ([['playlist', 'music.note.list', 'videoPlaylist'], ['chapters', 'list.and.film', 'videoChapters']] as [$id, $icon, $label]) {
                 $t = $c->row()->size(34, 30)->center()->round(15)->tooltip(self::t($c, $label));
@@ -1037,9 +1050,18 @@ final class VideoPlayer
             if (self::toggleSwitch($c, $s->subtitlesVisible)) { $s->toggleSubtitles(); }
         });
         $i = self::trackList($c, $rows, $at === false ? 0 : $at + 1);
-        if ($i !== null) { $p->setSubtitleTrack($i === 0 ? null : $tracks[$i - 1]); }
-        self::heading($c, '2.square.fill', self::t($c, 'videoSecondary'), fn() => self::toggleSwitch($c, true, false));
-        $c->column()->opacity(0.5)->fillWidth()->tooltip(self::t($c, 'videoNotYet')); self::trackList($c, [[self::t($c, 'videoNoTrack'), '']], 0); $c->end();
+        if ($i !== null && ($i === 0 || $tracks[$i - 1] !== $p->secondarySubtitleTrack())) { $p->setSubtitleTrack($i === 0 ? null : $tracks[$i - 1]); }
+        self::heading($c, '2.square.fill', self::t($c, 'videoSecondary'), function () use ($c, $s) {
+            if (self::toggleSwitch($c, $s->secondarySubtitlesVisible)) { $s->toggleSecondarySubtitles(); }
+        });
+        $texts = array_values(array_filter($tracks, fn(Track $t) => !in_array($t->codec, Subtitles::PICTURES, true))); // mpv's secondary: text tracks
+        $rows2 = [[self::t($c, 'videoNoTrack'), '']];
+        foreach ($texts as $t) { $rows2[] = self::trackRow($c, $t, ''); }
+        $at2 = array_search($p->secondarySubtitleTrack(), $texts, true);
+        $i = self::trackList($c, $rows2, $at2 === false ? 0 : $at2 + 1);
+        if ($i !== null && ($i === 0 || $texts[$i - 1] !== $p->subtitleTrack())) { // the first's track is refused, as mpv's ("already selected")
+            $p->setSecondarySubtitleTrack($i === 0 ? null : $texts[$i - 1]);
+        }
         self::card($c);
           $c->row(0, 8)->align(Node::CENTER);
             if (self::sideButton($c, self::t($c, 'videoLoadSubtitles'))) {
@@ -1050,11 +1072,17 @@ final class VideoPlayer
           $c->end();
         $c->end();
         self::card($c, 6);
-          $c->row()->fillWidth(); $c->column()->grow(1); self::segments($c, [self::t($c, 'videoPrimary'), self::t($c, 'videoSecondary')], 0, [0]); $c->end(); $c->end();
+          static $second = false; // which subtitles' delay the slider sets: IINA's segments over it
+          $c->row()->fillWidth(); $c->column()->grow(1);
+            if (($k = self::segments($c, [self::t($c, 'videoPrimary'), self::t($c, 'videoSecondary')], $second ? 1 : 0)) !== null) { $second = $k === 1; }
+          $c->end(); $c->end();
           self::heading($c, 'clock.arrow.circlepath', self::t($c, 'videoDelay'));
-          $d = VideoPlayerState::number($p->subtitleDelay());
-          $at = ($p->subtitleDelay() + 5) / 10;
-          if (self::sideSlider($c, $at, "{$d}s", ['-5s' => 0, '0s' => 0.5, '+5s' => 1], $d, 21)) { $s->setSubtitleDelay($at * 10 - 5); }
+          $delay = $second ? $p->secondarySubtitleDelay() : $p->subtitleDelay();
+          $d = VideoPlayerState::number($delay);
+          $at = ($delay + 5) / 10;
+          if (self::sideSlider($c, $at, "{$d}s", ['-5s' => 0, '0s' => 0.5, '+5s' => 1], $d, 21)) {
+              $second ? $p->setSecondarySubtitleDelay(max(-5.0, min(5.0, round($at * 10 - 5, 1)))) : $s->setSubtitleDelay($at * 10 - 5);
+          }
         $c->end();
     }
 
