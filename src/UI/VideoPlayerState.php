@@ -105,6 +105,8 @@ final class VideoPlayerState
 
     /** The URL open() opens (a film over the network, read in a fiber), null when none: the player shows IINA's "Opening stream…" meanwhile. */
     public ?string $opening = null;
+    /** While it opens, when the ad before a web page's video is over (microtime), which the indicator counts down to; null without one. @internal VideoPlayer */
+    public ?float $adOver = null;
 
     /**
      * Opens the film at $path (or an http(s) URL) and plays it: a player of
@@ -126,14 +128,15 @@ final class VideoPlayerState
             return true;
         }
         try {
-            $p = new Player($path);
+            $p = new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
         } catch (RuntimeException $e) {
+            $this->adOver = null;
             $this->opening = null;
             $this->error = $e->getMessage();
             $this->changed();
             return false;
         }
-        $this->opening = null;
+        $this->opening = null; $this->adOver = null;
         if ($p->playlist() !== null) { // a web page's (yt-dlp's): its videos, the one playing chosen
             $this->playlist = $p->playlist();
         } elseif ($this->playlist === null || !$this->playlist->select($path)) {

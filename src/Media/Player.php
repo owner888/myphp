@@ -134,9 +134,12 @@ final class Player
      * WebM, MP4, MOV, MPEG-TS, an HLS playlist), read as it comes; a URL that
      * is no film (a web page) read by yt-dlp, as mpv's ytdl_hook does when
      * the URL does not open (Media\YtDlp): the video of the page, or the
-     * first of its playlist (playlist()).
+     * first of its playlist (playlist()). $waiting is told the seconds it
+     * waits before a page's formats can be read (the ad before it), as it
+     * begins to.
+     * @param ?Closure(float): void $waiting
      */
-    public function __construct(private readonly string $path)
+    public function __construct(private readonly string $path, private readonly ?Closure $waiting = null)
     {
         if (self::isUrl($path) && YtDlp::first($path) && YtDlp::find() !== null) { // YouTube's, Twitch's: read by yt-dlp first, then as a film (mpv's on_load hook)
             try {
@@ -628,6 +631,7 @@ final class Player
             $info = YtDlp::info($entries[$start][0]);
         }
         if (($wait = YtDlp::wait($info)) > 0) { // the ad before it waited out, its URLs refused till then (HTTP 403), as mpv waits
+            if ($this->waiting !== null) { ($this->waiting)($wait); }
             $until = microtime(true) + $wait;
             CurlLoop::waitUntil(fn(): bool => microtime(true) >= $until);
         }

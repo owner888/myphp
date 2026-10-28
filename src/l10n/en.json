@@ -885,6 +885,10 @@
   "@videoOpeningStream": {
     "description": "The video player's indicator as it opens a film over the network."
   },
+  "videoSkippingAd": "Skipping ad… {seconds}s",
+  "@videoSkippingAd": {
+    "description": "The video player's indicator as it opens a web page's video after the ad before it, which the site makes a player wait out: the seconds left."
+  },
   "videoBuffering": "Buffering… {percent}%",
   "@videoBuffering": {
     "description": "The video player's indicator while it waits for the network: how much of what it waits for came, 0 to 100."

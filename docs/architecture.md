@@ -4479,6 +4479,15 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   place. The subtitles' overlays and the sidebars stay keyed, and
   `Context::videoPlayer` keys its player by its state.
 
+
+## The ad's countdown (v1.54)
+- **The indicator counts the ad down** (`Player::__construct`'s
+  `$waiting`, `VideoPlayerState::$adOver`): opening a web page's video
+  after an ad (`YtDlp::wait`), "Skipping ad… 13s", a frame each second,
+  then IINA's "Opening stream…". IINA shows only that (mpv logs "Waiting
+  N seconds for the stream to become available"): a wait of seconds
+  with no word of why looked like a hang, the developer's ask.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

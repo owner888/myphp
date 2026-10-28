@@ -29,6 +29,10 @@ $opening = new VideoPlayerState(); $opening->opening = 'https://example.com/film
 $t = new Headless(fn(Context $c) => $c->videoPlayer($opening), 960, 540);
 $t->frame();
 check($t->byText('Opening stream…') !== null, 'a URL opening, no film yet: IINA\'s "Opening stream…"');
+$opening->adOver = microtime(true) + 12.3;
+$t->frame();
+check($t->byText('Skipping ad… 13s') !== null, 'a web page\'s video waiting for the ad before it: the seconds left');
+$opening->adOver = null;
 same(['07:09', '1:58:37', '1.5', '2', '0.25'], [VideoPlayerState::clock(429), VideoPlayerState::clock(7117), VideoPlayerState::number(1.5), VideoPlayerState::number(2.0), VideoPlayerState::number(0.25)], 'times and numbers as IINA writes them');
 App::setLanguages('en', 'zh-Hans'); App::setLocale('zh-Hans');
 $track = new Track(2, Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);

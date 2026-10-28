@@ -47,7 +47,7 @@ final class VideoPlayer
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
             if ($s->error !== '') { $box->center(); $c->text($s->error, 13, 0xff6b6b); }
-            if ($s->opening !== null) { self::bufferIndicator($c, self::t($c, 'videoOpeningStream')); }
+            if ($s->opening !== null) { self::bufferIndicator($c, self::openingText($c, $s)); }
             $c->end();
             return $box;
         }
@@ -139,7 +139,7 @@ final class VideoPlayer
 
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->opening !== null) {
-            self::bufferIndicator($c, self::t($c, 'videoOpeningStream'));
+            self::bufferIndicator($c, self::openingText($c, $s));
         } elseif (($percent = $p->bufferingPercent()) !== null) {
             self::bufferIndicator($c, self::t($c, 'videoBuffering', ['percent' => $percent]),
                 VideoPlayerState::byteCount($p->cacheBytes(), true) . 'B (' . VideoPlayerState::byteCount($p->cacheSpeed(), false) . 'B/s)');
@@ -361,6 +361,17 @@ final class VideoPlayer
      * and $detail (what is cached, how fast it comes) under that, 150 points
      * wide, in glass.
      */
+    /** What the indicator says as a film opens: IINA's "Opening stream…", or the seconds left of the ad before a web page's video, a frame each second. */
+    private static function openingText(Context $c, VideoPlayerState $s): string
+    {
+        $left = ($s->adOver ?? 0.0) - microtime(true);
+        if ($left <= 0) {
+            return self::t($c, 'videoOpeningStream');
+        }
+        $c->after($left - floor($left) + 0.01); // as the next second goes
+        return self::t($c, 'videoSkippingAd', ['seconds' => (int)ceil($left)]);
+    }
+
     private static function bufferIndicator(Context $c, string $text, ?string $detail = null): void
     {
         $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->center()->passThrough();

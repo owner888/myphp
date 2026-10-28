@@ -186,6 +186,7 @@
   "videoAbLoopB": "AB循環：B",
   "videoAbLoopClear": "AB循環：清除",
   "videoOpeningStream": "開啟串流中⋯⋯",
+  "videoSkippingAd": "正在略過廣告⋯ {seconds} 秒",
   "videoBuffering": "緩衝處理中⋯ {percent}%",
   "videoScreenshot": "已儲存畫面截圖",
   "videoVolume": "音量：{volume}",
