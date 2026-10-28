@@ -27,7 +27,7 @@ use MyPHP\Window;
  * wheel up and down for the volume and across to seek. The
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
- * layout tab, the equalizer, external audio, online
+ * layout tab, the equalizer, online
  * subtitles, plugins) shows, held. The playlist's sidebar (its films,
  * their loop, shuffle and sort; the film's chapters) slides in from the
  * left; picture in picture from the control bar. Icons are SF Symbols.
@@ -1007,7 +1007,10 @@ final class VideoPlayer
         $i = self::trackList($c, $rows, $at === false ? 0 : $at + 1);
         if ($i !== null && $i > 0 && Player::playable($tracks[$i - 1])) { $p->setAudioTrack($tracks[$i - 1]); }
         self::card($c);
-          self::sideButton($c, self::t($c, 'videoLoadAudio'), false);
+          if (self::sideButton($c, self::t($c, 'videoLoadAudio'))) { // IINA's: an open panel of the film's folder
+              $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoLoadAudio'), defaultPath: $p->remote() ? '' : dirname($p->path())));
+              if ($paths) { $s->loadAudio($paths[0]); }
+          }
         $c->end();
         self::card($c, 2);
           self::heading($c, 'clock.arrow.circlepath', self::t($c, 'videoDelay'));

@@ -1696,6 +1696,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Download` and `Hls`, `Native\Dav1d` and `SoftVideo` are myphp's, as
   mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
   mygo has no video.
+- **External audio** (v1.55): `Player::loadAudio`,
+  `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
+  audio-add (IINA's Load External Audio); mygo has no video.
 - **Secondary subtitles** (v1.53): `Player::secondarySubtitleTrack`,
   `setSecondarySubtitleTrack`, `secondarySubtitles`,
   `setSecondarySubtitleDelay`, `secondarySubtitleDelay`,

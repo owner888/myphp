@@ -659,6 +659,17 @@ final class VideoPlayerState
         $this->changed();
     }
 
+    /** Loads audio file $path beside the film (Player::loadAudio, IINA's Load External Audio), its first track playing; what fails shows as the error. */
+    public function loadAudio(string $path): void
+    {
+        try {
+            $this->player?->loadAudio($path);
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+        }
+        $this->changed();
+    }
+
     /** The track after $current in $tracks, null after the last. @param list<Track> $tracks */
     private static function nextTrack(array $tracks, ?Track $current): ?Track
     {

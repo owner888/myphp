@@ -36,6 +36,8 @@ final class Renderers
     public float $audioDelay = 0.0;
     /** @var array<int, SoftVideo> the decoders of the video tracks decoded in software, by track number */
     private array $soft = [];
+    /** @var array<int, SoftAudio> the decoders of the audio tracks decoded in PHP (Vorbis), by track number */
+    private array $softAudio = [];
 
     /** Renderers whose video the system decodes, unless $hardware is off (IINA's hardware decoding, mpv's hwdec): then what libdav1d decodes (AV1) is decoded so. */
     public function __construct(private readonly bool $hardware = true)
@@ -99,21 +101,38 @@ final class Renderers
             $soft->send($p, $show, $this->layer);
             return;
         }
-        $format = $this->formats[$t->number] ??= CoreMedia::format($t, $p->data); // the first packet a keyframe: playing starts at one
-        if ($video) {
-            $sb = CoreMedia::videoSample($p, $format, $show);
-        } else {
-            $rate = (int)$t->sampleRate;
-            $at = (int)round(($p->time + $this->audioDelay) * $rate);
-            if ($this->nextAudio === null || abs($at - $this->nextAudio) > $rate / 10) { // the first, or the file's time jumping (a gap): its time again
-                $this->nextAudio = $at;
+        if (!$video && SoftAudio::wanted($t)) {
+            $soft = $this->softAudio[$t->number] ??= new SoftAudio($t);
+            [$pcm, $frames] = $soft->decode($p->data);
+            if ($frames === 0) {
+                return; // the first packet after a start: it only overlaps the next
             }
-            $frames = CoreMedia::frames($p);
-            $sb = CoreMedia::audioSample($p, $format, $this->nextAudio, $rate, $frames);
-            $this->nextAudio += $frames;
+            $format = $this->formats[$t->number] ??= CoreMedia::pcmFormat($soft->rate(), $soft->channels(), SoftAudio::BITS[$soft->channels()]);
+            $sb = CoreMedia::pcmSample($pcm, $format, $this->audioAt($p, $soft->rate(), $frames), $soft->rate(), $frames);
+        } else {
+            $format = $this->formats[$t->number] ??= CoreMedia::format($t, $p->data); // the first packet a keyframe: playing starts at one
+            if ($video) {
+                $sb = CoreMedia::videoSample($p, $format, $show);
+            } else {
+                $rate = (int)$t->sampleRate;
+                $frames = CoreMedia::frames($p);
+                $sb = CoreMedia::audioSample($p, $format, $this->audioAt($p, $rate, $frames), $rate, $frames);
+            }
         }
         ObjC::msg('v:p', $video ? $this->layer : $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
         CoreMedia::c()->CFRelease($sb);
+    }
+
+    /** The sample audio packet $p of $frames frames starts at, of $rate a second: right after the last, unless the file's time jumps (a gap), as its time says. */
+    private function audioAt(Packet $p, int $rate, int $frames): int
+    {
+        $at = (int)round(($p->time + $this->audioDelay) * $rate);
+        if ($this->nextAudio === null || abs($at - $this->nextAudio) > $rate / 10) { // the first, or the file's time jumping: its time again
+            $this->nextAudio = $at;
+        }
+        $at = $this->nextAudio;
+        $this->nextAudio += $frames;
+        return $at;
     }
 
     /**
@@ -149,6 +168,7 @@ final class Renderers
         ObjC::msg('v:', $this->layer, 'flush');
         ObjC::msg('v:', $this->audio, 'flush');
         foreach ($this->soft as $s) { $s->flush(); }
+        foreach ($this->softAudio as $s) { $s->reset(); }
         $this->nextAudio = null;
     }
 

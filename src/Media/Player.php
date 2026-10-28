@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, MediaTicker, Renderers, SoftVideo, VideoDecoder};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, MediaTicker, Renderers, SoftAudio, SoftVideo, VideoDecoder};
 use RuntimeException;
 
 /**
@@ -438,7 +438,7 @@ final class Player
     /** Whether the system decodes track $t, or libdav1d does (AV1): the player plays a track only if so. */
     public static function playable(Track $t): bool
     {
-        return CoreMedia::playable($t) || SoftVideo::wanted($t, false);
+        return CoreMedia::playable($t) || SoftVideo::wanted($t, false) || SoftAudio::wanted($t);
     }
 
     /** The file's audio tracks, playable or not, in its order. @return list<Track> */
@@ -466,6 +466,30 @@ final class Player
         $this->source->choose($this->video, $t); // HLS's renditions: the one played read from here
         $this->go($this->time(), true); // from the keyframe before, its frames up to now decoded and not shown
         $this->emit('track', 'audio');
+    }
+
+    /**
+     * Loads audio file $path (a film's too: its audio) as tracks beside the
+     * film's, as mpv's audio-add does for IINA's Load External Audio:
+     * played from where the film is, the first chosen; returns them. A URL
+     * is read as it plays. What has no audio the player plays throws.
+     * @return list<Track>
+     */
+    public function loadAudio(string $path): array
+    {
+        [$s, $cache] = self::isUrl($path) ? self::open($path) : [self::source($path), null];
+        if (array_filter($s->tracks(), fn(Track $t) => $t->type === Track::AUDIO && self::playable($t)) === []) {
+            throw new RuntimeException("myphp: $path has no audio the player plays");
+        }
+        if (!$this->source instanceof Merged) {
+            $this->source = new Merged([$this->source], $this->net === null ? [] : [$this->net]);
+        }
+        $tracks = $this->source->add($s, $cache, basename((string)(parse_url($path, PHP_URL_PATH) ?: $path)));
+        if ($cache !== null && $this->net === null) { $this->net = $this->source; } // read over the network now: the clock waits for it
+        foreach ($tracks as $t) {
+            if (self::playable($t)) { $this->setAudioTrack($t); break; }
+        }
+        return $tracks;
     }
 
     /** Whether $path is an http(s) URL. */

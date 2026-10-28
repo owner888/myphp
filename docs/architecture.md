@@ -4488,6 +4488,39 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   N seconds for the stream to become available"): a wait of seconds
   with no word of why looked like a hang, the developer's ask.
 
+
+## Vorbis and external audio in the video player (v1.55)
+- **Vorbis is decoded by the app's own codec** (`Native\SoftAudio`,
+  `Audio\Vorbis\Codec`): CoreAudio has none; mpv decodes it with
+  FFmpeg's. The Ogg decoder of the sound API (mygo's, jfreymuth's
+  oggvorbis) was split: `Codec`, the three headers and each packet's
+  frames (its blocks overlapped), and `Decoder`, Ogg's pages around it.
+  A Matroska track's headers come Xiph-laced in CodecPrivate
+  (`Codec::fromXiph`). Its frames go to the audio renderer as 32-bit float
+  PCM, interleaved, in WAVE's order with a channel bitmap layout
+  (`CoreMedia::pcmFormat`, `pcmSample`; Vorbis's order, section 4.3.9,
+  put so: a 5.1's center is its second, WAVE's third), each packet at its
+  time (a Matroska Vorbis block's time is that of the first frame it
+  completes), the first after a start or a seek completing none. In PHP
+  it decodes 12 times as fast as it plays (28 with the JIT) of 48 kHz
+  stereo here: libvorbis (and libogg, bundled with their load paths
+  rewritten) was weighed and left, the developer's choice. The frames
+  match the Ogg decoder's of the same stream (`tests/soft_audio_test.php`).
+- **An external audio file plays beside the film** (`Player::loadAudio`,
+  IINA's Load External Audio, mpv's audio-add): the film's source is
+  wrapped in a `Merged` (alone, its tracks the very objects the player
+  chose, the cues' keys theirs), the file's audio tracks added to it
+  (`Merged::add`, numbered k thousand on, named after the file where
+  they have no name), the first chosen and played from where the film
+  is (`setAudioTrack`'s seek, which seeks every source). A URL's reader
+  joins the film's cache; a local film then waits for the network too.
+- **Left for later (IINA's)**: the equalizer (ten bands, IINA's lavfi
+  `equalizer=f=…:t=h:width=f/1.2247:g=…` each, presets and saved
+  profiles) needs the audio decoded here (AudioConverter for what the
+  system decodes, AVAssetReader's LPCM for its files) and filtered
+  (vDSP_biquad), every audio path changed; online subtitles need a
+  provider and its API key (IINA's OpenSubtitles key is IINA's).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -4509,7 +4542,7 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 - Video: ASS's drawings, blur, 3D rotation and shearing are left out, a
   \kf is sung whole, a line turns by its first run (its styles, places
   and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43).
-  Vorbis is not decoded yet (FLAC is, v1.42; VP9, AV1 and Opus, v1.37),
+  Vorbis is decoded in PHP (v1.55; FLAC by the system, v1.42; VP9, AV1 and Opus, v1.37),
   nor DTS or TrueHD, which the system has no decoder of. A size
   animated by \t rasterizes its glyphs anew each frame.
 - Video: a seek while it plays holds the main thread some 45 ms in

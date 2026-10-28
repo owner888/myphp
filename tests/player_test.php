@@ -257,6 +257,31 @@ if (PHP_OS_FAMILY === 'Darwin') {
         check($failed === null && $p->time() - $from > 0.3, "$file: FLAC plays, decoded by the system: " . ($failed ?? round($p->time() - $from, 2) . ' s in 0.5'));
         $p->pause();
     }
+    // Vorbis, which the system has no decoder of: decoded in PHP (Native\SoftAudio), played as PCM, stereo and 5.1; a seek plays on.
+    foreach (['clip-vorbis.mkv', 'clip-vorbis51.mka'] as $file) {
+        $p = new Player(__DIR__ . "/testdata/$file");
+        check($p->audioTrack()?->codec === 'A_VORBIS', "$file: a Vorbis track plays");
+        $p->play();
+        for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
+        $from = $p->time();
+        $run(0.4);
+        $failed = $p->out->failure();
+        check($failed === null && $p->time() - $from > 0.25, "$file: Vorbis plays, decoded in PHP: " . ($failed ?? round($p->time() - $from, 2) . ' s in 0.4'));
+        $p->seek(0.5); $run(0.3);
+        check($p->out->failure() === null && $p->time() > 0.6, "$file: and on after a seek: at {$p->time()}");
+        $p->pause();
+    }
+    // An external audio file (IINA's Load External Audio, mpv's audio-add): its track beside the film's, chosen, playing from where the film is.
+    $p = new Player(__DIR__ . '/testdata/clip.mp4');
+    $p->seek(0.5);
+    $added = $p->loadAudio(__DIR__ . '/testdata/clip-vorbis.mkv');
+    check(count($added) === 1 && $p->audioTrack() === $added[0] && $added[0]->name === 'clip-vorbis.mkv' && in_array($added[0], $p->audioTracks(), true), 'an external audio file: its track listed, named after it, chosen');
+    $p->play(); $run(0.4);
+    check($p->out->failure() === null && $p->time() > 0.7, "it plays with the film from where it was: at {$p->time()}");
+    $p->pause();
+    $err = null;
+    try { $p->loadAudio(__DIR__ . '/testdata/clip-subs.zh.srt'); } catch (\RuntimeException $e) { $err = $e->getMessage(); }
+    check($err !== null, "what is no audio: $err");
 
     // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
     $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');

@@ -329,6 +329,42 @@ final class CoreMedia
         return $size * $count;
     }
 
+    /**
+     * The format description of 32-bit float PCM, interleaved, of
+     * $channels at $rate, in WAVE's order of them ($bits, CoreAudio's
+     * channel bits), owned: what a decoder of the player's own gives.
+     */
+    public static function pcmFormat(int $rate, int $channels, int $bits): CData
+    {
+        $c = self::c();
+        $asbd = $c->new('ASBD');
+        $asbd->rate = $rate; $asbd->format = self::fourcc('lpcm'); $asbd->flags = 9; // kAudioFormatFlagIsFloat | IsPacked
+        $asbd->bytesPerPacket = $asbd->bytesPerFrame = 4 * $channels; $asbd->framesPerPacket = 1; $asbd->channels = $channels; $asbd->bits = 32;
+        $layout = $c->new('unsigned int[3]'); // AudioChannelLayout with no descriptions: kAudioChannelLayoutTag_UseChannelBitmap, the bitmap, 0
+        $layout[0] = 1 << 16; $layout[1] = $bits; $layout[2] = 0;
+        $out = $c->new('void*');
+        $st = $c->CMAudioFormatDescriptionCreate(null, FFI::addr($asbd), 12, FFI::addr($layout[0]), 0, null, null, FFI::addr($out));
+        if ($st !== 0) {
+            throw new RuntimeException("myphp: the format of PCM of $channels channels: CoreMedia error $st");
+        }
+        return $out;
+    }
+
+    /** The sample buffer of $frames frames of PCM $pcm in $format, starting at sample $at of $rate a second, owned. */
+    public static function pcmSample(string $pcm, CData $format, int $at, int $rate, int $frames): CData
+    {
+        $c = self::c();
+        $bb = self::block($pcm);
+        $pts = $c->new('CMTime'); $pts->value = $at; $pts->timescale = $rate; $pts->flags = 1;
+        $sb = $c->new('void*');
+        $st = $c->CMAudioSampleBufferCreateReadyWithPacketDescriptions(null, $bb, $format, $frames, $pts, null, FFI::addr($sb));
+        $c->CFRelease($bb);
+        if ($st !== 0) {
+            throw new RuntimeException("myphp: a PCM sample buffer: CoreMedia error $st");
+        }
+        return $sb;
+    }
+
     /** The sample buffer of audio packet $p in $format, one packet of $frames frames, starting at sample $at of $rate a second, owned. */
     public static function audioSample(Packet $p, CData $format, int $at, int $rate, int $frames): CData
     {

@@ -6,9 +6,11 @@ namespace MyPHP\Media;
 /**
  * A film of sources apart played as one (yt-dlp's bestvideo+bestaudio: a
  * video's URL and an audio's, as mpv plays one with the other as its
- * audio-file): their tracks together (renumbered, the second's from 1000),
- * their frames in the order of their times, a seek of each, the caches of
- * both. Its duration the longest, its chapters the first's.
+ * audio-file): their tracks together (the first's as they are, the
+ * second's renumbered from 1000), their frames in the order of their
+ * times, a seek of each, the caches of both. Its duration the longest, its
+ * chapters the first's. An external audio file is added to it as mpv's
+ * audio-add adds one (add()).
  */
 final class Merged implements Source, Cache
 {
@@ -24,18 +26,45 @@ final class Merged implements Source, Cache
     private array $own = [];
 
     /** @param list<Source> $sources @param list<Cache> $caches what reads them over the network */
-    public function __construct(private readonly array $sources, private readonly array $caches = [])
+    public function __construct(private array $sources, private array $caches = [])
     {
         $this->share(new CacheBudget()); // one cache of the film, IINA's 150 MiB, not one each
         foreach ($sources as $k => $s) {
-            foreach ($s->tracks() as $t) {
-                $mine = new Track($k * 1000 + $t->number, $t->type, $t->codec, $t->private, $t->language, $t->name, $t->isDefault,
-                    $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels, $t->strip);
-                $this->tracks[] = $mine;
-                $this->of[spl_object_id($mine)] = [$k, $t];
-                $this->own[$k][spl_object_id($t)] = $mine;
-            }
+            $this->list($k, $s->tracks(), '');
         }
+    }
+
+    /**
+     * Adds the audio tracks of $s (read over the network by $cache, if it
+     * is), named $name where they have no name of their own, as mpv's
+     * audio-add: they play beside the film's; returns them as this has
+     * them. Seek it after (it reads each source from where it was).
+     * @return list<Track>
+     * @internal Media\Player
+     */
+    public function add(Source $s, ?Cache $cache, string $name): array
+    {
+        $k = count($this->sources);
+        $this->sources[] = $s;
+        if ($cache !== null) {
+            $this->caches[] = $cache;
+            $this->share(new CacheBudget());
+        }
+        return $this->list($k, array_values(array_filter($s->tracks(), fn(Track $t) => $t->type === Track::AUDIO)), $name);
+    }
+
+    /** Lists $tracks of source $k: the first's as they are (the tracks the player chose stay its), the others' renumbered k thousand on. @param list<Track> $tracks @return list<Track> */
+    private function list(int $k, array $tracks, string $name): array
+    {
+        $out = [];
+        foreach ($tracks as $t) {
+            $mine = $k === 0 ? $t : new Track($k * 1000 + $t->number, $t->type, $t->codec, $t->private, $t->language, $t->name !== '' ? $t->name : $name, $t->isDefault,
+                $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels, $t->strip);
+            $this->tracks[] = $out[] = $mine;
+            $this->of[spl_object_id($mine)] = [$k, $t];
+            $this->own[$k][spl_object_id($t)] = $mine;
+        }
+        return $out;
     }
 
     public function tracks(): array
