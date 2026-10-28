@@ -4076,6 +4076,23 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   play() after the end of such a film. A time before the first cue goes
   to it, where decoding starts.
 
+## Boundaries and the A-B loop (v1.48)
+
+- **Boundaries** (`Player::at`, AVPlayer's boundary time observers): told
+  when it plays from before a time to it or after, not when a seek lands
+  past it (a seek, play() and a step note where it is, `$passedTo`). The
+  ticks, four a second, look; a boundary before the next tick gets a
+  timer of its own, as a subtitle's change does, so it is told within a
+  few milliseconds. One that seeks (a loop back) ends the round: the
+  boundaries after it were not played past.
+- **The A-B loop** (`VideoPlayerState::abLoop`, ⌘L, mpv's ab-loop of
+  IINA's): A where it plays, then B there (the earlier of the two A, it
+  loops at once from A when B is where it plays), then none, each told as
+  IINA's OSD tells it. B is a boundary that seeks to A. The points show
+  on the bar of the time as IINA's loop knobs (gray 0.65, three by eleven
+  points, round by one), and dragged they move (`moveLoopPoint`), told
+  with the point's time. Another film clears it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

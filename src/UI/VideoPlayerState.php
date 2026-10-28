@@ -90,6 +90,10 @@ final class VideoPlayerState
      * @var list<\MyPHP\Media\Thumbnail>
      */
     public array $thumbnails = [];
+    /** The A-B loop's points, in seconds (abLoop): A alone set, nothing loops; both, it plays from A again at B. Null for none. */
+    public ?float $loopA = null, $loopB = null;
+    /** The player's boundary at B, removed when the loop goes. */
+    private ?Closure $loopOff = null;
     /** Where screenshots go (IINA's default), unless set. */
     public string $screenshots = '~/Pictures/Screenshots';
     /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
@@ -165,6 +169,7 @@ final class VideoPlayerState
             $this->player->pause();
         }
         $this->pip = null; // the last one's stops with it
+        $this->clearLoop();
         $this->pictureInPicture = false;
         $this->player = $p;
         $this->fresh = true;
@@ -391,6 +396,67 @@ final class VideoPlayerState
         $p->seek($p->time() + $s, $exact);
         $this->played();
         $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()));
+    }
+
+    /**
+     * The A-B loop as IINA's (mpv's ab-loop): A where it plays, then B
+     * there, then none, told as it goes. With both it plays from A again
+     * each time it plays past B (at once when B is where it is): A and B
+     * the earlier and the later of the two.
+     */
+    public function abLoop(): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        if ($this->loopA === null) {
+            $this->loopA = $p->time();
+            $this->say($this->t('videoAbLoopA'), 'time');
+        } elseif ($this->loopB === null) {
+            $this->setLoop($this->loopA, $p->time());
+            $this->say($this->t('videoAbLoopB'), 'time');
+        } else {
+            $this->clearLoop();
+            $this->say($this->t('videoAbLoopClear'));
+        }
+    }
+
+    /**
+     * Moves a point of the loop (a knob of the bar dragged, IINA's): 'a' or
+     * 'b' to $seconds, told with where it is; B as the loop's end as ever.
+     */
+    public function moveLoopPoint(string $which, float $seconds): void
+    {
+        $p = $this->player;
+        if ($p === null || $this->loopA === null || ($which === 'b' && $this->loopB === null)) { return; }
+        $seconds = max(0.0, min($seconds, $p->duration()));
+        if ($which === 'a') {
+            $this->loopB === null ? $this->loopA = $seconds : $this->setLoop($seconds, $this->loopB, false);
+        } else {
+            $this->setLoop($this->loopA, $seconds, false);
+        }
+        $this->say($this->t($which === 'a' ? 'videoAbLoopA' : 'videoAbLoopB'), self::clock($seconds) . ' / ' . self::clock($p->duration()));
+    }
+
+    /** Loops from $a to $b (the earlier first), from A again now when $jump and it is at B or past it. */
+    private function setLoop(float $a, float $b, bool $jump = true): void
+    {
+        $p = $this->player;
+        ($this->loopOff)?->__invoke();
+        [$this->loopA, $this->loopB] = [min($a, $b), max($a, $b)];
+        $this->loopOff = $p->at($this->loopB, function (): void {
+            $this->player?->seek($this->loopA ?? 0.0);
+            $this->played();
+        });
+        if ($jump && $p->time() >= $this->loopB - 1e-3) { $p->seek($this->loopA); $this->played(); }
+        $this->changed();
+    }
+
+    private function clearLoop(): void
+    {
+        ($this->loopOff)?->__invoke();
+        $this->loopOff = null;
+        $this->loopA = $this->loopB = null;
+        $this->changed();
     }
 
     /** Pauses and shows the next frame, or the one before ($back), as IINA's frame-step and frame-back-step. */

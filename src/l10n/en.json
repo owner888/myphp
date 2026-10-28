@@ -869,6 +869,18 @@
   "@videoStop": {
     "description": "The video player's message as it stops and goes back to the start."
   },
+  "videoAbLoopA": "AB-Loop: A",
+  "@videoAbLoopA": {
+    "description": "The video player's message as the A-B loop's first point is set or moved."
+  },
+  "videoAbLoopB": "AB-Loop: B",
+  "@videoAbLoopB": {
+    "description": "The video player's message as the A-B loop's second point is set or moved: it loops."
+  },
+  "videoAbLoopClear": "AB-Loop: Cleared",
+  "@videoAbLoopClear": {
+    "description": "The video player's message as the A-B loop goes."
+  },
   "videoScreenshot": "Screenshot Captured",
   "@videoScreenshot": {
     "description": "The video player's message as it saves a screenshot of the frame showing."

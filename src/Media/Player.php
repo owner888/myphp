@@ -73,6 +73,13 @@ final class Player
     private int $rotation = 0;
     /** The change of the subtitles the player wakes for, once (wakeForCue). */
     private ?float $cueWake = null;
+    /** @var array<int, array{0: float, 1: Closure(): void}> the times told as it plays past them (at()), by their id */
+    private array $boundaries = [];
+    private int $boundaryId = 0;
+    /** Where it played to when last looked (null before it plays from a place): a boundary after it and at or before where it is now was passed. */
+    private ?float $passedTo = null;
+    /** The boundary the player wakes for, once (wakeForBoundary). */
+    private ?float $boundaryWake = null;
     /** What keeps the display awake while it plays, and whether it does (setKeepAwake). */
     private Awake $awake;
     private bool $keepAwake = true;
@@ -415,6 +422,7 @@ final class Player
         $this->feed();
         MediaTicker::add($this, $this->tick(...));
         $this->wakeForCue();
+        $this->passedTo = $this->time(); $this->boundaryWake = null; $this->wakeForBoundary();
         $this->emit('play');
     }
 
@@ -515,6 +523,8 @@ final class Player
         $this->out->setRate($this->playing ? $this->rate : 0.0, $seconds);
         $this->feed($seconds);
         if ($this->playing) { $this->cueWake = null; $this->wakeForCue(); } // from where it went
+        $this->passedTo = $seconds; $this->boundaryWake = null; // a seek passes none
+        if ($this->playing) { $this->wakeForBoundary(); }
         return $seconds;
     }
 
@@ -708,8 +718,63 @@ final class Player
             $this->emit('ended');
             return;
         }
+        $this->pass();
         $this->emit('time');
         $this->wakeForCue();
+        $this->wakeForBoundary();
+    }
+
+    /**
+     * Calls $fn each time it plays past $seconds, as AVPlayer's boundary
+     * time observers: playing from before it to it or after, not a seek
+     * landing there, within a few milliseconds of it (a timer set for it
+     * when it comes before the next tick). Returns a function that removes
+     * it.
+     */
+    public function at(float $seconds, Closure $fn): Closure
+    {
+        $id = ++$this->boundaryId;
+        $this->boundaries[$id] = [$seconds, $fn];
+        if ($this->playing) { $this->boundaryWake = null; $this->wakeForBoundary(); }
+        return function () use ($id): void { unset($this->boundaries[$id]); };
+    }
+
+    /** Tells the boundaries played past since it last looked, in order; one may seek, which goes on from there. */
+    private function pass(): void
+    {
+        $from = $this->passedTo;
+        $now = $this->time();
+        $this->passedTo = $now;
+        if ($from === null || $now <= $from) {
+            return;
+        }
+        $passed = array_filter($this->boundaries, fn(array $b): bool => $b[0] > $from + 1e-6 && $b[0] <= $now + 1e-6);
+        uasort($passed, fn(array $a, array $b): int => $a[0] <=> $b[0]);
+        foreach ($passed as [, $fn]) {
+            $fn();
+            if ($this->passedTo !== $now) { return; } // it sought (a loop back): the rest were not passed
+        }
+    }
+
+    /** Wakes at the next boundary before the next tick, a quarter of a second off: once for each. */
+    private function wakeForBoundary(): void
+    {
+        $now = $this->time();
+        $next = null;
+        foreach ($this->boundaries as [$at]) {
+            if ($at > $now + 1e-6 && ($next === null || $at < $next)) { $next = $at; }
+        }
+        if ($next === null || $next === $this->boundaryWake || ($wait = ($next - $now) / $this->rate) >= MediaTicker::INTERVAL) {
+            return;
+        }
+        $this->boundaryWake = $next;
+        App::after($wait + 0.002, function () use ($next): void { // just past it
+            if ($this->playing && $this->boundaryWake === $next) {
+                $this->boundaryWake = null;
+                $this->pass();
+                $this->wakeForBoundary();
+            }
+        });
     }
 
     /**

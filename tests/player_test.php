@@ -108,6 +108,20 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check($png !== null && str_starts_with($png, "\x89PNG"), 'a snapshot of the frame on screen: a PNG');
     same([160, 90], $png === null ? null : array_values(unpack('N2', $png, 16)), 'of the film\'s size');
 
+    // Boundaries (at()): told as it plays past a time, within a few milliseconds; not by a seek landing past it; removed, no more.
+    $p = new Player(__DIR__ . '/testdata/clip.mkv');
+    $told = [];
+    $off = $p->at(1.0, function () use (&$told, &$p) { $told[] = round($p->time(), 3); });
+    $p->seek(1.5); $p->seek(0.5);
+    same([], $told, 'a seek past it tells nothing');
+    $p->play();
+    for ($waited = 0; $p->time() < 1.2 && $waited < 60; $waited++) { $run(0.05); }
+    $p->pause();
+    check(count($told) === 1 && $told[0] >= 1.0 && $told[0] < 1.03, 'played past it: told once, at it: ' . json_encode($told));
+    $off();
+    $p->seek(0.8); $p->play(); $run(0.5); $p->pause();
+    same(1, count($told), 'removed: told no more');
+
     // Thumbnails: the keyframe at or before a time, decoded by a reader and a decoder of their own: what plays stays where it is.
     foreach (['clip.mkv', 'clip.mp4', 'clip-hevc.mkv'] as $file) {
         $p = new Player(__DIR__ . "/testdata/$file");

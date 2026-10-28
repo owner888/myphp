@@ -1704,6 +1704,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
   `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
   mygo has no video.
+- **Boundaries and the A-B loop** (v1.48): `Player::at`,
+  `VideoPlayerState::abLoop`, `moveLoopPoint`, `$loopA` and `$loopB` are
+  myphp's, as AVPlayer's and IINA's; mygo has no video.
 - **The seek bar's thumbnails** (v1.47): `Media\Thumbnail`,
   `Player::thumbnail`, `Source::keyframe`, `VideoPlayerState::$thumbnails`,
   `thumbnailAt`, `$thumbnailCache`, `Media\ThumbnailCache` and

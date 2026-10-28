@@ -168,6 +168,7 @@ final class VideoPlayer
         if ($c->shortcut(Key::RIGHT, $alt) || $c->shortcut('.')) { $s->frameStep(); }
         if ($c->shortcut(Key::LEFT, $alt) || $c->shortcut(',')) { $s->frameStep(true); }
         if ($c->shortcut('s', $cmd)) { $s->screenshot(); }
+        if ($c->shortcut('l', $cmd)) { $s->abLoop(); }
         if ($c->shortcut(Key::PAGE_UP, $shift)) { $s->seekBy(600); }
         if ($c->shortcut(Key::PAGE_DOWN, $shift)) { $s->seekBy(-600); }
         if ($c->shortcut(Key::UP)) { $s->setVolume($s->volume + 0.05); }
@@ -319,11 +320,25 @@ final class VideoPlayer
             $l->rect($k - 1.5, $cy - 7.5, 3, 15, 0xffffff, 0.92, 1.5);
         });
         if ($c->changed($seek)) { $p->seek($s->at); }
+        // The A-B loop's points, as IINA's knobs of the loop: gray, three quarters of the knob's height, over the bar; dragged, they move.
+        foreach (['a' => $s->loopA, 'b' => $s->loopB] as $which => $at) {
+            if ($at === null) { continue; }
+            $x = self::SEEK_X + 1.5 + (self::SEEK_W - 3) * $at / max($p->duration(), 0.001);
+            $knob = $c->column()->absolute()->left($x - 1.5)->top(self::SEEK_Y + 1.5)->size(3, 15)->tooltip('A-B loop ' . strtoupper($which))->draw(static function (DisplayList $l, Node $n): void {
+                $l->rect($n->x, $n->y + 2, 3, 11, 0xa6a6a6, 1.0, 1);
+            });
+            $c->end();
+            if ($c->pressed($knob)) {
+                [$px] = $c->pointerPosition($seek);
+                $to = $p->duration() * max(0.0, min(1.0, ($px - 1.5) / (self::SEEK_W - 3)));
+                if (abs($to - $at) > 1e-3) { $s->moveLoopPoint($which, $to); }
+            }
+        }
         $c->text(VideoPlayerState::clock($p->duration()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->right(12.5)->top(50.5);
         return $seek;
     }
 
-    /** The message at the top left: its text, with the time or the volume's level under it, fading out. */
+    /** The message at the top left: its text, with the time or the volume's level under it (or a line of its own), fading out. */
     private static function osd(Context $c, VideoPlayerState $s, Player $p, float $now): void
     {
         [$text, $under, $until] = $s->message;
@@ -342,6 +357,8 @@ final class VideoPlayer
                   $l->rect($n->x, $n->y, $n->w * $level, $n->h, $t->accent, 1.0, 2.5); // the system's accent
               });
               $c->end();
+          } elseif ($under !== '') { // a time of its own (an A-B loop's point moved)
+              $c->text($under, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7);
           }
         $c->end();
     }

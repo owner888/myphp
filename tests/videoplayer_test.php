@@ -149,6 +149,18 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(abs($p->volume() - 0.95) < 1e-9, 'Down lowers it by 5');
     $h->key(Key::RIGHT, 'moveRight:'); $h->frame();
     check(abs($p->time() - 5.0) < 0.01 || abs($p->time() - $p->duration()) < 0.01, 'Right goes 5 s on: ' . $p->time());
+    // The A-B loop (Cmd+L, IINA's): A, then B, which loops (from A at once, at B), then none, told as it goes; their knobs on the bar.
+    $p->seek(0.5);
+    $h->shortcut('l', Key::COMMAND); $h->frame();
+    same([0.5, null, 'AB-Loop: A'], [round($s->loopA, 3), $s->loopB, $s->message[0]], 'Cmd+L: A where it is');
+    $p->seek(1.2);
+    $h->shortcut('l', Key::COMMAND); $h->frame();
+    same([0.5, 1.2, 'AB-Loop: B', 0.5], [round($s->loopA, 3), round($s->loopB, 3), $s->message[0], round($p->time(), 3)], 'again: B, and from A at once');
+    check($h->byText('AB-Loop: B') !== null, 'told');
+    $p->play(); $run(1.2); $at = $p->time(); $p->pause();
+    check($at >= 0.5 && $at < 1.25, "it plays from A again at B: at $at after 1.2 s");
+    $h->shortcut('l', Key::COMMAND); $h->frame();
+    same([null, null, 'AB-Loop: Cleared'], [$s->loopA, $s->loopB, $s->message[0]], 'again: none');
     $p->seek(1.0);
     $h->key(Key::PERIOD, 'insertText:', 0, '.'); $h->frame();
     $on = round($p->time(), 3);
