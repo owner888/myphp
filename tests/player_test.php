@@ -203,6 +203,19 @@ if (PHP_OS_FAMILY === 'Darwin') {
             check($same < 1 && $apart > 10, 'the frame of the time sought, from wherever it was: ' . round($same, 2) . ' apart, against ' . round($apart, 2) . ' to 1.5 s\'s');
             $thumb = $p->thumbnail(1.5, 80);
             check($thumb !== null && [$thumb->width, $thumb->height] === [80, 45] && abs($thumb->time - 1.0) < 0.1, 'a thumbnail, decoded by libdav1d: ' . ($thumb === null ? 'none' : "{$thumb->time} s"));
+            // 10 bits (x420 pixel buffers): its frame on screen and its thumbnail as those of its 8-bit twin (the same picture, ffmpeg's
+            // libdav1d frames 2.7 apart on average), and another frame far from them.
+            $p10 = new Player(__DIR__ . '/testdata/clip-av1-10.mkv');
+            $p8 = new Player(__DIR__ . '/testdata/clip-av1-10-twin8.mkv');
+            $p10->play(); $run(0.5); $p10->pause();
+            $failed = $p10->out->failure();
+            check($failed === null && $p10->time() > 0.2, 'a 10-bit film plays, decoded by libdav1d: ' . ($failed ?? round($p10->time(), 2) . ' s in 0.5'));
+            [$s10, $s8, $o10] = [$pixels($frame($p10, 1.0)), $pixels($frame($p8, 1.0)), $pixels($frame($p10, 1.5))];
+            $twin = $s10 === null || $s8 === null ? INF : $mean($s10, $s8);
+            $far = $s10 === null || $o10 === null ? 0.0 : $mean($s10, $o10);
+            check($twin < 6 && $far > 10, 'its frame on screen as its 8-bit twin\'s: ' . round($twin, 2) . ' apart, against ' . round($far, 2) . ' to 1.5 s\'s');
+            [$t10, $t8] = [$p10->thumbnail(1.5, 80), $p8->thumbnail(1.5, 80)];
+            check($t10 !== null && $t8 !== null && $mean($t10->rgba(), $t8->rgba()) < 6, 'its thumbnail as its twin\'s: mean error ' . ($t10 === null || $t8 === null ? '-' : round($mean($t10->rgba(), $t8->rgba()), 2)));
             Player::$hardwareDecoding = true;
             $h = new Player(__DIR__ . '/testdata/clip-av1.mkv');
             if (\MyPHP\Native\CoreMedia::playable($h->videoTrack())) { // this Mac's hardware: the thumbnails alike (its frames on screen are not

@@ -160,6 +160,28 @@ $disabled = true; $h->frame();
 $h->clickOn($n['sort']);
 same(null, $h->menuLabels(), 'a disabled menu button opens none');
 
+// A menu button inside what keeps the focus (Node::keepFocus), as a player's sidebar: its menu opens, the focus stays where it was, so Space is not the button's.
+$n = []; $spaces = 0;
+$h = new Headless(function (Context $c) use (&$n, &$spaces) {
+    $c->column(20, 10)->align(Node::START);
+      $n['other'] = $c->button('Other');
+      $c->column()->keepFocus();
+        $n['eq'] = $c->menuButton('Preset', function (Menu $m) { $m->item('Rock')->chosen(); });
+      $c->end();
+    $c->end();
+    if ($c->shortcut(Key::SPACE)) { $spaces++; }
+}, 400, 300);
+$h->frame();
+$h->rt->focus = null; $h->frame();
+$r = $h->rect($n['eq']);
+$h->press($r[0] + $r[2] / 2, $r[1] + $r[3] / 2);
+check($h->menuLabels() !== null, 'its menu opens');
+$h->release($r[0] + $r[2] / 2, $r[1] + $r[3] / 2);
+$h->chooseMenuItem('Rock');
+same(null, $h->rt->focus, 'the focus where it was: none');
+$h->key(Key::SPACE, 'insertText:', 0, ' ');
+same([null, 1], [$h->menuLabels(), $spaces], 'Space opens no menu, the view has it');
+
 // Assistive technology presses a menu button: its menu opens.
 $disabled = false; $h->frame();
 $h->input->push(['accessOn']); $h->frame();

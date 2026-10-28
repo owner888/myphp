@@ -21,7 +21,7 @@ final class Matroska implements Source
     private const TRACKS = 0x1654AE6B, TRACK_ENTRY = 0xAE, TRACK_NUMBER = 0xD7, TRACK_TYPE = 0x83, CODEC_ID = 0x86, CODEC_PRIVATE = 0x63A2,
         LANGUAGE = 0x22B59C, NAME = 0x536E, DEFAULT_DURATION = 0x23E383, FLAG_DEFAULT = 0x88, VIDEO = 0xE0, PIXEL_WIDTH = 0xB0, PIXEL_HEIGHT = 0xBA,
         AUDIO = 0xE1, SAMPLING_FREQUENCY = 0xB5, CHANNELS = 0x9F, CONTENT_ENCODINGS = 0x6D80, CONTENT_ENCODING = 0x6240, CONTENT_COMPRESSION = 0x5034,
-        CONTENT_COMP_ALGO = 0x4254, CONTENT_COMP_SETTINGS = 0x4255;
+        CONTENT_COMP_ALGO = 0x4254, CONTENT_COMP_SETTINGS = 0x4255, COLOUR = 0x55B0, MATRIX = 0x55B1, RANGE = 0x55B9, TRANSFER = 0x55BA, PRIMARIES = 0x55BB;
     private const CUES = 0x1C53BB6B, CUE_POINT = 0xBB, CUE_TIME = 0xB3, CUE_TRACK_POSITIONS = 0xB7, CUE_TRACK = 0xF7, CUE_CLUSTER_POSITION = 0xF1;
     private const CHAPTERS = 0x1043A770, EDITION_ENTRY = 0x45B9, EDITION_FLAG_DEFAULT = 0x45DB, CHAPTER_ATOM = 0xB6, CHAPTER_TIME_START = 0x91,
         CHAPTER_FLAG_HIDDEN = 0x98, CHAPTER_FLAG_ENABLED = 0x4598, CHAPTER_DISPLAY = 0x80, CHAP_STRING = 0x85;
@@ -161,7 +161,20 @@ final class Matroska implements Source
             sampleRate: isset($audio[self::SAMPLING_FREQUENCY]) ? self::float($audio[self::SAMPLING_FREQUENCY]) : 0.0,
             channels: isset($audio[self::CHANNELS]) ? self::uint($audio[self::CHANNELS]) : 0,
             strip: $strip,
+            colors: isset($video[self::COLOUR]) ? self::colors(self::fields($video[self::COLOUR])) : [],
         );
+    }
+
+    /** A Colour element's codes (H.273's, as Matroska's are), and its range: 1 the video's, 2 the full one, else none said. @param array<int, string> $c @return array{primaries?: int, transfer?: int, matrix?: int, full?: bool} */
+    private static function colors(array $c): array
+    {
+        $out = [];
+        foreach (['primaries' => self::PRIMARIES, 'transfer' => self::TRANSFER, 'matrix' => self::MATRIX] as $k => $id) {
+            if (isset($c[$id])) { $out[$k] = self::uint($c[$id]); }
+        }
+        $range = isset($c[self::RANGE]) ? self::uint($c[self::RANGE]) : 0;
+        if ($range === 1 || $range === 2) { $out['full'] = $range === 2; }
+        return $out;
     }
 
     /** The cues of the first video track, or of the first track cued when no video is. */

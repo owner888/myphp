@@ -26,5 +26,12 @@ final class Track
         public readonly int $channels,
         /** @internal the bytes header stripping took off the start of each frame, put back by Matroska */
         public readonly string $strip = '',
+        /**
+         * @internal the colors the container says of a video track (Matroska's
+         * Colour, an MP4's colr): H.273's codes, 2 where it says none, and
+         * whether the range is full; empty where it says nothing
+         * @var array{primaries?: int, transfer?: int, matrix?: int, full?: bool}
+         */
+        public readonly array $colors = [],
     ) {}
 }

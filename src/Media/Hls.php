@@ -68,7 +68,7 @@ final class Hls implements Source, CacheMember
                 $r = $k === 0 ? ($t->type === Track::AUDIO ? $muxed : null) : $audio[$k - 1][0];
                 $default = $r === null ? ($t->type !== Track::AUDIO || !$named) : strcasecmp($r['DEFAULT'] ?? '', 'YES') === 0;
                 $own[$t->number] = $mine = new Track($k * 1000 + $t->number, $t->type, $t->codec, $t->private, $r['LANGUAGE'] ?? $t->language, $r['NAME'] ?? $t->name,
-                    $default, $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels);
+                    $default, $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels, colors: $t->colors);
                 $this->tracks[] = $mine;
                 $this->owner[spl_object_id($mine)] = $k;
             }

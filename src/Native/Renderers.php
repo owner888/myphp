@@ -12,11 +12,15 @@ use RuntimeException;
  * threads of its own: an AVSampleBufferDisplayLayer decodes the video and
  * shows it (the window places the layer where Context::video's node is),
  * an AVSampleBufferAudioRenderer the audio, and an
- * AVSampleBufferRenderSynchronizer runs both on one clock. Nothing calls
- * back: the player tops them up while they ask for more. A video track the
- * system does not decode (AV1 without its decoder), or that it is not to
+ * AVSampleBufferRenderSynchronizer runs both on one clock. The player tops
+ * them up at its ticks while they ask for more. A video track the system
+ * does not decode (AV1 without its decoder), or that it is not to
  * ($hardware off), is decoded by libdav1d (Native\SoftVideo) into pixel
- * buffers the layer shows.
+ * buffers the layer shows; the layer takes few of those (a fifth of a
+ * second of 60 frames), fewer than a tick's quarter of a second plays, so
+ * while it will take no more, it is asked to say when it will
+ * (requestMediaDataWhenReadyOnQueue, on the main queue), and is given the
+ * video queued then ($videoWanted).
  *
  * @internal
  */
@@ -38,6 +42,28 @@ final class Renderers
     private array $soft = [];
     /** @var array<int, SoftAudio> the decoders of the audio tracks decoded in PHP (Vorbis), by track number */
     private array $softAudio = [];
+    /** What gives the layer the video queued (the player's), when the layer that would take no more of a software decoder's pictures will. */
+    public ?\Closure $videoWanted = null;
+    /** Whether the layer is to say when it takes more; the renderers that asked it, for the block (one for the process) the layers call. @var array<int, \WeakReference<self>> */
+    private bool $asking = false;
+    private static array $askers = [];
+    private static mixed $askBlock = null;
+    /** libSystem's main queue, which the layer's block runs on. */
+    private static ?\FFI $main = null;
+    /** Seconds between looks at a software decoder whose threads decode what it refused more for (a seek's frames from its keyframe). */
+    private const POLL = 0.004;
+    /**
+     * Seconds of the main thread a software decoder takes at a time: dav1d's
+     * send waits while its frame threads are all at work (dav1d_send_data
+     * submits the frame), so a seek's frames from its keyframe would hold
+     * the window as long as they decode (250 ms of a 60-frame 1080p film);
+     * they go on after a POLL instead. When the slice started (hrtime).
+     */
+    private const SLICE = 0.010;
+    private int $burst = 0;
+    /** @var array<int, \WeakReference<self>> the renderers whose software decoder was full, for the poll timer; the timer, its target */
+    private static array $pollers = [];
+    private static $pollTimer = null, $pollTarget = null;
     /** The equalizer's gains (IINA's ten bands, dB), null while it is off (flat): the audio then goes to the renderer as it comes. */
     private ?array $gains = null;
     /** @var array<int, AudioDecoder> the system's decoders of the audio the equalizer filters, by track number */
@@ -66,10 +92,85 @@ final class Renderers
     public function ready(Track $t): bool
     {
         $soft = $this->soft[$t->number] ?? null;
-        if ($soft !== null && ObjC::msg('b:', $this->layer, 'isReadyForMoreMediaData')) {
-            $soft->unclog($this->layer); // dav1d full: its pictures taken, as the layer takes them, now (a paused player has no tick to wait for)
+        $ready = ObjC::msg('b:', $t->type === Track::VIDEO ? $this->layer : $this->audio, 'isReadyForMoreMediaData'); // asked once: the layer turns ready on its own thread
+        if ($soft !== null && $ready && (hrtime(true) - $this->burst > self::SLICE * 1e9 || !$soft->unclog($this->layer))) {
+            $this->poll(); // dav1d full, or its slice of the main thread spent: on again soon, the window drawn meanwhile (a paused player has no tick)
+            return false;
         }
-        return ObjC::msg('b:', $t->type === Track::VIDEO ? $this->layer : $this->audio, 'isReadyForMoreMediaData');
+        if (!$ready && $soft !== null && !$this->asking) { $this->ask(); }
+        return $ready;
+    }
+
+    /**
+     * Has the video queued given again in POLL seconds, while a software
+     * decoder holds a packet it refused: an NSTimer in the common modes,
+     * one for the process, which stops once no renderer waits so.
+     */
+    private function poll(): void
+    {
+        self::$pollers[spl_object_id($this)] = \WeakReference::create($this);
+        if (self::$pollTimer !== null) {
+            return;
+        }
+        if (self::$pollTarget === null) {
+            ObjC::defineClass('MyPHPSoftVideoPoll', 'NSObject', [
+                'poll:' => ['v@:@', 'v(ppp)', static function ($self, $cmd, $timer): void {
+                    $waiting = self::$pollers;
+                    self::$pollers = [];
+                    foreach ($waiting as $r) { $r->get()?->wanted(true); } // those still waiting ask again
+                    if (self::$pollers === [] && self::$pollTimer !== null) {
+                        ObjC::msg('v:', self::$pollTimer, 'invalidate');
+                        ObjC::msg('v:', self::$pollTimer, 'release');
+                        self::$pollTimer = null;
+                    }
+                }],
+            ]);
+            self::$pollTarget = ObjC::msg('p:', ObjC::alloc('MyPHPSoftVideoPoll'), 'init');
+        }
+        self::$pollTimer = ObjC::msg('p:', ObjC::msg('p:dpppb', ObjC::cls('NSTimer'), 'timerWithTimeInterval:target:selector:userInfo:repeats:', self::POLL, self::$pollTarget, ObjC::sel('poll:'), null, true), 'retain');
+        ObjC::msg('v:pp', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'mainRunLoop'), 'addTimer:forMode:', self::$pollTimer, Metal::commonMode());
+    }
+
+    /** @internal Player: what follows is a slice of the main thread of its own (ready()'s SLICE), its packets given while it lasts. */
+    public function slice(): void
+    {
+        $this->burst = hrtime(true);
+    }
+
+    /** Has the layer say, on the main queue, when it takes more of the software decoder's pictures. */
+    private function ask(): void
+    {
+        self::$askBlock ??= ObjC::block('', static function (): void { // every renderer asking given its video: each looks at its own layer
+            foreach (self::$askers as $r) { $r->get()?->wanted(); }
+        }, false);
+        self::$askers[spl_object_id($this)] = \WeakReference::create($this);
+        $this->asking = true;
+        self::$main ??= \FFI::cdef('extern char _dispatch_main_q;', '/usr/lib/libSystem.B.dylib');
+        ObjC::msg('v:pp', $this->layer, 'requestMediaDataWhenReadyOnQueue:usingBlock:', \FFI::addr(self::$main->_dispatch_main_q), self::$askBlock);
+    }
+
+    /**
+     * The layer takes more, or ($polled) the poll timer fired: the video
+     * queued given it. The layer still taking more after that, nothing was
+     * left, and it stops asking (the next tick's reads ask again).
+     */
+    private function wanted(bool $polled = false): void
+    {
+        if (!$polled && !ObjC::msg('b:', $this->layer, 'isReadyForMoreMediaData')) {
+            return; // another's layer asked
+        }
+        if ($this->videoWanted !== null) { ($this->videoWanted)(); } // its readiness asked again: a poll or the layer's asking again, as it is
+        if (!$polled && ObjC::msg('b:', $this->layer, 'isReadyForMoreMediaData')) { $this->stopAsking(); }
+    }
+
+    private function stopAsking(): void
+    {
+        if (!$this->asking) {
+            return;
+        }
+        ObjC::msg('v:', $this->layer, 'stopRequestingMediaData');
+        $this->asking = false;
+        unset(self::$askers[spl_object_id($this)]);
     }
 
     /** The software decoder of video track $t, made at its first packet; null for one the layer decodes. */
@@ -212,6 +313,7 @@ final class Renderers
     /** Drops what the renderers hold, for a seek or another audio track. */
     public function flush(): void
     {
+        $this->stopAsking();
         ObjC::msg('v:', $this->layer, 'flush');
         ObjC::msg('v:', $this->audio, 'flush');
         foreach ($this->soft as $s) { $s->flush(); }
@@ -263,6 +365,8 @@ final class Renderers
 
     public function __destruct()
     {
+        $this->stopAsking();
+        unset(self::$pollers[spl_object_id($this)]);
         ObjC::msg('v:f', $this->sync, 'setRate:', 0.0);
         foreach ([...$this->formats, ...$this->pcmFormats] as $f) {
             CoreMedia::c()->CFRelease($f);

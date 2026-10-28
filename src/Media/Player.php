@@ -182,6 +182,8 @@ final class Player
         $this->source->choose($this->video, $this->audio);
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers($this->hardware);
+        $self = \WeakReference::create($this); // the renderers hold no cycle to the player
+        $this->out->videoWanted = static function () use ($self): void { $self->get()?->give('video'); }; // a software decoder's layer taking more between ticks
         $this->awake = new Awake('Playing ' . basename($path));
         if ($this->net === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
@@ -1294,13 +1296,19 @@ final class Player
             }
         }
         $this->out->pump($this->drained); // at the end, what the software decoder holds
-        foreach (['video', 'audio'] as $k) {
-            while ($this->queued[$k] !== [] && $this->out->ready($this->queued[$k][0]->track)) {
-                $p = array_shift($this->queued[$k]);
-                $end = $p->time + $p->duration;
-                $this->out->enqueue($p, $k === 'audio' || $end > $this->target); // the video's frames before it decoded, not shown
-                $this->fedTo = max($this->fedTo, $end);
-            }
+        $this->give('video');
+        $this->give('audio');
+    }
+
+    /** Gives the renderer of the $k queued ('video', 'audio') its packets while it takes them. */
+    private function give(string $k): void
+    {
+        $this->out->slice();
+        while ($this->queued[$k] !== [] && $this->out->ready($this->queued[$k][0]->track)) {
+            $p = array_shift($this->queued[$k]);
+            $end = $p->time + $p->duration;
+            $this->out->enqueue($p, $k === 'audio' || $end > $this->target); // the video's frames before it decoded, not shown
+            $this->fedTo = max($this->fedTo, $end);
         }
     }
 

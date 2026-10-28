@@ -128,6 +128,17 @@ $err = null;
 try { $vpcC->invoke(null, $v, "\x00\x00"); } catch (RuntimeException $e) { $err = $e->getMessage(); }
 same('myphp: track 1 starts with no VP9 frame', $err, 'what is no VP9 frame throws');
 
+// The colors the container says (Matroska's Colour, an MP4's colr nclx), none where it says none; a VP9's vpcC takes them where its frame has none (an HDR film's PQ).
+$colors = fn(\MyPHP\Media\Track $t) => $t->colors;
+same([['primaries' => 1, 'transfer' => 1, 'matrix' => 1, 'full' => false], ['primaries' => 9, 'transfer' => 16, 'matrix' => 9, 'full' => false], [], []],
+    [$colors((new Matroska(__DIR__ . '/testdata/clip-av1-10.mkv'))->tracks()[0]), $colors((new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip-av1-pq.mp4'))->tracks()[0]),
+     $colors((new Matroska(__DIR__ . '/testdata/clip-av1.mkv'))->tracks()[0]), $colors((new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip.mp4'))->tracks()[0])],
+    'BT.709 of a Matroska Colour, BT.2020 and PQ of an MP4\'s colr, none of files that say none');
+$pq = new \MyPHP\Media\Track($v->number, $v->type, $v->codec, $v->private, $v->language, $v->name, $v->isDefault, $v->frameDuration, $v->width, $v->height, 0.0, 0, colors: ['primaries' => 9, 'transfer' => 16, 'matrix' => 9]);
+$m = new Matroska(__DIR__ . '/testdata/clip-vp9.mkv');
+while (($p = $m->next()) !== null && $p->track->type !== \MyPHP\Media\Track::VIDEO) {}
+same(bin2hex(pack('CC3CCCCCCn', 1, 0, 0, 0, 0, 10, 8 << 4 | 1 << 1 | 0, 9, 16, 9, 0)), bin2hex($vpcC->invoke(null, $pq, $p->data)), 'a VP9 of the container\'s BT.2020 and PQ: its vpcC says them');
+
 // Opus: its CodecPrivate the OpusHead (2 channels, a pre-skip of 312), its packets of as many frames as their TOC byte says (20 ms: 960 at 48 kHz).
 $m = new Matroska(__DIR__ . '/testdata/clip-opus.mkv');
 $a = $m->tracks()[1];
@@ -165,3 +176,26 @@ $frames = [];
 while (($p = $m->next()) !== null) { if ($p->track === $a) { $frames[] = \MyPHP\Native\CoreMedia::frames($p); } }
 check(count($frames) > 2 && count(array_unique(array_slice($frames, 0, -1))) === 1 && $frames[0] === 4608 && end($frames) <= 4608, 'its packets of 4608 frames, the last no more: ' . implode(',', array_unique($frames)));
 same([90112, 2560], [array_sum($frames), end($frames)], 'all of them as ffprobe counts: 19 of 4608 and the last of 2560');
+
+// On macOS, the format the layer and VideoToolbox decode by says the container's colors, as AVFoundation's of an MP4's colr: PQ and
+// BT.2020 of a Matroska AV1 (hardware decoding, which read none from the film), none of a film that says none.
+if (PHP_OS_FAMILY !== 'Darwin') {
+    echo "  skipped: the formats' colors (macOS)\n";
+    return;
+}
+$cm = \FFI::cdef('void* CMFormatDescriptionGetExtension(void*, void*); extern void* kCMFormatDescriptionExtension_TransferFunction; extern void* kCMFormatDescriptionExtension_ColorPrimaries; extern void* kCMFormatDescriptionExtension_YCbCrMatrix; extern void* kCMFormatDescriptionExtension_FullRangeVideo; void CFRelease(void*);',
+    '/System/Library/Frameworks/CoreMedia.framework/CoreMedia');
+$ext = function (\MyPHP\Media\Track $t) use ($cm): array {
+    $f = \MyPHP\Native\CoreMedia::format($t);
+    $out = [];
+    foreach (['ColorPrimaries', 'TransferFunction', 'YCbCrMatrix', 'FullRangeVideo'] as $k) {
+        $v = $cm->CMFormatDescriptionGetExtension($f, $cm->{"kCMFormatDescriptionExtension_$k"});
+        $out[$k] = $v === null ? null : ($k === 'FullRangeVideo' ? (bool)\MyPHP\Native\ObjC::msg('b:', \MyPHP\Native\ObjC::import($v), 'boolValue') : \MyPHP\Native\ObjC::phpStr(\MyPHP\Native\ObjC::import($v)));
+    }
+    $cm->CFRelease($f);
+    return $out;
+};
+$hdr = (new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip-av1-pq.mp4'))->tracks()[0];
+same([['ColorPrimaries' => 'ITU_R_2020', 'TransferFunction' => 'SMPTE_ST_2084_PQ', 'YCbCrMatrix' => 'ITU_R_2020', 'FullRangeVideo' => false],
+      ['ColorPrimaries' => null, 'TransferFunction' => null, 'YCbCrMatrix' => null, 'FullRangeVideo' => null]],
+    [$ext($hdr), $ext((new Matroska(__DIR__ . '/testdata/clip-av1.mkv'))->tracks()[0])], 'the format of a PQ film says BT.2020 and PQ, of one that says none nothing');

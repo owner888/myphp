@@ -123,8 +123,8 @@ final class VideoDecoder
         $full = $y->new('char[' . ($w * $h * 4) . ']');
         $small = $y->new('char[' . ($this->width * $this->height * 4) . ']');
         try {
-            if ($pic->p->layout !== 1 || $pic->p->bpc !== 8) {
-                throw new RuntimeException("myphp: AV1 of {$pic->p->bpc}-bit samples: only 8-bit 4:2:0 decodes in software yet");
+            if ($pic->p->layout !== 1 || ($pic->p->bpc !== 8 && $pic->p->bpc !== 10)) {
+                throw new RuntimeException("myphp: AV1 of {$pic->p->bpc}-bit samples, layout {$pic->p->layout}: only 4:2:0 of 8 or 10 bits decodes in software");
             }
             $seq = FFI::isNull($pic->seq_hdr) ? null : $pic->seq_hdr;
             $wholeRange = $seq !== null && $seq->color_range === 1;
@@ -135,12 +135,23 @@ final class VideoDecoder
                 = $wholeRange ? [0, 128, 255, 255, 255, 0, 255, 0] : [16, 128, 235, 240, 235, 16, 240, 16];
             $info = $y->new('vImage_YpCbCrToARGB');
             $y->vImageConvert_YpCbCrToARGB_GenerateConversion($sd ? $y->kvImage_YpCbCrToARGBMatrix_ITU_R_601_4 : $y->kvImage_YpCbCrToARGBMatrix_ITU_R_709_2, FFI::addr($range), FFI::addr($info), 3, 0, 0); // kvImage420Yp8_Cb8_Cr8, kvImageARGB8888
-            $plane = function (int $k, int $pw, int $ph, int $stride) use ($y, $pic) {
+            $cw = ($w + 1) >> 1; $ch = ($h + 1) >> 1;
+            // The planes as they are, of 8 bits; of 10, a quarter of each in 8 (SoftVideo::eightBits), a row as long as the plane is wide.
+            [$planes, $strides] = [[Mem::addr($pic->data[0]), Mem::addr($pic->data[1]), Mem::addr($pic->data[2])], [$pic->stride[0], $pic->stride[1], $pic->stride[1]]];
+            if ($pic->p->bpc === 10) {
+                $eight = Mem::alloc($w * $h + 2 * $cw * $ch);
+                $at = Mem::addr($eight);
+                foreach ([[$w, $h, 0], [$cw, $ch, $w * $h], [$cw, $ch, $w * $h + $cw * $ch]] as $k => [$pw, $ph, $off]) {
+                    SoftVideo::eightBits($planes[$k], $pw, $ph, $strides[$k], $at + $off);
+                    [$planes[$k], $strides[$k]] = [$at + $off, $pw];
+                }
+            }
+            $plane = function (int $k, int $pw, int $ph) use ($y, $planes, $strides) {
                 $b = $y->new('vImage_Buffer');
-                $b->data = $y->cast('void*', Mem::addr($pic->data[$k])); $b->width = $pw; $b->height = $ph; $b->rowBytes = $stride;
+                $b->data = $y->cast('void*', $planes[$k]); $b->width = $pw; $b->height = $ph; $b->rowBytes = $strides[$k];
                 return $b;
             };
-            $yp = $plane(0, $w, $h, $pic->stride[0]); $cb = $plane(1, ($w + 1) >> 1, ($h + 1) >> 1, $pic->stride[1]); $cr = $plane(2, ($w + 1) >> 1, ($h + 1) >> 1, $pic->stride[1]);
+            $yp = $plane(0, $w, $h); $cb = $plane(1, $cw, $ch); $cr = $plane(2, $cw, $ch);
             $argb = $y->new('vImage_Buffer');
             $argb->data = $y->cast('void*', FFI::addr($full)); $argb->width = $w; $argb->height = $h; $argb->rowBytes = $w * 4;
             $map = $y->new('unsigned char[4]');
@@ -157,6 +168,7 @@ final class VideoDecoder
             return FFI::string($small, $this->width * $this->height * 4);
         } finally {
             Dav1d::release($pic);
+            if (isset($eight)) { Mem::free($eight); }
         }
     }
 

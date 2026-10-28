@@ -8,8 +8,10 @@
 // playlist, as one opened from the Finder; File > Open URL a film over
 // http(s); a subtitle file dropped on it loads over the film playing.
 // Run: ./run.sh video [file or URL], which logs what the player does to the
-// terminal (MYPHP_VIDEO_LOG=1); in examples/video, ../../bin/myphp build
-// makes Video.app and its .dmg.
+// terminal (MYPHP_VIDEO_LOG=1); MYPHP_VIDEO_SOFTWARE=1 turns the system's
+// decoders off (IINA's "Enable hardware decoder" unchecked: AV1 by libdav1d
+// on a Mac that decodes AV1 itself). In examples/video, ../../bin/myphp
+// build makes Video.app and its .dmg.
 declare(strict_types=1);
 
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
@@ -161,6 +163,10 @@ App::setName('Video');
 // below already plays.
 App::onOpenFile(fn(string $path) => $s->player !== null && realpath($s->player->path()) === realpath($path) ? null : drop($s, $path));
 Log::watchdog();
+if (getenv('MYPHP_VIDEO_SOFTWARE') !== false && getenv('MYPHP_VIDEO_SOFTWARE') !== '') {
+    \MyPHP\Media\Player::$hardwareDecoding = false; // read as each film opens
+    if (Log::on()) { Log::line('hardware decoding off (MYPHP_VIDEO_SOFTWARE)'); }
+}
 App::whenReady(function () use ($s, $argv, &$askUrl) {
     Theme::setSource(ThemeSource::Dark); // as IINA's window: dark whatever the system's
     $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',

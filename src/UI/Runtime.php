@@ -426,7 +426,7 @@ final class Runtime
                         break;
                     }
                     if (($t = $this->pressTarget($e[1], $e[2])) !== null && isset($this->menuNodes[$t]) && ($this->menuNodes[$t] & 2) !== 0) {
-                        $this->focus = $t; $this->focusVisible = false;
+                        $this->pressAt($e[1], $e[2]); // the focus as any press moves it, none inside what keeps it (Node::keepFocus), as mygo's pointerDown
                         $this->openMenuButton($t); // a menu button's menu opens as it goes down, and takes the release
                         $this->menuRelease = true;
                         break;

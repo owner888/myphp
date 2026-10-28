@@ -69,7 +69,21 @@ final class CoreMedia
                 extern void* kCMSampleAttachmentKey_NotSync;
                 extern void* kCMSampleAttachmentKey_DoNotDisplay;
                 extern void* kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms;
+                extern void* kCMFormatDescriptionExtension_ColorPrimaries;
+                extern void* kCMFormatDescriptionExtension_TransferFunction;
+                extern void* kCMFormatDescriptionExtension_YCbCrMatrix;
+                extern void* kCMFormatDescriptionExtension_FullRangeVideo;
+                extern void* kCMFormatDescriptionColorPrimaries_ITU_R_709_2;
+                extern void* kCMFormatDescriptionColorPrimaries_ITU_R_2020;
+                extern void* kCMFormatDescriptionColorPrimaries_SMPTE_C;
+                extern void* kCMFormatDescriptionTransferFunction_ITU_R_709_2;
+                extern void* kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ;
+                extern void* kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG;
+                extern void* kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2;
+                extern void* kCMFormatDescriptionYCbCrMatrix_ITU_R_601_4;
+                extern void* kCMFormatDescriptionYCbCrMatrix_ITU_R_2020;
                 extern void* kCFBooleanTrue;
+                extern void* kCFBooleanFalse;
             ', '/System/Library/Frameworks/CoreMedia.framework/CoreMedia');
             self::vt(); // its VP9 and AV1 decoders, before a reader or a layer meets them
         }
@@ -137,7 +151,20 @@ final class CoreMedia
             }
             $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $record, strlen($record));
             $atoms = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', $data, ObjC::str($atom));
-            $ext = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', $atoms, ObjC::import($c->kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms));
+            $ext = ObjC::msg('p:', ObjC::cls('NSMutableDictionary'), 'dictionary');
+            ObjC::msg('v:pp', $ext, 'setObject:forKey:', $atoms, ObjC::import($c->kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms));
+            // The colors the container says, as AVFoundation's format of an MP4's colr says them: without them the layer takes
+            // a Matroska AV1's PQ and BT.2020 for BT.709's (VideoToolbox's AV1 reads none of the sequence header's).
+            $said = $t->colors;
+            [$pri, $trc, $mtrx] = [$said['primaries'] ?? 2, $said['transfer'] ?? 2, $said['matrix'] ?? 2];
+            [$m, $p, $tr] = self::colorNames($mtrx, $pri, $trc, $t->width, $t->height);
+            foreach ([['ColorPrimaries', $pri, $p], ['TransferFunction', $trc, $tr], ['YCbCrMatrix', $mtrx, $m]] as [$key, $code, $name]) {
+                if ($code === 2) { continue; } // none said: the decoder's own
+                ObjC::msg('v:pp', $ext, 'setObject:forKey:', ObjC::import($c->{"kCMFormatDescription{$key}_$name"}), ObjC::import($c->{"kCMFormatDescriptionExtension_$key"}));
+            }
+            if (isset($said['full'])) {
+                ObjC::msg('v:pp', $ext, 'setObject:forKey:', ObjC::import($said['full'] ? $c->kCFBooleanTrue : $c->kCFBooleanFalse), ObjC::import($c->kCMFormatDescriptionExtension_FullRangeVideo));
+            }
             $st = $c->CMVideoFormatDescriptionCreate(null, self::fourcc($type), $t->width, $t->height, self::ptr($ext), FFI::addr($out));
         } else {
             [$format, $frames] = self::audio($t) ?? throw new RuntimeException("myphp: no decoder for {$t->codec}");
@@ -161,6 +188,26 @@ final class CoreMedia
             throw new RuntimeException("myphp: the format of {$t->codec} (track {$t->number}): CoreMedia error $st");
         }
         return $out;
+    }
+
+    /**
+     * @internal SoftVideo: H.273's matrix, primaries and transfer as the
+     * names of CoreVideo's and CoreMedia's constants (their suffixes:
+     * ITU_R_709_2…), [matrix, primaries, transfer]; where a code is 2 (none
+     * said), mpv's guess by the size: BT.709 from 1280 wide or past 576
+     * lines, else BT.601 (SMPTE C's primaries); a transfer of none, BT.709's.
+     * @return array{0: string, 1: string, 2: string}
+     */
+    public static function colorNames(int $mtrx, int $pri, int $trc, int $w, int $h): array
+    {
+        $hd = $w >= 1280 || $h > 576;
+        if ($mtrx === 2) { $mtrx = $hd ? 1 : 6; }
+        if ($pri === 2) { $pri = $hd ? 1 : 6; }
+        return [
+            match ($mtrx) { 5, 6 => 'ITU_R_601_4', 9, 10 => 'ITU_R_2020', default => 'ITU_R_709_2' },
+            match ($pri) { 9 => 'ITU_R_2020', 5, 6 => 'SMPTE_C', default => 'ITU_R_709_2' },
+            match ($trc) { 16 => 'SMPTE_ST_2084_PQ', 18 => 'ITU_R_2100_HLG', default => 'ITU_R_709_2' },
+        ];
     }
 
     /** The STREAMINFO of FLAC track $t: Matroska's CodecPrivate is "fLaC" and the stream's metadata blocks, STREAMINFO the first (34 bytes after its 4 of header). */
@@ -302,6 +349,9 @@ final class CoreMedia
         // The color space's matrix (ISO/IEC 23091-2): BT.601 and SMPTE 170 are 6, BT.709 1, SMPTE 240 7, BT.2020 9, RGB 0; unknown 2.
         $matrix = [0 => 2, 1 => 6, 2 => 1, 3 => 6, 4 => 7, 5 => 9, 6 => 2, 7 => 0][$space];
         [$primaries, $transfer] = match ($space) { 2 => [1, 1], 5 => [9, 14], 1, 3 => [6, 6], 4 => [7, 7], default => [2, 2] };
+        // The container's where it says them: a VP9 frame has no transfer, an HDR film's PQ or HLG (YouTube's VP9.2) only there.
+        $said = fn(string $k, int $own): int => ($t->colors[$k] ?? 2) !== 2 ? $t->colors[$k] : $own;
+        [$primaries, $transfer, $matrix] = [$said('primaries', $primaries), $said('transfer', $transfer), $said('matrix', $matrix)];
         $area = $t->width * $t->height;
         $level = 62;
         foreach ([10 => 36864, 11 => 73728, 20 => 122880, 21 => 245760, 30 => 552960, 31 => 983040, 40 => 2228224, 50 => 8912896, 60 => 35651584] as $l => $max) {

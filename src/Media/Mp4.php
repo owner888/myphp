@@ -345,7 +345,21 @@ final class Mp4 implements Source
         // A frame's duration: the decode times' mean delta (a muxer's of whole milliseconds, 0.042 and 0.041, are 1/24 s on the whole).
         $deltas = unpack('V*', $table['durations']) ?: [];
         $frame = $deltas === [] ? 0.0 : array_sum($deltas) / count($deltas) / $table['scale'];
-        return new Track($id, Track::VIDEO, self::VIDEO[$fourcc], $config, $lang, '', $enabled, $frame, unpack('n', $e, 24)[1], unpack('n', $e, 26)[1], 0.0, 0);
+        return new Track($id, Track::VIDEO, self::VIDEO[$fourcc], $config, $lang, '', $enabled, $frame, unpack('n', $e, 24)[1], unpack('n', $e, 26)[1], 0.0, 0,
+            colors: self::colr(self::find($e, 'colr', 78) ?? ''));
+    }
+
+    /** A colr box's colors (ISO/IEC 14496-12 12.1.5): an nclx's codes and range, a QuickTime nclc's codes; none of an ICC profile's. @return array{primaries?: int, transfer?: int, matrix?: int, full?: bool} */
+    private static function colr(string $b): array
+    {
+        $type = substr($b, 0, 4);
+        if (($type !== 'nclx' && $type !== 'nclc') || strlen($b) < 10) {
+            return [];
+        }
+        $v = unpack('n3', $b, 4);
+        $out = ['primaries' => $v[1], 'transfer' => $v[2], 'matrix' => $v[3]];
+        if ($type === 'nclx' && strlen($b) >= 11) { $out['full'] = (ord($b[10]) & 0x80) !== 0; }
+        return $out;
     }
 
     /** An audio track of sample entry $e (AudioSampleEntry, QuickTime's of versions 1 and 2 too): its channels and rate, its decoder configuration. */

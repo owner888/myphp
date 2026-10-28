@@ -4573,6 +4573,83 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   video` had it; a dialog shown from a frame holds the frame, as
   `Dialog::open` from the audio tab always did.
 
+## 10-bit AV1 in software, HDR colors, a menu button's focus (v1.57)
+- **10-bit AV1 decodes in software** (`Native\SoftVideo::x420`): dav1d
+  gives 16-bit samples, the 10 in the low bits; the display layer takes
+  x420 ('x420', 'xf20' of the full range: VideoToolbox's own of HEVC
+  Main 10), the 10 in the high bits, the chroma interleaved. As WebKit's
+  libvpx frames go (libyuv's CopyPlane_16 and MergeUVPlane_16 by 64),
+  each plane is made floats 64 times as large (vImageConvert_16UToF),
+  the chroma's interleaved (PlanarToChunkyF), and 16 bits again
+  (FTo16U, of no scale): six vImage calls a picture, the floats kept for
+  the next of its size. The colors are the sequence header's as of 8
+  bits (BT.2020, PQ and HLG attached as they are said). Thumbnails take a
+  quarter of each sample in 8 bits (`eightBits`) and the 8-bit way.
+  Tests: each frame of clip-av1-10.mkv bit for bit as FFmpeg's libdav1d,
+  and on macOS the pixel buffers bit for bit (NV12's too); its frame on
+  screen and thumbnail as its 8-bit twin's (clip-av1-10-twin8.mkv, the
+  same testsrc2 encoded at 8 bits). HDR on an HDR screen is the
+  developer's to look at; an HDR film's thumbnails are not tone-mapped.
+  `MYPHP_VIDEO_SOFTWARE=1 ./run.sh video …` turns hardware decoding off
+  in examples/video (`Player::$hardwareDecoding`), for a Mac of AV1's
+  own decoder (M3 on) to decode it by libdav1d.
+- **The format of a hardware-decoded film says the container's colors**
+  (`Track::$colors`, internal: Matroska's Colour, an MP4's colr nclx;
+  `CoreMedia::format`'s ColorPrimaries, TransferFunction, YCbCrMatrix,
+  FullRangeVideo extensions, as AVFoundation's format of a colr says
+  them). Without them an HDR Matroska AV1 (YouTube's, merged by yt-dlp)
+  showed washed out on the M5's hardware decoder, PQ and BT.2020 taken
+  for BT.709, while libdav1d's pixel buffers, the sequence header's
+  colors attached, were right. A code of 2 (none said) is left to the
+  decoder; a VP9's vpcC, made of its keyframe (which says no transfer),
+  takes the container's codes too (YouTube's VP9.2 HDR). One mapping of
+  H.273's codes to the constants' names serves both
+  (`CoreMedia::colorNames`). The mastering display and content light
+  levels (Matroska's MasteringMetadata, MaxCLL) are not passed yet.
+- **Trap: the layer takes a fifth of a second of decoded pictures.**
+  libdav1d's 1080p60 HDR (YouTube's) dropped frames all along in
+  software, while dav1d decodes it at 994 frames a second and the x420
+  pixel buffers take 1.2 ms a frame (a bench of the developer's M5): the
+  display layer stops taking pixel buffers after a dozen or so (it takes
+  seconds of compressed frames), and the player's tick, which tops it
+  up, comes every quarter of a second. A tick of 0.02 s played it
+  smoothly (an experiment, reverted). Now, while the layer takes no
+  more of a software decoder's pictures, it is asked to say when it will
+  (`requestMediaDataWhenReadyOnQueue:usingBlock:` on the main queue,
+  AVFoundation's way to feed a renderer), and is given the video queued
+  then (`Renderers::$videoWanted`, the player's `give('video')`); taking
+  more with nothing queued, it stops asking until a tick reads more.
+  One block for the process serves every player's renderers (a block
+  made each time would live for the process); a flush or the
+  renderers' end stops it.
+- **A software decoder is not waited for.** A seek (each step of a
+  slider dragged) held the main thread 0.12 to 0.5 s in software, against
+  nothing with VideoToolbox: `SoftVideo::unclog` spun on
+  `dav1d_get_picture` until dav1d's threads had decoded the frames from
+  the keyframe to the target (hundreds of a 60-frame film, YouTube's
+  keyframes seconds apart). It takes what is decoded now and says
+  whether dav1d takes another packet; while it does not, the renderers
+  look again every 4 ms (an NSTimer in the common modes, one for the
+  process, stopping once no decoder is full), as mpv's decoder thread
+  goes on while its window does. The end's drain still waits. The
+  layer's readiness is asked once a look: asked twice (before taking
+  dav1d's pictures and after), it turned ready between, on the layer's
+  thread, and a packet went to a full dav1d (which throws).
+- **dav1d's send waits too, so the software decoder gets slices.** Not
+  waiting in `unclog` left 258 ms a seek of the main thread (a bench of
+  the developer's: VideoToolbox's 73, reading the packets 1 to 10):
+  `dav1d_send_data` submits the frame, and with its frame threads all at
+  work, waits for the oldest. PHP has no thread to send from, so the
+  packets go to a software decoder for 10 ms at a time
+  (`Renderers::SLICE`, from `Player::give`'s `slice()`), then on at the
+  next POLL, the window drawn between; the frames from the keyframe take
+  as long as ever on the whole.
+- **A menu button's press moves the focus as any press does** (mygo's
+  pointerDown): it took the focus itself, past `keepFocus`, so the
+  player's equalizer pop-up, clicked, kept Space (its menu again) from
+  the window's play and pause. The press goes through `pressAt` now,
+  which leaves the focus inside what keeps it, then opens the menu.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

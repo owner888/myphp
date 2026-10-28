@@ -59,7 +59,7 @@ final class Merged implements Source, Cache
         $out = [];
         foreach ($tracks as $t) {
             $mine = $k === 0 ? $t : new Track($k * 1000 + $t->number, $t->type, $t->codec, $t->private, $t->language, $t->name !== '' ? $t->name : $name, $t->isDefault,
-                $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels, $t->strip);
+                $t->frameDuration, $t->width, $t->height, $t->sampleRate, $t->channels, $t->strip, $t->colors);
             $this->tracks[] = $out[] = $mine;
             $this->of[spl_object_id($mine)] = [$k, $t];
             $this->own[$k][spl_object_id($t)] = $mine;
