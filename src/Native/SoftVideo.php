@@ -34,6 +34,8 @@ final class SoftVideo
     private string $kind = '';
     /** A 10-bit picture's floats on their way (Mem::alloc'd), of the size they are of: the luma, then the chroma planes, then the chroma interleaved. */
     private ?CData $floats = null;
+    /** @var array<string, CData> the CFData of an HDR film's metadata, by its bytes */
+    private array $datas = [];
     private string $floatsOf = '';
 
     public function __construct(private readonly Track $track)
@@ -70,6 +72,9 @@ final class SoftVideo
             extern void* kCVImageBufferYCbCrMatrixKey;
             extern void* kCVImageBufferColorPrimariesKey;
             extern void* kCVImageBufferTransferFunctionKey;
+            extern void* kCVImageBufferMasteringDisplayColorVolumeKey;
+            extern void* kCVImageBufferContentLightLevelInfoKey;
+            void* CFDataCreate(void*, const char*, long);
             extern void* kCVImageBufferYCbCrMatrix_ITU_R_709_2;
             extern void* kCVImageBufferYCbCrMatrix_ITU_R_601_4;
             extern void* kCVImageBufferYCbCrMatrix_ITU_R_2020;
@@ -169,8 +174,7 @@ final class SoftVideo
         $c = self::c();
         $pb = $this->pixels($pic);
         try {
-            $seq = FFI::isNull($pic->seq_hdr) ? null : $pic->seq_hdr;
-            $this->colors($pb, $seq, $pic->p->w, $pic->p->h);
+            $this->colors($pb, $pic);
             if ($this->format !== null && $c->CMVideoFormatDescriptionMatchesImageBuffer($this->format, $pb) === 0) {
                 $c->CFRelease($this->format);
                 $this->format = null;
@@ -344,18 +348,34 @@ final class SoftVideo
     }
 
     /**
-     * The colors the sequence header says (AV1's color_config: H.273's
-     * codes), on $pb; where it says none, mpv's guess (CoreMedia::colorNames).
+     * The colors picture $pic's sequence header says (AV1's color_config:
+     * H.273's codes), on $pb; where it says none, mpv's guess
+     * (CoreMedia::colorNames); an HDR film's metadata with them.
      */
-    private function colors(CData $pb, ?CData $seq, int $w, int $h): void
+    private function colors(CData $pb, CData $pic): void
     {
         $c = self::c();
+        $seq = FFI::isNull($pic->seq_hdr) ? null : $pic->seq_hdr;
+        [$w, $h] = [$pic->p->w, $pic->p->h];
         [$mtrx, $pri, $trc] = $seq === null ? [2, 2, 2] : [$seq->mtrx, $seq->pri, $seq->trc];
         [$m, $p, $t] = CoreMedia::colorNames($mtrx, $pri, $trc, $w, $h);
         [$matrix, $primaries, $transfer] = [$c->{"kCVImageBufferYCbCrMatrix_$m"}, $c->{"kCVImageBufferColorPrimaries_$p"}, $c->{"kCVImageBufferTransferFunction_$t"}];
         $c->CVBufferSetAttachment($pb, $c->kCVImageBufferYCbCrMatrixKey, $matrix, 1); // kCVAttachmentMode_ShouldPropagate
         $c->CVBufferSetAttachment($pb, $c->kCVImageBufferColorPrimariesKey, $primaries, 1);
         $c->CVBufferSetAttachment($pb, $c->kCVImageBufferTransferFunctionKey, $transfer, 1);
+        // An HDR film's mastering display and light levels, for the system's tone mapping: the picture's own (its metadata OBUs), else the container's.
+        $hdr = Dav1d::hdr($pic) + array_intersect_key($this->track->colors, ['mastering' => true, 'light' => true]);
+        if (isset($hdr['mastering'])) { $c->CVBufferSetAttachment($pb, $c->kCVImageBufferMasteringDisplayColorVolumeKey, $this->data(CoreMedia::masteringDisplay($hdr['mastering'])), 1); }
+        if (isset($hdr['light'])) { $c->CVBufferSetAttachment($pb, $c->kCVImageBufferContentLightLevelInfoKey, $this->data(CoreMedia::contentLight($hdr['light'])), 1); }
+    }
+
+    /** Bytes $b as a CFData, kept for the next picture of the same (a film's are its own throughout). */
+    private function data(string $b)
+    {
+        if (!isset($this->datas[$b])) {
+            $this->datas[$b] = self::c()->CFDataCreate(null, $b, strlen($b));
+        }
+        return $this->datas[$b];
     }
 
     public function __destruct()
@@ -364,5 +384,6 @@ final class SoftVideo
         if ($this->pool !== null) { self::$c->CFRelease($this->pool); }
         if ($this->format !== null) { self::$c->CFRelease($this->format); }
         if ($this->floats !== null) { Mem::free($this->floats); }
+        foreach ($this->datas as $d) { self::$c->CFRelease($d); }
     }
 }

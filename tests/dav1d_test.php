@@ -87,6 +87,21 @@ $pic = $d->picture() ?? $d->picture();
 same([10, 1, 1, 1, 1, 0], [$pic?->p->bpc, $pic?->p->layout, $pic?->seq_hdr->mtrx, $pic?->seq_hdr->pri, $pic?->seq_hdr->trc, $pic?->seq_hdr->color_range], 'its samples of 10 bits, 4:2:0, BT.709 in the video range');
 if ($pic !== null) { Dav1d::release($pic); }
 
+// An HDR film's metadata OBUs (clip-av1-hdr.mp4, SVT-AV1's mastering-display and content-light): the mastering display and light levels of its pictures.
+$m = new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip-av1-hdr.mp4');
+[$hv] = $m->tracks();
+while (($p = $m->next()) !== null && $p->track !== $hv) {}
+$dh = new Dav1d(1, 1);
+$dh->send($p->data, 0);
+$pic = $dh->picture() ?? $dh->picture();
+$hdr = Dav1d::hdr($pic);
+same([[0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329, 1000.0, 0.0001], [1100, 180]],
+    [array_map(fn(float $v) => round($v, 4), $hdr['mastering'] ?? []), $hdr['light'] ?? null], 'an HDR picture\'s mastering display (R, G, B, the white point, its luminance) and MaxCLL, MaxFALL');
+same('33c286c41d4c0bb884d03e803d1340420098968000000001', bin2hex(\MyPHP\Native\CoreMedia::masteringDisplay($hdr['mastering'])), 'as CoreMedia takes it: HEVC\'s SEI, green, blue, red, in 0.00002 and 0.0001 cd/m²');
+Dav1d::release($pic);
+same([], Dav1d::hdr($first = (function () { $m = new Matroska(__DIR__ . '/testdata/clip-av1.mkv'); while (($p = $m->next()) !== null && $p->track->type !== Track::VIDEO) {} $d = new Dav1d(1, 1); $d->send($p->data, 0); return $d->picture() ?? $d->picture(); })()), 'an SDR picture\'s: none');
+Dav1d::release($first);
+
 if (PHP_OS_FAMILY !== 'Darwin') {
     echo "  skipped: SoftVideo's pixel buffers (macOS)\n";
     return;

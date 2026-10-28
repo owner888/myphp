@@ -27,6 +27,8 @@ final class Dav1d
         typedef struct { const uint8_t *data; size_t sz; Dav1dRef *ref; Dav1dDataProps m; } Dav1dData;
         typedef struct { int w; int h; int layout; int bpc; } Dav1dPictureParameters;
         typedef struct { uint8_t profile; int max_width, max_height; int layout, pri, trc, mtrx, chr; uint8_t hbd; uint8_t color_range; } Dav1dSequenceHeaderHead;
+        typedef struct { uint16_t max_content_light_level; uint16_t max_frame_average_light_level; } Dav1dContentLightLevel;
+        typedef struct { uint16_t primaries[3][2]; uint16_t white_point[2]; uint32_t max_luminance; uint32_t min_luminance; } Dav1dMasteringDisplay;
         typedef struct {
             Dav1dSequenceHeaderHead *seq_hdr; void *frame_hdr;
             void *data[3]; ptrdiff_t stride[2];
@@ -180,6 +182,29 @@ final class Dav1d
         }
         if ($this->pending !== null) { $this->flushPending(); } // room for the packet kept, now
         return $pic;
+    }
+
+    /**
+     * The HDR metadata OBUs picture $pic carries (AV1's metadata_hdr_mdcv
+     * and metadata_hdr_cll), as Track::$colors has a container's: the
+     * primaries red, green, blue and the white point (0.16 fixed point),
+     * the luminance (24.8 and 18.14); MaxCLL and MaxFALL. Empty of none.
+     * @return array{mastering?: list<float>, light?: array{0: int, 1: int}}
+     */
+    public static function hdr(CData $pic): array
+    {
+        $out = [];
+        if (!FFI::isNull($pic->mastering_display)) {
+            $m = self::$ffi->cast('Dav1dMasteringDisplay*', $pic->mastering_display);
+            $p = $m->primaries;
+            $out['mastering'] = [$p[0][0] / 65536, $p[0][1] / 65536, $p[1][0] / 65536, $p[1][1] / 65536, $p[2][0] / 65536, $p[2][1] / 65536,
+                $m->white_point[0] / 65536, $m->white_point[1] / 65536, $m->max_luminance / 256, $m->min_luminance / 16384];
+        }
+        if (!FFI::isNull($pic->content_light)) {
+            $l = self::$ffi->cast('Dav1dContentLightLevel*', $pic->content_light);
+            $out['light'] = [$l->max_content_light_level, $l->max_frame_average_light_level];
+        }
+        return $out;
     }
 
     /** Lets picture $pic go. */

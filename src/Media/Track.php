@@ -28,9 +28,13 @@ final class Track
         public readonly string $strip = '',
         /**
          * @internal the colors the container says of a video track (Matroska's
-         * Colour, an MP4's colr): H.273's codes, 2 where it says none, and
-         * whether the range is full; empty where it says nothing
-         * @var array{primaries?: int, transfer?: int, matrix?: int, full?: bool}
+         * Colour, an MP4's colr, mdcv and clli): H.273's codes, 2 where it says
+         * none, and whether the range is full; an HDR film's mastering display
+         * (SMPTE ST 2086: the red, green and blue primaries' and the white
+         * point's x and y, CIE 1931's, then its largest and least luminance,
+         * cd/m²) and its light levels (MaxCLL and MaxFALL, cd/m²); empty
+         * where it says nothing
+         * @var array{primaries?: int, transfer?: int, matrix?: int, full?: bool, mastering?: list<float>, light?: array{0: int, 1: int}}
          */
         public readonly array $colors = [],
     ) {}

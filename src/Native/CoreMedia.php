@@ -73,6 +73,8 @@ final class CoreMedia
                 extern void* kCMFormatDescriptionExtension_TransferFunction;
                 extern void* kCMFormatDescriptionExtension_YCbCrMatrix;
                 extern void* kCMFormatDescriptionExtension_FullRangeVideo;
+                extern void* kCMFormatDescriptionExtension_MasteringDisplayColorVolume;
+                extern void* kCMFormatDescriptionExtension_ContentLightLevelInfo;
                 extern void* kCMFormatDescriptionColorPrimaries_ITU_R_709_2;
                 extern void* kCMFormatDescriptionColorPrimaries_ITU_R_2020;
                 extern void* kCMFormatDescriptionColorPrimaries_SMPTE_C;
@@ -162,6 +164,11 @@ final class CoreMedia
                 if ($code === 2) { continue; } // none said: the decoder's own
                 ObjC::msg('v:pp', $ext, 'setObject:forKey:', ObjC::import($c->{"kCMFormatDescription{$key}_$name"}), ObjC::import($c->{"kCMFormatDescriptionExtension_$key"}));
             }
+            foreach (['MasteringDisplayColorVolume' => isset($said['mastering']) ? self::masteringDisplay($said['mastering']) : null, 'ContentLightLevelInfo' => isset($said['light']) ? self::contentLight($said['light']) : null] as $key => $bytes) {
+                if ($bytes === null) { continue; } // an HDR film's, for the system's tone mapping, as AVFoundation's format of an mdcv and a clli says them
+                $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $bytes, strlen($bytes));
+                ObjC::msg('v:pp', $ext, 'setObject:forKey:', $data, ObjC::import($c->{"kCMFormatDescriptionExtension_$key"}));
+            }
             if (isset($said['full'])) {
                 ObjC::msg('v:pp', $ext, 'setObject:forKey:', ObjC::import($said['full'] ? $c->kCFBooleanTrue : $c->kCFBooleanFalse), ObjC::import($c->kCMFormatDescriptionExtension_FullRangeVideo));
             }
@@ -208,6 +215,26 @@ final class CoreMedia
             match ($pri) { 9 => 'ITU_R_2020', 5, 6 => 'SMPTE_C', default => 'ITU_R_709_2' },
             match ($trc) { 16 => 'SMPTE_ST_2084_PQ', 18 => 'ITU_R_2100_HLG', default => 'ITU_R_709_2' },
         ];
+    }
+
+    /**
+     * @internal SoftVideo: a mastering display (Track::$colors') as
+     * CoreMedia's and CoreVideo's MasteringDisplayColorVolume take it, HEVC's
+     * SEI (ISO/IEC 23008-2 D.2.28, an MP4's mdcv): 24 bytes, big-endian, the
+     * primaries green, blue, red then the white point in 0.00002 units, the
+     * largest and least luminance in 0.0001 cd/m². @param list<float> $m
+     */
+    public static function masteringDisplay(array $m): string
+    {
+        [$rx, $ry, $gx, $gy, $bx, $by, $wx, $wy, $max, $min] = $m;
+        $xy = fn(float $v): int => max(0, min(50000, (int)round($v / 0.00002)));
+        return pack('n8N2', $xy($gx), $xy($gy), $xy($bx), $xy($by), $xy($rx), $xy($ry), $xy($wx), $xy($wy), (int)round($max * 10000), (int)round($min * 10000));
+    }
+
+    /** @internal SoftVideo: MaxCLL and MaxFALL as ContentLightLevelInfo takes them (an MP4's clli): 4 bytes, big-endian. @param array{0: int, 1: int} $l */
+    public static function contentLight(array $l): string
+    {
+        return pack('n2', $l[0], $l[1]);
     }
 
     /** The STREAMINFO of FLAC track $t: Matroska's CodecPrivate is "fLaC" and the stream's metadata blocks, STREAMINFO the first (34 bytes after its 4 of header). */

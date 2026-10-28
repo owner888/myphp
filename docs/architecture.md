@@ -4676,6 +4676,24 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   primitives_test). Every other control already reported only a value
   of its own, or a click.
 
+## An HDR film's mastering display and light levels (v1.59)
+- **The system's tone mapping is told the film's HDR metadata**, as
+  AVFoundation's formats of an MP4's mdcv and clli tell it, and mpv's
+  frames carry it: the mastering display (SMPTE ST 2086's primaries,
+  white point, largest and least luminance) and the light levels
+  (MaxCLL, MaxFALL). `Track::$colors` (internal) holds a container's:
+  Matroska's MasteringMetadata (floats, cd/m²) and MaxCLL, MaxFALL; an
+  MP4's mdcv (green, blue, red in 0.00002, luminance in 0.0001 cd/m²)
+  and clli. `CoreMedia::format` puts them in MasteringDisplayColorVolume
+  and ContentLightLevelInfo (HEVC's SEI bytes, big-endian:
+  `CoreMedia::masteringDisplay`, `contentLight`). In software, each
+  pixel buffer is given its picture's own (AV1's metadata OBUs, dav1d's
+  `mastering_display` and `content_light`, 0.16, 24.8 and 18.14 fixed
+  point: `Dav1d::hdr`), else the container's, as CoreVideo's attachments
+  of those keys, their CFData made once a film. Tests: SVT-AV1's
+  metadata OBUs (clip-av1-hdr.mp4), a Matroska Colour and an MP4's
+  boxes made in the test, the format's extensions on macOS.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

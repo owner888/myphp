@@ -134,6 +134,15 @@ same([['primaries' => 1, 'transfer' => 1, 'matrix' => 1, 'full' => false], ['pri
     [$colors((new Matroska(__DIR__ . '/testdata/clip-av1-10.mkv'))->tracks()[0]), $colors((new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip-av1-pq.mp4'))->tracks()[0]),
      $colors((new Matroska(__DIR__ . '/testdata/clip-av1.mkv'))->tracks()[0]), $colors((new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip.mp4'))->tracks()[0])],
     'BT.709 of a Matroska Colour, BT.2020 and PQ of an MP4\'s colr, none of files that say none');
+// An HDR film's mastering display and light levels: Matroska's MasteringMetadata (floats, cd/m²) and MaxCLL, MaxFALL; an MP4's mdcv (green, blue, red, in 0.00002 and 0.0001 cd/m²) and clli.
+$el = fn(int $id, string $d): string => ($id > 0xFF ? pack('n', $id) : chr($id)) . chr(0x80 | strlen($d)) . $d;
+$mastering = implode('', array_map(fn(int $id, float $v) => $el($id, pack('E', $v)), [0x55D1, 0x55D2, 0x55D3, 0x55D4, 0x55D5, 0x55D6, 0x55D7, 0x55D8, 0x55D9, 0x55DA], [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329, 1000.0, 0.0001]));
+$fields = (new \ReflectionMethod(Matroska::class, 'fields'))->invoke(null, $el(0x55B9, "\x01") . $el(0x55BC, "\x04\x4c") . $el(0x55BD, "\xb4") . $el(0x55D0, $mastering));
+same(['full' => false, 'light' => [1100, 180], 'mastering' => [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329, 1000.0, 0.0001]], (new \ReflectionMethod(Matroska::class, 'colors'))->invoke(null, $fields), 'a Matroska Colour\'s MaxCLL, MaxFALL and MasteringMetadata');
+$mdcv = pack('n8N2', 13250, 34500, 7500, 3000, 34000, 16000, 15635, 16450, 10000000, 1);
+$got = (new \ReflectionMethod(\MyPHP\Media\Mp4::class, 'hdr'))->invoke(null, $mdcv, pack('n2', 1100, 180));
+same([[0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329, 1000.0, 0.0001], [1100, 180]], [array_map(fn(float $v) => round($v, 5), $got['mastering']), $got['light']], 'an MP4\'s mdcv and clli');
+same(bin2hex($mdcv), bin2hex(\MyPHP\Native\CoreMedia::masteringDisplay($got['mastering'])), 'its mdcv again, as CoreMedia takes it');
 $pq = new \MyPHP\Media\Track($v->number, $v->type, $v->codec, $v->private, $v->language, $v->name, $v->isDefault, $v->frameDuration, $v->width, $v->height, 0.0, 0, colors: ['primaries' => 9, 'transfer' => 16, 'matrix' => 9]);
 $m = new Matroska(__DIR__ . '/testdata/clip-vp9.mkv');
 while (($p = $m->next()) !== null && $p->track->type !== \MyPHP\Media\Track::VIDEO) {}
@@ -183,7 +192,7 @@ if (PHP_OS_FAMILY !== 'Darwin') {
     echo "  skipped: the formats' colors (macOS)\n";
     return;
 }
-$cm = \FFI::cdef('void* CMFormatDescriptionGetExtension(void*, void*); extern void* kCMFormatDescriptionExtension_TransferFunction; extern void* kCMFormatDescriptionExtension_ColorPrimaries; extern void* kCMFormatDescriptionExtension_YCbCrMatrix; extern void* kCMFormatDescriptionExtension_FullRangeVideo; void CFRelease(void*);',
+$cm = \FFI::cdef('void* CMFormatDescriptionGetExtension(void*, void*); extern void* kCMFormatDescriptionExtension_TransferFunction; extern void* kCMFormatDescriptionExtension_ColorPrimaries; extern void* kCMFormatDescriptionExtension_YCbCrMatrix; extern void* kCMFormatDescriptionExtension_FullRangeVideo; extern void* kCMFormatDescriptionExtension_MasteringDisplayColorVolume; extern void* kCMFormatDescriptionExtension_ContentLightLevelInfo; void CFRelease(void*);',
     '/System/Library/Frameworks/CoreMedia.framework/CoreMedia');
 $ext = function (\MyPHP\Media\Track $t) use ($cm): array {
     $f = \MyPHP\Native\CoreMedia::format($t);
@@ -196,6 +205,15 @@ $ext = function (\MyPHP\Media\Track $t) use ($cm): array {
     return $out;
 };
 $hdr = (new \MyPHP\Media\Mp4(__DIR__ . '/testdata/clip-av1-pq.mp4'))->tracks()[0];
+$hl = new \MyPHP\Media\Track($hdr->number, $hdr->type, $hdr->codec, $hdr->private, 'und', '', true, 0.0, $hdr->width, $hdr->height, 0.0, 0, colors: $hdr->colors + ['mastering' => [0.68, 0.32, 0.265, 0.69, 0.15, 0.06, 0.3127, 0.329, 1000.0, 0.0001], 'light' => [1100, 180]]);
+$f = \MyPHP\Native\CoreMedia::format($hl);
+$bytes = [];
+foreach (['MasteringDisplayColorVolume', 'ContentLightLevelInfo'] as $k) {
+    $v = $cm->CMFormatDescriptionGetExtension($f, $cm->{"kCMFormatDescriptionExtension_$k"});
+    $bytes[] = $v === null ? null : bin2hex(\FFI::string(\MyPHP\Native\ObjC::$c->cast('char*', \MyPHP\Native\ObjC::msg('p:', \MyPHP\Native\ObjC::import($v), 'bytes')), \MyPHP\Native\ObjC::msg('L:', \MyPHP\Native\ObjC::import($v), 'length')));
+}
+$cm->CFRelease($f);
+same(['33c286c41d4c0bb884d03e803d1340420098968000000001', '044c00b4'], $bytes, 'the format of an HDR film says its mastering display and light levels');
 same([['ColorPrimaries' => 'ITU_R_2020', 'TransferFunction' => 'SMPTE_ST_2084_PQ', 'YCbCrMatrix' => 'ITU_R_2020', 'FullRangeVideo' => false],
       ['ColorPrimaries' => null, 'TransferFunction' => null, 'YCbCrMatrix' => null, 'FullRangeVideo' => null]],
     [$ext($hdr), $ext((new Matroska(__DIR__ . '/testdata/clip-av1.mkv'))->tracks()[0])], 'the format of a PQ film says BT.2020 and PQ, of one that says none nothing');

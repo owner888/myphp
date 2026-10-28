@@ -346,7 +346,28 @@ final class Mp4 implements Source
         $deltas = unpack('V*', $table['durations']) ?: [];
         $frame = $deltas === [] ? 0.0 : array_sum($deltas) / count($deltas) / $table['scale'];
         return new Track($id, Track::VIDEO, self::VIDEO[$fourcc], $config, $lang, '', $enabled, $frame, unpack('n', $e, 24)[1], unpack('n', $e, 26)[1], 0.0, 0,
-            colors: self::colr(self::find($e, 'colr', 78) ?? ''));
+            colors: self::colr(self::find($e, 'colr', 78) ?? '') + self::hdr(self::find($e, 'mdcv', 78) ?? '', self::find($e, 'clli', 78) ?? ''));
+    }
+
+    /**
+     * An HDR film's mdcv and clli boxes (ISO/IEC 23001-8, as HEVC's SEI):
+     * the mastering display, its primaries in the order green, blue, red,
+     * in 0.00002 units, its white point, its luminance in 0.0001 cd/m²;
+     * its MaxCLL and MaxFALL. As Track::$colors has them.
+     * @return array{mastering?: list<float>, light?: array{0: int, 1: int}}
+     */
+    private static function hdr(string $mdcv, string $clli): array
+    {
+        $out = [];
+        if (strlen($mdcv) >= 24) {
+            $v = unpack('n8xy/Nmax/Nmin', $mdcv);
+            [$gx, $gy, $bx, $by, $rx, $ry, $wx, $wy] = array_map(fn(int $c) => $c * 0.00002, [$v['xy1'], $v['xy2'], $v['xy3'], $v['xy4'], $v['xy5'], $v['xy6'], $v['xy7'], $v['xy8']]);
+            $out['mastering'] = [$rx, $ry, $gx, $gy, $bx, $by, $wx, $wy, $v['max'] / 10000, $v['min'] / 10000];
+        }
+        if (strlen($clli) >= 4) {
+            $out['light'] = array_values(unpack('n2', $clli));
+        }
+        return $out;
     }
 
     /** A colr box's colors (ISO/IEC 14496-12 12.1.5): an nclx's codes and range, a QuickTime nclc's codes; none of an ICC profile's. @return array{primaries?: int, transfer?: int, matrix?: int, full?: bool} */
