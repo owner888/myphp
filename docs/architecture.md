@@ -4545,6 +4545,34 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   subtitles, which need a provider and its API key (IINA's OpenSubtitles
   key is IINA's).
 
+## The equalizer's profiles, the tracing JIT, the video log's watchdog (v1.56)
+- **The equalizer's profiles are IINA's** (`Media\EqualizerProfiles`,
+  SidebarAudioPane's pop-up): saving is Manual's alone (disabled
+  otherwise), renaming and removing show only while a profile of the
+  user's is chosen, the profiles after the presets past a separator; a
+  slider moved makes it Manual. A name is asked by `Dialog::prompt` with
+  IINA's check as it is typed: none, or a preset's or a profile's name,
+  disables OK, the reason under the field (an NSControlTextDidChange
+  observer, its block one for the process). Removing asks nothing and
+  leaves the gains, Manual. A file that is not ten gains a name shows as
+  the error, the pop-up of no profile.
+- **The tracing JIT and `?->`**: under `run.sh`'s `opcache.jit=1255`,
+  `Layout`'s `$n->followX?->scroll` once warned "Attempt to read property
+  \"scroll\" on null" (a video opening, 12 s in, the frames hot), which
+  `?->` cannot. It is a plain null check there now; the suite under the
+  same JIT never showed it. A `?->` in a hot path that warns so is the
+  JIT's, not the code's.
+- **The video log's watchdog walks no stack of its own** (examples/video,
+  `MYPHP_VIDEO_LOG`): it took `(new Exception)->getTraceAsString()` in
+  its SIGALRM handler for a frame held up 3 s, and the app hung there
+  (`sample`: MTKView draw, JIT code, pcntl_signal_dispatch,
+  zend_fetch_debug_backtrace spinning), the equalizer's name prompt open
+  over 3 s inside its frame, OK'd. It logs only that a frame is held up
+  now; a hang's place is `sample`'s. The waiting fibers' traces stay
+  (ReflectionFiber, of suspended fibers, never hung). Only `./run.sh
+  video` had it; a dialog shown from a frame holds the frame, as
+  `Dialog::open` from the audio tab always did.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

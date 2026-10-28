@@ -5,6 +5,7 @@ namespace MyPHP\UI;
 
 use Closure;
 use MyPHP\App;
+use MyPHP\Media\EqualizerProfiles;
 use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
@@ -54,6 +55,10 @@ final class VideoPlayerState
     public string $equalizerPreset = '';
     /** @var ?list<float> the gains of the sliders while one is dragged, set as it is let go @internal VideoPlayer */
     public ?array $equalizerDraft = null;
+    /** The profile of the user's the gains are (EqualizerProfiles), '' for none @internal VideoPlayer */
+    public string $equalizerProfile = '';
+    /** The profiles the user saved: the app's, EqualizerProfiles::default(), unless set @internal */
+    public ?EqualizerProfiles $profiles = null;
 
     /** Whether the secondary subtitles show (mpv's secondary-sub-visibility): their track read all the same. */
     public bool $secondarySubtitlesVisible = true;
@@ -688,11 +693,81 @@ final class VideoPlayerState
      */
     public function setEqualizer(array $gains, string $preset = ''): void
     {
+        $this->applyEqualizer($gains, $preset, '');
+    }
+
+    /** @internal VideoPlayer: the names of the profiles the user saved; what fails to read shows as the error @return list<string> */
+    public function profileNames(): array
+    {
+        try {
+            return array_map('strval', array_keys($this->profiles()->all()));
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+            return [];
+        }
+    }
+
+    /** @internal VideoPlayer: the profile $name's gains, it the one chosen (IINA's pop-up, a profile of the user's chosen) */
+    public function chooseProfile(string $name): void
+    {
+        $gains = null;
+        $this->profiled(function () use ($name, &$gains): void { // by reference: read after
+            $gains = $this->profiles()->all()[$name] ?? throw new RuntimeException("myphp: no equalizer profile \"$name\"");
+        });
+        if ($gains !== null) { $this->applyEqualizer($gains, '', $name); }
+    }
+
+    /** @internal VideoPlayer: the gains saved as the profile $name, it the one chosen (IINA's "Save the current EQ as a preset…") */
+    public function saveProfile(string $name): void
+    {
+        $this->profiled(function () use ($name): void {
+            $this->profiles()->set($name, $this->equalizer);
+            [$this->equalizerPreset, $this->equalizerProfile] = ['', $name];
+        });
+    }
+
+    /** @internal VideoPlayer: the profile chosen named $name (IINA's "Rename the current EQ preset…") */
+    public function renameProfile(string $name): void
+    {
+        $this->profiled(function () use ($name): void {
+            $this->profiles()->rename($this->equalizerProfile, $name);
+            $this->equalizerProfile = $name;
+        });
+    }
+
+    /** @internal VideoPlayer: the profile chosen forgotten, the gains as they are, Manual (IINA's "Remove the current EQ preset") */
+    public function removeProfile(): void
+    {
+        $this->profiled(function (): void {
+            $this->profiles()->remove($this->equalizerProfile);
+            $this->equalizerProfile = '';
+        });
+    }
+
+    /** Does $fn to the profiles; what fails to write shows as the error. */
+    private function profiled(Closure $fn): void
+    {
+        try {
+            $fn();
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+        }
+        $this->changed();
+    }
+
+    private function profiles(): EqualizerProfiles
+    {
+        return $this->profiles ??= EqualizerProfiles::default();
+    }
+
+    /** @param list<float> $gains */
+    private function applyEqualizer(array $gains, string $preset, string $profile): void
+    {
         $this->equalizerDraft = null;
         try {
             $this->player?->setEqualizer($gains);
             $this->equalizer = array_map('floatval', array_values($gains));
-            $this->equalizerPreset = $preset;
+            [$this->equalizerPreset, $this->equalizerProfile] = [$preset, $profile];
         } catch (RuntimeException $e) {
             $this->error = $e->getMessage();
         }

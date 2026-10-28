@@ -32,8 +32,8 @@ function drop(VideoPlayerState $s, string $path): void
 /**
  * With MYPHP_VIDEO_LOG set, what the player does, on stderr: the film
  * opened, its events, a frame of the window that took long (the UI held
- * up), and, where PHP has pcntl, every 3 s: where it is when a frame is
- * held up, and where what is opening waits while it opens.
+ * up), and, where PHP has pcntl, every 3 s: that a frame is held up, and
+ * where what is opening waits while it opens.
  */
 final class Log
 {
@@ -90,7 +90,12 @@ final class Log
         $p->on('track', fn(string $kind) => self::line("$kind track changed"));
     }
 
-    /** Every 3 s (SIGALRM): where PHP is when a frame is held up 3 s; while opening, where each fiber waiting waits. */
+    /**
+     * Every 3 s (SIGALRM): that a frame is held up 3 s (not where: a
+     * backtrace taken in the handler hung in zend_fetch_debug_backtrace
+     * under the tracing JIT; `sample` the process for that); while opening,
+     * where each fiber waiting waits (a suspended fiber's frames are whole).
+     */
     public static function watchdog(): void
     {
         if (!self::on() || !function_exists('pcntl_async_signals')) { return; }
@@ -98,7 +103,7 @@ final class Log
         pcntl_signal(SIGALRM, function (): void {
             pcntl_alarm(3);
             if (self::$depth > 0 && microtime(true) - self::$frameAt > 3) {
-                self::line(sprintf("a frame held up %.0f s, at:\n", microtime(true) - self::$frameAt) . (new \Exception())->getTraceAsString());
+                self::line(sprintf('a frame held up %.0f s (a dialog of its open, or stuck: sample the process for where)', microtime(true) - self::$frameAt));
             }
             if (self::$opening === '') { return; }
             $waiters = (new ReflectionProperty(\MyPHP\Native\CurlLoop::class, 'waiters'))->getValue();

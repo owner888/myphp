@@ -525,7 +525,7 @@ final class Layout
             $flexible = false;
         }
         [$rowX, $rowW] = [$cx, $cw]; // where a list's rows start across, and their width
-        $f = $n->followX?->scroll;
+        $f = $n->followX !== null ? $n->followX->scroll : null; // not `?->`: the tracing JIT once read `scroll` of a null `followX` here (docs/architecture.md, v1.56)
         if ($f instanceof ScrollState || $f instanceof ListState) { // the content goes sideways with another's (mygo's ScrollWith)
             if ($n->rtl) { $scrollRtl = ($scrollRtl ?? 0.0) + $f->x; } else { $cx -= $f->x; }
         }

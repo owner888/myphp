@@ -57,6 +57,25 @@ for ($i = 0; $i < \MyPHP\Media\PlaybackPositions::KEEP; $i++) { $pos->set("/film
 same([null, 1.0], [$pos->get('/films/b.mkv'), $pos->get('/films/0.mkv')], 'the least recent forgotten past KEEP');
 unlink($file);
 
+// The equalizer's profiles (Media\EqualizerProfiles): gains by name, in their JSON file, in the order saved, a renamed one the last; removed; a file of other than ten gains refused.
+$file = sys_get_temp_dir() . '/myphp-eq-profiles-' . getmypid() . '.json';
+@unlink($file);
+$eq = new \MyPHP\Media\EqualizerProfiles($file);
+same([], $eq->all(), 'none at first');
+$warm = [1, 2, 3, 0, 0, 0, 0, -1, -2, -3.5];
+$eq->set('Warm', $warm); $eq->set('0', array_fill(0, 10, 1.5)); $eq->set('Bright', array_reverse($warm));
+same(['Warm', '0', 'Bright'], array_map('strval', array_keys((new \MyPHP\Media\EqualizerProfiles($file))->all())), 'in their file, in the order saved (a name like "0" too)');
+same(array_map('floatval', $warm), (new \MyPHP\Media\EqualizerProfiles($file))->all()['Warm'], 'their gains');
+$eq->rename('Warm', 'Cozy');
+same(['0', 'Bright', 'Cozy'], array_map('strval', array_keys((new \MyPHP\Media\EqualizerProfiles($file))->all())), 'a renamed one the last, IINA\'s');
+$eq->remove('0'); $eq->remove('Bright'); $eq->remove('Cozy');
+same('{}', file_get_contents($file), 'all removed: an object of none');
+file_put_contents($file, '{"Bad":[1,2,3]}');
+$threw = false;
+try { (new \MyPHP\Media\EqualizerProfiles($file))->all(); } catch (\RuntimeException) { $threw = true; }
+check($threw, 'a profile of three gains refused');
+unlink($file);
+
 // A playlist (Media\Playlist): the films of a folder in Finder's order, the one opened playing; next and previous; adding, taking out; durations read as asked.
 $dir = sys_get_temp_dir() . '/myphp-playlist-' . getmypid();
 @mkdir($dir);
@@ -219,13 +238,34 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h4->rt->reduceMotion = true;
     $h4->frame();
     $h4->clickText('Manual');
-    check(($h4->menuLabels() ?? [])[0] === 'Manual' && in_array('Rock', $h4->menuLabels() ?? [], true), "the pop-up: Manual, then IINA's presets");
+    same(['Save the current EQ as a preset…', '-', 'Manual'], array_slice($h4->menuLabels() ?? [], 0, 3), "the pop-up: saving, then Manual (IINA's; no profile yet, no renaming or removing)");
+    check(in_array('Rock', $h4->menuLabels() ?? [], true), "then IINA's presets");
     $h4->chooseMenuItem('Rock');
     same([array_map('floatval', VideoPlayerState::EQUALIZER_PRESETS['Rock']), 'Rock'], [$p4->equalizer(), $s4->equalizerPreset], 'Rock chosen: its gains the player\'s');
     check($h4->byText('Rock') !== null, 'the pop-up says it');
     $band = $h4->byLabel('1k Hz');
     $h4->rt->focus = $band->id; $h4->up(); $h4->frame();
     check($s4->equalizerPreset === '' && $p4->equalizer()[5] > VideoPlayerState::EQUALIZER_PRESETS['Rock'][5], 'an arrow up the 1 kHz band: higher, and Manual: ' . $p4->equalizer()[5]);
+    // The gains saved as a profile of the user's: chosen, the pop-up shows it, and renaming and removing it; another's gains, then it again.
+    $s4->profiles = new \MyPHP\Media\EqualizerProfiles($eqFile = sys_get_temp_dir() . '/myphp-eq-profiles-ui-' . getmypid() . '.json'); // not the user's
+    @unlink($eqFile);
+    $mine = $p4->equalizer();
+    $s4->saveProfile('Mine'); $h4->frame();
+    same(['Mine', ''], [$s4->equalizerProfile, $s4->equalizerPreset], 'saved: the profile chosen');
+    check($h4->byText('Mine') !== null, 'the pop-up says it');
+    $h4->clickText('Mine');
+    $labels = $h4->menuLabels() ?? [];
+    check(in_array('Rename the current EQ preset…', $labels, true) && in_array('Remove the current EQ preset', $labels, true) && end($labels) === 'Mine', 'its pop-up: renaming and removing it, and it the last: ' . json_encode($labels));
+    $h4->chooseMenuItem('Pop');
+    same('', $s4->equalizerProfile, 'a preset chosen: no profile');
+    $h4->clickText('Pop'); $h4->chooseMenuItem('Mine');
+    same([$mine, 'Mine'], [$p4->equalizer(), $s4->equalizerProfile], 'the profile chosen: its gains again');
+    $s4->renameProfile('Ours');
+    same(['Ours'], $s4->profileNames(), 'renamed');
+    $s4->removeProfile(); $h4->frame();
+    same([[], '', ''], [$s4->profileNames(), $s4->equalizerProfile, $s4->equalizerPreset], 'removed: Manual, the gains as they were');
+    check($h4->byText('Manual') !== null, 'the pop-up says Manual');
+    unlink($eqFile);
     $p5 = new Player(__DIR__ . '/testdata/clip.mp4'); $s4->setPlayer($p5);
     same($p4->equalizer(), $p5->equalizer(), 'the next player takes the gains');
     check($p->playing() && !$p->awake(), 'without keepAwake: the display may sleep while it plays');

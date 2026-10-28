@@ -1022,19 +1022,50 @@ final class VideoPlayer
           self::heading($c, 'slider.vertical.3', self::t($c, 'videoEqualizer'));
           $c->row();
             $pop = self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->align(Node::CENTER), 0.12, 0, 6);
-              $c->text(self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, 0xffffff)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
+              $c->text($s->equalizerProfile !== '' ? $s->equalizerProfile : self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, 0xffffff)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
               self::sf($c, 'chevron.up.chevron.down', 10, 0.8);
             $c->end();
-            $pop->menu(function (Menu $m) use ($c, $s): void { // IINA's pop-up: Manual, then its presets
-                if ($m->item(self::t($c, 'videoManual'))->checked($s->equalizerPreset === '')->chosen()) { $s->equalizerPreset = ''; } // the gains as they are, called Manual
+            $pop->menu(function (Menu $m) use ($c, $s): void { // IINA's pop-up: saving (Manual's), renaming and removing (a profile's), Manual, its presets, the user's profiles
+                $profile = $s->equalizerProfile;
+                $manual = $s->equalizerPreset === '' && $profile === '';
+                $names = $s->profileNames();
+                if ($m->item(self::t($c, 'videoEqSave'))->disabled(!$manual)->chosen() && ($name = self::profileName($c, $names, true)) !== null) { $s->saveProfile($name); }
+                if ($profile !== '') {
+                    if ($m->item(self::t($c, 'videoEqRename'))->chosen() && ($name = self::profileName($c, $names, false)) !== null) { $s->renameProfile($name); }
+                    if ($m->item(self::t($c, 'videoEqRemove'))->chosen()) { $s->removeProfile(); }
+                }
+                $m->separator();
+                if ($m->item(self::t($c, 'videoManual'))->checked($manual)->chosen()) { [$s->equalizerPreset, $s->equalizerProfile] = ['', '']; } // the gains as they are, called Manual
                 $m->separator();
                 foreach (VideoPlayerState::EQUALIZER_PRESETS as $name => $gains) {
                     if ($m->item(self::t($c, "videoEq$name"))->checked($s->equalizerPreset === $name)->chosen()) { $s->setEqualizer($gains, $name); }
+                }
+                if ($names !== []) { $m->separator(); }
+                foreach ($names as $name) {
+                    if ($m->item($name)->checked($profile === $name)->chosen()) { $s->chooseProfile($name); }
                 }
             });
           $c->end();
           self::equalizer($c, $s);
         $c->end();
+    }
+
+    /**
+     * The name of a profile to save ($new) or of the one chosen, asked as
+     * IINA's quickPromptPanel does: none, or one of a preset or profile
+     * ($names), cannot be OK'd. Null when canceled.
+     * @param list<string> $names the user's profiles'
+     */
+    private static function profileName(Context $c, array $names, bool $new): ?string
+    {
+        $taken = $names;
+        foreach (array_keys(VideoPlayerState::EQUALIZER_PRESETS) as $preset) { $taken[] = self::t($c, "videoEq$preset"); }
+        $key = $new ? 'videoEqNewProfile' : 'videoEqRenameProfile';
+        return Dialog::prompt(Window::focused(), self::t($c, $key), '', self::t($c, "{$key}Message"), static fn(string $name): string => match (true) {
+            $name === '' => self::t($c, 'videoValueEmpty'),
+            in_array($name, $taken, true) => self::t($c, 'videoValueExists'),
+            default => '',
+        });
     }
 
     /**
@@ -1068,7 +1099,7 @@ final class VideoPlayer
             $c->text('-12 dB', 10, 0xffffff)->opacity(0.8)->absolute()->right(0)->top(114);
           $c->end();
         $c->end();
-        if ($moved) { $s->equalizerDraft = $gains; $s->equalizerPreset = ''; }
+        if ($moved) { $s->equalizerDraft = $gains; [$s->equalizerPreset, $s->equalizerProfile] = ['', '']; }
         if ($s->equalizerDraft !== null && !($c->runtime?->input->mouseDown ?? false)) { // let go (or an arrow): set
             $s->setEqualizer($s->equalizerDraft);
         }

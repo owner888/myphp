@@ -1025,6 +1025,42 @@
   "@videoManual": {
     "description": "The equalizer's preset of the video player's audio tab, set by hand."
   },
+  "videoEqSave": "Save the current EQ as a preset…",
+  "@videoEqSave": {
+    "description": "An item of the video player's equalizer pop-up, IINA's: saves the gains set by hand as a profile."
+  },
+  "videoEqRename": "Rename the current EQ preset…",
+  "@videoEqRename": {
+    "description": "An item of the video player's equalizer pop-up, IINA's: renames the profile chosen."
+  },
+  "videoEqRemove": "Remove the current EQ preset",
+  "@videoEqRemove": {
+    "description": "An item of the video player's equalizer pop-up, IINA's: removes the profile chosen."
+  },
+  "videoEqNewProfile": "New EQ Profile",
+  "@videoEqNewProfile": {
+    "description": "The title of the prompt for a new equalizer profile's name, IINA's."
+  },
+  "videoEqNewProfileMessage": "Please enter a profile name.",
+  "@videoEqNewProfileMessage": {
+    "description": "The message of the prompt for a new equalizer profile's name, IINA's."
+  },
+  "videoEqRenameProfile": "Rename Current Profile",
+  "@videoEqRenameProfile": {
+    "description": "The title of the prompt for an equalizer profile's new name, IINA's."
+  },
+  "videoEqRenameProfileMessage": "Please enter a new profile name.",
+  "@videoEqRenameProfileMessage": {
+    "description": "The message of the prompt for an equalizer profile's new name, IINA's."
+  },
+  "videoValueEmpty": "Value cannot be empty.",
+  "@videoValueEmpty": {
+    "description": "Under a prompt's field, IINA's: nothing was typed."
+  },
+  "videoValueExists": "Value already exists.",
+  "@videoValueExists": {
+    "description": "Under a prompt's field, IINA's: the name is another's."
+  },
   "videoEqFlat": "Flat",
   "@videoEqFlat": {
     "description": "A preset of the video player's equalizer, IINA's."

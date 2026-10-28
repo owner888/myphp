@@ -1700,8 +1700,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `EQUALIZER_BANDS`, `VideoPlayerState::EQUALIZER_PRESETS`, `$equalizer`,
   `$equalizerPreset` and `setEqualizer` are myphp's, as IINA's audio
   equalizer (its presets, its filter for mpv); mygo has no video. Flat
-  turns it off (IINA adds the filter all the same, of no effect); its
-  saved profiles are not yet.
+  turns it off (IINA adds the filter all the same, of no effect).
+- **The equalizer's profiles** (v1.56): `Media\EqualizerProfiles`
+  (equalizer-profiles.json in the app's user data, as IINA's
+  userEQPresets) and VideoPlayerState's profile methods are internal,
+  the pop-up's; the profiles keep the order they were saved in (IINA's,
+  a Swift dictionary's, have none). `Dialog::prompt`'s detail and check
+  (IINA's quickPromptPanel) are internal too.
 - **External audio** (v1.55): `Player::loadAudio`,
   `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no video.
