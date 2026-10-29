@@ -54,4 +54,13 @@ interface TextPainter extends TextMetrics
 
     /** The backing scale glyphs are rasterized at: device pixels a point. */
     public function scale(): float;
+
+    /** @internal Context::memo: how much the painter has noted of what this frame drew from it, to tell what was drawn since (drawnSince). */
+    public function drawnMark(): int;
+
+    /** @internal What was drawn from the painter since $mark: the lines, glyphs and images, as they were then. */
+    public function drawnSince(int $mark): array;
+
+    /** @internal Whether what drawnSince() gave is there as it was, kept for this frame as drawn by it: quads drawn then can be drawn again as they were. */
+    public function drawnAgain(array $drawn): bool;
 }

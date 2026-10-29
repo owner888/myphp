@@ -54,6 +54,9 @@ final class Metrics implements TextPainter
     /** The scale the painter reports: what a test of pixels sets. */
     public float $scale = 1.0;
     public function scale(): float { return $this->scale; }
+    public function drawnMark(): int { return 0; } // its glyphs and images are drawn from no atlas: what was drawn is drawn again as it was
+    public function drawnSince(int $mark): array { return []; }
+    public function drawnAgain(array $drawn): bool { return true; }
     private ?\MyPHP\Text\System $system = null;
     public function textSystem(): \MyPHP\Text\System { return $this->system ??= new \MyPHP\Text\System(new \MyPHP\Text\StubEngine()); }
     public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void

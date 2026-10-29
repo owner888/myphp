@@ -23,6 +23,7 @@ final class Runtime
     use RuntimeSelection;
     use RuntimeMenu;
     use RuntimeTransition;
+    use RuntimeMemo;
 
     /** @var array<int, array{0: float, 1: float, 2: float, 3: float}> id => x, y, w, h */
     private array $rects = [];
@@ -346,6 +347,8 @@ final class Runtime
     public Closure $writeClipboard, $readClipboard;
     /** When a frame is due of its own accord, as asked by after(): seconds of the clock, or null. */
     private ?float $wakeAt = null;
+    /** How many times what was built or painted asked for the next frame (animationFrame): a memo painted asking is painted every frame. */
+    private int $frameAsks = 0;
 
     /** Asks for a frame $seconds from now, for what changes then, as a caret's blink or a hover's delay (mygo's Context.After and Painter.After): the earliest asked since the last frame began. */
     public function after(float $seconds): void
@@ -386,6 +389,7 @@ final class Runtime
     /** Asks for the next frame as soon as the display can show it, for what moves (mygo's AnimationFrame, Painter.AnimationFrame): while the frame is built (Context::animationFrame) or painted. */
     public function animationFrame(): void
     {
+        $this->frameAsks++;
         if ($this->building) { // asked as the frame is built: kept past its end, which clears what came before
             $this->animating = true;
         } else {
@@ -428,6 +432,7 @@ final class Runtime
             $state->glide($dt, $this->now);
         }
         $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
+        $events = $this->input->events;
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
             if ($this->inspector !== null && $this->inspector->event($this, $e)) {
                 continue; // its keys, and the pointer while it picks
@@ -584,6 +589,7 @@ final class Runtime
             }
         }
         $this->input->events = [];
+        $this->memoFrame($events);
         $this->dragScroll();
         $this->scrollTextSelection();
         $this->clickable = []; // this frame's build asks again
@@ -597,7 +603,7 @@ final class Runtime
             $this->kept = []; $this->routers = [];
             $this->uses = [];
             $this->actions = [];
-            if (isset($root)) { self::detach($root); } // the pass before's tree, which this one replaces
+            if (isset($root)) { self::detach($root, $this->frameNumber); } // the pass before's tree, which this one replaces
             $root = $build();
             if ($this->enterToggle !== null) { // Enter at a toggle no shortcut took presses it
                 foreach ($this->keys as $i => $k) {
@@ -667,6 +673,7 @@ final class Runtime
         $this->menuNodes = []; $this->menuRtl = [];
         $this->modal = null;
         $this->record($root);
+        $this->memoSweep();
         $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
@@ -732,7 +739,7 @@ final class Runtime
         } else {
             $this->blinkSeen = null;
         }
-        if ($this->root !== null && $this->root !== $root) { self::detach($this->root); } // the frame before's, which nothing draws or asks again
+        if ($this->root !== null && $this->root !== $root) { self::detach($this->root, $this->frameNumber); } // the frame before's, which nothing draws or asks again
         $this->root = $root;
         $this->describe();
         $this->showMenu();
@@ -745,10 +752,11 @@ final class Runtime
      * PHP's collector freed, a run long enough to drop a frame every few
      * frames of a scrolling list.
      */
-    private static function detach(Node $root): void
+    private static function detach(Node $root, int $frame): void
     {
         $stack = [$root];
         while (($n = array_pop($stack)) !== null) {
+            if ($n->placed === $frame) { continue; } // a memo's, placed again in the tree that replaces this one (Context::memo)
             $n->context = null;
             foreach ($n->kids as $k) { $stack[] = $k; }
         }
@@ -1728,6 +1736,12 @@ final class Runtime
 
     private function record(Node $n, ?Node $parent = null, int $group = 0, ?array $clip = null, int $page = 0, bool $inert = false, bool $hidden = false, int $clipper = 0): void
     {
+        if ($n->memo !== 0 && $group === 0) { // a memo's: recorded as it was, when it is where it was in the same frame around it (RuntimeMemo)
+            $w = $parent?->world;
+            $args = [$w !== null && $w->set ? [$w->a, $w->b, $w->c, $w->d, $w->x, $w->y, $w->g, $w->h] : null, $clip, $page, $inert, $hidden, $clipper, $parent !== null && ($this->order[$parent->id] ?? 0) === 1, $parent?->isDisabled(), $this->focus, $this->focusVisible, $n->x, $n->y, $n->w, $n->h];
+            if ($n->memo === 2 && $this->memoReplay($n, $args)) { return; }
+            $mark = $this->memoRecordBegin();
+        }
         $hidden = $hidden || $n->invisible; // in its room, but showing nothing and taking neither the pointer nor the focus (mygo's Invisible)
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         if ($n->frags !== []) { $this->frags[$n->id] = $n->frags; } // text inside a paragraph: its words are its area
@@ -1743,6 +1757,7 @@ final class Runtime
         if ($n->pose !== null) {
             $this->samplePose($n);
         }
+        if ($n->pose !== null || $n->draggable || $n->blocks || $n->ghosts !== [] || $n->focusGroup !== 0) { $this->recordTaint = true; } // what records what changes in place: a memo around it is recorded every frame
         if ($n->drags) { $this->dragSources[$n->id] = $n->dragValue; }
         if ($n->dataSource !== null) { $this->dataSources[$n->id] = $n->dataSource; }
         if (!$n->isDisabled()) {
@@ -1825,14 +1840,14 @@ final class Runtime
             $this->tips[$n->id] = $n->tooltip;
         }
         if ($n->url !== null) { $this->links[] = $n->id; }
-        if ($n->url !== null && $this->hovered($n->id)) {
-            $this->cursor = Cursor::Pointer;
-        } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $this->hovered($n->id)) {
-            $this->cursor = Cursor::Text;
-        } elseif ($n->cursor !== null && $this->hovered($n->id)) {
-            $this->cursor = $n->cursor;
-        } elseif ($this->hovered($n->id) && (isset($this->clickable[$n->id]) || in_array($n->role, self::CLICKABLE_ROLES, true))) {
-            $this->cursor = Cursor::Default; // a cursor around stops at what is clicked, which has its own (mygo's cursor of clickable elements)
+        $field = $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA;
+        if (($n->url !== null || $field || $n->cursor !== null || isset($this->clickable[$n->id]) || in_array($n->role, self::CLICKABLE_ROLES, true)) && $this->hovered($n->id)) {
+            $this->cursor = match (true) {
+                $n->url !== null => Cursor::Pointer,
+                $field => Cursor::Text,
+                $n->cursor !== null => $n->cursor,
+                default => Cursor::Default, // a cursor around stops at what is clicked, which has its own (mygo's cursor of clickable elements)
+            };
         }
         if ($n->kind === Node::PROGRESS && $n->fraction < 0) {
             $this->animating = true; // an indeterminate bar moves every frame; a spinner asks for its next spoke as it paints
@@ -1870,9 +1885,12 @@ final class Runtime
         foreach ($n->ghosts as $g) {
             self::worldTree($g, $n->world); // copies going only show: they are not recorded
         }
+        $from = $n->memo !== 0 ? count($this->order) - 1 : 0;
         foreach ($n->paintOrder() as $k) {
             $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
         }
+        if ($n->memo !== 0) { $this->memoRecorded($n, $from); }
+        if (isset($mark)) { $this->memoRecordEnd($n, $args, $mark); }
     }
 
     /** The window's point (x, y) in last frame's layout of node $id, from its top left, through its transform (mygo's WindowToLocal); null for a singular transform. @return ?array{0: float, 1: float} */
@@ -2410,6 +2428,7 @@ final class Runtime
     /** The modifiers of the Return or Enter key pressed this frame (a field's Enter with Shift: a find bar's previous match), 0 when none was. */
     public function submitMods(): int
     {
+        $this->readsKeys = true; // a memo reading them is built again when keys come
         foreach ($this->keys as $k) { if ($k[1] === Key::RETURN || $k[1] === Key::ENTER) { return $k[2]; } }
         return 0;
     }
@@ -2689,6 +2708,7 @@ final class Runtime
      */
     public function takeKeys(\Closure $take): void
     {
+        $this->readsKeys = true; // a memo reading them is built again when keys come
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
         foreach ($this->keys as $i => $k) {
             if ($k[3] || ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && $k[1] !== Key::ESCAPE)) { continue; }
@@ -2701,6 +2721,7 @@ final class Runtime
 
     public function shortcut(int|string $key, int $mods = 0): bool
     {
+        $this->readsKeys = true; // a memo reading them is built again when keys come
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
         $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE, Key::BACK, Key::FORWARD] : [Key::ESCAPE, Key::UP, Key::DOWN, Key::BACK, Key::FORWARD]; // what a focused field leaves: a single line has no use for Up and Down
         if ($field && $this->fields[$this->focus][0]->leaveEmptyBackspace && $this->fields[$this->focus][0]->text === '') { $free[] = Key::DELETE; }

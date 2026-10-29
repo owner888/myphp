@@ -270,6 +270,8 @@ final class Node
     public ?Node $attachTarget = null;
     /** Whether arrange() placed it this frame: what attachTo reads its target's box from. */
     public bool $laid = false;
+    /** @internal Context::memo: 1 for a memo's node built this frame, 2 for one placed again as it was; and the frame it was last placed in. */
+    public int $memo = 0, $placed = 0;
     /** A material painted in place of the color (Node::material). */
     public ?Material $material = null;
     /** For an image node: what it shows; for images and colored nodes, the corner radius and opacity. */
@@ -851,6 +853,9 @@ final class Node
     /** The node's map from its layout to the window: its transform around its origin, after its ancestors'. */
     public function transformAt(): Affine
     {
+        if (!$this->poseM->set && $this->transform === Transform::identity()) {
+            return $this->poseM; // none: most nodes, every frame
+        }
         $m = $this->poseM->mul($this->transform->flat()); // its pose acts after its own transform
         if (!$m->set) {
             return $m;

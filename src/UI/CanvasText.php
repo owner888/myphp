@@ -22,4 +22,7 @@ final class CanvasText implements TextPainter
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return $this->t->iconQuad($svg, $x, $y, $w, $h, $rotate); }
     public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return $this->t->svgSlot($svg, $w, $h, $current); }
     public function scale(): float { return 1.0; }
+    public function drawnMark(): int { return $this->t->drawnMark(); }
+    public function drawnSince(int $mark): array { return $this->t->drawnSince($mark); }
+    public function drawnAgain(array $drawn): bool { return $this->t->drawnAgain($drawn); }
 }

@@ -1812,6 +1812,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.
+- **Memos instead of comparing nodes** (v1.65): mygo's incremental
+  layout compares each node with last frame's and keeps its measure;
+  myphp keeps what the app marks as built from the same
+  (`Context::memo($key, $deps, $build)`): the subtree placed again
+  without building, measuring, recording or painting it, while nothing
+  reaches it (docs/architecture.md, v1.65). Comparing a node in PHP costs
+  about as much as laying it out, so mygo's way would save little here.
+  The app names what a part shows ($deps), as React's memo.
 - **Outlines of text** (v1.45): `Node::textOutline` and `textShadow` are
   myphp's, for subtitles; mygo's text has neither. So are `textBlur`,
   `textCutOut`, `clipMask`, `Span::$ghost` and `DisplayList::setMask`

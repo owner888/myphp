@@ -5075,6 +5075,85 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   its least recently drawn images; a page is emptied whole only when
   the frame draws from all of it.
 
+## Memos: subtrees kept from frame to frame, the frame's hot spots (v1.65)
+
+- **Where a frame's time goes** (`.compare/uibench.php`, mygo's
+  BenchmarkStressFrame scenes and three of a settings page of 40 cards
+  still but for a clock, a field typed in or a hover; the headless
+  window's fixed metrics, Linux, JIT; excimer's profile): building,
+  laying out, committing (`Runtime::record`) and painting each take a
+  quarter, all by the node, 2 to 6 µs each. mygo's incremental layout
+  compares a node's properties with last frame's to keep its measure: in
+  PHP that is 2.2 µs a node (69 properties by hand; `get_object_vars`
+  9 to 17 µs) against 2.5 µs of laying it out, and it keeps only the
+  layout. So the work is skipped where the app says what a part is built
+  from (`Context::memo`, below; `mygo-deviations.md`).
+- **The hot spots made cheaper**: `Affine::bounds` of an affine map
+  without its projective path (a translated column's every node);
+  `Node::transformAt` returns at once without a pose or transform;
+  `Runtime::record` asks `hovered` once a node, and only of what shows
+  a cursor; `Layout::fixedMargins` made a closure each call. A
+  translated column of 1000 rows, 44 → 37 ms.
+- **`+=` on a typed property's array copies the array** (PHP's
+  `zend_binary_assign_op_typed_prop` works the result apart, then
+  assigns it): `$this->rects += $more` is O(all the rects), not O(more).
+  Add entries one by one (`$this->$prop[$k] = $v`), or `array_push` to a
+  list. Found as a memo's record given back cost a millisecond.
+- **`Context::memo($key, $deps, $build)`**: $build builds one node,
+  keyed by $key; a memo of the same $deps (`===`) built in the same
+  context (the direction, disabled, the text style around it, the
+  theme, scale, window size, a toolbar, form, list row…) is placed
+  again, its nodes as they were (`Node::$memo` 2), unless something
+  reaches it this frame (`RuntimeMemo::memoHit`):
+  - the pointer: where it rests, where it was last frame, and every
+    press, release, drag, wheel, pinch, within the room its nodes showed
+    in last frame (2 points around);
+  - keys, a command, text or an access action, when it holds the focus
+    or its build read keys (`Runtime::shortcut`, `takeKeys`,
+    `submitMods` note it);
+  - the state its build reads outside its nodes changing anywhere (the
+    focus, the ring, a press, a slider, a drag, a tip, a menu, a modal,
+    the window's focus, full screen, the text selection…): every memo is
+    built again that frame;
+  - a scrolling or list state, or a field's or area's text, inside it
+    moved (noted as it is recorded);
+  - a pass after the first (an action changed state): built again, and
+    not kept until a first pass builds it.
+  A build that asked for frames (`animationFrame`, `after`) is built
+  every frame. What a build changed in the runtime and the context is
+  told from their properties before and after it (`memoAdds`): entries
+  added are given back each time it is placed again (the clicks its
+  toggle takes, steppers, local state); a build that changed a value or
+  an entry it had is not kept.
+- **Laid out as it was**: `Layout::measure` keeps a placed memo's
+  measures; `arrange` at its size moves it (`Layout::move`, frags too);
+  at another size it is forgotten and built again in another pass (its
+  texts wrap at the new width).
+- **Recorded as it was** (`memoRecordEnd`, `memoReplay`): what recording
+  it added to the runtime's arrays is kept with its arguments (its place
+  and size, the clip, the parent's world, page, inert, the focus); placed
+  and recorded with the same, those entries are given back, the frame's
+  order and paragraphs' indexes counted on from where it comes. A pose,
+  a drag, a dialog, ghosts or a focus group inside (`$recordTaint`), or
+  recording that changed a value, is recorded every frame.
+- **Painted as it was** (`Painter::paint`, `memoPaintEnd`, `memoRepaint`):
+  its quads are copied out of the display list (`DisplayList::copyOut`,
+  `copyIn`) with what they drew from the atlases (`TextPainter::drawnSince`:
+  a line's quads by their make, glyph and image slots by their place),
+  kept when it is drawn upright, unmasked, without glass, holes, wide
+  colors, native places, frames asked or a repaint; painted again at the
+  same place, clip, opacity and theme while each of those is where it
+  was (`drawnAgain`, which marks them drawn this frame).
+- **Its nodes' context**: a memo's nodes are moved into a context of no
+  tree (`RuntimeMemo::memoKeeper`), which holds the runtime: kept in the
+  context of the frame they were built in, they held that frame's whole
+  tree. `Runtime::detach` passes over a memo placed in the tree that
+  replaces the one it lets go (`Node::$placed`).
+- Measured (uibench, medians, a noisy machine): the settings page, about
+  6 ms a frame built anew, as memos 1.3 ms (a hover), 1.6 ms (a clock
+  ticking), 2.2 ms (a field typed in); build, layout, commit and paint
+  each 3 to 10 times less.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

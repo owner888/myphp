@@ -59,6 +59,7 @@ final class Layout
     /** Has the texts under $n arranged narrower than their lines wrap at the width they got, laid out by the text system; whether one did. */
     private static function wrapTexts(Node $n): bool
     {
+        if ($n->memo === 2) { return false; }
         if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < $n->mw) {
             if ($n->kind === Node::TEXT) {
                 [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it: a size given to it stays
@@ -158,6 +159,7 @@ final class Layout
     /** Measures $n and what is inside it, bottom-up: the size it asks, its margins included, which its parent's arrange gives it back less them (margins()). */
     public static function measure(Node $n): void
     {
+        if ($n->memo === 2) { return; } // a memo placed again: measured as it was (Context::memo)
         if ($n->colFit !== null) {
             $fit = $n->colFit;
             $n->colFit = null;
@@ -317,6 +319,14 @@ final class Layout
             [$x, $w] = self::inMargins($x, $w, $ml, $mr, $n->mw);
             [$y, $h] = self::inMargins($y, $h, $mt, $mb, $n->mh);
         }
+        if ($n->memo === 2) {
+            if ($w == $n->w && $h == $n->h) { // a memo placed again at its size: as it was laid out, moved
+                if ($x != $n->x || $y != $n->y) { self::move($n, $x - $n->x, $y - $n->y); }
+                return;
+            }
+            $n->context?->runtime?->memoForget($n->id); // at another size: built again, in another pass
+            $n->context?->runtime?->changed();
+        }
         $n->x = $x; $n->y = $y; $n->w = $w; $n->h = $h;
         $n->laid = true;
         if ($n->kind === Node::RICH && $n->wrapWidth === null && ($n->rtl || ($n->textStyle()->align ?? Node::START) !== Node::START) && $w - $n->padL() - $n->padR() > $n->textLayout()->width + 0.5) {
@@ -392,6 +402,14 @@ final class Layout
         foreach ($absolute ?? [] as $k) {
             self::arrangeAbsolute($n, $k);
         }
+    }
+
+    /** Moves $n and what is inside it, laid out, by ($dx, $dy). */
+    private static function move(Node $n, float $dx, float $dy): void
+    {
+        $n->x += $dx; $n->y += $dy;
+        foreach ($n->frags as $i => $f) { $n->frags[$i][0] += $dx; $n->frags[$i][1] += $dy; }
+        foreach ($n->kids as $k) { self::move($k, $dx, $dy); }
     }
 
     /** Arranges the children of a row or column that does not wrap, $kids those in the flow: CSS flexbox's (mygo's flexLayout) within myphp's measures. @param list<Node> $kids */
@@ -614,8 +632,8 @@ final class Layout
     private static function fixedMargins(Node $k): array
     {
         [$t, $r, $b, $l] = $k->margins;
-        $f = fn(float $m): float => is_finite($m) ? $m : 0.0;
-        return [$f($l) + $f($r), $f($t) + $f($b)];
+        if ($t == 0 && $r == 0 && $b == 0 && $l == 0) { return [0.0, 0.0]; } // most nodes: a closure or a call per side was a hot spot
+        return [(is_finite($l) ? $l : 0.0) + (is_finite($r) ? $r : 0.0), (is_finite($t) ? $t : 0.0) + (is_finite($b) ? $b : 0.0)];
     }
 
     /** $kw, an outer width (margins included), within $k's least and largest widths against a content box $cw wide. */

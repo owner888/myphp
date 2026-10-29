@@ -667,6 +667,77 @@ final class Context
     }
 
     /**
+     * Builds what $build builds, one node, keyed by $key (key()), and in the
+     * frames after places that node again as it was laid out, not building
+     * it, while $deps is the same (===), it is built in the same context,
+     * and nothing reaches it: the pointer over it, pressing or scrolling
+     * there, keys when it holds the focus or reads them (shortcut()), a
+     * scrolling state or a field's text inside it moving, the focus, a tip
+     * or a menu changing anywhere. $deps holds all $build shows that may
+     * change: what it reads of the app's state.
+     *
+     *     foreach ($settings as $i => $s) {
+     *         $c->memo("setting-$i", [$s->name, $s->on], function () use ($c, $s): void {
+     *             $c->row(0, 8)->fillWidth();
+     *               $c->text($s->name)->grow(1);
+     *               $c->toggle($s->on, '');
+     *             $c->end();
+     *         });
+     *     }
+     *
+     * A page of many parts, few changing at a time, then builds, measures
+     * and arranges only those; the rest are moved where they go. A build
+     * that asks for frames (an animation, after()) or changes the runtime's
+     * state other than adding to it is built every frame. Style the node in
+     * $build: what is done to the node returned is done again to the node
+     * kept. (Not mygo's, which compares its nodes one by one with last
+     * frame's: in PHP that costs about as much as laying them out.)
+     */
+    public function memo(int|string $key, array $deps, Closure $build): Node
+    {
+        $top = $this->stack[count($this->stack) - 1];
+        [$base] = $this->place($top);
+        $id = self::mix($base, self::keyHash($key));
+        $rt = $this->runtime;
+        $ctx = [$top->rtl, $top->isDisabled(), $this->selectScope(), $this->theme, $this->scale, $this->width, $this->height, $this->toolbars, $this->inert, $this->inOverlay,
+            $this->overlayInModal, $this->router, $this->form, $this->checks !== null, $this->listRow[0] ?? null, count($this->sidebars), count($this->accordions), count($this->trees),
+            $this->vibrancy, $this->titleBar];
+        $style = $this->inheritedText();
+        if ($rt !== null && ($n = $rt->memoHit($id, $deps, $ctx, $style)) !== null) {
+            if (isset($this->keyed[$id])) { $rt->duplicateKey($id, $key, Inspector::callSite()); }
+            $this->keyed[$id] = true;
+            foreach ($rt->memoContextAdds($id) as $prop => [$list, $added]) { // what its build gave the context, again
+                if ($list) { array_push($this->$prop, ...$added); } else { foreach ($added as $k => $v) { $this->$prop[$k] = $v; } } // not +=, which copies a typed property's array whole
+            }
+            $this->took($top);
+            $top->kids[] = $n;
+            $n->placed = $rt->frameNumber;
+            return $n;
+        }
+        $count = count($top->kids); $depth = count($this->stack);
+        $before = get_object_vars($this);
+        $rt?->memoBegin();
+        $this->key($key);
+        $build();
+        if (count($top->kids) !== $count + 1 || count($this->stack) !== $depth || $top->kids[$count]->id !== $id) {
+            throw new \LogicException('memo() builds one node, which takes its key: the build built ' . (count($top->kids) - $count) . ($depth !== count($this->stack) ? ', and left a container open' : ''));
+        }
+        $n = $top->kids[$count];
+        $n->placed = $rt?->frameNumber ?? 0;
+        $adds = Runtime::memoAdds($before, get_object_vars($this), ['root', 'stack', 'nextKey', 'keyed', 'rootCount', 'overlayCount', 'row', 'base']);
+        if ($rt !== null && $rt->memoEnd($id, $deps, $ctx, $style, $n, $adds !== null)) {
+            $rt->memoKeepContext($id, $adds);
+            $keeper = $rt->memoKeeper(fn(): self => new self($this->metrics, $rt, 0, 0, $this->theme, $this->scale));
+            $stack = [$n];
+            while (($k = array_pop($stack)) !== null) { // kept from frame to frame: in a context of no tree, which holds the runtime, not this frame's, which would hold the frame's tree
+                $k->context = $keeper;
+                foreach ($k->kids as $kid) { $stack[] = $kid; }
+            }
+        }
+        return $n;
+    }
+
+    /**
      * A virtualized list of $count rows: $row($i) builds row $i, and only
      * the rows in view are built, from the anchor $state keeps. Row heights
      * come from what layout measured last frame, so the list builds rows

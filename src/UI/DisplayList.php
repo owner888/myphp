@@ -73,6 +73,8 @@ final class DisplayList
     private string $maskKey = '';
     /** The opacity what is drawn now is drawn at. */
     private float $opacity = 1.0;
+    /** @internal Context::memo: how many times what is drawn went through a map or a mask, which a quad then names the entry of. */
+    public int $throughs = 0;
 
     public function __construct(public CData $buf, public int $capacity, public CData $xforms, public int $xformCapacity)
     {
@@ -120,6 +122,7 @@ final class DisplayList
             $this->xk = 0.0;
             return;
         }
+        $this->throughs++;
         $key = spl_object_id($m) . ':' . $this->maskKey;
         $entry = $this->entries[$key][0] ?? null;
         if ($entry === null) {
@@ -186,6 +189,23 @@ final class DisplayList
         if ($q !== null && !$this->clipped($q[0], $q[1], $q[2], $q[3])) {
             $this->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]);
         }
+    }
+
+    /** @internal Context::memo: the bytes of quads $from to $to (not included), to be drawn again as they are (copyIn). */
+    public function copyOut(int $from, int $to): string
+    {
+        return $to > $from ? \FFI::string(\FFI::addr($this->buf[$from * 16]), ($to - $from) * 16 * 4) : '';
+    }
+
+    /** @internal Context::memo: quads copyOut() gave, drawn again after those drawn now. */
+    public function copyIn(string $quads): void
+    {
+        $n = intdiv(strlen($quads), 64);
+        if ($this->n + $n > $this->capacity) {
+            throw new RuntimeException("display list full ({$this->capacity} quads)");
+        }
+        if ($n > 0) { \FFI::memcpy(\FFI::addr($this->buf[$this->n * 16]), $quads, strlen($quads)); }
+        $this->n += $n;
     }
 
     public function reset(): void

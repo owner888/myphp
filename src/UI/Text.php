@@ -34,6 +34,11 @@ final class Text implements TextPainter
     /** @var array<string, array<string, true>> the lines whose quads draw from each slot of the atlas, by its key (place: made again when it goes) */
     private array $users = [];
 
+    /** @var list<array> what this frame drew from the atlases, in order (drawnSince): ['l', line, shade, its quads' make], ['a', glyph atlas key, u, v], ['i', image key, u, v, page], ['p', picture key] */
+    private array $drawn = [];
+    /** How many times a line's quads were made: which make a line's quads drawn are. */
+    private int $makes = 0;
+
     /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
     public bool $repaint = false;
 
@@ -72,6 +77,7 @@ final class Text implements TextPainter
                     continue; // no ink, as a space
                 }
                 [$slot, $color, $ox, $oy, $w, $h] = $glyph;
+                if ($slot !== null) { $this->drawn[] = ['a', $glyph[6], $slot['u'], $slot['v']]; }
                 // The pen and the baseline on device pixels, so the bitmap lands on its own grid.
                 $px = round(($x + $g->x) * $s) / $s + $ox / $s;
                 $py = round(($y + $g->y) * $s) / $s - ($oy + $h) / $s;
@@ -151,6 +157,7 @@ final class Text implements TextPainter
                 $this->repaint = true;
             }
         }
+        $this->drawn[] = ['i', $image->key, $slot['u'], $slot['v'], $slot['page'], $image];
         return $slot;
     }
 
@@ -180,6 +187,7 @@ final class Text implements TextPainter
             $slot = $this->place($key, $cw, $ch, Mem::addr($rows));
             Mem::free($rows);
         }
+        $this->drawn[] = ['a', $key, $slot['u'], $slot['v']];
         return [$dx - ($cw - $pw) / 2 / $s, $dy - ($ch - $ph) / 2 / $s, $cw / $s, $ch / $s, $slot['u'], $slot['v']];
     }
 
@@ -193,6 +201,7 @@ final class Text implements TextPainter
             $this->pictures[$key] = $pic;
         }
         $this->pictureUsed[$key] = $this->gen;
+        $this->drawn[] = ['p', $key];
         return $this->imageSlot($pic);
     }
 
@@ -225,6 +234,7 @@ final class Text implements TextPainter
             $slot = $this->place($key, $w, $h, Mem::addr($rows));
             Mem::free($rows);
         }
+        $this->drawn[] = ['a', $key, $slot['u'], $slot['v']];
         return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];
     }
 
@@ -232,7 +242,7 @@ final class Text implements TextPainter
      * A glyph's bitmap: its mask's atlas slot, or, for a color glyph (an
      * emoji's), its picture, which the image atlas holds as mygo's color
      * atlas; with its offsets and size in pixels; null without ink.
-     * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int}
+     * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int, 6?: string} 6: the mask's key
      */
     private function glyph(int $font, int $id, int $shade, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): ?array
     {
@@ -248,7 +258,7 @@ final class Text implements TextPainter
             }
             if ($slot !== null) {
                 [$ox, $oy] = $this->offsets[$key];
-                return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+                return [$slot, null, $ox, $oy, $slot['w'], $slot['h'], $key];
             }
             if ($stroke > 0 || !$this->ct->isColor($font)) {
                 return null; // no ink, or a color glyph's outline: it has none
@@ -280,7 +290,7 @@ final class Text implements TextPainter
             $this->offsets[$key] = [$b['ox'], $b['oy']];
         }
         [$ox, $oy] = $this->offsets[$key];
-        return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+        return [$slot, null, $ox, $oy, $slot['w'], $slot['h'], $key];
     }
 
     /**
@@ -298,7 +308,7 @@ final class Text implements TextPainter
             foreach ($this->atlas->evict($w, $h) as $k) { // the lines drawn from it made again from what is left
                 unset($this->offsets[$k]);
                 foreach ($this->users[$k] ?? [] as $line => $_) {
-                    if (isset($this->lines[$line])) { $this->lines[$line]['quads'] = []; unset($this->lines[$line]['hot'], $this->lines[$line]['marked']); }
+                    if (isset($this->lines[$line])) { $this->lines[$line]['quads'] = []; unset($this->lines[$line]['hot'], $this->lines[$line]['marked'], $this->lines[$line]['made']); }
                 }
                 unset($this->users[$k]);
             }
@@ -330,6 +340,7 @@ final class Text implements TextPainter
     public function beginFrame(): void
     {
         $this->gen++;
+        $this->drawn = [];
         $this->atlas->frame = $this->gen; // what this frame draws from stays
         $this->system->endFrame();
         $this->images->beginFrame();
@@ -350,6 +361,50 @@ final class Text implements TextPainter
                 if ($used < $limit) { unset($this->pictures[$key], $this->pictureUsed[$key]); }
             }
         }
+    }
+
+    public function drawnMark(): int
+    {
+        return count($this->drawn);
+    }
+
+    public function drawnSince(int $mark): array
+    {
+        $out = [];
+        foreach (array_slice($this->drawn, $mark) as $d) {
+            if ($d[0] === 'l') { $d[] = $this->lines[$d[1]]['made'][$d[2]] ?? 0; } // the make of its quads drawn
+            $out[] = $d;
+        }
+        return $out;
+    }
+
+    public function drawnAgain(array $drawn): bool
+    {
+        foreach ($drawn as $d) {
+            switch ($d[0]) {
+                case 'l':
+                    if (($this->lines[$d[1]]['made'][$d[2]] ?? -1) !== $d[3]) { return false; } // its quads made again since, or gone with a slot evicted
+                    $this->lines[$d[1]]['gen'] = $this->gen;
+                    $this->quads($d[1], $d[2]); // its slots kept for this frame, its quads hot
+                    break;
+                case 'a':
+                    $slot = $this->atlas->get($d[1]);
+                    if ($slot === null || $slot['u'] !== $d[2] || $slot['v'] !== $d[3]) { return false; }
+                    $this->drawn[] = $d;
+                    break;
+                case 'i':
+                    $slot = $this->images->get($d[1]);
+                    if ($slot === null || $slot['u'] !== $d[2] || $slot['v'] !== $d[3] || $slot['page'] !== $d[4] || $d[5]->updated) { return false; }
+                    $this->drawn[] = $d;
+                    break;
+                case 'p':
+                    if (!isset($this->pictures[$d[1]])) { return false; }
+                    $this->pictureUsed[$d[1]] = $this->gen;
+                    $this->drawn[] = $d;
+                    break;
+            }
+        }
+        return true;
     }
 
     /** How many glyph bitmaps the atlas holds: a diagnostic. */
@@ -455,6 +510,7 @@ final class Text implements TextPainter
      */
     private function quads(string $key, int $shade): array
     {
+        $this->drawn[] = ['l', $key, $shade];
         if (($this->lines[$key]['marked'][$shade] ?? -1) !== $this->gen && isset($this->lines[$key]['slots'][$shade])) { // its glyphs drawn from this frame: kept in the atlas (Atlas::evict)
             foreach ($this->lines[$key]['slots'][$shade] as $k) { $this->atlas->mark($k); }
             $this->lines[$key]['marked'][$shade] = $this->gen;
@@ -477,6 +533,7 @@ final class Text implements TextPainter
                 return unpack('g*', $packed) ?: [];
             }
             $this->lines[$key]['quads'][$shade] = $packed;
+            $this->lines[$key]['made'][$shade] = ++$this->makes;
             $this->lines[$key]['slots'][$shade] = array_keys($slots);
             foreach ($slots as $k => $_) { $this->users[$k][$key] = true; }
             $this->lines[$key]['marked'][$shade] = $this->gen;

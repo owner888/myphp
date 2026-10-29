@@ -301,6 +301,18 @@ final class Painter
      */
     public static function paint(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt = null): void
     {
+        if ($n->memo !== 0 && $rt !== null && ($args = $rt->memoPaintArgs($n, $list, $t)) !== null) { // a memo's: drawn again as it was, where it was drawn so (RuntimeMemo)
+            if ($n->memo === 2 && $rt->memoRepaint($n, $args, $list, $text)) { return; }
+            $mark = $rt->memoPaintBegin($list, $text);
+            self::paintNode($n, $list, $text, $t, $rt);
+            $rt->memoPaintEnd($n, $args, $mark, $list, $text);
+            return;
+        }
+        self::paintNode($n, $list, $text, $t, $rt);
+    }
+
+    private static function paintNode(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
+    {
         if ($n->invisible || $n->backface && $n->transform->facesAway()) {
             return;
         }

@@ -187,6 +187,16 @@ final class Affine
         if (!$this->set) {
             return [$x, $y, $w, $h];
         }
+        if ($this->g == 0 && $this->h == 0) { // affine: the corners' images, without the projective path (a hot spot: every node, every frame)
+            if ($this->b == 0 && $this->c == 0) {
+                $x0 = $this->a * $x + $this->x; $x1 = $x0 + $this->a * $w; $y0 = $this->d * $y + $this->y; $y1 = $y0 + $this->d * $h;
+                return [min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0)];
+            }
+            $px = $this->a * $x + $this->c * $y + $this->x; $py = $this->b * $x + $this->d * $y + $this->y;
+            $ax = $this->a * $w; $ay = $this->b * $w; $cx = $this->c * $h; $cy = $this->d * $h;
+            $x0 = $px + min(0.0, $ax) + min(0.0, $cx); $y0 = $py + min(0.0, $ay) + min(0.0, $cy);
+            return [$x0, $y0, abs($ax) + abs($cx), abs($ay) + abs($cy)];
+        }
         $corners = [[$x, $y], [$x + $w, $y], [$x, $y + $h], [$x + $w, $y + $h]];
         if ($this->perspective()) {
             foreach ($corners as [$cx, $cy]) {
