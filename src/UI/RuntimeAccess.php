@@ -132,14 +132,21 @@ trait RuntimeAccess
     /** The texts of a node and those inside it, joined by spaces: a widget's own text, as a button's (mygo's innerText). */
     public static function innerText(Node $n): string
     {
+        if ($n->invisible) { return ''; }
         if ($n->kind === Node::RICH) { return $n->plainText(); }
         if ($n->role === Role::NONE && $n->text !== null) { return ''; } // a glyph drawn as text, as a tree's arrow: decoration
         if ($n->kind !== Node::INPUT && $n->kind !== Node::TEXTAREA && $n->text !== null && $n->text !== '') { return $n->text; } // a field's text is its placeholder
         $out = [];
         foreach ($n->kids as $k) {
-            if (($s = self::innerText($k)) !== '') { $out[] = $s; }
+            if (($s = self::contentOf($k)) !== '') { $out[] = $s; }
         }
         return implode(' ', $out);
+    }
+
+    /** What a node inside one named by its content gives the name (mygo's df5074b): its label in place of its texts, as a name from content takes a descendant's aria-label on the web; a row reads "Done Write the report", not "✓ Write the report". */
+    private static function contentOf(Node $k): string
+    {
+        return $k->invisible ? '' : ($k->label !== '' ? $k->label : self::innerText($k));
     }
 
     /**
@@ -251,7 +258,7 @@ trait RuntimeAccess
         }
         // Rows are named by their content, as leaves are, but show what is inside them too.
         $names = [];
-        for ($j = $k; $j < $end; $j++) { if (($s = self::innerText($n->kids[$j])) !== '') { $names[] = $s; } }
+        for ($j = $k; $j < $end; $j++) { if (($s = self::contentOf($n->kids[$j])) !== '') { $names[] = $s; } }
         $row->label = implode(' ', $names);
         $t->nodes[] = $row;
         $at = count($t->nodes) - 1;
@@ -384,6 +391,11 @@ trait RuntimeAccess
                 if (($e = $n?->edit) === null || $e->readOnly) { return; }
                 $this->accessFocus($id);
                 $e->selectAll();
+                $e->insert($text);
+                break;
+            case AccessNode::INSERT_TEXT:
+                if (($e = $n?->edit) === null || $e->readOnly) { return; }
+                $this->accessFocus($id);
                 $e->insert($text);
                 break;
         }

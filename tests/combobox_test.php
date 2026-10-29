@@ -229,3 +229,20 @@ $top = $h->rect($h->byText('Size 01'));
 $h->end();
 $r = $h->rect($h->byText('Size 39'));
 check($r[1] >= $top[1] - 20 && $r[1] + $r[3] <= $top[1] - 20 + 120, 'End highlights Size 39, in view: ' . json_encode([$r, $top]));
+
+// A field's box gives autoFocus() to its input, and shows its placeholder (mygo's 8006903, f27a125): typing reaches it at once.
+$picked = ''; $tags = [];
+$h = new Headless(function (Context $c) use (&$picked, &$tags): void {
+    $c->column(8, 8);
+      $c->combobox($picked, ['Red', 'Green'], 200, 'Pick a color')->label('Color')->autoFocus();
+      $c->tokenField($tags, [], 200, 'Add a tag')->label('Tags');
+    $c->end();
+}, 400, 200);
+$h->frame();
+$f = $h->focused();
+check($f !== null && $f->kind === \MyPHP\UI\Node::INPUT && $f->text === 'Pick a color', 'autoFocus on a combobox: its input focused, its placeholder shown: ' . ($f?->text ?? 'none'));
+$h->type('Gr'); $h->frame();
+same('Gr', $f->edit->text, 'typing reaches it');
+$inputs = []; $walk = function (\MyPHP\UI\Node $n) use (&$walk, &$inputs) { if ($n->kind === \MyPHP\UI\Node::INPUT) { $inputs[] = $n->text; } foreach ($n->kids as $k) { $walk($k); } };
+$walk($h->root);
+same(['Pick a color', 'Add a tag'], $inputs, 'each input with its placeholder');

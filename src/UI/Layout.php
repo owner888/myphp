@@ -257,7 +257,7 @@ final class Layout
             // A list in a scrolling container, or bounded by a largest height, is as high as its rows, the rest as estimated (mygo's list sized by its rows); elsewhere it takes the room it is given, as columns here shrink nothing.
             $l = $n->scroll;
             $main += max(0, $l->count - $l->first - $cnt) * ($l->estimate + $l->rowGap);
-        } elseif ($n->scroll !== null) { // a scrolling container takes the room it is given on the axes it scrolls
+        } elseif ($n->scroll !== null && !($n->absolute && $n->attachTarget !== null)) { // a scrolling container takes the room it is given on the axes it scrolls; a popover's is as large as its content, then cut to the window's room (roomAlong)
             if ($n->dir === Node::COLUMN ? $n->scrollY : $n->scrollX) { $main = $padMain; }
             if ($n->dir === Node::COLUMN ? $n->scrollX : $n->scrollY) { $cross = $padCross; }
         }
@@ -434,6 +434,8 @@ final class Layout
                 $b = $k->basisPct !== null ? $k->basisPct * $cw : ($k->basis ?? ($k->wPct !== null ? $k->wPct * $cw + $mx : $k->mw));
                 $lo[$i] = $k->minWPct !== null ? $k->minWPct * $cw + $mx : $k->minMw;
                 $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $cw, $k->maxW) : $k->maxW) + $mx;
+                // The content's least width was measured where a maximum that is a percentage of this row does not resolve: it binds here, as CSS clamps the content-based minimum by the max size; a least width the node asked for itself still wins (mygo's bbcc7b7).
+                if ($k->minWPct === null && !$k->minSet) { $lo[$i] = min($lo[$i], $hi[$i]); }
             } else {
                 // A column's child is as wide as it is across first: its height may follow from its width (aspectRatio).
                 $cross[$i] = self::crossWidth($k, $a, $cw);
@@ -748,6 +750,7 @@ final class Layout
             if ($k->attachTarget !== null) { // a popover of another node: on it, in the window
                 $tg = $k->attachTarget;
                 [$tx, $ty, $tw, $th] = $tg->laid ? self::shownIn($n, $tg) : ($tg->context?->runtime?->rectOf($tg->id) ?? [0.0, 0.0, 0.0, 0.0]); // as it shows, through its transforms, which the popover does not take
+                if ($k->scroll !== null && $k->scrollY) { $ih = min($ih, self::roomAlong($ty, $th, ($ay == 1 && $sy == 0) || ($ay == 0 && $sy == 1), $m[0] + $m[2], self::$window[1])); } // one that scrolls, as a select's long list, no longer than the room
                 $kx = self::alongTarget($tx, $tw, $ax, $sx, $iw, $m[3] - $m[1], self::$window[0]);
                 $ky = self::alongTarget($ty, $th, $ay, $sy, $ih, $m[0] - $m[2], self::$window[1]);
                 self::arrange($k, $kx + $dx - $m[3], $ky + $dy - $m[0], $iw + $mx, $ih + $my);
@@ -800,6 +803,18 @@ final class Layout
     public static function window(float $w, float $h): void
     {
         self::$window = [$w, $h];
+    }
+
+    /**
+     * The most a box attached to a target (from $t0, $tsize long) can be
+     * along an axis of the window, $limit long, and stay in it, 4 points
+     * from its edges: the target's larger side for one placed $beside it,
+     * else the window (mygo's roomAlong).
+     */
+    private static function roomAlong(float $t0, float $tsize, bool $beside, float $margins, float $limit): float
+    {
+        $room = $beside ? max($t0, $limit - ($t0 + $tsize)) - 4.0 - $margins : $limit - 8.0 - $margins;
+        return max($room, 0.0);
     }
 
     /**

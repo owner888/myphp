@@ -228,3 +228,24 @@ foreach ([false, true] as $reverse) {
     }
     same($reverse ? [160.0, 50.0] : [10.0, 50.0], $fill, $reverse ? 'reversed, from the right' : 'from the left');
 }
+
+// A select with more options than the window has room for, opening below or above, keeps its popup in the window, where they
+// scroll: the first and the last reached, a click choosing the one under it (mygo's TestSelectLongListScrolls).
+$options = array_map(fn(int $i) => sprintf('Option %02d', $i), range(0, 59));
+foreach ([20.0, 200.0] as $top) {
+    $value = 30;
+    $h = new Headless(function (Context $c) use ($options, &$value, $top): void {
+        $c->column()->padding($top, 20);
+          $c->select($options, $value)->label('Choice');
+        $c->end();
+    }, 400, 300);
+    $h->frame();
+    $h->clickLabel('Choice');
+    foreach ([[fn() => $h->end(), 'Option 59'], [fn() => $h->home(), 'Option 00']] as [$key, $option]) {
+        $key(); $h->frame();
+        $r = $h->rect($h->byText($option));
+        check($r[3] > 0 && $r[1] >= 0 && $r[1] + $r[3] <= 300, "at $top: $option in the window: " . json_encode($r));
+    }
+    $h->clickText('Option 00');
+    same(0, $value, "at $top: a click on Option 00 chose it");
+}

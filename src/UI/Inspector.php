@@ -401,8 +401,14 @@ final class Inspector
         return number_format($ns / 1e6, 1, '.', '');
     }
 
+    /** A color as CSS writes it: hex, or oklch() for one outside the sRGB gamut, whose hex would be its nearest sRGB color and not the wide color a window drawing a wide gamut shows (mygo's colorText). */
     public static function color(int $rgb, float $alpha = 1.0): string
     {
+        if (($wide = WideColor::wide($rgb)) !== null) {
+            [$l, $c, $h] = Oklch::of(...$wide);
+            $dec = static fn(float $v, int $n): string => str_contains($s = number_format($v, $n, '.', ''), '.') ? rtrim(rtrim($s, '0'), '.') : $s;
+            return 'oklch(' . $dec($l, 3) . ' ' . $dec($c, 3) . ' ' . $dec($h, 1) . ($alpha < 1 ? ' / ' . $dec((float)(int)round($alpha * 255) / 255, 2) : '') . ')';
+        }
         return $alpha >= 1 ? sprintf('#%06x', $rgb & 0xffffff) : sprintf('#%06x%02x', $rgb & 0xffffff, (int)round($alpha * 255));
     }
 }

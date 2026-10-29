@@ -287,7 +287,7 @@ final class DiffSideView implements Decor
                 // At the right, clear of the scroll bar: as wide as it was last frame.
                 $bar = $c->key("hunk actions $i")->row()->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(Editor::shield(...));
                 $w = $c->runtime?->rectOf($bar->id)[2] ?? 0.0;
-                $bar->at($ed->r[2] - Editor::SCROLLBAR_WIDTH - 6 - $w, $top - $ed->scrollY + 2);
+                $bar->at($ed->r[2] - $ed->trackWidth() - 6 - $w, $top - $ed->scrollY + 2);
                 ($d->renderHunkActions ?? DiffHunkActions::default(...))($c, $bar, new DiffHunkActions($i, new DiffHunk($hk->a0, $hk->a1, $hk->b0, $hk->b1), $d));
                 $c->end();
             }

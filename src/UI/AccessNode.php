@@ -22,8 +22,13 @@ final class AccessNode
     public const ACTION_PRESS = 1 << 0, ACTION_FOCUS = 1 << 1, ACTION_INCREMENT = 1 << 2, ACTION_DECREMENT = 1 << 3, ACTION_SET_VALUE = 1 << 4,
         ACTION_SCROLL_INTO_VIEW = 1 << 5, ACTION_EXPAND = 1 << 6;
 
-    /** The actions of assistive technology on an element (Runtime::accessAction); SELECT_TEXT selects characters $from to $to of a text field's value. */
-    public const PRESS = 0, FOCUS = 1, INCREMENT = 2, DECREMENT = 3, SET_VALUE = 4, SCROLL_INTO_VIEW = 5, EXPAND = 6, COLLAPSE = 7, SELECT_TEXT = 8;
+    /**
+     * The actions of assistive technology on an element (Runtime::accessAction); SELECT_TEXT selects characters $from
+     * to $to of a text field's value; INSERT_TEXT replaces its selection with the text, as typing it does, at the caret
+     * when nothing is selected.
+     */
+    public const PRESS = 0, FOCUS = 1, INCREMENT = 2, DECREMENT = 3, SET_VALUE = 4, SCROLL_INTO_VIEW = 5, EXPAND = 6, COLLAPSE = 7, SELECT_TEXT = 8,
+        INSERT_TEXT = 9;
 
     /** Names the element; $value is its value, as the text of a text field, for elements that have one. */
     public string $label = '', $value = '';

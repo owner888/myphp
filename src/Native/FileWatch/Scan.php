@@ -52,6 +52,8 @@ final class Scan
     private array $ignored = [];
     /** What an update changed, as it was before (null for an entry that didn't exist). @var array<string, ?array> */
     private array $before = [];
+    /** The watched file the last update found gone, as it was before: its stat, or null. */
+    private ?array $removed = null;
 
     /**
      * @param ?Closure(string, bool): bool $ignore
@@ -266,6 +268,12 @@ final class Scan
         return $this->all || $this->lists !== [] || $this->stats !== [] || $this->writes !== [];
     }
 
+    /** The watched file the last update found gone, as the watch last saw it (its stat), or null (mygo's removedFile). */
+    public function removedFile(): ?array
+    {
+        return $this->removed;
+    }
+
     /** Looks again at what changed. @return list<FileEvent> */
     public function update(): array
     {
@@ -335,6 +343,7 @@ final class Scan
         $events = self::diff($before, $after, $writes);
         $a = $before['.'] ?? null;
         $b = $after['.'] ?? null;
+        $this->removed = $this->file && $a !== null && $b === null ? $a : null;
         if ($this->file && $a !== null && $b !== null && !Fs::isDir($a) && !Fs::isDir($b) && !Fs::same($a, $b)) {
             // A file replaced, as editors save, is written.
             $events = [new FileEvent(FileOp::FileWrite, '.')];
@@ -791,7 +800,8 @@ final class Scan
     /**
      * What an update changed, as it was before and is after, as events
      * (mygo's fileWatchDiff). An entry whose identity moved to another path
-     * is a rename, when nothing else has that identity.
+     * is a rename, when nothing else has that identity; a file replaced at
+     * its path by another file is a write.
      *
      * @param array<string, array> $before
      * @param array<string, array> $after
@@ -800,26 +810,34 @@ final class Scan
      */
     public static function diff(array $before, array $after, array $writes): array
     {
-        $removed = $created = [];
+        $removed = $created = $replaced = [];
         foreach (self::keys($before) as $p) {
-            if (!Fs::same($before[$p], $after[$p] ?? null)) {
+            $b = $after[$p] ?? null;
+            if ($b !== null && !Fs::same($before[$p], $b) && !Fs::isDir($before[$p]) && !Fs::isDir($b)) {
+                // A file replaced at its path by another (mygo's c0c4c42), as editors and atomic saves rename a temporary file
+                // over it: written, not removed and created, which would have an app close a document it still has.
+                $replaced[$p] = true;
+            } elseif (!Fs::same($before[$p], $b)) {
                 $removed[$p] = $before[$p];
             }
         }
         foreach (self::keys($after) as $p) {
-            if (!Fs::same($before[$p] ?? null, $after[$p])) {
+            if (!isset($replaced[$p]) && !Fs::same($before[$p] ?? null, $after[$p])) {
                 $created[$p] = $after[$p];
             }
         }
-        $unique = function (array $m, array $info): bool {
-            $count = 0;
-            foreach ($m as $v) {
-                if (Fs::same($info, $v) && ++$count > 1) {
-                    return false;
+        // Pairing looks each removed entry up by identity: comparing it with every entry instead would make a directory of
+        // n files renamed n² comparisons (mygo's d7b4d54). The entries before and after counted by identity, with the
+        // path of one.
+        $ids = [[], []];
+        if ($removed !== [] && $created !== []) {
+            foreach ([$before, $after] as $side => $m) {
+                foreach ($m as $p => $info) {
+                    $k = Fs::identityKey($info);
+                    $ids[$side][$k] = [(string)$p, ($ids[$side][$k][1] ?? 0) + 1];
                 }
             }
-            return $count === 1;
-        };
+        }
         /** @var list<array{0: string, 1: list<FileEvent>}> $groups */
         $groups = [];
         $paired = [];
@@ -827,16 +845,9 @@ final class Scan
         sort($keys, SORT_STRING);
         foreach ($keys as $old) {
             $a = $removed[$old];
-            $match = '';
-            $count = 0;
-            foreach (self::keys($created) as $p) {
-                if (Fs::same($a, $created[$p])) {
-                    $match = $p;
-                    $count++;
-                }
-            }
-            // A hard link makes pairing by identity ambiguous.
-            if ($count !== 1 || !$unique($before, $a) || !$unique($after, $a)) {
+            // A hard link makes pairing by identity ambiguous: the identity must be the only one of its kind before, after and among what was created.
+            $k = Fs::identityKey($a);
+            if (($ids[0][$k][1] ?? 0) !== 1 || ($ids[1][$k][1] ?? 0) !== 1 || !isset($created[$match = $ids[1][$k][0]])) {
                 continue;
             }
             // A replacement is a removal and a creation even if the old name survives elsewhere.
@@ -875,7 +886,7 @@ final class Scan
             }
             $a = $before[$p] ?? null;
             $b = $after[$p] ?? null;
-            if ($a !== null && $b !== null && !Fs::isDir($b) && Fs::same($a, $b) && (isset($writes[$p]) || Fs::changed($a, $b))) {
+            if (isset($replaced[$p]) || ($a !== null && $b !== null && !Fs::isDir($b) && Fs::same($a, $b) && (isset($writes[$p]) || Fs::changed($a, $b)))) {
                 $events[] = new FileEvent(FileOp::FileWrite, $p);
             }
             if ($events !== []) {

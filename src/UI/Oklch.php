@@ -22,6 +22,14 @@ final class Oklch
         return WideColor::of(self::encode($r), self::encode($g), self::encode($b));
     }
 
+    /** The oklch() of extended sRGB components (sRGB-encoded, past 0 to 1 outside the gamut): lightness, chroma and hue in degrees (mygo's gamut.Oklch). @return array{0: float, 1: float, 2: float} */
+    public static function of(float $r, float $g, float $b): array
+    {
+        $decode = static fn(float $v): float => ($v < 0 ? -1 : 1) * (abs($v) <= 0.04045 ? abs($v) / 12.92 : ((abs($v) + 0.055) / 1.055) ** 2.4);
+        [$l, $a, $bb] = self::oklab($decode($r), $decode($g), $decode($b));
+        return [$l, hypot($a, $bb), fmod(rad2deg(atan2($bb, $a)) + 360, 360)];
+    }
+
     /** The nearest sRGB color, 0xRRGGBB, of linear sRGB components, which may be outside the gamut (CSS Color 4's mapping). */
     public static function nearestSRGB(float $r, float $g, float $b): int
     {

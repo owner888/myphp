@@ -286,6 +286,24 @@ final class ObjC
         return self::msg('p:s', self::cls('NSString'), 'stringWithUTF8String:', $s);
     }
 
+    /**
+     * The text of what an API hands in as a value, which may not be an
+     * NSString (mygo's stringOf): an NSAttributedString's string, an
+     * NSNumber's stringValue (an AXValue set to a number), "" for anything
+     * else; phpStr sends UTF8String, which those do not implement.
+     */
+    public static function textOf($obj): string
+    {
+        if ($obj === null) { return ''; }
+        $responds = fn(string $sel): bool => self::msg('b:p', $obj, 'respondsToSelector:', self::sel($sel));
+        if ($responds('string')) {
+            $obj = self::msg('p:', $obj, 'string');
+        } elseif (!$responds('UTF8String') && $responds('stringValue')) {
+            $obj = self::msg('p:', $obj, 'stringValue');
+        }
+        return $obj !== null && self::msg('b:p', $obj, 'respondsToSelector:', self::sel('UTF8String')) ? self::phpStr($obj) : '';
+    }
+
     public static function phpStr($nsString): string
     {
         $p = self::msg('p:', $nsString, 'UTF8String');

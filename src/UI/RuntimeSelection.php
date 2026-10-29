@@ -391,6 +391,8 @@ trait RuntimeSelection
                 }
                 ($this->writeClipboard)(implode("\n", $out));
                 break;
+            default:
+                return false; // not text's: Paste, Cut, Undo… go to the shortcuts of their keys (commandKey)
         }
         return true;
     }

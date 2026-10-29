@@ -24,5 +24,13 @@ final class PageOptions
         public float $zoomFactor = 1.0,
         /** Overrides the user agent (mygo's UserAgent). */
         public string $userAgent = '',
+        /**
+         * Appends to the page's user agent instead of replacing it, as $userAgent does (mygo's UserAgentSuffix): the
+         * app's name and version, such as "MyApp/1.2", for the sites that read them. It appends to $userAgent too,
+         * which Page::setUserAgent keeps as well; spaces around it are trimmed. A window.open() window does not inherit
+         * it. Some sites serve a bare web view, whose user agent names no browser, older pages: "Version/17.0
+         * Safari/605.1.15" makes the page look like Safari.
+         */
+        public string $userAgentSuffix = '',
     ) {}
 }

@@ -134,7 +134,7 @@ $h->clickOn($n['g']->kids[1]->kids[2]); same(5, $gs->selected, 'a click chooses'
 $h->down(); same(8, $gs->selected, 'Down a row'); $h->right(); same(9, $gs->selected, 'Right one'); $h->end(); same(999, $gs->selected, 'End the last'); check($gs->rows->row > 300, 'scrolled to it');
 $h->up(); $h->down(); same(999, $gs->selected, 'Down from the row above the shorter last lands on the last'); $h->home(); same(0, $gs->selected, 'Home');
 foreach (['i', 't', 'e', 'm', ' ', '7'] as $ch) { $h->type($ch); } same(7, $gs->selected, 'letters typed choose, Space among them');
-$h->enter(); same('open 7', end($ev), 'Enter submits'); $h->clickOn($n['g']->kids[0]->kids[0], 0, 2); same('open 0', end($ev), 'a double click too');
+$h->enter(); same('open 7', end($ev), 'Enter submits'); $h->clickOn($n['g']->kids[0]->kids[0]); $h->clickOn($n['g']->kids[0]->kids[0], 0, 2); same('open 0', end($ev), 'a double click too');
 
 // Several rows and items chosen, by key.
 $ls = new ListState; $ls->selected = -1; $ls->selection = new Selection; $ls->key = fn(int $i) => "row$i";

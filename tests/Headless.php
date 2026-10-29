@@ -96,7 +96,7 @@ final class Headless
             $this->dataDrag = ['data' => $data->snapshot(), 'local' => $local, 'options' => $o, 'x' => $x, 'y' => $y];
             return null;
         };
-        $this->rt->cancelDataDrag = fn() => $this->finishDataDrag(new \MyPHP\Transfer\Result(canceled: true));
+        $this->rt->cancelDataDrag = fn() => $this->finishDataDrag(new \MyPHP\Transfer\Result(canceled: true, escaped: true, point: new \MyPHP\Point(10, 20)));
         $this->rt->setDropFormats = function (array $formats): void { $this->dropFormats = $formats; };
         $this->rt->popupMenu = function (array $items, float $x, float $y, bool $rtl, Closure $chosen): void {
             $this->menu = ['items' => $items, 'at' => [$x, $y], 'rtl' => $rtl, 'chosen' => $chosen];
@@ -495,14 +495,22 @@ final class Headless
  */
 function rangeServer(string $dir): array
 {
-    do { // a port nothing listens on: an earlier test's server (its workers outlive it a moment) would answer of its own folder
-        $port = 19000 + random_int(0, 999);
-        $busy = @fsockopen('127.0.0.1', $port);
-        if ($busy !== false) { fclose($busy); }
-    } while ($busy !== false);
+    $port = freePort(); // nothing listens on it: an earlier test's server (its workers outlive it a moment) would answer of its own folder
     $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/range_server.php'], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4', 'MYPHP_FILES' => $dir] + getenv());
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     return ["http://127.0.0.1:$port", static function () use ($server): void { proc_terminate($server); }];
+}
+
+/**
+ * A port of the loopback no server listens on, for a test's own: the system picks it. A port worked out from the pid
+ * found another server now and then (a developer's own, on 19xxx), whose 404s failed the test.
+ */
+function freePort(): int
+{
+    $s = stream_socket_server('tcp://127.0.0.1:0', $errno, $error) ?: throw new \RuntimeException("no free port: $error");
+    $port = (int)substr(strrchr(stream_socket_get_name($s, false), ':'), 1);
+    fclose($s);
+    return $port;
 }
 
 /** Fails the test unless $cond, with $what. */

@@ -54,6 +54,8 @@ final class WebView
     public ?Closure $onPanel = null;
     /** The user content controller, whose scripts setUserScripts() replaces. */
     private $ucc = null;
+    /** What the user agent ends with, after a space (PageOptions::$userAgentSuffix). */
+    private string $suffix = '';
     private static $schemeHandler = null;
     private static $navigationDelegate = null, $uiDelegate = null;
     /** @var array<int, array{0: WebView, 1: string, 2: string}> the downloads under way by WKDownload address: their view, URL and path */
@@ -101,10 +103,11 @@ final class WebView
      * leak between pages.
      * @param list<string> $scripts
      */
-    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0): self
+    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = ''): self
     {
         self::define();
         $self = new self($onMessage);
+        $self->suffix = $suffix;
         if ($configuration !== null) {
             $wk = ObjC::msg('p:', $configuration, 'retain');
         } else {
@@ -125,6 +128,11 @@ final class WebView
         ObjC::msg('v:pp', $self->ucc, 'addScriptMessageHandler:name:', ObjC::msg('p:', ObjC::alloc('MyPHPScriptHandler'), 'init'), ObjC::str('myphp'));
         $self->setUserScripts($scripts);
         ObjC::msg('v:p', $wk, 'setUserContentController:', $self->ucc);
+        // WebKit appends the application name to the web view's user agent, and window.open() hands over the
+        // configuration of the window that opens it: the new window's options decide, which never inherit a suffix.
+        if ($suffix !== '' || $configuration !== null) {
+            ObjC::msg('v:p', $wk, 'setApplicationNameForUserAgent:', $suffix === '' ? null : ObjC::str($suffix));
+        }
         $self->ns = ObjC::msg('p:rp', ObjC::alloc('MyPHPWebView'), 'initWithFrame:configuration:', $frame, $wk);
         ObjC::msg('v:', $wk, 'release');
         if (ObjC::msg('b:p', $self->ns, 'respondsToSelector:', ObjC::sel('setInspectable:'))) {
@@ -195,9 +203,10 @@ final class WebView
     public function setZoom(float $f): void { ObjC::msg('v:d', $this->ns, 'setPageZoom:', $f); }
     public function zoom(): float { return ObjC::msg('d:', $this->ns, 'pageZoom'); }
 
-    /** Overrides the user agent; '' restores WebKit's. */
+    /** Overrides the user agent, the suffix still after it; '' restores WebKit's, which the configuration still appends the suffix to. */
     public function setUserAgent(string $ua): void
     {
+        if ($ua !== '' && $this->suffix !== '') { $ua .= ' ' . $this->suffix; }
         ObjC::msg('v:p', $this->ns, 'setCustomUserAgent:', $ua === '' ? null : ObjC::str($ua));
     }
 

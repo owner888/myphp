@@ -1856,3 +1856,37 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Window::setAspectRatio` and `Player::videoTrack` are myphp's: the developer asked for the video
   example laid out as IINA's, which draws in the system's glass and
   symbols; mygo has neither. The two window methods take Electron's names.
+
+## Fixes and small features from mygo (v1.67)
+
+- **A combobox's and a token field's placeholder**
+  - mygo: `Placeholder` on the element a combobox or a token field
+    returns.
+  - myphp: a `$placeholder` parameter of `Context::combobox` and
+    `tokenField`.
+  - Why: the node they return is the box around the field, whose own
+    placeholder would not reach the field inside; a parameter says where
+    it goes.
+- **Audio's latency**
+  - mygo: `Interactive` mixes about 40 ms ahead.
+  - myphp: `Latency::Interactive` about 85 ms (4 AudioQueue buffers of
+    1024 frames), `Latency::Playback` about 256 ms (12).
+  - Why: PHP fills the buffers on the main thread, which building a
+    frame keeps busy; fewer of them run dry meanwhile.
+- **Which end of a text selection is the caret**
+  - mygo: `TextAnchorCaret` returns the selection from its anchor to its
+    caret, in runes.
+  - myphp: `TextState::$anchor` and `$cursor`, in bytes, are public, as
+    they were.
+  - Why: nothing to add; `TextState::setTextSelection` takes runes as
+    mygo's.
+- **A drag's end** (`Transfer\Result`)
+  - mygo: `Result{Operation, Canceled, Escaped, Point, Err}`.
+  - myphp: `new Result($operation, $canceled, $error, $escaped, $point)`:
+    the two new ones after the error, which the constructor took third
+    already; named arguments read the same.
+  - Why: the order PHP code calling it had stays.
+- **Not taken**: `Element.MaximizeButton` (Windows 11's snap layouts
+  over a maximize button the view draws) and `FlyoutOptions`'s corners on
+  Windows: macOS only here; FSEvents' `NoDefer` (#370): myphp's watches
+  are kqueue's and inotify's, which tell at once.

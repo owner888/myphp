@@ -360,6 +360,12 @@ trait EditorInput
         return $moved;
     }
 
+    /** The room the scroll bar's track takes at the right edge: none while the editor shows no scroll bars, as with fitContent (mygo's trackWidth). */
+    public function trackWidth(): float
+    {
+        return $this->o->noScrollbar || $this->o->fitContent ? 0.0 : self::SCROLLBAR_WIDTH;
+    }
+
     /**
      * Which scroll bars the editor shows, and takes presses on: the
      * vertical one while it scrolls, as it does past the end of a short
@@ -368,7 +374,7 @@ trait EditorInput
      */
     public function scrollbars(): array
     {
-        if ($this->o->noScrollbar || $this->o->fitContent) { return [false, false]; }
+        if ($this->trackWidth() == 0) { return [false, false]; }
         return [$this->scrollMax() > 0, !$this->view->wrap && $this->view->maxLine > $this->r[2] - $this->textX - self::SCROLLBAR_WIDTH];
     }
 

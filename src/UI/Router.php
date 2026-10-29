@@ -406,6 +406,7 @@ final class Router
             $v->focusing = false; $v->announcing = true;
         }
         $v->leaving = null; $v->dir = 0;
+        $rt->forgetColors(); // the page that comes shows its colors at once (mygo's 1549ce9): a node coming back may have been painted for the one that took its place meanwhile, whose color it is not
         if ($this->transition === self::NONE || $rt->instant()) {
             return;
         }

@@ -64,5 +64,7 @@ final class WindowOptions
         public string $titleBarStyle = 'default',
         /** Moves the window controls of a window with a hidden title bar (mygo's TrafficLightPosition): [x, y] points from the window's top-left corner to the close button's; the bar leaves as much room below them as above. */
         public ?array $trafficLightPosition = null,
+        /** Keeps a hidden title bar ($titleBarStyle) but hides its window controls, for an app that draws its own (mygo's HideWindowButtons): Context::titleBar is then zero. */
+        public bool $hideWindowButtons = false,
     ) {}
 }

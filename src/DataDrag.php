@@ -17,6 +17,8 @@ final class DataDrag
 {
     private static ?self $active = null;
     private bool $finished = false;
+    /** Canceled by the core: Window::cancelDataDrag, or the window closing. */
+    private bool $escaped = false;
 
     private function __construct(
         public readonly Window $window,
@@ -64,7 +66,8 @@ final class DataDrag
     /**
      * Ends the drag, telling its source $r once (mygo's finish): an effect
      * it did not allow is an error; an error or a cancel has no effect, and
-     * no effect is a cancel.
+     * no effect is a cancel; a cancel given up, by the user or the core, is
+     * escaped; where it ended is kept.
      */
     public function finish(Result $r): void
     {
@@ -74,14 +77,11 @@ final class DataDrag
         $this->finished = true;
         $op = $r->operation;
         if ($op !== Operation::NONE && (($op !== Operation::COPY && $op !== Operation::MOVE) || ($op & $this->operations) === 0)) {
-            $r = new Result(error: new \RuntimeException('myphp: destination returned a disallowed drag operation'));
+            $r = new Result(error: new \RuntimeException('myphp: destination returned a disallowed drag operation'), point: $r->point);
         }
-        if ($r->error !== null || $r->canceled) {
-            $r = new Result(Operation::NONE, $r->canceled, $r->error);
-        }
-        if ($r->operation === Operation::NONE && $r->error === null) {
-            $r = new Result(Operation::NONE, true);
-        }
+        $op = $r->error !== null || $r->canceled ? Operation::NONE : $r->operation;
+        $canceled = $r->canceled || ($op === Operation::NONE && $r->error === null);
+        $r = new Result($op, $canceled, $r->error, $canceled && ($r->escaped || $this->escaped), $r->point);
         if (self::$active === $this) {
             self::$active = null;
         }
@@ -99,8 +99,9 @@ final class DataDrag
         $s = self::$active;
         if ($s !== null && $s->window === $window) {
             self::$active = null; // before callbacks or the system's cancel can come back in; its later end is ignored
+            $s->escaped = true;
             $native();
-            $s->finish(new Result(canceled: true));
+            $s->finish(new Result(canceled: true, escaped: true, point: Screen::cursorScreenPoint()));
         }
     }
 

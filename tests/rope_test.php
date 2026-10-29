@@ -97,3 +97,12 @@ foreach ([[0, strlen($s)], [10, 10], [Rope::CHUNK - 3, Rope::CHUNK + 3], [5000, 
     if ($got !== substr($s, $a, $b - $a) || $text->slice($a, $b) !== substr($s, $a, $b - $a)) { $ok = false; }
 }
 check($ok, 'chunks and slice match the string');
+
+// Long lines are read in batches of 64 KB, a line at least (mygo's 9965d50): each line whole, in order both ways.
+$long = []; foreach (range(0, 9) as $i) { $long[] = str_repeat(chr(97 + $i), 30000 + $i * 7000); }
+$text = RopeText::new(implode("\n", $long));
+$got = []; $text->eachLine(0, 10, function ($i, $start, $l) use (&$got) { $got[] = [$i, $start, strlen($l), $l[0]]; return true; });
+$want = []; $at = 0; foreach ($long as $i => $l) { $want[] = [$i, $at, strlen($l), $l[0]]; $at += strlen($l) + 1; }
+same($want, $got, 'long lines, whole and in order');
+$got = []; $text->eachLineBack(9, 0, function ($i, $start, $l) use (&$got) { $got[] = [$i, $start, strlen($l), $l[0]]; return true; });
+same(array_reverse($want), $got, 'and back');

@@ -103,6 +103,18 @@ rates are resampled as they play. PHP mixes on the main thread, as the
 app runs (`App::run`): work that keeps the main thread busy for longer
 than that makes the sound break up.
 
+`Audio::setLatency` sets how far ahead it mixes, as Web Audio's
+`latencyHint` (mygo's `SetLatency`):
+
+| latency | ahead | for |
+|---|---|---|
+| `Latency::Interactive` (the default) | about 85 ms | games and interfaces: sounds start, stop and change as soon as asked |
+| `Latency::Playback` | about 256 ms | music players: playback rides out the moments the system keeps the app waiting, as macOS does for up to 0.2 s while its appearance changes |
+
+With `Latency::Playback`, plays, pauses, seeks and volume changes are
+heard that much later. Set it before playing: an output open opens again,
+which drops what it held.
+
 Where no output opens, as on a machine with no audio device, players
 still play on time, unheard, and `Audio::err()` says why.
 

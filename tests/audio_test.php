@@ -380,3 +380,9 @@ foreach ($ref as $at => $want) {
     check($err < 2e-4, "and after seeking there: $err off");
 }
 fclose($r);
+
+// How far ahead the output mixes (mygo's SetLatency): the interactive default, four buffers; playback, twelve; an output open opens again.
+same([\MyPHP\Audio\Latency::Interactive, 4, 12], [Audio::latency(), \MyPHP\Audio\Latency::Interactive->buffers(), \MyPHP\Audio\Latency::Playback->buffers()], 'latencies: about 85 ms and 256 ms ahead');
+Audio::setLatency(\MyPHP\Audio\Latency::Playback);
+same(\MyPHP\Audio\Latency::Playback, Audio::latency(), 'set');
+Audio::setLatency(\MyPHP\Audio\Latency::Interactive);

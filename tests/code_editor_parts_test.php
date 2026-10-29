@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, Node};
-use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, DiffHunkActions, DiffLineRange, DiffSeparator, DiffSide, DiffState, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
+use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, DiffHunkActions, DiffLayout, DiffLineRange, DiffSeparator, DiffSide, DiffState, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -180,3 +180,38 @@ $btn = $tipped($t->root, 'Comment');
 check($btn !== null, 'the app\'s gutter button shows on the line under the pointer');
 $t->clickOn($btn);
 check(count($commented) === 1 && $commented[0] == new DiffLineRange(DiffSide::DiffOld, 28, 28), 'the gutter button reports its line');
+
+// A diff that fits its content is as high as its lines with the unchanged ones folded before it is first drawn (mygo's
+// TestDiffFitContentFoldsBeforeDrawn): below the view of a scroll container it would else stand as high as all its
+// lines until scrolled to, then shrink, and the container's end with it, under the user.
+$lines = array_map(fn(int $i): string => "line $i", range(0, 399));
+$old = implode("\n", $lines); $lines[200] = 'changed'; $nw = implode("\n", $lines);
+foreach ([DiffLayout::DiffUnified, DiffLayout::DiffSplit] as $layout) {
+    $d = new DiffState(new Buffer($old), new Buffer($nw));
+    $d->layout = $layout; $d->fitContent = true;
+    $sc = new \MyPHP\UI\ScrollState(); $node = null;
+    $t = new Headless(function (Context $c) use ($d, $sc, &$node) {
+        $c->column(0, 0, 1)->scroll($sc);
+          $c->box(0, 5000, 0);
+          $node = $d->view($c);
+        $c->end();
+    }, 800, 600);
+    $t->frame(); $t->frame(); $t->frame();
+    $h = $t->rt->rectOf($node->id)[3];
+    check($h > 0 && $h <= 40 * $d->eds[1]->view->lineHeight, "{$layout->name}: the diff not yet drawn is as high as it shows, not all its lines ($h)");
+}
+
+// A diff that fits its content shows no scroll bar, so its separators run to the viewer's right edge; one that scrolls
+// keeps the room of the scroll bar's track (mygo's TestDiffSeparatorsKeepRoomOnlyForScrollbars).
+$lines = array_map(fn(int $i): string => "line $i", range(0, 59));
+$old = implode("\n", $lines); $lines[30] = 'changed'; $nw = implode("\n", $lines);
+foreach ([[true, 800.0], [false, 800.0 - \MyPHP\UI\Editor\Editor::SCROLLBAR_WIDTH]] as [$fit, $want]) {
+    $d = new DiffState(new Buffer($old), new Buffer($nw));
+    $d->fitContent = $fit; $seps = [];
+    $d->renderSeparator = function (Context $c, Node $sep, DiffSeparator $s) use (&$seps) { $seps[] = $sep; $c->text('separator'); };
+    $t = new Headless(function (Context $c) use ($d, &$seps) { $seps = []; $d->view($c)->grow = 1; }, 800, 600);
+    $t->paints = true; // the separators come of where the lines drew
+    $t->frame(); $t->frame(); $t->frame();
+    $r = $t->rt->rectOf($seps[0]->id);
+    check(abs($r[0] + $r[2] - $want) < 0.5, ($fit ? 'fitting its content' : 'scrolling') . ": the separators end at $want (" . ($r[0] + $r[2]) . ')');
+}

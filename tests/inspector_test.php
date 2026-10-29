@@ -254,3 +254,13 @@ $t->frame();
 $decls = array_column($in->sel['rules'][0]['decls'], 1, 0);
 same(['0 4px 12px 0 #0000002e', '2px solid #000000', '#336699', '8px'], [$decls['box-shadow'] ?? null, $decls['border'] ?? null, $decls['background-color'] ?? null, $decls['padding'] ?? null], 'a shadow, a border, a background and padding');
 same('8px 24px', InspectorDetails::edges([8.0, 24.0, 8.0, 24.0]), 'edges as CSS writes them');
+
+// A wide color shows as oklch(), not its sRGB fallback (mygo's TestInspectorColorText).
+$ok = fn(float $l, float $c, float $h) => \MyPHP\UI\Oklch::rgb($l, $c, $h);
+foreach ([
+    ['#fafafa', 0xfafafa, 1.0], ['#11223380', 0x112233, 0.5], ['#fafafa', $ok(0.985, 0, 0), 1.0],
+    ['oklch(0.7 0.25 145)', $ok(0.7, 0.25, 145), 1.0], ['oklch(0.623 0.214 259.8)', $ok(0.623, 0.214, 259.815), 1.0],
+    ['oklch(0.7 0.25 145 / 0.5)', $ok(0.7, 0.25, 145), 0.5],
+] as [$want, $rgb, $alpha]) {
+    same($want, Inspector::color($rgb, $alpha), "the text of $want");
+}

@@ -460,13 +460,18 @@ final class View
             return true;
         };
         // Those around near first, so what shows is right at once.
-        $this->text->eachLine($near - 200, $near + 200, $measure);
-        $count = 0;
-        $this->text->eachLine($this->wrapAt, $n, function (int $i, int $at, string $s) use ($measure, &$count, $start, $budget): bool {
+        // Within 64 KB each way, and the clock read every 64 KB as well as every 256 lines (mygo's 9965d50): lines of 250 KB were measured in one frame.
+        $a = $this->text->lineStart(max(0, min($near, $n - 1)));
+        $this->text->eachLine(max($near - 200, $this->text->lineOf(max(0, $a - (64 << 10)))), min($near + 200, $this->text->lineOf(min($a + (64 << 10), $this->text->len())) + 1), $measure);
+        $count = 0; $bytes = 0;
+        $this->text->eachLine($this->wrapAt, $n, function (int $i, int $at, string $s) use ($measure, &$count, &$bytes, $start, $budget): bool {
             $measure($i, $at, $s);
             $this->wrapAt = $i + 1;
             $count++;
-            return ($count & 255) !== 0 || (hrtime(true) - $start) / 1e9 <= $budget;
+            $bytes += strlen($s);
+            if (($count & 255) !== 0 && $bytes < 64 << 10) { return true; }
+            $bytes = 0;
+            return (hrtime(true) - $start) / 1e9 <= $budget;
         });
         return $w->known >= $n;
     }

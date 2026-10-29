@@ -98,10 +98,20 @@ final class Fs
         return ($st[2] & self::S_IFMT) === self::S_IFREG;
     }
 
-    /** Whether $a and $b are the same file (Go's os.SameFile, false for a missing one). */
+    /**
+     * Whether $a and $b are the same file (Go's os.SameFile, false for a missing one), of the same type: a file never
+     * changes type, but a file system such as ext4 gives a freed inode to the next file created, so that a directory
+     * removed and a symlink created in its place can have the same inode (mygo's 0915563).
+     */
     public static function same(?array $a, ?array $b): bool
     {
-        return $a !== null && $b !== null && $a[0] === $b[0] && $a[1] === $b[1];
+        return $a !== null && $b !== null && $a[0] === $b[0] && $a[1] === $b[1] && ($a[2] & self::S_IFMT) === ($b[2] & self::S_IFMT);
+    }
+
+    /** What same() compares, as a key: device, inode and type. @param array{0: int, 1: int, 2: int, 3: int, 4: int} $st */
+    public static function identityKey(array $st): string
+    {
+        return $st[0] . ':' . $st[1] . ':' . ($st[2] & self::S_IFMT);
     }
 
     /** Whether a file's content may have changed, as its size or modification time says (mygo's fileInfoChanged). */

@@ -62,6 +62,8 @@ final class ListState implements Scrollable
     public ?array $drag = null;
     /** An identity for row $i (Closure(int): int|string), for the selection to follow its items as rows come, go and move; the index without one. */
     public ?Closure $key = null;
+    /** Keeps a list with a $key where it is scrolled as its rows move, rather than with the item at its top (mygo's KeepOffset): for rows sorted again as they change, as a process monitor's, which the list would otherwise scroll along with the item at its top. The choice and the row Shift chooses from still follow their items. */
+    public bool $keepOffset = false;
     /** A list showing its end keeps showing it as rows are appended (a chat, a log), until the user scrolls up. */
     public bool $followEnd = false;
     /** Set by Layout each frame: the last row's bottom is in view. */
@@ -220,7 +222,11 @@ final class ListState implements Scrollable
      * Follows what changed since the last frame, with $key (mygo's sync):
      * rows came or went above the anchor, which moves with its item, as
      * the heights known do; the chosen row follows its item, and is gone
-     * with it. The app choosing another row is not rows moving.
+     * with it. The app choosing another row is not rows moving: with a
+     * selection, the choice follows its item only while the selection
+     * still holds it, as one the app took out of it, choosing others, may
+     * land on the row the item had (a pasted file sorted there, an item
+     * renamed in its place).
      */
     public function sync(int $count): void
     {
@@ -232,7 +238,7 @@ final class ListState implements Scrollable
             $this->shiftHeights($j - $this->anchorRow);
             $this->row = max(0, min($count - 1, $this->row + $j - $this->anchorRow));
         }
-        if ($this->selected !== null && $this->selected === $this->selRow && $this->selKey !== null) {
+        if ($this->selected !== null && $this->selected === $this->selRow && $this->selKey !== null && ($this->selection === null || $this->selection->has($this->selKey))) {
             $this->selected = $this->selRow = $this->find($this->selKey, $this->selected, $count) ?? -1;
         }
     }
@@ -241,7 +247,7 @@ final class ListState implements Scrollable
     public function remember(): void
     {
         $this->anchorRow = $this->row;
-        $this->anchorKey = $this->key !== null && $this->row < $this->count ? $this->keyOf($this->row) : null;
+        $this->anchorKey = $this->key !== null && !$this->keepOffset && $this->row < $this->count ? $this->keyOf($this->row) : null;
         $this->selRow = $this->selected ?? -1;
         $this->selKey = $this->key !== null && $this->selRow >= 0 && $this->selRow < $this->count ? $this->keyOf($this->selRow) : null;
     }

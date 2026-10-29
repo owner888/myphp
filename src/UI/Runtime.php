@@ -291,6 +291,11 @@ final class Runtime
     /** @var array<int, Closure> the nodes taking their input as it comes (Node::handleInput), from last frame, and the one that took a press, which the pointer's moves and release go to wherever they are */
     private array $inputs = [];
     private ?int $captured = null;
+    /** The node the last press was counted on (countPress), and the system's count its clicks start after. */
+    private ?int $clickNode = null;
+    private int $clickBase = 0;
+    /** @var array<int, int> the count of the last press of each button, which its release carries */
+    private array $pressClicks = [];
     /** @var array<int, true> the nodes a press on which leaves the focus where it is (Node::keepFocus), from last frame */
     private array $keepers = [];
     /** @var array<int, array{0: TextInputClient, 1: bool}> the nodes taking text from the input methods (Node::handleTextInput), and whether the input methods compose for them */
@@ -562,7 +567,11 @@ final class Runtime
                     }
                     break;
                 case 'edit': // an editing command of the menus with no node taking its input: the focused field's, or Copy and Select All on selectable text
-                    if ($this->focus !== null && isset($this->fields[$this->focus])) { $this->editCommand($this->focus, $e[1]); } else { $this->textSelectionCommand($e[1]); }
+                    if ($this->focus !== null && isset($this->fields[$this->focus]) && !($this->fields[$this->focus][0]->readOnly && in_array($e[1], ['paste', 'cut', 'undo', 'redo'], true))) {
+                        $this->editCommand($this->focus, $e[1]);
+                    } elseif (!$this->textSelectionCommand($e[1])) {
+                        $this->commandKey($e[1]);
+                    }
                     break;
                 case 'command': // what the text system made of the key just pushed; a focused control taking it keeps it from shortcut()
                     if ($this->command($e[1]) && $this->keys !== []) {
@@ -589,6 +598,7 @@ final class Runtime
             }
         }
         $this->input->events = [];
+        $this->barsShown = []; // the presses took the last frame's; this frame's record notes its own
         $this->memoFrame($events);
         $this->dragScroll();
         $this->scrollTextSelection();
@@ -646,6 +656,11 @@ final class Runtime
         foreach ($this->keys as $k) { // a key nothing took scrolls, as browsers' (mygo's scrollKey)
             if (!$k[3] && $this->scrollKey($k[1], $k[2])) { $keyScrolled = true; }
         }
+        // What the frame moves under a pointer standing still hovers (mygo's rehover): a row taking the place of one
+        // removed sends no event that would. The control under it, by last frame's rects and by this frame's: another
+        // asks for the frame that shows it hovering. Not while a press holds the hover.
+        $still = $this->input->mouseInside && $this->drag === null && !($this->pointerPress['down'] ?? false);
+        $wasUnder = $still ? $this->pressTarget($this->input->mouseX, $this->input->mouseY) : null;
         $this->animateLayout($root); // with the last frame's rects, before they go
         $this->keyClicked ??= $this->activated; // clicked by the keys, whether or not the build asked
         $this->activated = null; // taken by clicked() during the build, or dropped
@@ -674,6 +689,12 @@ final class Runtime
         $this->modal = null;
         $this->record($root);
         $this->memoSweep();
+        if ($still && $this->pressTarget($this->input->mouseX, $this->input->mouseY) !== $wasUnder) {
+            $this->needsFrame = true;
+        }
+        if ($this->drag !== null || ($this->input->mouseInside && $this->overScrollbar($this->input->mouseX, $this->input->mouseY))) {
+            $this->cursor = Cursor::Default; // a scroll bar's track, and its thumb dragged wherever the pointer goes, show the arrow, not the cursor of the text under it (mygo's 166f789)
+        }
         $this->syncTextSelection();
         foreach ($this->locals as $id => $_) { // a node not built takes its state with it, but in a page a router keeps
             if (!isset($this->rects[$id]) && !$this->keptAlive($id)) { unset($this->locals[$id]); }
@@ -1872,6 +1893,9 @@ final class Runtime
             $this->fields[$n->id] = [$n->edit, $n->x + $ix, $n->y + $iy, $lh, $n->fontSize, $n->w - 2 * $ix];
         }
         if ($n->scroll !== null) {
+            if (($this->drag !== null && $this->drag[0] === $n->scroll) || $this->hovered($n->id)) {
+                $this->barsShown[$n->id] = true; // its bars show this frame, as the painter draws them: a press on them is theirs next frame
+            }
             $this->scrolls[$n->id] = $n->scroll;
             $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl, $n->barInsets];
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
@@ -1964,11 +1988,17 @@ final class Runtime
      * follow, the pointer moving over it, the wheel over it, and keys and
      * edit commands while it has the focus. A press focuses what it lands
      * on first, as any press does. Reports whether the node took it; what
-     * it left goes on to the frame, as it would without it.
+     * it left goes on to the frame, as it would without it, a press's and
+     * its release's count of clicks as counted here (countPress).
      */
-    private function deliver(array $e): bool
+    private function deliver(array &$e): bool
     {
         $id = null; $ev = null;
+        if ($e[0] === 'down') {
+            $e[4] = $this->pressClicks[$e[3]] = $this->countPress($e[1], $e[2], max(1, $e[4]));
+        } elseif ($e[0] === 'up' && isset($this->pressClicks[$e[3]])) {
+            $e[4] = $this->pressClicks[$e[3]]; // its press's count, which may have started over, though another button went down meanwhile
+        }
         switch ($e[0]) {
             case 'down':
                 $id = $this->inputAt($e[1], $e[2]);
@@ -1989,10 +2019,19 @@ final class Runtime
                 $id = $this->captured;
                 $ev = new InputEvent(InputEvent::POINTER_UP, mods: ($e[5] ?? 0) & Key::MODIFIERS, button: $e[3], clicks: max(1, $e[4] ?? 1));
                 break;
-            case 'scroll':
-                $id = $this->inputAt($e[1], $e[2]);
-                $ev = new InputEvent(InputEvent::SCROLL, mods: $this->input->mods, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
-                break;
+            case 'scroll': // from the innermost node taking input out, the first to take it (mygo's 8e7c49c): one that leaves it passes it to those around it, as an editor scrolls under what shields its presses; scroll containers move only when none takes it
+                $under = [];
+                foreach ($this->inputs as $id => $_) {
+                    $r = $this->rects[$id] ?? null;
+                    if ($r !== null && !isset($this->disabledIds[$id]) && $this->under($id, $e[1], $e[2])) { $under[$id] = $r[2] * $r[3]; }
+                }
+                asort($under);
+                foreach ($under as $id => $_) {
+                    $ev = new InputEvent(InputEvent::SCROLL, mods: $this->input->mods, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
+                    [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
+                    if (($this->inputs[$id])($ev)) { $this->needsFrame = true; return true; }
+                }
+                return false;
             case 'key':
                 $id = $this->focus;
                 $ev = new InputEvent(InputEvent::KEY_DOWN, key: $e[2], mods: $e[3] & Key::MODIFIERS, text: $e[1], repeat: $e[4] ?? false);
@@ -2025,7 +2064,7 @@ final class Runtime
         $took = (bool)($this->inputs[$id])($ev);
         if ($ev->kind === InputEvent::POINTER_DOWN) {
             $this->input->mouseDown = $took || $this->input->mouseDown;
-            $this->captured = $took ? $id : null;
+            $this->captured = $took ? $id : ($ev->button === 0 ? null : $this->captured); // another button pressed meanwhile leaves the press it holds
         } elseif ($ev->kind === InputEvent::POINTER_UP) {
             $this->input->mouseDown = false;
             $this->captured = null;
@@ -2055,6 +2094,23 @@ final class Runtime
     }
 
     /** The innermost reachable node taking its input under a point. */
+    /**
+     * The system's $n-th quick press at ($x, $y), counted from the first on the node pressed (mygo's countPress): the
+     * innermost of the press's target and the node taking its input, so that a click then a click on its neighbor is no
+     * double click, nor one on what the first click put under the pointer, and two handlers in one focusable node, or two
+     * buttons in one handler, count apart.
+     */
+    private function countPress(float $x, float $y, int $n): int
+    {
+        $target = $this->pressTarget($x, $y); $h = $this->inputAt($x, $y);
+        $id = $target === null ? $h : ($h === null || $this->within($target, $h) ? $target : $h);
+        if ($id !== $this->clickNode || $n <= $this->clickBase) {
+            $this->clickBase = $n - 1;
+        }
+        $this->clickNode = $id;
+        return $n - $this->clickBase;
+    }
+
     private function inputAt(float $x, float $y): ?int
     {
         $best = null; $bestArea = INF;
@@ -2092,12 +2148,33 @@ final class Runtime
     }
 
     /** A press on a scroll bar's thumb starts dragging it; the thumb takes a few points around it. */
+    /** @var array<int, true> the scrolling containers whose bars the last frame showed, which show while the pointer is over them or a thumb is dragged (the painter's rule) */
+    private array $barsShown = [];
+
+    /** Whether ($x, $y) is on the track of a scroll bar the last frame painted. */
+    private function overScrollbar(float $x, float $y): bool
+    {
+        foreach ($this->barsShown as $id => $_) {
+            if (!isset($this->scrollAxes[$id], $this->rects[$id])) { continue; }
+            [$horizontal, $vertical, $rtl, $inset] = $this->scrollAxes[$id];
+            $r = Scrollbar::track($this->rects[$id], $inset);
+            $w = $this->scrollbarWidth + Scrollbar::GRAB;
+            $right = $rtl ? $r[0] : $r[0] + $r[2] - $w;
+            $state = $this->scrolls[$id] ?? null;
+            if ($state === null) { continue; }
+            $vertical = $vertical && $state->extent()[1] > 0; $horizontal = $horizontal && $state->extentX()[1] > 0; // a bar only where the content overflows
+            if ($vertical && $x >= $right && $x < $right + $w && $y >= $r[1] && $y < $r[1] + $r[3]) { return true; }
+            if ($horizontal && $y >= $r[1] + $r[3] - $w && $y < $r[1] + $r[3] && $x >= $r[0] && $x < $r[0] + $r[2]) { return true; }
+        }
+        return false;
+    }
+
     private function grabThumb(float $x, float $y): bool
     {
         $g = Scrollbar::GRAB;
         foreach ($this->scrolls as $id => $state) {
-            if (!$this->reachable($id)) {
-                continue;
+            if (!$this->reachable($id) || !isset($this->barsShown[$id])) {
+                continue; // hidden bars take no press, as AppKit's overlay scrollers (mygo's a8e04d9): it goes to what is under them
             }
             [$horizontal, $vertical, $rtl, $inset] = $this->scrollAxes[$id];
             $r = Scrollbar::track($this->rects[$id], $inset);
@@ -2182,6 +2259,23 @@ final class Runtime
     }
 
     /** Text system commands the field did not take: focus moves, activation, list navigation. */
+    /**
+     * An Edit menu's command (copy, cut, paste, selectAll, undo, redo) that
+     * the focus does not take, as a list with nothing editable, goes to the
+     * shortcuts of its key (mygo's commandKey): the Edit menu takes
+     * Command+V and the others before the window sees the key, so
+     * `shortcut('v', Key::COMMAND)` would otherwise run only from a field.
+     */
+    private function commandKey(string $command): void
+    {
+        [$char, $code, $mods] = match ($command) {
+            'copy' => ['c', Key::C, Key::COMMAND], 'cut' => ['x', Key::X, Key::COMMAND], 'paste' => ['v', Key::V, Key::COMMAND],
+            'selectAll' => ['a', Key::A, Key::COMMAND], 'undo' => ['z', Key::Z, Key::COMMAND], 'redo' => ['z', Key::Z, Key::COMMAND | Key::SHIFT],
+            default => [null, 0, 0],
+        };
+        if ($char !== null) { $this->keys[] = [$char, $code, $mods, false, $char]; }
+    }
+
     private function command(string $selector): bool
     {
         if ($this->areaCommand($selector) || $this->textSelectionKey($selector)) {

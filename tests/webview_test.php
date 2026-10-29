@@ -142,3 +142,14 @@ $press($o); $press($m); $h->frame();
 check($open && $behind === 1, "a press elsewhere then on the anchor: open, the other clicked $behind time");
 $press($m); $press($o); $h->frame();
 check(!$open, 'a press on the anchor then elsewhere leaves it closed');
+
+if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user agent, WebKit's or the one set (mygo's UserAgentSuffix)
+    \MyPHP\Native\ObjC::boot(['Foundation', 'AppKit', 'WebKit']);
+    $rect = \MyPHP\Native\ObjC::rect(0, 0, 100, 100);
+    $w = \MyPHP\Native\WebView::create($rect, [], function () {}, suffix: 'MyApp/1.2');
+    check(str_ends_with($w->userAgent(), ' MyApp/1.2'), 'WebKit\'s user agent, the suffix after it: ' . $w->userAgent());
+    $w->setUserAgent('Custom/1');
+    same('Custom/1 MyApp/1.2', $w->userAgent(), 'one set: the suffix still after it');
+    $plain = \MyPHP\Native\WebView::create($rect, [], function () {}, userAgent: 'Custom/1');
+    same('Custom/1', $plain->userAgent(), 'without a suffix: the one set alone');
+}

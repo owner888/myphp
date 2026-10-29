@@ -26,6 +26,8 @@ final class TransitionState
     public int $built = 0, $laid = 0;
     public ?Node $elem = null;
     public int $parent = 0;
+    /** Where the node was among its parent's children the last frame it was built: the copies going under one parent go in that order (mygo's index). */
+    public int $index = 0;
     /** Where the layout put the node in frame $laid, $next where it puts it in the frame being laid out, and $shown where it shows: $ch move the components of $moving there. */
     public array $target = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0], $next = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0], $shown = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0];
     /** @var list<MotionChannel> */

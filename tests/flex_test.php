@@ -96,6 +96,21 @@ flexSame(['moved' => [3, 5, 20, 20], 'next' => [20, 0, 20, 20], 'quarter' => [40
     flexBox($c, 10, 10, 'half')->absolute()->leftPercent(50)->topPercent(50);
 }, 200, 200, 'moved', 'next', 'quarter', 'tenth', 'half'), 'relative offsets and percentages');
 
+// A maximum that is a percentage of the parent binds on the main axis as one in points does, though the automatic minimum is measured where it does not resolve (mygo's bbcc7b7).
+$row = flexBoxes(function (Context $c) {
+    $c->row()->size(400, 100);
+      $c->text('supercalifragilisticexpialidocious')->maxWidthPercent(10)->shrink(0)->label('pct');
+      $c->text('supercalifragilisticexpialidocious')->maxWidth(40)->shrink(0)->label('px');
+    $c->end();
+}, 400, 400, 'pct', 'px');
+check($row['pct'][2] <= 40.5, "a text limited to 10% of a 400-wide row: {$row['pct'][2]} wide, want 40 (maxWidth(40) gives {$row['px'][2]})");
+$col = flexBoxes(function (Context $c) {
+    $c->column()->size(200, 400);
+      $c->box(0, 300, 0)->maxHeightPercent(50)->shrink(0)->label('pct');
+    $c->end();
+}, 200, 400, 'pct');
+check($col['pct'][3] <= 200.5, "a box limited to 50% of a 400-high column: {$col['pct'][3]} high, want 200");
+
 // Absolute nodes in the padding box: insets from inside the border, whatever the padding; percentages of the padding box.
 flexSame(['start' => [4, 4, 14, 14], 'end' => [28, 12, 4, 4], 'half' => [18, 10, 2, 2]], flexBoxes(function (Context $c) {
     $c->column();

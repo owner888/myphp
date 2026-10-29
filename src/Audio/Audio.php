@@ -167,6 +167,27 @@ final class Audio
         return Mixer::$volume;
     }
 
+    /**
+     * Sets how far ahead the output mixes (mygo's SetLatency):
+     * Latency::Playback for music, which plays on while the system keeps
+     * the app waiting, Latency::Interactive (the default) for sounds that
+     * answer at once. An output open opens again, dropping what it held.
+     */
+    public static function setLatency(Latency $l): void
+    {
+        if (Output::$latency === $l) { return; }
+        Output::$latency = $l;
+        if (Output::open()) {
+            Output::close();
+            if (Mixer::$voices !== []) { Output::wake(); }
+        }
+    }
+
+    public static function latency(): Latency
+    {
+        return Output::$latency;
+    }
+
     /** Why the last output to open is not the system's audio output, as on a machine with none, or null. */
     public static function err(): ?\Throwable
     {

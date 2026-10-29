@@ -17,7 +17,7 @@ final class UpdateWindow
     public static function open(Checker $u, Session $s): void
     {
         $icon = $u->icon();
-        $win = $s->newWindow(null, self::page($u->text(), $icon === null ? '' : 'data:image/png;base64,' . base64_encode($icon), $s->view));
+        $win = $s->newWindow(null, self::page($s->t, $icon === null ? '' : 'data:image/png;base64,' . base64_encode($icon), $s->view));
         $win->page()->on('willNavigate', function (NavigateEvent $e): void {
             // Links of the release notes open in the browser.
             $e->preventDefault();

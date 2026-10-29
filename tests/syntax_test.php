@@ -39,6 +39,8 @@ foreach ([
         'var(x)op(=)re(/a[/]b/g)punct(.)fn(test)punct(()var(y)punct())'],
     ['python', ['@app.route("/")', 'def f(x): return f"{x!r}" + r\'\d\'  # c'],
         'meta(@app.route)punct(()str("/")punct()) / kw(def)fn(f)punct(()var(x)punct())op(:)kw(return)str(f")esc({)var(x)op(!)var(r)esc(})str(")op(+)str(r\'\d\')comment(# c)'],
+    ['python', ['x = f\'{a}\' + F\'{a}{b}\' + rf\'{c}\' + Fr"""{d}"""'], // each of Python's f-strings, the single-quoted ones last of all (mygo's 76ccea0)
+        'var(x)op(=)str(f\')esc({)var(a)esc(})str(\')op(+)str(F\')esc({)var(a)esc(}{)var(b)esc(})str(\')op(+)str(rf\')esc({)var(c)esc(})str(\')op(+)str(Fr""")esc({)var(d)esc(})str(""")'],
     ['json', ['{"a": [1, true, "b"]}'],
         'punct({)prop("a")op(:)punct([)num(1)punct(,)const(true)punct(,)str("b")punct(]})'],
     ['rust', ['/* a /* b */ c */ fn x() {}'],
@@ -109,3 +111,13 @@ check(!$h->highlight(3999, 0.0), 'a pass with no budget stops');
 check($h->highlight(3999, 3600.0), 'and the next finishes');
 [$toks, $final] = $h->tokens(1, '*/ y', []);
 same([[[2, Token::COMMENT], [3, Token::TEXT], [4, Token::VARIABLE]], true], [$toks, $final], 'the tokens of a line inside a comment, final');
+
+// A string with interpolations is one the lexer's stack can hold: its index in five bits (mygo's TestInterpolatedStringsFit).
+$past = [];
+foreach (Languages::all() as $l) {
+    if (!$l->tokenizer instanceof \MyPHP\UI\Editor\Lexer) { continue; }
+    foreach ($l->tokenizer->strings as $k => $str) {
+        if ($str->interpOpen !== '' && $k + 1 >= 1 << 5) { $past[] = "{$l->name}: $k"; }
+    }
+}
+same([], $past, 'every string with interpolations within the stack\'s 31');

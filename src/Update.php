@@ -36,7 +36,9 @@ final class Update
      * running version, only the delta is downloaded, unless it fails to
      * make the new version: the whole update is downloaded then, and the
      * progress starts over. The running app is not affected: the new
-     * version runs after App::relaunch(), or at the next launch.
+     * bundle replaces the app's once the app has exited, so that the Dock
+     * keeps its tile, and runs after App::relaunch(), or at the next
+     * launch.
      *
      * The app must be able to write where it is installed: a bundle in
      * /Applications of an administrator, or in ~/Applications. It waits as
@@ -65,6 +67,7 @@ final class Update
         if (!@mkdir($work, 0o700)) {
             throw new RuntimeException('cannot write next to the app: ' . (error_get_last()['message'] ?? $work));
         }
+        $staged = false;
         try {
             $unpacked = "$work/app";
             $m = $this->manifest;
@@ -72,7 +75,8 @@ final class Update
             if ($d !== null) {
                 try {
                     $this->applyDelta($d, $pub, $target, $work, $unpacked, $progress, $canceled);
-                    self::swapBundle($unpacked, $target);
+                    self::stageBundle($work, $unpacked, $target);
+                    $staged = true;
                     return;
                 } catch (Native\Update\Canceled $e) {
                     throw $e;
@@ -89,9 +93,10 @@ final class Update
             self::download((string)$m['url'], $size, (string)$m['signature'], $pub, $archive, $progress, $canceled);
             mkdir($unpacked, 0o755);
             Archive::extract($archive, $unpacked);
-            self::swapBundle($unpacked, $target);
+            self::stageBundle($work, $unpacked, $target);
+            $staged = true;
         } finally {
-            self::removeAll($work);
+            if (!$staged) { self::removeAll($work); } // a staged update's goes as the helper installs it
         }
     }
 
@@ -122,23 +127,71 @@ final class Update
         Format::verify($pub, $digest, $signature);
     }
 
-    /** Replaces the bundle at $target with the one in $dir. */
-    private static function swapBundle(string $dir, string $target): void
+    /**
+     * @internal tests: the process whose exit a staged update waits for, the
+     * app's (0); tests give one of their own.
+     */
+    public static int $appPid = 0;
+
+    /** The update staged (stageBundle): the directory it was made in, and the pid of the helper that installs it. @var ?array{0: string, 1: int} */
+    private static ?array $staged = null;
+
+    /**
+     * Leaves the bundle in $dir to replace the one at $target once the app
+     * has exited, however it exits, in place of an update staged before
+     * (mygo's stageBundle): replacing it while the app ran moved the
+     * running app's bundle away, the Dock's tile followed it, and the new
+     * version, opened where the app was, got a second tile. A helper of
+     * /bin/sh, detached, waits for the app's process to end, swaps the
+     * bundles (the old one back if the new one cannot be moved in), removes
+     * $work and opens the app again when App::relaunch() asked
+     * (relaunchStaged).
+     */
+    private static function stageBundle(string $work, string $dir, string $target): void
     {
         $entries = array_values(array_diff(scandir($dir) ?: [], ['.', '..']));
         if (count($entries) !== 1 || !str_ends_with($entries[0], '.app')) {
             throw new RuntimeException('the update holds no app bundle');
         }
-        $old = dirname($target) . '/.' . basename($target) . '.old-' . getmypid();
-        if (!@rename($target, $old)) {
-            throw new RuntimeException("cannot move $target aside");
+        $args = [(string)(self::$appPid ?: getmypid()), $target, "$dir/{$entries[0]}", $work, $target];
+        $rest = array_slice($_SERVER['argv'] ?? [], 1);
+        if ($rest !== []) { array_push($args, '--args', ...$rest); }
+        $pid = (int)exec('nohup /bin/sh -c ' . escapeshellarg(self::INSTALL_AFTER_EXIT) . ' myphp-update ' . implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!');
+        if ($pid <= 0) {
+            throw new RuntimeException('cannot start the helper that installs the update');
         }
-        if (!@rename("$dir/{$entries[0]}", $target)) {
-            @rename($old, $target);
-            throw new RuntimeException("cannot move the update to $target");
+        if (self::$staged !== null) { // the update staged before gives way
+            exec('kill ' . self::$staged[1] . ' 2> /dev/null');
+            self::removeAll(self::$staged[0]);
         }
-        // The running app keeps its open files.
-        self::removeAll($old);
+        self::$staged = [$work, $pid];
+    }
+
+    /**
+     * The helper's script (mygo's installAfterExit): with the app's pid,
+     * the target, the new bundle and the work directory, then open's
+     * arguments, it waits for the app to exit, swaps the bundles, and opens
+     * the app through Launch Services when it was asked to, without -n: the
+     * app has exited, and the Dock gives the new version the app's tile.
+     */
+    private const INSTALL_AFTER_EXIT = <<<'SH'
+        pid=$1 target=$2 new=$3 work=$4
+        shift 4
+        trap '' HUP
+        while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
+        if mv "$target" "$work/old"; then
+            mv "$new" "$target" || mv "$work/old" "$target"
+        fi
+        relaunch=
+        if [ -e "$work/relaunch" ]; then relaunch=1; fi
+        rm -rf "$work"
+        if [ -n "$relaunch" ]; then exec /usr/bin/open "$@"; fi
+        SH;
+
+    /** @internal App::relaunch(): has the helper of the update staged open the app once it installed it; whether one is staged. */
+    public static function relaunchStaged(): bool
+    {
+        return self::$staged !== null && @file_put_contents(self::$staged[0] . '/relaunch', '') !== false;
     }
 
     /** Removes $path and what is in it, not following links. */

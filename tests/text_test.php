@@ -96,6 +96,17 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(count($mac->decorate($l, 0, 0, count($l->lines[0]->glyphs), 0, 0, 2, System::UNDERLINE, 0)) >= 3, 'on macOS, the underline of gypsy in at least 3 pieces');
     $l = $mac->layout(new Params('ace 直', new Style(size: 24)));
     same(1, count($mac->decorate($l, 0, 0, count($l->lines[0]->glyphs), 0, 0, 2, System::UNDERLINE, 0)), 'nothing crosses the underline of ace 直');
+    // Laid out at the width it measured, text stays on one line (mygo's TestCoreTextLayoutAtMeasuredWidth): that width sums
+    // advances that may round below Core Text's own.
+    $wrapped = [];
+    foreach ([400, 500, 600, 700] as $weight) {
+        foreach ([13.0, 16.0, 20.0, 24.0] as $size) {
+            $style = new Style(size: $size, weight: $weight); $text = 'Action required: Complete your Artifact Signing identity validation';
+            $w = $mac->layout(new Params($text, $style))->width;
+            if (count($mac->layout(new Params($text, $style, $w))->lines) !== 1) { $wrapped[] = "$weight/$size"; }
+        }
+    }
+    same([], $wrapped, 'one line at its measured width');
 }
 
 // Visual carets in mixed directions, from fixed advances (mygo's caret_test.go).

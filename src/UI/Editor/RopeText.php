@@ -98,6 +98,9 @@ final class RopeText
     /** The text with bytes $a to $b replaced by $s. */
     public function replace(int $a, int $b, string $s): self { return new self(Rope::replaceBytes($this->n, $a, $b, $s)); }
 
+    /** The most bytes eachLine and eachLineBack copy out at a time, but for a line longer. */
+    private const BATCH_BYTES = 64 << 10;
+
     /**
      * Calls $fn($i, $start, $line) with lines $from to $to, exclusive, and
      * the byte each starts at, reading them a batch at a time rather than
@@ -107,16 +110,14 @@ final class RopeText
     {
         $to = min($to, $this->lineCount());
         for ($i = max(0, $from); $i < $to;) {
-            $end = min($i + 256, $to);
             $a = $this->lineStart($i);
+            $end = min($i + 256, $to, max($i + 1, $this->lineOf($a + self::BATCH_BYTES))); // 256 lines, or 64 KB of long ones, but a line at least (mygo's 9965d50): copying 256 lines of 250 KB took 64 MB for a scan that stops at the first
             $text = $this->slice($a, $this->lineEnd($end - 1));
-            while ($i < $end) {
-                $n = strpos($text, "\n");
+            for ($at = 0; $i < $end; $i++) {
+                $n = strpos($text, "\n", $at);
                 if ($n === false) { $n = strlen($text); }
-                if (!$fn($i, $a, substr($text, 0, $n))) { return; }
-                $a += $n + 1;
-                $text = $n < strlen($text) ? substr($text, $n + 1) : '';
-                $i++;
+                if (!$fn($i, $a + $at, substr($text, $at, $n - $at))) { return; }
+                $at = $n + 1;
             }
         }
     }
@@ -127,7 +128,7 @@ final class RopeText
         $from = min($from, $this->lineCount() - 1);
         $to = max(0, $to);
         for ($i = $from; $i >= $to;) {
-            $first = max($i - 255, $to);
+            $first = max($i - 255, $to, min($i, $this->lineOf(max(0, $this->lineEnd($i) - self::BATCH_BYTES)) + 1));
             $a = $this->lineStart($first);
             $text = $this->slice($a, $this->lineEnd($i));
             $starts = []; // where the batch's lines start, to go back through them

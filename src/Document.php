@@ -32,7 +32,7 @@ final class Document
     /** How many changes the content had; the change the file has, and the one the recovery copy has (0: none). */
     private int $changes = 0, $savedAt = 0, $backedUp = 0;
     private bool $edited = false;
-    /** The file as the document last read or wrote it (Files::stamp). @var ?array{0: int, 1: int} */
+    /** The file as the document last read or wrote it (Files::stamp). @var ?array{0: int, 1: int, 2?: array{0: int, 1: int, 2: int}} */
     private ?array $stamp = null;
     private bool $readOnly = false, $conflict = false, $deleted = false;
     private ?Frame $frame = null;
@@ -289,7 +289,7 @@ final class Document
             [$this->path, $this->stamp] = [$path, $stamp];
             $now = Files::stamp($path);
             $this->deleted = $now === null;
-            $this->conflict = $now !== null && $now !== $stamp;
+            $this->conflict = $now !== null && !Files::sameStamp($now, $stamp);
             $this->readOnly = !$this->deleted && !Files::writable($path);
         } elseif (($n = Untitled::number($this->name)) > 0) {
             $this->untitled = $n;
@@ -427,7 +427,7 @@ final class Document
         }
         if ($op === self::SAVE || $op === self::AUTOSAVE) {
             $now = Files::stamp($target);
-            if ($now !== null && ($now !== $this->stamp || $this->deleted)) {
+            if ($now !== null && (!Files::sameStamp($now, $this->stamp) || $this->deleted)) {
                 $was = $this->conflict;
                 [$this->conflict, $this->deleted] = [true, false];
                 if (!$was) {
@@ -730,7 +730,7 @@ final class Document
             if ($changed) {
                 $this->notify();
             }
-        } elseif ($now === $this->stamp && !$this->deleted) {
+        } elseif (Files::sameStamp($now, $this->stamp) && !$this->deleted) {
             $readOnly = !Files::writable($path);
             if ($this->readOnly !== $readOnly) {
                 $this->readOnly = $readOnly;
@@ -749,6 +749,12 @@ final class Document
                 $this->notify();
             }
         }
+    }
+
+    /** @internal the identity of the file as the document last read or wrote it (Files::stamp), or null @return ?array{0: int, 1: int, 2: int} */
+    public function fileIdentity(): ?array
+    {
+        return $this->stamp[2] ?? null;
     }
 
     /** @internal follows the document's file, which another app renamed to $path */

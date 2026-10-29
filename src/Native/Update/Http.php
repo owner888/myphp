@@ -16,7 +16,7 @@ use RuntimeException;
  */
 final class Http
 {
-    /** The User-Agent of the requests, as mygo's "MyGo/<version> <app>/<version>". */
+    /** The User-Agent of the requests: the updater's "myphp-updater", as mygo's "mygo-updater"; `myphp publish` its own. */
     public static string $userAgent = 'MyPHP';
     /** A token for the GitHub API, which lifts its limit on requests, as `myphp build` passes CI's. */
     public static string $githubToken = '';

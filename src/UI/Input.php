@@ -69,7 +69,7 @@ final class Input
     /** Gives an event to the node taking its input as it comes, as it arrives (Runtime's deliver, set by the runtime), and queues it for the next frame when that node leaves it. Reports whether the node took it. */
     public function push(array $event): bool
     {
-        if ($this->direct !== null && ($this->direct)($event)) { return true; }
+        if ($this->direct !== null && ($this->direct)($event)) { return true; } // which may count a press's clicks again (Runtime::deliver)
         $this->events[] = $event;
         return false;
     }

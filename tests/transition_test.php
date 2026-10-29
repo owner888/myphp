@@ -328,3 +328,30 @@ same(50.0, $boxes['moving']->x, 'without animations, the box is in its place');
 $instant = false; $target = 0.0;
 later($t, $now, 10);
 check($value != 0, 'with animations again, the value moves');
+
+// A route change shows the colors of what comes at once (mygo's 1549ce9): a node coming back is not eased from the color of the one that held its place.
+$color = 0x3478f6;
+$t = clockTester(function (Context $c) use (&$color, $lin) {
+    $c->transition($c->column()->size(100, 40)->background($color)->label('btn'), new ElementTransition(1.0, $lin, colors: true));
+    $c->end();
+}, $now, 200, 100);
+$color = 0xeeeeee; later($t, $now, 100);
+check($t->byLabel('btn')->color !== 0xeeeeee, 'a color change eases');
+$t->rt->forgetColors(); // as a page comes
+$color = 0x222222; later($t, $now, 16);
+same(0x222222, $t->byLabel('btn')->color, 'after a route change: its color at once');
+
+// Siblings leaving together keep their order (mygo's de135d4): C came first, A and B before it later; all three go, their copies A, B, C.
+$rows = ['C'];
+$t = clockTester(function (Context $c) use (&$rows, $lin) {
+    $c->column()->label('list');
+      foreach ($rows as $s) {
+          $c->transition($c->key($s)->row()->size(0, 20), new ElementTransition(0.2, $lin, exit: new TransitionMotion(opacity: 0.0)));
+            $c->text($s);
+          $c->end();
+      }
+    $c->end();
+}, $now, 200, 100);
+$rows = ['A', 'B', 'C']; later($t, $now, 300);
+$rows = []; later($t, $now, 16);
+same(['A', 'B', 'C'], array_map(fn(Node $g) => $g->kids[0]->text, ghostsOf($t->byLabel('list'))), 'the copies going in the order the rows had');

@@ -19,7 +19,7 @@ try {
 }
 
 (function () {
-    $port = 18000 + getmypid() % 1000;
+    $port = freePort();
     $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/testdata/fetch_server.php'], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes, null, ['PHP_CLI_SERVER_WORKERS' => '4'] + getenv()); // workers: a slow response holds one
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
     $base = "http://127.0.0.1:$port";

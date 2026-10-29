@@ -304,3 +304,12 @@ check($title === 'Notes.md' && $changes === 1, "after Tab: $title ($changes)");
 $h->clickText('Notes.md'); $h->enter();
 $h->input->focus?->selectAll(); $h->type('Plan'); $h->enter();
 check($title === 'Plan' && in_array('Plan', $h->texts($h->focused()), true), "after Enter: $title, focused");
+
+// A last column sharing the room left has no edge at the table's end (mygo's 976f17c); one with a width keeps its edge.
+$edgeOf = fn(Node $head): bool => array_filter($head->kids, fn(Node $k) => $k->cursor === \MyPHP\UI\Cursor::ResizeEW) !== [];
+$h = tableView(new ListState(), [new TableColumn('Name', 120), new TableColumn('Kind')], ['a', 'b']);
+$h->frame();
+same([true, false], [$edgeOf(header($h, 'Name')), $edgeOf(header($h, 'Kind'))], 'the last column taking the room left: no edge');
+$h = tableView(new ListState(), [new TableColumn('Name'), new TableColumn('Kind', 100)], ['a', 'b']);
+$h->frame();
+same([true, true], [$edgeOf(header($h, 'Name')), $edgeOf(header($h, 'Kind'))], 'a last column of its own width: its edge');

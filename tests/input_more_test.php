@@ -91,3 +91,50 @@ $h->release($rd[0], $rd[1] + $rd[3] + 8);
 check($moves === [[1, 4]] && $clicked === '', 'b dragged from its button below d: to the end, no click: ' . json_encode($moves));
 $h->clickText('a');
 check($clicked === 'a' && count($moves) === 1, 'a press that does not move clicks the button');
+
+// The wheel a handler leaves goes to the handlers around it (mygo's 8e7c49c): an editor scrolls under what shields its presses;
+// a handler around a scrolling container sees it before the container moves.
+$wheeled = []; $zoom = false;
+$h = new Headless(function (Context $c) use (&$wheeled, &$zoom): void {
+    $c->column()->size(300, 200)->label('editor')->handleInput(function (\MyPHP\UI\InputEvent $e) use (&$wheeled): bool {
+        if ($e->kind !== \MyPHP\UI\InputEvent::SCROLL) { return false; }
+        $wheeled[] = 'editor'; return true;
+    });
+      $c->column()->size(100, 40)->label('annotation')->handleInput(fn(\MyPHP\UI\InputEvent $e): bool => $e->kind === \MyPHP\UI\InputEvent::POINTER_DOWN); // takes its presses, not the wheel
+      $c->end();
+    $c->end();
+    $c->column()->size(300, 200)->label('canvas')->handleInput(function (\MyPHP\UI\InputEvent $e) use (&$wheeled, &$zoom): bool {
+        if ($e->kind !== \MyPHP\UI\InputEvent::SCROLL || !$zoom) { return false; }
+        $wheeled[] = 'canvas'; return true;
+    });
+      $c->scroll()->size(300, 200)->label('scroller');
+        for ($i = 0; $i < 30; $i++) { $c->text("line $i")->height(20); }
+      $c->end();
+    $c->end();
+}, 400, 500);
+$h->frame();
+[$x, $y] = $h->middle($h->byLabel('annotation'));
+$h->input->push(['scroll', $x, $y, 0, -30]); $h->frame();
+same(['editor'], $wheeled, 'the wheel over what takes only presses: the handler around it scrolls');
+[$x, $y] = $h->middle($h->byLabel('scroller'));
+$zoom = true;
+$h->input->push(['scroll', $x, $y, 0, -30]); $h->frame();
+same(['editor', 'canvas'], $wheeled, 'a handler around a scrolling container takes the wheel first');
+same(0.0, $h->byLabel('scroller')->scroll->y, 'and the container stays');
+$zoom = false;
+$h->input->push(['scroll', $x, $y, 0, -30]); $h->frame();
+check($h->byLabel('scroller')->scroll->y > 0, 'left by it: the container scrolls');
+
+// The Edit menu's Paste, which takes Command+V before the window sees it, runs the window's Cmd+V where no field has the
+// focus, and pastes into one that does (mygo's TestPasteCommandShortcut).
+$typed = new TextState(''); $pastes = 0;
+$h = new Headless(function (Context $c) use ($typed, &$pastes): void {
+    $c->input($typed)->width(200)->label('field');
+    if ($c->shortcut('v', Key::COMMAND)) { $pastes++; }
+}, 300, 100);
+$h->frame();
+$h->input->push(['edit', 'paste']); $h->frame();
+same(1, $pastes, 'the menu\'s Paste, no field focused: the window\'s Cmd+V');
+$h->clickLabel('field');
+setClip($h, 'hi'); $h->input->push(['edit', 'paste']); $h->frame();
+same(['hi', 1], [$typed->text, $pastes], 'a field focused: pasted into it, the shortcut not run');

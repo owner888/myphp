@@ -16,7 +16,8 @@ final class Tray
 {
     private const VARIABLE_LENGTH = -1.0;
     private const LEFT_UP = 1 << 2, RIGHT_UP = 1 << 4; // NSEventMask bits
-    private const RIGHT_MOUSE_UP = 4; // NSEventType
+    private const LEFT_MOUSE_UP = 2, RIGHT_MOUSE_UP = 4; // NSEventType
+    private const CONTROL = 1 << 18; // NSEventModifierFlagControl
     private static bool $defined = false;
     /** @var array<int, Tray> by status bar button address */
     private static array $byButton = [];
@@ -24,6 +25,9 @@ final class Tray
     private $menu = null; // the built NSMenu, kept alive
     private array $onClick = [];
     private array $onRightClick = [];
+    private array $onAppearance = [];
+    /** Whether the menu bar under the icon was dark, as last told (dark()). */
+    private bool $wasDark = false;
 
     public function __construct(TrayOptions $o)
     {
@@ -33,6 +37,15 @@ final class Tray
         $bar = ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar');
         // The status bar keeps no reference: the item leaves the menu bar when the pool that holds it drains, so the tray owns it (as mygo's retain).
         $this->item = ObjC::msg('p:', ObjC::msg('p:d', $bar, 'statusItemWithLength:', self::VARIABLE_LENGTH), 'retain');
+        if ($o->id !== '') {
+            ObjC::msg('v:p', $this->item, 'setAutosaveName:', ObjC::str($o->id)); // where the user put it, kept by AppKit under the name
+        }
+        // The title's digits at one width (mygo's 477eae5), so that a changing number (a rate, a timer) does not resize the
+        // item and move the icon and those beside it: the menu bar's font at its size, set on the button rather than in
+        // an attributed title, which keeps AppKit's colors for light and dark bars and the highlight.
+        $size = ObjC::msg('d:', ObjC::msg('p:d', ObjC::cls('NSFont'), 'menuBarFontOfSize:', 0.0), 'pointSize');
+        $font = ObjC::msg('p:dd', ObjC::cls('NSFont'), 'monospacedDigitSystemFontOfSize:weight:', $size, 0.0); // NSFontWeightRegular
+        if ($font !== null) { ObjC::msg('v:p', $this->button(), 'setFont:', $font); }
         if ($o->icon !== null) {
             $this->setIcon($o->icon, $o->iconIsTemplate);
         }
@@ -48,6 +61,8 @@ final class Tray
         ObjC::msg('v:p', $button, 'setTarget:', self::$target); // a menu, while there is one, takes the clicks instead
         ObjC::msg('v:p', $button, 'setAction:', ObjC::sel('trayClicked:'));
         ObjC::msg('l:L', $button, 'sendActionOn:', self::LEFT_UP | self::RIGHT_UP);
+        ObjC::msg('v:pppp', $button, 'addObserver:forKeyPath:options:context:', self::$target, ObjC::str('effectiveAppearance'), null, null); // the bar under it turning dark or light
+        $this->wasDark = $this->dark();
         if ($o->menu !== null) {
             $this->setMenu($o->menu);
         }
@@ -68,13 +83,34 @@ final class Tray
                     return;
                 }
                 $event = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
-                $right = $event !== null && ObjC::msg('L:', $event, 'type') === self::RIGHT_MOUSE_UP;
+                $right = $event !== null && self::secondaryClick(ObjC::msg('L:', $event, 'type'), ObjC::msg('L:', $event, 'modifierFlags'));
                 foreach ($right ? $tray->onRightClick : $tray->onClick as $fn) {
                     $fn();
                 }
             }],
+            // The menu bar under the button turned dark or light: with the system's appearance, or the wallpaper under a translucent bar.
+            'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(ppppppp)', function ($self, $cmd, $path, $object, $change, $context) {
+                $tray = self::$byButton[ObjC::addr($object)] ?? null;
+                if ($tray === null || ($dark = $tray->dark()) === $tray->wasDark) {
+                    return;
+                }
+                $tray->wasDark = $dark;
+                foreach ($tray->onAppearance as $fn) { $fn(); }
+            }],
         ]);
         self::$target = ObjC::msg('p:', ObjC::alloc('MyPHPTrayTarget'), 'init');
+    }
+
+    /**
+     * Whether a click on the icon ending with an event of type $type and
+     * modifier flags $flags is a right-click (mygo's secondaryClick): the
+     * right button's, or the primary button's with Control held, as a
+     * Control-click is a secondary click across macOS.
+     * @internal Tray's, and its test's
+     */
+    public static function secondaryClick(int $type, int $flags): bool
+    {
+        return $type === self::RIGHT_MOUSE_UP || ($type === self::LEFT_MOUSE_UP && ($flags & self::CONTROL) !== 0);
     }
 
     private function button()
@@ -137,10 +173,39 @@ final class Tray
         return function () use ($fn) { $this->onClick = array_values(array_filter($this->onClick, fn($f) => $f !== $fn)); };
     }
 
+    /** Called on a right-click, or a Control-click, when the tray has no menu. Returns a function that removes the listener. */
     public function onRightClick(Closure $fn): Closure
     {
         $this->onRightClick[] = $fn;
         return function () use ($fn) { $this->onRightClick = array_values(array_filter($this->onRightClick, fn($f) => $f !== $fn)); };
+    }
+
+    /**
+     * Whether the menu bar the icon shows on is dark (mygo's Dark), as
+     * AppKit tints its items: by the system's appearance, or the wallpaper
+     * under a translucent bar. A template icon follows the bar by itself;
+     * this is for an icon in color, whose ink goes light on a dark bar.
+     */
+    public function dark(): bool
+    {
+        if ($this->item === null) { return false; }
+        $names = ObjC::msg('p:p', ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array'), 'arrayByAddingObject:', ObjC::str('NSAppearanceNameAqua'));
+        $names = ObjC::msg('p:p', $names, 'arrayByAddingObject:', ObjC::str('NSAppearanceNameDarkAqua'));
+        $match = ObjC::msg('p:p', ObjC::msg('p:', $this->button(), 'effectiveAppearance'), 'bestMatchFromAppearancesWithNames:', $names);
+        return $match !== null && ObjC::phpStr($match) === 'NSAppearanceNameDarkAqua';
+    }
+
+    /** Called when the bar the icon shows on turns dark or light (see dark()): set the icon drawn for it again (mygo's OnAppearanceChange). Returns a function that removes the listener. */
+    public function onAppearanceChange(Closure $fn): Closure
+    {
+        $this->onAppearance[] = $fn;
+        return function () use ($fn) { $this->onAppearance = array_values(array_filter($this->onAppearance, fn($f) => $f !== $fn)); };
+    }
+
+    /** @internal Window: highlights the icon while a flyout's popover shows from it, as AppKit's status items are while their menus show. */
+    public function highlight(bool $on): void
+    {
+        if ($this->item !== null) { ObjC::msg('v:b', $this->button(), 'highlight:', $on); }
     }
 
     /** The status item's button (NSStatusBarButton), which a flyout's popover shows from. */
@@ -159,19 +224,26 @@ final class Tray
     /** Whether the event being handled is a press on the icon (mygo's pressed): a flyout of the icon leaves it to its click, which toggles it. */
     public function pressed(): bool
     {
-        $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
-        if ($ev === null || !in_array(ObjC::msg('L:', $ev, 'type'), [1, 3], true)) { // NSEventTypeLeftMouseDown, RightMouseDown
-            return false;
-        }
+        if ($this->item === null) { return false; }
         $button = $this->button();
         $win = ObjC::msg('p:', $button, 'window');
-        $evWin = ObjC::msg('p:', $ev, 'window');
-        if ($win === null || $evWin === null || ObjC::addr($evWin) !== ObjC::addr($win)) {
-            return false;
+        if ($win === null) { return false; }
+        $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
+        $evWin = $ev === null ? null : ObjC::msg('p:', $ev, 'window');
+        if ($evWin !== null && ObjC::addr($evWin) === ObjC::addr($win) && in_array(ObjC::msg('L:', $ev, 'type'), [1, 3], true)) { // NSEventTypeLeftMouseDown, RightMouseDown
+            $p = ObjC::msg('q:qp', $button, 'convertPoint:fromView:', ObjC::msg('q:', $ev, 'locationInWindow'), null);
+            return self::inRect($p, ObjC::msg('r:', $button, 'bounds'));
         }
-        $p = ObjC::msg('q:qp', $button, 'convertPoint:fromView:', ObjC::msg('q:', $ev, 'locationInWindow'), null);
-        $b = ObjC::msg('r:', $button, 'bounds');
-        return $p->x >= $b->x && $p->y >= $b->y && $p->x < $b->x + $b->w && $p->y < $b->y + $b->h;
+        // A button down with the pointer over it (mygo's 5a4e4b8): the app hears of the press only after it made the app
+        // resign, or in a monitor of other apps' events, which the menu bar's are on recent macOS.
+        if (ObjC::msg('L:', ObjC::cls('NSEvent'), 'pressedMouseButtons') === 0) { return false; }
+        return self::inRect(ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation'), ObjC::msg('r:', $win, 'frame'));
+    }
+
+    /** Whether point $p is in rect $r, its far edges out. */
+    private static function inRect($p, $r): bool
+    {
+        return $p->x >= $r->x && $p->y >= $r->y && $p->x < $r->x + $r->w && $p->y < $r->y + $r->h;
     }
 
     /** Takes the icon out of the menu bar (mygo's Destroy). */
@@ -180,6 +252,7 @@ final class Tray
         if ($this->item === null) {
             return;
         }
+        ObjC::msg('v:pp', $this->button(), 'removeObserver:forKeyPath:', self::$target, ObjC::str('effectiveAppearance'));
         unset(self::$byButton[ObjC::addr($this->button())]);
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSStatusBar'), 'systemStatusBar'), 'removeStatusItem:', $this->item);
         ObjC::msg('v:', $this->item, 'release');

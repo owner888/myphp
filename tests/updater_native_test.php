@@ -26,9 +26,9 @@ final class UpdNative
     /** @param array<string, mixed> $view */
     public function __construct(array $view, float $width, float $height, string $lang = 'en', ?Image $icon = null)
     {
-        $this->s = new Session(new Checker(new Options), true);
-        $this->s->view = $view;
         $text = Text::for($lang, [$lang => new Strings]);
+        $this->s = new Session(new Checker(new Options), $text, true);
+        $this->s->view = $view;
         $this->w = new UpdateWindow($this->s, $text, $icon);
         $this->w->respond = function (int $prompt, string $action, bool $automatic): void { $this->answers[] = [$prompt, $action, $automatic]; };
         $this->w->fit = function (int $w, int $h): void { $this->fits[] = [$w, $h]; };
@@ -152,6 +152,12 @@ $v['detail'] = str_repeat('dial tcp: lookup updates.example.com: no such host ',
 $u->set($v);
 $long = $u->fit();
 check($long[1] > $short[1], 'an error asks for ' . json_encode($long) . ', a short status for ' . json_encode($short));
+$v['detail'] = str_repeat('dial tcp: lookup updates.example.com: no such host ', 12); // all of a long error shows: the window grows for it (mygo's 002a1ea)
+$u->set($v);
+$longer = $u->fit();
+check($longer[1] > $long[1], 'a longer error asks for more yet, not cut to two lines: ' . json_encode($longer));
+$v['detail'] = str_repeat('dial tcp: lookup updates.example.com: no such host ', 4);
+$u->set($v); $u->fit();
 // Once it has the size it asked for, it asks for no other.
 $u->h->w = max($long[0], Checker::STATUS_WIDTH);
 $u->h->h = $long[1];

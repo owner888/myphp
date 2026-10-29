@@ -420,6 +420,18 @@ while ($d->path() !== "$dir/elsewhere.txt" && microtime(true) < $end) {
     DocLoop::advance(Watches::POLL);
 }
 same("$dir/elsewhere.txt", $d->path(), 'renamed by another app: followed');
+// Another app replaces the file and renames it before the watch looks again, the document having read the new file meanwhile (at the look when its window got the keyboard): the watch knows only the file replaced, so the document finds the new one by what it read (mygo's TestDocumentFollowsReplacedRename).
+file_put_contents("$dir/elsewhere.txt.tmp", 'two, longer');
+rename("$dir/elsewhere.txt.tmp", "$dir/elsewhere.txt");
+$d->checkDisk();
+same('two, longer', $d->content(), 'the document read the new file');
+rename("$dir/elsewhere.txt", "$dir/renamed.txt");
+$end = microtime(true) + 3;
+while ($d->path() !== "$dir/renamed.txt" && microtime(true) < $end) {
+    usleep(20_000);
+    DocLoop::advance(Watches::POLL);
+}
+check($d->path() === "$dir/renamed.txt" && !$d->state()->deleted, 'renamed after it was replaced: followed, not deleted');
 $docsDone();
 same([], Watches::paths(), 'closed, nothing is watched');
 

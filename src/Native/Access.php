@@ -457,6 +457,7 @@ final class Access
         $allowed = [
             'accessibilityPerformPress' => AccessNode::ACTION_PRESS, 'accessibilityPerformIncrement' => AccessNode::ACTION_INCREMENT,
             'accessibilityPerformDecrement' => AccessNode::ACTION_DECREMENT, 'setAccessibilityValue:' => AccessNode::ACTION_SET_VALUE,
+            'setAccessibilitySelectedText:' => AccessNode::ACTION_SET_VALUE,
             'setAccessibilityFocused:' => AccessNode::ACTION_FOCUS, 'setAccessibilityDisclosed:' => AccessNode::ACTION_EXPAND,
         ];
         // The text of a text field's UTF-16 units of range $r.
@@ -500,6 +501,7 @@ final class Access
                 if ($el === null) { return false; }
                 return match (ObjC::phpStr($attr)) {
                     'AXValue' => !self::textual($el['node']->role) || ($el['node']->actions & AccessNode::ACTION_SET_VALUE) !== 0,
+                    'AXSelectedText' => self::textual($el['node']->role) && ($el['node']->actions & AccessNode::ACTION_SET_VALUE) !== 0,
                     'AXFocused' => true,
                     'AXDisclosing' => $el['node']->role === Role::TREE_ITEM,
                     default => false,
@@ -550,7 +552,15 @@ final class Access
             'setAccessibilityValue:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $value) use ($super) {
                 ObjC::msgSuper('v:p', $self, $super, 'setAccessibilityValue:', $value);
                 [$s, $el] = self::of($self) ?? [null, null];
-                if ($s !== null && self::textual($el['node']->role)) { $s->act($el['node']->id, AccessNode::SET_VALUE, ObjC::phpStr($value)); }
+                if ($s !== null && self::textual($el['node']->role)) { $s->act($el['node']->id, AccessNode::SET_VALUE, ObjC::textOf($value)); } // a number too: phpStr would send it UTF8String, which aborts
+            }],
+            // Typing into a text field over its selection, as Voice Control, dictation and automation insert text (kAXSelectedTextAttribute).
+            'setAccessibilitySelectedText:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $text) use ($super) {
+                ObjC::msgSuper('v:p', $self, $super, 'setAccessibilitySelectedText:', $text);
+                [$s, $el] = self::of($self) ?? [null, null];
+                if ($s !== null && self::textual($el['node']->role) && ($el['node']->actions & AccessNode::ACTION_SET_VALUE) !== 0) {
+                    $s->act($el['node']->id, AccessNode::INSERT_TEXT, ObjC::textOf($text));
+                }
             }],
             // Moving the selection of a text field, as VoiceOver does.
             'setAccessibilitySelectedTextRange:' => ['v@:{_NSRange=QQ}', 'v(ppn)', function ($self, $cmd, $r) use ($super) {

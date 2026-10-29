@@ -16,5 +16,12 @@ final class TrayOptions
         public string $toolTip = '',
         /** Shown when the icon is clicked; without one, clicks reach onClick/onRightClick. */
         public ?Menu $menu = null,
+        /**
+         * Names the icon across launches, unique among the app's icons
+         * (mygo's ID): the status item's autosave name, under which macOS
+         * keeps where the user dragged it with ⌘ held, and puts it back
+         * there. Empty, a new icon goes left of those already there.
+         */
+        public string $id = '',
     ) {}
 }

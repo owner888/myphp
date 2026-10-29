@@ -18,12 +18,24 @@ final class Files
     /** Replaces the file at $path with the file at $tmp, keeping its metadata: NSFileManager's replaceItemAtURL by default; tests set a rename. @var ?\Closure(string, string): void */
     public static ?\Closure $replace = null;
 
-    /** The file's modification time, in seconds as PHP's stat() has it, and size, as the document last read or wrote it; null when it doesn't exist. @return ?array{0: int, 1: int} */
+    /**
+     * The file's modification time, in seconds as PHP's stat() has it, and size, as the document last read or wrote it,
+     * then its identity (device, inode and type), by which a document finds the file where another app renamed it
+     * (Watches): it says nothing of the content, so sameStamp() ignores it, and recovery doesn't keep it; null when it
+     * doesn't exist.
+     * @return ?array{0: int, 1: int, 2?: array{0: int, 1: int, 2: int}}
+     */
     public static function stamp(string $path): ?array
     {
         clearstatcache(true, $path);
         $st = @stat($path);
-        return $st === false ? null : [$st['mtime'], $st['size']];
+        return $st === false ? null : [$st['mtime'], $st['size'], [$st['dev'], $st['ino'], $st['mode'] & 0o170000]];
+    }
+
+    /** Whether stamps $a and $b stamp the same content: the same modification time and size (mygo's fileStamp.same). */
+    public static function sameStamp(?array $a, ?array $b): bool
+    {
+        return $a !== null && $b !== null && $a[0] === $b[0] && $a[1] === $b[1];
     }
 
     public static function writable(string $path): bool

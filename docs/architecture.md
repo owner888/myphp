@@ -5200,6 +5200,52 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   `boundsForRange` gave the shape before `TextInputClient`'s, a
   rectangle without its range.
 
+## mygo's fixes, a first batch (v1.67)
+
+- **Clicks counted per node** (`Runtime::countPress`, mygo's #347): the
+  system's count of quick presses starts over on a press of another node
+  than the last's, the innermost of the press's target and the node
+  taking its input, so a click and then one on its neighbor, or on what
+  the first click put under the pointer, is no double click. `deliver`,
+  which `Input::push` calls first for every event, takes the event by
+  reference and rewrites its count, so the frame's record sees the same;
+  a release carries its press's count, by button. A press of another
+  button that no node takes leaves the press a node holds. Tests that
+  double-click press once first, as a user does.
+- **A document follows its file renamed** however quickly: the watch
+  tells what a watched file it found gone was as it last saw it
+  (`FileWatcher::gone`, from `Scan::removedFile`), not a stat after the
+  batch, which may come after the next rename; and a document's stamp
+  holds the identity of the file it last read (`Files::stamp`'s third
+  item, which `Files::sameStamp` and recovery ignore), for a file another
+  app replaced and renamed before the watch looked again. Identities
+  hold the file's type: ext4 gives a freed inode to the next file made
+  (`Fs::same`).
+- **Renames paired by identity**: `Scan::diff` counts the entries before
+  and after by device, inode and type, so pairing is a lookup; comparing
+  every removed entry with every other made a directory of n files
+  renamed n² comparisons (20,000 files: 0.2 s now).
+- **A row's percentage maximum binds**: the content's least width is
+  measured where a percentage of the row does not resolve; the row clamps
+  it by the maximum, unless the node set its own least width.
+- **A diff fitting its content** folds its unchanged lines as it is
+  built (`DiffState::fit`), not only as it is drawn, so one below a
+  scroll container's view is as high as it shows; and it keeps no room
+  for a scroll bar it does not show (`Editor::trackWidth`).
+- **The updater** checks soon after every launch, and each window keeps
+  the language the app showed as its check began (`Session::$t`);
+  `Checker::text()` is made once per language.
+- **A drag's end** says whether it was given up (`Result::$escaped`:
+  Escape, `cancelDataDrag`, the window closing) and where it ended
+  (`$point`). AppKit's tracking loop takes Escape itself: the event that
+  ended the session tells it (key down, key code 53).
+- **Pitfalls**: `ObjC::msg('p:q', …, 'numberWithLong:', 42)` passes an
+  NSPoint (`q`), not a long (`l`), and FFI throws; an arrow function
+  captures by value, so a closure inside it that takes a variable by
+  reference takes the arrow's copy (`function () use (&$x)` instead); a
+  first-class callable keeps a parameter by reference
+  (`$input->direct = $this->deliver(...)`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

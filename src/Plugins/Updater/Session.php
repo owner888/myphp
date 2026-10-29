@@ -37,7 +37,8 @@ final class Session
     /** @var ?array{0: string, 1: bool} the user's response: an action, and whether updates may install automatically */
     private ?array $response = null;
 
-    public function __construct(private readonly Checker $u, bool $user)
+    /** @param Text $t the texts of the window, in the language the app showed when the check began: a window keeps its language while it is open */
+    public function __construct(private readonly Checker $u, public readonly Text $t, bool $user)
     {
         $this->user = $user;
     }
@@ -52,7 +53,7 @@ final class Session
         $this->release = (bool)$this->view['release'];
         [$width, $height] = Checker::size($this->release);
         $win = new Window(new WindowOptions(
-            title: $this->u->text()->s->title,
+            title: $this->t->s->title,
             width: $width,
             height: $height,
             useContentSize: true,

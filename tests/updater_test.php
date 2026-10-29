@@ -312,6 +312,48 @@ function updRelease(string $version, ?\Closure $install = null): Release
 })();
 
 (function () {
+    // A window keeps the language it opened in; after the app's language changes, the next window and the menu item take the new one (mygo's TestLanguageChange).
+    $h = new UpdHarness;
+    $proceed = false;
+    $h->result = function () use (&$proceed) { return updRelease('2.0.0', function () use (&$proceed): void { Fibers::until(function () use (&$proceed): bool { return $proceed; }); }); };
+    $done = $h->begin(true);
+    $s = $h->shown();
+    $v = updView($s, 'A new version of');
+    $s->respond($v['prompt'], 'install', false);
+    updView($s, 'Downloading update…');
+    $h->u->locale = fn(): string => 'zh-Hans';
+    $proceed = true;
+    $v = updView($s, 'Ready to Relaunch');
+    same('Software Update', $s->t->s->title, 'the texts of the open window');
+    $s->respond($v['prompt'], 'later', false);
+    updDone($done);
+    $done = $h->begin(true);
+    $s = $h->shown();
+    $v = updView($s, '可以重新启动了');
+    same('软件更新', $s->t->s->title, 'the texts of the next window');
+    $s->respond($v['prompt'], 'later', false);
+    updDone($done);
+    same('检查更新…', $h->u->text()->s->menuItem, 'the menu item');
+})();
+
+(function () {
+    // Soon after every launch, however recent the last check of an earlier launch, then an interval after it (mygo's TestCheckAtLaunch).
+    $h = new UpdHarness();
+    $waits = [];
+    $h->u->after = function (float $s, \Closure $fn) use (&$waits): void { $waits[] = $s; };
+    $h->u->load();
+    $h->u->state['lastCheck'] = ($h->u->now)()->modify('-1 hour');
+    $h->u->running = true;
+    $h->u->schedule();
+    same([10.0], $waits, 'the last launch checked an hour ago: soon after this one');
+    $d = $h->begin(false);
+    Fibers::runUntil(fn(): bool => $d->done);
+    $waits = [];
+    $h->u->schedule();
+    check(count($waits) === 1 && $waits[0] > 3600, 'then an interval after it, not at once again: ' . json_encode($waits));
+})();
+
+(function () {
     // When the next check is due.
     $now = new DateTimeImmutable('2026-09-30T12:00:00Z');
     $at = fn(string $rel) => $now->modify($rel);

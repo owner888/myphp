@@ -64,6 +64,7 @@ trait RuntimeTransition
             }
             $r->fresh = $r->laid + 1 !== $this->frameNumber;
             $r->t = $t; $r->elem = $e; $r->parent = $p->id; $r->built = $this->frameNumber;
+            $r->index = (int)array_search($e, $p->kids, true);
             $r->next = [$e->x - $p->x, $e->y - $p->y, $e->w, $e->h, 1.0, 1.0, 0.0];
             if ($r->ghost !== null) {
                 // Built again as a copy of it was going: it comes back from where the copy shows, as fast as it went.
@@ -166,10 +167,10 @@ trait RuntimeTransition
      */
     private function animateExits(array $byId, int $now, bool $still, bool $resized): void
     {
-        foreach ($this->trans as $id => $r) {
-            if ($r->built === $this->frameNumber) {
-                continue;
-            }
+        // The copies go under their parents in the order the nodes had among their siblings, as they leave together (mygo's de135d4), not the order their transitions began in.
+        $going = array_filter($this->trans, fn(TransitionState $r): bool => $r->built !== $this->frameNumber);
+        uksort($going, fn(int $a, int $b): int => [$going[$a]->index, $a] <=> [$going[$b]->index, $b]);
+        foreach ($going as $id => $r) {
             $exit = $r->t->exit;
             if ($r->ghost === null && ($exit === null || ($still && !$exit->fades()) || ($resized && $this->instant()) || $r->laid + 1 !== $this->frameNumber)) {
                 unset($this->trans[$id]);
@@ -282,6 +283,12 @@ trait RuntimeTransition
             return;
         }
         Layout::arrange($e, $b[0], $b[1], $b[2], $b[3]);
+    }
+
+    /** @internal Router: every node shows its colors at once the next time it paints, as one painted after a gap does: a node coming back with a page is not eased from the color of the node that held its place (mygo's forgetColors). */
+    public function forgetColors(): void
+    {
+        foreach ($this->trans as $r) { $r->colorSet = false; }
     }
 
     /**

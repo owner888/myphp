@@ -372,6 +372,13 @@ final class App
         ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
         // The dates the app shows are in the user's time zone, as a Go app's local time, whatever zone php.ini names (the developer's own, a server's UTC).
         date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
+        // AppKit's AutoFill heuristics watch every text input client for contact and password fields, in a helper process
+        // ("AutoFill (App)") and with sync calls that cost CPU and stall scrolling (mygo's 23ac61d, 2317b80): myphp draws
+        // its own fields, which never take those suggestions. macOS 26 reads the first, macOS 27 only the second.
+        $no = ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false);
+        $defaults = ObjC::msg('p:pp', ObjC::cls('NSMutableDictionary'), 'dictionaryWithObject:forKey:', $no, ObjC::str('NSAutoFillHeuristicControllerEnabled'));
+        ObjC::msg('v:pp', $defaults, 'setObject:forKey:', $no, ObjC::str('NSAutoFillHeuristicsEnabled'));
+        ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSUserDefaults'), 'standardUserDefaults'), 'registerDefaults:', $defaults);
         self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
         Native\Signals::quitOn(self::quit(...)); // SIGINT and SIGTERM quit as Quit does (mygo's quitOnSignals)
         ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', self::$policy->native());
@@ -829,10 +836,11 @@ final class App
     }
 
     /**
-     * Quits the app, then starts it again (mygo's Relaunch): the bundle's
-     * executable, which an update may have replaced. Under `myphp dev`,
-     * myphp dev starts it again. Nothing happens when quitting is
-     * canceled.
+     * Quits the app, then starts it again (mygo's Relaunch): the bundle
+     * through Launch Services, as the Dock opens it; an update installed
+     * (Update::install), once it has replaced the bundle as the app exited.
+     * Under `myphp dev`, myphp dev starts it again. Nothing happens when
+     * quitting is canceled.
      */
     public static function relaunch(): void
     {
@@ -844,6 +852,16 @@ final class App
     {
         if (getenv('MYPHP_DEV') === '1') {
             exit(self::DEV_RELAUNCH_CODE); // myphp dev starts it again
+        }
+        if (Update::relaunchStaged()) {
+            return; // the update's helper opens the new version once this one exited
+        }
+        $bundle = Native\Bundle::path();
+        $rest = array_slice($_SERVER['argv'] ?? [], 1);
+        if ($bundle !== null) { // through Launch Services, as the Dock (mygo's openBundle): a child of this process stays in its coalition, whose other processes loginwindow ends with an app the new one started
+            exec('/usr/bin/open -n ' . escapeshellarg($bundle) . ($rest !== [] ? ' --args ' . implode(' ', array_map('escapeshellarg', $rest)) : ''), $out, $code);
+            if ($code === 0) { return; }
+            Logger::warn("open -n $bundle failed ($code): starting its executable", 'app');
         }
         $cmd = implode(' ', array_map('escapeshellarg', Native\Bundle::command()));
         exec("nohup $cmd > /dev/null 2>&1 &");

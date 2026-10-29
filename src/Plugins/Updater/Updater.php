@@ -12,8 +12,10 @@ use RuntimeException;
  * The update window of MyPHP apps (mygo's plugins/updater), in the manner of
  * Sparkle: it checks for updates in the background, once a day by default,
  * and when a new version is out shows its release notes and offers to
- * install it, skip it or remind the user later. Installing downloads the
- * update with a progress bar, then offers to relaunch the app into it.
+ * install it, skip it or remind the user later. The first check is soon
+ * after launch, so a version that came out since the app last ran shows
+ * when it opens again. Installing downloads the update with a progress
+ * bar, then offers to relaunch the app into it.
  *
  *     App::use(Updater::plugin());
  *
@@ -83,7 +85,7 @@ final class Updater
         ($u->go)(fn() => $u->begin(true));
     }
 
-    /** A "Check for Updates…" item that calls checkForUpdates(). */
+    /** A "Check for Updates…" item that calls checkForUpdates(), labeled in the language the app shows now: an app rebuilding its menu as its language changes (App::onLocaleChanged) gets it relabeled. */
     public static function menuItem(): MenuItem
     {
         return new MenuItem(label: self::used()->text()->s->menuItem, click: fn() => self::checkForUpdates());

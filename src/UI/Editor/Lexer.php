@@ -112,7 +112,7 @@ class Lexer implements Tokenizer
                 Token::add($st->toks, $j, $s->kind);
                 $e = $j + strlen($s->interpOpen);
                 Token::add($st->toks, $e, Token::ESCAPE);
-                if ($st->stack >> 16 === 0) {
+                if ($st->stack >> 16 === 0 && $k + 1 < 1 << 5) { // an entry holds the string's index plus one in five bits: a string past that lexes its interpolations as text (mygo's 76ccea0)
                     $st->stack = ($st->stack << 8) | (($k + 1) << 3);
                     $st->mode = 0; $st->regexOK = true;
                     return $e;

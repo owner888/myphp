@@ -5,6 +5,7 @@ namespace MyPHP\Native;
 
 use Closure;
 use MyPHP\Transfer\{Data, Format, Item, Offer, Operation, Representation, Result};
+use MyPHP\{Point, Screen};
 use MyPHP\UI\DataDragEvent;
 
 /**
@@ -26,8 +27,10 @@ final class Drag
     /**
      * The drags on, by the address of their source object (mygo's
      * macDragSources): the request, the view, its provider objects, its
-     * NSDraggingSession, what failed providing, and itself.
-     * @var array<int, array{request: array, view: int, providers: list<mixed>, session: mixed, error: ?\Throwable, obj: mixed}>
+     * NSDraggingSession, what failed providing, itself, whether it was
+     * given up (Escape, or cancel()) rather than let go over no target,
+     * and where it ended.
+     * @var array<int, array{request: array, view: int, providers: list<mixed>, session: mixed, error: ?\Throwable, obj: mixed, escaped: bool, end: ?Point}>
      */
     private static array $sources = [];
     /** @var array<int, array{0: int, 1: Item}> each provider's source and item, by its address */
@@ -135,7 +138,7 @@ final class Drag
         self::define();
         $obj = ObjC::msg('p:', ObjC::alloc('MyPHPDragSource'), 'init');
         $key = ObjC::addr($obj);
-        self::$sources[$key] = ['request' => $r, 'view' => ObjC::addr($view), 'providers' => [], 'session' => null, 'error' => null, 'obj' => $obj];
+        self::$sources[$key] = ['request' => $r, 'view' => ObjC::addr($view), 'providers' => [], 'session' => null, 'error' => null, 'obj' => $obj, 'escaped' => false, 'end' => null];
         self::$viewDrags[ObjC::addr($view)] = $key;
         [$width, $height] = [$r['width'], $r['height']];
         if ($r['preview'] !== null) {
@@ -171,6 +174,7 @@ final class Drag
         $session = ObjC::msg('p:ppp', $view, 'beginDraggingSessionWithItems:event:source:', $dragging, $lastDown, $obj);
         if ($session === null) {
             self::$sources[$key]['error'] = new \RuntimeException('myphp: AppKit failed to start drag');
+            self::$sources[$key]['end'] = Screen::cursorScreenPoint();
             self::finish($key, 0);
             return;
         }
@@ -184,6 +188,7 @@ final class Drag
         if (!isset(self::$viewDrags[ObjC::addr($view)])) {
             return;
         }
+        self::$sources[self::$viewDrags[ObjC::addr($view)]]['escaped'] = true;
         $escape = ObjC::str("\e");
         $e = ObjC::msg('p:LqLdlpppbS', ObjC::cls('NSEvent'), 'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
             10 /* key down */, ObjC::point(0, 0), 0, 0.0, ObjC::msg('l:', ObjC::msg('p:', $view, 'window'), 'windowNumber'), null, $escape, $escape, false, 53);
@@ -341,7 +346,8 @@ final class Drag
         if ($src['session'] !== null) { ObjC::msg('v:', $src['session'], 'release'); }
         ObjC::msg('v:', $src['obj'], 'autorelease'); // the callback still uses it: let it go once AppKit returns
         $op = $src['error'] !== null ? Operation::NONE : self::operations($operation);
-        ($src['request']['done'])(new Result($op, $op === Operation::NONE && $src['error'] === null, $src['error']));
+        $canceled = $op === Operation::NONE && $src['error'] === null;
+        ($src['request']['done'])(new Result($op, $canceled, $src['error'], $canceled && $src['escaped'], $src['end']));
     }
 
     /** The objects of an NSArray. @internal @return list<mixed> */
@@ -373,8 +379,12 @@ final class Drag
                 return $src === null ? 0 : self::macOperations($src['request']['operations']);
             }],
             'draggingSession:endedAtPoint:operation:' => ['v@:@{CGPoint=dd}Q', 'v(pppqL)', function ($self, $cmd, $session, $point, $operation) {
-                if (isset(self::$sources[ObjC::addr($self)])) {
-                    self::finish(ObjC::addr($self), $operation);
+                if (isset(self::$sources[$key = ObjC::addr($self)])) {
+                    // AppKit's tracking loop takes Escape itself: the event that ended the session tells it from letting go.
+                    $ev = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
+                    if ($ev !== null && ObjC::msg('L:', $ev, 'type') === 10 && ObjC::msg('S:', $ev, 'keyCode') === 53) { self::$sources[$key]['escaped'] = true; }
+                    self::$sources[$key]['end'] = new Point((int)round($point->x), (int)round(Screens::primaryHeight() - $point->y));
+                    self::finish($key, $operation);
                 }
             }],
         ], ['NSDraggingSource']);

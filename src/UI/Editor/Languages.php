@@ -112,7 +112,7 @@ final class Languages
         $json = new Language('JSON', extensions: ['.json', '.jsonc', '.json5', '.webmanifest'], filenames: ['.babelrc', '.eslintrc', 'tsconfig.json'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 2,
             tokenizer: new JsonLexer(lineComments: ['//'], blockComments: $cBlock, strings: [$q('"'), $q("'")], words: Lexer::words(T::CONSTANT, 'true false null'), operators: ':'));
         $pyStrings = [];
-        foreach (['', 'r', 'R', 'b', 'B', 'u', 'U', 'f', 'F', 'rb', 'br', 'Rb', 'bR', 'fr', 'rf', 'Fr', 'rF'] as $p) {
+        foreach (['f', 'F', 'fr', 'rf', 'Fr', 'rF', '', 'r', 'R', 'b', 'B', 'u', 'U', 'rb', 'br', 'Rb', 'bR'] as $p) { // the f-strings first: the lexer's stack holds the index of a string with interpolations in five bits
             $raw = strpbrk($p, 'rR') !== false; $f = strpbrk($p, 'fF') !== false;
             foreach (['"""', "'''", '"', "'"] as $qq) {
                 $pyStrings[] = new LexString($qq, $qq, $raw ? '' : '\\', strlen($qq) === 3, $f ? '{' : '', $f ? '}' : '', $p);

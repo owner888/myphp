@@ -37,7 +37,7 @@ same(['a.txt', 'zed.txt'], array_map(fn($e) => $e['name'], $f->chosenEntries()),
 check($showing('2 of 4 chosen') !== null, 'the status counts the chosen');
 
 // A double click on a folder opens it; Backspace goes up; the breadcrumbs show the path.
-$h->clickOn($showing('Docs'), 0, 2);
+$h->clickOn($showing('Docs')); $h->clickOn($showing('Docs'), 0, 2); // the second press of two on it (Runtime::countPress)
 same("$dir/Docs", $f->path, 'a double click opens the folder');
 same(['Inner'], $names(), 'its entries');
 same([], $f->chosenEntries(), 'nothing chosen in the folder opened');

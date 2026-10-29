@@ -42,9 +42,19 @@ final class I18n
     /**
      * A BCP 47 tag in canonical form, as "zh-Hans-CN" or "en-GB", from a
      * tag or a POSIX locale ("zh_CN.UTF-8", "en_US@rg=gbzzzz" loses its
-     * keywords), or '' for one that names no language.
+     * keywords), or '' for one that names no language. Kept by tag, as
+     * formatting a message asks for it every time (mygo's normalized).
      */
     public static function normalize(string $tag): string
+    {
+        return self::$normalized[$tag] ??= self::canonical($tag);
+    }
+
+    /** @var array<string, string> normalize()'s answers, by tag */
+    private static array $normalized = [];
+
+    /** What normalize() answers, worked out. */
+    private static function canonical(string $tag): string
     {
         // A POSIX locale: language[_territory][.codeset][@modifier], the modifier perhaps a script.
         $tag = trim($tag); $modifier = '';
@@ -159,11 +169,8 @@ final class I18n
     /** @internal a normalized tag without its extensions and private use subtags, as "-u-ca-buddhist". */
     public static function stripExtensions(string $tag): string
     {
-        $parts = explode('-', $tag);
-        foreach ($parts as $i => $p) {
-            if ($i > 0 && strlen($p) === 1) { return implode('-', array_slice($parts, 0, $i)); }
-        }
-        return $tag;
+        // The first one-letter subtag, "-x-" or "-x" at the end, scanned for rather than split (mygo's 14a1455).
+        return preg_match('/-[^-](?=-|$)/', $tag, $m, PREG_OFFSET_CAPTURE) === 1 ? substr($tag, 0, $m[0][1]) : $tag;
     }
 
     /** Whether a tag is a pseudo locale, en-XA or ar-XB. */

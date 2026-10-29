@@ -246,6 +246,9 @@ final class Window
         if ($o->vibrancy !== '') {
             $this->setVibrancy($o->vibrancy);
         }
+        if ($this->flyout !== null && !$this->flyout['popover'] && $this->flyout['radius'] > 0) {
+            $this->roundFlyout($this->flyout['radius']);
+        }
         $delegate = self::delegate();
         if ($this->flyout !== null && $this->flyout['popover']) {
             $this->createPopover($delegate);
@@ -319,7 +322,7 @@ final class Window
     {
         $style = self::TITLED | ($o->disableClose ? 0 : self::CLOSABLE) | ($o->disableMinimize ? 0 : self::MINIATURIZABLE) | ($o->disableResize ? 0 : self::RESIZABLE);
         $hidden = match ($o->titleBarStyle) { 'default' => false, 'hidden', 'hiddenInset' => true, default => throw new \InvalidArgumentException("titleBarStyle {$o->titleBarStyle}") };
-        $this->hiddenTitleBar = $hidden && !$o->frameless; // the traffic lights stay, over the view
+        $this->hiddenTitleBar = $hidden && !$o->frameless && !$o->hideWindowButtons; // the traffic lights stay, over the view, unless the view draws its own
         if ($hidden || $o->frameless) { $style |= self::FULL_SIZE_CONTENT; } // the view fills the window, under the title bar
         $content = ObjC::rect(0, 0, $o->width, $o->height);
         if (!$o->useContentSize) { // the size is the window's: the content's is what its frame leaves
@@ -337,7 +340,7 @@ final class Window
             ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', true);
             ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', 1); // NSWindowTitleHidden
         }
-        if ($o->frameless) {
+        if ($o->frameless || ($hidden && $o->hideWindowButtons)) {
             for ($i = 0; $i < 3; $i++) { ObjC::msg('v:b', ObjC::msg('p:l', $this->ns, 'standardWindowButton:', $i), 'setHidden:', true); }
         }
         if ($o->titleBarStyle === 'hiddenInset' && !$o->frameless) {
@@ -380,6 +383,23 @@ final class Window
         }
         ObjC::msg('v:b', $this->ns, 'setHasShadow:', !$o->disableShadow);
         if ($o->opacity > 0 && $o->opacity < 1) { ObjC::msg('v:d', $this->ns, 'setAlphaValue:', $o->opacity); }
+    }
+
+    /**
+     * Cuts a flyout's content view, and the material in it, to corners of $radius points (mygo's roundFlyout): the
+     * window is clear, so its shadow, made of what it draws, follows them.
+     */
+    private function roundFlyout(int $radius): void
+    {
+        foreach ([$this->container, $this->effect] as $v) {
+            if ($v === null) { continue; }
+            ObjC::msg('v:b', $v, 'setWantsLayer:', true);
+            $layer = ObjC::msg('p:', $v, 'layer');
+            ObjC::msg('v:d', $layer, 'setCornerRadius:', (float)$radius);
+            ObjC::msg('v:p', $layer, 'setCornerCurve:', ObjC::str('continuous'));
+            ObjC::msg('v:b', $layer, 'setMasksToBounds:', true);
+        }
+        ObjC::msg('v:', $this->ns, 'invalidateShadow');
     }
 
     private function nativeView(WindowOptions $o)
@@ -464,8 +484,8 @@ final class Window
      * The room the window controls take in a window with a hidden title
      * bar (WindowOptions::$titleBarStyle), as mygo's Context.TitleBar:
      * height, left (to the right edge of the zoom button) and right, in
-     * points; all zero in other windows and in full screen, where the
-     * controls hide. The view keeps clear of them and drags the window by
+     * points; all zero in other windows, in full screen, where the
+     * controls hide, and with WindowOptions::$hideWindowButtons. The view keeps clear of them and drags the window by
      * its own title bar (Node::dragWindow).
      * @return array{height: float, left: float, right: float}
      */
@@ -617,6 +637,7 @@ final class Window
                         return;
                     }
                     $w->ns = null; // the popover's window goes
+                    $w->flyout['tray']?->highlight(false);
                     if ($w->popoverClosing) {
                         $w->popoverClosing = false;
                         return;
@@ -2152,10 +2173,10 @@ final class Window
         }
         [$side, $align] = Flyout::PLACEMENTS[$o->placement] ?? throw new \InvalidArgumentException("unknown flyout placement \"{$o->placement}\"");
         $width = $o->width ?: 200; $height = $o->height ?: 200;
-        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'popover' => $o->popover, 'width' => $width, 'height' => $height];
+        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'popover' => $o->popover, 'width' => $width, 'height' => $height, 'radius' => $o->cornerRadius];
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
-                disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true,
+                disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true, vibrancy: $o->vibrancy,
                 parent: $o->parent, content: $o->content, html: $o->html, url: $o->url, page: $o->page));
         } finally {
             self::$creating = null;
@@ -2421,6 +2442,7 @@ final class Window
         ObjC::msg('v:z', $this->popover, 'setContentSize:', $this->flyoutSize());
         ObjC::msg('v:rpL', $this->popover, 'showRelativeToRect:ofView:preferredEdge:', $r, $view, $edge);
         $this->ns = ObjC::msg('p:', $this->container, 'window'); // the window the popover shows in is the flyout's
+        $this->flyout['tray']?->highlight(true); // as AppKit's status items are while their menus show (mygo's e529e1a)
         if ($this->ns !== null) {
             ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $this->view);
         }
@@ -2457,6 +2479,7 @@ final class Window
         $this->ns = null;
         ObjC::msg('v:p', $this->popover, 'setDelegate:', null);
         if (ObjC::msg('b:', $this->popover, 'isShown')) {
+            $this->flyout['tray']?->highlight(false);
             ObjC::msg('v:b', $this->popover, 'setAnimates:', false);
             ObjC::msg('v:', $this->popover, 'close');
         }
@@ -2494,7 +2517,7 @@ final class Window
         [$pix, $width, $height] = self::dragImage($o->preview);
         DataDrag::start($this, $data, $local, $o->done, $o->operations, function (DataDrag $src) use ($o, $x, $y, $pix, $width, $height) {
             if ($this->destroyed) {
-                $src->finish(new Result(canceled: true));
+                $src->finish(new Result(canceled: true, escaped: true, point: Screen::cursorScreenPoint()));
                 return;
             }
             Drag::start($this->view, View::lastDown($this->view), ['data' => $src->data(), 'session' => $src->token, 'operations' => $src->operations,

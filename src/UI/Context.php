@@ -2076,10 +2076,11 @@ final class Context
      * Down shows them all; Up and Down move among them and Enter chooses,
      * as does a click; Escape closes them, and the text goes back to the
      * choice when the field loses the focus. changed() reports a new
-     * choice.
+     * choice. $placeholder shows while it is empty; autoFocus() on the field
+     * gives the focus to its input.
      * @param list<string> $options
      */
-    public function combobox(string &$selected, array $options, float $width = 0): Node
+    public function combobox(string &$selected, array $options, float $width = 0, string $placeholder = ''): Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -2089,7 +2090,8 @@ final class Context
         $local = $rt?->local($f->id, $make) ?? $make();
         $state = $local->text;
           [, $h] = $this->metrics->measure('X', $t->fontSize);
-          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, in the field's box
+          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $placeholder, null, $t->fontSize, $t->text)); // the input, unframed, in the field's box
+          $f->focusTo = $in; // autoFocus() and focusBind() on the box give the focus to the input (mygo's focusTo)
           $in->edit = $state; $in->changed = $state->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(25), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->role = Role::COMBO_BOX; $in->nameFrom = $f;
@@ -2106,6 +2108,7 @@ final class Context
             if (!$local->open) { $state->selectAll(); } // a click opening them selects the choice, for the next key to replace and filter; clicks while they show place the caret
         } elseif ($this->clicked($f)) { $focus = true; } // the box's padding: the input takes the focus
         if ($focus && $rt !== null) { $rt->focus = $in->id; $in->focused = true; }
+        $f->focused = $in->focused; // the box reports its input's focus
         $shown = $local->typed ? self::matching($options, $state->text) : $options;
         $chosen = $this->comboPopup($in, $f, $state, $local, $shown, true, false, $click);
         $state->submitted = false; // Enter on no highlight is nothing to a combobox
@@ -2150,11 +2153,13 @@ final class Context
      * Backspace while empty takes out the last; the $suggestions containing
      * what was typed show below, those not tokens yet, Up and Down moving
      * among them and Enter or a click adding one. The field wraps its
-     * chips onto more lines. changed() reports a change.
+     * chips onto more lines. changed() reports a change. $placeholder
+     * shows while its input is empty; autoFocus() on the field gives the
+     * focus to its input.
      * @param list<string> $tokens
      * @param list<string> $suggestions
      */
-    public function tokenField(array &$tokens, array $suggestions = [], float $width = 0): Node
+    public function tokenField(array &$tokens, array $suggestions = [], float $width = 0, string $placeholder = ''): Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -2178,7 +2183,8 @@ final class Context
           }
           [, $h] = $this->metrics->measure('X', $t->fontSize);
           $this->key('input'); // mygo's: the input keeps its identity, whatever tokens come before it
-          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, '', null, $t->fontSize, $t->text)); // the input, unframed, after the chips
+          $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $placeholder, null, $t->fontSize, $t->text)); // the input, unframed, after the chips
+          $f->focusTo = $in;
           $in->edit = $state; $in->changed = $state->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->min($t->space(20), 0);
           $in->focused = $rt?->focused($in->id) ?? false;
           $in->nameFrom = $f;
@@ -2186,6 +2192,7 @@ final class Context
         $this->end();
         $f->borderColor = $in->focused ? $t->accent : ($this->hovered($f) ? Theme::mix($t->border, $t->text, 0.25) : null);
         if ($this->clicked($f) && $rt !== null) { $rt->focus = $in->id; $in->focused = true; }
+        $f->focused = $in->focused;
         if ($in->focused && $tokens !== [] && $state->text === '' && $this->shortcut(Key::DELETE)) { array_pop($tokens); $changed = true; }
         $shown = [];
         if (($q = trim($state->text)) !== '') {
@@ -3539,7 +3546,7 @@ final class Context
         // The header, which scrolls sideways with the rows: a click sorts by a sortable column, a drag moves a column, a drag at a header's end edge resizes it.
         $head = $this->row(0, 0)->align(Node::STRETCH)->size(0, $rowH)->role(Role::ROW)->clip();
         $edges = [];
-        $heads = $cells(function (int $j) use ($columns, $state, $t, &$edges) {
+        $heads = $cells(function (int $j) use ($columns, $state, $t, &$edges, $layout, $order) {
             $col = $columns[$j];
             $this->text($col->title, $t->fontSize, $t->textMuted, Font::BOLD);
             $place = $col->sortable ? $state->sortPlace($col->id()) : null;
@@ -3549,7 +3556,7 @@ final class Context
                 }
                 $this->text($place[1] ? '▾' : '▴', $t->fontSize - 2, $t->textMuted)->role(Role::NONE)->marginStart($t->space(1));
             }
-            if (!$col->fixed) {
+            if (!$col->fixed && !($layout->width($col) === null && $j === $order[count($order) - 1])) { // the last column sharing the room left ends at the table's end: an edge there would resize nothing, as AppKit's has none (mygo's 976f17c)
                 $edges[$j] = $this->key('g' . $col->id())->column()->absolute()->top(0)->bottom(0)->end(0)->size($t->space(2), 0)->cursor(Cursor::ResizeEW)->role(Role::NONE);
                 $this->end();
             }
@@ -4111,6 +4118,7 @@ final class Context
         $this->end();
         $sel->popup(function (Node $panel) use ($sel, $options, $index, $t): void {
             $this->stylePanel($panel);
+            $panel->scroll($this->runtime?->local($panel->id, fn() => new ScrollState) ?? new ScrollState); // options past the room the window has scroll (mygo's 39a5543): the panel is no taller than it (Layout::roomAlong)
             foreach ($options as $i => $opt) {
                 $item = $sel->item($i)->padding($t->space(1.5), $t->space(2.5))->round($t->radius);
                 $fg = $t->text;

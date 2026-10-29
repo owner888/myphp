@@ -20,7 +20,7 @@ final class Watches
 {
     /** How often the watches are looked at, in seconds. */
     public const POLL = 0.25;
-    /** @var array<string, array{refs: int, watcher: FileWatcher, known: ?array{0: int, 1: int}}> by path */
+    /** @var array<string, array{refs: int, watcher: FileWatcher}> by path */
     private static array $files = [];
     private static bool $polling = false;
 
@@ -43,7 +43,7 @@ final class Watches
         } catch (\Throwable) {
             return; // the file is gone: the looks when a window gets the keyboard remain
         }
-        self::$files[$path] = ['refs' => 1, 'watcher' => $w, 'known' => self::identity($w->root())];
+        self::$files[$path] = ['refs' => 1, 'watcher' => $w];
         // What changed before the watch started, as after a rename.
         Host::later(function () use ($path): void {
             foreach (Registry::at($path) as $d) {
@@ -85,34 +85,54 @@ final class Watches
     {
         $f = self::$files[$path];
         $moved = '';
-        if (end($events)->op === FileOp::FileRemove && $f['known'] !== null) {
-            $moved = self::findRenamed(dirname($f['watcher']->root()), $f['known']);
+        // The file that went away, by what it was when the watch last saw it (mygo's 924b727), as a look now may come
+        // after the next rename, or else as the document last read or wrote it: the watch looks once changes settle, so a file that
+        // replaced the one it saw, which the document read (when the watch started, or its window got the keyboard),
+        // can be renamed before the watch ever saw it (mygo's 8f6864d).
+        $docs = Registry::at($path);
+        if (end($events)->op === FileOp::FileRemove) {
+            $moved = self::findRenamed(dirname($f['watcher']->root()), [$f['watcher']->gone(), ...array_map(fn($d) => $d->fileIdentity(), $docs)]);
         }
-        foreach (Registry::at($path) as $d) {
+        foreach ($docs as $d) {
             $moved !== '' ? $d->moved($moved) : $d->checkDisk();
-        }
-        if ($moved === '' && isset(self::$files[$path])) {
-            self::$files[$path]['known'] = self::identity($f['watcher']->root()) ?? $f['known'];
         }
     }
 
-    /** The device and inode of the file at $path, which a rename keeps, or null. @return ?array{0: int, 1: int} */
+    /**
+     * The device, inode and type of the file at $path, which a rename keeps, or null: the type too, as a file system
+     * such as ext4 gives a freed inode to the next file created (mygo's 0915563).
+     * @return ?array{0: int, 1: int, 2: int}
+     */
     private static function identity(string $path): ?array
     {
         clearstatcache(true, $path);
         $st = @lstat($path);
-        return $st === false ? null : [$st['dev'], $st['ino']];
+        return $st === false ? null : [$st['dev'], $st['ino'], $st['mode'] & 0o170000];
     }
 
-    /** The path of the file in $dir that is the file of $identity, or ''. @param array{0: int, 1: int} $identity */
-    private static function findRenamed(string $dir, array $identity): string
+    /**
+     * The path of the file in $dir that one of $ids identifies, the first of them that one does, or ''.
+     * @param list<?array{0: int, 1: int, 2: int}> $ids
+     */
+    private static function findRenamed(string $dir, array $ids): string
     {
+        if (array_filter($ids) === []) {
+            return '';
+        }
+        [$found, $at] = ['', count($ids)];
         foreach (scandir($dir) ?: [] as $name) {
-            if ($name !== '.' && $name !== '..' && self::identity("$dir/$name") === $identity) {
-                return "$dir/$name";
+            if ($name === '.' || $name === '..') {
+                continue;
+            }
+            $id = self::identity("$dir/$name");
+            foreach (array_slice($ids, 0, $at) as $i => $want) {
+                if ($want !== null && $want === $id) {
+                    [$found, $at] = ["$dir/$name", $i];
+                    break;
+                }
             }
         }
-        return '';
+        return $found;
     }
 
     /** The paths watched, for tests. @return list<string> */

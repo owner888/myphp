@@ -25,7 +25,7 @@ trait EditorPaint
         if ($this->o->signs) { $this->textX += 2 * $v->charWidth; }
         $this->viewH = $h;
         $wrap = $this->o->wrap !== $this->toggledWrap;
-        $ww = $w - $this->textX - self::SCROLLBAR_WIDTH - 4;
+        $ww = $w - $this->textX - $this->trackWidth() - 4; // a diff fitting its content wraps at its edge, no scroll bar's room kept (mygo's 1967821)
         if ($this->o->wrapColumn > 0) { $ww = min($ww, $this->o->wrapColumn * $v->charWidth); }
         $v->setWrap($wrap, max($ww, $v->charWidth * 8));
         if ($wrap) {

@@ -268,6 +268,8 @@ final class Node
     /** Attached to a point of the parent's padding box, or of $attachTarget's box in the window (attach, attachTo): [the point there, the node's own point] as Anchor cases. @var ?array{0: Anchor, 1: Anchor} */
     public ?array $attach = null;
     public ?Node $attachTarget = null;
+    /** @internal Context (combobox, tokenField): the input a field's box gives the focus to, which autoFocus() and focusBind() on the box go to (mygo's focusTo). */
+    public ?Node $focusTo = null;
     /** Whether arrange() placed it this frame: what attachTo reads its target's box from. */
     public bool $laid = false;
     /** @internal Context::memo: 1 for a memo's node built this frame, 2 for one placed again as it was; and the frame it was last placed in. */
@@ -599,6 +601,7 @@ final class Node
     public function focusBind(mixed &$field, mixed $value): static
     {
         if ($value === null) { throw new \InvalidArgumentException('focusBind: null is no member, but the focus on none'); }
+        if ($this->focusTo !== null) { $this->focusTo->focusBind($field, $value); return $this; }
         $this->focusable = true;
         $this->context?->runtime?->focusBind($field, $value, $this);
         return $this;
@@ -1692,6 +1695,7 @@ final class Node
     /** Gives the node the keyboard focus in the frame it appears, as the first field of a dialog (mygo's AutoFocus); it makes it focusable. */
     public function autoFocus(): static
     {
+        if ($this->focusTo !== null) { $this->focusTo->autoFocus(); return $this; } // a field's box: its input (combobox, tokenField)
         $this->focusable = true;
         $rt = $this->context?->runtime;
         if ($rt !== null && $rt->rectOf($this->id) === null) {

@@ -276,6 +276,54 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     same(watchJson([ev(FileOp::FileRename, 'b', false, 'a'), ev(FileOp::FileWrite, 'b')]), watchJson($events), 'a rename, then a write');
 })();
 
+(function () {
+    // A file replaced at its path by another, as an atomic save renames a temporary file over it: a write (mygo's c0c4c42).
+    $dir = watchDir();
+    file_put_contents("$dir/doc", 'old');
+    $old = ['doc' => \MyPHP\Native\FileWatch\Fs::lstat("$dir/doc")];
+    file_put_contents("$dir/.doc.tmp", 'new');
+    rename("$dir/.doc.tmp", "$dir/doc");
+    $events = Scan::diff($old, ['doc' => \MyPHP\Native\FileWatch\Fs::lstat("$dir/doc")], []);
+    same(watchJson([ev(FileOp::FileWrite, 'doc')]), watchJson($events), 'replaced at its path: written, not removed and created');
+})();
+
+(function () use ($noDebounce) {
+    // A watched file renamed away: the batch says what it was as the watch last saw it, the file a document follows (mygo's 924b727).
+    $dir = watchDir();
+    file_put_contents("$dir/doc", 'x');
+    $st = stat("$dir/doc");
+    $w = App::watchFiles("$dir/doc", $noDebounce());
+    rename("$dir/doc", "$dir/moved");
+    watchNotice($w, '..', new Notice(kind: Notice::REMOVE, name: 'doc'));
+    $events = $w->next(2);
+    check($events !== null && end($events)->op === FileOp::FileRemove, 'removed');
+    same([$st['dev'], $st['ino'], $st['mode'] & 0o170000], $w->gone(), 'what it was, as the watch saw it');
+    file_put_contents("$dir/doc", 'y');
+    watchNotice($w, '..', new Notice(kind: Notice::CREATE, name: 'doc'));
+    $w->next(2);
+    same(null, $w->gone(), 'a batch that removes nothing: none');
+    $w->close();
+})();
+
+(function () {
+    // A directory of many files renamed pairs them by identity, not by comparing every entry with every other (mygo's d7b4d54); a hard link stays unpaired.
+    $before = ['d' => [1, 1, 0o040755, 0, 0]]; $after = ['e' => [1, 1, 0o040755, 0, 0]];
+    for ($i = 0; $i < 20000; $i++) { $before["d/$i"] = $after["e/$i"] = [1, 10 + $i, 0o100644, 1, 1]; }
+    $t = hrtime(true);
+    $events = Scan::diff($before, $after, []);
+    $ms = (hrtime(true) - $t) / 1e6;
+    check(count($events) === 1 && $events[0]->op === FileOp::FileRename && $events[0]->path === 'e' && $ms < 2000, sprintf('20,000 files renamed with their directory: the directory\'s rename, in %.0f ms', $ms));
+    $linked = ['a' => [1, 5, 0o100644, 1, 1], 'b' => [1, 5, 0o100644, 1, 1]];
+    same(watchJson([ev(FileOp::FileRemove, 'a'), ev(FileOp::FileCreate, 'c')]), watchJson(Scan::diff($linked, ['b' => $linked['b'], 'c' => $linked['a']], [])), 'a hard link: removed and created, not renamed');
+})();
+
+(function () {
+    // A file system such as ext4 gives a freed inode to the next file created: a directory replaced by a symlink with its inode is a removal and a creation, not a write (mygo's TestFileWatchDiffReusedInode).
+    $before = ['a' => [1, 2, 0o040700, 0, 0], 'a/f' => [1, 3, 0o100644, 0, 0]];
+    $after = ['a' => [1, 2, 0o120777, 0, 0]];
+    same(watchJson([ev(FileOp::FileRemove, 'a', true), ev(FileOp::FileCreate, 'a'), ev(FileOp::FileRemove, 'a/f')]), watchJson(Scan::diff($before, $after, [])), 'a directory, then a symlink with its inode');
+})();
+
 (function () use ($noDebounce) {
     // A file is watched through its directory: written, replaced as editors save, removed and created again, then gone with its directory.
     $dir = watchDir() . '/dir';

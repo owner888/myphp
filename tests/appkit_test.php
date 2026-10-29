@@ -85,3 +85,9 @@ $threw = '';
 try { App::setOpenAtLogin(true); } catch (\RuntimeException $e) { $threw = $e->getMessage(); }
 check(str_contains($threw, 'needs an app bundle'), "starting at login needs a bundle: $threw");
 check(!App::openAtLogin(), 'without one, it does not');
+
+// A tray icon's right-clicks: the right button's, and the primary's with Control held, as a Control-click is a secondary click across macOS (mygo's TestSecondaryClick).
+[$leftUp, $rightUp] = [2, 4];
+[$shift, $control, $option, $command] = [1 << 17, 1 << 18, 1 << 19, 1 << 20];
+same([false, false, false, false, true, true, true, true], array_map(fn(array $c) => \MyPHP\Tray::secondaryClick(...$c),
+    [[$leftUp, 0], [$leftUp, $shift], [$leftUp, $option], [$leftUp, $command], [$leftUp, $control], [$leftUp, $control | $shift], [$rightUp, 0], [$rightUp, $control]]), 'a Control-click is a right-click');

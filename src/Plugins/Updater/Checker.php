@@ -45,7 +45,9 @@ final class Checker
     /** @var Closure(Session): void creates the window of a session and shows it */
     public Closure $open;
 
+    /** The texts of $textLang, the last language asked for. */
     private ?Text $text = null;
+    private string $textLang = '';
     private bool $loaded = false;
     /** "" when the state cannot be saved. */
     private string $file = '';
@@ -59,6 +61,8 @@ final class Checker
     /** The generation of the timer of the next automatic check, null when none is armed. */
     public ?int $timer = null;
     private int $timers = 0;
+    /** Set once a check began since launch: until then the next one is soon, however recent the last check of an earlier launch. */
+    public bool $launchChecked = false;
     /** When the last automatic check failed, which retries sooner than the interval. */
     public ?DateTimeImmutable $failed = null;
     /** The check in progress, and the update installed while the app runs, which runs at the next launch. */
@@ -96,10 +100,18 @@ final class Checker
         return $release ? [self::RELEASE_WIDTH, self::RELEASE_HEIGHT] : [self::STATUS_WIDTH, self::STATUS_HEIGHT];
     }
 
-    /** The texts of the window, in the language chosen once. */
+    /**
+     * The texts of the window in the language the app shows now ($opts->language, else App::locale): after
+     * App::setLocale, or a change of the user's languages, the next window and menu item take the new one. Made once
+     * per language.
+     */
     public function text(): Text
     {
-        return $this->text ??= Text::for($this->opts->language !== '' ? $this->opts->language : ($this->locale)(), $this->opts->strings);
+        $lang = $this->opts->language !== '' ? $this->opts->language : ($this->locale)();
+        if ($this->text === null || $this->textLang !== $lang) {
+            [$this->text, $this->textLang] = [Text::for($lang, $this->opts->strings), $lang];
+        }
+        return $this->text;
     }
 
     /** The PNG image of the update window: Options::$icon, else the project's icon.png among the app's resources, or null. */
@@ -220,7 +232,7 @@ final class Checker
             return;
         }
         $now = ($this->now)();
-        $wait = max(self::nextCheck($this->state['lastCheck'], $this->failed, $this->opts->interval, $now) - self::seconds($now), $this->firstCheckWait);
+        $wait = $this->launchChecked ? max(self::nextCheck($this->state['lastCheck'], $this->failed, $this->opts->interval, $now) - self::seconds($now), $this->firstCheckWait) : $this->firstCheckWait;
         $gen = $this->timer = ++$this->timers;
         ($this->after)($wait, function () use ($gen): void {
             if ($this->timer === $gen) {
@@ -281,7 +293,8 @@ final class Checker
         if (!$user && $this->installed !== null) {
             return;
         }
-        $s = $this->session = new Session($this, $user);
+        $s = $this->session = new Session($this, $this->text(), $user); // its window speaks the app's language as the check begins, and keeps it while open
+        $this->launchChecked = true;
         $this->timer = null;
         try {
             $this->run($s);
@@ -303,9 +316,9 @@ final class Checker
     /** Checks for updates and drives the update window. */
     private function run(Session $s): void
     {
-        $t = $this->text();
+        $t = $s->t;
         if (!($this->enabled)()) {
-            $s->set($this->unavailableView());
+            $s->set($this->unavailableView($t));
             $s->show();
             $s->wait();
             return;
@@ -314,7 +327,7 @@ final class Checker
             $this->offerRelaunch($s, $this->installed);
             return;
         }
-        $s->set(['title' => $t->s->checking, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton(false)]);
+        $s->set(['title' => $t->s->checking, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton($t, false)]);
         if ($s->user) {
             $s->show();
         }
@@ -331,14 +344,14 @@ final class Checker
         $this->checked($err);
         if ($err !== null) {
             if ($s->user) {
-                $s->set($this->errorView($t->s->checkError, $err));
+                $s->set($this->errorView($t, $t->s->checkError, $err));
                 $s->wait();
             }
             return;
         }
         if ($r === null) {
             if ($s->user) {
-                $s->set(['title' => $t->s->upToDate, 'message' => sprintf($t->s->upToDateMessage, App::name(), ($this->appVersion)()), 'buttons' => $this->okButton()]);
+                $s->set(['title' => $t->s->upToDate, 'message' => sprintf($t->s->upToDateMessage, App::name(), ($this->appVersion)()), 'buttons' => $this->okButton($t)]);
                 $s->wait();
             }
             return;
@@ -354,7 +367,7 @@ final class Checker
                 return;
             }
         }
-        $s->set($this->availableView($r, $automatic));
+        $s->set($this->availableView($t, $r, $automatic));
         $s->show();
         [$action, $auto] = $s->wait();
         if ($action === 'close') {
@@ -375,15 +388,15 @@ final class Checker
     /** Downloads and installs $r, showing its progress when the window shows, then offers to relaunch. */
     private function install(Session $s, Release $r): void
     {
-        $t = $this->text();
-        $s->set($this->downloadingView(0, 0));
+        $t = $s->t;
+        $s->set($this->downloadingView($t, 0, 0));
         $err = null;
         try {
             ($r->install)(function (int $downloaded, int $total) use ($s, $t): void {
                 if ($downloaded < $total) {
-                    $s->set($this->downloadingView($downloaded, $total));
+                    $s->set($this->downloadingView($t, $downloaded, $total));
                 } else {
-                    $s->set(['title' => $t->s->installing, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton(true)]);
+                    $s->set(['title' => $t->s->installing, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton($t, true)]);
                 }
             }, fn(): bool => $s->canceled);
         } catch (Throwable $e) {
@@ -394,7 +407,7 @@ final class Checker
         }
         if ($err !== null) {
             if ($s->user || $s->shown) {
-                $s->set($this->errorView($t->s->installError, $err));
+                $s->set($this->errorView($t, $t->s->installError, $err));
                 $s->show();
                 $s->wait();
             }
@@ -408,7 +421,7 @@ final class Checker
 
     private function offerRelaunch(Session $s, Release $r): void
     {
-        $t = $this->text();
+        $t = $s->t;
         $s->set([
             'title' => $t->s->ready,
             'message' => sprintf($t->s->readyMessage, App::name(), $r->version),
@@ -421,35 +434,33 @@ final class Checker
     }
 
     /** @return list<array<string, mixed>> */
-    private function okButton(): array
+    private function okButton(Text $t): array
     {
-        return [['action' => 'ok', 'label' => $this->text()->s->ok, 'default' => true, 'cancel' => true]];
+        return [['action' => 'ok', 'label' => $t->s->ok, 'default' => true, 'cancel' => true]];
     }
 
     /** @return list<array<string, mixed>> */
-    private function cancelButton(bool $disabled): array
+    private function cancelButton(Text $t, bool $disabled): array
     {
-        return [['action' => 'cancel', 'label' => $this->text()->s->cancel, 'cancel' => true] + ($disabled ? ['disabled' => true] : [])];
+        return [['action' => 'cancel', 'label' => $t->s->cancel, 'cancel' => true] + ($disabled ? ['disabled' => true] : [])];
     }
 
     /** @return array<string, mixed> */
-    private function unavailableView(): array
+    private function unavailableView(Text $t): array
     {
-        $t = $this->text();
         $msg = App::isDev() ? $t->s->developmentBuild : sprintf($t->s->unavailableMessage, App::name());
-        return ['title' => $t->s->unavailable, 'message' => $msg, 'buttons' => $this->okButton()];
+        return ['title' => $t->s->unavailable, 'message' => $msg, 'buttons' => $this->okButton($t)];
     }
 
     /** @return array<string, mixed> */
-    private function errorView(string $msg, Throwable $err): array
+    private function errorView(Text $t, string $msg, Throwable $err): array
     {
-        return ['title' => $this->text()->s->error, 'message' => $msg, 'detail' => $err->getMessage(), 'buttons' => $this->okButton()];
+        return ['title' => $t->s->error, 'message' => $msg, 'detail' => $err->getMessage(), 'buttons' => $this->okButton($t)];
     }
 
     /** @return array<string, mixed> */
-    private function availableView(Release $r, bool $automaticDownloads): array
+    private function availableView(Text $t, Release $r, bool $automaticDownloads): array
     {
-        $t = $this->text();
         $name = App::name();
         $notes = Markdown::parse($r->notes);
         return [
@@ -468,10 +479,9 @@ final class Checker
     }
 
     /** @return array<string, mixed> */
-    private function downloadingView(int $downloaded, int $total): array
+    private function downloadingView(Text $t, int $downloaded, int $total): array
     {
-        $t = $this->text();
-        $v = ['title' => $t->s->downloading, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton(false)];
+        $v = ['title' => $t->s->downloading, 'bar' => true, 'progress' => -1, 'buttons' => $this->cancelButton($t, false)];
         if ($total > 0) {
             $v['progress'] = $downloaded / $total;
             $v['message'] = sprintf($t->s->progress, $t->megabytes($downloaded), $t->megabytes($total));

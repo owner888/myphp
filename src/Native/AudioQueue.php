@@ -13,7 +13,7 @@ use MyPHP\Logger;
  * the default output, which follows it as it changes, of 48 kHz stereo
  * 32-bit floats. mygo's queue calls back on a thread of its own; this one
  * calls back on the main thread's run loop, in its common modes, so that
- * PHP mixes there, Output::FRAMES at a time, Output::BUFFERS ahead.
+ * PHP mixes there, Output::FRAMES at a time, as many buffers ahead as the latency keeps (Latency::buffers).
  * @internal
  */
 final class AudioQueue implements Device
@@ -73,7 +73,7 @@ final class AudioQueue implements Device
     public function start(): void
     {
         $c = self::c();
-        for ($i = 0; $i < Output::BUFFERS; $i++) { // start once every buffer holds something, not to begin with an underrun
+        for ($i = 0, $n = Output::$latency->buffers(); $i < $n; $i++) { // start once every buffer holds something, not to begin with an underrun
             $b = $c->new('AudioQueueBuffer*');
             if (($st = $c->AudioQueueAllocateBuffer($this->q, Output::FRAMES * Mixer::CHANNELS * 4, FFI::addr($b))) !== 0) {
                 $this->close();

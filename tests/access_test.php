@@ -108,6 +108,13 @@ accessSend($t, ['access', $field->id, AccessNode::SET_VALUE, 'Grace']);
 same('Grace', $d['name']->text, 'setting the text field\'s value');
 $f = accessNode($t->rt->accessTree, Role::TEXT_FIELD, '');
 check($f->value === 'Grace' && $f->selStart === 5 && $f->selEnd === 5 && $t->rt->accessTree->focus === $f->id, 'the field after setting it: its value, caret and focus');
+// Inserting text replaces the selection, as typing does: what assistive technology and automation type with AXSelectedText.
+accessSend($t, ['access', $field->id, AccessNode::SELECT_TEXT, '', 0, 5]);
+accessSend($t, ['access', $field->id, AccessNode::INSERT_TEXT, 'Ada']);
+same('Ada', $d['name']->text, 'inserting over the selection');
+accessSend($t, ['access', $field->id, AccessNode::INSERT_TEXT, ' L.']);
+$f = accessNode($t->rt->accessTree, Role::TEXT_FIELD, '');
+check($d['name']->text === 'Ada L.' && $f->selStart === 6 && $f->selEnd === 6, 'inserting at the caret: ' . $d['name']->text);
 
 // A list's rows say which of all they are, and that they can be chosen.
 $sel = new ListState; $sel->selected = -1;
@@ -242,3 +249,26 @@ $d = new \MyPHP\UI\Editor\DiffState(new \MyPHP\UI\Editor\Buffer("a\nb\n"), new \
 $t = diffViewer($d, 600, 300);
 accessSend($t, ['accessOn']);
 check(accessNode($t->rt->accessTree, Role::TEXT_FIELD, 'Old text') !== null && accessNode($t->rt->accessTree, Role::TEXT_FIELD, 'New text') !== null, 'the sides of a diff viewer are named');
+
+// A row named by what is inside it takes the Label of what has one, not its texts (mygo's df5074b): "Done Write the report", not "✓ Write the report".
+$t = new Headless(function (Context $c): void {
+    $c->list(new ListState, 2, function (int $i) use ($c) {
+        $c->row(8, 8);
+          $c->text('✓')->label('Done');
+          $c->text("Task $i");
+          $c->text('hidden')->invisible();
+        $c->end();
+    })->size(300, 200);
+}, 400, 300);
+$t->frame();
+accessSend($t, ['accessOn']);
+$labels = array_map(fn(AccessNode $n) => $n->label, array_values(array_filter($t->rt->accessTree->nodes, fn(AccessNode $n) => in_array($n->role, [Role::ROW, Role::LIST_ITEM], true))));
+same(['Done Task 0', 'Done Task 1'], $labels, 'rows named by the labels inside them, nothing of what is invisible');
+
+if (PHP_OS_FAMILY === 'Darwin') { // what an AXValue is set to may be a number, which has no UTF8String (mygo's stringOf)
+    \MyPHP\Native\ObjC::boot(['Foundation', 'AppKit']);
+    $O = \MyPHP\Native\ObjC::class;
+    same('42', $O::textOf($O::msg('p:l', $O::cls('NSNumber'), 'numberWithLong:', 42)), 'a number set as a value: its text');
+    same('héllo', $O::textOf($O::msg('p:p', $O::alloc('NSAttributedString'), 'initWithString:', $O::str('héllo'))), 'an attributed string: its string');
+    same('', $O::textOf($O::msg('p:', $O::cls('NSArray'), 'array')), 'anything else: none');
+}

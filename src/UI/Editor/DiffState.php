@@ -322,7 +322,7 @@ final class DiffState
               $ed->grow = 1; $ed->alignSelf(Node::STRETCH);
               $this->buildSeparators($c, $ct, $root);
             $c->end();
-            if ($this->fitContent) { $root->fh = $this->eds[1]->view->heights->total(); }
+            if ($this->fitContent) { $this->fit(); $root->fh = $this->eds[1]->view->heights->total(); }
             return $root;
         }
         // Side by side: two editors sharing their scroll.
@@ -365,8 +365,30 @@ final class DiffState
           }
           $this->buildSeparators($c, $ct, $row);
         $c->end();
-        if ($this->fitContent) { $row->fh = max($this->eds[0]->view->heights->total(), $this->eds[1]->view->heights->total()); }
+        if ($this->fitContent) { $this->fit(); $row->fh = max($this->eds[0]->view->heights->total(), $this->eds[1]->view->heights->total()); }
         return $row;
+    }
+
+    /**
+     * Lays out a diff that fits its content as its drawing does, its unchanged lines folded, at the size its editors
+     * were built at (mygo's fit): a diff not drawn yet, as one below the view of a scroll container, is then as high
+     * as it shows, not as all its lines, else it would shrink as it came into view, and the container's end with it,
+     * under the user scrolling.
+     */
+    private function fit(): void
+    {
+        $eds = $this->eds;
+        if ($this->layout === DiffLayout::DiffUnified) {
+            $eds = [$this->eds[1]];
+            $ed = $this->eds[1];
+            $this->oldView->style = $ed->view->style;
+            $this->oldView->setStyle($ed->tp, $ed->view->size, $ed->o->lineHeight, max(1.0, $ed->view->scale), $ed->tabSize());
+            $this->oldView->setWrap($ed->view->wrap, $ed->view->wrapWidth);
+        }
+        $this->prepare();
+        foreach ($eds as $ed) {
+            $ed->layout($ed->r[2] > 0 ? $ed->r[2] : 600.0, $ed->viewH, max(1.0, $ed->view->scale));
+        }
     }
 
     /** Reveals lines of the gap starting at old line $a: at its top, below the change before it ($dir 1), at its bottom (-1), or all. */
@@ -664,8 +686,8 @@ final class DiffState
         $ed = $this->eds[1];
         $this->built = $this->geom();
         $render = $this->renderSeparator ?? DiffSeparator::default(...);
-        // Across the viewer, as wide as the last frame laid it out, less the scroll bar.
-        $width = max(0.0, ($c->runtime?->rectOf($parent->id)[2] ?? 0.0) - Editor::SCROLLBAR_WIDTH);
+        // Across the viewer, as wide as the last frame laid it out, less the scroll bar's track while it scrolls.
+        $width = max(0.0, ($c->runtime?->rectOf($parent->id)[2] ?? 0.0) - $ed->trackWidth());
         $ed->blocksInView(function (Block $b, float $top) use ($c, $ct, $ed, $render, $width) {
             $s = new DiffSeparator($this, $ct, $ed->view->size, $ed->view->style);
             $s->step = $this->expansion();

@@ -8,6 +8,8 @@ trait EditorBrackets
 {
     /** How many lines a scan for a bracket reads at most. */
     private static int $bracketScanLines = 1000;
+    /** The bytes a scan goes through at most, as well (mygo's 8ba374c): 1000 lines of 250 KB are a file of 100 MB, scanned on every caret move. */
+    private const BRACKET_SCAN_BYTES = 64 << 10;
 
     /** The language's brackets of one byte each: openers and closers. @return array{0: string, 1: string} */
     public function bracketPairs(): array
@@ -76,9 +78,9 @@ trait EditorBrackets
             return true;
         };
         if ($dir > 0) {
-            $r->eachLine($line, $line + self::$bracketScanLines, $visit);
+            $r->eachLine($line, min($line + self::$bracketScanLines, $r->lineOf(min($off + self::BRACKET_SCAN_BYTES, $r->len())) + 1), $visit);
         } else {
-            $r->eachLineBack($line, $line - self::$bracketScanLines, $visit);
+            $r->eachLineBack($line, max($line - self::$bracketScanLines, $r->lineOf(max(0, $off - self::BRACKET_SCAN_BYTES))), $visit);
         }
         return $found >= 0 ? $found : null;
     }
@@ -146,7 +148,7 @@ trait EditorBrackets
         $stack = [];
         $at = -1; $which = -1;
         $line = $r->lineOf(min($off, $r->len()));
-        $r->eachLineBack($line, $line - self::$bracketScanLines, function (int $i, int $a, string $s) use ($off, $opens, $closes, &$stack, &$at, &$which): bool {
+        $r->eachLineBack($line, max($line - self::$bracketScanLines, $r->lineOf(max(0, $off - self::BRACKET_SCAN_BYTES))), function (int $i, int $a, string $s) use ($off, $opens, $closes, &$stack, &$at, &$which): bool {
             // Brackets are rare: look at the tokens only for lines with some.
             if ($opens . $closes === '' || strpbrk($s, $opens . $closes) === false) { return true; }
             $toks = $this->view->lineTokens($i, $s) ?? [];

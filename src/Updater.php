@@ -75,7 +75,9 @@ final class Updater
     /** @internal what check() asks */
     public static function checkFeed(string $feed, string $key, string $current, ?Closure $canceled = null): ?Update
     {
-        Http::$userAgent = 'MyPHP/' . App::VERSION . ' ' . App::name() . '/' . App::version();
+        // Not the app's name (mygo's bae6bfc): GitHub's release assets come from a store that answers 400 to a User-Agent
+        // with bytes outside ASCII, as 云音乐's, for every file its CDN has not cached yet.
+        Http::$userAgent = 'myphp-updater';
         try {
             $url = Feed::resolve($feed, fn(string $u): string => Http::get($u, 64 << 20, $canceled));
             $m = Format::manifest(Http::get($url, Format::MAX_MANIFEST_SIZE, $canceled));

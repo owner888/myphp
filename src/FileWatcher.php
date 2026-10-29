@@ -18,6 +18,8 @@ final class FileWatcher
 {
     /** @var ?list<FileEvent> the changes waiting for next(), null when none do: the watch doesn't look again until next() takes them */
     private ?array $batch = null;
+    /** What a watched file that the batch removes was (its stat), and that of the batch next() returned last (mygo's fileWatchGone). */
+    private ?array $gone = null, $taken = null;
     private bool $stopped = false;
     private ?Throwable $err = null;
     private bool $done = false;
@@ -83,7 +85,7 @@ final class FileWatcher
         while (true) {
             if ($this->batch !== null) {
                 $batch = $this->batch;
-                $this->batch = null;
+                [$this->batch, $this->taken, $this->gone] = [null, $this->gone, null];
                 $this->take();
                 return $batch;
             }
@@ -116,6 +118,17 @@ final class FileWatcher
     public function close(): void
     {
         $this->finish(null, true);
+    }
+
+    /**
+     * @internal The identity of the watched file that the batch next() returned last removes, as the watch last saw it
+     * (device, inode and type), or null: a document finds the file again where another app renamed it, which a look
+     * at the file after the batch came may be too late for, once it moved (mygo's fileWatchGone).
+     * @return ?array{0: int, 1: int, 2: int}
+     */
+    public function gone(): ?array
+    {
+        return $this->taken === null ? null : [$this->taken[0], $this->taken[1], $this->taken[2] & 0o170000];
     }
 
     /** Whether the watch has stopped and released its handles (mygo's Done). */
@@ -183,7 +196,7 @@ final class FileWatcher
     {
         $this->due = false;
         try {
-            $this->emit($this->scan->update());
+            $this->emit($this->scan->update(), $this->scan->removedFile());
         } catch (Throwable $e) {
             if ($this->stopped) {
                 return;
@@ -198,13 +211,16 @@ final class FileWatcher
         }
     }
 
-    /** Keeps events for next(). @param list<FileEvent> $events */
-    private function emit(array $events): void
+    /** Keeps events for next(), and what a watched file they remove was. @param list<FileEvent> $events */
+    private function emit(array $events, ?array $gone = null): void
     {
         if ($events === [] || $this->stopped) {
             return;
         }
         $this->batch = [...($this->batch ?? []), ...$events];
+        if ($gone !== null) {
+            $this->gone = $gone;
+        }
     }
 
     private function finish(?Throwable $err, bool $discard = true): void

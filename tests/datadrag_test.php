@@ -76,6 +76,22 @@ foreach (['escape' => false, 'source removal' => true] as $how => $remove) {
     $t->release(80, 80);
     $t->finishDataDrag(new Result(Operation::COPY));
     check(count($ends) === 1 && $ends[0]->canceled && $t->rt->valueDrag === null && $t->dataDrag === null, "$how cancels it, told once");
+    check($ends[0]->escaped && $ends[0]->point == new \MyPHP\Point(10, 20), "$how: given up, where it ended");
+}
+
+// A source tells a drag let go over no target from one given up, and learns where it ended (mygo's TestDataDragEndReasonAndPoint).
+$P = fn(int $x, int $y) => new \MyPHP\Point($x, $y);
+foreach ([
+    'no target' => [new Result(canceled: true, point: $P(-40, 900)), new Result(canceled: true, point: $P(-40, 900))],
+    'escape' => [new Result(canceled: true, escaped: true, point: $P(5, 6)), new Result(canceled: true, escaped: true, point: $P(5, 6))],
+    'no effect' => [new Result(point: $P(1, 2)), new Result(canceled: true, point: $P(1, 2))],
+    'drop' => [new Result(Operation::COPY, escaped: true, point: $P(7, 8)), new Result(Operation::COPY, point: $P(7, 8))],
+] as $how => [$native, $want]) {
+    $got = [];
+    $src = (new \ReflectionClass(\MyPHP\DataDrag::class))->newInstanceWithoutConstructor();
+    (function () use (&$got) { $this->operations = Operation::COPY; $this->done = function (Result $r) use (&$got) { $got[] = $r; }; })->call($src);
+    $src->finish($native);
+    check(count($got) === 1 && $got[0] == $want, "$how: " . json_encode([$got[0]->operation ?? null, $got[0]->canceled ?? null, $got[0]->escaped ?? null, $got[0]->point ?? null]));
 }
 
 // The press: a click moving two points; past a few, the drag the system's, nothing painted following the pointer, its release no click.

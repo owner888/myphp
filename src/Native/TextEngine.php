@@ -592,7 +592,9 @@ final class TextEngine implements Engine
             for ($start = 0; $start < $n;) {
                 $count = $n - $start;
                 if ($width > 0) {
-                    $count = max($c->CTTypesetterSuggestLineBreak($typesetter, $start, $width), 1);
+                    // A width measured by layout sums advances in float32, which may round below Core Text's own line width and
+                    // wrap the last word (20pt semibold measured 599.78): a 1/1024 point more, as Pango's units allow (mygo's 45e6d14).
+                    $count = max($c->CTTypesetterSuggestLineBreak($typesetter, $start, $width + 1.0 / 1024), 1);
                     // Core Text breaks a word that does not fit a line; carry on to the next break instead.
                     if ($breaks !== null) {
                         $end = min($start + $count, $n);

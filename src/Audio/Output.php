@@ -18,8 +18,10 @@ use MyPHP\App;
  */
 final class Output
 {
-    /** The frames a buffer of the device holds (21.3 ms), and how many it keeps queued: about 85 ms ahead. */
-    public const FRAMES = 1024, BUFFERS = 4;
+    /** The frames a buffer of the device holds (21.3 ms); how many it keeps queued is the latency's (Latency::buffers). */
+    public const FRAMES = 1024;
+    /** How far ahead it mixes (Audio::setLatency). */
+    public static Latency $latency = Latency::Interactive;
     /** How long the output stays open with nothing playing, in seconds. */
     public const IDLE_CLOSE = 5.0;
 

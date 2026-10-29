@@ -9,7 +9,8 @@ use MyPHP\UI\{Context, DisplayList, Key, Node, Path, Theme as UITheme};
  * A separator of a diff, as DiffState::$renderSeparator builds it (mygo's
  * DiffSeparator): unchanged lines collapsed between changes, which it
  * expands, or the header of a patch's hunk. The viewer places it, a
- * column as wide as the viewer and 32 points high, open as the render
+ * column as wide as the viewer, less the room of the scroll bar's track
+ * while the viewer scrolls, and 32 points high, open as the render
  * function is called.
  */
 final class DiffSeparator

@@ -63,7 +63,7 @@ final class UpdateWindow
                 // no icon when it is not an image, as mygo's
             }
         }
-        return new self($s, $u->text(), $icon);
+        return new self($s, $s->t, $icon);
     }
 
     /** Builds the update window. */
@@ -135,7 +135,7 @@ final class UpdateWindow
             }
         }
         if (($v['detail'] ?? '') !== '') {
-            self::para($c->key('detail'), $v['detail'], $small)->textColor($t->textMuted)->maxLines(2)->tooltip($v['detail'])->selectable();
+            self::para($c->key('detail'), $v['detail'], $small)->textColor($t->textMuted)->selectable(); // all of it (mygo's 002a1ea): the window grows to fit it, and a tooltip covered the title
         }
         if (($v['notes'] ?? []) !== []) {
             $c->key('notes')->column(0, 0, 1)->margin(6, 0, 0, 0);

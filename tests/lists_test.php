@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, Key, ListState};
+use MyPHP\UI\{Context, Key, ListState, Selection};
 
 // Rows added and removed above: the same items stay where they show, each row's state with its item.
 $ids = range(1000, 1199);
@@ -63,6 +63,59 @@ $s->selected = 2; $h->frame(); // b
 $ids = ['y', 'a'];
 $h->frame();
 same(-1, $s->selected, 'the chosen item went away: no choice');
+
+// The app choosing a row of rows it changed, at the index the choice had, is not rows moving: with a selection, the
+// choice follows its item only while the selection still holds it (mygo's TestListKeysAppChoiceAtTheSameIndex).
+$ids = ['notes', 'plan'];
+$s = new ListState(); $s->selected = 0; $s->selection = new Selection(); $s->selection->add('notes');
+$s->key = function (int $i) use (&$ids) { return $ids[$i]; };
+$h = new Headless(function (Context $c) use (&$ids, $s) {
+    $c->column(0, 0, 1);
+      $c->list($s, count($ids), function (int $i) use ($c, &$ids) { $c->text($ids[$i])->size(0, 20); })->grow = 1;
+    $c->end();
+}, 300, 400);
+$h->frame();
+$ids = ['icon', 'notes', 'plan']; // a paste brings "icon", which sorts first: the app chooses it, at the row "notes" had
+$s->selection->clear(); $s->selection->add('icon'); $s->selected = 0;
+$h->frame();
+check($s->selected === 0 && $s->selection->all() === ['icon'], 'chose the pasted row 0: ' . $s->selected . ' ' . json_encode($s->selection->all()));
+$s->selection->clear(); $s->selection->add('notes'); $s->selected = 1;
+$h->frame();
+$ids = ['icon', 'minutes', 'plan']; // "notes", chosen, renamed in its place: the app chooses it by its new name
+$s->selection->clear(); $s->selection->add('minutes');
+$h->frame();
+same(1, $s->selected, 'the renamed row, chosen by the app, keeps the cursor');
+$ids = ['a', 'b', 'icon', 'minutes', 'plan'];
+$h->frame();
+same(3, $s->selected, 'rows coming above a choice the app keeps still move the cursor with it');
+
+// A keyed list with keepOffset sorted again stays where it is scrolled, as the choice and the row Shift chooses from follow their items; without it, it goes along with the item at its top (mygo's TestListKeepOffset).
+$ids = range(1000, 1199);
+$s = new ListState(); $s->selected = -1; $s->selection = new Selection(); $s->keepOffset = true;
+$s->key = function (int $i) use (&$ids) { return $ids[$i]; };
+$h = new Headless(function (Context $c) use (&$ids, $s) {
+    $c->column(0, 0, 1);
+      $c->list($s, count($ids), function (int $i) use ($c, &$ids) { $c->text("Item {$ids[$i]}")->size(0, 30); })->grow = 1;
+    $c->end();
+}, 300, 400);
+$h->frame();
+$s->scrollTo(100, false);
+$h->frame(2);
+$h->clickOn($h->byText('Item 1102'));
+same([1102], $s->selection->all(), 'chose item 1102');
+$ids = array_reverse($ids);
+$h->frame(2);
+same(100, $s->row, 'sorted again: row 100 still at the top');
+check($h->byText('Item 1099') !== null, 'showing item 1099 there');
+$h->clickOn($h->byText('Item 1099'), Key::SHIFT);
+$chosen = $s->selection->all(); sort($chosen);
+same([1099, 1100, 1101, 1102], $chosen, 'Shift chooses from item 1102, now at row 97');
+$s->keepOffset = false;
+$h->frame();
+$first = $s->row;
+$ids = array_reverse($ids);
+$h->frame(2);
+same(count($ids) - 1 - $first, $s->row, 'without it: along with the item at its top');
 
 // Rows above and the wheel in one frame: the wheel moves from where the items were.
 $ids = range(1000, 1199);

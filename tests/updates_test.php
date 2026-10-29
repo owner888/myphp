@@ -13,6 +13,23 @@ use MyPHP\Native\Fibers;
 use MyPHP\Native\Update\{Archive, Bsdiff, Delta, Ed25519, Feed, Format, NotPublished, SuffixArray};
 
 /** A temporary directory, removed at the end. */
+/**
+ * Installs an update by $install into the bundle $target as an app does that
+ * exits after it: staged, the bundle kept while the app runs (the Dock keeps
+ * its tile), replaced by the helper once the app's process ended.
+ */
+function updStaged(\Closure $install, string $target): void
+{
+    $app = proc_open(['sleep', '0.3'], [], $pipes); // the app, whose exit the staged update waits for
+    \MyPHP\Update::$appPid = proc_get_status($app)['pid'];
+    $install();
+    same('1.0.0', file_get_contents("$target/Contents/version.txt"), 'staged: the app keeps its bundle while it runs');
+    proc_close($app);
+    $dir = dirname($target);
+    $done = fn(): bool => !in_array(@file_get_contents("$target/Contents/version.txt"), [false, '1.0.0'], true) && count(scandir($dir)) === 3; // the new bundle in place, where it was made removed
+    for ($i = 0; $i < 150 && !$done(); $i++) { usleep(20000); clearstatcache(); }
+}
+
 function updDir(): string
 {
     $d = sys_get_temp_dir() . '/myphp-upd-' . getmypid() . '-' . bin2hex(random_bytes(4));
@@ -218,7 +235,7 @@ try {
 
 (function () {
     // Check and install from a local server, into a bundle.
-    $port = 20000 + getmypid() % 1000;
+    $port = freePort();
     $www = updDir();
     $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:$port", '-t', $www], [['file', '/dev/null', 'r'], ['file', '/dev/null', 'w'], ['file', '/dev/null', 'w']], $pipes);
     for ($i = 0; $i < 100 && @fsockopen('127.0.0.1', $port) === false; $i++) { usleep(20000); }
@@ -244,7 +261,7 @@ try {
             Updater::$target = $target;
             $u = Updater::checkFeed("http://127.0.0.1:" . parse_url($manifest['url'], PHP_URL_PORT) . '/update.json', base64_encode($pk), '1.0.0');
             check($u instanceof Update, 'an update found');
-            $u->install($progress);
+            updStaged(fn() => $u->install($progress), $target);
             return $target;
         };
         $seen = [];
@@ -255,6 +272,7 @@ try {
         $u = Updater::checkFeed("$base/update.json", base64_encode($pk), '1.0.0');
         same(['1.1.0', '- Faster', '2026-10-21'], [$u->version, $u->notes, $u->date?->format('Y-m-d')], 'the version, its notes and date');
         same(null, Updater::checkFeed("$base/update.json", base64_encode($pk), '1.1.0'), 'up to date');
+        same('myphp-updater', \MyPHP\Native\Update\Http::$userAgent, 'asked as the updater, not the app (a store answers 400 to a name past ASCII)');
         same(null, Updater::checkFeed("$base/update.json", base64_encode($pk), '1.2.0'), 'newer than the feed');
         check(str_contains(updThrows(fn() => Updater::checkFeed("$base/missing.json", base64_encode($pk), '1.0.0')), '404'), 'a missing manifest');
         check(str_contains(updThrows(fn() => Updater::checkFeed('http://example.com/update.json', base64_encode($pk), '1.0.0')), 'updates need HTTPS'), 'plain HTTP refused');
@@ -309,7 +327,7 @@ try {
         Updater::$target = $app($installed, '1.0.0', $bin);
         $u = Updater::checkFeed("$base/" . Format::manifestName(Format::target()), $pubText, '1.0.0');
         $sizes = [];
-        $u->install(function (int $n, int $total) use (&$sizes) { $sizes[$total] = true; });
+        updStaged(function () use ($u, &$sizes) { $u->install(function (int $n, int $total) use (&$sizes) { $sizes[$total] = true; }); }, Updater::$target);
         same(['1.1.0', [$m['deltas'][0]['size']]], [file_get_contents(Updater::$target . '/Contents/version.txt'), array_keys($sizes)], 'installed from the delta myphp build made');
         foreach ([['github' => 'nope'], ['url' => 'http://insecure'], ['deltas' => -1], ['publicKey' => 'bad'], ['s3' => ['prefix' => 'x']], ['s3' => ['bucket' => 'b', 'endpoint' => 'https://r2.example/path']]] as $bad) {
             check(updThrows(fn() => new \MyPHP\Native\Update\Publish($project, ['name' => 'x', 'updates' => $bad + ['publicKey' => $pubText, 'url' => 'https://x.example']])) !== '', 'refused: ' . json_encode($bad));

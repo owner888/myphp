@@ -34,6 +34,10 @@ final class FlyoutOptions
         public bool $shadow = false,
         /** Shows the flyout in an NSPopover, which draws the system's material, rounded corners, shadow and an arrow pointing at the middle of the anchor, and animates as it opens and closes; AppKit places it on the side $placement names, or the opposite one where the screen has no room: the rest of $placement, and $gap, do not apply. It has the keyboard while it shows, focusable or not, which makes it close as the user clicks elsewhere; its content draws no background (Context::vibrancy says the material shows). */
         public bool $popover = false,
+        /** Puts a translucent, blurred material behind the flyout's content, as WindowOptions::$vibrancy does behind a window's: the content draws no background where it shows (Context::vibrancy says so). A popover has its own. */
+        public string $vibrancy = '',
+        /** Rounds the flyout's corners, in points: its material and content are cut to them, and its shadow follows them. */
+        public int $cornerRadius = 0,
         /** Native UI in it (Content::view), or a page: HTML, or a URL, as WindowOptions'. */
         public ?Content $content = null,
         public ?string $html = null,
