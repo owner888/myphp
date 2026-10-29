@@ -210,9 +210,10 @@ final class Player
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
         $this->out = new Renderers($this->hardware);
         $self = \WeakReference::create($this); // the renderers hold no cycle to the player
-        $this->out->videoWanted = static function () use ($self): void { // the layer taking more between ticks, a software decoder's slice spent
+        $this->out->videoWanted = static function () use ($self): void { // the layer taking more between ticks, a software decoder's slice spent, a seek's flush done off the main thread
             $p = $self->get();
             $p?->give('video');
+            $p?->give('audio');
             $p?->landPending();
         };
         $this->awake = new Awake('Playing ' . basename($path));

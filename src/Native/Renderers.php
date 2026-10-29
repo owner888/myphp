@@ -21,7 +21,12 @@ use RuntimeException;
  * while it will take no more video, it is asked to say when it will
  * (requestMediaDataWhenReadyOnQueue, on the main queue), and is given the
  * video queued then ($videoWanted). The video is given 10 ms of the main
- * thread at a time (SLICE), the rest a few milliseconds on (POLL).
+ * thread at a time (SLICE), the rest a few milliseconds on (POLL). A seek
+ * while the clock runs flushes the audio renderer, which waits some 45 ms
+ * for what it is rendering, off the main thread: that flush and the
+ * clock's new time go on a serial queue of its own (no PHP on it, as mpv's
+ * play thread flushes its audio output), nothing given the renderers
+ * until they are done, the clock read as the time it goes to meanwhile.
  *
  * @internal
  */
@@ -43,7 +48,7 @@ final class Renderers
     private array $soft = [];
     /** @var array<int, SoftAudio> the decoders of the audio tracks decoded in PHP (Vorbis), by track number */
     private array $softAudio = [];
-    /** What gives the layer the video queued (the player's): when the layer that would take no more will, or a poll fires. */
+    /** What gives the renderers what the player queued: when the layer that would take no more will, or a poll fires (the video's slice spent, a change of the clock off the main thread done). */
     public ?\Closure $videoWanted = null;
     /** Whether the layer is to say when it takes more; the renderers that asked it, for the block (one for the process) the layers call. @var array<int, \WeakReference<self>> */
     private bool $asking = false;
@@ -66,6 +71,11 @@ final class Renderers
     /** @var array<int, \WeakReference<self>> the renderers whose software decoder was full, for the poll timer; the timer, its target */
     private static array $pollers = [];
     private static $pollTimer = null, $pollTarget = null;
+    /** The serial queue the clock's changes go on while one is under way there (a seek's, as it plays), made the first time; its last operation, until done. */
+    private $queue = null, $queued = null;
+    /** The rate the clock was last set to, and the time it was set to go from while that waits on the queue. */
+    private float $rate = 0.0;
+    private ?float $goingTo = null;
     /** The equalizer's gains (IINA's ten bands, dB), null while it is off (flat): the audio then goes to the renderer as it comes. */
     private ?array $gains = null;
     /** The gain the audio is given in PHP, linear (a volume past 100%, ReplayGain's): 1 for none, the audio then going to the renderer as it comes. */
@@ -123,6 +133,10 @@ final class Renderers
     /** Whether the renderer of $t's packets takes more now. */
     public function ready(Track $t): bool
     {
+        if ($this->busy()) {
+            $this->poll(); // the clock's change under way off the main thread: on after it
+            return false;
+        }
         $soft = $this->soft[$t->number] ?? null;
         $ready = ObjC::msg('b:', $t->type === Track::VIDEO ? $this->layer : $this->audio, 'isReadyForMoreMediaData'); // asked once: the layer turns ready on its own thread
         if ($t->type === Track::VIDEO && $ready && hrtime(true) - $this->burst > self::SLICE * 1e9) {
@@ -378,12 +392,20 @@ final class Renderers
         $this->soft = [];
     }
 
-    /** Drops what the renderers hold, for a seek or another audio track. */
+    /**
+     * Drops what the renderers hold, for a seek or another audio track: the
+     * audio renderer's, while the clock runs (or a change of it waits), off
+     * the main thread, as it waits for what it is rendering (the class's).
+     */
     public function flush(): void
     {
         $this->stopAsking();
         ObjC::msg('v:', $this->layer, 'flush');
-        ObjC::msg('v:', $this->audio, 'flush');
+        if ($this->rate != 0.0 || $this->busy()) {
+            $this->later($this->audio, 'flush');
+        } else {
+            ObjC::msg('v:', $this->audio, 'flush');
+        }
         foreach ($this->soft as $s) { $s->flush(); }
         foreach ($this->softAudio as $s) { $s->reset(); }
         foreach ($this->decoders as $d) { $d->reset(); }
@@ -391,22 +413,74 @@ final class Renderers
         $this->nextAudio = null;
     }
 
-    /** The time of the clock, in seconds. */
+    /** The time of the clock, in seconds: the one it goes to while that waits on the queue. */
     public function time(): float
     {
+        if ($this->goingTo !== null && $this->busy()) {
+            return $this->goingTo;
+        }
         return CoreMedia::seconds(ObjC::msg('T:', $this->sync, 'currentTime')) ?? 0.0;
     }
 
-    /** Runs the clock at $rate (0 stops it), from $at seconds when given. AVFoundation's rates are floats. */
+    /**
+     * Runs the clock at $rate (0 stops it), from $at seconds when given.
+     * AVFoundation's rates are floats. After a change waiting on the queue
+     * (a flush as it played), on the queue too, in order.
+     */
     public function setRate(float $rate, ?float $at = null): void
     {
-        if ($at === null) {
-            ObjC::msg('v:f', $this->sync, 'setRate:', $rate);
+        $this->rate = $rate;
+        $f = ObjC::$c->new('float');
+        $f->cdata = $rate;
+        $t = null;
+        if ($at !== null) {
+            $t = ObjC::$c->new('CMTime');
+            $t->value = (int)round($at * 90000); $t->timescale = 90000; $t->flags = 1;
+        }
+        if ($this->busy()) {
+            if ($at !== null) { $this->goingTo = $at; }
+            $at === null ? $this->later($this->sync, 'setRate:', $f) : $this->later($this->sync, 'setRate:time:', $f, $t);
             return;
         }
-        $t = ObjC::$c->new('CMTime');
-        $t->value = (int)round($at * 90000); $t->timescale = 90000; $t->flags = 1;
-        ObjC::msg('v:fT', $this->sync, 'setRate:time:', $rate, $t);
+        $at === null ? ObjC::msg('v:f', $this->sync, 'setRate:', $rate) : ObjC::msg('v:fT', $this->sync, 'setRate:time:', $rate, $t);
+    }
+
+    /** Whether a change of the clock is under way on the queue; the last done, it is forgotten. */
+    private function busy(): bool
+    {
+        if ($this->queued === null) {
+            return false;
+        }
+        if (!ObjC::msg('b:', $this->queued, 'isFinished')) {
+            return true;
+        }
+        ObjC::msg('v:', $this->queued, 'release');
+        $this->queued = null;
+        $this->goingTo = null;
+        return false;
+    }
+
+    /**
+     * Sends $selector to $target on the queue, after what is there: an
+     * NSInvocationOperation of an NSInvocation, its arguments (CData, a
+     * float's or a CMTime's) copied into it, no PHP on that thread.
+     */
+    private function later($target, string $selector, CData ...$args): void
+    {
+        if ($this->queue === null) {
+            $this->queue = ObjC::msg('p:', ObjC::alloc('NSOperationQueue'), 'init');
+            ObjC::msg('v:l', $this->queue, 'setMaxConcurrentOperationCount:', 1); // serial: the flush, then the clock's time
+        }
+        $sel = ObjC::sel($selector);
+        $inv = ObjC::msg('p:p', ObjC::cls('NSInvocation'), 'invocationWithMethodSignature:', ObjC::msg('p:p', $target, 'methodSignatureForSelector:', $sel));
+        ObjC::msg('v:p', $inv, 'setTarget:', $target);
+        ObjC::msg('v:p', $inv, 'setSelector:', $sel);
+        foreach ($args as $i => $a) { ObjC::msg('v:pl', $inv, 'setArgument:atIndex:', ObjC::$c->cast('void*', \FFI::addr($a)), $i + 2); } // copied in as it is set
+        ObjC::msg('v:', $inv, 'retainArguments'); // the target kept while it waits
+        $op = ObjC::msg('p:p', ObjC::alloc('NSInvocationOperation'), 'initWithInvocation:', $inv);
+        ObjC::msg('v:p', $this->queue, 'addOperation:', $op);
+        if ($this->queued !== null) { ObjC::msg('v:', $this->queued, 'release'); } // the last is what busy() waits for: the queue is serial
+        $this->queued = $op;
     }
 
     public function setVolume(float $v): void
@@ -435,6 +509,11 @@ final class Renderers
     {
         $this->stopAsking();
         unset(self::$pollers[spl_object_id($this)]);
+        if ($this->queue !== null) { // what waits on it done first: its clock stopped after it
+            ObjC::msg('v:', $this->queue, 'waitUntilAllOperationsAreFinished');
+            ObjC::msg('v:', $this->queue, 'release');
+        }
+        if ($this->queued !== null) { ObjC::msg('v:', $this->queued, 'release'); }
         ObjC::msg('v:f', $this->sync, 'setRate:', 0.0);
         foreach ([...$this->formats, ...$this->pcmFormats] as $f) {
             CoreMedia::c()->CFRelease($f);

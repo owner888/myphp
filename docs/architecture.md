@@ -4426,7 +4426,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   for the audio it is rendering (the display layer's and dav1d's take no
   time). Stopping the synchronizer first only moves the wait there (30 ms
   of `setRate:0`, then 12 of the flush). Paused, it is nothing. Left as
-  it is: once a seek, as the picture goes elsewhere anyway.
+  it is: once a seek, as the picture goes elsewhere anyway. (Off the main
+  thread as of v1.63, its section.)
 - **An arrow function copies what it reads as it is made** (AGENTS.md
   rule 12): `Player::together`'s wait read its `$done` empty for ever.
   Looked for across the code (each arrow function reading a variable
@@ -4942,6 +4943,27 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - Fixed: a player whose window closed itself in its own frame drew on
   (Window's frame stops once destroyed; Metal forgets the view's draws).
 
+## A seek as it plays, off the main thread (v1.63)
+
+- **The audio renderer's flush goes on a serial queue while the clock
+  runs** (`Native\Renderers`): `AVSampleBufferAudioRenderer`'s flush
+  waits some 45 ms for what it is rendering (v1.52), stopping the
+  synchronizer first only moving the wait there. As mpv's play thread
+  flushes its audio output, the flush and the synchronizer's
+  `setRate:time:` after it go to an `NSOperationQueue` of one at a time,
+  as NSInvocationOperations (no PHP on that thread; their arguments
+  copied in by `setArgument:atIndex:`). Until the last is done no packet
+  goes to either renderer (`ready()` false, the poll timer giving them
+  after, the player's `videoWanted` giving the audio too), and the
+  clock reads as the time it goes to. A change of the clock made
+  meanwhile (a pause, buffering) goes on the queue too, in order. Paused,
+  the flush takes no time and is made at once, as before. The renderers
+  gone, what waits on the queue is done first. Measured (the developer's
+  4K HDR AV1, .compare/seekbench.php, as it plays): a seek's main thread
+  12 ms on the mean with the hardware decoder (74 before), 6 with
+  libdav1d; a slider's 30 seeks 16 ms apart 8 ms in all, landing where
+  the last went.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -4969,15 +4991,8 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   Vorbis is decoded in PHP (v1.55; FLAC by the system, v1.42; VP9, AV1 and Opus, v1.37),
   nor DTS or TrueHD, which the system has no decoder of. A size
   animated by \t rasterizes its glyphs anew each frame.
-- Video: a seek while it plays holds the main thread some 45 ms in
-  `AVSampleBufferAudioRenderer`'s flush (v1.52). IINA never waits: mpv
-  queues the seek and its play thread flushes the audio output. Here
-  PHP runs on the main thread only; the flush could go elsewhere by
-  `performSelectorInBackground:` (no PHP on that thread) or by
-  `flushFromSourceTime:completionHandler:`, either with audio enqueued
-  only once it is done (and a backward seek's times before the old).
-  The hardware AV1 decoder's display layer sometimes shows a hidden
-  frame (v1.52, its section).
+- Video: the hardware AV1 decoder's display layer sometimes shows a
+  hidden frame (v1.52, its section).
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
 - mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
