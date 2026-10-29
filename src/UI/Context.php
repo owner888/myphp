@@ -4218,4 +4218,17 @@ final class Context
         if ($this->nextKey === null) { $this->key('video player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
         return VideoPlayer::build($this, $s, $o ?? new VideoPlayerOptions());
     }
+
+    /**
+     * The player's settings, for the app's settings window, as IINA's
+     * Subtitles pane has them: the OpenSubtitles account the subtitles
+     * tab's Search Online logs in with (Login asks for its name and
+     * password, kept in the user's Keychain; Logout), and the preferred
+     * languages of subtitles it searches in (the system's where none). They
+     * are the app's, in its user data, whatever player $s is.
+     */
+    public function videoPlayerSettings(VideoPlayerState $s): Node
+    {
+        return VideoPlayer::settings($this, $s);
+    }
 }

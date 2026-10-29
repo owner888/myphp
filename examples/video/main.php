@@ -10,7 +10,8 @@
 // Run: ./run.sh video [file or URL], which logs what the player does to the
 // terminal (MYPHP_VIDEO_LOG=1); MYPHP_VIDEO_SOFTWARE=1 turns the system's
 // decoders off (IINA's "Enable hardware decoder" unchecked: AV1 by libdav1d
-// on a Mac that decodes AV1 itself). In examples/video, ../../bin/myphp
+// on a Mac that decodes AV1 itself). Video > Settings… (Cmd+,) has the
+// player's settings (IINA's Subtitles pane's). In examples/video, ../../bin/myphp
 // build makes Video.app and its .dmg.
 declare(strict_types=1);
 
@@ -119,6 +120,15 @@ final class Log
     }
 }
 
+/** The settings window (IINA's Settings, its Subtitles pane's settings the player has), one, brought forward when open. */
+function settings(VideoPlayerState $s): void
+{
+    static $w = null;
+    if ($w !== null && !$w->isDestroyed()) { $w->focus(); return; }
+    $w = new Window(new WindowOptions(title: 'Settings', width: 560, height: 260, stateKey: 'video settings',
+        content: Content::view(function (Context $c) use ($s): void { $c->videoPlayerSettings($s); })));
+}
+
 /** File > Open URL's field (IINA's Open URL window), null while it is closed. */
 $askUrl = null;
 
@@ -153,7 +163,10 @@ $openDialog = function () use ($s) {
     if ($paths) { $s->open($paths[0]); }
 };
 App::setMenu(new Menu([
-    new MenuItem(role: 'appMenu'),
+    new MenuItem(role: 'appMenu', submenu: [ // the system's, Settings… after About, as IINA's
+        new MenuItem(role: 'about'), MenuItem::separator(), new MenuItem('Settings…', fn() => settings($s), 'Cmd+,'), MenuItem::separator(),
+        new MenuItem(role: 'services'), MenuItem::separator(), new MenuItem(role: 'hide'), new MenuItem(role: 'hideOthers'), new MenuItem(role: 'unhide'), MenuItem::separator(), new MenuItem(role: 'quit'),
+    ]),
     new MenuItem('File', submenu: [new MenuItem('Open…', $openDialog, 'CmdOrCtrl+O'), new MenuItem('Open URL…', function () use (&$askUrl) { $askUrl = new TextState(); Window::focused()?->invalidate(); }, 'CmdOrCtrl+Shift+O'), MenuItem::separator(), new MenuItem(role: 'close')]),
     new MenuItem(role: 'editMenu'), // Cmd+V, Cmd+C and the rest in the URL's field: a menu's key equivalents, as macOS has them
     new MenuItem(role: 'windowMenu'),

@@ -268,6 +268,49 @@ if (PHP_OS_FAMILY === 'Darwin') {
     unlink($eqFile);
     $p5 = new Player(__DIR__ . '/testdata/clip.mp4'); $s4->setPlayer($p5);
     same($p4->equalizer(), $p5->equalizer(), 'the next player takes the gains');
+    // The video tab's hardware decoding, as IINA's quick setting: an AV1 film switched to libdav1d as it plays and back, of the next film too;
+    // a film the system alone decodes here (H.264), on and fixed.
+    if (\MyPHP\Native\Dav1d::unavailable() === null && (new Player(__DIR__ . '/testdata/clip-av1.mkv'))->decodingSwitchable()) { // libdav1d and this Mac's AV1
+        $s6 = new VideoPlayerState(); $s6->thumbnailCache = $thumbCache;
+        $p6 = new Player(__DIR__ . '/testdata/clip-av1.mkv'); $s6->setPlayer($p6);
+        $s6->sidebar = 'video'; $s6->tab = 'video';
+        $h6 = new Headless(fn(Context $c) => $c->videoPlayer($s6), 960, 900);
+        $h6->rt->reduceMotion = true;
+        $h6->frame();
+        $was = $p6->hardwareDecoding();
+        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        same([!$was, !$was], [$p6->hardwareDecoding(), $s6->hardwareDecoding], 'switched: the film decodes the other way');
+        $p6->play(); $run(0.5); $p6->pause();
+        check($p6->out->failure() === null && $p6->time() > 0.2, 'it plays on so: ' . ($p6->out->failure() ?? round($p6->time(), 2) . ' s'));
+        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        same($was, $p6->hardwareDecoding(), 'and back');
+        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        $p7 = new Player(__DIR__ . '/testdata/clip-av1.mp4'); $s6->setPlayer($p7);
+        same(!$was, $p7->hardwareDecoding(), 'the next film takes it');
+        $p8 = new Player(__DIR__ . '/testdata/clip.mkv'); $s6->setPlayer($p8); $h6->frame();
+        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        check(!$p8->decodingSwitchable() && $p8->hardwareDecoding() && $h6->byLabel('Hardware Decoding')?->checked === 2, 'an H.264 film, which the system alone decodes here: the switch on, fixed');
+    }
+    // Online subtitles (IINA's Find Online Subtitles): Search Online disabled of no key (''); the list of those found, a row each,
+    // a click choosing one, Command another, Cancel taking it away (no request made: OpenSubtitles' own in opensubtitles_test, offline).
+    $s9 = new VideoPlayerState(); $s9->thumbnailCache = $thumbCache;
+    $p9 = new Player(__DIR__ . '/testdata/clip.mkv'); $s9->setPlayer($p9);
+    $s9->sidebar = 'subtitles'; $s9->tab = 'subtitles';
+    $h9 = new Headless(fn(Context $c) => $c->videoPlayer($s9, new \MyPHP\UI\VideoPlayerOptions(openSubtitlesKey: '')), 960, 900); // none: no request made
+    $h9->rt->reduceMotion = true;
+    $h9->frame();
+    $h9->clickText('Search Online…');
+    same([null, false, null], [$s9->openSubtitles, $s9->searchingOnline, $s9->onlineSubtitles], 'no key: Search Online does nothing');
+    $row = fn(int $file, string $name) => ['file' => $file, 'name' => $name, 'language' => 'en', 'year' => 2019, 'fps' => 23.976, 'downloads' => 12, 'uploaded' => '2024-05-01T10:00:00Z'];
+    $s9->onlineSubtitles = [$row(1, 'Film.en.srt'), $row(2, 'Film.forced.en.srt')];
+    $h9->frame();
+    check($h9->byText('2 subtitles found.') !== null && $h9->byText('Film.forced.en.srt') !== null && $h9->byText("en  (2019)  23.98 fps  \u{2b07}12") !== null, 'the list: how many, each its name over its language, year, fps and downloads');
+    $h9->clickText('Film.en.srt');
+    same([0], $s9->onlineChosen, 'a click chooses one');
+    $h9->clickOn($h9->byText('Film.forced.en.srt'), \MyPHP\UI\Key::COMMAND);
+    same([0, 1], $s9->onlineChosen, 'Command another too');
+    $h9->clickText('CANCEL');
+    same([null, []], [$s9->onlineSubtitles, $s9->onlineChosen], 'Cancel: the list gone');
     check($p->playing() && !$p->awake(), 'without keepAwake: the display may sleep while it plays');
     $p->pause();
     @unlink($scratch);

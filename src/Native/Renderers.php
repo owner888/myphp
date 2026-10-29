@@ -74,7 +74,7 @@ final class Renderers
     private array $eqs = [], $pcmFormats = [];
 
     /** Renderers whose video the system decodes, unless $hardware is off (IINA's hardware decoding, mpv's hwdec): then what libdav1d decodes (AV1) is decoded so. */
-    public function __construct(private readonly bool $hardware = true)
+    public function __construct(private bool $hardware = true)
     {
         CoreMedia::c();
         ObjC::boot(['AppKit', 'QuartzCore']);
@@ -315,6 +315,13 @@ final class Renderers
         ObjC::msg('v:', $pool, 'drain');
         CoreMedia::c()->CFRelease($pixels); // a copy, the caller's
         return $bytes;
+    }
+
+    /** @internal Player: decodes on the system's decoders or not from the next packet on (Player::setHardwareDecoding, which seeks to where it is), the software decoders gone. */
+    public function setHardware(bool $on): void
+    {
+        $this->hardware = $on;
+        $this->soft = [];
     }
 
     /** Drops what the renderers hold, for a seek or another audio track. */

@@ -4694,6 +4694,91 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   metadata OBUs (clip-av1-hdr.mp4), a Matroska Colour and an MP4's
   boxes made in the test, the format's extensions on macOS.
 
+## The quick settings' hardware decoding, online subtitles (v1.60)
+- **Hardware decoding switches as it plays**, as IINA's quick setting
+  (mpv's hwdec set while playing): `Player::setHardwareDecoding`
+  (internal, the video tab's) tells the renderers (`setHardware`: the
+  software decoders dropped, the next packet decoded the other way), the
+  thumbnails' decoder goes, and the film seeks exactly to where it is,
+  its frames from the keyframe decoded again. The choice is the player
+  state's, of this film and the next (`VideoPlayerState::$hardwareDecoding`,
+  applied in `setPlayer` as the volume and the equalizer are). The switch
+  says how the film decodes (`hardwareDecoding()`: H.264 and HEVC only
+  on the system's here, AV1 without its decoder only in software) and
+  moves only where both ways do (`decodingSwitchable`: AV1, libdav1d
+  and the system's decoder, an M3 on); elsewhere it is fixed, "not
+  supported yet" (IINA decodes all in software too, by FFmpeg). The
+  sidebar's switches are switches to assistive technology now, labeled.
+
+- **Online subtitles are IINA's of OpenSubtitles** (`Media\OpenSubtitles`,
+  its REST API as IINA's OpenSubClient and OpenSub.Fetcher use it): the
+  subtitles tab's Search Online (`VideoPlayerState::searchOnlineSubtitles`,
+  in a fiber, the requests on CurlLoop) says "Finding online subtitles…"
+  until it ends, logs in with the settings' account first (once a
+  process, its password the Keychain's; none stored, none), asks for the
+  languages it has once a process (infos/languages), searches in the
+  settings' preferred languages, else the system's, those it has
+  (`languagesOf`: zh-cn of the simplified script, zh-tw of the
+  traditional, pt-br, pt-pt; English where none, as IINA's), by the
+  file's hash (`hash`: its size and the 64-bit words of its first and
+  last 64 KB; none of a stream or of a file of 128 KB or less) and its
+  name (a stream's title), the parameters in the order of their names.
+  None found, "No subtitles found"; one, it downloads at once; more, IINA's
+  list over where the message is (a row each, a click choosing, Command
+  more, a double click downloading it; CANCEL, DOWNLOAD). Downloading is
+  the download method's link, then its bytes, saved as "[index]name" in
+  the temporary folder and loaded (`loadSubtitles`), "Subtitle
+  downloaded" and their names told; the downloads spent (406, remaining
+  -1) say IINA's limit and when to try again.
+- **The film is looked up on TMDB first, as agc_player does it** (the
+  developer's player): the file's name is read as agc_player's MetaVideo
+  reads it (`Media\MetaVideo`, its Flutter client's parser, MoviePilot's
+  before it: the name up to the year, resolution, source or codec, the
+  Chinese one before the English, a show's season and episode, a
+  `{tmdb-123}` in the name or its folder's; a name of only a number, or
+  of 第3集, is the folder's, its 第二季 the season). TMDB's first result
+  of the name (the Chinese, then the English) and year (`Media\Tmdb`,
+  search/movie or search/tv; a show of none that year asked of any) is
+  the id OpenSubtitles is asked by (`searchTmdb`: tmdb_id of a film,
+  parent_tmdb_id, season_number and episode_number of a show's episode).
+  No id, or no subtitles of it, and the search is IINA's, by hash and
+  name. What fails on TMDB is told as OpenSubtitles' failures are. The
+  parser's slips are fixed where they gave a wrong answer: the episode of
+  `01.mkv` and of `Name - 12` was always 1 (the whole match of a file's
+  name read as its number), the "1" of DDP5.1 before the extension made
+  a film a show's episode 1, and the words it strips were of one case
+  only where MoviePilot's are of none (the "Season" of
+  Game.of.Thrones.Season.8 stayed in the name). The requests of both go
+  through `Media\Https` (the User-Agent "MyPHP", HTTPS only).
+- **The key is myphp's, in its source, reversed, as IINA's**
+  (`OpenSubtitles::KEY`, the developer's): an app built has it, where
+  anyone can read it out of the bundle, as of any client (IINA keeps its
+  own reversed in OpenSubClient); reversed, a search of the source for
+  keys does not find it. `VideoPlayerOptions::$openSubtitlesKey` gives an
+  app's own (null: myphp's; '': none, the button disabled). The
+  User-Agent is "MyPHP" (IINA's "IINA v<version>"). TMDB's key is the
+  developer's too, kept so (`Tmdb::KEY`).
+- **The settings are IINA's Subtitles pane's the player has**
+  (`Context::videoPlayerSettings`, the app's settings window's;
+  `Media\SubtitleSettings`, subtitle-settings.json in the user data):
+  Online Subtitles' OpenSubtitles account ("Not logged in" or "Logged in
+  as", Login asking a name and password, `Dialog::login`, IINA's
+  quickUsernamePasswordPanel, the account tried then kept, its password
+  in the Keychain by Secrets; a failure IINA's alert; Logout forgets it,
+  the password too, and ends the session), and Other's preferred
+  languages, a token each (IINA's ISO 639-2 token field; here the codes
+  `languagesOf` takes, as zh-Hans or en), the system's where none.
+  examples/video opens them from Settings… (Cmd+,).
+- **The wheel over the list of subtitles found scrolls it.** The
+  picture takes the wheel for the volume (its handleInput, given the
+  events before the frame's hit test), so a list over it lets the wheel
+  through as a sidebar does: the list's box of the last frame
+  (`VideoPlayer::over`) is where the picture leaves the wheel alone.
+- **Trap: the size of a file PHP looked at before is its stat cache's.**
+  `OpenSubtitles::hash` read a file rewritten in the test at its old
+  size; it clears the cache of the path first (a film still being
+  written, too).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

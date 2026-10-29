@@ -1707,6 +1707,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   the pop-up's; the profiles keep the order they were saved in (IINA's,
   a Swift dictionary's, have none). `Dialog::prompt`'s detail and check
   (IINA's quickPromptPanel) are internal too.
+- **Online subtitles** (v1.60): `VideoPlayerOptions::$openSubtitlesKey`
+  and `Context::videoPlayerSettings` are myphp's, as IINA's OpenSubtitles
+  (Find Online Subtitles) and its Subtitles pane; mygo has no video. With
+  no preferred language set, the system's are searched (IINA alerts and
+  searches English); the languages are the codes of BCP 47 (zh-Hans, en),
+  not IINA's ISO 639-2; Logout forgets the password too (IINA leaves it
+  in the Keychain). Search Online asks TMDB first, the developer's choice
+  (agc_player's way, IINA has none): the file's name read as agc_player's
+  MetaVideo reads it (`Media\MetaVideo`, `Media\Tmdb`, internal), the
+  subtitles of the film's TMDB id (a show's season and episode), IINA's
+  search by hash and name only where that finds none.
 - **External audio** (v1.55): `Player::loadAudio`,
   `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no video.

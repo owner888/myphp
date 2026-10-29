@@ -43,7 +43,7 @@ final class Player
     public static bool $hardwareDecoding = true;
 
     private Source $source;
-    /** Whether this film's video decodes on the system's decoders (self::$hardwareDecoding as it opened). */
+    /** Whether this film's video decodes on the system's decoders (self::$hardwareDecoding as it opened, then setHardwareDecoding's). */
     private bool $hardware;
     /** What reads a film over HTTP ahead (its bytes, or HLS's segments), null for a file's. */
     private ?Cache $net = null;
@@ -993,6 +993,36 @@ final class Player
         }
         $this->ahead = array_values(array_filter($read, fn(Packet $q) => $q->track !== $this->video || $q->time >= $at - 1e-6));
         return max(0.0, $at);
+    }
+
+    /**
+     * @internal UI\VideoPlayerState: decodes this film's video on the
+     * system's decoders or not, as IINA's quick setting of hardware
+     * decoding (mpv's hwdec set as it plays): the frames from where it is
+     * decoded again, from the keyframe before, the other way. Whether it
+     * can be decoded the other way: decodingSwitchable().
+     */
+    public function setHardwareDecoding(bool $on): void
+    {
+        if ($on === $this->hardware) {
+            return;
+        }
+        $this->hardware = $on;
+        $this->out->setHardware($on);
+        $this->thumbDecoder = null; // its thumbnails decoded so too
+        $this->go($this->time(), true);
+    }
+
+    /** @internal UI\VideoPlayer: whether its video decodes on the system's decoders (what only they decode, whatever was asked; AV1 without them, in software). */
+    public function hardwareDecoding(): bool
+    {
+        return $this->video !== null && !\MyPHP\Native\SoftVideo::wanted($this->video, $this->hardware);
+    }
+
+    /** @internal UI\VideoPlayer: whether its video decodes either way, and so is switched (AV1, with libdav1d and the system's decoder). */
+    public function decodingSwitchable(): bool
+    {
+        return $this->video !== null && \MyPHP\Native\SoftVideo::wanted($this->video, false) && \MyPHP\Native\CoreMedia::playable($this->video);
     }
 
     /** Plays at $rate times the speed (0.5 to 2 sound best). */

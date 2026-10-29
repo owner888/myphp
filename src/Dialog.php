@@ -186,6 +186,37 @@ final class Dialog
         return $text;
     }
 
+    /**
+     * @internal an alert asking for a user's name and password, as $window's
+     * sheet (app-modal without one), as IINA's quickUsernamePasswordPanel:
+     * $prompt over $detail, a field of each, $user's and $password's their
+     * placeholders, the password's a secure one. Both, or null when
+     * canceled. @return ?array{0: string, 1: string}
+     */
+    public static function login(?Window $window, string $prompt, string $detail, string $user, string $password): ?array
+    {
+        $t = L10n::in(App::locale());
+        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
+        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($prompt));
+        ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($detail));
+        ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('ok')));
+        ObjC::msg('v:p', ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('cancel'))), 'setKeyEquivalent:', ObjC::str("\e"));
+        $view = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 280, 54));
+        $fields = [];
+        foreach ([['NSTextField', $user, 30], ['NSSecureTextField', $password, 0]] as [$cls, $placeholder, $y]) {
+            $f = ObjC::msg('p:r', ObjC::alloc($cls), 'initWithFrame:', ObjC::rect(0, $y, 280, 24));
+            ObjC::msg('v:p', $f, 'setPlaceholderString:', ObjC::str($placeholder));
+            ObjC::msg('v:p', $view, 'addSubview:', $f);
+            $fields[] = $f;
+        }
+        ObjC::msg('v:p', $fields[0], 'setNextKeyView:', $fields[1]); // Tab from the name to the password
+        ObjC::msg('v:p', $alert, 'setAccessoryView:', $view);
+        ObjC::msg('v:p', ObjC::msg('p:', $alert, 'window'), 'setInitialFirstResponder:', $fields[0]);
+        $got = self::run($alert, $window) === self::FIRST_BUTTON ? [ObjC::phpStr(ObjC::msg('p:', $fields[0], 'stringValue')), ObjC::phpStr(ObjC::msg('p:', $fields[1], 'stringValue'))] : null;
+        foreach ([...$fields, $view, $alert] as $o) { ObjC::msg('v:', $o, 'release'); }
+        return $got;
+    }
+
     /** @internal a page's file input: files, folders too with $dirs, several with $multiple, as $window's sheet; null when canceled (mygo's jsFileInput) @return ?list<string> */
     public static function chooseForPage(Window $window, bool $multiple, bool $dirs): ?array
     {

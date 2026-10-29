@@ -54,10 +54,11 @@ final class VideoPlayer
         if ($o->keys) { self::keys($c, $s, $p); }
         $picture = $c->video($p)->grow(1);
         $width = $c->width;
-        $picture->handleInput(function (InputEvent $e) use ($s, $width): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
+        $chooser = null; // the list of the subtitles found online, built below
+        $picture->handleInput(function (InputEvent $e) use ($s, $width, $c, $picture, &$chooser): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
             $onSide = $s->sidebar === 'playlist' ? $e->x < self::SIDEBAR : $s->sidebar !== null && $e->x >= $width - self::SIDEBAR;
-            if ($e->kind !== InputEvent::SCROLL || $onSide) {
-                return false; // the rest goes on to the frame (a press, a click), the wheel over a sidebar to its scroll
+            if ($e->kind !== InputEvent::SCROLL || $onSide || ($chooser !== null && self::over($c, $chooser, ...$c->localToWindow($picture, $e->x, $e->y)))) {
+                return false; // the rest goes on to the frame (a press, a click), the wheel over a sidebar or the list of subtitles found to its scroll
             }
             if (abs($e->dy) >= abs($e->dx)) {
                 $s->setVolume($s->volume - $e->dy * self::VOLUME_A_POINT);
@@ -138,6 +139,7 @@ final class VideoPlayer
         }
 
         if ($o->osd) { self::osd($c, $s, $p, $now); }
+        if ($s->onlineSubtitles !== null) { $chooser = self::onlineSubtitles($c, $s); }
         if ($s->opening !== null) {
             self::bufferIndicator($c, self::openingText($c, $s));
         } elseif (($percent = $p->bufferingPercent()) !== null) {
@@ -387,9 +389,10 @@ final class VideoPlayer
     private static function osd(Context $c, VideoPlayerState $s, Player $p, float $now): void
     {
         [$text, $under, $until] = $s->message;
+        if ($s->onlineSubtitles !== null) { $text = ''; } // the list of subtitles found says it, where the message is
         $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial('glass')->round(12)->passThrough();
         $o = $c->animate($box, 'osd', $now < $until ? 1 : 0, 0.3);
-        if ($now < $until) { $c->after($until - $now + 0.01); }
+        if ($now < $until && is_finite($until)) { $c->after($until - $now + 0.01); } // one till another (a search going on) fades with it
         $box->opacity($o);
         if ($o <= 0.001 || $text === '') { $box->invisible(); }
           $c->text($text, 20, 0xffffff);
@@ -406,6 +409,101 @@ final class VideoPlayer
               $c->text($under, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7);
           }
         $c->end();
+    }
+
+    /**
+     * The settings of IINA's Subtitles pane the player has (PrefSubViewController),
+     * in the app's look, for its settings window (Context::videoPlayerSettings):
+     * under Online Subtitles, the OpenSubtitles account, "Not logged in" or
+     * "Logged in as" its user, and Login (a name and password asked, the
+     * account tried) or Logout; under Other, the preferred languages, a
+     * code a token, the system's where none.
+     */
+    public static function settings(Context $c, VideoPlayerState $s): Node
+    {
+        $t = $c->theme;
+        $st = $s->settings();
+        $root = $c->column(0, $t->space(4))->padding($t->space(5))->fillWidth();
+          $c->text(self::t($c, 'videoOnlineSubtitles'), $t->fontSize, $t->text)->fontWeight(600);
+          $c->row(0, $t->space(3))->align(Node::CENTER)->fillWidth();
+            $c->text(self::t($c, 'videoOpenSubtitlesAccount'), $t->fontSize, $t->text)->width(170)->textAlign(Node::END);
+            $user = $st->user();
+            $c->text($user === '' ? self::t($c, 'videoNotLoggedIn') : self::t($c, 'videoLoggedInAs', ['user' => $user]), $t->fontSize, $t->textMuted);
+            $b = $c->button(self::t($c, $user === '' ? 'videoLogin' : 'videoLogout'));
+            if ($s->loggingIn) { $b->disabled = true; $c->spinner(); }
+            if ($c->clicked($b)) {
+                if ($user !== '') {
+                    $s->logOutOpenSubtitles();
+                } elseif (($got = \MyPHP\Dialog::login(Window::focused(), self::t($c, 'videoOpenSubtitlesLogin'), self::t($c, 'videoOpenSubtitlesLoginMessage'), self::t($c, 'videoUsername'), self::t($c, 'videoPassword'))) !== null && $got[0] !== '' && $got[1] !== '') {
+                    $s->logInOpenSubtitles($got[0], $got[1], static function (string $why) use ($c): void { // IINA's alert, its reason under
+                        \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: Window::focused(), type: 'warning', message: self::t($c, 'videoCannotLoginDetail', ['why' => $why])));
+                    });
+                }
+            }
+          $c->end();
+          $c->text(self::t($c, 'videoOther'), $t->fontSize, $t->text)->fontWeight(600);
+          $c->row(0, $t->space(3))->align(Node::START)->fillWidth();
+            $c->text(self::t($c, 'videoPreferredLanguage'), $t->fontSize, $t->text)->width(170)->textAlign(Node::END)->paddingY($t->space(1.5));
+            $c->column(0, $t->space(1))->grow(1);
+              $languages = $st->languages();
+              $f = $c->tokenField($languages, array_values(array_diff(\MyPHP\App::preferredLanguages(), $languages)), 300)->label(self::t($c, 'videoPreferredLanguage'));
+              if ($c->changed($f)) { $s->setSubtitleLanguages($languages); }
+              $c->text(self::t($c, 'videoPreferredLanguageHelp'), $t->fontSize - 2, $t->textMuted)->maxWidth(300);
+            $c->end();
+          $c->end();
+        $c->end();
+        return $root;
+    }
+
+    /**
+     * IINA's list of the subtitles found online (SubChooseViewController,
+     * in its OSD): how many, and a row of each, its file's name over its
+     * language, year, frames a second and downloads, the day it was
+     * uploaded at the right; a click chooses one (Command one more), a
+     * double click downloads it; Cancel, and Download of those chosen.
+     */
+    private static function onlineSubtitles(Context $c, VideoPlayerState $s): Node
+    {
+        $found = $s->onlineSubtitles ?? [];
+        $day = new \MyPHP\DateFormatter(\MyPHP\App::locale(), new \MyPHP\DateOptions(date: \MyPHP\Style::Medium));
+        $box = $c->key('online subtitles')->column(0, 10)->absolute()->left(8)->top(48)->width(460)->padding(12, 14, 12, 14)->systemMaterial('glass')->round(12)->keepFocus();
+          $c->text(self::t($c, 'videoSubtitlesFound', ['count' => count($found)]), 20, 0xffffff);
+          $c->text(self::t($c, 'videoSubtitlesChoose'), 12, 0xffffff)->opacity(0.7);
+          self::frosted($c->scroll()->height(min(5, count($found)) * 44.0)->fillWidth(), 0.08, 0, 6);
+            $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+              foreach ($found as $i => $f) {
+                  $chosen = in_array($i, $s->onlineChosen, true);
+                  $row = $c->column(0, 2)->height(44)->paddingX(10)->justify(Node::CENTER)->fillWidth();
+                  if ($chosen) { ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(0xffffff, 0.12); }
+                    $c->text($f['name'], 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…');
+                    $c->row(0, 8)->fillWidth();
+                      $about = implode('  ', array_filter([$f['language'], $f['year'] > 0 ? "({$f['year']})" : '', $f['fps'] != 0 ? VideoPlayerState::number($f['fps']) . ' fps' : '', "\u{2b07}{$f['downloads']}"]));
+                      $c->text($about, 11, 0xffffff)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
+                      $at = strtotime($f['uploaded']);
+                      if ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, 0xffffff)->opacity(0.6); }
+                    $c->end();
+                  $c->end();
+                  if ($c->doubleClicked($row)) { $s->onlineChosen = [$i]; $s->downloadOnlineSubtitles([$i]); }
+                  elseif ($c->clicked($row)) {
+                      $s->onlineChosen = ($c->clickModifiers($row) & Key::COMMAND) === 0 ? [$i] : ($chosen ? array_values(array_diff($s->onlineChosen, [$i])) : [...$s->onlineChosen, $i]);
+                  }
+              }
+            $c->end();
+          $c->end();
+          $c->row(0, 8)->fillWidth()->justify(Node::END);
+            if (self::sideButton($c, self::t($c, 'videoCancel'))) { $s->cancelOnlineSubtitles(); }
+            if (self::sideButton($c, self::t($c, 'videoDownload'), $s->onlineChosen !== [])) { $s->downloadOnlineSubtitles($s->onlineChosen); }
+          $c->end();
+        $c->end();
+        return $box;
+    }
+
+    /** Whether the window's point ($x, $y) is in the last frame's box of $n. */
+    private static function over(Context $c, Node $n, float $x, float $y): bool
+    {
+        $at = $c->windowToLocal($n, $x, $y);
+        [, , $w, $h] = $c->layoutBounds($n);
+        return $at !== null && $at[0] >= 0 && $at[1] >= 0 && $at[0] < $w && $at[1] < $h;
     }
 
     /**
@@ -841,10 +939,10 @@ final class VideoPlayer
         return $clicked;
     }
 
-    /** A switch as macOS 26 draws one, 38 by 18; returns whether it was clicked. */
-    private static function toggleSwitch(Context $c, bool $on, bool $enabled = true): bool
+    /** A switch as macOS 26 draws one, 38 by 18, $label's to assistive technology; returns whether it was clicked (never, not $enabled). */
+    private static function toggleSwitch(Context $c, string $label, bool $on, bool $enabled = true): bool
     {
-        $sw = $c->row()->size(38, 18)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on): void {
+        $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on): void {
             $l->rect($n->x, $n->y, $n->w, $n->h, $on ? $t->accent : 0xffffff, $on ? 1.0 : 0.2, 9);
             $l->rect($on ? $n->x + $n->w - 24 : $n->x + 2, $n->y + 2, 22, 14, 0xffffff, 1.0, 7);
         });
@@ -927,8 +1025,7 @@ final class VideoPlayer
         $b = self::frosted($c->row()->height(24)->paddingX(10)->center(), $enabled ? 0.14 : 0.08, 0, 6);
           $c->text($label, 13, 0xffffff)->opacity($enabled ? 0.9 : 0.5);
         $c->end();
-        if (!$enabled) { $b->tooltip(self::t($c, 'videoNotYet')); return false; }
-        return $c->clicked($b);
+        return $enabled && $c->clicked($b);
     }
 
     /** The short name of a codec, as mpv names it. */
@@ -992,7 +1089,10 @@ final class VideoPlayer
           }
         $c->end();
         self::card($c);
-          self::heading($c, 'cpu', self::t($c, 'videoHardwareDecoding'), fn() => self::toggleSwitch($c, true, false)); // the system decodes in hardware
+          self::heading($c, 'cpu', self::t($c, 'videoHardwareDecoding'), function () use ($c, $s, $p): void { // IINA's: as it plays, the frames from where it is decoded the other way; what decodes one way only (all but AV1 in hardware, AV1 in software without the system's decoder), as it does, fixed
+              $hw = $p->hardwareDecoding();
+              if (self::toggleSwitch($c, self::t($c, 'videoHardwareDecoding'), $hw, $p->decodingSwitchable())) { $s->setHardwareDecoding(!$hw); }
+          });
         $c->end();
     }
 
@@ -1112,12 +1212,12 @@ final class VideoPlayer
         foreach ($tracks as $t) { $rows[] = self::trackRow($c, $t, ''); }
         $at = array_search($p->subtitleTrack(), $tracks, true);
         self::heading($c, '1.square.fill', self::t($c, 'videoPrimary'), function () use ($c, $s) {
-            if (self::toggleSwitch($c, $s->subtitlesVisible)) { $s->toggleSubtitles(); }
+            if (self::toggleSwitch($c, self::t($c, 'videoPrimary'), $s->subtitlesVisible)) { $s->toggleSubtitles(); }
         });
         $i = self::trackList($c, $rows, $at === false ? 0 : $at + 1);
         if ($i !== null && ($i === 0 || $tracks[$i - 1] !== $p->secondarySubtitleTrack())) { $p->setSubtitleTrack($i === 0 ? null : $tracks[$i - 1]); }
         self::heading($c, '2.square.fill', self::t($c, 'videoSecondary'), function () use ($c, $s) {
-            if (self::toggleSwitch($c, $s->secondarySubtitlesVisible)) { $s->toggleSecondarySubtitles(); }
+            if (self::toggleSwitch($c, self::t($c, 'videoSecondary'), $s->secondarySubtitlesVisible)) { $s->toggleSecondarySubtitles(); }
         });
         $texts = array_values(array_filter($tracks, fn(Track $t) => !in_array($t->codec, Subtitles::PICTURES, true))); // mpv's secondary: text tracks
         $rows2 = [[self::t($c, 'videoNoTrack'), '']];
@@ -1133,7 +1233,7 @@ final class VideoPlayer
                 $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoLoadSubtitles')));
                 if ($paths) { $s->loadSubtitles($paths[0]); }
             }
-            self::sideButton($c, self::t($c, 'videoSearchOnline'), false);
+            if (self::sideButton($c, self::t($c, 'videoSearchOnline'), $s->openSubtitles !== null && !$s->searchingOnline)) { $s->searchOnlineSubtitles(); } // IINA's Find Online Subtitles, of OpenSubtitles: the options' key, else disabled
           $c->end();
         $c->end();
         self::card($c, 6);

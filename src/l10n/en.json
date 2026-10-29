@@ -1061,6 +1061,114 @@
   "@videoValueExists": {
     "description": "Under a prompt's field, IINA's: the name is another's."
   },
+  "videoFindingOnline": "Finding online subtitles…",
+  "@videoFindingOnline": {
+    "description": "The message while subtitles are looked for online, IINA's."
+  },
+  "videoSubtitlesNotFound": "No subtitles found",
+  "@videoSubtitlesNotFound": {
+    "description": "The message when no subtitles were found online, IINA's."
+  },
+  "videoSubtitlesFound": "{count} subtitles found.",
+  "@videoSubtitlesFound": {
+    "description": "Over the list of subtitles found online, IINA's: how many."
+  },
+  "videoSubtitlesChoose": "Please click to select subtitles to download:",
+  "@videoSubtitlesChoose": {
+    "description": "Under the count of subtitles found online, IINA's."
+  },
+  "videoSubtitlesDownloading": "Downloading {count} subtitles",
+  "@videoSubtitlesDownloading": {
+    "description": "The message while subtitles found online download, IINA's."
+  },
+  "videoSubtitlesDownloaded": "Subtitle downloaded",
+  "@videoSubtitlesDownloaded": {
+    "description": "The message once subtitles found online downloaded, their names under it, IINA's."
+  },
+  "videoSubtitlesQuota": "Subtitle download limit reached",
+  "@videoSubtitlesQuota": {
+    "description": "The message when OpenSubtitles allows no more downloads, IINA's."
+  },
+  "videoSubtitlesQuotaAfter": "Try again after {time}",
+  "@videoSubtitlesQuotaAfter": {
+    "description": "Under the download limit's message: when they come again, IINA's."
+  },
+  "videoSubtitlesQuotaLater": "Try again later",
+  "@videoSubtitlesQuotaLater": {
+    "description": "Under the download limit's message, when the server does not say when, IINA's."
+  },
+  "videoCanceled": "Canceled",
+  "@videoCanceled": {
+    "description": "The message when the list of subtitles found online is canceled, IINA's."
+  },
+  "videoCancel": "CANCEL",
+  "@videoCancel": {
+    "description": "A button of the list of subtitles found online, IINA's."
+  },
+  "videoDownload": "DOWNLOAD",
+  "@videoDownload": {
+    "description": "A button of the list of subtitles found online, IINA's: downloads those chosen."
+  },
+  "videoOnlineSubtitles": "Online Subtitles:",
+  "@videoOnlineSubtitles": {
+    "description": "A section of the player's settings, IINA's Subtitles pane's."
+  },
+  "videoOpenSubtitlesAccount": "OpenSubtitles account:",
+  "@videoOpenSubtitlesAccount": {
+    "description": "A label of the player's settings, IINA's."
+  },
+  "videoNotLoggedIn": "Not logged in",
+  "@videoNotLoggedIn": {
+    "description": "No OpenSubtitles account logged in, IINA's."
+  },
+  "videoLoggedInAs": "Logged in as {user}",
+  "@videoLoggedInAs": {
+    "description": "The OpenSubtitles account logged in, IINA's."
+  },
+  "videoLogin": "Login",
+  "@videoLogin": {
+    "description": "A button of the player's settings: logs in to OpenSubtitles, IINA's."
+  },
+  "videoLogout": "Logout",
+  "@videoLogout": {
+    "description": "A button of the player's settings: logs out of OpenSubtitles, IINA's."
+  },
+  "videoOpenSubtitlesLogin": "OpenSubtitles Login",
+  "@videoOpenSubtitlesLogin": {
+    "description": "The title of the prompt for an OpenSubtitles account, IINA's."
+  },
+  "videoOpenSubtitlesLoginMessage": "Please enter your username and password",
+  "@videoOpenSubtitlesLoginMessage": {
+    "description": "The message of the prompt for an OpenSubtitles account, IINA's."
+  },
+  "videoUsername": "Username",
+  "@videoUsername": {
+    "description": "The placeholder of the user's name in the login prompt, IINA's."
+  },
+  "videoPassword": "Password",
+  "@videoPassword": {
+    "description": "The placeholder of the password in the login prompt, IINA's."
+  },
+  "videoCannotLogin": "Cannot login",
+  "@videoCannotLogin": {
+    "description": "The message when the OpenSubtitles account cannot log in for a search, IINA's."
+  },
+  "videoCannotLoginDetail": "Cannot login. Please check your username, password and network status.\n\n{why}",
+  "@videoCannotLoginDetail": {
+    "description": "The alert when the settings' login fails, its reason under, IINA's."
+  },
+  "videoOther": "Other:",
+  "@videoOther": {
+    "description": "A section of the player's settings, IINA's."
+  },
+  "videoPreferredLanguage": "Preferred language:",
+  "@videoPreferredLanguage": {
+    "description": "A label of the player's settings: the languages of subtitles searched online, IINA's."
+  },
+  "videoPreferredLanguageHelp": "Language codes, such as zh-Hans or en. With none, the system's languages are used.",
+  "@videoPreferredLanguageHelp": {
+    "description": "Under the preferred languages: what they are, the system's where none."
+  },
   "videoEqFlat": "Flat",
   "@videoEqFlat": {
     "description": "A preset of the video player's equalizer, IINA's."

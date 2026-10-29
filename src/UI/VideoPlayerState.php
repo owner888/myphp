@@ -6,6 +6,13 @@ namespace MyPHP\UI;
 use Closure;
 use MyPHP\App;
 use MyPHP\Media\EqualizerProfiles;
+use MyPHP\Media\MetaVideo;
+use MyPHP\Media\OpenSubtitles;
+use MyPHP\Media\OpenSubtitlesQuota;
+use MyPHP\Media\SubtitleSettings;
+use MyPHP\Media\Tmdb;
+use MyPHP\SecretNotFound;
+use MyPHP\Secrets;
 use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
@@ -55,6 +62,30 @@ final class VideoPlayerState
     public string $equalizerPreset = '';
     /** @var ?list<float> the gains of the sliders while one is dragged, set as it is let go @internal VideoPlayer */
     public ?array $equalizerDraft = null;
+    /** OpenSubtitles, of the options' key (VideoPlayerOptions::$openSubtitlesKey), null without one @internal */
+    public ?OpenSubtitles $openSubtitles = null;
+    /** TMDB, to look a film up by its name before OpenSubtitles (searchOnlineSubtitles); made as one is first looked up. */
+    private ?Tmdb $tmdb = null;
+    /** The settings of IINA's Subtitles pane: the app's, SubtitleSettings::default(), unless set @internal */
+    public ?SubtitleSettings $subtitleSettings = null;
+    /** Whether an account logs in to OpenSubtitles from the settings (IINA's indicator by its Login) @internal VideoPlayer */
+    public bool $loggingIn = false;
+    /** The Keychain's key of an OpenSubtitles account's password (Secrets), by its user. */
+    private const PASSWORD = 'opensubtitles:';
+    /**
+     * The subtitles found online to choose from (OpenSubtitles::search's),
+     * null while none are shown; the ones chosen, by their place; whether a
+     * search or its downloads go on (IINA's isSearchingOnlineSubtitle).
+     * @var ?list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}>
+     * @internal VideoPlayer
+     */
+    public ?array $onlineSubtitles = null;
+    /** @var list<int> @internal VideoPlayer */
+    public array $onlineChosen = [];
+    /** @internal VideoPlayer */
+    public bool $searchingOnline = false;
+    /** Whether the video decodes on the system's decoders, as the quick setting set it (null: as Player::$hardwareDecoding has each film open) @internal VideoPlayer */
+    public ?bool $hardwareDecoding = null;
     /** The profile of the user's the gains are (EqualizerProfiles), '' for none @internal VideoPlayer */
     public string $equalizerProfile = '';
     /** The profiles the user saved: the app's, EqualizerProfiles::default(), unless set @internal */
@@ -233,6 +264,7 @@ final class VideoPlayerState
         $this->speedAt = log($p->rate() / 0.25, 64);
         $p->setVolume($this->volume);
         $p->setEqualizer($this->equalizer);
+        if ($this->hardwareDecoding !== null) { $p->setHardwareDecoding($this->hardwareDecoding); } // the quick setting's, of this player and the next (mpv's hwdec stays as films change)
         $this->moved = microtime(true);
         $noted = 0.0;
         $this->off = [
@@ -324,6 +356,7 @@ final class VideoPlayerState
     {
         $this->runtime = \WeakReference::create($rt);
         $this->resume = $resume = $o->resume;
+        if ($o->openSubtitlesKey !== '' && $this->openSubtitles === null) { $this->openSubtitles = new OpenSubtitles($o->openSubtitlesKey); }
         $p = $this->player;
         $p?->setKeepAwake($o->keepAwake);
         if ($o->nowPlaying !== $this->nowPlaying) {
@@ -411,8 +444,242 @@ final class VideoPlayerState
     /** Shows $text at the top left, with the time ('time') or the volume ('volume') under it, as IINA's messages. */
     public function say(string $text, string $under = ''): void
     {
-        $this->message = [$text, $under, microtime(true) + self::MESSAGE];
+        $this->tell($text, $under, self::MESSAGE);
+    }
+
+    /** $text shown so for $seconds (INF: until another, as IINA's OSD of no auto-hide). */
+    private function tell(string $text, string $under, float $seconds): void
+    {
+        $this->message = [$text, $under, microtime(true) + $seconds];
         $this->changed();
+    }
+
+    /**
+     * @internal VideoPlayer: IINA's Find Online Subtitles, of OpenSubtitles:
+     * the film's subtitles in the settings' languages, else the system's
+     * (those it has; English where none), found by its TMDB id as
+     * agc_player finds them (tmdbSubtitles), else (none found, or no id) by
+     * its file's hash and name, IINA's way (a stream's, by its title);
+     * told as it goes; one is downloaded and loaded at once, more are shown
+     * to choose from (onlineSubtitles). In a fiber of its own, the window
+     * going on; nothing while one goes on.
+     */
+    public function searchOnlineSubtitles(): void
+    {
+        $p = $this->player;
+        $os = $this->openSubtitles;
+        if ($p === null || $os === null || $this->searchingOnline) {
+            return;
+        }
+        if (App::running() && \Fiber::getCurrent() === null) {
+            $this->searchingOnline = true;
+            App::go(function (): void { $this->searchingOnline = false; $this->searchOnlineSubtitles(); });
+            return;
+        }
+        $this->searchingOnline = true;
+        $this->onlineSubtitles = null; $this->onlineChosen = [];
+        $this->tell($this->t('videoFindingOnline'), '', INF);
+        try {
+            $this->logInFromSettings($os);
+            $preferred = $this->settings()->languages();
+            $languages = OpenSubtitles::languagesOf($preferred !== [] ? $preferred : App::preferredLanguages(), $os->languages()); // the settings', else the system's
+            $local = !$p->remote();
+            $found = $this->tmdbSubtitles($os, $languages, $local ? new MetaVideo(basename($p->path()), basename(dirname($p->path()))) : new MetaVideo($p->title()));
+            if ($found === []) {
+                $found = $os->search($languages, $local ? OpenSubtitles::hash($p->path()) : null, $local ? pathinfo($p->path(), PATHINFO_FILENAME) : $p->title());
+            }
+            if ($found === []) {
+                $this->say($this->t('videoSubtitlesNotFound'));
+            } elseif (count($found) === 1) {
+                $this->searchingOnline = false;
+                $this->onlineSubtitles = $found;
+                $this->downloadOnlineSubtitles([0]);
+                return;
+            } else {
+                $this->onlineSubtitles = $found;
+                $this->tell($this->t('videoSubtitlesFound', ['count' => count($found)]), '', INF); // over the list to choose from
+            }
+        } catch (RuntimeException $e) {
+            $this->failedOnline($e);
+        }
+        $this->searchingOnline = false;
+        $this->changed();
+    }
+
+    /**
+     * The subtitles in $languages of the film (or the show's episode) $meta
+     * tells of (its file's name), as agc_player looks them up: its TMDB id,
+     * written in the name, else TMDB's first of its name (the Chinese one,
+     * then the English) and year, then OpenSubtitles' of that id (a show's,
+     * of its season and episode); none for a name TMDB finds nothing of.
+     * @param list<string> $languages
+     * @return list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}>
+     */
+    private function tmdbSubtitles(OpenSubtitles $os, array $languages, MetaVideo $meta): array
+    {
+        $id = $meta->tmdbId;
+        foreach (array_unique(array_filter([trim($meta->cnName ?? ''), trim($meta->enName ?? '')], fn($n) => $n !== '')) as $name) {
+            $id ??= ($this->tmdb ??= new Tmdb())->find($name, $meta->year, $meta->tv); // the next name only while none is found
+        }
+        return $id === null ? [] : $os->searchTmdb($languages, $id, $meta->tv, $meta->season, $meta->episode);
+    }
+
+    /** @internal VideoPlayer: the subtitles found online at places $chosen downloaded and loaded, told (IINA's Download of its list); in a fiber of its own. @param list<int> $chosen */
+    public function downloadOnlineSubtitles(array $chosen): void
+    {
+        $found = $this->onlineSubtitles;
+        $os = $this->openSubtitles;
+        if ($found === null || $os === null || $chosen === [] || $this->searchingOnline) {
+            return;
+        }
+        if (App::running() && \Fiber::getCurrent() === null) {
+            $this->searchingOnline = true;
+            App::go(function () use ($chosen): void { $this->searchingOnline = false; $this->downloadOnlineSubtitles($chosen); });
+            return;
+        }
+        $this->searchingOnline = true;
+        $this->onlineSubtitles = null; $this->onlineChosen = [];
+        $this->tell($this->t('videoSubtitlesDownloading', ['count' => count($chosen)]), '', INF);
+        try {
+            $dir = sys_get_temp_dir() . '/myphp-subtitles';
+            if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+                throw new RuntimeException("cannot make $dir");
+            }
+            $names = [];
+            foreach ($chosen as $i) {
+                [$name, $data] = $os->download($found[$i]['file']);
+                $path = "$dir/[$i]" . basename($name); // IINA's: "[index]name", in the temporary folder
+                if (file_put_contents($path, $data) === false) {
+                    throw new RuntimeException("cannot write $path");
+                }
+                $this->loadSubtitles($path);
+                $names[] = basename($name);
+            }
+            $this->say($this->t('videoSubtitlesDownloaded'), implode("\n", $names));
+        } catch (RuntimeException $e) {
+            $this->failedOnline($e);
+        }
+        $this->searchingOnline = false;
+        $this->changed();
+    }
+
+    /** The account of the settings logged in, once (IINA's login() before a search): its password the Keychain's; none stored, none. */
+    private function logInFromSettings(OpenSubtitles $os): void
+    {
+        $user = $this->settings()->user();
+        if ($user === '' || $os->loggedIn()) {
+            return;
+        }
+        try {
+            $password = Secrets::get(self::PASSWORD . $user);
+        } catch (SecretNotFound) {
+            return; // as IINA's: an account of no password stored searches as none
+        }
+        try {
+            $os->login($user, $password);
+        } catch (OpenSubtitlesQuota $e) {
+            throw $e;
+        } catch (RuntimeException $e) {
+            throw new RuntimeException($this->t('videoCannotLogin') . ': ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /** @internal VideoPlayer: the settings of IINA's Subtitles pane the player has. */
+    public function settings(): SubtitleSettings
+    {
+        return $this->subtitleSettings ??= SubtitleSettings::default();
+    }
+
+    /**
+     * @internal VideoPlayer: logs in to OpenSubtitles as $user (IINA's Login
+     * of its Subtitles pane): the account tried, then its user kept in the
+     * settings and its password in the Keychain; what fails told by
+     * $failed. In a fiber of its own ($loggingIn meanwhile).
+     * @param \Closure(string): void $failed
+     */
+    public function logInOpenSubtitles(string $user, string $password, \Closure $failed): void
+    {
+        $os = $this->openSubtitles;
+        if ($os === null || $this->loggingIn) {
+            return;
+        }
+        if (App::running() && \Fiber::getCurrent() === null) {
+            $this->loggingIn = true;
+            App::go(function () use ($user, $password, $failed): void { $this->loggingIn = false; $this->logInOpenSubtitles($user, $password, $failed); });
+            return;
+        }
+        $this->loggingIn = true;
+        $this->changed();
+        try {
+            $os->logout(); // another account's session, if one is
+            $os->login($user, $password);
+            Secrets::set(self::PASSWORD . $user, $password);
+            $this->settings()->setUser($user);
+        } catch (RuntimeException $e) {
+            $failed($e->getMessage());
+        } finally {
+            $this->loggingIn = false;
+            $this->changed();
+        }
+    }
+
+    /** @internal VideoPlayer: the account logged out (IINA's Logout: its user forgotten; here its password too), its session ended. */
+    public function logOutOpenSubtitles(): void
+    {
+        $user = $this->settings()->user();
+        if ($user === '') {
+            return;
+        }
+        $this->settings()->setUser('');
+        try { Secrets::delete(self::PASSWORD . $user); } catch (SecretNotFound) {}
+        $os = $this->openSubtitles;
+        if ($os !== null && $os->loggedIn()) {
+            if (App::running() && \Fiber::getCurrent() === null) {
+                App::go(function () use ($os): void { $this->endSession($os); });
+            } else {
+                $this->endSession($os);
+            }
+        }
+        $this->changed();
+    }
+
+    /** OpenSubtitles' session ended; what fails is not the user's (the session lapses), only the log's. */
+    private function endSession(OpenSubtitles $os): void
+    {
+        try {
+            $os->logout();
+        } catch (RuntimeException $e) {
+            error_log("myphp: OpenSubtitles: logout: {$e->getMessage()}");
+        }
+    }
+
+    /** @internal VideoPlayer: the preferred languages of subtitles (IINA's Preferred language), none for the system's. @param list<string> $languages */
+    public function setSubtitleLanguages(array $languages): void
+    {
+        try {
+            $this->settings()->setLanguages($languages);
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+        }
+        $this->changed();
+    }
+
+    /** @internal VideoPlayer: the list of subtitles found online gone, none chosen (IINA's Cancel). */
+    public function cancelOnlineSubtitles(): void
+    {
+        $this->onlineSubtitles = null; $this->onlineChosen = [];
+        $this->say($this->t('videoCanceled'));
+    }
+
+    /** What failed finding or downloading subtitles online, told: the downloads spent as IINA tells it, the rest as the error. */
+    private function failedOnline(RuntimeException $e): void
+    {
+        if ($e instanceof OpenSubtitlesQuota) {
+            $this->tell($this->t('videoSubtitlesQuota'), $e->reset === null ? $this->t('videoSubtitlesQuotaLater') : $this->t('videoSubtitlesQuotaAfter', ['time' => date('H:i', $e->reset)]), 5.0);
+            return;
+        }
+        $this->message = ['', '', 0.0];
+        $this->error = $e->getMessage();
     }
 
     /** The strings of the player's controls and messages, in the app's locale. */
@@ -694,6 +961,14 @@ final class VideoPlayerState
     public function setEqualizer(array $gains, string $preset = ''): void
     {
         $this->applyEqualizer($gains, $preset, '');
+    }
+
+    /** @internal VideoPlayer: decodes the video on the system's decoders or not, as IINA's quick setting, of this player and the next (Player::setHardwareDecoding). */
+    public function setHardwareDecoding(bool $on): void
+    {
+        $this->hardwareDecoding = $on;
+        $this->player?->setHardwareDecoding($on);
+        $this->changed();
     }
 
     /** @internal VideoPlayer: the names of the profiles the user saved; what fails to read shows as the error @return list<string> */
