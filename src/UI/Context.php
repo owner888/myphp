@@ -4220,15 +4220,54 @@ final class Context
     }
 
     /**
-     * The player's settings, for the app's settings window, as IINA's
-     * Subtitles pane has them: the OpenSubtitles account the subtitles
-     * tab's Search Online logs in with (Login asks for its name and
-     * password, kept in the user's Keychain; Logout), and the preferred
-     * languages of subtitles it searches in (the system's where none). They
-     * are the app's, in its user data, whatever player $s is.
+     * The player's settings window, as IINA's Settings: a sidebar of its
+     * pages under a search field, the sections of the page chosen under
+     * it, the page beside it, its sections cards of a row a setting, by
+     * IINA's strings. The settings are IINA's, by its names
+     * (Media\PlayerSettings::default(), the app's, in its user data, whatever
+     * player $s is): its General page's, and of its Video and Subtitles
+     * pages the hardware decoder and the OpenSubtitles account and
+     * languages (Login asks for the name and password, kept in the user's
+     * Keychain); those of the app's windows (new windows, quitting, what
+     * the app does at launch) are the app's to follow. For a window of a
+     * hidden title bar over the sidebar material (WindowOptions:
+     * titleBarStyle 'hiddenInset', vibrancy 'sidebar'), as IINA's is, 600
+     * by 480; it names the window after the page shown.
      */
     public function videoPlayerSettings(VideoPlayerState $s): Node
     {
-        return VideoPlayer::settings($this, $s);
+        return VideoPlayerSettings::build($this, $s);
+    }
+
+    /**
+     * The player's welcome window, as IINA's: the app's icon, name and
+     * version, Open… (the open panel, each file chosen to $open) and Open
+     * URL… ($openURL); the film played last to resume, where the settings
+     * keep recent files and resume (PlayerSettings' recordRecentFiles and
+     * resumeLastPosition), and the recent documents (App::recentDocuments)
+     * under it, one opened ($open) with a click, or Up and Down and
+     * Return. For a window of a hidden title bar over the under-window
+     * material, 560 by 440, as IINA's is.
+     * @param Closure(string): void $open @param Closure(): void $openURL
+     */
+    public function videoPlayerWelcome(Closure $open, Closure $openURL): Node
+    {
+        return VideoPlayerWelcome::build($this, $open, $openURL);
+    }
+
+    /**
+     * The player's playback history window, as IINA's: the films the
+     * players played (PlayerSettings' recordPlaybackHistory), in groups by
+     * the day played or the folder, the latest first, each with where it
+     * was left and when it was played; a search in their names or paths;
+     * a double click or Return plays the films chosen ($open, $newWindow
+     * false), Command-Return in a new window (true), Delete forgets them,
+     * the context menu shows them in the Finder or moves their files to the
+     * Trash. For a window of a hidden title bar, 800 by 600, as IINA's is.
+     * @param Closure(list<string>, bool): void $open
+     */
+    public function videoPlayerHistory(Closure $open): Node
+    {
+        return VideoPlayerHistory::build($this, $open);
     }
 }

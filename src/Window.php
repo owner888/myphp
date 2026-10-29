@@ -66,6 +66,11 @@ final class Window
     private bool $held = false;
     /** What the view last asked of the window (answer): whether the traffic lights show, the aspect it keeps. */
     private ?bool $buttonsAsked = null;
+    /** What the view asked of full screen: the legacy one (IINA's "Use legacy full screen"), the other screens blacked out in it (its "Black out other monitors"). */
+    private bool $legacyAsked = false, $blackOutAsked = false;
+    /** In the legacy full screen: the frame and style it left; the black windows over the other screens. */
+    private ?array $legacy = null;
+    private array $blackOuts = [];
     private ?float $aspectAsked = null;
     /** The frame the window had before it went full screen by its own animation, which it goes back to. */
     private $windowedFrame = null;
@@ -567,8 +572,10 @@ final class Window
                     }
                     if ($event === 'enterFullScreen' || $event === 'leaveFullScreen') {
                         $w->page?->sendTitleBar(); // the controls hide in full screen
+                        $w->fullScreenChanged($event);
                     }
                     $w->emit($event);
+                    foreach ($w->runtime?->windowListeners ?? [] as $listen) { $listen($event); } // the view's own (a player pausing as its window is minimized, IINA's)
                     if (in_array($event, ['resize', 'move', 'minimize', 'restore', 'enterFullScreen', 'leaveFullScreen'], true)) {
                         $w->stateChanged();
                     }
@@ -670,6 +677,8 @@ final class Window
     {
         unset(self::$open[$this->key]);
         $this->destroyed = true;
+        $this->blackOut(false); // its black windows go with it, the menu bar and the Dock back
+        if ($this->legacy !== null) { ObjC::msg('v:L', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'setPresentationOptions:', $this->legacy[2]); }
         if ($this->frameStats !== null && $this->view !== null) { unset(Metal::$afterPresent[ObjC::addr($this->view)]); }
         self::$closingParents++; // its children close with it; the last window is reported once they all are
         foreach (self::all() as $child) {
@@ -932,7 +941,7 @@ final class Window
     /** Whether some of the window shows on screen: not hidden, minimized, on another space or covered by other windows, which still get frames (mygo's surface visible). */
     /**
      * Does what the view asked of the window this frame (Runtime::windowAsks),
-     * once for each change: the traffic lights shown or hidden; the aspect
+     * once for each change: closed; its title; the traffic lights shown or hidden; the aspect
      * kept as the user resizes it, the window first made of that shape, its
      * width kept; full screen or not. Resizing redraws the window at once
      * (windowDidResize:): it waits for the frame to end.
@@ -940,6 +949,12 @@ final class Window
      */
     private function answer(array $asks): void
     {
+        if (($asks['close'] ?? false) === true) { // the view's own window closing (a player at its film's end, IINA's)
+            App::later(function (): void { if (!$this->destroyed) { $this->close(); } });
+        }
+        if (array_key_exists('title', $asks) && $asks['title'] !== $this->title) {
+            $this->setTitle($asks['title']);
+        }
         if (array_key_exists('buttons', $asks) && $asks['buttons'] !== $this->buttonsAsked) {
             $this->buttonsAsked = $asks['buttons'];
             $this->setWindowButtonVisibility($asks['buttons']);
@@ -955,10 +970,14 @@ final class Window
                 }
             });
         }
+        $this->legacyAsked = (bool)($asks['legacyFullScreen'] ?? $this->legacyAsked);
+        $this->blackOutAsked = (bool)($asks['blackOut'] ?? $this->blackOutAsked);
         if (array_key_exists('fullScreen', $asks) && $asks['fullScreen'] !== $this->isFullScreen()) {
             $on = $asks['fullScreen'];
-            App::later(function () use ($on): void {
-                if (!$this->destroyed) { $this->setFullScreen($on); }
+            $legacy = $this->legacyAsked || $this->legacy !== null; // the way it went in, it comes out
+            App::later(function () use ($on, $legacy): void {
+                if ($this->destroyed) { return; }
+                $legacy ? $this->setLegacyFullScreen($on) : $this->setFullScreen($on);
             });
         }
     }
@@ -1199,7 +1218,68 @@ final class Window
 
     public function isFullScreen(): bool
     {
-        return (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN) !== 0;
+        return $this->legacy !== null || (ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN) !== 0;
+    }
+
+    /**
+     * The legacy full screen, as IINA's (before OS X 10.7's spaces): the
+     * window over its whole screen where it is, borderless, the menu bar
+     * and the Dock hidden until the pointer goes to them; off, as it was.
+     */
+    private function setLegacyFullScreen(bool $on): void
+    {
+        if ($on === ($this->legacy !== null)) {
+            return;
+        }
+        $app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
+        if ($on) {
+            $this->legacy = [ObjC::msg('r:', $this->ns, 'frame'), ObjC::msg('L:', $this->ns, 'styleMask'), ObjC::msg('L:', $app, 'presentationOptions')];
+            ObjC::msg('v:L', $app, 'setPresentationOptions:', 1 | 4); // NSApplicationPresentationAutoHideDock, AutoHideMenuBar
+            ObjC::msg('v:L', $this->ns, 'setStyleMask:', ($this->legacy[1] & ~(self::TITLED | self::RESIZABLE)) | self::FULL_SIZE_CONTENT);
+            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::msg('r:', ObjC::msg('p:', $this->ns, 'screen'), 'frame'), true);
+        } else {
+            [$frame, $mask, $options] = $this->legacy;
+            $this->legacy = null;
+            ObjC::msg('v:L', $this->ns, 'setStyleMask:', $mask);
+            ObjC::msg('v:rb', $this->ns, 'setFrame:display:', $frame, true);
+            ObjC::msg('v:L', $app, 'setPresentationOptions:', $options);
+        }
+        $this->fullScreenChanged($on ? 'enterFullScreen' : 'leaveFullScreen');
+    }
+
+    /** Into or out of full screen ($event): told as AppKit's own is, the other screens blacked out in it as the view asked. */
+    private function fullScreenChanged(string $event): void
+    {
+        $this->blackOut($event === 'enterFullScreen' && $this->blackOutAsked);
+        if ($this->legacy !== null || $event === 'leaveFullScreen') {
+            $this->emit($event);
+            foreach ($this->runtime?->windowListeners ?? [] as $listen) { $listen($event); }
+            $this->stateChanged();
+            $this->invalidate();
+        }
+    }
+
+    /** The other screens black while it is full screen (IINA's "Black out other monitors"): a borderless black window over each, gone with $on false. */
+    private function blackOut(bool $on): void
+    {
+        foreach ($this->blackOuts as $b) { ObjC::msg('v:p', $b, 'orderOut:', null); ObjC::msg('v:', $b, 'release'); }
+        $this->blackOuts = [];
+        if (!$on) {
+            return;
+        }
+        $mine = ObjC::msg('p:', $this->ns, 'screen');
+        $screens = ObjC::msg('p:', ObjC::cls('NSScreen'), 'screens');
+        for ($i = 0, $n = ObjC::msg('L:', $screens, 'count'); $i < $n; $i++) {
+            $screen = ObjC::msg('p:L', $screens, 'objectAtIndex:', $i);
+            if (ObjC::addr($screen) === ObjC::addr($mine)) { continue; }
+            $b = ObjC::msg('p:rLlb', ObjC::alloc('NSWindow'), 'initWithContentRect:styleMask:backing:defer:', ObjC::msg('r:', $screen, 'frame'), 0, 2, false); // borderless, buffered
+            ObjC::msg('v:b', $b, 'setReleasedWhenClosed:', false);
+            ObjC::msg('v:p', $b, 'setBackgroundColor:', ObjC::msg('p:', ObjC::cls('NSColor'), 'blackColor'));
+            ObjC::msg('v:l', $b, 'setLevel:', 3); // NSFloatingWindowLevel, as IINA's
+            ObjC::msg('v:L', $b, 'setCollectionBehavior:', 1 | 256); // NSWindowCollectionBehaviorCanJoinAllSpaces, FullScreenAuxiliary
+            ObjC::msg('v:p', $b, 'orderFront:', null);
+            $this->blackOuts[] = $b;
+        }
     }
 
     /** Moves the window to the center of its screen. */

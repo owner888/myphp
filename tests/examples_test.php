@@ -478,11 +478,11 @@ check($t->dataOver($x, $y, $d), 'the zone takes a URL'); $d->data = $url;
 check($t->dataDrop($x, $y, $d), 'and its drop'); $t->frame();
 same('Received URLs: https://example.com/', $right->status, 'a URL dropped is reported');
 
-// video: without a file, it asks for one; a file the system cannot read says why (playing is tests/player_test.php's, on macOS).
-[$view, $s] = Headless::load('video', '$openDialog');
-$t = new Headless($view, 900, 600);
+// video: a player's window; a file the system cannot read says why (playing is tests/player_test.php's, on macOS).
+Headless::load('video');
+$s = new \MyPHP\UI\VideoPlayerState();
+$t = new Headless(function (Context $c) use ($s) { \MyPHP\Examples\Video\view($c, $s); }, 900, 600);
 $t->frame();
-check($t->byText('Open a video (Cmd+O), a URL (Cmd+Shift+O), or drop one on the window') !== null, 'the video player asks for a file, or a URL');
 $s->open(__DIR__ . '/testdata/upright.jpg');
 $t->frame();
 check($s->player === null && $s->error !== '' && $t->byText($s->error) !== null, "a file it cannot play shows why: {$s->error}");

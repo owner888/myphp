@@ -1109,7 +1109,7 @@
   "@videoDownload": {
     "description": "A button of the list of subtitles found online, IINA's: downloads those chosen."
   },
-  "videoOnlineSubtitles": "Online Subtitles:",
+  "videoOnlineSubtitles": "Online Subtitles",
   "@videoOnlineSubtitles": {
     "description": "A section of the player's settings, IINA's Subtitles pane's."
   },
@@ -1157,11 +1157,11 @@
   "@videoCannotLoginDetail": {
     "description": "The alert when the settings' login fails, its reason under, IINA's."
   },
-  "videoOther": "Other:",
+  "videoOther": "Other",
   "@videoOther": {
     "description": "A section of the player's settings, IINA's."
   },
-  "videoPreferredLanguage": "Preferred language:",
+  "videoPreferredLanguage": "Preferred language",
   "@videoPreferredLanguage": {
     "description": "A label of the player's settings: the languages of subtitles searched online, IINA's."
   },
@@ -1257,7 +1257,6 @@
   "@videoEqSpokenWord": {
     "description": "A preset of the video player's equalizer, IINA's."
   },
-
   "videoPrimary": "Primary",
   "@videoPrimary": {
     "description": "The video player's primary subtitles."
@@ -1365,5 +1364,2249 @@
   "videoClearPlaylist": "Clear Playlist",
   "@videoClearPlaylist": {
     "description": "The tooltip of the button that takes every film but the one playing out of the video player's playlist."
+  },
+  "settingsNoResult": "No Result",
+  "@settingsNoResult": {
+    "description": "Shown when a search of the player's settings finds none, IINA's."
+  },
+  "settingsPages": "Settings",
+  "@settingsPages": {
+    "description": "Names the list of the pages of the player's settings window for assistive technology."
+  },
+  "iinaAlertDeleteAllHistoryMessage": "Are you sure to delete all playback history?",
+  "@iinaAlertDeleteAllHistoryMessage": {
+    "description": "IINA's \"alert.delete_all_history.message\"."
+  },
+  "iinaAlertDeleteAllHistoryTitle": "Clear Playback History",
+  "@iinaAlertDeleteAllHistoryTitle": {
+    "description": "IINA's \"alert.delete_all_history.title\"."
+  },
+  "iinaAlertDeleteFileMessage": "Are you sure to trash the selected files?",
+  "@iinaAlertDeleteFileMessage": {
+    "description": "IINA's \"alert.delete_file.message\"."
+  },
+  "iinaAlertDeleteFileTitle": "Delete File",
+  "@iinaAlertDeleteFileTitle": {
+    "description": "IINA's \"alert.delete_file.title\"."
+  },
+  "iinaAlertDeleteHistoryMessage": "Are you sure to delete selected entries?",
+  "@iinaAlertDeleteHistoryMessage": {
+    "description": "IINA's \"alert.delete_history.message\"."
+  },
+  "iinaAlertDeleteHistoryTitle": "Delete Playback History",
+  "@iinaAlertDeleteHistoryTitle": {
+    "description": "IINA's \"alert.delete_history.title\"."
+  },
+  "iinaHistoryWindowColFilename": "Media",
+  "@iinaHistoryWindowColFilename": {
+    "description": "IINA's \"history_window.col.filename\"."
+  },
+  "iinaHistoryWindowColPlayedAt": "Played at",
+  "@iinaHistoryWindowColPlayedAt": {
+    "description": "IINA's \"history_window.col.played_at\"."
+  },
+  "iinaHistoryWindowColProgress": "Progress",
+  "@iinaHistoryWindowColProgress": {
+    "description": "IINA's \"history_window.col.progress\"."
+  },
+  "iinaHistoryWindowMenuDelete": "Delete…",
+  "@iinaHistoryWindowMenuDelete": {
+    "description": "IINA's \"history_window.menu.delete\"."
+  },
+  "iinaHistoryWindowMenuDeleteFile": "Move to Trash…",
+  "@iinaHistoryWindowMenuDeleteFile": {
+    "description": "IINA's \"history_window.menu.delete_file\"."
+  },
+  "iinaHistoryWindowMenuPlay": "Play",
+  "@iinaHistoryWindowMenuPlay": {
+    "description": "IINA's \"history_window.menu.play\"."
+  },
+  "iinaHistoryWindowMenuPlayNewWindow": "Play in New Window",
+  "@iinaHistoryWindowMenuPlayNewWindow": {
+    "description": "IINA's \"history_window.menu.play_new_window\"."
+  },
+  "iinaHistoryWindowMenuShowInFinder": "Show in Finder",
+  "@iinaHistoryWindowMenuShowInFinder": {
+    "description": "IINA's \"history_window.menu.show_in_finder\"."
+  },
+  "iinaHistoryWindowSearchClearRecents": "Clear Recents",
+  "@iinaHistoryWindowSearchClearRecents": {
+    "description": "IINA's \"history_window.search.clear_recents\"."
+  },
+  "iinaHistoryWindowSearchFilename": "Filename",
+  "@iinaHistoryWindowSearchFilename": {
+    "description": "IINA's \"history_window.search.filename\"."
+  },
+  "iinaHistoryWindowSearchFullPath": "Full Path",
+  "@iinaHistoryWindowSearchFullPath": {
+    "description": "IINA's \"history_window.search.full_path\"."
+  },
+  "iinaHistoryWindowSearchNoRecents": "No Recent Searches",
+  "@iinaHistoryWindowSearchNoRecents": {
+    "description": "IINA's \"history_window.search.no_recents\"."
+  },
+  "iinaHistoryWindowSearchRecentsTitle": "Recent Searches",
+  "@iinaHistoryWindowSearchRecentsTitle": {
+    "description": "IINA's \"history_window.search.recents_title\"."
+  },
+  "iinaHistoryWindowSearchSearchIn": "Search in",
+  "@iinaHistoryWindowSearchSearchIn": {
+    "description": "IINA's \"history_window.search.search_in\"."
+  },
+  "iinaHistoryWindowTitle": "Playback History",
+  "@iinaHistoryWindowTitle": {
+    "description": "IINA's \"history_window.title\"."
+  },
+  "iinaHistoryWindowToolbarClear": "Clear Playback History",
+  "@iinaHistoryWindowToolbarClear": {
+    "description": "IINA's \"history_window.toolbar.clear\"."
+  },
+  "iinaHistoryWindowToolbarCollapseAll": "Collapse All",
+  "@iinaHistoryWindowToolbarCollapseAll": {
+    "description": "IINA's \"history_window.toolbar.collapse_all\"."
+  },
+  "iinaHistoryWindowToolbarExpandAll": "Expand All",
+  "@iinaHistoryWindowToolbarExpandAll": {
+    "description": "IINA's \"history_window.toolbar.expand_all\"."
+  },
+  "iinaHistoryWindowToolbarExpandCollapse": "Expand/Collapse",
+  "@iinaHistoryWindowToolbarExpandCollapse": {
+    "description": "IINA's \"history_window.toolbar.expand_collapse\"."
+  },
+  "iinaHistoryWindowToolbarGroupBy": "Group By",
+  "@iinaHistoryWindowToolbarGroupBy": {
+    "description": "IINA's \"history_window.toolbar.group_by\"."
+  },
+  "iinaHistoryWindowToolbarGroupByDate": "Date",
+  "@iinaHistoryWindowToolbarGroupByDate": {
+    "description": "IINA's \"history_window.toolbar.group_by.date\"."
+  },
+  "iinaHistoryWindowToolbarGroupByDateTooltip": "Sort by Date",
+  "@iinaHistoryWindowToolbarGroupByDateTooltip": {
+    "description": "IINA's \"history_window.toolbar.group_by.date_tooltip\"."
+  },
+  "iinaHistoryWindowToolbarGroupByLocation": "Folder and Website",
+  "@iinaHistoryWindowToolbarGroupByLocation": {
+    "description": "IINA's \"history_window.toolbar.group_by.location\"."
+  },
+  "iinaHistoryWindowToolbarGroupByLocationTooltip": "Sort by Folder and Website",
+  "@iinaHistoryWindowToolbarGroupByLocationTooltip": {
+    "description": "IINA's \"history_window.toolbar.group_by.location_tooltip\"."
+  },
+  "iinaHistoryWindowToolbarGroupByMenu": "Group by",
+  "@iinaHistoryWindowToolbarGroupByMenu": {
+    "description": "IINA's \"history_window.toolbar.group_by.menu\"."
+  },
+  "iinaPreferenceAdvanced": "Advanced",
+  "@iinaPreferenceAdvanced": {
+    "description": "IINA's \"preference.advanced\"."
+  },
+  "iinaPreferenceControl": "Control",
+  "@iinaPreferenceControl": {
+    "description": "IINA's \"preference.control\"."
+  },
+  "iinaPreferenceEnableAdvSettings": "Enable advanced settings",
+  "@iinaPreferenceEnableAdvSettings": {
+    "description": "IINA's \"preference.enable_adv_settings\"."
+  },
+  "iinaPreferenceGeneral": "General",
+  "@iinaPreferenceGeneral": {
+    "description": "IINA's \"preference.general\"."
+  },
+  "iinaPreferenceKeyBindingHint1": "To edit key bindings in current configuration file, click \"Duplicate…\" button first to create a copy.",
+  "@iinaPreferenceKeyBindingHint1": {
+    "description": "IINA's \"preference.key_binding_hint_1\"."
+  },
+  "iinaPreferenceKeyBindingHint2": "Double click a row at the right side to edit the corresponding key binding.",
+  "@iinaPreferenceKeyBindingHint2": {
+    "description": "IINA's \"preference.key_binding_hint_2\"."
+  },
+  "iinaPreferenceKeybindings": "Key Bindings",
+  "@iinaPreferenceKeybindings": {
+    "description": "IINA's \"preference.keybindings\"."
+  },
+  "iinaPreferenceLoggedInAs": "Logged in as %@",
+  "@iinaPreferenceLoggedInAs": {
+    "description": "IINA's \"preference.logged_in_as\"."
+  },
+  "iinaPreferenceNetwork": "Network",
+  "@iinaPreferenceNetwork": {
+    "description": "IINA's \"preference.network\"."
+  },
+  "iinaPreferenceNotLoggedIn": "Not logged in",
+  "@iinaPreferenceNotLoggedIn": {
+    "description": "IINA's \"preference.not_logged_in\"."
+  },
+  "iinaPreferencePlugins": "Plugins",
+  "@iinaPreferencePlugins": {
+    "description": "IINA's \"preference.plugins\"."
+  },
+  "iinaPreferenceScripts": "Scripts",
+  "@iinaPreferenceScripts": {
+    "description": "IINA's \"preference.scripts\"."
+  },
+  "iinaPreferenceSubOverrideLevelDescriptiveTextForce": "Apply all subtitle styles.",
+  "@iinaPreferenceSubOverrideLevelDescriptiveTextForce": {
+    "description": "IINA's \"preference.sub_override_level.descriptive_text.force\"."
+  },
+  "iinaPreferenceSubOverrideLevelDescriptiveTextNo": "Render subtitles as specified by the subtitle scripts, without overrides.",
+  "@iinaPreferenceSubOverrideLevelDescriptiveTextNo": {
+    "description": "IINA's \"preference.sub_override_level.descriptive_text.no\"."
+  },
+  "iinaPreferenceSubOverrideLevelDescriptiveTextScale": "Apply the scale setting in addition to the style settings in this section.",
+  "@iinaPreferenceSubOverrideLevelDescriptiveTextScale": {
+    "description": "IINA's \"preference.sub_override_level.descriptive_text.scale\"."
+  },
+  "iinaPreferenceSubOverrideLevelDescriptiveTextStrip": "Radically strip all ASS tags and styles from the subtitle.",
+  "@iinaPreferenceSubOverrideLevelDescriptiveTextStrip": {
+    "description": "IINA's \"preference.sub_override_level.descriptive_text.strip\"."
+  },
+  "iinaPreferenceSubOverrideLevelDescriptiveTextYes": "Apply all the style settings in this section.",
+  "@iinaPreferenceSubOverrideLevelDescriptiveTextYes": {
+    "description": "IINA's \"preference.sub_override_level.descriptive_text.yes\"."
+  },
+  "iinaPreferenceSubOverrideLevelForce": "force",
+  "@iinaPreferenceSubOverrideLevelForce": {
+    "description": "IINA's \"preference.sub_override_level.force\"."
+  },
+  "iinaPreferenceSubOverrideLevelNo": "no",
+  "@iinaPreferenceSubOverrideLevelNo": {
+    "description": "IINA's \"preference.sub_override_level.no\"."
+  },
+  "iinaPreferenceSubOverrideLevelScale": "scale",
+  "@iinaPreferenceSubOverrideLevelScale": {
+    "description": "IINA's \"preference.sub_override_level.scale\"."
+  },
+  "iinaPreferenceSubOverrideLevelStrip": "strip",
+  "@iinaPreferenceSubOverrideLevelStrip": {
+    "description": "IINA's \"preference.sub_override_level.strip\"."
+  },
+  "iinaPreferenceSubOverrideLevelYes": "yes",
+  "@iinaPreferenceSubOverrideLevelYes": {
+    "description": "IINA's \"preference.sub_override_level.yes\"."
+  },
+  "iinaPreferenceSubtitle": "Subtitle",
+  "@iinaPreferenceSubtitle": {
+    "description": "IINA's \"preference.subtitle\"."
+  },
+  "iinaPreferenceSystemMediaControl": "Use system media control",
+  "@iinaPreferenceSystemMediaControl": {
+    "description": "IINA's \"preference.system_media_control\"."
+  },
+  "iinaPreferenceTitle": "Settings",
+  "@iinaPreferenceTitle": {
+    "description": "IINA's \"preference.title\"."
+  },
+  "iinaPreferenceUi": "Interface",
+  "@iinaPreferenceUi": {
+    "description": "IINA's \"preference.ui\"."
+  },
+  "iinaPreferenceUtilities": "Utilities",
+  "@iinaPreferenceUtilities": {
+    "description": "IINA's \"preference.utilities\"."
+  },
+  "iinaPreferenceVideoAudio": "Video & Audio",
+  "@iinaPreferenceVideoAudio": {
+    "description": "IINA's \"preference.video_audio\"."
+  },
+  "iinaPreferenceYtdlPluginInstalled": "The built-in youtube-dl support is disabled since you have the Online media plugin installed.",
+  "@iinaPreferenceYtdlPluginInstalled": {
+    "description": "IINA's \"preference.ytdl_plugin_installed\"."
+  },
+  "iinaPreferenceYtdlPluginNotInstalled": "Install the Online Media plugin from \"Plugins > Install from GitHub\" to enjoy advanced features such and video downloading and auto yt-dlp updates.",
+  "@iinaPreferenceYtdlPluginNotInstalled": {
+    "description": "IINA's \"preference.ytdl_plugin_not_installed\"."
+  },
+  "settingsASSSubtitles": "ASS Subtitles",
+  "@settingsASSSubtitles": {
+    "description": "IINA's \"settings.$ASSSubtitles\": a string of the player's settings window."
+  },
+  "settingsAbout": "About",
+  "@settingsAbout": {
+    "description": "IINA's \"settings.$About\": a string of the player's settings window."
+  },
+  "settingsAccessibility": "Accessibility",
+  "@settingsAccessibility": {
+    "description": "IINA's \"settings.$Accessibility\": a string of the player's settings window."
+  },
+  "settingsAdditionalMpvOptions": "Additional mpv options",
+  "@settingsAdditionalMpvOptions": {
+    "description": "IINA's \"settings.$AdditionalMpvOptions\": a string of the player's settings window."
+  },
+  "settingsAdditionalMpvOptionsDesc": "Paste an option in the key=value format to fill in both fields automatically.",
+  "@settingsAdditionalMpvOptionsDesc": {
+    "description": "IINA's \"settings.$AdditionalMpvOptions.desc\": a string of the player's settings window."
+  },
+  "settingsAdvanced": "Advanced",
+  "@settingsAdvanced": {
+    "description": "IINA's \"settings.$Advanced\": a string of the player's settings window."
+  },
+  "settingsAlign": "Align",
+  "@settingsAlign": {
+    "description": "IINA's \"settings.$Align\": a string of the player's settings window."
+  },
+  "settingsAlwaysWhenPlaying": "Always when playing a new file",
+  "@settingsAlwaysWhenPlaying": {
+    "description": "IINA's \"settings.$AlwaysWhenPlaying\": a string of the player's settings window."
+  },
+  "settingsAppearance": "Appearance",
+  "@settingsAppearance": {
+    "description": "IINA's \"settings.$Appearance\": a string of the player's settings window."
+  },
+  "settingsAssrtAPIToken": "Assrt API token",
+  "@settingsAssrtAPIToken": {
+    "description": "IINA's \"settings.$AssrtAPIToken\": a string of the player's settings window."
+  },
+  "settingsAuthor": "Author",
+  "@settingsAuthor": {
+    "description": "IINA's \"settings.$Author\": a string of the player's settings window."
+  },
+  "settingsAutoLoad": "Auto Load",
+  "@settingsAutoLoad": {
+    "description": "IINA's \"settings.$AutoLoad\": a string of the player's settings window."
+  },
+  "settingsBackground": "Background",
+  "@settingsBackground": {
+    "description": "IINA's \"settings.$Background\": a string of the player's settings window."
+  },
+  "settingsBehavior": "Behavior",
+  "@settingsBehavior": {
+    "description": "IINA's \"settings.$Behavior\": a string of the player's settings window."
+  },
+  "settingsBorder": "Border",
+  "@settingsBorder": {
+    "description": "IINA's \"settings.$Border\": a string of the player's settings window."
+  },
+  "settingsBrowserExtensions": "Browser Extensions",
+  "@settingsBrowserExtensions": {
+    "description": "IINA's \"settings.$BrowserExtensions\": a string of the player's settings window."
+  },
+  "settingsCache": "Cache",
+  "@settingsCache": {
+    "description": "IINA's \"settings.$Cache\": a string of the player's settings window."
+  },
+  "settingsCancel": "Cancel",
+  "@settingsCancel": {
+    "description": "IINA's \"settings.$Cancel\": a string of the player's settings window."
+  },
+  "settingsCheckForUpdates": "Check for updates",
+  "@settingsCheckForUpdates": {
+    "description": "IINA's \"settings.$CheckForUpdates\": a string of the player's settings window."
+  },
+  "settingsCheckForUpdatesItems2629800": "Monthly",
+  "@settingsCheckForUpdatesItems2629800": {
+    "description": "IINA's \"settings.$CheckForUpdates.items.2629800\": a string of the player's settings window."
+  },
+  "settingsCheckForUpdatesItems3600": "Hourly",
+  "@settingsCheckForUpdatesItems3600": {
+    "description": "IINA's \"settings.$CheckForUpdates.items.3600\": a string of the player's settings window."
+  },
+  "settingsCheckForUpdatesItems604800": "Weekly",
+  "@settingsCheckForUpdatesItems604800": {
+    "description": "IINA's \"settings.$CheckForUpdates.items.604800\": a string of the player's settings window."
+  },
+  "settingsCheckForUpdatesItems86400": "Daily",
+  "@settingsCheckForUpdatesItems86400": {
+    "description": "IINA's \"settings.$CheckForUpdates.items.86400\": a string of the player's settings window."
+  },
+  "settingsChrome": "Chrome",
+  "@settingsChrome": {
+    "description": "IINA's \"settings.$Chrome\": a string of the player's settings window."
+  },
+  "settingsClearCache": "Clear Cache",
+  "@settingsClearCache": {
+    "description": "IINA's \"settings.$ClearCache\": a string of the player's settings window."
+  },
+  "settingsClearPlaybackHistory": "Clear Playback History",
+  "@settingsClearPlaybackHistory": {
+    "description": "IINA's \"settings.$ClearPlaybackHistory\": a string of the player's settings window."
+  },
+  "settingsClearSavedPlaybackProgress": "Clear Saved Playback Progress",
+  "@settingsClearSavedPlaybackProgress": {
+    "description": "IINA's \"settings.$ClearSavedPlaybackProgress\": a string of the player's settings window."
+  },
+  "settingsClearThumbnailCache": "Clear Thumbnail Cache",
+  "@settingsClearThumbnailCache": {
+    "description": "IINA's \"settings.$ClearThumbnailCache\": a string of the player's settings window."
+  },
+  "settingsColor": "Color",
+  "@settingsColor": {
+    "description": "IINA's \"settings.$Color\": a string of the player's settings window."
+  },
+  "settingsColorHDR": "Color and HDR",
+  "@settingsColorHDR": {
+    "description": "IINA's \"settings.$ColorHDR\": a string of the player's settings window."
+  },
+  "settingsCommunityPlugins": "Community Plugins",
+  "@settingsCommunityPlugins": {
+    "description": "IINA's \"settings.$CommunityPlugins\": a string of the player's settings window."
+  },
+  "settingsCreateAnEmptySet": "Create an empty set…",
+  "@settingsCreateAnEmptySet": {
+    "description": "IINA's \"settings.$CreateAnEmptySet\": a string of the player's settings window."
+  },
+  "settingsCustomize": "Customize…",
+  "@settingsCustomize": {
+    "description": "IINA's \"settings.$Customize\": a string of the player's settings window."
+  },
+  "settingsDecoding": "Decoding",
+  "@settingsDecoding": {
+    "description": "IINA's \"settings.$Decoding\": a string of the player's settings window."
+  },
+  "settingsDefaultApplication": "Default Application",
+  "@settingsDefaultApplication": {
+    "description": "IINA's \"settings.$DefaultApplication\": a string of the player's settings window."
+  },
+  "settingsDefaultEncoding": "Default encoding",
+  "@settingsDefaultEncoding": {
+    "description": "IINA's \"settings.$DefaultEncoding\": a string of the player's settings window."
+  },
+  "settingsDeleteAllPlaybackHistories": "Delete all playback histories and entries in \"Open Recent\".",
+  "@settingsDeleteAllPlaybackHistories": {
+    "description": "IINA's \"settings.$DeleteAllPlaybackHistories\": a string of the player's settings window."
+  },
+  "settingsDeleteAllWatchLater": "Delete all files in the \"watch later\" folder. These files contain all saved playback progress and settings applied during playback.",
+  "@settingsDeleteAllWatchLater": {
+    "description": "IINA's \"settings.$DeleteAllWatchLater\": a string of the player's settings window."
+  },
+  "settingsDoNotResize": "Do not resize",
+  "@settingsDoNotResize": {
+    "description": "IINA's \"settings.$DoNotResize\": a string of the player's settings window."
+  },
+  "settingsDuplicateCurrentSet": "Duplicate current set…",
+  "@settingsDuplicateCurrentSet": {
+    "description": "IINA's \"settings.$DuplicateCurrentSet\": a string of the player's settings window."
+  },
+  "settingsFailedToLoadThePage": "Failed to load the page.",
+  "@settingsFailedToLoadThePage": {
+    "description": "IINA's \"settings.$FailedToLoadThePage\": a string of the player's settings window."
+  },
+  "settingsFirefox": "Firefox",
+  "@settingsFirefox": {
+    "description": "IINA's \"settings.$Firefox\": a string of the player's settings window."
+  },
+  "settingsFont": "Font",
+  "@settingsFont": {
+    "description": "IINA's \"settings.$Font\": a string of the player's settings window."
+  },
+  "settingsGetBrowserExtensionsForIINA": "Get Browser Extensions for IINA",
+  "@settingsGetBrowserExtensionsForIINA": {
+    "description": "IINA's \"settings.$GetBrowserExtensionsForIINA\": a string of the player's settings window."
+  },
+  "settingsGetPlugins": "Get Plugins…",
+  "@settingsGetPlugins": {
+    "description": "IINA's \"settings.$GetPlugins\": a string of the player's settings window."
+  },
+  "settingsHardware": "Hardware",
+  "@settingsHardware": {
+    "description": "IINA's \"settings.$Hardware\": a string of the player's settings window."
+  },
+  "settingsHeight": "Height",
+  "@settingsHeight": {
+    "description": "IINA's \"settings.$Height\": a string of the player's settings window."
+  },
+  "settingsHelp": "Help",
+  "@settingsHelp": {
+    "description": "IINA's \"settings.$Help\": a string of the player's settings window."
+  },
+  "settingsHistory": "History",
+  "@settingsHistory": {
+    "description": "IINA's \"settings.$History\": a string of the player's settings window."
+  },
+  "settingsIdentifier": "Identifier",
+  "@settingsIdentifier": {
+    "description": "IINA's \"settings.$Identifier\": a string of the player's settings window."
+  },
+  "settingsImportAnExistingConfigFile": "Import an existing config file",
+  "@settingsImportAnExistingConfigFile": {
+    "description": "IINA's \"settings.$ImportAnExistingConfigFile\": a string of the player's settings window."
+  },
+  "settingsInitialWindowPosition": "Initial window position",
+  "@settingsInitialWindowPosition": {
+    "description": "IINA's \"settings.$InitialWindowPosition\": a string of the player's settings window."
+  },
+  "settingsInitialWindowSize": "Initial window size",
+  "@settingsInitialWindowSize": {
+    "description": "IINA's \"settings.$InitialWindowSize\": a string of the player's settings window."
+  },
+  "settingsInputGithubURL": "Input a Github URL",
+  "@settingsInputGithubURL": {
+    "description": "IINA's \"settings.$InputGithubURL\": a string of the player's settings window."
+  },
+  "settingsInstall": "Install",
+  "@settingsInstall": {
+    "description": "IINA's \"settings.$Install\": a string of the player's settings window."
+  },
+  "settingsInstallLocalPackage": "Install Local Package…",
+  "@settingsInstallLocalPackage": {
+    "description": "IINA's \"settings.$InstallLocalPackage\": a string of the player's settings window."
+  },
+  "settingsInstalled": "Installed",
+  "@settingsInstalled": {
+    "description": "IINA's \"settings.$Installed\": a string of the player's settings window."
+  },
+  "settingsInstalling": "Installing",
+  "@settingsInstalling": {
+    "description": "IINA's \"settings.$Installing\": a string of the player's settings window."
+  },
+  "settingsKeyBindingSet": "Key binding set",
+  "@settingsKeyBindingSet": {
+    "description": "IINA's \"settings.$KeyBindingSet\": a string of the player's settings window."
+  },
+  "settingsLayout": "Layout",
+  "@settingsLayout": {
+    "description": "IINA's \"settings.$Layout\": a string of the player's settings window."
+  },
+  "settingsLegacyOpenSubAlert": "⚠️ The old OpenSubtitles support is deprecated. Please use the OpenSubtitles plugin instead. If you need to login, please access it from the legacy Settings window.",
+  "@settingsLegacyOpenSubAlert": {
+    "description": "IINA's \"settings.$LegacyOpenSubAlert\": a string of the player's settings window."
+  },
+  "settingsLiveText": "Live Text",
+  "@settingsLiveText": {
+    "description": "IINA's \"settings.$LiveText\": a string of the player's settings window."
+  },
+  "settingsLogging": "Logging",
+  "@settingsLogging": {
+    "description": "IINA's \"settings.$Logging\": a string of the player's settings window."
+  },
+  "settingsLogin": "Login",
+  "@settingsLogin": {
+    "description": "IINA's \"settings.$Login\": a string of the player's settings window."
+  },
+  "settingsMB": "MB",
+  "@settingsMB": {
+    "description": "IINA's \"settings.$MB\": a string of the player's settings window."
+  },
+  "settingsMPVSettings": "mpv Settings",
+  "@settingsMPVSettings": {
+    "description": "IINA's \"settings.$MPVSettings\": a string of the player's settings window."
+  },
+  "settingsMargin": "Margin",
+  "@settingsMargin": {
+    "description": "IINA's \"settings.$Margin\": a string of the player's settings window."
+  },
+  "settingsMouse": "Mouse",
+  "@settingsMouse": {
+    "description": "IINA's \"settings.$Mouse\": a string of the player's settings window."
+  },
+  "settingsNetwork": "Network",
+  "@settingsNetwork": {
+    "description": "IINA's \"settings.$Network\": a string of the player's settings window."
+  },
+  "settingsNewKeyBindingSet": "New key binding set",
+  "@settingsNewKeyBindingSet": {
+    "description": "IINA's \"settings.$NewKeyBindingSet\": a string of the player's settings window."
+  },
+  "settingsNoSelection": "No Selection",
+  "@settingsNoSelection": {
+    "description": "IINA's \"settings.$NoSelection\": a string of the player's settings window."
+  },
+  "settingsNotLoggedIn": "Not logged in",
+  "@settingsNotLoggedIn": {
+    "description": "IINA's \"settings.$NotLoggedIn\": a string of the player's settings window."
+  },
+  "settingsOK": "OK",
+  "@settingsOK": {
+    "description": "IINA's \"settings.$OK\": a string of the player's settings window."
+  },
+  "settingsOfficialPlugins": "Official Plugins",
+  "@settingsOfficialPlugins": {
+    "description": "IINA's \"settings.$OfficialPlugins\": a string of the player's settings window."
+  },
+  "settingsOffset": "Offset",
+  "@settingsOffset": {
+    "description": "IINA's \"settings.$Offset\": a string of the player's settings window."
+  },
+  "settingsOnScreenController": "On Screen Controller",
+  "@settingsOnScreenController": {
+    "description": "IINA's \"settings.$OnScreenController\": a string of the player's settings window."
+  },
+  "settingsOnScreenDisplay": "On Screen Display",
+  "@settingsOnScreenDisplay": {
+    "description": "IINA's \"settings.$OnScreenDisplay\": a string of the player's settings window."
+  },
+  "settingsOnlineSubtitles": "Online Subtitles",
+  "@settingsOnlineSubtitles": {
+    "description": "IINA's \"settings.$OnlineSubtitles\": a string of the player's settings window."
+  },
+  "settingsOpenLinksOrCurrentWebpage": "Open links or current webpage in IINA with one click. The website must be supported by youtube-dl.",
+  "@settingsOpenLinksOrCurrentWebpage": {
+    "description": "IINA's \"settings.$OpenLinksOrCurrentWebpage\": a string of the player's settings window."
+  },
+  "settingsOpenLogDirectory": "Open Log Directory",
+  "@settingsOpenLogDirectory": {
+    "description": "IINA's \"settings.$OpenLogDirectory\": a string of the player's settings window."
+  },
+  "settingsOpenLogWindow": "Open the log viewer",
+  "@settingsOpenLogWindow": {
+    "description": "IINA's \"settings.$OpenLogWindow\": a string of the player's settings window."
+  },
+  "settingsOrSelectFrom": "Or select from available plugins",
+  "@settingsOrSelectFrom": {
+    "description": "IINA's \"settings.$OrSelectFrom\": a string of the player's settings window."
+  },
+  "settingsOther": "Other",
+  "@settingsOther": {
+    "description": "IINA's \"settings.$Other\": a string of the player's settings window."
+  },
+  "settingsOtherStyles": "Other Styles",
+  "@settingsOtherStyles": {
+    "description": "IINA's \"settings.$OtherStyles\": a string of the player's settings window."
+  },
+  "settingsOverrideLevel": "Override level",
+  "@settingsOverrideLevel": {
+    "description": "IINA's \"settings.$OverrideLevel\": a string of the player's settings window."
+  },
+  "settingsPercent": "%",
+  "@settingsPercent": {
+    "description": "IINA's \"settings.$Percent\": a string of the player's settings window."
+  },
+  "settingsPictureinnPicture": "Picture-in-Picture",
+  "@settingsPictureinnPicture": {
+    "description": "IINA's \"settings.$PictureinnPicture\": a string of the player's settings window."
+  },
+  "settingsPlaylist": "Playlist",
+  "@settingsPlaylist": {
+    "description": "IINA's \"settings.$Playlist\": a string of the player's settings window."
+  },
+  "settingsPleaseSelectTheMediaTypes": "Please select the media types that you want to make IINA as the default Application for.",
+  "@settingsPleaseSelectTheMediaTypes": {
+    "description": "IINA's \"settings.$PleaseSelectTheMediaTypes\": a string of the player's settings window."
+  },
+  "settingsPosition": "Position",
+  "@settingsPosition": {
+    "description": "IINA's \"settings.$Position\": a string of the player's settings window."
+  },
+  "settingsPreferredLanguage": "Preferred language",
+  "@settingsPreferredLanguage": {
+    "description": "IINA's \"settings.$PreferredLanguage\": a string of the player's settings window."
+  },
+  "settingsRestoreAlerts": "Restore Alerts",
+  "@settingsRestoreAlerts": {
+    "description": "IINA's \"settings.$RestoreAlerts\": a string of the player's settings window."
+  },
+  "settingsRestoreAllAlertsThat": "Restore all alerts that have been suppressed using the \"Do not show this message again\" checkbox.",
+  "@settingsRestoreAllAlertsThat": {
+    "description": "IINA's \"settings.$RestoreAllAlertsThat\": a string of the player's settings window."
+  },
+  "settingsRestoreSuppressedAlerts": "Restore Suppressed Alerts",
+  "@settingsRestoreSuppressedAlerts": {
+    "description": "IINA's \"settings.$RestoreSuppressedAlerts\": a string of the player's settings window."
+  },
+  "settingsSPDIFOutput": "S/PDIF output",
+  "@settingsSPDIFOutput": {
+    "description": "IINA's \"settings.$SPDIFOutput\": a string of the player's settings window."
+  },
+  "settingsSPDIFOutputWarning": "List of codecs for which compressed audio passthrough should be used.\n\nWarning: There is not much reason to use this setting. HDMI supports uncompressed multichannel PCM, and lossless DTS-HD decoding is supported via FFmpeg's DCA decoder. Playback may not start if the output device does not support S/PDIF and this setting is enabled.",
+  "@settingsSPDIFOutputWarning": {
+    "description": "IINA's \"settings.$SPDIFOutputWarning\": a string of the player's settings window."
+  },
+  "settingsSafari": "Safari",
+  "@settingsSafari": {
+    "description": "IINA's \"settings.$Safari\": a string of the player's settings window."
+  },
+  "settingsScreenshots": "Screenshots",
+  "@settingsScreenshots": {
+    "description": "IINA's \"settings.$Screenshots\": a string of the player's settings window."
+  },
+  "settingsSetIINAAsTheDefault": "Set IINA as the Default Application",
+  "@settingsSetIINAAsTheDefault": {
+    "description": "IINA's \"settings.$SetIINAAsTheDefault\": a string of the player's settings window."
+  },
+  "settingsSettings": "Settings",
+  "@settingsSettings": {
+    "description": "IINA's \"settings.$Settings\": a string of the player's settings window."
+  },
+  "settingsShadow": "Shadow",
+  "@settingsShadow": {
+    "description": "IINA's \"settings.$Shadow\": a string of the player's settings window."
+  },
+  "settingsShowInFinder": "Show in Finder",
+  "@settingsShowInFinder": {
+    "description": "IINA's \"settings.$ShowInFinder\": a string of the player's settings window."
+  },
+  "settingsShowTheConfigFileIn": "Show the config file in Finder",
+  "@settingsShowTheConfigFileIn": {
+    "description": "IINA's \"settings.$ShowTheConfigFileIn\": a string of the player's settings window."
+  },
+  "settingsSize": "Size",
+  "@settingsSize": {
+    "description": "IINA's \"settings.$Size\": a string of the player's settings window."
+  },
+  "settingsSource": "Source",
+  "@settingsSource": {
+    "description": "IINA's \"settings.$Source\": a string of the player's settings window."
+  },
+  "settingsSubtitleSource": "Subtitle source",
+  "@settingsSubtitleSource": {
+    "description": "IINA's \"settings.$SubtitleSource\": a string of the player's settings window."
+  },
+  "settingsSubtitleSourceDesc": "This is the default source for searching subtiles. While playing, you can manually choose to search subtitles from other sources from the menu.",
+  "@settingsSubtitleSourceDesc": {
+    "description": "IINA's \"settings.$SubtitleSource.desc\": a string of the player's settings window."
+  },
+  "settingsSubtitleSourcePluginDesc": "This source is provided by a plugin. Please go to the plugin's settings page for configurations.",
+  "@settingsSubtitleSourcePluginDesc": {
+    "description": "IINA's \"settings.$SubtitleSourcePluginDesc\": a string of the player's settings window."
+  },
+  "settingsSuppressMessagesFor": "Suppress messages for",
+  "@settingsSuppressMessagesFor": {
+    "description": "IINA's \"settings.$SuppressMessagesFor\": a string of the player's settings window."
+  },
+  "settingsTextSubtitles": "Text Subtitles",
+  "@settingsTextSubtitles": {
+    "description": "IINA's \"settings.$TextSubtitles\": a string of the player's settings window."
+  },
+  "settingsThisPluginIsNot": "This plugin is not hosted on GitHub. Please go to the website to download.",
+  "@settingsThisPluginIsNot": {
+    "description": "IINA's \"settings.$ThisPluginIsNot\": a string of the player's settings window."
+  },
+  "settingsThumbnailPreview": "Thumbnail Preview",
+  "@settingsThumbnailPreview": {
+    "description": "IINA's \"settings.$ThumbnailPreview\": a string of the player's settings window."
+  },
+  "settingsToolbar": "Toolbar",
+  "@settingsToolbar": {
+    "description": "IINA's \"settings.$Toolbar\": a string of the player's settings window."
+  },
+  "settingsTrackpad": "Trackpad",
+  "@settingsTrackpad": {
+    "description": "IINA's \"settings.$Trackpad\": a string of the player's settings window."
+  },
+  "settingsUninstall": "Uninstall",
+  "@settingsUninstall": {
+    "description": "IINA's \"settings.$Uninstall\": a string of the player's settings window."
+  },
+  "settingsVolume": "Volume",
+  "@settingsVolume": {
+    "description": "IINA's \"settings.$Volume\": a string of the player's settings window."
+  },
+  "settingsWebsite": "Website",
+  "@settingsWebsite": {
+    "description": "IINA's \"settings.$Website\": a string of the player's settings window."
+  },
+  "settingsWhenEnteringPIP": "When entering Picture-in-Picture",
+  "@settingsWhenEnteringPIP": {
+    "description": "IINA's \"settings.$WhenEnteringPIP\": a string of the player's settings window."
+  },
+  "settingsWhenMediaIsOpened": "When media is opened",
+  "@settingsWhenMediaIsOpened": {
+    "description": "IINA's \"settings.$WhenMediaIsOpened\": a string of the player's settings window."
+  },
+  "settingsWhenMediaIsOpenedManually": "When media is opened manually",
+  "@settingsWhenMediaIsOpenedManually": {
+    "description": "IINA's \"settings.$WhenMediaIsOpenedManually\": a string of the player's settings window."
+  },
+  "settingsWidth": "Width",
+  "@settingsWidth": {
+    "description": "IINA's \"settings.$Width\": a string of the player's settings window."
+  },
+  "settingsWindow": "Window",
+  "@settingsWindow": {
+    "description": "IINA's \"settings.$Window\": a string of the player's settings window."
+  },
+  "settingsX": " X",
+  "@settingsX": {
+    "description": "IINA's \"settings.$X\": a string of the player's settings window."
+  },
+  "settingsXOffset": "X offset",
+  "@settingsXOffset": {
+    "description": "IINA's \"settings.$XOffset\": a string of the player's settings window."
+  },
+  "settingsY": "Y",
+  "@settingsY": {
+    "description": "IINA's \"settings.$Y\": a string of the player's settings window."
+  },
+  "settingsYOffset": "Y offset",
+  "@settingsYOffset": {
+    "description": "IINA's \"settings.$YOffset\": a string of the player's settings window."
+  },
+  "settingsYTDL": "Online Videos (yt-dlp)",
+  "@settingsYTDL": {
+    "description": "IINA's \"settings.$YTDL\": a string of the player's settings window."
+  },
+  "settingsYouCanInstallANew": "You can install a new plugin from GitHub or a local .iinaplgz package. Plugins installed from GitHub can be updated automatically.",
+  "@settingsYouCanInstallANew": {
+    "description": "IINA's \"settings.$YouCanInstallANew\": a string of the player's settings window."
+  },
+  "settingsBottom": "bottom",
+  "@settingsBottom": {
+    "description": "IINA's \"settings.$bottom\": a string of the player's settings window."
+  },
+  "settingsDB": "dB",
+  "@settingsDB": {
+    "description": "IINA's \"settings.$dB\": a string of the player's settings window."
+  },
+  "settingsLeft": "left",
+  "@settingsLeft": {
+    "description": "IINA's \"settings.$left\": a string of the player's settings window."
+  },
+  "settingsNits": "nits",
+  "@settingsNits": {
+    "description": "IINA's \"settings.$nits\": a string of the player's settings window."
+  },
+  "settingsOfScreen": "% of screen",
+  "@settingsOfScreen": {
+    "description": "IINA's \"settings.$ofScreen\": a string of the player's settings window."
+  },
+  "settingsOnlineMediaPluginAdvice": "The Online Media plugin is recommended",
+  "@settingsOnlineMediaPluginAdvice": {
+    "description": "IINA's \"settings.$onlineMediaPluginAdvice\": a string of the player's settings window."
+  },
+  "settingsPoint": "point",
+  "@settingsPoint": {
+    "description": "IINA's \"settings.$point\": a string of the player's settings window."
+  },
+  "settingsPt": "pt",
+  "@settingsPt": {
+    "description": "IINA's \"settings.$pt\": a string of the player's settings window."
+  },
+  "settingsRight": "right",
+  "@settingsRight": {
+    "description": "IINA's \"settings.$right\": a string of the player's settings window."
+  },
+  "settingsS": "s",
+  "@settingsS": {
+    "description": "IINA's \"settings.$s\": a string of the player's settings window."
+  },
+  "settingsSideOfTheScreen": "side of the screen",
+  "@settingsSideOfTheScreen": {
+    "description": "IINA's \"settings.$sideOfTheScreen\": a string of the player's settings window."
+  },
+  "settingsToThe": "to the",
+  "@settingsToThe": {
+    "description": "IINA's \"settings.$toThe\": a string of the player's settings window."
+  },
+  "settingsTop": "top",
+  "@settingsTop": {
+    "description": "IINA's \"settings.$top\": a string of the player's settings window."
+  },
+  "settingsYtdlWarning": "The Online Media plugin has additional features such as switching quality and video downloading. IINA will use the plugin if it's installed and enabled. The settings below only work if the plugin is not available.",
+  "@settingsYtdlWarning": {
+    "description": "IINA's \"settings.$ytdlWarning\": a string of the player's settings window."
+  },
+  "settingsActionAfterLaunchItems0": "Show welcome window",
+  "@settingsActionAfterLaunchItems0": {
+    "description": "IINA's \"settings.actionAfterLaunch.items.0\": a string of the player's settings window."
+  },
+  "settingsActionAfterLaunchItems1": "Show open file panel",
+  "@settingsActionAfterLaunchItems1": {
+    "description": "IINA's \"settings.actionAfterLaunch.items.1\": a string of the player's settings window."
+  },
+  "settingsActionAfterLaunchItems2": "Do nothing",
+  "@settingsActionAfterLaunchItems2": {
+    "description": "IINA's \"settings.actionAfterLaunch.items.2\": a string of the player's settings window."
+  },
+  "settingsActionAfterLaunchLabel": "At launch",
+  "@settingsActionAfterLaunchLabel": {
+    "description": "IINA's \"settings.actionAfterLaunch.label\": a string of the player's settings window."
+  },
+  "settingsAllowDuplicatePlayersLabel": "Allow opening the same file in multiple windows",
+  "@settingsAllowDuplicatePlayersLabel": {
+    "description": "IINA's \"settings.allowDuplicatePlayers.label\": a string of the player's settings window."
+  },
+  "settingsAllowScreenSaverForAudioDesc": "Still prevents system from sleeping.",
+  "@settingsAllowScreenSaverForAudioDesc": {
+    "description": "IINA's \"settings.allowScreenSaverForAudio.desc\": a string of the player's settings window."
+  },
+  "settingsAllowScreenSaverForAudioLabel": "Not while in \"music mode\" or only playing audio",
+  "@settingsAllowScreenSaverForAudioLabel": {
+    "description": "IINA's \"settings.allowScreenSaverForAudio.label\": a string of the player's settings window."
+  },
+  "settingsAlwaysFloatOnTopLabel": "Always float on top while playing",
+  "@settingsAlwaysFloatOnTopLabel": {
+    "description": "IINA's \"settings.alwaysFloatOnTop.label\": a string of the player's settings window."
+  },
+  "settingsAlwaysOpenInNewWindowLabel": "Allow multiple player windows",
+  "@settingsAlwaysOpenInNewWindowLabel": {
+    "description": "IINA's \"settings.alwaysOpenInNewWindow.label\": a string of the player's settings window."
+  },
+  "settingsAlwaysShowOnTopIconLabel": "Always show float on top status in the title bar",
+  "@settingsAlwaysShowOnTopIconLabel": {
+    "description": "IINA's \"settings.alwaysShowOnTopIcon.label\": a string of the player's settings window."
+  },
+  "settingsArrowBtnActionItems0": "Speed",
+  "@settingsArrowBtnActionItems0": {
+    "description": "IINA's \"settings.arrowBtnAction.items.0\": a string of the player's settings window."
+  },
+  "settingsArrowBtnActionItems1": "Previous / Next Media",
+  "@settingsArrowBtnActionItems1": {
+    "description": "IINA's \"settings.arrowBtnAction.items.1\": a string of the player's settings window."
+  },
+  "settingsArrowBtnActionItems2": "Fast Forward / Rewind",
+  "@settingsArrowBtnActionItems2": {
+    "description": "IINA's \"settings.arrowBtnAction.items.2\": a string of the player's settings window."
+  },
+  "settingsArrowBtnActionLabel": "Use left/right button for",
+  "@settingsArrowBtnActionLabel": {
+    "description": "IINA's \"settings.arrowBtnAction.label\": a string of the player's settings window."
+  },
+  "settingsAudioDriverEnableAVFoundationItems0": "Core Audio",
+  "@settingsAudioDriverEnableAVFoundationItems0": {
+    "description": "IINA's \"settings.audioDriverEnableAVFoundation.items.0\": a string of the player's settings window."
+  },
+  "settingsAudioDriverEnableAVFoundationItems0Desc": "The default audio driver.",
+  "@settingsAudioDriverEnableAVFoundationItems0Desc": {
+    "description": "IINA's \"settings.audioDriverEnableAVFoundation.items.0.desc\": a string of the player's settings window."
+  },
+  "settingsAudioDriverEnableAVFoundationItems1": "AVFoundation",
+  "@settingsAudioDriverEnableAVFoundationItems1": {
+    "description": "IINA's \"settings.audioDriverEnableAVFoundation.items.1\": a string of the player's settings window."
+  },
+  "settingsAudioDriverEnableAVFoundationItems1Desc": "AVFoundation is a new, experimental audio driver offering Spatial Audio support. However, you may encounter some issues when using AVFoundation, such as audio delays.",
+  "@settingsAudioDriverEnableAVFoundationItems1Desc": {
+    "description": "IINA's \"settings.audioDriverEnableAVFoundation.items.1.desc\": a string of the player's settings window."
+  },
+  "settingsAudioDriverEnableAVFoundationLabel": "Audio driver",
+  "@settingsAudioDriverEnableAVFoundationLabel": {
+    "description": "IINA's \"settings.audioDriverEnableAVFoundation.label\": a string of the player's settings window."
+  },
+  "settingsAutoRepeatLabel": "Loop when a file is opened manually",
+  "@settingsAutoRepeatLabel": {
+    "description": "IINA's \"settings.autoRepeat.label\": a string of the player's settings window."
+  },
+  "settingsAutoSearchOnlineSubDesc": "If enabled, IINA will automatically search online subtitles only for videos without loaded subtitles and longer than 20 minutes.",
+  "@settingsAutoSearchOnlineSubDesc": {
+    "description": "IINA's \"settings.autoSearchOnlineSub.desc\": a string of the player's settings window."
+  },
+  "settingsAutoSearchOnlineSubLabel": "Search online subtitles automatically",
+  "@settingsAutoSearchOnlineSubLabel": {
+    "description": "IINA's \"settings.autoSearchOnlineSub.label\": a string of the player's settings window."
+  },
+  "settingsAutoSwitchToMusicModeLabel": "Switch to \"music mode\" automatically when playing an audio file",
+  "@settingsAutoSwitchToMusicModeLabel": {
+    "description": "IINA's \"settings.autoSwitchToMusicMode.label\": a string of the player's settings window."
+  },
+  "settingsBlackOutMonitorLabel": "Black out other monitors while in full screen",
+  "@settingsBlackOutMonitorLabel": {
+    "description": "IINA's \"settings.blackOutMonitor.label\": a string of the player's settings window."
+  },
+  "settingsCachePauseInitialDesc": "Enter buffering mode before starting playback. This can be used to ensure playback starts smoothly, in exchange for waiting some time to prefetch and buffer network data.",
+  "@settingsCachePauseInitialDesc": {
+    "description": "IINA's \"settings.cachePauseInitial.desc\": a string of the player's settings window."
+  },
+  "settingsCachePauseInitialLabel": "Buffer before starting playback",
+  "@settingsCachePauseInitialLabel": {
+    "description": "IINA's \"settings.cachePauseInitial.label\": a string of the player's settings window."
+  },
+  "settingsCachePauseWaitDesc": "Number of seconds the cache should have buffered before starting playback again if buffering mode was entered. Increase this setting if playback quickly reenters buffering mode.\n\nDefault: 1",
+  "@settingsCachePauseWaitDesc": {
+    "description": "IINA's \"settings.cachePauseWait.desc\": a string of the player's settings window."
+  },
+  "settingsCachePauseWaitLabel": "Seconds to buffer before restarting",
+  "@settingsCachePauseWaitLabel": {
+    "description": "IINA's \"settings.cachePauseWait.label\": a string of the player's settings window."
+  },
+  "settingsControlBarAutoHideTimeoutLabel": "Auto hide after",
+  "@settingsControlBarAutoHideTimeoutLabel": {
+    "description": "IINA's \"settings.controlBarAutoHideTimeout.label\": a string of the player's settings window."
+  },
+  "settingsControlBarStickToCenterLabel": "Snap to center when dragging",
+  "@settingsControlBarStickToCenterLabel": {
+    "description": "IINA's \"settings.controlBarStickToCenter.label\": a string of the player's settings window."
+  },
+  "settingsDefaultCacheSizeDesc": "Default: 153,600",
+  "@settingsDefaultCacheSizeDesc": {
+    "description": "IINA's \"settings.defaultCacheSize.desc\": a string of the player's settings window."
+  },
+  "settingsDefaultCacheSizeLabel": "Cache buffer size (KiB)",
+  "@settingsDefaultCacheSizeLabel": {
+    "description": "IINA's \"settings.defaultCacheSize.label\": a string of the player's settings window."
+  },
+  "settingsDefaultRepeatModeItems0": "Loop playlist",
+  "@settingsDefaultRepeatModeItems0": {
+    "description": "IINA's \"settings.defaultRepeatMode.items.0\": a string of the player's settings window."
+  },
+  "settingsDefaultRepeatModeItems1": "Loop single file",
+  "@settingsDefaultRepeatModeItems1": {
+    "description": "IINA's \"settings.defaultRepeatMode.items.1\": a string of the player's settings window."
+  },
+  "settingsDisableAnimationsDesc": "When the macOS Reduce Motion accessibility setting is enabled IINA will reduce user interface animations that are known to cause problems for those with vestibular disorders. Should that be insufficient, this setting can be used to reduce motion further by eliminating user interface animations.",
+  "@settingsDisableAnimationsDesc": {
+    "description": "IINA's \"settings.disableAnimations.desc\": a string of the player's settings window."
+  },
+  "settingsDisableAnimationsLabel": "Disable animations",
+  "@settingsDisableAnimationsLabel": {
+    "description": "IINA's \"settings.disableAnimations.label\": a string of the player's settings window."
+  },
+  "settingsDisableOSDFileStartMsgLabel": "File start",
+  "@settingsDisableOSDFileStartMsgLabel": {
+    "description": "IINA's \"settings.disableOSDFileStartMsg.label\": a string of the player's settings window."
+  },
+  "settingsDisableOSDPauseResumeMsgsLabel": "Pause / Resume",
+  "@settingsDisableOSDPauseResumeMsgsLabel": {
+    "description": "IINA's \"settings.disableOSDPauseResumeMsgs.label\": a string of the player's settings window."
+  },
+  "settingsDisableOSDSeekMsgLabel": "Seek",
+  "@settingsDisableOSDSeekMsgLabel": {
+    "description": "IINA's \"settings.disableOSDSeekMsg.label\": a string of the player's settings window."
+  },
+  "settingsDisableOSDSpeedMsgLabel": "Speed",
+  "@settingsDisableOSDSpeedMsgLabel": {
+    "description": "IINA's \"settings.disableOSDSpeedMsg.label\": a string of the player's settings window."
+  },
+  "settingsDisablePlaySliderScrollingLabel": "Prevent scroll wheel from changing playback position",
+  "@settingsDisablePlaySliderScrollingLabel": {
+    "description": "IINA's \"settings.disablePlaySliderScrolling.label\": a string of the player's settings window."
+  },
+  "settingsDisableVolumeSliderScrollingLabel": "Prevent scroll wheel from changing volume",
+  "@settingsDisableVolumeSliderScrollingLabel": {
+    "description": "IINA's \"settings.disableVolumeSliderScrolling.label\": a string of the player's settings window."
+  },
+  "settingsDisplayInLetterBoxLabel": "Display subtitles in letterboxes while in full screen",
+  "@settingsDisplayInLetterBoxLabel": {
+    "description": "IINA's \"settings.displayInLetterBox.label\": a string of the player's settings window."
+  },
+  "settingsDisplayKeyBindingRawValuesLabel": "Display raw values",
+  "@settingsDisplayKeyBindingRawValuesLabel": {
+    "description": "IINA's \"settings.displayKeyBindingRawValues.label\": a string of the player's settings window."
+  },
+  "settingsDisplayTimeAndBatteryInFullScreenLabel": "Display time and battery info when in full screen",
+  "@settingsDisplayTimeAndBatteryInFullScreenLabel": {
+    "description": "IINA's \"settings.displayTimeAndBatteryInFullScreen.label\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems0": "None",
+  "@settingsDoubleClickActionItems0": {
+    "description": "IINA's \"settings.doubleClickAction.items.0\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems1": "Enter/Exit full screen",
+  "@settingsDoubleClickActionItems1": {
+    "description": "IINA's \"settings.doubleClickAction.items.1\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems2": "Pause/Resume",
+  "@settingsDoubleClickActionItems2": {
+    "description": "IINA's \"settings.doubleClickAction.items.2\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems4": "Enter/Exit picture-in-picture",
+  "@settingsDoubleClickActionItems4": {
+    "description": "IINA's \"settings.doubleClickAction.items.4\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems5": "A-B loop",
+  "@settingsDoubleClickActionItems5": {
+    "description": "IINA's \"settings.doubleClickAction.items.5\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionItems6": "Reset speed",
+  "@settingsDoubleClickActionItems6": {
+    "description": "IINA's \"settings.doubleClickAction.items.6\": a string of the player's settings window."
+  },
+  "settingsDoubleClickActionLabel": "Double click to",
+  "@settingsDoubleClickActionLabel": {
+    "description": "IINA's \"settings.doubleClickAction.label\": a string of the player's settings window."
+  },
+  "settingsEnableAdvancedSettingsDesc": "The following settings will require restarting IINA to take effect.",
+  "@settingsEnableAdvancedSettingsDesc": {
+    "description": "IINA's \"settings.enableAdvancedSettings.desc\": a string of the player's settings window."
+  },
+  "settingsEnableAdvancedSettingsLabel": "Enable advanced settings",
+  "@settingsEnableAdvancedSettingsLabel": {
+    "description": "IINA's \"settings.enableAdvancedSettings.label\": a string of the player's settings window."
+  },
+  "settingsEnableCacheLabel": "Prefetch and buffer network data",
+  "@settingsEnableCacheLabel": {
+    "description": "IINA's \"settings.enableCache.label\": a string of the player's settings window."
+  },
+  "settingsEnableHdrSupportDesc": "Enable HDR mode by default when playing HDR videos.",
+  "@settingsEnableHdrSupportDesc": {
+    "description": "IINA's \"settings.enableHdrSupport.desc\": a string of the player's settings window."
+  },
+  "settingsEnableHdrSupportLabel": "Enable HDR mode",
+  "@settingsEnableHdrSupportLabel": {
+    "description": "IINA's \"settings.enableHdrSupport.label\": a string of the player's settings window."
+  },
+  "settingsEnableInitialVolumeLabel": "Initial volume",
+  "@settingsEnableInitialVolumeLabel": {
+    "description": "IINA's \"settings.enableInitialVolume.label\": a string of the player's settings window."
+  },
+  "settingsEnableLiveTextDesc": "Show a Live Text overlay on paused video frames for text recognition. Requires macOS 13 or later.",
+  "@settingsEnableLiveTextDesc": {
+    "description": "IINA's \"settings.enableLiveText.desc\": a string of the player's settings window."
+  },
+  "settingsEnableLiveTextLabel": "Live Text",
+  "@settingsEnableLiveTextLabel": {
+    "description": "IINA's \"settings.enableLiveText.label\": a string of the player's settings window."
+  },
+  "settingsEnableLoggingLabel": "Enable logging to file",
+  "@settingsEnableLoggingLabel": {
+    "description": "IINA's \"settings.enableLogging.label\": a string of the player's settings window."
+  },
+  "settingsEnableOSDLabel": "Enable OSD",
+  "@settingsEnableOSDLabel": {
+    "description": "IINA's \"settings.enableOSD.label\": a string of the player's settings window."
+  },
+  "settingsEnableThumbnailForRemoteFilesLabel": "Include files on a mounted remote drive",
+  "@settingsEnableThumbnailForRemoteFilesLabel": {
+    "description": "IINA's \"settings.enableThumbnailForRemoteFiles.label\": a string of the player's settings window."
+  },
+  "settingsEnableThumbnailPreviewLabel": "Enable thumbnail preview",
+  "@settingsEnableThumbnailPreviewLabel": {
+    "description": "IINA's \"settings.enableThumbnailPreview.label\": a string of the player's settings window."
+  },
+  "settingsEnableToneMappingLabel": "Enable tone mapping",
+  "@settingsEnableToneMappingLabel": {
+    "description": "IINA's \"settings.enableToneMapping.label\": a string of the player's settings window."
+  },
+  "settingsForceDedicatedGPUDesc": "Always use the dedicated GPU for rendering (if it exists). This can improve performance but may reduce battery life.",
+  "@settingsForceDedicatedGPUDesc": {
+    "description": "IINA's \"settings.forceDedicatedGPU.desc\": a string of the player's settings window."
+  },
+  "settingsForceDedicatedGPULabel": "Force dedicated GPU",
+  "@settingsForceDedicatedGPULabel": {
+    "description": "IINA's \"settings.forceDedicatedGPU.label\": a string of the player's settings window."
+  },
+  "settingsForceTouchActionItems0": "None",
+  "@settingsForceTouchActionItems0": {
+    "description": "IINA's \"settings.forceTouchAction.items.0\": a string of the player's settings window."
+  },
+  "settingsForceTouchActionItems1": "Enter/Exit full screen",
+  "@settingsForceTouchActionItems1": {
+    "description": "IINA's \"settings.forceTouchAction.items.1\": a string of the player's settings window."
+  },
+  "settingsForceTouchActionItems2": "Pause/Resume",
+  "@settingsForceTouchActionItems2": {
+    "description": "IINA's \"settings.forceTouchAction.items.2\": a string of the player's settings window."
+  },
+  "settingsForceTouchActionItems3": "Hide OSC",
+  "@settingsForceTouchActionItems3": {
+    "description": "IINA's \"settings.forceTouchAction.items.3\": a string of the player's settings window."
+  },
+  "settingsForceTouchActionLabel": "Force Touch to",
+  "@settingsForceTouchActionLabel": {
+    "description": "IINA's \"settings.forceTouchAction.label\": a string of the player's settings window."
+  },
+  "settingsFullScreenWhenOpenLabel": "Enter fullscreen",
+  "@settingsFullScreenWhenOpenLabel": {
+    "description": "IINA's \"settings.fullScreenWhenOpen.label\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioDesc": "Gapless audio",
+  "@settingsGaplessAudioDesc": {
+    "description": "IINA's \"settings.gaplessAudio.desc\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems0": "Disabled",
+  "@settingsGaplessAudioItems0": {
+    "description": "IINA's \"settings.gaplessAudio.items.0\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems0Desc": "Playback of consecutive audio files may result in silence or disruption at the point of file change.",
+  "@settingsGaplessAudioItems0Desc": {
+    "description": "IINA's \"settings.gaplessAudio.items.0.desc\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems1": "Weak",
+  "@settingsGaplessAudioItems1": {
+    "description": "IINA's \"settings.gaplessAudio.items.1\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems1Desc": "If the audio format the decoder output changes, the audio device is closed and reopened, disrupting gapless playback.",
+  "@settingsGaplessAudioItems1Desc": {
+    "description": "IINA's \"settings.gaplessAudio.items.1.desc\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems2": "Strong",
+  "@settingsGaplessAudioItems2": {
+    "description": "IINA's \"settings.gaplessAudio.items.2\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioItems2Desc": "The audio device is opened using parameters chosen for the first file played and is then kept open for gapless playback. Following files may be resampled.",
+  "@settingsGaplessAudioItems2Desc": {
+    "description": "IINA's \"settings.gaplessAudio.items.2.desc\": a string of the player's settings window."
+  },
+  "settingsGaplessAudioLabel": "Gapless audio",
+  "@settingsGaplessAudioLabel": {
+    "description": "IINA's \"settings.gaplessAudio.label\": a string of the player's settings window."
+  },
+  "settingsGroupSimultaneousOpensInPlaylistLabel": "Group media in playlist when opening multiple files at once",
+  "@settingsGroupSimultaneousOpensInPlaylistLabel": {
+    "description": "IINA's \"settings.groupSimultaneousOpensInPlaylist.label\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems0": "Disabled",
+  "@settingsHardwareDecoderItems0": {
+    "description": "IINA's \"settings.hardwareDecoder.items.0\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems0Desc": "Disable hardware decoding.",
+  "@settingsHardwareDecoderItems0Desc": {
+    "description": "IINA's \"settings.hardwareDecoder.items.0.desc\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems1": "Auto",
+  "@settingsHardwareDecoderItems1": {
+    "description": "IINA's \"settings.hardwareDecoder.items.1\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems1Desc": "Enable hardware decoding. However, most of the video filters won't work properly.",
+  "@settingsHardwareDecoderItems1Desc": {
+    "description": "IINA's \"settings.hardwareDecoder.items.1.desc\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems2": "Auto (Copy)",
+  "@settingsHardwareDecoderItems2": {
+    "description": "IINA's \"settings.hardwareDecoder.items.2\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderItems2Desc": "Enable hardware decoding. It will consume double the memory but work with video filters.",
+  "@settingsHardwareDecoderItems2Desc": {
+    "description": "IINA's \"settings.hardwareDecoder.items.2.desc\": a string of the player's settings window."
+  },
+  "settingsHardwareDecoderLabel": "Hardware decoder",
+  "@settingsHardwareDecoderLabel": {
+    "description": "IINA's \"settings.hardwareDecoder.label\": a string of the player's settings window."
+  },
+  "settingsHorizontalScrollActionItems0": "Adjust volume",
+  "@settingsHorizontalScrollActionItems0": {
+    "description": "IINA's \"settings.horizontalScrollAction.items.0\": a string of the player's settings window."
+  },
+  "settingsHorizontalScrollActionItems1": "Seek",
+  "@settingsHorizontalScrollActionItems1": {
+    "description": "IINA's \"settings.horizontalScrollAction.items.1\": a string of the player's settings window."
+  },
+  "settingsHorizontalScrollActionItems2": "None",
+  "@settingsHorizontalScrollActionItems2": {
+    "description": "IINA's \"settings.horizontalScrollAction.items.2\": a string of the player's settings window."
+  },
+  "settingsHorizontalScrollActionItems4": "Adjust playback speed",
+  "@settingsHorizontalScrollActionItems4": {
+    "description": "IINA's \"settings.horizontalScrollAction.items.4\": a string of the player's settings window."
+  },
+  "settingsHorizontalScrollActionLabel": "Scroll horizontally to",
+  "@settingsHorizontalScrollActionLabel": {
+    "description": "IINA's \"settings.horizontalScrollAction.label\": a string of the player's settings window."
+  },
+  "settingsHttpProxyDesc": "Requires restarting IINA to take effect.",
+  "@settingsHttpProxyDesc": {
+    "description": "IINA's \"settings.httpProxy.desc\": a string of the player's settings window."
+  },
+  "settingsHttpProxyLabel": "HTTP proxy",
+  "@settingsHttpProxyLabel": {
+    "description": "IINA's \"settings.httpProxy.label\": a string of the player's settings window."
+  },
+  "settingsKeepOpenOnFileEndLabel": "Keep window open after playback finishes",
+  "@settingsKeepOpenOnFileEndLabel": {
+    "description": "IINA's \"settings.keepOpenOnFileEnd.label\": a string of the player's settings window."
+  },
+  "settingsLoadIccProfileDesc": "Load the ICC profile for current display and use it to transform video RGB to screen output. (Only for SDR mode)",
+  "@settingsLoadIccProfileDesc": {
+    "description": "IINA's \"settings.loadIccProfile.desc\": a string of the player's settings window."
+  },
+  "settingsLoadIccProfileLabel": "Load ICC profile",
+  "@settingsLoadIccProfileLabel": {
+    "description": "IINA's \"settings.loadIccProfile.label\": a string of the player's settings window."
+  },
+  "settingsLogLevelDesc": "View logs by choosing Window - Log Viewer from the menu.",
+  "@settingsLogLevelDesc": {
+    "description": "IINA's \"settings.logLevel.desc\": a string of the player's settings window."
+  },
+  "settingsLogLevelItems0": "Verbose",
+  "@settingsLogLevelItems0": {
+    "description": "IINA's \"settings.logLevel.items.0\": a string of the player's settings window."
+  },
+  "settingsLogLevelItems1": "Debug",
+  "@settingsLogLevelItems1": {
+    "description": "IINA's \"settings.logLevel.items.1\": a string of the player's settings window."
+  },
+  "settingsLogLevelItems2": "Warning",
+  "@settingsLogLevelItems2": {
+    "description": "IINA's \"settings.logLevel.items.2\": a string of the player's settings window."
+  },
+  "settingsLogLevelItems3": "Error",
+  "@settingsLogLevelItems3": {
+    "description": "IINA's \"settings.logLevel.items.3\": a string of the player's settings window."
+  },
+  "settingsLogLevelLabel": "Log level",
+  "@settingsLogLevelLabel": {
+    "description": "IINA's \"settings.logLevel.label\": a string of the player's settings window."
+  },
+  "settingsMaxThumbnailPreviewCacheSizeLabel": "Maximum cache size",
+  "@settingsMaxThumbnailPreviewCacheSizeLabel": {
+    "description": "IINA's \"settings.maxThumbnailPreviewCacheSize.label\": a string of the player's settings window."
+  },
+  "settingsMaxVolumeDesc": "(100-1000)",
+  "@settingsMaxVolumeDesc": {
+    "description": "IINA's \"settings.maxVolume.desc\": a string of the player's settings window."
+  },
+  "settingsMaxVolumeLabel": "Maximum volume",
+  "@settingsMaxVolumeLabel": {
+    "description": "IINA's \"settings.maxVolume.label\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems0": "None",
+  "@settingsMiddleClickActionItems0": {
+    "description": "IINA's \"settings.middleClickAction.items.0\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems1": "Enter/Exit full screen",
+  "@settingsMiddleClickActionItems1": {
+    "description": "IINA's \"settings.middleClickAction.items.1\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems2": "Pause/Resume",
+  "@settingsMiddleClickActionItems2": {
+    "description": "IINA's \"settings.middleClickAction.items.2\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems3": "Hide OSC",
+  "@settingsMiddleClickActionItems3": {
+    "description": "IINA's \"settings.middleClickAction.items.3\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems4": "Enter/Exit picture-in-picture",
+  "@settingsMiddleClickActionItems4": {
+    "description": "IINA's \"settings.middleClickAction.items.4\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems5": "A-B loop",
+  "@settingsMiddleClickActionItems5": {
+    "description": "IINA's \"settings.middleClickAction.items.5\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionItems6": "Reset speed",
+  "@settingsMiddleClickActionItems6": {
+    "description": "IINA's \"settings.middleClickAction.items.6\": a string of the player's settings window."
+  },
+  "settingsMiddleClickActionLabel": "Middle click to",
+  "@settingsMiddleClickActionLabel": {
+    "description": "IINA's \"settings.middleClickAction.label\": a string of the player's settings window."
+  },
+  "settingsMore_ui_settings": "More User Interface settings are available in the Layout sidebar.",
+  "@settingsMore_ui_settings": {
+    "description": "IINA's \"settings.more_ui_settings\": a string of the player's settings window."
+  },
+  "settingsOscPositionItems0": "Floating",
+  "@settingsOscPositionItems0": {
+    "description": "IINA's \"settings.oscPosition.items.0\": a string of the player's settings window."
+  },
+  "settingsOscPositionItems1": "Top",
+  "@settingsOscPositionItems1": {
+    "description": "IINA's \"settings.oscPosition.items.1\": a string of the player's settings window."
+  },
+  "settingsOscPositionItems2": "Bottom",
+  "@settingsOscPositionItems2": {
+    "description": "IINA's \"settings.oscPosition.items.2\": a string of the player's settings window."
+  },
+  "settingsOscPositionLabel": "On Screen Controller",
+  "@settingsOscPositionLabel": {
+    "description": "IINA's \"settings.oscPosition.label\": a string of the player's settings window."
+  },
+  "settingsOsdTextSizeLabel": "Text size",
+  "@settingsOsdTextSizeLabel": {
+    "description": "IINA's \"settings.osdTextSize.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenGoesToSleepLabel": "Pause when machine goes to sleep",
+  "@settingsPauseWhenGoesToSleepLabel": {
+    "description": "IINA's \"settings.pauseWhenGoesToSleep.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenInactiveLabel": "Window becomes inactive/active",
+  "@settingsPauseWhenInactiveLabel": {
+    "description": "IINA's \"settings.pauseWhenInactive.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenLeavingFullScreenLabel": "Pause upon leaving full screen",
+  "@settingsPauseWhenLeavingFullScreenLabel": {
+    "description": "IINA's \"settings.pauseWhenLeavingFullScreen.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenMinimizedLabel": "Minimized/un-minimized",
+  "@settingsPauseWhenMinimizedLabel": {
+    "description": "IINA's \"settings.pauseWhenMinimized.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenOpenLabel": "Pause",
+  "@settingsPauseWhenOpenLabel": {
+    "description": "IINA's \"settings.pauseWhenOpen.label\": a string of the player's settings window."
+  },
+  "settingsPauseWhenPipLabel": "Automatically pause playback",
+  "@settingsPauseWhenPipLabel": {
+    "description": "IINA's \"settings.pauseWhenPip.label\": a string of the player's settings window."
+  },
+  "settingsPauseresumeWhen": "Pause/resume when",
+  "@settingsPauseresumeWhen": {
+    "description": "IINA's \"settings.pauseresumeWhen\": a string of the player's settings window."
+  },
+  "settingsPinchActionItems0": "Adjust window size",
+  "@settingsPinchActionItems0": {
+    "description": "IINA's \"settings.pinchAction.items.0\": a string of the player's settings window."
+  },
+  "settingsPinchActionItems1": "Fullscreen",
+  "@settingsPinchActionItems1": {
+    "description": "IINA's \"settings.pinchAction.items.1\": a string of the player's settings window."
+  },
+  "settingsPinchActionItems2": "None",
+  "@settingsPinchActionItems2": {
+    "description": "IINA's \"settings.pinchAction.items.2\": a string of the player's settings window."
+  },
+  "settingsPinchActionLabel": "Pinch to",
+  "@settingsPinchActionLabel": {
+    "description": "IINA's \"settings.pinchAction.label\": a string of the player's settings window."
+  },
+  "settingsPlayWhenEnteringFullScreenLabel": "Play upon entering full screen",
+  "@settingsPlayWhenEnteringFullScreenLabel": {
+    "description": "IINA's \"settings.playWhenEnteringFullScreen.label\": a string of the player's settings window."
+  },
+  "settingsPlaybackSpeedScrollAmountLabel": "Sensitivity for speed",
+  "@settingsPlaybackSpeedScrollAmountLabel": {
+    "description": "IINA's \"settings.playbackSpeedScrollAmount.label\": a string of the player's settings window."
+  },
+  "settingsPlaylistAutoAddDesc": "Requires restarting IINA to take effect.",
+  "@settingsPlaylistAutoAddDesc": {
+    "description": "IINA's \"settings.playlistAutoAdd.desc\": a string of the player's settings window."
+  },
+  "settingsPlaylistAutoAddLabel": "Add files in the same folder automatically",
+  "@settingsPlaylistAutoAddLabel": {
+    "description": "IINA's \"settings.playlistAutoAdd.label\": a string of the player's settings window."
+  },
+  "settingsPlaylistAutoPlayNextLabel": "Play next item automatically",
+  "@settingsPlaylistAutoPlayNextLabel": {
+    "description": "IINA's \"settings.playlistAutoPlayNext.label\": a string of the player's settings window."
+  },
+  "settingsPlaylistShowMetadataLabel": "Show artist and track name for audio files when available",
+  "@settingsPlaylistShowMetadataLabel": {
+    "description": "IINA's \"settings.playlistShowMetadata.label\": a string of the player's settings window."
+  },
+  "settingsPlaylistShowMetadataInMusicModeLabel": "Only in \"music mode\"",
+  "@settingsPlaylistShowMetadataInMusicModeLabel": {
+    "description": "IINA's \"settings.playlistShowMetadataInMusicMode.label\": a string of the player's settings window."
+  },
+  "settingsPreferredAudioDeviceLabel": "Preferred audio device",
+  "@settingsPreferredAudioDeviceLabel": {
+    "description": "IINA's \"settings.preferredAudioDevice.label\": a string of the player's settings window."
+  },
+  "settingsPreventScreenSaverLabel": "Prevent screen saver from starting while playing",
+  "@settingsPreventScreenSaverLabel": {
+    "description": "IINA's \"settings.preventScreenSaver.label\": a string of the player's settings window."
+  },
+  "settingsQuitWhenNoOpenedWindowLabel": "Quit after all windows are closed",
+  "@settingsQuitWhenNoOpenedWindowLabel": {
+    "description": "IINA's \"settings.quitWhenNoOpenedWindow.label\": a string of the player's settings window."
+  },
+  "settingsReceiveBetaUpdateLabel": "Receive beta updates",
+  "@settingsReceiveBetaUpdateLabel": {
+    "description": "IINA's \"settings.receiveBetaUpdate.label\": a string of the player's settings window."
+  },
+  "settingsRecordPlaybackHistoryLabel": "Enable playback history",
+  "@settingsRecordPlaybackHistoryLabel": {
+    "description": "IINA's \"settings.recordPlaybackHistory.label\": a string of the player's settings window."
+  },
+  "settingsRecordRecentFilesLabel": "Enable \"Open Recent\" menu",
+  "@settingsRecordRecentFilesLabel": {
+    "description": "IINA's \"settings.recordRecentFiles.label\": a string of the player's settings window."
+  },
+  "settingsRelativeSeekAmountLabel": "Sensitivity for normal seek",
+  "@settingsRelativeSeekAmountLabel": {
+    "description": "IINA's \"settings.relativeSeekAmount.label\": a string of the player's settings window."
+  },
+  "settingsReplayGainDesc": "Adjust volume gain according to ReplayGain values stored in the file metadata.",
+  "@settingsReplayGainDesc": {
+    "description": "IINA's \"settings.replayGain.desc\": a string of the player's settings window."
+  },
+  "settingsReplayGainItems0": "No adjustment",
+  "@settingsReplayGainItems0": {
+    "description": "IINA's \"settings.replayGain.items.0\": a string of the player's settings window."
+  },
+  "settingsReplayGainItems1": "Track gain",
+  "@settingsReplayGainItems1": {
+    "description": "IINA's \"settings.replayGain.items.1\": a string of the player's settings window."
+  },
+  "settingsReplayGainItems2": "Album gain",
+  "@settingsReplayGainItems2": {
+    "description": "IINA's \"settings.replayGain.items.2\": a string of the player's settings window."
+  },
+  "settingsReplayGainLabel": "Gain adjustment",
+  "@settingsReplayGainLabel": {
+    "description": "IINA's \"settings.replayGain.label\": a string of the player's settings window."
+  },
+  "settingsReplayGainClipDesc": "If this option is not enabled, clipping will be prevented by lowering the gain.",
+  "@settingsReplayGainClipDesc": {
+    "description": "IINA's \"settings.replayGainClip.desc\": a string of the player's settings window."
+  },
+  "settingsReplayGainClipLabel": "Allow the volume gain to clip",
+  "@settingsReplayGainClipLabel": {
+    "description": "IINA's \"settings.replayGainClip.label\": a string of the player's settings window."
+  },
+  "settingsReplayGainFallbackDesc": "Gain to apply if the file has no ReplayGain tags.",
+  "@settingsReplayGainFallbackDesc": {
+    "description": "IINA's \"settings.replayGainFallback.desc\": a string of the player's settings window."
+  },
+  "settingsReplayGainFallbackLabel": "Fallback",
+  "@settingsReplayGainFallbackLabel": {
+    "description": "IINA's \"settings.replayGainFallback.label\": a string of the player's settings window."
+  },
+  "settingsReplayGainPreampDesc": "Pre-amplification gain to apply to the ReplayGain gain.",
+  "@settingsReplayGainPreampDesc": {
+    "description": "IINA's \"settings.replayGainPreamp.desc\": a string of the player's settings window."
+  },
+  "settingsReplayGainPreampLabel": "Preamp gain",
+  "@settingsReplayGainPreampLabel": {
+    "description": "IINA's \"settings.replayGainPreamp.label\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionItems0": "fit the screen",
+  "@settingsResizeWindowOptionItems0": {
+    "description": "IINA's \"settings.resizeWindowOption.items.0\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionItems1": "0.5x video size",
+  "@settingsResizeWindowOptionItems1": {
+    "description": "IINA's \"settings.resizeWindowOption.items.1\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionItems2": "1x video size",
+  "@settingsResizeWindowOptionItems2": {
+    "description": "IINA's \"settings.resizeWindowOption.items.2\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionItems3": "1.5x video size",
+  "@settingsResizeWindowOptionItems3": {
+    "description": "IINA's \"settings.resizeWindowOption.items.3\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionItems4": "2x video size",
+  "@settingsResizeWindowOptionItems4": {
+    "description": "IINA's \"settings.resizeWindowOption.items.4\": a string of the player's settings window."
+  },
+  "settingsResizeWindowOptionLabel": "Resize window to",
+  "@settingsResizeWindowOptionLabel": {
+    "description": "IINA's \"settings.resizeWindowOption.label\": a string of the player's settings window."
+  },
+  "settingsResumeLastPositionLabel": "Resume last playback position",
+  "@settingsResumeLastPositionLabel": {
+    "description": "IINA's \"settings.resumeLastPosition.label\": a string of the player's settings window."
+  },
+  "settingsRightClickActionDesc": "Middle click to",
+  "@settingsRightClickActionDesc": {
+    "description": "IINA's \"settings.rightClickAction.desc\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems0": "None",
+  "@settingsRightClickActionItems0": {
+    "description": "IINA's \"settings.rightClickAction.items.0\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems2": "Pause/Resume",
+  "@settingsRightClickActionItems2": {
+    "description": "IINA's \"settings.rightClickAction.items.2\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems3": "Hide OSC",
+  "@settingsRightClickActionItems3": {
+    "description": "IINA's \"settings.rightClickAction.items.3\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems4": "Enter/Exit picture-in-picture",
+  "@settingsRightClickActionItems4": {
+    "description": "IINA's \"settings.rightClickAction.items.4\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems5": "A-B loop",
+  "@settingsRightClickActionItems5": {
+    "description": "IINA's \"settings.rightClickAction.items.5\": a string of the player's settings window."
+  },
+  "settingsRightClickActionItems6": "Reset speed",
+  "@settingsRightClickActionItems6": {
+    "description": "IINA's \"settings.rightClickAction.items.6\": a string of the player's settings window."
+  },
+  "settingsRightClickActionLabel": "Right click to",
+  "@settingsRightClickActionLabel": {
+    "description": "IINA's \"settings.rightClickAction.label\": a string of the player's settings window."
+  },
+  "settingsScaleRemainingTimeLabel": "Base remaining time on playback speed",
+  "@settingsScaleRemainingTimeLabel": {
+    "description": "IINA's \"settings.scaleRemainingTime.label\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems0": "PNG (.png)",
+  "@settingsScreenShotFormatItems0": {
+    "description": "IINA's \"settings.screenShotFormat.items.0\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems1": "JPEG (.jpg)",
+  "@settingsScreenShotFormatItems1": {
+    "description": "IINA's \"settings.screenShotFormat.items.1\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems2": "JPEG (.jpeg)",
+  "@settingsScreenShotFormatItems2": {
+    "description": "IINA's \"settings.screenShotFormat.items.2\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems3": "WebP (.webp)",
+  "@settingsScreenShotFormatItems3": {
+    "description": "IINA's \"settings.screenShotFormat.items.3\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems4": "JPEG XL (.jxl)",
+  "@settingsScreenShotFormatItems4": {
+    "description": "IINA's \"settings.screenShotFormat.items.4\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatItems5": "AVIF (.avif)",
+  "@settingsScreenShotFormatItems5": {
+    "description": "IINA's \"settings.screenShotFormat.items.5\": a string of the player's settings window."
+  },
+  "settingsScreenShotFormatLabel": "Format",
+  "@settingsScreenShotFormatLabel": {
+    "description": "IINA's \"settings.screenShotFormat.label\": a string of the player's settings window."
+  },
+  "settingsScreenShotIncludeSubtitleLabel": "Include subtitles",
+  "@settingsScreenShotIncludeSubtitleLabel": {
+    "description": "IINA's \"settings.screenShotIncludeSubtitle.label\": a string of the player's settings window."
+  },
+  "settingsScreenshotCopyToClipboardDesc": "Destination",
+  "@settingsScreenshotCopyToClipboardDesc": {
+    "description": "IINA's \"settings.screenshotCopyToClipboard.desc\": a string of the player's settings window."
+  },
+  "settingsScreenshotCopyToClipboardLabel": "Copy to clipboard",
+  "@settingsScreenshotCopyToClipboardLabel": {
+    "description": "IINA's \"settings.screenshotCopyToClipboard.label\": a string of the player's settings window."
+  },
+  "settingsScreenshotSaveToFileDesc": "/path/to/screenshot/folder",
+  "@settingsScreenshotSaveToFileDesc": {
+    "description": "IINA's \"settings.screenshotSaveToFile.desc\": a string of the player's settings window."
+  },
+  "settingsScreenshotSaveToFileLabel": "Save to",
+  "@settingsScreenshotSaveToFileLabel": {
+    "description": "IINA's \"settings.screenshotSaveToFile.label\": a string of the player's settings window."
+  },
+  "settingsScreenshotShowPreviewLabel": "Show previews after taking screenshots",
+  "@settingsScreenshotShowPreviewLabel": {
+    "description": "IINA's \"settings.screenshotShowPreview.label\": a string of the player's settings window."
+  },
+  "settingsSecPrefechDesc": "Default: 36,000",
+  "@settingsSecPrefechDesc": {
+    "description": "IINA's \"settings.secPrefech.desc\": a string of the player's settings window."
+  },
+  "settingsSecPrefechLabel": "Seconds to prefetch",
+  "@settingsSecPrefechLabel": {
+    "description": "IINA's \"settings.secPrefech.label\": a string of the player's settings window."
+  },
+  "settingsShowBufferingThrobberLabel": "Show throbber when buffering",
+  "@settingsShowBufferingThrobberLabel": {
+    "description": "IINA's \"settings.showBufferingThrobber.label\": a string of the player's settings window."
+  },
+  "settingsShowChapterPosLabel": "Show chapter position in progress bar",
+  "@settingsShowChapterPosLabel": {
+    "description": "IINA's \"settings.showChapterPos.label\": a string of the player's settings window."
+  },
+  "settingsShowRemainingTimeLabel": "Show remaining time instead of total duration",
+  "@settingsShowRemainingTimeLabel": {
+    "description": "IINA's \"settings.showRemainingTime.label\": a string of the player's settings window."
+  },
+  "settingsShowSeekingThrobberLabel": "Show throbber when seeking",
+  "@settingsShowSeekingThrobberLabel": {
+    "description": "IINA's \"settings.showSeekingThrobber.label\": a string of the player's settings window."
+  },
+  "settingsSingleClickActionItems0": "None",
+  "@settingsSingleClickActionItems0": {
+    "description": "IINA's \"settings.singleClickAction.items.0\": a string of the player's settings window."
+  },
+  "settingsSingleClickActionItems2": "Pause/Resume",
+  "@settingsSingleClickActionItems2": {
+    "description": "IINA's \"settings.singleClickAction.items.2\": a string of the player's settings window."
+  },
+  "settingsSingleClickActionItems3": "Hide OSC",
+  "@settingsSingleClickActionItems3": {
+    "description": "IINA's \"settings.singleClickAction.items.3\": a string of the player's settings window."
+  },
+  "settingsSingleClickActionLabel": "Single click to",
+  "@settingsSingleClickActionLabel": {
+    "description": "IINA's \"settings.singleClickAction.label\": a string of the player's settings window."
+  },
+  "settingsSpdifAC3Label": "AC3",
+  "@settingsSpdifAC3Label": {
+    "description": "IINA's \"settings.spdifAC3.label\": a string of the player's settings window."
+  },
+  "settingsSpdifDTSLabel": "DTS",
+  "@settingsSpdifDTSLabel": {
+    "description": "IINA's \"settings.spdifDTS.label\": a string of the player's settings window."
+  },
+  "settingsSpdifDTSHDLabel": "DTS-HD",
+  "@settingsSpdifDTSHDLabel": {
+    "description": "IINA's \"settings.spdifDTSHD.label\": a string of the player's settings window."
+  },
+  "settingsSpdifEAC3Label": "EAC3",
+  "@settingsSpdifEAC3Label": {
+    "description": "IINA's \"settings.spdifEAC3.label\": a string of the player's settings window."
+  },
+  "settingsSpdifTRUEHDLabel": "TRUEHD",
+  "@settingsSpdifTRUEHDLabel": {
+    "description": "IINA's \"settings.spdifTRUEHD.label\": a string of the player's settings window."
+  },
+  "settingsSubAlignXItems0": "Left",
+  "@settingsSubAlignXItems0": {
+    "description": "IINA's \"settings.subAlignX.items.0\": a string of the player's settings window."
+  },
+  "settingsSubAlignXItems1": "Center",
+  "@settingsSubAlignXItems1": {
+    "description": "IINA's \"settings.subAlignX.items.1\": a string of the player's settings window."
+  },
+  "settingsSubAlignXItems2": "Right",
+  "@settingsSubAlignXItems2": {
+    "description": "IINA's \"settings.subAlignX.items.2\": a string of the player's settings window."
+  },
+  "settingsSubAlignYItems0": "Top",
+  "@settingsSubAlignYItems0": {
+    "description": "IINA's \"settings.subAlignY.items.0\": a string of the player's settings window."
+  },
+  "settingsSubAlignYItems1": "Center",
+  "@settingsSubAlignYItems1": {
+    "description": "IINA's \"settings.subAlignY.items.1\": a string of the player's settings window."
+  },
+  "settingsSubAlignYItems2": "Bottom",
+  "@settingsSubAlignYItems2": {
+    "description": "IINA's \"settings.subAlignY.items.2\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadIINAItems0": "Disabled",
+  "@settingsSubAutoLoadIINAItems0": {
+    "description": "IINA's \"settings.subAutoLoadIINA.items.0\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadIINAItems1": "Subtitles containing media filename",
+  "@settingsSubAutoLoadIINAItems1": {
+    "description": "IINA's \"settings.subAutoLoadIINA.items.1\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadIINAItems2": "Detect intelligently by IINA",
+  "@settingsSubAutoLoadIINAItems2": {
+    "description": "IINA's \"settings.subAutoLoadIINA.items.2\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadIINALabel": "Auto Load",
+  "@settingsSubAutoLoadIINALabel": {
+    "description": "IINA's \"settings.subAutoLoadIINA.label\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadPriorityStringDesc": "Please enter a comma-separated list of strings.",
+  "@settingsSubAutoLoadPriorityStringDesc": {
+    "description": "IINA's \"settings.subAutoLoadPriorityString.desc\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadPriorityStringLabel": "Subtitles have priority when filename containing",
+  "@settingsSubAutoLoadPriorityStringLabel": {
+    "description": "IINA's \"settings.subAutoLoadPriorityString.label\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadSearchPathDesc": "Directories are separated by colons (:). Relative paths and wildcards (*) at the end are allowed.",
+  "@settingsSubAutoLoadSearchPathDesc": {
+    "description": "IINA's \"settings.subAutoLoadSearchPath.desc\": a string of the player's settings window."
+  },
+  "settingsSubAutoLoadSearchPathLabel": "Also search subtitles in following directories",
+  "@settingsSubAutoLoadSearchPathLabel": {
+    "description": "IINA's \"settings.subAutoLoadSearchPath.label\": a string of the player's settings window."
+  },
+  "settingsSubBlurLabel": "Blur",
+  "@settingsSubBlurLabel": {
+    "description": "IINA's \"settings.subBlur.label\": a string of the player's settings window."
+  },
+  "settingsSubBoldDesc": "sans-serif",
+  "@settingsSubBoldDesc": {
+    "description": "IINA's \"settings.subBold.desc\": a string of the player's settings window."
+  },
+  "settingsSubBoldLabel": "Bold",
+  "@settingsSubBoldLabel": {
+    "description": "IINA's \"settings.subBold.label\": a string of the player's settings window."
+  },
+  "settingsSubBorderStyleItems1": "Outline and Shadow",
+  "@settingsSubBorderStyleItems1": {
+    "description": "IINA's \"settings.subBorderStyle.items.1\": a string of the player's settings window."
+  },
+  "settingsSubBorderStyleItems3": "Opaque Box",
+  "@settingsSubBorderStyleItems3": {
+    "description": "IINA's \"settings.subBorderStyle.items.3\": a string of the player's settings window."
+  },
+  "settingsSubBorderStyleItems4": "Background Box",
+  "@settingsSubBorderStyleItems4": {
+    "description": "IINA's \"settings.subBorderStyle.items.4\": a string of the player's settings window."
+  },
+  "settingsSubBorderStyleLabel": "Border Style",
+  "@settingsSubBorderStyleLabel": {
+    "description": "IINA's \"settings.subBorderStyle.label\": a string of the player's settings window."
+  },
+  "settingsSubItalicLabel": "Italic",
+  "@settingsSubItalicLabel": {
+    "description": "IINA's \"settings.subItalic.label\": a string of the player's settings window."
+  },
+  "settingsSubLangDesc": "This option will be stored as ISO 639-2 language code and will work for both mpv and opensubtitles.",
+  "@settingsSubLangDesc": {
+    "description": "IINA's \"settings.subLang.desc\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems0": "yes",
+  "@settingsSubOverrideLevelItems0": {
+    "description": "IINA's \"settings.subOverrideLevel.items.0\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems0Desc": "Apply all the style settings in this section.",
+  "@settingsSubOverrideLevelItems0Desc": {
+    "description": "IINA's \"settings.subOverrideLevel.items.0.desc\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems1": "force",
+  "@settingsSubOverrideLevelItems1": {
+    "description": "IINA's \"settings.subOverrideLevel.items.1\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems1Desc": "Apply all subtitle styles.",
+  "@settingsSubOverrideLevelItems1Desc": {
+    "description": "IINA's \"settings.subOverrideLevel.items.1.desc\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems2": "strip",
+  "@settingsSubOverrideLevelItems2": {
+    "description": "IINA's \"settings.subOverrideLevel.items.2\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems2Desc": "Radically strip all ASS tags and styles from the subtitle.",
+  "@settingsSubOverrideLevelItems2Desc": {
+    "description": "IINA's \"settings.subOverrideLevel.items.2.desc\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems3": "scale",
+  "@settingsSubOverrideLevelItems3": {
+    "description": "IINA's \"settings.subOverrideLevel.items.3\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems3Desc": "Apply the scale setting in addition to the style settings in this section.",
+  "@settingsSubOverrideLevelItems3Desc": {
+    "description": "IINA's \"settings.subOverrideLevel.items.3.desc\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems4": "no",
+  "@settingsSubOverrideLevelItems4": {
+    "description": "IINA's \"settings.subOverrideLevel.items.4\": a string of the player's settings window."
+  },
+  "settingsSubOverrideLevelItems4Desc": "Render subtitles as specified by the subtitle scripts, without overrides.",
+  "@settingsSubOverrideLevelItems4Desc": {
+    "description": "IINA's \"settings.subOverrideLevel.items.4.desc\": a string of the player's settings window."
+  },
+  "settingsSubPosLabel": "Vertical position",
+  "@settingsSubPosLabel": {
+    "description": "IINA's \"settings.subPos.label\": a string of the player's settings window."
+  },
+  "settingsSubScaleWithWindowLabel": "Scale subtitles with window size",
+  "@settingsSubScaleWithWindowLabel": {
+    "description": "IINA's \"settings.subScaleWithWindow.label\": a string of the player's settings window."
+  },
+  "settingsSubSpacingLabel": "Font spacing",
+  "@settingsSubSpacingLabel": {
+    "description": "IINA's \"settings.subSpacing.label\": a string of the player's settings window."
+  },
+  "settingsThemeMaterialDesc": "Theme",
+  "@settingsThemeMaterialDesc": {
+    "description": "IINA's \"settings.themeMaterial.desc\": a string of the player's settings window."
+  },
+  "settingsThemeMaterialItems0": "Dark",
+  "@settingsThemeMaterialItems0": {
+    "description": "IINA's \"settings.themeMaterial.items.0\": a string of the player's settings window."
+  },
+  "settingsThemeMaterialItems2": "Light",
+  "@settingsThemeMaterialItems2": {
+    "description": "IINA's \"settings.themeMaterial.items.2\": a string of the player's settings window."
+  },
+  "settingsThemeMaterialItems4": "Match System Appearance",
+  "@settingsThemeMaterialItems4": {
+    "description": "IINA's \"settings.themeMaterial.items.4\": a string of the player's settings window."
+  },
+  "settingsThemeMaterialLabel": "Appearance",
+  "@settingsThemeMaterialLabel": {
+    "description": "IINA's \"settings.themeMaterial.label\": a string of the player's settings window."
+  },
+  "settingsThumbnailWidthDesc": "Modifying the width clears the current thumbnail cache and regenerates all thumbnails at the selected size.",
+  "@settingsThumbnailWidthDesc": {
+    "description": "IINA's \"settings.thumbnailWidth.desc\": a string of the player's settings window."
+  },
+  "settingsThumbnailWidthLabel": "Thumbnail width",
+  "@settingsThumbnailWidthLabel": {
+    "description": "IINA's \"settings.thumbnailWidth.label\": a string of the player's settings window."
+  },
+  "settingsTogglePipByMinimizingWindowLabel": "Toggle Picture-in-Picture by minimizing/un-minimizing the window",
+  "@settingsTogglePipByMinimizingWindowLabel": {
+    "description": "IINA's \"settings.togglePipByMinimizingWindow.label\": a string of the player's settings window."
+  },
+  "settingsTogglePipByMinimizingWindowForVideoOnlyLabel": "Only for video files",
+  "@settingsTogglePipByMinimizingWindowForVideoOnlyLabel": {
+    "description": "IINA's \"settings.togglePipByMinimizingWindowForVideoOnly.label\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmDesc": "Algorithm to use for tone-mapping images onto the target display.",
+  "@settingsToneMappingAlgorithmDesc": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.desc\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems0": "auto",
+  "@settingsToneMappingAlgorithmItems0": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.0\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems1": "clip",
+  "@settingsToneMappingAlgorithmItems1": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.1\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems2": "mobius",
+  "@settingsToneMappingAlgorithmItems2": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.2\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems3": "reinhard",
+  "@settingsToneMappingAlgorithmItems3": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.3\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems4": "hable",
+  "@settingsToneMappingAlgorithmItems4": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.4\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems5": "bt.2390",
+  "@settingsToneMappingAlgorithmItems5": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.5\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems6": "gamma",
+  "@settingsToneMappingAlgorithmItems6": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.6\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmItems7": "linear",
+  "@settingsToneMappingAlgorithmItems7": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.items.7\": a string of the player's settings window."
+  },
+  "settingsToneMappingAlgorithmLabel": "Algorithm",
+  "@settingsToneMappingAlgorithmLabel": {
+    "description": "IINA's \"settings.toneMappingAlgorithm.label\": a string of the player's settings window."
+  },
+  "settingsToneMappingParamOverrideDesc": "Parameter for tuning the tone mapping algorithm. By default this is set to an algorithm-specific default value. Enable this setting to override that default.",
+  "@settingsToneMappingParamOverrideDesc": {
+    "description": "IINA's \"settings.toneMappingParamOverride.desc\": a string of the player's settings window."
+  },
+  "settingsToneMappingParamOverrideLabel": "Tuning parameter",
+  "@settingsToneMappingParamOverrideLabel": {
+    "description": "IINA's \"settings.toneMappingParamOverride.label\": a string of the player's settings window."
+  },
+  "settingsToneMappingTargetPeakDesc": "Measured peak brightness of the display. By default IINA detects this value. If detection fails, target peak will be set to an appropriate value based on the transfer characteristics of the display. Enable this setting to manually specify the display's brightness.",
+  "@settingsToneMappingTargetPeakDesc": {
+    "description": "IINA's \"settings.toneMappingTargetPeak.desc\": a string of the player's settings window."
+  },
+  "settingsToneMappingTargetPeakLabel": "Target peak",
+  "@settingsToneMappingTargetPeakLabel": {
+    "description": "IINA's \"settings.toneMappingTargetPeak.label\": a string of the player's settings window."
+  },
+  "settingsTrackAllFilesInRecentOpenMenuDesc": "Otherwise only files that opened manually will show up in this menu.",
+  "@settingsTrackAllFilesInRecentOpenMenuDesc": {
+    "description": "IINA's \"settings.trackAllFilesInRecentOpenMenu.desc\": a string of the player's settings window."
+  },
+  "settingsTrackAllFilesInRecentOpenMenuLabel": "Track all played files in \"Open Recent\" menu",
+  "@settingsTrackAllFilesInRecentOpenMenuLabel": {
+    "description": "IINA's \"settings.trackAllFilesInRecentOpenMenu.label\": a string of the player's settings window."
+  },
+  "settingsTransportRTSPThroughItems0": "Auto",
+  "@settingsTransportRTSPThroughItems0": {
+    "description": "IINA's \"settings.transportRTSPThrough.items.0\": a string of the player's settings window."
+  },
+  "settingsTransportRTSPThroughItems1": "TCP",
+  "@settingsTransportRTSPThroughItems1": {
+    "description": "IINA's \"settings.transportRTSPThrough.items.1\": a string of the player's settings window."
+  },
+  "settingsTransportRTSPThroughItems2": "UDP",
+  "@settingsTransportRTSPThroughItems2": {
+    "description": "IINA's \"settings.transportRTSPThrough.items.2\": a string of the player's settings window."
+  },
+  "settingsTransportRTSPThroughItems3": "HTTP",
+  "@settingsTransportRTSPThroughItems3": {
+    "description": "IINA's \"settings.transportRTSPThrough.items.3\": a string of the player's settings window."
+  },
+  "settingsTransportRTSPThroughLabel": "Transport RTSP stream through",
+  "@settingsTransportRTSPThroughLabel": {
+    "description": "IINA's \"settings.transportRTSPThrough.label\": a string of the player's settings window."
+  },
+  "settingsUseExactSeekDesc": "Exact seek is more precise but can cause lag and higher CPU usage.",
+  "@settingsUseExactSeekDesc": {
+    "description": "IINA's \"settings.useExactSeek.desc\": a string of the player's settings window."
+  },
+  "settingsUseExactSeekItems0": "Keyframe seek",
+  "@settingsUseExactSeekItems0": {
+    "description": "IINA's \"settings.useExactSeek.items.0\": a string of the player's settings window."
+  },
+  "settingsUseExactSeekItems1": "Exact seek",
+  "@settingsUseExactSeekItems1": {
+    "description": "IINA's \"settings.useExactSeek.items.1\": a string of the player's settings window."
+  },
+  "settingsUseExactSeekItems2": "Auto",
+  "@settingsUseExactSeekItems2": {
+    "description": "IINA's \"settings.useExactSeek.items.2\": a string of the player's settings window."
+  },
+  "settingsUseExactSeekLabel": "Seek type",
+  "@settingsUseExactSeekLabel": {
+    "description": "IINA's \"settings.useExactSeek.label\": a string of the player's settings window."
+  },
+  "settingsUseLegacyFullScreenLabel": "Use legacy full screen",
+  "@settingsUseLegacyFullScreenLabel": {
+    "description": "IINA's \"settings.useLegacyFullScreen.label\": a string of the player's settings window."
+  },
+  "settingsUseMediaKeysLabel": "Use system media control",
+  "@settingsUseMediaKeysLabel": {
+    "description": "IINA's \"settings.useMediaKeys.label\": a string of the player's settings window."
+  },
+  "settingsUseMpvOsdLabel": "Use mpv's OSD",
+  "@settingsUseMpvOsdLabel": {
+    "description": "IINA's \"settings.useMpvOsd.label\": a string of the player's settings window."
+  },
+  "settingsUsePhysicalResolutionLabel": "Use physical resolution on Retina displays",
+  "@settingsUsePhysicalResolutionLabel": {
+    "description": "IINA's \"settings.usePhysicalResolution.label\": a string of the player's settings window."
+  },
+  "settingsUseUserDefinedConfDirLabel": "Use config directory",
+  "@settingsUseUserDefinedConfDirLabel": {
+    "description": "IINA's \"settings.useUserDefinedConfDir.label\": a string of the player's settings window."
+  },
+  "settingsUserAgentLabel": "User agent",
+  "@settingsUserAgentLabel": {
+    "description": "IINA's \"settings.userAgent.label\": a string of the player's settings window."
+  },
+  "settingsVerticalScrollActionItems0": "Adjust volume",
+  "@settingsVerticalScrollActionItems0": {
+    "description": "IINA's \"settings.verticalScrollAction.items.0\": a string of the player's settings window."
+  },
+  "settingsVerticalScrollActionItems1": "Seek",
+  "@settingsVerticalScrollActionItems1": {
+    "description": "IINA's \"settings.verticalScrollAction.items.1\": a string of the player's settings window."
+  },
+  "settingsVerticalScrollActionItems2": "None",
+  "@settingsVerticalScrollActionItems2": {
+    "description": "IINA's \"settings.verticalScrollAction.items.2\": a string of the player's settings window."
+  },
+  "settingsVerticalScrollActionItems4": "Adjust playback speed",
+  "@settingsVerticalScrollActionItems4": {
+    "description": "IINA's \"settings.verticalScrollAction.items.4\": a string of the player's settings window."
+  },
+  "settingsVerticalScrollActionLabel": "Scroll vertically to",
+  "@settingsVerticalScrollActionLabel": {
+    "description": "IINA's \"settings.verticalScrollAction.label\": a string of the player's settings window."
+  },
+  "settingsVideoThreadsDesc": "Default: 0 (Auto)",
+  "@settingsVideoThreadsDesc": {
+    "description": "IINA's \"settings.videoThreads.desc\": a string of the player's settings window."
+  },
+  "settingsVideoThreadsLabel": "Number of threads",
+  "@settingsVideoThreadsLabel": {
+    "description": "IINA's \"settings.videoThreads.label\": a string of the player's settings window."
+  },
+  "settingsVideoViewAcceptsFirstMouseDesc": "Mouse",
+  "@settingsVideoViewAcceptsFirstMouseDesc": {
+    "description": "IINA's \"settings.videoViewAcceptsFirstMouse.desc\": a string of the player's settings window."
+  },
+  "settingsVideoViewAcceptsFirstMouseLabel": "Accepts first mouse click when not focused",
+  "@settingsVideoViewAcceptsFirstMouseLabel": {
+    "description": "IINA's \"settings.videoViewAcceptsFirstMouse.label\": a string of the player's settings window."
+  },
+  "settingsVolumeScrollAmountLabel": "Sensitivity for volume",
+  "@settingsVolumeScrollAmountLabel": {
+    "description": "IINA's \"settings.volumeScrollAmount.label\": a string of the player's settings window."
+  },
+  "settingsWindowBehaviorWhenPipItems0": "Do nothing",
+  "@settingsWindowBehaviorWhenPipItems0": {
+    "description": "IINA's \"settings.windowBehaviorWhenPip.items.0\": a string of the player's settings window."
+  },
+  "settingsWindowBehaviorWhenPipItems1": "Hide",
+  "@settingsWindowBehaviorWhenPipItems1": {
+    "description": "IINA's \"settings.windowBehaviorWhenPip.items.1\": a string of the player's settings window."
+  },
+  "settingsWindowBehaviorWhenPipItems2": "Minimize",
+  "@settingsWindowBehaviorWhenPipItems2": {
+    "description": "IINA's \"settings.windowBehaviorWhenPip.items.2\": a string of the player's settings window."
+  },
+  "settingsWindowBehaviorWhenPipLabel": "Window",
+  "@settingsWindowBehaviorWhenPipLabel": {
+    "description": "IINA's \"settings.windowBehaviorWhenPip.label\": a string of the player's settings window."
+  },
+  "settingsYtdlEnabledLabel": "Enable mpv's youtube-dl script",
+  "@settingsYtdlEnabledLabel": {
+    "description": "IINA's \"settings.ytdlEnabled.label\": a string of the player's settings window."
+  },
+  "settingsYtdlRawOptionsDesc": "Format <key>=<value>[,<key>=<value>[,…]]",
+  "@settingsYtdlRawOptionsDesc": {
+    "description": "IINA's \"settings.ytdlRawOptions.desc\": a string of the player's settings window."
+  },
+  "settingsYtdlRawOptionsLabel": "Raw options",
+  "@settingsYtdlRawOptionsLabel": {
+    "description": "IINA's \"settings.ytdlRawOptions.label\": a string of the player's settings window."
+  },
+  "settingsYtdlSearchPathDesc": "IINA will search youtube-dl in this folder. Restart needed.",
+  "@settingsYtdlSearchPathDesc": {
+    "description": "IINA's \"settings.ytdlSearchPath.desc\": a string of the player's settings window."
+  },
+  "settingsYtdlSearchPathLabel": "Custom youtube-dl path",
+  "@settingsYtdlSearchPathLabel": {
+    "description": "IINA's \"settings.ytdlSearchPath.label\": a string of the player's settings window."
+  },
+  "iinaSidebarAddFile": "Add File…",
+  "@iinaSidebarAddFile": {
+    "description": "IINA's \"sidebar.add_file\"."
+  },
+  "iinaSidebarAddUrl": "Add URL…",
+  "@iinaSidebarAddUrl": {
+    "description": "IINA's \"sidebar.add_url\"."
+  },
+  "iinaSidebarAspectRatio": "Aspect Ratio",
+  "@iinaSidebarAspectRatio": {
+    "description": "IINA's \"sidebar.aspect_ratio\"."
+  },
+  "iinaSidebarAudio": "Audio",
+  "@iinaSidebarAudio": {
+    "description": "IINA's \"sidebar.audio\"."
+  },
+  "iinaSidebarBorder": "Border",
+  "@iinaSidebarBorder": {
+    "description": "IINA's \"sidebar.border\"."
+  },
+  "iinaSidebarBrightness": "Brightness",
+  "@iinaSidebarBrightness": {
+    "description": "IINA's \"sidebar.brightness\"."
+  },
+  "iinaSidebarChapters": "Chapters",
+  "@iinaSidebarChapters": {
+    "description": "IINA's \"sidebar.chapters\"."
+  },
+  "iinaSidebarColor": "Color",
+  "@iinaSidebarColor": {
+    "description": "IINA's \"sidebar.color\"."
+  },
+  "iinaSidebarCompactInterface": "Compact Interface",
+  "@iinaSidebarCompactInterface": {
+    "description": "IINA's \"sidebar.compact_interface\"."
+  },
+  "iinaSidebarContrast": "Contrast",
+  "@iinaSidebarContrast": {
+    "description": "IINA's \"sidebar.contrast\"."
+  },
+  "iinaSidebarCrop": "Crop",
+  "@iinaSidebarCrop": {
+    "description": "IINA's \"sidebar.crop\"."
+  },
+  "iinaSidebarDelay": "Delay",
+  "@iinaSidebarDelay": {
+    "description": "IINA's \"sidebar.delay\"."
+  },
+  "iinaSidebarDocked": "Docked Control Bar and Titlebar",
+  "@iinaSidebarDocked": {
+    "description": "IINA's \"sidebar.docked\"."
+  },
+  "iinaSidebarEdgeToEdgeVideo": "Edge-to-Edge Video",
+  "@iinaSidebarEdgeToEdgeVideo": {
+    "description": "IINA's \"sidebar.edge_to_edge_video\"."
+  },
+  "iinaSidebarEq": "Equalizer",
+  "@iinaSidebarEq": {
+    "description": "IINA's \"sidebar.eq\"."
+  },
+  "iinaSidebarExternalSubtitles": "External Subtitles",
+  "@iinaSidebarExternalSubtitles": {
+    "description": "IINA's \"sidebar.external_subtitles\"."
+  },
+  "iinaSidebarFitWindowToVideo": "Fit Window to Video",
+  "@iinaSidebarFitWindowToVideo": {
+    "description": "IINA's \"sidebar.fit_window_to_video\"."
+  },
+  "iinaSidebarFont": "Font",
+  "@iinaSidebarFont": {
+    "description": "IINA's \"sidebar.font\"."
+  },
+  "iinaSidebarGamma": "Gamma",
+  "@iinaSidebarGamma": {
+    "description": "IINA's \"sidebar.gamma\"."
+  },
+  "iinaSidebarHue": "Hue",
+  "@iinaSidebarHue": {
+    "description": "IINA's \"sidebar.hue\"."
+  },
+  "iinaSidebarLayout": "Layout",
+  "@iinaSidebarLayout": {
+    "description": "IINA's \"sidebar.layout\"."
+  },
+  "iinaSidebarLiquidGlass": "Liquid Glass",
+  "@iinaSidebarLiquidGlass": {
+    "description": "IINA's \"sidebar.liquid_glass\"."
+  },
+  "iinaSidebarLoadExternalAudio": "Load External Audio Track…",
+  "@iinaSidebarLoadExternalAudio": {
+    "description": "IINA's \"sidebar.load_external_audio\"."
+  },
+  "iinaSidebarLoadSubtitle": "Load Subtitle…",
+  "@iinaSidebarLoadSubtitle": {
+    "description": "IINA's \"sidebar.load_subtitle\"."
+  },
+  "iinaSidebarLockWindowAspect": "Lock Window Aspect Ratio",
+  "@iinaSidebarLockWindowAspect": {
+    "description": "IINA's \"sidebar.lock_window_aspect\"."
+  },
+  "iinaSidebarManualEq": "Manual",
+  "@iinaSidebarManualEq": {
+    "description": "IINA's \"sidebar.manual_eq\"."
+  },
+  "iinaSidebarPlaylist": "Playlist",
+  "@iinaSidebarPlaylist": {
+    "description": "IINA's \"sidebar.playlist\"."
+  },
+  "iinaSidebarPlaylistAndChapters": "Playlist and Chapters",
+  "@iinaSidebarPlaylistAndChapters": {
+    "description": "IINA's \"sidebar.playlist_and_chapters\"."
+  },
+  "iinaSidebarPlugins": "Plugins",
+  "@iinaSidebarPlugins": {
+    "description": "IINA's \"sidebar.plugins\"."
+  },
+  "iinaSidebarPluginsPlaceholder": "Plugins can display custom sidebar contents. Select a plugin to view its sidebar or install a new plugin in Settings.",
+  "@iinaSidebarPluginsPlaceholder": {
+    "description": "IINA's \"sidebar.plugins_placeholder\"."
+  },
+  "iinaSidebarPosition": "Position",
+  "@iinaSidebarPosition": {
+    "description": "IINA's \"sidebar.position\"."
+  },
+  "iinaSidebarPrimary": "Primary",
+  "@iinaSidebarPrimary": {
+    "description": "IINA's \"sidebar.primary\"."
+  },
+  "iinaSidebarRemoveEq": "Remove the current EQ preset",
+  "@iinaSidebarRemoveEq": {
+    "description": "IINA's \"sidebar.remove_eq\"."
+  },
+  "iinaSidebarRenameEq": "Rename the current EQ preset…",
+  "@iinaSidebarRenameEq": {
+    "description": "IINA's \"sidebar.rename_eq\"."
+  },
+  "iinaSidebarRotation": "Rotation",
+  "@iinaSidebarRotation": {
+    "description": "IINA's \"sidebar.rotation\"."
+  },
+  "iinaSidebarSaturation": "Saturation",
+  "@iinaSidebarSaturation": {
+    "description": "IINA's \"sidebar.saturation\"."
+  },
+  "iinaSidebarSaveEq": "Save the current EQ as a preset…",
+  "@iinaSidebarSaveEq": {
+    "description": "IINA's \"sidebar.save_eq\"."
+  },
+  "iinaSidebarScale": "Scale",
+  "@iinaSidebarScale": {
+    "description": "IINA's \"sidebar.scale\"."
+  },
+  "iinaSidebarSearchOnline": "Search Online…",
+  "@iinaSidebarSearchOnline": {
+    "description": "IINA's \"sidebar.search_online\"."
+  },
+  "iinaSidebarSecondary": "Secondary",
+  "@iinaSidebarSecondary": {
+    "description": "IINA's \"sidebar.secondary\"."
+  },
+  "iinaSidebarSettings": "Settings",
+  "@iinaSidebarSettings": {
+    "description": "IINA's \"sidebar.settings\"."
+  },
+  "iinaSidebarShadow": "Shadow",
+  "@iinaSidebarShadow": {
+    "description": "IINA's \"sidebar.shadow\"."
+  },
+  "iinaSidebarSidebar": "Sidebar",
+  "@iinaSidebarSidebar": {
+    "description": "IINA's \"sidebar.sidebar\"."
+  },
+  "iinaSidebarSidebarPosition": "Sidebar Position",
+  "@iinaSidebarSidebarPosition": {
+    "description": "IINA's \"sidebar.sidebar_position\"."
+  },
+  "iinaSidebarSpeed": "Speed",
+  "@iinaSidebarSpeed": {
+    "description": "IINA's \"sidebar.speed\"."
+  },
+  "iinaSidebarSub": "Subtitles",
+  "@iinaSidebarSub": {
+    "description": "IINA's \"sidebar.sub\"."
+  },
+  "iinaSidebarSubSettingsNotAvailable": "Some settings are not available for this subtitle type.",
+  "@iinaSidebarSubSettingsNotAvailable": {
+    "description": "IINA's \"sidebar.sub_settings_not_available\"."
+  },
+  "iinaSidebarSubStyleWarning": "Setting style options for ASS subtitles may break rendering.",
+  "@iinaSidebarSubStyleWarning": {
+    "description": "IINA's \"sidebar.sub_style_warning\"."
+  },
+  "iinaSidebarText": "Text",
+  "@iinaSidebarText": {
+    "description": "IINA's \"sidebar.text\"."
+  },
+  "iinaSidebarVideo": "Video",
+  "@iinaSidebarVideo": {
+    "description": "IINA's \"sidebar.video\"."
+  },
+  "welcomeOpen": "Open…",
+  "@welcomeOpen": {
+    "description": "The welcome window's button that opens the open panel (IINA's)."
+  },
+  "welcomeOpenURL": "Open URL…",
+  "@welcomeOpenURL": {
+    "description": "The welcome window's button that asks for a URL to open (IINA's)."
+  },
+  "welcomeResume": "Resume",
+  "@welcomeResume": {
+    "description": "The welcome window's row that resumes the film played last, before its name (IINA's)."
+  },
+  "videoShotDelete": "DELETE",
+  "@videoShotDelete": {
+    "description": "The screenshot preview's button that deletes the screenshot (IINA's)."
+  },
+  "videoShotEdit": "EDIT",
+  "@videoShotEdit": {
+    "description": "The screenshot preview's button that opens the screenshot in Preview to edit (IINA's)."
+  },
+  "videoShotReveal": "REVEAL",
+  "@videoShotReveal": {
+    "description": "The screenshot preview's button that shows the screenshot in the Finder (IINA's)."
+  },
+  "settingsMoreInfo": "More Info",
+  "@settingsMoreInfo": {
+    "description": "Labels a settings page's ⓘ button, which opens its help page."
+  },
+  "help": "Help",
+  "@help": {
+    "description": "Labels a ? button that opens a help page."
   }
 }

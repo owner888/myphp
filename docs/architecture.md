@@ -4779,10 +4779,84 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   size; it clears the cache of the path first (a film still being
   written, too).
 
+## The player's settings window, its General page, the welcome and history windows (v1.61)
+- **The settings window is IINA's new one** (SettingsWindow and its
+  SettingsPage*, `UI\VideoPlayerSettings` drawing what
+  `UI\VideoPlayerSettingsPages` describes): a sidebar of the pages under a
+  capsule search field, the page chosen in the accent while the window
+  has the focus, its sections under it with IINA's line and dot; the
+  page's sections of cards, a row a setting (its symbol, label,
+  description, its control centered on its first line), the rows under a
+  switch enabled while it is on, those under a disclosure shown at a
+  click. The search finds a row whose words hold every word typed, a row
+  under another with it, by page; a click goes to the row and rings it.
+  The strings are IINA's (settings.* to settings…, its other keys to
+  iina…, for en, zh-Hans and zh-Hant), added by a script from its
+  .strings, its VerbatimStrings and two of its xibs' (the welcome's
+  buttons, the screenshot preview's).
+- **The settings are IINA's preferences** (`Media\PlayerSettings`, by
+  IINA's keys and raw values, of their types; settings.json in the user
+  data, written through a temporary file, `onChange` told). General's
+  apply where the player is: pause or full screen as a film opens, the
+  pauses when minimized, inactive, entering or leaving full screen and
+  as the Mac sleeps (`Runtime::$windowListeners`, `Power::onSuspend`),
+  keep the window open at the end (else it closes, IINA's), legacy full
+  screen (a borderless frame over the screen, the Dock and menu bar
+  hidden) and black out the other screens, the screen saver kept off as
+  it plays (the display awake, `Awake::setDisplay`; for audio, where
+  asked, only the system's sleep held off, IINA's SleepPreventer), resume
+  where a film was left, the history and Open Recent, the folder's
+  films added to the playlist, the next played, the repeat of a film
+  opened by hand, the screenshots' folder, format (those of IINA's
+  ImageIO writes here, `Media\Screenshot`), clipboard
+  and preview (IINA's, with DELETE, EDIT and REVEAL). The app-wide ones
+  are the app's: examples/video opens a window a film or the one in
+  front, as IINA's PlayerCore.openURLs, gathers the Finder's files for
+  0.2 s, shows the welcome window or the open panel at launch, quits
+  after the last window only where asked, and has File > Open Recent
+  and Playback History.
+- **The welcome and playback history windows are IINA's**
+  (`Context::videoPlayerWelcome`, `Context::videoPlayerHistory`,
+  `Media\PlaybackHistory`: history.json in the user data, a film once,
+  the latest first): the welcome's film to resume over the recent
+  documents (Up, Down, Return); the history's groups by day or folder
+  (a URL's by its host), Expand All and Collapse All, Clear, a search in
+  the names or paths, multiple choice, Return and Command-Return, Delete,
+  IINA's menu and alerts.
+- **A settings page's title bar frosts the page under it, as macOS 26's
+  hard scroll edge** (Plugins\Glass\ScrollEdge): a system material
+  (`systemMaterial`) shows what the window draws under it but punches a
+  hole through myphp's own content, so the page's rows under the bar did
+  not show at all.
+- **Trap: the section a click in the index scrolls to was not the one
+  marked.** IINA's rule (the first section crossing a band a third of the
+  way down, 40 high) marked the one before: its end was still in the
+  band. The section marked is the last begun by the band's bottom, and
+  the one clicked stays marked until the page is scrolled again (a page
+  that ends before the section reaches the band marked its last).
+- **Trap: window asks made between frames were lost.** The runtime's
+  asks start empty with each frame; `VideoPlayerState` keeps those of an
+  event (a film opened by the Finder, its end) and asks them as it
+  attaches in the next frame.
+- **Trap: a test's arrow function holds a copy.** `fn(Context $c) =>
+  …(function () use (&$opened) …)` binds the inner reference to the
+  arrow function's copy of `$opened`: the test saw nothing opened. The
+  view is a `function () use (&$opened)`, as for any closure run later.
+- **Trap: a node of a border and a color painted it opaque**; a row of a
+  fill's alpha borders itself with `borderWidth` and `borderColor`.
+- The tests' user data is a temporary folder (tests/run.php), not the
+  user's: the player's settings, history and positions start from none.
+- Fixed: the playlist's Add Files and the settings' folder button named
+  options OpenDialogOptions has not (multiSelections, properties).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 
+- The player's settings window (v1.61) has IINA's General, Video and
+  Subtitles pages; the others are to come. Of General, music mode (its
+  switch and the playlist's metadata in it), the playlist's metadata
+  and screenshots with their subtitles do nothing yet.
 
 - The glyph atlas starts over when full and is re-rasterized whole; an
   image page is emptied whole. Eviction per glyph or image would avoid

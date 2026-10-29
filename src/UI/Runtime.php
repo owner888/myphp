@@ -236,13 +236,16 @@ final class Runtime
     private ?int $pressDragger = null;
     /** Asks the window for a frame, after a change from outside a frame (a menu item going to another page); the window sets it. */
     public ?Closure $requestFrame = null;
+    /** @var array<string, Closure(string): void> what of the view listens to its window's events (Window::EVENTS: minimize, restore, focus, blur, enterFullScreen…), by who listens; the window calls them */
+    public array $windowListeners = [];
     /** Shows (true) or hides the window at once, from outside a frame too (a film gone to picture in picture, and back); the window sets it. */
     public ?Closure $showWindow = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
     /**
      * What the view asked of its window this frame, which the window does
-     * once it is built (Context::videoPlayer's): 'buttons' => whether the
+     * once it is built (Context::videoPlayer's, videoPlayerSettings'): 'close'
+     * => true to close it, 'title' => its title, 'buttons' => whether the
      * traffic lights show, 'aspect' => the content's width over its height
      * to keep (null for none), 'fullScreen' => whether to be full screen.
      * @var array<string, mixed>

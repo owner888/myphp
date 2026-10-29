@@ -1688,7 +1688,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   of `Player::seek` and `VideoPlayerState::seekBy`, and
   `VideoPlayerOptions::$nowPlaying` are myphp's, as AVPlayer's and IINA's,
   and `Player::step`, `snapshot`, `VideoPlayerState::frameStep`,
-  `screenshot`, `$screenshots` (IINA's frame steps and screenshots);
+  `screenshot` (IINA's frame steps and screenshots; its `$screenshots`
+  went in v1.61, the settings saying where they go);
   mygo has no video.
 - **yt-dlp, two sources, AV1 in software** (v1.52): `Media\YtDlp`,
   `Merged`, `CacheBudget`, `CacheMember`, `Player::title`, `Player::playlist`, `Player::$hardwareDecoding`,
@@ -1718,6 +1719,21 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   MetaVideo reads it (`Media\MetaVideo`, `Media\Tmdb`, internal), the
   subtitles of the film's TMDB id (a show's season and episode), IINA's
   search by hash and name only where that finds none.
+- **The player's settings and windows** (v1.61): `Media\PlayerSettings`
+  (IINA's preferences by IINA's names and defaults: `default`, `get`,
+  `set`, `onChange`; settings.json in the user data, replacing v1.60's
+  SubtitleSettings and its file, so an OpenSubtitles account logs in
+  again), `Context::videoPlayerWelcome` and `Context::videoPlayerHistory`
+  (IINA's welcome and playback history windows) are myphp's; mygo has no
+  video. `VideoPlayerState::$screenshots`, `setSubtitleLanguages` and
+  `setHardwareDecoder` are gone (`setSetting`), and so is examples/video's
+  MYPHP_VIDEO_SOFTWARE (Settings > Video). The settings window has IINA's
+  General, Video and Subtitles pages so far. General's receive beta
+  updates is left out (no beta feed); Check for Updates is myphp's own
+  setting where IINA's is Sparkle's, its interval taken at the next
+  launch (the updater's is set as it starts). The app-wide ones (new
+  windows, quit after the last, at launch, Open Recent) are the app's to
+  follow, as examples/video does: the library's player has one window.
 - **External audio** (v1.55): `Player::loadAudio`,
   `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no video.

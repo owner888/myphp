@@ -9,6 +9,10 @@ if ($tmp !== false && $tmp !== '' && ($real = realpath($tmp)) !== false) {
     putenv("TMPDIR=$real");
 }
 require __DIR__ . '/Headless.php';
+// The suite's user data in a folder of its own, not the user's: the player's settings, playback history and positions (Media\PlayerSettings::default() and the others) start from none.
+$userData = sys_get_temp_dir() . '/myphp-tests-' . getmypid();
+@mkdir($userData);
+\MyPHP\App::setPath(\MyPHP\PathName::UserData, $userData);
 
 $checks = 0; $failures = [];
 ini_set('memory_limit', '-1'); // the whole suite in one process, as CI runs it: an icon's 1024² sums alone take more than PHP's default 128M

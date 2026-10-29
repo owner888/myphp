@@ -43,6 +43,8 @@ final class VideoPlayer
     public static function build(Context $c, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
         if ($c->runtime !== null) { $s->attach($c->runtime, $o); }
+        $c->runtime?->askWindow('legacyFullScreen', $s->settings()->get('useLegacyFullScreen')); // IINA's settings of full screen: the legacy one, the other screens blacked out
+        $c->runtime?->askWindow('blackOut', $s->settings()->get('blackOutMonitor'));
         $box = $c->column(0, 0, 1, 0x000000); // keyed by its state (Context::videoPlayer)
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
@@ -390,7 +392,8 @@ final class VideoPlayer
     {
         [$text, $under, $until] = $s->message;
         if ($s->onlineSubtitles !== null) { $text = ''; } // the list of subtitles found says it, where the message is
-        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial('glass')->round(12)->passThrough();
+        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial('glass')->round(12);
+        if (($s->shot['path'] ?? null) === null) { $box->passThrough(); } // the pointer goes through, but to a screenshot's buttons
         $o = $c->animate($box, 'osd', $now < $until ? 1 : 0, 0.3);
         if ($now < $until && is_finite($until)) { $c->after($until - $now + 0.01); } // one till another (a search going on) fades with it
         $box->opacity($o);
@@ -408,51 +411,28 @@ final class VideoPlayer
           } elseif ($under !== '') { // a time of its own (an A-B loop's point moved)
               $c->text($under, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7);
           }
+          if ($s->shot !== null && $now < $until) { self::shotPreview($c, $s); }
         $c->end();
+        if ($s->shot !== null && $now >= $until) { $s->shot = null; }
     }
 
-    /**
-     * The settings of IINA's Subtitles pane the player has (PrefSubViewController),
-     * in the app's look, for its settings window (Context::videoPlayerSettings):
-     * under Online Subtitles, the OpenSubtitles account, "Not logged in" or
-     * "Logged in as" its user, and Login (a name and password asked, the
-     * account tried) or Logout; under Other, the preferred languages, a
-     * code a token, the system's where none.
-     */
-    public static function settings(Context $c, VideoPlayerState $s): Node
+    /** IINA's preview of a screenshot under its message (ScreenshootOSDView): the picture at most 300 by 200, ringed, and DELETE, EDIT, REVEAL of its file, kept. */
+    private static function shotPreview(Context $c, VideoPlayerState $s): void
     {
-        $t = $c->theme;
-        $st = $s->settings();
-        $root = $c->column(0, $t->space(4))->padding($t->space(5))->fillWidth();
-          $c->text(self::t($c, 'videoOnlineSubtitles'), $t->fontSize, $t->text)->fontWeight(600);
-          $c->row(0, $t->space(3))->align(Node::CENTER)->fillWidth();
-            $c->text(self::t($c, 'videoOpenSubtitlesAccount'), $t->fontSize, $t->text)->width(170)->textAlign(Node::END);
-            $user = $st->user();
-            $c->text($user === '' ? self::t($c, 'videoNotLoggedIn') : self::t($c, 'videoLoggedInAs', ['user' => $user]), $t->fontSize, $t->textMuted);
-            $b = $c->button(self::t($c, $user === '' ? 'videoLogin' : 'videoLogout'));
-            if ($s->loggingIn) { $b->disabled = true; $c->spinner(); }
-            if ($c->clicked($b)) {
-                if ($user !== '') {
-                    $s->logOutOpenSubtitles();
-                } elseif (($got = \MyPHP\Dialog::login(Window::focused(), self::t($c, 'videoOpenSubtitlesLogin'), self::t($c, 'videoOpenSubtitlesLoginMessage'), self::t($c, 'videoUsername'), self::t($c, 'videoPassword'))) !== null && $got[0] !== '' && $got[1] !== '') {
-                    $s->logInOpenSubtitles($got[0], $got[1], static function (string $why) use ($c): void { // IINA's alert, its reason under
-                        \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: Window::focused(), type: 'warning', message: self::t($c, 'videoCannotLoginDetail', ['why' => $why])));
-                    });
-                }
-            }
-          $c->end();
-          $c->text(self::t($c, 'videoOther'), $t->fontSize, $t->text)->fontWeight(600);
-          $c->row(0, $t->space(3))->align(Node::START)->fillWidth();
-            $c->text(self::t($c, 'videoPreferredLanguage'), $t->fontSize, $t->text)->width(170)->textAlign(Node::END)->paddingY($t->space(1.5));
-            $c->column(0, $t->space(1))->grow(1);
-              $languages = $st->languages();
-              $f = $c->tokenField($languages, array_values(array_diff(\MyPHP\App::preferredLanguages(), $languages)), 300)->label(self::t($c, 'videoPreferredLanguage'));
-              if ($c->changed($f)) { $s->setSubtitleLanguages($languages); }
-              $c->text(self::t($c, 'videoPreferredLanguageHelp'), $t->fontSize - 2, $t->textMuted)->maxWidth(300);
-            $c->end();
-          $c->end();
+        $img = $s->shot['image'];
+        $k = min(1.0, 300 / max(1, $img->w), 200 / max(1, $img->h));
+        $c->image($img, $img->w * $k, $img->h * $k, 4)->margin(8, 0, $s->shot['path'] === null ? 0 : 8, 0)->draw(static function (DisplayList $l, Node $n): void {
+            $l->ring($n->x, $n->y, $n->w, $n->h, 0x808080, 0.6, 4, 1);
+        });
+        if ($s->shot['path'] === null) { return; }
+        $c->row(0, 12);
+          foreach (['delete' => 'videoShotDelete', 'edit' => 'videoShotEdit', 'reveal' => 'videoShotReveal'] as $action => $key) {
+              $b = $c->row()->role(Role::BUTTON)->label(self::t($c, $key));
+                $c->text(self::t($c, $key), 11, 0xffffff, Font::BOLD)->opacity(0.85);
+              $c->end();
+              if ($c->clicked($b)) { $s->shotAction($action); }
+          }
         $c->end();
-        return $root;
     }
 
     /**
@@ -845,7 +825,7 @@ final class VideoPlayer
             $c->text(self::t($c, 'videoTotal', ['time' => VideoPlayerState::clock($total)]), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.5)->textAlign(Node::CENTER)->grow(1);
             $add = $c->column()->tooltip(self::t($c, 'videoAddFiles')); self::sf($c, 'plus', 12, $c->hovered($add) ? 0.95 : 0.7); $c->end();
             if ($c->clicked($add) && $list !== null) {
-                foreach (Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoAddFiles'), multiSelections: true)) ?? [] as $path) { $list->add($path); }
+                foreach (Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoAddFiles'), multiple: true)) ?? [] as $path) { $list->add($path); }
             }
             $remove = $c->column()->tooltip(self::t($c, 'videoRemoveChosen')); self::sf($c, 'minus', 12, $c->hovered($remove) ? 0.95 : 0.7); $c->end();
             if ($c->clicked($remove) && $list !== null && $s->chosen >= 0 && $s->chosen !== $list->index()) { $list->remove($s->chosen); $s->chosen = -1; }

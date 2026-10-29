@@ -2,16 +2,17 @@
 // OpenSubtitles' REST API as IINA's OpenSubClient uses it (Media\OpenSubtitles),
 // without the network: a file's hash (its wiki's HashSourceCodes, against
 // Python's 64-bit sums), the system's languages as its codes, a search's
-// response as the rows IINA lists; the settings of IINA's Subtitles pane
-// the player has (Media\SubtitleSettings), and their pane; what a file's
+// response as the rows IINA lists; the settings of IINA's Settings window
+// the player has (Media\PlayerSettings), the window's search, and, on
+// macOS, the window (UI\VideoPlayerSettings); what a file's
 // name tells of its film, to look it up on TMDB by (Media\MetaVideo, of
 // agc_player's names).
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Media\{MetaVideo, OpenSubtitles, SubtitleSettings};
-use MyPHP\UI\{Context, VideoPlayerState};
+use MyPHP\Media\{MetaVideo, OpenSubtitles, PlayerSettings};
+use MyPHP\UI\{Context, VideoPlayerSettings, VideoPlayerSettingsPages, VideoPlayerState};
 
 $file = sys_get_temp_dir() . '/myphp-hash-' . getmypid() . '.bin';
 $n = 200003;
@@ -50,19 +51,57 @@ same(['Rocky II', 1979, false, null, null, null], $read('Rocky.II.1979.720p.mkv'
 same('', (new MetaVideo('hdr-av1.mkv'))->name(), 'no name in what is only a codec\'s');
 same([3, 12, 20, 105], array_map(MetaVideo::chineseNumber(...), ['三', '十二', '二十', '一百零五']), 'Chinese numbers');
 
-// The settings: the preferred languages and the account's user, in their JSON file, read again by another; none at first.
-$file = sys_get_temp_dir() . '/myphp-subtitle-settings-' . getmypid() . '.json';
+// The settings (IINA's, by its names and defaults): its defaults at first; set ones in their JSON file, read again by another; each of its type; told of changes.
+$file = sys_get_temp_dir() . '/myphp-settings-' . getmypid() . '.json';
 @unlink($file);
-$set = new SubtitleSettings($file);
-same([[], ''], [$set->languages(), $set->user()], 'none at first: the system\'s languages, no account');
-$set->setLanguages(['zh-Hans', ' en ', '', 'zh-Hans']); $set->setUser('kitty');
-$again = new SubtitleSettings($file);
-same([['zh-Hans', 'en'], 'kitty'], [$again->languages(), $again->user()], 'in their file: the languages trimmed, once each, none empty');
-// Their pane (Context::videoPlayerSettings): the account logged in, Logout; the languages a token each, one added kept.
-$s = new VideoPlayerState(); $s->subtitleSettings = $again;
-$h = new Headless(fn(Context $c) => $c->videoPlayerSettings($s), 560, 260);
-$h->frame();
-check($h->byText('Logged in as kitty') !== null && $h->byText('Logout') !== null && $h->byText('zh-Hans') !== null && $h->byText('Online Subtitles:') !== null, 'the pane: the account and its Logout, the languages');
-$again->setUser(''); $h->frame();
-check($h->byText('Not logged in') !== null && $h->byText('Login') !== null, 'none logged in: Login');
+$set = new PlayerSettings($file);
+same([[], '', 1, true, '~/Pictures/Screenshots'], [$set->get('subLang'), $set->get('openSubUsername'), $set->get('hardwareDecoder'), $set->get('keepOpenOnFileEnd'), $set->get('screenShotFolder')], 'IINA\'s defaults at first');
+check(!$set->stored('hardwareDecoder'), 'none stored: the hardware decoder the app\'s');
+$told = [];
+$set->onChange('hardwareDecoder', function (int $v) use (&$told) { $told[] = $v; });
+$set->set('subLang', ['zh-Hans', 'en']); $set->set('openSubUsername', 'kitty'); $set->set('hardwareDecoder', 0); $set->set('hardwareDecoder', 0);
+same([0], $told, 'told once of a change, not of the same value again');
+$again = new PlayerSettings($file);
+same([['zh-Hans', 'en'], 'kitty', 0, true], [$again->get('subLang'), $again->get('openSubUsername'), $again->get('hardwareDecoder'), $again->stored('hardwareDecoder')], 'in their file');
+same(['subLang', 'openSubUsername', 'hardwareDecoder'], array_reverse(array_keys(json_decode((string)file_get_contents($file), true))), 'by IINA\'s names of them');
+$threw = false; try { $set->set('hardwareDecoder', 'auto'); } catch (\InvalidArgumentException) { $threw = true; }
+check($threw, 'a value of the wrong type throws');
+$threw = false; try { $set->get('noSuchSetting'); } catch (\InvalidArgumentException) { $threw = true; }
+check($threw, 'a setting IINA has not throws');
+file_put_contents($file, '{"hardwareDecoder": "auto"}');
+$threw = false; try { (new PlayerSettings($file))->get('hardwareDecoder'); } catch (\RuntimeException) { $threw = true; }
+check($threw, 'a file of settings of the wrong types is no settings: it throws');
 unlink($file);
+
+// The settings window's search (IINA's): every word in a word of a row (or a row under one); by page, then section, then label.
+$pages = [];
+(new Headless(function (Context $c) use (&$pages) { $pages = (new VideoPlayerSettingsPages($c, new VideoPlayerState(), (object)[]))->all(); $c->column(); $c->end(); }, 600, 480))->frame();
+same(['general', 'video', 'subtitles'], array_keys($pages), 'the pages, in IINA\'s order');
+same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'HARDWARE'), 'id'), 'a word of a label, whatever its case');
+same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'filters'), 'id'), 'a word of what an option says');
+same(['pauseWhenMinimized'], array_column(VideoPlayerSettings::search($pages, 'minimized'), 'id'), 'a row under another');
+same('Pause/resume when', VideoPlayerSettings::search($pages, 'minimized')[0]['parent'], 'with the row it is under');
+same([], VideoPlayerSettings::search($pages, 'source hardware'), 'each word in the same row');
+same([], VideoPlayerSettings::search($pages, '   '), 'nothing for no words');
+
+if (PHP_OS_FAMILY === 'Darwin') {
+    // The window (Context::videoPlayerSettings): the pages, the Video page's sections, the hardware decoder's choices; the Subtitles page's account and languages.
+    @unlink($file);
+    $s = new VideoPlayerState(); $s->playerSettings = $again = new PlayerSettings($file);
+    $again->set('openSubUsername', 'kitty'); $again->set('subLang', ['zh-Hans']);
+    $h = new Headless(fn(Context $c) => $c->videoPlayerSettings($s), 600, 480);
+    $h->frame();
+    check($h->byText('General') !== null && $h->byText('At launch') !== null, 'the General page first');
+    $h->clickOn($h->byText('Video')); $h->frame();
+    check($h->byText('Decoding') !== null && $h->byText('Hardware decoder') !== null, 'the Video page: its section, its setting');
+    check($h->byText('Disabled') !== null && $h->byText('Auto') !== null, 'the hardware decoder\'s choices');
+    $h->clickOn($h->byText('Disabled')); $h->frame();
+    same(0, $again->get('hardwareDecoder'), 'Disabled chosen: kept');
+    check(!\MyPHP\Media\Player::$hardwareDecoding, 'and the films opened next decode in software');
+    $s->setSetting('hardwareDecoder', 1);
+    $h->clickOn($h->byText('Subtitles')); $h->frame();
+    check($h->byText('Logged in as kitty') !== null && $h->byText('Logout') !== null && $h->byText('zh-Hans') !== null && $h->byText('Online Subtitles') !== null, 'the Subtitles page: the account and its Logout, the languages');
+    $again->set('openSubUsername', ''); $h->frame();
+    check($h->byText('Not logged in') !== null && $h->byText('Login') !== null, 'none logged in: Login');
+    unlink($file);
+}

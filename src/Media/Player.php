@@ -809,6 +809,12 @@ final class Player
         return $this->awake->held();
     }
 
+    /** @internal UI\VideoPlayerState: whether what it keeps awake while it plays is the display (its screen saver off), else only the system (IINA's "not while only playing audio"). */
+    public function setAwakeDisplay(bool $display): void
+    {
+        $this->awake->setDisplay($display);
+    }
+
     /** Whether it keeps the display awake while it plays (as IINA's "prevent the screen saver", on by default); off, it lets it sleep now. */
     public function setKeepAwake(bool $on): void
     {

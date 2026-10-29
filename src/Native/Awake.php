@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace MyPHP\Native;
 
 /**
- * Keeps the display awake, its screen saver off, while something plays,
- * as IINA's SleepPreventer: a ProcessInfo activity of idle display sleep
+ * Keeps the display awake, its screen saver off, while something plays
+ * (or only the system, setDisplay), as IINA's SleepPreventer: a ProcessInfo activity of idle display sleep
  * disabled, begun and ended (`pmset -g assertions` lists it while it
  * lasts).
  *
@@ -13,10 +13,12 @@ namespace MyPHP\Native;
  */
 final class Awake
 {
-    /** NSActivityIdleDisplaySleepDisabled. */
-    private const IDLE_DISPLAY_SLEEP_DISABLED = 1 << 40;
+    /** NSActivityIdleDisplaySleepDisabled, NSActivityIdleSystemSleepDisabled. */
+    private const IDLE_DISPLAY_SLEEP_DISABLED = 1 << 40, IDLE_SYSTEM_SLEEP_DISABLED = 1 << 20;
 
     private $token = null;
+    /** Whether the display stays awake, else only the system (IINA's SleepPreventer's allowScreenSaver). */
+    private bool $display = true;
 
     public function __construct(private readonly string $reason) {}
 
@@ -28,7 +30,20 @@ final class Awake
         }
         ObjC::boot(['Foundation']);
         $info = ObjC::msg('p:', ObjC::cls('NSProcessInfo'), 'processInfo');
-        $this->token = ObjC::msg('p:', ObjC::msg('p:Lp', $info, 'beginActivityWithOptions:reason:', self::IDLE_DISPLAY_SLEEP_DISABLED, ObjC::str($this->reason)), 'retain');
+        $this->token = ObjC::msg('p:', ObjC::msg('p:Lp', $info, 'beginActivityWithOptions:reason:', $this->display ? self::IDLE_DISPLAY_SLEEP_DISABLED : self::IDLE_SYSTEM_SLEEP_DISABLED, ObjC::str($this->reason)), 'retain');
+    }
+
+    /** Keeps the display awake ($display), its screen saver off, or only the system, the screen saver allowed; held, taken again so. */
+    public function setDisplay(bool $display): void
+    {
+        if ($display === $this->display) {
+            return;
+        }
+        $this->display = $display;
+        if ($this->token !== null) {
+            $this->release();
+            $this->hold();
+        }
     }
 
     /** Lets the display sleep again. */

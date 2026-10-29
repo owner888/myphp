@@ -11,7 +11,7 @@ use RuntimeException;
  * NSImage of the symbol, configured with a point size and a weight, drawn
  * into a CGBitmapContext at $scale pixels a point in one color.
  *
- * @internal Image::symbol
+ * @internal Image::symbol, UI\VideoPlayerSettings
  */
 final class Symbols
 {
@@ -32,6 +32,13 @@ final class Symbols
             self::$space = self::$c->CGColorSpaceCreateDeviceRGB();
         }
         return self::$c;
+    }
+
+    /** Whether the system has symbol $name (IINA's NSImage.sf takes the first of several it has). */
+    public static function exists(string $name): bool
+    {
+        self::c();
+        return ObjC::msg('p:pp', ObjC::cls('NSImage'), 'imageWithSystemSymbolName:accessibilityDescription:', ObjC::str($name), null) !== null;
     }
 
     /**

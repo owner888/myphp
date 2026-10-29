@@ -12,7 +12,8 @@ use RuntimeException;
  * (premultiplied, top row first), scaled down to fit $max pixels on a
  * side when larger, through a CGBitmapContext, on the calling thread:
  * the icons myphp build makes (Build\Icns), and a video player's cached
- * thumbnails; and encodes RGBA as a JPEG (the thumbnails' cache). The
+ * thumbnails; and encodes RGBA as a JPEG (the thumbnails' cache), and an
+ * image as another type ImageIO writes (a player's screenshots). The
  * UI's images decode off the main thread, through CoreImage.
  */
 final class ImageIO
@@ -24,6 +25,7 @@ final class ImageIO
     private static function c(): FFI
     {
         if (self::$c === null) {
+            // CFDataGetBytePtr's bytes a void*: a const char* return arrives as a PHP string, cut at its first NUL.
             self::$c = FFI::cdef('
                 typedef struct { double x, y; } CGPoint;
                 typedef struct { double w, h; } CGSize;
@@ -46,11 +48,12 @@ final class ImageIO
                 void* CGBitmapContextCreateImage(void*);
                 void* CFDataCreateMutable(void*, long);
                 long  CFDataGetLength(void*);
-                void* CFDataGetBytePtr(void*); // void*: a const char* return arrives as a PHP string, cut at its first NUL
+                void* CFDataGetBytePtr(void*);
                 void* CGImageDestinationCreateWithData(void*, void*, size_t, void*);
                 void  CGImageDestinationAddImage(void*, void*, void*);
                 bool  CGImageDestinationFinalize(void*);
                 extern void* kCGImageDestinationLossyCompressionQuality;
+                void* CGImageDestinationCopyTypeIdentifiers(void);
             ', '/System/Library/Frameworks/ImageIO.framework/ImageIO');
             self::$c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
             self::$colorSpace = self::$c->CGColorSpaceCreateDeviceRGB();
@@ -128,6 +131,50 @@ final class ImageIO
         $c->CFRelease($dest); $c->CFRelease($data); $c->CGImageRelease($image);
         if (!$ok) {
             throw new RuntimeException('myphp: the JPEG could not be made');
+        }
+        return $out;
+    }
+
+    /** The types of image ImageIO writes on this system, by their UTIs (public.png, public.jpeg, org.webmproject.webp…). @return list<string> */
+    public static function writable(): array
+    {
+        $c = self::c();
+        ObjC::boot(['Foundation']);
+        $types = ObjC::import($c->CGImageDestinationCopyTypeIdentifiers());
+        $out = [];
+        for ($i = 0, $n = ObjC::msg('L:', $types, 'count'); $i < $n; $i++) {
+            $out[] = ObjC::phpStr(ObjC::msg('p:L', $types, 'objectAtIndex:', $i));
+        }
+        $c->CFRelease($c->cast('void*', ObjC::addr($types)));
+        return $out;
+    }
+
+    /** Image $bytes (a PNG, say) as an image of type $uti (writable()'s), of $quality where it is lossy. */
+    public static function convert(string $bytes, string $uti, float $quality = 0.9): string
+    {
+        $c = self::c();
+        ObjC::boot(['Foundation']);
+        $in = $c->CFDataCreate(null, $bytes, strlen($bytes));
+        $src = $c->CGImageSourceCreateWithData($in, null);
+        $image = $src === null ? null : $c->CGImageSourceCreateImageAtIndex($src, 0, null);
+        if ($image === null) {
+            if ($src !== null) { $c->CFRelease($src); }
+            $c->CFRelease($in);
+            throw new RuntimeException('myphp: no image to convert');
+        }
+        $data = $c->CFDataCreateMutable(null, 0);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str($uti))), 1, null);
+        $ok = false;
+        if ($dest !== null) {
+            $options = ObjC::msg('p:pp', ObjC::cls('NSDictionary'), 'dictionaryWithObject:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $quality), ObjC::import($c->kCGImageDestinationLossyCompressionQuality));
+            $c->CGImageDestinationAddImage($dest, $image, $c->cast('void*', ObjC::addr($options)));
+            $ok = $c->CGImageDestinationFinalize($dest);
+        }
+        $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
+        if ($dest !== null) { $c->CFRelease($dest); }
+        $c->CFRelease($data); $c->CGImageRelease($image); $c->CFRelease($src); $c->CFRelease($in);
+        if (!$ok) {
+            throw new RuntimeException("myphp: an image of type $uti could not be made");
         }
         return $out;
     }

@@ -9,10 +9,11 @@ use MyPHP\Media\EqualizerProfiles;
 use MyPHP\Media\MetaVideo;
 use MyPHP\Media\OpenSubtitles;
 use MyPHP\Media\OpenSubtitlesQuota;
-use MyPHP\Media\SubtitleSettings;
+use MyPHP\Media\PlayerSettings;
 use MyPHP\Media\Tmdb;
 use MyPHP\SecretNotFound;
 use MyPHP\Secrets;
+use MyPHP\Media\PlaybackHistory;
 use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
@@ -66,9 +67,9 @@ final class VideoPlayerState
     public ?OpenSubtitles $openSubtitles = null;
     /** TMDB, to look a film up by its name before OpenSubtitles (searchOnlineSubtitles); made as one is first looked up. */
     private ?Tmdb $tmdb = null;
-    /** The settings of IINA's Subtitles pane: the app's, SubtitleSettings::default(), unless set @internal */
-    public ?SubtitleSettings $subtitleSettings = null;
-    /** Whether an account logs in to OpenSubtitles from the settings (IINA's indicator by its Login) @internal VideoPlayer */
+    /** The settings of IINA's Settings window the player has: the app's, PlayerSettings::default(), unless set @internal */
+    public ?PlayerSettings $playerSettings = null;
+    /** Whether an account logs in to OpenSubtitles from the settings (IINA's indicator by its Login) @internal VideoPlayerSettings */
     public bool $loggingIn = false;
     /** The Keychain's key of an OpenSubtitles account's password (Secrets), by its user. */
     private const PASSWORD = 'opensubtitles:';
@@ -152,8 +153,8 @@ final class VideoPlayerState
     public ?float $loopA = null, $loopB = null;
     /** The player's boundary at B, removed when the loop goes. */
     private ?Closure $loopOff = null;
-    /** Where screenshots go (IINA's default), unless set. */
-    public string $screenshots = '~/Pictures/Screenshots';
+    /** The last screenshot's preview (IINA's ScreenshootOSDView, screenshotShowPreview): its image, its file (null, not kept), shown until when. @internal VideoPlayer */
+    public ?array $shot = null;
     /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
     public bool $pictureInPicture = false;
     /** The picture in picture of the player, where this Mac has it. */
@@ -171,19 +172,31 @@ final class VideoPlayerState
      * there is. A URL opens in a fiber of
      * its own (App::go) while the app runs, the window going on meanwhile
      * ($opening). What fails to open shows as the error, the film playing
-     * going on. Returns whether it opened (a URL: began to).
+     * going on. Returns whether it opened (a URL: began to). As the
+     * settings say (IINA's): the playlist the film alone without
+     * playlistAutoAdd; looping (autoRepeat) as defaultRepeatMode says;
+     * noted in the recent documents and the playback history; paused
+     * (pauseWhenOpen), full screen (fullScreenWhenOpen).
      */
     public function open(string $path): bool
+    {
+        return $this->openFile($path, true);
+    }
+
+    /** Opens $path, as the user asked ($manual: a file opened, not the next of the playlist). */
+    private function openFile(string $path, bool $manual): bool
     {
         $url = preg_match('~^https?://~i', $path) === 1;
         if ($url && App::running() && \Fiber::getCurrent() === null) {
             $this->opening = $path;
             $this->error = '';
             $this->changed();
-            App::go(function () use ($path): void { $this->open($path); });
+            App::go(function () use ($path, $manual): void { $this->openFile($path, $manual); });
             return true;
         }
+        $set = $this->settings();
         try {
+            if ($this->settings()->stored('hardwareDecoder')) { Player::$hardwareDecoding = $this->settings()->get('hardwareDecoder') !== 0; } // the settings' hardware decoder, once set, as mpv's hwdec is IINA's
             $p = new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
         } catch (RuntimeException $e) {
             $this->adOver = null;
@@ -196,13 +209,35 @@ final class VideoPlayerState
         if ($p->playlist() !== null) { // a web page's (yt-dlp's): its videos, the one playing chosen
             $this->playlist = $p->playlist();
         } elseif ($this->playlist === null || !$this->playlist->select($path)) {
-            $this->playlist = $url ? new Playlist([$path]) : Playlist::folder($path);
+            $this->playlist = $url || !$set->get('playlistAutoAdd') ? new Playlist([$path]) : Playlist::folder($path);
         }
         $this->chosen = $this->playlist->index();
         $this->title = $p->title();
+        if ($manual && $set->get('autoRepeat')) { $this->loop = $set->get('defaultRepeatMode') === 1 ? 'file' : 'playlist'; } // IINA's "Loop when a file is opened manually"
+        if ($set->get('recordRecentFiles') && ($manual || $set->get('trackAllFilesInRecentOpenMenu')) && App::running()) { App::addRecentDocument($path); }
+        if ($set->get('recordPlaybackHistory')) { $this->history()->add($path, $url ? $path : basename($path), $p->title(), $p->duration()); }
         $this->setPlayer($p);
-        $p->play();
+        if (!$set->get('pauseWhenOpen')) { $p->play(); }
+        if ($set->get('fullScreenWhenOpen')) { $this->ask('fullScreen', true); }
         return true;
+    }
+
+    /** The films played (IINA's playback history): the app's, PlaybackHistory::default(), unless set. @internal */
+    public ?PlaybackHistory $playbackHistory = null;
+
+    /** @var array<string, mixed> what to ask of the window at the next frame (Runtime::askWindow), asked between frames */
+    private array $asks = [];
+
+    /** Asks the window for $what at the next frame (one between frames would be forgotten at the next's start). */
+    private function ask(string $what, mixed $value): void
+    {
+        $this->asks[$what] = $value;
+        $this->changed();
+    }
+
+    private function history(): PlaybackHistory
+    {
+        return $this->playbackHistory ??= PlaybackHistory::default();
     }
 
     /** Plays the next film of the playlist; false after the last, unless the playlist loops, which goes to the first. */
@@ -210,7 +245,7 @@ final class VideoPlayerState
     {
         $l = $this->playlist;
         $path = $l?->next() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[0] ?? null) : null);
-        return $path !== null && $this->open($path);
+        return $path !== null && $this->openFile($path, false);
     }
 
     /** Plays the film before; false before the first, unless the playlist loops, which goes to the last. */
@@ -218,7 +253,7 @@ final class VideoPlayerState
     {
         $l = $this->playlist;
         $path = $l?->previous() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[$l->count() - 1] ?? null) : null);
-        return $path !== null && $this->open($path);
+        return $path !== null && $this->openFile($path, false);
     }
 
     /** The loop after the one there is, as IINA's button goes: off, the file, the playlist, off. */
@@ -278,7 +313,10 @@ final class VideoPlayerState
             $p->on('ended', function () {
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
                 if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
-                if (!$this->next()) { NowPlaying::end($this); $this->changed(); } // the next film plays, else nothing does
+                if (($this->settings()->get('playlistAutoPlayNext') || $this->loop === 'playlist') && $this->next()) { return; } // the next film plays (IINA's "Play next item automatically")
+                NowPlaying::end($this);
+                if (!$this->settings()->get('keepOpenOnFileEnd')) { $this->ask('close', true); } // IINA's: the window goes, unless kept open
+                $this->changed();
             }),
             $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
             $p->on('buffering', fn() => $this->changed()), // the indicator shows, and goes
@@ -355,10 +393,18 @@ final class VideoPlayerState
     public function attach(Runtime $rt, VideoPlayerOptions $o): void
     {
         $this->runtime = \WeakReference::create($rt);
-        $this->resume = $resume = $o->resume;
+        foreach ($this->asks as $what => $value) { $rt->askWindow($what, $value); }
+        $this->asks = [];
+        $set = $this->settings();
+        $this->resume = $resume = $o->resume && $set->get('resumeLastPosition');
         if ($o->openSubtitlesKey !== '' && $this->openSubtitles === null) { $this->openSubtitles = new OpenSubtitles($o->openSubtitlesKey); }
         $p = $this->player;
-        $p?->setKeepAwake($o->keepAwake);
+        $p?->setAwakeDisplay(!$set->get('allowScreenSaverForAudio') || ($p->videoTrack() !== null && !$this->musicMode)); // IINA's: the screen saver kept off, or only sleep for audio (SleepPreventer)
+        $p?->setKeepAwake($o->keepAwake && $set->get('preventScreenSaver'));
+        $rt->windowListeners['video ' . spl_object_id($this)] ??= $this->windowEvent(...);
+        $this->sleeping ??= \MyPHP\Power::onSuspend(function (): void { // IINA's "Pause when machine goes to sleep"
+            if ($this->player?->playing() && $this->settings()->get('pauseWhenGoesToSleep')) { $this->player->pause(); $this->played(); $this->changed(); }
+        });
         if ($o->nowPlaying !== $this->nowPlaying) {
             $this->nowPlaying = $o->nowPlaying;
             $o->nowPlaying ? $this->showNowPlaying() : NowPlaying::end($this);
@@ -371,6 +417,39 @@ final class VideoPlayerState
             $p->seek($at);
             $this->say($this->t('videoResumedAt', ['time' => self::clock($at)]));
         }
+    }
+
+    /** Whether the player is in music mode (IINA's mini player) @internal VideoPlayer */
+    public bool $musicMode = false;
+    /** What it paused for (minimized, inactive), to play again when that ends, as IINA's; what stops listening to the system's sleep. */
+    private string $pausedFor = '';
+    private ?Closure $sleeping = null;
+
+    /**
+     * Its window's event $e, as IINA's settings have the player do: pause
+     * as it is minimized or inactive (pauseWhenMinimized,
+     * pauseWhenInactive), playing again as it comes back if it paused it;
+     * play as it goes full screen, pause as it leaves (playWhenEnteringFullScreen,
+     * pauseWhenLeavingFullScreen).
+     */
+    private function windowEvent(string $e): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        $set = $this->settings();
+        $pause = function (string $for) use ($p): void { if ($p->playing()) { $p->pause(); $this->pausedFor = $for; } };
+        $resume = function (string $for) use ($p): void { if ($this->pausedFor === $for) { $p->play(); } $this->pausedFor = ''; };
+        match ($e) {
+            'minimize' => $set->get('pauseWhenMinimized') ? $pause('minimize') : null,
+            'restore' => $resume('minimize'),
+            'blur' => $set->get('pauseWhenInactive') ? $pause('inactive') : null,
+            'focus' => $resume('inactive'),
+            'enterFullScreen' => $set->get('playWhenEnteringFullScreen') ? $p->play() : null,
+            'leaveFullScreen' => $set->get('pauseWhenLeavingFullScreen') ? $p->pause() : null,
+            default => null,
+        };
+        $this->played();
+        $this->changed();
     }
 
     private function positions(): PlaybackPositions
@@ -481,7 +560,7 @@ final class VideoPlayerState
         $this->tell($this->t('videoFindingOnline'), '', INF);
         try {
             $this->logInFromSettings($os);
-            $preferred = $this->settings()->languages();
+            $preferred = $this->settings()->get('subLang');
             $languages = OpenSubtitles::languagesOf($preferred !== [] ? $preferred : App::preferredLanguages(), $os->languages()); // the settings', else the system's
             $local = !$p->remote();
             $found = $this->tmdbSubtitles($os, $languages, $local ? new MetaVideo(basename($p->path()), basename(dirname($p->path()))) : new MetaVideo($p->title()));
@@ -566,7 +645,7 @@ final class VideoPlayerState
     /** The account of the settings logged in, once (IINA's login() before a search): its password the Keychain's; none stored, none. */
     private function logInFromSettings(OpenSubtitles $os): void
     {
-        $user = $this->settings()->user();
+        $user = $this->settings()->get('openSubUsername');
         if ($user === '' || $os->loggedIn()) {
             return;
         }
@@ -584,15 +663,15 @@ final class VideoPlayerState
         }
     }
 
-    /** @internal VideoPlayer: the settings of IINA's Subtitles pane the player has. */
-    public function settings(): SubtitleSettings
+    /** @internal VideoPlayerSettings: the settings of IINA's Settings window the player has. */
+    public function settings(): PlayerSettings
     {
-        return $this->subtitleSettings ??= SubtitleSettings::default();
+        return $this->playerSettings ??= PlayerSettings::default();
     }
 
     /**
-     * @internal VideoPlayer: logs in to OpenSubtitles as $user (IINA's Login
-     * of its Subtitles pane): the account tried, then its user kept in the
+     * @internal VideoPlayerSettings: logs in to OpenSubtitles as $user (IINA's
+     * legacy Login of its Subtitles pane): the account tried, then its user kept in the
      * settings and its password in the Keychain; what fails told by
      * $failed. In a fiber of its own ($loggingIn meanwhile).
      * @param \Closure(string): void $failed
@@ -614,7 +693,7 @@ final class VideoPlayerState
             $os->logout(); // another account's session, if one is
             $os->login($user, $password);
             Secrets::set(self::PASSWORD . $user, $password);
-            $this->settings()->setUser($user);
+            $this->settings()->set('openSubUsername', $user);
         } catch (RuntimeException $e) {
             $failed($e->getMessage());
         } finally {
@@ -623,14 +702,14 @@ final class VideoPlayerState
         }
     }
 
-    /** @internal VideoPlayer: the account logged out (IINA's Logout: its user forgotten; here its password too), its session ended. */
+    /** @internal VideoPlayerSettings: the account logged out (IINA's Logout: its user forgotten; here its password too), its session ended. */
     public function logOutOpenSubtitles(): void
     {
-        $user = $this->settings()->user();
+        $user = $this->settings()->get('openSubUsername');
         if ($user === '') {
             return;
         }
-        $this->settings()->setUser('');
+        $this->settings()->set('openSubUsername', '');
         try { Secrets::delete(self::PASSWORD . $user); } catch (SecretNotFound) {}
         $os = $this->openSubtitles;
         if ($os !== null && $os->loggedIn()) {
@@ -653,11 +732,18 @@ final class VideoPlayerState
         }
     }
 
-    /** @internal VideoPlayer: the preferred languages of subtitles (IINA's Preferred language), none for the system's. @param list<string> $languages */
-    public function setSubtitleLanguages(array $languages): void
+    /**
+     * @internal VideoPlayerSettingsPages: sets setting $key of the player's
+     * settings to $value (PlayerSettings::set), what fails to be written
+     * shown as the error; the hardware decoder's that of the films opened
+     * next (Player::$hardwareDecoding), the quick setting of those playing
+     * staying.
+     */
+    public function setSetting(string $key, mixed $value): void
     {
         try {
-            $this->settings()->setLanguages($languages);
+            $this->settings()->set($key, $value);
+            if ($key === 'hardwareDecoder') { Player::$hardwareDecoding = $value !== 0; }
         } catch (RuntimeException $e) {
             $this->error = $e->getMessage();
         }
@@ -785,27 +871,61 @@ final class VideoPlayerState
     }
 
     /**
-     * Saves the frame showing (Player::snapshot) in $screenshots, made if
-     * it is not there, named as IINA's (mpv's %F-%n): the film's name and
-     * the first number of four digits not taken, movie-0001.png; tells it.
-     * Returns the file's path, null before a frame shows.
+     * Takes a screenshot of the frame showing (Player::snapshot), as IINA's
+     * settings say: saved (screenshotSaveToFile) in their folder
+     * (screenShotFolder), made if it is not there, in their format
+     * (screenShotFormat), named as IINA's (mpv's %F-%n): the film's name and
+     * the first number of four digits not taken, movie-0001.png; copied to
+     * the clipboard (screenshotCopyToClipboard); its preview shown
+     * (screenshotShowPreview), else "Screenshot captured" said. Neither
+     * saved nor copied, nothing is taken, as IINA's. Returns the file's
+     * path, null before a frame shows or where it is not saved.
      */
     public function screenshot(): ?string
     {
+        $set = $this->settings();
+        [$save, $copy] = [$set->get('screenshotSaveToFile'), $set->get('screenshotCopyToClipboard')];
         $p = $this->player;
-        $png = $p?->snapshot();
+        $png = $save || $copy ? $p?->snapshot() : null;
         if ($png === null) { return null; }
-        $dir = str_starts_with($this->screenshots, '~/') ? getenv('HOME') . substr($this->screenshots, 1) : $this->screenshots;
-        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
-            throw new RuntimeException("myphp: no folder $dir for screenshots");
+        $path = null;
+        if ($save) {
+            $folder = $set->get('screenShotFolder');
+            $dir = str_starts_with($folder, '~/') ? getenv('HOME') . substr($folder, 1) : $folder;
+            if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+                throw new RuntimeException("myphp: no folder $dir for screenshots");
+            }
+            $format = $set->get('screenShotFormat');
+            $ext = \MyPHP\Media\Screenshot::FORMATS[$format][0] ?? 'png';
+            $name = pathinfo($p->path(), PATHINFO_FILENAME);
+            for ($n = 1; file_exists($path = sprintf('%s/%s-%04d.%s', $dir, $name, $n, $ext)); $n++) {}
+            if (file_put_contents($path, \MyPHP\Media\Screenshot::encode($png, $format)) === false) {
+                throw new RuntimeException("myphp: the screenshot could not be written to $path");
+            }
         }
-        $name = pathinfo($p->path(), PATHINFO_FILENAME);
-        for ($n = 1; file_exists($path = sprintf('%s/%s-%04d.png', $dir, $name, $n)); $n++) {}
-        if (file_put_contents($path, $png) === false) {
-            throw new RuntimeException("myphp: the screenshot could not be written to $path");
+        if ($copy) { \MyPHP\Clipboard::writeImage($png); }
+        if ($set->get('screenshotShowPreview')) {
+            $this->shot = ['image' => Image::fromBytes($png, 600), 'path' => $path];
+            $this->tell($this->t('videoScreenshot'), '', 5.0); // IINA's: its preview under the message, 5 s
+        } else {
+            $this->say($this->t('videoScreenshot'));
         }
-        $this->say($this->t('videoScreenshot'));
         return $path;
+    }
+
+    /** @internal VideoPlayer: the screenshot previewed deleted (IINA's DELETE), or opened (EDIT), or shown in the Finder (REVEAL); the preview gone. */
+    public function shotAction(string $action): void
+    {
+        $path = $this->shot['path'] ?? null;
+        if ($path === null) { return; }
+        match ($action) {
+            'delete' => @unlink($path),
+            'edit' => \MyPHP\Shell::openPath($path),
+            'reveal' => \MyPHP\Shell::showItemInFolder($path),
+        };
+        $this->shot = null;
+        $this->message[2] = 0.0;
+        $this->changed();
     }
 
     /** Goes to the start of the $i-th chapter of the player's and plays, as IINA's playChapter. */

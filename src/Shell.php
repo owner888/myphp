@@ -70,6 +70,14 @@ final class Shell
         return $png ?? throw new RuntimeException("myphp: no icon for \"$real\"");
     }
 
+    /** @internal UI\VideoPlayerWelcome: the app's icon (the Dock's, NSApp's applicationIconImage) as a PNG of $size by $size pixels. */
+    public static function appIcon(int $size): string
+    {
+        $img = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'applicationIconImage');
+        $png = $img === null ? null : self::png($img, $size);
+        return $png ?? throw new RuntimeException('myphp: the app has no icon');
+    }
+
     /**
      * The applications installed on the Mac, sorted by name, as a launcher
      * shows them (mygo's InstalledApps): the .app bundles in /Applications,
