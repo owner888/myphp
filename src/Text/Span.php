@@ -24,10 +24,15 @@ final class Span
          * When $objectWidth is set, each rune of the span, an object
          * replacement character (U+FFFC), is an inline object: a box that
          * wide, standing that high on the baseline, which lines break
-         * around and which draws no glyph (Glyph::$object).
+         * around and which draws no glyph (Glyph::$object). $objectDescent
+         * extends the box that far below the baseline, as math's
+         * subscripts and fractions go (mygo's ObjectDescent).
          */
         public readonly float $objectWidth = 0,
         public readonly float $objectHeight = 0,
+        public readonly float $objectDescent = 0,
+        /** Raises the span's glyphs and objects that many points above the baseline, or lowers them when negative, as superscripts and subscripts are; the line makes room for them (mygo's BaselineShift). */
+        public readonly float $baselineShift = 0,
     ) {}
 
     /** The style of the span's runes in a text of style $base. */
@@ -47,12 +52,12 @@ final class Span
     /** A copy ending at $end. */
     public function until(int $end): self
     {
-        return new self($end, $this->family, $this->size, $this->weight, $this->italic, $this->letterSpacing, $this->features, $this->lang, $this->objectWidth, $this->objectHeight);
+        return new self($end, $this->family, $this->size, $this->weight, $this->italic, $this->letterSpacing, $this->features, $this->lang, $this->objectWidth, $this->objectHeight, $this->objectDescent, $this->baselineShift);
     }
 
     public function key(): string
     {
-        return $this->end . "\0" . $this->family . "\0" . $this->size . "\0" . $this->weight . "\0" . (int)$this->italic . "\0" . $this->letterSpacing . "\0" . $this->features . "\0" . $this->lang . "\0" . $this->objectWidth . "\0" . $this->objectHeight;
+        return $this->end . "\0" . $this->family . "\0" . $this->size . "\0" . $this->weight . "\0" . (int)$this->italic . "\0" . $this->letterSpacing . "\0" . $this->features . "\0" . $this->lang . "\0" . $this->objectWidth . "\0" . $this->objectHeight . ($this->objectWidth != 0 ? "\0" . $this->objectDescent : '') . ($this->baselineShift != 0 ? "\0^" . $this->baselineShift : ''); // only objects have a descent, and few spans a shift: other spans' keys stay short
     }
 
     /**

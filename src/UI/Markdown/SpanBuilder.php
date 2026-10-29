@@ -26,11 +26,13 @@ final class SpanBuilder
     public ?Closure $notes = null;
     /** The inline of the link being built. */
     private int $linkIndex = 0;
+    /** @var ?Closure(string, float): ?InlineObject makes math within text objects (Options::$inlineMath) */
+    public ?Closure $math = null;
 
     /** Makes $p the paragraph of block $this->block, of base style $base (mygo's build). */
     public function build(Para $p, SpanStyle $base): void
     {
-        $p->pieces = []; $p->marks = []; $p->runes = 0; $p->fading = false; $p->width = 0; $p->measured = false;
+        $p->pieces = []; $p->marks = []; $p->objects = []; $p->runes = 0; $p->fading = false; $p->width = 0; $p->measured = false;
         $this->p = $p;
         $this->in = $this->d->inlines($this->block) ?? [];
         $this->html = [];
@@ -218,6 +220,9 @@ final class SpanBuilder
                     }
                     break;
                 case Inline::MATH:
+                    if ($this->mathObject($n, $this->htmlStyle($s), $link)) {
+                        break;
+                    }
                     $cs = clone $s; $cs->font = $this->th->codeFont; $cs->color = $this->th->muted;
                     if (!$cs->italic) { $cs->size = $this->th->em($this->th->codeSize); }
                     $this->add($n->text, self::mathStart($src, $n), $n->end, false, $cs, $link);
@@ -229,6 +234,29 @@ final class SpanBuilder
                     break;
             }
         }
+    }
+
+    /** Adds math $n, within text of style $s, as the object Options::$inlineMath makes of it, and reports whether it made one (mygo's mathObject). */
+    private function mathObject(Inline $n, SpanStyle $s, int $link): bool
+    {
+        if ($this->math === null) {
+            return false;
+        }
+        $size = $s->size != 0 ? $s->size : $this->th->fontSize;
+        if ($s->sub) { $size *= 0.75; }
+        $o = ($this->math)($n->text, $size);
+        if ($o === null || !($o->width > 0)) {
+            return false;
+        }
+        $p = $this->p;
+        $p->objects[] = [$p->runes, $n->start, $n->end, $o->draw];
+        if ($this->fade !== null) {
+            $p->fading = $p->fading || ($this->fade)($n->start) < 1;
+        }
+        $p->pieces[$this->piece($link)][1][] = new Span("\u{FFFC}", $size, objectWidth: $o->width, objectHeight: max($o->height, 0), objectDescent: max($o->depth, 0));
+        $p->marks[] = [$p->runes, $n->start, $n->end, false];
+        $p->runes++;
+        return true;
     }
 
     /** Where a code span's text starts in the source (mygo's codeStart). */

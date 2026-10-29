@@ -277,6 +277,7 @@ final class ViewState
         $sb->block = $i;
         $sb->fade = $this->fade;
         $sb->notes = $this->noteNumber(...);
+        $sb->math = $this->o->inlineMath;
         $sb->build($p, $base);
         return $p;
     }
@@ -285,7 +286,8 @@ final class ViewState
     public function paragraph(int $i, SpanStyle $base): Node
     {
         $c = $this->c;
-        $ps = $this->para($i, $base)->pieces;
+        $para = $this->para($i, $base);
+        $ps = $para->pieces;
         if ($ps === []) {
             $el = $c->text('');
         } elseif ($ps[0][0] === -1) {
@@ -301,8 +303,26 @@ final class ViewState
                 }
             });
         }
+        if (($objects = $para->objects) !== []) { // its math drawn by the app (Options::$inlineMath): a list of this build's own, which the drawing keeps
+            $el->drawObjects(function (\MyPHP\UI\Painter $p, int $at, array $r) use ($objects): void {
+                $k = self::objectAt($objects, $at);
+                if ($k !== null && $objects[$k][3] !== null) { ($objects[$k][3])($p, $r); }
+            });
+        }
         $this->note($el->id, $i, -1);
         return $el;
+    }
+
+    /** The index of the object of rune $at among $objects, in order of their runes, or null. @param list<array{0: int, 1: int, 2: int, 3: ?Closure}> $objects */
+    private static function objectAt(array $objects, int $at): ?int
+    {
+        [$lo, $hi] = [0, count($objects) - 1];
+        while ($lo <= $hi) {
+            $mid = ($lo + $hi) >> 1;
+            if ($objects[$mid][0] === $at) { return $mid; }
+            if ($objects[$mid][0] < $at) { $lo = $mid + 1; } else { $hi = $mid - 1; }
+        }
+        return null;
     }
 
     /** Builds a link, or text after one, within a paragraph (mygo's piece). @param array{0: int, 1: list<Span>} $pc */
@@ -765,8 +785,25 @@ final class ViewState
             if ($k > 0) {
                 $out .= $inf !== null && $prev !== null ? $this->separator($prev, $inf) : "\n";
             }
-            $out .= mb_substr($p->text, $p->start, max(0, $p->end - $p->start), 'UTF-8');
+            $out .= $inf !== null ? $this->selectedText($inf, $p) : mb_substr($p->text, $p->start, max(0, $p->end - $p->start), 'UTF-8');
             $prev = $inf;
+        }
+        return $out;
+    }
+
+    /** The text of selected part $p of a node $inf tells of, with the source of the math drawn as objects, as $x_i$, in place of their characters (mygo's writeText). @param array{0: int, 1: int, 2: int} $inf */
+    private function selectedText(array $inf, SelectedText $p): string
+    {
+        $text = mb_substr($p->text, $p->start, max(0, $p->end - $p->start), 'UTF-8');
+        $objects = $inf[2] === -1 ? ($this->paras[$inf[1]]['p'] ?? null)?->objects ?? [] : [];
+        if ($objects === [] || !str_contains($text, "\u{FFFC}")) {
+            return $text;
+        }
+        $src = $this->doc->source();
+        $out = '';
+        foreach (mb_str_split($text, 1, 'UTF-8') as $k => $ch) {
+            $o = $ch === "\u{FFFC}" ? self::objectAt($objects, $p->start + $k) : null;
+            $out .= $o !== null && $objects[$o][2] <= strlen($src) ? substr($src, $objects[$o][1], $objects[$o][2] - $objects[$o][1]) : $ch;
         }
         return $out;
     }

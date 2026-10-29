@@ -74,7 +74,7 @@ final class StubEngine implements Engine
                 }
                 $x += $adv;
                 $end++;
-                if ($runes[$end - 1] === 0x20) {
+                if ($runes[$end - 1] === 0x20 || $runes[$end - 1] === 0xAD) { // after a space, or a soft hyphen
                     $lastBreak = $end;
                 }
             }

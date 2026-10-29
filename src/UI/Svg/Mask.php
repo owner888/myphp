@@ -8,8 +8,9 @@ use MyPHP\UI\Path as UIPath;
 /**
  * The coverage of a UI path (points, in the window) as a mask of w × h
  * device pixels starting at (x0, y0) points, one byte a pixel: filled by
- * the non-zero rule, or stroked $width points wide with round joins and
- * caps, as mygo's drawPath has the text system rasterize paths. The
+ * the non-zero rule, or stroked $width points wide with the path's caps,
+ * joins and dashes (round and whole unless it sets them), as mygo's
+ * drawPath has the text system rasterize paths. The
  * rasterizer of the SVG renderer draws it, so a path looks the same on
  * every platform.
  */
@@ -31,7 +32,14 @@ final class Mask
         $flat = new Polys;
         if ($width > 0) {
             $p->flatten($m, false, $flat);
-            $st = new Stroker; $st->hw = $width / 2; $st->join = Style::JOIN_ROUND; $st->cap = Style::CAP_ROUND; $st->tol = 0.1 / $scale;
+            if ($path->dash !== []) { // cut from the center line, each subpath from where it starts on the path trim() cut it from (mygo's d9d45f4); past 65536 dashes, the rest whole
+                $dashed = new Polys;
+                Stroker::dash($flat, $path->dash, $path->dashOffset, $dashed, 1 << 16, $path->phases);
+                $flat = $dashed;
+            }
+            $st = new Stroker; $st->hw = $width / 2; $st->tol = 0.1 / $scale; $st->miter = $path->miter;
+            $st->join = match ($path->join) { UIPath::JOIN_MITER => Style::JOIN_MITER, UIPath::JOIN_BEVEL => Style::JOIN_BEVEL, default => Style::JOIN_ROUND };
+            $st->cap = match ($path->cap) { UIPath::CAP_BUTT => Style::CAP_BUTT, UIPath::CAP_SQUARE => Style::CAP_SQUARE, default => Style::CAP_ROUND };
             $st->stroke($flat);
             $flat = $st->out; $flat->transform($m);
         } else {

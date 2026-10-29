@@ -5,7 +5,8 @@ namespace MyPHP\Text;
 
 /**
  * Where lines may break in a paragraph, the rough cut of UAX #14 that keeps
- * a word whole: after whitespace and hyphens, between ideographs. Core Text
+ * a word whole: after whitespace, hyphens and soft hyphens, between
+ * ideographs. Core Text
  * breaks a word that does not fit a line; whole-word wrapping carries on to
  * the next of these (Native\TextEngine), and a text's min-content width is
  * its widest piece between them.
@@ -20,7 +21,7 @@ final class LineBreaks
         for ($i = 1; $i <= $n; $i++) {
             $p = $runes[$i - 1];
             $q = $runes[$i] ?? 0x20;
-            if ($p === 0x20 || $p === 0x09 || $p === 0x2D || self::isIdeograph($p) || $i < $n && self::isIdeograph($q)) {
+            if ($p === 0x20 || $p === 0x09 || $p === 0x2D || $p === 0xAD || self::isIdeograph($p) || $i < $n && self::isIdeograph($q)) {
                 $out[$i] = true;
             }
         }

@@ -41,13 +41,17 @@ final class Params
         public readonly bool $noBreakWords = false,
         /** Styles runs of the text apart from $style. */
         public readonly array $spans = [],
+        /** Moves the first line of the text this many points from the start of its paragraph's direction, the left or the right, and wraps it that much narrower, as CSS's text-indent; 0 or less is none. The lines after a newline are not indented (mygo's Indent). */
+        public readonly float $indent = 0,
+        /** Stretches every line that $width wraps to $width, the whitespace ending it left out, by widening the spaces between its words and the room after Han characters and kana, as browsers justify text; $align places the last line of each paragraph, and a line with nothing to widen (mygo's Justify). */
+        public readonly bool $justify = false,
     ) {}
 
     /** What tells parameters apart, for the cache of layouts. */
     public function key(): string
     {
         if ($this->key === null) {
-            $k = $this->style->key() . "\1" . $this->width . "\1" . $this->maxLines . "\1" . $this->ellipsis . "\1" . (int)$this->noWrap . (int)$this->rtl . (int)$this->keepSpaces . (int)$this->noBreakWords . $this->align;
+            $k = $this->style->key() . "\1" . $this->width . "\1" . $this->maxLines . "\1" . $this->ellipsis . "\1" . (int)$this->noWrap . (int)$this->rtl . (int)$this->keepSpaces . (int)$this->noBreakWords . $this->align . ($this->indent > 0 ? "\1" . $this->indent : '') . ($this->justify ? "\1j" : '');
             foreach ($this->spans as $sp) {
                 $k .= "\2" . $sp->key();
             }

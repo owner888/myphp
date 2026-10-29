@@ -27,7 +27,7 @@ final class Clip
         self::$process = self::$process ?: bin2hex(random_bytes(13));
         $name = self::$process . '-' . base_convert((string)++self::$copyName, 10, 36);
         self::$copies = [$name => $t];
-        $c = self::of($t);
+        $c = self::of($t, false); // IDs are the app's, of paragraphs where they are: a paste makes new ones (Text::replace)
         return json_encode(['copy' => $name] + $c, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
@@ -45,15 +45,15 @@ final class Clip
         return self::text($c);
     }
 
-    /** The JSON form of $t. @return array{paragraphs: list<array>} */
-    public static function of(Text $t): array
+    /** The JSON form of $t, its paragraphs' IDs with $ids. @return array{paragraphs: list<array>} */
+    public static function of(Text $t, bool $ids): array
     {
         $paras = [];
         foreach ($t->paragraphs() as $p) {
             $st = $p->style;
             $style = array_filter([
                 'heading' => $st->heading, 'list' => $st->list->value, 'checked' => $st->checked, 'indent' => $st->indent,
-                'align' => $st->align, 'quote' => $st->quote, 'codeBlock' => $st->codeBlock,
+                'align' => $st->align, 'quote' => $st->quote, 'codeBlock' => $st->codeBlock, 'id' => $ids ? $st->id : '',
             ]);
             $cp = ['style' => (object)$style];
             foreach ($p->runs as $r) {
@@ -90,7 +90,7 @@ final class Clip
             $s = is_array($cp['style'] ?? null) ? $cp['style'] : [];
             $p = new Paragraph(new ParagraphStyle(
                 heading: $int($s, 'heading'), list: ListKind::tryFrom($int($s, 'list')) ?? ListKind::NoList, checked: $bool($s, 'checked'),
-                indent: $int($s, 'indent'), align: $int($s, 'align'), quote: $bool($s, 'quote'), codeBlock: $bool($s, 'codeBlock'),
+                indent: $int($s, 'indent'), align: $int($s, 'align'), quote: $bool($s, 'quote'), codeBlock: $bool($s, 'codeBlock'), id: $str($s, 'id'),
             ));
             foreach (is_array($cp['runs'] ?? null) ? $cp['runs'] : [] as $cr) {
                 if (!is_array($cr)) { continue; }

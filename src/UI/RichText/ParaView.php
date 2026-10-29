@@ -23,4 +23,6 @@ final class ParaView
     public float $h = 0;
     /** The space above and below it, in $h. */
     public float $space = 0;
+    /** How far its first line goes in (Theme::$firstLineIndent), as its layout indents it. */
+    public float $indent = 0;
 }

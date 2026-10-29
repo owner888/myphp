@@ -32,12 +32,33 @@ final class ParagraphStyle
         /** Show the paragraph as a quotation, or as code in the monospaced font, its spaces kept. */
         public bool $quote = false,
         public bool $codeBlock = false,
+        /**
+         * The app's name for the paragraph, the key of what it keeps about
+         * it, which the editor does not show (mygo's ID). It stays with the
+         * paragraph's text as it is edited (Text::replace): a paragraph
+         * split keeps it in its first half (the second when split at its
+         * start), paragraphs joined keep the first's, and the paragraphs an
+         * edit makes have none, unless the document names them
+         * (Document::identifyParagraphs). Undo brings it back with the
+         * text, JSON saves it, and the clipboard, Markdown, HTML and RTF
+         * leave it out.
+         */
+        public string $id = '',
     ) {}
 
     public function equals(ParagraphStyle $b): bool
     {
         return $this === $b || ($this->heading === $b->heading && $this->list === $b->list && $this->checked === $b->checked
-            && $this->indent === $b->indent && $this->align === $b->align && $this->quote === $b->quote && $this->codeBlock === $b->codeBlock);
+            && $this->indent === $b->indent && $this->align === $b->align && $this->quote === $b->quote && $this->codeBlock === $b->codeBlock && $this->id === $b->id);
+    }
+
+    /** The style with ID $id: itself when it has it. @internal */
+    public function withID(string $id): ParagraphStyle
+    {
+        if ($id === $this->id) { return $this; }
+        $s = clone $this;
+        $s->id = $id;
+        return $s;
     }
 
     /** The style with its levels in range, as text pasted or loaded may have any. @internal */

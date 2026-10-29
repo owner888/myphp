@@ -38,8 +38,8 @@ final class InlineParser
     private int $noMath = -1;
     /** The offsets after which no $, \) or \] closes math, so that openers repeated stay linear. */
     private int $noDollar = -1, $noParen = -1, $noBracket = -1;
-    /** Where $$ opens math that nothing closes, or -1, and a bracket healing leaves out, as the text of a link being written. */
-    private int $openMath = -1, $hide = -1;
+    /** Where $$ opens math that nothing closes, or -1, and a bracket healing leaves out, as the text of a link being written; where a single $ opens math (Extensions::DOLLAR_MATH) that nothing closes up to the end of the text, or -1. */
+    private int $openMath = -1, $hide = -1, $openDollar = -1;
     /** @var list<string> */
     private array $labels = [];
     /** @var list<Delimiter> the openers no closer matched, for healing */
@@ -88,7 +88,7 @@ final class InlineParser
         $this->scannedBackticks = false;
         $this->html = ['pi' => -1, 'comment' => -1, 'cdata' => -1, 'decl' => -1];
         $this->noMath = -1;
-        $this->noDollar = -1; $this->noParen = -1; $this->noBracket = -1; $this->openMath = -1;
+        $this->noDollar = -1; $this->noParen = -1; $this->noBracket = -1; $this->openMath = -1; $this->openDollar = -1;
         $this->leftover = [];
         $n = strlen($s);
         while ($this->pos < $n) {
@@ -488,6 +488,9 @@ final class InlineParser
             }
         }
         $this->noDollar = $start;
+        if ($this->openDollar < 0) {
+            $this->openDollar = $start;
+        }
         return false;
     }
 
@@ -1493,16 +1496,24 @@ final class InlineParser
         // text of a link being written shows without its bracket.
         $this->run($s);
         $open = [];
+        // Math not closed, by $$ or a single $ (Extensions::DOLLAR_MATH), runs to the end: what follows is TeX, whose _ and * open no emphasis (mygo's 610df69).
+        [$math, $closer] = [strlen($s), ''];
+        if (($this->ext & Extensions::MATH) !== 0 && $this->openMath >= 0) {
+            [$math, $closer] = [$this->openMath, '$$'];
+        }
+        if (($this->ext & Extensions::DOLLAR_MATH) !== 0 && $this->openDollar >= 0 && $this->openDollar < $math) {
+            [$math, $closer] = [$this->openDollar, '$'];
+        }
+        if ($closer !== '') {
+            $open[] = [$math, $closer];
+        }
         foreach ($this->leftover as $d) {
-            if ($d->c === '*' && self::wordInside($s, $d->at, $d->orig) || $d->c === '~' && $d->orig === 1) {
-                continue; // 2*3, or a tilde for "about", as ~200
+            if ($d->c === '*' && self::wordInside($s, $d->at, $d->orig) || $d->c === '~' && $d->orig === 1 || $d->at > $math) {
+                continue; // 2*3, a tilde for "about", as ~200, or TeX
             }
             $open[] = [$d->at, str_repeat($d->c, $d->n)];
         }
-        if (($this->ext & Extensions::MATH) !== 0 && $this->openMath >= 0) {
-            $open[] = [$this->openMath, '$$'];
-        }
-        if ($this->lastB >= 0) {
+        if ($this->lastB >= 0 && $this->nodes[$this->br[$this->lastB]->node]->start < $math) {
             $this->hide = $this->nodes[$this->br[$this->lastB]->node]->start;
         }
         if ($open === [] && $this->hide < 0) {

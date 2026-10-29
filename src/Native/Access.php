@@ -427,6 +427,7 @@ final class Access
     /** The innermost element at a point of the view, or null. */
     private function at(float $x, float $y)
     {
+        [$x, $y] = [$x / $this->input->zoom, $y / $this->input->zoom]; // the content's points (Context::setZoom)
         $found = null;
         foreach ($this->tree->nodes as $n) {
             [$bx, $by, $bw, $bh] = $n->bounds;
@@ -437,10 +438,11 @@ final class Access
         return $found;
     }
 
-    /** A rectangle of the view, [x, y, w, h], on the screen. */
+    /** A rectangle of the content, [x, y, w, h], on the screen: where it shows, zoomed (Context::setZoom). */
     private function screenRect(array $b)
     {
-        $inWindow = ObjC::msg('r:rp', $this->view, 'convertRect:toView:', ObjC::rect(...$b), null);
+        $z = $this->input->zoom;
+        $inWindow = ObjC::msg('r:rp', $this->view, 'convertRect:toView:', ObjC::rect($b[0] * $z, $b[1] * $z, $b[2] * $z, $b[3] * $z), null);
         return ObjC::msg('r:r', ObjC::msg('p:', $this->view, 'window'), 'convertRectToScreen:', $inWindow);
     }
 

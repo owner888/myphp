@@ -19,7 +19,7 @@ use RuntimeException;
  * color by its alpha), kind 9 a line, kinds 10 and 11 a gradient between two
  * colors across (10) or down (11) the quad: the color, and u the other's
  * rgb packed as a float, v its alpha. Kind 14 is a box (box(): its paint,
- * corners, borders; or, flagged 8, a path's mask from the glyph atlas,
+ * corners, borders; or, flagged 16, a path's mask from the glyph atlas,
  * painted: pathGradient()) and kind 15 a box shadow (boxShadow()), each
  * taking the slot after it too for what does not fit in its own, that
  * slot's kind -1.
@@ -45,10 +45,12 @@ final class DisplayList
 {
     public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 16;
     public const KIND_STRIDE = 16.0;
-    /** What box() fills with (mygo's scene.Paint): a color, a gradient mixed in sRGB or in Oklab, or stripes. */
-    public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3;
+    /** What box() fills with (mygo's scene.Paint): a color, a linear gradient mixed in sRGB or in Oklab, stripes, or a radial gradient mixed in sRGB or in Oklab. */
+    public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3, PAINT_RADIAL = 4, PAINT_RADIAL_OKLAB = 5;
     private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
+    /** The zoom of the content it draws (Context::setZoom, mygo's scene Zoom): its points are this many of the view's, drawn at its scale times it. Set by the window. */
+    public float $zoom = 1.0;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
     public array $glass = [];
     /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
@@ -383,7 +385,8 @@ final class DisplayList
      * bottom right, bottom left), fitted to it as CSS does; filled with
      * $rgb at $alpha, or, by $paint, a gradient from $rgb to $rgb2 at
      * $alpha2 from ($g[0], $g[1]) to ($g[2], $g[3]), in points from its top
-     * left, or stripes of $rgb over $rgb2, ($g[0], $g[1]) the unit vector
+     * left, or out from ($g[0], $g[1]) to a circle $g[2] points around it
+     * (radial), or stripes of $rgb over $rgb2, ($g[0], $g[1]) the unit vector
      * across them, $g[2] wide every $g[3] points; inside its edges a border
      * of $borders (top, right, bottom, left) in $borderRgb at $borderAlpha,
      * $dashed or solid, its inner corners each the outer less the wider of
@@ -397,7 +400,7 @@ final class DisplayList
     {
         $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2); // a gradient's or stripes' second color and the border's are packed: they draw their sRGB twins
         $r = self::fitRadii($w, $h, $radii);
-        $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? 4.0 : 0.0), $g);
+        $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? 8.0 : 0.0), $g);
     }
 
     /**
@@ -419,7 +422,7 @@ final class DisplayList
         $this->slot(self::fitRadii($w, $h, $radii), $cut, $c[0], $c[1], $c[2], [$c[3], 0.0, 0.0, 0.0]);
     }
 
-    /** Fills $path, or with $width > 0 strokes it that wide, with the gradient from $rgb at $alpha to $rgb2 at $alpha2 along the line $line(w, h) gives, in points from the top left of the path's bounds (mygo's FillPathGradient, StrokePathGradient): its mask from the atlas, as path() draws it, painted as a box (flag 8). @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line */
+    /** Fills $path, or with $width > 0 strokes it that wide, with the gradient from $rgb at $alpha to $rgb2 at $alpha2 along the line $line(w, h) gives, in points from the top left of the path's bounds (mygo's FillPathGradient, StrokePathGradient): its mask from the atlas, as path() draws it, painted as a box (flag 16). @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line */
     public function pathGradient(Path $path, float $width, int $rgb, float $alpha, int $rgb2, float $alpha2, bool $oklab, \Closure $line): void
     {
         $quads = $this->pathQuad === null ? [] : ($this->pathQuad)($path, $width, fn(float $x, float $y, float $w, float $h): bool => !$this->clipped($x, $y, $w, $h));
@@ -435,7 +438,7 @@ final class DisplayList
             if ($this->clipped($q[0], $q[1], $q[2], $q[3])) { continue; }
             $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
             [$dx, $dy] = [$ox - $q[0], $oy - $q[1]];
-            $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 8.0, [$l[0] + $dx, $l[1] + $dy, $l[2] + $dx, $l[3] + $dy]);
+            $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 16.0, [$l[0] + $dx, $l[1] + $dy, $l[2] + $dx, $l[3] + $dy]);
         }
     }
 

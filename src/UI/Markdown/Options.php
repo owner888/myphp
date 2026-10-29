@@ -25,6 +25,7 @@ final class Options
      * @param ?Closure(\MyPHP\UI\Context, string): void $math
      * @param ?Closure(\MyPHP\UI\Context, string): void $html
      * @param ?Closure(\MyPHP\UI\Context, Parser\Document, int): bool $block
+     * @param ?Closure(string, float): ?InlineObject $inlineMath
      */
     public function __construct(
         /** The look: Theme::defaultTheme() of the window's theme when null, whose values those it leaves unset take. */
@@ -46,7 +47,7 @@ final class Options
         public array $code = [],
         /** Wraps the lines of code blocks rather than scrolling them sideways. */
         public bool $wrapCode = false,
-        /** Builds blocks of display math from their TeX, which show as their TeX without it; math within text shows as its TeX. */
+        /** Builds blocks of display math from their TeX, which show as their TeX without it; math within text shows as its TeX, unless $inlineMath makes it an object. */
         public ?Closure $math = null,
         /** Builds HTML blocks from their HTML, which show as their HTML without it; within text, the tags of formatting (<b>, <i>, <code>, <br>, <mark>, <sub>…) apply, and other tags show as text. */
         public ?Closure $html = null,
@@ -56,6 +57,18 @@ final class Options
         public ?Reveal $reveal = null,
         /** Leaves the selection to a selectable container around the view, as one across a chat's messages, rather than giving the view one of its own. */
         public bool $shareSelection = false,
+        /**
+         * Makes math within text an object of the text (mygo's InlineMath),
+         * from its TeX and the size of the text around it in points: one on
+         * the baseline, which wraps with the words and copies as its source,
+         * as $x_i$. When it returns null, the math shows as its TeX. It is
+         * asked again whenever the paragraph changes, as every frame of a
+         * paragraph streaming in: keep what it makes.
+         *
+         *     $o->inlineMath = fn(string $tex, float $size) => ($f = $app->formula($tex, $size)) === null ? null
+         *         : new InlineObject($f->width, $f->ascent, $f->descent, $f->draw(...));
+         */
+        public ?Closure $inlineMath = null,
     ) {}
 
     /** The extensions read: Extensions::DEFAULT for 0. */

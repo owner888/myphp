@@ -15,6 +15,59 @@ final class Path
     public array $cmds = [];
     /** How long the part trim() kept is, in points; null for a path not trimmed. */
     public ?float $kept = null;
+    /** How a stroke ends where its subpath or a dash of it does (mygo's LineCap): a half disc (the default), square where its line ends, or square half its width past it. */
+    public const CAP_ROUND = 0, CAP_BUTT = 1, CAP_SQUARE = 2;
+    /** How a stroke turns at a corner (mygo's LineJoin): in an arc (the default), in a point where its sides meet, bevelled past the miter limit, or cut straight across. */
+    public const JOIN_ROUND = 0, JOIN_MITER = 1, JOIN_BEVEL = 2;
+    /** How the path is stroked (cap(), join(), miterLimit(), dash()): none set strokes it as before, round and whole. */
+    public int $cap = self::CAP_ROUND, $join = self::JOIN_ROUND;
+    public float $miter = 4.0, $dashOffset = 0.0;
+    /** @var list<float> the dashes and gaps, in points, an even count; none for a whole stroke */
+    public array $dash = [];
+    /** @var ?list<float> @internal where each subpath trim() kept starts on the subpath it was cut from, in points: its dashes stay where they are on the path */
+    public ?array $phases = null;
+
+    /** Sets how the stroke ends at the ends of open subpaths and of dashes, as SVG's stroke-linecap (mygo's Cap), and returns the path. */
+    public function cap(int $cap): static { $this->cap = $cap; return $this; }
+
+    /** Sets how the stroke turns at the path's corners, as SVG's stroke-linejoin (mygo's Join), and returns the path. */
+    public function join(int $join): static { $this->join = $join; return $this; }
+
+    /** Sets how far the point of a miter join may reach from its corner, in half the stroke's width, as SVG's stroke-miterlimit (mygo's MiterLimit): 4 by default, which bevels corners sharper than about 29 degrees, and at least 1. */
+    public function miterLimit(float $limit): static
+    {
+        Motion::finite('miter limit', $limit);
+        $this->miter = max($limit, 1.0);
+        return $this;
+    }
+
+    /**
+     * Strokes the path in dashes, as SVG's stroke-dasharray and
+     * stroke-dashoffset (mygo's Dash), and returns the path: $lengths are
+     * those of the dashes and the gaps between them in turn, in points,
+     * repeated along it, twice over when there is an odd number of them;
+     * each subpath starts them anew, $offset points into them. A dash of no
+     * length shows its caps alone (a dot with CAP_ROUND). No lengths, a
+     * negative one, or lengths adding up to none stroke it whole. As
+     * trim() trims the path, its dashes stay where they are on it.
+     */
+    public function dash(float $offset, float ...$lengths): static
+    {
+        Motion::finite('dash', $offset, ...$lengths);
+        [$this->dash, $this->dashOffset] = [[], $offset];
+        foreach ($lengths as $l) { if ($l < 0) { return $this; } }
+        if (array_sum($lengths) > 0) {
+            $this->dash = count($lengths) % 2 === 1 ? [...$lengths, ...$lengths] : array_values($lengths);
+        }
+        return $this;
+    }
+
+    /** How far past its points the stroke $width wide reaches: half the width, past it where square caps and miters reach. */
+    public function reach(float $width): float
+    {
+        $hw = max($width, 0) / 2;
+        return $hw * max($this->join === self::JOIN_MITER ? $this->miter : 1.0, $this->cap === self::CAP_SQUARE ? M_SQRT2 : 1.0);
+    }
 
     public function moveTo(float $x, float $y): static { $this->cmds[] = [self::MOVE, $x, $y, 0, 0, 0, 0]; return $this; }
     public function lineTo(float $x, float $y): static { $this->cmds[] = [self::LINE, $x, $y, 0, 0, 0, 0]; return $this; }
@@ -74,23 +127,24 @@ final class Path
             for ($i = 1; $i < count($poly); $i++) { $total += hypot($poly[$i][0] - $poly[$i - 1][0], $poly[$i][1] - $poly[$i - 1][1]); }
         }
         $a = $from * $total; $b = $to * $total;
-        $this->cmds = [];
+        $this->cmds = []; $phases = []; $was = $this->phases ?? []; // trimmed again: from where each started on the path first trimmed
         $at = 0.0;
-        foreach ($polys as $poly) {
-            $open = false;
+        foreach ($polys as $pi => $poly) {
+            $open = false; $subStart = $at;
             for ($i = 1; $i < count($poly); $i++) {
                 [$x0, $y0] = $poly[$i - 1]; [$x1, $y1] = $poly[$i];
                 $l = hypot($x1 - $x0, $y1 - $y0);
                 $s0 = max($a, $at); $s1 = min($b, $at + $l);
                 if ($l > 0 && $s1 > $s0) {
                     $k0 = ($s0 - $at) / $l; $k1 = ($s1 - $at) / $l;
-                    if (!$open) { $this->moveTo($x0 + ($x1 - $x0) * $k0, $y0 + ($y1 - $y0) * $k0); $open = true; }
+                    if (!$open) { $this->moveTo($x0 + ($x1 - $x0) * $k0, $y0 + ($y1 - $y0) * $k0); $open = true; $phases[] = ($was[$pi] ?? 0.0) + $s0 - $subStart; }
                     $this->lineTo($x0 + ($x1 - $x0) * $k1, $y0 + ($y1 - $y0) * $k1);
                 }
                 $at += $l;
             }
         }
         $this->kept = max(0.0, $b - $a);
+        $this->phases = $phases;
         return $this;
     }
 

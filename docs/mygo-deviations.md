@@ -1907,7 +1907,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Text fields' words**: mygo's buffer moves by letters, digits and
   underscores; myphp's moved by runs between spaces, and now moves as
   mygo's.
-- **Not taken yet**: `TextLayout.Lines`, justified and indented
+- **Taken in v1.70**: `TextLayout.Lines`, justified and indented
   paragraphs, soft hyphens and baseline shift (a8f25ed), rich text's
   paragraph indent and spacing (7e510df), Markdown's inline math
   (610df69).
@@ -1924,3 +1924,32 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Drag regions' point**: mygo reads a drag's point from its CGEvent;
   myphp from NSEvent's `mouseLocation` as the monitor sees the drag,
   where mygo falls back to the same.
+
+## Drawing vocabulary (v1.70)
+
+- **Radial gradients of two colors**
+  - mygo: `RadialGradient` spreads `Stops`, as many as 32.
+  - myphp: `RadialGradient` goes from `$from` to `$to`, each with its
+    alpha, as myphp's `LinearGradient` does; gradient stops, conic and
+    border gradients and element blur (3cb5ea6) are not taken yet.
+- **Zoom**
+  - Glyphs are rasterized in one atlas for every window, at the largest
+    backing scale times zoom among them; a window less zoomed samples
+    them down, as a window on a lesser display did.
+  - A flyout's anchor stays in the window's points, as the app gives it;
+    `MaximizeButton` (Windows) has no counterpart.
+  - `Headless::rect` returns the window's points, as mygo's `Tester.Find`.
+- **Paths**: the dash phases of a path trimmed twice add up, where mygo
+  keeps the last trim's; the stroke's style lives on the `Path`, as
+  mygo's.
+- **Soft hyphens**: where a line may break again is myphp's rough cut of
+  UAX #14 (`LineBreaks`, which now breaks after U+00AD), not go-text's
+  segmenter. Justification needs no `UseJustify`: PHP links nothing.
+- **Inline objects** draw in the transform of the text holding them,
+  not of an inline node inside it, which myphp's rich text has no
+  transform of its own for.
+- **Markdown's inline math**: `$inlineMath` returns an `InlineObject` or
+  null for none, where mygo returns a pair.
+- **Visible paragraphs**: a paint that moves them sets the runtime's
+  `needsFrame`, the window then drawing another; the document has no
+  lock, PHP running the app on one thread.

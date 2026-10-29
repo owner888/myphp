@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 /**
- * What the window received since the last frame, in points, y down, and
+ * What the window received since the last frame, in points, y down (the
+ * content's: the window's divided by its zoom, Context::setZoom), and
  * the text field that has the keyboard, which the native view's text
  * input client edits directly (an input method expects its changes to be
  * visible as soon as it makes them).
@@ -16,6 +17,8 @@ final class Input
     public bool $mouseDown = false;
     /** The modifiers held (Key::SHIFT…), as of the last key, flag change or pointer event (mygo's Context.Modifiers). */
     public int $mods = 0;
+    /** The content's zoom the frame shown was laid out at (Runtime::$frameZoom): what comes in the window's points is divided by it, what goes out multiplied. @internal Runtime */
+    public float $zoom = 1.0;
     /** @var list<array> ['down'|'up'|'move'|'drag'|'scroll'|'key'|'command'|'insert'|'accessOn'|'access', ...] in arrival order; down and up carry x, y, button, click count, modifier flags; access an action of assistive technology: id, AccessNode action, text, from, to */
     public array $events = [];
 
@@ -61,14 +64,33 @@ final class Input
         return !$types && (bool)($f->onTextKey)($code, $chars, $mods & Key::MODIFIERS, $f);
     }
 
+    /** The pointer at ($x, $y), in the window's points. */
     public function mouse(float $x, float $y): void
     {
-        $this->mouseX = $x; $this->mouseY = $y; $this->mouseInside = true;
+        $this->mouseX = $x / $this->zoom; $this->mouseY = $y / $this->zoom; $this->mouseInside = true;
     }
 
-    /** Gives an event to the node taking its input as it comes, as it arrives (Runtime's deliver, set by the runtime), and queues it for the next frame when that node leaves it. Reports whether the node took it. */
+    /**
+     * Gives an event to the node taking its input as it comes, as it
+     * arrives (Runtime's deliver, set by the runtime), and queues it for the
+     * next frame when that node leaves it. Reports whether the node took
+     * it. Where it happened is in the window's points, as how far a
+     * touchpad scrolls, which the content follows: both come in the
+     * content's; a wheel's lines scroll as far as unzoomed (mygo's
+     * fromWindow).
+     */
     public function push(array $event): bool
     {
+        if ($this->zoom !== 1.0) {
+            $z = $this->zoom;
+            switch ($event[0]) {
+                case 'scroll':
+                    if ($event[5]) { $event[3] /= $z; $event[4] /= $z; }
+                    // and where
+                case 'down': case 'up': case 'move': case 'drag': case 'magnify': case 'pressure':
+                    $event[1] /= $z; $event[2] /= $z;
+            }
+        }
         if ($this->direct !== null && ($this->direct)($event)) { return true; } // which may count a press's clicks again (Runtime::deliver)
         $this->events[] = $event;
         return false;
@@ -107,13 +129,15 @@ final class Input
         if ($this->client === null || $inv === null) {
             return null;
         }
-        [$lx, $ly] = $inv->point($x, $y);
+        [$lx, $ly] = $inv->point($x / $this->zoom, $y / $this->zoom);
         return $this->client->indexForPoint($lx - $this->clientOrigin[0], $ly - $this->clientOrigin[1]);
     }
 
-    /** $r, a rectangle of the focused node's layout, as it shows in the window. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */
+    /** $r, a rectangle of the focused node's layout, as it shows in the window: in its points, as input methods take it. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */
     private function shown(array $r): array
     {
-        return $this->world->set ? $this->world->bounds(...$r) : $r;
+        $r = $this->world->set ? $this->world->bounds(...$r) : $r;
+        $z = $this->zoom;
+        return $z === 1.0 ? $r : [$r[0] * $z, $r[1] * $z, $r[2] * $z, $r[3] * $z];
     }
 }

@@ -38,10 +38,19 @@ final class TextLayout
      * at newlines only), aligned by $align (Node::START, CENTER, END)
      * within it; $rtl, as in an interface laid out right to left, lines
      * start at the right and paragraphs with no strong direction read
-     * right to left (mygo's ShapeRichTextWith).
+     * right to left (mygo's ShapeRichTextWith and its TextShape).
+     * $justify stretches every line $width wraps to it but the last of
+     * each paragraph, widening the spaces between its words and the room
+     * after Han characters and kana, as printed prose sets them; $align
+     * places the last lines, and those with nothing to widen; the
+     * whitespace ending a line hangs past $width. $indent moves the first
+     * line that many points in from the side its paragraph starts at and
+     * wraps it that much narrower, as CSS's text-indent; the lines after a
+     * newline are not indented. $noBreakWords breaks lines only between
+     * words: a word wider than $width overflows it.
      * @param list<Span> $spans
      */
-    public static function shape(System $sys, array $spans, TextStyle $font, float $size, float $width = 0, int $align = Node::START, bool $rtl = false): self
+    public static function shape(System $sys, array $spans, TextStyle $font, float $size, float $width = 0, int $align = Node::START, bool $rtl = false, bool $justify = false, float $indent = 0, bool $noBreakWords = false): self
     {
         $text = ''; $runes = 0; $styles = [];
         foreach ($spans as $sp) {
@@ -56,7 +65,21 @@ final class TextLayout
             $align === Node::END => Params::END,
             default => Params::START,
         };
-        return new self($sys->layout(new Params($text, $font->style($size), $width, align: $a, rtl: $rtl, keepSpaces: true, spans: $styles)), $spans);
+        return new self($sys->layout(new Params($text, $font->style($size), $width, align: $a, rtl: $rtl, keepSpaces: true, noBreakWords: $noBreakWords, spans: $styles, indent: $indent, justify: $justify)), $spans);
+    }
+
+    /**
+     * The lines of the layout, from the top (mygo's Lines): where a page
+     * ends, which line holds an offset, or how many lines fit a height.
+     * @return list<TextLine>
+     */
+    public function lines(): array
+    {
+        $out = [];
+        foreach ($this->layout->lines as $line) {
+            $out[] = new TextLine([$line->x, $line->y, $line->width, $line->height], $line->baseline, $line->ascent, $line->descent, $this->units[$line->start], $this->units[$line->end], $line->rtl);
+        }
+        return $out;
     }
 
     /** The layout's width and height, in points (mygo's Size). @return array{0: float, 1: float} */
@@ -134,18 +157,34 @@ final class TextLayout
         return $this->units[$this->bounds[min(count($this->bounds) - 1, $b + 1)]];
     }
 
-    /** The inline objects (Span::$objectWidth), in the order of the text: the UTF-16 offset of each object replacement character and its box [x, y, w, h], standing on its line's baseline (mygo's Objects). @return list<array{0: int, 1: array{0: float, 1: float, 2: float, 3: float}}> */
+    /** The inline objects (Span::$objectWidth), in the order of the text: the UTF-16 offset of each object replacement character and its box [x, y, w, h], standing on its line's baseline, its descent below it, or as far off it as its span's baselineShift (mygo's Objects). @return list<array{0: int, 1: array{0: float, 1: float, 2: float, 3: float}}> */
     public function objects(): array
     {
         $out = [];
-        foreach ($this->layout->lines as $line) {
+        foreach (self::objectBoxes($this->layout) as [$at, $r]) {
+            $out[] = [$this->units[$at], $r];
+        }
+        return $out;
+    }
+
+    /**
+     * The inline objects of layout $l: the rune of each and its box from
+     * the layout's top left, its height above its line's baseline and its
+     * descent below.
+     * @internal Painter, RichText\ParaLayout
+     * @return list<array{0: int, 1: array{0: float, 1: float, 2: float, 3: float}}>
+     */
+    public static function objectBoxes(\MyPHP\Text\Layout $l): array
+    {
+        $out = [];
+        foreach ($l->lines as $line) {
             foreach ($line->glyphs as $g) {
                 if (!$g->object) { continue; }
-                $h = 0.0;
-                foreach ($this->layout->params->spans as $sp) {
-                    if ($g->cluster < $sp->end) { $h = $sp->objectHeight; break; }
+                [$h, $d] = [0.0, 0.0];
+                foreach ($l->params->spans as $sp) {
+                    if ($g->cluster < $sp->end) { [$h, $d] = [$sp->objectHeight + $sp->baselineShift, $sp->objectDescent - $sp->baselineShift]; break; }
                 }
-                $out[] = [$this->units[$g->cluster], [$g->x, $line->baseline - $h, $g->advance, $h]];
+                $out[] = [$g->cluster, [$g->x, $line->baseline - $h, $g->advance, $h + $d]];
             }
         }
         return $out;

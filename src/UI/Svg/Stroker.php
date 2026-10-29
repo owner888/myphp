@@ -144,19 +144,23 @@ final class Stroker
     /**
      * Cuts the polylines of $in into the dashes of a dash array (of even
      * length), starting $offset into it, as open polylines in $out; $limit
-     * bounds the number of dashes.
+     * bounds the number of dashes. $phases, when given, moves each
+     * polyline's start further into the pattern (where a trimmed one began
+     * on its subpath).
+     * @param ?list<float> $phases
      */
-    public static function dash(Polys $in, array $dashes, float $offset, Polys $out, int $limit): void
+    public static function dash(Polys $in, array $dashes, float $offset, Polys $out, int $limit, ?array $phases = null): void
     {
         $total = array_sum($dashes); $nd = count($dashes);
-        $offset = fmod($offset, $total); if ($offset < 0) { $offset += $total; }
         for ($i = 0, $n = $in->count(); $i < $n; $i++) {
             [$from, $to] = $in->range($i); $pts = $in->pts;
             // Every subpath starts the pattern anew, offset into it: in dash or gap k, with left of it to go.
-            $k = 0; $o = $offset;
+            $o = fmod($offset + ($phases[$i] ?? 0.0), $total); if ($o < 0) { $o += $total; }
+            $k = 0;
             while ($o > $dashes[$k]) { $o -= $dashes[$k]; $k = ($k + 1) % $nd; }
             $left = $dashes[$k] - $o;
             $on = $k % 2 === 0;
+            $first = $on && $in->closed[$i] ? $out->count() : -1; // the dash the subpath starts in, which a closed one's last dash goes on into
             if ($on) { $out->start($pts[$from], $pts[$from + 1]); }
             $cnt = intdiv($to - $from, 2);
             $segs = $in->closed[$i] ? $cnt : $cnt - 1;
@@ -169,7 +173,7 @@ final class Stroker
                     $x = $ax + ($bx - $ax) * $t; $y = $ay + ($by - $ay) * $t;
                     if ($on) {
                         $out->add($x, $y); $out->end(false);
-                        if (--$limit <= 0) { return; }
+                        if (--$limit <= 0) { self::rest($in, $i, $sg + 1, $x, $y, $out); return; }
                     } else {
                         $out->start($x, $y);
                     }
@@ -178,7 +182,32 @@ final class Stroker
                 $left -= $l - $pos;
                 if ($on) { $out->add($bx, $by); }
             }
+            if ($on && $first >= 0 && $out->count() > $first) { // a dash through the start of a closed subpath is one, turning there as at its other corners (as Skia's)
+                [$f0, $f1] = $out->range($first);
+                $run = array_slice($out->pts, $f0 + 2, $f1 - $f0 - 2);
+                array_splice($out->pts, $f0, $f1 - $f0);
+                array_splice($out->starts, $first, 1); array_splice($out->closed, $first, 1);
+                for ($q = $first, $nq = count($out->starts); $q < $nq; $q++) { $out->starts[$q] -= $f1 - $f0; }
+                $out->begin -= $f1 - $f0;
+                array_push($out->pts, ...$run);
+            }
             $out->end(false);
+        }
+    }
+
+    /** Past the limit of dashes: the rest of $in whole, from (x, y) on segment $sg of polyline $i. */
+    private static function rest(Polys $in, int $i, int $sg, float $x, float $y, Polys $out): void
+    {
+        [$from, $to] = $in->range($i); $pts = $in->pts;
+        $cnt = intdiv($to - $from, 2);
+        $out->start($x, $y);
+        for ($j = $sg, $end = $in->closed[$i] ? $cnt : $cnt - 1; $j <= $end; $j++) { $q = $from + 2 * ($j % $cnt); $out->add($pts[$q], $pts[$q + 1]); }
+        $out->end(false);
+        for ($i++, $n = $in->count(); $i < $n; $i++) {
+            [$from, $to] = $in->range($i);
+            $out->start($pts[$from], $pts[$from + 1]);
+            for ($q = $from + 2; $q < $to; $q += 2) { $out->add($pts[$q], $pts[$q + 1]); }
+            $out->end($in->closed[$i]);
         }
     }
 }

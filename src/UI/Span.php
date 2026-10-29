@@ -45,10 +45,16 @@ final class Span
          * When $objectWidth is set, each rune of the span, an object
          * replacement character (U+FFFC), is an inline object: a box of that
          * size standing on the baseline, which lines break around and which
-         * draws nothing, where a rich text editor draws an image.
+         * draws nothing, where a rich text editor draws an image and a
+         * text what Node::drawObjects draws. $objectDescent extends the box
+         * that far below the baseline, as math's subscripts and fractions
+         * go: the line makes room for it (mygo's ObjectDescent).
          */
         public float $objectWidth = 0,
         public float $objectHeight = 0,
+        public float $objectDescent = 0,
+        /** Raises the span's text, or its objects, that many points above the baseline, or lowers it when negative, as superscripts and subscripts with a smaller $size: footnote references, exponents, chemical formulas. The line makes room for it, and its underline, strikethrough and background go with it (mygo's BaselineShift). */
+        public float $baselineShift = 0,
         /** The opacity of $background, as a code span's tint. */
         public ?float $backgroundAlpha = null,
         /** @internal VideoPlayer (ASS's runs drawn apart): laid out, but nothing of it painted, its glyphs, outline, shadow, background or lines. */
@@ -85,6 +91,6 @@ final class Span
         $weight = $this->weight ?? (($this->style & Font::BOLD) !== 0 ? 700 : 0);
         $family = $this->font ?? (($this->style & Font::MONO) !== 0 ? 'monospace' : '');
         return new \MyPHP\Text\Span($end, $family, $this->size ?? 0, $weight, $this->italic || ($this->style & Font::ITALIC) !== 0,
-            $this->letterSpacing ?? 0, $this->features ?? '', $this->lang ?? '', $this->objectWidth, $this->objectHeight);
+            $this->letterSpacing ?? 0, $this->features ?? '', $this->lang ?? '', $this->objectWidth, $this->objectHeight, $this->objectDescent, $this->baselineShift);
     }
 }

@@ -44,6 +44,14 @@ final class Document
     public bool $coalesce = false;
     /** @internal what changed since the versions the editor last saw, for it to lay out only the paragraphs that changed; @var list<Change> */
     public array $log = [];
+    /** Names the paragraphs edits make (identifyParagraphs). @var ?Closure(): string */
+    private ?Closure $newID = null;
+    /** @internal the editor that last showed the document, for visibleParagraphs; whether the app read them since its last paint, and the boxes it read, for the editor's next paint to tell whether it moved them @var ?\WeakReference<View> */
+    public ?\WeakReference $shownIn = null;
+    /** @internal */
+    public bool $read = false;
+    /** @internal @var list<ParagraphBox> */
+    public array $boxes = [];
 
     /** A document of $text, its caret at the end (mygo's NewDocument). */
     public function __construct(Text $text = new Text)
@@ -65,7 +73,7 @@ final class Document
     public function setText(Text $text): void
     {
         $old = $this->text->len();
-        $this->text = $text;
+        $this->text = $this->identify($text, 0, $text->paragraphCount() - 1);
         $this->undo = $this->redo = [];
         $this->coalesce = false;
         $this->changed(0, $old, $text->len());
@@ -132,6 +140,65 @@ final class Document
         $this->typing = $a;
     }
 
+    /**
+     * Has $newID give an ID (ParagraphStyle::$id) to each paragraph
+     * without one (mygo's IdentifyParagraphs): those of the text now and
+     * of setText, and those edits make, as a paragraph split or text
+     * pasted, in the step of undo that makes them, so that undo and redo
+     * bring them back with their IDs, and the app finds every paragraph by
+     * its ID when it saves. Call it before the document is edited: the
+     * steps of undo before it keep their texts. null stops naming
+     * paragraphs.
+     *
+     *     $doc = new Document($chapter);
+     *     $doc->identifyParagraphs(fn() => bin2hex(random_bytes(8)));
+     *
+     * @param ?Closure(): string $newID
+     */
+    public function identifyParagraphs(?Closure $newID): void
+    {
+        $this->newID = $newID;
+        $t = $this->identify($this->text, 0, $this->text->paragraphCount() - 1);
+        if (!$t->same($this->text)) {
+            $this->text = $t;
+            $n = $t->len();
+            $this->changed(0, $n, $n);
+        }
+    }
+
+    /** $t with the paragraphs from $pa to $pz that have no ID given one, when the document names paragraphs. */
+    private function identify(Text $t, int $pa, int $pz): Text
+    {
+        if ($this->newID === null) {
+            return $t;
+        }
+        return $t->formatParas($pa, $pz, function (ParagraphStyle $p): void {
+            if ($p->id === '') { $p->id = ($this->newID)(); }
+        });
+    }
+
+    /**
+     * The paragraphs in view in the editor showing the document, from the
+     * first to the last, those partly in view included, where the editor
+     * places them in this frame (mygo's VisibleParagraphs): an app lines a
+     * gutter up beside it with them, as a timeline or the numbers of
+     * paragraphs. A frame in which they move from where this said, as the
+     * editor scrolls, its width changes or it reveals the caret, builds
+     * another, so that what read them follows. It lays out only the
+     * paragraphs in view, as painting the editor does; empty until an
+     * editor showed the document, as in the first frame.
+     *
+     * @return list<ParagraphBox>
+     */
+    public function visibleParagraphs(): array
+    {
+        $v = $this->shownIn?->get();
+        $boxes = $v !== null && $v->doc === $this && $v->width > 0 ? $v->visibleBoxes() : [];
+        $this->read = true;
+        $this->boxes = $boxes;
+        return $boxes;
+    }
+
     /** @internal notes that the runes from $start to $oldEnd became those from $start to $newEnd */
     public function changed(int $start, int $oldEnd, int $newEnd): void
     {
@@ -167,6 +234,7 @@ final class Document
      */
     public function apply(?UndoStep $step, int $start, int $removed, int $inserted, Text $t): void
     {
+        $t = $this->identify($t, $t->paraAt($start), $t->paraAt($start + $inserted));
         $formatted = $t->text === $this->text->text; // the text is the same: only formats changed
         $this->text = $t;
         if ($step !== null) {

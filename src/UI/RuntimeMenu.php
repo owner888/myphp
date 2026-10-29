@@ -212,7 +212,7 @@ trait RuntimeMenu
         $text = 0;
         if (isset($this->fields[$s]) && $this->input->focus !== null && $s === $this->focus) {
             [$cx, $cy, $cw, $ch] = $this->input->caretRect(TextState::utf16Index($this->input->focus->display(), $this->input->focus->displayCaret()));
-            $x = $cx; $y = $cy + $ch;
+            $x = $cx / $this->input->zoom; $y = ($cy + $ch) / $this->input->zoom; // the window's points, as input methods take them: the content's
         }
         if ($this->editable($s)) {
             $text = $s;
@@ -260,7 +260,7 @@ trait RuntimeMenu
             return;
         }
         $this->menuPending = null;
-        ($this->popupMenu)($p['items'], $p['x'], $p['y'], $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice));
+        ($this->popupMenu)($p['items'], $p['x'] * $this->frameZoom, $p['y'] * $this->frameZoom, $p['rtl'], fn(int $choice) => $this->menuChosen($p, $choice)); // in the window's points
     }
 
     /** The item $choice (from 1) chosen from menu $p: the next frame reports it to its function, or the text does the editing command (mygo's menuChosen). @param array{id: int, button: bool, items: list<NativeItem>, labels: list<string>, commands: ?list<string>, x: float, y: float, text: int} $p */

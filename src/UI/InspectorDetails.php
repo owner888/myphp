@@ -114,6 +114,8 @@ final class InspectorDetails
         }
         if ($n->material !== null) {
             $add('background', $n->material instanceof \Stringable ? (string)$n->material : 'material'); // a material describes itself as a Stringable
+        } elseif (($g = $n->gradient) instanceof RadialGradient) {
+            $add('background', 'radial-gradient(circle ' . ($g->radius > 0 ? Inspector::num($g->radius) . 'px' : 'farthest-corner') . ' at ' . Inspector::num($g->centerX * 100) . '% ' . Inspector::num($g->centerY * 100) . '%, ' . Inspector::color($g->from, $g->fromAlpha) . ', ' . Inspector::color($g->to, $g->toAlpha) . ')');
         } elseif (($g = $n->gradient) !== null) {
             $add('background', 'linear-gradient(' . Inspector::num($g->angle) . 'deg, ' . Inspector::color($g->from, $g->fromAlpha) . ', ' . Inspector::color($g->to, $g->toAlpha) . ')');
         } elseif ($n->stripes !== null) {

@@ -145,6 +145,36 @@ $ln = (new \MyPHP\UI\Path)->moveTo(2, 4)->lineTo(6, 4);
 $m = \MyPHP\UI\Svg\Mask::of($ln, 2, 1.0, 0, 0, 8, 8);
 check(ord($m[3 * 8 + 4]) === 255 && ord($m[3 * 8 + 1]) > 0 && ord($m[3 * 8 + 0]) <= 1 && ord($m[1 * 8 + 4]) === 0, 'a line stroked 2 wide with round caps: they reach a pixel past the ends');
 
+// Caps, joins and dashes (mygo's d9d45f4): a path sets how it is stroked; one that sets none strokes as before.
+$P = \MyPHP\UI\Path::class;
+$cap = fn(int $c) => \MyPHP\UI\Svg\Mask::of((new $P)->moveTo(4, 8)->lineTo(12, 8)->cap($c), 4, 1.0, 0, 0, 16, 16);
+$butt = $cap($P::CAP_BUTT); $square = $cap($P::CAP_SQUARE); $round = $cap($P::CAP_ROUND);
+check(ord($butt[7 * 16 + 2]) === 0 && ord($butt[7 * 16 + 5]) === 255, 'a butt cap ends at the end');
+check(ord($square[6 * 16 + 2]) === 255 && ord($square[6 * 16 + 13]) === 255, 'a square cap reaches half the width past it, corners and all');
+check(ord($round[6 * 16 + 2]) > 0 && ord($round[6 * 16 + 2]) < 255, 'a round cap: the half disc');
+same(bin2hex($round), bin2hex(\MyPHP\UI\Svg\Mask::of((new $P)->moveTo(4, 8)->lineTo(12, 8), 4, 1.0, 0, 0, 16, 16)), 'round caps are the default');
+$corner = fn(int $j, float $limit = 4) => \MyPHP\UI\Svg\Mask::of((new $P)->moveTo(2, 14)->lineTo(10, 6)->lineTo(18, 14)->cap($P::CAP_BUTT)->join($j)->miterLimit($limit), 2, 1.0, 0, 0, 20, 20);
+$miter = $corner($P::JOIN_MITER); $bevel = $corner($P::JOIN_BEVEL);
+check(ord($miter[4 * 20 + 10]) > 0 && ord($bevel[4 * 20 + 10]) === 0 && ord($miter[5 * 20 + 10]) > ord($bevel[5 * 20 + 10]), 'a miter join comes to a point past the corner; a bevel cuts across');
+same(bin2hex($bevel), bin2hex($corner($P::JOIN_MITER, 1)), 'a miter past its limit bevels');
+$dashed = \MyPHP\UI\Svg\Mask::of((new $P)->moveTo(0, 4)->lineTo(20, 4)->cap($P::CAP_BUTT)->dash(0, 4), 2, 1.0, 0, 0, 20, 8);
+same([255, 255, 0, 0, 255], [ord($dashed[3 * 20 + 1]), ord($dashed[3 * 20 + 2]), ord($dashed[3 * 20 + 5]), ord($dashed[3 * 20 + 6]), ord($dashed[3 * 20 + 9])], 'dashes 4 on, 4 off: an odd count twice over');
+$shifted = \MyPHP\UI\Svg\Mask::of((new $P)->moveTo(0, 4)->lineTo(20, 4)->cap($P::CAP_BUTT)->dash(2, 4), 2, 1.0, 0, 0, 20, 8);
+same([255, 0, 255], [ord($shifted[3 * 20 + 0]), ord($shifted[3 * 20 + 3]), ord($shifted[3 * 20 + 7])], 'an offset moves the pattern back along the path');
+$trimmed = (new $P)->moveTo(0, 4)->lineTo(20, 4)->cap($P::CAP_BUTT)->dash(0, 4)->trim(0.25, 1);
+$t = \MyPHP\UI\Svg\Mask::of($trimmed, 2, 1.0, 0, 0, 20, 8);
+same([0, 0, 255, 0], [ord($t[3 * 20 + 3]), ord($t[3 * 20 + 6]), ord($t[3 * 20 + 9]), ord($t[3 * 20 + 13])], 'trimmed, the dashes stay where they were on the path');
+same(bin2hex($t), bin2hex(\MyPHP\UI\Svg\Mask::of((new $P)->moveTo(0, 4)->lineTo(20, 4)->cap($P::CAP_BUTT)->dash(0, 4)->trim(0.1, 1)->trim(1 / 6, 1), 2, 1.0, 0, 0, 20, 8)), 'trimmed twice, as well');
+$loop = \MyPHP\UI\Svg\Mask::of((new $P)->moveTo(2, 2)->lineTo(10, 2)->lineTo(10, 10)->lineTo(2, 10)->close()->cap($P::CAP_BUTT)->join($P::JOIN_MITER)->dash(1, 4, 2), 2, 1.0, 0, 0, 12, 12);
+same(255, ord($loop[1 * 12 + 1]), 'a dash through the start of a closed subpath is one, mitered there');
+$in = new \MyPHP\UI\Svg\Polys; $in->start(0, 0); $in->add(10, 0); $in->add(10, 10); $in->end(false); $in->start(20, 20); $in->add(30, 20); $in->end(true);
+$cut = new \MyPHP\UI\Svg\Polys; \MyPHP\UI\Svg\Stroker::dash($in, [1, 1], 0, $cut, 3);
+same('[[0,0,1,0],[2,0,3,0],[4,0,5,0],[5,0,10,0,10,10],[20,20,30,20]]', json_encode(array_map(fn(int $i) => array_slice($cut->pts, $cut->range($i)[0], $cut->range($i)[1] - $cut->range($i)[0]), range(0, $cut->count() - 1))), 'past the limit of dashes, the rest whole');
+same([], (new $P)->dash(0, 4, -1)->dash, 'a negative length strokes it whole');
+same([], (new $P)->dash(0, 0, 0)->dash, 'as do lengths adding up to none');
+same(1.0, (new $P)->miterLimit(0.5)->miter, 'a miter limit is at least 1');
+same(4.0, (new $P)->join($P::JOIN_MITER)->reach(2), 'a mitered stroke reaches the limit past its points');
+
 // A path's mask cut in tiles (Text::pathQuad past the atlas, mygo's b0d5f43): each the whole path's, cut to the tile, so tiles meet as the pixels of one mask do.
 $tri = (new \MyPHP\UI\Path)->moveTo(0.3, 0.7)->lineTo(19.6, 3.2)->lineTo(7.1, 19.4)->close();
 $whole = \MyPHP\UI\Svg\Mask::of($tri, 0, 1.0, 0, 0, 20, 20);

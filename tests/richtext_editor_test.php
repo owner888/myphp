@@ -15,52 +15,6 @@ use MyPHP\UI\RichText\{Attributes, Document, EditorOptions, FormatState, Heading
 
 require_once __DIR__ . '/RichTextTest.php';
 
-/** An editor of $doc filling a window, focused at the end of its text (mygo's richTester); $changed is set when a build reports a change. */
-function richTester(Document $doc, ?bool &$changed = null, ?EditorOptions $o = null): Headless
-{
-    $changed = false;
-    $h = new Headless(function (Context $c) use ($doc, &$changed, &$o) {
-        $e = RichText::editor($c, $doc, $o)->size(500, 400);
-        if ($c->changed($e)) { $changed = true; }
-    }, 500, 400);
-    $h->paints = true;
-    $h->frame();
-    $h->click(250, 380);
-    richKey($h, Key::COMMAND, Key::DOWN);
-    return $h;
-}
-
-/** A key with modifiers, as the view sends it to an element taking its input (mygo's Tester.Key). */
-function richKey(Headless $h, int $mods, int $key): void { $h->key($key, '', $mods); }
-
-/** Types $s a rune at a time, as a keyboard does (mygo's typeRunes). */
-function typeRunes(Headless $h, string $s): void
-{
-    foreach (mb_str_split($s, 1, 'UTF-8') as $r) { $h->type($r); }
-}
-
-/** The pointer moved to ($x, $y), as the view sends it (mygo's Tester.Move). */
-function richMove(Headless $h, float $x, float $y): void
-{
-    $h->input->mouse($x, $y);
-    $h->input->push(['move', $x, $y]);
-    $h->frame();
-}
-
-/** An edit command of the menus (mygo's Tester.Command). */
-function richCommand(Headless $h, string $name): void
-{
-    $h->input->push(['edit', $name]);
-    $h->frame();
-}
-
-/** The caret's rectangle, as the input methods see it (mygo's TextCaret). @return array{0: float, 1: float, 2: float, 3: float} */
-function textCaret(Headless $h): array
-{
-    $s = $h->input->client->selection();
-    return $h->input->client->boundsForRange(new TextInputRange($s->caret(), $s->caret()))[0];
-}
-
 // TestRichTextTyping
 $doc = new Document(new Text);
 $rtChanged = false;

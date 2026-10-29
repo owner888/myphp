@@ -170,21 +170,37 @@ final class System
             }
             $start = $end + 1;
         }
-        foreach ($l->lines as $line) {
-            $l->width = max($l->width, $line->width);
+        $indent = max($p->indent, 0.0);
+        foreach ($l->lines as $i => $line) {
+            $l->width = max($l->width, $line->width + ($i === 0 ? $indent : 0.0));
         }
         $l->height = $y;
-        // Each line aligned within the wrap width, or the longest line.
+        // Each line aligned within the wrap width, or the longest line, the first beside its indent.
         $box = $p->width > 0 ? $p->width : $l->width;
-        foreach ($l->lines as $line) {
+        $justify = $p->justify && $p->width > 0 && !$p->noWrap; $justified = false;
+        foreach ($l->lines as $i => $line) {
+            [$lo, $hi] = [0.0, $box];
+            if ($i === 0) {
+                if ($line->rtl) { $hi -= $indent; } else { $lo += $indent; }
+            }
             $align = $p->align;
             if ($line->rtl) {
                 $align = match ($align) { Params::START => Params::END, Params::END => Params::START, default => $align };
             }
-            $dx = match ($align) { Params::CENTER => ($box - $line->width) / 2, Params::END, Params::RIGHT => $box - $line->width, default => 0.0 };
+            // The last line of a paragraph, and a line an ellipsis ends, keep the alignment.
+            $last = $line->end === $n || $runes[$line->end] === 0x0A || $l->truncated && $i === count($l->lines) - 1;
+            if ($justify && !$last && ($left = self::justifyLine($line, $runes, $hi - $lo)) !== null) {
+                [$align, $lo, $justified] = [Params::LEFT, $lo - $left, true]; // its words fill the room, whatever its whitespace's end
+            }
+            $dx = match ($align) { Params::CENTER => $lo + ($hi - $lo - $line->width) / 2, Params::END, Params::RIGHT => $hi - $line->width, default => $lo };
             if ($dx != 0) {
                 $line->x += $dx;
                 foreach ($line->glyphs as $g) { $g->x += $dx; }
+            }
+        }
+        if ($justified) { // the lines stretched are as wide as the width, or wider by the whitespace they keep
+            foreach ($l->lines as $i => $line) {
+                $l->width = max($l->width, $line->width + ($i === 0 ? $indent : 0.0));
             }
         }
         return $l;
@@ -208,19 +224,29 @@ final class System
         }
         $rtl = self::isRTL($text, $p->rtl);
         $spans = Span::in($p->spans, $start, $start + count($text));
+        $hy = in_array(Hyphens::SOFT, $text, true) ? new Hyphens($this->engine, $style, $spans) : null;
+        $indent = $start === 0 ? max($p->indent, 0.0) : 0.0;
         $shaped = [];
         if ($text !== []) {
             $width = $p->noWrap ? 0.0 : max($p->width, 0.0);
-            $shaped = $this->engine->shape($text, $style, $spans, $width, $rtl, $p->noBreakWords);
+            $shaped = $this->breakLines($text, $style, $spans, $width, $indent, $rtl, $p->noBreakWords, $hy);
         }
         if ($shaped === []) {
             $shaped = [['start' => 0, 'end' => count($text), 'runs' => []]];
         }
         $truncated = false;
         if ($maxLines > 0 && (count($shaped) > $maxLines || count($shaped) === $maxLines && $continues)) {
-            $last = $this->ellipsize($text, $spans, $shaped[$maxLines - 1]['start'], $p, $style, $rtl);
+            [$from, $width] = [$shaped[$maxLines - 1]['start'], $p->width];
+            if ($from === 0 && $width > 0) { $width = max($width - $indent, 1.0); } // the first line, beside its indent
+            $last = $this->ellipsize($text, $spans, $from, $p, $width, $style, $rtl);
             $shaped = [...array_slice($shaped, 0, $maxLines - 1), $last];
             $truncated = true;
+        }
+        if ($hy !== null) {
+            foreach ($shaped as $k => $sl) {
+                $broken = !$truncated || $k < count($shaped) - 1;
+                $shaped[$k] = $hy->place($sl, $text, $broken && Hyphens::softBreak($sl, $text) >= 0, $rtl);
+            }
         }
         $first = count($l->lines);
         foreach ($shaped as $sl) {
@@ -234,6 +260,151 @@ final class System
             $l->lines[count($l->lines) - 1]->end = $end;
         }
         return $truncated;
+    }
+
+    /**
+     * Breaks $text, a paragraph without newlines, into lines of at most
+     * $width points (one line when 0), the first $indent narrower, and
+     * shapes them with the engine, which breaks at one width (mygo's
+     * breakLines). A line that breaks at a soft hyphen ends with a hyphen,
+     * for which an engine may leave no room: one that does not fit with
+     * it is broken again, narrower by the hyphen. What follows the
+     * indented line, or a line that broke elsewhere then, is broken anew:
+     * a paragraph without either is shaped once. $hy is null for a text
+     * without soft hyphens.
+     * @param list<int> $text
+     * @param list<Span> $spans
+     */
+    private function breakLines(array $text, Style $style, array $spans, float $width, float $indent, bool $rtl, bool $wholeWords, ?Hyphens $hy): array
+    {
+        $e = $this->engine;
+        if ($width <= 0) {
+            return $e->shape($text, $style, $spans, 0, $rtl, $wholeWords);
+        }
+        if ($indent <= 0 && $hy === null) {
+            return $e->shape($text, $style, $spans, $width, $rtl, $wholeWords);
+        }
+        $out = [];
+        $n = count($text);
+        for ($pos = 0; $pos < $n;) {
+            $first = $out === [] && $indent > 0;
+            $limit = $first ? max($width - $indent, 1.0) : $width;
+            $lines = $e->shape(array_slice($text, $pos), $style, Span::in($spans, $pos, $n), $limit, $rtl, $wholeWords);
+            if ($lines === []) {
+                break;
+            }
+            if ($first) {
+                $lines = array_slice($lines, 0, 1); // the lines after the first are for the width
+            }
+            $lines = self::offsetLines($lines, $pos);
+            foreach ($lines as $l) {
+                if (($c = Hyphens::softBreak($l, $text)) >= 0 && $hy !== null && $hy->lineWidth($l, $text, $c) > $limit + 1e-3) {
+                    $narrow = $e->shape(array_slice($text, $l['start'], $l['end'] - $l['start']), $style, Span::in($spans, $l['start'], $l['end']), max($limit - $hy->width($c), 1.0), $rtl, $wholeWords);
+                    if ($narrow !== [] && $narrow[0]['end'] !== $l['end'] - $l['start'] && $hy->opportunity($text, $l['start'] + $narrow[0]['end'])) {
+                        $out[] = self::offsetLines([$narrow[0]], $l['start'])[0];
+                        break;
+                    }
+                    // Nothing before fits but a part of a word: the hyphen overflows, as a word too long for a line does.
+                }
+                $out[] = $l;
+            }
+            $end = $out[count($out) - 1]['end'];
+            if ($end <= $pos) {
+                break;
+            }
+            $pos = $end;
+        }
+        return $out;
+    }
+
+    /** $lines an engine shaped from rune $offset of a paragraph, moved to their places in it (mygo's offsetLines). */
+    private static function offsetLines(array $lines, int $offset): array
+    {
+        if ($offset === 0) {
+            return $lines;
+        }
+        foreach ($lines as &$l) {
+            $l['start'] += $offset; $l['end'] += $offset;
+            foreach ($l['runs'] as &$r) {
+                $r['start'] += $offset; $r['end'] += $offset;
+                foreach ($r['glyphs'] as $g) {
+                    if ($g->cluster >= 0) { $g->cluster += $offset; }
+                }
+            }
+            unset($r);
+        }
+        unset($l);
+        return $lines;
+    }
+
+    /**
+     * Stretches $line, of a layout of $runes, to $width points, the
+     * whitespace ending it left out, widening its spaces between words
+     * and the room after its Han characters and kana but the last, by as
+     * much each (mygo's justifyLine). Returns the left of what it
+     * stretched, relative to the line, which whitespace ending a
+     * right-to-left line may be left of; null, leaving the line as it was,
+     * when it has nothing to widen or is that wide already.
+     * @param list<int> $runes
+     */
+    private static function justifyLine(Line $line, array $runes, float $width): ?float
+    {
+        $end = $line->end;
+        while ($end > $line->start && self::isSpace($runes[$end - 1])) { $end--; }
+        // The extent of each cluster of what stretches, by its first rune, and the glyph of each that widens, its rightmost.
+        $clusters = [];
+        $content = 0.0; $last = -1; $left = 1e30;
+        foreach ($line->glyphs as $i => $g) {
+            $c = $g->cluster - $line->start;
+            if ($c < 0 || $c >= $end - $line->start) {
+                continue;
+            }
+            $content += $g->advance;
+            $left = min($left, $g->x);
+            $last = max($last, $c);
+            if (!isset($clusters[$c])) {
+                $clusters[$c] = [$g->x, $g->x + $g->advance, $i];
+                continue;
+            }
+            $clusters[$c][0] = min($clusters[$c][0], $g->x);
+            if ($g->x + $g->advance >= $clusters[$c][1]) {
+                [$clusters[$c][1], $clusters[$c][2]] = [$g->x + $g->advance, $i];
+            }
+        }
+        $extra = $width - $content;
+        if ($extra <= 1e-3) {
+            return null;
+        }
+        $opps = []; // the middles of the clusters that widen
+        foreach ($clusters as $c => $cl) {
+            if ($c !== $last && self::stretches($runes[$line->start + $c])) { $opps[] = ($cl[0] + $cl[1]) / 2; }
+        }
+        if ($opps === []) {
+            return null;
+        }
+        $each = $extra / count($opps);
+        // Each glyph moves by the room the clusters left of it gain: a cluster right of the line's content, as whitespace ending it, moves too.
+        foreach ($line->glyphs as $g) {
+            $c = $g->cluster - $line->start;
+            $mid = isset($clusters[$c]) ? ($clusters[$c][0] + $clusters[$c][1]) / 2 : $g->x + $g->advance / 2;
+            $k = 0;
+            foreach ($opps as $o) { if ($o < $mid) { $k++; } }
+            $g->x += $each * $k;
+        }
+        foreach ($clusters as $c => $cl) {
+            if ($c !== $last && self::stretches($runes[$line->start + $c])) { $line->glyphs[$cl[2]]->advance += $each; }
+        }
+        $line->width += $extra; // no cluster that widens is left of the content's leftmost: it stays
+        return $left;
+    }
+
+    /** Whether justified lines widen the room after rune $r: a space between words, as CSS's word separators, or a Han character, kana or the punctuation written with them, which lines of Chinese and Japanese text take apart (mygo's stretches). */
+    private static function stretches(int $r): bool
+    {
+        if ($r === 0x20 || $r === 0xA0 || $r === 0x1361 || $r === 0x3000 || $r >= 0x3001 && $r <= 0x303F || $r >= 0xFF01 && $r <= 0xFF60) {
+            return true;
+        }
+        return $r >= 0x2E80 && preg_match('/^[\p{Han}\p{Hiragana}\p{Katakana}\p{Bopomofo}]$/u', (string)mb_chr($r, 'UTF-8')) === 1;
     }
 
     /**
@@ -279,11 +450,18 @@ final class System
                         continue;
                     }
                     $g->runes = max($nextOf[$g->cluster] - $g->cluster, 1);
-                    $o = self::objectAt($spans, $g->cluster);
-                    if ($o !== null) {
-                        // An inline object stands on the baseline, as high as it is, whatever font its run took.
-                        $g->object = true; $g->advance = $o->objectWidth; $g->id = 0;
-                        $line->ascent = max($line->ascent, $o->objectHeight);
+                    $sp = self::spanAt($spans, $g->cluster);
+                    if ($sp !== null) { // a span shifted off the baseline takes its glyphs and the room they need with it
+                        $shift = $sp->baselineShift;
+                        if ($sp->objectWidth > 0) { // an inline object stands on the baseline, as high as it is and as deep, whatever font its run took
+                            $g->object = true; $g->advance = $sp->objectWidth; $g->id = 0;
+                            $line->ascent = max($line->ascent, $sp->objectHeight + $shift);
+                            $line->descent = max($line->descent, $sp->objectDescent - $shift);
+                        } elseif ($shift != 0 && $g->font !== null) {
+                            $line->ascent = max($line->ascent, $g->font->ascent + $shift);
+                            $line->descent = max($line->descent, $g->font->descent - $shift);
+                        }
+                        $g->y -= $shift;
                     }
                     $g->cluster += $offset;
                 }
@@ -342,10 +520,10 @@ final class System
         if ($i >= $j) {
             return [];
         }
-        $style = $l->params->style;
+        $style = $l->params->style; $shift = 0.0;
         foreach ($l->params->spans as $sp) {
             if ($gs[$i]->cluster < $sp->end) {
-                $style = $sp->style($style);
+                [$style, $shift] = [$sp->style($style), $sp->baselineShift]; // the line of a span shifted off the baseline goes with it
                 break;
             }
         }
@@ -379,7 +557,7 @@ final class System
             }
             $pieces = self::cut($x0, $x1, $cuts, 0.75 * $th);
         }
-        $base = round(($y + $line->baseline) * $scale);
+        $base = round(($y + $line->baseline - $shift) * $scale);
         $top = $base + ($center - $th / 2) * $scale; $bottom = $base + ($center + $th / 2) * $scale;
         if ($thick > 0) {
             $h = max(round($thick * $scale), 1.0);
@@ -473,12 +651,12 @@ final class System
         return $out;
     }
 
-    /** @param list<Span> $spans */
-    private static function objectAt(array $spans, int $i): ?Span
+    /** The span of rune $i if it makes it an inline object or shifts it off the baseline, else null (mygo's spanAt). @param list<Span> $spans */
+    private static function spanAt(array $spans, int $i): ?Span
     {
         foreach ($spans as $sp) {
             if ($sp->end > $i) {
-                return $sp->objectWidth > 0 ? $sp : null;
+                return $sp->objectWidth > 0 || $sp->baselineShift != 0 ? $sp : null;
             }
         }
         return null;
@@ -486,18 +664,19 @@ final class System
 
     /**
      * The paragraph $text from rune $start on one line ending with an
-     * ellipsis: as many of its graphemes as fit the width with it.
+     * ellipsis: as many of its graphemes as fit $width with it (all of
+     * them for 0).
      *
      * @param list<int> $text
      * @param list<Span> $spans
      */
-    private function ellipsize(array $text, array $spans, int $start, Params $p, Style $style, bool $rtl): array
+    private function ellipsize(array $text, array $spans, int $start, Params $p, float $width, Style $style, bool $rtl): array
     {
         $rest = array_slice($text, $start);
         $restSpans = Span::in($spans, $start, count($text));
         $mark = System::runes($p->ellipsis !== '' ? $p->ellipsis : '…');
         $cut = count($rest);
-        if ($p->width > 0) {
+        if ($width > 0) {
             $key = $style->key() . "\0" . $p->ellipsis . "\0" . (int)$rtl;
             if (!isset($this->marks[$key])) {
                 $w = 0.0;
@@ -525,7 +704,7 @@ final class System
             while ($cut < count($rest)) {
                 $next = $b->nextGrapheme($cut);
                 $gw = array_sum(array_slice($advances, $cut, $next - $cut));
-                if ($w + $gw + $ellipsis > $p->width) {
+                if ($w + $gw + $ellipsis > $width) {
                     break;
                 }
                 $w += $gw;

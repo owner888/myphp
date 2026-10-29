@@ -215,7 +215,7 @@ trait ViewEdit
                     $e->replaceString($ps, $pe, '', new Attributes);
                     $e->formatParagraphs($ps, $ps, function (ParagraphStyle $s): void {
                         $indent = $s->indent;
-                        foreach (get_object_vars(new ParagraphStyle(codeBlock: true, indent: $indent)) as $k => $v) { $s->$k = $v; }
+                        foreach (get_object_vars(new ParagraphStyle(codeBlock: true, indent: $indent, id: $s->id)) as $k => $v) { $s->$k = $v; }
                     });
                     $e->select($ps, $ps);
                 });

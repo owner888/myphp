@@ -57,3 +57,31 @@ check($ow >= 39 && $ow <= 41 && $oh == 50 && $ox > 0 && $oy >= 0, 'its box: ' . 
 check($l->caret(2)[0] >= $ox + $ow - 1, 'the caret after it past its box');
 [, $nh] = TextLayout::shape($sys, [new Span('words words '), new Span('￼', objectWidth: 60, objectHeight: 20), new Span(' more')], $font, 14, 90)->size();
 check($nh >= 40, "narrow, $nh high: a line broke at the object");
+
+// An inline object reaching below the baseline (mygo's 610df69 TestTextObjectDescent): the line makes room for its descent, its box holds it; none, as before.
+$obj = fn(float $d) => [new Span('a'), new Span('￼', objectWidth: 30, objectHeight: 8, objectDescent: $d), new Span('b')];
+$zero = TextLayout::shape($sys, $obj(0), $font, 14);
+same(TextLayout::shape($sys, [new Span('a'), new Span('￼', objectWidth: 30, objectHeight: 8), new Span('b')], $font, 14)->size(), $zero->size(), 'a descent of none: as without one');
+$deep = TextLayout::shape($sys, $obj(40), $font, 14);
+[$zw, $zh] = $zero->size(); [$dw, $dh] = $deep->size();
+check($dw == $zw && $dh >= $zh + 30, "with a descent of 40: $dw × $dh, without $zw × $zh");
+[$zr, $r] = [$zero->objects()[0][1], $deep->objects()[0][1]];
+check($zr[3] == 8 && $r[3] == 48 && $r[2] == $zr[2], 'its box holds it: ' . json_encode([$zr, $r]));
+$caret = $deep->caret(0);
+check($r[1] + 8 >= $caret[1] && $r[1] + 8 <= $caret[1] + $caret[3], 'on the baseline its text stands on: ' . json_encode([$r, $caret]));
+check($r[1] >= 0 && $r[1] + $r[3] <= $dh + 0.01, 'inside the text');
+$narrow = TextLayout::shape($sys, [new Span('words words words '), new Span('￼', objectWidth: 30, objectHeight: 8, objectDescent: 40), new Span(' more')], $font, 14, 100);
+$nr = $narrow->objects()[0][1]; [, $nh] = $narrow->size();
+check($nr[1] >= $narrow->caret(0)[1] + $narrow->caret(0)[3] && $nr[1] + $nr[3] <= $nh + 0.01, 'wrapped, the second line holds it below the first');
+
+// A text's inline objects drawn after its glyphs, in their boxes, not those its clip hides (mygo's TestDrawObjects).
+$drawn = []; $o = new Span('￼', objectWidth: 20, objectHeight: 10, objectDescent: 6);
+$h = new Headless(function (Context $c) use (&$drawn, $o): void {
+    $c->column(0, 0)->size(300, 60)->clip();
+      $c->richText([new Span('ab'), $o, new Span(str_repeat("\n", 10) . 'far '), $o])->drawObjects(function (\MyPHP\UI\Painter $p, int $at, array $r) use (&$drawn) { $drawn[] = [$at, $r]; });
+    $c->end();
+}, 400, 400);
+$h->frame(); $drawn = []; $h->paint();
+same(1, count($drawn), 'the object the clip shows: ' . json_encode($drawn));
+same(2, $drawn[0][0], 'its rune in the text');
+same([20.0, 16.0], [$drawn[0][1][2], $drawn[0][1][3]], 'its box, its height and descent');

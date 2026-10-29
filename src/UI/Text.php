@@ -228,10 +228,17 @@ final class Text implements TextPainter
     {
         $b = $path->bounds();
         if ($b === null) { return []; }
-        $s = $this->ct->scale; $hw = max($width, 0) / 2;
+        $s = $this->ct->scale; $hw = $path->reach($width); // past half the width where square caps and miters reach
         $x0 = floor(($b[0] - $hw) * $s) / $s; $y0 = floor(($b[1] - $hw) * $s) / $s; // on the device grid
         $w = (int)ceil(($b[2] + $hw - $x0) * $s) + 1; $h = (int)ceil(($b[3] + $hw - $y0) * $s) + 1;
-        $key = 'p' . $hw;
+        $key = 'p' . max($width, 0) / 2;
+        if ($width > 0 && ($path->cap !== Path::CAP_ROUND || $path->join !== Path::JOIN_ROUND || $path->dash !== [])) {
+            $key .= "|$path->cap,$path->join," . ($path->join === Path::JOIN_MITER ? $path->miter : '') . '|' . implode(',', $path->dash);
+            if ($path->dash !== []) { // where each subpath starts in the dashes, within one pattern, to a quarter of a pixel: an offset going around it again draws the same masks
+                $total = array_sum($path->dash);
+                foreach ($path->phases ?? [0.0] as $ph) { $o = fmod($path->dashOffset + $ph, $total); $key .= '@' . (int)round(($o < 0 ? $o + $total : $o) * $s * 4); }
+            }
+        }
         foreach ($path->cmds as $c) {
             $key .= chr($c[0]);
             $n = match ($c[0]) { Path::MOVE, Path::LINE => 1, Path::QUAD => 2, Path::CUBE => 3, default => 0 };

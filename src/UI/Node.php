@@ -172,8 +172,8 @@ final class Node
     public bool $belowMaterials = false;
     /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
     public ?array $radii = null;
-    /** A gradient filling the node in place of its color (gradient, linearGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
-    public ?LinearGradient $gradient = null;
+    /** A gradient filling the node in place of its color (gradient, linearGradient, radialGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
+    public LinearGradient|RadialGradient|null $gradient = null;
     public ?array $stripes = null;
     /** Whether the border is solid or dashed (mygo's BorderStyle). */
     public BorderStyle $borderStyle = BorderStyle::Solid;
@@ -200,6 +200,8 @@ final class Node
     public bool $on = false;
     /** Drawn over the children (mygo's DrawOver): a list's drop line. */
     public ?\Closure $drawOver = null;
+    /** Paints the inline objects of a rich text (drawObjects): fn(Painter, int $at, array $box). */
+    public ?\Closure $drawObjects = null;
     /** clipMask's: the image whose coverage cuts the node and what is inside it, over its box (null: the box itself), and whether inverted. @var ?array{0: ?Image, 1: bool} */
     public ?array $clipMask = null;
 
@@ -507,6 +509,13 @@ final class Node
 
     /** Fills the node with $g, in place of its color (mygo's LinearGradient). */
     public function linearGradient(LinearGradient $g): static
+    {
+        $this->gradient = $g; $this->stripes = null;
+        return $this;
+    }
+
+    /** Fills the node with $g, its colors spreading out from a point, as a glow (mygo's RadialGradient, CSS's radial-gradient()), in place of its color. */
+    public function radialGradient(RadialGradient $g): static
     {
         $this->gradient = $g; $this->stripes = null;
         return $this;
@@ -1377,6 +1386,23 @@ final class Node
     public function drawOver(\Closure $fn): static
     {
         $this->drawOver = $fn;
+        return $this;
+    }
+
+    /**
+     * Paints the inline objects of this rich text (Span::$objectWidth)
+     * after its glyphs (mygo's DrawObjects): $fn(Painter $p, int $at,
+     * array $box) gets each one that shows, its rune in the text, and its
+     * box [x, y, w, h] in the window's points, its objectHeight above the
+     * baseline and its objectDescent below. It paints in the text's clip;
+     * it only paints, and may run more than once a frame.
+     *
+     *     $c->richText([new Span('area '), new Span("\u{FFFC}", objectWidth: $w, objectHeight: $h, objectDescent: $d)])
+     *         ->drawObjects(fn(Painter $p, int $at, array $r) => $formula->draw($p, $r));
+     */
+    public function drawObjects(\Closure $fn): static
+    {
+        $this->drawObjects = $fn;
         return $this;
     }
 

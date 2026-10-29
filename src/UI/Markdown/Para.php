@@ -15,6 +15,8 @@ final class Para
     /** @var list<array{0: int, 1: int, 2: int, 3: bool}> that the text from a rune comes from the source's bytes [src, end): exactly those bytes, else written otherwise there, as an entity or an escape (mygo's runMark) */
     public array $marks = [];
     public int $runes = 0;
+    /** @var list<array{0: int, 1: int, 2: int, 3: ?\Closure}> its math Options::$inlineMath made objects of, in order: the rune of each, where its source is, delimiters included [src, end), and how it draws (mygo's mathObject) */
+    public array $objects = [];
     /** Its spans fade in: built anew next frame. */
     public bool $fading = false;
     /** The width of its text on one line, once measured. */

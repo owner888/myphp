@@ -180,14 +180,19 @@ final class Metal
                              -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z));
     }
     float4 premul(float4 c) { return float4(c.rgb * c.a, c.a); }
-    // The premultiplied color at p of a plain color (0), a gradient from g.xy to g.zw mixed in sRGB (1) or Oklab (2), or stripes (3) of c1 over c2, g.xy across them, g.z wide every g.w.
+    // The premultiplied color at p of a plain color (0), a gradient from g.xy to g.zw mixed in sRGB (1) or Oklab (2), stripes (3) of c1 over c2, g.xy across them, g.z wide every g.w, or a radial gradient from g.xy out to a circle of radius g.z mixed in sRGB (4) or Oklab (5).
     float4 paintAt(float2 p, float mode, float4 c1, float4 c2, float4 g, float scale) {
         if (mode < 0.5) { return premul(c1); }
-        if (mode < 2.5) {
-            float2 d = g.zw - g.xy;
-            float t = saturate(dot(p - g.xy, d) / max(dot(d, d), 0.0001));
+        if (mode < 2.5 || mode > 3.5) {
+            float t;
+            if (mode < 2.5) {
+                float2 d = g.zw - g.xy;
+                t = saturate(dot(p - g.xy, d) / max(dot(d, d), 0.0001));
+            } else {
+                t = saturate(length(p - g.xy) / max(g.z, 0.0001));
+            }
             float a = mix(c1.a, c2.a, t);
-            if (mode < 1.5) { return float4(mix(c1.rgb * c1.a, c2.rgb * c2.a, t), a); }
+            if (mode < 1.5 || (mode > 3.5 && mode < 4.5)) { return float4(mix(c1.rgb * c1.a, c2.rgb * c2.a, t), a); }
             if (a <= 0.0) { return float4(0.0); }
             float3 lab = mix(oklab(c1.rgb) * c1.a, oklab(c2.rgb) * c2.a, t);
             return float4(saturate(fromOklab(lab / a)) * a, a);
@@ -246,17 +251,17 @@ final class Metal
         }
         return v;
     }
-    float4 box(V v, constant Uniforms& u, texture2d<float> atlas) {   // the slot after: radii (or, for a mask, its place in the glyph atlas), border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 4 when dashed + 8 for a mask, the paint's g
+    float4 box(V v, constant Uniforms& u, texture2d<float> atlas) {   // the slot after: radii (or, for a mask, its place in the glyph atlas), border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 8 when dashed + 16 for a mask, the paint's g
         constexpr sampler s(filter::linear);
         float scale = u.scale;
         float2 size = 2.0 * v.extent;
         float2 p = v.local + v.extent;
         float4 rad = v.r4;
         float flags = v.e4.w;
-        bool mask = flags > 7.5;   // a path's mask from the atlas, painted (Painter::fillPathGradient)
-        if (mask) { flags -= 8.0; }
+        bool mask = flags > 15.5;   // a path's mask from the atlas, painted (Painter::fillPathGradient)
+        if (mask) { flags -= 16.0; }
         float outer = mask ? atlas.sample(s, (rad.xy + p * u.atlasScale) / u.atlas).r : cover(sdBox(p, size, rad), scale);
-        float4 res = paintAt(p, flags > 3.5 ? flags - 4.0 : flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale) * outer;
+        float4 res = paintAt(p, flags > 7.5 ? flags - 8.0 : flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale) * outer;
         float4 bw = v.b4;
         if (!mask && any(bw > 0.0)) {
             float2 isz = size - bw.yz - bw.wx;
@@ -266,7 +271,7 @@ final class Metal
                 inner = cover(sdBox(p - bw.wx, isz, fitRadii(isz, ir)), scale);
             }
             float bc = saturate(outer - inner);
-            if (flags > 3.5) { bc *= dash(p, size, bw, scale); }
+            if (flags > 7.5) { bc *= dash(p, size, bw, scale); }
             float4 b = float4(unpackRGB(v.e4.x) * v.e4.z, v.e4.z) * bc;
             res = b + res * (1.0 - b.a);
         }
@@ -661,7 +666,7 @@ final class Metal
             self::$drawing[$key] = false;
             if (isset(self::$pace[$key])) { self::$pace[$key]['last'] = microtime(true); self::$pace[$key]['timing'] = false; }
             $list = $this->lists[$this->frame % self::RING];
-            $list->reset();
+            $list->reset(); $list->zoom = 1.0; // a view's draw zooms it (Context::setZoom); this ring's list was another's
             $draw($view, $list);
             $this->present($view, $list);
             (self::$afterPresent[$key] ?? null)?->__invoke();
@@ -830,11 +835,7 @@ final class Metal
         $this->drawn[ObjC::addr($view)] = $size;
         ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
         $list->showWide($this->useWide($view, $list)); // its wide colors, as its drawables show them
-        $bounds = ObjC::msg('r:', $view, 'bounds');
-        $this->uniforms[0] = $bounds->w;
-        $this->uniforms[1] = $bounds->h;
-        $window = ObjC::msg('p:', $view, 'window');
-        $this->uniforms[4] = $window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor');
+        $this->viewUniforms($view, $list);
         $key = ObjC::addr($view);
         $damage = self::$damage[$key] ??= new FrameDamage();
         if ($sync) { self::letGo($key); } // a new size: new drawables, drawn whole
@@ -928,14 +929,30 @@ final class Metal
                 ObjC::$c->cast("float[$xfloats]", ObjC::msg('p:', $xbuf, 'contents')), self::TRANSFORMS)];
         }
         [$buf, $xbuf, $list] = $this->offscreen;
-        $list->reset();
+        $list->reset(); $list->zoom = 1.0;
         $draw($view, $list);
         return $this->readBack($view, $list, [$buf, $xbuf]);
+    }
+
+    /**
+     * The uniforms of $view drawing $list: the viewport, in the list's
+     * points, and how many pixels one is: the window's backing scale, times
+     * the content's zoom (DisplayList::$zoom), its points that many of the
+     * view's (mygo's scene Zoom).
+     */
+    private function viewUniforms($view, DisplayList $list): void
+    {
+        $bounds = ObjC::msg('r:', $view, 'bounds');
+        $this->uniforms[0] = $bounds->w / $list->zoom;
+        $this->uniforms[1] = $bounds->h / $list->zoom;
+        $window = ObjC::msg('p:', $view, 'window');
+        $this->uniforms[4] = ($window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor')) * $list->zoom;
     }
 
     /** $list drawn on a texture of $view's drawable's size, read back. */
     private function readBack($view, DisplayList $list, array $buffers): array
     {
+        $this->viewUniforms($view, $list); // its own, not those of the view drawn last
         $ds = ObjC::msg('z:', $view, 'drawableSize');
         $pw = max(1, (int)$ds->w); $ph = max(1, (int)$ds->h);
         $list->showWide(false); // BGRA pixels: its sRGB colors

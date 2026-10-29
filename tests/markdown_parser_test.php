@@ -107,6 +107,44 @@ foreach ([
 }
 same("<p>a **b</p>\n<p>c <strong>d</strong></p>\n", mdStreamed("a **b\n\nc **d"), 'blocks already finished show as written');
 
+// Math a single dollar opens heals as it streams (Extensions::DOLLAR_MATH, mygo's 610df69 TestHealingDollarMath): its _ and * are TeX; money, escaped dollars and finished text as before.
+$dollar = function (string $src, bool $streaming = true): string {
+    $d = new Document(Extensions::DEFAULT | Extensions::DOLLAR_MATH);
+    $d->setStreaming($streaming);
+    $d->set($src);
+    return $d->html();
+};
+$inline = fn(string $tex) => '<span class="math inline">' . $tex . '</span>';
+foreach ([
+    ['where $x_i', '<p>where ' . $inline('x_i') . "</p>\n"],
+    ['where $a*b', '<p>where ' . $inline('a*b') . "</p>\n"],
+    ['where $x_i^2 + y_', '<p>where ' . $inline('x_i^2 + y_') . "</p>\n"],
+    ['where $\\frac{a}{b', '<p>where ' . $inline('\\frac{a}{b') . "</p>\n"],
+    ['where $x \\', '<p>where ' . $inline('x') . "</p>\n"],
+    ['where $x $', '<p>where ' . $inline('x') . "</p>\n"],
+    ['*see $x_i', '<p><em>see ' . $inline('x_i') . "</em></p>\n"],
+    ['**see $a_b', '<p><strong>see ' . $inline('a_b') . "</strong></p>\n"],
+    ['$a$ and $b_', '<p>' . $inline('a') . ' and ' . $inline('b_') . "</p>\n"],
+    ['see [link $x', '<p>see link ' . $inline('x') . "</p>\n"],
+    ['math $$x^2', "<p>math <span class=\"math display\">x^2</span></p>\n"],
+    ['math $$x_i *y', "<p>math <span class=\"math display\">x_i *y</span></p>\n"],
+    ['costs $5 and *more', '<p>costs $5 and <em>more</em></p>' . "\n"],
+    ['costs $ 5 and _more', '<p>costs $ 5 and <em>more</em></p>' . "\n"],
+    ['costs \\$x and *more', '<p>costs $x and <em>more</em></p>' . "\n"],
+    ['costs $', "<p>costs</p>\n"],
+    ['costs 5$', '<p>costs 5$</p>' . "\n"],
+] as [$src, $want]) {
+    same($want, $dollar($src), 'streaming ' . json_encode($src));
+}
+same('<p>where $x_i <em>y</em></p>' . "\n", mdStreamed('where $x_i *y'), 'without the extension, a dollar is text');
+foreach ([
+    ['where $x_i', '<p>where $x_i</p>' . "\n"],
+    ['where $a *b*', '<p>where $a <em>b</em></p>' . "\n"],
+    ['costs $5 and $x$', '<p>costs $5 and ' . $inline('x') . "</p>\n"],
+] as [$src, $want]) {
+    same($want, $dollar($src, false), 'finished ' . json_encode($src));
+}
+
 // A pending link.
 $d = new Document(Extensions::DEFAULT);
 $d->setStreaming(true);

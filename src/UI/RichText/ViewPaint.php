@@ -77,6 +77,7 @@ trait ViewPaint
             [$top, $size] = $this->thumbBox();
             $list->rect($r[0] + $r[2] - 8, $r[1] + $top, 5, $size, $th->text[0], $th->text[1] * 0.3, 2.5);
         }
+        $this->moved();
     }
 
     /** Paints what a paragraph of style $st shows behind its text: the background of a block of code, the bar of a quotation. */
@@ -98,6 +99,10 @@ trait ViewPaint
             $list->popClip();
         }
         if ($st->quote) {
+            if ($i === 0 || !$this->para($i - 1)->style->quote) { // the spacing above the first paragraph of a quotation is outside it
+                [$above] = $this->space($i, $st);
+                [$top, $height] = [$top + $above, $height - $above];
+            }
             $w = $th->quoteBarWidth;
             $list->rect($x + $indent, $top, $w, $height, $th->quoteBar[0], $th->quoteBar[1], $w / 2);
         }

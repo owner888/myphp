@@ -110,6 +110,7 @@ final class View implements TextInputClient
         }
         $v->opts = $options ?? new EditorOptions;
         $v->services = $rt;
+        $doc->shownIn = \WeakReference::create($v);
         $v->sys = $c->metrics()->textSystem();
         $v->setLook($t, $styled);
         $v->sync();
@@ -277,12 +278,42 @@ final class View implements TextInputClient
         return [$left, $right];
     }
 
-    /** The room above and below paragraph $p: a heading's margins, a block of code's padding at its ends. @return array{0: float, 1: float} */
+    /** Whether a paragraph of style $st is of the body's text, which Theme::$firstLineIndent and $paragraphSpacing set apart: not a heading, an item of a list or code (mygo's body). */
+    public static function body(ParagraphStyle $st): bool
+    {
+        return $st->heading === 0 && $st->list === ListKind::NoList && !$st->codeBlock;
+    }
+
+    /**
+     * How far the first line of paragraph $p goes in (mygo's firstLine): a
+     * body paragraph aligned at the start after another of the same
+     * quotation and level takes Theme::$firstLineIndent, as printed prose
+     * indents all but the first paragraph after a heading, a list, a
+     * centered scene break or an empty line. It looks at the paragraph
+     * before only.
+     */
+    public function firstLine(int $p, ParagraphStyle $st): float
+    {
+        $th = $this->look->theme;
+        if ($th->firstLineIndent <= 0 || $p === 0 || !self::body($st) || $st->align !== \MyPHP\Text\Params::START) {
+            return 0.0;
+        }
+        $prev = $this->para($p - 1);
+        $ps = $prev->style;
+        if ($prev->n === 0 || !self::body($ps) || $ps->align !== \MyPHP\Text\Params::START || $ps->quote !== $st->quote || $ps->indent !== $st->indent) {
+            return 0.0;
+        }
+        return $this->look->size * $th->firstLineIndent;
+    }
+
+    /** The room above and below paragraph $p: a heading's margins, a block of code's padding at its ends, the spacing between body paragraphs, above the second. @return array{0: float, 1: float} */
     public function space(int $p, ParagraphStyle $st): array
     {
         $look = $this->look;
         $above = $below = 0.0;
-        if ($st->heading > 0) {
+        if (self::body($st)) {
+            if ($look->theme->paragraphSpacing > 0 && $p > 0 && self::body($this->para($p - 1)->style)) { $above = $look->size * $look->theme->paragraphSpacing; }
+        } elseif ($st->heading > 0) {
             $h = $look->heading($st->heading);
             if ($p > 0) { $above = $look->size * $h->size * $h->top; }
             $below = $look->size * $h->bottom;
@@ -305,8 +336,9 @@ final class View implements TextInputClient
         if ($this->compose !== '' && $this->shown->paraAt($this->caret) === $p) {
             $compose = $this->compose; $at = $this->caret - $this->shown->paraStart($p);
         }
-        if ($pv->layout !== null && $pv->para === $para && $pv->compose === $compose && $pv->at === $at) {
-            // The space around it follows its neighbours, which may have changed without it: a code block's last line, the first heading.
+        $indent = $this->firstLine($p, $para->style);
+        if ($pv->layout !== null && $pv->para === $para && $pv->compose === $compose && $pv->at === $at && $pv->indent == $indent) {
+            // The space around it follows its neighbours, which may have changed without it: a code block's last line, the first heading, a body paragraph after one that became a heading.
             [$above, $below] = $this->space($p, $para->style);
             if ($above + $below != $pv->space) {
                 $h = $pv->h - $pv->space + $above + $below;
@@ -344,7 +376,7 @@ final class View implements TextInputClient
         }
         if ($pending !== '') { $spans[] = $this->look->span($pending, $typing, $para->style); }
         [$family, $size, $weight] = $this->paraFont($para->style);
-        $l = ParaLayout::shape($this->sys, $spans, $family, $size, $weight, $this->look->width, $para->style->align);
+        $l = ParaLayout::shape($this->sys, $spans, $family, $size, $weight, $this->look->width, $para->style->align, $indent);
         [$above, $below] = $this->space($p, $para->style);
         [, $lh] = $l->size();
         $h = $above + $lh + $below;
@@ -354,7 +386,7 @@ final class View implements TextInputClient
         } else {
             $this->hs->add($p, $h, -1);
         }
-        $pv->layout = $l; $pv->para = $para; $pv->compose = $compose; $pv->at = $at; $pv->h = $h; $pv->space = $above + $below;
+        $pv->layout = $l; $pv->para = $para; $pv->compose = $compose; $pv->at = $at; $pv->h = $h; $pv->space = $above + $below; $pv->indent = $indent;
         $pv->marker = ''; $pv->markerLayout = null;
         return $pv;
     }
@@ -511,6 +543,40 @@ final class View implements TextInputClient
             if ($y >= $this->scroll + $h) { break; }
         }
         $this->last = min($p, $n - 1);
+    }
+
+    /** @internal Document::visibleParagraphs: the boxes of the paragraphs in view, laid out at the editor's size. @return list<ParagraphBox> */
+    public function visibleBoxes(): array
+    {
+        $this->sync();
+        $this->layout($this->width, $this->viewH);
+        return $this->boxes();
+    }
+
+    /** The boxes of the paragraphs in view (mygo's boxes). @return list<ParagraphBox> */
+    private function boxes(): array
+    {
+        $out = [];
+        for ($i = $this->first; $i <= $this->last && $i < count($this->paras); $i++) {
+            $pv = $this->paraLayout($i);
+            [, $y] = $this->origin($i);
+            $out[] = new ParagraphBox($i, $this->shown->paraStart($i), $this->padY + $y - $this->scroll, $pv->h - $pv->space);
+        }
+        return $out;
+    }
+
+    /** Asks for another frame when the app read the paragraphs in view and they are no longer where it read them, as painting placed them otherwise: the frame after builds the app's view with them again (mygo's moved). */
+    public function moved(): void
+    {
+        $d = $this->doc;
+        [$read, $was] = [$d->read, $d->boxes];
+        $d->read = false;
+        if (!$read) {
+            return;
+        }
+        if ($this->boxes() != $was && $this->services !== null) {
+            $this->services->needsFrame = true; // painted after the frame was built: the window draws another
+        }
     }
 
     /** Drops the layouts of the paragraphs far from view, keeping their heights. */

@@ -996,15 +996,16 @@ final class App
     }
 
     /**
-     * A window's display changed: glyphs are rasterized at the largest
-     * backing scale among the open windows (a window on a lesser display
+     * A window's display changed, or its content's zoom (Context::setZoom):
+     * glyphs are rasterized at the largest backing scale times zoom among
+     * the open windows (a window on a lesser display, or less zoomed,
      * samples them down), so a change there remakes the atlas.
      */
     public static function rescale(): void
     {
         $scale = 1.0;
         foreach (Window::all() as $w) {
-            $scale = max($scale, ObjC::msg('d:', $w->nativeHandle(), 'backingScaleFactor'));
+            $scale = max($scale, ObjC::msg('d:', $w->nativeHandle(), 'backingScaleFactor') * $w->contentZoom());
         }
         if ($scale === self::$scale) {
             return;

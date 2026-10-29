@@ -7,8 +7,8 @@ use MyPHP\UI\Theme as UITheme;
 
 /**
  * How the editor's text looks (mygo's richtext.Theme): its colors, the
- * font of code, the styles of headings, and the room of lists, quotations
- * and blocks of code. What it leaves unset (0, '' or null) takes the value
+ * font of code, the styles of headings, and the room of paragraphs, lists,
+ * quotations and blocks of code. What it leaves unset (0, '' or null) takes the value
  * of defaultTheme() for the window's theme, so that a theme sets only what
  * it changes:
  *
@@ -63,6 +63,18 @@ final class Theme
         public float $quoteBarWidth = 0,
         /** The room around the text of an editor, in points across and down: the window theme's space(3) and space(2.5). An editorBase() has none, its room the app's. */
         public array $padding = [0, 0],
+        /**
+         * Indents the first line of a body paragraph by that many ems, as
+         * printed prose sets paragraphs apart (about 1.2), but for the first
+         * after a heading, a list, a block of code, a paragraph aligned
+         * otherwise (a centered scene break) or an empty one, or the first of
+         * a quotation, which nothing needs to set apart: 0, none. Only
+         * paragraphs aligned at the start take it. The indent is no
+         * character: the caret, selection, clicks and arrow keys skip it.
+         */
+        public float $firstLineIndent = 0,
+        /** The room between two body paragraphs, in ems, as prose on screens sets paragraphs apart instead: 0, none. A body paragraph is one that is not a heading, an item of a list or code. */
+        public float $paragraphSpacing = 0,
     ) {
         $this->headings = $headings;
     }
@@ -89,7 +101,8 @@ final class Theme
 
     /**
      * $th with what it leaves unset taken from $def; the colors that default
-     * to others of $th take those (mygo's resolve).
+     * to others of $th take those (mygo's resolve). $firstLineIndent and
+     * $paragraphSpacing are none by default, as 0.
      *
      * @internal
      */

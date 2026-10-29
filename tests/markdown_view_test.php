@@ -247,3 +247,50 @@ same(['box.svg'], $asked, 'the image is loaded once');
 same(1, $redrawn, 'the window is asked to draw again once it loaded');
 $h->frame();
 check(!$hasText($h, 'a red box'), 'the image shows in place of its description');
+
+// Math within text drawn by the app (Options::$inlineMath, mygo's 610df69 math_test.go): objects in links and strong text too, as TeX where it makes none; copied as its source.
+$math = new class {
+    public array $asked = [], $sizes = [], $drawn = [];
+    public function options(): Options
+    {
+        return new Options(extensions: \MyPHP\UI\Markdown\Parser\Extensions::DEFAULT | \MyPHP\UI\Markdown\Parser\Extensions::DOLLAR_MATH, inlineMath: function (string $tex, float $size) {
+            $this->asked[] = $tex; $this->sizes[] = $size;
+            return $tex === 'bad' ? null : new \MyPHP\UI\Markdown\InlineObject(20, 10, 6, function (\MyPHP\UI\Painter $p, array $r) use ($tex) { $this->drawn[$tex] = $r; });
+        });
+    }
+};
+$mv = function (string $src, Options $o) {
+    $root = null;
+    $h = new Headless(function (Context $c) use ($src, $o, &$root) { $root = Markdown::view($c, $src, $o); }, 700, 3000);
+    $h->frame(); $h->paint();
+    return [$h, $h->rt->local($root->id, fn() => null)];
+};
+[$h, $st] = $mv("Let \$x_i\$ be **big \$y\$**, [see \$z\$](https://go.dev) and \$bad\$ or \\(w\\).\n\n# Head \$h\$\n", $math->options());
+same('Let ￼ be big ￼, see ￼ and bad or ￼.', $paraText($st, 1), 'math as objects, and as TeX where none is made');
+foreach (['x_i', 'y', 'z', 'w', 'h'] as $tex) {
+    $r = $math->drawn[$tex] ?? null;
+    check($r !== null && $r[2] == 20 && $r[3] == 16, "$tex drawn in its box: " . json_encode($r));
+}
+check(!isset($math->drawn['bad']) && in_array('bad', $h->texts(), true) === false && str_contains(implode('', $h->texts()), 'bad'), 'bad shown as TeX');
+foreach ($math->asked as $k => $tex) {
+    check($tex === 'h' ? $math->sizes[$k] > $st->th->fontSize : $math->sizes[$k] == $st->th->fontSize, "$tex asked at {$math->sizes[$k]}, the size of the text around it");
+}
+same($math->drawn['x_i'][1], $math->drawn['y'][1], 'on the baseline of their line');
+
+$math = new $math();
+[, $st] = $mv("Let \$x_i\$ be **big \$y\$** or \\(w\\) — café.\n", $math->options());
+$text = $paraText($st, 1); $k = $elemOf($st, 1);
+same('Let $x_i$ be big $y$ or \(w\) — café.', $st->copyText([$part($k, $text, 0, mb_strlen($text))]), 'copied whole, the math as its source');
+foreach ([[4, 7, '$x_i$ b', '$x_i$ b'], [2, 5, 't $x_i$', 't $x_i$'], [4, 5, '$x_i$', '$x_i$'], [9, 19, 'big $y$ or \(w\)', '**big $y$** or \(w\)']] as [$from, $to, $plain, $md]) {
+    same($plain, $st->copyText([$part($k, $text, $from, $to)]), "runes $from to $to copied");
+    same($md, $st->copyMarkdown([$part($k, $text, $from, $to)]), "and as Markdown");
+}
+
+$math = new $math(); $o = $math->options(); $o->reveal = new Reveal(RevealUnit::AtOnce, fade: -1);
+$h = new Headless(function (Context $c) use ($o) { Markdown::stream($c, 'Costs $5, so $x_i', $o); }, 600, 400);
+$h->frame();
+check(end($math->asked) === 'x_i' && !str_contains(implode(' ', $math->asked), '5'), 'streaming, math a dollar leaves open asked for, healed; money as text: ' . json_encode($math->asked));
+check(in_array('Costs $5, so ￼', $h->texts(), true), 'shows ' . json_encode($h->texts(), JSON_UNESCAPED_UNICODE));
+
+[, $st] = $mv("Let \$x_i\$ be.\n", new Options(extensions: \MyPHP\UI\Markdown\Parser\Extensions::DEFAULT | \MyPHP\UI\Markdown\Parser\Extensions::DOLLAR_MATH));
+same('Let x_i be.', $paraText($st, 1), 'without inlineMath, math as TeX');

@@ -126,6 +126,9 @@ $l = $h->paint();
 $alpha = null;
 for ($i = 0; $i < $l->n; $i++) { if (fmod($l->buf[$i * 16 + 9], 16) == 1) { $alpha = round($l->buf[$i * 16 + 7], 3); } }
 same(0.256, $alpha, 'a stroke a point long and 4 wide at about a quarter');
+$p->cap(Path::CAP_BUTT); $h->frame(); $l = $h->paint(); $alpha = null;
+for ($i = 0; $i < $l->n; $i++) { if (fmod($l->buf[$i * 16 + 9], 16) == 1) { $alpha = round($l->buf[$i * 16 + 7], 3); } }
+same(1.0, $alpha, 'with butt caps, which show no dot, it does not fade');
 
 // A scroll column keeps its offset while it shows.
 $h = new Headless(function (Context $c) {

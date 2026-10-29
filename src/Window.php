@@ -72,6 +72,8 @@ final class Window
     private ?array $legacy = null;
     private array $blackOuts = [];
     private ?float $aspectAsked = null;
+    /** The content's zoom the last frame drew (Context::setZoom): App::rescale rasterizes glyphs at the screen's scale times it. */
+    private float $zoomDrawn = 1.0;
     /** The compact size the view asked for (a player's music mode): [width, height, least height, most height (0 none)], null for none; and what the window was before it, to go back to. */
     private ?array $compactAsked = null, $beforeCompact = null;
     /** Whether the view asked the window to float on top (a player's pin, IINA's), null before it asked. */
@@ -424,23 +426,31 @@ final class Window
                 $this->runtime->fullScreen = $this->isFullScreen();
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
                     $in?->startPass();
-                    $c = new Context($text, $this->runtime, $in?->contentWidth($bounds->w) ?? $bounds->w, $bounds->h, App::theme(), App::scale());
-                    $c->titleBar = $this->titleBar();
+                    $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
+                    [$w, $h] = [$bounds->w / $z, $bounds->h / $z];
+                    $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
+                    $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
                     $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
                     ($content->view)($c);
                     $c->toasts(); // over everything the view built
-                    if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $bounds->w, $bounds->h); $in->lap(0); } // beside the content
+                    if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content
                     $this->frameStats?->lap(UI\FrameStats::BUILD);
-                    Layout::layout($c, $bounds->w, $bounds->h);
+                    Layout::layout($c, $w, $h);
                     $this->frameStats?->lap(UI\FrameStats::LAYOUT);
                     if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->runtime, $c->root); }
                     return $c->root;
                 });
-                $paint = function () use ($root, $list, $text, $bounds, $in): void {
+                $z = $this->runtime->frameZoom;
+                if ($z !== $this->zoomDrawn) { // glyphs rasterized at the screen's scale times the zoom: as sharp as at that size
+                    $this->zoomDrawn = $z;
+                    App::rescale();
+                }
+                $list->zoom = $z; // drawn at the window's scale times it, in a viewport 1/z the window's
+                $paint = function () use ($root, $list, $text, $bounds, $in, $z): void {
                     $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
-                    $list->pushClip(0, 0, $bounds->w, $bounds->h); // what lies outside the window is not painted (mygo's visible)
+                    $list->pushClip(0, 0, $bounds->w / $z, $bounds->h / $z); // what lies outside the window is not painted (mygo's visible)
                     Painter::paint($root, $list, $text, App::theme(), $this->runtime);
-                    if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h); }
+                    if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h / $z); }
                     Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
                     Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
                 };
@@ -551,6 +561,12 @@ final class Window
         }
         $down = View::lastDown($this->view);
         if ($down !== null && !(ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) { Native\WindowDrag::startDrag($this->ns, $down); } // the window server, or myphp after a quick drag (Native\WindowDrag)
+    }
+
+    /** The zoom of the window's content its last frame drew (Context::setZoom), 1 for none. @internal App::rescale */
+    public function contentZoom(): float
+    {
+        return $this->zoomDrawn;
     }
 
     /** The web page the window shows, or null for a window showing native UI (mygo's Page). */
@@ -1811,7 +1827,7 @@ final class Window
         }
         $v = new WebView($this, $this->container, $this->view, $o);
         $this->webViews[] = $v;
-        View::$passThrough[ObjC::addr($this->view)] = fn(float $x, float $y): bool => $this->runtime->webViewAt($x, $y) !== null;
+        View::$passThrough[ObjC::addr($this->view)] = fn(float $x, float $y): bool => $this->runtime->webViewAt($x / $this->runtime->frameZoom, $y / $this->runtime->frameZoom) !== null; // the content's points
         $this->invalidate();
         return $v;
     }
@@ -1843,9 +1859,10 @@ final class Window
         $view = App::metal()->createView(ObjC::rect(0, 0, $b->w, $b->h), function ($view, DisplayList $list) use ($text): void {
             $bounds = ObjC::msg('r:', $view, 'bounds');
             $list->pathQuad ??= $text->pathQuad(...);
+            $list->zoom = $this->runtime->frameZoom; // as the window's content
             $paint = function () use ($list, $text, $bounds): void {
                 $plain = $list->world();
-                $list->pushClip(0, 0, $bounds->w, $bounds->h);
+                $list->pushClip(0, 0, $bounds->w / $list->zoom, $bounds->h / $list->zoom);
                 $this->runtime->paintingUnder = true;
                 try {
                     foreach ($this->runtime->underPaints as $u) {
@@ -1919,7 +1936,7 @@ final class Window
         $shown = [];
         foreach ($this->webViews as $v) {
             $p = $places[spl_object_id($v)] ?? null;
-            $v->place($p['frame'] ?? null, $p['clip'] ?? null, $height);
+            $v->place($p === null ? null : $this->runtime->windowRect($p['frame']), $p === null ? null : $this->runtime->windowRect($p['clip']), $height); // in the window's points: zoomed, the content's times the zoom
         }
         foreach ($places as $p) {
             if (in_array($p['view'], $this->webViews, true)) { $shown[] = $p['view']; }
@@ -1989,8 +2006,8 @@ final class Window
                 ObjC::msg('v:b', $clip, 'setHidden:', true);
                 continue;
             }
-            [$cx, $cy, $cw, $ch] = $p['clip'];
-            [$fx, $fy, $fw, $fh] = $p['frame'];
+            [$cx, $cy, $cw, $ch] = $this->runtime->windowRect($p['clip']);
+            [$fx, $fy, $fw, $fh] = $this->runtime->windowRect($p['frame']);
             // A video across the window, or down it, stretches with it as AppKit resizes the window (the full screen's animation, a live resize), before
             // the next frame places it: the picture goes with the window, as a player's view does; elsewhere it keeps its distance to the top.
             $wide = $cx <= 0 && $cx + $cw >= $width; $tall = $cy <= 0 && $cy + $ch >= $height;
@@ -2054,14 +2071,14 @@ final class Window
                 $added = true;
             }
             $v = $m['view'];
-            [$cx, $cy, $cw, $ch] = $p['clip'];
+            [$cx, $cy, $cw, $ch] = $this->runtime->windowRect($p['clip']);
             ObjC::msg('v:r', $v, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
             $appearance = $p['dark'] === null ? null : ObjC::msg('p:p', ObjC::cls('NSAppearance'), 'appearanceNamed:', ObjC::str($p['dark'] ? 'NSAppearanceNameDarkAqua' : 'NSAppearanceNameAqua'));
             ObjC::msg('v:p', $v, 'setAppearance:', $appearance);
             if ($glass) {
-                ObjC::msg('v:d', $v, 'setCornerRadius:', $p['radius']);
+                ObjC::msg('v:d', $v, 'setCornerRadius:', $p['radius'] * $this->runtime->frameZoom);
             } else {
-                ObjC::msg('v:d', ObjC::msg('p:', $v, 'layer'), 'setCornerRadius:', $p['radius']);
+                ObjC::msg('v:d', ObjC::msg('p:', $v, 'layer'), 'setCornerRadius:', $p['radius'] * $this->runtime->frameZoom);
             }
             ObjC::msg('v:d', $v, 'setAlphaValue:', $p['alpha']); // the node's opacity: a material fades with it
             $shown[$id] = true;
@@ -2578,11 +2595,12 @@ final class Window
     {
         DataDrag::resolve($d);
         $rt = $this->runtime;
+        [$cx, $cy] = [$x / $rt->frameZoom, $y / $rt->frameZoom]; // the content's points (Context::setZoom); the 'fileDrop' listeners take the window's
         if ($kind === 'leave') {
             $rt->clearDataOver();
             $taken = false;
         } else {
-            $taken = $kind === 'over' ? $rt->dataDragOver($x, $y, $d) : $rt->dataDrop($x, $y, $d);
+            $taken = $kind === 'over' ? $rt->dataDragOver($cx, $cy, $d) : $rt->dataDrop($cx, $cy, $d);
         }
         if ($taken) {
             return true;
@@ -2615,10 +2633,11 @@ final class Window
     private function fileEvent(string $kind, float $x, float $y, array $paths): bool
     {
         $listeners = $this->listeners['fileDrop'] ?? [];
+        $z = $this->runtime->frameZoom;
         if ($kind === 'over') {
-            return $this->runtime->fileDrag($x, $y) || $listeners !== [];
+            return $this->runtime->fileDrag($x / $z, $y / $z) || $listeners !== [];
         }
-        if ($this->runtime->fileDrop($x, $y, $paths)) {
+        if ($this->runtime->fileDrop($x / $z, $y / $z, $paths)) {
             return true;
         }
         if ($listeners === []) {

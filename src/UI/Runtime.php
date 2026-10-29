@@ -50,6 +50,10 @@ final class Runtime
     private array $doubleClicks = []; // [x, y] of second presses this frame
     private bool $consumed = false;
     public int $passes = 0;
+    /** The zooms setZoom takes; others are clamped to them (mygo's minZoom, maxZoom). */
+    public const MIN_ZOOM = 0.25, MAX_ZOOM = 5.0;
+    /** The content's zoom (Context::setZoom), 1 for none; and the one the frame being built, or the last, was laid out at, which the window draws and maps the pointer by. @internal Window: $frameZoom */
+    public float $zoom = 1.0, $frameZoom = 1.0;
     /** The theme's scroll bar width, for hit-testing thumbs; Window sets it. */
     public float $scrollbarWidth = 6;
     /** Opens a URL with the system, throwing when none opens it; App sets it (Shell::openExternal). Links and Context::openURL reach it through openURLThen. */
@@ -615,6 +619,7 @@ final class Runtime
             $this->uses = [];
             $this->actions = [];
             if (isset($root)) { self::detach($root, $this->frameNumber); } // the pass before's tree, which this one replaces
+            $this->frameZoom = $this->zoom; // the size the pass builds at: a zoom set in the one before builds again (setZoom)
             $root = $build();
             if ($this->enterToggle !== null) { // Enter at a toggle no shortcut took presses it
                 foreach ($this->keys as $i => $k) {
@@ -639,6 +644,7 @@ final class Runtime
             $this->dropped = []; $this->dataDropped = []; $this->filesDropped = [];
         }
         $this->building = false;
+        $this->input->zoom = $this->frameZoom; // the pointer hits what the frame shows
         $this->commitFocusBindings();
         $this->revealIDs = []; // the frame's last pass showed them
         $this->resolveMenu();
@@ -717,7 +723,8 @@ final class Runtime
             foreach ($this->focusables as $id) { if ($this->reachable($id)) { $into = $id; break; } }
             $this->focus = $into;
         }
-        $this->needsFrame = $this->needsFrame || $keyScrolled || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
+        $this->needsFrame = $this->needsFrame || $this->zoom !== $this->frameZoom // zoomed in the last pass: built at the new size in the next frame
+            || $keyScrolled || $this->animating || ($this->hold[4] ?? false) // a held stepper keeps stepping
             || ($this->inspector?->stale() ?? false); // the inspector shows the nodes of this frame in the next
         $this->showTip();
         foreach ($this->overlayIds as $id => $_) { // an overlay born this frame notes who had the focus
@@ -1012,7 +1019,7 @@ final class Runtime
             $this->changed();
             if ($o->done !== null) { ($o->done)($r); }
         };
-        $error = ($this->startDataDrag)($make(), $this->valueDrag['value'], new DragOptions($o->operations, $preview, $hotspot, $done), $x, $y);
+        $error = ($this->startDataDrag)($make(), $this->valueDrag['value'], new DragOptions($o->operations, $preview, $hotspot, $done), $x * $this->frameZoom, $y * $this->frameZoom); // under the pointer, in the window's points
         if ($error !== null) {
             $done(new Result(error: $error));
         }
@@ -1028,13 +1035,14 @@ final class Runtime
      */
     private function dataPreview(int $id, float $lx, float $ly): array
     {
-        [$vx, $vy, $vw, $vh] = $this->visible[$id] ?? [0.0, 0.0, 0.0, 0.0];
+        [$vx, $vy, $vw, $vh] = $this->windowRect($this->visible[$id] ?? [0.0, 0.0, 0.0, 0.0]); // the window's points: as large as the zoom shows it
         $w = min((int)$vw, 512); $h = min((int)$vh, 512);
         if ($w <= 0 || $h <= 0) {
             return [null, [0, 0]];
         }
         $r = $this->rects[$id];
         [$x, $y] = ($this->worlds[$id] ?? Affine::identity())->point($r[0] + $lx, $r[1] + $ly);
+        [$x, $y] = [$x * $this->frameZoom, $y * $this->frameZoom];
         return [($this->snapshot)($vx, $vy, $w, $h), [min(max((int)($x - $vx), 0), $w - 1), min(max((int)($y - $vy), 0), $h - 1)]];
     }
 
@@ -1618,6 +1626,29 @@ final class Runtime
     public function askWindow(string $what, mixed $value): void
     {
         $this->windowAsks[$what] = $value;
+    }
+
+    /**
+     * Zooms the window's content by $z (Context::setZoom, mygo's SetZoom):
+     * NaN or none is 1, others clamped to MIN_ZOOM to MAX_ZOOM. The frame
+     * being built is of the old zoom: another pass builds it at the new
+     * size, or the next frame when this is its last.
+     */
+    public function setZoom(float $z): void
+    {
+        $z = is_nan($z) || $z <= 0 ? 1.0 : min(max($z, self::MIN_ZOOM), self::MAX_ZOOM);
+        if ($z === $this->zoom) {
+            return;
+        }
+        $this->zoom = $z;
+        $this->changed();
+    }
+
+    /** A rectangle of the content, as the frame shows it, in the window's points: zoomed (setZoom), $frameZoom times it. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */
+    public function windowRect(array $r): array
+    {
+        $z = $this->frameZoom;
+        return $z === 1.0 ? $r : [$r[0] * $z, $r[1] * $z, $r[2] * $z, $r[3] * $z];
     }
 
     /** Shows a change of the state the view shows (a router's page): another pass of the frame being built, else a frame. */

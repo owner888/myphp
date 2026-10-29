@@ -387,11 +387,11 @@ final class Context
         return $this->shapeRichText([new Span($s)], $width, $font);
     }
 
-    /** $spans shaped as shapeText does, aligned by $align (Node::START, CENTER, END) in the direction of what is built now (mygo's ShapeRichText, ShapeRichTextWith). @param list<Span> $spans */
-    public function shapeRichText(array $spans, float $width = 0, ?TextStyle $font = null, int $align = Node::START): TextLayout
+    /** $spans shaped as shapeText does, aligned by $align (Node::START, CENTER, END) in the direction of what is built now, justified, indented or broken between words alone as TextLayout::shape says (mygo's ShapeRichText, ShapeRichTextWith). @param list<Span> $spans */
+    public function shapeRichText(array $spans, float $width = 0, ?TextStyle $font = null, int $align = Node::START, bool $justify = false, float $indent = 0, bool $noBreakWords = false): TextLayout
     {
         $style = ($font ?? new TextStyle())->over($this->inheritedText());
-        return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, $this->stack[count($this->stack) - 1]->rtl);
+        return TextLayout::shape($this->metrics->textSystem(), $spans, $style, $this->theme->fontSize, $width, $align, $this->stack[count($this->stack) - 1]->rtl, $justify, $indent, $noBreakWords);
     }
 
     /**
@@ -521,6 +521,32 @@ final class Context
     public function size(): array
     {
         return [$this->width, $this->height];
+    }
+
+    /**
+     * Zooms the window's content by $z, as a browser zooms a page (mygo's
+     * SetZoom): the view is laid out in a window 1/z its size and shown z
+     * times larger, drawn at the screen's resolution times z, so that text,
+     * icons, vectors and images stay as sharp as at that size natively,
+     * not a picture of the window scaled up (as Node::scale's transform
+     * draws). 1 shows it at its size; the zoom stays until set again, and
+     * is clamped to between 0.25 and 5. A frame that sets another builds
+     * again at the new size before it shows. What the view sees is zoomed:
+     * size(), titleBar() and every length are in the content's points, z
+     * of them to the window's; the pointer, input methods, accessibility,
+     * context menus, drags, web views, videos and materials follow it.
+     *
+     *     $c->setZoom($app->zoom); // 1.25 for 125%
+     */
+    public function setZoom(float $z): void
+    {
+        $this->runtime?->setZoom($z);
+    }
+
+    /** The zoom setZoom set, 1 for none (mygo's Zoom). */
+    public function zoom(): float
+    {
+        return $this->runtime?->zoom ?? 1.0;
     }
 
     /** Asks for a frame $seconds from now, for what changes then (mygo's After). */

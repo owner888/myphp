@@ -52,7 +52,7 @@ final class Text
 
     /**
      * A Text of paragraphs (mygo's TextOf). A newline in a run starts
-     * another paragraph of the same style.
+     * another paragraph of the same style, without its ID.
      *
      *     Text::of(
      *         new Paragraph(new ParagraphStyle(heading: 1), [new Run('Groceries')]),
@@ -68,22 +68,24 @@ final class Text
             $line = '';
             $runs = [];
             $last = new Attributes;
+            $style = null; // the paragraph's, with its ID, until a newline starts another
             foreach ($p->runs as $r) {
                 $last = $r->attributes;
                 $parts = explode("\n", $r->text);
                 foreach ($parts as $k => $part) {
                     if ($k > 0) {
                         $lines[] = $line;
-                        $paras[] = RichPara::new($p->style, RichPara::appendRun($runs, 1, $r->attributes->extending()));
+                        $paras[] = RichPara::new($style ?? $p->style, RichPara::appendRun($runs, 1, $r->attributes->extending()));
                         $line = '';
                         $runs = [];
+                        $style = $p->style->withID('');
                     }
                     $line .= $part;
                     $runs = RichPara::appendRuns($runs, $part, $r->attributes);
                 }
             }
             $lines[] = $line;
-            $paras[] = RichPara::new($p->style, RichPara::appendRun($runs, 1, $last->extending()));
+            $paras[] = RichPara::new($style ?? $p->style, RichPara::appendRun($runs, 1, $last->extending()));
         }
         return new Text(Rope::build(implode("\n", $lines)), Seq::build($paras));
     }
@@ -278,16 +280,18 @@ final class Text
             } elseif ($f->n > 0) {
                 $style = $f->style;
             }
+            $style = $style->withID($headN > 0 || $f->n > 0 ? $first->style->id : $last->style->id); // joined, the first's, unless nothing of it is left
             $out[] = new RichPara($first->id, $style, $headN + $f->n + $tailN, $runs);
         } else {
+            $moved = $pa === $pz && $headN === 0; // split at its start, the paragraph's text goes to the last part, with its ID
             $f = $frag[0];
-            $style = $headN > 0 ? $first->style : $f->style;
+            $style = ($headN > 0 ? $first->style : $f->style)->withID($moved ? '' : $first->style->id);
             $out[] = new RichPara($first->id, $style, $headN + $f->n, RichPara::cutRuns($head, $f->runs, 0, $f->n + 1));
             for ($k = 1, $m = count($frag) - 1; $k < $m; $k++) {
-                $out[] = new RichPara(RichPara::nextID(), $frag[$k]->style, $frag[$k]->n, $frag[$k]->runs);
+                $out[] = new RichPara(RichPara::nextID(), $frag[$k]->style->withID(''), $frag[$k]->n, $frag[$k]->runs);
             }
             $f = $frag[count($frag) - 1];
-            $style = $f->n > 0 ? $f->style : $last->style;
+            $style = ($f->n > 0 ? $f->style : $last->style)->withID($pz !== $pa ? $last->style->id : ($moved ? $first->style->id : ''));
             $id = RichPara::nextID();
             if ($pz !== $pa) { $id = $last->id; }
             $runs = RichPara::cutRuns([], $f->runs, 0, $f->n);
@@ -385,6 +389,12 @@ final class Text
     public function formatParagraphs(int $start, int $end, Closure $fn): Text
     {
         [$pa, $pz] = $this->paragraphSpan($start, $end);
+        return $this->formatParas($pa, $pz, $fn);
+    }
+
+    /** The text with $fn changing the styles of paragraphs $pa to $pz (mygo's formatParas). @internal Document @param Closure(ParagraphStyle): void $fn */
+    public function formatParas(int $pa, int $pz, Closure $fn): Text
+    {
         $out = [];
         $changed = false;
         Seq::each($this->seq(), $pa, function (int $i, RichPara $p) use ($pz, $fn, &$out, &$changed): bool {
@@ -465,7 +475,7 @@ final class Text
      */
     public function marshalJSON(): string
     {
-        return json_encode(Clip::of($this), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        return json_encode(Clip::of($this, true), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
     /** The text marshalJSON() wrote; throws JsonException on what is not JSON. */

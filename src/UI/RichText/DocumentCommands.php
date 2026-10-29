@@ -55,7 +55,7 @@ trait DocumentCommands
         Seq::each($this->text->seq(), $pa, function (int $i, RichPara $p) use ($pa, $pz, $f): bool {
             if ($i === $pa) {
                 $f->paragraph = clone $p->style;
-            } elseif (!$p->style->equals($f->paragraph)) {
+            } elseif (!$p->style->withID($f->paragraph->id)->equals($f->paragraph)) { // paragraphs of other IDs look the same
                 $f->paragraphsMixed = true;
             }
             return $i < $pz;

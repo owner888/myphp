@@ -28,7 +28,7 @@ final class ParaLayout
      *
      * @param list<Span> $spans
      */
-    public static function shape(System $sys, array $spans, string $family, float $size, int $weight, float $width, int $align): self
+    public static function shape(System $sys, array $spans, string $family, float $size, int $weight, float $width, int $align, float $indent = 0): self
     {
         $text = ''; $runes = 0; $styles = [];
         foreach ($spans as $sp) {
@@ -36,7 +36,7 @@ final class ParaLayout
             $runes += mb_strlen($sp->text, 'UTF-8');
             $styles[] = $sp->textSpan($runes);
         }
-        $p = new Params($text, new Style($family, $size, $weight), $width, align: $align, keepSpaces: true, spans: $styles);
+        $p = new Params($text, new Style($family, $size, $weight), $width, align: $align, keepSpaces: true, spans: $styles, indent: $indent); // the indent on the side the paragraph starts at, the right of one reading right to left
         return new self($sys->layout($p), $spans);
     }
 
@@ -114,19 +114,7 @@ final class ParaLayout
      */
     public function objects(): array
     {
-        $out = [];
-        $spans = $this->l->params->spans;
-        foreach ($this->l->lines as $line) {
-            foreach ($line->glyphs as $g) {
-                if (!$g->object) { continue; }
-                $h = 0.0;
-                foreach ($spans as $sp) {
-                    if ($g->cluster < $sp->end) { $h = $sp->objectHeight; break; }
-                }
-                $out[] = [$g->cluster, [$g->x, $line->baseline - $h, $g->advance, $h]];
-            }
-        }
-        return $out;
+        return \MyPHP\UI\TextLayout::objectBoxes($this->l);
     }
 
     /** Paints the layout at ($x, $y), $rgb at $alpha the color of what its spans leave uncolored (mygo's Painter.TextLayout). */

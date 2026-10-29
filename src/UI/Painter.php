@@ -222,6 +222,12 @@ final class Painter
         $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $g->from, $g->fromAlpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha, g: self::gradientLine($box[2], $box[3], $g));
     }
 
+    /** Paints a box with a radial gradient, its colors spreading out from a point of it (mygo's FillRadialGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
+    public function fillRadialGradient(array $box, RadialGradient $g, float $radius = 0): void
+    {
+        $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $g->from, $g->fromAlpha, paint: $g->oklab ? DisplayList::PAINT_RADIAL_OKLAB : DisplayList::PAINT_RADIAL, rgb2: $g->to, alpha2: $g->toAlpha, g: self::radialCircle($box[2], $box[3], $g));
+    }
+
     /**
      * Paints a pane of Liquid Glass over what was painted before (the
      * renderer's glass effect, which Plugins\Glass draws with): $style 0
@@ -277,10 +283,10 @@ final class Painter
         $this->list->pathGradient($path, $width, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
     }
 
-    /** Strokes $path $width points wide, with round joins and caps; trimmed shorter than its width (Path::trim), it fades with its length. */
+    /** Strokes $path $width points wide, with its caps, joins and dashes (round and whole unless it sets them); trimmed shorter than its width (Path::trim), it fades with its length, unless its caps are butt, which show no dot. */
     public function strokePath(Path $path, float $width, int $rgb, float $alpha = 1.0): void
     {
-        if ($path->kept !== null && $path->kept < $width) {
+        if ($path->kept !== null && $path->kept < $width && $path->cap !== Path::CAP_BUTT) {
             $alpha *= $width > 0 ? $path->kept / $width : 0.0;
             if ($alpha <= 0) { return; }
         }
@@ -454,7 +460,10 @@ final class Painter
             $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius, $n->borderWidth);
         } elseif ($n->gradient !== null) {
             $g = $n->gradient;
-            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $g->from, $g->fromAlpha * $n->alpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha * $n->alpha, g: self::gradientLine($n->w, $n->h, $g));
+            [$paint, $line] = $g instanceof RadialGradient
+                ? [$g->oklab ? DisplayList::PAINT_RADIAL_OKLAB : DisplayList::PAINT_RADIAL, self::radialCircle($n->w, $n->h, $g)]
+                : [$g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, self::gradientLine($n->w, $n->h, $g)];
+            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $g->from, $g->fromAlpha * $n->alpha, paint: $paint, rgb2: $g->to, alpha2: $g->toAlpha * $n->alpha, g: $line);
         } elseif ($n->stripes !== null) { // over the color, if any
             [$sc, $sa, $sw, $sg, $angle] = $n->stripes;
             $a = deg2rad($angle);
@@ -603,6 +612,14 @@ final class Painter
             return [$sx, $sy, $sx + $dx * 0.25, $sy + $dy * 0.25];
         }
         return [$sx, $sy, $x0 + ($x1 - $x0) * $end, $y0 + ($y1 - $y0) * $end];
+    }
+
+    /** The circle a radial gradient spreads to in a box $w by $h, from its top left (mygo's Painter.radial): its center and radius, the box's farthest corner without one, a quarter of a point at least (in an empty box, a hard edge). @return array{0: float, 1: float, 2: float, 3: float} */
+    public static function radialCircle(float $w, float $h, RadialGradient $g): array
+    {
+        $cx = $w * $g->centerX; $cy = $h * $g->centerY;
+        $r = $g->radius > 0 ? $g->radius : hypot(max(abs($cx), abs($w - $cx)), max(abs($cy), abs($h - $cy)));
+        return [$cx, $cy, max($r, 0.25), 0.0];
     }
 
     /** The box shadow $sh (Node::$shadows) of $box, rounded by $radii, outside it, as CSS's box-shadow (mygo's Painter.shadow). @param array{0: float, 1: float, 2: float, 3: float} $box @param array{0: float, 1: float, 2: float, 3: float} $radii */
@@ -1094,6 +1111,13 @@ final class Painter
             $glyphs = fn(): bool => self::contentText($n, $list, $text, $n->spans[0]->text, $x + $line->x, $y + $line->y, $rt);
         }
         self::paintSpans($list, $text, $l, $n->spans, $x, $y, $ts->color ?? $n->fg, ($ts->alpha ?? 1.0) * $n->alpha, $n->alpha, $ts, $under, $glyphs);
+        if ($n->drawObjects !== null) { // its inline objects, after the glyphs (mygo's textObjects)
+            $p = null;
+            foreach (TextLayout::objectBoxes($l) as [$at, $r]) {
+                $r = [$x + $r[0], $y + $r[1], $r[2], $r[3]];
+                if (!$list->clipped(...$r)) { ($n->drawObjects)($p ??= new self($list, $text, $t, $rt), $at, $r); }
+            }
+        }
         self::paintInline($n, $list, $t);
     }
 
@@ -1143,7 +1167,7 @@ final class Painter
                 if ($sp->radius > 0) { // hugging the glyphs, a little wider
                     $size = $line->glyphs[$i]->size;
                     $px = min($size * 0.22, $sp->radius);
-                    $list->rect($x + $x0 - $px, $y + $line->baseline - $size * 0.98, $x1 - $x0 + 2 * $px, $size * 1.32, $sp->background, $ba, $sp->radius);
+                    $list->rect($x + $x0 - $px, $y + $line->baseline - $sp->baselineShift - $size * 0.98, $x1 - $x0 + 2 * $px, $size * 1.32, $sp->background, $ba, $sp->radius);
                 } else {
                     $list->rect($x + $x0, $y + $line->y, $x1 - $x0, $line->height, $sp->background, $ba);
                 }

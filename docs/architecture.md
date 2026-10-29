@@ -5338,6 +5338,64 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   as a touchpad (`$e[5] ?? true`), as all of them did before the glide;
   `Headless::wheel` sends a notch.
 
+## Drawing vocabulary: strokes, radial gradients, zoom, paragraphs (v1.70)
+
+- **Paths stroke with caps, joins and dashes** (`Path::cap`, `join`,
+  `miterLimit`, `dash`, mygo's d9d45f4): `Svg\Mask::of` hands the path's
+  style to the SVG renderer's `Stroker`, whose butt and square caps,
+  miter and bevel joins and dashes SVG already drew; dashes are cut from
+  the flattened center line (`Stroker::dash`), each subpath from where
+  `trim()` cut it on the subpath it came from (`Path::$phases`), so that
+  a path drawing itself in keeps its dashes in place, and a dash through
+  the start of a closed subpath is one, turning there (as Skia's); past
+  65536 dashes the rest is stroked whole. `Text::pathQuad` keys masks by
+  the style, the dash phases snapped to a quarter pixel within one
+  pattern, and reaches past half the width as far as square caps and
+  miters do (`Path::reach`). Butt caps keep a stroke trimmed short from
+  fading. Unstyled paths stroke as before, to the pixel.
+- **Radial gradients** (`RadialGradient`, `Node::radialGradient`,
+  `Painter::fillRadialGradient`, mygo's 977740f): from a center in
+  fractions of the box to a radius in points, or the farthest corner, in
+  sRGB or Oklab. Box paints 4 and 5 in the Metal shader (`paintAt`), the
+  dashed border flag now 8 and the path mask 16 so that paints have room.
+  Two colors, as myphp's linear gradients (see the deviations).
+- **Zoom** (`Context::setZoom`, `zoom()`, mygo's 91d105a): the runtime
+  keeps the zoom asked (`$zoom`) and the one the frame was laid out at
+  (`$frameZoom`, set before each pass, so that a pass that zooms builds
+  again at the new size, or the next frame when it was the last). The
+  window lays the content out at its size over the zoom, gives the
+  title bar's room over it, and draws with `DisplayList::$zoom`: Metal's
+  viewport is the content's, its scale the backing scale times the zoom
+  (`Metal::viewUniforms`, readbacks too), and `App::rescale` rasterizes
+  glyphs at the largest backing scale times zoom of the windows.
+  `Input::$zoom` divides what comes in (pointer, a touchpad's scroll,
+  pinches, Force Touch) and multiplies the input methods' rectangles;
+  context menus, drags and their previews, accessibility's boxes and hit
+  tests, drops, web views, videos and materials are mapped at their
+  boundaries (`Runtime::windowRect`). Tests keep the window's points
+  (`Headless::rect`).
+- **Text**: inline objects reach below the baseline (`Span::$objectDescent`)
+  and draw after the glyphs (`Node::drawObjects`, mygo's 610df69), which
+  Markdown's `Options::$inlineMath` uses for math within text, copied as
+  its source; streaming, math a single dollar opens heals as math, its
+  `_` and `*` TeX. The shared layout (`Text\System`, mygo's a8f25ed)
+  indents a paragraph's first line (`Params::$indent`), justifies lines
+  (`$justify`, `System::justifyLine`), shows soft hyphens as hyphens where
+  lines break at them and as nothing elsewhere (`Text\Hyphens`), breaking
+  a line again where its hyphen does not fit, and shifts spans off the
+  baseline (`Span::$baselineShift`), decorations and backgrounds with them;
+  engines break at one width, so the system breaks the indented line and
+  lines that end at a soft hyphen apart. `TextLayout::lines()` gives a
+  layout's lines.
+- **Rich text paragraphs** (mygo's 7e510df): `Theme::$firstLineIndent`
+  (a layout's indent, so no character the caret steps over) and
+  `$paragraphSpacing` set body paragraphs apart; `ParagraphStyle::$id`
+  follows a paragraph's text through `Text::replace`, undo and JSON,
+  never through the clipboard, and `Document::identifyParagraphs` names
+  those edits make; `Document::visibleParagraphs` gives the paragraphs in
+  view where the editor paints them, and a paint that moves them from
+  where the app read them asks for another frame (`View::moved`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

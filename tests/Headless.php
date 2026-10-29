@@ -160,7 +160,7 @@ final class Headless
     /** $e over ($x, $y), then a frame: whether a node takes it. */
     public function dataOver(float $x, float $y, \MyPHP\UI\DataDragEvent $e): bool
     {
-        $took = $this->rt->dataDragOver($x, $y, $e);
+        $took = $this->rt->dataDragOver($x / $this->rt->frameZoom, $y / $this->rt->frameZoom, $e); // the window's points, as the window maps them
         $this->frame();
         return $took;
     }
@@ -168,7 +168,7 @@ final class Headless
     /** $e dropped at ($x, $y), then a frame: whether a node took it. */
     public function dataDrop(float $x, float $y, \MyPHP\UI\DataDragEvent $e): bool
     {
-        $took = $this->rt->dataDrop($x, $y, $e);
+        $took = $this->rt->dataDrop($x / $this->rt->frameZoom, $y / $this->rt->frameZoom, $e);
         $this->frame();
         return $took;
     }
@@ -186,10 +186,11 @@ final class Headless
             $in = $this->rt->inspector;
             $this->root = $this->rt->frame(function () use ($in) {
                 $in?->startPass();
-                $c = new Context($this->metrics, $this->rt, $in?->contentWidth($this->w) ?? $this->w, $this->h, $this->theme);
+                [$w, $h] = [$this->w / $this->rt->frameZoom, $this->h / $this->rt->frameZoom]; // zoomed (Context::setZoom), as a window lays it out; the tester's points stay the window's
+                $c = new Context($this->metrics, $this->rt, $in?->contentWidth($w) ?? $w, $h, $this->theme);
                 ($this->view)($c);
-                if ($in !== null && $in->open) { \MyPHP\UI\InspectorPanel::build($c, $this->rt, $in, $this->w, $this->h); $in->lap(0); }
-                Layout::layout($c, $this->w, $this->h);
+                if ($in !== null && $in->open) { \MyPHP\UI\InspectorPanel::build($c, $this->rt, $in, $w, $h); $in->lap(0); }
+                Layout::layout($c, $w, $h);
                 if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->rt, $c->root); }
                 return $c->root;
             });
@@ -204,12 +205,12 @@ final class Headless
         $ffi = \FFI::cdef();
         $this->list ??= new DisplayList($ffi->new('float[' . ($capacity * DisplayList::FLOATS_PER_RECT) . ']'), $capacity, $ffi->new('float[' . (4096 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4096);
         $this->list->pathQuad ??= fn(Path $p, float $w, ?Closure $visible = null) => ($b = $p->bounds()) === null ? [] : [[$b[0], $b[1], $b[2] - $b[0], $b[3] - $b[1], 0, 0]]; // a path's quad is its bounds; no mask
-        $this->list->reset();
+        $this->list->reset(); $this->list->zoom = $this->rt->frameZoom;
         $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; $this->rt->underPaints = []; // as the window's paint
-        $this->list->pushClip(0, 0, $this->w, $this->h);
+        $this->list->pushClip(0, 0, $this->w / $this->rt->frameZoom, $this->h / $this->rt->frameZoom);
         Painter::paint($root = $this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
         if (($in = $this->rt->inspector) !== null && $in->open) {
-            \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h);
+            \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h / $this->rt->frameZoom);
             $in->lap(2);
         }
         Painter::dragCopy($this->list, $this->metrics, $this->theme, $this->rt);
@@ -334,8 +335,8 @@ final class Headless
     public function pageDown(): Node { return $this->key(Key::PAGE_DOWN, 'pageDown:'); }
     public function space(): Node { return $this->type(' '); }
 
-    /** The rect node $n had last frame: x, y, w, h. */
-    public function rect(Node $n): array { return $this->rt->rectOf($n->id) ?? throw new \RuntimeException('no rect for ' . self::label($n)); }
+    /** The rect node $n had last frame: x, y, w, h, in the window's points (zoomed, Context::setZoom: the content's times the zoom, as mygo's Tester.Find). */
+    public function rect(Node $n): array { return $this->rt->windowRect($this->rt->rectOf($n->id) ?? throw new \RuntimeException('no rect for ' . self::label($n))); }
 
     /** The middle of node $n's last-frame rect. */
     public function middle(Node $n): array { $r = $this->rect($n); return [$r[0] + $r[2] / 2, $r[1] + $r[3] / 2]; }
