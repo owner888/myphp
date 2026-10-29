@@ -5396,6 +5396,43 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   view where the editor paints them, and a paint that moves them from
   where the app read them asks for another frame (`View::moved`).
 
+## Menus drawn in the window, menu icons, browsing a calendar (v1.71)
+
+- **Drawn menus** (`Node::popoverMenu`, `popoverMenuButton`,
+  `Context::popoverMenuButton`, mygo's 34c735c, d728256 and 85fd4bb):
+  the same machinery as context menus and menu buttons opens them
+  (`RuntimeMenu::buildMenu` with `$drawn`, the press, the menu key,
+  Shift+F10, Enter, Space, Down, assistive technology), but rather than
+  handing the window a native menu it keeps a `DrawnMenu`: where it
+  opened, from the node's whole box, its levels (the menu and the
+  submenus open, each with the item highlighted), the frame it opened in
+  and the one that last built it. While it shows, each pass runs the
+  menu's function to collect its items and builds a panel for each level
+  in an overlay, attached to a point of the node (`attachTo` flips it at
+  the window's edges) or below the button, a submenu after its item; the
+  panel takes the focus (the overlay gives it back as it goes) and
+  highlights its items as its active descendant. The keys move among
+  the items that can be chosen, type-ahead goes to an item's first
+  letters, Right and Left open and close submenus (mirrored right to
+  left), Enter and Space choose (Space comes as the panel's activation),
+  Escape closes the submenu on top; Tab while a panel has the focus
+  closes the menu (`Runtime::tabOutOfMenu`, before Tab moves the focus);
+  a press outside closes it, not the one opening it. A choice reaches
+  the function as a native menu's does (`menuChoice`), an editing item
+  does its command (`menuCommand`). The menu goes once the frame's last
+  pass did not build its node (`resolveMenu`). `UI\MenuItem::radio`
+  marks radio items, in native menus too. The menu key opens a context
+  menu at the node's right right to left.
+- **Menu icons** (`MenuIcon::of`, `MenuItem::$icon`, `setIcon`, mygo's
+  6a95d8f): a PNG made once into an NSImage fit to 16 points, a template
+  one tinted as the menu's text, shared by items showing the same image
+  (a weak map by its hash) and released with the icon.
+- **Calendars**: `Node::browse()` (mygo's b7e6bdd) gives a calendar a
+  cursor of its own, which its buttons and keys move without choosing,
+  following the build before, as input reaches the calendar as it is
+  built; the month buttons draw their chevrons in their middle (mygo's
+  e554723).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

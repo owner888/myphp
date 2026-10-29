@@ -24,6 +24,10 @@ trait RuntimeMenu
     private int $menuAsked = 0, $menuText = 0, $menuChosen = 0, $menuChoice = 0, $menuChosenText = 0;
     private float $menuX = 0, $menuY = 0;
     private bool $menuButton = false, $menuChosenButton = false;
+    /** That the menu asked for opens for the menu key, Shift+F10 or a menu button's keys (or assistive technology), and that a menu button's opens below the button. */
+    private bool $menuByKey = false, $menuBelow = false;
+    /** The menu drawn in the window that shows (Node::popoverMenu, popoverMenuButton), null while none does. */
+    private ?DrawnMenu $drawnMenu = null;
     private string $menuLabel = '';
     /** That a menu button's menu took the press, so its release is no click; that a context menu took the secondary button's, so its release is no right-click. */
     private bool $menuRelease = false, $menuTook = false;
@@ -64,11 +68,19 @@ trait RuntimeMenu
      * Node::contextMenu and Node::menu call it as the frame builds them.
      * @param Closure(Menu): void $build
      */
-    public function buildMenu(int $id, bool $disabled, bool $button, Closure $build): void
+    public function buildMenu(int $id, bool $disabled, bool $button, Closure $build, bool $drawn = false): void
     {
         if ($this->menuAsked === $id && $this->menuButton === $button) {
             $this->menuAsked = 0;
             if ($disabled) {
+                return;
+            }
+            if ($drawn) { // a menu drawn in the window only opens here, or closes as its button is pressed again: drawMenu builds it
+                if ($button && $this->menuBelow && $this->drawnMenu?->id === $id && $this->drawnMenu->below) {
+                    $this->drawnMenu = null;
+                } else {
+                    $this->openDrawnMenu($id);
+                }
                 return;
             }
             $run = new MenuRun(true);
@@ -78,11 +90,56 @@ trait RuntimeMenu
             $this->openMenu($id, $button, $m->items, $run->labels, $commands);
         } elseif ($this->menuChosen === $id && $this->menuChosenButton === $button) {
             $this->menuChosen = 0;
-            $run = new MenuRun(false, $this->menuChoice, $this->menuLabel);
-            $build(new Menu($run, null, $this, $this->menuChosenText));
-            if ($run->chosen) {
-                $this->consumed = true; // the choice may change what was built before: build again
-            }
+            $this->menuChoice($build, $this->menuChoice, $this->menuLabel, $this->menuChosenText);
+        }
+    }
+
+    /** Runs $build for the item chosen from its menu, at place $choice and labeled $label, whose chosen() then reports it; $text is the text the menu opened on (mygo's menuChoice). @internal DrawnMenu @param Closure(Menu): void $build */
+    public function menuChoice(Closure $build, int $choice, string $label, int $text): void
+    {
+        $run = new MenuRun(false, $choice, $label);
+        $build(new Menu($run, null, $this, $text));
+        if ($run->chosen) {
+            $this->consumed = true; // the choice may change what was built before: build again
+        }
+    }
+
+    /** Does the editing command $name, chosen from a menu, on text input or selectable text $id (mygo's menuCommand). @internal DrawnMenu */
+    public function menuCommand(int $id, string $name): void
+    {
+        $this->editCommand($id, $name);
+        $this->changed();
+    }
+
+    /** Tab, or Shift-Tab, while a drawn menu has the focus: it closes, the focus going back where it came from, as the overlay goes (mygo's drawn menu keys). Whether it did. */
+    private function tabOutOfMenu(): bool
+    {
+        if ($this->drawnMenu === null || $this->focus === null || !in_array($this->focus, $this->drawnMenu->panelIds, true)) {
+            return false;
+        }
+        $this->drawnMenu = null;
+        return true;
+    }
+
+    /** Opens the drawn menu of node $id at the point asked for, from the node's whole box, which the menu attaches to, not its visible part: one scrolled partly out of view would put it off the point by as much (mygo's openDrawnMenu, 85fd4bb). */
+    private function openDrawnMenu(int $id): void
+    {
+        $r = $this->rects[$id] ?? null;
+        if ($r === null) {
+            return;
+        }
+        $this->drawnMenu = new DrawnMenu($id, $this->menuBelow, $this->menuX - $r[0], $this->menuY - $r[1], $this->menuText, $this->frameNumber, $this->menuByKey, [$this->input->mouseX, $this->input->mouseY]);
+    }
+
+    /** Builds the drawn menu of $e, which $build fills, while it shows (mygo's drawMenu): an overlay holding a panel for the menu and each submenu open, as popovers of $e. @internal Node @param Closure(Menu): void $build */
+    public function drawMenu(Node $e, Context $c, Closure $build): void
+    {
+        $d = $this->drawnMenu;
+        if ($d === null || $d->id !== $e->id || $c->isInert()) {
+            return;
+        }
+        if (!$d->build($e, $c, $this, $build) && $this->drawnMenu === $d) {
+            $this->drawnMenu = null;
         }
     }
 
@@ -129,6 +186,7 @@ trait RuntimeMenu
     private function askMenu(int $id, float $x, float $y, bool $button): void
     {
         $this->menuAsked = $id; $this->menuX = $x; $this->menuY = $y; $this->menuButton = $button; $this->menuText = 0;
+        $this->menuByKey = $this->menuBelow = false;
         $this->needsFrame = true;
     }
 
@@ -207,8 +265,8 @@ trait RuntimeMenu
         if ($s === 0) {
             return false;
         }
-        [$vx, $vy, , $vh] = $this->visible[$s] ?? $this->rects[$s];
-        $x = $vx; $y = $vy + min($vh, 32);
+        [$vx, $vy, $vw, $vh] = $this->visible[$s] ?? $this->rects[$s];
+        $x = isset($this->menuRtl[$s]) ? $vx + $vw : $vx; $y = $vy + min($vh, 32); // at its start, the right right to left
         $text = 0;
         if (isset($this->fields[$s]) && $this->input->focus !== null && $s === $this->focus) {
             [$cx, $cy, $cw, $ch] = $this->input->caretRect(TextState::utf16Index($this->input->focus->display(), $this->input->focus->displayCaret()));
@@ -220,14 +278,16 @@ trait RuntimeMenu
         }
         $this->askMenu($s, $x, $y, false);
         $this->menuText = $text;
+        $this->menuByKey = true;
         return true;
     }
 
-    /** Has the next frame build the menu of menu button $id, to show below it (mygo's openMenuButton and menuCorner). */
-    private function openMenuButton(int $id): void
+    /** Has the next frame build the menu of menu button $id, to show below it (mygo's openMenuButton and menuCorner); $key when the keyboard opens it, or assistive technology. */
+    private function openMenuButton(int $id, bool $key = false): void
     {
         [$vx, $vy, $vw, $vh] = $this->visible[$id] ?? $this->rects[$id];
         $this->askMenu($id, isset($this->menuRtl[$id]) ? $vx + $vw : $vx, $vy + $vh, true); // at its bottom left corner, the right one right to left, where the menu opens to the left
+        [$this->menuByKey, $this->menuBelow] = [$key, true];
     }
 
     /** Keeps the menu built for node $id to show once the frame is done (mygo's openMenu). @param list<NativeItem> $items @param list<string> $labels @param ?list<string> $commands */
@@ -242,6 +302,9 @@ trait RuntimeMenu
     /** Opens the menu asked for that no context menu built, after the frame's build: a text input's or selectable text's, with its editing commands (mygo's resolveMenu). */
     private function resolveMenu(): void
     {
+        if (($d = $this->drawnMenu) !== null && ($d->built !== $this->frameNumber || $d->pass !== $this->pass)) {
+            $this->drawnMenu = null; // the node whose menu it is was not built: the menu goes with it
+        }
         $id = $this->menuAsked;
         if ($id === 0) {
             return;

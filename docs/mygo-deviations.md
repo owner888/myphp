@@ -1953,3 +1953,20 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Visible paragraphs**: a paint that moves them sets the runtime's
   `needsFrame`, the window then drawing another; the document has no
   lock, PHP running the app on one thread.
+
+## Drawn menus and menu icons (v1.71)
+
+- **Keys in one frame**: mygo has an element take one key a frame, the
+  others waiting for the next (d728256), so that a Down and an Enter
+  typed quickly reach a drawn menu in order; myphp's passes take a Down
+  and then an Enter of one frame in that order, but an Enter coming
+  before a Down is taken after it.
+- **A toolbar's overflow**: myphp's overflow menu presses the controls
+  it lists and opens no menu button's menu from it, so mygo's
+  `askMenuLater` has nothing to do.
+- **Headers** (`Menu::header`, myphp's own) show in a drawn menu as
+  muted text, chosen by none.
+- **Menu icons**: `MenuIcon::of` checks the PNG signature and its IHDR,
+  not the whole image, which AppKit then reads; one it cannot read shows
+  no image. Icons are macOS's only: the drawn menus show none, as mygo's.
+

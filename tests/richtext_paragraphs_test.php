@@ -16,7 +16,7 @@ use MyPHP\Text\Params;
 require_once __DIR__ . '/RichTextTest.php';
 
 /** An editorBase of $doc, 10 points an em in theme $th, filling a window 300 wide and $h high, focused; its view reads the paragraphs in view as it builds, as an app's gutter does, into $boxes (mygo's proseTester). */
-function proseTester(Document $doc, ?Theme $th, float $h, ?array &$boxes): Headless
+function proseTester(Document $doc, ?Theme $th, float $h, mixed &$boxes): Headless
 {
     $boxes = [];
     $t = new Headless(function (Context $c) use ($doc, $th, &$boxes) {

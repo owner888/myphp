@@ -217,6 +217,9 @@ final class Menu
         if ($it->toolTip !== '') {
             ObjC::msg('v:p', $ns, 'setToolTip:', ObjC::str($it->toolTip));
         }
+        if ($it->icon !== null) { // drawn at 16 points from the representation fit for the display; a template tinted as the menu's text
+            ObjC::msg('v:p', $ns, 'setImage:', $it->icon->image());
+        }
         if ($it->submenu !== [] || in_array($it->role, ['services', 'window', 'help'], true)) {
             $sub = new self($it->submenu);
             foreach ($it->submenu as $child) { $child->parent = $it; } // the item's list, not the menu built of it

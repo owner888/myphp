@@ -45,6 +45,8 @@ final class MenuItem
         public string $id = '',
         public bool $hidden = false,
         public string $toolTip = '',
+        /** An image shown beside the label (MenuIcon::of), null for none. */
+        public ?MenuIcon $icon = null,
     ) {
         foreach ($this->submenu as $child) {
             $child->parent = $this;
@@ -116,6 +118,15 @@ final class MenuItem
             if (($sub = ObjC::msg('p:', $this->native, 'submenu')) !== null) {
                 ObjC::msg('v:p', $sub, 'setTitle:', ObjC::str($label));
             }
+        }
+    }
+
+    /** Replaces the image beside the label; null removes it (mygo's SetIcon). */
+    public function setIcon(?MenuIcon $icon): void
+    {
+        $this->icon = $icon;
+        if ($this->native !== null && $this->type !== self::SEPARATOR) {
+            ObjC::msg('v:p', $this->native, 'setImage:', $icon?->image());
         }
     }
 

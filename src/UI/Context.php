@@ -253,6 +253,12 @@ final class Context
         return $this->router;
     }
 
+    /** @internal Runtime::drawMenu: whether what is built now is inert, a page going away. */
+    public function isInert(): bool
+    {
+        return $this->inert;
+    }
+
     /** Builds $fn as a page of $router, inert while $inert (a page going away): shortcuts reach nothing in it. Router's. */
     public function inRoute(?Router $router, bool $inert, Closure $fn): void
     {
@@ -2288,16 +2294,38 @@ final class Context
      * focus, Page Up and Page Down or its buttons move by months, Home
      * and End go to the month's first and last day. changed() reports a
      * new date, which keeps the time of day and the zone of $date. The
-     * names and the first weekday are en-US.
+     * names and the first weekday are en-US. Node::browse() lets the user
+     * move about it without choosing.
      */
     public function calendar(\DateTimeImmutable &$date): Node
     {
         $changed = false;
-        $g = $this->calendarGrid($date, $date, true, function (\DateTimeImmutable $d) use (&$date, &$changed) {
+        $g = $this->calendarBox();
+        // Input reaches the calendar as it is built, before this build's browse(): it follows the build before, which the user saw (mygo's b7e6bdd).
+        $set = $this->runtime?->local($g->id, fn() => (object)['now' => false, 'shown' => false, 'cursor' => $date, 'date' => $date]) ?? (object)['now' => false, 'shown' => false, 'cursor' => $date, 'date' => $date];
+        [$set->shown, $set->now] = [$set->now, false];
+        if (!$set->shown || $set->date->format('Y-m-d') !== $date->format('Y-m-d')) { $set->cursor = $date; } // the cursor follows the date the app sets
+        $set->date = $date;
+        $g->calendar = $set;
+        $choose = function (\DateTimeImmutable $d) use (&$date, &$changed) {
             if (self::setDay($date, $d)) { $changed = true; }
-        });
+        };
+        if ($set->shown) {
+            $this->calendarGrid($date, $set->cursor, false, $choose, $g);
+        } else {
+            $this->calendarGrid($date, $date, true, $choose, $g);
+        }
+        $set->date = $date;
         $g->changed = $changed;
         return $g;
+    }
+
+    /** The node of a month's grid, which calendarGrid fills (mygo's calendarBox). */
+    private function calendarBox(): Node
+    {
+        $grid = $this->column(0, $this->theme->space(0.5))->focusable()->role(Role::TABLE);
+        $grid->ownRing = true;
+        return $grid;
     }
 
     /** Sets the day of $date to $d's, keeping its time of day and zone; whether it changed. */
@@ -2316,7 +2344,7 @@ final class Context
      * the chosen in the accent, the cursor's surfaceHover, today ringed
      * in the accent, the month's neighbors' days muted.
      */
-    private function calendarGrid(\DateTimeImmutable $date, \DateTimeImmutable &$cursor, bool $moveChooses, Closure $choose): Node
+    private function calendarGrid(\DateTimeImmutable $date, \DateTimeImmutable &$cursor, bool $moveChooses, Closure $choose, ?Node $grid = null): Node
     {
         $t = $this->theme;
         $rt = $this->runtime;
@@ -2325,7 +2353,7 @@ final class Context
         $month = $cur->setDate((int)$cur->format('Y'), (int)$cur->format('n'), 1)->setTime(0, 0);
         $title = I18n::formatDate($locale, $month, new DateOptions(skeleton: 'yMMMM'));
         $first = $region->firstWeekday;
-        $grid = $this->column(0, $t->space(0.5))->focusable()->role(Role::TABLE)->label($title); $grid->ownRing = true;
+        $grid = ($grid ?? $this->calendarBox())->label($title);
         $visible = $rt?->focusVisible($grid->id) ?? false;
         $grid->draw(function (DisplayList $list, Node $g, Theme $t) use ($visible) { if ($visible) { Painter::paintFocusRing($list, $g->x, $g->y, $g->w, $g->h, $t->radius, $t); } });
         $move = function (\DateTimeImmutable $d) use ($moveChooses, $choose, &$cursor) { if ($moveChooses) { $choose($d); } else { $cursor = $d; } }; // choosing moves the cursor where it is the date chosen
@@ -2342,10 +2370,10 @@ final class Context
             elseif ($rt->activated($grid->id)) { $choose($cur); }
         }
           $this->row(0, $t->space(1))->align(Node::CENTER);
-            $prev = $this->button('‹')->padding($t->space(0.5), $t->space(2.5))->label($this->texts()->get('previousMonth'));
+            $prev = $this->monthButton(true);
             if ($this->clicked($prev)) { $move(self::addMonths($cur, -1)); }
             $this->row(0, 0, 1)->justify(Node::CENTER); $this->text($title, $t->fontSize, $t->text, Font::BOLD); $this->end();
-            $next = $this->button('›')->padding($t->space(0.5), $t->space(2.5))->label($this->texts()->get('nextMonth'));
+            $next = $this->monthButton(false);
             if ($this->clicked($next)) { $move(self::addMonths($cur, 1)); }
           $this->end();
           $this->row(0, 0);
@@ -2376,6 +2404,22 @@ final class Context
           }
         $this->end();
         return $grid;
+    }
+
+    /** A calendar's button to the month before, $back, or after: a chevron drawn in its middle, where the text's ‹ and › sat low, mirrored right to left (mygo's monthChevron, e554723). */
+    private function monthButton(bool $back): Node
+    {
+        $t = $this->theme;
+        $b = $this->buttonFace($t->space(1), $t->space(2.5))->justify(Node::CENTER)->role(Role::BUTTON)->label($this->texts()->get($back ? 'previousMonth' : 'nextMonth'));
+          $e = $this->box($t->space(1.5), $t->space(2.5), 0)->shrink(0);
+          $e->color = null;
+          [$tip, $ends] = $back === $e->rtl ? [0.85, 0.15] : [0.15, 0.85]; // ‹, or ›
+          $e->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($tip, $ends): void {
+              $p = (new Path)->moveTo($n->x + $n->w * $ends, $n->y + $n->h * 0.1)->lineTo($n->x + $n->w * $tip, $n->y + $n->h * 0.5)->lineTo($n->x + $n->w * $ends, $n->y + $n->h * 0.9);
+              (new Painter($list, $text, $th))->strokePath($p, 1.5, $th->text);
+          });
+        $this->end();
+        return $b;
     }
 
     /** $d moved $n months, as Go's AddDate normalizes: the 31st of a 30-day month lands in the month after. */
@@ -3116,6 +3160,15 @@ final class Context
         $n->fw += $this->theme->space(1.5) + $this->theme->space(2.5); // room for the chevron
         $n->chevron = true;
         return $n->menu($build);
+    }
+
+    /** A menu button as menuButton() makes, whose menu myphp draws in the window with the theme's look (mygo's PopoverMenuButton; Node::popoverMenuButton). @param Closure(Menu): void $build */
+    public function popoverMenuButton(string $label, Closure $build): Node
+    {
+        $n = $this->button($label);
+        $n->fw += $this->theme->space(1.5) + $this->theme->space(2.5); // room for the chevron
+        $n->chevron = true;
+        return $n->popoverMenuButton($build);
     }
 
     /**

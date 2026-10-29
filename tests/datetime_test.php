@@ -46,6 +46,24 @@ $h->input->push(['accessOn']); $h->frame();
 $n = dtNode($h->rt->accessTree, Role::BUTTON, 'October 31, 2026');
 check($h->rt->accessTree->focus === $n->id && ($n->states & AccessNode::CHECKED) !== 0, 'assistive technology is on the day chosen');
 
+// Browsing (mygo's b7e6bdd): the buttons, Page Down and the arrows move without choosing; a click, Enter or Space chooses; the cursor follows a date the app sets.
+$day = new \DateTimeImmutable('2026-10-15 09:41:00', new \DateTimeZone('UTC')); $changes = 0;
+$h = new Headless(function (Context $c) use (&$day, &$changes): void {
+    if ($c->changed($c->calendar($day)->browse())) { $changes++; }
+}, 400, 400);
+$h->frame();
+$h->clickLabel('Next month');
+check($h->byText('November 2026') !== null && $day->format('Y-m-d') === '2026-10-15' && $changes === 0, 'the button shows the next month, choosing none');
+$h->clickLabel('November 3, 2026');
+check($day->format('Y-m-d') === '2026-11-03' && $changes === 1, 'a click chooses');
+$h->right(); $h->pageDown();
+check($day->format('Y-m-d') === '2026-11-03' && $h->byText('December 2026') !== null && $changes === 1, 'the keys move the cursor alone');
+$h->enter();
+check($day->format('Y-m-d') === '2026-12-04' && $changes === 2, 'Enter chooses where it is: ' . $day->format('Y-m-d'));
+$day = new \DateTimeImmutable('2027-03-09', new \DateTimeZone('UTC')); $h->frame();
+check($h->byText('March 2027') !== null, 'the cursor follows the date the app sets');
+check($h->byLabel('Previous month')?->kids[0]?->draw !== null, 'the month buttons draw their chevrons');
+
 // A time input in 24 hours: Up, round the clock, digits going on to the minutes, one that can't begin two digits; the date kept; what it says.
 App::setLocale('en-GB');
 $alarm = new \DateTimeImmutable('2026-10-04 07:30:00', new \DateTimeZone('UTC')); $changes = 0;

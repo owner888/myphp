@@ -587,7 +587,7 @@ final class Runtime
                     if ($this->focus !== null && isset($this->fields[$this->focus]) && $this->keys !== []) {
                         $this->keys[array_key_last($this->keys)][3] = true; // typed into the field
                     } elseif ($e[1] === ' ' && $this->focus !== null && (($this->menuNodes[$this->focus] ?? 0) & 2) !== 0) {
-                        $this->openMenuButton($this->focus); // and Space
+                        $this->openMenuButton($this->focus, true); // and Space
                         if ($this->keys !== []) { $this->keys[array_key_last($this->keys)][3] = true; }
                     } elseif ($e[1] === ' ' && $this->focus !== null && !isset($this->fields[$this->focus]) && $this->now / 1e9 - $this->typedAt >= 1.0) {
                         $this->activated = $this->focus; // space presses a focused button; within a second of letters typed at it, it is typed too (mygo's typePause)
@@ -2334,7 +2334,7 @@ final class Runtime
             return true;
         }
         if ($this->focus !== null && (($this->menuNodes[$this->focus] ?? 0) & 2) !== 0 && in_array($selector, ['insertNewline:', 'moveDown:'], true)) {
-            $this->openMenuButton($this->focus); // Enter and Down open a focused menu button's menu
+            $this->openMenuButton($this->focus, true); // Enter and Down open a focused menu button's menu
             return true;
         }
         if ($this->focus !== null && !isset($this->fields[$this->focus])) {
@@ -2381,6 +2381,9 @@ final class Runtime
             }
         }
         if ($this->focus !== null && $this->groupKey($selector)) {
+            return true;
+        }
+        if (($selector === 'insertTab:' || $selector === 'insertBacktab:') && $this->tabOutOfMenu()) {
             return true;
         }
         switch ($selector) {

@@ -1289,6 +1289,76 @@ final class Node
         return $this;
     }
 
+    /** @internal Context::calendar: what a calendar keeps (browse()), null for other nodes */
+    public ?object $calendar = null;
+
+    /**
+     * Lets the user move about a calendar without choosing a day (mygo's
+     * Browse): its buttons and Page Up and Page Down only show other
+     * months, and the arrows, Home and End only move among the days, until
+     * a click, Enter or Space chooses one, as in a date input's calendar.
+     * changed() then reports only a day chosen, as a calendar in a popover
+     * that closes when the user picks a day needs. The calendar goes back
+     * to the date as the app sets another. Nodes other than a calendar
+     * take no notice.
+     */
+    public function browse(): static
+    {
+        if ($this->calendar !== null) { $this->calendar->now = true; }
+        return $this;
+    }
+
+    /**
+     * Gives the node a context menu, as contextMenu() does, which myphp
+     * draws in the window with the theme's look, as a popover, rather than
+     * the system showing one of its own (mygo's PopoverMenu). It opens
+     * where the node is clicked with the secondary button, or
+     * Control-clicked, and, while it or a node inside it has the focus,
+     * below it for the menu key or Shift+F10. $build fills it with the
+     * items contextMenu()'s function takes, and the item chosen reports
+     * chosen() as there. The menu takes the focus as it opens and gives it
+     * back as it closes; Up and Down move among its items, past those
+     * disabled, as do Home, End and typing the first letters of an item;
+     * Right opens a submenu and Left closes it, the other way round right
+     * to left; Enter and Space choose, Escape closes the submenu on top, Tab
+     * and a press outside the menu close it. It shows below and after where
+     * it opened, and on the other side where the window has no room.
+     * Assistive technology sees a menu of items, check box items and radio
+     * items, as the system's.
+     * @param \Closure(Menu): void $build
+     */
+    public function popoverMenu(\Closure $build): static
+    {
+        $this->contextMenu = true;
+        $rt = $this->context?->runtime;
+        $rt?->buildMenu($this->id, $this->disabled, false, $build, true);
+        if ($this->context !== null) { $rt?->drawMenu($this, $this->context, $build); }
+        return $this;
+    }
+
+    /**
+     * Makes the node a menu button, as menu() does, whose menu myphp draws
+     * in the window, as popoverMenu() draws a context menu (mygo's
+     * PopoverMenuButton): it opens below the node, or above it where the
+     * window has no room, as the pointer goes down on it, and for Enter,
+     * Space or Down while it has the focus. The menu has popoverMenu()'s
+     * keys; a press on the node closes it too; opened by the keyboard, it
+     * starts on its first item. The node is expanded while it shows.
+     * @param \Closure(Menu): void $build
+     */
+    public function popoverMenuButton(\Closure $build): static
+    {
+        $this->menuButton = true;
+        $this->focusable = true;
+        if ($this->role === Role::AUTO || $this->role === Role::BUTTON) {
+            $this->role = Role::MENU_BUTTON;
+        }
+        $rt = $this->context?->runtime;
+        $rt?->buildMenu($this->id, $this->disabled, true, $build, true);
+        if ($this->context !== null) { $rt?->drawMenu($this, $this->context, $build); }
+        return $this;
+    }
+
     /**
      * Makes the node a menu button: it opens a menu below it, which $build
      * fills with items, as the pointer goes down on it, as a pop-up button

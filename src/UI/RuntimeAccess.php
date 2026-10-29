@@ -348,7 +348,7 @@ trait RuntimeAccess
         switch ($action) {
             case AccessNode::PRESS:
                 if ($row !== null) { $this->activated = $row[0]; break; }
-                if ((($this->menuNodes[$id] ?? 0) & 2) !== 0) { $this->openMenuButton($id); break; } // a menu button opens its menu
+                if ((($this->menuNodes[$id] ?? 0) & 2) !== 0) { $this->openMenuButton($id, true); break; } // a menu button opens its menu, on its first item
                 if ($n->kind === Node::BUTTON || isset($this->clickable[$id])) { $this->activated = $id; } else { $this->accessFocus($id); }
                 break;
             case AccessNode::FOCUS:

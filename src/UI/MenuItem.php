@@ -33,6 +33,24 @@ final class MenuItem
         return $this;
     }
 
+    /**
+     * Shows the item as one of a group choosing one setting, as the one
+     * chosen when $on is true (mygo's Radio); chosen() reports the choice,
+     * and the view marks it as it builds the menu again:
+     *
+     *     foreach (['Name', 'Date', 'Size'] as $by) {
+     *         if ($m->item($by)->radio($app->sort === $by)->chosen()) { $app->sort = $by; }
+     *     }
+     */
+    public function radio(bool $on): static
+    {
+        if ($this->p !== null && !$this->sub) {
+            $this->p->type = NativeItem::RADIO;
+            $this->p->checked = $on;
+        }
+        return $this;
+    }
+
     /** Shows a key with modifiers (Key::COMMAND…, a Key code) by the item, as the shortcut that does the same; the view handles the key itself, as with Context::shortcut. */
     public function shortcut(int $mods, int $key): static
     {
