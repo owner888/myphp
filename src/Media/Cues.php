@@ -56,6 +56,13 @@ final class Cues
         return $out;
     }
 
+    /** @internal Player: the starts of the cues that show something, in order. @return list<float> */
+    public function starts(): array
+    {
+        $this->at(0.0); // sorts the list
+        return array_values(array_unique(array_map(fn(array $c) => $c[0], array_filter($this->list ?? [], fn(array $c) => $c[2] !== [])), SORT_REGULAR));
+    }
+
     /** When after $t the text showing changes next, a cue starting or one showing ending; null for no more. @internal the player wakes for it */
     public function next(float $t): ?float
     {

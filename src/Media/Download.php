@@ -183,6 +183,7 @@ final class Download implements Bytes
         $set(Curl::OPT_WRITEFUNCTION, $cbs->write);
         $list = $this->list = Curl::headers($this->headers);
         if ($list !== null) { $set(Curl::OPT_HTTPHEADER, $list); }
+        if (HttpBytes::$userAgent !== '') { $set(Curl::OPT_USERAGENT, HttpBytes::$userAgent); }
         CurlLoop::start($easy, static function (int $result) use ($self, $easy, $cbs, $list, &$status): void {
             if ($list !== null) { Curl::ffi()->curl_slist_free_all($list); }
             $d = $self->get();

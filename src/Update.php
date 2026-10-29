@@ -77,7 +77,7 @@ final class Update
                 } catch (Native\Update\Canceled $e) {
                     throw $e;
                 } catch (Throwable $e) {
-                    error_log("myphp: downloading the whole update, as its delta update failed: {$e->getMessage()}");
+                    Logger::warn("downloading the whole update, as its delta update failed: {$e->getMessage()}", 'update');
                     self::removeAll($unpacked);
                 }
             }

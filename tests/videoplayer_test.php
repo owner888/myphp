@@ -14,16 +14,26 @@ namespace MyPHP\Tests;
 use MyPHP\App;
 use MyPHP\Media\{Player, Track};
 use MyPHP\Native\ObjC;
-use MyPHP\UI\{Context, Key, Node, VideoPlayer, VideoPlayerOptions, VideoPlayerState};
+use MyPHP\UI\{Context, Key, Node, VideoPlayer, VideoPlayerOptions, VideoPlayerState, VideoPlayerSubtitleStyle};
 
-$t = new Headless(function (Context $c) { $c->column(0, 0, 1); VideoPlayer::subtitle($c, "two\nlines", 20, 40); $c->end(); }, 900, 600);
-$t->frame();
-same(1, count(array_filter($t->texts(), fn($s) => $s === "two\nlines")), 'its subtitles: the text once');
-same([1.25, 0x000000, 1.0], $t->byText("two\nlines")?->textStyle()->outline, 'outlined in black, a sixteenth of its size wide: its glyphs grown, not copies of it');
-$quads = $t->paint()->n;
-$plain = new Headless(function (Context $c) { $c->column(0, 0, 1); $c->text("two\nlines", 20, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->letterSpacing(0.001); $c->end(); }, 900, 600); // laid out as it is, without the outline
-$plain->frame();
-same(8, $quads - $plain->paint()->n, 'its outline painted under it: a quad more for each of its eight glyphs');
+// Text subtitles in the settings' style, as mpv's sub-* options give it: ASS lines of a Default style on a plane 720 high.
+$subSet = new \MyPHP\Media\PlayerSettings(sys_get_temp_dir() . '/myphp-substyle-' . getmypid() . '.json');
+[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ["two\nlines"], 16 / 9, 1.0);
+same([1280, 720, 2, 25, 25, 22, true], [$sl->playResX, $sl->playResY, $sl->alignment, $sl->marginLeft, $sl->marginRight, $sl->marginVertical, $sl->scaledBorder], 'its plane and place: IINA\'s defaults (bottom center, margins 25 and 22)');
+same(['two', "\n", 'lines'], array_map(fn($r) => $r->text, $sl->runs), 'its lines at its newline');
+$r0 = $sl->runs[0];
+same(['sans-serif', 55.0, 400, false, 0xffffff, 1.0, 0x000000, 1.0, 3.0, 0.0, 1], [$r0->font, $r0->size, $r0->weight, $r0->italic, $r0->color, $r0->alpha, $r0->outlineColor, $r0->outlineAlpha, $r0->border, $r0->shadow, $r0->borderStyle], 'its style: IINA\'s defaults');
+same('{\\i1}x', VideoPlayerSubtitleStyle::lines($subSet, ['{\\i1}x'], 16 / 9, 1.0)[0]->text(), 'its text as it is: no tags read');
+$subSet->set('subBold', true); $subSet->set('subAlignX', 0); $subSet->set('subAlignY', 0); $subSet->set('subTextColorString', '1/1/0/0.5'); $subSet->set('subBorderStyle', 4); $subSet->set('subShadowColorString', '0/0/1/1');
+[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
+same([960, 7, 50, 44, 700, 0xffff00, 0.5, 110.0, 3, 0x0000ff], [$sl->playResX, $sl->alignment, $sl->marginLeft, $sl->marginVertical, $sl->runs[0]->weight, $sl->runs[0]->color, round($sl->runs[0]->alpha, 2), $sl->runs[0]->size, $sl->runs[0]->borderStyle, $sl->runs[0]->outlineColor],
+    'the settings\' (bold, top left, a color half clear, a box behind it of the shadow\'s color), its sizes scaled by the window');
+same(8, VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 1.0, true)[0]->alignment - 1 === 6 ? 8 : 0, 'the secondary at the top');
+$ass = new \MyPHP\Media\Ass("[Script Info]\nPlayResY: 360\n");
+$forced = VideoPlayerSubtitleStyle::forced($subSet, $ass->line('{\\fs10}y', 'Default'), 1.0);
+same([27.5, 700, 7, 13, 11], [$forced->runs[0]->size, $forced->runs[0]->weight, $forced->alignment, $forced->marginLeft, $forced->marginVertical], 'an ASS line forced to it (sub-ass-override=force): its sizes of its own plane');
+same([[0xff8000, 0.5], '1/0.501961/0/0.5'], [VideoPlayerSubtitleStyle::color('1/0.5/0/0.5'), VideoPlayerSubtitleStyle::colorString(0xff8000, 0.5)], 'colors as IINA keeps them, r/g/b/a');
+@unlink(sys_get_temp_dir() . '/myphp-substyle-' . getmypid() . '.json');
 same(['12.5 Mi', '850 K', '0 ', '1 Gi'], [VideoPlayerState::byteCount(12.5 * 1024 * 1024, true), VideoPlayerState::byteCount(850000, false), VideoPlayerState::byteCount(0, true), VideoPlayerState::byteCount(1024 ** 3, true)], 'bytes as IINA writes them, binary and decimal');
 $opening = new VideoPlayerState(); $opening->opening = 'https://example.com/film.mkv';
 $t = new Headless(fn(Context $c) => $c->videoPlayer($opening), 960, 540);
@@ -92,6 +102,32 @@ same(null, $list->duration(2), 'no duration for what is no film');
 $list->remove(0);
 same([-1, null], [$list->index(), $list->current()], 'the one playing taken out: none plays');
 same(['solo.webm'], array_map('basename', \MyPHP\Media\Playlist::folder("$dir/../solo.webm")->files()), 'a film alone: its playlist itself');
+// The audio files of the folder after its films, as IINA's (its videos, then its audio); their tags, read as asked (IINA's playlist's metadata); a film's none.
+copy(__DIR__ . '/testdata/clip-tags.mka', "$dir/b song.mka"); copy(__DIR__ . '/testdata/clip-tags.mka', "$dir/A song.mka");
+$list = \MyPHP\Media\Playlist::folder("$dir/b song.mka");
+same(['Ep 1.mkv', 'ep 2.mkv', 'ep 10.mkv', 'A song.mka', 'b song.mka'], array_map('basename', $list->files()), 'the films, then the audio');
+same([null, ['title' => 'A Song', 'artist' => 'The Band', 'album' => 'The Album']], [$list->tags(0), $list->tags(4)], 'an audio file\'s tags, none of a film');
+unlink("$dir/b song.mka"); unlink("$dir/A song.mka");
+// A Matroska file's tags and its cover, as music mode shows them (mpv's metadata, its attached picture).
+$mka = new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip-tags.mka');
+same(['title' => 'A Song', 'artist' => 'The Band', 'album' => 'The Album'], $mka->tags(), 'its tags');
+same("\x89PNG", substr((string)$mka->cover(), 0, 4), 'its cover, the PNG attached');
+same([['title' => '', 'artist' => '', 'album' => ''], null], [(new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip.mkv'))->tags(), (new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip.mkv'))->cover()], 'none of a file of none');
+// Its ReplayGain tags (of the segment and of the track), and the gain mpv's replaygain makes of them.
+$gain = (new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip-gain.mka'))->replayGain();
+same(['trackGain' => -6.48, 'trackPeak' => 0.988, 'albumGain' => -7.1, 'albumPeak' => null], $gain, 'its ReplayGain tags, "dB" taken off');
+same([null, null], [(new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip-tags.mka'))->replayGain()['trackGain'], (new \MyPHP\Media\Matroska(__DIR__ . '/testdata/clip-tags.mka'))->replayGain()['albumGain']], 'none of a file of none');
+$of = fn(array $tags, int $mode, float $preamp = 0, bool $clip = false, float $fallback = 0) => round(Player::replayGainOf($tags, $mode, $preamp, $clip, $fallback), 4);
+same(1.0, $of($gain, 0), 'no adjustment: none');
+same(round(10 ** (-6.48 / 20), 4), $of($gain, 1), "the track's");
+same(round(10 ** (-7.1 / 20), 4), $of($gain, 2), "the album's");
+same(round(10 ** (-0.48 / 20), 4), $of($gain, 1, 6), 'with the preamp');
+same(round(1 / 0.988, 4), $of($gain, 1, 12), 'no louder than the peak allows');
+same(round(10 ** (5.52 / 20), 4), $of($gain, 1, 12, true), 'louder, clipping allowed');
+same(round(10 ** (-6.48 / 20), 4), $of(['albumGain' => null, 'albumPeak' => null] + $gain, 2), "the album's: the track's where it has none");
+same(round(10 ** (-3 / 20), 4), $of(['trackGain' => null, 'trackPeak' => null, 'albumGain' => null, 'albumPeak' => null], 1, 6, false, -3), 'the fallback for a file of no tags');
+// The tracks' languages, as mpv's alang and slang match them.
+same(['en', 'en', 'en', 'zh', 'zh', 'de', 'ja', ''], array_map([\MyPHP\Media\Track::class, 'primaryLanguage'], ['eng', 'en-US', 'en', 'chi', 'zh-Hans', 'ger', 'jpn', 'und']), 'their primary languages');
 // Shuffled and sorted as IINA's, the one playing staying the one playing; unshuffled back to the order before, one added since after.
 $list = new \MyPHP\Media\Playlist(['/m/b/2.mkv', '/m/a/3.mkv', '/m/c/1.mkv', '/m/a/4.mkv', '/m/b/5.mkv', '/m/c/6.mkv']);
 $list->select('/m/a/4.mkv');
@@ -110,6 +146,7 @@ foreach (scandir($dir) as $f) { if ($f[0] !== '.' || $f === '.hidden.mkv') { @un
 @rmdir($dir);
 
 if (PHP_OS_FAMILY === 'Darwin') {
+    Player::$autoLoad = [0, '', '', false]; // testdata's films: no subtitle files of theirs matched (IINA's matching gives clip.mkv, first, every "clip…" one)
     $run = function (float $seconds): void {
         $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
         ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'currentRunLoop'), 'runUntilDate:', $until);
@@ -197,12 +234,14 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h->key(Key::SPACE, 'insertText:', 0, ' '); $h->frame();
     check($p->playing(), 'Space plays');
     $p->pause();
-    // The wheel over the picture: up and down the volume, across a seek (at most one a tenth of a second).
+    // The wheel over the picture, as IINA's settings say by default: up and down the volume (volumeScrollAmount 3: 0.75 a point), across a seek (relativeSeekAmount 3: a quarter of a second a point; at most one a tenth of a second).
     $h->input->push(['scroll', 300.0, 200.0, 0.0, -20.0, true]); $h->frame();
-    check(abs($s->volume - 0.85) < 1e-9, 'the wheel down 20 points: the volume 10 lower: ' . $s->volume);
+    check(abs($s->volume - 0.80) < 1e-9, 'the wheel down 20 points: the volume 15 lower: ' . $s->volume);
+    $s->settings()->set('useExactSeek', 1); // exact, not to the clip's keyframe (IINA's default seeks to keyframes)
     $p->seek(1.5); $from = $p->time();
     $h->input->push(['scroll', 300.0, 200.0, -5.0, 0.0, true]); $h->frame();
-    check(abs($p->time() - ($from - 0.5)) < 0.01, 'across 5 points: half a second back: ' . $p->time());
+    check(abs($p->time() - ($from - 1.25)) < 0.01, 'across 5 points: a second and a quarter back: ' . $p->time());
+    $s->settings()->set('useExactSeek', 0);
     // Where it was left noted at a pause, for the next time (more than 5 s in, which a clip of 2 s is not: noted, not gone back to).
     $posFile = sys_get_temp_dir() . '/myphp-positions-player-' . getmypid() . '.json';
     $s2 = new VideoPlayerState(); $s2->thumbnailCache = $thumbCache; $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
@@ -450,5 +489,26 @@ if (PHP_OS_FAMILY === 'Darwin') {
     rmdir($films);
     foreach (scandir($thumbDir) ?: [] as $f) { if ($f[0] !== '.') { unlink("$thumbDir/$f"); } }
     rmdir($thumbDir);
+
+    // Music mode (IINA's mini player): an audio file switches to it (autoSwitchToMusicMode), its title, artist and album shown, the window asked
+    // to be 300 wide, the picture square (no cover: the art of its own), the controls 72 under it; back by hand, a film then leaves it so.
+    $m = new VideoPlayerState();
+    $m->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
+    check($m->musicMode, 'an audio file: music mode');
+    $mh = new Headless(fn(Context $c) => $c->videoPlayer($m), 300, 372);
+    $mh->frame();
+    check($mh->byText('A Song') !== null && $mh->byText('The Band - The Album') !== null, 'its tags: ' . json_encode($mh->texts()));
+    same([[300, 372, 372, 372], false], [$mh->rt->windowAsks['compact'] ?? null, $mh->rt->windowAsks['buttons'] ?? null], 'the window 300 by 300 + 72, of that height, its traffic lights hidden');
+    $m->setSetting('musicModeShowPlaylist', true); $mh->frame();
+    same([300, 672, 572, 0], $mh->rt->windowAsks['compact'] ?? null, 'the playlist shown: 300 more, at least 200');
+    $m->setSetting('musicModeShowPlaylist', false);
+    $m->toggleMusicMode(); $mh->frame();
+    check(!$m->musicMode && array_key_exists('compact', $mh->rt->windowAsks) && $mh->rt->windowAsks['compact'] === null, 'back to the video\'s window: its own size');
+    $m->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
+    check(!$m->musicMode, 'switched by hand: the next audio file leaves it so');
+    $m2 = new VideoPlayerState();
+    $m2->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
+    $m2->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv'));
+    check(!$m2->musicMode, 'a film after the audio: out of it');
 }
 

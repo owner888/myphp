@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\Audio;
 
+use MyPHP\Logger;
+
 /**
  * Decodes ahead of a voice, about a second, into a ring the voice reads
  * without waiting (mygo's stream). mygo decodes on a goroutine of its own;
@@ -75,7 +77,7 @@ final class Stream implements Source
             try {
                 $samples = $this->d->read(self::CHUNK);
             } catch (\Throwable $e) {
-                error_log('audio: ' . $e->getMessage());
+                Logger::error($e->getMessage(), 'audio');
                 $this->atEOF = true; $this->loop = false; // a decoder that fails loops no more
                 return;
             }

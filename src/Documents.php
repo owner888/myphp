@@ -194,7 +194,7 @@ final class Documents
             try {
                 $value = ($this->opts->read)($bytes);
             } catch (\Throwable $err) {
-                error_log("myphp: documents: cannot read the recovery copy of " . ($e['name'] ?? $path) . ": {$err->getMessage()}");
+                Logger::warn("cannot read the recovery copy of " . ($e['name'] ?? $path) . ": {$err->getMessage()}", 'documents');
                 continue;
             }
             $d = new Document($this, $value, (string)($e['name'] ?? ''));

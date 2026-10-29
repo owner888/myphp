@@ -358,7 +358,9 @@ App::onWindowAllClosed(function (): void { if (PlayerSettings::default()->get('q
 App::onActivate(function (bool $visible): void { if (!$visible) { Players::welcome(); } });
 Log::watchdog();
 App::whenReady(function () use ($argv): void {
-    Theme::setSource(ThemeSource::Dark); // as IINA's windows: dark whatever the system's
+    $appearance = fn(int $theme) => Theme::setSource(match ($theme) { 2 => ThemeSource::Light, 4 => ThemeSource::System, default => ThemeSource::Dark }); // Settings > Interface > Appearance, IINA's: dark by default
+    $appearance(PlayerSettings::default()->get('themeMaterial'));
+    PlayerSettings::default()->onChange('themeMaterial', $appearance);
     Players::menu();
     if (isset($argv[1])) { // ./run.sh video file: no bundle, whose document types onOpenFile takes files from the command line by
         Players::open([$argv[1]]);

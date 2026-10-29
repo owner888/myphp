@@ -1749,10 +1749,6 @@
   "@settingsCustomize": {
     "description": "IINA's \"settings.$Customize\": a string of the player's settings window."
   },
-  "settingsDecoding": "Decoding",
-  "@settingsDecoding": {
-    "description": "IINA's \"settings.$Decoding\": a string of the player's settings window."
-  },
   "settingsDefaultApplication": "Default Application",
   "@settingsDefaultApplication": {
     "description": "IINA's \"settings.$DefaultApplication\": a string of the player's settings window."
@@ -2036,14 +2032,6 @@
   "settingsSource": "Source",
   "@settingsSource": {
     "description": "IINA's \"settings.$Source\": a string of the player's settings window."
-  },
-  "settingsSubtitleSource": "Subtitle source",
-  "@settingsSubtitleSource": {
-    "description": "IINA's \"settings.$SubtitleSource\": a string of the player's settings window."
-  },
-  "settingsSubtitleSourceDesc": "This is the default source for searching subtiles. While playing, you can manually choose to search subtitles from other sources from the menu.",
-  "@settingsSubtitleSourceDesc": {
-    "description": "IINA's \"settings.$SubtitleSource.desc\": a string of the player's settings window."
   },
   "settingsSubtitleSourcePluginDesc": "This source is provided by a plugin. Please go to the plugin's settings page for configurations.",
   "@settingsSubtitleSourcePluginDesc": {
@@ -2648,10 +2636,6 @@
   "settingsMiddleClickActionLabel": "Middle click to",
   "@settingsMiddleClickActionLabel": {
     "description": "IINA's \"settings.middleClickAction.label\": a string of the player's settings window."
-  },
-  "settingsMore_ui_settings": "More User Interface settings are available in the Layout sidebar.",
-  "@settingsMore_ui_settings": {
-    "description": "IINA's \"settings.more_ui_settings\": a string of the player's settings window."
   },
   "settingsOscPositionItems0": "Floating",
   "@settingsOscPositionItems0": {
@@ -3608,5 +3592,809 @@
   "help": "Help",
   "@help": {
     "description": "Labels a ? button that opens a help page."
+  },
+  "iinaMiniPlayerAdd": "Add to playlist",
+  "@iinaMiniPlayerAdd": {
+    "description": "IINA's \"mini_player.add\"."
+  },
+  "iinaMiniPlayerAlbumArt": "Toggle album art",
+  "@iinaMiniPlayerAlbumArt": {
+    "description": "IINA's \"mini_player.album_art\"."
+  },
+  "iinaMiniPlayerBack": "Return to video mode",
+  "@iinaMiniPlayerBack": {
+    "description": "IINA's \"mini_player.back\"."
+  },
+  "iinaMiniPlayerClose": "Close music mode",
+  "@iinaMiniPlayerClose": {
+    "description": "IINA's \"mini_player.close\"."
+  },
+  "iinaMiniPlayerDelete": "Delete all tracks from playlist",
+  "@iinaMiniPlayerDelete": {
+    "description": "IINA's \"mini_player.delete\"."
+  },
+  "iinaMiniPlayerLoop": "Repeat",
+  "@iinaMiniPlayerLoop": {
+    "description": "IINA's \"mini_player.loop\"."
+  },
+  "iinaMiniPlayerRemove": "Remove from playlist",
+  "@iinaMiniPlayerRemove": {
+    "description": "IINA's \"mini_player.remove\"."
+  },
+  "iinaMiniPlayerShuffle": "Shuffle",
+  "@iinaMiniPlayerShuffle": {
+    "description": "IINA's \"mini_player.shuffle\"."
+  },
+  "iinaMiniPlayerSort": "Sort the playlist",
+  "@iinaMiniPlayerSort": {
+    "description": "IINA's \"mini_player.sort\"."
+  },
+  "iinaMiniPlayerVolume": "Volume",
+  "@iinaMiniPlayerVolume": {
+    "description": "IINA's \"mini_player.volume\"."
+  },
+  "settingsMoreUiSettings": "More User Interface settings are available in the Layout sidebar.",
+  "@settingsMoreUiSettings": {
+    "description": "IINA's \"settings.more_ui_settings\": a string of the player's settings window."
+  },
+  "iinaOscToolbarFullScreen": "Toggle full screen",
+  "@iinaOscToolbarFullScreen": {
+    "description": "IINA's \"osc_toolbar.full_screen\"."
+  },
+  "iinaOscToolbarLiveText": "Toggle Live Text",
+  "@iinaOscToolbarLiveText": {
+    "description": "IINA's \"osc_toolbar.live_text\"."
+  },
+  "iinaOscToolbarMusicMode": "Enter music mode",
+  "@iinaOscToolbarMusicMode": {
+    "description": "IINA's \"osc_toolbar.music_mode\"."
+  },
+  "iinaOscToolbarPip": "Toggle Picture-in-Picture",
+  "@iinaOscToolbarPip": {
+    "description": "IINA's \"osc_toolbar.pip\"."
+  },
+  "iinaOscToolbarPlaylist": "Playlist and chapters",
+  "@iinaOscToolbarPlaylist": {
+    "description": "IINA's \"osc_toolbar.playlist\"."
+  },
+  "iinaOscToolbarPlugins": "Show plugins panel",
+  "@iinaOscToolbarPlugins": {
+    "description": "IINA's \"osc_toolbar.plugins\"."
+  },
+  "iinaOscToolbarScreenshot": "Take a screenshot",
+  "@iinaOscToolbarScreenshot": {
+    "description": "IINA's \"osc_toolbar.screenshot\"."
+  },
+  "iinaOscToolbarSettings": "Quick Settings",
+  "@iinaOscToolbarSettings": {
+    "description": "IINA's \"osc_toolbar.settings\"."
+  },
+  "iinaOscToolbarSubTrack": "Choose subtitle track",
+  "@iinaOscToolbarSubTrack": {
+    "description": "IINA's \"osc_toolbar.sub_track\"."
+  },
+  "toolbarCurrentItems": "Current Items:",
+  "@toolbarCurrentItems": {
+    "description": "The toolbar sheet's title over the buttons the control bar has (IINA's)."
+  },
+  "toolbarDragOut": "Drag an item out of the box to delete it.",
+  "@toolbarDragOut": {
+    "description": "Under the toolbar sheet's current buttons: how to take one out (IINA's)."
+  },
+  "toolbarAvailableItems": "Available Items:",
+  "@toolbarAvailableItems": {
+    "description": "The toolbar sheet's title over the buttons there are (IINA's)."
+  },
+  "toolbarDragIn": "Drag an item and drop it to the box above to add it.",
+  "@toolbarDragIn": {
+    "description": "Under the toolbar sheet's buttons there are: how to add one (IINA's)."
+  },
+  "toolbarRestoreDefault": "Restore Default",
+  "@toolbarRestoreDefault": {
+    "description": "The toolbar sheet's button that puts the default buttons back (IINA's)."
+  },
+  "toolbarCancel": "Cancel",
+  "@toolbarCancel": {
+    "description": "The toolbar sheet's Cancel (IINA's)."
+  },
+  "toolbarDone": "Done",
+  "@toolbarDone": {
+    "description": "The toolbar sheet's Done (IINA's)."
+  },
+  "videoPlay": "Play",
+  "@videoPlay": {
+    "description": "Labels the control bar's play button to assistive technology while it is paused."
+  },
+  "videoForward": "Forward",
+  "@videoForward": {
+    "description": "Labels the control bar's right arrow (faster, the next film, or ten seconds on, as the settings say) to assistive technology."
+  },
+  "videoBackward": "Backward",
+  "@videoBackward": {
+    "description": "Labels the control bar's left arrow (slower, the film before, or ten seconds back, as the settings say) to assistive technology."
+  },
+  "videoFloatOnTop": "Float on Top",
+  "@videoFloatOnTop": {
+    "description": "Labels the title bar's pin, which keeps the player's window above the others."
+  },
+  "iinaSubencodingAuto": "Auto detect",
+  "@iinaSubencodingAuto": {
+    "description": "IINA's \"subencoding.auto\"."
+  },
+  "fontPickerChoose": "Choose a font:",
+  "@fontPickerChoose": {
+    "description": "The font sheet's label over its filter (IINA's)."
+  },
+  "fontPickerFilter": "Type to filter…",
+  "@fontPickerFilter": {
+    "description": "The font sheet's filter field, before anything is typed (IINA's)."
+  },
+  "fontPickerFamily": "Family",
+  "@fontPickerFamily": {
+    "description": "The font sheet's header over the font families (IINA's)."
+  },
+  "fontPickerPreview": "Preview",
+  "@fontPickerPreview": {
+    "description": "The font sheet's label over the preview (IINA's)."
+  },
+  "fontPickerTest": "Test",
+  "@fontPickerTest": {
+    "description": "The text the font sheet's preview shows in the font (IINA's)."
+  },
+  "fontPickerOther": "Or enter the font name:",
+  "@fontPickerOther": {
+    "description": "The font sheet's label over the field a font's name is typed in (IINA's)."
+  },
+  "fontPickerCancel": "Cancel",
+  "@fontPickerCancel": {
+    "description": "The font sheet's Cancel (IINA's)."
+  },
+  "fontPickerOK": "OK",
+  "@fontPickerOK": {
+    "description": "The font sheet's OK (IINA's)."
+  },
+  "videoSeeking": "Seeking…",
+  "@videoSeeking": {
+    "description": "The indicator over the picture while a film over the network seeks (IINA's main.seeking_indicator)."
+  },
+  "iinaAlertClearCacheMessage": "Are you sure to clear all thumbnail Cache?",
+  "@iinaAlertClearCacheMessage": {
+    "description": "IINA's \"alert.clear_cache.message\"."
+  },
+  "iinaAlertClearCacheTitle": "Clear Thumbnail Cache",
+  "@iinaAlertClearCacheTitle": {
+    "description": "IINA's \"alert.clear_cache.title\"."
+  },
+  "iinaAlertClearHistoryMessage": "Are you sure to delete all playback history?",
+  "@iinaAlertClearHistoryMessage": {
+    "description": "IINA's \"alert.clear_history.message\"."
+  },
+  "iinaAlertClearHistoryTitle": "Clear Playback History",
+  "@iinaAlertClearHistoryTitle": {
+    "description": "IINA's \"alert.clear_history.title\"."
+  },
+  "iinaAlertClearWatchLaterMessage": "Are you sure to delete all saved playback progress (\"watch later\" data)?",
+  "@iinaAlertClearWatchLaterMessage": {
+    "description": "IINA's \"alert.clear_watch_later.message\"."
+  },
+  "iinaAlertClearWatchLaterTitle": "Clear Saved Playback Progress",
+  "@iinaAlertClearWatchLaterTitle": {
+    "description": "IINA's \"alert.clear_watch_later.title\"."
+  },
+  "iinaAlertCleared": "Cleared.",
+  "@iinaAlertCleared": {
+    "description": "IINA's \"alert.cleared\"."
+  },
+  "iinaAlertRestoreAlertsMessage": "Are you sure you want to restore suppressed alerts?",
+  "@iinaAlertRestoreAlertsMessage": {
+    "description": "IINA's \"alert.restore_alerts.message\"."
+  },
+  "iinaAlertRestoreAlertsTitle": "Restore Suppressed Alerts",
+  "@iinaAlertRestoreAlertsTitle": {
+    "description": "IINA's \"alert.restore_alerts.title\"."
+  },
+  "iinaAlertRestored": "Restored.",
+  "@iinaAlertRestored": {
+    "description": "IINA's \"alert.restored\"."
+  },
+  "iinaAlertSetDefaultSuccess": "Finished with %d success and %d failed.",
+  "@iinaAlertSetDefaultSuccess": {
+    "description": "IINA's \"alert.set_default.success\"."
+  },
+  "iinaAlertErrorSavingFile": "Error occurred when saving %@: %@",
+  "@iinaAlertErrorSavingFile": {
+    "description": "IINA's \"alert.error_saving_file\"."
+  },
+  "iinaLogwindowAllSubsystems": "All subsystems",
+  "@iinaLogwindowAllSubsystems": {
+    "description": "IINA's \"logwindow.all_subsystems\"."
+  },
+  "iinaLogwindowClearSubsystemSelections": "Clear Selections",
+  "@iinaLogwindowClearSubsystemSelections": {
+    "description": "IINA's \"logwindow.clear_subsystem_selections\"."
+  },
+  "iinaLogwindowCopy": "Copy",
+  "@iinaLogwindowCopy": {
+    "description": "IINA's \"logwindow.copy\"."
+  },
+  "iinaLogwindowFilter": "Filter",
+  "@iinaLogwindowFilter": {
+    "description": "IINA's \"logwindow.filter\"."
+  },
+  "iinaLogwindowLogLevel": "Log level",
+  "@iinaLogwindowLogLevel": {
+    "description": "IINA's \"logwindow.log_level\"."
+  },
+  "iinaLogwindowLogs": "logs",
+  "@iinaLogwindowLogs": {
+    "description": "IINA's \"logwindow.logs\"."
+  },
+  "iinaLogwindowMessage": "Message",
+  "@iinaLogwindowMessage": {
+    "description": "IINA's \"logwindow.message\"."
+  },
+  "iinaLogwindowNow": "Now",
+  "@iinaLogwindowNow": {
+    "description": "IINA's \"logwindow.now\"."
+  },
+  "iinaLogwindowNowDesc": "Follow latest logs",
+  "@iinaLogwindowNowDesc": {
+    "description": "IINA's \"logwindow.now.desc\"."
+  },
+  "iinaLogwindowSave": "Save",
+  "@iinaLogwindowSave": {
+    "description": "IINA's \"logwindow.save\"."
+  },
+  "iinaLogwindowSaveFiltered": "Save filtered logs…",
+  "@iinaLogwindowSaveFiltered": {
+    "description": "IINA's \"logwindow.save_filtered\"."
+  },
+  "iinaLogwindowSubsystem": "Subsystem",
+  "@iinaLogwindowSubsystem": {
+    "description": "IINA's \"logwindow.subsystem\"."
+  },
+  "iinaLogwindowTime": "Time",
+  "@iinaLogwindowTime": {
+    "description": "IINA's \"logwindow.time\"."
+  },
+  "iinaLogwindowTitle": "Log Viewer",
+  "@iinaLogwindowTitle": {
+    "description": "IINA's \"logwindow.title\"."
+  },
+  "iinaAlertConfigCannotCreate": "Cannot create config file!\n%@",
+  "@iinaAlertConfigCannotCreate": {
+    "description": "IINA's \"alert.config.cannot_create\"."
+  },
+  "iinaAlertConfigCannotWrite": "Cannot write to config file!",
+  "@iinaAlertConfigCannotWrite": {
+    "description": "IINA's \"alert.config.cannot_write\"."
+  },
+  "iinaAlertConfigDuplicateMessage": "Please enter name for the duplicated configuration file.",
+  "@iinaAlertConfigDuplicateMessage": {
+    "description": "IINA's \"alert.config.duplicate.message\"."
+  },
+  "iinaAlertConfigDuplicateTitle": "Duplicate Configuration",
+  "@iinaAlertConfigDuplicateTitle": {
+    "description": "IINA's \"alert.config.duplicate.title\"."
+  },
+  "iinaAlertConfigFileExistingMessage": "A config file with the same filename already exists. Choose OK to show the file in Finder.",
+  "@iinaAlertConfigFileExistingMessage": {
+    "description": "IINA's \"alert.config.file_existing.message\"."
+  },
+  "iinaAlertConfigFileExistingTitle": "File Already Exists",
+  "@iinaAlertConfigFileExistingTitle": {
+    "description": "IINA's \"alert.config.file_existing.title\"."
+  },
+  "iinaAlertConfigNewMessage": "Please enter a name for the new configuration.",
+  "@iinaAlertConfigNewMessage": {
+    "description": "IINA's \"alert.config.new.message\"."
+  },
+  "iinaAlertConfigNewTitle": "New Input Configuration",
+  "@iinaAlertConfigNewTitle": {
+    "description": "IINA's \"alert.config.new.title\"."
+  },
+  "iinaAlertConfigRenameMessage": "Please enter the new name for the configuration.",
+  "@iinaAlertConfigRenameMessage": {
+    "description": "IINA's \"alert.config.rename.message\"."
+  },
+  "iinaAlertConfigRenameTitle": "Rename Input Configuration",
+  "@iinaAlertConfigRenameTitle": {
+    "description": "IINA's \"alert.config.rename.title\"."
+  },
+  "iinaAlertDeleteKeybindingsetMessage": "Are you sure to delete this key binding set?",
+  "@iinaAlertDeleteKeybindingsetMessage": {
+    "description": "IINA's \"alert.delete_keybindingset.message\"."
+  },
+  "iinaAlertDeleteKeybindingsetTitle": "Delete Key Binding Set",
+  "@iinaAlertDeleteKeybindingsetTitle": {
+    "description": "IINA's \"alert.delete_keybindingset.title\"."
+  },
+  "iinaAlertDuplicateConfig": "You cannot edit default configurations directly. Please duplicate one before editing.",
+  "@iinaAlertDuplicateConfig": {
+    "description": "IINA's \"alert.duplicate_config\"."
+  },
+  "iinaAlertErrorDeletingFile": "Cannot delete the file.",
+  "@iinaAlertErrorDeletingFile": {
+    "description": "IINA's \"alert.error_deleting_file\"."
+  },
+  "iinaAlertErrorFindingFile": "Cannot find %@ file!",
+  "@iinaAlertErrorFindingFile": {
+    "description": "IINA's \"alert.error_finding_file\"."
+  },
+  "iinaAlertKeybindingConfigError": "Error parsing keybinding configuration file \"%@\"! Fallback to IINA Default keybinding setting. Please check your configuration.",
+  "@iinaAlertKeybindingConfigError": {
+    "description": "IINA's \"alert.keybinding_config.error\"."
+  },
+  "iinaKeymappingMessage": "Press any key to record.",
+  "@iinaKeymappingMessage": {
+    "description": "IINA's \"keymapping.message\"."
+  },
+  "iinaKeymappingTitle": "Key Mapping",
+  "@iinaKeymappingTitle": {
+    "description": "IINA's \"keymapping.title\"."
+  },
+  "keyRecordSelectAction": "Select action:",
+  "@keyRecordSelectAction": {
+    "description": "The key mapping sheet's label over the actions to choose (IINA's)."
+  },
+  "keyRecordEnterCommand": "Or enter mpv command:",
+  "@keyRecordEnterCommand": {
+    "description": "The key mapping sheet's label over the field of an mpv command (IINA's)."
+  },
+  "keyBindingCmdIgnore": "Ignore",
+  "@keyBindingCmdIgnore": {
+    "description": "IINA's KeyBinding.strings \"cmd.ignore\": how a key binding's action reads."
+  },
+  "keyBindingCmdSeek": "Seek",
+  "@keyBindingCmdSeek": {
+    "description": "IINA's KeyBinding.strings \"cmd.seek\": how a key binding's action reads."
+  },
+  "keyBindingCmdRevertSeek": "Revert seek",
+  "@keyBindingCmdRevertSeek": {
+    "description": "IINA's KeyBinding.strings \"cmd.revert-seek\": how a key binding's action reads."
+  },
+  "keyBindingCmdSet": "Set",
+  "@keyBindingCmdSet": {
+    "description": "IINA's KeyBinding.strings \"cmd.set\": how a key binding's action reads."
+  },
+  "keyBindingCmdCycle": "Cycle",
+  "@keyBindingCmdCycle": {
+    "description": "IINA's KeyBinding.strings \"cmd.cycle\": how a key binding's action reads."
+  },
+  "keyBindingCmdCycleValues": "Cycle in",
+  "@keyBindingCmdCycleValues": {
+    "description": "IINA's KeyBinding.strings \"cmd.cycle-values\": how a key binding's action reads."
+  },
+  "keyBindingCmdAdd": "Change",
+  "@keyBindingCmdAdd": {
+    "description": "IINA's KeyBinding.strings \"cmd.add\": how a key binding's action reads."
+  },
+  "keyBindingCmdMultiply": "Multiply",
+  "@keyBindingCmdMultiply": {
+    "description": "IINA's KeyBinding.strings \"cmd.multiply\": how a key binding's action reads."
+  },
+  "keyBindingCmdFrameStep": "Next frame",
+  "@keyBindingCmdFrameStep": {
+    "description": "IINA's KeyBinding.strings \"cmd.frame-step\": how a key binding's action reads."
+  },
+  "keyBindingCmdFrameBackStep": "Previous frame",
+  "@keyBindingCmdFrameBackStep": {
+    "description": "IINA's KeyBinding.strings \"cmd.frame-back-step\": how a key binding's action reads."
+  },
+  "keyBindingCmdAbLoop": "A-B loop",
+  "@keyBindingCmdAbLoop": {
+    "description": "IINA's KeyBinding.strings \"cmd.ab-loop\": how a key binding's action reads."
+  },
+  "keyBindingCmdSubSeek": "Subtitle seek",
+  "@keyBindingCmdSubSeek": {
+    "description": "IINA's KeyBinding.strings \"cmd.sub-seek\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistNext": "Next media",
+  "@keyBindingCmdPlaylistNext": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-next\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistPrev": "Previous media",
+  "@keyBindingCmdPlaylistPrev": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-prev\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistMove": "Move playlist item",
+  "@keyBindingCmdPlaylistMove": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-move\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistClear": "Clear playlist",
+  "@keyBindingCmdPlaylistClear": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-clear\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistRemove": "Remove current",
+  "@keyBindingCmdPlaylistRemove": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-remove\": how a key binding's action reads."
+  },
+  "keyBindingCmdPlaylistShuffle": "Shuffle",
+  "@keyBindingCmdPlaylistShuffle": {
+    "description": "IINA's KeyBinding.strings \"cmd.playlist-shuffle\": how a key binding's action reads."
+  },
+  "keyBindingCmdWriteWatchLaterConfig": "Record play history",
+  "@keyBindingCmdWriteWatchLaterConfig": {
+    "description": "IINA's KeyBinding.strings \"cmd.write-watch-later-config\": how a key binding's action reads."
+  },
+  "keyBindingCmdStop": "Stop",
+  "@keyBindingCmdStop": {
+    "description": "IINA's KeyBinding.strings \"cmd.stop\": how a key binding's action reads."
+  },
+  "keyBindingCmdQuit": "Quit",
+  "@keyBindingCmdQuit": {
+    "description": "IINA's KeyBinding.strings \"cmd.quit\": how a key binding's action reads."
+  },
+  "keyBindingCmdQuitWatchLater": "Quit (save progress)",
+  "@keyBindingCmdQuitWatchLater": {
+    "description": "IINA's KeyBinding.strings \"cmd.quit-watch-later\": how a key binding's action reads."
+  },
+  "keyBindingCmdScreenshot": "Screenshot",
+  "@keyBindingCmdScreenshot": {
+    "description": "IINA's KeyBinding.strings \"cmd.screenshot\": how a key binding's action reads."
+  },
+  "keyBindingCmdScreenshotToFile": "Screenshot to file",
+  "@keyBindingCmdScreenshotToFile": {
+    "description": "IINA's KeyBinding.strings \"cmd.screenshot-to-file\": how a key binding's action reads."
+  },
+  "keyBindingCmdLoadfile": "Load file",
+  "@keyBindingCmdLoadfile": {
+    "description": "IINA's KeyBinding.strings \"cmd.loadfile\": how a key binding's action reads."
+  },
+  "keyBindingCmdLoadlist": "Load playlist",
+  "@keyBindingCmdLoadlist": {
+    "description": "IINA's KeyBinding.strings \"cmd.loadlist\": how a key binding's action reads."
+  },
+  "keyBindingCmdRun": "Run",
+  "@keyBindingCmdRun": {
+    "description": "IINA's KeyBinding.strings \"cmd.run\": how a key binding's action reads."
+  },
+  "keyBindingIinaFlip": "Flip",
+  "@keyBindingIinaFlip": {
+    "description": "IINA's KeyBinding.strings \"iina.flip\": how a key binding's action reads."
+  },
+  "keyBindingIinaMirror": "Mirror",
+  "@keyBindingIinaMirror": {
+    "description": "IINA's KeyBinding.strings \"iina.mirror\": how a key binding's action reads."
+  },
+  "keyBindingIinaTogglePip": "Toggle Picture-in-Picture",
+  "@keyBindingIinaTogglePip": {
+    "description": "IINA's KeyBinding.strings \"iina.toggle-pip\": how a key binding's action reads."
+  },
+  "keyBindingIinaToggleMusicMode": "Toggle Music Mode",
+  "@keyBindingIinaToggleMusicMode": {
+    "description": "IINA's KeyBinding.strings \"iina.toggle-music-mode\": how a key binding's action reads."
+  },
+  "keyBindingIinaOpenFile": "Open file",
+  "@keyBindingIinaOpenFile": {
+    "description": "IINA's KeyBinding.strings \"iina.open-file\": how a key binding's action reads."
+  },
+  "keyBindingIinaOpenUrl": "Open URL",
+  "@keyBindingIinaOpenUrl": {
+    "description": "IINA's KeyBinding.strings \"iina.open-url\": how a key binding's action reads."
+  },
+  "keyBindingIinaVideoPanel": "Video panel",
+  "@keyBindingIinaVideoPanel": {
+    "description": "IINA's KeyBinding.strings \"iina.video-panel\": how a key binding's action reads."
+  },
+  "keyBindingIinaAudioPanel": "Audio panel",
+  "@keyBindingIinaAudioPanel": {
+    "description": "IINA's KeyBinding.strings \"iina.audio-panel\": how a key binding's action reads."
+  },
+  "keyBindingIinaSubPanel": "Subtitle panel",
+  "@keyBindingIinaSubPanel": {
+    "description": "IINA's KeyBinding.strings \"iina.sub-panel\": how a key binding's action reads."
+  },
+  "keyBindingIinaPlaylistPanel": "Playlist panel",
+  "@keyBindingIinaPlaylistPanel": {
+    "description": "IINA's KeyBinding.strings \"iina.playlist-panel\": how a key binding's action reads."
+  },
+  "keyBindingIinaChapterPanel": "Chapter panel",
+  "@keyBindingIinaChapterPanel": {
+    "description": "IINA's KeyBinding.strings \"iina.chapter-panel\": how a key binding's action reads."
+  },
+  "keyBindingIinaBiggerWindow": "Bigger Window",
+  "@keyBindingIinaBiggerWindow": {
+    "description": "IINA's KeyBinding.strings \"iina.bigger-window\": how a key binding's action reads."
+  },
+  "keyBindingIinaSmallerWindow": "Smaller Window",
+  "@keyBindingIinaSmallerWindow": {
+    "description": "IINA's KeyBinding.strings \"iina.smaller-window\": how a key binding's action reads."
+  },
+  "keyBindingIinaFitToScreen": "Fit to Screen",
+  "@keyBindingIinaFitToScreen": {
+    "description": "IINA's KeyBinding.strings \"iina.fit-to-screen\": how a key binding's action reads."
+  },
+  "keyBindingIinaToggleFlip": "Toggle flip",
+  "@keyBindingIinaToggleFlip": {
+    "description": "IINA's KeyBinding.strings \"iina.toggle-flip\": how a key binding's action reads."
+  },
+  "keyBindingIinaToggleMirror": "Toggle mirror",
+  "@keyBindingIinaToggleMirror": {
+    "description": "IINA's KeyBinding.strings \"iina.toggle-mirror\": how a key binding's action reads."
+  },
+  "keyBindingIinaSavePlaylist": "Save current playlist",
+  "@keyBindingIinaSavePlaylist": {
+    "description": "IINA's KeyBinding.strings \"iina.save-playlist\": how a key binding's action reads."
+  },
+  "keyBindingIinaShowCurrentFileInFinder": "Show current file in Finder",
+  "@keyBindingIinaShowCurrentFileInFinder": {
+    "description": "IINA's KeyBinding.strings \"iina.show-current-file-in-finder\": how a key binding's action reads."
+  },
+  "keyBindingIinaDeleteCurrentFile": "Delete current file",
+  "@keyBindingIinaDeleteCurrentFile": {
+    "description": "IINA's KeyBinding.strings \"iina.delete-current-file\": how a key binding's action reads."
+  },
+  "keyBindingIinaDeleteCurrentFileHard": "Delete current file directly without moving to trash",
+  "@keyBindingIinaDeleteCurrentFileHard": {
+    "description": "IINA's KeyBinding.strings \"iina.delete-current-file-hard\": how a key binding's action reads."
+  },
+  "keyBindingIinaFindOnlineSubs": "Find online subtitles",
+  "@keyBindingIinaFindOnlineSubs": {
+    "description": "IINA's KeyBinding.strings \"iina.find-online-subs\": how a key binding's action reads."
+  },
+  "keyBindingIinaSaveDownloadedSub": "Save downloaded subtitle",
+  "@keyBindingIinaSaveDownloadedSub": {
+    "description": "IINA's KeyBinding.strings \"iina.save-downloaded-sub\": how a key binding's action reads."
+  },
+  "keyBindingYes": "Yes",
+  "@keyBindingYes": {
+    "description": "IINA's KeyBinding.strings \"yes\": how a key binding's action reads."
+  },
+  "keyBindingNo": "No",
+  "@keyBindingNo": {
+    "description": "IINA's KeyBinding.strings \"no\": how a key binding's action reads."
+  },
+  "keyBindingTo": "to",
+  "@keyBindingTo": {
+    "description": "IINA's KeyBinding.strings \"to\": how a key binding's action reads."
+  },
+  "keyBindingBy": "by",
+  "@keyBindingBy": {
+    "description": "IINA's KeyBinding.strings \"by\": how a key binding's action reads."
+  },
+  "keyBindingIn": "in",
+  "@keyBindingIn": {
+    "description": "IINA's KeyBinding.strings \"in\": how a key binding's action reads."
+  },
+  "keyBindingAdd": "increase",
+  "@keyBindingAdd": {
+    "description": "IINA's KeyBinding.strings \"add\": how a key binding's action reads."
+  },
+  "keyBindingMinus": "decrease",
+  "@keyBindingMinus": {
+    "description": "IINA's KeyBinding.strings \"minus\": how a key binding's action reads."
+  },
+  "keyBindingForward": "forward",
+  "@keyBindingForward": {
+    "description": "IINA's KeyBinding.strings \"forward\": how a key binding's action reads."
+  },
+  "keyBindingBackward": "backward",
+  "@keyBindingBackward": {
+    "description": "IINA's KeyBinding.strings \"backward\": how a key binding's action reads."
+  },
+  "keyBindingSeekTo": "to",
+  "@keyBindingSeekTo": {
+    "description": "IINA's KeyBinding.strings \"seek-to\": how a key binding's action reads."
+  },
+  "keyBindingRelative": "s",
+  "@keyBindingRelative": {
+    "description": "IINA's KeyBinding.strings \"relative\": how a key binding's action reads."
+  },
+  "keyBindingAbsolute": "s",
+  "@keyBindingAbsolute": {
+    "description": "IINA's KeyBinding.strings \"absolute\": how a key binding's action reads."
+  },
+  "keyBindingAbsolutePercent": "%",
+  "@keyBindingAbsolutePercent": {
+    "description": "IINA's KeyBinding.strings \"absolute-percent\": how a key binding's action reads."
+  },
+  "keyBindingRelativePercent": "%",
+  "@keyBindingRelativePercent": {
+    "description": "IINA's KeyBinding.strings \"relative-percent\": how a key binding's action reads."
+  },
+  "keyBindingRelativeExact": "s (exact)",
+  "@keyBindingRelativeExact": {
+    "description": "IINA's KeyBinding.strings \"relative+exact\": how a key binding's action reads."
+  },
+  "keyBindingRelativePercentExact": "% (exact)",
+  "@keyBindingRelativePercentExact": {
+    "description": "IINA's KeyBinding.strings \"relative-percent+exact\": how a key binding's action reads."
+  },
+  "keyBindingAbsoluteKeyframe": "s (keyframe)",
+  "@keyBindingAbsoluteKeyframe": {
+    "description": "IINA's KeyBinding.strings \"absolute+keyframe\": how a key binding's action reads."
+  },
+  "keyBindingAbsolutePercentKeyframe": "% (keyframe)",
+  "@keyBindingAbsolutePercentKeyframe": {
+    "description": "IINA's KeyBinding.strings \"absolute-percent+keyframe\": how a key binding's action reads."
+  },
+  "keyBindingOptPause": "Pause",
+  "@keyBindingOptPause": {
+    "description": "IINA's KeyBinding.strings \"opt.pause\": how a key binding's action reads."
+  },
+  "keyBindingOptSpeed": "Speed",
+  "@keyBindingOptSpeed": {
+    "description": "IINA's KeyBinding.strings \"opt.speed\": how a key binding's action reads."
+  },
+  "keyBindingOptWindowScale": "Window scale",
+  "@keyBindingOptWindowScale": {
+    "description": "IINA's KeyBinding.strings \"opt.window-scale\": how a key binding's action reads."
+  },
+  "keyBindingOptVideo": "Video track",
+  "@keyBindingOptVideo": {
+    "description": "IINA's KeyBinding.strings \"opt.video\": how a key binding's action reads."
+  },
+  "keyBindingOptVideoAspectOverride": "Video aspect",
+  "@keyBindingOptVideoAspectOverride": {
+    "description": "IINA's KeyBinding.strings \"opt.video-aspect-override\": how a key binding's action reads."
+  },
+  "keyBindingOptContrast": "Contrast",
+  "@keyBindingOptContrast": {
+    "description": "IINA's KeyBinding.strings \"opt.contrast\": how a key binding's action reads."
+  },
+  "keyBindingOptBrightness": "Brightness",
+  "@keyBindingOptBrightness": {
+    "description": "IINA's KeyBinding.strings \"opt.brightness\": how a key binding's action reads."
+  },
+  "keyBindingOptGamma": "Gamma",
+  "@keyBindingOptGamma": {
+    "description": "IINA's KeyBinding.strings \"opt.gamma\": how a key binding's action reads."
+  },
+  "keyBindingOptSaturation": "Saturation",
+  "@keyBindingOptSaturation": {
+    "description": "IINA's KeyBinding.strings \"opt.saturation\": how a key binding's action reads."
+  },
+  "keyBindingOptDeinterlace": "Deinterlace",
+  "@keyBindingOptDeinterlace": {
+    "description": "IINA's KeyBinding.strings \"opt.deinterlace\": how a key binding's action reads."
+  },
+  "keyBindingOptAudio": "Audio track",
+  "@keyBindingOptAudio": {
+    "description": "IINA's KeyBinding.strings \"opt.audio\": how a key binding's action reads."
+  },
+  "keyBindingOptVolume": "Volume",
+  "@keyBindingOptVolume": {
+    "description": "IINA's KeyBinding.strings \"opt.volume\": how a key binding's action reads."
+  },
+  "keyBindingOptMute": "Mute",
+  "@keyBindingOptMute": {
+    "description": "IINA's KeyBinding.strings \"opt.mute\": how a key binding's action reads."
+  },
+  "keyBindingOptAudioDelay": "Audio delay",
+  "@keyBindingOptAudioDelay": {
+    "description": "IINA's KeyBinding.strings \"opt.audio-delay\": how a key binding's action reads."
+  },
+  "keyBindingOptSub": "Subtitle track",
+  "@keyBindingOptSub": {
+    "description": "IINA's KeyBinding.strings \"opt.sub\": how a key binding's action reads."
+  },
+  "keyBindingOptSubDelay": "Subtitle delay",
+  "@keyBindingOptSubDelay": {
+    "description": "IINA's KeyBinding.strings \"opt.sub-delay\": how a key binding's action reads."
+  },
+  "keyBindingOptSubPos": "Subtitle position",
+  "@keyBindingOptSubPos": {
+    "description": "IINA's KeyBinding.strings \"opt.sub-pos\": how a key binding's action reads."
+  },
+  "keyBindingOptSubScale": "Subtitle scale",
+  "@keyBindingOptSubScale": {
+    "description": "IINA's KeyBinding.strings \"opt.sub-scale\": how a key binding's action reads."
+  },
+  "keyBindingOptSubVisibility": "Subtitle visibility",
+  "@keyBindingOptSubVisibility": {
+    "description": "IINA's KeyBinding.strings \"opt.sub-visibility\": how a key binding's action reads."
+  },
+  "keyBindingOptSecondarySubVisibility": "Secondary subtitle visibility",
+  "@keyBindingOptSecondarySubVisibility": {
+    "description": "IINA's KeyBinding.strings \"opt.secondary-sub-visibility\": how a key binding's action reads."
+  },
+  "keyBindingOptSubAssStyleOverride": "ASS style override",
+  "@keyBindingOptSubAssStyleOverride": {
+    "description": "IINA's KeyBinding.strings \"opt.sub-ass-style-override\": how a key binding's action reads."
+  },
+  "keyBindingOptFullscreen": "Fullscreen",
+  "@keyBindingOptFullscreen": {
+    "description": "IINA's KeyBinding.strings \"opt.fullscreen\": how a key binding's action reads."
+  },
+  "keyBindingOptOntop": "Float on top",
+  "@keyBindingOptOntop": {
+    "description": "IINA's KeyBinding.strings \"opt.ontop\": how a key binding's action reads."
+  },
+  "keyBindingOptChapter": "Chapter",
+  "@keyBindingOptChapter": {
+    "description": "IINA's KeyBinding.strings \"opt.chapter\": how a key binding's action reads."
+  },
+  "keyBindingReadSet": "Set '{{'property'}}' to '{{'value'}}'",
+  "@keyBindingReadSet": {
+    "description": "IINA's KeyBinding.strings \"read.set\": how a key binding's action reads."
+  },
+  "keyBindingReadAdd": "'{{'property'}}' '{{'value'}}'",
+  "@keyBindingReadAdd": {
+    "description": "IINA's KeyBinding.strings \"read.add\": how a key binding's action reads."
+  },
+  "keyBindingReadMultiply": "Multiply '{{'property'}}' by '{{'factor'}}'x",
+  "@keyBindingReadMultiply": {
+    "description": "IINA's KeyBinding.strings \"read.multiply\": how a key binding's action reads."
+  },
+  "keyBindingReadCycle": "Cycle '{{'property'}}{{'#dir_down'}}' Downwards'{{'/dir_down'}}'",
+  "@keyBindingReadCycle": {
+    "description": "IINA's KeyBinding.strings \"read.cycle\": how a key binding's action reads."
+  },
+  "keyBindingReadCycleValues": "Cycle '{{'property'}}' in ('{{{'values'}}}')",
+  "@keyBindingReadCycleValues": {
+    "description": "IINA's KeyBinding.strings \"read.cycle-values\": how a key binding's action reads."
+  },
+  "keyBindingReadSeek": "Seek '{{'#fwd'}}'forward'{{'/fwd'}}{{'#bwd'}}'backward'{{'/bwd'}}{{'#abs'}}'to'{{'/abs'}}' '{{'value'}}{{'#sec'}}'s'{{'/sec'}}{{'#per'}}'%'{{'/per'}}' '{{'#exact'}}'(exact)'{{'/exact'}}{{'#kf'}}'(keyframe)'{{'/kf'}}'",
+  "@keyBindingReadSeek": {
+    "description": "IINA's KeyBinding.strings \"read.seek\": how a key binding's action reads."
+  },
+  "keyBindingReadSubSeek": "Seek to '{{'#skip_1'}}'next'{{'/skip_1'}}{{'#skip_-1'}}'previous'{{'/skip_-1'}}' subtitle",
+  "@keyBindingReadSubSeek": {
+    "description": "IINA's KeyBinding.strings \"read.sub-seek\": how a key binding's action reads."
+  },
+  "videoSubScaleTo": "Subtitle Scale: {scale}x",
+  "@videoSubScaleTo": {
+    "description": "The OSD message of the subtitles' scale set (IINA's osd.subtitle_scale); {scale} its number."
+  },
+  "videoSubPosTo": "Subtitle Position: {pos}",
+  "@videoSubPosTo": {
+    "description": "The OSD message of the subtitles' vertical position set (IINA's osd.subtitle_pos); {pos} its number, 100 at the foot."
+  },
+  "videoChapterTo": "Chapter: {name}",
+  "@videoChapterTo": {
+    "description": "The OSD message of the chapter gone to (IINA's osd.chapter); {name} its title."
+  },
+  "videoSecondarySubHidden": "Secondary Subtitles Hidden",
+  "@videoSecondarySubHidden": {
+    "description": "The OSD message of the secondary subtitles hidden (IINA's osd.sub_second_hidden)."
+  },
+  "videoSecondarySubVisible": "Secondary Subtitles Visible",
+  "@videoSecondarySubVisible": {
+    "description": "The OSD message of the secondary subtitles shown (IINA's osd.sub_second_visible)."
+  },
+  "videoFileLoop": "Loop Single File",
+  "@videoFileLoop": {
+    "description": "The OSD message of the file looped (IINA's osd.file_loop)."
+  },
+  "videoPlaylistLoop": "Loop Playlist",
+  "@videoPlaylistLoop": {
+    "description": "The OSD message of the playlist looped (IINA's osd.playlist_loop)."
+  },
+  "videoNoLoop": "Disable Looping",
+  "@videoNoLoop": {
+    "description": "The OSD message of looping turned off (IINA's osd.no_loop)."
+  },
+  "videoHwdecTo": "Hardware Decoding: {state}",
+  "@videoHwdecTo": {
+    "description": "The OSD message of hardware decoding turned on or off (IINA's osd.hwdec); {state} On or Off."
+  },
+  "videoOn": "On",
+  "@videoOn": {
+    "description": "On, of a switch said (IINA's general.on)."
+  },
+  "videoOff": "Off",
+  "@videoOff": {
+    "description": "Off, of a switch said (IINA's general.off)."
+  },
+  "iinaInputAlreadyExists": "Value already exists.",
+  "@iinaInputAlreadyExists": {
+    "description": "IINA's \"input.already_exists\"."
+  },
+  "iinaInputValueIsEmpty": "Value cannot be empty.",
+  "@iinaInputValueIsEmpty": {
+    "description": "IINA's \"input.value_is_empty\"."
+  },
+  "settingsDecoding": "Decoding",
+  "@settingsDecoding": {
+    "description": "IINA's \"settings.$Decoding\": a string of the player's settings window."
+  },
+  "settingsSubtitleSource": "Subtitle source",
+  "@settingsSubtitleSource": {
+    "description": "IINA's \"settings.$SubtitleSource\": a string of the player's settings window."
+  },
+  "settingsSubtitleSourceDesc": "This is the default source for searching subtiles. While playing, you can manually choose to search subtitles from other sources from the menu.",
+  "@settingsSubtitleSourceDesc": {
+    "description": "IINA's \"settings.$SubtitleSource.desc\": a string of the player's settings window."
   }
 }

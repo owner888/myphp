@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
-use MyPHP\{App, PathName, Rectangle, WindowState, WindowStateStore};
+use MyPHP\{App, Logger, PathName, Rectangle, WindowState, WindowStateStore};
 
 /**
  * The states windows' state keys remember (mygo's windowStates), loaded
@@ -44,7 +44,7 @@ final class WindowStates
             self::store()->saveWindowStates(self::$byKey);
             self::$dirty = false;
         } catch (\Throwable $e) {
-            error_log("myphp: window state: {$e->getMessage()}");
+            Logger::warn("window state: {$e->getMessage()}", 'window');
         }
     }
 

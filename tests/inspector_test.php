@@ -178,8 +178,6 @@ same('Deep', $in->nodes[$in->nodeOf($in->selected)]['text'] ?? null, 'finding ch
 check(inspHas($t, '<Text>Deep</Text>'), 'and shows it');
 
 // The tabs: issues, performance; the edge resizes the panel.
-$log = ini_get('error_log');
-ini_set('error_log', '/dev/null');
 [$t, $seen] = inspected(function (Context $c) {
     $c->key('twice')->row(); $c->end();
     $c->key('twice')->row(); $c->end();
@@ -191,7 +189,6 @@ $in = $t->rt->inspector;
 check(inspHas($t, 'Issues 1'), 'the toolbar counts the issue');
 $t->clickText('Issues 1');
 check(inspHas($t, "the key 'twice'"), 'the Issues tab lists it');
-ini_set('error_log', (string)$log);
 $t->clickText('Performance');
 foreach (['Last frame', 'Average', 'Slowest', 'Build', 'Layout', 'Paint', '60 Hz', '16.7 ms, a frame at 60 Hz'] as $s) { check(inspHas($t, $s), "the Performance tab shows $s"); }
 $in->hz = 120;

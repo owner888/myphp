@@ -5,6 +5,7 @@ namespace MyPHP\UI;
 
 use Closure;
 use MyPHP\App;
+use MyPHP\Logger;
 use MyPHP\Media\EqualizerProfiles;
 use MyPHP\Media\MetaVideo;
 use MyPHP\Media\OpenSubtitles;
@@ -18,6 +19,10 @@ use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
 use MyPHP\Media\ThumbnailCache;
+use MyPHP\Media\CacheBudget;
+use MyPHP\Media\HttpBytes;
+use MyPHP\Media\Subtitles;
+use MyPHP\Media\YtDlp;
 use MyPHP\Media\Track;
 use MyPHP\Native\NowPlaying;
 use MyPHP\Native\PictureInPicture;
@@ -33,8 +38,6 @@ use RuntimeException;
  */
 final class VideoPlayerState
 {
-    /** Seconds the controls stay after the pointer last moved, and a message shows (IINA's). */
-    public const LINGER = 2.5, MESSAGE = 1.0;
     /** IINA's aspect ratios, the crop's too: the label (null for "default", or "none" of a crop) and the ratio, null for the picture's own. */
     public const ASPECTS = [[null, null], ['4:3', 4 / 3], ['16:9', 16 / 9], ['16:10', 16 / 10], ['21:9', 21 / 9], ['5:4', 5 / 4]];
     public const ROTATIONS = [0, 90, 180, 270];
@@ -197,15 +200,29 @@ final class VideoPlayerState
         $set = $this->settings();
         try {
             if ($this->settings()->stored('hardwareDecoder')) { Player::$hardwareDecoding = $this->settings()->get('hardwareDecoder') !== 0; } // the settings' hardware decoder, once set, as mpv's hwdec is IINA's
-            $p = new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
+            Player::$videoThreads = $this->settings()->get('videoThreads'); // and its threads of decoding in software (IINA's videoThreads)
+            [Player::$audioLanguages, Player::$subtitleLanguages] = [$set->get('audioLanguage'), $set->get('subLang')]; // the tracks of the preferred languages first (mpv's alang and slang)
+            Player::$autoLoad = [$set->get('subAutoLoadIINA'), $set->get('subAutoLoadPriorityString'), $set->get('subAutoLoadSearchPath'), $set->get('playlistAutoAdd')]; // its subtitle files as IINA's auto load finds them
+            Subtitles::$encoding = $set->get('defaultEncoding');
+            [Player::$cache, Player::$cachePauseInitial, Player::$cacheWait] = [$set->get('enableCache'), $set->get('cachePauseInitial'), $set->get('cachePauseWait')]; // the network's cache, as mpv's options
+            [CacheBudget::$max, CacheBudget::$seconds] = [$set->get('defaultCacheSize') << 10, $set->get('secPrefech')];
+            HttpBytes::$userAgent = $set->get('userAgent');
+            [YtDlp::$enabled, YtDlp::$searchPath, YtDlp::$rawOptions] = [$set->get('ytdlEnabled'), $set->get('ytdlSearchPath'), $set->get('ytdlRawOptions')];
+            if ($set->get('httpProxy') !== '') { putenv('http_proxy=http://' . $set->get('httpProxy')); } // as IINA sets it, for curl and yt-dlp
+            [$ahead, $this->ahead] = [$this->ahead, null];
+            $this->log("Opening $path" . ($manual ? ' (by hand)' : ''));
+            $p = ($ahead[0] ?? null) === $path && $ahead[1] !== null ? $ahead[1] // opened already, as its gapless audio
+                : new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
         } catch (RuntimeException $e) {
             $this->adOver = null;
             $this->opening = null;
             $this->error = $e->getMessage();
+            $this->log("Cannot open $path: {$e->getMessage()}", Logger::ERROR);
             $this->changed();
             return false;
         }
         $this->opening = null; $this->adOver = null;
+        $this->log(sprintf('Opened %s: %s, video %s, audio %s, %d subtitle tracks', $p->title(), self::clock($p->duration()), $p->videoTrack()?->codec ?? 'none', $p->audioTrack()?->codec ?? 'none', count($p->subtitleTracks())));
         if ($p->playlist() !== null) { // a web page's (yt-dlp's): its videos, the one playing chosen
             $this->playlist = $p->playlist();
         } elseif ($this->playlist === null || !$this->playlist->select($path)) {
@@ -217,7 +234,18 @@ final class VideoPlayerState
         if ($set->get('recordRecentFiles') && ($manual || $set->get('trackAllFilesInRecentOpenMenu')) && App::running()) { App::addRecentDocument($path); }
         if ($set->get('recordPlaybackHistory')) { $this->history()->add($path, $url ? $path : basename($path), $p->title(), $p->duration()); }
         $this->setPlayer($p);
+        $this->say($p->title(), '', 'fileStart'); // IINA's message of the file opened
+        if ($p->videoTrack() !== null) { // the window to the film's size, as IINA's settings say: on each film, those opened by hand, or never; its initial size and place the first time
+            $timing = $set->get('resizeWindowTiming');
+            [$w, $h] = $p->size();
+            $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => $timing === 0 || ($timing === 1 && $manual), 'ratio' => [-1.0, 0.5, 1.0, 1.5, 2.0][$set->get('resizeWindowOption')] ?? 1.0,
+                'physical' => $set->get('usePhysicalResolution'), 'geometry' => $this->placed ? null : $set->get('initialWindowSizePosition'), 'animate' => !$set->get('disableAnimations')]);
+            $this->placed = true;
+        }
         if (!$set->get('pauseWhenOpen')) { $p->play(); }
+        if ($set->get('autoSearchOnlineSub') && !$url && $p->subtitleTracks() === [] && $p->duration() >= $set->get('autoSearchThreshold') * 60 && $this->openSubtitles !== null) { // IINA's: a film of no subtitles, long enough, searched for online
+            $this->searchOnlineSubtitles();
+        }
         if ($set->get('fullScreenWhenOpen')) { $this->ask('fullScreen', true); }
         return true;
     }
@@ -238,6 +266,36 @@ final class VideoPlayerState
     private function history(): PlaybackHistory
     {
         return $this->playbackHistory ??= PlaybackHistory::default();
+    }
+
+    /** Seconds before an audio file's end the next is opened, for gapless audio. */
+    private const AHEAD = 5.0;
+    /** @var ?array{0: string, 1: ?Player} the next file of the playlist opened before its turn (its path, and its player, null where it failed: it fails again in its turn, told then) */
+    private ?array $ahead = null;
+
+    /**
+     * IINA's gapless audio, as near as there is: AHEAD seconds before the
+     * end of an audio file that the next follows, the next audio file
+     * opened (read, its first sound decoded and queued), so that it plays
+     * the moment this one ends.
+     */
+    private function openAhead(): void
+    {
+        $p = $this->player; $l = $this->playlist; $set = $this->settings();
+        if ($this->ahead !== null || $p === null || $l === null || $p->videoTrack() !== null || $set->get('gaplessAudio') === 0 || $this->loop === 'file'
+            || !($set->get('playlistAutoPlayNext') || $this->loop === 'playlist') || $p->duration() - $p->time() > self::AHEAD) {
+            return;
+        }
+        $files = $l->files();
+        $next = $files[$l->index() + 1] ?? ($this->loop === 'playlist' ? ($files[0] ?? null) : null);
+        if ($next === null || preg_match('~^https?://~i', $next) === 1 || !in_array(strtolower(pathinfo($next, PATHINFO_EXTENSION)), Playlist::AUDIO, true)) {
+            return;
+        }
+        try {
+            $this->ahead = [$next, new Player($next)];
+        } catch (RuntimeException) {
+            $this->ahead = [$next, null];
+        }
     }
 
     /** Plays the next film of the playlist; false after the last, unless the playlist loops, which goes to the first. */
@@ -278,6 +336,7 @@ final class VideoPlayerState
             return;
         }
         foreach ($this->off as $off) { $off(); }
+        $first = $this->player === null;
         if ($this->player !== null) {
             if ($this->resume) { $this->note(); }
             $this->player->pause();
@@ -288,17 +347,28 @@ final class VideoPlayerState
         $this->player = $p;
         $this->fresh = true;
         if (PictureInPicture::supported()) {
-            $this->pip = new PictureInPicture($p, function (bool $on): void { // the window goes while the film plays in the system's, as IINA's, and comes back with it
+            $this->pip = new PictureInPicture($p, function (bool $on): void { // the window hides, or goes to the Dock, or stays, while the film plays in the system's, as IINA's settings say, and comes back with it
                 if ($on === $this->pictureInPicture) { return; }
                 $this->pictureInPicture = $on;
-                ($this->runtime?->get()?->showWindow)?->__invoke(!$on);
+                $set = $this->settings();
+                $rt = $this->runtime?->get();
+                match ($set->get('windowBehaviorWhenPip')) {
+                    1 => ($rt?->showWindow)?->__invoke(!$on),
+                    2 => ($rt?->minimizeWindow)?->__invoke($on),
+                    default => null,
+                };
+                if ($on && $set->get('pauseWhenPip') && $this->player?->playing()) { $this->player->pause(); $this->played(); } // IINA's "Automatically pause playback"
                 $this->changed();
             });
         }
         $this->error = '';
+        $this->autoMusicMode($p);
         $this->speedAt = log($p->rate() / 0.25, 64);
+        if ($first && $this->settings()->get('enableInitialVolume')) { $this->volume = min($this->maxVolume(), $this->settings()->get('initialVolume') / 100); } // IINA's initial volume, of a new window's player
         $p->setVolume($this->volume);
+        $this->applyAudio($p);
         $p->setEqualizer($this->equalizer);
+        $p->setHdr($this->settings()->get('enableHdrSupport')); // IINA's HDR mode: HDR as HDR, else tone mapped
         if ($this->hardwareDecoding !== null) { $p->setHardwareDecoding($this->hardwareDecoding); } // the quick setting's, of this player and the next (mpv's hwdec stays as films change)
         $this->moved = microtime(true);
         $noted = 0.0;
@@ -308,8 +378,12 @@ final class VideoPlayerState
                 if ($look !== $this->drawn) { $this->drawn = $look; $this->changed(); }
                 if ($this->resume && abs($this->player->time() - $noted) >= self::NOTE_EVERY) { $noted = $this->player->time(); $this->note(); }
                 if ($this->nowPlaying && $this->player->chapter() !== $this->shownChapter) { $this->showNowPlaying(); }
+                $this->openAhead();
             }),
             ...array_map(fn(string $e) => $p->on($e, function (): void { if ($this->nowPlaying) { $this->showNowPlaying(); } }), ['play', 'pause', 'rate', 'seek']),
+            ...array_map(fn(string $e) => $p->on($e, function () use ($e): void { // IINA's "Always float on top while playing": on top as it plays, not as it pauses
+                if ($this->settings()->get('alwaysFloatOnTop')) { $this->onTop = $e === 'play'; $this->changed(); }
+            }), ['play', 'pause']),
             $p->on('ended', function () {
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
                 if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
@@ -318,16 +392,19 @@ final class VideoPlayerState
                 if (!$this->settings()->get('keepOpenOnFileEnd')) { $this->ask('close', true); } // IINA's: the window goes, unless kept open
                 $this->changed();
             }),
-            $p->on('error', function (string $why) { $this->error = $why; $this->changed(); }),
-            $p->on('buffering', fn() => $this->changed()), // the indicator shows, and goes
+            $p->on('error', function (string $why) { $this->error = $why; $this->log("Error: $why", Logger::ERROR); $this->changed(); }),
+            $p->on('buffering', function (bool $on): void { $this->log($on ? 'Paused for cache' : 'Cache ready', Logger::DEBUG); $this->changed(); }), // the indicator shows, and goes
         ];
         if ($this->nowPlaying) { $this->showNowPlaying(); }
         $this->makeThumbnails($p);
         $this->changed();
     }
 
-    /** IINA's count of the seek bar's thumbnails less one, their width in pixels (twice the 120 points they show at), and the seconds at most between two made. */
-    private const THUMBNAILS = 100, THUMBNAIL_WIDTH = 240, THUMBNAIL_EVERY = 0.02;
+    /** IINA's count of the seek bar's thumbnails less one, and the seconds at most between two made. */
+    private const THUMBNAILS = 100, THUMBNAIL_EVERY = 0.02;
+
+    /** The settings the thumbnails were made by (shown, their width, of remote drives), to make them again as they change. */
+    private ?array $thumbsAsSet = null;
 
     /** Where the seek bar's thumbnails of films seen are kept: the app's, ThumbnailCache::default(), unless set. */
     public ?ThumbnailCache $thumbnailCache = null;
@@ -345,22 +422,25 @@ final class VideoPlayerState
     private function makeThumbnails(Player $p): void
     {
         $this->thumbnails = [];
-        if ($p->videoTrack() === null || $p->duration() <= 0 || $p->remote()) { return; } // none of a film over the network, as IINA's
-        $cache = $this->thumbnailCache ??= ThumbnailCache::default();
-        if (($kept = $cache->get($p->path(), self::THUMBNAIL_WIDTH)) !== null) {
+        $set = $this->settings();
+        if ($p->videoTrack() === null || $p->duration() <= 0 || $p->remote() || !$set->get('enableThumbnailPreview')) { return; } // none of a film over the network, as IINA's, nor where the settings say none
+        if (!$set->get('enableThumbnailForRemoteFiles') && PHP_OS_FAMILY === 'Darwin' && !\MyPHP\Shell::isLocal($p->path())) { return; } // nor of one on a mounted remote drive, unless the settings say so
+        $cache = ($this->thumbnailCache ?? ThumbnailCache::default())->withMax((int)$set->get('maxThumbnailPreviewCacheSize') << 20);
+        $width = self::thumbnailWidth($set);
+        if (($kept = $cache->get($p->path(), $width)) !== null) {
             $this->thumbnails = $kept;
             return;
         }
         $made = []; $jpegs = []; $i = 0;
         $next = null;
-        $step = function () use ($p, $cache, &$made, &$jpegs, &$i, &$next): void {
+        $step = function () use ($p, $cache, $width, &$made, &$jpegs, &$i, &$next): void {
             if ($this->player !== $p) { $next = null; return; } // another film took its place
-            $t = $p->thumbnail($p->duration() * $i / self::THUMBNAILS, self::THUMBNAIL_WIDTH);
+            $t = $p->thumbnail($p->duration() * $i / self::THUMBNAILS, $width);
             if ($t !== null && ($made === [] || $made[count($made) - 1]->time !== $t->time)) { $made[] = $t; $jpegs[] = ThumbnailCache::jpeg($t); }
             if (++$i <= self::THUMBNAILS) { $next(); return; }
             $next = null; // the closures let themselves go
             $this->thumbnails = $made;
-            $cache->put($p->path(), self::THUMBNAIL_WIDTH, $made, $jpegs);
+            $cache->put($p->path(), $width, $made, $jpegs);
             $this->changed();
         };
         $next = function () use (&$step): void { // after the next frame presented, or the timer, whichever comes first
@@ -370,6 +450,12 @@ final class VideoPlayerState
             App::after(self::THUMBNAIL_EVERY, $once);
         };
         $next();
+    }
+
+    /** The thumbnails' width in pixels: twice the settings' points (thumbnailWidth), for a screen of two pixels a point. */
+    public static function thumbnailWidth(PlayerSettings $set): int
+    {
+        return 2 * (int)$set->get('thumbnailWidth');
     }
 
     /** The thumbnail for $seconds, as IINA's getThumbnail: the one before the first at or after it (the first for none before), else the last; null before they are made. */
@@ -402,12 +488,17 @@ final class VideoPlayerState
         $p?->setAwakeDisplay(!$set->get('allowScreenSaverForAudio') || ($p->videoTrack() !== null && !$this->musicMode)); // IINA's: the screen saver kept off, or only sleep for audio (SleepPreventer)
         $p?->setKeepAwake($o->keepAwake && $set->get('preventScreenSaver'));
         $rt->windowListeners['video ' . spl_object_id($this)] ??= $this->windowEvent(...);
+        $thumbs = [$set->get('enableThumbnailPreview'), self::thumbnailWidth($set), $set->get('enableThumbnailForRemoteFiles')];
+        if ($p !== null && $this->thumbsAsSet !== null && $thumbs !== $this->thumbsAsSet) { $this->makeThumbnails($p); } // the settings of the thumbnails changed: made again
+        $this->thumbsAsSet = $thumbs;
         $this->sleeping ??= \MyPHP\Power::onSuspend(function (): void { // IINA's "Pause when machine goes to sleep"
             if ($this->player?->playing() && $this->settings()->get('pauseWhenGoesToSleep')) { $this->player->pause(); $this->played(); $this->changed(); }
         });
-        if ($o->nowPlaying !== $this->nowPlaying) {
-            $this->nowPlaying = $o->nowPlaying;
-            $o->nowPlaying ? $this->showNowPlaying() : NowPlaying::end($this);
+        if (!self::$logSet) { self::$logSet = true; self::applyLog($set); } // the app's log as the settings say, once the first player shows
+        $nowPlaying = $o->nowPlaying && $set->get('useMediaKeys'); // and as the settings say: IINA's "Use system media control"
+        if ($nowPlaying !== $this->nowPlaying) {
+            $this->nowPlaying = $nowPlaying;
+            $nowPlaying ? $this->showNowPlaying() : NowPlaying::end($this);
         }
         if (!$this->fresh || $p === null) {
             return;
@@ -419,8 +510,101 @@ final class VideoPlayerState
         }
     }
 
-    /** Whether the player is in music mode (IINA's mini player) @internal VideoPlayer */
+    /** Whether the player is in music mode (IINA's mini player, VideoPlayerMusic): toggleMusicMode(), or an audio file opened (autoSwitchToMusicMode). */
     public bool $musicMode = false;
+    /** Whether music mode was switched by hand (IINA's overrideAutoSwitchToMusicMode): the films opened then leave it as it is. */
+    private bool $musicByHand = false;
+    /** Music mode's: whether its playlist and its picture (the album's art) show, and how high the playlist is, IINA's musicModeShowPlaylist and musicModeShowAlbumArt. @internal VideoPlayerMusic */
+    public float $musicPlaylistHeight = 300;
+
+    /** IINA's speeds of the control bar's arrows (AppData.availableSpeedValues), 1x in the middle. */
+    public const SPEEDS = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32];
+    /** @internal VideoPlayer: the control bar's arrows held (by node), and its bars of the time and of the volume as last built, which the wheel over them moves. */
+    public array $arrowHeld = [];
+    /** @internal VideoPlayer: the floating bar's drag: where it began, and how far it went, [x, y, dx, dy]. */
+    public ?array $oscDrag = null;
+    public ?Node $seekBar = null, $volumeBar = null;
+    /** @internal VideoPlayer: when a single click on the picture acts, a double click's time after it (null for none waiting). */
+    public ?float $singleClickAt = null;
+    /** Whether the window was placed by the settings' initial size and position (once, as its first film opens). */
+    private bool $placed = false;
+    /** Whether the window floats on top (IINA's: its title bar's pin, or as it plays where the settings say alwaysFloatOnTop). */
+    public bool $onTop = false;
+    /** An arrow of the control bar held for speed: [right, when it was pressed, the speed's index before]. */
+    private ?array $arrow = null;
+
+    /**
+     * An arrow of the control bar pressed ($right, else the left), as the
+     * settings say it acts (IINA's arrowBtnAction): the speed a step faster,
+     * or slower, from 1x if it went the other way (playing if paused); the
+     * next film, or the one before; ten seconds on, or back.
+     */
+    public function arrowDown(bool $right): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        match ($this->settings()->get('arrowBtnAction')) {
+            1 => $right ? $this->next() : $this->previous(),
+            2 => $this->seekBy($right ? 10 : -10),
+            default => (function () use ($p, $right): void {
+                $mid = intdiv(count(self::SPEEDS), 2);
+                $at = $this->speedIndex();
+                if ($right ? $at < $mid : $at > $mid) { $at = $mid; } // the other way: from 1x
+                $this->arrow = [$right, microtime(true), $at];
+                $this->setSpeed(self::SPEEDS[max(0, min(count(self::SPEEDS) - 1, $at + ($right ? 1 : -1)))]);
+                if (!$p->playing()) { $p->play(); $this->played(); }
+            })(),
+        };
+    }
+
+    /** The arrow pressed for speed let go: held long (half a second, IINA's) from 1x, the speed goes back to 1x, as a press to look ahead; a click keeps it. */
+    public function arrowUp(): void
+    {
+        if ($this->arrow === null) { return; }
+        [, $at] = $this->arrow;
+        $this->arrow = null;
+        if (microtime(true) - $at >= 0.5 && abs($this->speedIndex() - intdiv(count(self::SPEEDS), 2)) === 1) { $this->setSpeed(1.0); }
+    }
+
+    /** The index in SPEEDS of the speed it plays at, or of the nearest. */
+    private function speedIndex(): int
+    {
+        $rate = $this->player?->rate() ?? 1.0;
+        $best = 0;
+        foreach (self::SPEEDS as $i => $v) { if (abs(log($v) - log($rate)) < abs(log(self::SPEEDS[$best]) - log($rate))) { $best = $i; } }
+        return $best;
+    }
+
+    /** Seconds the controls stay after the pointer last moved: the settings' (controlBarAutoHideTimeout), for ever where they do not hide (enableControlBarAutoHide). */
+    public function linger(): float
+    {
+        $set = $this->settings();
+        return $set->get('enableControlBarAutoHide') ? (float)$set->get('controlBarAutoHideTimeout') : INF;
+    }
+
+    /** Goes into music mode, or out of it (IINA's Enter/Exit Music Mode): by hand, so the next films opened leave it so. */
+    public function toggleMusicMode(): void
+    {
+        $this->musicByHand = !$this->musicByHand;
+        $this->musicMode = !$this->musicMode;
+        if ($this->musicMode) { $this->sidebar = null; } // IINA's: the sidebars go
+        $this->changed();
+    }
+
+    /** IINA's automatic switch, as a file opens: into music mode for audio (not over the network, not in full screen), out of it for video; not while switched by hand. */
+    private function autoMusicMode(Player $p): void
+    {
+        if (!$this->settings()->get('autoSwitchToMusicMode') || $this->musicByHand) {
+            return;
+        }
+        $audio = $p->videoTrack() === null && !$p->remote();
+        if ($audio && !$this->musicMode && !($this->runtime?->get()?->fullScreen ?? false)) {
+            $this->musicMode = true;
+            $this->sidebar = null;
+        } elseif (!$audio && $this->musicMode) {
+            $this->musicMode = false;
+        }
+    }
     /** What it paused for (minimized, inactive), to play again when that ends, as IINA's; what stops listening to the system's sleep. */
     private string $pausedFor = '';
     private ?Closure $sleeping = null;
@@ -439,8 +623,11 @@ final class VideoPlayerState
         $set = $this->settings();
         $pause = function (string $for) use ($p): void { if ($p->playing()) { $p->pause(); $this->pausedFor = $for; } };
         $resume = function (string $for) use ($p): void { if ($this->pausedFor === $for) { $p->play(); } $this->pausedFor = ''; };
+        $pipOnMinimize = $set->get('togglePipByMinimizingWindow') && (!$set->get('togglePipByMinimizingWindowForVideoOnly') || $p->videoTrack() !== null);
+        if ($e === 'minimize' && $pipOnMinimize && !$this->pictureInPicture && $this->pip?->possible()) { $this->pip->start(); } // IINA's: picture in picture as the window goes to the Dock
+        if ($e === 'restore' && $pipOnMinimize && $this->pip?->active()) { $this->pip->stop(); } // and back as it comes back
         match ($e) {
-            'minimize' => $set->get('pauseWhenMinimized') ? $pause('minimize') : null,
+            'minimize' => $set->get('pauseWhenMinimized') && !$pipOnMinimize ? $pause('minimize') : null,
             'restore' => $resume('minimize'),
             'blur' => $set->get('pauseWhenInactive') ? $pause('inactive') : null,
             'focus' => $resume('inactive'),
@@ -520,15 +707,29 @@ final class VideoPlayerState
         $this->runtime?->get()?->changed();
     }
 
-    /** Shows $text at the top left, with the time ('time') or the volume ('volume') under it, as IINA's messages. */
-    public function say(string $text, string $under = ''): void
+    /**
+     * Shows $text at the top left, with the time ('time') or the volume
+     * ('volume') under it, as IINA's messages, for the settings' time
+     * (osdAutoHideTimeout); none while the settings turn the messages off
+     * (enableOSD), or those of $kind ('fileStart', 'pause', 'seek', 'speed':
+     * IINA's disableOSDFileStartMsg and the others).
+     */
+    public function say(string $text, string $under = '', string $kind = ''): void
     {
-        $this->tell($text, $under, self::MESSAGE);
+        $set = $this->settings();
+        $off = ['fileStart' => 'disableOSDFileStartMsg', 'pause' => 'disableOSDPauseResumeMsgs', 'seek' => 'disableOSDSeekMsg', 'speed' => 'disableOSDSpeedMsg'][$kind] ?? null;
+        if ($off !== null && $set->get($off)) {
+            return;
+        }
+        $this->tell($text, $under, (float)$set->get('osdAutoHideTimeout'));
     }
 
-    /** $text shown so for $seconds (INF: until another, as IINA's OSD of no auto-hide). */
+    /** $text shown so for $seconds (INF: until another, as IINA's OSD of no auto-hide); none while the messages are off (enableOSD). */
     private function tell(string $text, string $under, float $seconds): void
     {
+        if (!$this->settings()->get('enableOSD')) {
+            return;
+        }
         $this->message = [$text, $under, microtime(true) + $seconds];
         $this->changed();
     }
@@ -663,6 +864,48 @@ final class VideoPlayerState
         }
     }
 
+    /** Whether the settings were given the app's log. */
+    private static bool $logSet = false;
+
+    /** The app's log (Logger) as IINA's settings say, with the advanced settings on (which hold them): their log level, else the app's kind's; written to its file with logging on. */
+    private static function applyLog(PlayerSettings $set): void
+    {
+        Logger::setLevel($set->get('enableAdvancedSettings') ? $set->get('logLevel') : Logger::defaultLevel());
+        Logger::logToFile($set->get('enableAdvancedSettings') && $set->get('enableLogging'));
+    }
+
+    /** The number of the players made, and this one's: its log's subsystem, "player0" and on, as IINA's. */
+    private static int $players = 0;
+    private ?int $number = null;
+
+    /** Logs $message as this player's (Logger, its subsystem IINA's "player<n>"). */
+    private function log(string $message, int $level = Logger::DEBUG): void
+    {
+        $this->number ??= self::$players++;
+        Logger::log($level, $message, "player{$this->number}");
+    }
+
+    /** @internal VideoPlayerSettingsPages: forgets where all films were left (IINA's Clear Saved Playback Progress). */
+    public function clearPositions(): void
+    {
+        $this->positions()->clear();
+    }
+
+    /** @internal VideoPlayerSettingsPages: forgets the films played and the recent ones (IINA's Clear Playback History). */
+    public function clearHistory(): void
+    {
+        $this->history()->clear();
+        if (App::running()) { App::clearRecentDocuments(); }
+    }
+
+    /** @internal VideoPlayerSettingsPages: the thumbnails kept, their bytes; forgotten where $clear (IINA's Clear Thumbnail Cache). */
+    public function thumbnailBytes(bool $clear = false): int
+    {
+        $cache = $this->thumbnailCache ?? ThumbnailCache::default();
+        if ($clear) { $cache->clear(); }
+        return $cache->size();
+    }
+
     /** @internal VideoPlayerSettings: the settings of IINA's Settings window the player has. */
     public function settings(): PlayerSettings
     {
@@ -728,7 +971,7 @@ final class VideoPlayerState
         try {
             $os->logout();
         } catch (RuntimeException $e) {
-            error_log("myphp: OpenSubtitles: logout: {$e->getMessage()}");
+            Logger::warn("logout: {$e->getMessage()}", 'opensub');
         }
     }
 
@@ -744,6 +987,10 @@ final class VideoPlayerState
         try {
             $this->settings()->set($key, $value);
             if ($key === 'hardwareDecoder') { Player::$hardwareDecoding = $value !== 0; }
+            if (in_array($key, ['enableAdvancedSettings', 'enableLogging', 'logLevel'], true)) { self::applyLog($this->settings()); }
+            if ($key === 'maxVolume' && $this->volume > $this->maxVolume()) { $this->setVolume($this->maxVolume()); } // as mpv's volume-max lowers it
+            if (in_array($key, ['audioDevice', 'replayGain', 'replayGainPreamp', 'replayGainClip', 'replayGainFallback'], true) && $this->player !== null) { $this->applyAudio($this->player); } // as mpv's options set, at once
+            if ($key === 'thumbnailWidth') { ($this->thumbnailCache ?? ThumbnailCache::default())->clear(); } // IINA's: the thumbnails kept go, the players make theirs again (attach)
         } catch (RuntimeException $e) {
             $this->error = $e->getMessage();
         }
@@ -781,7 +1028,7 @@ final class VideoPlayerState
         $p->playing() ? $p->pause() : $p->play();
         $this->played();
         if ($this->resume && !$p->playing()) { $this->note(); }
-        $this->say($this->t($p->playing() ? 'videoResume' : 'videoPause'), 'time');
+        $this->say($this->t($p->playing() ? 'videoResume' : 'videoPause'), 'time', 'pause');
     }
 
     public function stop(): void
@@ -797,9 +1044,11 @@ final class VideoPlayerState
     {
         $p = $this->player;
         if ($p === null) { return; }
+        $this->log(sprintf('Seek %+.2fs%s', $s, $exact ? ', exact' : ''), Logger::VERBOSE);
+        $this->seekedFrom = $p->time();
         $p->seek($p->time() + $s, $exact);
         $this->played();
-        $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()));
+        $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration()), '', 'seek');
     }
 
     /**
@@ -863,6 +1112,112 @@ final class VideoPlayerState
         $this->changed();
     }
 
+    /** @internal VideoPlayer, VideoPlayerCommands: the subtitles' scale (mpv's sub-scale, 1 the settings' size), their vertical position (sub-pos, null the settings'), the ASS override level asked (sub-ass-override, null the settings'). */
+    public float $subScale = 1.0;
+    /** @internal VideoPlayerLiveText: the analysis of the frame paused at (its time, the job, the words, the choice, all shown, where a drag began, the words' boxes), null for none. @var ?array<string, mixed> */
+    public ?array $liveText = null;
+    public ?float $subPos = null;
+    public ?int $assOverride = null;
+    /** Where the last seek went from, for revert-seek (mpv's), null for none. */
+    private ?float $seekedFrom = null;
+
+    /** Goes back to where the last seek went from, and the seek before it undone the same way (mpv's revert-seek). */
+    public function revertSeek(): void
+    {
+        $p = $this->player;
+        if ($p === null || $this->seekedFrom === null) { return; }
+        $this->seekBy($this->seekedFrom - $p->time(), true);
+    }
+
+    /** Goes to the subtitle line $skip lines on (back when negative), as mpv's sub-seek; or, where $delay (sub-step), the subtitles' delay changed so that it shows now. */
+    public function subSeek(int $skip, bool $delay = false): void
+    {
+        $p = $this->player;
+        $to = $p?->subtitleStart($skip);
+        if ($to === null) { return; }
+        $delay ? $this->setSubtitleDelay($p->subtitleDelay() + $p->time() - $to) : $this->seekBy($to - $p->time(), true);
+    }
+
+    /** The subtitles' scale (mpv's sub-scale, 0 to 100), told as IINA's OSD tells it. */
+    public function setSubScale(float $k): void
+    {
+        $this->subScale = max(0.0, min(100.0, round($k, 2)));
+        $this->say($this->t('videoSubScaleTo', ['scale' => self::number($this->subScale)]));
+    }
+
+    /** The subtitles' vertical position (mpv's sub-pos, 0 to 150), told. */
+    public function setSubPos(float $pos): void
+    {
+        $this->subPos = max(0.0, min(150.0, round($pos)));
+        $this->say($this->t('videoSubPosTo', ['pos' => self::number($this->subPos)]));
+    }
+
+    /** Loops the file, the playlist or nothing ('file', 'playlist', 'off'), told as IINA's. */
+    public function setLooping(string $loop): void
+    {
+        $this->loop = $loop;
+        $this->say($this->t(['file' => 'videoFileLoop', 'playlist' => 'videoPlaylistLoop'][$loop] ?? 'videoNoLoop'));
+    }
+
+    /** The window to $k times the film's size (mpv's window-scale); to the screen's for a negative $k (IINA's fit-to-screen). */
+    public function windowScale(float $k): void
+    {
+        $p = $this->player;
+        if ($p === null || $p->videoTrack() === null) { return; }
+        [$w, $h] = $p->size();
+        $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => true, 'ratio' => $k, 'physical' => false, 'geometry' => null, 'animate' => !$this->settings()->get('disableAnimations')]);
+    }
+
+    /** The player's film gone (mpv's quit: the window closes), where it was noted first ($watchLater, quit-watch-later). */
+    public function quit(bool $watchLater = false): void
+    {
+        if ($watchLater || $this->resume) { $this->note(); }
+        $this->ask('close', true);
+    }
+
+    /** Takes all but the film playing out of the playlist (mpv's playlist-clear). */
+    public function clearPlaylist(): void
+    {
+        $l = $this->playlist;
+        if ($l === null) { return; }
+        for ($i = $l->count() - 1; $i >= 0; $i--) { if ($i !== $l->index()) { $l->remove($i); } }
+        $this->changed();
+    }
+
+    /** Takes the film playing out of the playlist and plays the next (mpv's playlist-remove current). */
+    public function removeFromPlaylist(): void
+    {
+        $l = $this->playlist;
+        if ($l === null || $l->index() < 0) { return; }
+        $i = $l->index();
+        $next = $l->files()[$i + 1] ?? null;
+        $l->remove($i);
+        $next !== null ? $this->openFile($next, false) : $this->changed();
+    }
+
+    /** Moves the film playing to the Trash, or deletes it ($hard), as IINA's, asked first; the next plays. */
+    public function deleteCurrentFile(bool $hard): void
+    {
+        $p = $this->player;
+        if ($p === null || $p->remote()) { return; }
+        $path = $p->path();
+        $r = \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: \MyPHP\Window::focused(), type: 'warning', message: $this->t('iinaAlertDeleteFileTitle'),
+            detail: $this->t('iinaAlertDeleteFileMessage'), buttons: [$this->t('ok'), $this->t('cancel')]));
+        if ($r->response !== 0) { return; }
+        $this->removeFromPlaylist();
+        $hard ? @unlink($path) : \MyPHP\Shell::trashItem($path);
+    }
+
+    /** Saves the playlist as an M3U8 where the user says (IINA's save-playlist). */
+    public function savePlaylist(): void
+    {
+        $l = $this->playlist;
+        if ($l === null) { return; }
+        $to = \MyPHP\Dialog::save(new \MyPHP\SaveDialogOptions(parent: \MyPHP\Window::focused(), defaultPath: 'playlist.m3u8'));
+        if ($to === '') { return; }
+        if (@file_put_contents($to, "#EXTM3U\n" . implode("\n", $l->files()) . "\n") === false) { $this->error = "cannot write $to"; $this->changed(); }
+    }
+
     /** Pauses and shows the next frame, or the one before ($back), as IINA's frame-step and frame-back-step. */
     public function frameStep(bool $back = false): void
     {
@@ -888,6 +1243,7 @@ final class VideoPlayerState
         $p = $this->player;
         $png = $save || $copy ? $p?->snapshot() : null;
         if ($png === null) { return null; }
+        if ($set->get('screenShotIncludeSubtitle')) { $png = $this->withSubtitles($png); }
         $path = null;
         if ($save) {
             $folder = $set->get('screenShotFolder');
@@ -911,6 +1267,33 @@ final class VideoPlayerState
             $this->say($this->t('videoScreenshot'));
         }
         return $path;
+    }
+
+    /**
+     * The frame $png with the subtitles over it as the window shows them
+     * (IINA's "Include subtitles", mpv's screenshot of subtitles): the
+     * window's drawing of them, of the picture's place, scaled to the
+     * frame; the frame as it is where none show (none on, or no window).
+     */
+    private function withSubtitles(string $png): string
+    {
+        $rt = $this->runtime?->get();
+        $under = $rt?->underFrame === null ? null : ($rt->underFrame)();
+        if ($under === null) {
+            return $png; // nothing drawn over the picture
+        }
+        [$bgra, $bw, $bh, $k] = $under;
+        foreach ($rt->videoPlaces as $place) {
+            if ($place['view'] !== $this->player) { continue; }
+            [$fx, $fy, $fw, $fh] = $place['frame'];
+            [$vw, $vh] = $this->player->size();
+            if ($vw <= 0 || $vh <= 0) { break; }
+            $s = min($fw / $vw, $fh / $vh); // the picture, fit in its place as the layer shows it
+            [$pw, $ph] = [$vw * $s, $vh * $s];
+            $crop = [(int)round(($fx + ($fw - $pw) / 2) * $k), (int)round(($fy + ($fh - $ph) / 2) * $k), (int)round($pw * $k), (int)round($ph * $k)];
+            return \MyPHP\Native\ImageIO::overlay($png, $bgra, $bw, $bh, $crop);
+        }
+        return $png;
     }
 
     /** @internal VideoPlayer: the screenshot previewed deleted (IINA's DELETE), or opened (EDIT), or shown in the Finder (REVEAL); the preview gone. */
@@ -946,9 +1329,24 @@ final class VideoPlayerState
         if ($p !== null) { $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration())); }
     }
 
+    /** The volume's most, 1 to 10: IINA's maximum volume (100% to 1000%), the sliders' end. */
+    public function maxVolume(): float
+    {
+        return max(1.0, min(10.0, $this->settings()->get('maxVolume') / 100));
+    }
+
+    /** The settings' sound, of player $p: the output device (IINA's preferred), and ReplayGain's gain. */
+    private function applyAudio(Player $p): void
+    {
+        $set = $this->settings();
+        $device = $set->get('audioDevice');
+        $p->setAudioDevice($device === 'auto' ? null : preg_replace('~^coreaudio/~', '', $device)); // mpv's names of IINA's setting, the system's unique ID after its driver
+        $p->setReplayGain($set->get('replayGain'), (float)$set->get('replayGainPreamp'), $set->get('replayGainClip'), (float)$set->get('replayGainFallback'));
+    }
+
     public function setVolume(float $v): void
     {
-        $this->volume = max(0.0, min(1.0, $v));
+        $this->volume = max(0.0, min($this->maxVolume(), $v));
         $this->player?->setVolume($this->volume);
         if ($this->player?->muted()) { $this->player->setMuted(false); }
         $this->say($this->t('videoVolume', ['volume' => (int)round($this->volume * 100)]), 'volume');
@@ -962,14 +1360,14 @@ final class VideoPlayerState
         $this->say($this->t($p->muted() ? 'videoMute' : 'videoUnmute'));
     }
 
-    /** Plays at $rate, 0.25x to 16x as IINA's slider goes. */
+    /** Plays at $rate, 1/32x to 32x as IINA's arrows go (its slider 0.25x to 16x). */
     public function setSpeed(float $rate): void
     {
-        $rate = max(0.25, min(16.0, round($rate, 2)));
+        $rate = max(self::SPEEDS[0], min(self::SPEEDS[count(self::SPEEDS) - 1], $rate < 0.25 ? $rate : round($rate, 2)));
         $this->player?->setRate($rate);
         $this->played();
-        $this->speedAt = log($rate / 0.25, 64);
-        $this->say($this->t('videoSpeedTo', ['speed' => self::number($rate)]));
+        $this->speedAt = max(0.0, min(1.0, log($rate / 0.25, 64)));
+        $this->say($this->t('videoSpeedTo', ['speed' => self::number($rate)]), '', 'speed');
     }
 
     public function setSubtitleDelay(float $s): void

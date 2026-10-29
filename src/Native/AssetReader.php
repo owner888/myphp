@@ -107,6 +107,65 @@ final class AssetReader implements Source
      * write it, matches no preferred language); each group's start and its
      * common title.
      */
+    /** @internal Player: the file's common metadata (AVFoundation's: ID3, iTunes, QuickTime), title, artist and album, '' each where it has none. @return array{title: string, artist: string, album: string} */
+    public function tags(): array
+    {
+        $out = ['title' => '', 'artist' => '', 'album' => ''];
+        foreach (['title' => 'title', 'artist' => 'artist', 'albumName' => 'album'] as $key => $name) {
+            $item = $this->common($key);
+            $v = $item === null ? null : ObjC::msg('p:', $item, 'stringValue');
+            if ($v !== null) { $out[$name] = trim(ObjC::phpStr($v)); }
+        }
+        return $out;
+    }
+
+    /**
+     * @internal Player: the file's ReplayGain tags, as its metadata names
+     * them in any of its formats (ID3's TXXX, iTunes's ----): dB, and the
+     * peaks' linear amplitudes; null where none.
+     * @return array{trackGain: ?float, trackPeak: ?float, albumGain: ?float, albumPeak: ?float}
+     */
+    public function replayGain(): array
+    {
+        $out = ['trackGain' => null, 'trackPeak' => null, 'albumGain' => null, 'albumPeak' => null];
+        $names = ['replaygain_track_gain' => 'trackGain', 'replaygain_track_peak' => 'trackPeak', 'replaygain_album_gain' => 'albumGain', 'replaygain_album_peak' => 'albumPeak'];
+        $items = ObjC::msg('p:', $this->asset, 'metadata');
+        for ($i = 0, $n = ObjC::msg('L:', $items, 'count'); $i < $n; $i++) {
+            $item = ObjC::msg('p:L', $items, 'objectAtIndex:', $i);
+            $id = ObjC::msg('p:', $item, 'identifier');
+            $value = ObjC::msg('p:', $item, 'stringValue');
+            if ($value === null) { continue; }
+            $value = ObjC::phpStr($value);
+            $name = strtolower($id === null ? '' : ObjC::phpStr($id));
+            $extra = ObjC::msg('p:', $item, 'extraAttributes'); // ID3's TXXX: its description among them
+            if ($extra !== null) { $info = ObjC::msg('p:p', $extra, 'objectForKey:', ObjC::str('info')); if ($info !== null && ObjC::msg('b:p', $info, 'isKindOfClass:', ObjC::cls('NSString'))) { $name .= '/' . strtolower(ObjC::phpStr($info)); } }
+            foreach ($names as $key => $field) {
+                if (str_contains($name, $key) && is_numeric($v = trim(preg_replace('/\s*dB$/i', '', $value)))) { $out[$field] = (float)$v; }
+            }
+        }
+        return $out;
+    }
+
+    /** @internal Player: the file's artwork (its cover), its image's bytes; null for none. */
+    public function cover(): ?string
+    {
+        $item = $this->common('artwork');
+        $data = $item === null ? null : ObjC::msg('p:', $item, 'dataValue');
+        return $data === null ? null : Drag::bytes($data);
+    }
+
+    /** The first of the asset's common metadata items of common key $key (AVMetadataCommonKey…), null for none. */
+    private function common(string $key)
+    {
+        $items = ObjC::msg('p:', $this->asset, 'commonMetadata');
+        for ($i = 0, $n = ObjC::msg('L:', $items, 'count'); $i < $n; $i++) {
+            $item = ObjC::msg('p:L', $items, 'objectAtIndex:', $i);
+            $k = ObjC::msg('p:', $item, 'commonKey');
+            if ($k !== null && ObjC::phpStr($k) === $key) { return $item; }
+        }
+        return null;
+    }
+
     public function chapters(): array
     {
         if ($this->chapters !== null) {

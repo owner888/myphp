@@ -401,7 +401,7 @@ final class Document
             return $this->write($this->path, self::AUTOSAVE);
         } catch (\Throwable $e) {
             if (!$e instanceof DocumentChanged) {
-                error_log("myphp: documents: cannot save {$this->path}: {$e->getMessage()}");
+                Logger::error("cannot save {$this->path}: {$e->getMessage()}", 'documents');
             }
             return false;
         }
@@ -514,7 +514,7 @@ final class Document
         try {
             $this->kind->recovery->save($e, ($this->kind->opts->write)($value));
         } catch (\Throwable $err) {
-            error_log("myphp: documents: cannot write the recovery copy of {$this->name()}: {$err->getMessage()}");
+            Logger::warn("cannot write the recovery copy of {$this->name()}: {$err->getMessage()}", 'documents');
             return;
         }
         $this->backedUp = $at;
@@ -740,7 +740,7 @@ final class Document
             try {
                 $this->reload($path);
             } catch (\Throwable $e) {
-                error_log("myphp: documents: cannot read $path again: {$e->getMessage()}");
+                Logger::warn("cannot read $path again: {$e->getMessage()}", 'documents');
             }
         } else {
             $changed = !$this->conflict || $this->deleted;

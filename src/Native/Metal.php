@@ -430,6 +430,10 @@ final class Metal
     private const TEXTURE_2D_ARRAY = 3; // MTLTextureType
     /** @var array<int, Closure> draw callbacks by view address */
     private static array $onDraw = [];
+    /** @var array<int, Closure> what each view draws, by its address: for drawOffscreen */
+    private static array $draws = [];
+    /** The buffers and list drawOffscreen draws with, made at its first: the ring's are the frames'. */
+    private ?array $offscreen = null;
     /** @var array<int, Closure> what runs after a view presented a frame, by its address: a window's frame statistics */
     public static array $afterPresent = [];
     /** @var array<int, Closure> what runs once a view's frame is done, its list and buffers let go, by its address: a window's layer under its materials draws then, in the same turn, with the next of the ring */
@@ -617,6 +621,7 @@ final class Metal
         ObjC::msg('v:k', $view, 'setClearColor:', $c);
         ObjC::msg('v:l', $view, 'setPreferredFramesPerSecond:', $fps);
         ObjC::msg('v:p', $view, 'setDelegate:', self::$delegate);
+        self::$draws[ObjC::addr($view)] = $draw;
         self::$onDraw[ObjC::addr($view)] = function ($view) use ($draw) {
             $key = ObjC::addr($view);
             if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
@@ -657,6 +662,9 @@ final class Metal
     public static function requestFrame($view): void
     {
         $key = ObjC::addr($view);
+        if (!isset(self::$onDraw[$key])) {
+            return; // a view forgotten, its window closed (an event AppKit still sends it, its own frame that closed it): it draws no more, no link made for it
+        }
         $p = &self::$pace[$key];
         $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0];
         $refresh = self::refresh($view);
@@ -688,7 +696,7 @@ final class Metal
             ObjC::msg('v:', $link, 'invalidate');
             ObjC::msg('v:', $link, 'release');
         }
-        unset(self::$pace[$key], self::$onDraw[$key], self::$afterFrame[$key], self::$afterPresent[$key]);
+        unset(self::$pace[$key], self::$onDraw[$key], self::$draws[$key], self::$afterFrame[$key], self::$afterPresent[$key]);
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
     }
 
@@ -830,10 +838,39 @@ final class Metal
      */
     public function lastFrame($view): array
     {
+        $at = ($this->frame - 1 + self::RING) % self::RING;
+        return $this->readBack($view, $this->lists[$at], [$this->buffers[$at], $this->xformBuffers[$at]]);
+    }
+
+    /**
+     * What $view draws now, drawn off screen (its draw run again, on a list
+     * of its own, not the ring's, which another view's frames come round
+     * on): BGRA pixels, premultiplied, rows top down, [bytes, width,
+     * height]. For a player's screenshot of its subtitles, the window's
+     * view under its materials'; it waits for the GPU.
+     */
+    public function drawOffscreen($view): array
+    {
+        $draw = self::$draws[ObjC::addr($view)] ?? throw new RuntimeException('myphp: drawOffscreen: not a view of this Metal');
+        if ($this->offscreen === null) {
+            $floats = $this->capacity * DisplayList::FLOATS_PER_RECT;
+            $xfloats = self::TRANSFORMS * DisplayList::FLOATS_PER_TRANSFORM;
+            $buf = ObjC::msg('p:LL', $this->device, 'newBufferWithLength:options:', $floats * 4, 0 /* shared */);
+            $xbuf = ObjC::msg('p:LL', $this->device, 'newBufferWithLength:options:', $xfloats * 4, 0 /* shared */);
+            $this->offscreen = [$buf, $xbuf, new DisplayList(ObjC::$c->cast("float[$floats]", ObjC::msg('p:', $buf, 'contents')), $this->capacity,
+                ObjC::$c->cast("float[$xfloats]", ObjC::msg('p:', $xbuf, 'contents')), self::TRANSFORMS)];
+        }
+        [$buf, $xbuf, $list] = $this->offscreen;
+        $list->reset();
+        $draw($view, $list);
+        return $this->readBack($view, $list, [$buf, $xbuf]);
+    }
+
+    /** $list drawn on a texture of $view's drawable's size, read back. */
+    private function readBack($view, DisplayList $list, array $buffers): array
+    {
         $ds = ObjC::msg('z:', $view, 'drawableSize');
         $pw = max(1, (int)$ds->w); $ph = max(1, (int)$ds->h);
-        $at = ($this->frame - 1 + self::RING) % self::RING;
-        $list = $this->lists[$at];
         $list->showWide(false); // BGRA pixels: its sRGB colors
         $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_BGRA8, $pw, $ph, false);
         ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
@@ -846,7 +883,7 @@ final class Metal
         ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
         ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::msg('k:', $view, 'clearColor'));
         $cb = ObjC::msg('p:', $this->queue, 'commandBuffer');
-        $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$at], $this->xformBuffers[$at]]);
+        $this->drawList($cb, $pass, $texture, $list, $buffers);
         ObjC::msg('v:', $cb, 'commit');
         ObjC::msg('v:', $cb, 'waitUntilCompleted');
         $bytes = ObjC::$c->new("char[" . ($pw * $ph * 4) . "]");

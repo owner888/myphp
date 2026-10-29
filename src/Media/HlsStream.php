@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * A media playlist of HLS (RFC 8216) and its segments, read one after the
  * other as FFmpeg's hls demuxer reads them: each segment downloaded ahead
- * of the one read while the cache has room (Hls::MAX, of all the streams),
+ * of the one read while the cache has room (CacheBudget::$max, of all the streams),
  * decrypted (AES-128), demuxed (Media\Ts, or Media\Fragment of its init
  * segment's Mp4), its frames made the stream's tracks and timed on the
  * playlist's line (Hls::align). A live playlist (no EXT-X-ENDLIST) is
@@ -345,8 +345,9 @@ final class HlsStream
 
     /**
      * Downloads the next segment, one at a time, while the cache holds
-     * less than 90% of Hls::MAX ahead of what is read (mpv's demuxer cache
-     * reads ahead so): its key first, when it has one not here.
+     * less than 90% of CacheBudget::$max ahead of what is read and less
+     * than CacheBudget::$seconds (mpv's demuxer cache reads ahead so): its
+     * key first, when it has one not here.
      */
     private function pump(): void
     {
@@ -355,7 +356,7 @@ final class HlsStream
         }
         foreach ($this->downloads as $d) { if (!$d->over()) { return; } }
         $next = $this->downloads === [] ? $this->seq : array_key_last($this->downloads) + 1;
-        if (!isset($this->segments[$next]) || ($this->downloads !== [] && $this->hls->shared() >= Hls::MAX * 0.9)) {
+        if (!isset($this->segments[$next]) || ($this->downloads !== [] && ($this->hls->shared() >= CacheBudget::$max * 0.9 || $this->segments[$next]['start'] - ($this->segments[$this->seq]['start'] ?? $this->segments[$next]['start']) >= CacheBudget::$seconds))) {
             return;
         }
         $seg = $this->segments[$next];

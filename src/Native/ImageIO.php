@@ -12,13 +12,15 @@ use RuntimeException;
  * (premultiplied, top row first), scaled down to fit $max pixels on a
  * side when larger, through a CGBitmapContext, on the calling thread:
  * the icons myphp build makes (Build\Icns), and a video player's cached
- * thumbnails; and encodes RGBA as a JPEG (the thumbnails' cache), and an
- * image as another type ImageIO writes (a player's screenshots). The
+ * thumbnails; and encodes RGBA as a JPEG (the thumbnails' cache), an
+ * image as another type ImageIO writes, and a frame with what a window
+ * drew over it (a player's screenshots, their subtitles). The
  * UI's images decode off the main thread, through CoreImage.
  */
 final class ImageIO
 {
     private const RGBA_PREMULTIPLIED_BIG = 1 | (4 << 12); // kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big: R G B A in memory
+    private const BGRA_PREMULTIPLIED_LITTLE = 2 | (2 << 12); // kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little: B G R A in memory, Metal's BGRA8
     private static ?FFI $c = null;
     private static $colorSpace = null;
 
@@ -54,6 +56,7 @@ final class ImageIO
                 bool  CGImageDestinationFinalize(void*);
                 extern void* kCGImageDestinationLossyCompressionQuality;
                 void* CGImageDestinationCopyTypeIdentifiers(void);
+                void* CGImageCreateWithImageInRect(void*, CGRect);
             ', '/System/Library/Frameworks/ImageIO.framework/ImageIO');
             self::$c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
             self::$colorSpace = self::$c->CGColorSpaceCreateDeviceRGB();
@@ -175,6 +178,63 @@ final class ImageIO
         $c->CFRelease($data); $c->CGImageRelease($image); $c->CFRelease($src); $c->CFRelease($in);
         if (!$ok) {
             throw new RuntimeException("myphp: an image of type $uti could not be made");
+        }
+        return $out;
+    }
+
+    /**
+     * The image $png (a video's frame) with the part $crop ([x, y, w, h],
+     * in pixels from the top left) of $bw by $bh pixels $bgra (premultiplied,
+     * the bytes B G R A, top row first: a window's drawing, Metal's) laid
+     * over it, scaled to its size: a PNG of the frame's size.
+     * @param array{0: int, 1: int, 2: int, 3: int} $crop
+     */
+    public static function overlay(string $png, string $bgra, int $bw, int $bh, array $crop): string
+    {
+        $c = self::c();
+        ObjC::boot(['Foundation']);
+        if (strlen($bgra) !== $bw * $bh * 4) {
+            throw new RuntimeException("myphp: $bw by $bh pixels are not " . strlen($bgra) . ' bytes');
+        }
+        $in = $c->CFDataCreate(null, $png, strlen($png));
+        $src = $c->CGImageSourceCreateWithData($in, null);
+        $frame = $src === null ? null : $c->CGImageSourceCreateImageAtIndex($src, 0, null);
+        if ($src !== null) { $c->CFRelease($src); }
+        $c->CFRelease($in);
+        if ($frame === null) {
+            throw new RuntimeException('myphp: no frame to lay the drawing over');
+        }
+        $w = (int)$c->CGImageGetWidth($frame); $h = (int)$c->CGImageGetHeight($frame);
+        $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w * 4, self::$colorSpace, self::RGBA_PREMULTIPLIED_BIG)
+            ?? throw new RuntimeException('CGBitmapContextCreate');
+        $c->CGContextSetInterpolationQuality($ctx, 4); // high
+        $all = $c->new('CGRect');
+        $all->size->w = $w; $all->size->h = $h;
+        $c->CGContextDrawImage($ctx, $all, $frame);
+        $c->CGImageRelease($frame);
+        $over = $c->CGBitmapContextCreate(null, $bw, $bh, 8, $bw * 4, self::$colorSpace, self::BGRA_PREMULTIPLIED_LITTLE)
+            ?? throw new RuntimeException('CGBitmapContextCreate');
+        FFI::memcpy($c->cast('char*', $c->CGBitmapContextGetData($over)), $bgra, $bw * $bh * 4);
+        $drawing = $c->CGBitmapContextCreateImage($over);
+        $c->CGContextRelease($over);
+        $part = $c->new('CGRect'); // an image's rect: from its top left
+        [$part->origin->x, $part->origin->y, $part->size->w, $part->size->h] = $crop;
+        $piece = $c->CGImageCreateWithImageInRect($drawing, $part);
+        $c->CGImageRelease($drawing);
+        if ($piece !== null) { // none where the crop missed the drawing
+            $c->CGContextDrawImage($ctx, $all, $piece);
+            $c->CGImageRelease($piece);
+        }
+        $image = $c->CGBitmapContextCreateImage($ctx);
+        $c->CGContextRelease($ctx);
+        $data = $c->CFDataCreateMutable(null, 0);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.png'))), 1, null);
+        $c->CGImageDestinationAddImage($dest, $image, null);
+        $ok = $c->CGImageDestinationFinalize($dest);
+        $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
+        $c->CFRelease($dest); $c->CFRelease($data); $c->CGImageRelease($image);
+        if (!$ok) {
+            throw new RuntimeException('myphp: the PNG could not be made');
         }
         return $out;
     }

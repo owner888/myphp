@@ -111,7 +111,7 @@ try {
     $b = new \MyPHP\Media\CacheBudget();
     $video = $member('v', $log); $audio = $member('a', $log);
     $video->share($b); $audio->share($b);
-    $third = \MyPHP\Media\CacheBudget::MAX / 3;
+    $third = \MyPHP\Media\CacheBudget::$max / 3;
     $video->held = (int)$third; $audio->held = 100;
     same((int)$third + 100, $b->ahead(), 'what the readers hold ahead, together');
     $video->blocks = [0 => [$b->tick(), (int)$third], 1 => [$b->tick(), (int)$third]];

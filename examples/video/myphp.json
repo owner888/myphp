@@ -10,6 +10,11 @@
     { "ext": ["webm"], "name": "WebM media", "role": "Viewer" },
     { "ext": ["mp4", "m4v"], "name": "MPEG-4 video", "role": "Viewer" },
     { "ext": ["mov"], "name": "QuickTime media", "role": "Viewer" },
-    { "ext": ["ts", "m2ts", "mts"], "name": "MPEG transport stream", "role": "Viewer" }
+    { "ext": ["ts", "m2ts", "mts"], "name": "MPEG transport stream", "role": "Viewer" },
+    { "ext": ["mp3"], "name": "MP3 audio", "role": "Viewer" },
+    { "ext": ["m4a", "m4b", "aac"], "name": "MPEG-4 audio", "role": "Viewer" },
+    { "ext": ["flac"], "name": "FLAC audio", "role": "Viewer" },
+    { "ext": ["wav", "aif", "aiff", "caf"], "name": "Uncompressed audio", "role": "Viewer" },
+    { "ext": ["mka"], "name": "Matroska audio", "role": "Viewer" }
   ]
 }

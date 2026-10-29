@@ -6,6 +6,7 @@ namespace MyPHP\UI;
 use MyPHP\Transfer\{Data, Drop, DragOptions, Format, FormatUnavailable, Offer, Operation, Result};
 
 use Closure;
+use MyPHP\Logger;
 
 /**
  * Frame-to-frame state for immediate mode: last frame's rectangles by node
@@ -39,6 +40,12 @@ final class Runtime
     /** The modifiers of the click clicked() last took (mygo's ClickModifiers): Shift, Command. */
     public int $clickMods = 0;
     private array $rightClicks = []; // [x, y] of right mouse-ups this frame
+    private array $middleClicks = []; // and of the middle button's
+    /** @var list<array{0: float, 1: float, 2: float, 3: int}> the pinches this frame: where, the magnification, the gesture's phase (NSEventPhase) */
+    private array $magnifies = [];
+    /** @var list<array{0: float, 1: float}> where a Force Touch's press went deep (its second stage) this frame */
+    private array $forceClicks = [];
+    private int $pressureStage = 0;
     private array $doubleClicks = []; // [x, y] of second presses this frame
     private bool $consumed = false;
     public int $passes = 0;
@@ -238,10 +245,16 @@ final class Runtime
     public ?Closure $requestFrame = null;
     /** @var array<string, Closure(string): void> what of the view listens to its window's events (Window::EVENTS: minimize, restore, focus, blur, enterFullScreen…), by who listens; the window calls them */
     public array $windowListeners = [];
+    /** What the window's view under its materials drew last (the nodes belowMaterials: a video's subtitles), [BGRA bytes, width, height, pixels a point], null when it drew nothing; the window sets it. @var ?Closure(): ?array{0: string, 1: int, 2: int, 3: float} */
+    public ?Closure $underFrame = null;
     /** Shows (true) or hides the window at once, from outside a frame too (a film gone to picture in picture, and back); the window sets it. */
     public ?Closure $showWindow = null;
+    /** Minimizes the window (true) or brings it back, from outside a frame too (a film gone to picture in picture, as the settings say); the window sets it. */
+    public ?Closure $minimizeWindow = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
+    /** @internal VideoPlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */
+    public float $doubleClickInterval = 0.5;
     /**
      * What the view asked of its window this frame, which the window does
      * once it is built (Context::videoPlayer's, videoPlayerSettings'): 'close'
@@ -391,6 +404,7 @@ final class Runtime
         foreach (array_splice($this->opened, 0) as $fn) { $fn(); } // what came of the URLs opened
         $this->clicks = [];
         $this->rightClicks = [];
+        $this->middleClicks = []; $this->magnifies = []; $this->forceClicks = [];
         $this->doubleClicks = [];
         $this->slid = [];
         $this->steps = [];
@@ -489,7 +503,7 @@ final class Runtime
                     unset($p);
                     if ($this->drag !== null) {
                         $this->drag = null; // releasing the thumb is not a click
-                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif (!$moved && $pressedHere) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
+                    } elseif ($e[3] === 1) { $this->rightClicks[] = [$e[1], $e[2]]; } elseif ($e[3] === 2) { $this->middleClicks[] = [$e[1], $e[2]]; } elseif (!$moved && $pressedHere) { $this->clicks[] = [$e[1], $e[2], ($e[5] ?? 0) & Key::MODIFIERS]; }
                     break;
                 case 'drag':
                     if ($this->pointerPress !== null && $this->pointerPress['down']) {
@@ -519,6 +533,11 @@ final class Runtime
                     }
                     break;
                 case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); $this->wheeled = true; break;
+                case 'magnify': $this->magnifies[] = [$e[1], $e[2], (float)$e[3], (int)$e[4]]; break;
+                case 'pressure':
+                    if ($e[3] >= 2 && $this->pressureStage < 2) { $this->forceClicks[] = [$e[1], $e[2]]; } // once, as it goes deep
+                    $this->pressureStage = (int)$e[3];
+                    break;
                 case 'key':
                     if ($e[2] === Key::ESCAPE && ($e[3] & Key::MODIFIERS) === 0 && $this->valueDrag !== null && !$this->valueDrag['canceled']) {
                         if ($this->valueDrag['native']) {
@@ -528,7 +547,7 @@ final class Runtime
                         }
                         break;
                     }
-                    $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false];
+                    $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false, $e[5] ?? $e[1]]; // and what it types without its modifiers (charactersIgnoringModifiers)
                     if ((($e[2] === Key::CONTEXT_MENU && ($e[3] & Key::MODIFIERS) === 0) || ($e[2] === Key::F10 && ($e[3] & Key::MODIFIERS) === Key::SHIFT)) && $this->menuKey()) {
                         $this->keys[array_key_last($this->keys)][3] = true; // the menu key or Shift+F10 opens the focused node's context menu
                         break;
@@ -595,6 +614,7 @@ final class Runtime
             }
             $this->clicks = [];
             $this->rightClicks = [];
+            $this->middleClicks = [];
             $this->doubleClicks = [];
             if ($this->pointerPress !== null) {
                 $this->pointerPress['released'] = false; // the pass handled the release (mygo's forgetInput)
@@ -2476,6 +2496,51 @@ final class Runtime
     }
 
     /** Whether a right mouse-up this frame landed on the node this id had last frame. */
+    /** @internal Context: whether the middle button clicked node $id this frame. */
+    public function middleClicked(int $id): bool
+    {
+        foreach ($this->middleClicks as $i => [$x, $y]) {
+            if ($this->under($id, $x, $y)) {
+                unset($this->middleClicks[$i]);
+                $this->consumed = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @internal Context: whether a Force Touch press went deep on node $id this frame. */
+    public function forceClicked(int $id): bool
+    {
+        foreach ($this->forceClicks as $i => [$x, $y]) {
+            if ($this->under($id, $x, $y)) {
+                unset($this->forceClicks[$i]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @internal Context: the pinches over node $id this frame, as one: the
+     * magnification they add (0 for none), and whether the gesture began and
+     * ended in them; null for none.
+     * @return ?array{0: float, 1: bool, 2: bool}
+     */
+    public function magnified(int $id): ?array
+    {
+        $m = 0.0; $began = false; $ended = false; $any = false;
+        foreach ($this->magnifies as $i => [$x, $y, $by, $phase]) {
+            if (!$this->under($id, $x, $y)) { continue; }
+            $any = true;
+            $m += $by;
+            $began = $began || ($phase & 1) !== 0; // NSEventPhaseBegan
+            $ended = $ended || ($phase & (8 | 16)) !== 0; // Ended, Cancelled
+            unset($this->magnifies[$i]);
+        }
+        return $any ? [$m, $began, $ended] : null;
+    }
+
     public function rightClicked(int $id): bool
     {
         foreach ($this->rightClicks as $i => [$x, $y]) {
@@ -2615,6 +2680,25 @@ final class Runtime
      * field its typing and moves, a button Enter and Space, a list the
      * arrows), as mygo's Context.Shortcut.
      */
+    /**
+     * @internal Context: offers $take the keys pressed this frame that no
+     * one took (nor the focused field, as shortcut()): their characters,
+     * code, modifiers and characters without the modifiers; those it
+     * returns true for, taken.
+     * @param \Closure(string, int, int, string): bool $take
+     */
+    public function takeKeys(\Closure $take): void
+    {
+        $field = $this->focus !== null && isset($this->fields[$this->focus]);
+        foreach ($this->keys as $i => $k) {
+            if ($k[3] || ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && $k[1] !== Key::ESCAPE)) { continue; }
+            if ($take($k[0], $k[1], $k[2], $k[4] ?? $k[0])) {
+                $this->keys[$i][3] = true;
+                $this->consumed = true;
+            }
+        }
+    }
+
     public function shortcut(int|string $key, int $mods = 0): bool
     {
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
@@ -2725,7 +2809,7 @@ final class Runtime
         }
         if (isset($this->dupKeys[$id])) { return; }
         $this->dupKeys[$id] = true;
-        error_log($msg);
+        Logger::warn($msg, 'ui');
         $this->warn($msg);
     }
 

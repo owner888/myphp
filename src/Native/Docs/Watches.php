@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native\Docs;
 
-use MyPHP\{App, FileOp, FileWatcher, FileWatchOptions};
+use MyPHP\{App, FileOp, FileWatcher, FileWatchOptions, Logger};
 
 /**
  * Documents notice what other apps do to their files (mygo's
@@ -63,7 +63,7 @@ final class Watches
             try {
                 $events = $f['watcher']->next(0);
             } catch (\Throwable $e) {
-                error_log("myphp: documents: the watch of $path stopped: {$e->getMessage()}");
+                Logger::warn("the watch of $path stopped: {$e->getMessage()}", 'documents');
                 $events = null;
             }
             if ($events === null) { // the watch ended: its directory went away

@@ -37,19 +37,30 @@ use MyPHP\Window;
 final class VideoPlayer
 {
     public const SIDEBAR = 360.0;
-    /** What a point the wheel moves does: of the volume (0 to 1, 200 points all of it), and seconds of a seek. */
-    public const VOLUME_A_POINT = 0.005, SEEK_A_POINT = 0.1;
+    /** The color of the controls' symbols and texts: white in the dark appearance, black in the light (the theme's, as the settings say: IINA's themeMaterial). */
+    private static int $ink = 0xffffff;
+    /**
+     * IINA's sensitivities of the wheel (AppData's maps, by the settings'
+     * 1 to 4, or 5): the seconds a point of a trackpad seeks, and a notch of
+     * a mouse; the volume (of 100) a trackpad's point moves (a mouse's notch
+     * one); the part of the speed a point adds.
+     */
+    private const SEEK_MAP = [0, 0.05, 0.1, 0.25, 0.5], SEEK_MAP_MOUSE = [0, 0.5, 1, 2, 4], VOLUME_MAP = [0, 0.25, 0.5, 0.75, 1], SPEED_MAP = [0, 0.001, 0.002, 0.005, 0.01];
 
     public static function build(Context $c, VideoPlayerState $s, VideoPlayerOptions $o): Node
     {
+        self::$ink = $c->theme->dark ? 0xffffff : 0x000000;
         if ($c->runtime !== null) { $s->attach($c->runtime, $o); }
+        if ($s->settings()->get('disableAnimations')) { $c->disableAnimations(); } // IINA's: no animations of its interface, more than Reduce Motion takes
         $c->runtime?->askWindow('legacyFullScreen', $s->settings()->get('useLegacyFullScreen')); // IINA's settings of full screen: the legacy one, the other screens blacked out
         $c->runtime?->askWindow('blackOut', $s->settings()->get('blackOutMonitor'));
+        if ($s->musicMode && $s->player !== null) { return VideoPlayerMusic::build($c, $s, $s->player, $o); } // IINA's mini player
+        $c->runtime?->askWindow('compact', null); // the window's own size again
         $box = $c->column(0, 0, 1, 0x000000); // keyed by its state (Context::videoPlayer)
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
             if ($s->error !== '') { $box->center(); $c->text($s->error, 13, 0xff6b6b); }
-            if ($s->opening !== null) { self::bufferIndicator($c, self::openingText($c, $s)); }
+            if ($s->opening !== null) { self::bufferIndicator($c, $s, self::openingText($c, $s)); }
             $c->end();
             return $box;
         }
@@ -59,21 +70,30 @@ final class VideoPlayer
         $chooser = null; // the list of the subtitles found online, built below
         $picture->handleInput(function (InputEvent $e) use ($s, $width, $c, $picture, &$chooser): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
             $onSide = $s->sidebar === 'playlist' ? $e->x < self::SIDEBAR : $s->sidebar !== null && $e->x >= $width - self::SIDEBAR;
+            if ($e->kind !== InputEvent::SCROLL && !$onSide && VideoPlayerLiveText::input($s, $e, ...$c->localToWindow($picture, $e->x, $e->y))) { return true; } // a drag over Live Text's words chooses them
             if ($e->kind !== InputEvent::SCROLL || $onSide || ($chooser !== null && self::over($c, $chooser, ...$c->localToWindow($picture, $e->x, $e->y)))) {
                 return false; // the rest goes on to the frame (a press, a click), the wheel over a sidebar or the list of subtitles found to its scroll
             }
-            if (abs($e->dy) >= abs($e->dx)) {
-                $s->setVolume($s->volume - $e->dy * self::VOLUME_A_POINT);
-            } else {
-                $s->wheelSeek += -$e->dx * self::SEEK_A_POINT; // a seek a tenth of a second at the most (build)
-                $s->moved = microtime(true);
+            [$wx, $wy] = $c->localToWindow($picture, $e->x, $e->y);
+            $set = $s->settings();
+            $vertical = abs($e->dy) >= abs($e->dx);
+            $d = $vertical ? -$e->dy : -$e->dx; // up, or across to the left, more
+            if ($s->seekBar !== null && $s->shown && self::over($c, $s->seekBar, $wx, $wy)) { // over the bar of the time, IINA's: the wheel seeks, unless the settings say not (disablePlaySliderScrolling)
+                if (!$set->get('disablePlaySliderScrolling')) { self::scrolled($s, 1, $d, $e->precise, $vertical); }
+                return true;
             }
+            if ($s->volumeBar !== null && $s->shown && self::over($c, $s->volumeBar, $wx, $wy)) { // over the volume's: the volume, unless the settings say not (disableVolumeSliderScrolling)
+                if (!$set->get('disableVolumeSliderScrolling')) { self::scrolled($s, 0, $vertical ? $d : $e->dx, $e->precise, $vertical); } // across it, to the right louder
+                return true;
+            }
+            self::scrolled($s, $set->get($vertical ? 'verticalScrollAction' : 'horizontalScrollAction'), $d, $e->precise, $vertical); // as the settings say: IINA's scroll actions
             return true;
         });
         if ($s->wheelSeek != 0.0) { // what the wheel moved across, a seek every tenth of a second at the most: one costs reading from a keyframe
             $wait = 0.1 - (microtime(true) - $s->wheelSeekAt);
             if ($wait <= 0) {
-                $s->seekBy($s->wheelSeek);
+                $exact = match ($s->settings()->get('useExactSeek')) { 0 => false, 1 => true, default => !$p->remote() }; // IINA's seek type: keyframes, exact, or exact where it is quick (a local file's)
+                $s->seekBy($s->wheelSeek, $exact);
                 [$s->wheelSeek, $s->wheelSeekAt] = [0.0, microtime(true)];
             } else {
                 $c->after($wait);
@@ -92,12 +112,26 @@ final class VideoPlayer
         // The subtitles, under the bars' glass as mpv draws them into the picture: in the window's layer under its materials.
         // Keyed: shown and hidden (their switch, picture in picture), they renumber none of the siblings after them (the
         // sidebar's scroll among them, whose place jumped as the subtitles changed).
+        // Text subtitles in the settings' style (mpv's sub-* options), an ASS track's in its own unless sub-ass-override says
+        // otherwise; their sizes of the window's height or the picture's (sub-scale-by-window), their margins in the black
+        // bars or the picture (sub-use-margins, ass-force-margins), the bottom ones raised by sub-pos.
+        $subs = $s->settings();
+        [$vw, $vh] = $p->size();
+        [$px, $py, $pw, $ph] = $vw > 0 && $vh > 0 ? $p->subtitlePlane($c->width, $c->height, $vw, $vh) : [0.0, 0.0, $c->width, $c->height];
+        $subScale = ($subs->get('subScaleWithWindow') && $ph > 0 ? $c->height / $ph : 1.0) * $s->subScale; // and mpv's sub-scale
+        $place = ['letterbox' => $subs->get('displayInLetterBox'), 'pos' => $s->subPos ?? $subs->get('subPos')];
         if ($s->subtitlesVisible && !$s->pictureInPicture) {
             $c->key('subtitles')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
-              if (($styled = $p->subtitleLines()) !== []) { // an ASS track's lines, in their styles where they are
-                  self::assLines($c, $p, $styled);
-              } elseif (($lines = $p->subtitles()) !== []) {
-                  self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left);
+              $level = $s->assOverride ?? $subs->get('subOverrideLevel');
+              if (($styled = $p->subtitleLines()) !== [] && $level !== 2) { // an ASS track's lines, in their styles where they are (forced to the settings', sub-ass-override's force; scaled by sub-scale, its scale)
+                  $restyle = match (true) {
+                      $level === 1 => fn(AssLine $l) => VideoPlayerSubtitleStyle::forced($subs, $l, $subScale),
+                      $level === 3 && $s->subScale != 1.0 => fn(AssLine $l) => VideoPlayerSubtitleStyle::scaled($l, $s->subScale),
+                      default => null,
+                  };
+                  self::assLines($c, $p, $styled, $place, $restyle);
+              } elseif (($lines = $p->subtitles()) !== []) { // a text track's, or an ASS track's stripped of its styles (strip)
+                  self::assLines($c, $p, VideoPlayerSubtitleStyle::lines($subs, $lines, $pw / max(1.0, $ph), $subScale), $place);
               }
               if (($pictures = $p->subtitlePictures()) !== []) {
                   self::subtitlePictures($c, $p, $pictures);
@@ -107,45 +141,69 @@ final class VideoPlayer
         if ($s->secondarySubtitlesVisible && !$s->pictureInPicture) { // mpv's toptitle: plain, as far from the top as the first from the foot
             $c->key('secondary subtitles')->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()->belowMaterials();
               if (($lines = $p->secondarySubtitles()) !== []) {
-                  self::subtitle($c, implode("\n", $lines), $c->height / 19.5, $c->height * 0.075, $right, $left, true);
+                  self::assLines($c, $p, VideoPlayerSubtitleStyle::lines($subs, $lines, $pw / max(1.0, $ph), $subScale, true), ['pos' => 100.0] + $place);
               }
             $c->end();
         }
+        VideoPlayerLiveText::build($c, $s, $p, $px, $py, $pw, $ph); // over the picture and its subtitles, under the bars
 
         // The title bar and the control bar show while the pointer moves and while it is on them, and fade.
-        // Each built and closed before the next: an open node takes the next as its child.
+        // Each built and closed before the next: an open node takes the next as its child. The control bar floats (draggable),
+        // or is in the title bar, or at the foot, as the settings say (IINA's oscPosition).
+        $set = $s->settings();
+        $at = $set->get('oscPosition');
+        $compact = $set->get('compactUI');
         $bars = [];
-        if ($o->titleBar) {
-            $bars[] = $title = $c->row(0, 6)->absolute()->top(0)->left($left)->right($right)->height(32)->align(Node::CENTER)->paddingStart($left > 0 ? 12 : 84)->systemMaterial('titlebar', true)->dragWindow(); // after the traffic lights, but over the playlist
-              self::sf($c, 'doc.fill', 11, 0.6);
-              $c->text($s->title, 13, 0xffffff)->fontWeight(600)->opacity(0.85)->noWrap()->ellipsis('…')->grow(1);
+        $seek = null;
+        $oscRow = $at === 1 ? self::ROW + ($compact ? 6 : 10) : 0; // IINA's: the bar under the title, 10 above its foot (6 compact)
+        if ($o->titleBar || $at === 1) {
+            $bars[] = $title = $c->column()->absolute()->top(0)->left($left)->right($right)->height(($o->titleBar ? self::TITLE : 0) + $oscRow)->systemMaterial('titlebar', $c->theme->dark)->dragWindow();
+              if ($o->titleBar) { self::titleRow($c, $s, $left > 0); }
+              if ($at === 1) {
+                  $c->row(0, 8)->height(self::ROW)->fillWidth()->paddingX(6)->align(Node::CENTER)->keepFocus();
+                    $seek = self::inlineBar($c, $s, $p, $o);
+                  $c->end();
+              }
             $c->end();
         }
-        $oscX = $left + ($area - 460) / 2; $oscY = $c->height - $c->height * 0.1 - 80;
-        $bars[] = $osc = $c->column()->absolute()->left($oscX)->bottom($c->height * 0.1)->size(460, 80)->systemMaterial('glass')->round(12)->keepFocus();
-          $seek = self::controlBar($c, $s, $p, $o);
-        $c->end();
-        $shown = $now - $s->moved < VideoPlayerState::LINGER;
+        if ($at === 2) {
+            $pad = $compact ? 8 : 12;
+            $bars[] = $osc = $c->row(0, 8)->absolute()->left($left)->right($right)->bottom(0)->height(self::ROW + 2 * $pad)->paddingStart($compact ? 12 : 16)->paddingEnd($pad)->align(Node::CENTER)
+                ->systemMaterial(self::glass($s, 'OSC'))->keepFocus();
+              $seek = self::inlineBar($c, $s, $p, $o);
+            $c->end();
+        } elseif ($at === 0) {
+            [$oscX, $oscY] = self::floatingAt($c, $s, $left, $area);
+            $bars[] = $osc = $c->key('floating bar')->column()->absolute()->left($oscX)->top($oscY)->size(self::OSC_W, self::floatingHeight($s))->systemMaterial(self::glass($s, 'OSC'))->round(12)->keepFocus();
+              $seek = self::floatingBar($c, $s, $p, $o);
+            $c->end();
+            self::dragFloating($c, $s, $osc, $left, $area);
+        }
+        if (($c->runtime?->fullScreen ?? false) && $set->get('displayTimeAndBatteryInFullScreen')) { $bars[] = self::additionalInfo($c, $s, $right); } // IINA's: the time and the battery at the top right
+        $linger = $s->linger();
+        $shown = $now - $s->moved < $linger && !VideoPlayerLiveText::active($s); // hidden while Live Text's words are chosen, as IINA's
         foreach ($bars as $n) { $shown = $shown || $c->hovered($n); }
         $fade = $c->animate($box, 'controls', $shown ? 1 : 0, 0.25);
         $s->shown = $shown;
         if ($o->titleBar) { $c->runtime?->askWindow('buttons', $shown); } // the traffic lights go with the title bar
-        if ($shown) { $c->after(VideoPlayerState::LINGER - ($now - $s->moved) + 0.05); } // to hide them
-        else { $picture->cursor(Cursor::None); } // the pointer hides with them
+        $c->runtime?->askWindow('onTop', $s->onTop);
+        if ($shown && is_finite($linger)) { $c->after($linger - ($now - $s->moved) + 0.05); } // to hide them
+        if (!$shown) { $picture->cursor(Cursor::None); } // the pointer hides with them
         foreach ($bars as $n) {
             $fade > 0.001 ? $n->opacity($fade) : $n->invisible(); // faded out: nothing to click either
+            $c->clicked($n); // a click on a bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
         }
-        $c->clicked($osc); // a click on the bar that none of its controls took (the end of a drag of the time) is the bar's, not the picture's
-        if ($fade > 0.001 && ([$sx, , $over] = $c->pointerPosition($seek)) && $over) {
-            self::seekPreview($c, $s, $p, $oscX + self::SEEK_X, $oscY + self::SEEK_Y, $sx, $fade);
+        if ($seek !== null && $fade > 0.001 && ([$sx, , $over] = $c->pointerPosition($seek)) && $over) {
+            [$bx, $by, $bw, $bh] = $c->layoutBounds($seek);
+            self::seekPreview($c, $s, $p, $bx, $at === 1 ? $by + $bh : $by, $bw, $sx, $fade, $at === 1);
         }
 
         if ($o->osd) { self::osd($c, $s, $p, $now); }
         if ($s->onlineSubtitles !== null) { $chooser = self::onlineSubtitles($c, $s); }
         if ($s->opening !== null) {
-            self::bufferIndicator($c, self::openingText($c, $s));
-        } elseif (($percent = $p->bufferingPercent()) !== null) {
-            self::bufferIndicator($c, self::t($c, 'videoBuffering', ['percent' => $percent]),
+            self::bufferIndicator($c, $s, self::openingText($c, $s));
+        } elseif (($percent = $p->bufferingPercent()) !== null && $s->settings()->get($p->seekBuffering() ? 'showSeekingThrobber' : 'showBufferingThrobber')) { // as the settings say: IINA's throbbers
+            self::bufferIndicator($c, $s, $p->seekBuffering() ? self::t($c, 'videoSeeking') : self::t($c, 'videoBuffering', ['percent' => $percent]),
                 VideoPlayerState::byteCount($p->cacheBytes(), true) . 'B (' . VideoPlayerState::byteCount($p->cacheSpeed(), false) . 'B/s)');
             $c->after(0.25); // its numbers as they go
         }
@@ -165,10 +223,81 @@ final class VideoPlayer
             if ($outside && !$onBars) { $s->sidebar = null; }
         }
         // A click goes to the first node built that asks for it where it is: the picture asks after what is over it.
-        if ($c->rightClicked($picture)) { $s->togglePause(); }
-        if ($c->doubleClicked($picture)) { $c->runtime?->askWindow('fullScreen', !($c->runtime->fullScreen)); }
+        // The clicks on the picture as the settings say (IINA's): a single one waits a double click's time where a double click does something.
+        if ($c->rightClicked($picture)) { self::clickAction($c, $s, $set->get('rightClickAction')); }
+        if ($c->middleClicked($picture)) { self::clickAction($c, $s, $set->get('middleClickAction')); }
+        if ($c->forceClicked($picture)) { self::clickAction($c, $s, $set->get('forceTouchAction')); }
+        if ($c->doubleClicked($picture)) {
+            $s->singleClickAt = null;
+            self::clickAction($c, $s, $set->get('doubleClickAction'));
+        } elseif ($c->clicked($picture)) {
+            $set->get('doubleClickAction') === 0 ? self::clickAction($c, $s, $set->get('singleClickAction')) : $s->singleClickAt = $now + ($c->runtime?->doubleClickInterval ?? 0.5);
+        }
+        if ($s->singleClickAt !== null) {
+            if ($now >= $s->singleClickAt) { $s->singleClickAt = null; self::clickAction($c, $s, $set->get('singleClickAction')); }
+            else { $c->after($s->singleClickAt - $now); }
+        }
+        if (($pinch = $c->magnified($picture)) !== null) { self::pinched($c, $s, $pinch); }
+        $c->runtime?->askWindow('firstMouse', $set->get('videoViewAcceptsFirstMouse')); // IINA's: the click that brings the window forward clicks the picture too, as the settings say
         $c->end();
         return $box;
+    }
+
+    /**
+     * The wheel's $d (points of a trackpad, else a mouse's, ten a line: a
+     * notch, as IINA's, twice up and down) doing $action, as IINA's: 0 the
+     * volume, 1 a seek (a tenth of a second at the most: build), 4 the speed
+     * (0.05 to 4), 2 nothing; as sensitive as the settings say.
+     */
+    private static function scrolled(VideoPlayerState $s, int $action, float $d, bool $precise, bool $vertical): void
+    {
+        $set = $s->settings();
+        $delta = $precise ? $d : $d / 10 * ($vertical ? 2 : 1);
+        if ($action === 0) {
+            $s->setVolume($s->volume + ($precise ? self::VOLUME_MAP[max(1, min(4, $set->get('volumeScrollAmount')))] * $delta : $delta) / 100);
+        } elseif ($action === 1) {
+            $s->wheelSeek += ($precise ? self::SEEK_MAP : self::SEEK_MAP_MOUSE)[max(1, min(4, $set->get('relativeSeekAmount')))] * $delta;
+            $s->moved = microtime(true);
+        } elseif ($action === 4 && $s->player !== null) {
+            $rate = $s->player->rate();
+            $s->setSpeed(round(1000 * max(0.05, min(4.0, $rate + $rate * self::SPEED_MAP[max(1, min(4, $set->get('playbackSpeedScrollAmount')))] * $delta))) / 1000);
+        }
+    }
+
+    /**
+     * What a click on the picture does, as IINA's settings say
+     * (MouseClickAction): 1 full screen, 2 pause, 3 the controls hidden
+     * (until the pointer moves), 4 picture in picture, 5 the A-B loop, 6
+     * the speed back to 1; 0 nothing.
+     */
+    private static function clickAction(Context $c, VideoPlayerState $s, int $action): void
+    {
+        match ($action) {
+            1 => $c->runtime?->askWindow('fullScreen', !($c->runtime->fullScreen)),
+            2 => $s->togglePause(),
+            3 => $s->moved = -INF,
+            4 => $s->togglePictureInPicture(),
+            5 => $s->abLoop(),
+            6 => $s->setSpeed(1.0),
+            default => null,
+        };
+    }
+
+    /**
+     * A pinch over the picture, as IINA's settings say (pinchAction): 0 the
+     * window's size by it (not in full screen), 1 full screen as it begins
+     * spreading out and back as it begins pinching in, 2 nothing.
+     * @param array{0: float, 1: bool, 2: bool} $pinch
+     */
+    private static function pinched(Context $c, VideoPlayerState $s, array $pinch): void
+    {
+        [$by, $began] = $pinch;
+        $action = $s->settings()->get('pinchAction');
+        if ($action === 0 && $by != 0.0) {
+            $c->runtime?->askWindow('magnify', $by);
+        } elseif ($action === 1 && $began && $by != 0.0 && ($by > 0) !== ($c->runtime?->fullScreen ?? false)) {
+            $c->runtime?->askWindow('fullScreen', $by > 0);
+        }
     }
 
     /** The aspect the picture shows at in the window, its width over its height: its own or the one asked, cut, turned. */
@@ -180,63 +309,36 @@ final class VideoPlayer
         return $p->rotation() % 180 === 90 ? 1 / $a : $a;
     }
 
-    /** IINA's default keys (iina-default-input.conf) that the player has the means for. */
-    private static function keys(Context $c, VideoPlayerState $s, Player $p): void
+    /**
+     * The keys, as the key bindings of the settings' set say (VideoPlayerKeys,
+     * IINA's input.conf): a key pressed that no control took looked up by
+     * mpv's name of it, the last binding of it in the set carried out
+     * (VideoPlayerCommands); Escape hides a sidebar first, as IINA's.
+     * @internal VideoPlayerMusic
+     */
+    public static function keys(Context $c, VideoPlayerState $s, Player $p): void
     {
-        [$shift, $alt, $cmd, $ctrl] = [Key::SHIFT, Key::OPTION, Key::COMMAND, Key::CONTROL];
-        if ($c->shortcut(Key::SPACE) || $c->shortcut('p')) { $s->togglePause(); }
-        if ($c->shortcut(Key::RIGHT)) { $s->seekBy(5); }
-        if ($c->shortcut(Key::LEFT)) { $s->seekBy(-5); }
-        if ($c->shortcut(Key::RIGHT, $alt) || $c->shortcut('.')) { $s->frameStep(); }
-        if ($c->shortcut(Key::LEFT, $alt) || $c->shortcut(',')) { $s->frameStep(true); }
-        if ($c->shortcut('s', $cmd)) { $s->screenshot(); }
-        if ($c->shortcut('l', $cmd)) { $s->abLoop(); }
-        if ($c->shortcut(Key::PAGE_UP, $shift)) { $s->seekBy(600); }
-        if ($c->shortcut(Key::PAGE_DOWN, $shift)) { $s->seekBy(-600); }
-        if ($c->shortcut(Key::UP)) { $s->setVolume($s->volume + 0.05); }
-        if ($c->shortcut(Key::DOWN)) { $s->setVolume($s->volume - 0.05); }
-        if ($c->shortcut(Key::UP, $alt)) { $s->setVolume($s->volume + 0.01); }
-        if ($c->shortcut(Key::DOWN, $alt)) { $s->setVolume($s->volume - 0.01); }
-        if ($c->shortcut('/', $cmd) || $c->shortcut('m')) { $s->toggleMute(); }
-        if ($c->shortcut(Key::BRACKET_LEFT, $cmd)) { $s->setSpeed($p->rate() * 0.5); }
-        if ($c->shortcut(Key::BRACKET_RIGHT, $cmd)) { $s->setSpeed($p->rate() * 2); }
-        if ($c->shortcut(Key::BRACKET_LEFT, $alt | $cmd)) { $s->setSpeed($p->rate() / 1.1); }
-        if ($c->shortcut(Key::BRACKET_RIGHT, $alt | $cmd)) { $s->setSpeed($p->rate() * 1.1); }
-        if ($c->shortcut(Key::BACKSLASH, $cmd)) { $s->setSpeed(1); }
-        if ($c->shortcut(Key::N9, $shift)) { $s->setAudioDelay($p->audioDelay() + 0.5); } // Shift+( and Shift+), Alt with them by a tenth, Shift+_ none
-        if ($c->shortcut(Key::N0, $shift)) { $s->setAudioDelay($p->audioDelay() - 0.5); }
-        if ($c->shortcut(Key::N9, $alt | $shift)) { $s->setAudioDelay($p->audioDelay() + 0.1); }
-        if ($c->shortcut(Key::N0, $alt | $shift)) { $s->setAudioDelay($p->audioDelay() - 0.1); }
-        if ($c->shortcut(Key::MINUS, $shift)) { $s->setAudioDelay(0); }
-        if ($c->shortcut('z', $shift)) { $s->setSubtitleDelay($p->subtitleDelay() - 0.5); }
-        if ($c->shortcut('x', $shift)) { $s->setSubtitleDelay($p->subtitleDelay() + 0.5); }
-        if ($c->shortcut('z', $alt)) { $s->setSubtitleDelay($p->subtitleDelay() - 0.1); }
-        if ($c->shortcut('x', $alt)) { $s->setSubtitleDelay($p->subtitleDelay() + 0.1); }
-        if ($c->shortcut('c', $shift)) { $s->setSubtitleDelay(0); }
-        if ($c->shortcut('v')) { $s->toggleSubtitles(); }
-        if ($c->shortcut('o') || $c->shortcut('p', $shift)) { $s->showProgress(); }
-        if ($c->shortcut('.', $cmd)) { $s->stop(); }
-        if ($c->shortcut(Key::RIGHT, $cmd)) { $s->next(); } // playlist-next, playlist-prev
-        if ($c->shortcut(Key::LEFT, $cmd)) { $s->previous(); }
-        if ($c->shortcut('s', $ctrl | $cmd)) { $s->cycleSubtitles(); }
-        if ($c->shortcut('a', $ctrl | $cmd)) { $s->cycleAudio(); }
-        $full = $c->runtime?->fullScreen ?? false;
-        if ($c->shortcut('f') || $c->shortcut('f', $ctrl | $cmd)) { $c->runtime?->askWindow('fullScreen', !$full); }
-        if ($c->shortcut(Key::RETURN) && !$full) { $c->runtime?->askWindow('fullScreen', true); }
-        if ($c->shortcut(Key::ESCAPE)) {
-            if ($s->sidebar !== null) { $s->sidebar = null; } elseif ($full) { $c->runtime?->askWindow('fullScreen', false); }
-        }
+        if ($s->sidebar !== null && $c->shortcut(Key::ESCAPE)) { $s->sidebar = null; }
+        $bound = [];
+        foreach (VideoPlayerKeys::current($s->settings()) as $m) { $bound[$m['normal']] = $m; } // the later of a key's, as mpv's
+        $c->takeKeys(function (string $chars, int $code, int $mods, string $plain) use ($c, $s, $p, $bound): bool {
+            $m = $bound[VideoPlayerKeys::fromEvent($code, $mods, $plain)] ?? null;
+            if ($m === null) { return false; }
+            VideoPlayerCommands::run($c, $s, $p, $m);
+            return true;
+        });
     }
 
     /** SF Symbol $name at $size points in white, at the window's scale: drawn once. */
-    private static function symbol(Context $c, string $name, float $size, float $weight = 0.0, int $rgb = 0xffffff): Image
+    private static function symbol(Context $c, string $name, float $size, float $weight = 0.0, ?int $rgb = null): Image
     {
+        $rgb ??= self::$ink;
         static $drawn = [];
         return $drawn["$name/$size/$weight/$rgb/{$c->scale}"] ??= Image::symbol($name, $size, $rgb, $weight, $c->scale);
     }
 
-    /** SF Symbol $name, white (or $rgb) at $alpha. */
-    private static function sf(Context $c, string $name, float $size, float $alpha = 1.0, float $weight = 0.0, int $rgb = 0xffffff): Node
+    /** SF Symbol $name, white (or $rgb) at $alpha. @internal VideoPlayerMusic */
+    public static function sf(Context $c, string $name, float $size, float $alpha = 1.0, float $weight = 0.0, ?int $rgb = null): Node
     {
         $img = self::symbol($c, $name, $size, $weight, $rgb);
         return $c->image($img, $img->w / $c->scale, $img->h / $c->scale, 0, $alpha);
@@ -246,12 +348,19 @@ final class VideoPlayer
     private static function frosted(Node $n, float $fill, float $ring, float $r): Node
     {
         return $n->draw(static function (DisplayList $l, Node $n) use ($fill, $ring, $r): void {
-            $l->rect($n->x, $n->y, $n->w, $n->h, 0xffffff, $fill, $r);
-            if ($ring > 0) { $l->ring($n->x, $n->y, $n->w, $n->h, 0xffffff, $ring, $r, 1); }
+            $l->rect($n->x, $n->y, $n->w, $n->h, self::$ink, $fill, $r);
+            if ($ring > 0) { $l->ring($n->x, $n->y, $n->w, $n->h, self::$ink, $ring, $r, 1); }
         });
     }
 
-    private static function t(Context $c, string $key, array $args = []): string
+    /** The material of the player's $part (OSC, OSD, Sidebar): the system's glass, or its HUD where the settings turn the glass off (IINA's useLiquidGlassOSC and the others). */
+    private static function glass(VideoPlayerState $s, string $part): string
+    {
+        return $s->settings()->get("useLiquidGlass$part") ? 'glass' : 'hud';
+    }
+
+    /** The player's string $key. @internal VideoPlayerMusic */
+    public static function t(Context $c, string $key, array $args = []): string
     {
         return $c->texts()->get($key, $args);
     }
@@ -266,20 +375,22 @@ final class VideoPlayer
         return $b;
     }
 
-    /** Where the bar of the time is in the control bar, and how wide. */
+    /** Where the bar of the time is in the floating control bar, and how wide. */
     private const SEEK_X = 58, SEEK_Y = 49, SEEK_W = 344, SEEK_H = 18;
+    /** The floating control bar's size; the title bar's height; a row of the control bar in the title bar or at the foot (IINA's: its buttons 24 high). */
+    private const OSC_W = 460, OSC_H = 80, TITLE = 32, ROW = 24;
 
     /**
      * Over the bar of the time under the pointer, $x from the bar's left
      * at ($bx, $by) of the player: the time there (and its chapter's title
      * above it) in a box of glass 5 points above the bar, and the thumbnail
-     * of the film there 5 points above that, 120 points wide, round by 4,
+     * of the film there 5 points above that, as wide as the settings say (thumbnailWidth, 120 points), round by 4,
      * ringed and shadowed, as IINA's TimePreviewView and ThumbnailPeekView,
      * centered on the pointer.
      */
-    private static function seekPreview(Context $c, VideoPlayerState $s, Player $p, float $bx, float $by, float $x, float $alpha): void
+    private static function seekPreview(Context $c, VideoPlayerState $s, Player $p, float $bx, float $by, float $bw, float $x, float $alpha, bool $below = false): void
     {
-        $f = max(0.0, min(1.0, ($x - 1.5) / (self::SEEK_W - 3)));
+        $f = max(0.0, min(1.0, ($x - 1.5) / ($bw - 3)));
         $t = $p->duration() * $f;
         $text = VideoPlayerState::clock($t);
         $chapter = null;
@@ -287,13 +398,14 @@ final class VideoPlayer
         if ($chapter !== null) { $text = $chapter->title . "\n" . $text; }
         $cx = $bx + $x;
         $thumb = $s->thumbnailAt($t);
-        // A column centered on the pointer, its foot 5 points above the bar: the thumbnail over the time.
-        $c->column(0, 5)->absolute()->left($cx - 200)->width(400)->bottom($c->height - $by + 5)->align(Node::CENTER)->passThrough()->opacity($alpha);
+        // A column centered on the pointer, its foot 5 points above the bar (its top 5 under a bar at the top): the thumbnail over the time.
+        $col = $c->column(0, 5)->absolute()->left($cx - 200)->width(400)->align(Node::CENTER)->passThrough()->opacity($alpha);
+        $below ? $col->top($by + 5) : $col->bottom($c->height - $by + 5);
           if ($thumb !== null) {
               static $images = null;
               $images ??= new \WeakMap(); // by thumbnail: its image
               $img = $images[$thumb] ??= Image::fromPixels($thumb->width, $thumb->height, $thumb->rgba());
-              $w = 120.0; $h = round($w / (self::shownAspect($p) ?? $thumb->width / max(1, $thumb->height)));
+              $w = (float)$s->settings()->get('thumbnailWidth'); $h = round($w / (self::shownAspect($p) ?? $thumb->width / max(1, $thumb->height)));
               $turned = $p->rotation() % 180 === 90;
               $c->column()->size($w, $h)->round(4)->shadow(0, 0, 2, 0, 0x000000)->center()->drawOver(static function (DisplayList $l, Node $n): void {
                   $l->ring($n->x, $n->y, $n->w, $n->h, 0x999999, 0.5, 4, 1);
@@ -301,63 +413,305 @@ final class VideoPlayer
                 $c->image($img, $turned ? $h : $w, $turned ? $w : $h, 4)->rotate($p->rotation());
               $c->end();
           }
-          $c->column()->padding(4, 8)->systemMaterial('glass')->round(16);
-            $c->text($text, 11, 0xffffff)->fontFeatures('tnum')->textAlign(Node::CENTER);
+          $c->column()->padding(4, 8)->systemMaterial(self::glass($s, 'OSC'))->round(16);
+            $c->text($text, 11, self::$ink)->fontFeatures('tnum')->textAlign(Node::CENTER);
           $c->end();
         $c->end();
     }
 
-    /** The control bar's inside, 460 by 80: the volume, back, play, on and the bar's buttons above, the times and the bar of the time below; returns the bar of the time. */
-    private static function controlBar(Context $c, VideoPlayerState $s, Player $p, VideoPlayerOptions $o): Node
+    /**
+     * The title bar's row: the film's icon and title after the traffic
+     * lights ($afterList: from the playlist's edge), the pin of the window
+     * floating on top at the right while it floats, or always where the
+     * settings say (IINA's alwaysShowOnTopIcon), a click toggling it.
+     */
+    private static function titleRow(Context $c, VideoPlayerState $s, bool $afterList): void
     {
-        $vol = $p->muted() || $s->volume == 0 ? 'speaker.slash.fill' : ($s->volume < 0.34 ? 'speaker.wave.1.fill' : ($s->volume < 0.67 ? 'speaker.wave.2.fill' : 'speaker.wave.3.fill'));
-        if ($c->clicked(self::barButton($c, $vol, 13, 27, 24))) { $s->toggleMute(); }
+        $c->row(0, 6)->height(self::TITLE)->fillWidth()->align(Node::CENTER)->paddingStart($afterList ? 12 : 84)->paddingEnd(8);
+          self::sf($c, 'doc.fill', 11, 0.6);
+          $c->text($s->title, 13, self::$ink)->fontWeight(600)->opacity(0.85)->noWrap()->ellipsis('…')->grow(1);
+          if ($s->onTop || $s->settings()->get('alwaysShowOnTopIcon')) {
+              $pin = $c->column()->size(16, 16)->center()->role(Role::TOGGLE_BUTTON)->checked($s->onTop)->label(self::t($c, 'videoFloatOnTop'));
+                self::sf($c, $s->onTop ? 'pin.fill' : 'pin', 12, $c->hovered($pin) ? 0.95 : 0.75);
+              $c->end();
+              if ($c->clicked($pin)) { $s->onTop = !$s->onTop; }
+          }
+        $c->end();
+    }
+
+    /** Where the floating bar is: the settings' place of it (IINA's controlBarPositionHorizontal, of its center, and Vertical, of its foot), kept in the window, centered while the window is narrower than it. @return array{0: float, 1: float} */
+    private static function floatingAt(Context $c, VideoPlayerState $s, float $left, float $area): array
+    {
+        $set = $s->settings();
+        [$fx, $fy] = isset($s->oscDrag[4]) ? [$s->oscDrag[4], $s->oscDrag[5]] : [(float)$set->get('controlBarPositionHorizontal'), (float)$set->get('controlBarPositionVertical')]; // dragged, where it is
+        $x = $area < self::OSC_W ? $area / 2 : max(self::OSC_W / 2, min($area - self::OSC_W / 2, $area * $fx));
+        $h = self::floatingHeight($s);
+        $y = max(0.0, min($c->height - $h - 25, $c->height * $fy)); // its foot from the window's, 25 below the top at most
+        return [$left + $x - self::OSC_W / 2, $c->height - $y - $h];
+    }
+
+    /**
+     * The floating bar dragged by what of it takes no clicks, as IINA's:
+     * kept in the window, held at the middle within 5 points of it where
+     * the settings say (controlBarStickToCenter); where it is let go kept
+     * in the settings, as fractions of the window.
+     */
+    private static function dragFloating(Context $c, VideoPlayerState $s, Node $osc, float $left, float $area): void
+    {
+        $set = $s->settings();
+        if ($c->dragEnded($osc) !== null && $s->oscDrag !== null) { // let go: kept in the settings
+            $s->setSetting('controlBarPositionHorizontal', $s->oscDrag[4]);
+            $s->setSetting('controlBarPositionVertical', $s->oscDrag[5]);
+        }
+        $d = $c->dragged($osc);
+        if ($d === null) { $s->oscDrag = null; return; }
+        if ($s->oscDrag === null) { [$x, $y] = self::floatingAt($c, $s, $left, $area); $s->oscDrag = [$x - $left, $y, 0.0, 0.0]; } // where the drag began, and how far it went
+        $s->oscDrag[2] += $d[0]; $s->oscDrag[3] += $d[1];
+        $nx = $s->oscDrag[0] + $s->oscDrag[2]; $ny = $s->oscDrag[1] + $s->oscDrag[3];
+        if ($set->get('controlBarStickToCenter') && abs($nx - ($area - self::OSC_W) / 2) <= 5) { $nx = ($area - self::OSC_W) / 2; }
+        $nx = max(10.0, min($area - self::OSC_W - 10, $nx));
+        $h = self::floatingHeight($s);
+        $ny = max(25.0, min($c->height - $h, $ny));
+        [$s->oscDrag[4], $s->oscDrag[5]] = [($nx + self::OSC_W / 2) / max(1.0, $area), ($c->height - $ny - $h) / max(1.0, $c->height)]; // where it is as it moves, the settings' once let go
+    }
+
+    /**
+     * The floating bar's inside, 460 by 80, as IINA's: the volume, the
+     * arrows and play (the speed beside them while not 1x), the toolbar's
+     * buttons above; the times and the bar of the time below; returns the
+     * bar of the time.
+     */
+    private static function floatingBar(Context $c, VideoPlayerState $s, Player $p, VideoPlayerOptions $o): Node
+    {
+        $top = $s->settings()->get('compactUI') ? 4 : 0; // IINA's compact interface: 4 less above the buttons, 3 less under the bar of the time (floatingHeight)
+        $buttons = self::toolbarButtons($s);
+        if (count($buttons) <= 5) { // the volume, unless the toolbar needs its room (IINA's detachOnlyIfNecessary)
+            $vol = self::volumeSymbol($s, $p);
+            if ($c->clicked(self::barButton($c, $vol, 13, 27, 24 - $top, self::t($c, 'videoMute')))) { $s->toggleMute(); }
+            self::volumeSlider($c, $s, $p)->absolute()->left(45)->top(16 - $top)->size(69, 16);
+        }
+        self::arrow($c, $s, false, 183, 24 - $top);
+        if ($c->clicked(self::barButton($c, $p->playing() ? 'pause.fill' : 'play.fill', 22, 229, 24 - $top))) { $s->togglePause(); }
+        self::arrow($c, $s, true, 277, 24 - $top);
+        $rate = $p->rate();
+        if (abs($rate - 1) > 1e-6) { // IINA's speed labels, beside the arrows
+            $label = $rate < 1 ? sprintf('%.2fx', $rate) : rtrim(rtrim(sprintf('%.2f', $rate), '0'), '.') . 'x';
+            $t = $c->text($label, 10, self::$ink)->opacity(0.55)->absolute()->top(18 - $top);
+            $rate < 1 ? $t->right(self::OSC_W - 183 + 13 + 8) : $t->left(277 + 13 + 8);
+        }
+        foreach ($buttons as $i => $b) { self::toolbarButton($c, $s, $o, $b)->absolute()->left(436 - 24 * (count($buttons) - 1 - $i) - 12)->top(12 - $top); }
+        $c->text(VideoPlayerState::clock($p->time()), 11.5, self::$ink)->fontFeatures('tnum')->opacity(0.6)->absolute()->left(17.5)->top(50.5 - $top); // the system font, its digits of one width
+        $seek = self::seekBar($c, $s, $p)->absolute()->left(self::SEEK_X)->top(self::SEEK_Y - $top)->size(self::SEEK_W, self::SEEK_H);
+        self::loopKnobs($c, $s, $p, $seek, self::SEEK_X, self::SEEK_Y - $top, self::SEEK_W);
+        self::endTime($c, $s, $p, 11.5)->absolute()->right(12.5)->top(50.5 - $top);
+        return $seek;
+    }
+
+    /** The floating bar's height: IINA's, 7 less in the compact interface. */
+    private static function floatingHeight(VideoPlayerState $s): float
+    {
+        return self::OSC_H - ($s->settings()->get('compactUI') ? 7 : 0);
+    }
+
+    /**
+     * The control bar in a row, in the title bar or at the foot, as IINA's:
+     * back, play and on, the times around the bar of the time, the volume,
+     * the toolbar's buttons; returns the bar of the time.
+     */
+    private static function inlineBar(Context $c, VideoPlayerState $s, Player $p, VideoPlayerOptions $o): Node
+    {
+        $c->row(0, 16)->align(Node::CENTER)->shrink(0);
+          self::arrow($c, $s, false);
+          $play = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label(self::t($c, $p->playing() ? 'videoPause' : 'videoPlay'));
+            self::sf($c, $p->playing() ? 'pause.fill' : 'play.fill', 16, $c->hovered($play) ? 0.95 : 0.75);
+          $c->end();
+          if ($c->clicked($play)) { $s->togglePause(); }
+          self::arrow($c, $s, true);
+        $c->end();
+        $c->row(0, 2)->grow(1)->min(120, 0)->align(Node::CENTER);
+          $c->text(VideoPlayerState::clock($p->time()), 11, self::$ink)->fontFeatures('tnum')->opacity(0.6)->min(46, 0)->textAlign(Node::CENTER);
+          $box = $c->row()->grow(1)->height(24)->align(Node::CENTER);
+            $seek = self::seekBar($c, $s, $p)->fillWidth()->height(self::SEEK_H);
+          $c->end();
+          self::endTime($c, $s, $p, 11)->min(46, 0)->textAlign(Node::CENTER);
+        $c->end();
+        $buttons = self::toolbarButtons($s);
+        $c->row(0, 4)->align(Node::CENTER)->paddingEnd(6)->shrink(0);
+          $mute = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label(self::t($c, 'videoMute'));
+            self::sf($c, self::volumeSymbol($s, $p), 13, $c->hovered($mute) ? 0.95 : 0.75);
+          $c->end();
+          if ($c->clicked($mute)) { $s->toggleMute(); }
+          self::volumeSlider($c, $s, $p)->size(70, 16);
+        $c->end();
+        $c->row()->align(Node::CENTER)->shrink(0);
+          foreach ($buttons as $b) { self::toolbarButton($c, $s, $o, $b); }
+        $c->end();
+        return $seek;
+    }
+
+    /**
+     * IINA's AdditionalInfoView, in full screen at the top right, $right
+     * from the window's edge (the sidebar's): the film's title over the
+     * time and, on a Mac of a battery, its charge, in the OSD's glass.
+     */
+    private static function additionalInfo(Context $c, VideoPlayerState $s, float $right): Node
+    {
+        $box = $c->column(0, 8)->absolute()->top(8)->right($right + 8)->padding(8, 16)->systemMaterial(self::glass($s, 'OSD'))->round(16)->align(Node::END)->passThrough();
+          $c->text($s->title, 18, self::$ink)->noWrap()->ellipsis('…')->maxWidth(max(100.0, $c->width / 2));
+          $c->row(0, 4)->align(Node::CENTER);
+            self::sf($c, 'clock', 18, 0.55, 0.6);
+            $c->text((new \MyPHP\DateFormatter(\MyPHP\App::locale(), new \MyPHP\DateOptions(time: \MyPHP\Style::Short)))->format(new \DateTimeImmutable()), 18, self::$ink)->fontWeight(700)->fontFeatures('tnum')->opacity(0.55);
+            if (($level = \MyPHP\Power::batteryLevel()) !== null) {
+                $c->box(2, 16, self::$ink)->opacity(0.25)->marginX(4);
+                $c->column()->center();
+                  self::sf($c, 'battery.0', 24, 0.55);
+                  $c->text($level . '%', 9, self::$ink)->fontWeight(700)->opacity(0.8)->absolute()->left(0)->right(4)->top(0)->bottom(0)->textAlign(Node::CENTER);
+                $c->end();
+            }
+          $c->end();
+        $c->end();
+        $c->after(60 - (int)date('s')); // the time as the minute turns
+        return $box;
+    }
+
+    /** The volume's symbol: muted, or its waves as loud as it is. */
+    private static function volumeSymbol(VideoPlayerState $s, Player $p): string
+    {
+        return $p->muted() || $s->volume == 0 ? 'speaker.slash.fill' : ($s->volume < 0.34 ? 'speaker.wave.1.fill' : ($s->volume < 0.67 ? 'speaker.wave.2.fill' : 'speaker.wave.3.fill'));
+    }
+
+    /** The volume's slider: a thin track, filled to the knob, and a white pill. */
+    private static function volumeSlider(Context $c, VideoPlayerState $s, Player $p): Node
+    {
         $level = $p->muted() ? 0.0 : $s->volume;
-        $v = $c->sliderBase($level, 0, 1)->absolute()->left(45)->top(16)->size(69, 16)->paddingX(7.5);
-        $v->draw(static function (DisplayList $l, Node $n): void { // a thin track, filled to the knob, and a white pill
+        $v = $c->sliderBase($level, 0, $s->maxVolume())->paddingX(7.5); // to the maximum volume, as IINA's
+        $v->draw(static function (DisplayList $l, Node $n): void {
             $x0 = $n->x + 7.5; $w = $n->w - 15; $cy = $n->y + $n->h / 2; $k = $x0 + $w * $n->fraction;
-            $l->rect($n->x, $cy - 2, $n->w, 4, 0xffffff, 0.25, 2);
-            $l->rect($n->x, $cy - 2, $k - $n->x, 4, 0xffffff, 0.8, 2);
+            $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.25, 2);
+            $l->rect($n->x, $cy - 2, $k - $n->x, 4, self::$ink, 0.8, 2);
             $l->rect($k - 7.5, $cy - 5, 15, 10, 0xffffff, 0.92, 5);
         });
         if ($c->changed($v)) { $s->setVolume($level); }
-        if ($c->clicked(self::barButton($c, 'backward.fill', 17, 183, 24))) { $s->seekBy(-10); }
-        if ($c->clicked(self::barButton($c, $p->playing() ? 'pause.fill' : 'play.fill', 22, 229, 24))) { $s->togglePause(); }
-        if ($c->clicked(self::barButton($c, 'forward.fill', 17, 277, 24))) { $s->seekBy(10); }
-        $held = self::t($c, 'videoNotYet');
-        self::barButton($c, 'puzzlepiece.extension', 14, 364, 24, self::t($c, 'videoPlugins') . " ($held)");
-        $pip = self::barButton($c, 'pip', 14, 388, 24, self::t($c, 'videoPictureInPicture'));
-        if ($c->clicked($pip)) { $s->togglePictureInPicture(); }
-        $list = self::barButton($c, 'list.bullet.rectangle', 14, 412, 24, self::t($c, 'videoPlaylist'));
-        if ($o->sidebar && $c->clicked($list)) { $s->sidebar = $s->sidebar === 'playlist' ? null : 'playlist'; }
-        $gear = self::barButton($c, 'gearshape', 15, 436, 24, self::t($c, 'videoSettings'));
-        if ($o->sidebar && $c->clicked($gear)) { $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' ? $s->tab : null; }
-        $c->text(VideoPlayerState::clock($p->time()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->left(17.5)->top(50.5); // the system font, its digits of one width
-        $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->absolute()->left(self::SEEK_X)->top(self::SEEK_Y)->size(self::SEEK_W, self::SEEK_H)->paddingX(1.5);
+        $s->volumeBar = $v;
+        return $v;
+    }
+
+    /**
+     * An arrow of the control bar (at ($x, $y) in the floating bar, else in
+     * its row): IINA's speed arrows, or the playlist's where the settings
+     * say (arrowBtnAction); a press acts at once (the speed while held,
+     * VideoPlayerState::arrowDown), its release ends it.
+     */
+    private static function arrow(Context $c, VideoPlayerState $s, bool $right, ?float $x = null, ?float $y = null): void
+    {
+        $playlist = $s->settings()->get('arrowBtnAction') === 1;
+        $name = $playlist ? ($right ? 'forward.end.fill' : 'backward.end.fill') : ($right ? 'forward.fill' : 'backward.fill');
+        $b = $x !== null ? self::barButton($c, $name, 17, $x, $y) : $c->column()->size(24, 24)->center()->role(Role::BUTTON);
+        if ($x === null) { self::sf($c, $name, 13, $c->hovered($b) ? 0.95 : 0.75); $c->end(); }
+        $b->label(self::t($c, $right ? 'videoForward' : 'videoBackward'));
+        $held = $c->pressed($b);
+        $was = $s->arrowHeld[$b->id] ?? false;
+        if ($held && !$was) { $s->arrowDown($right); }
+        if (!$held && $was) { $s->arrowUp(); }
+        $s->arrowHeld[$b->id] = $held;
+        if ($held) { $c->after(0.1); } // a frame to see it let go
+    }
+
+    /** The control bar's toolbar buttons, the settings' (IINA's controlBarToolbarButtons), but those the player has not (Live Text). @return list<int> */
+    private static function toolbarButtons(VideoPlayerState $s): array
+    {
+        $live = $s->settings()->get('enableLiveText'); // IINA's: Live Text's button only while it is on
+        return array_values(array_filter($s->settings()->get('controlBarToolbarButtons'), fn(int $b) => ($b !== 8 || $live) && isset(VideoPlayerSettings::TOOLBAR[$b])));
+    }
+
+    /** A button of the toolbar, 24 by 24, its symbol the one of it on while it is on (the sidebar it opens shown, picture in picture, full screen); a click does what it does. */
+    private static function toolbarButton(Context $c, VideoPlayerState $s, VideoPlayerOptions $o, int $b): Node
+    {
+        [$symbols, $onSymbols, $key] = VideoPlayerSettings::TOOLBAR[$b];
+        $on = match ($b) { 0 => $s->sidebar !== null && $s->sidebar !== 'playlist', 1 => $s->sidebar === 'playlist', 2 => $s->pictureInPicture, 3 => $c->runtime?->fullScreen ?? false, 8 => $s->settings()->get('enableLiveText'), default => false };
+        $tip = $c->texts()->get('iinaOscToolbar' . implode('', array_map('ucfirst', explode('_', $key))));
+        if ($b === 7) { $tip .= ' (' . self::t($c, 'videoNotYet') . ')'; }
+        $n = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label($tip)->tooltip($tip);
+          $name = self::firstSymbol($on && $onSymbols !== [] ? $onSymbols : $symbols);
+          self::sf($c, $name, 14, $c->hovered($n) ? 0.95 : 0.75);
+        $c->end();
+        if ($b === 5 && ($p = $s->player) !== null) { // IINA's: a menu of the subtitle tracks, none first
+            $n->menu(function (Menu $m) use ($c, $p): void {
+                if ($m->item(self::t($c, 'videoNone'))->checked($p->subtitleTrack() === null)->chosen()) { $p->setSubtitleTrack(null); }
+                foreach ($p->subtitleTracks() as $t) {
+                    $title = $t->name !== '' ? $t->name : (self::language($t->language, $c->locale()) ?: '#' . $t->number);
+                    if ($m->item($title)->checked($p->subtitleTrack() === $t)->chosen()) { $p->setSubtitleTrack($t); }
+                }
+            });
+            return $n;
+        }
+        if ($c->clicked($n)) {
+            match ($b) {
+                0 => $o->sidebar ? $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' ? $s->tab : null : null,
+                1 => $o->sidebar ? $s->sidebar = $s->sidebar === 'playlist' ? null : 'playlist' : null,
+                2 => $s->togglePictureInPicture(),
+                3 => $c->runtime?->askWindow('fullScreen', !($c->runtime->fullScreen)),
+                4 => $s->toggleMusicMode(),
+                6 => $s->screenshot(),
+                8 => $s->setSetting('enableLiveText', !$s->settings()->get('enableLiveText')),
+                default => null, // the plugins: myphp's player has none
+            };
+        }
+        return $n;
+    }
+
+    /** The first of $names the system has. @param list<string> $names */
+    private static function firstSymbol(array $names): string
+    {
+        foreach ($names as $name) { if (\MyPHP\Native\Symbols::exists($name)) { return $name; } }
+        return $names[0];
+    }
+
+    /** The bar of the time: a 4-point track, lighter where it played, the chapters' starts cut in it where the settings say (showChapterPos), and a white upright knob; dragged, it seeks. */
+    private static function seekBar(Context $c, VideoPlayerState $s, Player $p): Node
+    {
+        $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->paddingX(1.5);
         if (!$c->pressed($seek)) { $s->at = $p->time(); }
-        $seek->draw(static function (DisplayList $l, Node $n): void { // a 4-point track, lighter where it played, and a white upright knob
+        $marks = $s->settings()->get('showChapterPos') && $p->duration() > 0 ? array_map(fn($ch) => $ch->start / $p->duration(), array_slice($p->chapters(), 1)) : [];
+        $seek->draw(static function (DisplayList $l, Node $n) use ($marks): void {
             $x0 = $n->x + 1.5; $w = $n->w - 3; $cy = $n->y + $n->h / 2; $k = $x0 + $w * $n->fraction;
-            $l->rect($n->x, $cy - 2, $n->w, 4, 0xffffff, 0.2, 2);
-            $l->rect($n->x, $cy - 2, $k - $n->x, 4, 0xffffff, 0.45, 2);
+            $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.2, 2);
+            $l->rect($n->x, $cy - 2, $k - $n->x, 4, self::$ink, 0.45, 2);
+            foreach ($marks as $m) { $l->rect($x0 + $w * $m - 0.5, $cy - 2, 1, 4, 0x000000, 0.6); } // IINA's chapter marks: the track cut
             $l->rect($k - 1.5, $cy - 7.5, 3, 15, 0xffffff, 0.92, 1.5);
         });
         if ($c->changed($seek)) { $p->seek($s->at); }
-        // The A-B loop's points, as IINA's knobs of the loop: gray, three quarters of the knob's height, over the bar; dragged, they move.
+        $s->seekBar = $seek;
+        return $seek;
+    }
+
+    /** The A-B loop's points over the bar of the time at ($sx, $sy), $sw wide, as IINA's knobs of the loop: gray, three quarters of the knob's height; dragged, they move. */
+    private static function loopKnobs(Context $c, VideoPlayerState $s, Player $p, Node $seek, float $sx, float $sy, float $sw): void
+    {
         foreach (['a' => $s->loopA, 'b' => $s->loopB] as $which => $at) {
             if ($at === null) { continue; }
-            $x = self::SEEK_X + 1.5 + (self::SEEK_W - 3) * $at / max($p->duration(), 0.001);
-            $knob = $c->column()->absolute()->left($x - 1.5)->top(self::SEEK_Y + 1.5)->size(3, 15)->tooltip('A-B loop ' . strtoupper($which))->draw(static function (DisplayList $l, Node $n): void {
+            $x = $sx + 1.5 + ($sw - 3) * $at / max($p->duration(), 0.001);
+            $knob = $c->column()->absolute()->left($x - 1.5)->top($sy + 1.5)->size(3, 15)->tooltip('A-B loop ' . strtoupper($which))->draw(static function (DisplayList $l, Node $n): void {
                 $l->rect($n->x, $n->y + 2, 3, 11, 0xa6a6a6, 1.0, 1);
             });
             $c->end();
             if ($c->pressed($knob)) {
                 [$px] = $c->pointerPosition($seek);
-                $to = $p->duration() * max(0.0, min(1.0, ($px - 1.5) / (self::SEEK_W - 3)));
+                $to = $p->duration() * max(0.0, min(1.0, ($px - 1.5) / ($sw - 3)));
                 if (abs($to - $at) > 1e-3) { $s->moveLoopPoint($which, $to); }
             }
         }
-        $c->text(VideoPlayerState::clock($p->duration()), 11.5, 0xffffff)->fontFeatures('tnum')->opacity(0.6)->absolute()->right(12.5)->top(50.5);
-        return $seek;
+    }
+
+    /** The time at the end of the bar: the film's length, or what is left of it where the settings say (showRemainingTime; at the speed it plays, scaleRemainingTime), as IINA's; a click toggles which. */
+    private static function endTime(Context $c, VideoPlayerState $s, Player $p, float $size): Node
+    {
+        $set = $s->settings();
+        $left = $set->get('showRemainingTime');
+        $text = $left ? '-' . VideoPlayerState::clock(max(0.0, $p->duration() - $p->time()) / ($set->get('scaleRemainingTime') ? max(1e-6, $p->rate()) : 1.0)) : VideoPlayerState::clock($p->duration());
+        $n = $c->text($text, $size, self::$ink)->fontFeatures('tnum')->opacity(0.6)->role(Role::BUTTON);
+        if ($c->clicked($n)) { $s->setSetting('showRemainingTime', !$left); }
+        return $n;
     }
 
     /**
@@ -376,13 +730,13 @@ final class VideoPlayer
         return self::t($c, 'videoSkippingAd', ['seconds' => (int)ceil($left)]);
     }
 
-    private static function bufferIndicator(Context $c, string $text, ?string $detail = null): void
+    private static function bufferIndicator(Context $c, VideoPlayerState $s, string $text, ?string $detail = null): void
     {
         $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->center()->passThrough();
-          $c->column(0, 4)->padding(12, 20)->systemMaterial('glass')->round(16)->align(Node::CENTER)->width(150 + 40);
+          $c->column(0, 4)->padding(12, 20)->systemMaterial(self::glass($s, 'OSD'))->round(16)->align(Node::CENTER)->width(150 + 40);
             $c->spinner();
-            $c->text($text, 13, 0xffffff)->textAlign(Node::CENTER);
-            if ($detail !== null) { $c->text($detail, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7)->textAlign(Node::CENTER); }
+            $c->text($text, 13, self::$ink)->textAlign(Node::CENTER);
+            if ($detail !== null) { $c->text($detail, 11, self::$ink)->fontFeatures('tnum')->opacity(0.7)->textAlign(Node::CENTER); }
           $c->end();
         $c->end();
     }
@@ -391,25 +745,27 @@ final class VideoPlayer
     private static function osd(Context $c, VideoPlayerState $s, Player $p, float $now): void
     {
         [$text, $under, $until] = $s->message;
+        $size = (float)$s->settings()->get('osdTextSize'); // IINA's: the message at the size set, what is under it at 0.55 of it
+        $small = round($size * 0.55, 1);
         if ($s->onlineSubtitles !== null) { $text = ''; } // the list of subtitles found says it, where the message is
-        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial('glass')->round(12);
+        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial(self::glass($s, 'OSD'))->round(12);
         if (($s->shot['path'] ?? null) === null) { $box->passThrough(); } // the pointer goes through, but to a screenshot's buttons
         $o = $c->animate($box, 'osd', $now < $until ? 1 : 0, 0.3);
         if ($now < $until && is_finite($until)) { $c->after($until - $now + 0.01); } // one till another (a search going on) fades with it
         $box->opacity($o);
         if ($o <= 0.001 || $text === '') { $box->invisible(); }
-          $c->text($text, 20, 0xffffff);
+          $c->text($text, $size, self::$ink);
           if ($under === 'time') {
-              $c->text(VideoPlayerState::clock($p->time()) . ' / ' . VideoPlayerState::clock($p->duration()), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7);
+              $c->text(VideoPlayerState::clock($p->time()) . ' / ' . VideoPlayerState::clock($p->duration()), $small, self::$ink)->fontFeatures('tnum')->opacity(0.7);
           } elseif ($under === 'volume') {
-              $level = $p->muted() ? 0.0 : $s->volume;
+              $level = ($p->muted() ? 0.0 : $s->volume) / $s->maxVolume(); // of the maximum volume, as IINA's
               $c->row()->height(5)->fillWidth()->minWidth(90)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($level): void {
-                  $l->rect($n->x, $n->y, $n->w, $n->h, 0xffffff, 0.25, 2.5);
+                  $l->rect($n->x, $n->y, $n->w, $n->h, self::$ink, 0.25, 2.5);
                   $l->rect($n->x, $n->y, $n->w * $level, $n->h, $t->accent, 1.0, 2.5); // the system's accent
               });
               $c->end();
           } elseif ($under !== '') { // a time of its own (an A-B loop's point moved)
-              $c->text($under, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.7);
+              $c->text($under, $small, self::$ink)->fontFeatures('tnum')->opacity(0.7);
           }
           if ($s->shot !== null && $now < $until) { self::shotPreview($c, $s); }
         $c->end();
@@ -428,7 +784,7 @@ final class VideoPlayer
         $c->row(0, 12);
           foreach (['delete' => 'videoShotDelete', 'edit' => 'videoShotEdit', 'reveal' => 'videoShotReveal'] as $action => $key) {
               $b = $c->row()->role(Role::BUTTON)->label(self::t($c, $key));
-                $c->text(self::t($c, $key), 11, 0xffffff, Font::BOLD)->opacity(0.85);
+                $c->text(self::t($c, $key), 11, self::$ink, Font::BOLD)->opacity(0.85);
               $c->end();
               if ($c->clicked($b)) { $s->shotAction($action); }
           }
@@ -446,21 +802,21 @@ final class VideoPlayer
     {
         $found = $s->onlineSubtitles ?? [];
         $day = new \MyPHP\DateFormatter(\MyPHP\App::locale(), new \MyPHP\DateOptions(date: \MyPHP\Style::Medium));
-        $box = $c->key('online subtitles')->column(0, 10)->absolute()->left(8)->top(48)->width(460)->padding(12, 14, 12, 14)->systemMaterial('glass')->round(12)->keepFocus();
-          $c->text(self::t($c, 'videoSubtitlesFound', ['count' => count($found)]), 20, 0xffffff);
-          $c->text(self::t($c, 'videoSubtitlesChoose'), 12, 0xffffff)->opacity(0.7);
+        $box = $c->key('online subtitles')->column(0, 10)->absolute()->left(8)->top(48)->width(460)->padding(12, 14, 12, 14)->systemMaterial(self::glass($s, 'OSD'))->round(12)->keepFocus();
+          $c->text(self::t($c, 'videoSubtitlesFound', ['count' => count($found)]), 20, self::$ink);
+          $c->text(self::t($c, 'videoSubtitlesChoose'), 12, self::$ink)->opacity(0.7);
           self::frosted($c->scroll()->height(min(5, count($found)) * 44.0)->fillWidth(), 0.08, 0, 6);
-            $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+            $c->column()->fillWidth()->dividers(1, self::$ink, 0.1);
               foreach ($found as $i => $f) {
                   $chosen = in_array($i, $s->onlineChosen, true);
                   $row = $c->column(0, 2)->height(44)->paddingX(10)->justify(Node::CENTER)->fillWidth();
-                  if ($chosen) { ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(0xffffff, 0.12); }
-                    $c->text($f['name'], 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…');
+                  if ($chosen) { ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(self::$ink, 0.12); }
+                    $c->text($f['name'], 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…');
                     $c->row(0, 8)->fillWidth();
                       $about = implode('  ', array_filter([$f['language'], $f['year'] > 0 ? "({$f['year']})" : '', $f['fps'] != 0 ? VideoPlayerState::number($f['fps']) . ' fps' : '', "\u{2b07}{$f['downloads']}"]));
-                      $c->text($about, 11, 0xffffff)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
+                      $c->text($about, 11, self::$ink)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
                       $at = strtotime($f['uploaded']);
-                      if ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, 0xffffff)->opacity(0.6); }
+                      if ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
                     $c->end();
                   $c->end();
                   if ($c->doubleClicked($row)) { $s->onlineChosen = [$i]; $s->downloadOnlineSubtitles([$i]); }
@@ -495,7 +851,7 @@ final class VideoPlayer
      * the margins; the lower layers first.
      * @param list<AssLine> $lines
      */
-    private static function assLines(Context $c, Player $p, array $lines): void
+    private static function assLines(Context $c, Player $p, array $lines, array $place, ?Closure $restyle = null): void
     {
         $order = array_keys($lines);
         usort($order, fn(int $a, int $b): int => [$lines[$a]->layer, $a] <=> [$lines[$b]->layer, $b]);
@@ -507,7 +863,8 @@ final class VideoPlayer
         foreach ($groups as $group) {
             $l = $group[0];
             [$px, $py, $pw, $ph] = $p->subtitlePlane($c->width, $c->height, $l->playResX, $l->playResY);
-            $l->alone() ? self::assAlone($c, $p, $l, $px, $py, $pw, $ph) : self::assGroup($c, $p, $group, $px, $py, $pw, $ph);
+            if ($restyle !== null) { $group = array_map($restyle, $group); $l = $group[0]; }
+            $l->alone() ? self::assAlone($c, $p, $l, $px, $py, $pw, $ph) : self::assGroup($c, $p, $group, $px, $py, $pw, $ph, $place);
         }
         foreach ($lines as $l) {
             if ($l->changes()) { $c->animationFrame(); break; } // moving, fading, animated, sung: a frame each refresh of the display while it shows, as a page's animation
@@ -557,7 +914,7 @@ final class VideoPlayer
     }
 
     /** Lines of one place, on the plane at ($px, $py) $pw by $ph: of one alignment and margins, or one laid out on its own. @param list<AssLine> $group */
-    private static function assGroup(Context $c, Player $p, array $group, float $px, float $py, float $pw, float $ph): void
+    private static function assGroup(Context $c, Player $p, array $group, float $px, float $py, float $pw, float $ph, array $place = []): void
     {
         $l = $group[0];
         $sx = $pw / $l->playResX; $sy = $ph / $l->playResY;
@@ -569,9 +926,11 @@ final class VideoPlayer
             $box = $c->column()->absolute()->left($ax - [0, $pw, 2 * $pw][$col])->top($ay - [2 * $ph, $ph, 0][$row])->size(2 * $pw, 2 * $ph);
             $wrap = null;
         } else {
-            $box = $c->column()->absolute()->left($px + $l->marginLeft * $sx)->top($py + $l->marginVertical * $sy)
-                ->size(max(1.0, $pw - ($l->marginLeft + $l->marginRight) * $sx), max(1.0, $ph - 2 * $l->marginVertical * $sy));
-            $wrap = $l->wraps ? max(1.0, $pw - ($l->marginLeft + $l->marginRight) * $sx) : null;
+            [$fx, $fy, $fw, $fh] = ($place['letterbox'] ?? false) ? [0.0, 0.0, $c->width, $c->height] : [$px, $py, $pw, $ph]; // its margins from the window's edges, in the black bars (sub-use-margins), else the picture's
+            $box = $c->column()->absolute()->left($fx + $l->marginLeft * $sx)->top($fy + $l->marginVertical * $sy)
+                ->size(max(1.0, $fw - ($l->marginLeft + $l->marginRight) * $sx), max(1.0, $fh - 2 * $l->marginVertical * $sy));
+            $wrap = $l->wraps ? max(1.0, $fw - ($l->marginLeft + $l->marginRight) * $sx) : null;
+            if ($row === 0 && ($place['pos'] ?? 100.0) != 100.0) { $box->translate(0, -(100 - $place['pos']) / 100 * $fh); } // sub-pos: of the height, 100 at the foot
         }
         $box->align($across)->justify($along)->passThrough();
           foreach ($row === 0 ? array_reverse($group) : $group as $line) { // at the bottom a later line goes above the ones before
@@ -705,24 +1064,13 @@ final class VideoPlayer
         }
     }
 
-    /** $text over the picture, centered $bottom points from its foot (from its top, $top: a toptitle): white, outlined in black as mpv draws subtitles. */
-    public static function subtitle(Context $c, string $text, float $size, float $bottom, float $right = 0, float $left = 0, bool $top = false): void
-    {
-        $box = $c->column()->absolute()->left($left)->right($right)->align(Node::CENTER)->passThrough();
-        $top ? $box->top($bottom) : $box->bottom($bottom);
-          $c->column()->maxWidth($c->width * 0.9);
-            $c->text($text, $size, 0xffffff)->fontWeight(500)->textAlign(Node::CENTER)->textOutline($size / 16, 0x000000);
-          $c->end();
-        $c->end();
-    }
-
     /** The quick settings, 360 points wide over the right of the window, sliding in by $slide: the back button, the tabs, the chosen tab's cards. */
     private static function sidebar(Context $c, VideoPlayerState $s, Player $p, float $slide): Node
     {
         // Keyed, as the playlist's: the messages, the buffering indicator and the seek bar's preview built before it come and go,
         // which would renumber its nodes (its scroll's place, the state of its controls).
-        $side = $c->key('quick settings')->column()->absolute()->top(0)->right(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(self::SIDEBAR * (1 - $slide), 0)->keepFocus();
-          $back = $c->column()->absolute()->left(9)->top(7)->size(38, 38)->center()->systemMaterial('glass')->round(19)->tooltip(self::t($c, 'videoHide'));
+        $side = $c->key('quick settings')->column()->absolute()->top(0)->right(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial(self::glass($s, 'Sidebar'))->translate(self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+          $back = $c->column()->absolute()->left(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->round(19)->tooltip(self::t($c, 'videoHide'));
             self::sf($c, 'chevron.right', 14, $c->hovered($back) ? 0.9 : 0.6, 0.2);
           $c->end();
           if ($c->clicked($back)) { $s->sidebar = null; }
@@ -750,49 +1098,78 @@ final class VideoPlayer
      */
     private static function playlistSidebar(Context $c, VideoPlayerState $s, float $slide): Node
     {
-        $side = $c->key('playlist')->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial('glass')->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
-          $c->row(3, 0)->absolute()->left(96)->top(9)->height(36)->align(Node::CENTER)->systemMaterial('glass')->round(18);
+        $side = $c->key('playlist')->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial(self::glass($s, 'Sidebar'))->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+          self::playlistPane($c, $s, $side, self::SIDEBAR, $c->height, 96, true);
+        $c->end();
+        $c->clicked($side); // a click on the playlist is its own, not the picture's
+        return $side;
+    }
+
+    /**
+     * The playlist's pane, $w by $h, in $side (the sidebar, or music mode's
+     * playlist), as IINA's: its tabs at $tabsLeft (the playlist, the
+     * chapters), its back button where $back; the films, their bar under
+     * them. The films are titled by their tags (an audio file's title, its
+     * artist under it) where the settings say (playlistShowMetadata, only
+     * in music mode where playlistShowMetadataInMusicMode).
+     * @internal VideoPlayerMusic
+     */
+    public static function playlistPane(Context $c, VideoPlayerState $s, Node $side, float $w, float $h, float $tabsLeft, bool $back): void
+    {
+        $set = $s->settings();
+        $tagged = $set->get('playlistShowMetadata') && (!$set->get('playlistShowMetadataInMusicMode') || $s->musicMode);
+          $c->row(3, 0)->absolute()->left($tabsLeft)->top(9)->height(36)->align(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->round(18);
             foreach ([['playlist', 'music.note.list', 'videoPlaylist'], ['chapters', 'list.and.film', 'videoChapters']] as [$id, $icon, $label]) {
                 $t = $c->row()->size(34, 30)->center()->round(15)->tooltip(self::t($c, $label));
-                if ($s->playlistTab === $id) { $t->background(0xffffff, 0.16); }
+                if ($s->playlistTab === $id) { $t->background(self::$ink, 0.16); }
                   self::sf($c, $icon, 14, $s->playlistTab === $id || $c->hovered($t) ? 0.95 : 0.7);
                 $c->end();
                 if ($c->clicked($t)) { $s->playlistTab = $id; }
             }
           $c->end();
-          $back = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial('glass')->round(19)->tooltip(self::t($c, 'videoHide'));
-            self::sf($c, 'chevron.left', 14, $c->hovered($back) ? 0.9 : 0.6, 0.2);
-          $c->end();
-          if ($c->clicked($back)) { $s->sidebar = null; }
+          if ($back) {
+              $hide = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->round(19)->tooltip(self::t($c, 'videoHide'));
+                self::sf($c, 'chevron.left', 14, $c->hovered($hide) ? 0.9 : 0.6, 0.2);
+              $c->end();
+              if ($c->clicked($hide)) { $s->sidebar = null; }
+          }
           $list = $s->playlist;
           // The two tabs side by side, sliding across as one goes to the other, as IINA's: each page built while any of it shows.
           $page = $c->animate($side, 'playlistTab', $s->playlistTab === 'chapters' ? 1 : 0, 0.25);
           $c->column()->absolute()->top(53)->left(0)->right(0)->bottom(33)->clip();
           if ($page < 1) {
-              $c->scroll()->absolute()->top(0)->left(0)->right(0)->bottom(0)->translate(-self::SIDEBAR * $page, 0);
-                $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+              $c->scroll()->absolute()->top(0)->left(0)->right(0)->bottom(0)->translate(-$w * $page, 0);
+                $c->column()->fillWidth()->dividers(1, self::$ink, 0.1);
                   foreach ($list?->files() ?? [] as $i => $path) {
                       $playing = $i === $list->index();
                       $row = $c->row(0, 6)->height(32)->paddingStart(28)->paddingEnd(9)->align(Node::CENTER)->fillWidth();
                       if ($i === $s->chosen) { // the chosen row as AppKit's lists choose: the accent in the key window, gray in another
-                          ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(0xffffff, 0.12);
+                          ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(self::$ink, 0.12);
                       }
                         if ($playing) { $c->column()->absolute()->left(9)->top(9)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
-                        $c->text($list->title($path), 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->grow(1);
+                        $tags = $tagged ? $list->tags($i) : null;
+                        if ($tags !== null && $tags['title'] !== '' && $tags['artist'] !== '') { // IINA's: the track's name, its artist under it
+                            $c->column(0, 1)->grow(1)->min(0, 0);
+                              $c->text($tags['title'], 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…');
+                              $c->text($tags['artist'], 10.5, self::$ink)->opacity(0.55)->noWrap()->ellipsis('…');
+                            $c->end();
+                        } else {
+                            $c->text($list->title($path), 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…')->grow(1);
+                        }
                         $d = $list->duration($i);
-                        if ($d !== null) { $c->text(VideoPlayerState::clock($d), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.55); }
+                        if ($d !== null) { $c->text(VideoPlayerState::clock($d), 11, self::$ink)->fontFeatures('tnum')->opacity(0.55); }
                       $c->end();
                       if ($c->doubleClicked($row)) { $s->open($path); } elseif ($c->clicked($row)) { $s->chosen = $i; }
                   }
                 $c->end();
-                $c->column()->fillWidth()->height(max(0.0, $c->height - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
-                    for ($y = $n->y + 32; $y < $n->y + $n->h; $y += 32) { $l->rect($n->x, $y, $n->w, 1, 0xffffff, 0.1); }
+                $c->column()->fillWidth()->height(max(0.0, $h - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
+                    for ($y = $n->y + 32; $y < $n->y + $n->h; $y += 32) { $l->rect($n->x, $y, $n->w, 1, self::$ink, 0.1); }
                 });
                 $c->end();
               $c->end();
           }
           if ($page > 0) {
-              self::chapterList($c, $s)->translate(self::SIDEBAR * (1 - $page), 0);
+              self::chapterList($c, $s, $h)->translate($w * (1 - $page), 0);
           }
           $c->end();
           // The bar under the list: repeat, shuffle and sort (held), the time of them all, add, remove, clear.
@@ -800,12 +1177,12 @@ final class VideoPlayer
             // As IINA's: the loop button off, the file (repeat.1) or the playlist, in the accent while on; shuffle in it while shuffled; sort a menu.
             $loop = $c->column()->tooltip(self::t($c, 'videoRepeat'));
               $on = $s->loop !== 'off';
-              self::sf($c, $s->loop === 'file' ? 'repeat.1' : 'repeat', 12, $on || $c->hovered($loop) ? 0.95 : 0.7, 0.0, $on ? $c->theme->accent : 0xffffff);
+              self::sf($c, $s->loop === 'file' ? 'repeat.1' : 'repeat', 12, $on || $c->hovered($loop) ? 0.95 : 0.7, 0.0, $on ? $c->theme->accent : self::$ink);
             $c->end();
             if ($c->clicked($loop)) { $s->nextLoop(); }
             $mixed = $list?->shuffled() ?? false;
             $shuffle = $c->column()->tooltip(self::t($c, 'videoShuffle'));
-              self::sf($c, 'shuffle', 12, $mixed || $c->hovered($shuffle) ? 0.95 : 0.7, 0.0, $mixed ? $c->theme->accent : 0xffffff);
+              self::sf($c, 'shuffle', 12, $mixed || $c->hovered($shuffle) ? 0.95 : 0.7, 0.0, $mixed ? $c->theme->accent : self::$ink);
             $c->end();
             if ($c->clicked($shuffle) && $list !== null) { $mixed ? $list->unshuffle() : $list->shuffle(); $s->chosen = -1; }
             $sort = $c->column()->tooltip(self::t($c, 'videoSort'));
@@ -822,7 +1199,7 @@ final class VideoPlayer
             });
             $total = 0.0;
             for ($i = 0, $n = $list?->count() ?? 0; $i < $n; $i++) { $total += $list->duration($i) ?? 0.0; }
-            $c->text(self::t($c, 'videoTotal', ['time' => VideoPlayerState::clock($total)]), 11, 0xffffff)->fontFeatures('tnum')->opacity(0.5)->textAlign(Node::CENTER)->grow(1);
+            $c->text(self::t($c, 'videoTotal', ['time' => VideoPlayerState::clock($total)]), 11, self::$ink)->fontFeatures('tnum')->opacity(0.5)->textAlign(Node::CENTER)->grow(1);
             $add = $c->column()->tooltip(self::t($c, 'videoAddFiles')); self::sf($c, 'plus', 12, $c->hovered($add) ? 0.95 : 0.7); $c->end();
             if ($c->clicked($add) && $list !== null) {
                 foreach (Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoAddFiles'), multiple: true)) ?? [] as $path) { $list->add($path); }
@@ -835,23 +1212,20 @@ final class VideoPlayer
                 $s->chosen = -1;
             }
           $c->end();
-        $c->end();
-        $c->clicked($side); // a click on the playlist is its own, not the picture's
-        return $side;
     }
 
     /** The tabs in a glass pill at the top right: the chosen one with its icon and name, the others their icon, divided. */
     private static function tabBar(Context $c, VideoPlayerState $s): void
     {
         $tabs = [['layout', 'paintbrush.pointed.fill', 'videoLayout'], ['video', 'photo', 'videoVideo'], ['audio', 'waveform', 'videoAudio'], ['subtitles', 'captions.bubble.fill', 'videoSubtitles']];
-        $c->row(3, 0)->absolute()->right(7)->top(9)->height(36)->align(Node::CENTER)->systemMaterial('glass')->round(18);
+        $c->row(3, 0)->absolute()->right(7)->top(9)->height(36)->align(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->round(18);
           foreach ($tabs as $i => [$id, $icon, $label]) {
               $on = $s->tab === $id;
-              if ($i > 0 && !$on && $tabs[$i - 1][0] !== $s->tab) { $c->box(1, 18, 0xffffff)->opacity(0.25); } // between two not chosen
+              if ($i > 0 && !$on && $tabs[$i - 1][0] !== $s->tab) { $c->box(1, 18, self::$ink)->opacity(0.25); } // between two not chosen
               $t = $c->row(0, 5)->height(30)->paddingX($on ? 10 : 7)->align(Node::CENTER)->round(15)->tooltip(self::t($c, $label));
-              if ($on) { $t->background(0xffffff, 0.16); }
+              if ($on) { $t->background(self::$ink, 0.16); }
                 self::sf($c, $icon, 14, $on || $c->hovered($t) ? 0.95 : 0.7);
-                if ($on) { $c->text(self::t($c, $label), 13, 0xffffff)->fontWeight(500)->opacity(0.95); }
+                if ($on) { $c->text(self::t($c, $label), 13, self::$ink)->fontWeight(500)->opacity(0.95); }
               $c->end();
               if ($c->clicked($t)) { $s->tab = $id; $s->sidebar = $id; }
           }
@@ -869,7 +1243,7 @@ final class VideoPlayer
     {
         $c->row(0, 8)->align(Node::CENTER)->fillWidth();
           $c->column()->size(16, 16)->center(); self::sf($c, $icon, 12, 0.7); $c->end();
-          $c->text($title, 13, 0xffffff)->fontWeight(600)->opacity(0.9)->grow(1);
+          $c->text($title, 13, self::$ink)->fontWeight(600)->opacity(0.9)->grow(1);
           if ($trailing !== null) { $trailing(); }
         $c->end();
     }
@@ -883,13 +1257,13 @@ final class VideoPlayer
     private static function trackList(Context $c, array $rows, ?int $chosen): ?int
     {
         $clicked = null;
-        self::frosted($c->column(), 0.05, 0.14, 8)->fillWidth()->dividers(1, 0xffffff, 0.1);
+        self::frosted($c->column(), 0.05, 0.14, 8)->fillWidth()->dividers(1, self::$ink, 0.1);
           foreach (array_pad($rows, 4, null) as $i => $r) {
               $row = $c->row(0, 6)->height(24.5)->paddingStart(20)->paddingEnd(8)->align(Node::CENTER)->fillWidth();
               if ($r !== null) {
                   if ($i === $chosen) { $c->box(3, 16, $c->theme->accent)->round(1.5)->absolute()->left(8)->top(4.25); }
-                  $c->text($r[0], 13, 0xffffff)->opacity($i === 0 ? 0.5 : 0.9)->noWrap()->ellipsis('…')->grow(1);
-                  if ($r[1] !== '') { self::frosted($c->row()->padding(1, 3), 0.2, 0, 3); $c->text($r[1], 11, 0xffffff)->opacity(0.85); $c->end(); }
+                  $c->text($r[0], 13, self::$ink)->opacity($i === 0 ? 0.5 : 0.9)->noWrap()->ellipsis('…')->grow(1);
+                  if ($r[1] !== '') { self::frosted($c->row()->padding(1, 3), 0.2, 0, 3); $c->text($r[1], 11, self::$ink)->opacity(0.85); $c->end(); }
                   if ($c->clicked($row)) { $clicked = $i; }
               }
               $c->end();
@@ -905,10 +1279,10 @@ final class VideoPlayer
         $c->row(0, 4)->align(Node::CENTER); // as wide as its options, not the card
         self::frosted($c->row(0, 0), 0.1, 0, 6)->height(23)->align(Node::STRETCH);
           foreach ($options as $i => $label) {
-              if ($i > 0 && $i !== $chosen && $i - 1 !== $chosen) { $c->column()->width(1)->paddingY(5); $c->box(1, 13, 0xffffff)->opacity(0.25); $c->end(); }
+              if ($i > 0 && $i !== $chosen && $i - 1 !== $chosen) { $c->column()->width(1)->paddingY(5); $c->box(1, 13, self::$ink)->opacity(0.25); $c->end(); }
               $seg = $c->column()->paddingX(11)->center()->round(6);
               if ($i === $chosen) { $seg->background($c->theme->accent); } // the choice in the system's accent, as IINA's
-                $c->text($label, 13, 0xffffff)->opacity(0.9);
+                $c->text($label, 13, self::$ink)->opacity(0.9);
               $c->end();
               if ($takes !== null && !in_array($i, $takes, true)) { $seg->tooltip(self::t($c, 'videoNotYet')); continue; }
               if ($c->clicked($seg)) { $clicked = $i; }
@@ -923,7 +1297,7 @@ final class VideoPlayer
     private static function toggleSwitch(Context $c, string $label, bool $on, bool $enabled = true): bool
     {
         $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on): void {
-            $l->rect($n->x, $n->y, $n->w, $n->h, $on ? $t->accent : 0xffffff, $on ? 1.0 : 0.2, 9);
+            $l->rect($n->x, $n->y, $n->w, $n->h, $on ? $t->accent : self::$ink, $on ? 1.0 : 0.2, 9);
             $l->rect($on ? $n->x + $n->w - 24 : $n->x + 2, $n->y + 2, 22, 14, 0xffffff, 1.0, 7);
         });
         $c->end();
@@ -937,26 +1311,26 @@ final class VideoPlayer
      * when the next does (the last's "End"), lines between them and below;
      * a double click goes to one and plays.
      */
-    private static function chapterList(Context $c, VideoPlayerState $s): Node
+    private static function chapterList(Context $c, VideoPlayerState $s, float $h): Node
     {
         $p = $s->player;
         $chapters = $p?->chapters() ?? [];
         $playing = $p?->chapter() ?? -1;
         $list = $c->scroll()->absolute()->top(0)->left(0)->right(0)->bottom(0);
-          $c->column()->fillWidth()->dividers(1, 0xffffff, 0.1);
+          $c->column()->fillWidth()->dividers(1, self::$ink, 0.1);
             foreach ($chapters as $i => $ch) {
                 $row = $c->column(0, 1)->height(40)->paddingStart(28)->paddingEnd(9)->justify(Node::CENTER)->fillWidth();
                   if ($i === $playing) { $c->column()->absolute()->left(9)->top(13)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
                   $title = $ch->title !== '' ? $ch->title : self::t($c, 'videoChapterNumber', ['n' => (string)$i]);
-                  $c->text($title, 13, 0xffffff)->opacity(0.9)->noWrap()->ellipsis('…')->tooltip($title);
+                  $c->text($title, 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…')->tooltip($title);
                   $end = isset($chapters[$i + 1]) ? VideoPlayerState::clock($chapters[$i + 1]->start) : self::t($c, 'videoChapterEnd');
-                  $c->text(VideoPlayerState::clock($ch->start) . ' → ' . $end, 11, 0xffffff)->fontFeatures('tnum')->opacity(0.55)->noWrap();
+                  $c->text(VideoPlayerState::clock($ch->start) . ' → ' . $end, 11, self::$ink)->fontFeatures('tnum')->opacity(0.55)->noWrap();
                 $c->end();
                 if ($c->doubleClicked($row)) { $s->playChapter($i); }
             }
           $c->end();
-          $c->column()->fillWidth()->height(max(0.0, $c->height - 86 - 40 * count($chapters)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
-              for ($y = $n->y + 40; $y < $n->y + $n->h; $y += 40) { $l->rect($n->x, $y, $n->w, 1, 0xffffff, 0.1); }
+          $c->column()->fillWidth()->height(max(0.0, $h - 86 - 40 * count($chapters)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
+              for ($y = $n->y + 40; $y < $n->y + $n->h; $y += 40) { $l->rect($n->x, $y, $n->w, 1, self::$ink, 0.1); }
           });
           $c->end();
         $c->end();
@@ -977,14 +1351,14 @@ final class VideoPlayer
             $f = $sl->fraction;
             $sl->draw(static function (DisplayList $l, Node $n) use ($dots): void { // a track, dots under it, an upright white pill
                 $x0 = $n->x + 5; $w = $n->w - 10; $cy = $n->y + $n->h / 2;
-                $l->rect($n->x, $cy - 2, $n->w, 4, 0xffffff, 0.15, 2);
-                for ($i = 0; $i < $dots; $i++) { $l->rect($x0 + $w * $i / ($dots - 1) - 0.75, $cy + 6, 1.5, 1.5, 0xffffff, 0.3, 0.75); }
+                $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.15, 2);
+                for ($i = 0; $i < $dots; $i++) { $l->rect($x0 + $w * $i / ($dots - 1) - 0.75, $cy + 6, 1.5, 1.5, self::$ink, 0.3, 0.75); }
                 $l->rect($x0 + $w * $n->fraction - 4.5, $cy - 8.5, 9, 17, 0xffffff, 1.0, 4.5);
             });
             $changed = $c->changed($sl);
-            $c->text($label, 10, 0xffffff)->opacity(0.8)->textAlign(Node::CENTER)->absolute()->leftPercent($f * 100)->top(0)->width(40)->translate(-20, 0)->passThrough();
+            $c->text($label, 10, self::$ink)->opacity(0.8)->textAlign(Node::CENTER)->absolute()->leftPercent($f * 100)->top(0)->width(40)->translate(-20, 0)->passThrough();
             foreach ($marks as $text => $at) { // the ends' marks within the slider, flush with its ends; the others centered under their place
-                $m = $c->text((string)$text, 10, 0xffffff)->opacity(0.8)->absolute()->top(35)->passThrough();
+                $m = $c->text((string)$text, 10, self::$ink)->opacity(0.8)->absolute()->top(35)->passThrough();
                 match (true) {
                     $at <= 0 => $m->left(0),
                     $at >= 1 => $m->right(0),
@@ -993,7 +1367,7 @@ final class VideoPlayer
             }
           $c->end();
           self::frosted($c->row()->size(52, 26)->paddingX(8)->align(Node::CENTER), 0.1, 0, 6);
-            $c->text($field, 13, 0xffffff)->opacity(0.9);
+            $c->text($field, 13, self::$ink)->opacity(0.9);
           $c->end();
         $c->end();
         return $changed;
@@ -1003,7 +1377,7 @@ final class VideoPlayer
     private static function sideButton(Context $c, string $label, bool $enabled = true): bool
     {
         $b = self::frosted($c->row()->height(24)->paddingX(10)->center(), $enabled ? 0.14 : 0.08, 0, 6);
-          $c->text($label, 13, 0xffffff)->opacity($enabled ? 0.9 : 0.5);
+          $c->text($label, 13, self::$ink)->opacity($enabled ? 0.9 : 0.5);
         $c->end();
         return $enabled && $c->clicked($b);
     }
@@ -1023,10 +1397,8 @@ final class VideoPlayer
     /** The name of language $code (ISO 639-2 as Matroska writes it, or 639-1) in $locale, '' for none. */
     public static function language(string $code, string $locale): string
     {
-        $code = strtolower($code);
-        if ($code === '' || $code === 'und') { return ''; }
-        // The bibliographic codes of ISO 639-2, which ICU does not take, as their terminology ones.
-        $code = ['chi' => 'zh', 'fre' => 'fr', 'ger' => 'de', 'dut' => 'nl', 'cze' => 'cs', 'gre' => 'el', 'per' => 'fa', 'rum' => 'ro', 'slo' => 'sk', 'wel' => 'cy', 'arm' => 'hy', 'baq' => 'eu', 'bur' => 'my', 'geo' => 'ka', 'ice' => 'is', 'mac' => 'mk', 'mao' => 'mi', 'may' => 'ms', 'alb' => 'sq', 'tib' => 'bo'][$code] ?? $code;
+        $code = Track::primaryLanguage($code);
+        if ($code === '') { return ''; }
         $name = (string)Locale::getDisplayLanguage($code, $locale);
         return $name !== '' ? $name : $code;
     }
@@ -1102,7 +1474,7 @@ final class VideoPlayer
           self::heading($c, 'slider.vertical.3', self::t($c, 'videoEqualizer'));
           $c->row();
             $pop = self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->align(Node::CENTER), 0.12, 0, 6);
-              $c->text($s->equalizerProfile !== '' ? $s->equalizerProfile : self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, 0xffffff)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
+              $c->text($s->equalizerProfile !== '' ? $s->equalizerProfile : self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, self::$ink)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
               self::sf($c, 'chevron.up.chevron.down', 10, 0.8);
             $c->end();
             $pop->menu(function (Menu $m) use ($c, $s): void { // IINA's pop-up: saving (Manual's), renaming and removing (a profile's), Manual, its presets, the user's profiles
@@ -1165,18 +1537,18 @@ final class VideoPlayer
                 $sl = $c->sliderBase($g, -12, 12, 0.0, true)->size(16, 120)->label("$band Hz");
                 $sl->draw(static function (DisplayList $l, Node $n): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
                     $cx = $n->x + $n->w / 2;
-                    $l->rect($cx - 1.5, $n->y, 3, $n->h, 0xffffff, 0.15, 1.5);
-                    foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $l->rect($cx + 5, $n->y + $n->h * $f - 0.75, 1.5, 1.5, 0xffffff, 0.3, 0.75); }
+                    $l->rect($cx - 1.5, $n->y, 3, $n->h, self::$ink, 0.15, 1.5);
+                    foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $l->rect($cx + 5, $n->y + $n->h * $f - 0.75, 1.5, 1.5, self::$ink, 0.3, 0.75); }
                     $l->rect($n->x, $n->y + $n->h * (1 - $n->fraction) - 4, 16, 8, 0xffffff, 0.92, 4);
                 });
                 if ($c->changed($sl)) { $gains[$i] = round($g, 2); $moved = true; }
-                $c->text($band, 10, 0xffffff)->opacity(0.5);
+                $c->text($band, 10, self::$ink)->opacity(0.5);
               $c->end();
           }
           $c->column()->grow(1)->height(120);
-            $c->text('+12 dB', 10, 0xffffff)->opacity(0.8)->absolute()->right(0)->top(-6);
-            $c->text('0 dB', 10, 0xffffff)->opacity(0.8)->absolute()->right(0)->top(54);
-            $c->text('-12 dB', 10, 0xffffff)->opacity(0.8)->absolute()->right(0)->top(114);
+            $c->text('+12 dB', 10, self::$ink)->opacity(0.8)->absolute()->right(0)->top(-6);
+            $c->text('0 dB', 10, self::$ink)->opacity(0.8)->absolute()->right(0)->top(54);
+            $c->text('-12 dB', 10, self::$ink)->opacity(0.8)->absolute()->right(0)->top(114);
           $c->end();
         $c->end();
         if ($moved) { $s->equalizerDraft = $gains; [$s->equalizerPreset, $s->equalizerProfile] = ['', '']; }
@@ -1235,7 +1607,7 @@ final class VideoPlayer
     private static function layoutTab(Context $c): void
     {
         self::card($c);
-          $c->text(self::t($c, 'videoLayoutNotYet'), 13, 0xffffff)->opacity(0.6);
+          $c->text(self::t($c, 'videoLayoutNotYet'), 13, self::$ink)->opacity(0.6);
         $c->end();
     }
 }

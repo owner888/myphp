@@ -72,16 +72,17 @@ final class Ass
      * Dialogue line $text of style $style, layer $layer and margins (0 for
      * the style's), showing from $start for $duration seconds, as it shows
      * at its start (AssLine::at for later); null for one that shows nothing
-     * (empty, or a drawing alone).
+     * (empty, or a drawing alone). $plain: a text subtitle's, of no tags,
+     * its lines at its newlines (as mpv converts one to ASS).
      */
-    public function line(string $text, string $style, int $layer = 0, int $marginL = 0, int $marginR = 0, int $marginV = 0, float $start = 0.0, float $duration = INF): ?AssLine
+    public function line(string $text, string $style, int $layer = 0, int $marginL = 0, int $marginR = 0, int $marginV = 0, float $start = 0.0, float $duration = INF, bool $plain = false): ?AssLine
     {
         $base = $this->styles[ltrim($style, '*')] ?? $this->styles['Default'] ?? self::DEFAULT;
         $st = self::state($base);
         $line = ['align' => (int)$base['alignment'], 'pos' => null, 'move' => null, 'fade' => null, 'clip' => null, 'org' => null, 'drawing' => false];
         $parts = []; // each run's text, its state, the \t's over it and its syllable
         $transforms = []; $karaoke = 0.0; $syllable = null;
-        foreach (preg_split('/(\{[^}]*\})/', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: [] as $part) {
+        foreach ($plain ? [] : (preg_split('/(\{[^}]*\})/', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: []) as $part) {
             if ($part[0] === '{') {
                 foreach (self::tags(substr($part, 1, -1)) as [$name, $arg]) {
                     $this->tag($name, $arg, $st, $base, $line, $transforms, $karaoke, $syllable);
@@ -96,6 +97,9 @@ final class Ass
                 $parts[] = [$piece === '\N' ? "\n" : $piece, $st, $transforms, $syllable];
             }
             $syllable = null; // a syllable's text is what follows its \k, up to the next tags
+        }
+        if ($plain) { // a text subtitle's: no tags, its lines its own
+            foreach (preg_split('/(\n)/', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: [] as $piece) { $parts[] = [$piece, $st, [], null]; }
         }
         $shape = [$line['align'], $marginL ?: (int)$base['marginl'], $marginR ?: (int)$base['marginr'], $marginV ?: (int)$base['marginv'], $layer, $this->playResX, $this->playResY, $this->scaledBorder, $this->wraps, $start, $duration];
         $animated = $line['move'] !== null || $line['fade'] !== null || array_filter($parts, fn(array $p) => $p[2] !== [] || $p[3] !== null) !== [];

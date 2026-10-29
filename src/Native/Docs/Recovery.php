@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native\Docs;
 
-use MyPHP\{Document, Documents};
+use MyPHP\{Document, Documents, Logger};
 
 /**
  * The recovery copies of a kind of documents (mygo's document_recovery.go):
@@ -78,7 +78,7 @@ final class Recovery
         try {
             $this->writeIndex();
         } catch (\RuntimeException $e) {
-            error_log("myphp: documents: {$e->getMessage()}");
+            Logger::warn($e->getMessage(), 'documents');
         }
         @unlink("{$this->dir}/$id");
     }
@@ -131,7 +131,7 @@ final class Recovery
             $json = @file_get_contents("$dir/index.json");
             $entries = $json === false ? [] : json_decode($json, true);
             if (!is_array($entries)) {
-                error_log("myphp: documents: $dir: its index is not JSON");
+                Logger::warn("$dir: its index is not JSON", 'documents');
                 $entries = [];
             }
             foreach ($entries as $e) {

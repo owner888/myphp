@@ -40,7 +40,7 @@ final class SoftVideo
 
     public function __construct(private readonly Track $track)
     {
-        $this->dav1d = new Dav1d();
+        $this->dav1d = new Dav1d(\MyPHP\Media\Player::$videoThreads); // the settings' threads (IINA's videoThreads), 0 as many as the cores
     }
 
     /** Whether track $t is decoded so: AV1, without the system's decoder, or with it when $hardware is off (IINA's hardware decoding preference). */

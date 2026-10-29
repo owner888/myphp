@@ -49,7 +49,7 @@ final class Power
         return self::add('unlockScreen', $fn);
     }
 
-    private static ?\FFI $io = null, $cg = null;
+    private static ?\FFI $io = null, $cg = null, $ps = null;
 
     /**
      * Keeps the Mac from sleeping while idle, and with $display the display
@@ -89,6 +89,30 @@ final class Power
         $battery = $type !== null && ObjC::phpStr($type) === 'Battery Power';
         self::$io->CFRelease($info);
         return $battery;
+    }
+
+    /** @internal UI\VideoPlayer: the charge of the Mac's own battery in percent (IOKit's Current Capacity of its InternalBattery), null for a Mac of none. */
+    public static function batteryLevel(): ?int
+    {
+        self::$ps ??= \FFI::cdef('void* IOPSCopyPowerSourcesInfo(void); void* IOPSCopyPowerSourcesList(void*); void* IOPSGetPowerSourceDescription(void*, void*); void CFRelease(void*);', '/System/Library/Frameworks/IOKit.framework/IOKit');
+        $info = self::$ps->IOPSCopyPowerSourcesInfo();
+        if ($info === null) {
+            return null;
+        }
+        $list = self::$ps->IOPSCopyPowerSourcesList($info);
+        $level = null;
+        $sources = ObjC::import($list);
+        for ($i = 0, $n = $sources === null ? 0 : ObjC::msg('L:', $sources, 'count'); $i < $n && $level === null; $i++) {
+            $d = self::$ps->IOPSGetPowerSourceDescription($info, self::$ps->cast('void*', ObjC::addr(ObjC::msg('p:L', $sources, 'objectAtIndex:', $i))));
+            $desc = $d === null ? null : ObjC::import($d);
+            $type = $desc === null ? null : ObjC::msg('p:p', $desc, 'objectForKey:', ObjC::str('Type'));
+            if ($type === null || ObjC::phpStr($type) !== 'InternalBattery') { continue; }
+            $cap = ObjC::msg('p:p', $desc, 'objectForKey:', ObjC::str('Current Capacity'));
+            $level = $cap === null ? null : ObjC::msg('l:', $cap, 'integerValue');
+        }
+        if ($list !== null) { self::$ps->CFRelease($list); }
+        self::$ps->CFRelease($info);
+        return $level;
     }
 
     /** How long, in seconds, the user has not used the keyboard or the mouse (mygo's IdleTime). */

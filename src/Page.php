@@ -13,7 +13,7 @@ use RuntimeException;
  * for a window showing native UI.
  *
  *     $win = new Window(new WindowOptions(title: 'Editor', url: '/'));
- *     $win->page()->on('domReady', fn() => error_log('ready'));
+ *     $win->page()->on('domReady', fn() => Logger::debug('ready'));
  *
  * Its events, by on(): pageTitleUpdated (a TitleEvent, whose
  * preventDefault() keeps the window's title), willNavigate (a

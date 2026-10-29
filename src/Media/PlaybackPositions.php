@@ -57,6 +57,13 @@ final class PlaybackPositions
         $this->save();
     }
 
+    /** @internal UI\VideoPlayerState: forgets them all (IINA's Clear Saved Playback Progress). */
+    public function clear(): void
+    {
+        $this->positions = [];
+        $this->save();
+    }
+
     /** @return array<string, array{0: float, 1: int}> */
     private function all(): array
     {

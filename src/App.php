@@ -409,7 +409,7 @@ final class App
                 try {
                     Native\Pasteboard::flush(); // the app's data stays on the clipboard once it quit
                 } catch (\Throwable $e) {
-                    error_log("myphp: clipboard: {$e->getMessage()}");
+                    Logger::warn($e->getMessage(), 'clipboard');
                 }
                 $quit = self::$onQuit;
                 self::$onQuit = [];

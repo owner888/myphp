@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use Closure;
+use MyPHP\Logger;
 
 /**
  * Frame statistics (mygo's frameStats): with MYPHP_FRAME_STATS set, a
@@ -45,7 +46,7 @@ final class FrameStats
             $v === 'all' => [0.0, true],
             is_numeric($v) && (float)$v >= 0 => [(float)$v / 1000, true],
             default => (function () use ($v): array {
-                fwrite(STDERR, "myphp: MYPHP_FRAME_STATS=\"$v\" is not a number of milliseconds: logging frames over 8 ms\n");
+                Logger::warn("MYPHP_FRAME_STATS=\"$v\" is not a number of milliseconds: logging frames over 8 ms", 'frames');
                 return [0.008, true];
             })(),
         };
@@ -89,10 +90,10 @@ final class FrameStats
         $passes = $this->passes > 1 ? " ({$this->passes} passes)" : '';
         $runs = gc_status()['runs'] - $this->runs;
         $gc = $runs > 0 ? "GC: $runs runs" : 'no GC';
-        $line = sprintf('myphp: frame %d took %s ms: build %s%s, layout %s, paint %s, present %s (%s), other %s; meanwhile the process came to hold %+.1f KB, %d text layouts; %s',
+        $line = sprintf('frame %d took %s ms: build %s%s, layout %s, paint %s, present %s (%s), other %s; meanwhile the process came to hold %+.1f KB, %d text layouts; %s',
             $frame, $ms($total), $ms($this->laps[self::BUILD]), $passes, $ms($this->laps[self::LAYOUT]), $ms($this->laps[self::PAINT]), $ms($this->laps[self::PRESENT]), $path, $ms($other),
             (memory_get_usage() - $this->memory) / 1024, $layouts - $this->layouts, $gc);
-        self::$log !== null ? (self::$log)($line) : fwrite(STDERR, $line . "\n");
+        self::$log !== null ? (self::$log)($line) : Logger::debug($line, 'frames');
         return $line;
     }
 }

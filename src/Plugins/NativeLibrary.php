@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Plugins;
 
 use RuntimeException;
+use MyPHP\Logger;
 
 /**
  * Finds a plugin's native library (mygo's terminal/internal/library and
@@ -101,7 +102,7 @@ final class NativeLibrary
         if ($f['url'] === '' || $f['sha256'] === '') {
             throw new RuntimeException("$plugin: no download of {$f['name']} for " . self::target());
         }
-        error_log("$plugin: downloading {$f['url']} into " . dirname($path));
+        Logger::debug("downloading {$f['url']} into " . dirname($path), $plugin);
         $ctx = stream_context_create(['http' => ['timeout' => 120, 'follow_location' => 1, 'max_redirects' => 10, 'ignore_errors' => true]]);
         $in = @fopen($f['url'], 'rb', false, $ctx);
         if ($in === false) {

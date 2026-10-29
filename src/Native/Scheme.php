@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Native;
 
 use Closure;
-use MyPHP\{App, Protocol, ProtocolRequest, ProtocolResponse};
+use MyPHP\{App, Logger, Protocol, ProtocolRequest, ProtocolResponse};
 
 /**
  * Serving the requests of custom schemes (mygo's protocol.go): the
@@ -50,7 +50,7 @@ final class Scheme
                 throw new \UnexpectedValueException('the handler returned ' . get_debug_type($resp) . ', not a ProtocolResponse');
             }
         } catch (\Throwable $e) {
-            error_log("myphp: serving {$req->url}: {$e->getMessage()}");
+            Logger::error("serving {$req->url}: {$e->getMessage()}", 'scheme');
             $task->respond(500, []);
             $task->finish();
             return;
@@ -76,7 +76,7 @@ final class Scheme
                 $it->next();
             }
         } catch (\Throwable $e) {
-            error_log("myphp: serving {$req->url}: {$e->getMessage()}");
+            Logger::error("serving {$req->url}: {$e->getMessage()}", 'scheme');
             $task->respond(500, []);
             $task->finish();
             return;
@@ -118,7 +118,7 @@ final class Scheme
                 }
                 $task->write((string)$it->current());
             } catch (\Throwable $e) {
-                error_log("myphp: serving $url: {$e->getMessage()}");
+                Logger::error("serving $url: {$e->getMessage()}", 'scheme');
                 $task->fail($e->getMessage());
                 return;
             }

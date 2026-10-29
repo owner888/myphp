@@ -6,6 +6,7 @@ namespace MyPHP\Native;
 use FFI;
 use MyPHP\App;
 use MyPHP\Audio\{Device, Mixer, Output};
+use MyPHP\Logger;
 
 /**
  * The system's audio output (mygo's output_darwin.go): an Audio Queue on
@@ -54,7 +55,7 @@ final class AudioQueue implements Device
             try {
                 $self->fill($buf);
             } catch (\Throwable $e) {
-                error_log('audio: ' . $e->getMessage());
+                Logger::error($e->getMessage(), 'audio');
             }
         };
         $desc = $c->new('AudioStreamBasicDescription');
@@ -96,7 +97,7 @@ final class AudioQueue implements Device
         FFI::memcpy($b->mAudioData, $s, strlen($s));
         $b->mAudioDataByteSize = strlen($s);
         if (($st = self::c()->AudioQueueEnqueueBuffer($this->q, $b, 0, null)) !== 0) {
-            error_log("audio: AudioQueueEnqueueBuffer failed (OSStatus $st)");
+            Logger::error("AudioQueueEnqueueBuffer failed (OSStatus $st)", 'audio');
             App::later(fn() => Output::lost($this));
         }
     }

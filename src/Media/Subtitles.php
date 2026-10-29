@@ -99,9 +99,17 @@ final class Subtitles
         };
     }
 
-    /** $bytes as UTF-8: by a byte order mark, else as UTF-8 when it is, else as GB18030. */
+    /** @internal UI\VideoPlayerState: the encoding of the subtitle files read next, iconv's name of it (IINA's default encoding), 'auto' to find it. */
+    public static string $encoding = 'auto';
+
+    /** $bytes as UTF-8: by a byte order mark, else of $encoding where it is set, else as UTF-8 when it is, else as GB18030. */
     private static function utf8(string $bytes): string
     {
+        if (self::$encoding !== 'auto' && !str_starts_with($bytes, "\xEF\xBB\xBF") && !str_starts_with($bytes, "\xFF\xFE") && !str_starts_with($bytes, "\xFE\xFF")) {
+            $out = @iconv(self::$encoding, 'UTF-8//IGNORE', $bytes); // as mpv's sub-codepage, through iconv
+            if ($out === false) { throw new RuntimeException('myphp: subtitles not of ' . self::$encoding); }
+            return $out;
+        }
         if (str_starts_with($bytes, "\xEF\xBB\xBF")) {
             return substr($bytes, 3);
         }

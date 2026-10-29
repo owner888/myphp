@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native\Docs;
 
-use MyPHP\{App, Document, DocumentCanceled, Documents, L10n, MenuItem, MessageOptions, OpenDialogOptions, QuitEvent, Window};
+use MyPHP\{App, Document, DocumentCanceled, Documents, L10n, Logger, MenuItem, MessageOptions, OpenDialogOptions, QuitEvent, Window};
 use WeakMap;
 
 /**
@@ -198,7 +198,7 @@ final class Registry
         try {
             App::addRecentDocument($path);
         } catch (\RuntimeException $e) {
-            error_log("myphp: recent documents: {$e->getMessage()}");
+            Logger::warn("recent documents: {$e->getMessage()}", 'documents');
         }
     }
 
@@ -209,7 +209,7 @@ final class Registry
         try {
             Host::message(new MessageOptions(parent: $parent, type: 'error', message: $message, detail: preg_replace('/^myphp: /', '', $e->getMessage())));
         } catch (\Throwable) {
-            error_log("myphp: documents: $message {$e->getMessage()}");
+            Logger::warn("$message {$e->getMessage()}", 'documents');
         }
     }
 

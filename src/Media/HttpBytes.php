@@ -16,8 +16,8 @@ use RuntimeException;
  * by the run loop (Native\CurlLoop). Its first request (from 0) says the
  * size and whether the server takes ranges. A read of what is not near
  * where the transfer is starts another there; the transfer stops once the
- * cache holds MAX bytes ahead of the reader, and goes on as it reads.
- * Past MAX in all, the blocks least recently read go (IINA's 150 MiB),
+ * cache holds CacheBudget::$max bytes ahead of the reader, and goes on as it reads.
+ * Past it in all, the blocks least recently read go (IINA's 150 MiB),
  * never those ahead of the reader not read yet; of a film of readers
  * sharing it (CacheBudget: a video's and an audio's), of them all.
  * The blocks are of native memory, as mpv's cache is: PHP's memory_limit
@@ -26,7 +26,9 @@ use RuntimeException;
 final class HttpBytes implements Bytes, CacheMember
 {
     /** A block of the cache; IINA's defaultCacheSize, 153600 KiB. */
-    public const BLOCK = 256 << 10, MAX = CacheBudget::MAX;
+    public const BLOCK = 256 << 10;
+    /** @internal UI\VideoPlayerState: the User-Agent the films over the network are asked for with (IINA's userAgent, mpv's user-agent), '' for none; HLS's segments too (Download). */
+    public static string $userAgent = '';
     /** How far ahead of the transfer a read may be and wait for it rather than start another. */
     private const NEAR = 2 << 20;
     /** CURLOPT_RANGE, CURLOPT_CONNECTTIMEOUT; CURLE_WRITE_ERROR, what a transfer stopped by its callback ends with. */
@@ -174,7 +176,7 @@ final class HttpBytes implements Bytes, CacheMember
         }
         $b = intdiv($this->reader, self::BLOCK);
         while (isset($this->blocks[$b])) { $b++; }
-        if ($b * self::BLOCK < $this->size && $this->budget->ahead() < self::MAX / 2) {
+        if ($b * self::BLOCK < $this->size && $this->budget->ahead() < CacheBudget::$max / 2) {
             $this->fetch($b * self::BLOCK);
         }
     }
@@ -253,6 +255,7 @@ final class HttpBytes implements Bytes, CacheMember
         $set(Curl::OPT_WRITEFUNCTION, $cbs->write);
         $list = Curl::headers($this->headers);
         if ($list !== null) { $set(Curl::OPT_HTTPHEADER, $list); }
+        if (self::$userAgent !== '') { $set(Curl::OPT_USERAGENT, self::$userAgent); } // a User-Agent of the headers (a page's, yt-dlp's) before it
         $this->transfer = ['easy' => $easy, 'cbs' => $cbs, 'at' => $at, 'part' => '', 'stop' => false, 'list' => $list];
         CurlLoop::start($easy, static function (int $result) use ($self, $easy, $list, &$status): void {
             $b = $self->get();
@@ -313,7 +316,7 @@ final class HttpBytes implements Bytes, CacheMember
             $t['part'] = '';
             $kept = true;
         }
-        if ($kept && $this->budget->ahead() >= self::MAX * 0.9) { // room for the reader: on once it read some (looked at as a block is kept, not at each piece)
+        if ($kept && $this->budget->ahead() >= CacheBudget::$max * 0.9) { // room for the reader: on once it read some (looked at as a block is kept, not at each piece)
             $t['stop'] = true;
             return false;
         }

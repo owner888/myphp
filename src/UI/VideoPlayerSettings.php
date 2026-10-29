@@ -28,11 +28,30 @@ final class VideoPlayerSettings
     public const SIDEBAR = 200, BAR = 52, PAGE_ROW = 36, SECTION_ROW = 22;
     /** Where a row's label starts in its card; the indent of what a row has under it (SettingsSubList.indent). */
     public const LABEL = 36, INDENT = 28;
+    /**
+     * IINA's buttons of the control bar's toolbar (Preference.ToolBarButton),
+     * by its numbers: their symbols (the first the system has), those shown
+     * while on, the key of their names (osc_toolbar.*), in the order its
+     * sheet lists them.
+     */
+    public const TOOLBAR = [
+        0 => [['gearshape'], ['gearshape.fill'], 'settings'],
+        1 => [['list.bullet.rectangle', 'list.bullet'], ['list.bullet.rectangle.fill', 'list.bullet'], 'playlist'],
+        2 => [['pip.enter'], ['pip.exit'], 'pip'],
+        3 => [['arrow.up.backward.and.arrow.down.forward.rectangle', 'arrow.up.left.and.arrow.down.right'], ['arrow.down.forward.and.arrow.up.backward.rectangle', 'arrow.down.right.and.arrow.up.left'], 'full_screen'],
+        4 => [['microphone.dynamic.on.stand', 'music.microphone', 'music.mic'], [], 'music_mode'],
+        5 => [['captions.bubble.fill'], [], 'sub_track'],
+        6 => [['camera.shutter.button', 'camera.fill'], [], 'screenshot'],
+        7 => [['puzzlepiece.extension', 'puzzlepiece'], ['puzzlepiece.extension.fill', 'puzzlepiece.fill'], 'plugins'],
+        8 => [['document.viewfinder', 'doc.viewfinder', 'doc.text.viewfinder'], ['viewfinder.circle.fill'], 'live_text'],
+    ];
+    /** The default buttons of the toolbar, IINA's. */
+    public const TOOLBAR_DEFAULT = [7, 2, 1, 0];
 
     /** What one window's settings view keeps between frames: the page, the search, the pages' scrolls, the section in view, the rows open, the fields' texts. */
     private static function local(Context $c, Node $root): object
     {
-        $make = fn() => (object)['page' => 'general', 'search' => new TextState(), 'open' => false, 'scroll' => [], 'section' => '', 'ring' => null, 'jump' => null, 'pinned' => null, 'expanded' => [], 'fields' => [], 'heights' => []];
+        $make = fn() => (object)['page' => 'general', 'search' => new TextState(), 'open' => false, 'scroll' => [], 'section' => '', 'ring' => null, 'jump' => null, 'pinned' => null, 'toolbarChosen' => null, 'audioDevices' => null, 'assSecondary' => false, 'thumbBytes' => null, 'kbSearch' => null, 'kbChosen' => null, 'expanded' => [], 'fields' => [], 'heights' => []];
         return $c->runtime?->local($root->id, $make) ?? $make();
     }
 
@@ -306,6 +325,7 @@ final class VideoPlayerSettings
     {
         $t = $c->theme;
         $k = self::colors($t);
+        $enabled = $enabled && (($item['holds'] ?? null) === null || ($item['holds'])()); // a row of its own condition (the advanced settings' switch)
         $pad = $small ? 8 : 12; // SettingsItem's vertical padding of its control size
         $expand = $item['expand'];
         $open = $expand ? ($v->expanded[$item['id']] ?? false) : ($item['shows'] === null || ($item['shows'])());
@@ -420,6 +440,120 @@ final class VideoPlayerSettings
           }
         $c->end();
         return $clicked;
+    }
+
+    /**
+     * IINA's radio buttons under a row (its radioGroup): each a circle and
+     * its title, 24 apart, the one chosen in the accent (gray while the
+     * window is not the key one) with its dot; returns the one clicked.
+     * @param array<int, string> $options titles by value
+     */
+    public static function radios(Context $c, array $options, int $chosen): ?int
+    {
+        $t = $c->theme;
+        $clicked = null;
+        $c->column(0, 6)->padding(0, 8, 12, self::INDENT - 8)->fillWidth()->role(Role::RADIO_GROUP);
+          foreach ($options as $value => $title) {
+              $b = $c->key("radio:$value")->row(0, 6)->height(18)->align(Node::CENTER)->role(Role::RADIO)->checked($value === $chosen)->label($title);
+                self::radio($c, $value === $chosen);
+                $c->text($title, 13, $t->text);
+              $c->end();
+              if ($c->clicked($b) && $value !== $chosen) { $clicked = $value; }
+          }
+        $c->end();
+        return $clicked;
+    }
+
+    /** A radio button's circle, 14 points, as macOS 26 draws it: the accent with a white dot when $on in the key window, gray with one in another; gray, empty, when off. */
+    private static function radio(Context $c, bool $on): void
+    {
+        $key = $c->runtime?->windowFocus ?? true;
+        $c->column()->size(14, 14)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on, $key): void {
+            $accent = $on && $key;
+            $l->rect($n->x, $n->y, 14, 14, $accent ? $t->accent : ($t->dark ? 0xffffff : 0x000000), $accent ? 1.0 : ($t->dark ? 0.12 : 0.06), 7);
+            if (!$accent && !$t->dark) { $l->ring($n->x, $n->y, 14, 14, 0x000000, 0.2, 7, 0.5); }
+            if ($on) { $l->rect($n->x + 4.5, $n->y + 4.5, 5, 5, $accent ? 0xffffff : ($t->dark ? 0xdfdfdf : 0x000000), $accent ? 1.0 : 0.85, 2.5); }
+        });
+        $c->end();
+    }
+
+    /**
+     * IINA's choice of where the control bar is (its OSCLayoutView): three
+     * small windows showing the floating bar, the bar at the top and at the
+     * foot, 105 by 59, ringed, a radio button under each; the one clicked.
+     */
+    public static function oscLayout(Context $c, int $chosen): ?int
+    {
+        $t = $c->theme;
+        $clicked = null;
+        $c->row(0, 8)->paddingStart(self::INDENT)->paddingEnd(8)->paddingY(4)->fillWidth()->justify(Node::CENTER);
+          foreach ([0, 1, 2] as $at) {
+              $title = self::tr($c, "oscPosition.items.$at");
+              $box = $c->key("osc:$at")->column(0, 8)->align(Node::CENTER)->padding(0, 0, 8, 0)->role(Role::RADIO)->checked($at === $chosen)->label($title);
+                $c->column()->size(105.6, 59.4)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($at): void { self::oscFigure($l, $n->x, $n->y, $n->w, $n->h, $at, $t); });
+                $c->end();
+                $c->row(0, 6)->align(Node::CENTER);
+                  self::radio($c, $at === $chosen);
+                  $c->text($title, 13, $t->text);
+                $c->end();
+              $c->end();
+              if ($c->clicked($box) && $at !== $chosen) { $clicked = $at; }
+          }
+        $c->end();
+        return $clicked;
+    }
+
+    /** A small window of a landscape (a sky, a sun, two hills) with the control bar where $at puts it (0 floating, 1 at the top, 2 at the foot): myphp's own drawing of what IINA's figures show. */
+    private static function oscFigure(DisplayList $l, float $x, float $y, float $w, float $h, int $at, Theme $t): void
+    {
+        $l->rect($x, $y, $w, $h, 0x8bc9f8, 1.0, 6); // the sky
+        $l->rect($x + $w - 22, $y + 10, 14, 14, 0xdad97f, 1.0, 7); // the sun
+        foreach ([[0.4, 0.42, 0.45], [0.75, 0.5, 0.38]] as [$px, $py, $half]) { // two hills: their peaks, how far they spread, in slices
+            for ($i = 0; $i < 24; $i++) {
+                $k = ($i + 0.5) / 12 - 1; // -1 to 1 across the hill
+                $top = $y + $h * ($py + (1 - $py) * abs($k) * 0.8);
+                $x0 = max($x + 1, $x + $w * ($px + $k * $half) - $w * $half / 24); $x1 = min($x + $w - 1, $x + $w * ($px + $k * $half) + $w * $half / 24 + 0.5);
+                if ($x1 > $x0) { $l->rect($x0, $top, $x1 - $x0, $y + $h - 1 - $top, 0x4a8f5c, 1.0); }
+            }
+        }
+        $l->rect($x, $y, $w, 9, 0x506372, 1.0, 6); // the title bar, its lights
+        $l->rect($x, $y + 5, $w, 4, 0x506372, 1.0);
+        foreach ([0xfe5f57, 0xfebc2e, 0x28c840] as $i => $rgb) { $l->rect($x + 5 + $i * 7, $y + 2.5, 4.5, 4.5, $rgb, 1.0, 2.25); }
+        [$bx, $by, $bw, $bh] = match ($at) { 0 => [$x + $w * 0.25, $y + $h - 17, $w * 0.5, 12], 1 => [$x, $y + 9, $w, 11], default => [$x, $y + $h - 11, $w, 11] };
+        $l->rect($bx, $by, $bw, $bh, 0x2b3a30, 0.82, $at === 0 ? 2 : 0); // the bar, its buttons and its time
+        $cy = $by + $bh / 2;
+        $l->rect($bx + ($at === 0 ? $bw / 2 - 9 : 5), $cy - 1.5, 18, 3, 0xffffff, 0.85, 1.5);
+        if ($at !== 0) { $l->rect($bx + 27, $cy - 0.5, $bw - 40, 1, 0xffffff, 0.75); $l->rect($bx + $bw - 11, $cy - 1.5, 6, 3, 0xffffff, 0.85, 1.5); }
+        else { $l->rect($bx + 6, $by + $bh - 3, $bw - 12, 1, 0xffffff, 0.75); }
+        $l->ring($x, $y, $w, $h, $t->dark ? 0xffffff : 0x000000, 0.15, 6, 2); // NSColor.separatorColor, 2 wide
+    }
+
+    /**
+     * IINA's toolbar row's view (OSCToolbarView): the buttons the control
+     * bar has, in a box, and Customize… which opens the sheet to choose
+     * them; the buttons chosen there, else null.
+     * @param list<int> $buttons
+     */
+    public static function toolbar(Context $c, object $v, array $buttons): ?array
+    {
+        $t = $c->theme;
+        $c->row(0, 8)->padding(0, 8, 8, self::INDENT)->fillWidth()->justify(Node::CENTER)->align(Node::CENTER);
+          $c->row(0, 0)->size(130, 26)->round(13)->justify(Node::END)->align(Node::CENTER)->paddingEnd(4)->background($t->dark ? 0xffffff : 0x000000, 0.05);
+            foreach ($buttons as $b) {
+                $c->column()->size(24, 24)->center();
+                  self::glyph($c, self::TOOLBAR[$b][0] ?? ['questionmark'], $t->text);
+                $c->end();
+            }
+          $c->end();
+          $customize = self::pushButton($c, self::tr($c, '$Customize'), false);
+        $c->end();
+        if ($customize) { VideoPlayerToolbarSheet::open($c, $buttons, function (array $chosen) use ($v): void { $v->toolbarChosen = $chosen; }); }
+        if (($v->toolbarChosen ?? null) !== null) {
+            $chosen = $v->toolbarChosen;
+            $v->toolbarChosen = null;
+            return $chosen;
+        }
+        return null;
     }
 
     /** A switch as macOS 26 draws one (NSSwitch, mini), $label's to assistive technology; whether it was clicked. */
@@ -628,7 +762,7 @@ final class VideoPlayerSettings
     /** The key of IINA's settings string $key in MyPHP's strings. */
     public static function key(string $key): string
     {
-        return 'settings' . implode('', array_map('ucfirst', explode('.', str_replace('$', '', $key))));
+        return 'settings' . implode('', array_map('ucfirst', preg_split('/[._$]+/', $key, -1, PREG_SPLIT_NO_EMPTY)));
     }
 
 }

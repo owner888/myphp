@@ -30,8 +30,20 @@ final class Player
     public const EVENTS = ['time', 'ended', 'error', 'play', 'pause', 'rate', 'seek', 'track', 'buffering'];
     /** Seconds of packets the renderers are given ahead of the clock. */
     private const AHEAD = 2.0;
-    /** A film over HTTP: the clock waits once less than STALL seconds are given ahead and the next are not here, until CACHE_WAIT are (IINA's cachePauseWait, mpv's cache-pause-wait); looked at every BUFFER_LOOK seconds meanwhile. */
-    private const STALL = 0.1, CACHE_WAIT = 1.0, BUFFER_LOOK = 0.05;
+    /** A film over HTTP: the clock waits once less than STALL seconds are given ahead and the next are not here, until $cacheWait are; looked at every BUFFER_LOOK seconds meanwhile. */
+    private const STALL = 0.1, BUFFER_LOOK = 0.05;
+    /**
+     * @internal UI\VideoPlayerState: of the films opened next over the
+     * network, whether the clock waits for the cache (IINA's enableCache,
+     * mpv's cache: without it, it plays on as the frames come), for how
+     * many seconds of it (cachePauseWait, cache-pause-wait), and whether
+     * before it starts too (cachePauseInitial, cache-pause-initial).
+     */
+    public static bool $cache = true, $cachePauseInitial = false;
+    public static float $cacheWait = 1.0;
+    /** Those of this player, as they were as it opened; and whether it has not yet started (the cache waited for first, where cachePauseInitial). */
+    private bool $waitsForCache, $pausesInitially, $unstarted = true;
+    private float $waitFor;
 
     /**
      * Whether the system's decoders decode the video, IINA's "Enable
@@ -41,8 +53,16 @@ final class Player
      * not decode (before Apple's M3) decodes in software anyway.
      */
     public static bool $hardwareDecoding = true;
+    /** @internal UI\VideoPlayerState: the threads of the software decoder of the films opened next (libdav1d's), 0 for as many as the cores: IINA's videoThreads. */
+    public static int $videoThreads = 0;
+    /** @internal UI\VideoPlayerState: the languages of the audio and of the subtitles chosen first in the films opened next, the first first (mpv's alang and slang, IINA's preferred languages). @var list<string> */
+    public static array $audioLanguages = [], $subtitleLanguages = [];
+    /** @internal UI\VideoPlayerState: how the subtitle files of the films opened next are found (SubtitleMatcher::match's mode, priority words, search path, whether the folder is the playlist): IINA's auto load. @var array{0: int, 1: string, 2: string, 3: bool} */
+    public static array $autoLoad = [2, '', './*', true];
 
     private Source $source;
+    /** The source of a local file, its tags and cover read from it (music mode's); null for one over the network. */
+    private Matroska|AssetReader|Ts|null $file = null;
     /** Whether this film's video decodes on the system's decoders (self::$hardwareDecoding as it opened, then setHardwareDecoding's). */
     private bool $hardware;
     /** What reads a film over HTTP ahead (its bytes, or HLS's segments), null for a file's. */
@@ -59,6 +79,8 @@ final class Player
      * the target meanwhile).
      */
     private ?float $bufferFrom = null, $readFrom = null;
+    /** Whether the clock waits for the network as a seek lands (mpv's seeking), not as it played on. */
+    private bool $seekBuffering = false;
     private float $readTo = -INF;
     private bool $seeking = false;
     private ?string $readError = null;
@@ -93,6 +115,8 @@ final class Player
     private array $ahead = [];
     private bool $playing = false, $ended = false, $muted = false;
     private float $rate = 1.0, $volume = 1.0;
+    /** ReplayGain's gain, linear; the gain the renderers give the sound (the volume past 1 times it). */
+    private float $replay = 1.0, $gain = 1.0;
     /** @var array<string, list<Closure>> */
     private array $listeners = [];
     /** The subtitle track shown, null for none; the subtitle files loaded, as tracks; how late the subtitles show, in seconds. */
@@ -158,7 +182,7 @@ final class Player
                 [$this->source, $this->net] = self::open($path);
             } catch (RuntimeException $direct) {
                 if (YtDlp::find() === null) {
-                    throw new RuntimeException($direct->getMessage() . ', and there is no yt-dlp to read it as a page (brew install yt-dlp)');
+                    throw new RuntimeException($direct->getMessage() . (YtDlp::$enabled ? ', and there is no yt-dlp to read it as a page (brew install yt-dlp)' : ', and pages are not read by yt-dlp (the settings\' ytdlEnabled)'));
                 }
                 try {
                     $this->page($path);
@@ -167,9 +191,10 @@ final class Player
                 }
             }
         } else {
-            $this->source = self::source($path);
+            $this->source = $this->file = self::source($path);
         }
         $this->hardware = self::$hardwareDecoding;
+        [$this->waitsForCache, $this->pausesInitially, $this->waitFor] = [self::$cache, self::$cachePauseInitial, self::$cacheWait];
         $this->duration = $this->source->duration();
         foreach ($this->source->tracks() as $t) {
             if ($t->type === Track::VIDEO && $this->video === null && self::playable($t)) {
@@ -177,7 +202,7 @@ final class Player
             }
         }
         $audio = array_values(array_filter($this->audioTracks(), [self::class, 'playable']));
-        $this->audio = array_values(array_filter($audio, fn(Track $t) => $t->isDefault))[0] ?? $audio[0] ?? null;
+        $this->audio = self::inLanguage($audio, self::$audioLanguages) ?? array_values(array_filter($audio, fn(Track $t) => $t->isDefault))[0] ?? $audio[0] ?? null; // mpv's alang first, then the default
         if ($this->video === null && $this->audio === null) {
             throw new RuntimeException("myphp: nothing in $path the system decodes");
         }
@@ -196,26 +221,41 @@ final class Player
     }
 
     /**
-     * Loads the subtitle files beside $path that are named after it
-     * (movie.srt, movie.zh.ass, movie.English.vtt), as IINA does, and
-     * shows the first; else the first embedded track the file marks
-     * default.
+     * Loads the subtitle files IINA's matching finds for $path
+     * (SubtitleMatcher, as $autoLoad says), and shows the first, the
+     * preferred languages' first; else the first embedded track of those
+     * languages, else the one the file marks default.
      */
     private function loadSubtitleFiles(string $path): void
     {
-        $base = pathinfo($path, PATHINFO_FILENAME);
-        $dir = dirname($path);
-        foreach (scandir($dir) ?: [] as $f) {
-            if (isset(Subtitles::FILES[strtolower(pathinfo($f, PATHINFO_EXTENSION))]) && str_starts_with($f, $base . '.')) {
-                $this->loadSubtitles("$dir/$f");
+        foreach (SubtitleMatcher::match($path, ...self::$autoLoad) as $file) {
+            try {
+                $this->loadSubtitles($file);
+            } catch (RuntimeException) {
+                // one that does not read is passed over, as IINA's auto load (its suppressError): one opened by hand tells why
             }
         }
-        $this->subtitle = $this->external[0] ?? null;
+        $this->subtitle = self::inLanguage($this->external, self::$subtitleLanguages) ?? $this->external[0] ?? null; // the files first, as mpv's; of them and of the file's, those of slang's languages first
         if ($this->subtitle === null) {
-            foreach ($this->subtitleTracks() as $t) {
-                if ($t->isDefault) { $this->subtitle = $t; break; }
+            $embedded = array_values(array_filter($this->source->tracks(), [Subtitles::class, 'readable']));
+            $this->subtitle = self::inLanguage($embedded, self::$subtitleLanguages) ?? array_values(array_filter($embedded, fn(Track $t) => $t->isDefault))[0] ?? null;
+        }
+    }
+
+    /**
+     * The first of $tracks in the first of $languages one is in (mpv's alang
+     * and slang: their order the preference), null for none.
+     * @param list<Track> $tracks @param list<string> $languages
+     */
+    private static function inLanguage(array $tracks, array $languages): ?Track
+    {
+        foreach ($languages as $l) {
+            $l = Track::primaryLanguage($l);
+            foreach ($tracks as $t) {
+                if ($l !== '' && Track::primaryLanguage($t->language) === $l) { return $t; }
             }
         }
+        return null;
     }
 
     /** The subtitle tracks of the file the player reads (its text ones) and the subtitle files loaded. @return list<Track> */
@@ -358,6 +398,23 @@ final class Player
             if (is_string($s)) { $out[] = $s; } elseif ($s instanceof AssLine) { $out[] = $s->text(); }
         }
         return $out;
+    }
+
+    /**
+     * @internal UI\VideoPlayerState: where the subtitle $skip lines on (back
+     * when negative) from the one showing starts, of the film's time (its
+     * delay counted), as mpv's sub-seek goes; null for none there.
+     */
+    public function subtitleStart(int $skip): ?float
+    {
+        if ($this->subtitle === null || $skip === 0) { return null; }
+        $this->fetchSubtitles($this->subtitle);
+        $starts = ($this->cues[spl_object_id($this->subtitle)] ?? new Cues())->starts();
+        $t = $this->time() - $this->subtitleDelay + 0.001;
+        $at = -1;
+        foreach ($starts as $i => $s) { if ($s <= $t) { $at = $i; } else { break; } }
+        $to = $starts[$at + $skip] ?? null;
+        return $to === null ? null : $to + $this->subtitleDelay;
     }
 
     /**
@@ -512,6 +569,12 @@ final class Player
         return $this->net !== null;
     }
 
+    /** @internal UI\VideoPlayer: whether the clock waits for the network as a seek lands (IINA's seeking throbber's), not as it played. */
+    public function seekBuffering(): bool
+    {
+        return $this->buffering && $this->seekBuffering;
+    }
+
     /** While the clock waits for the network (the buffering event), how much of what it waits for is here, 0 to 100 (mpv's cache-buffering-state); else null. */
     public function bufferingPercent(): ?int
     {
@@ -519,7 +582,7 @@ final class Player
             return null;
         }
         $from = $this->bufferFrom ?? $this->readFrom;
-        $goal = $this->out->time() + self::CACHE_WAIT;
+        $goal = $this->out->time() + $this->waitFor;
         if ($from === null) {
             return 0;
         }
@@ -551,26 +614,30 @@ final class Player
     /**
      * A film over HTTP: the clock waits (mpv's paused-for-cache, told by the
      * buffering event) once less than STALL seconds are given ahead of it
-     * and the next are not here, and goes on once CACHE_WAIT seconds are, or
+     * and the next are not here (or before it starts, where it pauses
+     * initially), and goes on once $cacheWait seconds are, or
      * the end; looked at every BUFFER_LOOK seconds while it waits.
      */
     private function cache(): void
     {
-        if ($this->net === null) {
+        if ($this->net === null || !$this->waitsForCache) {
             return;
         }
         $ahead = $this->given() - $this->out->time();
         if (!$this->buffering) {
-            if ($this->playing && !$this->drained && $ahead < self::STALL && !$this->source->ready()) {
+            $initial = $this->unstarted && $this->pausesInitially;
+            if ($this->playing) { $this->unstarted = false; }
+            if ($this->playing && !$this->drained && ($initial ? $ahead < $this->waitFor : $ahead < self::STALL && !$this->source->ready())) {
                 $this->buffering = true;
                 $this->bufferFrom = $this->seeking ? null : $this->out->time();
+                $this->seekBuffering = $this->seeking;
                 $this->out->setRate(0);
                 $this->emit('buffering', true);
                 $this->lookAtCache();
             }
             return;
         }
-        if ($ahead >= self::CACHE_WAIT || $this->drained || !$this->playing) {
+        if ($ahead >= $this->waitFor || $this->drained || !$this->playing) {
             $this->buffering = false;
             if ($this->playing) { $this->out->setRate($this->rate); }
             $this->emit('buffering', false);
@@ -692,6 +759,23 @@ final class Player
         return self::isUrl($this->path) ? rawurldecode(basename((string)parse_url($this->path, PHP_URL_PATH))) : basename($this->path);
     }
 
+    /**
+     * @internal UI\VideoPlayer, UI\VideoPlayerState: the file's tags, as
+     * mpv's metadata for IINA's music mode, '' each where it has none (a
+     * film over the network has none).
+     * @return array{title: string, artist: string, album: string}
+     */
+    public function tags(): array
+    {
+        return $this->file instanceof Ts || $this->file === null ? ['title' => '', 'artist' => '', 'album' => ''] : $this->file->tags();
+    }
+
+    /** @internal UI\VideoPlayer: the image of the file's cover (an audio file's album art), its bytes; null for none. */
+    public function cover(): ?string
+    {
+        return $this->file instanceof Ts || $this->file === null ? null : $this->file->cover();
+    }
+
     /** The playlist of the page the URL is (yt-dlp's entries, each a video's page, the one playing chosen), null for a film's. */
     public function playlist(): ?Playlist
     {
@@ -751,6 +835,18 @@ final class Player
         return self::source($path)->duration();
     }
 
+    /**
+     * @internal Playlist: the tags of the file at $path (an audio file's
+     * title, artist, album), read from its header; none of a URL or of a
+     * file the player reads no tags of (a transport stream).
+     * @return array{title: string, artist: string, album: string}
+     */
+    public static function tagsOf(string $path): array
+    {
+        $s = self::isUrl($path) ? null : self::source($path);
+        return $s === null || $s instanceof Ts ? ['title' => '', 'artist' => '', 'album' => ''] : $s->tags();
+    }
+
     /** The file it plays. */
     public function path(): string
     {
@@ -807,6 +903,18 @@ final class Player
     public function awake(): bool
     {
         return $this->awake->held();
+    }
+
+    /** @internal UI\VideoPlayerState: the audio output it plays on, by its unique ID (Native\AudioDevices), the system's default for null: IINA's preferred audio device. */
+    public function setAudioDevice(?string $uid): void
+    {
+        $this->out->setAudioDevice($uid);
+    }
+
+    /** @internal UI\VideoPlayerState: whether an HDR film shows in HDR (the system's high dynamic range), else tone mapped to the standard range: IINA's HDR mode. */
+    public function setHdr(bool $on): void
+    {
+        $this->out->setDynamicRange($on);
     }
 
     /** @internal UI\VideoPlayerState: whether what it keeps awake while it plays is the display (its screen saver off), else only the system (IINA's "not while only playing audio"). */
@@ -1053,11 +1161,49 @@ final class Player
         return $this->rate;
     }
 
-    /** Sets the volume, 0 to 1. */
+    /** Sets the volume, 0 to 10: past 1 (100%), the sound amplified (as mpv's volume to 1000, IINA's maximum volume). */
     public function setVolume(float $v): void
     {
-        $this->volume = max(0.0, min(1.0, $v));
-        $this->out->setVolume($this->volume);
+        $this->volume = max(0.0, min(10.0, $v));
+        $this->out->setVolume(min(1.0, $this->volume));
+        $this->applyGain();
+    }
+
+    /**
+     * @internal UI\VideoPlayerState: mpv's replaygain as IINA's settings
+     * set it: $mode 0 none, 1 the track's, 2 the album's (the track's where
+     * it has none) from the file's tags, $preamp dB more; clipping prevented
+     * by the peak unless $clip; $fallback dB for a file of no tags.
+     */
+    public function setReplayGain(int $mode, float $preamp, bool $clip, float $fallback): void
+    {
+        $tags = $this->file instanceof Ts || $this->file === null ? ['trackGain' => null, 'trackPeak' => null, 'albumGain' => null, 'albumPeak' => null] : $this->file->replayGain();
+        $this->replay = self::replayGainOf($tags, $mode, $preamp, $clip, $fallback);
+        $this->applyGain();
+    }
+
+    /**
+     * @internal the linear gain of setReplayGain()'s settings for a file of
+     * ReplayGain tags $tags, as mpv's af_volume reckons it.
+     * @param array{trackGain: ?float, trackPeak: ?float, albumGain: ?float, albumPeak: ?float} $tags
+     */
+    public static function replayGainOf(array $tags, int $mode, float $preamp, bool $clip, float $fallback): float
+    {
+        if ($mode === 0) { return 1.0; }
+        [$gain, $peak] = $mode === 2 && $tags['albumGain'] !== null ? [$tags['albumGain'], $tags['albumPeak']] : [$tags['trackGain'], $tags['trackPeak']]; // the album's, else the track's
+        if ($gain === null) { return 10 ** ($fallback / 20); }
+        $linear = 10 ** (($gain + $preamp) / 20);
+        return !$clip && $peak !== null && $peak > 0 ? min($linear, 1 / $peak) : $linear; // no louder than its peak allows
+    }
+
+    /** The gain given in PHP: the volume past 100%, times ReplayGain's; the sound given again from here when it changed. */
+    private function applyGain(): void
+    {
+        $gain = max(1.0, $this->volume) * $this->replay;
+        if (abs($gain - $this->gain) < 1e-6) { return; }
+        $this->gain = $gain;
+        $this->out->setGain($gain);
+        if ($this->audio !== null) { $this->go($this->time(), true); } // given again, of its gain, from here
     }
 
     public function volume(): float

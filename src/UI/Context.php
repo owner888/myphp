@@ -559,6 +559,36 @@ final class Context
         return $this->runtime?->doubleClicked($n->id) ?? false;
     }
 
+    /**
+     * @internal UI\VideoPlayer: the keys pressed this frame that no shortcut
+     * took, offered to $take (their characters, code, modifiers and the
+     * characters without the modifiers); those it takes (true) taken.
+     * @param Closure(string, int, int, string): bool $take
+     */
+    public function takeKeys(Closure $take): void
+    {
+        if ($this->inert || !$this->insideModal()) { return; }
+        $this->runtime?->takeKeys($take);
+    }
+
+    /** @internal UI\VideoPlayer: whether the middle button clicked $n this frame. */
+    public function middleClicked(Node $n): bool
+    {
+        return $this->runtime?->middleClicked($n->id) ?? false;
+    }
+
+    /** @internal UI\VideoPlayer: whether a Force Touch press went deep on $n this frame (its second stage, NSEvent's pressure). */
+    public function forceClicked(Node $n): bool
+    {
+        return $this->runtime?->forceClicked($n->id) ?? false;
+    }
+
+    /** @internal UI\VideoPlayer: a trackpad's pinch over $n this frame: [the magnification added, whether it began, whether it ended]; null for none. @return ?array{0: float, 1: bool, 2: bool} */
+    public function magnified(Node $n): ?array
+    {
+        return $this->runtime?->magnified($n->id);
+    }
+
     public function rightClicked(Node $n): bool
     {
         return $this->runtime?->rightClicked($n->id) ?? false;
@@ -4269,5 +4299,18 @@ final class Context
     public function videoPlayerHistory(Closure $open): Node
     {
         return VideoPlayerHistory::build($this, $open);
+    }
+
+    /**
+     * The app's log viewer, as IINA's: what Logger kept (of its level and
+     * above), of a level and above, of the subsystems chosen, filtered by
+     * what is typed; following the latest; saved, all or what shows;
+     * copied with Command-C. For a window of a hidden title bar
+     * ("hiddenInset"), 800 by 500; the video player's settings open one of
+     * their own (Open the log viewer).
+     */
+    public function logViewer(): Node
+    {
+        return LogViewer::build($this);
     }
 }

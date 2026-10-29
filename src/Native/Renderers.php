@@ -68,6 +68,9 @@ final class Renderers
     private static $pollTimer = null, $pollTarget = null;
     /** The equalizer's gains (IINA's ten bands, dB), null while it is off (flat): the audio then goes to the renderer as it comes. */
     private ?array $gains = null;
+    /** The gain the audio is given in PHP, linear (a volume past 100%, ReplayGain's): 1 for none, the audio then going to the renderer as it comes. */
+    private float $gain = 1.0;
+    private static ?\FFI $vdsp = null;
     /** @var array<int, AudioDecoder> the system's decoders of the audio the equalizer filters, by track number */
     private array $decoders = [];
     /** @var array<string, Equalizer> the equalizer's filters, by rate and channels; @var array<string, CData> the formats of the PCM filtered, by rate, channels and layout */
@@ -88,6 +91,33 @@ final class Renderers
         }
         ObjC::msg('v:p', $this->sync, 'addRenderer:', $this->layer);
         ObjC::msg('v:p', $this->sync, 'addRenderer:', $this->audio);
+    }
+
+    /**
+     * The output the audio plays on, by its unique ID (AudioDevices::outputs()),
+     * the system's default for null (AVSampleBufferAudioRenderer's
+     * audioOutputDeviceUniqueID, which takes no nil: a renderer never set one
+     * left as it is, following the default; one set given the default's ID now).
+     */
+    public function setAudioDevice(?string $uid): void
+    {
+        if ($uid === $this->device) {
+            return;
+        }
+        $this->device = $uid;
+        $uid ??= AudioDevices::defaultOutput();
+        if ($uid !== null) { ObjC::msg('v:p', $this->audio, 'setAudioOutputDeviceUniqueID:', ObjC::str($uid)); }
+    }
+
+    /** The unique ID of the output set (setAudioDevice), null for the system's default. */
+    private ?string $device = null;
+
+    /** Whether HDR shows in HDR, the system deciding (CALayer's preferredDynamicRange automatic), else in the standard range, tone mapped (macOS 26's standard). */
+    public function setDynamicRange(bool $high): void
+    {
+        static $qc = null;
+        $qc ??= \FFI::cdef('extern void* CADynamicRangeAutomatic; extern void* CADynamicRangeStandard;', '/System/Library/Frameworks/QuartzCore.framework/QuartzCore'); // CADynamicRange's, no k before them (macOS 15's)
+        ObjC::msg('v:p', $this->layer, 'setPreferredDynamicRange:', ObjC::import($high ? $qc->CADynamicRangeAutomatic : $qc->CADynamicRangeStandard));
     }
 
     /** Whether the renderer of $t's packets takes more now. */
@@ -203,7 +233,7 @@ final class Renderers
     {
         $t = $p->track;
         $video = $t->type === Track::VIDEO;
-        if (!$video && $this->gains !== null) { // the equalizer on: decoded here, filtered, given as PCM
+        if (!$video && ($this->gains !== null || $this->gain != 1.0)) { // the equalizer on, or a gain: decoded here, filtered, given as PCM
             $this->enqueueFiltered($p);
             return;
         }
@@ -253,7 +283,30 @@ final class Renderers
         $this->eqs = []; // made again of the gains as the audio comes
     }
 
-    /** Audio packet $p decoded (by the system, Vorbis by SoftAudio), filtered by the equalizer and given to the renderer as float PCM. */
+    /**
+     * Gives the audio a gain of $linear (a volume past 100%, ReplayGain's,
+     * mpv's af volume): decoded here and multiplied, as the equalizer's
+     * audio is; 1 for none. Flush and feed again after (Player::setVolume).
+     */
+    public function setGain(float $linear): void
+    {
+        $this->gain = $linear;
+    }
+
+    /** Float PCM $pcm times $k (vDSP_vsmul). */
+    private static function amplify(string $pcm, float $k): string
+    {
+        $v = self::$vdsp ??= \FFI::cdef('void vDSP_vsmul(const float*, long, const float*, float*, long, unsigned long);', '/System/Library/Frameworks/Accelerate.framework/Accelerate');
+        $n = intdiv(strlen($pcm), 4);
+        $buf = $v->new("float[$n]");
+        \FFI::memcpy($buf, $pcm, $n * 4);
+        $scale = $v->new('float');
+        $scale->cdata = $k;
+        $v->vDSP_vsmul($buf, 1, \FFI::addr($scale), $buf, 1, $n);
+        return \FFI::string($buf, $n * 4);
+    }
+
+    /** Audio packet $p decoded (by the system, Vorbis by SoftAudio), filtered by the equalizer, given its gain and given to the renderer as float PCM. */
     private function enqueueFiltered(Packet $p): void
     {
         $t = $p->track;
@@ -271,7 +324,8 @@ final class Renderers
         if ($frames === 0) {
             return; // the codec holds them yet
         }
-        $pcm = ($this->eqs["$rate/$ch"] ??= new Equalizer($this->gains, $rate, $ch))->process($pcm, $frames);
+        if ($this->gains !== null) { $pcm = ($this->eqs["$rate/$ch"] ??= new Equalizer($this->gains, $rate, $ch))->process($pcm, $frames); }
+        if ($this->gain != 1.0) { $pcm = self::amplify($pcm, $this->gain); }
         $format = $this->pcmFormats["$rate/$ch/" . bin2hex($layout)] ??= CoreMedia::pcmFormat($rate, $ch, $layout);
         $sb = CoreMedia::pcmSample($pcm, $format, $this->audioAt($p, $rate, $frames), $rate, $frames);
         ObjC::msg('v:p', $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));

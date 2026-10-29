@@ -72,6 +72,10 @@ final class Window
     private ?array $legacy = null;
     private array $blackOuts = [];
     private ?float $aspectAsked = null;
+    /** The compact size the view asked for (a player's music mode): [width, height, least height, most height (0 none)], null for none; and what the window was before it, to go back to. */
+    private ?array $compactAsked = null, $beforeCompact = null;
+    /** Whether the view asked the window to float on top (a player's pin, IINA's), null before it asked. */
+    private ?bool $onTopAsked = null;
     /** The frame the window had before it went full screen by its own animation, which it goes back to. */
     private $windowedFrame = null;
     /** @var ?array{0: float, 1: float} where the close button's top-left corner goes (WindowOptions::$trafficLightPosition) */
@@ -138,6 +142,7 @@ final class Window
         $this->runtime = $o->content === null ? null : new Runtime($this->input, App::text());
         if ($this->runtime !== null) {
             $this->runtime->openURL = Shell::openExternal(...);
+            $this->runtime->doubleClickInterval = ObjC::msg('d:', ObjC::cls('NSEvent'), 'doubleClickInterval');
             $this->runtime->dragWindow = $this->dragWindow(...);
             $this->runtime->writeClipboard = Pasteboard::setText(...);
             $this->runtime->writeClipboardData = Pasteboard::writeData(...);
@@ -162,6 +167,7 @@ final class Window
                 $this->show();
                 $this->placeVideos(ObjC::msg('r:', $this->view, 'bounds')->h); // a video given back (picture in picture) in its place now, as the last frame placed it: the system animates into it before a frame comes
             };
+            $this->runtime->minimizeWindow = function (bool $on): void { $on ? $this->minimize() : $this->restore(); }; // a player's window going to the Dock as its film goes to picture in picture, IINA's
             $this->runtime->startDataDrag = function (Data $data, mixed $local, DragOptions $o, float $x, float $y): ?\Throwable {
                 try {
                     $this->dragData($data, $local, $o, $x, $y);
@@ -173,6 +179,11 @@ final class Window
             $this->runtime->cancelDataDrag = $this->cancelDataDrag(...);
             $this->runtime->setDropFormats = fn(array $formats) => Drag::setFormats($this->view, $formats);
             $this->runtime->snapshot = $this->snapshot(...);
+            $this->runtime->underFrame = function (): ?array { // a player's subtitles, for its screenshots
+                if ($this->under === null || !$this->underShown) { return null; }
+                [$bgra, $w, $h] = App::metal()->drawOffscreen($this->under); // drawn again: the ring's list of its last frame may be another view's by now
+                return [$bgra, $w, $h, $w / max(1.0, ObjC::msg('r:', $this->under, 'bounds')->w)];
+            };
         }
 
         $this->stateKey = $o->stateKey;
@@ -430,6 +441,7 @@ final class Window
                 }
                 $this->showCursor($this->runtime->cursor);
                 $this->answer($this->runtime->windowAsks);
+                if ($this->destroyed) { return; } // closed by its own frame (its view opened a film elsewhere, and its window went): no frame after it
                 $wake = $this->runtime->nextWake();
                 if (($this->runtime->needsFrame || $wake !== null) && !$this->showing()) {
                     // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
@@ -970,6 +982,43 @@ final class Window
                 }
             });
         }
+        if (array_key_exists('compact', $asks) && $asks['compact'] !== $this->compactAsked) { // a player's music mode, IINA's mini player: its own size, the window's before it given back
+            $to = $this->compactAsked = $asks['compact'];
+            App::later(function () use ($to): void {
+                if ($this->destroyed) { return; }
+                if ($to === null) {
+                    if ($this->beforeCompact === null) { return; }
+                    [$bounds, $min, $max] = $this->beforeCompact;
+                    $this->beforeCompact = null;
+                    $this->setMinimumSize(...$min);
+                    $this->setMaximumSize(...$max);
+                    $this->setContentBounds($bounds);
+                    return;
+                }
+                if ($this->beforeCompact === null) {
+                    $size = function (string $of): array { // as setMinimumSize and setMaximumSize take them: 0 for no limit
+                        $z = ObjC::msg('z:', $this->ns, $of);
+                        return [$z->w >= 1e30 ? 0 : (int)$z->w, $z->h >= 1e30 ? 0 : (int)$z->h];
+                    };
+                    $this->beforeCompact = [$this->contentBounds(), $size('minSize'), $size('maxSize')];
+                }
+                [$w, $h, $least, $most] = $to;
+                $this->setMinimumSize($w, $least);
+                $this->setMaximumSize($w, $most);
+                $b = $this->contentBounds();
+                if ($b->width != $w || $b->height != $h) { $this->setContentBounds(new Rectangle($b->x, $b->y, $w, $h)); } // its top left where it is
+            });
+        }
+        if (isset($asks['fitVideo'])) { // a film opened: the window to its size, as IINA's settings say
+            $fit = $asks['fitVideo'];
+            App::later(function () use ($fit): void { if (!$this->destroyed && !$this->isFullScreen()) { $this->fitVideo($fit); } });
+        }
+        if (isset($asks['magnify']) && !$this->isFullScreen()) { $this->magnify((float)$asks['magnify']); } // a player pinched: its size by the pinch
+        if (array_key_exists('firstMouse', $asks)) { View::setAcceptsFirstMouse($this->view, (bool)$asks['firstMouse']); } // a player's: the click that brings the window forward clicks too, as IINA's setting says
+        if (array_key_exists('onTop', $asks) && $asks['onTop'] !== $this->onTopAsked) { // a player floating on top as it plays, IINA's
+            $this->onTopAsked = (bool)$asks['onTop'];
+            $this->setAlwaysOnTop($this->onTopAsked);
+        }
         $this->legacyAsked = (bool)($asks['legacyFullScreen'] ?? $this->legacyAsked);
         $this->blackOutAsked = (bool)($asks['blackOut'] ?? $this->blackOutAsked);
         if (array_key_exists('fullScreen', $asks) && $asks['fullScreen'] !== $this->isFullScreen()) {
@@ -1393,6 +1442,99 @@ final class Window
         return [$b->width, $b->height];
     }
 
+    /**
+     * The window to a film of $o['w'] by $o['h'] pixels, as IINA's
+     * adjustFrameByVideoSize: where $o['resize'], to the film's size in
+     * points ($o['physical']: a pixel a pixel of the screen) times
+     * $o['ratio'] (-1: within the screen), kept within the screen and above
+     * the window's least size, placed by the geometry $o['geometry'] (mpv's,
+     * IINA's initial size and position) where there is one, else in the
+     * screen's middle (fit), else about its own; else the film's size in
+     * the middle where the geometry was asked for; kept in the screen;
+     * animated unless $o['animate'] is false.
+     * @param array{w: int, h: int, resize: bool, ratio: float, physical: bool, geometry: ?string, animate: bool} $o
+     */
+    /**
+     * The window $by larger (a pinch's magnification, IINA's handleMagnifyGesture):
+     * its width times 1 + $by, its shape kept, about its center; not as high
+     * as the screen's visible frame, nor smaller than it may be.
+     */
+    private function magnify(float $by): void
+    {
+        $screen = ObjC::msg('p:', $this->ns, 'screen') ?? ObjC::msg('p:', ObjC::cls('NSScreen'), 'mainScreen');
+        $sf = ObjC::msg('r:', $screen, 'visibleFrame');
+        $f = ObjC::msg('r:', $this->ns, 'frame');
+        $min = ObjC::msg('z:', $this->ns, 'minSize');
+        $w = $f->w * (1 + $by);
+        $h = $w / ($f->w / max(1.0, $f->h));
+        if ($h >= $sf->h || $h <= $min->h || $w <= $min->w) { return; }
+        ObjC::msg('v:rb', $this->ns, 'setFrame:display:', ObjC::rect($f->x + ($f->w - $w) / 2, $f->y + ($f->h - $h) / 2, $w, $h), true);
+    }
+
+    private function fitVideo(array $o): void
+    {
+        if ($o['w'] <= 0 || $o['h'] <= 0) { return; }
+        $screen = ObjC::msg('p:', $this->ns, 'screen') ?? ObjC::msg('p:', ObjC::cls('NSScreen'), 'mainScreen');
+        $sf = ObjC::msg('r:', $screen, 'visibleFrame'); // AppKit's, from the bottom left
+        $frame = ObjC::msg('r:', $this->ns, 'frame');
+        $min = ObjC::msg('z:', $this->ns, 'minSize');
+        [$w, $h] = [(float)$o['w'], (float)$o['h']];
+        $geometry = $o['geometry'] === null || $o['geometry'] === '' ? null : $o['geometry'];
+        if ($o['resize']) {
+            if ($o['physical']) { $k = ObjC::msg('d:', $this->ns, 'backingScaleFactor'); [$w, $h] = [$w / $k, $h / $k]; }
+            if ($o['ratio'] < 0) {
+                $k = min(1.0, $sf->w / $w, $sf->h / $h); [$w, $h] = [$w * $k, $h * $k]; // shrunk to the screen
+            } else {
+                [$w, $h] = [$w * $o['ratio'], $h * $o['ratio']];
+            }
+        }
+        $k = min(1.0, $sf->w / $w, $sf->h / $h); [$w, $h] = [$w * $k, $h * $k]; // no larger than the screen
+        $k = max(1.0, $min->w / $w, $min->h / $h); [$w, $h] = [$w * $k, $h * $k]; // no smaller than the window may be
+        if ($geometry !== null) {
+            $r = self::geometryFrame($geometry, $w, $h, $sf);
+        } elseif (!$o['resize']) {
+            return; // the size the window has: its shape follows the film's (the aspect asked)
+        } elseif ($o['ratio'] < 0) {
+            $r = [$sf->x + ($sf->w - $w) / 2, $sf->y + ($sf->h - $h) / 2, $w, $h];
+        } else {
+            $r = [$frame->x + ($frame->w - $w) / 2, $frame->y + ($frame->h - $h) / 2, $w, $h];
+        }
+        $r[0] = max($sf->x, min($sf->x + $sf->w - $r[2], $r[0])); // kept in the screen
+        $r[1] = max($sf->y, min($sf->y + $sf->h - $r[3], $r[1]));
+        ObjC::msg('v:rbb', $this->ns, 'setFrame:display:animate:', ObjC::rect(...$r), true, $o['animate'] && $this->isVisible());
+    }
+
+    /**
+     * The frame mpv's geometry $g gives a window of $w by $h on the screen of
+     * visible frame $sf (IINA's windowFrameFromGeometry): a width ("1280",
+     * "50%" of the screen) or a height ("x720") keeping its shape; the
+     * position of its left ("+x") or right ("-x"), of its bottom ("+y") or
+     * top ("-y"), a "%" of the screen placing its center; the middle of the
+     * screen for a size alone. AppKit's: from the bottom left. @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private static function geometryFrame(string $g, float $w, float $h, $sf): array
+    {
+        if (preg_match('/^(?:(x?)(\d+)(%?))?(?:([+-])(\d+)(%?)([+-])(\d+)(%?))?$/', $g, $m) !== 1) {
+            throw new \InvalidArgumentException("myphp: no geometry \"$g\"");
+        }
+        $aspect = $w / $h;
+        $sized = ($m[2] ?? '') !== '';
+        if ($sized && $m[1] === '') {
+            $w = $m[3] === '%' ? (float)$m[2] / 100 * $sf->w : (float)$m[2]; $h = $w / $aspect;
+        } elseif ($sized) {
+            $h = $m[3] === '%' ? (float)$m[2] / 100 * $sf->h : (float)$m[2]; $w = $h * $aspect;
+        }
+        $x = ($sf->w - $w) / 2; $y = ($sf->h - $h) / 2;
+        if (($m[4] ?? '') !== '') {
+            $off = fn(string $v, bool $pct, float $span, float $size): float => $pct ? (float)$v / 100 * $span - $size / 2 : (float)$v;
+            $ox = $off($m[5], $m[6] === '%', $sf->w, $w);
+            $x = $m[4] === '+' ? $ox : $sf->w - $ox - $w;
+            $oy = $off($m[8], $m[9] === '%', $sf->h, $h);
+            $y = $m[7] === '+' ? $oy : $sf->h - $oy - $h;
+        }
+        return [$sf->x + $x, $sf->y + $y, $w, $h];
+    }
+
     /** Moves the window's top-left corner. */
     public function setPosition(int $x, int $y): void
     {
@@ -1677,6 +1819,7 @@ final class Window
         $text = App::text();
         $view = App::metal()->createView(ObjC::rect(0, 0, $b->w, $b->h), function ($view, DisplayList $list) use ($text): void {
             $bounds = ObjC::msg('r:', $view, 'bounds');
+            $list->pathQuad ??= $text->pathQuad(...);
             $paint = function () use ($list, $text, $bounds): void {
                 $plain = $list->world();
                 $list->pushClip(0, 0, $bounds->w, $bounds->h);

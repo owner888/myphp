@@ -15,6 +15,8 @@ final class Playlist
 {
     /** The extensions of the films a folder's playlist takes. */
     public const FILMS = ['mkv', 'webm', 'mp4', 'm4v', 'mov', 'ts', 'm2ts', 'mts'];
+    /** And of the audio files, after the films, as IINA's (its videos, then its audio): those AVFoundation or Matroska reads here. */
+    public const AUDIO = ['mp3', 'm4a', 'm4b', 'aac', 'flac', 'wav', 'aif', 'aiff', 'caf', 'mka'];
     /** @var list<string> */
     private array $files = [];
     /** @var array<string, ?float> the durations read, by path; null for a file that is no film the player reads */
@@ -22,6 +24,9 @@ final class Playlist
     private int $index = -1;
     /** @var ?list<string> the order before shuffle(), which unshuffle() goes back to; null while not shuffled */
     private ?array $unshuffled = null;
+
+    /** @var array<string, ?array{title: string, artist: string, album: string}> the tags read, by path */
+    private array $tags = [];
 
     /** @var array<string, string> the titles of the films that have them, by path (a web playlist's, yt-dlp's) */
     private array $titles = [];
@@ -43,13 +48,17 @@ final class Playlist
         return preg_match('~^https?://~i', $path) === 1 ? rawurldecode(basename((string)parse_url($path, PHP_URL_PATH))) : basename($path);
     }
 
-    /** The films of the folder of $path, by name as Finder sorts them, $path the one playing. */
+    /** The films of the folder of $path, by name as Finder sorts them, then its audio files so, as IINA's: $path the one playing. */
     public static function folder(string $path): self
     {
         $dir = dirname($path);
-        $names = array_values(array_filter(scandir($dir) ?: [], fn(string $f) => $f[0] !== '.' && in_array(strtolower(pathinfo($f, PATHINFO_EXTENSION)), self::FILMS, true)));
-        usort($names, 'strnatcasecmp');
-        $list = new self(array_map(fn(string $f) => "$dir/$f", $names));
+        $all = array_values(array_filter(scandir($dir) ?: [], fn(string $f) => $f[0] !== '.'));
+        $of = function (array $exts) use ($all): array {
+            $names = array_values(array_filter($all, fn(string $f) => in_array(strtolower(pathinfo($f, PATHINFO_EXTENSION)), $exts, true)));
+            usort($names, 'strnatcasecmp');
+            return $names;
+        };
+        $list = new self(array_map(fn(string $f) => "$dir/$f", [...$of(self::FILMS), ...$of(self::AUDIO)]));
         if (!$list->select($path)) { // a film of no film's extension: on its own
             $list = new self([$path]);
         }
@@ -181,6 +190,29 @@ final class Playlist
     }
 
     /** How long the $i-th film lasts, in seconds, read once; null for one the player does not read. */
+    /**
+     * The tags of the audio file at $i (IINA's playlist's metadata: its
+     * title and artist), read as first asked for; null for a film, a URL,
+     * a file of none, or one the player reads not.
+     * @return ?array{title: string, artist: string, album: string}
+     */
+    public function tags(int $i): ?array
+    {
+        $path = $this->files[$i] ?? null;
+        if ($path === null || !in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::AUDIO, true) || preg_match('~^https?://~i', $path) === 1) {
+            return null;
+        }
+        if (!array_key_exists($path, $this->tags)) {
+            try {
+                $t = Player::tagsOf($path);
+                $this->tags[$path] = $t['title'] === '' && $t['artist'] === '' ? null : $t;
+            } catch (\RuntimeException) {
+                $this->tags[$path] = null; // no file the player reads: shown by its name
+            }
+        }
+        return $this->tags[$path];
+    }
+
     public function duration(int $i): ?float
     {
         $path = $this->files[$i] ?? null;

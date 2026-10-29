@@ -44,7 +44,6 @@ final class ProtoTask implements SchemeTask
     }
 }
 
-$protoLog = ini_set('error_log', '/dev/null'); // the failures served on purpose
 $protoLater = [];
 Scheme::$later = function (\Closure $fn) use (&$protoLater): void { $protoLater[] = $fn; };
 $protoDrain = function () use (&$protoLater): void {
@@ -213,5 +212,4 @@ same('attachment; filename="r"', Scheme::$dispositions['dl2://localhost/a'] ?? '
 
 Protocol::unhandle('test');
 Scheme::$later = null;
-ini_set('error_log', (string)$protoLog);
 exec('rm -rf ' . escapeshellarg($dir));

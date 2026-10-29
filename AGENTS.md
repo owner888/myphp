@@ -5,14 +5,12 @@ the reasoning, the numbers and the pitfalls behind the rules here.
 
 ## Rules
 
-1. **This file stays under 200 lines** (`wc -l AGENTS.md`): near the limit,
-   condense what is here first; only then move detail to `docs/`.
+1. **This file stays under 200 lines** (`wc -l AGENTS.md`): near the limit, condense what is here first; only then move detail to `docs/`.
 2. No third-party packages without asking the developer; small things are written here (`composer.json`: `php`, `ext-ffi`).
 3. Git is the developer's: no commit, push, branch, tag or patch export; change files, run checks, report which changed.
 4. Files in git never carry the developer's name: "the developer" / 「开发者」 when one is needed.
 5. GUI examples run only on the developer's Mac (ask for the output); `php -l` and pure-PHP checks run anywhere.
-6. Small and literal: no speculative abstractions, no silent fallbacks, no
-   magic numbers that make a symptom go away. Unclear? Ask before changing.
+6. Small and literal: no speculative abstractions, no silent fallbacks, no magic numbers that make a symptom go away. Unclear? Ask before changing.
 7. Delete dead code when you touch it; never comment it out.
 8. `bin/myphp` stays executable: `chmod 755 bin/myphp` after any change, checked with `ls -l` (file syncs drop the bit).
 9. **UI is 1:1 with mygo** (the developer's rule): every size — padding,
@@ -32,6 +30,8 @@ the reasoning, the numbers and the pitfalls behind the rules here.
 13. **What comes and goes is keyed** (`$c->key()`): a node's id is its parent's mixed with its place there (mygo's),
     so content shown or hidden renumbers the siblings after it, and a scroll, a field's focus or an animation among
     them takes another's state. Put it in a container of its own, or key what follows it.
+14. **Logs go through `MyPHP\Logger` at their level** (the developer's rule): `verbose` (step by step), `debug` (what it did), `warn` (went on
+    without something), `error` (failed), with a subsystem; never `error_log`/`echo`/`fwrite(STDERR)`. Dev apps log debug up, `myphp build` warn up.
 
 ## What this is
 

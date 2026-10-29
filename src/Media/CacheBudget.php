@@ -15,8 +15,10 @@ namespace MyPHP\Media;
  */
 final class CacheBudget
 {
-    /** IINA's defaultCacheSize, 153600 KiB. */
-    public const MAX = 153600 << 10;
+    /** @internal UI\VideoPlayerState: the bytes the cache holds, of the films opened next: IINA's defaultCacheSize (153600 KiB), mpv's demuxer-max-bytes. */
+    public static int $max = 153600 << 10;
+    /** @internal UI\VideoPlayerState: and the seconds it reads ahead at the most, of a stream of segments (HLS's): IINA's secPrefech, mpv's cache-secs. */
+    public static int $seconds = 36000;
 
     /** @var array<int, \WeakReference<CacheMember>> */
     private array $members = [];
@@ -57,7 +59,7 @@ final class CacheBudget
     {
         $members = $this->live();
         $total = array_sum(array_map(fn(CacheMember $m) => $m->cached(), $members));
-        if ($total <= self::MAX) {
+        if ($total <= self::$max) {
             return;
         }
         $all = [];
@@ -66,7 +68,7 @@ final class CacheBudget
         }
         usort($all, fn(array $a, array $b) => $a[0] <=> $b[0]);
         foreach ($all as [, $drop]) {
-            if ($total <= self::MAX * 0.9) { break; }
+            if ($total <= self::$max * 0.9) { break; }
             $total -= $drop();
         }
     }

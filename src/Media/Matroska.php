@@ -26,6 +26,9 @@ final class Matroska implements Source
     private const CUES = 0x1C53BB6B, CUE_POINT = 0xBB, CUE_TIME = 0xB3, CUE_TRACK_POSITIONS = 0xB7, CUE_TRACK = 0xF7, CUE_CLUSTER_POSITION = 0xF1;
     private const CHAPTERS = 0x1043A770, EDITION_ENTRY = 0x45B9, EDITION_FLAG_DEFAULT = 0x45DB, CHAPTER_ATOM = 0xB6, CHAPTER_TIME_START = 0x91,
         CHAPTER_FLAG_HIDDEN = 0x98, CHAPTER_FLAG_ENABLED = 0x4598, CHAPTER_DISPLAY = 0x80, CHAP_STRING = 0x85;
+    private const SEGMENT_TITLE = 0x7BA9, TAGS = 0x1254C367, TAG = 0x7373, TARGETS = 0x63C0, TARGET_TYPE_VALUE = 0x68CA, TAG_TRACK_UID = 0x63C5,
+        SIMPLE_TAG = 0x67C8, TAG_NAME = 0x45A3, TAG_STRING = 0x4487;
+    private const ATTACHMENTS = 0x1941A469, ATTACHED_FILE = 0x61A7, FILE_NAME = 0x466E, FILE_MEDIA_TYPE = 0x4660, FILE_DATA = 0x465C;
     private const CLUSTER = 0x1F43B675, TIMESTAMP = 0xE7, SIMPLE_BLOCK = 0xA3, BLOCK_GROUP = 0xA0, BLOCK = 0xA1, BLOCK_DURATION = 0x9B, REFERENCE_BLOCK = 0xFB;
     /** The size of an element whose size is unknown (all its bits set), as a cluster being written live has. */
     private const UNKNOWN = -1;
@@ -42,6 +45,12 @@ final class Matroska implements Source
     private array $chapters = [];
     /** @var list<array{0: float, 1: int}> */
     private array $cues = [];
+    /** @var array{title: string, artist: string, album: string} the file's tags (its title, its album's and track's ARTIST and TITLE) */
+    private array $tags = ['title' => '', 'artist' => '', 'album' => ''];
+    /** @var array{trackGain: ?float, trackPeak: ?float, albumGain: ?float, albumPeak: ?float} the ReplayGain tags (dB, and the peaks' linear amplitudes), null where none */
+    private array $replayGain = ['trackGain' => null, 'trackPeak' => null, 'albumGain' => null, 'albumPeak' => null];
+    /** Where the attachments are, [data, size], read only when the cover is asked for (fonts of ASS subtitles are large); null for none. */
+    private ?array $attachments = null;
     /** Where the next element of the segment is read from (a cluster, else what is skipped). */
     private int $at = 0;
     /** The cluster being read, element by element (its blocks as their bytes come, a film's over HTTP): where it ends, -1 for none; where its next element is; its timestamp. */
@@ -111,6 +120,13 @@ final class Matroska implements Source
                 $e = self::fields($this->read($data, $size));
                 $this->scale = isset($e[self::TIMESTAMP_SCALE]) ? self::uint($e[self::TIMESTAMP_SCALE]) : 1000000;
                 $this->duration = isset($e[self::DURATION]) ? self::float($e[self::DURATION]) * $this->scale / 1e9 : 0.0;
+                if (isset($e[self::SEGMENT_TITLE]) && $this->tags['title'] === '') { $this->tags['title'] = rtrim($e[self::SEGMENT_TITLE], "\0"); }
+                break;
+            case self::TAGS:
+                $this->readTags($this->read($data, $size));
+                break;
+            case self::ATTACHMENTS:
+                $this->attachments = [$data, $size];
                 break;
             case self::TRACKS:
                 foreach (self::children($this->read($data, $size)) as [$cid, $c]) {
@@ -252,6 +268,70 @@ final class Matroska implements Source
     public function tracks(): array
     {
         return $this->tracks;
+    }
+
+    /**
+     * The tags of the file, for IINA's music mode: of a track (target 30,
+     * or a track's UID) its TITLE and ARTIST; of the whole (no target, or
+     * the album, 50) its TITLE, ARTIST and ALBUM, the TITLE the album's
+     * where a track has its own; the segment's title where no TITLE is.
+     */
+    private function readTags(string $s): void
+    {
+        $whole = $track = [];
+        foreach (self::children($s) as [$id, $tag]) {
+            if ($id !== self::TAG) { continue; }
+            $ofTrack = false;
+            $simple = [];
+            foreach (self::children($tag) as [$cid, $c]) {
+                if ($cid === self::TARGETS) {
+                    $t = self::fields($c);
+                    $ofTrack = isset($t[self::TAG_TRACK_UID]) || (isset($t[self::TARGET_TYPE_VALUE]) && self::uint($t[self::TARGET_TYPE_VALUE]) <= 30);
+                } elseif ($cid === self::SIMPLE_TAG) {
+                    $f = self::fields($c);
+                    if (isset($f[self::TAG_NAME], $f[self::TAG_STRING])) { $simple[strtoupper(rtrim($f[self::TAG_NAME], "\0"))] = trim(rtrim($f[self::TAG_STRING], "\0")); }
+                }
+            }
+            $ofTrack ? $track += $simple : $whole += $simple;
+        }
+        $all = $track + $whole;
+        foreach (['trackGain' => 'REPLAYGAIN_TRACK_GAIN', 'trackPeak' => 'REPLAYGAIN_TRACK_PEAK', 'albumGain' => 'REPLAYGAIN_ALBUM_GAIN', 'albumPeak' => 'REPLAYGAIN_ALBUM_PEAK'] as $k => $name) {
+            $this->replayGain[$k] = isset($all[$name]) && is_numeric($v = trim(preg_replace('/\s*dB$/i', '', $all[$name]))) ? (float)$v : null; // "-6.48 dB"
+        }
+        $this->tags = [
+            'title' => ($track['TITLE'] ?? '') !== '' ? $track['TITLE'] : (($whole['TITLE'] ?? '') !== '' ? $whole['TITLE'] : $this->tags['title']),
+            'artist' => ($track['ARTIST'] ?? '') !== '' ? $track['ARTIST'] : ($whole['ARTIST'] ?? ''),
+            'album' => ($whole['ALBUM'] ?? '') !== '' ? $whole['ALBUM'] : (($track['TITLE'] ?? '') !== '' ? ($whole['TITLE'] ?? '') : ''),
+        ];
+    }
+
+    /** @internal Player: the file's title, artist and album, '' each where it has none. @return array{title: string, artist: string, album: string} */
+    public function tags(): array
+    {
+        return $this->tags;
+    }
+
+    /** @internal Player: the ReplayGain tags, as mpv reads them for its replaygain. @return array{trackGain: ?float, trackPeak: ?float, albumGain: ?float, albumPeak: ?float} */
+    public function replayGain(): array
+    {
+        return $this->replayGain;
+    }
+
+    /** @internal Player: the image attached as the cover (the first named cover, else the first image), its bytes; null for none. */
+    public function cover(): ?string
+    {
+        if ($this->attachments === null) {
+            return null;
+        }
+        $first = null;
+        foreach (self::children($this->read(...$this->attachments)) as [$id, $file]) {
+            if ($id !== self::ATTACHED_FILE) { continue; }
+            $f = self::fields($file);
+            if (!str_starts_with(strtolower(rtrim($f[self::FILE_MEDIA_TYPE] ?? '', "\0")), 'image/') || !isset($f[self::FILE_DATA])) { continue; }
+            if (str_starts_with(strtolower(rtrim($f[self::FILE_NAME] ?? '', "\0")), 'cover')) { return $f[self::FILE_DATA]; }
+            $first ??= $f[self::FILE_DATA];
+        }
+        return $first;
     }
 
     public function chapters(): array

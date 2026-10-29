@@ -16,8 +16,14 @@ use RuntimeException;
  */
 final class YtDlp
 {
-    /** The yt-dlp run, null to find it (IINA's ytdl search path): in PATH, Homebrew's, /usr/local/bin. */
+    /** The yt-dlp run, null to find it: in $searchPath, PATH, Homebrew's, /usr/local/bin. */
     public static ?string $path = null;
+    /** @internal UI\VideoPlayerState: a folder looked in first (IINA's custom youtube-dl path, before its PATH), '' for none. */
+    public static string $searchPath = '';
+    /** @internal UI\VideoPlayerState: whether pages are read by it (IINA's ytdlEnabled, mpv's ytdl). */
+    public static bool $enabled = true;
+    /** @internal UI\VideoPlayerState: options given it, "key=value,key=value" (mpv's ytdl-raw-options): --key value, --key alone of none. */
+    public static string $rawOptions = '';
 
     /** The program found, null for none. */
     public static function find(): ?string
@@ -25,7 +31,10 @@ final class YtDlp
         if (self::$path !== null) {
             return is_executable(self::$path) ? self::$path : null;
         }
-        $dirs = [...explode(PATH_SEPARATOR, (string)getenv('PATH')), '/opt/homebrew/bin', '/usr/local/bin']; // an app the Finder opens has only the system's PATH
+        if (!self::$enabled) {
+            return null;
+        }
+        $dirs = [...(self::$searchPath !== '' ? [self::$searchPath] : []), ...explode(PATH_SEPARATOR, (string)getenv('PATH')), '/opt/homebrew/bin', '/usr/local/bin']; // an app the Finder opens has only the system's PATH
         foreach (['yt-dlp', 'youtube-dl'] as $name) { // mpv's names, the fork first
             foreach ($dirs as $d) {
                 if ($d !== '' && is_file("$d/$name") && is_executable("$d/$name")) { return "$d/$name"; }
@@ -42,8 +51,9 @@ final class YtDlp
     public static function info(string $url): array
     {
         $bin = self::find() ?? throw new RuntimeException('myphp: no yt-dlp to read the page with (brew install yt-dlp, or set Media\YtDlp::$path)');
+        \MyPHP\Logger::debug("Running $bin for $url", 'ytdl');
         // mpv's ytdl_hook's: the JSON, a playlist's entries flat (each read as it plays), its subtitles' formats.
-        $proc = proc_open([$bin, '--no-warnings', '-J', '--flat-playlist', '--sub-format', 'ass/srt/vtt/best', '--', $url], [['file', '/dev/null', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
+        $proc = proc_open([$bin, '--no-warnings', '-J', '--flat-playlist', '--sub-format', 'ass/srt/vtt/best', ...self::raw(self::$rawOptions), '--', $url], [['file', '/dev/null', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
         if ($proc === false) {
             throw new RuntimeException("myphp: cannot run $bin");
         }
@@ -60,9 +70,22 @@ final class YtDlp
         $json = $code === 0 ? json_decode($out, true) : null;
         if (!is_array($json)) {
             $why = trim((string)preg_replace('~^ERROR:\s*~m', '', trim($err)));
+            \MyPHP\Logger::error("yt-dlp failed: $why (exit status $code)", 'ytdl');
             throw new RuntimeException('myphp: yt-dlp: ' . ($why !== '' ? $why : "exit status $code"));
         }
         return $json;
+    }
+
+    /** mpv's ytdl-raw-options as yt-dlp's arguments: "a=1,b=" as --a 1 --b. @return list<string> */
+    public static function raw(string $options): array
+    {
+        $out = [];
+        foreach (array_filter(array_map('trim', explode(',', $options)), fn(string $o) => $o !== '') as $o) {
+            [$k, $v] = array_pad(explode('=', $o, 2), 2, '');
+            $out[] = '--' . trim($k);
+            if (trim($v) !== '') { $out[] = trim($v); }
+        }
+        return $out;
     }
 
     /** The sites whose pages yt-dlp reads before the URL is opened as a film (mpv's ytdl_hook's include, IINA's): YouTube's, Twitch's. */

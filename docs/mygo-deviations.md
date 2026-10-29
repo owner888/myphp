@@ -1734,6 +1734,51 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   launch (the updater's is set as it starts). The app-wide ones (new
   windows, quit after the last, at launch, Open Recent) are the app's to
   follow, as examples/video does: the library's player has one window.
+- **The player's settings pages, the log, key bindings, Live Text**
+  (v1.62): IINA's settings window whole (UI, Video, Audio, Subtitles,
+  Network, Control, Key Bindings, Advanced, Utilities after v1.61's
+  General); `MyPHP\Logger` and `Context::logViewer` (the app's log as
+  IINA's Logger and Log Viewer: the developer's choice, a log of the
+  app's, of which the player is one subsystem) are myphp's; mygo has no
+  video and no log of its own. Left out or done otherwise, where myphp
+  has no mpv:
+  - UI: the initial position's X and Y pop-ups are labelled as they
+    place (IINA's are crossed); music mode's long titles do not scroll;
+    a screenshot with its subtitles takes them at the window's size.
+  - Video: the ICC profile, tone mapping's options and the dedicated GPU
+    are left out (the system manages the colors and tone maps; Apple
+    silicon has one GPU).
+  - Audio: audio threads, the AVFoundation driver and S/PDIF are mpv's;
+    gapless audio opens the next audio file 5 s before the end (weak and
+    strong alike: the system's renderer, no device kept open).
+  - Subtitles: blur is not drawn (\blur neither); the font is a family
+    (no face list: the bold and italic switches choose the face); the
+    secondary subtitles are always text at the top (their override level
+    is kept, unused); a new default encoding reads the files loaded
+    next (IINA reloads those loaded); a subtitle file's language named
+    in English (movie.English.srt) matches no preferred language.
+  - Network: the seconds to prefetch bound HLS only (a file over HTTP by
+    bytes); the cache off means no pause for it; RTSP's transport (no
+    RTSP) and the Online Media plugin's advice (no plugins) are left out;
+    the seeking throbber is the buffering one begun by a seek.
+  - Control: a trackpad's seek does not pause as it begins (no phases);
+    the seek type's Auto is exact for a local file, by keyframes over the
+    network (IINA measures its first seek).
+  - Key bindings: mpv's commands and properties the player has the means
+    for (contrast, brightness, gamma, saturation, video-zoom and pan,
+    panscan, deinterlace, edition, flip, mirror, open-url and
+    save-downloaded-sub are logged and do nothing); no key sequences;
+    no-osd and the other prefixes are taken off, the messages shown all
+    the same.
+  - Advanced: mpv's OSD, its config folder and options are left out;
+    logging is the app's (Logger), on and off at once, not at the next
+    launch.
+  - Utilities: the browser extensions (IINA's, of iina:// links) are left
+    out; Set as Default works for a built app only.
+  - Live Text is myphp's overlay of Vision's text (VisionKit's
+    ImageAnalysisOverlayView is Swift's): choose, copy, show all; no
+    look-up, translation or data detectors; not of a picture cropped or
+    turned. The strings keep IINA's name where IINA's say it.
 - **External audio** (v1.55): `Player::loadAudio`,
   `VideoPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no video.

@@ -18,8 +18,6 @@ use RuntimeException;
  */
 final class Hls implements Source, CacheMember
 {
-    /** The bytes the segments downloaded ahead may hold, of all the streams: IINA's cache, 150 MiB, as HttpBytes::MAX. */
-    public const MAX = HttpBytes::MAX;
 
     /** @var list<HlsStream> the variant's playlist, then the audio renditions' */
     private array $streams = [];

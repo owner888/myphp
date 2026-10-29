@@ -12,6 +12,7 @@ use MyPHP\Media\{Player, Track};
 use MyPHP\Native\ObjC;
 
 if (PHP_OS_FAMILY === 'Darwin') {
+    \MyPHP\Media\Player::$autoLoad = [0, '', '', false]; // testdata's films: no subtitle files of theirs matched (IINA's matching gives clip.mkv, first, every "clip…" one)
     /** Runs the main run loop for $seconds, as the app would: the player's timer tops up its renderers. */
     $run = function (float $seconds): void {
         $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
@@ -66,8 +67,16 @@ if (PHP_OS_FAMILY === 'Darwin') {
         check($err !== null, 'a rate of 0 throws: pause() stops');
     }
 
+    // A folder of the film with subtitles and the file beside it alone, its subtitle files found as IINA's settings find them by default.
+    $subsDir = sys_get_temp_dir() . '/myphp-player-subs-' . getmypid();
+    @mkdir($subsDir);
+    foreach (['clip-subs.mkv', 'clip-subs.zh.srt'] as $f) { copy(__DIR__ . "/testdata/$f", "$subsDir/$f"); }
+    $withFiles = function () use ($subsDir): Player {
+        \MyPHP\Media\Player::$autoLoad = [2, '', './*', true];
+        try { return new Player("$subsDir/clip-subs.mkv"); } finally { \MyPHP\Media\Player::$autoLoad = [0, '', '', false]; }
+    };
     // What it tells as it changes: play and pause, the rate, where a seek went, a track; each once, when it changes.
-    $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');
+    $p = $withFiles();
     $told = [];
     foreach (['play', 'pause', 'rate', 'seek', 'track'] as $e) {
         $p->on($e, function (mixed ...$a) use (&$told, $e) { $told[] = implode(' ', [$e, ...array_map(fn($v) => is_float($v) ? sprintf('%.1f', $v) : $v, $a)]); });
@@ -318,7 +327,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     }
 
     // Subtitles: the file's text tracks, the files beside it named after it (shown first), the lines showing where it is, a delay.
-    $p = new Player(__DIR__ . '/testdata/clip-subs.mkv');
+    $p = $withFiles();
     $subs = $p->subtitleTracks();
     same([['S_TEXT/UTF8', 'chi'], ['S_TEXT/ASS', 'eng'], ['S_TEXT/UTF8', 'zh']], array_map(fn(Track $t) => [$t->codec, $t->language], $subs), 'subtitles: two tracks of the file, a file beside it');
     same('clip-subs.zh.srt', $p->subtitleTrack()?->name, 'the file beside it shows');
@@ -481,4 +490,6 @@ if (PHP_OS_FAMILY === 'Darwin') {
         foreach (glob("$dir/*") ?: [] as $f) { @unlink($f); }
         @rmdir($dir);
     }
+    foreach (glob("$subsDir/*") ?: [] as $f) { @unlink($f); }
+    @rmdir($subsDir);
 }

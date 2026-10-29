@@ -5,6 +5,7 @@ namespace MyPHP\Native;
 
 use Closure;
 use MyPHP\App;
+use MyPHP\Logger;
 
 /**
  * One instance of the app (mygo's single_instance.go): the first takes a
@@ -51,7 +52,7 @@ final class SingleInstance
                 stream_get_contents($conn); // wait until it was read
                 fclose($conn);
                 if (getenv('MYPHP_DEV') === '1') {
-                    error_log('myphp: ' . App::name() . ' is already running: handed the command line over to it (requestSingleInstanceLock)');
+                    Logger::debug(App::name() . ' is already running: handed the command line over to it (requestSingleInstanceLock)');
                 }
                 return false;
             }

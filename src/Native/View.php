@@ -68,6 +68,8 @@ final class View
 
     /** @var array<int, bool> the views whose primary button is down for a Control-click */
     private static array $ctrlClick = [];
+    /** @var array<int, bool> whether a view takes the click that brings its window forward, by its address: true unless set */
+    private static array $firstMouse = [];
 
     private static function define(): void
     {
@@ -114,7 +116,7 @@ final class View
                 return ObjC::msgSuper('p:q', $self, 'MTKView', 'hitTest:', $point);
             }],
             'acceptsFirstResponder' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
-            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => true],
+            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => self::$firstMouse[ObjC::addr($self)] ?? true], // a click on the window behind clicks too, unless its content says not (setAcceptsFirstMouse)
             // A press in the title bar region of a hidden title bar reaches the view, not AppKit's window move and double-click zoom: Node::dragWindow handles do those.
             'mouseDownCanMoveWindow' => ['B@:', 'b(pp)', fn($self, $cmd) => false],
             // The layer's changes are not animated, as layers do by default (mygo's fit): a resize would show the last frame stretched to the new size, catching up over the animation.
@@ -130,7 +132,23 @@ final class View
             'rightMouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
             'mouseMoved:' => ['v@:@', 'v(ppp)', $mouse('move')],
             // A mouse's back and forward buttons (3 and 4) are keys, as mygo's KeyBack and KeyForward: a router goes back and forward on them.
-            'otherMouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+            // The middle button (2) presses and clicks as the others do.
+            'otherMouseUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($mouse) {
+                if (ObjC::msg('l:', $event, 'buttonNumber') === 2) { $mouse('up')($self, $cmd, $event); }
+            }],
+            // A trackpad's pinch (its magnification since the last, and the gesture's phase) and a Force Touch's press (its stage), as they come.
+            'magnifyWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
+                [$x, $y] = $point($self, $event);
+                self::$inputs[ObjC::addr($self)]->push(['magnify', $x, $y, ObjC::msg('d:', $event, 'magnification'), ObjC::msg('L:', $event, 'phase')]);
+                Metal::requestFrame($self);
+            }],
+            'pressureChangeWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
+                [$x, $y] = $point($self, $event);
+                self::$inputs[ObjC::addr($self)]->push(['pressure', $x, $y, ObjC::msg('l:', $event, 'stage')]);
+                Metal::requestFrame($self);
+            }],
+            'otherMouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($mouse) {
+                if (ObjC::msg('l:', $event, 'buttonNumber') === 2) { $mouse('down')($self, $cmd, $event); return; }
                 $key = match (ObjC::msg('l:', $event, 'buttonNumber')) { 3 => Key::BACK, 4 => Key::FORWARD, default => null };
                 if ($key !== null) {
                     self::$inputs[ObjC::addr($self)]->push(['key', '', $key, ObjC::msg('L:', $event, 'modifierFlags')]);
@@ -170,7 +188,8 @@ final class View
                     return;
                 }
                 $input->mods = $mods & Key::MODIFIERS;
-                if ($input->push(['key', $chars, $code, $mods, ObjC::msg('b:', $event, 'isARepeat')])) { // a node taking its input as it comes took the key: the text system sees nothing of it
+                $plain = ObjC::msg('p:', $event, 'charactersIgnoringModifiers');
+                if ($input->push(['key', $chars, $code, $mods, ObjC::msg('b:', $event, 'isARepeat'), $plain === null ? '' : ObjC::phpStr($plain)])) { // a node taking its input as it comes took the key: the text system sees nothing of it
                 } elseif ($input->client !== null && !$input->inputMethod) { // input methods off: the key types the characters of the layout
                     if ($chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/[\x{F700}-\x{F8FF}]/u', $chars) !== 1) { $input->client->replaceText(null, $chars); }
                 } else {
@@ -320,6 +339,12 @@ final class View
     }
 
     /** Asks for a frame $seconds from now; a later call replaces an earlier one. */
+    /** @internal Window: whether a click on $view's window while another is in front clicks it too, or only brings the window forward (NSView's acceptsFirstMouse:). */
+    public static function setAcceptsFirstMouse($view, bool $on): void
+    {
+        self::$firstMouse[ObjC::addr($view)] = $on;
+    }
+
     public static function wake($view, float $seconds): void
     {
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('wake:'), null);

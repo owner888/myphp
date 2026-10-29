@@ -38,4 +38,21 @@ final class Track
          */
         public readonly array $colors = [],
     ) {}
+
+    /**
+     * @internal the primary language of $code (ISO 639-2 as Matroska writes
+     * it, bibliographic or terminology, 639-1, or a BCP 47 tag), as 639-1
+     * where there is one: 'eng', 'en-US' and 'en' all 'en'; '' for none
+     * ('und').
+     */
+    public static function primaryLanguage(string $code): string
+    {
+        $code = strtolower(str_replace('_', '-', trim($code)));
+        if ($code === '' || $code === 'und') { return ''; }
+        $first = explode('-', $code)[0];
+        // The bibliographic codes of ISO 639-2, which ICU does not take, as their terminology ones.
+        $first = ['chi' => 'zh', 'fre' => 'fr', 'ger' => 'de', 'dut' => 'nl', 'cze' => 'cs', 'gre' => 'el', 'per' => 'fa', 'rum' => 'ro', 'slo' => 'sk', 'wel' => 'cy', 'arm' => 'hy', 'baq' => 'eu', 'bur' => 'my', 'geo' => 'ka', 'ice' => 'is', 'mac' => 'mk', 'mao' => 'mi', 'may' => 'ms', 'alb' => 'sq', 'tib' => 'bo'][$first] ?? $first;
+        $primary = \Locale::getPrimaryLanguage(\Locale::canonicalize($first));
+        return $primary === null || $primary === '' ? $first : strtolower($primary);
+    }
 }

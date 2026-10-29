@@ -4849,14 +4849,106 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - Fixed: the playlist's Add Files and the settings' folder button named
   options OpenDialogOptions has not (multiSelections, properties).
 
+## The player's settings pages, music mode, the log, key bindings, Live Text (v1.62)
+- **The settings window's pages are IINA's whole**: UI (the theme, the
+  OSC's layouts with their own figures, the toolbar's sheet of dragged
+  buttons, the window's initial size and place as mpv's geometry, its
+  resizing, the OSD, thumbnails, picture in picture, animations), Video
+  (decoding threads, hardware decoding, Live Text, HDR), Audio (the
+  output device, initial and maximum volume, ReplayGain, gapless audio,
+  the preferred languages), Subtitles (auto load, ASS's override level,
+  text subtitles' style and place, online subtitles, languages,
+  encoding), Network (the cache, its throbbers, User-Agent, proxy,
+  yt-dlp), Control (pinch, Force Touch, the clicks, the wheel, the seek
+  type and sensitivities), Key Bindings, Advanced (the log) and
+  Utilities. Each applies where the player is: most as it plays, those
+  of opening a film (Player's statics, CacheBudget's, HttpBytes', YtDlp's,
+  Subtitles' encoding) as the next opens.
+- **Music mode** (`UI\VideoPlayerMusic`, IINA's mini player in the same
+  window, its compact size asked of the window): the album art, the
+  tags (Matroska's Tags, AVAsset's common metadata), the controls, the
+  playlist under it; automatic for audio as the settings say.
+- **The volume past 100% and ReplayGain are a gain in PHP**
+  (`Renderers::setGain`, vDSP's vsmul on the float PCM): the sound given
+  again from where it plays when the gain changes, as the equalizer.
+  ReplayGain's tags are Matroska's (track's, then segment's) and
+  AVAsset's (ID3's TXXX, iTunes's), mpv's sums (preamp, peak clipping,
+  fallback).
+- **Text subtitles are ASS lines of the settings' style**
+  (`UI\VideoPlayerSubtitleStyle`: a Default style on a plane 720 high,
+  mpv's scaled pixels), so SRT and VTT are drawn by v1.44's ASS renderer;
+  ASS tracks forced to it (force), stripped to text (strip) or scaled by
+  sub-scale (scale). The margins go into the black bars where asked
+  (sub-use-margins): the box from the window's edges, the scale the
+  picture's. sub-pos moves the bottom lines by its part of the height.
+- **Subtitle files are found as IINA's AutoFileMatcher finds them**
+  (`Media\SubtitleMatcher`: FileGroup's series by common beginnings, a
+  series' subtitle of the same number, those containing the film's name,
+  priority words, search paths, the unmatched by edit distance); a file
+  that does not read is passed over (IINA's suppressError).
+- **The app's log is `MyPHP\Logger`** (the developer's choice over a log
+  of the player's own): verbose to error, subsystems ("app", the
+  player's "player0", "fmatcher", "ytdl", "keybindings", "livetext"),
+  kept for `Context::logViewer` (IINA's Log Viewer: follow, level,
+  subsystems, save, filter, copy), to a file of the session where
+  `logToFile`. Its level and printing by default as the app's kind
+  (`App::isDev`): a development app (`php app.php`, `myphp dev`, `myphp
+  build -debug`) from debug on, printed to the standard error; a
+  `myphp build` one warnings and errors only, printed nowhere (kept for
+  the viewer, and the file where it is on). The player's Advanced
+  settings set its level only while they are on, as theirs hold it, and
+  its file. The framework's own reports went over to it from
+  `error_log` (documents, windows' states, the clipboard, the scheme's
+  failures, audio, updates, duplicate keys, MYPHP_FRAME_STATS); the
+  test runner turns printing off. Not a log, and so not the Logger's:
+  what the pseudo-terminal's child (Plugins/Terminal/Pty/spawn.php) says
+  on the terminal before it becomes the program, the user's to read
+  there.
+- **Key bindings are IINA's input.conf sets** (`UI\VideoPlayerKeys`:
+  IINA's five in src/UI/keybindings, the user's in input_conf of the user
+  data; a key pressed named as mpv names it from charactersIgnoringModifiers,
+  Runtime's takeKeys after the shortcuts) carried out by
+  `UI\VideoPlayerCommands` (mpv's seek, set, add, cycle, cycle-values,
+  multiply of the properties the player has, IINA's commands). The page
+  edits the user's sets; its key mapping alert records a key and builds
+  an action as IINA's NSRuleEditor does (`UI\VideoPlayerKeyRecord`).
+- **The mouse and trackpad as IINA's**: the middle button, a pinch
+  (magnifyWithEvent:) and a Force Touch (pressureChangeWithEvent:'s
+  stage 2) reach `Context::middleClicked`, `magnified` and `forceClicked`
+  (internal); a single click waits the system's double-click interval
+  where a double click does something; acceptsFirstMouse: is the view's
+  as the settings say (Window's firstMouse ask).
+- **Live Text reads the frame off the main thread** (`Native\TextRecognizer`:
+  VNRecognizeTextRequest performed by an NSInvocationOperation on its
+  own queue, no PHP on that thread; polled each tenth of a second); its
+  words, their boxes of the picture, chosen by a drag
+  (`UI\VideoPlayerLiveText`, through the picture's input), copied.
+- **Trap: `setAudioOutputDeviceUniqueID:` takes no nil**: it throws
+  NSInvalidArgumentException and PHP aborts. A renderer never set is left
+  to follow the default; set back to the default, it is given the
+  default output's UID (`AudioDevices::defaultOutput`).
+- **Trap: CALayer's dynamic ranges have no k**: `CADynamicRangeAutomatic`
+  and `CADynamicRangeStandard` (macOS 15); FFI's cdef of a symbol the
+  library lacks throws at the cdef.
+- **Trap: ICU reads "'{''{'" as {'{**: '' inside a quote is an
+  apostrophe, so the strings generator quotes a run of braces whole
+  ("'{{'"), as IINA's Mustache templates of key bindings have.
+- **Trap: "glob(" in any source, a comment's too, fails static_app's
+  test**; a static app's phar has no glob, so folders are listed.
+- **Trap: in testdata, IINA's matching gives clip.mkv every "clip…"
+  subtitle** (the first film, by name, takes those containing its name):
+  the player's tests turn Player::$autoLoad off, and test it in a folder
+  of their own.
+- Fixed: a player whose window closed itself in its own frame drew on
+  (Window's frame stops once destroyed; Metal forgets the view's draws).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
 
-- The player's settings window (v1.61) has IINA's General, Video and
-  Subtitles pages; the others are to come. Of General, music mode (its
-  switch and the playlist's metadata in it), the playlist's metadata
-  and screenshots with their subtitles do nothing yet.
+- The player's settings (v1.62) are IINA's whole; what of them has no
+  equivalent without mpv is in `mygo-deviations.md`. Key bindings carry
+  out the mpv commands the player has the means for, the others logged.
 
 - The glyph atlas starts over when full and is re-rasterized whole; an
   image page is emptied whole. Eviction per glyph or image would avoid

@@ -70,6 +70,22 @@ final class Shell
         return $png ?? throw new RuntimeException("myphp: no icon for \"$real\"");
     }
 
+    /**
+     * @internal UI\VideoPlayerState: whether the file at $path is on a
+     * volume of this Mac, not a mounted remote drive (NSURLVolumeIsLocalKey),
+     * as IINA asks before making a film's thumbnails.
+     */
+    public static function isLocal(string $path): bool
+    {
+        $keys = ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', ObjC::str('NSURLVolumeIsLocalKey'));
+        $values = ObjC::msg('p:pp', self::fileURL($path), 'resourceValuesForKeys:error:', $keys, null);
+        $local = $values === null ? null : ObjC::msg('p:p', $values, 'objectForKey:', ObjC::str('NSURLVolumeIsLocalKey'));
+        if ($local === null) {
+            throw new RuntimeException("myphp: no volume known of $path");
+        }
+        return ObjC::msg('b:', $local, 'boolValue');
+    }
+
     /** @internal UI\VideoPlayerWelcome: the app's icon (the Dock's, NSApp's applicationIconImage) as a PNG of $size by $size pixels. */
     public static function appIcon(int $size): string
     {

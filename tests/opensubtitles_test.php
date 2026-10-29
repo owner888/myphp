@@ -76,7 +76,7 @@ unlink($file);
 // The settings window's search (IINA's): every word in a word of a row (or a row under one); by page, then section, then label.
 $pages = [];
 (new Headless(function (Context $c) use (&$pages) { $pages = (new VideoPlayerSettingsPages($c, new VideoPlayerState(), (object)[]))->all(); $c->column(); $c->end(); }, 600, 480))->frame();
-same(['general', 'video', 'subtitles'], array_keys($pages), 'the pages, in IINA\'s order');
+same(['general', 'ui', 'video', 'audio', 'subtitles', 'network', 'control', 'key.bindings', 'advanced', 'utilities'], array_keys($pages), 'the pages, in IINA\'s order');
 same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'HARDWARE'), 'id'), 'a word of a label, whatever its case');
 same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'filters'), 'id'), 'a word of what an option says');
 same(['pauseWhenMinimized'], array_column(VideoPlayerSettings::search($pages, 'minimized'), 'id'), 'a row under another');
