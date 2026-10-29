@@ -44,6 +44,7 @@ final class Layout
     public static function layout(Context $c, float $w, float $h): void
     {
         self::$window = [$w, $h];
+        self::$metrics = $c->metrics();
         self::measure($c->root);
         self::arrange($c->root, 0, 0, $w, $h);
         if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width)
@@ -165,18 +166,25 @@ final class Layout
             $n->colFit = null;
             $fit();
         }
+        [$pw, $ph] = $n->padSums(); $n->padW = $pw; $n->padH = $ph;
         self::measureBox($n);
+        if ($n->mw < $pw) { $n->mw = $pw; } // no smaller than its padding and border, whatever its size says, as in CSS
+        if ($n->mh < $ph) { $n->mh = $ph; }
+        if ($n->natW < $pw) { $n->natW = $pw; }
+        if ($n->natH < $ph) { $n->natH = $ph; }
         if ($n->aspect > 0 || $n->maxW < INF || $n->maxH < INF) { // the side its aspect ratio sets, and the largest sizes
             if ($n->aspect > 0 && $n->fw > 0 && $n->fh <= 0) { $n->mh = max($n->fw / $n->aspect, $n->minH); }
             elseif ($n->aspect > 0 && $n->fh > 0 && $n->fw <= 0) { $n->mw = max($n->fh * $n->aspect, $n->minW); }
-            $n->mw = max(min($n->mw, $n->maxW), $n->minW); $n->mh = max(min($n->mh, $n->maxH), $n->minH);
+            $n->mw = max(min($n->mw, $n->maxW), $n->minW, $pw); $n->mh = max(min($n->mh, $n->maxH), $n->minH, $ph);
             $n->minMw = min($n->minMw, $n->mw);
         }
         [$mt, $mr, $mb, $ml] = $n->margins;
         if ($mt != 0 || $mr != 0 || $mb != 0 || $ml != 0) { // an automatic margin asks for none
-            $mx = (is_finite($ml) ? $ml : 0) + (is_finite($mr) ? $mr : 0);
+            $mx = $n->marW = (is_finite($ml) ? $ml : 0.0) + (is_finite($mr) ? $mr : 0.0);
             $n->mw += $mx; $n->minMw += $mx;
-            $n->mh += (is_finite($mt) ? $mt : 0) + (is_finite($mb) ? $mb : 0);
+            $n->mh += $n->marH = (is_finite($mt) ? $mt : 0.0) + (is_finite($mb) ? $mb : 0.0);
+        } else {
+            $n->marW = $n->marH = 0.0;
         }
     }
 
@@ -208,9 +216,10 @@ final class Layout
             $n->mh = $n->fh;
             $n->minMw = $n->single ? $n->minW : ($n->wrapsAtWidth() ? min($n->fw, $n->minContentWidth()) : $n->fw); // a single-line text shrinks to its min width (and shows an ellipsis), one that wraps to its widest word; other leaves keep their size
             if (($n->kind === Node::TEXT || $n->kind === Node::RICH) && !$n->inline) { // a text's padding and border around its lines (mygo's)
-                $px = $n->padL() + $n->padR(); $py = $n->padT() + $n->padB();
+                $px = $n->padW; $py = $n->padH;
                 $n->mw += $px; $n->mh += $py; $n->minMw += $px;
             }
+            $n->natW = $n->mw; $n->natH = $n->mh;
             $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH); // a leaf's least size too, as a slider's (mygo's MinWidth)
             if ($n->minSet) { $n->minMw = max($n->minMw, $n->minW); }
             return;
@@ -218,31 +227,42 @@ final class Layout
         if ($n->gridCols !== null) { // a grid: its tracks at the size their content asks
             foreach ($n->kids as $k) { self::measure($k); }
             [$cols, $rows] = self::gridTracks($n, INF, INF);
-            $n->mw = array_sum($cols) + ($n->gapX ?? $n->gap) * max(0, count($cols) - 1) + $n->padL() + $n->padR();
-            $n->mh = array_sum($rows) + ($n->gapY ?? $n->gap) * max(0, count($rows) - 1) + $n->padT() + $n->padB();
+            $n->mw = array_sum($cols) + ($n->gapX ?? $n->gap) * max(0, count($cols) - 1) + $n->padW;
+            $n->mh = array_sum($rows) + ($n->gapY ?? $n->gap) * max(0, count($rows) - 1) + $n->padH;
             if ($n->fw > 0) { $n->mw = $n->fw; }
             if ($n->fh > 0) { $n->mh = $n->fh; }
+            $n->natW = $n->mw; $n->natH = $n->mh;
             $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
             return;
         }
         $main = 0.0; $cross = 0.0; $cnt = 0; $least = 0.0; // least: the min-content width, the automatic minimum a row shrinks this node to
         foreach ($n->kids as $k) {
             self::measure($k);
-            if ($k->absolute) {
-                continue; // out of the flow: it takes no room
+            if ($k->absolute || $k->hidden) {
+                continue; // out of the flow, or hidden: it takes no room
             }
             $cnt++;
             if ($n->dir === Node::ROW) {
-                $main += $k->basis ?? $k->mw; if ($k->mh > $cross) $cross = $k->mh;
+                $kw = $k->mw;
+                if ($k->basis !== null) { // an item that cannot grow takes no more than its flex base size, one that cannot shrink no less, neither below its least (CSS flexbox §9.9.1, mygo's 269e2f9)
+                    $kmx = $k->marW;
+                    $b = max(min($k->basis, $k->maxW), $k->minSet ? $k->minW : 0.0, $k->padW) + $kmx; // the basis, as arrangeFlex's, is the box's, without its margins
+                    if ($k->grow == 0) { $kw = max(min($kw, $b), $k->minMw); }
+                    if ($k->shrink == 0) { $kw = max($kw, $b); }
+                }
+                $main += $kw; if ($k->mh > $cross) $cross = $k->mh;
                 $least += $k->minMw;
             } else {
                 $main += $k->basis ?? $k->mh; if ($k->mw > $cross) $cross = $k->mw;
                 $least = max($least, $k->minMw);
             }
         }
+        if ($n->dir === Node::ROW && !$n->wraps) { // children lined up by their baselines: as high as the highest ascent and the deepest descent
+            $cross = max($cross, self::baselineCross($n, $n->kids));
+        }
         $gap = $n->mainGap();
-        $n->minMw = ($n->dir === Node::ROW ? $least + $gap * max(0, $cnt - 1) : $least) + $n->padL() + $n->padR();
-        [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padL() + $n->padR(), $n->padT() + $n->padB()] : [$n->padT() + $n->padB(), $n->padL() + $n->padR()];
+        $n->minMw = ($n->dir === Node::ROW ? $least + $gap * max(0, $cnt - 1) : $least) + $n->padW;
+        [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padW, $n->padH] : [$n->padH, $n->padW];
         $main += $gap * max(0, $cnt - 1) + $padMain;
         $cross += $padCross;
         if ($n->wraps && $n->wrapWidth > 0) { // a wrapping row: as wide as its widest line, as high as its lines
@@ -250,6 +270,7 @@ final class Layout
             foreach (self::lines($n, $n->wrapWidth - $padMain) as $i => $line) {
                 $lw = $gap * (count($line) - 1); $lh = 0.0;
                 foreach ($line as $k) { $lw += $k->mw; $lh = max($lh, $k->mh); }
+                $lh = max($lh, self::baselineCross($n, $line));
                 $main = max($main, $lw + $padMain); $cross += $lh + ($i > 0 ? $n->crossGap() : 0);
             }
         }
@@ -264,7 +285,8 @@ final class Layout
         if ($n->dir === Node::ROW) { $n->mw = $main; $n->mh = $cross; } else { $n->mw = $cross; $n->mh = $main; }
         if ($n->fw > 0) { $n->mw = $n->fw; $n->minMw = min($n->minMw, $n->fw); } // a container given a size (Node::size) takes it over its content's
         if ($n->fh > 0) { $n->mh = $n->fh; }
-        if ($n->scrollX || $n->wraps) { $n->minMw = $n->padL() + $n->padR(); } // what scrolls or wraps across has no least width
+        if ($n->scrollX || $n->wraps) { $n->minMw = $n->padW; } // what scrolls or wraps across has no least width
+        $n->natW = $n->mw; $n->natH = $n->mh;
         $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
         $n->minMw = $n->minSet ? $n->minW : max(min($n->minMw, $n->mw), $n->minW); // a least width set replaces its content's
     }
@@ -340,7 +362,9 @@ final class Layout
         if ($n->kind !== Node::CONTAINER) return;
         $kids = [];
         foreach ($n->kids as $k) {
-            if (!$k->absolute) {
+            if ($k->hidden) {
+                self::gone($k, $x, $y); // no room, no gap
+            } elseif (!$k->absolute) {
                 $kids[] = $k;
             } elseif ($k === $n->pinned) {
                 // a list's header built out of the flow: placed with the rows
@@ -365,18 +389,37 @@ final class Layout
             $colAt = []; $rowAt = []; // where each track starts
             for ($c = 0, $p = $x + $px; $c < count($cols); $c++) { $colAt[$c] = $p; $p += $cols[$c] + $gx; }
             for ($r = 0, $p = $y + $py; $r < count($rows); $r++) { $rowAt[$r] = $p; $p += $rows[$r] + $gy; }
-            foreach ($items as [$k, $c, $r, $cs, $rs]) {
+            $size = function (array $it) use ($n, $cols, $rows, $gx, $gy): array { // an item's area, and its size there: its percentages of the area, as in CSS (mygo's 813ee46)
+                [$k, $c, $r, $cs, $rs] = $it;
                 $aw = $gx * ($cs - 1); for ($j = $c; $j < $c + $cs; $j++) { $aw += $cols[$j]; }
                 $ah = $gy * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
                 $a = $k->self !== Node::AUTO ? $k->self : ($n->align !== Node::AUTO ? $n->align : Node::STRETCH); // alignSelf, else the grid's align (mygo's AlignItems), else stretched
                 $j = $k->justifySelf !== Node::AUTO ? $k->justifySelf : ($n->justifyItems !== Node::AUTO ? $n->justifyItems : Node::STRETCH); // mygo's gridJustify
                 $kh = $k->hPct !== null ? $k->hPct * $ah : ($a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh); // a size of its own is kept (mygo: an explicit size is not stretched)
                 $kw = $k->wPct !== null ? $k->wPct * $aw : ($j === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT) ? $aw : $k->mw); // a text's fw is what it measured, not a size given
-                $kw = self::clampW($k, $kw, $cw); $kh = self::clampH($k, $kh, $ch);
+                return [$aw, $ah, $a, $j, self::clampW($k, $kw, $aw), self::clampH($k, $kh, $ah)];
+            };
+            // The items of a row lined up by their baselines, laid out first to find them: how far below the row's top each goes.
+            $align = $n->align !== Node::AUTO ? $n->align : Node::STRETCH;
+            $base = []; $rowBase = [];
+            foreach (self::asksBaseline($align, $n->kids) ? $items : [] as $i => $it) {
+                if ($it[4] !== 1 || !self::byBaseline($it[0], $align, $n)) { continue; }
+                [, , , , $kw, $kh] = $size($it);
+                self::arrange($it[0], 0.0, 0.0, $kw, $kh);
+                $base[$i] = $it[0]->y + (self::boxBaseline($it[0]) ?? $it[0]->h);
+                $rowBase[$it[2]] = max($rowBase[$it[2]] ?? -INF, $base[$i]);
+            }
+            foreach ($items as $i => $it) {
+                [$k, $c, $r] = $it;
+                [$aw, $ah, $a, $j, $kw, $kh] = $size($it);
                 $kx = $colAt[$c] + self::across($j, $aw, $kw);
                 if ($n->rtl) { $kx = 2 * ($x + $px) + $cw - $kx - $kw; } // right to left, the columns go from the right
-                [$dx, $dy] = self::relative($k, $cw, $ch);
-                self::arrange($k, $kx + $dx, $rowAt[$r] + self::across($a, $ah, $kh) + $dy, $kw, $kh);
+                [$dx, $dy] = self::relative($k, $aw, $ah);
+                if (isset($base[$i])) {
+                    self::move($k, $kx + $dx, $rowAt[$r] + $rowBase[$r] - $base[$i] + $dy);
+                } else {
+                    self::arrange($k, $kx + $dx, $rowAt[$r] + self::across($a, $ah, $kh) + $dy, $kw, $kh);
+                }
             }
         } elseif ($n->wraps) { // each line is arranged as a row of its own, the lines stacked as alignContent says, from the bottom in reverse
             $lines = self::lines($n, $cw);
@@ -404,6 +447,14 @@ final class Layout
         }
     }
 
+    /** Gives $n, hidden, and what is inside it no room, at ($x, $y). */
+    private static function gone(Node $n, float $x, float $y): void
+    {
+        $n->x = $x; $n->y = $y; $n->w = $n->h = 0.0;
+        $n->gone = true; $n->laid = true;
+        foreach ($n->kids as $k) { self::gone($k, $x, $y); }
+    }
+
     /** Moves $n and what is inside it, laid out, by ($dx, $dy). */
     private static function move(Node $n, float $dx, float $dy): void
     {
@@ -426,23 +477,35 @@ final class Layout
         $avail = ($row ? $cw : $ch) - $gap * ($cnt - 1);
         $align = $n->align === Node::AUTO ? ($row ? Node::CENTER : Node::STRETCH) : $n->align;
         // Each child's size along the axis to start from, its margins included, and the least and largest it may take.
-        $base = []; $lo = []; $hi = []; $used = 0.0; $grow = 0.0; $crossMax = 0.0; $cross = [];
+        $base = []; $lo = []; $hi = []; $pads = []; $used = 0.0; $grow = 0.0; $crossMax = 0.0; $cross = []; $colShrinks = false;
         foreach ($kids as $i => $k) {
-            [$mx, $my] = self::fixedMargins($k);
+            [$mx, $my] = [$k->marW, $k->marH];
             $a = $k->self === Node::AUTO ? $align : $k->self;
+            // The flex base size, before the least and largest, which only its hypothetical size is clamped by (CSS flexbox §9.2, mygo's 269e2f9); its margins included.
             if ($row) {
-                $b = $k->basisPct !== null ? $k->basisPct * $cw : ($k->basis ?? ($k->wPct !== null ? $k->wPct * $cw + $mx : $k->mw));
+                $b = ($k->basisPct !== null ? $k->basisPct * $cw : ($k->basis ?? ($k->wPct !== null ? $k->wPct * $cw : $k->natW))) + $mx;
                 $lo[$i] = $k->minWPct !== null ? $k->minWPct * $cw + $mx : $k->minMw;
                 $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $cw, $k->maxW) : $k->maxW) + $mx;
                 // The content's least width was measured where a maximum that is a percentage of this row does not resolve: it binds here, as CSS clamps the content-based minimum by the max size; a least width the node asked for itself still wins (mygo's bbcc7b7).
                 if ($k->minWPct === null && !$k->minSet) { $lo[$i] = min($lo[$i], $hi[$i]); }
+                $pads[$i] = $k->padW + $mx;
             } else {
                 // A column's child is as wide as it is across first: its height may follow from its width (aspectRatio).
                 $cross[$i] = self::crossWidth($k, $a, $cw);
-                $b = $k->basisPct !== null ? $k->basisPct * $ch : ($k->basis ?? ($k->hPct !== null ? $k->hPct * $ch + $my : ($k->aspect > 0 && $k->fh <= 0 ? ($cross[$i] - $mx) / $k->aspect + $my : $k->mh)));
-                $lo[$i] = $k->minHPct !== null ? $k->minHPct * $ch + $my : $b; // a column's children keep their heights where it overflows
+                $b = ($k->basisPct !== null ? $k->basisPct * $ch : ($k->basis ?? ($k->hPct !== null ? $k->hPct * $ch : ($k->aspect > 0 && $k->fh <= 0 ? ($cross[$i] - $mx) / $k->aspect : $k->natH)))) + $my;
                 $hi[$i] = ($k->maxHPct !== null ? min($k->maxHPct * $ch, $k->maxH) : $k->maxH) + $my;
-                $lo[$i] = min($lo[$i], $hi[$i]);
+                // A column's children keep their heights where it overflows, within their largest, unless they ask for a least height, down to which they shrink (a split's pane); a least height wins over the largest, as in CSS.
+                $least = $k->minHPct !== null ? $k->minHPct * $ch : ($k->minH > 0 ? $k->minH : null);
+                $lo[$i] = $least !== null ? $least + $my : min($b, $hi[$i]);
+                if ($least !== null && $lo[$i] < $b) { $colShrinks = true; }
+                $pads[$i] = $k->padH + $my;
+            }
+            // No size along it goes below the padding and border, as in CSS.
+            $p = $pads[$i];
+            if ($p > 0) { // most nodes have none: max() three times a child was a hot spot
+                if ($b < $p) { $b = $p; }
+                if ($lo[$i] < $p) { $lo[$i] = $p; }
+                if ($hi[$i] < $p) { $hi[$i] = $p; }
             }
             $base[$i] = $b;
             $used += max($lo[$i], min($b, $hi[$i]));
@@ -553,8 +616,8 @@ final class Layout
         $main = [];
         foreach ($kids as $i => $k) { $main[$i] = max($lo[$i], min($base[$i], $hi[$i])); }
         $growing = $used < $avail;
-        if ($flexible && (($growing && $grow > 0) || (!$growing && $row && $n->scroll === null))) {
-            $main = self::flexible($kids, $base, $lo, $hi, $avail, $growing);
+        if ($flexible && (($growing && $grow > 0) || (!$growing && ($row || $colShrinks) && $n->scroll === null))) {
+            $main = self::flexible($kids, $base, $lo, $hi, $pads, $avail, $growing);
         }
         $sum = array_sum($main);
         // The automatic margins along the axis take the free space, before justify does.
@@ -573,15 +636,40 @@ final class Layout
             [$start, $between] = self::justifyOffsets($n->justify, $free, $cnt);
             if ($row) { $cx += $start; } else { $cy += $start; }
         }
+        // The children lined up by their baselines, laid out first to find them (mygo's 4dc371f): how far below the line's top each goes; a row's child's size, along it as resolved, across as its alignment and its own say.
+        $lift = $row && self::asksBaseline($align, $kids) ? self::lineUp($n, $kids, $align, function (int $i, Node $k) use ($main, $autos, $align, $ch): array {
+            $a = $k->self === Node::AUTO ? $align : $k->self;
+            if ($k->mh <= 0) { $a = Node::STRETCH; }
+            $autoCross = is_infinite($k->margins[0]) || is_infinite($k->margins[2]);
+            [$mx, $my] = [$k->marW, $k->marH];
+            $kw = $main[$i] + ($autos[$i] ?? 0.0);
+            if ($k->hPct !== null) {
+                $kh = $k->hPct * $ch + $my;
+            } elseif ($k->aspect > 0 && $k->fh <= 0) {
+                $kh = ($main[$i] - $mx) / $k->aspect + $my;
+            } else {
+                $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
+            }
+            return [$kw, self::clampH($k, $kh, $ch)];
+        }) : [];
+        // Across a column the children lined up by their baselines line up their left edges, as Chrome: right to left, as far from the right as the widest there reaches.
+        $leftEdge = null;
+        if (!$row && $n->rtl && self::asksBaseline($align, $kids)) {
+            foreach ($kids as $i => $k) {
+                if (($k->self === Node::AUTO ? $align : $k->self) === Node::BASELINE && is_finite($k->margins[1]) && is_finite($k->margins[3])) {
+                    $leftEdge = max($leftEdge ?? -INF, $k->margins[1] + $cross[$i] - $k->marW);
+                }
+            }
+        }
         foreach ($kids as $i => $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($row ? $k->mh <= 0 : $k->mw <= 0) {
                 $a = Node::STRETCH; // no size of its own across (a text area given 0, an empty box): it takes the room
             }
             $autoCross = $row ? is_infinite($k->margins[0]) || is_infinite($k->margins[2]) : is_infinite($k->margins[1]) || is_infinite($k->margins[3]); // automatic margins across place it themselves, in all the room
-            [$mx, $my] = self::fixedMargins($k);
             [$dx, $dy] = self::relative($k, $cw, $ch);
             if ($row) {
+                [$mx, $my] = [$k->marW, $k->marH];
                 $kw = $main[$i] + ($autos[$i] ?? 0.0);
                 if ($k->hPct !== null) {
                     $kh = $k->hPct * $ch + $my;
@@ -590,17 +678,23 @@ final class Layout
                 } else {
                     $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
                 }
-                $kh = self::clampH($k, $kh, $ch);
+                $kh = self::clampH($k, $kh, $ch); // as $rowSize, inline: a closure call a child was a hot spot
                 // Reversed, or right to left (not both), the same place counted from the right.
                 $at = $n->reverse !== $n->rtl ? 2 * ($x + $px) + $viewW - $cx - $kw + ($scrollRtl ?? 0.0) : $cx;
-                self::arrange($k, $at + $dx, $cy + ($autoCross ? 0.0 : self::across($a, $ch, $kh)) + $dy, $kw, $kh);
+                if (isset($lift[$i])) {
+                    self::move($k, $at + $dx, $cy + $lift[$i] + $dy); // laid out at the origin already, at this size
+                } else {
+                    self::arrange($k, $at + $dx, $cy + ($autoCross ? 0.0 : self::across($a, $ch, $kh)) + $dy, $kw, $kh);
+                }
                 $cx += $kw + $gap + $between;
             } else {
                 $kh = $main[$i] + ($autos[$i] ?? 0.0);
                 $kw = $cross[$i];
                 $at = $n->reverse ? 2 * ($y + $py) + $ch - $cy - $kh : $cy; // from the bottom
                 $kx = $cx + ($autoCross ? 0.0 : self::across($a, $cw, $kw));
-                if ($n->rtl) { $kx = 2 * ($x + $px) + $viewW - $kx - $kw + ($scrollRtl ?? 0.0); } // right to left, across from the right
+                if ($n->rtl && $leftEdge !== null && $a === Node::BASELINE && !$autoCross) {
+                    $kx = $x + $px + $viewW - $leftEdge - $k->margins[3] + ($scrollRtl ?? 0.0); // its left edge where the others' are
+                } elseif ($n->rtl) { $kx = 2 * ($x + $px) + $viewW - $kx - $kw + ($scrollRtl ?? 0.0); } // right to left, across from the right
                 self::arrange($k, $kx + $dx, $at + $dy, $kw, $kh);
                 $cy += $kh + $gap + $between;
             }
@@ -618,7 +712,7 @@ final class Layout
     private static function crossWidth(Node $k, int $a, float $cw): float
     {
         if ($k->mw <= 0) { $a = Node::STRETCH; }
-        [$mx] = self::fixedMargins($k);
+        $mx = $k->marW;
         $autoCross = is_infinite($k->margins[1]) || is_infinite($k->margins[3]);
         if ($k->wPct !== null) {
             $kw = $k->wPct * $cw + $mx;
@@ -630,30 +724,24 @@ final class Layout
         return self::clampW($k, $kw, $cw);
     }
 
-    /** The fixed margins of $k across and down, automatic ones as none. @return array{0: float, 1: float} */
-    private static function fixedMargins(Node $k): array
-    {
-        [$t, $r, $b, $l] = $k->margins;
-        if ($t == 0 && $r == 0 && $b == 0 && $l == 0) { return [0.0, 0.0]; } // most nodes: a closure or a call per side was a hot spot
-        return [(is_finite($l) ? $l : 0.0) + (is_finite($r) ? $r : 0.0), (is_finite($t) ? $t : 0.0) + (is_finite($b) ? $b : 0.0)];
-    }
-
     /** $kw, an outer width (margins included), within $k's least and largest widths against a content box $cw wide. */
     private static function clampW(Node $k, float $kw, float $cw): float
     {
-        if ($k->maxW === INF && $k->maxWPct === null && $k->minWPct === null) { return $kw; }
-        [$mx] = self::fixedMargins($k);
+        $pad = $k->padW; // no narrower than its padding and border, as in CSS
+        if ($k->maxW === INF && $k->maxWPct === null && $k->minWPct === null) { return $pad == 0.0 ? $kw : max($kw, $pad + $k->marW); }
+        $mx = $k->marW;
         $max = min($k->maxW, $k->maxWPct !== null ? $k->maxWPct * $cw : INF);
-        $min = max($k->minSet ? $k->minW : 0.0, $k->minWPct !== null ? $k->minWPct * $cw : 0.0);
+        $min = max($k->minSet ? $k->minW : 0.0, $k->minWPct !== null ? $k->minWPct * $cw : 0.0, $pad);
         return max(min($kw - $mx, $max), $min) + $mx;
     }
 
     private static function clampH(Node $k, float $kh, float $ch): float
     {
-        if ($k->maxH === INF && $k->maxHPct === null && $k->minHPct === null) { return $kh; }
-        [, $my] = self::fixedMargins($k);
+        $pad = $k->padH;
+        if ($k->maxH === INF && $k->maxHPct === null && $k->minHPct === null) { return $pad == 0.0 ? $kh : max($kh, $pad + $k->marH); }
+        $my = $k->marH;
         $max = min($k->maxH, $k->maxHPct !== null ? $k->maxHPct * $ch : INF);
-        $min = max($k->minH, $k->minHPct !== null ? $k->minHPct * $ch : 0.0);
+        $min = max($k->minH, $k->minHPct !== null ? $k->minHPct * $ch : 0.0, $pad);
         return max(min($kh - $my, $max), $min) + $my;
     }
 
@@ -661,38 +749,42 @@ final class Layout
      * Grows the children into $space, or shrinks them where they overflow
      * it, none past its least ($lo) or largest ($hi) size (CSS flexbox
      * §9.7, mygo's resolveFlexible): growing by their grow factors,
-     * shrinking by their shrink factors times their sizes; those held at a
-     * bound leave the rest to share what is left, going round again.
-     * @param list<Node> $kids @param array<int, float> $base @param array<int, float> $lo @param array<int, float> $hi
+     * shrinking by their shrink factors times their sizes less their
+     * padding, border and margins ($pads); those clamped the way the total
+     * moved are frozen (by their least or by their largest, the least
+     * winning where it is the larger), leaving the rest to share what is
+     * left, going round again.
+     * @param list<Node> $kids @param array<int, float> $base @param array<int, float> $lo @param array<int, float> $hi @param array<int, float> $pads
      * @return array<int, float>
      */
-    private static function flexible(array $kids, array $base, array $lo, array $hi, float $space, bool $growing): array
+    private static function flexible(array $kids, array $base, array $lo, array $hi, array $pads, float $space, bool $growing): array
     {
-        $main = []; $frozen = [];
+        $main = []; $frozen = []; $inner = [];
         foreach ($kids as $i => $k) {
+            $inner[$i] = max($base[$i] - $pads[$i], 0.0);
             $hyp = max($lo[$i], min($base[$i], $hi[$i]));
-            $factor = $growing ? $k->grow : $k->shrink * $base[$i];
+            $factor = $growing ? $k->grow : $k->shrink * $inner[$i];
             $main[$i] = $hyp;
             if ($factor == 0 || ($growing && $base[$i] > $hyp) || (!$growing && $base[$i] < $hyp)) { $frozen[$i] = true; }
         }
         for ($round = 0, $n = count($kids); $round <= $n; $round++) {
             $free = $space; $sum = 0.0;
             foreach ($kids as $i => $k) {
-                if (isset($frozen[$i])) { $free -= $main[$i]; } else { $free -= $base[$i]; $sum += $growing ? $k->grow : $k->shrink * $base[$i]; }
+                if (isset($frozen[$i])) { $free -= $main[$i]; } else { $free -= $base[$i]; $sum += $growing ? $k->grow : $k->shrink * $inner[$i]; }
             }
             if ($sum == 0) { break; }
-            $violation = 0.0;
+            $violation = 0.0; $moved = [];
             foreach ($kids as $i => $k) {
                 if (isset($frozen[$i])) { continue; }
-                $v = $base[$i] + $free * ($growing ? $k->grow : $k->shrink * $base[$i]) / $sum;
+                $v = $base[$i] + $free * ($growing ? $k->grow : $k->shrink * $inner[$i]) / $sum;
                 $clamped = max($lo[$i], min($v, $hi[$i]));
-                $violation += $clamped - $v;
+                $moved[$i] = $clamped - $v;
+                $violation += $moved[$i];
                 $main[$i] = $clamped;
             }
             if (abs($violation) < 1e-9) { break; }
-            foreach ($kids as $i => $k) {
-                if (isset($frozen[$i])) { continue; }
-                if (($violation > 0 && $main[$i] == $lo[$i]) || ($violation < 0 && $main[$i] == $hi[$i])) { $frozen[$i] = true; }
+            foreach ($moved as $i => $d) {
+                if (($violation > 0 && $d > 0) || ($violation < 0 && $d < 0)) { $frozen[$i] = true; }
             }
         }
         return $main;
@@ -731,9 +823,15 @@ final class Layout
      */
     private static function arrangeAbsolute(Node $n, Node $k): void
     {
+        if ($k->attachTarget?->gone) { // attached to what is hidden: hidden too
+            self::gone($k, $n->x, $n->y);
+            $k->invisible = true;
+            return;
+        }
         $bx = $n->x + $n->borders[3]; $by = $n->y + $n->borders[0];
         $pw = $n->w - $n->borders[1] - $n->borders[3]; $ph = $n->h - $n->borders[0] - $n->borders[2];
-        [$mx, $my] = self::fixedMargins($k);
+        if (($on = $k->placeOn) !== null) { [$bx, $by, $pw, $ph] = [$on->x, $on->y, $on->w, $on->h]; } // on a sibling, where this frame lays it out
+        [$mx, $my] = [$k->marW, $k->marH];
         $m = array_map(fn(float $v): float => is_finite($v) ? $v : 0.0, $k->margins);
         [$t, $r, $b, $l] = $k->insets;
         $v = fn(array $i, float $base): float => $i[1] ? $i[0] * $base : $i[0];
@@ -798,6 +896,8 @@ final class Layout
 
     /** The window's size as the layout goes: what attachTo keeps popovers in. @var array{0: float, 1: float} */
     private static array $window = [INF, INF];
+    /** The text metrics of the frame laid out, for the baselines of texts (boxBaseline). */
+    private static ?TextMetrics $metrics = null;
 
     /** The window's size, the layout's: what attachTo keeps popovers in. */
     public static function window(float $w, float $h): void
@@ -851,7 +951,15 @@ final class Layout
     {
         [$items, $nc, $nr] = self::gridPlace($n);
         $cols = self::sizeTracks($n->gridCols, $nc, $availW, $n->gapX ?? $n->gap, array_map(fn($it) => [$it[1], $it[3], max($it[0]->mw, $it[0]->minW)], $items)); // at least its least width
-        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gapY ?? $n->gap, array_map(fn($it) => [$it[2], $it[4], max($it[0]->mh, $it[0]->minH)], $items));
+        // An item lined up by its baseline asks for the room above it that lines it up with its row's (mygo's 4dc371f).
+        $align = $n->align !== Node::AUTO ? $n->align : Node::STRETCH;
+        $lifts = []; $rowBase = [];
+        foreach (self::asksBaseline($align, $n->kids) ? $items : [] as $j => [$k, , $r, , $rs]) {
+            if ($rs !== 1 || !self::byBaseline($k, $align, $n)) { continue; }
+            $lifts[$j] = $k->margins[0] + (self::measuredBaseline($k) ?? $k->mh - $k->marH);
+            $rowBase[$r] = max($rowBase[$r] ?? 0.0, $lifts[$j]);
+        }
+        $rows = self::sizeTracks($n->gridRows, $nr, $availH, $n->gapY ?? $n->gap, array_map(fn($j) => [$items[$j][2], $items[$j][4], max($items[$j][0]->mh, $items[$j][0]->minH) + (isset($lifts[$j]) ? $rowBase[$items[$j][2]] - $lifts[$j] : 0.0)], array_keys($items)));
         return [$cols, $rows, $items];
     }
 
@@ -867,7 +975,7 @@ final class Layout
         $nc = max(count($n->gridCols), 1); $nr = 0;
         $items = [];
         foreach ($n->kids as $k) {
-            if ($k->absolute) { continue; }
+            if ($k->absolute || $k->hidden) { continue; }
             $cs = $k->colSpan < 0 ? max(count($n->gridCols) - max($k->cellCol - 1, 0), 1) : max($k->colSpan, 1);
             $rs = $k->rowSpan < 0 ? max(count($n->gridRows) - max($k->cellRow - 1, 0), 1) : max($k->rowSpan, 1);
             $nc = max($nc, max($k->cellCol - 1, 0) + $cs);
@@ -963,7 +1071,7 @@ final class Layout
     {
         $lines = []; $line = []; $used = 0.0; $gap = $n->mainGap();
         foreach ($n->kids as $k) {
-            if ($k->absolute) { continue; }
+            if ($k->absolute || $k->hidden) { continue; }
             if ($line !== [] && $used + $gap + $k->mw > $avail) { $lines[] = $line; $line = []; $used = 0.0; }
             $used += ($line === [] ? 0 : $gap) + $k->mw; $line[] = $k;
         }
@@ -975,27 +1083,34 @@ final class Layout
     private static function arrangeRow(Node $n, array $line, float $x, float $y, float $w, float $h): void
     {
         $gap = $n->mainGap();
-        $base = []; $lo = []; $hi = []; $used = 0.0; $grow = 0.0;
+        $base = []; $lo = []; $hi = []; $pads = []; $used = 0.0; $grow = 0.0;
         foreach ($line as $i => $k) {
-            [$mx] = self::fixedMargins($k);
+            $mx = $k->marW;
             $base[$i] = $k->basisPct !== null ? $k->basisPct * $w : ($k->wPct !== null ? $k->wPct * $w + $mx : $k->mw);
             $lo[$i] = $k->minWPct !== null ? $k->minWPct * $w + $mx : $k->minMw;
             $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $w, $k->maxW) : $k->maxW) + $mx;
+            $pads[$i] = $k->padW + $mx;
             $used += max($lo[$i], min($base[$i], $hi[$i])); $grow += $k->grow;
         }
         $avail = $w - $gap * (count($line) - 1);
         $growing = $used < $avail;
-        $main = ($growing && $grow > 0) || !$growing ? self::flexible($line, $base, $lo, $hi, $avail, $growing) : array_map(fn($i) => max($lo[$i], min($base[$i], $hi[$i])), array_keys($line));
+        $main = ($growing && $grow > 0) || !$growing ? self::flexible($line, $base, $lo, $hi, $pads, $avail, $growing) : array_map(fn($i) => max($lo[$i], min($base[$i], $hi[$i])), array_keys($line));
         [$cx, $between] = self::justifyOffsets($n->justify, max(0.0, $avail - array_sum($main)), count($line));
         $cx += $x;
         $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
+        $size = function (int $i, Node $k) use ($main, $align, $h): array {
+            $a = $k->self === Node::AUTO ? $align : $k->self;
+            if ($k->mh <= 0) { $a = Node::STRETCH; }
+            return [$main[$i], self::clampH($k, $k->hPct !== null ? $k->hPct * $h : ($a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh), $h)];
+        };
+        $lift = self::asksBaseline($align, $line) ? self::lineUp($n, $line, $align, $size) : [];
         foreach ($line as $i => $k) {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($k->mh <= 0) { $a = Node::STRETCH; }
-            $kw = $main[$i];
-            $kh = self::clampH($k, $k->hPct !== null ? $k->hPct * $h : ($a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh), $h);
+            [$kw, $kh] = $size($i, $k);
             [$dx, $dy] = self::relative($k, $w, $h);
-            self::arrange($k, ($n->rtl ? 2 * $x + $w - $cx - $kw : $cx) + $dx, $y + self::across($a, $h, $kh) + $dy, $kw, $kh); // right to left, from the right
+            $kx = ($n->rtl ? 2 * $x + $w - $cx - $kw : $cx) + $dx; // right to left, from the right
+            if (isset($lift[$i])) { self::move($k, $kx, $y + $lift[$i] + $dy); } else { self::arrange($k, $kx, $y + self::across($a, $h, $kh) + $dy, $kw, $kh); }
             $cx += $kw + $gap + $between;
         }
     }
@@ -1021,6 +1136,118 @@ final class Layout
     }
 
     /** Where a child of $size sits across $room: at the start, in the middle, or at the end. */
+    /** Whether a container aligning by $align, or one of $kids, asks for baselines: those that do not skip the work. @param array<int, Node> $kids */
+    private static function asksBaseline(int $align, array $kids): bool
+    {
+        if ($align === Node::BASELINE) { return true; }
+        foreach ($kids as $k) { if ($k->self === Node::BASELINE) { return true; } }
+        return false;
+    }
+
+    /**
+     * Whether $k, a child of the row or grid $n, lines its baseline up with its siblings' as aligning by $align asks:
+     * not where automatic margins place it across, nor in a row wrapping in reverse, where BASELINE is START (mygo's
+     * byBaseline).
+     */
+    private static function byBaseline(Node $k, int $align, Node $n): bool
+    {
+        return ($k->self === Node::AUTO ? $align : $k->self) === Node::BASELINE && !is_infinite($k->margins[0]) && !is_infinite($k->margins[2]) && !$n->wrapReverse;
+    }
+
+    /**
+     * Lays out the children of a line of $n lined up by their baselines at the origin, at their sizes ($size gives them),
+     * and says how far below the line's top each goes so that their baselines meet (mygo's flexLayout): a child without
+     * one puts its bottom there. @param array<int, Node> $kids @param Closure(int, Node): array{0: float, 1: float} $size
+     * @return array<int, float>
+     */
+    private static function lineUp(Node $n, array $kids, int $align, Closure $size): array
+    {
+        $base = [];
+        foreach ($kids as $i => $k) {
+            if (!self::byBaseline($k, $align, $n)) { continue; }
+            [$kw, $kh] = $size($i, $k);
+            self::arrange($k, 0.0, 0.0, $kw, $kh);
+            $base[$i] = $k->y + (self::boxBaseline($k) ?? $k->h); // its top margin and its baseline
+        }
+        if ($base === []) { return []; }
+        $ascent = max($base);
+        return array_map(fn(float $b): float => $ascent - $b, $base);
+    }
+
+    /** How high a line of $kids of the row $n is to line up those aligned by their baselines, as measured: the highest ascent and the deepest descent, 0 for none. @param array<int, Node> $kids */
+    private static function baselineCross(Node $n, array $kids): float
+    {
+        $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
+        if (!self::asksBaseline($align, $kids)) { return 0.0; }
+        $ascent = $descent = -INF;
+        foreach ($kids as $k) {
+            if ($k->absolute || $k->hidden || !self::byBaseline($k, $align, $n)) { continue; }
+            $b = $k->margins[0] + (self::measuredBaseline($k) ?? $k->mh - $k->marH);
+            $ascent = max($ascent, $b); $descent = max($descent, $k->mh - $b);
+        }
+        return is_finite($ascent) ? $ascent + $descent : 0.0;
+    }
+
+    /**
+     * How far below the top of $n, laid out, its first baseline is, as CSS's (mygo's boxBaseline): its first line of
+     * text's, or its first child's (in a row, its first child's aligned by its baseline), which a child without one takes
+     * from its bottom; null for a node with neither text nor children.
+     */
+    private static function boxBaseline(Node $n): ?float
+    {
+        if ($n->kind !== Node::CONTAINER) { return self::textBaseline($n, $n->h); }
+        $first = null;
+        $row = $n->dir === Node::ROW && $n->gridCols === null;
+        $align = $n->align === Node::AUTO ? Node::STRETCH : $n->align;
+        foreach ($n->kids as $k) {
+            if ($k->absolute || $k->invisible || $k->hidden) { continue; }
+            $first ??= $k;
+            if (!$row) { break; }
+            if (self::byBaseline($k, $align, $n)) { $first = $k; break; }
+        }
+        return $first === null ? null : $first->y - $n->y + (self::boxBaseline($first) ?? $first->h);
+    }
+
+    /** boxBaseline() as measured, before the node is laid out: its children taken at their measured sizes, at the top across. */
+    private static function measuredBaseline(Node $n): ?float
+    {
+        if ($n->kind !== Node::CONTAINER) { return self::textBaseline($n, $n->mh - $n->marH); }
+        $row = $n->dir === Node::ROW && $n->gridCols === null;
+        if ($row && ($asc = self::baselineCross($n, $n->kids)) > 0) {
+            $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
+            $best = -INF;
+            foreach ($n->kids as $k) {
+                if (!$k->absolute && !$k->hidden && self::byBaseline($k, $align, $n)) { $best = max($best, $k->margins[0] + (self::measuredBaseline($k) ?? $k->mh - $k->marH)); }
+            }
+            return $n->padT() + $best;
+        }
+        foreach ($n->kids as $k) {
+            if ($k->absolute || $k->invisible || $k->hidden) { continue; }
+            return $n->padT() + (is_finite($k->margins[0]) ? $k->margins[0] : 0.0) + (self::measuredBaseline($k) ?? $k->mh - $k->marH);
+        }
+        return null;
+    }
+
+    /** The baseline of the first line of a leaf $h high, below its top: a text's, a button's label's, a field's; null for one without text. */
+    private static function textBaseline(Node $n, float $h): ?float
+    {
+        if ($n->kind === Node::RICH) {
+            $l = $n->textLayout();
+            return $l->lines === [] ? null : ($n->inline ? 0.0 : $n->padT()) + $l->lines[0]->baseline;
+        }
+        $m = self::$metrics;
+        if ($m === null) { return null; }
+        if ($n->kind === Node::TEXT && $n->text !== null) {
+            return ($n->inline ? 0.0 : $n->padT()) + $m->ascent($n->fontSize, $n->style);
+        }
+        if (($n->kind === Node::BUTTON && $n->text !== null) || $n->kind === Node::INPUT) { // a label, a field's line, centered in it (Painter)
+            $style = $n->kind === Node::INPUT && $n->edit !== null ? $n->edit->style : $n->style;
+            [, $th] = $m->measure($n->kind === Node::BUTTON ? $n->text : ($n->edit?->shown() ?: 'X'), $n->fontSize, $style);
+            return ($h - $th) / 2 + $m->ascent($n->fontSize, $style);
+        }
+        return null;
+    }
+
     private static function across(int $align, float $room, float $size): float
     {
         return match ($align) { Node::CENTER => ($room - $size) / 2, Node::END => $room - $size, default => 0.0 };

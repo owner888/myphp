@@ -3701,9 +3701,23 @@ final class Context
      * divider between them the user drags, or moves with the arrows once
      * it has the focus, as mygo's Split: $size is the first pane's width
      * (height), kept Space(10) from either edge; $first and $second build
-     * the panes. changed() reports a move.
+     * the panes. With less room than that, the first pane gives way down to
+     * Space(10), keeping $size for when there is room again. changed()
+     * reports a move.
      */
     public function split(float &$size, Closure $first, Closure $second, bool $vertical = false): Node
+    {
+        return $this->splitPanes($size, $first, $second, $vertical, false);
+    }
+
+    /** split() with $percent the percentage of the room the first pane takes, from 0 to 100, so that both panes grow and shrink with the room, in proportion (mygo's SplitPercent, SplitVerticalPercent). */
+    public function splitPercent(float &$percent, Closure $first, Closure $second, bool $vertical = false): Node
+    {
+        return $this->splitPanes($percent, $first, $second, $vertical, true);
+    }
+
+    /** split() and splitPercent(): $size is the first pane's size, or with $inPercent its percentage of the room (mygo's split). */
+    private function splitPanes(float &$size, Closure $first, Closure $second, bool $vertical, bool $inPercent): Node
     {
         $t = $this->theme;
         $minPane = $t->space(10); $grip = $t->space(1.5); $step = $t->space(2.5);
@@ -3711,35 +3725,52 @@ final class Context
         $rt = $this->runtime;
         $r = $rt?->rectOf($n->id);
         $total = $r === null ? 0.0 : ($vertical ? $r[3] : $r[2]); // the room to share, as the last frame laid it out
-        $set = function (float $v) use (&$size, $total, $minPane, $n) {
-            if ($total > 0) { $v = min($v, $total - 1 - $minPane); }
-            $v = max($v, $minPane);
+        $fit = fn(float $v): float => max($total > 0 ? min($v, $total - 1 - $minPane) : $v, $minPane); // leaving Space(10) on either side of the divider
+        $share = min(max($size, 0.0), 100.0) / 100;
+        // The first pane's size as the last frame laid it out: drags and keys move the divider from there, not from $size, which a split too small for it does not show.
+        $shown = $size;
+        if ($inPercent && $total > 0) { $shown = $fit($share * ($total - 1)); }
+        elseif (!$inPercent && $total > 0 && $size > $minPane) { $shown = $fit($size); }
+        $set = function (float $v) use (&$size, $total, $fit, $inPercent, $n) {
+            $v = $fit($v);
+            if ($inPercent) {
+                if ($total <= 1) { return; }
+                $v = $v * 100 / ($total - 1);
+            }
             if ($v != $size) { $size = $v; $n->changed = true; }
         };
-          $a = $this->column(0, 0);
-          $vertical ? $a->size(0, $size) : $a->size($size, 0);
+        $length = fn(Node $p, float $v) => $vertical ? $p->height($v) : $p->width($v);
+        $least = fn(Node $p, float $v) => $vertical ? $p->minHeight($v) : $p->minWidth($v);
+          // The layout sizes the panes, not $shown: it uses this frame's room.
+          $a = $this->column(0, 0)->shrink(1);
+          if ($inPercent) { $a->grow($share)->basis(0); $least($a, $minPane); } else { $length($a, $size); $least($a, min($size, $minPane)); }
             $first();
           $this->end();
-          $div = $this->box($vertical ? 0 : 1, $vertical ? 1 : 0, $t->border)->focusable()->role(Role::SPLITTER)->label($this->texts()->get('divider')); // the line takes the focus between the panes
-          $b = $this->column(0, 0, 1);
+          $div = $this->box($vertical ? 0 : 1, $vertical ? 1 : 0, $t->border)->shrink(0)->focusable()->role(Role::SPLITTER)->label($this->texts()->get('divider')); // the line takes the focus between the panes
+          $b = $this->column(0, 0, 1)->shrink(1);
+          if ($inPercent) { $b->grow(1 - $share)->basis(0); }
+          $least($b, $minPane);
             $second();
           $this->end();
-          // The handle the pointer drags spans a few points over either pane, above them.
+          // The handle the pointer drags spans a few points over either pane, above them, on the divider where this frame lays it out (mygo's placeOn).
           $rtl = !$vertical && $n->rtl; // right to left, the first pane is at the right
-          $handle = $this->box(0, 0, 0)->at($vertical ? 0 : ($rtl ? ($r[2] ?? 0) - $size - 1 : $size) - ($grip - 1) / 2, $vertical ? $size - ($grip - 1) / 2 : 0)
-              ->size($vertical ? ($r[2] ?? 0) : $grip, $vertical ? $grip : ($r[3] ?? 0))->cursor($vertical ? Cursor::ResizeNS : Cursor::ResizeEW);
+          $handle = $this->box(0, 0, 0)->absolute()->cursor($vertical ? Cursor::ResizeNS : Cursor::ResizeEW);
+          $handle->placeOn = $div;
+          $vertical ? $handle->left(0)->right(0)->top(-($grip - 1) / 2)->height($grip) : $handle->top(0)->bottom(0)->left(-($grip - 1) / 2)->width($grip);
           $handle->alpha = 0.0;
         $this->end();
         if ($rt !== null) {
             $held = $rt->dragged($handle->id);
             if ($held !== null) {
                 $rt->focus = $div->id; // a press there focuses the line, as a press on it would
-                $set($size + ($vertical ? $held[1] : ($rtl ? -$held[0] : $held[0]))); // right to left, dragging it left widens the first pane
+                if ($held[0] != 0 || $held[1] != 0) { // only a move changes the size, so a press keeps $size for when there is room again
+                    $set($shown + ($vertical ? $held[1] : ($rtl ? -$held[0] : $held[0]))); // right to left, dragging it left widens the first pane
+                }
             }
             if ($rt->focus === $div->id) {
                 [$back, $forth] = $vertical ? [Key::UP, Key::DOWN] : $this->arrows($div);
-                if ($this->shortcut($back)) { $set($size - $step); }
-                if ($this->shortcut($forth)) { $set($size + $step); }
+                if ($this->shortcut($back)) { $set($shown - $step); }
+                if ($this->shortcut($forth)) { $set($shown + $step); }
             }
             if ($held !== null || $rt->hovered($handle->id)) { $div->color = $t->accent; }
         }

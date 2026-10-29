@@ -71,8 +71,18 @@ final class RevealState
     public static function snap(string $src, int $i, int $target, RevealUnit $u): int
     {
         switch ($u) {
-            case RevealUnit::ByWord:
-                while ($i < $target && $src[$i] !== ' ' && $src[$i] !== "\n") { $i++; }
+            case RevealUnit::ByWord: // up to a space, or to an ideograph or a kana, each a word: past the one $i is at or inside, else up to the next (mygo's 5a134b4)
+                $at = $i;
+                while ($i > 0 && $i < strlen($src) && (ord($src[$i]) & 0xC0) === 0x80) { $i--; }
+                while ($i < $target && $src[$i] !== ' ' && $src[$i] !== "\n") {
+                    $n = ord($src[$i]) < 0x80 ? 1 : (ord($src[$i]) < 0xE0 ? 2 : (ord($src[$i]) < 0xF0 ? 3 : 4));
+                    if ($n >= 3 && \MyPHP\Text\Boundaries::standsAlone(mb_ord(substr($src, $i, $n), 'UTF-8'))) {
+                        if ($i <= $at) { $i += $n; }
+                        break;
+                    }
+                    $i += $n;
+                }
+                $i = min($i, $target);
                 while ($i < $target && ($src[$i] === ' ' || $src[$i] === "\n")) { $i++; }
                 break;
             case RevealUnit::BySentence: case RevealUnit::ByLine: case RevealUnit::ByParagraph:

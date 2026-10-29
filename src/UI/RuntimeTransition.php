@@ -53,6 +53,10 @@ trait RuntimeTransition
             if ($p === null) {
                 continue; // the root's, or a node not in the frame
             }
+            if ($e->gone) { // hidden: no box to animate to or from (mygo's Hidden)
+                unset($this->trans[$e->id]);
+                continue;
+            }
             $r = $this->trans[$e->id] ?? null;
             if ($r === null) {
                 $r = $this->trans[$e->id] = new TransitionState();

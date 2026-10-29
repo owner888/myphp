@@ -117,7 +117,8 @@ $h = new Headless(function (Context $c) use (&$n, &$ev, &$mail, &$cal, &$asking,
 $h->frame(); $head = $n['g']->kids[0]; check(!$head->on && $head->mixed, 'some checked: the head is mixed');
 $h->clickOn($head); check($mail && $cal, 'its click checks all'); check($n['g']->kids[0]->on, 'and it is on'); $h->clickOn($head); check(!$mail && !$cal, 'again clears all');
 $h->clickOn($n['g']->kids[1]->kids[1]->kids[0]); check($n['g']->kids[0]->mixed, 'one checked: mixed again');
-same(24.0, $h->rect($n['bc']->kids[4])[2], 'a crumb shrinks to its min width'); $h->clickOn($n['bc']->kids[2]); same(1, $chosen, 'a crumb clicked'); $h->clickOn($n['bc']->kids[8]); same(1, $chosen, 'the last is no link');
+$crumbs = array_map(fn(int $i) => $h->rect($n['bc']->kids[$i])[2], [0, 4, 8]); // shrunk alike by their widths less their padding (CSS flexbox §9.7), none below its least
+check(abs((96 - $crumbs[0]) / 84 - (33 - $crumbs[1]) / 21) < 1e-6 && abs((222 - $crumbs[2]) / 210 - (33 - $crumbs[1]) / 21) < 1e-6 && $crumbs[1] >= 24, 'the crumbs shrink alike: ' . json_encode($crumbs)); $h->clickOn($n['bc']->kids[2]); same(1, $chosen, 'a crumb clicked'); $h->clickOn($n['bc']->kids[8]); same(1, $chosen, 'the last is no link');
 $h->clickOn($n['open']); check($asking, 'the alert opens'); same('B(Delete)', Headless::label($h->focused()), 'with its default focused'); $h->enter(); same('alert 1', end($ev), 'Enter chooses it');
 $h->clickOn($n['open']); $h->click(5, 5); check($asking, 'a click outside does nothing'); $h->escape(); same('alert -2', end($ev), 'Escape dismisses');
 
@@ -141,8 +142,8 @@ $ls = new ListState; $ls->selected = -1; $ls->selection = new Selection; $ls->ke
 $gs = new GridState; $gs->selects = true; $gs->selection = new Selection; $n = [];
 $h = new Headless(function (Context $c) use (&$n, $ls, $gs) {
     $c->row(0, 0, 1);
-      $n['l'] = $c->list($ls, 20, function (int $i) use ($c) { $c->row(0, 0)->size(0, 20); $c->text("Row $i"); $c->end(); });
-      $n['g'] = $c->gridView($gs, 30, 50, 40, function (int $i) use ($c) { $c->text("$i"); });
+      $n['l'] = $c->list($ls, 20, function (int $i) use ($c) { $c->row(0, 0)->size(0, 20); $c->text("Row $i"); $c->end(); })->basis(0);
+      $n['g'] = $c->gridView($gs, 30, 50, 40, function (int $i) use ($c) { $c->text("$i"); })->basis(0); // half each: grown from no width, not from their contents' (CSS flexbox §9.7)
     $c->end();
 }, 400, 400);
 $h->frame(); $row = fn(int $i) => $n['l']->kids[$i]; $all = fn() => array_map(fn($k) => (int)substr($k, 3), $ls->selection->all());
@@ -152,7 +153,7 @@ $h->clickOn($row(8), Key::COMMAND); $h->down(Key::SHIFT); same([2, 3, 4, 8, 9], 
 $h->key(0, 'selectAll:', Key::COMMAND, 'a'); same(20, $ls->selection->count(), 'Cmd+A chooses all');
 $cell = fn(int $i) => $n['g']->kids[intdiv($i, $gs->cols)]->kids[$i % $gs->cols];
 $h->clickOn($cell(1)); $h->clickOn($cell(4), Key::SHIFT); same([1, 2, 3, 4], $gs->selection->all(), 'Shift-click in the grid'); $h->clickOn($cell(7), Key::COMMAND); $h->down(Key::SHIFT);
-same(3, $gs->cols, 'the grid shares the row with the list, half each: three columns'); // Basis(0): its rows never widen it
+same(3, $gs->cols, 'the grid shares the row with the list, half each: three columns');
 same([1, 2, 3, 4, 7, 8, 9, 10], $gs->selection->all(), 'Shift+Down in the grid extends a row down from the pivot');
 $h->shortcut('a', Key::COMMAND); same(30, $gs->selection->count(), 'Cmd+A in the grid');
 

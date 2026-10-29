@@ -66,7 +66,7 @@ $shown = [];
 for ($i = 1; $i <= 4; $i++) {
     $now += 50_000_000; $h->frame(1);
     $r = ($n = $h->byText('Row 0')) === null ? null : $h->rect($n);
-    $shown[] = $r !== null && $r[2] > 0;
+    $shown[] = $r !== null && $r[2] > 8; // closed, a row is as wide as its padding alone, as in CSS, which the column cuts away
 }
 same([true, true, true, false], $shown, 'closing, its rows show on the way, none once closed');
 $open = true; $h->frame(1);

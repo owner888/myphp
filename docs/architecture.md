@@ -680,7 +680,8 @@ Paths and icons follow mygo's path.go and svg.go: `UI\Path` holds
 moveTo/lineTo/quadTo/cubeTo/close (and `circle`, four cubic arcs) in
 points; `DisplayList::path($path, $rgb, $alpha, $width)` fills it (non-
 zero winding) or strokes it $width wide with round joins and caps, drawn
-as one glyph quad from a mask `Text::pathQuad` keeps in the glyph atlas,
+as one glyph quad from a mask `Text::pathQuad` keeps in the glyph atlas
+(one past 4095 pixels a side in tiles of 511, v1.68),
 keyed by the shape relative to the pixel grid in quarters of a pixel
 (a path looks the same wherever it is) and by the stroke's half width;
 `Svg\Mask` rasterizes the mask in PHP with the SVG renderer's
@@ -5245,6 +5246,55 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   reference takes the arrow's copy (`function () use (&$x)` instead); a
   first-class callable keeps a parameter by reference
   (`$input->direct = $this->deliver(...)`).
+
+## Layout and text as CSS and mygo have them (v1.68)
+
+- **Flexbox as Chrome** (mygo's 269e2f9): a box is never smaller than
+  its padding and border (`Node::padSums`, kept as `padW`/`padH` by
+  `measure`, which also keeps the fixed margins as `marW`/`marH`: the
+  calls a child were hot spots); a flex base size is the measured size
+  before the least and largest (`natW`/`natH`), which only the
+  hypothetical size is clamped by; items shrink by their bases less
+  their padding, border and margins; items clamped the way the total
+  moved are frozen, so a least height over a largest one wins without
+  moving its siblings; a row sized by its content counts an item that
+  cannot grow at most its basis and one that cannot shrink at least
+  (§9.9.1). myphp's columns still keep their children's heights, except
+  those that set a least height, which shrink to it (a split's pane).
+  Layout of 2800 nodes is as fast as before (within noise).
+- **Baselines** (`Node::BASELINE`, mygo's 4dc371f): the children of a
+  line lined up by their baselines are laid out at the origin first
+  (`lineUp`), their baselines found from what they laid out
+  (`boxBaseline`: a text's first line, a button's label, a field's line,
+  a container's first child's), then moved into place, not laid out
+  again. A row measures as high as the highest ascent and the deepest
+  descent take, from baselines found as measured (`measuredBaseline`); a
+  grid's rows ask for the room above their items too. Containers that
+  ask for none skip it all (`asksBaseline`).
+- **Hidden** (`Node::hidden`, mygo's 9b0de23): out of the flow, the
+  layout gives it and what is inside it no room (`Layout::gone`, which
+  marks them), they record as invisible nodes do, what is attached to
+  them hides, and their transitions stop.
+- **Splits give way**: `split` keeps both panes in a smaller window, the
+  first down to Space(10), and drags and keys move the divider from
+  where it shows; `splitPercent` takes a share of the room. The handle
+  is placed on the divider where this frame lays it out
+  (`Node::$placeOn`).
+- **Words in Chinese and Japanese** (`Text\Boundaries::standsAlone`,
+  `wordBoundary`, mygo's 5a134b4): each ideograph and kana is a word,
+  in text fields (whose words were runs between spaces until now, and
+  are letters, digits and underscores as mygo's), the code editor, rich
+  text and Markdown's reveal by words.
+- **A grid child's percentages** are of its area, with their least and
+  largest sizes and insets.
+- **Paths past the atlas** draw in tiles of their mask, each the whole
+  path's cut to the tile, those that do not show not made, those the
+  path covers whole sharing one (`Text::PATH_TILE`, mygo's b0d5f43);
+  `DisplayList::$pathQuad` gives a list of quads now. A gradient spans
+  the path's bounds across its tiles.
+- **Pitfall**: a closure made in `arrangeFlex` a call, and called a
+  child, cost a layout a few percent: the sizes stay inline, and the
+  closure is made only for lines that line up baselines.
 
 ## Open items
 

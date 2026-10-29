@@ -342,10 +342,9 @@ final class TextState
     /** Selects the word at the caret (a run without spaces), as a double click does. */
     public function selectWord(): void
     {
-        $n = strlen($this->text); $a = $b = $this->cursor;
-        while ($a > 0 && !ctype_space($this->text[$a - 1])) { $a--; }
-        while ($b < $n && !ctype_space($this->text[$b])) { $b++; }
-        $this->anchor = $a; $this->cursor = $b;
+        $runes = mb_str_split($this->text, 1, 'UTF-8');
+        [$a, $b] = \MyPHP\Text\Boundaries::wordAround(array_map('mb_ord', $runes), mb_strlen(substr($this->text, 0, $this->cursor), 'UTF-8')); // the word, or the run of other runes: an ideograph or a kana alone (mygo's 5a134b4)
+        $this->anchor = strlen(implode('', array_slice($runes, 0, $a))); $this->cursor = strlen(implode('', array_slice($runes, 0, $b)));
     }
 
     /** Selects the line at the caret (between newlines), as a triple click does. */
@@ -356,19 +355,18 @@ final class TextState
         $this->anchor = $a === false ? 0 : $a + 1; $this->cursor = $b === false ? strlen($this->text) : $b;
     }
 
+    /** The start of the word before byte $i: letters, digits and underscores, each ideograph and kana a word alone (Text\Boundaries, as mygo's buffer). */
     private function wordLeft(int $i): int
     {
-        while ($i > 0 && ctype_space($this->text[$i - 1])) { $i--; }
-        while ($i > 0 && !ctype_space($this->text[$i - 1])) { $i--; }
-        return $i;
+        $runes = mb_str_split(substr($this->text, 0, $i), 1, 'UTF-8');
+        return strlen(implode('', array_slice($runes, 0, \MyPHP\Text\Boundaries::wordStart(array_map('mb_ord', $runes), count($runes)))));
     }
 
+    /** The end of the word after byte $i. */
     private function wordRight(int $i): int
     {
-        $n = strlen($this->text);
-        while ($i < $n && !ctype_space($this->text[$i])) { $i++; }
-        while ($i < $n && ctype_space($this->text[$i])) { $i++; }
-        return $i;
+        $runes = mb_str_split(substr($this->text, $i), 1, 'UTF-8');
+        return $i + strlen(implode('', array_slice($runes, 0, \MyPHP\Text\Boundaries::wordEnd(array_map('mb_ord', $runes), 0))));
     }
 
     /** UTF-16 unit index of a byte offset in $s. */

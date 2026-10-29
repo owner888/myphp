@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
+use MyPHP\Text\Boundaries;
+
 /**
  * Characters as the editor steps over them (the functions of mygo's
  * selection.go): the classes of characters, the words and subwords of
@@ -53,7 +55,7 @@ final class Chars
         $off += $size;
         while ($off < $n) {
             [$c, $size] = $r->runeAt($off);
-            if (self::classOf($c, $extra) !== $cls || $c === "\n") { break; }
+            if (self::classOf($c, $extra) !== $cls || $c === "\n" || self::apart($cls, $prev, $c)) { break; }
             if ($sub && $cls === self::WORD && self::subwordBreak($prev, $c, $r, $off + $size)) { break; }
             $prev = $c;
             $off += $size;
@@ -76,12 +78,18 @@ final class Chars
         $off -= $size;
         while ($off > 0) {
             [$c, $size] = $r->runeBefore($off);
-            if (self::classOf($c, $extra) !== $cls || $c === "\n") { break; }
+            if (self::classOf($c, $extra) !== $cls || $c === "\n" || self::apart($cls, $c, $next)) { break; }
             if ($sub && $cls === self::WORD && self::subwordBreakBack($c, $next)) { break; }
             $next = $c;
             $off -= $size;
         }
         return $off;
+    }
+
+    /** Whether $a and $b, next to each other and both of class $cls, are in different words all the same: each ideograph and kana is one, Chinese and Japanese having no spaces between words (mygo's apart). */
+    private static function apart(int $cls, string $a, string $b): bool
+    {
+        return $cls === self::WORD && (strlen($a) >= 3 && Boundaries::standsAlone(mb_ord($a, 'UTF-8')) || strlen($b) >= 3 && Boundaries::standsAlone(mb_ord($b, 'UTF-8')));
     }
 
     /** Whether a subword ends between $prev and $c going right: at an underscore, or lower case turning upper. */
@@ -119,15 +127,22 @@ final class Chars
         } else {
             return [$off, $off];
         }
+        // An ideograph or a kana is a word alone.
+        $alone = fn(string $c): bool => $cls === self::WORD && strlen($c) >= 3 && Boundaries::standsAlone(mb_ord($c, 'UTF-8'));
+        if ($cls === self::WORD) {
+            $forward = $i < strlen($s) && self::classOf(self::runeAt($s, $i), $extra) === self::WORD;
+            $c = $forward ? self::runeAt($s, $i) : self::runeBefore($s, $i);
+            if ($alone($c)) { return $forward ? [$a + $i, $a + $i + strlen($c)] : [$a + $i - strlen($c), $a + $i]; }
+        }
         $start = $i; $end = $i;
         while ($start > 0) {
             $c = self::runeBefore($s, $start);
-            if (self::classOf($c, $extra) !== $cls) { break; }
+            if (self::classOf($c, $extra) !== $cls || $alone($c)) { break; }
             $start -= strlen($c);
         }
         while ($end < strlen($s)) {
             $c = self::runeAt($s, $end);
-            if (self::classOf($c, $extra) !== $cls) { break; }
+            if (self::classOf($c, $extra) !== $cls || $alone($c)) { break; }
             $end += strlen($c);
         }
         return [$a + $start, $a + $end];

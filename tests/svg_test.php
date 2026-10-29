@@ -144,3 +144,23 @@ same([255, 0, 0], [ord($m[3 * 8 + 3]), ord($m[1 * 8 + 1]), ord($m[6 * 8 + 6])], 
 $ln = (new \MyPHP\UI\Path)->moveTo(2, 4)->lineTo(6, 4);
 $m = \MyPHP\UI\Svg\Mask::of($ln, 2, 1.0, 0, 0, 8, 8);
 check(ord($m[3 * 8 + 4]) === 255 && ord($m[3 * 8 + 1]) > 0 && ord($m[3 * 8 + 0]) <= 1 && ord($m[1 * 8 + 4]) === 0, 'a line stroked 2 wide with round caps: they reach a pixel past the ends');
+
+// A path's mask cut in tiles (Text::pathQuad past the atlas, mygo's b0d5f43): each the whole path's, cut to the tile, so tiles meet as the pixels of one mask do.
+$tri = (new \MyPHP\UI\Path)->moveTo(0.3, 0.7)->lineTo(19.6, 3.2)->lineTo(7.1, 19.4)->close();
+$whole = \MyPHP\UI\Svg\Mask::of($tri, 0, 1.0, 0, 0, 20, 20);
+$left = \MyPHP\UI\Svg\Mask::of($tri, 0, 1.0, 0, 0, 9, 20); $right = \MyPHP\UI\Svg\Mask::of($tri, 0, 1.0, 9, 0, 11, 20);
+$joined = '';
+for ($y = 0; $y < 20; $y++) { $joined .= substr($left, $y * 9, 9) . substr($right, $y * 11, 11); }
+same(bin2hex($whole), bin2hex($joined), 'two tiles of a triangle\'s mask: its pixels');
+if (PHP_OS_FAMILY === 'Darwin') {
+    \MyPHP\Native\ObjC::boot(['Foundation', 'AppKit']);
+    $text = new \MyPHP\UI\Text(new \MyPHP\Native\CoreText(2.0), new \MyPHP\UI\Atlas(2048, 2048), new \MyPHP\UI\ImageAtlas());
+    $big = (new \MyPHP\UI\Path)->moveTo(0, 0)->lineTo(2100, 0)->lineTo(2100, 600)->lineTo(0, 600)->close(); // 4201 × 1201 pixels at 2x
+    $text->beginFrame();
+    $quads = $text->pathQuad($big, 0);
+    check(count($quads) === 9 * 3, 'a path past 4096 pixels across drawn in tiles: ' . count($quads));
+    $slots = array_unique(array_map(fn(array $q) => $q[4] . ',' . $q[5], $quads));
+    check(count($slots) < count($quads), 'the tiles it covers whole share one mask: ' . count($slots) . ' masks');
+    $seen = $text->pathQuad($big, 0, fn(float $x, float $y, float $w, float $h): bool => $x < 300 && $y < 300);
+    same(4, count($seen), 'only the tiles that show');
+}

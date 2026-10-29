@@ -58,7 +58,7 @@ final class DisplayList
     private array $clip = self::NO_CLIP;
     private array $clips = [];
 
-    /** Text::pathQuad, for path(): the glyph quad of a path from its mask in the atlas. Set by the window; null leaves paths undrawn (a headless list). */
+    /** Text::pathQuad, for path(): the glyph quads of a path from its mask (or its tiles) in the atlas, given which show. Set by the window; null leaves paths undrawn (a headless list). */
     public ?\Closure $pathQuad = null;
 
     /** The entries of $xforms written this frame, the identity's included. */
@@ -185,9 +185,10 @@ final class DisplayList
     /** Fills $path in $rgb (non-zero winding), or with $width > 0 strokes it that wide with round joins and caps, as mygo's FillPath and StrokePath: drawn as a glyph from a cached mask. */
     public function path(Path $path, int $rgb, float $alpha = 1.0, float $width = 0.0): void
     {
-        $q = $this->pathQuad === null ? null : ($this->pathQuad)($path, $width);
-        if ($q !== null && !$this->clipped($q[0], $q[1], $q[2], $q[3])) {
-            $this->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]);
+        foreach ($this->pathQuad === null ? [] : ($this->pathQuad)($path, $width, fn(float $x, float $y, float $w, float $h): bool => !$this->clipped($x, $y, $w, $h)) as $q) {
+            if (!$this->clipped($q[0], $q[1], $q[2], $q[3])) {
+                $this->glyph($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, $q[4], $q[5]);
+            }
         }
     }
 
@@ -421,12 +422,21 @@ final class DisplayList
     /** Fills $path, or with $width > 0 strokes it that wide, with the gradient from $rgb at $alpha to $rgb2 at $alpha2 along the line $line(w, h) gives, in points from the top left of the path's bounds (mygo's FillPathGradient, StrokePathGradient): its mask from the atlas, as path() draws it, painted as a box (flag 8). @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line */
     public function pathGradient(Path $path, float $width, int $rgb, float $alpha, int $rgb2, float $alpha2, bool $oklab, \Closure $line): void
     {
-        $q = $this->pathQuad === null ? null : ($this->pathQuad)($path, $width);
-        if ($q === null || $this->clipped($q[0], $q[1], $q[2], $q[3])) {
+        $quads = $this->pathQuad === null ? [] : ($this->pathQuad)($path, $width, fn(float $x, float $y, float $w, float $h): bool => !$this->clipped($x, $y, $w, $h));
+        if ($quads === []) {
             return;
         }
-        $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
-        $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 8.0, $line($q[2], $q[3]));
+        // The gradient spans the path's bounds, which its tiles cut: its line from the first's corner, moved to each tile's.
+        [$bx, $by] = [min(array_column($quads, 0)), min(array_column($quads, 1))];
+        $bounds = $this->pathQuad !== null && count($quads) > 1 ? $path->bounds() : null;
+        $l = $bounds !== null ? $line($bounds[2] - $bounds[0] + $width, $bounds[3] - $bounds[1] + $width) : $line($quads[0][2], $quads[0][3]);
+        $ox = $bounds !== null ? $bounds[0] - $width / 2 : $bx; $oy = $bounds !== null ? $bounds[1] - $width / 2 : $by;
+        foreach ($quads as $q) {
+            if ($this->clipped($q[0], $q[1], $q[2], $q[3])) { continue; }
+            $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+            [$dx, $dy] = [$ox - $q[0], $oy - $q[1]];
+            $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 8.0, [$l[0] + $dx, $l[1] + $dy, $l[2] + $dx, $l[3] + $dy]);
+        }
     }
 
     /** The radii of a box's corners, scaled down together where two of a side's would overlap, as CSS's. @param array{0: float, 1: float, 2: float, 3: float} $r @return array{0: float, 1: float, 2: float, 3: float} */

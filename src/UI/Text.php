@@ -44,6 +44,8 @@ final class Text implements TextPainter
 
     /** @var array<string, Image> SVGs drawn in their own colors, by SVG, size and color, and the frame each was last drawn */
     private array $pictures = [], $pictureUsed = [];
+    /** @var array<string, true|string> the tiles of large paths' masks found empty, and those covered whole, by key: the shared mask's key (pathMask) */
+    private array $emptyTiles = [], $sharedTiles = [];
 
     private System $system;
 
@@ -205,34 +207,71 @@ final class Text implements TextPainter
         return $this->imageSlot($pic);
     }
 
+    /** The side of a tile of a path's mask too large for the atlas, in device pixels (mygo's pathTiles). */
+    public const PATH_TILE = 511;
+
     /**
-     * The glyph quad of $path filled, or stroked $width points wide (round
-     * joins and caps), from a mask cached in the atlas by the shape, as
-     * mygo's drawPath: x, y, w, h in points and the slot's u, v, or null
+     * The glyph quads of $path filled, or stroked $width points wide (round
+     * joins and caps), from masks cached in the atlas by the shape, as
+     * mygo's drawPath: x, y, w, h in points and the slot's u, v each; none
      * for an empty path. The key covers the shape relative to the pixel
      * grid in quarters of a pixel, so a path looks the same wherever it is.
-     * @return array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int}|null
+     * A mask the atlas cannot hold (past 4095 pixels a side) is drawn in
+     * tiles of it, PATH_TILE a side (mygo's b0d5f43): each a mask of the
+     * whole path cut to the tile, so tiles meet as the pixels of one mask
+     * do; those $visible(x, y, w, h) says do not show, and those the path
+     * leaves empty, are not made, and those it covers whole share one.
+     * @param ?\Closure(float, float, float, float): bool $visible
+     * @return list<array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int}>
      */
-    public function pathQuad(Path $path, float $width): ?array
+    public function pathQuad(Path $path, float $width, ?\Closure $visible = null): array
     {
         $b = $path->bounds();
-        if ($b === null) { return null; }
+        if ($b === null) { return []; }
         $s = $this->ct->scale; $hw = max($width, 0) / 2;
         $x0 = floor(($b[0] - $hw) * $s) / $s; $y0 = floor(($b[1] - $hw) * $s) / $s; // on the device grid
         $w = (int)ceil(($b[2] + $hw - $x0) * $s) + 1; $h = (int)ceil(($b[3] + $hw - $y0) * $s) + 1;
-        if ($w > 4096 || $h > 4096) { return null; }
         $key = 'p' . $hw;
         foreach ($path->cmds as $c) {
             $key .= chr($c[0]);
             $n = match ($c[0]) { Path::MOVE, Path::LINE => 1, Path::QUAD => 2, Path::CUBE => 3, default => 0 };
-            for ($i = 0; $i < $n; $i++) { $key .= pack('vv', (int)round(($c[1 + 2 * $i] - $x0) * $s * 4), (int)round(($c[2 + 2 * $i] - $y0) * $s * 4)); }
+            for ($i = 0; $i < $n; $i++) { $key .= pack('VV', (int)round(($c[1 + 2 * $i] - $x0) * $s * 4) & 0xffffffff, (int)round(($c[2 + 2 * $i] - $y0) * $s * 4) & 0xffffffff); }
         }
-        $slot = $this->atlas->get($key);
+        if ($w < 4096 && $h < 4096) { // the atlas keeps a pixel of padding beside each bitmap
+            return [$this->pathMask($key, $path, $width, $x0, $y0, $w, $h)];
+        }
+        $t = self::PATH_TILE; $quads = [];
+        for ($ty = 0; $ty < $h; $ty += $t) {
+            for ($tx = 0; $tx < $w; $tx += $t) {
+                [$tw, $th] = [min($t, $w - $tx), min($t, $h - $ty)];
+                $qx = $x0 + $tx / $s; $qy = $y0 + $ty / $s;
+                if ($visible !== null && !$visible($qx, $qy, $tw / $s, $th / $s)) { continue; }
+                $q = $this->pathMask($key . "/$tx,$ty", $path, $width, $qx, $qy, $tw, $th);
+                if ($q !== null) { $quads[] = $q; }
+            }
+        }
+        return $quads;
+    }
+
+    /** The quad of the mask $key of $path, $w × $h pixels from ($x0, $y0) in points, made and placed in the atlas once; null for a tile the path leaves empty. @return ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int} */
+    private function pathMask(string $key, Path $path, float $width, float $x0, float $y0, int $w, int $h): ?array
+    {
+        $s = $this->ct->scale;
+        if (isset($this->emptyTiles[$key])) { return null; }
+        $slot = $this->atlas->get($this->sharedTiles[$key] ?? $key);
         if ($slot === null) {
-            $rows = Mem::alloc($w * $h);
-            \FFI::memcpy($rows, Svg\Mask::of($path, $width, $s, $x0, $y0, $w, $h), $w * $h);
-            $slot = $this->place($key, $w, $h, Mem::addr($rows));
-            Mem::free($rows);
+            $mask = Svg\Mask::of($path, $width, $s, $x0, $y0, $w, $h);
+            if (strspn($mask, "\0") === strlen($mask)) { $this->emptyTiles[$key] = true; return null; }
+            if ($w === self::PATH_TILE && $h === self::PATH_TILE && strspn($mask, "\xff") === strlen($mask)) { $key = $this->sharedTiles[$key] = 'full-tile'; } // covered whole: one mask for all such
+            $slot = $this->atlas->get($key);
+            if ($slot === null) {
+                $rows = Mem::alloc($w * $h);
+                \FFI::memcpy($rows, $mask, $w * $h);
+                $slot = $this->place($key, $w, $h, Mem::addr($rows));
+                Mem::free($rows);
+            }
+        } else {
+            $key = $this->sharedTiles[$key] ?? $key;
         }
         $this->drawn[] = ['a', $key, $slot['u'], $slot['v']];
         return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];

@@ -1890,3 +1890,24 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   over a maximize button the view draws) and `FlyoutOptions`'s corners on
   Windows: macOS only here; FSEvents' `NoDefer` (#370): myphp's watches
   are kqueue's and inotify's, which tell at once.
+
+## Layout and text (v1.68)
+
+- **Columns shrink only what asks**
+  - mygo: a column's children shrink as CSS's do, down to their content.
+  - myphp: a column's children keep their heights, as before, except
+    those that set a least height (`minHeight`), which shrink to it.
+  - Why: myphp's lists and views count on columns that do not shrink
+    them (see "A list as high as its rows"); a split's pane asks.
+- **Wrapping columns**: mygo stretches the items of a column that wraps
+  to their line; myphp wraps rows only.
+- **Hidden** (`Node::hidden(bool)`): as mygo's, but focus that was on
+  a node hidden goes where the runtime puts focus that lost its node,
+  and a form's labels or a toolbar do not lay out apart for it.
+- **Text fields' words**: mygo's buffer moves by letters, digits and
+  underscores; myphp's moved by runs between spaces, and now moves as
+  mygo's.
+- **Not taken yet**: `TextLayout.Lines`, justified and indented
+  paragraphs, soft hyphens and baseline shift (a8f25ed), rich text's
+  paragraph indent and spacing (7e510df), Markdown's inline math
+  (610df69).

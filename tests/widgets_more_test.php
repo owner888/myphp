@@ -249,3 +249,46 @@ foreach ([20.0, 200.0] as $top) {
     $h->clickText('Option 00');
     same(0, $value, "at $top: a click on Option 00 chose it");
 }
+
+// A split in a window smaller than its first pane keeps both panes: the first gives way, takes its size back when there is room again, and the divider moves from where it shows (mygo's TestSplitShrinks).
+$size = 450.0;
+$h = new Headless(function (Context $c) use (&$size) { $c->split($size, fn() => $c->text('top'), fn() => $c->text('bottom'), true)->fillHeight(); }, 300, 600);
+$h->frame();
+$h->h = 300; $h->frame();
+same([260.0, 450.0], [$h->rect($h->byText('bottom'))[1], $size], 'in a window 300 high: the second pane at 300 - 40, the size kept');
+$h->h = 600; $h->frame();
+same(451.0, $h->rect($h->byText('bottom'))[1], 'made high again, the first pane takes its size back');
+$h->h = 300; $h->frame();
+$h->hover(100, 259); $h->press(100, 259); $h->drag(100, 219); $h->release(100, 219);
+same(219.0, $size, 'dragged 40 up from where the divider shows');
+$size = 450.0; $h->frame();
+$h->key(\MyPHP\UI\Key::UP, 'moveUp:');
+same(249.0, $size, 'Up from where it shows');
+// The first pane's percentage of the room: both panes follow the window (mygo's TestSplitPercent).
+$p = 75.0;
+$h = new Headless(function (Context $c) use (&$p) { $c->splitPercent($p, fn() => $c->text('top'), fn() => $c->text('bottom'), true)->fillHeight(); }, 300, 401);
+$h->frame();
+same(301.0, $h->rect($h->byText('bottom'))[1], 'three quarters of 400');
+$h->h = 201; $h->frame();
+same([151.0, 75.0], [$h->rect($h->byText('bottom'))[1], $p], 'three quarters of 200, the percentage kept');
+$h->hover(100, 150); $h->press(100, 150); $h->drag(100, 100); $h->release(100, 100);
+same(50.0, $p, 'dragged to the middle: 50%');
+$h->key(\MyPHP\UI\Key::UP, 'moveUp:');
+same(45.0, $p, 'Up from the middle: 45%');
+$p = 100.0; $h->frame();
+same(161.0, $h->rect($h->byText('bottom'))[1], '100%: the second pane keeps 40');
+$p = 0.0; $h->frame();
+same(41.0, $h->rect($h->byText('bottom'))[1], '0%: the first keeps 40');
+// Side by side too (mygo's TestSplitShrinksSideways, TestSplitPercentSideways).
+$size = 350.0;
+$h = new Headless(function (Context $c) use (&$size) { $c->split($size, fn() => $c->text('first'), fn() => $c->text('second'))->fill(); }, 400, 200);
+$h->frame(); $h->w = 200; $h->frame();
+same(160.0, $h->rect($h->byText('second'))[0], 'in a window 200 wide, the second pane at 200 - 40');
+$h->hover(159, 100); $h->press(159, 100); $h->drag(139, 100); $h->release(139, 100);
+same(139.0, $size, 'dragged 20 from where the divider shows');
+$p = 25.0;
+$h = new Headless(function (Context $c) use (&$p) { $c->splitPercent($p, fn() => $c->text('first'), fn() => $c->text('second'))->fill(); }, 401, 200);
+$h->frame();
+same(101.0, $h->rect($h->byText('second'))[0], 'a quarter of 400');
+$h->hover(100, 100); $h->press(100, 100); $h->drag(200, 100); $h->release(200, 100);
+same(50.0, $p, 'dragged 100: half');

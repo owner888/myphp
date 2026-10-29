@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\RichText;
 
-use MyPHP\Text\Layout;
+use MyPHP\Text\{Boundaries, Layout};
 use MyPHP\UI\{Context, InputEvent, Key, Menu};
 use MyPHP\UI\Editor\{Rope, RopeText};
 
@@ -78,18 +78,17 @@ trait ViewInput
         return $t->runeAt(Rope::byteOfRune($this->shown->text, $i))[0];
     }
 
-    private static function isWord(string $r): bool { return $r === '_' || preg_match('/^[\pL\pN]$/u', $r) === 1; }
+    /** The rune as a code point, for Text\Boundaries ('' as none). */
+    private static function cp(string $r): int { return $r === '' ? 0 : mb_ord($r, 'UTF-8'); }
 
-    /** The end of the word after $i. */
+    /** The end of the word after $i: each ideograph and kana is a word (Text\Boundaries::wordBoundary, mygo's 5a134b4). */
     private function nextWord(int $i): int
     {
-        $n = $this->shown->len(); $word = false;
+        $n = $this->shown->len(); $word = false; $prev = 0;
         for (; $i < $n; $i++) {
-            if (self::isWord($this->runeAt($i))) {
-                $word = true;
-            } elseif ($word) {
-                break;
-            }
+            $r = self::cp($this->runeAt($i));
+            if ($word && Boundaries::wordBoundary($prev, $r)) { break; }
+            $word = $word || Boundaries::isWordRune($r); $prev = $r;
         }
         return $i;
     }
@@ -97,34 +96,32 @@ trait ViewInput
     /** The start of the word before $i. */
     private function prevWord(int $i): int
     {
-        $word = false;
+        $word = false; $next = 0;
         for (; $i > 0; $i--) {
-            if (self::isWord($this->runeAt($i - 1))) {
-                $word = true;
-            } elseif ($word) {
-                break;
-            }
+            $r = self::cp($this->runeAt($i - 1));
+            if ($word && Boundaries::wordBoundary($r, $next)) { break; }
+            $word = $word || Boundaries::isWordRune($r); $next = $r;
         }
         return $i;
     }
 
-    /** The word, or the run of other runes, around $i, within its paragraph. @return array{0: int, 1: int} */
+    /** The word, or the run of other runes, around $i, within its paragraph: an ideograph or a kana is a word alone. @return array{0: int, 1: int} */
     private function wordAt(int $i): array
     {
         $n = $this->shown->len();
         if ($n === 0) { return [0, 0]; }
         $i = max(0, min($i, $n - 1));
-        $word = self::isWord($this->runeAt($i));
+        $at = self::cp($this->runeAt($i));
         $a = $z = $i;
-        while ($a > 0) {
-            $r = $this->runeAt($a - 1);
-            if ($r === "\n" || self::isWord($r) !== $word) { break; }
-            $a--;
+        for ($next = $at; $a > 0; $a--) {
+            $r = self::cp($this->runeAt($a - 1));
+            if ($r === 0x0A || Boundaries::wordBoundary($r, $next)) { break; }
+            $next = $r;
         }
-        while ($z < $n) {
-            $r = $this->runeAt($z);
-            if ($r === "\n" || self::isWord($r) !== $word) { break; }
-            $z++;
+        for ($prev = $at; $z < $n; $z++) {
+            $r = self::cp($this->runeAt($z));
+            if ($r === 0x0A || $z > $i && Boundaries::wordBoundary($prev, $r)) { break; }
+            $prev = $r;
         }
         return [$a, $z];
     }

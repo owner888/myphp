@@ -16,6 +16,13 @@ final class Node
     public const AUTO = -1, START = 0, CENTER = 1, END = 2, STRETCH = 3;
     /** How justify() and alignContent() share the free room: between the children, around each, or evenly with the edges (mygo's SpaceBetween, SpaceAround, SpaceEvenly). */
     public const SPACE_BETWEEN = 4, SPACE_AROUND = 5, SPACE_EVENLY = 6;
+    /**
+     * For align() and alignSelf() (mygo's Baseline): lines up the first lines of text of a row's children, as a large
+     * price beside its small unit, and of the items of each row of a grid; the row is as high as the highest baseline
+     * above and the deepest descent below take. A box's baseline is its first child's (in a row, its first child's
+     * aligned by its baseline); one without text lines up its bottom. Across a column it lines up the starts, as Chrome.
+     */
+    public const BASELINE = 7;
     /** How this container places its children across its axis (align) and along it when none grows (justify), and how it sits across its parent's (self). */
     public int $align = self::AUTO, $self = self::AUTO, $justify = self::START;
     /** How a grid places its children in their cells across (Node::justifyItems), and how this child is placed over that (justifySelf): STRETCH unless said. */
@@ -157,6 +164,10 @@ final class Node
     public bool $disabled = false, $disabledIn = false;
     /** Keeps its room in the layout but paints nothing and, with what is inside it, takes neither the pointer nor the focus (mygo's Invisible); outlined with what is inside it, margins, padding and content (mygo's Debug); passes the pointer to what is under it (mygo's PassThrough). */
     public bool $invisible = false, $debug = false, $passThrough = false;
+    /** Taken out of the layout (hidden()); and, set by Layout, given no room, it or a node around it hidden: what is attached to it hides too. */
+    public bool $hidden = false, $gone = false;
+    /** @internal A sibling, laid out in the parent's flow, whose box an absolute node's insets are measured from instead of the parent's: a split keeps its handle on its divider (mygo's placeOn). */
+    public ?Node $placeOn = null;
     /** @internal belowMaterials() */
     public bool $belowMaterials = false;
     /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
@@ -292,6 +303,12 @@ final class Node
     public float $x = 0, $y = 0, $w = 0, $h = 0;
     /** Measured intrinsic size. */
     public float $mw = 0, $mh = 0;
+    /** @internal The measured size before the least and largest sizes, margins aside: the flex base size along a row or a column, which only the hypothetical size is clamped from (CSS flexbox §9.2). */
+    public float $natW = 0, $natH = 0;
+    /** @internal Its padding and border across and down, as Layout::measure found them this frame. */
+    public float $padW = 0, $padH = 0;
+    /** @internal Its fixed margins across and down, automatic ones as none, as Layout::measure found them this frame. */
+    public float $marW = 0, $marH = 0;
     /** The least width the node shrinks to in a row (Layout: its min-content width, mygo's automatic minimum): a single-line text's minW, a container's children's least widths, a leaf's own width. */
     public float $minMw = 0;
 
@@ -534,6 +551,19 @@ final class Node
     public function invisible(): static
     {
         $this->invisible = true;
+        return $this;
+    }
+
+    /**
+     * Hides the node and takes its room away, as CSS's display: none (mygo's Hidden): it and what is inside it are
+     * still built, keeping their state (scroll offsets, local values, editors), but the layout gives them no room and
+     * no gap, and they paint, take input and read to assistive technology as invisible nodes do; what is attached to
+     * them (attachTo) hides too. invisible() keeps the room.
+     */
+    public function hidden(bool $on = true): static
+    {
+        $this->hidden = $on;
+        if ($on) { $this->invisible = true; }
         return $this;
     }
 
@@ -1548,6 +1578,20 @@ final class Node
     public function padL(): float { return ($this->pads[3] ?? $this->padX ?? $this->pad) + $this->borderSide(3); }
 
     /** The border on side $i: borderWidth()'s, else border()'s all round. */
+    /** @internal The padding and border across and down, padL() + padR() and padT() + padB() at once: Layout measures them for every node. @return array{0: float, 1: float} */
+    public function padSums(): array
+    {
+        if ($this->pads !== null) {
+            [$t, $r, $b, $l] = $this->pads;
+            $w = $r + $l; $h = $t + $b;
+        } else {
+            $w = 2 * ($this->padX ?? $this->pad); $h = 2 * ($this->padY ?? $this->pad);
+        }
+        $bs = $this->borders; $all = $this->bordered ? $this->borderWidth : 0.0;
+        if ($all == 0.0 && $bs[0] == 0.0 && $bs[1] == 0.0 && $bs[2] == 0.0 && $bs[3] == 0.0) { return [$w, $h]; }
+        return [$w + ($bs[1] > 0 ? $bs[1] : $all) + ($bs[3] > 0 ? $bs[3] : $all), $h + ($bs[0] > 0 ? $bs[0] : $all) + ($bs[2] > 0 ? $bs[2] : $all)];
+    }
+
     private function borderSide(int $i): float
     {
         return $this->borders[$i] > 0 ? $this->borders[$i] : ($this->bordered ? $this->borderWidth : 0.0);

@@ -235,7 +235,7 @@ final class InspectorDetails
 
     public static function align(int $a): string
     {
-        return match ($a) { Node::START => 'flex-start', Node::CENTER => 'center', Node::END => 'flex-end', Node::STRETCH => 'stretch', Node::SPACE_BETWEEN => 'space-between', Node::SPACE_AROUND => 'space-around', Node::SPACE_EVENLY => 'space-evenly', default => 'auto' };
+        return match ($a) { Node::START => 'flex-start', Node::CENTER => 'center', Node::END => 'flex-end', Node::STRETCH => 'stretch', Node::SPACE_BETWEEN => 'space-between', Node::SPACE_AROUND => 'space-around', Node::SPACE_EVENLY => 'space-evenly', Node::BASELINE => 'baseline', default => 'auto' };
     }
 
     /** The four sides top, right, bottom and left as CSS writes them, or null when all are 0. @param array{0: float, 1: float, 2: float, 3: float} $v */
