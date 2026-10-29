@@ -56,11 +56,12 @@ final class Metrics implements TextPainter
     public function scale(): float { return $this->scale; }
     private ?\MyPHP\Text\System $system = null;
     public function textSystem(): \MyPHP\Text\System { return $this->system ??= new \MyPHP\Text\System(new \MyPHP\Text\StubEngine()); }
-    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void
     {
         foreach ($l->lines as $line) {
-            foreach ($line->glyphs as $g) { // an outline's glyph grown by its stroke all round
-                if (!$g->object) { [$rgb, $alpha] = $colorAt($g->cluster); $list->glyph($x + $g->x - $stroke, $y + $line->y - $stroke, $g->advance + 2 * $stroke, $line->height + 2 * $stroke, $rgb, $alpha, 0, 0); }
+            $grow = $stroke + 3 * $blur; // an outline's glyph grown by its stroke all round, a blurred one by three sigmas
+            foreach ($line->glyphs as $g) {
+                if (!$g->object && ([$rgb, $alpha] = $colorAt($g->cluster))[1] > 0) { $list->glyph($x + $g->x - $grow, $y + $line->y - $grow, $g->advance + 2 * $grow, $line->height + 2 * $grow, $rgb, $alpha, 0, 0); }
             }
         }
     }

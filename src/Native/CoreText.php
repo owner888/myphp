@@ -75,6 +75,7 @@ final class CoreText
             double CTFontGetDescent(void*);
             CGRect CTFontGetBoundingRectsForGlyphs(void*, unsigned int, const CGGlyph*, CGRect*, long);
             void  CTFontDrawGlyphs(void*, const CGGlyph*, const CGPoint*, unsigned long, void*);
+            void  CGContextSetBlendMode(void*, int);
             unsigned int CTFontGetSymbolicTraits(void*);
             void* CGColorSpaceCreateWithName(void*);
             void* CTLineCreateWithAttributedString(void*);
@@ -239,11 +240,15 @@ final class CoreText
      * gray is, in a mask too. A $shade of -1 draws it without, as a
      * canvas's text. A $stroke (points) draws the glyph grown by it all
      * round, without smoothing, the mask an outline of the text paints
-     * under it (Node::textOutline); a color glyph has none.
+     * under it (Node::textOutline); a color glyph has none. A $blur
+     * (points) blurs the mask so drawn as a Gaussian of that sigma
+     * (Node::textBlur, ASS's \blur), unsmoothed, its bitmap grown to hold
+     * it; $cutOut takes the glyph out of the outline so drawn and blurred
+     * (Node::textCutOut, libass's ass_fix_outline).
      *
      * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int, color: bool}|null
      */
-    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0): ?array
+    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): ?array
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
@@ -256,11 +261,11 @@ final class CoreText
         }
         $s = $scale ?? $this->scale;
         $color = $this->isColor($fontId);
-        if ($stroke > 0 && $color) {
-            return null; // a color glyph is its own picture: no outline of it
+        if (($stroke > 0 || $blur > 0) && $color) {
+            return null; // a color glyph is its own picture: no outline or blur of it
         }
-        $smooth = $stroke <= 0 && $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
-        $pad = ($smooth ? 2 : 1) + (int)ceil($stroke * $s); // smoothing spreads a glyph up to a pixel further, an outline its width
+        $smooth = $stroke <= 0 && $blur <= 0 && $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
+        $pad = ($smooth ? 2 : 1) + (int)ceil($stroke * $s) + (int)ceil(3 * $blur * $s); // smoothing spreads a glyph up to a pixel further, an outline its width, a blur three sigmas
         $x0 = (int)floor($b->origin->x * $s) - $pad;
         $y0 = (int)floor($b->origin->y * $s) - $pad;
         $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + $pad - $x0;
@@ -296,6 +301,15 @@ final class CoreText
         $addr = Mem::addr($rows);
         Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $bpp * $w * $h);
         $c->CGContextRelease($ctx);
+        if ($blur > 0) { Gaussian::blur($addr, $w, $h, $blur * $s); }
+        if ($cutOut && $stroke > 0) { // the glyph taken out of its outline, blurred or not: drawn over it so as to clear it
+            $cut = $c->CGBitmapContextCreate($c->cast('void*', $addr), $w, $h, 8, $w, null, self::ALPHA_ONLY) ?? throw new RuntimeException('CGBitmapContextCreate');
+            $c->CGContextTranslateCTM($cut, -$x0, -$y0);
+            $c->CGContextScaleCTM($cut, $s, $s);
+            $c->CGContextSetBlendMode($cut, 23); // kCGBlendModeDestinationOut
+            $c->CTFontDrawGlyphs($font, $ids, $c->new('CGPoint[1]'), 1, $cut);
+            $c->CGContextRelease($cut);
+        }
         return ['w' => $w, 'h' => $h, 'ox' => $x0, 'oy' => $y0, 'rows' => $rows, 'addr' => $addr, 'color' => $color];
     }
 

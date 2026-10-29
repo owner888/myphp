@@ -872,32 +872,63 @@ final class VideoPlayer
     }
 
     /**
-     * A line laid out on its own (placed, turned, scaled or clipped), in
-     * boxes of the plane one in the other: cut to \clip, turned by \frz
-     * around \org (else the point of its alignment), scaled by \fscx and
-     * \fscy around that point, as libass draws it.
+     * A line laid out on its own (placed, turned, scaled, sheared or
+     * clipped), in boxes of the plane one in the other: cut to \clip (a
+     * rectangle, or a drawing's mask; \iclip what it covers cut away),
+     * turned by \frz, then \frx and \fry in 3D, seen from libass's 20000
+     * PlayRes units before the plane, around \org (else the point of its
+     * alignment), scaled by \fscx and \fscy around that point, as libass
+     * draws it (its rows sheared each, assRow). Runs turned, scaled or
+     * sheared apart (libass's are each glyph's) are each drawn so, the line
+     * laid out once for each, its other runs laid out but not drawn.
      */
     private static function assAlone(Context $c, Player $p, AssLine $l, float $px, float $py, float $pw, float $ph): void
     {
         $sx = $pw / $l->playResX; $sy = $ph / $l->playResY;
-        $r = $l->runs[0];
         $opened = 0;
-        if ($l->clip !== null) {
-            [$x1, $y1, $x2, $y2] = $l->clip;
-            $c->column()->absolute()->left($px + $x1 * $sx)->top($py + $y1 * $sy)->size(max(0.0, ($x2 - $x1) * $sx), max(0.0, ($y2 - $y1) * $sy))->clip()->passThrough();
+        if ($l->clip !== null || $l->clipDrawing !== null) { // \clip, \iclip: a rectangle cut to, or a mask (a drawing's, or the rectangle's to cut away)
+            $mask = null;
+            if ($l->clip !== null) {
+                [$x1, $y1, $x2, $y2] = $l->clip;
+            } elseif (($clip = VideoPlayerAssDrawing::clip($c, $l->clipDrawing, $sx, $sy)) !== null) {
+                [$mask, [$x1, $y1, $x2, $y2]] = $clip;
+            } elseif ($l->clipInverted) { // a drawing of nothing cut away: all of it
+                [$x1, $y1, $x2, $y2] = [0.0, 0.0, 0.0, 0.0];
+            } else {
+                return; // cut to nothing
+            }
+            $box = $c->column()->absolute()->left($px + $x1 * $sx)->top($py + $y1 * $sy)->size(max(0.0, ($x2 - $x1) * $sx), max(0.0, ($y2 - $y1) * $sy))->passThrough();
+            if ($l->clip !== null && !$l->clipInverted) { $box->clip(); } elseif ($mask !== null || $l->clip !== null) { $box->clipMask($mask, $l->clipInverted); }
             [$px, $py] = [-$x1 * $sx, -$y1 * $sy];
             $opened++;
         }
+        $groups = [];
+        foreach ($l->runs as $r) {
+            if ($r->text === "\n") { continue; }
+            $groups[serialize([$r->rotation, $r->rotationX, $r->rotationY, $r->scaleX, $r->scaleY, $r->shearX, $r->shearY])][] = $r;
+        }
         [$ax, $ay] = self::assAnchor($l);
         [$ox, $oy] = $l->origin ?? [$ax, $ay];
-        $inner = fn() => $c->column()->absolute()->left(0)->top(0)->size($pw, $ph)->passThrough();
-        $plane = $c->column()->absolute()->left($px)->top($py)->size($pw, $ph)->passThrough(); $opened++;
-        if ($l->moved !== [0.0, 0.0]) { // \move: laid out where it starts, moved by a transform, in fractions of a pixel, not by its glyphs' places on whole ones
-            $plane->translate($l->moved[0] * $sx, $l->moved[1] * $sy);
+        foreach ($groups === [] ? [[$l->runs[0]]] : $groups as $group) {
+            $only = count($groups) > 1 ? array_fill_keys(array_map('spl_object_id', $group), true) : null; // the runs drawn this time, of all of them for one
+            $r = $group[0];
+            $inner = fn() => $c->column()->absolute()->left(0)->top(0)->size($pw, $ph)->passThrough();
+            $plane = $c->column()->absolute()->left($px)->top($py)->size($pw, $ph)->passThrough(); $nest = 1;
+            if ($l->moved !== [0.0, 0.0]) { // \move: laid out where it starts, moved by a transform, in fractions of a pixel, not by its glyphs' places on whole ones
+                $plane->translate($l->moved[0] * $sx, $l->moved[1] * $sy);
+            }
+            if ($r->rotation != 0 || $r->rotationX != 0 || $r->rotationY != 0) {
+                $turn = $inner()->transformOrigin($ox / $l->playResX, $oy / $l->playResY);
+                if ($r->rotation != 0) { $turn->rotate(-$r->rotation); } // \frz turns counterclockwise
+                if ($r->rotationX != 0) { $turn->rotateX(-$r->rotationX); } // libass's top comes toward the viewer, CSS's goes away
+                if ($r->rotationY != 0) { $turn->rotateY($r->rotationY); }
+                if ($r->rotationX != 0 || $r->rotationY != 0) { $turn->perspective(20000 * $sy); } // libass's distance: 20000 of the plane's units (blur_scale_y's)
+                $nest++;
+            }
+            if ($r->scaleX != 1 || $r->scaleY != 1) { $inner()->transformOrigin($ax / $l->playResX, $ay / $l->playResY)->scale($r->scaleX, $r->scaleY); $nest++; }
+            self::assGroup($c, $p, [$l], 0, 0, $pw, $ph, [], $only, $r);
+            for (; $nest > 0; $nest--) { $c->end(); }
         }
-        if ($r->rotation != 0) { $inner()->transformOrigin($ox / $l->playResX, $oy / $l->playResY)->rotate(-$r->rotation); $opened++; } // \frz turns counterclockwise
-        if ($r->scaleX != 1 || $r->scaleY != 1) { $inner()->transformOrigin($ax / $l->playResX, $ay / $l->playResY)->scale($r->scaleX, $r->scaleY); $opened++; }
-        self::assGroup($c, $p, [$l], 0, 0, $pw, $ph);
         for (; $opened > 0; $opened--) { $c->end(); }
     }
 
@@ -913,8 +944,13 @@ final class VideoPlayer
         return [(float)$x, (float)$y];
     }
 
-    /** Lines of one place, on the plane at ($px, $py) $pw by $ph: of one alignment and margins, or one laid out on its own. @param list<AssLine> $group */
-    private static function assGroup(Context $c, Player $p, array $group, float $px, float $py, float $pw, float $ph, array $place = []): void
+    /**
+     * Lines of one place, on the plane at ($px, $py) $pw by $ph: of one
+     * alignment and margins, or one laid out on its own; of those, the runs
+     * of $only drawn (spl_object_id's; null for all), sheared as $rep is.
+     * @param list<AssLine> $group @param ?array<int, true> $only
+     */
+    private static function assGroup(Context $c, Player $p, array $group, float $px, float $py, float $pw, float $ph, array $place = [], ?array $only = null, ?AssRun $rep = null): void
     {
         $l = $group[0];
         $sx = $pw / $l->playResX; $sy = $ph / $l->playResY;
@@ -935,7 +971,7 @@ final class VideoPlayer
         $box->align($across)->justify($along)->passThrough();
           foreach ($row === 0 ? array_reverse($group) : $group as $line) { // at the bottom a later line goes above the ones before
               foreach (self::assRows($line) as $runs) {
-                  self::assRow($c, $p, $line, $runs, $sx, $sy, $wrap, $across);
+                  self::assRow($c, $p, $line, $runs, $sx, $sy, $wrap, $across, $only, $rep);
               }
           }
         $c->end();
@@ -953,31 +989,22 @@ final class VideoPlayer
     }
 
     /**
-     * A row of runs: the text in its colors over its outline ($border wide)
-     * and its shadow (the outlined glyphs moved by $shadow), or for
-     * BorderStyle 3 over a box of the outline's color; an empty row is the
-     * height of its font. Fontsize is the height of a
-     * font's ascent and descent, as libass sizes it, not its em.
-     * @param list<AssRun> $runs
+     * A row of runs (assText draws its text); an empty row is the height of
+     * its font. Fontsize is the height of a font's ascent and descent, as
+     * libass sizes it, not its em. Sheared by \fax of $rep (else its first
+     * run) from its top left (libass shears each line from its top), or with
+     * \fay each glyph (and drawing) on its own, from its origin and the top
+     * (libass's: \fay of each glyph's own x); drawings (\p) where their runs are, the text between them in
+     * pieces of its own, a drawing's foot on their baseline (\pbo below
+     * it). Of the runs, those of $only drawn (null: all).
+     * @param list<AssRun> $runs @param ?array<int, true> $only
      */
-    private static function assRow(Context $c, Player $p, AssLine $line, array $runs, float $sx, float $sy, ?float $wrap, int $across): void
+    private static function assRow(Context $c, Player $p, AssLine $line, array $runs, float $sx, float $sy, ?float $wrap, int $across, ?array $only = null, ?AssRun $rep = null): void
     {
         $first = $runs[0] ?? $line->runs[0];
+        $rep ??= $first;
         [, $videoHeight] = $p->size();
         $px = $line->scaledBorder ? $sy : ($videoHeight > 0 ? $sy * $line->playResY / $videoHeight : $sy); // outlines and shadows of the plane's units, or of the video's pixels
-        $pieces = [];
-        foreach ($runs as $r) {
-            foreach (self::assPieces($c, $r) as [$text, $em]) { $pieces[] = [$r, $text, $em]; }
-        }
-        $spans = static function (?int $color, ?float $alpha) use ($pieces, $sx, $sy): array {
-            $out = [];
-            foreach ($pieces as [$r, $text, $em]) {
-                $out[] = new Span($text, size: $em * $sy, color: $color ?? $r->color, alpha: $alpha ?? $r->alpha, font: $r->font, weight: $r->weight, italic: $r->italic,
-                    underline: $r->underline, strikethrough: $r->strikeout, letterSpacing: $r->spacing * $sx);
-            }
-            return $out;
-        };
-        $border = $first->border * $px; $shadow = $first->shadow * $px;
         $row = $c->column()->alignSelf($across)->passThrough();
         if ($wrap !== null) { // as wide as it wraps at, its lines aligned in it by the text's layout (a text of its lines' width would be moved twice)
             $row->width($wrap);
@@ -985,21 +1012,237 @@ final class VideoPlayer
         if ($line->alpha < 1) { // \fad, \fade
             $row->opacity($line->alpha);
         }
+        $shear = $rep->shearY != 0 ? [$rep->shearX, $rep->shearY] : null; // \fay: each glyph sheared on its own (assText), and with it \fax
+        if ($rep->shearX != 0 && $shear === null) { // \fax: x by y times it, the same for the whole line
+            $row->transformOrigin(0, 0)->skew(rad2deg(atan($rep->shearX)), 0);
+        }
           if ($runs === []) { // a \N on its own: a blank row
               $c->box(1, self::assEm($c, $first) * $sy * 1.2, 0);
               $c->end();
               return;
           }
-          if ($first->borderStyle === 3) { // an opaque box of the outline's color behind it, its shadow the box moved
-              if ($shadow > 0) { $c->column()->absolute()->left($shadow - $border)->top($shadow - $border)->right(-$shadow - $border)->bottom(-$shadow - $border)->background($first->shadowColor, $first->shadowAlpha); $c->end(); }
-              $c->column()->absolute()->left(-$border)->top(-$border)->right(-$border)->bottom(-$border)->background($first->outlineColor, $first->outlineAlpha); $c->end();
-          }
-          $text = $c->richText($spans(null, null), width: $wrap, wrap: $wrap !== null)->textAlign($across);
-          if ($first->borderStyle !== 3) { // its outline and its shadow (of the outlined glyphs), as libass draws them: the glyphs grown
-              if ($border > 0) { $text->textOutline($border, $first->outlineColor, $first->outlineAlpha); }
-              if ($shadow > 0) { $text->textShadow($shadow, $shadow, $first->shadowColor, $first->shadowAlpha); }
+          if (array_filter($runs, fn(AssRun $r) => $r->drawing !== null) === []) {
+              self::assText($c, $runs, $sx, $sy, $wrap, $across, $px, $line->alpha, $only, $shear);
+          } else { // drawings among it: each a box of its own, the text between in pieces, on the text's baseline
+              $descent = 0.0;
+              foreach ($runs as $r) {
+                  if ($r->drawing === null) { $descent = max($descent, self::assDescent($c, $r) * $sy); }
+              }
+              $c->row()->align(Node::END)->passThrough();
+                $text = [];
+                foreach ([...$runs, null] as $r) {
+                    if ($r !== null && $r->drawing === null) { $text[] = $r; continue; }
+                    if ($text !== []) { self::assText($c, $text, $sx, $sy, null, Node::START, $px, $line->alpha, $only, $shear); $text = []; }
+                    if ($r !== null) { VideoPlayerAssDrawing::build($c, $r, $sx, $sy, $px, $line->alpha, self::assBlur($c, $r, $sy), $descent, $only === null || isset($only[spl_object_id($r)]), $shear); }
+                }
+              $c->end();
           }
         $c->end();
+    }
+
+    /**
+     * Runs of text in their colors, as assRow lays them, in a box of their
+     * own: drawn for each of their styles of outline, shadow and blur (the
+     * first in the flow, the others over it, each of the text laid out
+     * whole, its other runs laid out but not drawn), as libass draws them
+     * (VideoPlayerAssDrawing::rules: what of the glyphs the outline and the
+     * shadow cut out, whether the shadow shows; BorderStyle 3 a box of each
+     * line of the runs, blurred with them). A syllable being sung by \kf or
+     * \K in the secondary color, the primary over it cut to how far it has
+     * swept across the syllable's glyphs (libass's: from its leftmost ink,
+     * in the order of its lines). With $shear (\fax, \fay) each glyph is
+     * drawn on its own, sheared from its origin and its line's top (its
+     * box with it). Of the runs, those of $only drawn.
+     * @param list<AssRun> $runs @param ?array<int, true> $only @param ?array{0: float, 1: float} $shear
+     */
+    private static function assText(Context $c, array $runs, float $sx, float $sy, ?float $wrap, int $across, float $px, float $lineAlpha, ?array $only, ?array $shear = null): void
+    {
+        $pieces = [];
+        foreach ($runs as $i => $r) {
+            foreach (self::assPieces($c, $r) as [$text, $em]) { $pieces[] = [$r, $text, $em, $i]; }
+        }
+        // The spans of the text: $color(run, its index) its [rgb, alpha], or null for a run not drawn; drawn only in the runes [$from, $to) when given.
+        $spans = static function (\Closure $color, int $from = 0, int $to = PHP_INT_MAX) use ($pieces, $sx, $sy): array {
+            $out = []; $at = 0;
+            foreach ($pieces as [$r, $text, $em, $i]) {
+                $paint = $color($r, $i);
+                $n = mb_strlen($text, 'UTF-8');
+                $cuts = array_values(array_unique([0, max(0, min($n, $from - $at)), max(0, min($n, $to - $at)), $n]));
+                for ($k = 0; $k + 1 < count($cuts); $k++) { // the piece split where the runes drawn begin and end
+                    $drawn = $paint !== null && $at + $cuts[$k] >= $from && $at + $cuts[$k] < $to;
+                    $out[] = new Span(mb_substr($text, $cuts[$k], $cuts[$k + 1] - $cuts[$k], 'UTF-8'), size: $em * $sy, color: $paint[0] ?? $r->color, alpha: $paint[1] ?? 0.0,
+                        font: $r->font, weight: $r->weight, italic: $r->italic, underline: $r->underline, strikethrough: $r->strikeout, letterSpacing: $r->spacing * $sx, ghost: !$drawn);
+                }
+                $at += $n;
+            }
+            return $out;
+        };
+        $styles = []; // the runs drawn, by their styles of outline, shadow and blur
+        foreach ($runs as $i => $r) {
+            if ($only !== null && !isset($only[spl_object_id($r)])) { continue; }
+            $styles[serialize([$r->border, $r->shadow, $r->outlineColor, $r->outlineAlpha, $r->shadowColor, $r->shadowAlpha, $r->blur, $r->edgeBlur, $r->borderStyle])][$i] = $r;
+        }
+        $fill = static fn(AssRun $r): array => $r->sweep !== null ? [$r->secondary, $r->secondaryAlpha] : [$r->color, $r->alpha]; // a syllable sweeping: the secondary under the primary that sweeps
+        $text = static fn(array $spans): Node => $c->richText($spans, width: $wrap, wrap: $wrap !== null)->textAlign($across);
+        $c->column()->passThrough();
+          if ($styles === [] || $shear !== null) { // laid out alone: none of it drawn now, or each glyph drawn apart over it
+              $text($spans(fn() => null));
+          }
+          $layout = $shear === null ? null : $c->shapeRichText($spans(fn() => null), $wrap ?? 0, null, $across);
+          $inFlow = $shear === null;
+          foreach ($styles as $group) {
+              $s = reset($group);
+              $border = $s->border * $px; $shadow = $s->shadow * $px; $blur = self::assBlur($c, $s, $sy);
+              [$cutOutline, $cutShadow, $shadows] = VideoPlayerAssDrawing::rules(array_values($group), $lineAlpha);
+              $paint = static function (Node $t) use ($s, $border, $shadow, $blur, $cutOutline, $cutShadow, $shadows): void { // its outline, shadow and blur, as libass draws them: the glyphs grown
+                  if ($s->borderStyle !== 3) {
+                      if ($border > 0) { $t->textOutline($border, $s->outlineColor, $s->outlineAlpha); }
+                      if ($shadow > 0 && $shadows) { $t->textShadow($shadow, $shadow, $s->shadowColor, $s->shadowAlpha); }
+                      if ($cutOutline || $cutShadow) { $t->textCutOut($cutOutline, $cutShadow); }
+                  }
+                  if ($blur > 0) { $t->textBlur($blur); }
+              };
+              $boxes = static function (array $lines) use ($c, $s, $border, $shadow, $blur): void { // BorderStyle 3: a box of the outline's color behind each, its shadow the box moved; both blurred with it
+                  $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()
+                      ->draw(static function (DisplayList $list, Node $n) use ($lines, $s, $border, $shadow, $blur): void {
+                          $box = static function (float $dx, float $dy, int $rgb, float $alpha) use ($list, $n, $lines, $border, $blur): void {
+                              foreach ($lines as [$x0, $x1, $top, $height]) {
+                                  [$x, $y, $w, $h] = [$n->x + $x0 - $border + $dx, $n->y + $top - $border + $dy, $x1 - $x0 + 2 * $border, $height + 2 * $border];
+                                  $blur > 0 ? $list->shadow($x, $y, $w, $h, $rgb, $alpha, 0.0, 1.64 * $blur) : $list->rect($x, $y, $w, $h, $rgb, $alpha); // a feather of 1.64 sigmas: a Gaussian's 10 to 90 percent
+                              }
+                          };
+                          if ($shadow > 0) { $box($shadow, $shadow, $s->shadowColor, $s->shadowAlpha); }
+                          $box(0, 0, $s->outlineColor, $s->outlineAlpha);
+                      });
+                  $c->end();
+              };
+              $mine = $spans(fn(AssRun $r, int $i) => isset($group[$i]) ? $fill($r) : null);
+              if ($shear === null) {
+                  if ($s->borderStyle === 3) { $boxes(array_map(fn(array $g) => array_slice($g, 1), self::assSweep($c, $mine, $pieces, array_keys($group), $wrap, $across))); }
+                  $t = $text($mine);
+                  if (!$inFlow) { $t->absolute()->left(0)->top(0); }
+                  $inFlow = false;
+                  $paint($t);
+              } else { // each glyph on its own, sheared from its origin and its line's top: in a box of the text's size, over it
+                  [$tw, $th] = $layout->size();
+                  foreach (self::assGlyphs($layout, $pieces, array_keys($group)) as [$from, $to, $gx, $gw, $top, $height]) {
+                      $c->column()->absolute()->left(0)->top(0)->size($tw, $th)->passThrough()
+                          ->transformOrigin($tw > 0 ? $gx / $tw : 0, $th > 0 ? $top / $th : 0)->skew(rad2deg(atan($shear[0])), rad2deg(atan($shear[1])));
+                        if ($s->borderStyle === 3) { $boxes([[$gx, $gx + $gw, $top, $height]]); }
+                        $paint($text($spans(fn(AssRun $r, int $i) => isset($group[$i]) ? $fill($r) : null, $from, $to))->absolute()->left(0)->top(0));
+                      $c->end();
+                  }
+              }
+              foreach ($group as $i => $r) {
+                  if ($r->sweep === null) {
+                      continue;
+                  }
+                  $segments = self::assSweep($c, $mine, $pieces, [$i], $wrap, $across);
+                  $left = $r->sweep * array_sum(array_map(fn(array $g) => $g[2] - $g[1], $segments)); // how far across its glyphs, line after line
+                  $primary = fn(AssRun $q, int $k) => $k === $i ? [$q->color, $q->alpha] : null; // the syllable alone, in the primary
+                  foreach ($segments as [, $x0, $x1, $top, $height]) {
+                      $w = min($x1 - $x0, $left);
+                      $left -= $w;
+                      if ($w <= 0) { break; }
+                      $c->column()->absolute()->left($x0)->top($top)->size($w, $height)->clipX()->passThrough(); // across, how far it has swept; down, all its glyphs, sheared or not
+                        if ($shear === null) {
+                            $o = $text($spans($primary))->absolute()->left(-$x0)->top(-$top);
+                            if ($blur > 0 && ($border <= 0 || $s->borderStyle === 3)) { $o->textBlur($blur); }
+                        } else {
+                            [$tw, $th] = $layout->size();
+                            foreach (self::assGlyphs($layout, $pieces, [$i]) as [$from, $to, $gx, , $gtop]) {
+                                if (abs($gtop - $top) > 1e-6) { continue; } // this segment's line
+                                $c->column()->absolute()->left(-$x0)->top(-$top)->size($tw, $th)->passThrough()
+                                    ->transformOrigin($tw > 0 ? $gx / $tw : 0, $th > 0 ? $gtop / $th : 0)->skew(rad2deg(atan($shear[0])), rad2deg(atan($shear[1])));
+                                  $o = $text($spans($primary, $from, $to))->absolute()->left(0)->top(0);
+                                  if ($blur > 0 && ($border <= 0 || $s->borderStyle === 3)) { $o->textBlur($blur); }
+                                $c->end();
+                            }
+                        }
+                      $c->end();
+                  }
+              }
+          }
+        $c->end();
+    }
+
+    /**
+     * The glyphs of runs $ks in $layout, each [its first rune, the rune after
+     * its cluster, its x, its advance, its line's top, the line's height].
+     * @param list<int> $ks @return list<array{0: int, 1: int, 2: float, 3: float, 4: float, 5: float}>
+     */
+    private static function assGlyphs(TextLayout $layout, array $pieces, array $ks): array
+    {
+        $ranges = []; $at = 0;
+        foreach ($pieces as [, $text, , $i]) {
+            $n = mb_strlen($text, 'UTF-8');
+            if (in_array($i, $ks, true)) { $ranges[] = [$at, $at + $n]; }
+            $at += $n;
+        }
+        $out = [];
+        foreach ($layout->layout->lines as $line) {
+            foreach ($line->glyphs as $g) {
+                foreach ($ranges as [$from, $to]) {
+                    if ($g->cluster < $from || $g->cluster >= $to) { continue; }
+                    $k = "$g->cluster/$line->y";
+                    if (isset($out[$k])) { // a cluster of glyphs (a ligature, marks): one, as wide as they go
+                        $out[$k][3] = max($out[$k][2] + $out[$k][3], $g->x + $g->advance) - min($out[$k][2], $g->x); $out[$k][2] = min($out[$k][2], $g->x);
+                    } else {
+                        $out[$k] = [$g->cluster, $g->cluster + max(1, $g->runes), $g->x, $g->advance, $line->y, $line->height];
+                    }
+                    break;
+                }
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
+     * Where the glyphs of runs $ks are in the text of $spans as it is laid
+     * out (wrapped at $wrap, aligned $across): a segment of each line they
+     * are on, [line, their leftmost x, their rightmost, the line's top, its
+     * height].
+     * @param list<Span> $spans @param list<int> $ks @return list<array{0: int, 1: float, 2: float, 3: float, 4: float}>
+     */
+    private static function assSweep(Context $c, array $spans, array $pieces, array $ks, ?float $wrap, int $across): array
+    {
+        $ranges = [];
+        $at = 0;
+        foreach ($pieces as [, $text, , $i]) {
+            $n = mb_strlen($text, 'UTF-8');
+            if (in_array($i, $ks, true)) { $ranges[] = [$at, $at + $n]; }
+            $at += $n;
+        }
+        $out = [];
+        foreach ($c->shapeRichText($spans, $wrap ?? 0, null, $across)->layout->lines as $li => $line) {
+            $x0 = INF; $x1 = -INF;
+            foreach ($line->glyphs as $g) {
+                foreach ($ranges as [$from, $to]) {
+                    if ($g->cluster >= $from && $g->cluster < $to) { $x0 = min($x0, $g->x); $x1 = max($x1, $g->x + $g->advance); break; }
+                }
+            }
+            if ($x1 > $x0) { $out[] = [$li, $x0, $x1, $line->y, $line->height]; }
+        }
+        return $out;
+    }
+
+    /** The descent of run $r's font below its baseline, in the plane's units, as libass sizes the font (assEm). */
+    private static function assDescent(Context $c, AssRun $r): float
+    {
+        $style = new TextStyle(); $style->family = $r->font; $style->size = 100.0; $style->weight = $r->weight; $style->italic = $r->italic;
+        return $c->fontMetrics($style)['descent'] / 100 * self::assEm($c, $r);
+    }
+
+    /**
+     * Run $r's blur as a Gaussian's sigma in points, as libass makes it: \blur
+     * of the plane's units, its radius 2 / sqrt(ln 256) of them; and \be's
+     * passes of [1 2 1] across and down, each a variance of half a pixel,
+     * the display's pixels.
+     */
+    private static function assBlur(Context $c, AssRun $r, float $sy): float
+    {
+        $sigma = $r->blur * $sy * 2 / sqrt(log(256));
+        return sqrt($sigma * $sigma + $r->edgeBlur * 0.5 / ($c->scale * $c->scale));
     }
 
     /**

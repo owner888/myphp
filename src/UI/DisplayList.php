@@ -31,14 +31,19 @@ use RuntimeException;
  * What a quad is drawn through, the map from its coordinates to the
  * window (setWorld, mygo's Painter transform), is an entry of a second
  * buffer, $xforms, of FLOATS_PER_TRANSFORM floats each: a b c d, x y g h
- * of an Affine, entry 0 the identity. The quad's kind carries the entry,
+ * of an Affine, entry 0 the identity; then the mask what is drawn is cut
+ * by (setMask), x y w h of where it lies in the window (w below 0 for
+ * one inverted, what it covers cut away) and u v w h of its image's slot
+ * in pixels, u plus 4096 times the slot's page (a slot w of 0: the rect
+ * itself is the mask); w 0 for none. The quad's
+ * kind carries the entry,
  * as kind + KIND_STRIDE * entry, so that a quad drawn as it is laid out
  * costs no more floats. The opacity of what is drawn (setOpacity, mygo's
  * Painter opacity) multiplies each quad's alpha.
  */
 final class DisplayList
 {
-    public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 8;
+    public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 16;
     public const KIND_STRIDE = 16.0;
     /** What box() fills with (mygo's scene.Paint): a color, a gradient mixed in sRGB or in Oklab, or stripes. */
     public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3;
@@ -61,8 +66,11 @@ final class DisplayList
     /** What is drawn now is drawn through: the map, its entry as kind + KIND_STRIDE * entry, and the entries of the maps written this frame by spl_object_id, with the maps: held until reset, as an id is reused by a new object once its own is freed, and a map drawn through and gone would give its entry to another. */
     private Affine $world;
     private float $xk = 0.0;
-    /** @var array<int, array{0: int, 1: Affine}> */
+    /** @var array<string, array{0: int, 1: Affine}> by the map's spl_object_id and the mask's key */
     private array $entries = [];
+    /** The mask what is drawn now is cut by (setMask), and its key among the entries; null and '' for none. @var ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int, 6: int, 7: int, 8: int, 9: bool} */
+    private ?array $mask = null;
+    private string $maskKey = '';
     /** The opacity what is drawn now is drawn at. */
     private float $opacity = 1.0;
 
@@ -79,18 +87,48 @@ final class DisplayList
             return;
         }
         $this->world = $m;
-        if (!$m->set) {
+        $this->through();
+    }
+
+    /**
+     * @internal Painter (Node::clipMask): cuts what follows by $mask, the
+     * coverage of an image's slot lying at x y w h of the window
+     * (points), or of that rect itself for a slot of no width: [x, y, w,
+     * h, u, v, sw, sh, page, inverted]; inverted, what
+     * it covers is cut away; null for none. What is drawn through a
+     * transform is cut where it shows.
+     * @param ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int, 6: int, 7: int, 8: int, 9: bool} $mask
+     */
+    public function setMask(?array $mask): void
+    {
+        $this->mask = $mask;
+        $this->maskKey = $mask === null ? '' : implode(',', array_map('strval', $mask));
+        $this->through();
+    }
+
+    /** @internal Painter: the mask what is drawn now is cut by. @return ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int, 6: int, 7: int, 8: int, 9: bool} */
+    public function mask(): ?array
+    {
+        return $this->mask;
+    }
+
+    /** The entry of the map and the mask drawn through now, written the first time this frame. */
+    private function through(): void
+    {
+        $m = $this->world;
+        if (!$m->set && $this->mask === null) {
             $this->xk = 0.0;
             return;
         }
-        $entry = $this->entries[spl_object_id($m)][0] ?? null;
+        $key = spl_object_id($m) . ':' . $this->maskKey;
+        $entry = $this->entries[$key][0] ?? null;
         if ($entry === null) {
             if ($this->transforms === $this->xformCapacity) {
                 throw new RuntimeException("display list full ({$this->xformCapacity} transforms)");
             }
             $entry = $this->transforms++;
-            $this->entries[spl_object_id($m)] = [$entry, $m];
-            $this->writeEntry($entry, $m);
+            $this->entries[$key] = [$entry, $m];
+            $this->writeEntry($entry, $m, $this->mask);
         }
         $this->xk = self::KIND_STRIDE * $entry;
     }
@@ -130,11 +168,15 @@ final class DisplayList
         }
     }
 
-    private function writeEntry(int $entry, Affine $m): void
+    /** @param ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int, 6: int, 7: int, 8: int, 9: bool} $mask */
+    private function writeEntry(int $entry, Affine $m, ?array $mask = null): void
     {
         $x = $this->xforms; $k = $entry * self::FLOATS_PER_TRANSFORM;
         $x[$k] = $m->a; $x[$k + 1] = $m->b; $x[$k + 2] = $m->c; $x[$k + 3] = $m->d;
         $x[$k + 4] = $m->x; $x[$k + 5] = $m->y; $x[$k + 6] = $m->g; $x[$k + 7] = $m->h;
+        [$mx, $my, $mw, $mh, $u, $v, $sw, $sh, $page, $inverted] = $mask ?? [0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, false];
+        $x[$k + 8] = $mx; $x[$k + 9] = $my; $x[$k + 10] = $inverted ? -$mw : $mw; $x[$k + 11] = $mh;
+        $x[$k + 12] = $u + 4096 * $page; $x[$k + 13] = $v; $x[$k + 14] = $sw; $x[$k + 15] = $sh;
     }
 
     /** Fills $path in $rgb (non-zero winding), or with $width > 0 strokes it that wide with round joins and caps, as mygo's FillPath and StrokePath: drawn as a glyph from a cached mask. */
@@ -155,7 +197,7 @@ final class DisplayList
         $this->clip = self::NO_CLIP;
         $this->clips = [];
         $this->transforms = 1; $this->entries = [];
-        $this->world = Affine::identity(); $this->xk = 0.0;
+        $this->world = Affine::identity(); $this->xk = 0.0; $this->mask = null; $this->maskKey = '';
         $this->opacity = 1.0;
     }
 

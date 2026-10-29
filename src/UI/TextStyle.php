@@ -40,6 +40,10 @@ final class TextStyle
     public ?array $outline = null;
     /** Node::textShadow: its offset, color and opacity. @var ?array{0: float, 1: float, 2: int, 3: float} */
     public ?array $textShadow = null;
+    /** Node::textBlur: its sigma in points. */
+    public ?float $blur = null;
+    /** Node::textCutOut: whether the outline, and the shadow, have the glyphs taken out of them. @var ?array{0: bool, 1: bool} */
+    public ?array $cutOut = null;
 
     /** This style over $base: what this leaves null, $base's. */
     public function over(?self $base): self
@@ -69,7 +73,7 @@ final class TextStyle
             || ($this->weight !== null && $this->weight !== 400 && $this->weight !== 700)
             || $this->lineHeight !== null || ($this->align ?? 0) !== 0 || $this->wavy || $this->strike
             || ($this->spacing ?? 0.0) != 0 || ($this->features ?? '') !== '' || $this->lang !== null
-            || $this->decoColor !== null || $this->decoThick !== null || $this->background !== null || $this->outline !== null || $this->textShadow !== null;
+            || $this->decoColor !== null || $this->decoThick !== null || $this->background !== null || $this->outline !== null || $this->textShadow !== null || $this->blur !== null || $this->cutOut !== null;
     }
 
     /** The engine's style of this one, $size for none. */

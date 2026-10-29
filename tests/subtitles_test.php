@@ -102,8 +102,32 @@ same([2, null, 40, 40, 60, "A red and more\ntwo"], [$l->alignment, $l->position,
 $l = $ass->line('{\an7\pos(100,200)\fnGeorgia\fs30\3c&HFF0000&\bord1\shad0\alpha&H80&}x', 'Box', 2, 5, 6, 7);
 same([[['x', 'Georgia', 30.0, 400, true, false, 'ffffff', 0.5, '0000ff', 1.0, 0.0, 3]], 7, [100.0, 200.0], [5, 6, 7], 2], [array_map($run, $l->runs), $l->alignment, $l->position, [$l->marginLeft, $l->marginRight, $l->marginVertical], $l->layer], '\an \pos \fn \fs \3c \bord \shad \alpha, BorderStyle 3; the event\'s margins and layer');
 $l = $ass->line('{\t(0,500,\fs80)\move(10,20,300,400)\fad(100,100)\k20}moving{\p1}m 0 0 l 10 10{\p0}', 'Nope');
-same([[10.0, 20.0], 72.0, 'moving'], [$l->position, $l->runs[0]->size, $l->text()], '\move at its start; \t \fad \k left out; a drawing left out; a style it has not: Default');
-same(null, $ass->line('{\p1}m 0 0 l 10 10', 'Default'), 'a drawing alone shows nothing');
+same([[10.0, 20.0], 72.0, 'moving', [['m', 0.0, 0.0], ['l', 10.0, 10.0], ['c']]], [$l->position, $l->runs[0]->size, $l->text(), $l->runs[1]->drawing], '\move at its start; \t \fad \k left out; a drawing a run of no text; a style it has not: Default');
+// Drawings (\p), as libass reads them: their level's scale, lines, Beziers, a B-spline closed, \pbo; one of no points shows nothing.
+$d = $ass->line('{\an7\pos(0,0)\p2\pbo4}m 0 0 l 200 0 200 100 b 100 150 50 150 0 100', 'Default')->runs[0];
+same([[['m', 0.0, 0.0], ['l', 100.0, 0.0], ['l', 100.0, 50.0], ['b', 50.0, 75.0, 25.0, 75.0, 0.0, 50.0], ['c']], [0.0, 0.0, 100.0, 75.0], 4.0, ''],
+    [$d->drawing, $d->drawingBounds(), $d->baselineOffset, $d->text], '\p2 halves: m, l of two points, b; its bounds; \pbo');
+$sp = $ass->line('{\p1}m 0 0 s 60 0 60 60 0 60 c', 'Default')->runs[0]->drawing;
+same([6, 'b', ['c']], [count($sp), $sp[1][0], $sp[5]], 's: a B-spline from the pen, c closing it with its first three points again (four segments, Beziers)');
+same([60.0, 20.0], [$sp[1][1], $sp[1][2]], 'a B-spline segment as a Bezier: its first control point (2 P1 + P2) / 3');
+same(null, $ass->line('{\p1}m 0 0', 'Default'), 'a drawing of one point shows nothing');
+// \frx \fry \fax \fay \blur \be: a run's; turned in 3D or sheared, a line laid out on its own; \t animates them, over the whole line when it gives no times (libass's).
+$l = $ass->line('{\frx30\fry-20\fax0.5\fay-0.25\blur3\be2\t(\blur9)}x', 'Default', 0, 0, 0, 0, 0.0, 2.0);
+$r = $l->runs[0];
+same([30.0, -20.0, 0.5, -0.25, 3.0, 2, true], [$r->rotationX, $r->rotationY, $r->shearX, $r->shearY, $r->blur, $r->edgeBlur, $l->alone()], 'the tags a run\'s; it alone');
+same([6.0, 9.0], [$l->at(1.0)->runs[0]->blur, $l->at(2.0)->runs[0]->blur], '\t of no times: over the line\'s two seconds');
+// \kf and \K sweep: how far across its syllable as it is sung, the secondary before, the primary after.
+$k = $ass->line('{\1c&H0000FF&\2c&HFF0000&\K50}ab{\kf50}cd', 'Default');
+same([[0.5, null, 0x0000ff], [null, 0.5, 0xff0000]], [[$k->at(0.25)->runs[0]->sweep, $k->at(0.25)->runs[1]->sweep, $k->at(0.25)->runs[1]->color], [$k->at(0.75)->runs[0]->sweep, $k->at(0.75)->runs[1]->sweep, $k->at(0.75)->runs[0]->color]],
+    'half way through the first syllable, the second in the secondary; then the second half swept, the first in the primary');
+same([0x0000ff, 1.0], [$k->runs[0]->secondary, $k->runs[0]->secondaryAlpha], 'a run knows its secondary, which the sweep starts from');
+// \clip and \iclip: a rectangle, or a drawing of a scale; \iclip what it covers cut away; \t moves a rectangle toward another.
+$c1 = $ass->line('{\\iclip(2,m 0 0 l 20 0 20 20)}x', 'Default');
+same([null, [['m', 0.0, 0.0], ['l', 10.0, 0.0], ['l', 10.0, 10.0], ['c']], true, true], [$c1->clip, $c1->clipDrawing, $c1->clipInverted, $c1->alone()], '\\iclip of a drawing, its scale 2: halved, cut away, alone');
+same([[1.0, 2.0, 3.0, 4.0], true], [$ass->line('{\\iclip(3,4,1,2)}x', 'Default')->clip, $ass->line('{\\iclip(3,4,1,2)}x', 'Default')->clipInverted], '\\iclip of a rectangle, its corners in order');
+$c2 = $ass->line('{\\clip(0,0,100,100)\\t(0,1000,\\clip(100,100,200,200))}x', 'Default', 0, 0, 0, 0, 0.0, 2.0);
+same([[0.0, 0.0, 100.0, 100.0], [50.0, 50.0, 150.0, 150.0], [100.0, 100.0, 200.0, 200.0]], [$c2->clip, $c2->at(0.5)->clip, $c2->at(1.5)->clip], '\\t(\\clip): halfway at half a second, there after its second');
+same(true, $ass->line('x{\\frz10}y', 'Default')->alone(), 'a run turned past the first: the line alone');
 same(8, $ass->line('{\a6}top', 'Default')->alignment, "SSA's \a6: top center");
 
 // A Matroska ASS track's packets read in its header's styles; a file's lines; cues of lines read again kept once.

@@ -46,7 +46,7 @@ check($over, 'over the target, it sees the value');
 $list = $t->paint();
 $quads = $list->n;
 $moved = [];
-for ($e = 1; $e < $list->transforms; $e++) { $moved[] = [round($list->xforms[$e * 8 + 4]), round($list->xforms[$e * 8 + 5])]; }
+for ($e = 1; $e < $list->transforms; $e++) { $moved[] = [round($list->xforms[$e * \MyPHP\UI\DisplayList::FLOATS_PER_TRANSFORM + 4]), round($list->xforms[$e * \MyPHP\UI\DisplayList::FLOATS_PER_TRANSFORM + 5])]; }
 check(in_array([$tx + 120 - $sx - 10, $ty + 60 - $sy - 10], $moved), 'the copy shows under the pointer, where the press took the source: moved by ' . json_encode($moved));
 $t->release($tx + 120, $ty + 60);
 check($dropped === ['hello'] && $clicks === 1 && !$over, 'dropped on the target: no click');

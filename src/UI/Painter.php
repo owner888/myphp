@@ -305,7 +305,7 @@ final class Painter
             return;
         }
         if ($n->belowMaterials && $rt !== null && $rt->underLayer && !$rt->paintingUnder) { // the window paints it under its materials, from where its painting is now
-            $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip()];
+            $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;
         }
         $world = $list->world(); $opacity = $list->opacity();
@@ -318,7 +318,15 @@ final class Painter
             $list->setOpacity($o);
         }
         $list->setWorld($n->world);
+        $mask = $list->mask();
+        if ($n->clipMask !== null) { // its box where it shows, upright, the image's slot over it
+            if ($mask !== null) { throw new \LogicException('a clip mask inside another'); }
+            [$x0, $y0] = $n->world->point($n->x, $n->y); [$x1, $y1] = $n->world->point($n->x + $n->w, $n->y + $n->h);
+            $slot = $n->clipMask[0] === null ? ['u' => 0, 'v' => 0, 'w' => 0, 'h' => 0, 'page' => 0] : $text->imageSlot($n->clipMask[0]); // none: the box itself
+            $list->setMask([min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0), $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page'], $n->clipMask[1]]);
+        }
         self::node($n, $list, $text, $n->theme ?? $t, $rt);
+        if ($n->clipMask !== null) { $list->setMask($mask); }
         $list->setWorld($world);
         $list->setOpacity($opacity);
     }
@@ -1116,7 +1124,7 @@ final class Painter
                 $list->rect($x + $line->x, $y + $line->y, $line->width, $line->height, $ts->background, $alpha);
             }
             foreach ($runs($line) as [$k, $i, , $x0, $x1]) {
-                if ($k < 0 || $spans[$k]->background === null) {
+                if ($k < 0 || $spans[$k]->background === null || $spans[$k]->ghost) {
                     continue;
                 }
                 $sp = $spans[$k]; $ba = ($sp->backgroundAlpha ?? $sp->alpha ?? 1.0) * $nodeAlpha;
@@ -1131,27 +1139,35 @@ final class Painter
         }
         if ($under !== null) { $under(); }
         // Its shadow (its outline's, outlined) and its outline under the glyphs: the glyphs grown by the outline (Node::textOutline, textShadow).
+        // Blurred (textBlur), as libass blurs: the outline where there is one, else the glyphs; the shadow what was blurred.
+        // Cut out (textCutOut): the outline, or the shadow, of the glyphs grown with the glyphs themselves taken out, as libass's ass_fix_outline.
         $stroke = $ts?->outline[0] ?? 0.0;
+        $blur = $ts?->blur ?? 0.0;
+        [$cutOutline, $cutShadow] = $ts?->cutOut ?? [false, false];
+        $ghost = static fn(int $r): bool => ($k = $at($r)) >= 0 && $spans[$k]->ghost;
         if ($ts?->textShadow !== null) {
             [$dx, $dy, $src, $sa] = $ts->textShadow;
-            $text->paintLayout($list, $l, $x + $dx, $y + $dy, static fn(): array => [$src, $sa * $nodeAlpha], $stroke);
+            $text->paintLayout($list, $l, $x + $dx, $y + $dy, static fn(int $r): array => [$src, $ghost($r) ? 0.0 : $sa * $nodeAlpha], $stroke, $blur, $cutShadow && $stroke > 0);
         }
         if ($ts?->outline !== null) {
             [, $orgb, $oa] = $ts->outline;
-            $text->paintLayout($list, $l, $x, $y, static fn(): array => [$orgb, $oa * $nodeAlpha], $stroke);
+            $text->paintLayout($list, $l, $x, $y, static fn(int $r): array => [$orgb, $ghost($r) ? 0.0 : $oa * $nodeAlpha], $stroke, $blur, $cutOutline);
         }
         if ($glyphs === null || !$glyphs()) $text->paintLayout($list, $l, $x, $y, static function (int $r) use ($at, $spans, $color, $alpha, $nodeAlpha): array {
             $k = $at($r);
+            if ($k >= 0 && $spans[$k]->ghost) {
+                return [$color, 0.0];
+            }
             if ($k < 0 || $spans[$k]->color === null && $spans[$k]->alpha === null) {
                 return [$color, $alpha];
             }
             return [$spans[$k]->color ?? $color, ($spans[$k]->alpha ?? 1.0) * $nodeAlpha];
-        });
+        }, 0.0, $ts?->outline === null ? $blur : 0.0);
         $sys = $text->textSystem(); $scale = $text->scale();
         $base = [$ts?->underline ?? false, $ts?->wavy ?? false, $ts?->strike ?? false, $ts?->decoColor, $ts?->decoThick ?? 0.0];
         foreach ($l->lines as $li => $line) {
             foreach ($runs($line) as [$k, $i, $j]) {
-                if ($k < 0) {
+                if ($k < 0 || $spans[$k]->ghost) {
                     continue;
                 }
                 $sp = $spans[$k];

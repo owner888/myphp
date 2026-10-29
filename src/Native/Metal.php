@@ -33,8 +33,9 @@ final class Metal
     struct Inst { float4 rect; float4 color; float4 params; float4 clip; };   // params: radius, kind, u, v; kind 2 (image): color.xy = slot size in pixels, color.z = the atlas page; kind 3 (shadow): u = blur; kind 4 (ring): u = thickness; kind 5 (glass): u = style, color = tint; kind 6 (gradient): alpha from color.a at the top to u at the bottom; kind 7 (a blur's level): shown by clamp(u + v t), t = clamp(color.z + color.x x + color.y y) of the quad's points, color.a its opacity; kind 8 (hard scroll edge): backdrop toned under color by color.a; kind 9 (line): radius = half the thickness, u, v = the direction's signs; kinds 10 and 11 (gradient across, down): from color to u (rgb packed) at alpha v; kind 12: an image (as 2) in shades of gray; an image's radius below 0 is -1 - a tint's packed rgb; kind 13: an image (as 2) sampled at the nearest pixel, pixel art; kind 14 (a box: DisplayList::box) and 15 (a box shadow: boxShadow) take the slot after them too, its kind -1
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]];
-               float4 r4 [[flat]]; float4 b4 [[flat]]; float4 e4 [[flat]]; float4 g4 [[flat]]; };   // kinds 14 and 15: the slot after the quad (DisplayList::box, boxShadow)
-    struct Xform { float4 abcd; float4 xygh; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1
+               float4 r4 [[flat]]; float4 b4 [[flat]]; float4 e4 [[flat]]; float4 g4 [[flat]];   // kinds 14 and 15: the slot after the quad (DisplayList::box, boxShadow)
+               float4 mrect [[flat]]; float4 mslot [[flat]]; };   // the mask it is cut by (its Xform's)
+    struct Xform { float4 abcd; float4 xygh; float4 mrect; float4 mslot; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1; the mask (DisplayList::setMask): where it lies in the window, points (z below 0: inverted, z 0: none), and its image's slot, pixels (x plus 4096 times the page; z 0: no image, the rect itself)
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                          const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]], const device Xform* xf [[buffer(2)]]) {
         Inst i = in[iid];
@@ -62,6 +63,7 @@ final class Metal
         o.radius = i.params.x;
         o.kind = kind;
         o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
+        o.mrect = m.mrect; o.mslot = m.mslot;
         o.rect = i.rect * u.scale;   // the quad in pixels, for the glass
         if (kind > 13.5) {
             Inst x = in[iid + 1];
@@ -290,10 +292,29 @@ final class Metal
         }
         return float4(v.color.rgb, v.color.a * a);
     }
+    // What a quad paints, cut to its clip and its mask: the mask's coverage (alpha) where the fragment is, in the window, nothing outside it; inverted, the rest.
+    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop);
     fragment float4 quad_fragment(V v [[stage_in]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d_array<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
+        float4 c = quad_paint(v, u, atlas, images, backdrop);
+        if (v.mrect.z != 0.0) {
+            float2 t = (v.pos.xy / u.scale - v.mrect.xy) / float2(abs(v.mrect.z), v.mrect.w);
+            float m = 0.0;
+            if (v.mslot.z < 0.5) {   // no image: the rect itself, its edges a pixel soft
+                float2 inside = min(t, 1.0 - t) * float2(abs(v.mrect.z), v.mrect.w) * u.scale;   // pixels inside its nearer edges
+                m = clamp(min(inside.x, inside.y) + 0.5, 0.0, 1.0);
+            } else if (t.x >= 0.0 && t.y >= 0.0 && t.x <= 1.0 && t.y <= 1.0) {
+                constexpr sampler ms(filter::linear);
+                float page = floor(v.mslot.x / 4096.0);
+                m = images.sample(ms, (float2(v.mslot.x - page * 4096.0, v.mslot.y) + t * v.mslot.zw) / u.atlas, uint(page + 0.5)).a;
+            }
+            c.a *= v.mrect.z < 0.0 ? 1.0 - m : m;
+        }
+        return c;
+    }
+    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop) {
         constexpr sampler s(filter::linear);
         constexpr sampler nearest(filter::nearest);
         if (v.kind > 14.5) { return boxShadowQuad(v, u.scale); }

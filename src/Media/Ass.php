@@ -10,10 +10,12 @@ namespace MyPHP\Media;
  * the styles of [V4+ Styles] (or SSA's [V4 Styles]) by their Format line.
  * A line's override tags change its runs' styles: \b \i \u \s, \fn \fs
  * \fsp, \c \1c \2c \3c \4c and \alpha \1a \2a \3a \4a, \bord \shad,
- * \fscx \fscy \frz, \r, \p (a drawing, left out); and the line's: \an \a,
+ * \fscx \fscy \frz \frx \fry \fax \fay, \blur \be, \r, \p and \pbo (a
+ * drawing: m n l b s p c, as libass reads them); and the line's: \an \a,
  * \pos, \move, \fad \fade, \clip (a rectangle), \org; \t animates what
- * follows it, \k \K \kf \ko sing its syllables. \be, \blur, \fax, \fay,
- * \frx, \fry and the borders and shadows apart in x and y are left out.
+ * follows it, \k \K \kf \ko sing its syllables (\K and \kf sweeping).
+ * The borders and shadows apart in x and y, and a drawing's \clip, are
+ * left out.
  */
 final class Ass
 {
@@ -72,14 +74,14 @@ final class Ass
      * Dialogue line $text of style $style, layer $layer and margins (0 for
      * the style's), showing from $start for $duration seconds, as it shows
      * at its start (AssLine::at for later); null for one that shows nothing
-     * (empty, or a drawing alone). $plain: a text subtitle's, of no tags,
+     * (empty, or a drawing of no points). $plain: a text subtitle's, of no tags,
      * its lines at its newlines (as mpv converts one to ASS).
      */
     public function line(string $text, string $style, int $layer = 0, int $marginL = 0, int $marginR = 0, int $marginV = 0, float $start = 0.0, float $duration = INF, bool $plain = false): ?AssLine
     {
         $base = $this->styles[ltrim($style, '*')] ?? $this->styles['Default'] ?? self::DEFAULT;
         $st = self::state($base);
-        $line = ['align' => (int)$base['alignment'], 'pos' => null, 'move' => null, 'fade' => null, 'clip' => null, 'org' => null, 'drawing' => false];
+        $line = ['align' => (int)$base['alignment'], 'pos' => null, 'move' => null, 'fade' => null, 'clip' => null, 'clipDrawing' => null, 'clipInverted' => false, 'org' => null];
         $parts = []; // each run's text, its state, the \t's over it and its syllable
         $transforms = []; $karaoke = 0.0; $syllable = null;
         foreach ($plain ? [] : (preg_split('/(\{[^}]*\})/', $text, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: []) as $part) {
@@ -89,7 +91,9 @@ final class Ass
                 }
                 continue;
             }
-            if ($line['drawing']) {
+            if ($st['drawing'] > 0) { // a drawing's commands, a run of its own
+                $parts[] = [$part, $st, $transforms, $syllable];
+                $syllable = null;
                 continue;
             }
             $part = str_replace(['\h', '\n'], ["\u{00A0}", $this->wraps ? ' ' : "\n"], $part);
@@ -105,15 +109,27 @@ final class Ass
         $animated = $line['move'] !== null || $line['fade'] !== null || array_filter($parts, fn(array $p) => $p[2] !== [] || $p[3] !== null) !== [];
         $make = function (float $t) use ($parts, $line, $shape): AssLine {
             $runs = [];
+            $clip = $line['clip'];
             foreach ($parts as [$piece, $state, $ts, $syl]) {
-                foreach ($ts as [$t1, $t2, $accel, $tags]) { $state = $this->animate($state, $tags, self::progress($t, $t1, $t2, $accel)); }
-                if ($syl !== null) { // karaoke: the secondary colour until its syllable is sung (\ko: no outline until then)
-                    [$from, , $kind] = $syl;
-                    if ($t < $from) {
+                foreach ($ts as [$t1, $t2, $accel, $tags]) {
+                    if ($t2 == 0.0 && is_finite($shape[10])) { $t2 = $shape[10]; } // no end: the line's (libass's), all of it without times
+                    $state = $this->animate($state, $tags, self::progress($t, $t1, $t2, $accel));
+                }
+                $sweep = null;
+                if ($syl !== null) { // karaoke: the secondary colour until its syllable is sung (\ko: no outline until then; \kf, \K: the primary sweeping across it as it is)
+                    [$from, $length, $kind] = $syl;
+                    if ($kind === 'kf' && $t >= $from && $t < $from + $length) {
+                        $sweep = ($t - $from) / $length;
+                    } elseif ($t < $from) {
                         if ($kind === 'ko') { $state['outlineAlpha'] = 0.0; } else { [$state['color'], $state['alpha']] = [$state['secondary'], $state['secondaryAlpha']]; }
                     }
                 }
-                $runs[] = self::run($piece, $state);
+                $runs[] = self::run($piece, $state, $sweep);
+                if ($state['clipTo'] !== null && $line['clipDrawing'] === null) { // \t of \clip's rectangle: from the line's (the whole plane's without one) toward it
+                    [$to, $k] = $state['clipTo'];
+                    $from = $line['clip'] ?? [0.0, 0.0, (float)$shape[5], (float)$shape[6]];
+                    $clip = array_map(fn(float $a, float $b): float => $a + ($b - $a) * $k, $from, $to);
+                }
             }
             [$align, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration] = $shape;
             $pos = $line['pos']; $moved = [0.0, 0.0];
@@ -131,16 +147,16 @@ final class Ass
                 $a = match (true) { $t < $t1 => $a1, $t < $t2 => $a1 + ($a2 - $a1) * ($t - $t1) / max(1e-9, $t2 - $t1), $t < $t3 => $a2, $t < $t4 => $a2 + ($a3 - $a2) * ($t - $t3) / max(1e-9, $t4 - $t3), default => $a3 };
                 $alpha = 1 - $a / 255;
             }
-            return new AssLine($runs, $align, $pos, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration, $alpha, $line['clip'], $line['org'], $moved);
+            return new AssLine($runs, $align, $pos, $ml, $mr, $mv, $layer, $rx, $ry, $scaled, $wraps, $start, $duration, $alpha, $clip, $line['org'], $moved, $line['clipDrawing'], $line['clipInverted']);
         };
         $first = $make(0.0);
-        if ($first->text() === '') {
+        if ($first->blank()) {
             return null;
         }
         return $animated ? $first->animatedBy($make) : $first;
     }
 
-    /** How far a \t from $t1 to $t2 (seconds into the line; 0 and 0 for all of it) has gone at $t, by its acceleration. */
+    /** How far a \t from $t1 to $t2 (seconds into the line) has gone at $t, by its acceleration: all of it from $t1 when they are one. */
     private static function progress(float $t, float $t1, float $t2, float $accel): float
     {
         if ($t2 <= $t1) { return $t >= $t1 ? 1.0 : 0.0; }
@@ -152,9 +168,9 @@ final class Ass
     private function animate(array $st, array $tags, float $k): array
     {
         if ($k <= 0) { return $st; }
-        $to = $st; $line = ['align' => 0, 'pos' => null, 'move' => null, 'fade' => null, 'clip' => null, 'org' => null, 'drawing' => false]; $none = []; $kar = 0.0; $syl = null;
+        $to = $st; $line = ['align' => 0, 'pos' => null, 'move' => null, 'fade' => null, 'clip' => null, 'clipDrawing' => null, 'clipInverted' => false, 'org' => null]; $none = []; $kar = 0.0; $syl = null;
         foreach ($tags as [$name, $arg]) { $this->tag($name, $arg, $to, [], $line, $none, $kar, $syl); }
-        foreach (['size', 'spacing', 'border', 'shadow', 'alpha', 'outlineAlpha', 'shadowAlpha', 'secondaryAlpha', 'scaleX', 'scaleY', 'rotation'] as $f) {
+        foreach (['size', 'spacing', 'border', 'shadow', 'alpha', 'outlineAlpha', 'shadowAlpha', 'secondaryAlpha', 'scaleX', 'scaleY', 'rotation', 'frx', 'fry', 'fax', 'fay', 'blur', 'be'] as $f) {
             $st[$f] = $st[$f] + ($to[$f] - $st[$f]) * $k;
         }
         foreach (['color', 'outlineColor', 'shadowColor', 'secondary'] as $f) {
@@ -162,6 +178,7 @@ final class Ass
             foreach ([16, 8, 0] as $sh) { $c |= (int)round((($st[$f] >> $sh) & 0xff) + (((($to[$f] >> $sh) & 0xff) - (($st[$f] >> $sh) & 0xff)) * $k)) << $sh; }
             $st[$f] = $c;
         }
+        if ($line['clip'] !== null) { $st['clipTo'] = [$line['clip'], $k]; } // \t(\clip(…)): the line's rectangle that far to it (AssLine's, line())
         return $st;
     }
 
@@ -174,15 +191,79 @@ final class Ass
             'italic' => (int)$s['italic'] !== 0, 'underline' => (int)$s['underline'] !== 0, 'strikeout' => (int)$s['strikeout'] !== 0,
             'color' => $c, 'alpha' => $a, 'secondary' => $sc, 'secondaryAlpha' => $sa, 'outlineColor' => $oc, 'outlineAlpha' => $oa, 'shadowColor' => $bc, 'shadowAlpha' => $ba,
             'border' => (float)$s['outline'], 'shadow' => (float)$s['shadow'], 'spacing' => (float)$s['spacing'], 'borderStyle' => (int)$s['borderstyle'] === 3 ? 3 : 1,
-            'scaleX' => (float)($s['scalex'] ?? 100), 'scaleY' => (float)($s['scaley'] ?? 100), 'rotation' => (float)($s['angle'] ?? 0)];
+            'scaleX' => (float)($s['scalex'] ?? 100), 'scaleY' => (float)($s['scaley'] ?? 100), 'rotation' => (float)($s['angle'] ?? 0),
+            'frx' => 0.0, 'fry' => 0.0, 'fax' => 0.0, 'fay' => 0.0, 'blur' => 0.0, 'be' => 0.0, 'drawing' => 0, 'pbo' => 0.0, 'clipTo' => null];
     }
 
-    /** @param array<string, mixed> $st */
-    private static function run(string $text, array $st): AssRun
+    /** A run of $text in state $st: of a drawing's commands while \p is on; $sweep as \kf sings it. @param array<string, mixed> $st */
+    private static function run(string $text, array $st, ?float $sweep = null): AssRun
     {
-        return new AssRun($text, $st['font'], $st['size'], $st['weight'], $st['italic'], $st['underline'], $st['strikeout'], $st['color'], $st['alpha'],
+        $drawing = $st['drawing'] > 0 ? self::drawing($text, 2 ** ($st['drawing'] - 1)) : null;
+        return new AssRun($drawing === null ? $text : '', $st['font'], $st['size'], $st['weight'], $st['italic'], $st['underline'], $st['strikeout'], $st['color'], $st['alpha'],
             $st['outlineColor'], $st['outlineAlpha'], $st['shadowColor'], $st['shadowAlpha'], $st['border'], $st['shadow'], $st['spacing'], $st['borderStyle'],
-            $st['scaleX'] / 100, $st['scaleY'] / 100, $st['rotation']);
+            $st['scaleX'] / 100, $st['scaleY'] / 100, $st['rotation'], $st['frx'], $st['fry'], $st['fax'], $st['fay'], $st['blur'], (int)round($st['be']),
+            $drawing, $st['pbo'], $sweep, $st['secondary'], $st['secondaryAlpha']);
+    }
+
+    /**
+     * A drawing's commands (\p), its coordinates divided by $scale (2 to the
+     * \p level less one), as libass reads them: m (a contour begun, the one
+     * before closed), n (moved to, not closed), l (lines), b (cubic
+     * Beziers), s (a uniform cubic B-spline through the points after it, the
+     * pen first; p extends it; c closes it with its first three points
+     * again); a command's points repeat it, what is incomplete is dropped.
+     * @return list<list<string|float>>
+     */
+    private static function drawing(string $text, float $scale): array
+    {
+        preg_match_all('/[mnlbspc]|-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/i', $text, $m);
+        $out = []; $cmd = null; $nums = []; $pen = [0.0, 0.0]; $started = false; $spline = [];
+        $close = function () use (&$out, &$started): void {
+            if ($started) { $out[] = ['c']; $started = false; }
+        };
+        $splineSegment = function (array $p) use (&$out, &$started): void { // a uniform cubic B-spline's segment of four points, as a Bezier
+            [$p0, $p1, $p2, $p3] = $p;
+            $b0 = [($p0[0] + 4 * $p1[0] + $p2[0]) / 6, ($p0[1] + 4 * $p1[1] + $p2[1]) / 6];
+            if (!$started) { $out[] = ['m', $b0[0], $b0[1]]; $started = true; }
+            $out[] = ['b', (2 * $p1[0] + $p2[0]) / 3, (2 * $p1[1] + $p2[1]) / 3, ($p1[0] + 2 * $p2[0]) / 3, ($p1[1] + 2 * $p2[1]) / 3,
+                ($p1[0] + 4 * $p2[0] + $p3[0]) / 6, ($p1[1] + 4 * $p2[1] + $p3[1]) / 6];
+        };
+        foreach ($m[0] as $tok) {
+            if (ctype_alpha($tok)) {
+                $cmd = strtolower($tok); $nums = [];
+                if ($cmd === 's') { $spline = [$pen]; }
+                if ($cmd === 'c' && count($spline) >= 3) { // the spline closed: its first three points again
+                    $first = array_slice($spline, 0, 3);
+                    foreach ($first as $q) { $spline[] = $q; $splineSegment(array_slice($spline, -4)); }
+                    $pen = $spline[count($spline) - 1]; $spline = [];
+                }
+                continue;
+            }
+            if ($cmd === null) { continue; }
+            $nums[] = (float)$tok / $scale;
+            $need = $cmd === 'b' ? 6 : 2;
+            if (count($nums) < $need) { continue; }
+            $pts = array_chunk($nums, 2); $nums = [];
+            switch ($cmd) {
+                case 'm': $close(); $pen = $pts[0]; $out[] = ['m', $pen[0], $pen[1]]; $started = true; break;
+                case 'n': $pen = $pts[0]; $out[] = ['m', $pen[0], $pen[1]]; $started = true; break;
+                case 'l':
+                    if (!$started) { $out[] = ['m', $pen[0], $pen[1]]; $started = true; }
+                    $pen = $pts[0]; $out[] = ['l', $pen[0], $pen[1]];
+                    break;
+                case 'b':
+                    if (!$started) { $out[] = ['m', $pen[0], $pen[1]]; $started = true; }
+                    $out[] = ['b', $pts[0][0], $pts[0][1], $pts[1][0], $pts[1][1], $pts[2][0], $pts[2][1]]; $pen = $pts[2];
+                    break;
+                case 's': case 'p':
+                    if ($spline === []) { $spline = [$pen]; }
+                    $spline[] = $pts[0]; $pen = $pts[0];
+                    if (count($spline) >= 4) { $splineSegment(array_slice($spline, -4)); }
+                    break;
+            }
+        }
+        $close();
+        return $out;
     }
 
     /**
@@ -259,9 +340,15 @@ final class Ass
                 $n = $nums();
                 if (count($n) === 7 && $line['fade'] === null) { $line['fade'] = [$n[0], $n[1], $n[2], $n[3] / 1000, $n[4] / 1000, $n[5] / 1000, $n[6] / 1000]; }
                 break;
-            case 'clip': // a rectangle; a drawing's clip is left out
+            case 'clip': case 'iclip': // a rectangle, or a drawing of a scale ("\clip(2, m …)"); \iclip what it covers cut away
                 $n = $nums();
-                if (count($n) === 4) { $line['clip'] = [min($n[0], $n[2]), min($n[1], $n[3]), max($n[0], $n[2]), max($n[1], $n[3])]; }
+                if (count($n) === 4 && preg_match('/[a-z]/i', $arg) !== 1) {
+                    [$line['clip'], $line['clipDrawing']] = [[min($n[0], $n[2]), min($n[1], $n[3]), max($n[0], $n[2]), max($n[1], $n[3])], null];
+                } else {
+                    [$scale, $text] = preg_match('/^\s*(\d+)\s*,(.*)$/s', $arg, $cm) === 1 ? [max(1, (int)$cm[1]), $cm[2]] : [1, $arg];
+                    [$line['clip'], $line['clipDrawing']] = [null, self::drawing($text, 2 ** ($scale - 1))];
+                }
+                $line['clipInverted'] = $tag === 'iclip';
                 break;
             case 'org': $xy = $nums(); if (count($xy) >= 2) { $line['org'] ??= [$xy[0], $xy[1]]; } break;
             case 'fn': $st['font'] = $v !== '' ? $v : ($base['fontname'] ?? $st['font']); break;
@@ -271,6 +358,13 @@ final class Ass
             case 'fscy': $st['scaleY'] = $v !== '' ? (float)$v : (float)($base['scaley'] ?? 100); break;
             case 'fsc': $st['scaleX'] = (float)($base['scalex'] ?? 100); $st['scaleY'] = (float)($base['scaley'] ?? 100); break;
             case 'fr': case 'frz': $st['rotation'] = (float)$v; break;
+            case 'frx': $st['frx'] = (float)$v; break;
+            case 'fry': $st['fry'] = (float)$v; break;
+            case 'fax': $st['fax'] = (float)$v; break;
+            case 'fay': $st['fay'] = (float)$v; break;
+            case 'blur': $st['blur'] = max(0.0, (float)$v); break;
+            case 'be': $st['be'] = max(0.0, round((float)$v)); break;
+            case 'pbo': $st['pbo'] = (float)$v; break;
             case 'bord': $st['border'] = max(0.0, (float)$v); break;
             case 'shad': $st['shadow'] = max(0.0, (float)$v); break;
             case 'b': $b = (int)$v; $st['weight'] = $b === 1 ? 700 : ($b > 1 ? $b : 400); break;
@@ -278,7 +372,7 @@ final class Ass
             case 'u': $st['underline'] = $v === '1'; break;
             case 's': $st['strikeout'] = $v === '1'; break;
             case 'r': $st = self::state($v !== '' && isset($this->styles[$v]) ? $this->styles[$v] : $base); $transforms = []; break;
-            case 'p': $line['drawing'] = (int)$v > 0; break;
+            case 'p': $st['drawing'] = max(0, (int)$v); break;
             case 't': // [t1, t2,] [accel,] tags: what follows goes to them between t1 and t2 (milliseconds; its whole time without)
                 if (preg_match('/^\s*(?:(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,)?\s*(?:([\d.]+)\s*,)?\s*(\\\\.*)$/s', $arg, $tm) === 1) {
                     $t1 = $tm[1] !== '' ? (float)$tm[1] / 1000 : 0.0; $t2 = $tm[2] !== '' ? (float)$tm[2] / 1000 : 0.0;
@@ -287,7 +381,7 @@ final class Ass
                 break;
             case 'k': case 'K': case 'kf': case 'ko': // a syllable of centiseconds, sung from the time the ones before took
                 $d = (float)$v / 100;
-                $syllable = [$karaoke, $d, $tag === 'ko' ? 'ko' : 'k'];
+                $syllable = [$karaoke, $d, match ($tag) { 'ko' => 'ko', 'kf', 'K' => 'kf', default => 'k' }];
                 $karaoke += $d;
                 break;
         }

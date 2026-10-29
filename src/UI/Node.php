@@ -189,6 +189,8 @@ final class Node
     public bool $on = false;
     /** Drawn over the children (mygo's DrawOver): a list's drop line. */
     public ?\Closure $drawOver = null;
+    /** clipMask's: the image whose coverage cuts the node and what is inside it, over its box (null: the box itself), and whether inverted. @var ?array{0: ?Image, 1: bool} */
+    public ?array $clipMask = null;
 
     /** A press on this node (not on a control inside it) drags the window, a double click zooms or minimizes it as macOS is set to (mygo's DragWindow): a view's own title bar. */
     public bool $dragsWindow = false;
@@ -792,6 +794,20 @@ final class Node
         return $this;
     }
 
+    /**
+     * @internal VideoPlayer (ASS's \clip and \iclip): cuts the node and
+     * what is inside it by the coverage (alpha) of $mask laid over its box,
+     * as it is laid out, upright, or by the box itself for null: what it
+     * covers shows, or with $inverted what it covers is cut away (what is
+     * inside reaching past the box all the same). One at a time: a node
+     * inside one has none of its own.
+     */
+    public function clipMask(?Image $mask, bool $inverted = false): static
+    {
+        $this->clipMask = [$mask, $inverted];
+        return $this;
+    }
+
     /** Makes the node and its children translucent, from 0 to 1 (mygo's Opacity). */
     public function opacity(float $o): static
     {
@@ -954,6 +970,30 @@ final class Node
     public function textShadow(float $dx, float $dy, int $rgb, float $alpha = 1.0): static
     {
         $this->ts()->textShadow = [$dx, $dy, $rgb, max(0.0, min(1.0, $alpha))];
+        return $this;
+    }
+
+    /**
+     * @internal VideoPlayer (ASS's \blur and \be): blurs text as a Gaussian
+     * of $sigma points, as libass does: its outline where it has one
+     * (textOutline), the glyphs themselves staying sharp, else the glyphs;
+     * its shadow (textShadow) is what was blurred, moved.
+     */
+    public function textBlur(float $sigma): static
+    {
+        if (!is_finite($sigma) || $sigma < 0) { throw new \InvalidArgumentException('a blur of a sigma of 0 or more'); }
+        $this->ts()->blur = $sigma > 0 ? $sigma : null;
+        return $this;
+    }
+
+    /**
+     * @internal VideoPlayer (libass's ass_fix_outline): takes the glyphs out
+     * of the text's outline ($outline) and of its shadow ($shadow, of the
+     * outline), so that they do not show through glyphs not quite opaque.
+     */
+    public function textCutOut(bool $outline, bool $shadow): static
+    {
+        $this->ts()->cutOut = $outline || $shadow ? [$outline, $shadow] : null;
         return $this;
     }
 

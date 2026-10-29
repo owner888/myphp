@@ -32,6 +32,11 @@ same(8, VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 1.0, true)[0]->al
 $ass = new \MyPHP\Media\Ass("[Script Info]\nPlayResY: 360\n");
 $forced = VideoPlayerSubtitleStyle::forced($subSet, $ass->line('{\\fs10}y', 'Default'), 1.0);
 same([27.5, 700, 7, 13, 11], [$forced->runs[0]->size, $forced->runs[0]->weight, $forced->alignment, $forced->marginLeft, $forced->marginVertical], 'an ASS line forced to it (sub-ass-override=force): its sizes of its own plane');
+$subSet->set('subBlur', 2.0);
+[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
+$forced = VideoPlayerSubtitleStyle::forced($subSet, $ass->line('{\\frx20}y{\\p1}m 0 0 l 4 4', 'Default'), 1.0);
+same([4.0, 1.0, 20.0, 'l'], [$sl->runs[0]->blur, $forced->runs[0]->blur, $forced->runs[0]->rotationX, $forced->runs[1]->drawing[1][0]],
+    'the settings\' Blur (sub-blur) on text subtitles, scaled by the window, and on ASS forced to them (of its plane), what else the runs have kept');
 same([[0xff8000, 0.5], '1/0.501961/0/0.5'], [VideoPlayerSubtitleStyle::color('1/0.5/0/0.5'), VideoPlayerSubtitleStyle::colorString(0xff8000, 0.5)], 'colors as IINA keeps them, r/g/b/a');
 @unlink(sys_get_temp_dir() . '/myphp-substyle-' . getmypid() . '.json');
 same(['12.5 Mi', '850 K', '0 ', '1 Gi'], [VideoPlayerState::byteCount(12.5 * 1024 * 1024, true), VideoPlayerState::byteCount(850000, false), VideoPlayerState::byteCount(0, true), VideoPlayerState::byteCount(1024 ** 3, true)], 'bytes as IINA writes them, binary and decimal');
@@ -451,6 +456,75 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(abs($cx - 480) < 2 && abs($cy - 60) < 2, '\\move halfway at 1 s: shown centered on (480, 60), moved by its transform: ' . round($cx, 1) . ', ' . round($cy, 1));
     check($h4->rt->nextWake() !== null, 'a frame asked for while it moves');
     $s4->player->pause();
+    // ASS's drawings, 3D turns, shears, blurs and \kf (a file of them, 1920 by 1080 on 960 by 540): as libass draws them.
+    $fx = sys_get_temp_dir() . '/myphp-ass-fx-' . getmypid() . '.ass';
+    file_put_contents($fx, "[Script Info]\nPlayResX: 1920\nPlayResY: 1080\n\n[V4+ Styles]\n"
+        . "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        . "Style: Default,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,40,40,40,1\n"
+        . "Style: Box,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,3,4,0,2,40,40,40,1\n\n[Events]\n"
+        . "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,100)\\p1}m 0 0 l 200 0 200 100 0 100{\\p0}\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an5\\pos(960,540)\\fry40}Turned\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an8\\pos(960,100)\\fax0.5}Sheared\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\blur4}Blurred\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,700)\\kf200}Swept\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an5\\pos(960,800)\\frz10}Left{\\frz-10}Right\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,900)\\bord4\\1a&H80&}Clear\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Box,,0,0,0,,{\\an7\\pos(1000,900)}Boxed\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,300)\\iclip(0,0,1920,320)}Cut\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,400)\\clip(m 0 0 l 1920 0 1920 420 0 420)}Masked\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(1000,600)}Base{\\p1}m 0 0 l 22 0 22 22 0 22\n"
+        . "Dialogue: 0,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\\an7\\pos(100,1000)\\fay0.2}Stairs\n");
+    $s4->player->loadSubtitles($fx);
+    $s4->player->seek(1.0);
+    $h4->frame(); $h4->frame();
+    $drawn = function (?\MyPHP\UI\Node $n) use (&$drawn): array {
+        if ($n === null) { return []; }
+        $out = $n->draw !== null ? [$n] : [];
+        foreach ($n->kids as $k) { array_push($out, ...$drawn($k)); }
+        return $out;
+    };
+    $boxes = array_map(fn($n) => array_map(fn($v) => round($v, 1), $h4->rect($n)), array_filter($drawn($h4->root), fn($n) => abs($n->w - 100) < 0.5 && abs($n->h - 50) < 0.5));
+    same([[50.0, 50.0, 100.0, 50.0]], array_values($boxes), 'a drawing: a box its points span, its top left at \\an7\\pos');
+    $found = $all($h4->root, 'Turned'); $turned = end($found) ?: throw new \RuntimeException('no turned line');
+    [$x, $y, $w, $h] = $h4->rect($turned);
+    [, $ly1] = $turned->world->point($x, $y); [, $ly2] = $turned->world->point($x, $y + $h);
+    [, $ry1] = $turned->world->point($x + $w, $y); [, $ry2] = $turned->world->point($x + $w, $y + $h);
+    check($ry2 - $ry1 < $ly2 - $ly1 - 0.01, '\\fry40: its right side away, shorter in perspective: ' . round($ly2 - $ly1, 2) . ' and ' . round($ry2 - $ry1, 2));
+    $found = $all($h4->root, 'Sheared'); $sheared = end($found) ?: throw new \RuntimeException('no sheared line');
+    [$x, $y, $w, $h] = $h4->rect($sheared);
+    [$tx] = $sheared->world->point($x, $y); [$bx] = $sheared->world->point($x, $y + $h);
+    check(abs(($bx - $tx) - 0.5 * $h) < 0.5, '\\fax0.5: its foot half its height to the right of its top: ' . round($bx - $tx, 2) . ' of ' . round($h, 2));
+    $found = $all($h4->root, 'Blurred'); $blurred = end($found) ?: throw new \RuntimeException('no blurred line');
+    same(round(4 * 0.5 * 2 / sqrt(log(256)), 3), round($blurred->textStyle()->blur ?? 0.0, 3), '\\blur4: a Gaussian of libass\'s sigma, 2 / sqrt(ln 256) of its units');
+    $swept = $all($h4->root, 'Swept');
+    same(2, count($swept), '\\kf: the syllable in the secondary, the primary over it');
+    $parentOf = function (\MyPHP\UI\Node $n, \MyPHP\UI\Node $in) use (&$parentOf): ?\MyPHP\UI\Node {
+        foreach ($in->kids as $k) { if ($k === $n) { return $in; } if (($p = $parentOf($n, $k)) !== null) { return $p; } }
+        return null;
+    };
+    [, , $sw] = $h4->rect($swept[0]);
+    [, , $cw] = $h4->rect($parentOf($swept[1], $h4->root));
+    check(abs($cw - $sw / 2) < 2, 'half way through its two seconds: the primary cut to half its glyphs: ' . round($cw, 1) . ' of ' . round($sw, 1));
+    same(2, count($all($h4->root, 'LeftRight')), 'runs turned apart: the line laid out for each, as libass turns each glyph');
+    $found = $all($h4->root, 'Clear'); $clear = end($found) ?: throw new \RuntimeException('no clear line');
+    same([true, false], $clear->textStyle()->cutOut, 'a fill half clear: the glyphs cut out of its outline (libass\'s ass_fix_outline)');
+    $found = $all($h4->root, 'Boxed'); $boxed = end($found) ?: throw new \RuntimeException('no boxed line');
+    $holder = $parentOf($boxed, $h4->root);
+    check($holder !== null && $holder->kids[0]->draw !== null && $holder->kids[0] !== $boxed, 'BorderStyle 3: a box drawn behind its line');
+    $masks = function (?\MyPHP\UI\Node $n) use (&$masks): array {
+        if ($n === null) { return []; }
+        $out = $n->clipMask !== null ? [[$n->clipMask[0] === null ? null : 'image', $n->clipMask[1]]] : [];
+        foreach ($n->kids as $k) { array_push($out, ...$masks($k)); }
+        return $out;
+    };
+    same([[null, true], ['image', false]], $masks($h4->root), '\\iclip of a rectangle: the box itself cut away; \\clip of a drawing: its mask');
+    $found = $all($h4->root, 'Base'); [, $ty, , $th] = $h4->rect(end($found));
+    $squares = array_values(array_filter($drawn($h4->root), fn($n) => abs($n->w - 11) < 0.5 && abs($n->h - 11) < 0.5));
+    [, $dy, , $dh] = $h4->rect($squares[0] ?? throw new \RuntimeException('no square'));
+    check($ty + $th - ($dy + $dh) > 2, 'a drawing beside text: its foot on the text\'s baseline, above the text\'s descent: ' . round($ty + $th - ($dy + $dh), 1));
+    same(7, count($all($h4->root, 'Stairs')), '\\fay: each glyph sheared on its own (libass\'s of its own x), over the text laid out once');
+    @unlink($fx);
     // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.
     $s3->open("$films/clip-chapters.mkv");
     $s3->player->pause();

@@ -45,18 +45,34 @@ final class AssLine
         public readonly float $duration = INF,
         /** Its opacity as \fad and \fade have it, 0 to 1. */
         public readonly float $alpha = 1.0,
-        /** \clip: the rectangle of it that shows, [x1, y1, x2, y2]; null for all. */
+        /** \clip: the rectangle of it that shows ($clipInverted: that is cut away), [x1, y1, x2, y2]; null for all. */
         public readonly ?array $clip = null,
         /** \org: the point it turns around; null for that of its alignment. */
         public readonly ?array $origin = null,
         /** How far \move has taken it from its start ($position), [dx, dy]: moved as a whole, not laid out again, so that it glides. @var array{0: float, 1: float} */
         public readonly array $moved = [0.0, 0.0],
+        /** \clip or \iclip of a drawing: its commands (AssRun::drawing's), in PlayRes units; null for none (or a rectangle, $clip). @var ?list<list<string|float>> */
+        public readonly ?array $clipDrawing = null,
+        /** \iclip: what the clip (the rectangle or the drawing) covers is cut away, the rest shows. */
+        public readonly bool $clipInverted = false,
     ) {}
 
-    /** Its text as plain lines. */
+    /** Its text as plain lines (its drawings none). */
     public function text(): string
     {
         return trim(implode('', array_map(fn(AssRun $r) => $r->text, $this->runs)));
+    }
+
+    /** Whether it shows nothing: no text and no drawing of any point. */
+    public function blank(): bool
+    {
+        if ($this->text() !== '') {
+            return false;
+        }
+        foreach ($this->runs as $r) {
+            if ($r->drawingBounds() !== null) { return false; }
+        }
+        return true;
     }
 
     /** Whether it changes as it shows: at() is not itself at every time. */
@@ -79,10 +95,15 @@ final class AssLine
         return $l;
     }
 
-    /** Whether it is laid out on its own, not stacked with the lines of its alignment: placed (\pos, \move), turned, scaled or clipped. */
+    /** Whether it is laid out on its own, not stacked with the lines of its alignment: placed (\pos, \move), clipped, or a run of it turned (in 3D too), scaled or sheared. */
     public function alone(): bool
     {
-        $r = $this->runs[0] ?? null;
-        return $this->position !== null || $this->clip !== null || ($r !== null && ($r->rotation != 0 || $r->scaleX != 1 || $r->scaleY != 1));
+        if ($this->position !== null || $this->clip !== null || $this->clipDrawing !== null) {
+            return true;
+        }
+        foreach ($this->runs as $r) {
+            if ($r->rotation != 0 || $r->rotationX != 0 || $r->rotationY != 0 || $r->scaleX != 1 || $r->scaleY != 1 || $r->shearX != 0 || $r->shearY != 0) { return true; }
+        }
+        return false;
     }
 }

@@ -15,9 +15,13 @@ interface TextPainter extends TextMetrics
     /**
      * Paints the glyphs of $l, its top left at ($x, $y), each in the color
      * $colorAt(int $rune): array{0: int, 1: float} gives the rune its
-     * cluster starts at; inline objects draw nothing.
+     * cluster starts at; inline objects draw nothing. $stroke: the glyphs
+     * grown by it (an outline, Node::textOutline); $blur: them blurred as a
+     * Gaussian of that sigma (Node::textBlur); points; $cutOut: the glyphs
+     * taken out of what they grew to (Node::textCutOut). A glyph of no
+     * opacity is not drawn.
      */
-    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void;
+    public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void;
 
     /**
      * The coverage of $glyphs (Context::shape) drawn with the pen at ($x,

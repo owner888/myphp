@@ -4964,6 +4964,107 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   libdav1d; a slider's 30 seeks 16 ms apart 8 ms in all, landing where
   the last went.
 
+## ASS's drawings, 3D turns, shears, blurs and \kf (v1.64)
+
+- **A drawing (\p) is a glyph of its box** (libass's OUTLINE_DRAWING):
+  as wide and high as its points span (control points too), its
+  contours at their own coordinates from the box's top left, not moved
+  to it (a mask of the screen is `\an7\pos(0,0)` and its corners). Its
+  masks are Core Graphics' (`Native\VectorMask`: filled non-zero, or
+  filled and stroked twice the border wide for its outline and shadow),
+  at the display's pixels, made white and tinted as drawn, so a color
+  animated draws no mask again; an image, not the glyph atlas, as a
+  4K screen's mask is larger than the atlas and an image's quad is
+  scaled (a mask past 2040 pixels is made smaller and drawn larger).
+  The B-spline (s, p, c) is uniform cubic, its segments Beziers.
+- **\frx is the other way round from CSS's rotateX**: libass turns the
+  top toward the viewer for a positive angle, CSS away; \fry is CSS's
+  rotateY. libass applies \frz, \frx, \fry, then a perspective of
+  20000 of the plane's units (`20000 * blur_scale_y`), around \org.
+- **\fax is applied under \fscx and \fscy** (the row sheared, the
+  line scaled around it): libass shears the scaled glyph by
+  fax * scale_x / scale_y, which comes to the same; a row is sheared
+  from its top left, as libass shears each line from its top.
+- **\blur blurs the outline, not the glyphs, where there is one**
+  (libass's ass_synth_blur over bm_o; the shadow a copy of it): the fill
+  stays sharp. Its sigma is the tag's value of the plane's units times
+  2 / sqrt(ln 256); \be's passes of [1 2 1] across and down are half a
+  pixel's variance each, of the display's pixels, added to it. Glyph
+  masks of a blur are the atlas's by an eighth of a point
+  (`Native\Gaussian`, Accelerate's vImageConvolve_Planar8, three
+  sigmas each way; the bitmap grown to hold it).
+- **\t of no end time runs over the whole line** (libass: t2 of 0 is
+  the event's duration): read as instant before.
+- **\kf and \K sweep**: the syllable is drawn in the secondary color
+  and the same text over it, of that syllable alone in the primary,
+  cut at how far the time has swept across its glyphs (their leftmost
+  to their rightmost, line after line, from the text laid out as the
+  node lays it, `shapeRichText`).
+- **A mask is part of a transform entry** (`DisplayList::setMask`,
+  `Node::clipMask`): an entry is 16 floats now, its map and then where
+  the mask lies in the window (its width below 0 inverted) and its
+  image's slot (u plus 4096 times the page; no slot: the rect itself,
+  its edges a pixel soft); the fragment shader multiplies what a quad
+  paints by the mask's alpha where the fragment is (quad_paint under
+  quad_fragment). Entries are keyed by the map and the mask, so a
+  transform inside a mask gets an entry of both. One mask at a time (a
+  mask inside another throws); the window's under-layer replays keep
+  the mask they were noted under. Tests reading the transforms must use
+  FLOATS_PER_TRANSFORM, not 8.
+- **Runs apart are drawn as copies of the whole text, the others
+  ghosts** (`Span::$ghost`: laid out, nothing of it painted): runs
+  turned, scaled or sheared apart (assAlone, a pass each, as libass
+  turns each glyph around \org), of outlines, shadows or blurs apart
+  (assText, a node each over the first), \kf's primary, and with \fay
+  each glyph (libass shears by the glyph's own x: glyphs slant, the
+  line does not), each over a text laid out once. Ghosts paint no quad;
+  a glyph of no alpha draws none either.
+- **libass cuts the fill out of the outline** (ass_fix_outline) unless
+  the fill and the secondary are opaque and the line not fading
+  (FILL_IN_BORDER), and out of the shadow unless the fill shows
+  (FILL_IN_SHADOW); a shadow of no outline shows only of a fill that
+  shows (`VideoPlayerAssDrawing::rules`). A glyph's cut outline is a
+  mask of its own (`Node::textCutOut`, CoreText drawing the glyph over
+  the grown and blurred one in kCGBlendModeDestinationOut), a
+  drawing's the same by VectorMask.
+- **BorderStyle 3's box is per line of the runs' glyphs**, not the
+  row's box (which was the wrap's width for a line that wraps), and
+  blurs as a soft rect (`DisplayList::shadow`, its feather 1.64 sigmas).
+- **\t of a \clip rectangle moves it** from the line's (the plane's
+  without one), as libass; a drawing's clip does not move (libass's
+  neither).
+- **A run restyled keeps what it has** (`VideoPlayerSubtitleStyle::with`,
+  by its fields' names): forcing the settings' style (sub-ass-override)
+  and sub-scale had built runs anew of their first twenty fields, which
+  would have dropped a drawing, its turns and its blur. The settings'
+  Blur (sub-blur) is the style's Blur of text subtitles now.
+
+## The atlases evict bitmap by bitmap (v1.64)
+
+- **`UI\Atlas` keeps its free room** (shelves of heights in steps of
+  four, each with the gaps its bitmaps left, gaps side by side joined; a
+  bitmap goes into the lowest shelf of a gap wide enough no more than a
+  quarter higher than it, else a new shelf below, else an empty shelf
+  split to it; a shelf emptied joins the empty shelves beside it, the
+  last gives its rows back). `add` returns null without room now, not an
+  exception.
+- **What a frame draws from is never evicted** (`Atlas::$frame`, set by
+  its owner each frame; `get` and `mark` note a slot's frame): its quads
+  may be in the frame's display list already. `evict` frees the bitmaps
+  of the oldest frames, one at a time, until the one wanted fits; a
+  bitmap freed has its pixels cleared, as its neighbors' edges sample
+  them through their pixel apart.
+- **The text painter's lines keep their glyphs' places** (their packed
+  quads' u and v): a line marks the slots it draws from once a frame
+  (`Text::quads`), and an eviction drops every line's packed quads (not
+  its shaping), made again from the slots left, as one may name a slot
+  gone. The atlas starts over only when one frame draws more than it
+  holds (`Text::place`; the frame paints again, as before).
+- **The image atlas evicts images, not pages**: past its MAX pages the
+  pages are tried from the one drawn from least recently, each evicting
+  its least recently drawn images; a page is emptied whole only when
+  the frame draws from all of it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
@@ -4972,22 +5073,19 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   equivalent without mpv is in `mygo-deviations.md`. Key bindings carry
   out the mpv commands the player has the means for, the others logged.
 
-- The glyph atlas starts over when full and is re-rasterized whole; an
-  image page is emptied whole. Eviction per glyph or image would avoid
-  the restart, at the cost of free-space bookkeeping the shelves lack.
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache is swept by age but the
   burst itself is CoreText's.
 - An icon turned every frame rasterizes a mask a frame (mygo does too);
-  the atlas starts over when it fills.
+  the masks of the turns before go as the atlas needs their room (v1.64).
 - Text glyphs still come from CoreText: the SVG renderer could draw
   fonts' outlines on Linux and Windows once a font parser exists.
 - `grid` has no automatic margins (nodes have no margins here); a child
   fills its area across unless `justifyItems`/`justifySelf` place it.
   mygo's `Margin` comes with the Markdown view, which uses it.
-- Video: ASS's drawings, blur, 3D rotation and shearing are left out, a
-  \kf is sung whole, a line turns by its first run (its styles, places
-  and motion are read, v1.44; image subtitles, PGS and VobSub, v1.43).
+- Video: ASS's outlines are cut out per glyph, not per line (v1.64, its
+  section and mygo-deviations.md; its styles, places and motion, v1.44;
+  image subtitles, PGS and VobSub, v1.43).
   Vorbis is decoded in PHP (v1.55; FLAC by the system, v1.42; VP9, AV1 and Opus, v1.37),
   nor DTS or TrueHD, which the system has no decoder of. A size
   animated by \t rasterizes its glyphs anew each frame.

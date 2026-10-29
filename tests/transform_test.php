@@ -26,7 +26,7 @@ function quadsOf(DisplayList $list): array
 function entryOf(DisplayList $list, int $i): array
 {
     $v = [];
-    for ($k = 0; $k < DisplayList::FLOATS_PER_TRANSFORM; $k++) { $v[] = $list->xforms[$i * DisplayList::FLOATS_PER_TRANSFORM + $k]; }
+    for ($k = 0; $k < 8; $k++) { $v[] = $list->xforms[$i * DisplayList::FLOATS_PER_TRANSFORM + $k]; } // its map; its mask after it
     return $v;
 }
 
@@ -340,3 +340,27 @@ $r = $c0->layoutBounds($link);
 [$x, $y] = $c0->localToWindow($link, $r[2] / 2, $r[3] / 2);
 $t->click($x, $y);
 same(1, $clicks, 'the transformed inline text takes the click where it shows');
+
+// A clip mask (Node::clipMask, ASS's \clip and \iclip): what is drawn in the node and inside it goes through a transform entry of its own,
+// the mask after its map: where the box lies in the window (its width below 0 inverted), its image's slot (none: the box itself);
+// what is drawn after it, through the entry before.
+$t = new Headless(function (Context $c): void {
+    $c->column()->absolute()->left(20)->top(10)->size(100, 50)->clipMask(null, true);
+      $c->box(30, 30, 0, 0xff0000);
+    $c->end();
+    $c->box(5, 5, 0, 0x00ff00);
+}, 200, 100);
+$t->frame();
+$list = $t->paint();
+$by = []; foreach (quadsOf($list) as $q) { $by[(int)$q[2]] = $q[6]; } // by width: the red box 30, the green 5
+[$masked, $after] = [$by[30], $by[5]];
+$m = []; for ($k = 8; $k < 16; $k++) { $m[] = $list->xforms[$masked * DisplayList::FLOATS_PER_TRANSFORM + $k]; }
+same([[20.0, 10.0, -100.0, 50.0, 0.0, 0.0, 0.0, 0.0], 0], [$m, $after], 'the box inverted, no image; what follows it unmasked');
+// A span laid out but not drawn (Span::$ghost): no glyphs of it, its room kept.
+$t = new Headless(function (Context $c): void {
+    $c->richText([new \MyPHP\UI\Span('ab'), new \MyPHP\UI\Span('cd', ghost: true), new \MyPHP\UI\Span('e')]);
+}, 200, 100);
+$t->frame();
+$glyphs = array_filter(quadsOf($t->paint()), fn(array $q) => abs($q[5] - 1.0) < 1e-6);
+same(3, count($glyphs), 'the ghost\'s two glyphs not drawn, the others\' three');
+check(max(array_map(fn(array $q) => $q[0], $glyphs)) > min(array_map(fn(array $q) => $q[0], $glyphs)) + 3 * 5, 'the last after the ghost\'s room');

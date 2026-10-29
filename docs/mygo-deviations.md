@@ -1751,7 +1751,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Audio: audio threads, the AVFoundation driver and S/PDIF are mpv's;
     gapless audio opens the next audio file 5 s before the end (weak and
     strong alike: the system's renderer, no device kept open).
-  - Subtitles: blur is not drawn (\blur neither); the font is a family
+  - Subtitles: the font is a family
     (no face list: the bold and italic switches choose the face); the
     secondary subtitles are always text at the top (their override level
     is kept, unused); a new default encoding reads the files loaded
@@ -1813,7 +1813,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.
 - **Outlines of text** (v1.45): `Node::textOutline` and `textShadow` are
-  myphp's, for subtitles; mygo's text has neither.
+  myphp's, for subtitles; mygo's text has neither. So are `textBlur`,
+  `textCutOut`, `clipMask`, `Span::$ghost` and `DisplayList::setMask`
+  (v1.64, `@internal` to the video player, for ASS's \blur, \be, outlines
+  and \clip); mygo has no video.
+- **ASS's effects** (v1.64): drawings, \frx \fry \fax \fay, \blur \be,
+  \clip and \iclip of rectangles and drawings and the \kf sweep are
+  drawn as libass draws them, each run with its own; what is left: a
+  glyph is cut out of its own outline only, where libass cuts the
+  line's fill out of the line's outline (a wide outline under the next
+  glyph's half clear fill shows through it); BorderStyle 3's box blurs
+  by a feathered edge of 1.64 sigmas, not a Gaussian; a drawing \pbo
+  puts below the baseline is moved there without making its line
+  taller.
 - **ASS in its styles** (v1.44): `Media\Ass`, `AssLine`, `AssRun`,
   `Subtitles::styled`, `assFile`, `assPacket` and `Player::subtitleLines`
   are myphp's, as IINA (libass) shows ASS; mygo has no video.

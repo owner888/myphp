@@ -9,9 +9,11 @@ use RuntimeException;
  * Images packed into pages, each an RGBA Atlas the size of the glyph
  * atlas and a slice of one texture array: an image goes on the first page
  * with room, a new page opens while there are fewer than MAX (an image up
- * to a page's size has one to itself), and past that the page used least
- * recently is emptied — so thumbnails and a large image stop evicting
- * each other, as they did in one atlas.
+ * to a page's size has one to itself), and past that the images drawn
+ * least recently make room, page by page from the one drawn from least
+ * recently (Atlas::evict, none this frame draws); only when even that
+ * does not do is the page used least recently emptied — so thumbnails
+ * and a large image stop evicting each other, as they did in one atlas.
  */
 final class ImageAtlas
 {
@@ -28,6 +30,7 @@ final class ImageAtlas
     public function beginFrame(): void
     {
         $this->frame++;
+        foreach ($this->pages as $page) { $page->frame = $this->frame; }
     }
 
     /** @return ?array{u: int, v: int, w: int, h: int, page: int} */
@@ -64,18 +67,25 @@ final class ImageAtlas
             throw new RuntimeException("image {$w}x{$h} is larger than a page ({$this->w}x{$this->h})");
         }
         $emptied = false;
-        $i = null;
+        $slot = null; $i = null;
         foreach ($this->pages as $p => $page) {
-            if ($page->fits($w, $h)) {
-                $i = $p;
-                break;
-            }
+            if (($slot = $page->add($key, $w, $h, $src)) !== null) { $i = $p; break; }
         }
-        if ($i === null && count($this->pages) < self::MAX) {
+        if ($slot === null && count($this->pages) < self::MAX) {
             $i = count($this->pages);
             $this->pages[$i] = new Atlas($this->w, $this->h, 4);
+            $this->pages[$i]->frame = $this->frame;
+            $slot = $this->pages[$i]->add($key, $w, $h, $src);
         }
-        if ($i === null) { // every page full: empty the one drawn from least recently, not one this frame draws from if it can be helped
+        if ($slot === null) { // every page full: the images drawn least recently make room, on the page drawn from least recently first
+            $order = array_keys($this->pages);
+            usort($order, fn(int $a, int $b) => ($this->used[$a] ?? -1) <=> ($this->used[$b] ?? -1));
+            foreach ($order as $p) {
+                $this->pages[$p]->evict($w, $h);
+                if (($slot = $this->pages[$p]->add($key, $w, $h, $src)) !== null) { $i = $p; break; }
+            }
+        }
+        if ($slot === null) { // this frame draws from all of it: the page drawn from least recently emptied, what drew from it painted again
             $i = array_key_first($this->pages);
             foreach ($this->pages as $p => $page) {
                 if (($this->used[$p] ?? -1) < ($this->used[$i] ?? -1)) {
@@ -84,8 +94,8 @@ final class ImageAtlas
             }
             $this->pages[$i]->reset();
             $emptied = true;
+            $slot = $this->pages[$i]->add($key, $w, $h, $src) ?? throw new RuntimeException("image {$w}x{$h} does not fit an empty page");
         }
-        $slot = $this->pages[$i]->add($key, $w, $h, $src);
         $this->used[$i] = $this->frame;
         $slot['page'] = $i;
         return [$slot, $emptied];

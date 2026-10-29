@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
 use MyPHP\Media\Ass;
 use MyPHP\Media\AssLine;
 use MyPHP\Media\AssRun;
@@ -52,10 +53,11 @@ final class VideoPlayerSubtitleStyle
     public static function lines(PlayerSettings $set, array $texts, float $aspect, float $scale, bool $secondary = false): array
     {
         $ass = self::script($set, $aspect, $scale, $secondary);
+        $blur = $set->get('subBlur') * $scale; // mpv's sub-blur: the style's Blur, of the 720 high plane
         $out = [];
         foreach ($texts as $text) {
             $l = $ass->line($text, 'Default', plain: true);
-            if ($l !== null) { $out[] = $l; }
+            if ($l !== null) { $out[] = $blur > 0 ? self::restyled($l, fn(AssRun $r) => self::with($r, ['blur' => $blur])) : $l; }
         }
         return $out;
     }
@@ -70,21 +72,32 @@ final class VideoPlayerSubtitleStyle
     {
         $s = self::style($set, $scale);
         $k = $l->playResY / self::HEIGHT;
-        $runs = array_map(fn(AssRun $r) => new AssRun($r->text, $s['font'], $s['size'] * $k, $s['weight'], $s['italic'], $r->underline, $r->strikeout,
-            $s['color'], $s['alpha'] * $r->alpha, $s['outlineColor'], $s['outlineAlpha'], $s['shadowColor'], $s['shadowAlpha'], $s['border'] * $k, $s['shadow'] * $k,
-            $s['spacing'] * $k, $s['borderStyle'], $r->scaleX, $r->scaleY, $r->rotation), $l->runs);
+        $runs = array_map(fn(AssRun $r) => self::with($r, ['font' => $s['font'], 'size' => $s['size'] * $k, 'weight' => $s['weight'], 'italic' => $s['italic'],
+            'color' => $s['color'], 'alpha' => $s['alpha'] * $r->alpha, 'outlineColor' => $s['outlineColor'], 'outlineAlpha' => $s['outlineAlpha'], 'shadowColor' => $s['shadowColor'], 'shadowAlpha' => $s['shadowAlpha'],
+            'border' => $s['border'] * $k, 'shadow' => $s['shadow'] * $k, 'spacing' => $s['spacing'] * $k, 'borderStyle' => $s['borderStyle'],
+            'blur' => $r->blur != 0 ? $r->blur : $set->get('subBlur') * $scale * $k]), $l->runs); // its tags' blur, else the style's
         $placed = $l->position !== null;
         return new AssLine($runs, $placed ? $l->alignment : $s['alignment'], $l->position, $placed ? $l->marginLeft : (int)round($s['marginX'] * $k), $placed ? $l->marginRight : (int)round($s['marginX'] * $k),
-            $placed ? $l->marginVertical : (int)round($s['marginY'] * $k), $l->layer, $l->playResX, $l->playResY, true, $l->wraps, $l->start, $l->duration, $l->alpha, $l->clip, $l->origin, $l->moved);
+            $placed ? $l->marginVertical : (int)round($s['marginY'] * $k), $l->layer, $l->playResX, $l->playResY, true, $l->wraps, $l->start, $l->duration, $l->alpha, $l->clip, $l->origin, $l->moved, $l->clipDrawing, $l->clipInverted);
     }
 
     /** ASS line $l of its sizes $k times (mpv's sub-scale, as sub-ass-override's scale applies it): its fonts, outlines, shadows and spacing. */
     public static function scaled(AssLine $l, float $k): AssLine
     {
-        $runs = array_map(fn(AssRun $r) => new AssRun($r->text, $r->font, $r->size * $k, $r->weight, $r->italic, $r->underline, $r->strikeout, $r->color, $r->alpha, $r->outlineColor,
-            $r->outlineAlpha, $r->shadowColor, $r->shadowAlpha, $r->border * $k, $r->shadow * $k, $r->spacing * $k, $r->borderStyle, $r->scaleX, $r->scaleY, $r->rotation), $l->runs);
-        return new AssLine($runs, $l->alignment, $l->position, $l->marginLeft, $l->marginRight, $l->marginVertical, $l->layer, $l->playResX, $l->playResY, $l->scaledBorder, $l->wraps,
-            $l->start, $l->duration, $l->alpha, $l->clip, $l->origin, $l->moved);
+        return self::restyled($l, fn(AssRun $r) => self::with($r, ['size' => $r->size * $k, 'border' => $r->border * $k, 'shadow' => $r->shadow * $k, 'spacing' => $r->spacing * $k]));
+    }
+
+    /** Line $l of its runs as $fn makes each, the rest as it is. @param Closure(AssRun): AssRun $fn */
+    private static function restyled(AssLine $l, Closure $fn): AssLine
+    {
+        return new AssLine(array_map($fn, $l->runs), $l->alignment, $l->position, $l->marginLeft, $l->marginRight, $l->marginVertical, $l->layer, $l->playResX, $l->playResY, $l->scaledBorder, $l->wraps,
+            $l->start, $l->duration, $l->alpha, $l->clip, $l->origin, $l->moved, $l->clipDrawing, $l->clipInverted);
+    }
+
+    /** Run $r with the fields $set gives (by their names), the others its own: its drawing, turns, blur and sweep kept. @param array<string, mixed> $set */
+    private static function with(AssRun $r, array $set): AssRun
+    {
+        return new AssRun(...[...get_object_vars($r), ...$set]);
     }
 
     /**

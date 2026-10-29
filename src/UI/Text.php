@@ -50,10 +50,11 @@ final class Text implements TextPainter
         return $this->system;
     }
 
-    public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0): void
+    public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void
     {
         $s = $this->ct->scale;
         $stroke = round($stroke * 4) / 4; // the outlines of a few widths in the atlas, a quarter point apart
+        $blur = round($blur * 8) / 8; // and blurs an eighth of a point apart
         foreach ($l->lines as $line) {
             $lastC = -2; $rgb = 0; $alpha = 1.0; $shade = 0;
             foreach ($line->glyphs as $g) {
@@ -61,7 +62,10 @@ final class Text implements TextPainter
                     continue;
                 }
                 if ($g->cluster !== $lastC) { [$rgb, $alpha] = $colorAt($g->cluster); $lastC = $g->cluster; $shade = self::shadeOf($rgb); }
-                $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke);
+                if ($alpha <= 0) {
+                    continue; // clear: nothing to draw
+                }
+                $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke, $blur, $cutOut && $stroke > 0);
                 if ($glyph === null) {
                     continue; // no ink, as a space
                 }
@@ -166,15 +170,12 @@ final class Text implements TextPainter
         $key = "s{$svg->id}/{$pw}x{$ph}/$rotate";
         $slot = $this->atlas->get($key);
         if ($slot === null) {
-            if (!$this->atlas->fits($cw, $ch)) {
-                $this->resetAtlas();
-            }
             $pix = $rotate != 0 ? $svg->doc->rotated($pw, $ph, $cw, $ch, $rotate) : $svg->doc->pixels($pw, $ph);
             $mask = ''; // the coverage of the SVG, whatever its colors: its alpha
             for ($i = 3, $n = count($pix); $i < $n; $i += 4) { $mask .= chr($pix[$i]); }
             $rows = Mem::alloc($cw * $ch);
             \FFI::memcpy($rows, $mask, $cw * $ch);
-            $slot = $this->atlas->add($key, $cw, $ch, Mem::addr($rows));
+            $slot = $this->place($key, $cw, $ch, Mem::addr($rows));
             Mem::free($rows);
         }
         return [$dx - ($cw - $pw) / 2 / $s, $dy - ($ch - $ph) / 2 / $s, $cw / $s, $ch / $s, $slot['u'], $slot['v']];
@@ -217,12 +218,9 @@ final class Text implements TextPainter
         }
         $slot = $this->atlas->get($key);
         if ($slot === null) {
-            if (!$this->atlas->fits($w, $h)) {
-                $this->resetAtlas();
-            }
             $rows = Mem::alloc($w * $h);
             \FFI::memcpy($rows, Svg\Mask::of($path, $width, $s, $x0, $y0, $w, $h), $w * $h);
-            $slot = $this->atlas->add($key, $w, $h, Mem::addr($rows));
+            $slot = $this->place($key, $w, $h, Mem::addr($rows));
             Mem::free($rows);
         }
         return [$x0, $y0, $slot['w'] / $s, $slot['h'] / $s, $slot['u'], $slot['v']];
@@ -234,27 +232,26 @@ final class Text implements TextPainter
      * atlas; with its offsets and size in pixels; null without ink.
      * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int}
      */
-    private function glyph(int $font, int $id, int $shade, float $stroke = 0.0): ?array
+    private function glyph(int $font, int $id, int $shade, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): ?array
     {
         $base = "$font:$id";
-        if ($stroke > 0) { // its outline: a mask of the glyph grown by it, unsmoothed, of no shade
-            $key = "$base:o$stroke";
+        if ($stroke > 0 || $blur > 0) { // its outline (a mask of the glyph grown by it, the glyph cut out of it or not), or it blurred: unsmoothed, of no shade
+            $key = "$base:o$stroke" . ($blur > 0 ? ":b$blur" : '') . ($cutOut ? ':c' : '');
             $slot = $this->atlas->get($key);
-            if ($slot === null) {
-                if (isset($this->colorIndex[$base])) { return null; }
-                $b = $this->ct->rasterize($font, $id, null, -1, $stroke);
-                if ($b === null) {
-                    return null;
-                }
-                if (!$this->atlas->fits($b['w'], $b['h'])) {
-                    $this->resetAtlas();
-                }
-                $slot = $this->atlas->add($key, $b['w'], $b['h'], $b['addr']);
+            $b = $slot !== null || isset($this->colorIndex[$base]) ? null : $this->ct->rasterize($font, $id, null, -1, $stroke, $blur, $cutOut);
+            if ($b !== null) {
+                $slot = $this->place($key, $b['w'], $b['h'], $b['addr']);
                 Mem::free($b['rows']);
                 $this->offsets[$key] = [$b['ox'], $b['oy']];
             }
-            [$ox, $oy] = $this->offsets[$key];
-            return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+            if ($slot !== null) {
+                [$ox, $oy] = $this->offsets[$key];
+                return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+            }
+            if ($stroke > 0 || !$this->ct->isColor($font)) {
+                return null; // no ink, or a color glyph's outline: it has none
+            }
+            // a color glyph blurred: it is its own picture, drawn as it is
         }
         if (isset($this->colorIndex[$base])) {
             $img = $this->colors[$this->colorIndex[$base]];
@@ -276,15 +273,39 @@ final class Text implements TextPainter
                 $this->offsets[$base] = [$b['ox'], $b['oy']];
                 return [null, $img, $b['ox'], $b['oy'], $b['w'], $b['h']];
             }
-            if (!$this->atlas->fits($b['w'], $b['h'])) {
-                $this->resetAtlas();
-            }
-            $slot = $this->atlas->add($key, $b['w'], $b['h'], $b['addr']);
+            $slot = $this->place($key, $b['w'], $b['h'], $b['addr']);
             Mem::free($b['rows']);
             $this->offsets[$key] = [$b['ox'], $b['oy']];
         }
         [$ox, $oy] = $this->offsets[$key];
         return [$slot, null, $ox, $oy, $slot['w'], $slot['h']];
+    }
+
+    /**
+     * Puts the w*h bitmap at $src in the atlas as $key: where there is
+     * room, else where the bitmaps drawn least recently were (Atlas::evict,
+     * none this frame draws from: the cached lines' quads made again from
+     * what is left, as they may name a slot gone), else in the atlas
+     * started over, as a frame that draws more than it holds must.
+     * @return array{u: int, v: int, w: int, h: int}
+     */
+    private function place(string $key, int $w, int $h, int $src): array
+    {
+        $slot = $this->atlas->add($key, $w, $h, $src);
+        if ($slot === null) {
+            $gone = $this->atlas->evict($w, $h);
+            if ($gone !== []) {
+                foreach ($gone as $k) { unset($this->offsets[$k]); }
+                foreach ($this->lines as &$l) { $l['quads'] = []; unset($l['hot'], $l['marked']); }
+                unset($l);
+            }
+            $slot = $this->atlas->add($key, $w, $h, $src);
+        }
+        if ($slot === null) {
+            $this->resetAtlas();
+            $slot = $this->atlas->add($key, $w, $h, $src) ?? throw new \RuntimeException("myphp: a bitmap of {$w}x{$h} is larger than the glyph atlas");
+        }
+        return $slot;
     }
 
     /** Starts the atlas over: every cached line refers to slots that are gone; the color glyphs, in the image atlas, keep theirs. */
@@ -306,6 +327,7 @@ final class Text implements TextPainter
     public function beginFrame(): void
     {
         $this->gen++;
+        $this->atlas->frame = $this->gen; // what this frame draws from stays
         $this->system->endFrame();
         $this->images->beginFrame();
         if ($this->gen % self::SWEEP_EVERY === 0) {
@@ -426,16 +448,21 @@ final class Text implements TextPainter
      */
     private function quads(string $key, int $shade): array
     {
+        if (($this->lines[$key]['marked'][$shade] ?? -1) !== $this->gen && isset($this->lines[$key]['slots'][$shade])) { // its glyphs drawn from this frame: kept in the atlas (Atlas::evict)
+            foreach ($this->lines[$key]['slots'][$shade] as $k) { $this->atlas->mark($k); }
+            $this->lines[$key]['marked'][$shade] = $this->gen;
+        }
         if (isset($this->lines[$key]['hot'][$shade])) { return $this->lines[$key]['hot'][$shade]; }
         $packed = $this->lines[$key]['quads'][$shade] ?? null;
         if ($packed === null) {
             $s = $this->ct->scale;
-            $packed = '';
+            $packed = ''; $slots = [];
             foreach (str_split($this->lines[$key]['glyphs'], self::GLYPH_BYTES) as $g) {
                 ['x' => $px, 'y' => $py, 'font' => $font, 'id' => $id, 'index' => $index] = unpack('ex/ey/qfont/Vid/Vindex', $g);
                 $glyph = $this->glyph($font, $id, $shade);
                 if ($glyph === null) { continue; } // no ink, as a space, in every shade
                 [$slot, $color, $ox, $oy, $w, $h] = $glyph;
+                if ($color === null) { $slots["$font:$id:$shade"] = true; }
                 [$u, $v] = $color === null ? [$slot['u'], $slot['v']] : [-1, $this->colorIndex["$font:$id"]]; // a color glyph's u is -1, its v the index of its picture
                 $packed .= pack('g7', $px + $ox / $s, $py - ($oy + $h) / $s, $w / $s, $h / $s, $u, $v, $index);
             }
@@ -443,6 +470,8 @@ final class Text implements TextPainter
                 return unpack('g*', $packed) ?: [];
             }
             $this->lines[$key]['quads'][$shade] = $packed;
+            $this->lines[$key]['slots'][$shade] = array_keys($slots);
+            $this->lines[$key]['marked'][$shade] = $this->gen;
         }
         return $this->lines[$key]['hot'][$shade] = $packed === '' ? [] : unpack('g*', $packed);
     }

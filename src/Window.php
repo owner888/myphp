@@ -1830,7 +1830,9 @@ final class Window
                         $list->pushClip(...$u['clip']);
                         $list->setWorld($u['world']);
                         $list->setOpacity($u['opacity']);
+                        $list->setMask($u['mask']);
                         Painter::paint($u['node'], $list, $text, App::theme(), $this->runtime);
+                        $list->setMask(null);
                         $list->popClip();
                     }
                 } finally {
