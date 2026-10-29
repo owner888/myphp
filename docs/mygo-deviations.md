@@ -1812,6 +1812,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.
+- **Partial frames** (v1.66): as mygo's, a frame draws only the
+  rectangles that changed since its drawable was drawn, and nothing
+  when it is the last one's; but what changed under a transform or a
+  mask, or a canvas or an image's pixels, draws the frame whole here,
+  where mygo bounds them (its ops' transformed bounds, its atlases'
+  changed rectangles, the backdrops of effects); a frame with glass is
+  drawn whole too.
 - **Memos instead of comparing nodes** (v1.65): mygo's incremental
   layout compares each node with last frame's and keeps its measure;
   myphp keeps what the app marks as built from the same

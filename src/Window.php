@@ -216,7 +216,7 @@ final class Window
             if (($this->frameStats = UI\FrameStats::fromEnv()) !== null) {
                 Metal::$afterPresent[ObjC::addr($this->view)] = function (): void {
                     $this->frameStats->lap(UI\FrameStats::PRESENT);
-                    $this->frameStats->end($this->runtime->frameNumber, App::text()->textSystem()->made, 'Metal');
+                    $this->frameStats->end($this->runtime->frameNumber, App::text()->textSystem()->made, 'Metal, drew ' . (Metal::$redrew[ObjC::addr($this->view)] ?? 'whole')); // whole, in rectangles, or nothing (FrameDamage)
                 };
             }
             Metal::setClearColor($this->view, App::theme()->background);

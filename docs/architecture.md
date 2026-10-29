@@ -5154,6 +5154,52 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   ticking), 2.2 ms (a field typed in); build, layout, commit and paint
   each 3 to 10 times less.
 
+## Metal draws only what changed (v1.66)
+
+- **A frame the same as the last draws nothing** (`Native\FrameDamage`,
+  mygo's scene.Differ): `Metal::present` copies the frame's quads and
+  transforms out of the display list as bytes and compares them with the
+  last frame's from both ends (by halves, as bytes: 0.05 ms for 500
+  quads); the same, with the same size, scale, clear color, glass and
+  holes, it takes no drawable and presents nothing: the drawable shows
+  the frame already.
+- **Otherwise what changed is drawn into what the drawable holds**: the
+  boxes of the quads that differ between the shared start and end (in
+  pixels, within their clips, two around for their smoothed edges;
+  where they drew and where they draw now; a box's second slot stands
+  for its box), in at most eight rectangles apart from each other
+  (`FrameDamage::add`, mygo's addRect). A CAMetalLayer hands its
+  drawables out in turn, so each is tracked by its texture's address
+  (held while tracked, as mygo's), with what changed since it was drawn
+  (`take`, mygo's gpu.Ages); a drawable new to the window is drawn whole.
+  The pass loads it, each rectangle is cleared to the frame's color by
+  an unblended quad of it (`$clearPipeline`, a point past it each way),
+  and every draw is made once in each rectangle, scissored to it
+  (`setScissorRects:count:`, by pointer). Past half the frame together
+  it is drawn whole.
+- **Drawn whole**: a frame with glass (it reads what is below it), with
+  a canvas rendered or an image page uploaded (pixels the quads do not
+  tell of), with a quad drawn through a transform or a mask changed
+  (the entry it names), with other transforms, a new size (the
+  drawables let go, `Metal::letGo`), or more than 768 quads changed
+  between the shared ends; `MYPHP_PARTIAL=0` draws every frame whole.
+  Glyph slots need nothing: a quad unchanged names a slot this frame
+  draws from, which the atlas never evicts (v1.64).
+- `MYPHP_FRAME_STATS` tells how each frame was drawn: `Metal, drew whole`,
+  `drew 2 rectangles`, `drew nothing`.
+- The test draws a frame whole into one texture and, into another
+  holding the frame before, in part, and compares them pixel for pixel
+  (`tests/damage_test.php`, on macOS).
+- **An input method asks for half a character**: the system counts in
+  UTF-16, and a range may end inside an emoji's surrogate pair. The
+  text-input example's client cut it into bytes that are not UTF-8,
+  NSString made nil of them and NSAttributedString threw from inside
+  the callback, which aborts the app. The example cuts at whole
+  characters now; `View` logs text that is not UTF-8 as an error and
+  answers nil (no text), which the text system takes. The example's
+  `boundsForRange` gave the shape before `TextInputClient`'s, a
+  rectangle without its range.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

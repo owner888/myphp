@@ -417,9 +417,21 @@ final class Metal
 
     public $device;
     private $blurPipeline, $canvasPipeline, $canvasUniforms;
-    /** The pipeline of web views' holes: what is there goes, by the quad's coverage (DisplayList::hole). */
-    private $holePipeline;
-    /** @var array<int, array{0: mixed, 1: mixed, 2: mixed}> the quad, blur and hole pipelines of each pixel format drawn to: BGRA8's, and RGBA16Float's once a view draws a wide gamut */
+    /** The pipeline of web views' holes: what is there goes, by the quad's coverage (DisplayList::hole); and the quads' unblended, which clears a part of a frame to its color. */
+    private $holePipeline, $clearPipeline;
+    /**
+     * Each view's frames, by its address (FrameDamage): what changed from one to the next and since each drawable
+     * was drawn; the drawables it tracks, held, by their textures' addresses.
+     * @var array<int, FrameDamage>
+     */
+    private static array $damage = [];
+    /** @var array<int, array<int, mixed>> */
+    private static array $held = [];
+    /** How the last frame of each view, by address, was drawn: whole, in part (rectangles), or not at all, the same as the one before. @var array<int, string> */
+    public static array $redrew = [];
+    /** MYPHP_PARTIAL=0 draws every frame whole, for measurements that compare. */
+    private static ?bool $partial = null;
+    /** @var array<int, array{0: mixed, 1: mixed, 2: mixed, 3: mixed}> the quad, blur, hole and clear pipelines of each pixel format drawn to: BGRA8's, and RGBA16Float's once a view draws a wide gamut */
     private array $pipelines = [];
     /** @var array<int, float> until when each view, by address, draws a wide gamut (hrtime seconds) */
     private array $wideUntil = [];
@@ -479,7 +491,7 @@ final class Metal
         $mtl = FFI::cdef('void* MTLCreateSystemDefaultDevice(void);', '/System/Library/Frameworks/Metal.framework/Metal');
         $this->device = ObjC::import($mtl->MTLCreateSystemDefaultDevice() ?? throw new RuntimeException('no Metal device'));
         $this->queue = ObjC::msg('p:', $this->device, 'newCommandQueue');
-        [$this->pipeline, $this->blurPipeline, $this->holePipeline] = $this->pipelines[self::PIXEL_FORMAT_BGRA8] = $this->buildPipelines(self::PIXEL_FORMAT_BGRA8);
+        [$this->pipeline, $this->blurPipeline, $this->holePipeline, $this->clearPipeline] = $this->pipelines[self::PIXEL_FORMAT_BGRA8] = $this->buildPipelines(self::PIXEL_FORMAT_BGRA8);
         $this->canvasPipeline = $this->buildPipeline('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE);
         $this->canvasUniforms = ObjC::$c->new('float[8]');
         $floats = $capacity * DisplayList::FLOATS_PER_RECT;
@@ -535,11 +547,11 @@ final class Metal
         [CanvasAtlas::$w, CanvasAtlas::$h] = [$images->w, $images->h];
     }
 
-    /** The quad pipeline (blended), the blur pipeline (opaque, for the backdrop textures) and the web views' holes' pipeline, drawing to $format. @return array{0: mixed, 1: mixed, 2: mixed} */
+    /** The quad pipeline (blended), the blur pipeline (opaque, for the backdrop textures), the web views' holes' pipeline and the quads' unblended (a part of a frame cleared, FrameDamage), drawing to $format. @return array{0: mixed, 1: mixed, 2: mixed, 3: mixed} */
     private function buildPipelines(int $format): array
     {
         return [$this->buildPipeline('quad_vertex', 'quad_fragment', true, $format), $this->buildPipeline('blur_vertex', 'blur_fragment', false, $format),
-            $this->buildPipeline('quad_vertex', 'quad_fragment', true, $format, self::BLEND_ZERO, self::BLEND_ZERO)];
+            $this->buildPipeline('quad_vertex', 'quad_fragment', true, $format, self::BLEND_ZERO, self::BLEND_ZERO), $this->buildPipeline('quad_vertex', 'quad_fragment', false, $format)];
     }
 
     /** A pipeline of the library's $vertex and $fragment functions drawing to $format, blended or not; the canvases' (RGBA, keeping alpha premultiplied, as the image atlas holds it) take their alpha as it is. */
@@ -707,10 +719,20 @@ final class Metal
         self::drawLater($view, max(0.0, $refresh - (microtime(true) - $p['last'])));
     }
 
+    /** Lets go of the drawables view $key's frames tracked, and of its last frame: the next is drawn whole. */
+    private static function letGo(int $key): void
+    {
+        foreach (self::$held[$key] ?? [] as $t) { ObjC::msg('v:', $t, 'release'); }
+        unset(self::$held[$key]);
+        self::$damage[$key]?->forget();
+    }
+
     /** Stops pacing a view whose window closed: its link goes. */
     public static function forget($view): void
     {
         $key = ObjC::addr($view);
+        self::letGo($key);
+        unset(self::$damage[$key], self::$redrew[$key]);
         $link = self::$pace[$key]['link'] ?? null;
         if ($link !== null) {
             unset(self::$linked[ObjC::addr($link)]);
@@ -808,16 +830,34 @@ final class Metal
         $this->drawn[ObjC::addr($view)] = $size;
         ObjC::msg('v:b', ObjC::msg('p:', $view, 'layer'), 'setPresentsWithTransaction:', $sync);
         $list->showWide($this->useWide($view, $list)); // its wide colors, as its drawables show them
-        $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
-        $drawable = ObjC::msg('p:', $view, 'currentDrawable');
-        if ($pass === null || $drawable === null) {
-            return;
-        }
         $bounds = ObjC::msg('r:', $view, 'bounds');
         $this->uniforms[0] = $bounds->w;
         $this->uniforms[1] = $bounds->h;
         $window = ObjC::msg('p:', $view, 'window');
         $this->uniforms[4] = $window === null ? $this->uniforms[5] : ObjC::msg('d:', $window, 'backingScaleFactor');
+        $key = ObjC::addr($view);
+        $damage = self::$damage[$key] ??= new FrameDamage();
+        if ($sync) { self::letGo($key); } // a new size: new drawables, drawn whole
+        $canvases = $this->imagesTexture !== null ? CanvasAtlas::take() : [];
+        $pages = false;
+        foreach ($this->images?->pages ?? [] as $page) { $pages = $pages || $page->dirty; }
+        // What changed since the last frame (FrameDamage, mygo's scene.Differ): nothing, and it draws nothing, taking no
+        // drawable; else the drawable gets what changed since it was drawn, cleared and drawn again there, the rest kept.
+        // Glass reads what is below it, canvases and images changed pixels the quads do not tell: drawn whole.
+        $cc = ObjC::msg('k:', $view, 'clearColor');
+        $changed = $damage->diff($list->copyOut(0, $list->n), $list->transformBytes(), [$cc->r, $cc->g, $cc->b, $cc->a, $this->uniforms[5], $this->uniforms[6], $list->glass, $list->holes,
+            ObjC::msg('L:', $view, 'colorPixelFormat')], $this->uniforms[4], (int)$ds->w, (int)$ds->h);
+        if ($list->glass !== [] || $pages || $canvases !== [] || !(self::$partial ??= getenv('MYPHP_PARTIAL') !== '0')) { $changed = null; }
+        if ($changed === [] && !$sync) {
+            self::$redrew[$key] = 'nothing';
+            return; // the same frame: the drawable shows it
+        }
+        $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
+        $drawable = ObjC::msg('p:', $view, 'currentDrawable');
+        if ($pass === null || $drawable === null) {
+            self::letGo($key);
+            return;
+        }
         if ($this->atlas !== null && $this->atlas->dirty) {
             $this->upload($this->atlasTexture, 0, $this->atlas);
         }
@@ -829,15 +869,21 @@ final class Metal
             }
         }
         $cb = ObjC::msg('p:', $this->queue, 'commandBuffer');
-        if ($this->imagesTexture !== null) {
-            foreach (CanvasAtlas::take() as $canvas) { // before the frame, which shows them
-                $this->renderCanvas($cb, $canvas);
-            }
+        foreach ($canvases as $canvas) { // before the frame, which shows them
+            $this->renderCanvas($cb, $canvas);
         }
         $texture = ObjC::msg('p:', $drawable, 'texture');
+        $id = ObjC::addr($texture);
+        if (!$damage->has($id)) { self::$held[$key][$id] = ObjC::msg('p:', $texture, 'retain'); } // held while tracked, so that no other drawable takes its address: Core Animation makes them anew as it likes
+        $part = $damage->take($id, $changed, function (int $gone) use ($key): void {
+            ObjC::msg('v:', self::$held[$key][$gone], 'release');
+            unset(self::$held[$key][$gone]);
+        });
+        $rects = $part !== null && FrameDamage::worth($part, (int)$ds->w, (int)$ds->h) && $list->n + count($part) <= $list->capacity ? $part : null;
+        self::$redrew[$key] = $rects === null ? 'whole' : count($rects) . ' rectangles';
         // One pass draws everything; a glass quad splits it: what is below it is drawn, copied and
         // blurred into the backdrop, and the pass goes on from the glass, which reads the blur.
-        $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$this->frame % self::RING], $this->xformBuffers[$this->frame % self::RING]]);
+        $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$this->frame % self::RING], $this->xformBuffers[$this->frame % self::RING]], $rects, $cc);
         if ($sync) {
             ObjC::msg('v:', $cb, 'commit');
             ObjC::msg('v:', $cb, 'waitUntilScheduled');
@@ -916,9 +962,14 @@ final class Metal
     }
 
     /** Draws $list onto $texture through $pass: one pass, split at each glass quad, which reads what is below it blurred. */
-    private function drawList($cb, $pass, $texture, DisplayList $list, array $buffers): void
+    /**
+     * $rects: the parts of the drawable to draw, in pixels (FrameDamage), what it holds elsewhere kept, each cleared to
+     * $clear first and every quad drawn scissored to each; null draws it whole.
+     * @param ?list<array{0: int, 1: int, 2: int, 3: int}> $rects
+     */
+    private function drawList($cb, $pass, $texture, DisplayList $list, array $buffers, ?array $rects = null, $clear = null): void
     {
-        [$this->pipeline, $this->blurPipeline, $this->holePipeline] = $this->pipelines[ObjC::msg('L:', $texture, 'pixelFormat')]; // the target's: BGRA8, or a wide gamut's float16
+        [$this->pipeline, $this->blurPipeline, $this->holePipeline, $this->clearPipeline] = $this->pipelines[ObjC::msg('L:', $texture, 'pixelFormat')]; // the target's: BGRA8, or a wide gamut's float16
         $start = 0;
         foreach ($list->glass as $g) {
             [$at, $sigma] = $g;
@@ -926,7 +977,17 @@ final class Metal
             $this->blur($cb, $texture, $sigma);
             $start = $at;
         }
-        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers, $list->holes);
+        if ($rects !== null) { // the clearing quads after the frame's, one a part, a point past it each way
+            $s = $this->uniforms[4]; $b = $list->buf;
+            foreach ($rects as $i => [$x0, $y0, $x1, $y1]) {
+                $k = ($list->n + $i) * DisplayList::FLOATS_PER_RECT;
+                $b[$k] = $x0 / $s - 1; $b[$k + 1] = $y0 / $s - 1; $b[$k + 2] = ($x1 - $x0) / $s + 2; $b[$k + 3] = ($y1 - $y0) / $s + 2;
+                $b[$k + 4] = $clear->r; $b[$k + 5] = $clear->g; $b[$k + 6] = $clear->b; $b[$k + 7] = $clear->a;
+                $b[$k + 8] = 0.0; $b[$k + 9] = 0.0; $b[$k + 10] = 0.0; $b[$k + 11] = 0.0;
+                $b[$k + 12] = -1e6; $b[$k + 13] = -1e6; $b[$k + 14] = 2e6; $b[$k + 15] = 2e6;
+            }
+        }
+        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers, $list->holes, $rects);
     }
 
     /**
@@ -935,12 +996,11 @@ final class Metal
      * with their pipeline.
      * @param list<array{0: int, 1: int}> $holes
      */
-    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers, array $holes = []): void
+    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers, array $holes = [], ?array $rects = null): void
     {
         [$quads, $xforms] = $buffers;
-        if (!$first) {
-            ObjC::msg('v:L', ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0), 'setLoadAction:', self::LOAD_LOAD);
-        }
+        ObjC::msg('v:L', ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0), 'setLoadAction:',
+            !$first || $rects !== null ? self::LOAD_LOAD : self::LOAD_CLEAR); // a part, or after glass: what the drawable holds is kept
         $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
         ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->pipeline);
         ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $quads, $from * DisplayList::FLOATS_PER_RECT * 4, 0);
@@ -956,12 +1016,26 @@ final class Metal
         if ($this->backdrop !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->backdrop, 2);
         }
-        $draw = function (int $at, int $n, $pipeline) use ($enc, $quads, $from): void {
+        $scissor = $rects === null ? null : ObjC::$c->new('unsigned long[4]'); // MTLScissorRect: x, y, width, height; set by pointer, as setScissorRect: would take it by value
+        $cut = function (array $r) use ($enc, $scissor): void {
+            [$scissor[0], $scissor[1], $scissor[2], $scissor[3]] = [$r[0], $r[1], $r[2] - $r[0], $r[3] - $r[1]];
+            ObjC::msg('v:pL', $enc, 'setScissorRects:count:', ObjC::$c->cast('void*', FFI::addr($scissor)), 1);
+        };
+        $draw = function (int $at, int $n, $pipeline) use ($enc, $quads, $from, $rects, $cut): void {
             if ($n <= 0) { return; }
             ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $pipeline);
             ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
-            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $n);
+            foreach ($rects ?? [null] as $r) { // drawn once in each part, which are apart from each other
+                if ($r !== null) { $cut($r); }
+                ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $n);
+            }
         };
+        foreach ($rects ?? [] as $i => $r) { // each part cleared to the frame's color first, as a frame drawn whole starts
+            ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->clearPipeline);
+            ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', ($from + $count + $i) * DisplayList::FLOATS_PER_RECT * 4, 0);
+            $cut($r);
+            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, 1);
+        }
         $at = $from;
         foreach ($holes as [$h, $slots]) {
             if ($h < $from || $h >= $from + $count) { continue; }

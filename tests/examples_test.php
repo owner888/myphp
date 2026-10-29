@@ -58,12 +58,17 @@ same('plain', $s->body->text, 'plain text becomes the body');
 [$view, $s] = Headless::load('text-input');
 $t = new Headless($view, 760, 240);
 $t->frame();
+$e = mb_strpos($s->text, '😀'); $u = intdiv(strlen(mb_convert_encoding(mb_substr($s->text, 0, $e), 'UTF-16LE', 'UTF-8')), 2);
+[$cut] = $s->textForRange(new \MyPHP\UI\TextInputRange(0, $u + 1)); // half of the emoji's surrogate pair, as an input method may ask
+check(mb_check_encoding($cut, 'UTF-8') && !str_contains($cut, '😀'), 'a range ending inside a surrogate pair: whole characters, UTF-8: ' . json_encode($cut));
 $t->type('!'); $t->frame();
 check(str_ends_with($s->text, 'עברית!'), 'typed at the end: ' . $s->text);
 $s->replaceText(new \MyPHP\UI\TextInputRange(0, 4), 'Write');
 check(str_starts_with($s->text, 'Write here'), 'a range replaced in UTF-16 units');
 $t->key(Key::DELETE, 'deleteBackward:'); $t->frame();
 check(str_starts_with($s->text, 'Writ here') || str_starts_with($s->text, 'Write here'), 'Delete');
+$b = $s->boundsForRange(new \MyPHP\UI\TextInputRange(0, 1)); // what an input method asks for to place its window: a rectangle and the range it is of (TextInputClient)
+check($b === null || (is_array($b[0]) && count($b[0]) === 4 && $b[1] instanceof \MyPHP\UI\TextInputRange), 'its bounds as the text services take them: ' . json_encode($b));
 
 // text-buffer: the document and its counts.
 [$view, $s] = Headless::load('text-buffer', 'App::setName', ['1000']);

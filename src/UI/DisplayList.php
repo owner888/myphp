@@ -197,6 +197,12 @@ final class DisplayList
         return $to > $from ? \FFI::string(\FFI::addr($this->buf[$from * 16]), ($to - $from) * 16 * 4) : '';
     }
 
+    /** @internal Metal: the bytes of the transforms written this frame, to compare a frame with the last. */
+    public function transformBytes(): string
+    {
+        return \FFI::string(\FFI::addr($this->xforms[0]), $this->transforms * self::FLOATS_PER_TRANSFORM * 4);
+    }
+
     /** @internal Context::memo: quads copyOut() gave, drawn again after those drawn now. */
     public function copyIn(string $quads): void
     {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Native;
 
 use Closure;
+use MyPHP\Logger;
 use MyPHP\UI\{TextInputRange, Input, Key, TextState};
 
 /**
@@ -306,6 +307,10 @@ final class View
                 $client = self::$inputs[ObjC::addr($self)]->client;
                 if ($client === null) { return null; }
                 [$text, $used] = $client->textForRange(new TextInputRange(min((int)$range->location, 1 << 31), min((int)$range->location + (int)$range->length, 1 << 31)));
+                if (!mb_check_encoding($text, 'UTF-8')) { // NSString takes none of it, and NSAttributedString throws at nil: past this callback, which may not throw, the app would abort
+                    Logger::error('textForRange gave text that is not UTF-8 (a character cut, as half of a surrogate pair): ' . bin2hex(substr($text, 0, 16)), 'input');
+                    return null;
+                }
                 self::setRange($actual, $used);
                 return ObjC::msg('p:p', ObjC::alloc('NSAttributedString'), 'initWithString:', ObjC::str($text));
             }],

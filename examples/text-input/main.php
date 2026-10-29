@@ -17,10 +17,16 @@ function utf16Len(string $s): int
     return intdiv(strlen(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8')), 2);
 }
 
-/** The byte offset in $s of its UTF-16 offset $u. */
+/** The byte offset in $s of its UTF-16 offset $u, at the start of the character it falls in: an input method may ask for half of a surrogate pair (an emoji's). */
 function utf16ByteOffset(string $s, int $u): int
 {
-    return strlen(mb_convert_encoding(substr(mb_convert_encoding($s, 'UTF-16LE', 'UTF-8'), 0, 2 * max(0, $u)), 'UTF-8', 'UTF-16LE'));
+    $bytes = 0;
+    foreach (mb_str_split($s, 1, 'UTF-8') as $ch) {
+        $u -= strlen($ch) === 4 ? 2 : 1;
+        if ($u < 0) { break; }
+        $bytes += strlen($ch);
+    }
+    return $bytes;
 }
 
 /** The field's state: the app's own, which a larger editor could replace with its buffer, selections and history without changing the API. */
@@ -77,7 +83,7 @@ final class Field implements TextInputClient
         if ($this->layout === null) { return null; }
         $b = $this->layout->caret($r->start);
         if ($r->start !== $r->end && ($rects = $this->layout->selectionRects($r)) !== []) { $b = $rects[0]; }
-        return [$b[0] + 12, $b[1] + 12, $b[2], $b[3]];
+        return [[$b[0] + 12, $b[1] + 12, $b[2], $b[3]], $r]; // the rectangle and the range it is of (TextInputClient)
     }
 
     public function indexForPoint(float $x, float $y): ?int
