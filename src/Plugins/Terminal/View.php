@@ -87,6 +87,8 @@ final class View implements TextInputClient
     public RightClickAction $rightClick = RightClickAction::RightClickContextMenu;
     /** Scrolling not yet a whole row; the wheel with Command not yet a notch. */
     public float $scrolled = 0, $zoomed = 0;
+    /** That the touchpad's scroll gesture going on zooms, from how it began. */
+    private bool $scrollZoom = false;
     /** An autoscroll tick is due. */
     public bool $ticking = false;
 

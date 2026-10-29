@@ -32,5 +32,9 @@ final class PageOptions
          * Safari/605.1.15" makes the page look like Safari.
          */
         public string $userAgentSuffix = '',
+        /** Lets a horizontal swipe of a trackpad or a Magic Mouse go back and forward through the page's history, as browsers do (mygo's SwipeNavigation, WKWebView's allowsBackForwardNavigationGestures); off, as an app's pages have their own way back. */
+        public bool $swipeNavigation = false,
+        /** Lets a pinch magnify the page, and the trackpad's smart zoom, as browsers do (mygo's PinchZoom, WKWebView's allowsMagnification): it scales what the page shows without laying it out again, as $zoomFactor does; off, as in desktop apps. */
+        public bool $pinchZoom = false,
     ) {}
 }

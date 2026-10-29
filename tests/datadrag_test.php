@@ -179,3 +179,24 @@ $t->frame();
 check($dropped === ['/tmp/a', '/tmp/b'] && !$over, 'dropped on it');
 $t->frame();
 same(2, count($dropped), 'once');
+
+// A native drag held still near a scroll container's edge scrolls it, frame after frame, and its target follows the rows that come under the pointer (mygo's TestNativeDragEdgeScroll).
+$scroll = new \MyPHP\UI\ScrollState(); $rows = []; $dropped = -1; $now = 0;
+$t = poseTester(function (Context $c) use ($scroll, &$rows, &$dropped) {
+    $c->column(0, 0, 1)->scroll($scroll);
+    for ($i = 0; $i < 100; $i++) {
+        $rows[$i] = $row = $c->box(200, 40, 0);
+        if ($c->dropData($row, new DropOptions([Format::TEXT], Operation::COPY))) { $dropped = $i; }
+    }
+    $c->end();
+}, $now, 200, 200);
+$t->frame(1);
+$d = new DataDragEvent(new Offer([Format::TEXT], Operation::COPY));
+$t->rt->dataDragOver(50, 199, $d);
+$first = null; $moved = true;
+for ($i = 0; $i < 8; $i++) {
+    $was = $scroll->y; $now += 16_000_000; $t->frame(1);
+    $moved = $moved && $scroll->y > $was;
+}
+$over = array_search(true, array_map(fn($r) => $t->rt->dataOffer($r->id) !== null, $rows), true);
+check($moved && $over !== false && $over >= 5, "it scrolls each frame, the target the row under the pointer now: row $over");

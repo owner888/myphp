@@ -24,8 +24,10 @@ final class InputEvent
     public const POINTER_DOWN = 6, POINTER_UP = 7;
     /** The pointer at x, y, with $button held, or -1 when none is. */
     public const POINTER_MOVE = 8;
-    /** Scrolls by dx, dy points at x, y; $precise marks touchpads, which scroll by pixels rather than by lines. */
+    /** Scrolls by dx, dy points at x, y; $precise marks touchpads, which scroll by pixels rather than by lines, and $momentum what a touchpad sends on its own once the fingers left it. */
     public const SCROLL = 9;
+    /** A pinch of a touchpad at x, y, to the node under the pointer that takes input (mygo's InputZoom): $scale is how much it grew the content since the last, 1.25 a quarter larger; no node zooms of its own. */
+    public const ZOOM = 10;
 
     public function __construct(
         public int $kind,
@@ -45,5 +47,9 @@ final class InputEvent
         public bool $repeat = false,
         /** The character of a COMPOSE's text its caret is at. */
         public int $caret = 0,
+        /** ZOOM's growth since the last. */
+        public float $scale = 1.0,
+        /** Marks a SCROLL a touchpad sends on its own, its momentum, once the fingers left it. */
+        public bool $momentum = false,
     ) {}
 }

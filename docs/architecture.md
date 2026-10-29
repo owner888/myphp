@@ -5296,6 +5296,48 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   child, cost a layout a few percent: the sizes stay inline, and the
   closure is made only for lines that line up baselines.
 
+## The feel of the wheel, gestures and drag regions (v1.69)
+
+- **A mouse wheel glides** (`Runtime::wheelScroll`, `glideWheels`,
+  mygo's 2549f24): a notch (`['scroll', …, precise false]`, which
+  `View` tells by `hasPreciseScrollingDeltas`) goes over 0.15 s along an
+  ease out, by two `MotionChannel`s from 0 to as far as all the notches
+  scroll, the container moved each frame by what they went since the
+  last, so that a list measuring its rows meanwhile does not throw it
+  off. Notches add up; past the end they stop; the app scrolling the
+  container (a ScrollState's offset set, a `scrollTo`, a `ListState`'s
+  `scrolled`, mygo's 9fd99c0), the thumb pressed or a touchpad's scroll
+  take over; with less motion a notch scrolls at once. A touchpad
+  follows the fingers at once, as before.
+- **The wheel chains**: the innermost scroll container under the pointer
+  that it moves takes it, those around it what it cannot (at its end), as
+  browsers do.
+- **Gestures**: a pinch reaches the node under the pointer taking input
+  as `InputEvent::ZOOM` (`$scale`, mygo's 2be9252), what none takes going
+  on to `Context::magnified` as before; a swipe (`swipeWithEvent:`, a
+  touchpad set to swipe between pages, the side buttons of mice whose
+  software sends swipes) is Back or Forward, as the side buttons are
+  (mygo's 4b839bc); a scroll's momentum is told (`$momentum`), which the
+  terminal's Command zoom ignores, a touchpad gesture keeping what it
+  began as (mygo's 9c69cf8). Pages swipe through their history and zoom
+  with a pinch only when asked (`PageOptions::$swipeNavigation`,
+  `$pinchZoom`, mygo's 32188db).
+- **Drag regions move the window after a quick drag**
+  (`Native\WindowDrag`, mygo's b0a8b3f and da3657e): a local event
+  monitor follows the left button's press; the window server is asked
+  when the pointer has not moved yet, myphp moves the window itself
+  (keeping the point pressed under the pointer, below the menu bar) when
+  it has or when the window server did not begin, and leaves it to the
+  window server once that says it begins (`windowWillMove:`) or the
+  window is not where myphp put it, so that both never move it. The
+  press's drags are the window's then, not the content's.
+- **A native drag held at a scroll container's edge scrolls it**, its
+  target following the rows that come under the still pointer (mygo's
+  8049993).
+- **Pitfall**: an event pushed by tests without its precise flag scrolls
+  as a touchpad (`$e[5] ?? true`), as all of them did before the glide;
+  `Headless::wheel` sends a notch.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

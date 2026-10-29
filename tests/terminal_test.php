@@ -698,6 +698,20 @@ TermClock::install();
 })();
 
 (function () {
+    // A touchpad's gesture keeps what it began as: its momentum does not zoom when Command comes down meanwhile, nor stop zooming when it is let go (mygo's 9c69cf8).
+    $term = Terminal::new(new Options(conn: new TermPipe, font: new Font(size: 14)));
+    $tt = new TermTester($term);
+    $size = function () use ($tt, $term): float { $tt->frame(); return $term->v->font['size']; };
+    $term->v->input(new InputEvent(InputEvent::SCROLL, dy: -10, precise: true));
+    $term->v->input(new InputEvent(InputEvent::SCROLL, mods: Key::COMMAND, dy: -80, precise: true, momentum: true));
+    same(14.0, $size(), 'momentum with Command down: no zoom');
+    $term->v->input(new InputEvent(InputEvent::SCROLL, mods: Key::COMMAND, dy: -40, precise: true));
+    $term->v->input(new InputEvent(InputEvent::SCROLL, dy: -40, precise: true, momentum: true));
+    same(16.0, $size(), 'a gesture that began zooming zooms through its momentum');
+    $term->close();
+})();
+
+(function () {
     // A program that reads the clipboard is offered every format, a file list as text/uri-list, and reads a lazy one only when it asks; a paste it does not read is told after a moment, and still read.
     Terminal::$notTakenAfter = 0.05;
     $conn = new TermPipe;

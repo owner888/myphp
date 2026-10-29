@@ -152,4 +152,7 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     same('Custom/1 MyApp/1.2', $w->userAgent(), 'one set: the suffix still after it');
     $plain = \MyPHP\Native\WebView::create($rect, [], function () {}, userAgent: 'Custom/1');
     same('Custom/1', $plain->userAgent(), 'without a suffix: the one set alone');
+    $both = \MyPHP\Native\WebView::create($rect, [], function () {}, swipe: true, pinch: true);
+    $ns = fn($w, string $p): bool => \MyPHP\Native\ObjC::msg('b:', $w->ns, $p);
+    same([false, false, true, true], [$ns($plain, 'allowsBackForwardNavigationGestures'), $ns($plain, 'allowsMagnification'), $ns($both, 'allowsBackForwardNavigationGestures'), $ns($both, 'allowsMagnification')], 'swipes and pinches off unless asked (mygo\'s 32188db)');
 }

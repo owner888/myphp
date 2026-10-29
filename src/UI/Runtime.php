@@ -437,6 +437,7 @@ final class Runtime
             $state->glide($dt, $this->now);
         }
         $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
+        $this->glideWheels();
         $events = $this->input->events;
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
             if ($this->inspector !== null && $this->inspector->event($this, $e)) {
@@ -542,7 +543,7 @@ final class Runtime
                         $this->moveTextSelection($e[1], $e[2]);
                     }
                     break;
-                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4]); $this->wheeled = true; break;
+                case 'scroll': $this->scrollAt($e[1], $e[2], $e[3], $e[4], $e[5] ?? true); $this->wheeled = true; break; // ['scroll', x, y, dx, dy, precise]: a mouse wheel's notches are not precise
                 case 'magnify': $this->magnifies[] = [$e[1], $e[2], (float)$e[3], (int)$e[4]]; break;
                 case 'pressure':
                     if ($e[3] >= 2 && $this->pressureStage < 2) { $this->forceClicks[] = [$e[1], $e[2]]; } // once, as it goes deep
@@ -1235,7 +1236,10 @@ final class Runtime
     private function dragScroll(): void
     {
         $d = $this->valueDrag;
-        if ($d === null || $d['canceled'] || $d['native']) {
+        if ($this->incoming !== null) { // a native drag over the window, from another app or this one, tells of itself only by its destination events: its target follows the content that scrolled under a still pointer (mygo's 8049993)
+            $over = $this->dataTargetAt($this->input->mouseX, $this->input->mouseY, $this->incoming);
+            if ($over !== $this->dataOver) { $this->dataOver = $over; $this->changed(); }
+        } elseif ($d === null || $d['canceled'] || $d['native']) {
             return;
         }
         $x = $this->input->mouseX; $y = $this->input->mouseY;
@@ -1259,7 +1263,9 @@ final class Runtime
         }
         if ($st->extent()[0] != $was) {
             $this->animating = true;
-            $this->valueDrag['over'] = $this->valueTarget($x, $y, $d['value']); // the node under the pointer changes as the content moves
+            if ($d !== null && !$d['native'] && !$d['canceled']) {
+                $this->valueDrag['over'] = $this->valueTarget($x, $y, $d['value']); // the node under the pointer changes as the content moves
+            }
         }
     }
 
@@ -2027,7 +2033,21 @@ final class Runtime
                 }
                 asort($under);
                 foreach ($under as $id => $_) {
-                    $ev = new InputEvent(InputEvent::SCROLL, mods: $this->input->mods, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false);
+                    $ev = new InputEvent(InputEvent::SCROLL, mods: $this->input->mods, dx: -$e[3], dy: -$e[4], precise: $e[5] ?? false, momentum: $e[6] ?? false);
+                    [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
+                    if (($this->inputs[$id])($ev)) { $this->needsFrame = true; return true; }
+                }
+                return false;
+            case 'magnify': // a pinch, to the innermost node under the pointer taking input that takes it (mygo's InputZoom); what none takes goes on to Context::magnified
+                if ($e[3] == 0) { return false; }
+                $under = [];
+                foreach ($this->inputs as $id => $_) {
+                    $r = $this->rects[$id] ?? null;
+                    if ($r !== null && !isset($this->disabledIds[$id]) && $this->under($id, $e[1], $e[2])) { $under[$id] = $r[2] * $r[3]; }
+                }
+                asort($under);
+                foreach ($under as $id => $_) {
+                    $ev = new InputEvent(InputEvent::ZOOM, mods: $this->input->mods, scale: 1 + (float)$e[3]);
                     [$ev->x, $ev->y] = $this->toLocal($id, $e[1], $e[2]) ?? [0.0, 0.0];
                     if (($this->inputs[$id])($ev)) { $this->needsFrame = true; return true; }
                 }
@@ -2188,6 +2208,7 @@ final class Runtime
                     continue;
                 }
                 $state->stop();
+                unset($this->wheels[spl_object_id($state)]); // the thumb takes over from the wheel
                 $ratio = Scrollbar::pointsPerThumbPoint($r, $extent, $axis);
                 $this->drag = [$state, $axis ? $x : $y, $ratio * ($axis && $rtl ? -1 : 1), $axis, $extent[0], $extent[1], $ratio > 0 ? $extent[1] / $ratio : 0.0]; // right to left, the thumb going right goes back to the start; where it started through the content, how far the content went then, and the track's travel
                 return true;
@@ -3071,34 +3092,119 @@ final class Runtime
     }
 
     /** Scrolls the innermost scrolling container under (x, y) by the wheel's dx and dy points, on the axes it scrolls. */
-    private function scrollAt(float $x, float $y, float $dx, float $dy): void
+    /**
+     * The wheel over ($x, $y): the innermost scroll container under it that it moves, those around it taking what it
+     * cannot (at its end), as browsers chain them (mygo's scroll); a text area inside one takes it over it. A mouse
+     * wheel's notches ($precise false) glide there, as browsers scroll them (mygo's wheelScroll); a touchpad's small
+     * moves follow the fingers at once.
+     */
+    private function scrollAt(float $x, float $y, float $dx, float $dy, bool $precise = true): void
     {
-        $best = null; $bestArea = INF; $axes = [false, true];
+        $under = [];
         foreach ($this->scrolls as $id => $state) {
             $r = $this->rects[$id];
-            if ($this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) {
-                $best = $state; $bestArea = $r[2] * $r[3]; $axes = $this->scrollAxes[$id];
-            }
+            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, $this->scrollAxes[$id]]; }
         }
-        foreach ($this->areas as $id => $state) { // a text area inside a scrolling container takes the wheel over it
+        foreach ($this->areas as $id => $state) {
             $r = $this->rects[$id];
-            if ($this->under($id, $x, $y) && $r[2] * $r[3] < $bestArea) {
-                $best = $state; $bestArea = $r[2] * $r[3];
+            if ($this->under($id, $x, $y)) { $under[] = [$r[2] * $r[3], $state, [false, true]]; }
+        }
+        usort($under, fn(array $a, array $b): int => $a[0] <=> $b[0]); // innermost first
+        $glide = !$precise && !$this->reduceMotion;
+        foreach ($under as [, $state, $axes]) {
+            if ($state instanceof TextState) {
+                $state->scrollY = max(0.0, $state->scrollY - $dy); // the painter clamps it to the text
+                return;
+            }
+            [$sx, $sy] = [$axes[0] ? -$dx : 0.0, $axes[1] ? -$dy : 0.0];
+            if ($glide) {
+                if ($this->wheelMoves($state, $sx, $sy)) {
+                    $this->wheelScroll($state, $sx, $sy);
+                    return;
+                }
+                continue;
+            }
+            unset($this->wheels[spl_object_id($state)]);
+            $state->stop();
+            $was = [$state->extent()[0], $state instanceof ScrollState || $state instanceof ListState ? $state->extentX()[0] : 0.0];
+            if ($sy != 0) { $state->scrollBy($sy); }
+            if ($sx != 0) { $state->scrollByX($sx); } // right to left as well: the offset counts from the right, so the content moves as the wheel does
+            if ($state->extent()[0] != $was[0] || (($state instanceof ScrollState || $state instanceof ListState) && $state->extentX()[0] != $was[1])) {
+                return;
             }
         }
-        if ($best === null) {
-            return;
+    }
+
+    /**
+     * The notches of a mouse wheel on their way through scroll containers, by the state's object id: the state, its
+     * channels across and down going from 0 to as far as all of them scroll, how far it has scrolled with them, and,
+     * for a ScrollState, where it was left (an app setting its offset takes over).
+     * @var array<int, array{state: Scrollable, x: MotionChannel, y: MotionChannel, doneX: float, doneY: float, at: ?array{0: float, 1: float}}>
+     */
+    private array $wheels = [];
+
+    /** How the notches of a mouse wheel scroll: along a short ease out, as browsers scroll them (mygo's wheelAnimation). */
+    private const WHEEL_SECONDS = 0.15;
+
+    /** Whether a notch scrolling ($dx, $dy) moves $s further than the notches on their way already do (mygo's wheelMoves). */
+    private function wheelMoves(Scrollable $s, float $dx, float $dy): bool
+    {
+        $g = $this->wheels[spl_object_id($s)] ?? null;
+        [$ax, $ay] = $g === null ? [0.0, 0.0] : [$g['x']->goal() - $g['doneX'], $g['y']->goal() - $g['doneY']];
+        if ($dy != 0) {
+            [$pos, $max] = $s->extent();
+            $at = max(0.0, min($pos + $ay, $max));
+            if (max(0.0, min($at + $dy, $max)) != $at) { return true; }
         }
-        if ($best instanceof TextState) {
-            $best->scrollY = max(0.0, $best->scrollY - $dy); // the painter clamps it to the text
-            return;
+        if ($dx != 0 && ($s instanceof ScrollState || $s instanceof ListState)) {
+            [$pos, $max] = $s->extentX();
+            $at = max(0.0, min($pos + $ax, $max));
+            if (max(0.0, min($at + $dx, $max)) != $at) { return true; }
         }
-        $best->stop();
-        if ($axes[1] && $dy != 0) {
-            $best->scrollBy(-$dy);
+        return false;
+    }
+
+    /** Scrolls $s by a notch of ($dx, $dy) smoothly, on top of the notches on their way. */
+    private function wheelScroll(Scrollable $s, float $dx, float $dy): void
+    {
+        $k = spl_object_id($s);
+        if (!isset($this->wheels[$k])) {
+            $this->wheels[$k] = ['state' => $s, 'x' => new MotionChannel(0.0, $this->now), 'y' => new MotionChannel(0.0, $this->now), 'doneX' => 0.0, 'doneY' => 0.0, 'at' => null];
         }
-        if ($axes[0] && $dx != 0) {
-            $best->scrollByX(-$dx); // right to left as well: the offset counts from the right, so the content moves as the wheel does
+        $s->stop(); // the user takes over from scrollTo
+        if ($s instanceof ListState) { $s->scrolled = false; } // and from the list's
+        $g = &$this->wheels[$k];
+        $a = new Animation(self::WHEEL_SECONDS);
+        foreach (['x' => $dx, 'y' => $dy] as $axis => $d) {
+            $g[$axis]->advance($this->now);
+            if ($d != 0) { $g[$axis]->retarget($g[$axis]->goal() + $d, $a); }
+        }
+        unset($g);
+        $this->animating = true;
+    }
+
+    /** Moves the containers the notches of a wheel scroll to the frame's time (mygo's glideWheels); an app scrolling them, or a scrollTo, takes over. */
+    private function glideWheels(): void
+    {
+        foreach ($this->wheels as $k => $g) {
+            $s = $g['state'];
+            if ($s->moving() || ($s instanceof ListState && $s->scrolled) || ($s instanceof ScrollState && $g['at'] !== null && ($s->x != $g['at'][0] || $s->y != $g['at'][1]))) { // the app scrolled it, or a scrollTo: it takes over
+                unset($this->wheels[$k]);
+                continue;
+            }
+            $g['x']->advance($this->now); $g['y']->advance($this->now);
+            $dx = $g['x']->value - $g['doneX']; $dy = $g['y']->value - $g['doneY'];
+            $was = [$s->extent()[0], $s instanceof ScrollState || $s instanceof ListState ? $s->extentX()[0] : 0.0];
+            if ($dy != 0) { $s->scrollBy($dy); }
+            if ($dx != 0 && ($s instanceof ScrollState || $s instanceof ListState)) { $s->scrollByX($dx); }
+            $moved = $s->extent()[0] != $was[0] || (($s instanceof ScrollState || $s instanceof ListState) && $s->extentX()[0] != $was[1]);
+            if ((!$moved && ($dx != 0 || $dy != 0)) || (!$g['x']->moving && !$g['y']->moving)) { // at the end of the content, or there
+                unset($this->wheels[$k]);
+                continue;
+            }
+            $this->wheels[$k]['doneX'] = $g['x']->value; $this->wheels[$k]['doneY'] = $g['y']->value;
+            $this->wheels[$k]['at'] = $s instanceof ScrollState ? [$s->x, $s->y] : null;
+            $this->animating = true;
         }
     }
 }

@@ -68,7 +68,7 @@ final class Page
         $this->preload = $o->preloadScript;
         $this->devTools = $o->devTools->on();
         $this->zoom = $o->zoomFactor > 0 ? $o->zoomFactor : 1.0;
-        $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix));
+        $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom);
         $this->wire();
     }
 

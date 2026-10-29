@@ -1911,3 +1911,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   paragraphs, soft hyphens and baseline shift (a8f25ed), rich text's
   paragraph indent and spacing (7e510df), Markdown's inline math
   (610df69).
+
+## Feel (v1.69)
+
+- **Scroll events without the flag**: mygo's events say whether they are
+  precise; myphp's `['scroll', x, y, dx, dy]` without the sixth item
+  scrolls as a touchpad's, at once, as the tests and apps pushing them
+  did before notches glided.
+- **A pinch none takes**: mygo's InputZoom goes to the handler under the
+  pointer or nowhere; myphp's goes on to `Context::magnified` (the video
+  player's pinch) when no node takes it.
+- **Drag regions' point**: mygo reads a drag's point from its CGEvent;
+  myphp from NSEvent's `mouseLocation` as the monitor sees the drag,
+  where mygo falls back to the same.

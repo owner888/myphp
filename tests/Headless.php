@@ -226,6 +226,14 @@ final class Headless
         return $this->frame();
     }
 
+    /** A notch of a mouse wheel scrolling ($dx, $dy) with the pointer at ($x, $y), whose scroll container glides there over a moment (Runtime::wheelScroll), then a frame. */
+    public function wheel(float $x, float $y, float $dx, float $dy): Node
+    {
+        $this->input->mouse($x, $y);
+        $this->input->push(['scroll', $x, $y, $dx, $dy, false]);
+        return $this->frame(1);
+    }
+
     /** The mouse pressed at ($x, $y) and held. */
     public function press(float $x, float $y): Node
     {

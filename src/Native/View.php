@@ -126,6 +126,7 @@ final class View
                 $key = ObjC::addr($self);
                 if (isset(self::$lastDown[$key])) { ObjC::msg('v:', self::$lastDown[$key], 'release'); }
                 self::$lastDown[$key] = ObjC::msg('p:', $event, 'retain');
+                if (($win = ObjC::msg('p:', $self, 'window')) !== null) { WindowDrag::pressed($win, $event); } // native UI's drag regions move the window with it
                 $mouse('down')($self, $cmd, $event);
             }],
             'mouseUp:' => ['v@:@', 'v(ppp)', $mouse('up')],
@@ -142,6 +143,14 @@ final class View
                 [$x, $y] = $point($self, $event);
                 self::$inputs[ObjC::addr($self)]->push(['magnify', $x, $y, ObjC::msg('d:', $event, 'magnification'), ObjC::msg('L:', $event, 'phase')]);
                 Metal::requestFrame($self);
+            }],
+            // A swipe goes back and forward, as the side buttons do: the buttons of mice whose makers' software sends swipes for them (Logi Options+), and touchpads set to swipe between pages; deltaX positive, a swipe to the left, goes back, as Safari reads it (mygo's 4b839bc).
+            'swipeWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                $dx = ObjC::msg('d:', $event, 'deltaX');
+                if ($dx != 0) {
+                    self::$inputs[ObjC::addr($self)]->push(['key', '', $dx > 0 ? Key::BACK : Key::FORWARD, ObjC::msg('L:', $event, 'modifierFlags')]);
+                    Metal::requestFrame($self);
+                }
             }],
             'pressureChangeWithEvent:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
                 [$x, $y] = $point($self, $event);
@@ -178,7 +187,7 @@ final class View
                 }
                 $input->mouse($x, $y);
                 $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
-                $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas')]);
+                $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas'), ObjC::msg('L:', $event, 'momentumPhase') !== 0]); // its momentum: what the touchpad sends once the fingers left it
                 Metal::requestFrame($self);
             }],
             'keyDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {

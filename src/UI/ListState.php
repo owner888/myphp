@@ -62,6 +62,8 @@ final class ListState implements Scrollable
     public ?array $drag = null;
     /** An identity for row $i (Closure(int): int|string), for the selection to follow its items as rows come, go and move; the index without one. */
     public ?Closure $key = null;
+    /** @internal That the app asked the list to scroll (scrollTo, scrollToOffset, scrollIntoView, scrollToEnd): a mouse wheel's notches on their way stop there (Runtime::glideWheels, mygo's 9fd99c0). */
+    public bool $scrolled = false;
     /** Keeps a list with a $key where it is scrolled as its rows move, rather than with the item at its top (mygo's KeepOffset): for rows sorted again as they change, as a process monitor's, which the list would otherwise scroll along with the item at its top. The choice and the row Shift chooses from still follow their items. */
     public bool $keepOffset = false;
     /** A list showing its end keeps showing it as rows are appended (a chat, a log), until the user scrolls up. */
@@ -377,6 +379,7 @@ final class ListState implements Scrollable
      */
     public function scrollTo(int $row, bool $smooth = true, int $align = Node::START): void
     {
+        $this->scrolled = true;
         $row = max(0, min($this->count - 1, $row));
         if ($smooth && $align === Node::START) {
             $this->target = $row;
@@ -394,7 +397,7 @@ final class ListState implements Scrollable
     /** Scrolls to $y points through the rows as extent() counts them: the thumb of the scroll bar dragged there. */
     public function scrollToOffset(float $y): void
     {
-        $this->target = null; $this->aligning = null;
+        $this->target = null; $this->aligning = null; $this->scrolled = true;
         $est = max(1.0, $this->estimate);
         $this->row = max(0, min($this->count - 1, (int)floor($y / $est)));
         $this->offset = $y - $this->row * $est;
@@ -410,7 +413,7 @@ final class ListState implements Scrollable
     /** Scrolls as little as needed to bring row $row into view. */
     public function scrollIntoView(int $row): void
     {
-        $this->target = null;
+        $this->target = null; $this->scrolled = true;
         $row = max(0, min($this->count - 1, $row));
         if ($row < $this->row || ($row === $this->row && $this->offset > 0)) {
             $this->scrollTo($row, false); // at the top, under its section's header

@@ -36,7 +36,7 @@ check($h->byText('Beta.mkv') !== null, 'a title over its file\'s name');
 check($h->byText('00:25') !== null, 'where a film was left');
 
 // A double click plays it; Command-A and Return all of them there are, Command-Return in a new window.
-$h->clickOn($h->byText('Alpha.mkv'), 0, 2); $h->frame();
+$h->clickOn($h->byText('Alpha.mkv')); $h->clickOn($h->byText('Alpha.mkv'), 0, 2); $h->frame(); // the second press of two on it (Runtime::countPress)
 same([[[$a], false]], $opened, 'a double click plays it');
 $opened = [];
 $h->shortcut('a', Key::COMMAND); $h->frame();

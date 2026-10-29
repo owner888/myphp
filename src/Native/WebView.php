@@ -103,7 +103,7 @@ final class WebView
      * leak between pages.
      * @param list<string> $scripts
      */
-    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = ''): self
+    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false): self
     {
         self::define();
         $self = new self($onMessage);
@@ -145,6 +145,9 @@ final class WebView
         if ($zoom > 0 && $zoom != 1) {
             $self->setZoom($zoom);
         }
+        // Both off in a new WKWebView (PageOptions::$swipeNavigation, $pinchZoom).
+        if ($swipe) { ObjC::msg('v:b', $self->ns, 'setAllowsBackForwardNavigationGestures:', true); }
+        if ($pinch) { ObjC::msg('v:b', $self->ns, 'setAllowsMagnification:', true); }
         Drop::register($self->ns);
         ObjC::msg('v:p', $self->ns, 'setNavigationDelegate:', self::$navigationDelegate); // weak: the class keeps it
         ObjC::msg('v:p', $self->ns, 'setUIDelegate:', self::$uiDelegate);
@@ -284,6 +287,7 @@ final class WebView
             'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 if (self::$lastDown !== null) { ObjC::msg('v:', self::$lastDown, 'release'); }
                 self::$lastDown = ObjC::msg('p:', $event, 'retain');
+                if (($win = ObjC::msg('p:', $self, 'window')) !== null) { WindowDrag::pressed($win, $event); }
                 ObjC::msgSuper('v:p', $self, 'WKWebView', 'mouseDown:', $event);
             }],
         ], ['NSDraggingDestination']);

@@ -501,7 +501,12 @@ trait ViewInput
         if ($this->cellH === 0) {
             return false;
         }
-        if (($ev->mods & Key::COMMAND) !== 0) {
+        $zooming = ($ev->mods & Key::COMMAND) !== 0;
+        if ($ev->precise) { // a touchpad gesture keeps what it began as, though Command comes down while its momentum still runs (mygo's 9c69cf8)
+            if (!$ev->momentum) { $this->scrollZoom = $zooming; }
+            $zooming = $this->scrollZoom;
+        }
+        if ($zooming) {
             // Rolling up is a step up. dy is the scroll offset's change, so up comes negative; a wheel's event is a notch, a trackpad's many small moves, which add up to a step by 40.
             if (!$ev->precise) {
                 if ($ev->dy < 0) { $this->zoom(new Zoom(1)); } elseif ($ev->dy > 0) { $this->zoom(new Zoom(-1)); }

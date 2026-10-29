@@ -549,8 +549,8 @@ final class Window
             match ($action === null ? '' : ObjC::phpStr($action)) { 'None' => null, 'Minimize' => ObjC::msg('v:p', $this->ns, 'performMiniaturize:', null), default => ObjC::msg('v:p', $this->ns, 'performZoom:', null) };
             return;
         }
-        $event = ObjC::msg('p:', $this->ns, 'currentEvent');
-        if ($event !== null) { ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $event); }
+        $down = View::lastDown($this->view);
+        if ($down !== null && !(ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) { Native\WindowDrag::startDrag($this->ns, $down); } // the window server, or myphp after a quick drag (Native\WindowDrag)
     }
 
     /** The web page the window shows, or null for a window showing native UI (mygo's Page). */
@@ -658,6 +658,7 @@ final class Window
                 }],
                 'windowDidResize:' => ['v@:@', 'v(ppp)', $fire('resize')],
                 'windowDidMove:' => ['v@:@', 'v(ppp)', $fire('move')],
+                'windowWillMove:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $note) => Native\WindowDrag::the()->willMove(ObjC::addr(ObjC::msg('p:', $note, 'object')))], // the window server begins to move it: a drag region's press is its
                 'windowDidMiniaturize:' => ['v@:@', 'v(ppp)', $fire('minimize')],
                 'windowDidDeminiaturize:' => ['v@:@', 'v(ppp)', $fire('restore')],
                 'windowDidEnterFullScreen:' => ['v@:@', 'v(ppp)', $fire('enterFullScreen')],
@@ -723,6 +724,7 @@ final class Window
         }
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
+        if ($this->ns !== null) { Native\WindowDrag::forget($this->ns); }
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         if ($this->under !== null) {
             Metal::forget($this->under);
@@ -1744,8 +1746,8 @@ final class Window
     {
         if ($clicks === 2) {
             $this->dragWindow(2);
-        } elseif (($down = Native\WebView::lastDown()) !== null) {
-            ObjC::msg('v:p', $this->ns, 'performWindowDragWithEvent:', $down);
+        } elseif (($down = Native\WebView::lastDown()) !== null && !(ObjC::msg('L:', $this->ns, 'styleMask') & self::FULL_SCREEN)) {
+            Native\WindowDrag::startDrag($this->ns, $down);
         }
     }
 
