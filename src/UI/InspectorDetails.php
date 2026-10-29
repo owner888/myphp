@@ -101,11 +101,14 @@ final class InspectorDetails
         if (($v = self::edges($n->barInsets)) !== null) { $add('scrollbar-insets', $v); }
         $bc = $n->borderColor ?? $in->base?->border ?? 0;
         $style = $n->borderStyle === BorderStyle::Dashed ? ' dashed ' : ' solid ';
-        if ($n->bordered) {
-            $add('border', Inspector::px($n->borderWidth) . $style . Inspector::color($bc), $bc);
-        } elseif (($v = self::edges($n->borders)) !== null) {
-            $add('border', $v . $style . Inspector::color($bc), $bc);
+        $bv = $n->bordered ? Inspector::px($n->borderWidth) : self::edges($n->borders);
+        if ($bv !== null && $n->borderGradient !== null) { // its gradient paints it (mygo's border-image)
+            $add('border', $bv . rtrim($style));
+            $add('border-image', 'gradient');
+        } elseif ($bv !== null) {
+            $add('border', $bv . $style . Inspector::color($bc), $bc);
         }
+        if ($n->blur > 0) { $add('filter', 'blur(' . Inspector::px($n->blur) . ')'); }
         if (($v = self::edges($n->corners())) !== null) { $add('border-radius', $v); }
         if ($n->scroll !== null) {
             $add(match (true) { $n->scrollX && $n->scrollY => 'overflow', $n->scrollX => 'overflow-x', default => 'overflow-y' }, 'scroll');
@@ -114,9 +117,13 @@ final class InspectorDetails
         }
         if ($n->material !== null) {
             $add('background', $n->material instanceof \Stringable ? (string)$n->material : 'material'); // a material describes itself as a Stringable
-        } elseif (($g = $n->gradient) instanceof RadialGradient) {
+        } elseif (($g = $n->gradient) instanceof ConicGradient) {
+            $add('background', 'conic-gradient(from ' . Inspector::num($g->angle) . 'deg, ' . count($g->stops) . ' stops)');
+        } elseif ($g !== null && $g->stops !== []) {
+            $add('background', ($g instanceof RadialGradient ? 'radial' : 'linear') . '-gradient(' . ($g instanceof LinearGradient ? Inspector::num($g->angle) . 'deg, ' : '') . count($g->stops) . ' stops)');
+        } elseif ($g instanceof RadialGradient) {
             $add('background', 'radial-gradient(circle ' . ($g->radius > 0 ? Inspector::num($g->radius) . 'px' : 'farthest-corner') . ' at ' . Inspector::num($g->centerX * 100) . '% ' . Inspector::num($g->centerY * 100) . '%, ' . Inspector::color($g->from, $g->fromAlpha) . ', ' . Inspector::color($g->to, $g->toAlpha) . ')');
-        } elseif (($g = $n->gradient) !== null) {
+        } elseif ($g !== null) {
             $add('background', 'linear-gradient(' . Inspector::num($g->angle) . 'deg, ' . Inspector::color($g->from, $g->fromAlpha) . ', ' . Inspector::color($g->to, $g->toAlpha) . ')');
         } elseif ($n->stripes !== null) {
             $add('background', 'stripes ' . Inspector::color($n->stripes[0], $n->stripes[1]), $n->stripes[0]);

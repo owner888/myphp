@@ -11,9 +11,12 @@ namespace MyPHP\UI;
  * the colors along the line, from 0 to 1, solid before and after them;
  * both 0 mean 0 and 1. $oklab mixes them in the Oklab color space, whose
  * midpoints keep the colors' lightness and saturation, as CSS's "in oklab".
+ * $stops, unless empty, are its colors in place of $from and $to (and
+ * $start and $end), at their places along the line (GradientStop).
  */
 final class LinearGradient
 {
+    /** @param list<GradientStop> $stops */
     public function __construct(
         public int $from = 0x000000,
         public float $fromAlpha = 1.0,
@@ -23,5 +26,6 @@ final class LinearGradient
         public float $start = 0,
         public float $end = 0,
         public bool $oklab = false,
+        public array $stops = [],
     ) {}
 }

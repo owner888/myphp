@@ -5356,9 +5356,9 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **Radial gradients** (`RadialGradient`, `Node::radialGradient`,
   `Painter::fillRadialGradient`, mygo's 977740f): from a center in
   fractions of the box to a radius in points, or the farthest corner, in
-  sRGB or Oklab. Box paints 4 and 5 in the Metal shader (`paintAt`), the
-  dashed border flag now 8 and the path mask 16 so that paints have room.
-  Two colors, as myphp's linear gradients (see the deviations).
+  sRGB or Oklab, in the Metal shader (`paintAt`). Two colors, as myphp's
+  linear gradients; since v1.72 they paint through stops (paints 8 and
+  9) and the flags moved again (see v1.72).
 - **Zoom** (`Context::setZoom`, `zoom()`, mygo's 91d105a): the runtime
   keeps the zoom asked (`$zoom`) and the one the frame was laid out at
   (`$frameZoom`, set before each pass, so that a pass that zooms builds
@@ -5432,6 +5432,64 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   following the build before, as input reaches the calendar as it is
   built; the month buttons draw their chevrons in their middle (mygo's
   e554723).
+
+## Gradient stops, conic gradients, element blur (v1.72)
+
+- **Stops** (`GradientStop`, `LinearGradient::$stops`,
+  `RadialGradient::$stops`, mygo's 3cb5ea6): a gradient of stops paints
+  a box through `DisplayList::box` with a paint of stops (linear 4 and
+  5, conic 6 and 7, radial 8 and 9, each in sRGB or Oklab, mygo's
+  numbering); the box's quad holds how many stops in `u`, and each stop
+  takes a slot of kind -1 after the box's second: its color, straight,
+  at the list's opacity, its place (at the one before's or after, as
+  CSS orders them) and its color in Oklab, worked out once in PHP
+  (`DisplayList::oklab`). The vertex shader passes the instance's index
+  on, the fragment shader reads the stops from the quads' buffer, which
+  the pass binds to the fragment stage at the offset it draws from
+  (`setFragmentBufferOffset`), and `stopsAt` mixes the two around `t`
+  as mygo's does. Stops travelling with their box, frame damage sees
+  them change as it sees the box's colors, and a canvas's list carries
+  its own. A radial gradient always paints through stops, its two
+  colors as two; a linear one of two colors keeps paints 1 and 2. At
+  most 32 stops (`DisplayList::MAX_STOPS`).
+- **Flags**: a box's slot holds its paint plus 16 when dashed, 32 for a
+  path's mask, 64 when the gradient paints the border; Metal's `box()`
+  takes them off from the largest.
+- **Conic gradients** (`ConicGradient`, `Node::conicGradient`,
+  `Painter::fillConicGradient`, `fillPathConicGradient`,
+  `strokePathConicGradient`): `g` is the center, from the box's top left,
+  and the start angle in radians; `t` is the angle of the point from
+  upwards, clockwise, less the start, in turns. A path's tiles move the
+  center alone (`DisplayList::pathGradient` takes the paint).
+- **Border gradients** (`Node::borderLinearGradient`,
+  `borderConicGradient`): the background paints as ever, then a box of
+  the border's widths, its inside transparent, flagged 64: the shader
+  paints the border with the gradient times the border's color, opaque
+  white at the node's alpha, whose stops then take no opacity of their
+  own. A linear one of two colors becomes two stops at its start and end
+  (`Painter::gradientPaint` with `$asStops`).
+- **Element blur** (`Node::blur`, `Painter::paintBlurred`): a blurred
+  node paints its subtree into a `Canvas` kept for it by its id
+  (`Runtime::$blurLayers`, dropped with the node) covering its box and 3
+  sigma around, in the window's pixels, or in a half, a quarter or an
+  eighth of them for a wide blur, as mygo computes a large blur at a
+  fraction of the size, the blur left at 2 pixels at least; what the
+  averaging takes of the variance comes off the sigma. The canvas's list
+  draws through a base map (`DisplayList::setBase`): the node's map
+  inverted, then the canvas's pixels, which every map `setWorld` is
+  given goes through, so the subtree paints as it is laid out, with its
+  transforms and clips; `world()` returns the map given. `Canvas::$blur`
+  has `renderCanvas` blur the rendered canvas along rows into a texture
+  of its size and back along columns (`blur_clear_fragment`, sampling
+  `clamp_to_zero`: transparent beyond it, as CSS's), before it is copied
+  to its page. The window then shows the bitmap over the area it was
+  drawn from, through the node's map, at the opacity around it. A
+  canvas larger than `Canvas::MAX` paints the node as it is; one out of
+  the clip paints nothing. Hit testing, focus and accessibility take
+  the node as laid out.
+- **Inspector**: conic backgrounds and gradients of stops show as
+  `conic-gradient(from …, n stops)`, a border's gradient as
+  `border-image: gradient`, a blur as `filter: blur(…)`.
 
 ## Open items
 

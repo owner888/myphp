@@ -34,7 +34,8 @@ final class Metal
     struct Uniforms { float2 viewport; float2 atlas; float scale; float atlasScale; float dark; float pad; };   // scale: this view's pixels per point; atlasScale: what glyphs were rasterized at; dark: the theme
     struct V { float4 pos [[position]]; float2 local; float2 extent; float2 uv; float4 color; float radius; float kind; float4 clip [[flat]]; float4 rect [[flat]];
                float4 r4 [[flat]]; float4 b4 [[flat]]; float4 e4 [[flat]]; float4 g4 [[flat]];   // kinds 14 and 15: the slot after the quad (DisplayList::box, boxShadow)
-               float4 mrect [[flat]]; float4 mslot [[flat]]; };   // the mask it is cut by (its Xform's)
+               float4 mrect [[flat]]; float4 mslot [[flat]];   // the mask it is cut by (its Xform's)
+               uint inst [[flat]]; };   // its instance: a box's stops follow it (DisplayList::box), which the fragment reads
     struct Xform { float4 abcd; float4 xygh; float4 mrect; float4 mslot; };   // the map from the quad's points to the window's: ((a x + c y + x0) / w, (b x + d y + y0) / w), w = g x + h y + 1; the mask (DisplayList::setMask): where it lies in the window, points (z below 0: inverted, z 0: none), and its image's slot, pixels (x plus 4096 times the page; z 0: no image, the rect itself)
     vertex V quad_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                          const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]], const device Xform* xf [[buffer(2)]]) {
@@ -65,6 +66,7 @@ final class Metal
         o.clip = float4(i.clip.xy, i.clip.xy + i.clip.zw) * u.scale;   // x0 y0 x1 y1 in pixels
         o.mrect = m.mrect; o.mslot = m.mslot;
         o.rect = i.rect * u.scale;   // the quad in pixels, for the glass
+        o.inst = iid;
         if (kind > 13.5) {
             Inst x = in[iid + 1];
             o.r4 = x.rect; o.b4 = x.color; o.e4 = x.params; o.g4 = x.clip;
@@ -180,19 +182,46 @@ final class Metal
                              -0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z));
     }
     float4 premul(float4 c) { return float4(c.rgb * c.a, c.a); }
-    // The premultiplied color at p of a plain color (0), a gradient from g.xy to g.zw mixed in sRGB (1) or Oklab (2), stripes (3) of c1 over c2, g.xy across them, g.z wide every g.w, or a radial gradient from g.xy out to a circle of radius g.z mixed in sRGB (4) or Oklab (5).
-    float4 paintAt(float2 p, float mode, float4 c1, float4 c2, float4 g, float scale) {
+    // The color at t of the gradient of the n stops from in[at] on (DisplayList::stops: the color, straight, in rect; its place and its color in Oklab in color), premultiplied: the first's before it, the last's after it, between two both mixed in sRGB or in Oklab (mygo's stopsAt).
+    float4 stopsAt(const device Inst* in, uint at, int n, float t, bool lab) {
+        if (n <= 0) { return float4(0.0); }
+        Inst a = in[at], last = in[at + uint(n) - 1];
+        if (t <= a.color.x) { return premul(a.rect); }
+        if (t >= last.color.x) { return premul(last.rect); }
+        Inst b = last;
+        for (int i = 1; i < n - 1; i++) {
+            Inst c = in[at + uint(i)];
+            if (t < c.color.x) { b = c; break; }
+            a = c;
+        }
+        float f = saturate((t - a.color.x) / max(b.color.x - a.color.x, 1e-6));
+        float alpha = mix(a.rect.a, b.rect.a, f);
+        if (!lab) { return float4(mix(a.rect.rgb * a.rect.a, b.rect.rgb * b.rect.a, f), alpha); }
+        if (alpha <= 0.0) { return float4(0.0); }
+        return float4(saturate(fromOklab(mix(a.color.yzw * a.rect.a, b.color.yzw * b.rect.a, f) / alpha)) * alpha, alpha);
+    }
+    // The premultiplied color at p of a plain color (0), a gradient from g.xy to g.zw mixed in sRGB (1) or Oklab (2), stripes (3) of c1 over c2, g.xy across them, g.z wide every g.w, or a gradient of the n stops from in[at], mixed in sRGB or Oklab: linear from g.xy to g.zw (4, 5), conic around g.xy from g.z radians clockwise from upwards (6, 7), radial from g.xy out to a circle of radius g.z (8, 9).
+    float4 paintAt(float2 p, float mode, float4 c1, float4 c2, float4 g, float scale, const device Inst* in, uint at, int n) {
         if (mode < 0.5) { return premul(c1); }
-        if (mode < 2.5 || mode > 3.5) {
+        if (mode > 3.5) {
             float t;
-            if (mode < 2.5) {
+            if (mode < 5.5) {
                 float2 d = g.zw - g.xy;
-                t = saturate(dot(p - g.xy, d) / max(dot(d, d), 0.0001));
+                t = dot(p - g.xy, d) / max(dot(d, d), 0.0001);
+            } else if (mode < 7.5) {
+                float2 d = p - g.xy;
+                t = (atan2(d.x, -d.y) - g.z) * 0.15915494309189535;
+                t -= floor(t);
             } else {
-                t = saturate(length(p - g.xy) / max(g.z, 0.0001));
+                t = length(p - g.xy) / max(g.z, 0.0001);
             }
+            return stopsAt(in, at, n, t, (mode > 4.5 && mode < 5.5) || (mode > 6.5 && mode < 7.5) || mode > 8.5);
+        }
+        if (mode < 2.5) {
+            float2 d = g.zw - g.xy;
+            float t = saturate(dot(p - g.xy, d) / max(dot(d, d), 0.0001));
             float a = mix(c1.a, c2.a, t);
-            if (mode < 1.5 || (mode > 3.5 && mode < 4.5)) { return float4(mix(c1.rgb * c1.a, c2.rgb * c2.a, t), a); }
+            if (mode < 1.5) { return float4(mix(c1.rgb * c1.a, c2.rgb * c2.a, t), a); }
             if (a <= 0.0) { return float4(0.0); }
             float3 lab = mix(oklab(c1.rgb) * c1.a, oklab(c2.rgb) * c2.a, t);
             return float4(saturate(fromOklab(lab / a)) * a, a);
@@ -251,17 +280,22 @@ final class Metal
         }
         return v;
     }
-    float4 box(V v, constant Uniforms& u, texture2d<float> atlas) {   // the slot after: radii (or, for a mask, its place in the glyph atlas), border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 8 when dashed + 16 for a mask, the paint's g
+    float4 box(V v, constant Uniforms& u, texture2d<float> atlas, const device Inst* in) {   // the slot after: radii (or, for a mask, its place in the glyph atlas), border widths (top right bottom left), the border's rgb (packed), its alpha, the paint + 16 when dashed + 32 for a mask + 64 for a border the gradient paints, the paint's g; u: its stops, which follow the slot
         constexpr sampler s(filter::linear);
         float scale = u.scale;
         float2 size = 2.0 * v.extent;
         float2 p = v.local + v.extent;
         float4 rad = v.r4;
         float flags = v.e4.w;
-        bool mask = flags > 15.5;   // a path's mask from the atlas, painted (Painter::fillPathGradient)
-        if (mask) { flags -= 16.0; }
+        bool borderPaint = flags > 63.5;   // the gradient paints the border, times its color; the inside is the plain color
+        if (borderPaint) { flags -= 64.0; }
+        bool mask = flags > 31.5;   // a path's mask from the atlas, painted (Painter::fillPathGradient)
+        if (mask) { flags -= 32.0; }
+        bool dashed = flags > 15.5;
+        if (dashed) { flags -= 16.0; }
         float outer = mask ? atlas.sample(s, (rad.xy + p * u.atlasScale) / u.atlas).r : cover(sdBox(p, size, rad), scale);
-        float4 res = paintAt(p, flags > 7.5 ? flags - 8.0 : flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale) * outer;
+        float4 pc = paintAt(p, flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale, in, v.inst + 2, flags > 3.5 ? int(v.uv.x + 0.5) : 0);
+        float4 res = (borderPaint ? premul(v.color) : pc) * outer;
         float4 bw = v.b4;
         if (!mask && any(bw > 0.0)) {
             float2 isz = size - bw.yz - bw.wx;
@@ -271,8 +305,8 @@ final class Metal
                 inner = cover(sdBox(p - bw.wx, isz, fitRadii(isz, ir)), scale);
             }
             float bc = saturate(outer - inner);
-            if (flags > 7.5) { bc *= dash(p, size, bw, scale); }
-            float4 b = float4(unpackRGB(v.e4.x) * v.e4.z, v.e4.z) * bc;
+            if (dashed) { bc *= dash(p, size, bw, scale); }
+            float4 b = (borderPaint ? pc : float4(1.0)) * float4(unpackRGB(v.e4.x) * v.e4.z, v.e4.z) * bc;
             res = b + res * (1.0 - b.a);
         }
         return float4(res.a > 0.0 ? res.rgb / res.a : float3(0.0), res.a);
@@ -298,12 +332,12 @@ final class Metal
         return float4(v.color.rgb, v.color.a * a);
     }
     // What a quad paints, cut to its clip and its mask: the mask's coverage (alpha) where the fragment is, in the window, nothing outside it; inverted, the rest.
-    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop);
-    fragment float4 quad_fragment(V v [[stage_in]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d_array<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
+    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop, const device Inst* in);
+    fragment float4 quad_fragment(V v [[stage_in]], const device Inst* in [[buffer(0)]], constant Uniforms& u [[buffer(1)]], texture2d<float> atlas [[texture(0)]], texture2d_array<float> images [[texture(1)]], texture2d<float> backdrop [[texture(2)]]) {
         if (v.pos.x < v.clip.x || v.pos.y < v.clip.y || v.pos.x >= v.clip.z || v.pos.y >= v.clip.w) {
             discard_fragment();
         }
-        float4 c = quad_paint(v, u, atlas, images, backdrop);
+        float4 c = quad_paint(v, u, atlas, images, backdrop, in);
         if (v.mrect.z != 0.0) {
             float2 t = (v.pos.xy / u.scale - v.mrect.xy) / float2(abs(v.mrect.z), v.mrect.w);
             float m = 0.0;
@@ -319,11 +353,11 @@ final class Metal
         }
         return c;
     }
-    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop) {
+    float4 quad_paint(V v, constant Uniforms& u, texture2d<float> atlas, texture2d_array<float> images, texture2d<float> backdrop, const device Inst* in) {
         constexpr sampler s(filter::linear);
         constexpr sampler nearest(filter::nearest);
         if (v.kind > 14.5) { return boxShadowQuad(v, u.scale); }
-        if (v.kind > 13.5) { return box(v, u, atlas); }
+        if (v.kind > 13.5) { return box(v, u, atlas, in); }
         if (v.kind > 1.5 && (v.kind < 2.5 || v.kind > 11.5)) {   // an image from the atlas page color.z (2), in shades of gray (12): BT.709 luminance of the premultiplied color; pixelated (13)
             float4 c = v.kind > 12.5 ? images.sample(nearest, v.uv, uint(v.color.z + 0.5)) : images.sample(s, v.uv, uint(v.color.z + 0.5));   // premultiplied; the blend expects straight alpha
             if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
@@ -406,8 +440,7 @@ final class Metal
         float2 uv = float2((vid << 1) & 2, vid & 2);
         BV o; o.pos = float4(uv * 2.0 - 1.0, 0.0, 1.0); o.uv = float2(uv.x, 1.0 - uv.y); return o;
     }
-    fragment float4 blur_fragment(BV v [[stage_in]], constant Blur& b [[buffer(0)]], texture2d<float> src [[texture(0)]]) {
-        constexpr sampler s(filter::linear, address::clamp_to_edge);
+    float4 blurAlong(BV v, constant Blur& b, texture2d<float> src, sampler s) {
         float2 texel = 1.0 / float2(src.get_width(), src.get_height());
         float4 sum = float4(0.0); float wsum = 0.0;
         int taps = int(ceil(b.sigma * 3.0));
@@ -418,10 +451,23 @@ final class Metal
         }
         return sum / wsum;
     }
+    fragment float4 blur_fragment(BV v [[stage_in]], constant Blur& b [[buffer(0)]], texture2d<float> src [[texture(0)]]) {
+        constexpr sampler s(filter::linear, address::clamp_to_edge);
+        return blurAlong(v, b, src, s);
+    }
+    // A blurred canvas's (Node::blur): transparent beyond its pixels, as CSS's filter: blur() reads them.
+    fragment float4 blur_clear_fragment(BV v [[stage_in]], constant Blur& b [[buffer(0)]], texture2d<float> src [[texture(0)]]) {
+        constexpr sampler s(filter::linear, address::clamp_to_zero);
+        return blurAlong(v, b, src, s);
+    }
     MSL;
 
     public $device;
     private $blurPipeline, $canvasPipeline, $canvasUniforms;
+    /** The pipeline blurring a canvas drawn blurred (Canvas::$blur), transparent beyond its pixels; the textures its passes go through, by size. */
+    private $canvasBlurPipeline;
+    /** @var array<string, mixed> */
+    private array $canvasBlurTemps = [];
     /** The pipeline of web views' holes: what is there goes, by the quad's coverage (DisplayList::hole); and the quads' unblended, which clears a part of a frame to its color. */
     private $holePipeline, $clearPipeline;
     /**
@@ -498,6 +544,7 @@ final class Metal
         $this->queue = ObjC::msg('p:', $this->device, 'newCommandQueue');
         [$this->pipeline, $this->blurPipeline, $this->holePipeline, $this->clearPipeline] = $this->pipelines[self::PIXEL_FORMAT_BGRA8] = $this->buildPipelines(self::PIXEL_FORMAT_BGRA8);
         $this->canvasPipeline = $this->buildPipeline('quad_vertex', 'quad_fragment', true, self::PIXEL_FORMAT_RGBA8, self::BLEND_ONE);
+        $this->canvasBlurPipeline = $this->buildPipeline('blur_vertex', 'blur_clear_fragment', false, self::PIXEL_FORMAT_RGBA8);
         $this->canvasUniforms = ObjC::$c->new('float[8]');
         $floats = $capacity * DisplayList::FLOATS_PER_RECT;
         for ($i = 0; $i < self::RING; $i++) {
@@ -1024,6 +1071,7 @@ final class Metal
         ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $this->uniforms, 32, 1);
         ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $xforms, 0, 2);
         ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $this->uniforms, 32, 1);
+        ObjC::msg('v:pLL', $enc, 'setFragmentBuffer:offset:atIndex:', $quads, $from * DisplayList::FLOATS_PER_RECT * 4, 0); // a box's stops, after it
         if ($this->atlasTexture !== null) {
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);
         }
@@ -1042,6 +1090,7 @@ final class Metal
             if ($n <= 0) { return; }
             ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $pipeline);
             ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
+            ObjC::msg('v:LL', $enc, 'setFragmentBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
             foreach ($rects ?? [null] as $r) { // drawn once in each part, which are apart from each other
                 if ($r !== null) { $cut($r); }
                 ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $n);
@@ -1050,6 +1099,7 @@ final class Metal
         foreach ($rects ?? [] as $i => $r) { // each part cleared to the frame's color first, as a frame drawn whole starts
             ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->clearPipeline);
             ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', ($from + $count + $i) * DisplayList::FLOATS_PER_RECT * 4, 0);
+            ObjC::msg('v:LL', $enc, 'setFragmentBufferOffset:atIndex:', ($from + $count + $i) * DisplayList::FLOATS_PER_RECT * 4, 0);
             $cut($r);
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, 1);
         }
@@ -1104,6 +1154,7 @@ final class Metal
             ObjC::msg('v:pLL', $enc, 'setVertexBytes:length:atIndex:', $uni, 32, 1);
             ObjC::msg('v:pLL', $enc, 'setVertexBuffer:offset:atIndex:', $xforms, 0, 2);
             ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $uni, 32, 1);
+            ObjC::msg('v:pLL', $enc, 'setFragmentBuffer:offset:atIndex:', $quads, 0, 0);
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->imagesTexture, 1);
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $list->n);
@@ -1111,6 +1162,14 @@ final class Metal
             ObjC::msg('v:', $xforms, 'release');
         }
         ObjC::msg('v:', $enc, 'endEncoding');
+        if ($c->blur > 0) { // blurred along rows into a texture of its size, then along columns back
+            $tmp = $this->canvasBlurTemps[$key] ??= $this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8);
+            if (count($this->canvasBlurTemps) > 16) {
+                foreach ($this->canvasBlurTemps as $k => $t) { if ($k !== $key) { ObjC::msg('v:', $t, 'release'); unset($this->canvasBlurTemps[$k]); } }
+            }
+            $this->blurPass($cb, $target, $tmp, 1.0, 0.0, $c->blur, $this->canvasBlurPipeline);
+            $this->blurPass($cb, $tmp, $target, 0.0, 1.0, $c->blur, $this->canvasBlurPipeline);
+        }
         $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
         $from = ObjC::$c->new('MTLOrigin');
         $size = ObjC::$c->new('MTLSize');
@@ -1153,7 +1212,7 @@ final class Metal
         $this->blurPass($cb, $this->blurTemp, $this->backdrop, 0.0, 1.0, max(0.5, $sigma / 2));
     }
 
-    private function blurPass($cb, $src, $dst, float $dx, float $dy, float $sigma): void
+    private function blurPass($cb, $src, $dst, float $dx, float $dy, float $sigma, $pipeline = null): void
     {
         $desc = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
         $ca = ObjC::msg('p:L', ObjC::msg('p:', $desc, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
@@ -1161,7 +1220,7 @@ final class Metal
         ObjC::msg('v:L', $ca, 'setLoadAction:', 0);
         ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
         $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $desc);
-        ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $this->blurPipeline);
+        ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $pipeline ?? $this->blurPipeline);
         $this->blurParams[0] = $dx; $this->blurParams[1] = $dy; $this->blurParams[2] = $sigma;
         ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', $this->blurParams, 16, 0);
         ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $src, 0);

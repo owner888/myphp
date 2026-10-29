@@ -31,6 +31,8 @@ final class Canvas
     public ?array $slot = null;
     /** @internal the number of its last draw, among all canvases' (0: never drawn), which renders canvases drawn inside others first */
     public int $drawn = 0;
+    /** @internal the standard deviation, in its pixels, of the Gaussian blur it renders through, transparent beyond its pixels (Node::blur); 0 for none */
+    public float $blur = 0.0;
     private static int $draws = 0;
 
     /** A canvas of $w × $h pixels, transparent until drawn (mygo's NewCanvas). */

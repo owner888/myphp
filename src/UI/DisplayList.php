@@ -19,10 +19,12 @@ use RuntimeException;
  * color by its alpha), kind 9 a line, kinds 10 and 11 a gradient between two
  * colors across (10) or down (11) the quad: the color, and u the other's
  * rgb packed as a float, v its alpha. Kind 14 is a box (box(): its paint,
- * corners, borders; or, flagged 16, a path's mask from the glyph atlas,
+ * corners, borders; or, flagged MASK, a path's mask from the glyph atlas,
  * painted: pathGradient()) and kind 15 a box shadow (boxShadow()), each
  * taking the slot after it too for what does not fit in its own, that
- * slot's kind -1.
+ * slot's kind -1; a box painted with a gradient of stops takes a slot
+ * more for each stop, of kind -1 too: its color (straight sRGB), its
+ * place, and its color in Oklab.
  * Kinds 5, 7 and 8 read what was drawn before
  * them, blurred: the renderer splits the frame's draw at each of them.
  * The clip rect is the innermost pushClip() in effect; fragments outside
@@ -45,8 +47,18 @@ final class DisplayList
 {
     public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 16;
     public const KIND_STRIDE = 16.0;
-    /** What box() fills with (mygo's scene.Paint): a color, a linear gradient mixed in sRGB or in Oklab, stripes, or a radial gradient mixed in sRGB or in Oklab. */
-    public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3, PAINT_RADIAL = 4, PAINT_RADIAL_OKLAB = 5;
+    /**
+     * What box() fills with (mygo's scene.Paint): a color, a linear
+     * gradient of two colors mixed in sRGB or in Oklab, stripes, or a
+     * gradient of stops, linear, conic or radial, each mixed in sRGB or in
+     * Oklab.
+     */
+    public const PAINT_COLOR = 0, PAINT_LINEAR = 1, PAINT_OKLAB = 2, PAINT_STRIPES = 3, PAINT_LINEAR_STOPS = 4, PAINT_LINEAR_STOPS_OKLAB = 5,
+        PAINT_CONIC = 6, PAINT_CONIC_OKLAB = 7, PAINT_RADIAL = 8, PAINT_RADIAL_OKLAB = 9;
+    /** What a box's slot flags with its paint: its border dashed, a path's mask, its border painted with the gradient (the inside with plain color). */
+    public const DASHED = 16, MASK = 32, BORDER_PAINT = 64;
+    /** How many stops a gradient takes at most (mygo's scene.MaxStops). */
+    public const MAX_STOPS = 32;
     private const NO_CLIP = [-1e6, -1e6, 2e6, 2e6];
     public int $n = 0;
     /** The zoom of the content it draws (Context::setZoom, mygo's scene Zoom): its points are this many of the view's, drawn at its scale times it. Set by the window. */
@@ -67,6 +79,12 @@ final class DisplayList
     public int $transforms = 1;
     /** What is drawn now is drawn through: the map, its entry as kind + KIND_STRIDE * entry, and the entries of the maps written this frame by spl_object_id, with the maps: held until reset, as an id is reused by a new object once its own is freed, and a map drawn through and gone would give its entry to another. */
     private Affine $world;
+    /** The map setWorld was given, which world() returns: $world is it after the base (setBase). */
+    private Affine $given;
+    /** @internal Painter::paintBlurred: the map from the window to what is drawn into this list, after every map setWorld is given; null for none. */
+    private ?Affine $base = null;
+    /** @var array<int, array{0: Affine, 1: Affine}> the maps setWorld was given, by spl_object_id, with the base after them, held until reset */
+    private array $based = [];
     private float $xk = 0.0;
     /** @var array<string, array{0: int, 1: Affine}> by the map's spl_object_id and the mask's key */
     private array $entries = [];
@@ -80,18 +98,29 @@ final class DisplayList
 
     public function __construct(public CData $buf, public int $capacity, public CData $xforms, public int $xformCapacity)
     {
-        $this->world = Affine::identity();
+        $this->world = $this->given = Affine::identity();
         $this->writeEntry(0, $this->world);
     }
 
     /** Draws what follows through $m, the map from its coordinates to the window (mygo's Painter transform); clips pushed after it are its bounds. */
     public function setWorld(Affine $m): void
     {
-        if ($m === $this->world) {
+        if ($m === $this->given) {
             return;
         }
-        $this->world = $m;
+        $this->given = $m;
+        $this->world = $this->base === null ? $m : ($this->based[spl_object_id($m)] ??= [$m, $this->base->mul($m)])[1];
         $this->through();
+    }
+
+    /** @internal Painter::paintBlurred: draws what follows, and all drawn through setWorld after, through $base after its map: a subtree laid out in the window drawn into a canvas's pixels. */
+    public function setBase(Affine $base): void
+    {
+        $this->base = $base;
+        $this->based = [];
+        $m = $this->given;
+        $this->given = Affine::singular(); // set again, through the base
+        $this->setWorld($m);
     }
 
     /**
@@ -141,7 +170,7 @@ final class DisplayList
     /** The map what is drawn now is drawn through. */
     public function world(): Affine
     {
-        return $this->world;
+        return $this->given;
     }
 
     /** Draws what follows at $opacity, from 0 to 1, as its alpha times it. */
@@ -161,7 +190,7 @@ final class DisplayList
      */
     public function transform(Transform $t, float $ox, float $oy, \Closure $fn): void
     {
-        $saved = $this->world;
+        $saved = $this->given;
         $m = $t->flat();
         if ($m->set) {
             $this->setWorld($saved->mul(Affine::translation($ox, $oy))->mul($m)->mul(Affine::translation(-$ox, -$oy)));
@@ -226,7 +255,8 @@ final class DisplayList
         $this->clip = self::NO_CLIP;
         $this->clips = [];
         $this->transforms = 1; $this->entries = [];
-        $this->world = Affine::identity(); $this->xk = 0.0; $this->mask = null; $this->maskKey = '';
+        $this->world = $this->given = Affine::identity(); $this->xk = 0.0; $this->mask = null; $this->maskKey = '';
+        $this->base = null; $this->based = [];
         $this->opacity = 1.0;
     }
 
@@ -385,22 +415,61 @@ final class DisplayList
      * bottom right, bottom left), fitted to it as CSS does; filled with
      * $rgb at $alpha, or, by $paint, a gradient from $rgb to $rgb2 at
      * $alpha2 from ($g[0], $g[1]) to ($g[2], $g[3]), in points from its top
-     * left, or out from ($g[0], $g[1]) to a circle $g[2] points around it
-     * (radial), or stripes of $rgb over $rgb2, ($g[0], $g[1]) the unit vector
-     * across them, $g[2] wide every $g[3] points; inside its edges a border
-     * of $borders (top, right, bottom, left) in $borderRgb at $borderAlpha,
-     * $dashed or solid, its inner corners each the outer less the wider of
-     * its sides.
+     * left, or stripes of $rgb over $rgb2, ($g[0], $g[1]) the unit vector
+     * across them, $g[2] wide every $g[3] points, or a gradient of $stops
+     * ([rgb, alpha, place] each, in order): linear from ($g[0], $g[1]) to
+     * ($g[2], $g[3]), conic around ($g[0], $g[1]) from $g[2] radians
+     * clockwise from upwards, or radial out from ($g[0], $g[1]) to a circle
+     * $g[2] points around it; inside its edges a border of $borders (top,
+     * right, bottom, left) in $borderRgb at $borderAlpha, $dashed or solid,
+     * its inner corners each the outer less the wider of its sides. With
+     * $borderPaint the gradient paints the border, times its color, and
+     * $rgb at $alpha the inside.
      * @param array{0: float, 1: float, 2: float, 3: float} $radii
      * @param array{0: float, 1: float, 2: float, 3: float} $borders
      * @param array{0: float, 1: float, 2: float, 3: float} $g
+     * @param list<array{0: int, 1: float, 2: float}> $stops
      */
     public function box(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, array $borders = [0.0, 0.0, 0.0, 0.0], int $borderRgb = 0, float $borderAlpha = 0.0, bool $dashed = false,
-                        int $paint = self::PAINT_COLOR, int $rgb2 = 0, float $alpha2 = 0.0, array $g = [0.0, 0.0, 0.0, 0.0]): void
+                        int $paint = self::PAINT_COLOR, int $rgb2 = 0, float $alpha2 = 0.0, array $g = [0.0, 0.0, 0.0, 0.0], array $stops = [], bool $borderPaint = false): void
     {
-        $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2); // a gradient's or stripes' second color and the border's are packed: they draw their sRGB twins
+        $n = $paint >= self::PAINT_LINEAR_STOPS ? min(count($stops), self::MAX_STOPS) : 0;
+        if ($n > 0) { // u: how many stops follow the slot
+            $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)$n, 0.0, 2 + $n);
+        } else {
+            $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2); // a gradient's or stripes' second color and the border's are packed: they draw their sRGB twins
+        }
         $r = self::fitRadii($w, $h, $radii);
-        $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? 8.0 : 0.0), $g);
+        $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? self::DASHED : 0) + ($borderPaint ? self::BORDER_PAINT : 0), $g);
+        $this->stops($stops, $n, $borderPaint ? 1.0 : $this->opacity); // a border's color, at the opacity, times the gradient
+    }
+
+    /** The first $n of $stops, each a slot of kind -1 after a box's: its color, straight, at $opacity, its place, at the one before's or after, and its color in Oklab. @param list<array{0: int, 1: float, 2: float}> $stops */
+    private function stops(array $stops, int $n, float $opacity): void
+    {
+        $last = -INF;
+        for ($i = 0; $i < $n; $i++) {
+            [$rgb, $alpha, $at] = $stops[$i];
+            $last = $at = max($at, $last); // in order, as CSS puts them
+            [$l, $a, $b] = self::oklab($rgb);
+            $c = $rgb & 0xffffff;
+            $this->slot([(($c >> 16) & 255) / 255, (($c >> 8) & 255) / 255, ($c & 255) / 255, $alpha * $opacity], [$at, $l, $a, $b], 0.0, 0.0, 0.0, [0.0, 0.0, 0.0, 0.0]);
+        }
+    }
+
+    /** sRGB $rgb in the Oklab color space (mygo's scene.Oklab), as the shader mixes gradients in it. @return array{0: float, 1: float, 2: float} */
+    public static function oklab(int $rgb): array
+    {
+        $lin = static function (int $c): float {
+            $c /= 255;
+            return $c <= 0.04045 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+        };
+        [$r, $g, $b] = [$lin(($rgb >> 16) & 255), $lin(($rgb >> 8) & 255), $lin($rgb & 255)];
+        $l = (0.4122214708 * $r + 0.5363325363 * $g + 0.0514459929 * $b) ** (1 / 3);
+        $m = (0.2119034982 * $r + 0.6806995451 * $g + 0.1073969566 * $b) ** (1 / 3);
+        $s = (0.0883024619 * $r + 0.2817188376 * $g + 0.6299787005 * $b) ** (1 / 3);
+        return [0.2104542553 * $l + 0.7936177850 * $m - 0.0040720468 * $s, 1.9779984951 * $l - 2.4285922050 * $m + 0.4505937099 * $s,
+            0.0259040371 * $l + 0.7827717662 * $m - 0.8086757660 * $s];
     }
 
     /**
@@ -422,8 +491,17 @@ final class DisplayList
         $this->slot(self::fitRadii($w, $h, $radii), $cut, $c[0], $c[1], $c[2], [$c[3], 0.0, 0.0, 0.0]);
     }
 
-    /** Fills $path, or with $width > 0 strokes it that wide, with the gradient from $rgb at $alpha to $rgb2 at $alpha2 along the line $line(w, h) gives, in points from the top left of the path's bounds (mygo's FillPathGradient, StrokePathGradient): its mask from the atlas, as path() draws it, painted as a box (flag 16). @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line */
-    public function pathGradient(Path $path, float $width, int $rgb, float $alpha, int $rgb2, float $alpha2, bool $oklab, \Closure $line): void
+    /**
+     * Fills $path, or with $width > 0 strokes it that wide, with a gradient
+     * as box() paints one by $paint: from $rgb at $alpha to $rgb2 at
+     * $alpha2, or of $stops, at $g(w, h), in points from the top left of
+     * the path's bounds (mygo's FillPathGradient, StrokePathGradient,
+     * FillPathConicGradient): its mask from the atlas, as path() draws it,
+     * painted as a box (flag MASK).
+     * @param \Closure(float, float): array{0: float, 1: float, 2: float, 3: float} $line
+     * @param list<array{0: int, 1: float, 2: float}> $stops
+     */
+    public function pathGradient(Path $path, float $width, int $paint, int $rgb, float $alpha, int $rgb2, float $alpha2, \Closure $line, array $stops = []): void
     {
         $quads = $this->pathQuad === null ? [] : ($this->pathQuad)($path, $width, fn(float $x, float $y, float $w, float $h): bool => !$this->clipped($x, $y, $w, $h));
         if ($quads === []) {
@@ -434,11 +512,18 @@ final class DisplayList
         $bounds = $this->pathQuad !== null && count($quads) > 1 ? $path->bounds() : null;
         $l = $bounds !== null ? $line($bounds[2] - $bounds[0] + $width, $bounds[3] - $bounds[1] + $width) : $line($quads[0][2], $quads[0][3]);
         $ox = $bounds !== null ? $bounds[0] - $width / 2 : $bx; $oy = $bounds !== null ? $bounds[1] - $width / 2 : $by;
+        $n = $paint >= self::PAINT_LINEAR_STOPS ? min(count($stops), self::MAX_STOPS) : 0;
+        $around = $paint >= self::PAINT_CONIC; // conic and radial: a center, which alone moves
         foreach ($quads as $q) {
             if ($this->clipped($q[0], $q[1], $q[2], $q[3])) { continue; }
-            $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+            if ($n > 0) {
+                $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)$n, 0.0, 2 + $n);
+            } else {
+                $this->quad($q[0], $q[1], $q[2], $q[3], $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2);
+            }
             [$dx, $dy] = [$ox - $q[0], $oy - $q[1]];
-            $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, ($oklab ? self::PAINT_OKLAB : self::PAINT_LINEAR) + 16.0, [$l[0] + $dx, $l[1] + $dy, $l[2] + $dx, $l[3] + $dy]);
+            $this->slot([(float)$q[4], (float)$q[5], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, $paint + self::MASK, [$l[0] + $dx, $l[1] + $dy, $around ? $l[2] : $l[2] + $dx, $around ? $l[3] : $l[3] + $dy]);
+            $this->stops($stops, $n, $this->opacity);
         }
     }
 

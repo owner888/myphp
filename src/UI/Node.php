@@ -172,8 +172,14 @@ final class Node
     public bool $belowMaterials = false;
     /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
     public ?array $radii = null;
-    /** A gradient filling the node in place of its color (gradient, linearGradient, radialGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
-    public LinearGradient|RadialGradient|null $gradient = null;
+    /** A gradient filling the node in place of its color (gradient, linearGradient, radialGradient, conicGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
+    public LinearGradient|RadialGradient|ConicGradient|null $gradient = null;
+    /** The gradient painting the node's border in place of its color (borderLinearGradient, borderConicGradient), or null. */
+    public LinearGradient|ConicGradient|null $borderGradient = null;
+    /** The standard deviation of the node's blur, with its children, in points (blur); 0 for none. */
+    public float $blur = 0.0;
+    /** @internal Painter::paintBlurred: painted into its blur's canvas now */
+    public bool $blurring = false;
     public ?array $stripes = null;
     /** Whether the border is solid or dashed (mygo's BorderStyle). */
     public BorderStyle $borderStyle = BorderStyle::Solid;
@@ -518,6 +524,53 @@ final class Node
     public function radialGradient(RadialGradient $g): static
     {
         $this->gradient = $g; $this->stripes = null;
+        return $this;
+    }
+
+    /**
+     * Fills the node with a conic gradient, its colors turning around a
+     * point (mygo's ConicGradient, CSS's conic-gradient()), in place of
+     * its color:
+     *
+     *     $c->box(80, 80)->radius(40)->conicGradient(new ConicGradient([
+     *         new GradientStop(0xff0000, 0), new GradientStop(0xffff00, 1 / 3), new GradientStop(0x0000ff, 2 / 3), new GradientStop(0xff0000, 1),
+     *     ]));
+     */
+    public function conicGradient(ConicGradient $g): static
+    {
+        $this->gradient = $g; $this->stripes = null;
+        return $this;
+    }
+
+    /** Paints the node's border (border, borderWidth) with a linear gradient across the node, in place of its color (mygo's BorderLinearGradient). */
+    public function borderLinearGradient(LinearGradient $g): static
+    {
+        $this->borderGradient = $g;
+        return $this;
+    }
+
+    /**
+     * Paints the node's border (border, borderWidth) with a conic gradient
+     * around the node, in place of its color: a ring of colors, as
+     * SwiftUI's strokeBorder with an AngularGradient draws (mygo's
+     * BorderConicGradient).
+     */
+    public function borderConicGradient(ConicGradient $g): static
+    {
+        $this->borderGradient = $g;
+        return $this;
+    }
+
+    /**
+     * Blurs the node, with its children, by $sigma points, the standard
+     * deviation of a Gaussian, as CSS's filter: blur() does (mygo's Blur):
+     * what it draws spreads that far around, transparent beyond, on the
+     * GPU. It renders into a canvas first, about 3 sigma larger each way.
+     * Hit testing, focus and accessibility do not change: only what shows.
+     */
+    public function blur(float $sigma): static
+    {
+        $this->blur = max($sigma, 0.0);
         return $this;
     }
 

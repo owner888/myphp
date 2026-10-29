@@ -216,16 +216,29 @@ final class Painter
         $this->list->transform($t, $ox, $oy, $fn);
     }
 
-    /** Paints a box with a gradient, at any angle, from its start to its end, in sRGB or Oklab (mygo's FillGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
+    /** Paints a box with a gradient, at any angle, from its start to its end, or of its stops, in sRGB or Oklab (mygo's FillGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
     public function fillGradient(array $box, LinearGradient $g, float $radius = 0): void
     {
-        $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $g->from, $g->fromAlpha, paint: $g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, rgb2: $g->to, alpha2: $g->toAlpha, g: self::gradientLine($box[2], $box[3], $g));
+        $this->fillPaint($box, $g, $radius);
     }
 
     /** Paints a box with a radial gradient, its colors spreading out from a point of it (mygo's FillRadialGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
     public function fillRadialGradient(array $box, RadialGradient $g, float $radius = 0): void
     {
-        $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $g->from, $g->fromAlpha, paint: $g->oklab ? DisplayList::PAINT_RADIAL_OKLAB : DisplayList::PAINT_RADIAL, rgb2: $g->to, alpha2: $g->toAlpha, g: self::radialCircle($box[2], $box[3], $g));
+        $this->fillPaint($box, $g, $radius);
+    }
+
+    /** Paints a box with a conic gradient, its colors turning around a point of it (mygo's FillConicGradient). @param array{0: float, 1: float, 2: float, 3: float} $box */
+    public function fillConicGradient(array $box, ConicGradient $g, float $radius = 0): void
+    {
+        $this->fillPaint($box, $g, $radius);
+    }
+
+    /** @param array{0: float, 1: float, 2: float, 3: float} $box */
+    private function fillPaint(array $box, LinearGradient|RadialGradient|ConicGradient $g, float $radius): void
+    {
+        [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($g, $box[2], $box[3], 1.0);
+        $this->list->box($box[0], $box[1], $box[2], $box[3], [$radius, $radius, $radius, $radius], $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
     }
 
     /**
@@ -274,13 +287,31 @@ final class Painter
     /** Fills $path with $g across its bounds, as the area under a chart's line (mygo's FillPathGradient). */
     public function fillPathGradient(Path $path, LinearGradient $g): void
     {
-        $this->list->pathGradient($path, 0.0, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
+        $this->pathPaint($path, 0.0, $g);
     }
 
     /** Strokes $path as strokePath does, $width points wide, in $g across its bounds (mygo's StrokePathGradient). */
     public function strokePathGradient(Path $path, float $width, LinearGradient $g): void
     {
-        $this->list->pathGradient($path, $width, $g->from, $g->fromAlpha, $g->to, $g->toAlpha, $g->oklab, static fn(float $w, float $h): array => self::gradientLine($w, $h, $g));
+        $this->pathPaint($path, $width, $g);
+    }
+
+    /** Fills $path with $g around its bounds (mygo's FillPathConicGradient). */
+    public function fillPathConicGradient(Path $path, ConicGradient $g): void
+    {
+        $this->pathPaint($path, 0.0, $g);
+    }
+
+    /** Strokes $path as strokePath does, $width points wide, in $g around its bounds (mygo's StrokePathConicGradient). */
+    public function strokePathConicGradient(Path $path, float $width, ConicGradient $g): void
+    {
+        $this->pathPaint($path, $width, $g);
+    }
+
+    private function pathPaint(Path $path, float $width, LinearGradient|ConicGradient $g): void
+    {
+        [$paint, $c1, $a1, $c2, $a2, , $stops] = self::gradientPaint($g, 1.0, 1.0, 1.0);
+        $this->list->pathGradient($path, $width, $paint, $c1, $a1, $c2, $a2, static fn(float $w, float $h): array => self::gradientPaint($g, $w, $h, 1.0)[5], $stops);
     }
 
     /** Strokes $path $width points wide, with its caps, joins and dashes (round and whole unless it sets them); trimmed shorter than its width (Path::trim), it fades with its length, unless its caps are butt, which show no dot. */
@@ -326,6 +357,9 @@ final class Painter
             $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;
         }
+        if ($n->blur > 0 && !$n->blurring && $rt !== null && self::paintBlurred($n, $list, $text, $t, $rt)) {
+            return;
+        }
         $world = $list->world(); $opacity = $list->opacity();
         $dim = $n->disabled; // disabled, at half its opacity, and what is inside it with it (mygo's paint)
         if ($n->opacity < 1 || $n->poseFade > 0 || $dim) {
@@ -347,6 +381,60 @@ final class Painter
         if ($n->clipMask !== null) { $list->setMask($mask); }
         $list->setWorld($world);
         $list->setOpacity($opacity);
+    }
+
+    /**
+     * Paints $n blurred (Node::blur, mygo's paintEffect), and tells whether
+     * it did: its subtree drawn into a canvas of its box and 3 sigma more
+     * each way, in the window's pixels, or in fewer for a wide blur (as
+     * mygo blurs a large one at a fraction of the size, a power of two up
+     * to 8 that leaves it 2 pixels at least), which the renderer blurs,
+     * transparent beyond it; the canvas shown where it was drawn from,
+     * through $n's map. A canvas too large paints it as it is; out of the
+     * clip, nothing.
+     */
+    private static function paintBlurred(Node $n, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): bool
+    {
+        $m = 3 * $n->blur;
+        $world = $list->world();
+        $list->setWorld($n->world);
+        $out = $list->clipped($n->x - $m, $n->y - $m, $n->w + 2 * $m, $n->h + 2 * $m);
+        $list->setWorld($world);
+        if ($n->w <= 0 || $n->h <= 0 || $out) {
+            return true;
+        }
+        $blur = $n->blur * $text->scale(); // in the window's pixels
+        $down = 1;
+        while ($down < 8 && $blur / (2 * $down) >= 2) { $down *= 2; }
+        $s = $text->scale() / $down;
+        [$x0, $y0] = [floor(($n->x - $m) * $s), floor(($n->y - $m) * $s)];
+        [$w, $h] = [(int)(ceil(($n->x + $n->w + $m) * $s) - $x0), (int)(ceil(($n->y + $n->h + $m) * $s) - $y0)];
+        if ($w > Canvas::MAX || $h > Canvas::MAX) {
+            return false;
+        }
+        $cv = $rt->blurLayers[$n->id] ?? null;
+        if ($cv === null || $cv->w !== $w || $cv->h !== $h) {
+            $cv = $rt->blurLayers[$n->id] = new Canvas($w, $h);
+        }
+        $cv->blur = sqrt(max($blur * $blur - $down * $down / 12, 0.0)) / $down; // the average of each square of $down pixels blurs it by its variance
+        $base = Affine::matrix($s, 0, 0, $s, -$x0, -$y0); // the node's layout, in the canvas's pixels
+        if ($n->world->set) {
+            $base = $base->mul($n->world->inverse() ?? Affine::singular()); // drawn through its map, as a layer of its content
+        }
+        $cv->draw(new self($list, $text, $t, $rt), static function (Painter $cp) use ($n, $base, $t, $rt): void {
+            $cp->list->setBase($base);
+            $n->blurring = true;
+            try {
+                self::paintNode($n, $cp->list, $cp->text, $t, $rt);
+            } finally {
+                $n->blurring = false;
+            }
+        });
+        $slot = self::slot($text, $cv->bitmap());
+        $list->setWorld($n->world);
+        $list->image($x0 / $s, $y0 / $s, $w / $s, $h / $s, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
+        $list->setWorld($world);
+        return true;
     }
 
     /**
@@ -457,13 +545,10 @@ final class Painter
             $n->material->paintMaterial(new self($list, $text, $t, $rt), $box, $n->radius);
         } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box; its ring over the face, which shows through neither when it is dimmed (a disabled button's border stays a ring, as mygo's)
             $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
-            $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius, $n->borderWidth);
+            if ($n->borderGradient === null) { $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius, $n->borderWidth); }
         } elseif ($n->gradient !== null) {
-            $g = $n->gradient;
-            [$paint, $line] = $g instanceof RadialGradient
-                ? [$g->oklab ? DisplayList::PAINT_RADIAL_OKLAB : DisplayList::PAINT_RADIAL, self::radialCircle($n->w, $n->h, $g)]
-                : [$g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, self::gradientLine($n->w, $n->h, $g)];
-            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $g->from, $g->fromAlpha * $n->alpha, paint: $paint, rgb2: $g->to, alpha2: $g->toAlpha * $n->alpha, g: $line);
+            [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($n->gradient, $n->w, $n->h, $n->alpha);
+            $list->box($n->x, $n->y, $n->w, $n->h, $radii, $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
         } elseif ($n->stripes !== null) { // over the color, if any
             [$sc, $sa, $sw, $sg, $angle] = $n->stripes;
             $a = deg2rad($angle);
@@ -475,7 +560,7 @@ final class Painter
                 $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->alpha * $n->bgAlpha, $radius);
             }
         }
-        if ($n->bordered && $n->color === null && $n->material === null) { // a border without a face (mygo's Border on a box with no background): its ring, or dashed
+        if ($n->bordered && $n->color === null && $n->material === null && $n->borderGradient === null) { // a border without a face (mygo's Border on a box with no background): its ring, or dashed
             if ($n->borderStyle === BorderStyle::Dashed) {
                 $bw = $n->borderWidth;
                 $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, $n->alpha, true);
@@ -487,7 +572,13 @@ final class Painter
             if ($sh[6]) { self::insetShadow($list, $box, $radii, $n->borders, $sh); }
         }
         [$bt, $br, $bb, $bl] = $n->borders;
-        if (($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) && ($n->borderStyle === BorderStyle::Dashed || $n->radii !== null)) { // dashed, or around corners each its own
+        if ($n->borderGradient !== null) { // a gradient paints it, over the background (mygo's border): border()'s, else borderWidth()'s
+            $bw = $n->bordered ? [$n->borderWidth, $n->borderWidth, $n->borderWidth, $n->borderWidth] : $n->borders;
+            if (max($bw) > 0 && $n->material === null) {
+                [$paint, , , , , $line, $stops] = self::gradientPaint($n->borderGradient, $n->w, $n->h, 1.0, true);
+                $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $bw, 0xffffff, $n->alpha, $n->borderStyle === BorderStyle::Dashed, paint: $paint, g: $line, stops: $stops, borderPaint: true);
+            }
+        } elseif (($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) && ($n->borderStyle === BorderStyle::Dashed || $n->radii !== null)) { // dashed, or around corners each its own
             $list->box($n->x, $n->y, $n->w, $n->h, $radii, 0, 0.0, $n->borders, $n->borderColor ?? $t->border, $n->alpha, $n->borderStyle === BorderStyle::Dashed);
         } elseif ($bt > 0 || $br > 0 || $bb > 0 || $bl > 0) { // borders inside the edges (mygo's BorderWidth): around the corners where they are one width, else a side each
             $bc = $n->borderColor ?? $t->border;
@@ -599,6 +690,40 @@ final class Painter
      * blurred by 6.4 points and saturated under 82% of the background
      * (toned as AppKit's), with a hairline along the other edge.
      */
+    /**
+     * How box() paints $g across a box $w by $h, its colors' alphas times
+     * $alpha: [paint, rgb, alpha, rgb2, alpha2, g, stops] (mygo's
+     * Painter.gradient, conic and radial). A gradient of stops, a radial's
+     * and a conic's, paints through them; $asStops paints a linear one of
+     * two colors so too, as a border's gradient does.
+     * @return array{0: int, 1: int, 2: float, 3: int, 4: float, 5: array{0: float, 1: float, 2: float, 3: float}, 6: list<array{0: int, 1: float, 2: float}>}
+     */
+    public static function gradientPaint(LinearGradient|RadialGradient|ConicGradient $g, float $w, float $h, float $alpha, bool $asStops = false): array
+    {
+        $stops = array_map(static fn(GradientStop $s): array => [$s->color, $s->alpha * $alpha, $s->at], $g->stops);
+        if ($g instanceof ConicGradient) {
+            return [$g->oklab ? DisplayList::PAINT_CONIC_OKLAB : DisplayList::PAINT_CONIC, 0, 0.0, 0, 0.0, [$w * $g->centerX, $h * $g->centerY, deg2rad($g->angle), 0.0], $stops];
+        }
+        if ($g instanceof RadialGradient) {
+            $stops = $stops !== [] ? $stops : [[$g->from, $g->fromAlpha * $alpha, 0.0], [$g->to, $g->toAlpha * $alpha, 1.0]];
+            return [$g->oklab ? DisplayList::PAINT_RADIAL_OKLAB : DisplayList::PAINT_RADIAL, 0, 0.0, 0, 0.0, self::radialCircle($w, $h, $g), $stops];
+        }
+        if ($stops === [] && !$asStops) {
+            return [$g->oklab ? DisplayList::PAINT_OKLAB : DisplayList::PAINT_LINEAR, $g->from, $g->fromAlpha * $alpha, $g->to, $g->toAlpha * $alpha, self::gradientLine($w, $h, $g), []];
+        }
+        if ($stops === []) { // its two colors as stops, at its start and end
+            [$start, $end] = $g->start == 0 && $g->end == 0 ? [0.0, 1.0] : [$g->start, $g->end];
+            $stops = [[$g->from, $g->fromAlpha * $alpha, $start], [$g->to, $g->toAlpha * $alpha, $end]];
+        }
+        // The stops' places along the whole line, through the middle as long as the box's corners reach along it.
+        $a = deg2rad($g->angle);
+        $dx = sin($a); $dy = -cos($a);
+        $half = (abs($w * $dx) + abs($h * $dy)) / 2;
+        [$x0, $y0] = [$w / 2 - $dx * $half, $h / 2 - $dy * $half];
+        $line = $half < 0.25 ? [$x0, $y0, $x0 + $dx * 0.5, $y0 + $dy * 0.5] : [$x0, $y0, $w / 2 + $dx * $half, $h / 2 + $dy * $half];
+        return [$g->oklab ? DisplayList::PAINT_LINEAR_STOPS_OKLAB : DisplayList::PAINT_LINEAR_STOPS, 0, 0.0, 0, 0.0, $line, $stops];
+    }
+
     /** The line a gradient runs along across a box $w by $h, from its top left, as CSS's (mygo's Painter.gradient): through the middle at its angle, as long as the box's corners reach along it, cut at its start and end. @return array{0: float, 1: float, 2: float, 3: float} */
     public static function gradientLine(float $w, float $h, LinearGradient $g): array
     {

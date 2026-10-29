@@ -1930,8 +1930,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Radial gradients of two colors**
   - mygo: `RadialGradient` spreads `Stops`, as many as 32.
   - myphp: `RadialGradient` goes from `$from` to `$to`, each with its
-    alpha, as myphp's `LinearGradient` does; gradient stops, conic and
-    border gradients and element blur (3cb5ea6) are not taken yet.
+    alpha, as myphp's `LinearGradient` does, or through `$stops` since
+    v1.72.
 - **Zoom**
   - Glyphs are rasterized in one atlas for every window, at the largest
     backing scale times zoom among them; a window less zoomed samples
@@ -1970,3 +1970,23 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   not the whole image, which AppKit then reads; one it cannot read shows
   no image. Icons are macOS's only: the drawn menus show none, as mygo's.
 
+## Gradient stops, conic gradients, element blur (v1.72)
+
+- **Stops' alpha**: a `GradientStop` has a color and an `$alpha` of its
+  own, as myphp's colors are an RGB and an alpha; a `RadialGradient`
+  keeps `$from` and `$to` as a two-stop shorthand beside `$stops`.
+- **Where stops travel**: mygo's renderers upload a frame's stops into
+  a float texture; myphp's go in the display list, a slot after the box
+  for each, which the fragment shader reads from the quads' buffer.
+- **Element blur**
+  - mygo draws a blur through its effect machinery (`Effect`, which
+    myphp has none of) and blurs the canvas as an image op, averaging
+    squares of a wide blur on the GPU first; myphp renders the canvas
+    at a fraction of the pixels instead and blurs it as it renders it,
+    the window sampling it up.
+  - A clip mask inside a blurred node keeps its place in the window,
+    not in the canvas's pixels; web views and videos inside one show
+    where they are, unblurred.
+- **Strokes in a conic gradient** do not fade with a trimmed length as
+  mygo's `StrokePathConicGradient` does, as myphp's
+  `strokePathGradient` does not either.

@@ -103,7 +103,7 @@ $h->frame();
 $boxes = styleKind($h, 14);
 same(2, count($boxes), 'two bordered boxes');
 same([2.0, 2.0, 2.0, 2.0], array_slice($boxes[0]['next'], 4, 4), 'the border widths');
-same([0xff0000, 1.0, 8.0], [(int)$boxes[0]['next'][8], $boxes[0]['next'][10], $boxes[0]['next'][11]], 'in red, dashed');
+same([0xff0000, 1.0, 16.0], [(int)$boxes[0]['next'][8], $boxes[0]['next'][10], $boxes[0]['next'][11]], 'in red, dashed (16)');
 same(0.0, $boxes[0][7], 'no fill under the border');
 same([1.0, 2.0, 3.0, 4.0, 0.0], [...array_slice($boxes[1]['next'], 4, 4), $boxes[1]['next'][11]], 'a side each, solid');
 
@@ -204,15 +204,18 @@ same([100.0, 200.0], [styleFind($h->root, 'a')->w, styleFind($h->root, 'b')->w],
 // A radial gradient (mygo's 977740f): out from its center, the middle unless set, to its radius, or the farthest corner.
 $list = $h->paint(); $list->reset(); $pt = new \MyPHP\UI\Painter($list, $h->metrics, \MyPHP\UI\Theme::light());
 $pt->fillRadialGradient([10, 20, 60, 80], new \MyPHP\UI\RadialGradient(0xffffff, 1.0, 0x000000, 0.0));
-same([4.0, 30.0, 40.0, 50.0], [$list->buf[16 + 11], $list->buf[28], $list->buf[29], $list->buf[30]], 'a radial paint (4) from the middle to the corners');
+same([8.0, 30.0, 40.0, 50.0], [$list->buf[16 + 11], $list->buf[28], $list->buf[29], $list->buf[30]], 'a radial paint (8) from the middle to the corners');
+same([2.0, 4], [$list->buf[10], $list->n], 'its two colors as two stops, a slot each after the box');
+same([1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [$list->buf[32], $list->buf[33], $list->buf[34], $list->buf[35], $list->buf[36], $list->buf[48], $list->buf[49], $list->buf[50], $list->buf[51], $list->buf[52]], 'white at 0, transparent black at 1');
+same([1.0, 0.0, 0.0], array_map(fn($v) => round($v, 3), [$list->buf[37], $list->buf[38], $list->buf[39]]), 'white in Oklab');
 $list->reset(); $pt->fillRadialGradient([0, 0, 100, 50], new \MyPHP\UI\RadialGradient(0xffffff, 1.0, 0x000000, 0.0, 0.2, 0, oklab: true), 8);
-same([5.0, 20.0, 0.0, round(hypot(80, 50), 3)], [$list->buf[16 + 11], $list->buf[28], $list->buf[29], round($list->buf[30], 3)], 'off its middle, in Oklab (5): to the corner farthest away');
+same([9.0, 20.0, 0.0, round(hypot(80, 50), 3)], [$list->buf[16 + 11], $list->buf[28], $list->buf[29], round($list->buf[30], 3)], 'off its middle, in Oklab (9): to the corner farthest away');
 same([0.0, 0.0, 12.0, 0.0], \MyPHP\UI\Painter::radialCircle(0, 0, new \MyPHP\UI\RadialGradient(centerX: 0, centerY: 0, radius: 12)), 'a radius of its own');
 same(0.25, \MyPHP\UI\Painter::radialCircle(0, 0, new \MyPHP\UI\RadialGradient())[2], 'in an empty box, a quarter of a point: a hard edge');
 $h2 = new Headless(fn(Context $c) => $c->box(80, 40, 0)->radialGradient(new \MyPHP\UI\RadialGradient(0xff0000, 1.0, 0x0000ff, 1.0, radius: 30)), 100, 100);
 $h2->frame(); $l2 = $h2->paint(); $at = null;
 for ($i = 0; $i < $l2->n; $i++) { if (fmod($l2->buf[$i * 16 + 9], DisplayList::KIND_STRIDE) == 14) { $at = $i; break; } }
-same([4.0, 40.0, 20.0, 30.0], [$l2->buf[($at + 1) * 16 + 11], $l2->buf[($at + 1) * 16 + 12], $l2->buf[($at + 1) * 16 + 13], $l2->buf[($at + 1) * 16 + 14]], 'a node filled with one');
+same([8.0, 40.0, 20.0, 30.0], [$l2->buf[($at + 1) * 16 + 11], $l2->buf[($at + 1) * 16 + 12], $l2->buf[($at + 1) * 16 + 13], $l2->buf[($at + 1) * 16 + 14]], 'a node filled with one');
 check(str_contains(json_encode((fn() => self::own(new \MyPHP\UI\Inspector(), $h2->rt, $h2->root->kids[0]))->bindTo(null, \MyPHP\UI\InspectorDetails::class)(), JSON_UNESCAPED_SLASHES), 'radial-gradient(circle 30px at 50% 50%'), 'the inspector shows it as CSS');
 
 // A path filled with a gradient: its mask painted as a box, the gradient across its bounds.
@@ -221,5 +224,5 @@ $h->frame();
 $list = $h->paint(); $list->reset();
 $p = (new \MyPHP\UI\Path())->moveTo(10, 10)->lineTo(50, 10)->lineTo(50, 30)->close();
 (new \MyPHP\UI\Painter($list, $h->metrics, \MyPHP\UI\Theme::light()))->fillPathGradient($p, new LinearGradient(0xff0000, 1.0, 0x0000ff, 1.0, 90));
-same([14.0, 17.0], [fmod($list->buf[9], DisplayList::KIND_STRIDE), $list->buf[16 + 11]], 'a box of a mask (16), with a gradient (1)');
+same([14.0, 33.0], [fmod($list->buf[9], DisplayList::KIND_STRIDE), $list->buf[16 + 11]], 'a box of a mask (32), with a gradient (1)');
 same([0.0, 10.0, 40.0, 10.0], array_map(fn($v) => round($v, 6) + 0.0, [$list->buf[28], $list->buf[29], $list->buf[30], $list->buf[31]]), 'left to right across its bounds');
