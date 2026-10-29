@@ -5051,14 +5051,24 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **What a frame draws from is never evicted** (`Atlas::$frame`, set by
   its owner each frame; `get` and `mark` note a slot's frame): its quads
   may be in the frame's display list already. `evict` frees the bitmaps
-  of the oldest frames, one at a time, until the one wanted fits; a
+  of the oldest frames, one at a time from the least recent (`$used` is
+  kept in that order: a slot asked for again goes last), looking at the
+  shelf each left, at most 64; else it empties the run of shelves high
+  enough together whose newest bitmap is the oldest (a tall bitmap needs
+  a shelf, which scattered gaps never make). Under pressure a bitmap
+  takes a gap of any higher shelf before the atlas starts over. A
   bitmap freed has its pixels cleared, as its neighbors' edges sample
-  them through their pixel apart.
+  them through their pixel apart. Measured (.compare/atlasbench.php,
+  Linux, JIT): glyphs all held 0.04 ms a frame; text scrolling by, 30
+  glyphs new a frame, 0.6 ms; 200 new a frame, 4.4 ms (less than
+  CoreText takes to rasterize them); a working set of 8 to 160 pixels
+  two thirds of the atlas still starts over now and then (no shelves
+  pack it).
 - **The text painter's lines keep their glyphs' places** (their packed
   quads' u and v): a line marks the slots it draws from once a frame
-  (`Text::quads`), and an eviction drops every line's packed quads (not
-  its shaping), made again from the slots left, as one may name a slot
-  gone. The atlas starts over only when one frame draws more than it
+  (`Text::quads`), and an eviction drops the packed quads (not the
+  shaping) of the lines that drew from a slot gone (`Text::$users`, by
+  slot; swept with the lines), made again from the slots left. The atlas starts over only when one frame draws more than it
   holds (`Text::place`; the frame paints again, as before).
 - **The image atlas evicts images, not pages**: past its MAX pages the
   pages are tried from the one drawn from least recently, each evicting

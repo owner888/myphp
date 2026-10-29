@@ -31,6 +31,8 @@ final class Text implements TextPainter
     private int $gen = 0;
     /** How many times the atlas filled and was rebuilt; a diagnostic. */
     public int $resets = 0;
+    /** @var array<string, array<string, true>> the lines whose quads draw from each slot of the atlas, by its key (place: made again when it goes) */
+    private array $users = [];
 
     /** Set when an atlas was reset during a paint: quads painted before the reset point at slots that are gone, so paint again. */
     public bool $repaint = false;
@@ -124,7 +126,7 @@ final class Text implements TextPainter
         }
         $this->ct->scale = $scale;
         $this->atlas->reset();
-        $this->lines = [];
+        $this->lines = []; $this->users = [];
         $this->offsets = [];
         $this->colors = []; $this->colorIndex = [];
         $this->repaint = true;
@@ -293,11 +295,12 @@ final class Text implements TextPainter
     {
         $slot = $this->atlas->add($key, $w, $h, $src);
         if ($slot === null) {
-            $gone = $this->atlas->evict($w, $h);
-            if ($gone !== []) {
-                foreach ($gone as $k) { unset($this->offsets[$k]); }
-                foreach ($this->lines as &$l) { $l['quads'] = []; unset($l['hot'], $l['marked']); }
-                unset($l);
+            foreach ($this->atlas->evict($w, $h) as $k) { // the lines drawn from it made again from what is left
+                unset($this->offsets[$k]);
+                foreach ($this->users[$k] ?? [] as $line => $_) {
+                    if (isset($this->lines[$line])) { $this->lines[$line]['quads'] = []; unset($this->lines[$line]['hot'], $this->lines[$line]['marked']); }
+                }
+                unset($this->users[$k]);
             }
             $slot = $this->atlas->add($key, $w, $h, $src);
         }
@@ -311,7 +314,7 @@ final class Text implements TextPainter
     /** Starts the atlas over: every cached line refers to slots that are gone; the color glyphs, in the image atlas, keep theirs. */
     private function resetAtlas(): void
     {
-        $this->atlas->reset(); $this->lines = []; $this->resets++; $this->repaint = true;
+        $this->atlas->reset(); $this->lines = []; $this->users = []; $this->resets++; $this->repaint = true;
         $this->offsets = array_intersect_key($this->offsets, $this->colorIndex);
     }
 
@@ -338,6 +341,10 @@ final class Text implements TextPainter
                 } elseif ($l['gen'] < $this->gen - 1 && isset($l['hot'])) {
                     unset($this->lines[$key]['hot']); // out of view: the packed quads are enough until it shows again
                 }
+            }
+            foreach ($this->users as $k => $lines) { // the lines gone let go of the slots they drew from
+                $lines = array_intersect_key($lines, $this->lines);
+                if ($lines === []) { unset($this->users[$k]); } else { $this->users[$k] = $lines; }
             }
             foreach ($this->pictureUsed as $key => $used) { // the pictures no frame drew for a while are forgotten (mygo's prunePictures)
                 if ($used < $limit) { unset($this->pictures[$key], $this->pictureUsed[$key]); }
@@ -471,6 +478,7 @@ final class Text implements TextPainter
             }
             $this->lines[$key]['quads'][$shade] = $packed;
             $this->lines[$key]['slots'][$shade] = array_keys($slots);
+            foreach ($slots as $k => $_) { $this->users[$k][$key] = true; }
             $this->lines[$key]['marked'][$shade] = $this->gen;
         }
         return $this->lines[$key]['hot'][$shade] = $packed === '' ? [] : unpack('g*', $packed);

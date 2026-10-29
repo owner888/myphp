@@ -17,9 +17,11 @@ use RuntimeException;
  * high (a little higher at most); a shelf left empty takes bitmaps of any
  * height, split to theirs, and joins the empty shelves beside it. Each
  * bitmap remembers the frame it was last asked for ($frame, set by its
- * owner each frame: get, mark), and evict() frees the ones asked for
- * least recently, never one of this frame, whose quads may be in the
- * frame's display list already.
+ * owner each frame: get, mark; in that order, the least recent first), and
+ * evict() frees the ones asked for least recently, never one of this
+ * frame, whose quads may be in the frame's display list already: in the
+ * shelves of the bitmap's height first, else the oldest run of shelves
+ * high enough together, emptied into one.
  */
 final class Atlas
 {
@@ -35,12 +37,16 @@ final class Atlas
     private int $base;
     /** @var list<array{y: int, h: int, gaps: list<array{0: int, 1: int}>, n: int}> the shelves from the top: their room, the gaps of it ([x, w]) and how many bitmaps they hold */
     private array $shelves = [];
+    /** @var array<int, int> each shelf's index by its y, made again as shelves come and go */
+    private array $at = [];
     /** Where the room below the shelves begins. */
     private int $top = 0;
     /** @var array<string, array{u: int, v: int, w: int, h: int}> */
     private array $slots = [];
-    /** @var array<string, int> the frame each slot was last asked for */
+    /** @var array<string, int> the frame each slot was last asked for, the least recent first */
     private array $used = [];
+    /** @var array<int, array<string, true>> the slots of each shelf, by its y */
+    private array $keys = [];
 
     public function __construct(public int $w = 2048, public int $h = 2048, public int $bpp = 1)
     {
@@ -52,21 +58,21 @@ final class Atlas
     public function get(string $key): ?array
     {
         $s = $this->slots[$key] ?? null;
-        if ($s !== null) { $this->used[$key] = $this->frame; }
+        if ($s !== null && $this->used[$key] !== $this->frame) { unset($this->used[$key]); $this->used[$key] = $this->frame; } // the most recent, last
         return $s;
     }
 
     /** Notes that slot $key is drawn from this frame, by what keeps its place (a line's quads). */
     public function mark(string $key): void
     {
-        if (isset($this->slots[$key])) { $this->used[$key] = $this->frame; }
+        if (isset($this->slots[$key]) && $this->used[$key] !== $this->frame) { unset($this->used[$key]); $this->used[$key] = $this->frame; }
     }
 
     /** Forgets every bitmap; what used them must be added again. */
     public function reset(): void
     {
-        $this->slots = []; $this->used = [];
-        $this->shelves = []; $this->top = 0;
+        $this->slots = []; $this->used = []; $this->keys = [];
+        $this->shelves = []; $this->at = []; $this->top = 0;
         $this->touch(0, $this->h);
     }
 
@@ -101,6 +107,7 @@ final class Atlas
         }
         $this->touch($v, $v + $h);
         $this->used[$key] = $this->frame;
+        $this->keys[$v][$key] = true;
         return $this->slots[$key] = ['u' => $u, 'v' => $v, 'w' => $w, 'h' => $h];
     }
 
@@ -111,52 +118,105 @@ final class Atlas
         if ($s === null) {
             return;
         }
-        unset($this->slots[$key], $this->used[$key]);
+        unset($this->slots[$key], $this->used[$key], $this->keys[$s['v']][$key]);
         $bpp = $this->bpp;
         $zero = str_repeat("\0", $s['w'] * $bpp);
         for ($r = 0; $r < $s['h']; $r++) { Mem::write($this->base + (($s['v'] + $r) * $this->w + $s['u']) * $bpp, $zero); }
         $this->touch($s['v'], $s['v'] + $s['h']);
-        foreach ($this->shelves as $i => $shelf) {
-            if ($shelf['y'] !== $s['v']) { continue; }
-            $gaps = $shelf['gaps'];
-            $gaps[] = [$s['u'], $s['w'] + 1];
-            usort($gaps, fn(array $a, array $b) => $a[0] <=> $b[0]);
-            $merged = [];
-            foreach ($gaps as $g) { // gaps side by side are one
-                $last = count($merged) - 1;
-                if ($last >= 0 && $merged[$last][0] + $merged[$last][1] >= $g[0]) { $merged[$last][1] = max($merged[$last][1], $g[0] + $g[1] - $merged[$last][0]); } else { $merged[] = $g; }
-            }
-            $this->shelves[$i]['gaps'] = $merged;
-            if (--$this->shelves[$i]['n'] === 0) { $this->emptied($i); }
-            return;
+        $i = $this->at[$s['v']] ?? throw new RuntimeException("atlas: no shelf at {$s['v']} for $key");
+        [$x, $w] = [$s['u'], $s['w'] + 1];
+        $gaps = $this->shelves[$i]['gaps'];
+        $k = 0; $n = count($gaps);
+        while ($k < $n && $gaps[$k][0] < $x) { $k++; } // where it goes among the gaps, by x
+        if ($k > 0 && $gaps[$k - 1][0] + $gaps[$k - 1][1] === $x) { // joined to the gap before it
+            $k--; $gaps[$k][1] += $w;
+        } else {
+            array_splice($gaps, $k, 0, [[$x, $w]]);
         }
-        throw new RuntimeException("atlas: no shelf at {$s['v']} for $key");
+        if ($k + 1 < count($gaps) && $gaps[$k][0] + $gaps[$k][1] === $gaps[$k + 1][0]) { // and to the gap after
+            $gaps[$k][1] += $gaps[$k + 1][1];
+            array_splice($gaps, $k + 1, 1);
+        }
+        $this->shelves[$i]['gaps'] = $gaps;
+        if (--$this->shelves[$i]['n'] === 0) { $this->emptied($i); }
     }
 
     /**
      * Frees the bitmaps asked for least recently, none of this frame, until
-     * a w*h one fits; the keys freed (none when it fits without, or when
-     * even freeing all those would not do).
+     * a w*h one fits: first in the shelves of its height, one at a time,
+     * looking at the shelf each left; else the run of shelves (and the
+     * room below them) high enough for it whose most recent bitmap is the
+     * oldest, the least high of those, emptied whole and joined. The keys
+     * freed (none when it fits without, or when nothing would do: every
+     * shelf drawn from this frame).
      * @return list<string>
      */
     public function evict(int $w, int $h): array
     {
-        if ($this->room($w + 1, $h + 1, false) !== null) {
+        [$w, $h] = [$w + 1, $h + 1];
+        if ($this->room($w, $h, false) !== null) {
             return [];
         }
-        $old = array_filter($this->used, fn(int $f) => $f < $this->frame);
-        asort($old);
         $gone = [];
-        foreach ($old as $key => $f) {
-            $this->remove((string)$key);
-            $gone[] = (string)$key;
-            if ($this->room($w + 1, $h + 1, false) !== null) {
-                $this->evicted += count($gone);
-                return $gone;
+        $tall = false; // whether a shelf as high as it holds bitmaps, whose leaving can make a gap for it
+        foreach ($this->shelves as $shelf) { if ($shelf['n'] > 0 && $shelf['h'] >= $h) { $tall = true; break; } }
+        if ($tall) { // the least recent first, a few: those of a shelf high enough freed, the shelf looked at
+            foreach ($this->used as $k => $f) {
+                if ($f >= $this->frame || count($gone) >= self::FEW) { break; }
+                $k = (string)$k;
+                $y = $this->slots[$k]['v'];
+                $high = $this->slots[$k]['h'] + 1;
+                $this->remove($k);
+                $gone[] = $k;
+                if ((($this->keys[$y] ?? []) === [] || $this->gapAt($y, $w)) && $this->room($w, $h, false) !== null) { // a gap wide enough there now, or the shelf gone
+                    $this->evicted += count($gone);
+                    return $gone;
+                }
+            }
+        }
+        $newest = []; // the frame each shelf was last drawn from
+        foreach ($this->shelves as $i => $shelf) {
+            $f = -1;
+            foreach ($this->keys[$shelf['y']] ?? [] as $k => $_) { $f = max($f, $this->used[$k]); }
+            $newest[$i] = $f;
+        }
+        $best = null; // [first, last, its newest frame, its height]
+        $count = count($this->shelves);
+        for ($i = 0; $i < $count; $i++) {
+            $f = -1; $sum = 0;
+            for ($j = $i; $j < $count && $newest[$j] < $this->frame; $j++) {
+                $f = max($f, $newest[$j]); $sum += $this->shelves[$j]['h'];
+                $room = $j === $count - 1 ? $this->h + 1 - $this->top : 0; // the last shelf has the room below it too
+                if ($sum + $room >= $h) {
+                    if ($best === null || [$f, $sum] < [$best[2], $best[3]]) { $best = [$i, $j, $f, $sum]; }
+                    break;
+                }
+            }
+        }
+        if ($best !== null) {
+            $run = array_slice($this->shelves, $best[0], $best[1] - $best[0] + 1);
+            foreach ($run as $shelf) {
+                foreach (array_keys($this->keys[$shelf['y']] ?? []) as $k) { $this->remove((string)$k); $gone[] = (string)$k; }
             }
         }
         $this->evicted += count($gone);
         return $gone;
+    }
+
+    /** How many bitmaps evict() frees one by one, the least recent first, before it empties a run of shelves instead. */
+    private const FEW = 64;
+
+    /** Whether the shelf at $y has a gap $w wide. */
+    private function gapAt(int $y, int $w): bool
+    {
+        foreach ($this->shelves[$this->at[$y] ?? -1]['gaps'] ?? [] as [, $gw]) { if ($gw >= $w) { return true; } }
+        return false;
+    }
+
+    /** The shelves' indexes by their y, made again. */
+    private function index(): void
+    {
+        $this->at = array_flip(array_column($this->shelves, 'y'));
     }
 
     /** How many bitmaps it holds. */
@@ -191,14 +251,27 @@ final class Atlas
             if ($sh >= $h) {
                 if (!$take) { return [0, $this->top]; }
                 $this->shelves[] = ['y' => $this->top, 'h' => $sh, 'gaps' => [[0, $this->w + 1]], 'n' => 0];
+                $this->at[$this->top] = count($this->shelves) - 1;
                 $this->top += $sh;
                 $best = [count($this->shelves) - 1, 0];
             } else {
                 foreach ($this->shelves as $i => $shelf) { // an empty shelf of the room, the lowest
                     if ($shelf['n'] === 0 && $shelf['h'] >= $h && ($best === null || $shelf['h'] < $this->shelves[$best[0]]['h'])) { $best = [$i, 0]; }
                 }
-                if ($best === null) {
-                    return null;
+                if ($best === null) { // under pressure: a gap of a shelf however much higher, the lowest
+                    foreach ($this->shelves as $i => $shelf) {
+                        if ($shelf['n'] === 0 || $shelf['h'] < $h || ($best !== null && $shelf['h'] >= $this->shelves[$best[0]]['h'])) { continue; }
+                        foreach ($shelf['gaps'] as $g => [, $gw]) { if ($gw >= $w) { $best = [$i, $g]; break; } }
+                    }
+                    if ($best === null) {
+                        return null;
+                    }
+                    [$i, $g] = $best;
+                    [$gx, $gw] = $this->shelves[$i]['gaps'][$g];
+                    if (!$take) { return [$gx, $this->shelves[$i]['y']]; }
+                    if ($gw > $w) { $this->shelves[$i]['gaps'][$g] = [$gx + $w, $gw - $w]; } else { array_splice($this->shelves[$i]['gaps'], $g, 1); }
+                    $this->shelves[$i]['n']++;
+                    return [$gx, $this->shelves[$i]['y']];
                 }
                 if (!$take) { return [0, $this->shelves[$best[0]]['y']]; }
                 $shelf = $this->shelves[$best[0]];
@@ -206,6 +279,7 @@ final class Atlas
                 if ($shelf['h'] - $sh >= 4) { // split: the rest an empty shelf of its own, below
                     array_splice($this->shelves, $best[0] + 1, 0, [['y' => $shelf['y'] + $sh, 'h' => $shelf['h'] - $sh, 'gaps' => [[0, $this->w + 1]], 'n' => 0]]);
                     $this->shelves[$best[0]]['h'] = $sh;
+                    $this->index();
                 }
             }
         }
@@ -234,6 +308,7 @@ final class Atlas
             $this->top = $this->shelves[$i]['y'];
             array_pop($this->shelves);
         }
+        $this->index();
     }
 
     /** Copies the bitmap at $src, of the size it was added at, over the slot of $key, for the next upload; whether there was one. */

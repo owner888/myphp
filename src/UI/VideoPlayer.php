@@ -1061,15 +1061,17 @@ final class VideoPlayer
         foreach ($runs as $i => $r) {
             foreach (self::assPieces($c, $r) as [$text, $em]) { $pieces[] = [$r, $text, $em, $i]; }
         }
-        // The spans of the text: $color(run, its index) its [rgb, alpha], or null for a run not drawn; drawn only in the runes [$from, $to) when given.
-        $spans = static function (\Closure $color, int $from = 0, int $to = PHP_INT_MAX) use ($pieces, $sx, $sy): array {
+        // The spans of the text: $color(run, its index) its [rgb, alpha], or null for a run not drawn; drawn only in the runes [$from, $to) when given, and with $alone of those runes only.
+        $spans = static function (\Closure $color, int $from = 0, int $to = PHP_INT_MAX, bool $alone = false) use ($pieces, $sx, $sy): array {
             $out = []; $at = 0;
             foreach ($pieces as [$r, $text, $em, $i]) {
                 $paint = $color($r, $i);
                 $n = mb_strlen($text, 'UTF-8');
                 $cuts = array_values(array_unique([0, max(0, min($n, $from - $at)), max(0, min($n, $to - $at)), $n]));
                 for ($k = 0; $k + 1 < count($cuts); $k++) { // the piece split where the runes drawn begin and end
-                    $drawn = $paint !== null && $at + $cuts[$k] >= $from && $at + $cuts[$k] < $to;
+                    $in = $at + $cuts[$k] >= $from && $at + $cuts[$k] < $to;
+                    if ($alone && !$in) { continue; }
+                    $drawn = $paint !== null && $in;
                     $out[] = new Span(mb_substr($text, $cuts[$k], $cuts[$k + 1] - $cuts[$k], 'UTF-8'), size: $em * $sy, color: $paint[0] ?? $r->color, alpha: $paint[1] ?? 0.0,
                         font: $r->font, weight: $r->weight, italic: $r->italic, underline: $r->underline, strikethrough: $r->strikeout, letterSpacing: $r->spacing * $sx, ghost: !$drawn);
                 }
@@ -1084,6 +1086,17 @@ final class VideoPlayer
         }
         $fill = static fn(AssRun $r): array => $r->sweep !== null ? [$r->secondary, $r->secondaryAlpha] : [$r->color, $r->alpha]; // a syllable sweeping: the secondary under the primary that sweeps
         $text = static fn(array $spans): Node => $c->richText($spans, width: $wrap, wrap: $wrap !== null)->textAlign($across);
+        // With $shear, glyph $g alone (assGlyphs'), on its line's baseline, sheared from its origin and the line's top, ($dx, $dy) from where it is: its box over it, its text at its top left, and the box itself (BorderStyle 3 draws in it).
+        $glyph = static function (array $g, array $one, float $dx, float $dy) use ($c, $shear): ?array {
+            $line = $c->shapeRichText($one, 0, null, Node::START)->layout->lines[0] ?? null;
+            if ($line === null || $line->glyphs === []) { return null; }
+            [$from, $to, $gx, $gw, $top, $height, $base] = $g;
+            [$left, $y] = [$gx - $line->glyphs[0]->x, $base - $line->baseline]; // its pen where the line has it, the baselines one
+            $w = max($line->x + $line->width, $gw); $h = max($line->y + $line->height, 1e-6);
+            $c->column()->absolute()->left($left + $dx)->top($y + $dy)->size($w, $h)->passThrough()
+                ->transformOrigin(($gx - $left) / max($w, 1e-6), ($top - $y) / $h)->skew(rad2deg(atan($shear[0])), rad2deg(atan($shear[1])));
+            return [$gx - $left, $top - $y, $gw, $height];
+        };
         $c->column()->passThrough();
           if ($styles === [] || $shear !== null) { // laid out alone: none of it drawn now, or each glyph drawn apart over it
               $text($spans(fn() => null));
@@ -1123,13 +1136,13 @@ final class VideoPlayer
                   if (!$inFlow) { $t->absolute()->left(0)->top(0); }
                   $inFlow = false;
                   $paint($t);
-              } else { // each glyph on its own, sheared from its origin and its line's top: in a box of the text's size, over it
-                  [$tw, $th] = $layout->size();
-                  foreach (self::assGlyphs($layout, $pieces, array_keys($group)) as [$from, $to, $gx, $gw, $top, $height]) {
-                      $c->column()->absolute()->left(0)->top(0)->size($tw, $th)->passThrough()
-                          ->transformOrigin($tw > 0 ? $gx / $tw : 0, $th > 0 ? $top / $th : 0)->skew(rad2deg(atan($shear[0])), rad2deg(atan($shear[1])));
-                        if ($s->borderStyle === 3) { $boxes([[$gx, $gx + $gw, $top, $height]]); }
-                        $paint($text($spans(fn(AssRun $r, int $i) => isset($group[$i]) ? $fill($r) : null, $from, $to))->absolute()->left(0)->top(0));
+              } else { // each glyph on its own, laid out alone, sheared from its origin and its line's top, where the text has it
+                  foreach (self::assGlyphs($layout, $pieces, array_keys($group)) as $g) {
+                      $one = $spans(fn(AssRun $r, int $i) => isset($group[$i]) ? $fill($r) : null, $g[0], $g[1], true);
+                      $at = $glyph($g, $one, 0.0, 0.0);
+                      if ($at === null) { continue; }
+                        if ($s->borderStyle === 3) { $boxes([[$at[0], $at[0] + $at[2], $at[1], $at[3]]]); }
+                        $paint($c->richText($one)->absolute()->left(0)->top(0));
                       $c->end();
                   }
               }
@@ -1149,12 +1162,11 @@ final class VideoPlayer
                             $o = $text($spans($primary))->absolute()->left(-$x0)->top(-$top);
                             if ($blur > 0 && ($border <= 0 || $s->borderStyle === 3)) { $o->textBlur($blur); }
                         } else {
-                            [$tw, $th] = $layout->size();
-                            foreach (self::assGlyphs($layout, $pieces, [$i]) as [$from, $to, $gx, , $gtop]) {
-                                if (abs($gtop - $top) > 1e-6) { continue; } // this segment's line
-                                $c->column()->absolute()->left(-$x0)->top(-$top)->size($tw, $th)->passThrough()
-                                    ->transformOrigin($tw > 0 ? $gx / $tw : 0, $th > 0 ? $gtop / $th : 0)->skew(rad2deg(atan($shear[0])), rad2deg(atan($shear[1])));
-                                  $o = $text($spans($primary, $from, $to))->absolute()->left(0)->top(0);
+                            foreach (self::assGlyphs($layout, $pieces, [$i]) as $g) {
+                                if (abs($g[4] - $top) > 1e-6) { continue; } // this segment's line
+                                $one = $spans($primary, $g[0], $g[1], true);
+                                if ($glyph($g, $one, -$x0, -$top) === null) { continue; }
+                                  $o = $c->richText($one)->absolute()->left(0)->top(0);
                                   if ($blur > 0 && ($border <= 0 || $s->borderStyle === 3)) { $o->textBlur($blur); }
                                 $c->end();
                             }
@@ -1168,8 +1180,9 @@ final class VideoPlayer
 
     /**
      * The glyphs of runs $ks in $layout, each [its first rune, the rune after
-     * its cluster, its x, its advance, its line's top, the line's height].
-     * @param list<int> $ks @return list<array{0: int, 1: int, 2: float, 3: float, 4: float, 5: float}>
+     * its cluster, its x, its advance, its line's top, the line's height,
+     * its baseline].
+     * @param list<int> $ks @return list<array{0: int, 1: int, 2: float, 3: float, 4: float, 5: float, 6: float}>
      */
     private static function assGlyphs(TextLayout $layout, array $pieces, array $ks): array
     {
@@ -1188,7 +1201,7 @@ final class VideoPlayer
                     if (isset($out[$k])) { // a cluster of glyphs (a ligature, marks): one, as wide as they go
                         $out[$k][3] = max($out[$k][2] + $out[$k][3], $g->x + $g->advance) - min($out[$k][2], $g->x); $out[$k][2] = min($out[$k][2], $g->x);
                     } else {
-                        $out[$k] = [$g->cluster, $g->cluster + max(1, $g->runes), $g->x, $g->advance, $line->y, $line->height];
+                        $out[$k] = [$g->cluster, $g->cluster + max(1, $g->runes), $g->x, $g->advance, $line->y, $line->height, $line->baseline];
                     }
                     break;
                 }

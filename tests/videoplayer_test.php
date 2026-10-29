@@ -523,7 +523,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $squares = array_values(array_filter($drawn($h4->root), fn($n) => abs($n->w - 11) < 0.5 && abs($n->h - 11) < 0.5));
     [, $dy, , $dh] = $h4->rect($squares[0] ?? throw new \RuntimeException('no square'));
     check($ty + $th - ($dy + $dh) > 2, 'a drawing beside text: its foot on the text\'s baseline, above the text\'s descent: ' . round($ty + $th - ($dy + $dh), 1));
-    same(7, count($all($h4->root, 'Stairs')), '\\fay: each glyph sheared on its own (libass\'s of its own x), over the text laid out once');
+    same([1, 1, 1, 1, 1, 1, 1], array_map(fn(string $t) => count($all($h4->root, $t)), ['Stairs', 'S', 't', 'a', 'i', 'r', 's']), '\\fay: each glyph sheared on its own (libass\'s of its own x), laid out alone, over the text laid out once');
     @unlink($fx);
     // The chapters' tab: a film's chapters (an untitled one by its place), when each starts and the next does, the last to the end; a double click goes to one and plays.
     $s3->open("$films/clip-chapters.mkv");
