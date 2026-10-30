@@ -57,6 +57,10 @@ final class Terminal
     /** What a program did while the output was processed, for the callbacks, which run after it. */
     private bool $titleEvent = false;
     private int $bells = 0;
+    /** When the command the shell marked started running (OSC 133 C), hrtime; null while none runs. */
+    private ?int $commandStart = null;
+    /** @var list<array{0: int, 1: ?int}> the commands that ended in the output written: how long each ran, in nanoseconds, and its exit code */
+    private array $finished = [];
     /** @var list<array{0: string, 1: string}> */
     private array $notify = [];
     private bool $closed = false;
@@ -120,6 +124,14 @@ final class Terminal
                 $this->sendReply($p);
             },
             bell: function (): void { $this->bells++; },
+            semanticPrompt: function (int $kind, ?int $exit): void {
+                if ($kind === VtTerminal::OUTPUT_START) {
+                    $this->commandStart = hrtime(true);
+                } elseif ($kind === VtTerminal::COMMAND_END && $this->commandStart !== null) {
+                    $this->finished[] = [hrtime(true) - $this->commandStart, $exit];
+                    $this->commandStart = null;
+                }
+            },
             titleChanged: function (): void { $this->titleEvent = true; },
             renderHold: $this->renderHold(...),
             clipboard: function (string $text, bool $primary): bool {
@@ -327,9 +339,14 @@ final class Terminal
             $this->term->write($p);
             if ($this->titleEvent) { $title = $this->term->title(); }
         }
-        [$titled, $bells, $notify] = [$this->titleEvent, $this->bells, $this->notify];
-        [$this->titleEvent, $this->bells, $this->notify] = [false, 0, []];
+        [$titled, $bells, $notify, $finished] = [$this->titleEvent, $this->bells, $this->notify, $this->finished];
+        [$this->titleEvent, $this->bells, $this->notify, $this->finished] = [false, 0, [], []];
         $o = $this->opts;
+        foreach ($finished as [$ns, $exit]) {
+            [$bell, $note] = $this->commandFinished($ns, $exit);
+            $bells += $bell ? 1 : 0;
+            if ($note !== null) { $notify[] = $note; }
+        }
         if ($titled && $o->onTitle !== null) { ($o->onTitle)($title); }
         for ($i = 0; $i < $bells; $i++) {
             if ($o->onBell !== null) { ($o->onBell)(); }
@@ -338,6 +355,44 @@ final class Terminal
             if ($o->onNotify !== null) { ($o->onNotify)($t, $b); }
         }
         $this->redraw();
+    }
+
+    /**
+     * How a command that ran $ns nanoseconds and exited with $exit (null
+     * when the shell did not say) tells the user, as Ghostty's
+     * notify-on-command-finish: whether it rings the bell, and the desktop
+     * notification it sends, [title, body], or null.
+     * @return array{0: bool, 1: ?array{0: string, 1: string}}
+     */
+    private function commandFinished(int $ns, ?int $exit): array
+    {
+        $o = $this->opts;
+        if ($o->notifyOnCommandFinish === NotifyOnCommandFinish::Never || ($o->notifyOnCommandFinish === NotifyOnCommandFinish::Unfocused && ($this->v?->focused ?? false))
+            || $ns <= $o->notifyOnCommandFinishAfter * 1e9) {
+            return [false, null];
+        }
+        $a = $o->notifyOnCommandFinishAction;
+        if (!$a->notify) {
+            return [$a->bell, null];
+        }
+        $tx = \MyPHP\L10n::in(\MyPHP\App::locale());
+        $took = self::duration($ns);
+        return [$a->bell, $exit === null ? [$tx->get('commandFinished'), $tx->get('commandTook', ['duration' => $took])]
+            : [$tx->get($exit === 0 ? 'commandSucceeded' : 'commandFailed'), $tx->get('commandTookExit', ['duration' => $took, 'code' => $exit])]];
+    }
+
+    /** $ns nanoseconds as Ghostty writes a duration, to the millisecond: "1m 5s 230ms". */
+    private static function duration(int $ns): string
+    {
+        $ms = (int)round($ns / 1e6);
+        $out = [];
+        foreach (['y' => 365 * 86400000, 'w' => 7 * 86400000, 'd' => 86400000, 'h' => 3600000, 'm' => 60000, 's' => 1000, 'ms' => 1] as $unit => $f) {
+            if ($ms >= $f) {
+                $out[] = intdiv($ms, $f) . $unit;
+                $ms %= $f;
+            }
+        }
+        return $out === [] ? '0ms' : implode(' ', $out);
     }
 
     /** Marks the program ended, once its output did. */

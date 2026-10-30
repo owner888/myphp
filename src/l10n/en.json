@@ -4412,5 +4412,38 @@
   "clipboardReadEmpty": "The clipboard is empty.",
   "@clipboardReadEmpty": {
     "description": "What the terminal's clipboard prompt shows when the clipboard holds no text."
+  },
+  "commandSucceeded": "Command Succeeded",
+  "@commandSucceeded": {
+    "description": "The title of the notification a terminal sends when a command that ran long ended with exit code 0."
+  },
+  "commandFailed": "Command Failed",
+  "@commandFailed": {
+    "description": "The title of the notification a terminal sends when a command that ran long ended with another exit code."
+  },
+  "commandFinished": "Command Finished",
+  "@commandFinished": {
+    "description": "The title of the notification a terminal sends when a command that ran long ended, the shell giving no exit code."
+  },
+  "commandTook": "Command took {duration}.",
+  "@commandTook": {
+    "description": "The body of a terminal's notification of a command that ended: how long it ran, as 1m 5s 230ms.",
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "commandTookExit": "Command took {duration} and exited with code {code, number, ::group-off}.",
+  "@commandTookExit": {
+    "description": "The body of a terminal's notification of a command that ended: how long it ran, as 1m 5s 230ms, and its exit code.",
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      },
+      "code": {
+        "type": "int"
+      }
+    }
   }
 }

@@ -2150,3 +2150,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     the nodes around it; painting goes on into them as before.
   - Why: myphp's draw callbacks get the display list itself, with nothing
     holding them to their boxes, and games and charts paint past them.
+
+## A terminal tells of commands that finished (v1.87)
+
+- **Command finished notifications**
+  - mygo: none.
+  - myphp: `Options::$notifyOnCommandFinish`, `$notifyOnCommandFinishAction`
+    and `$notifyOnCommandFinishAfter`, Ghostty 1.3's options, by OSC 133.
+  - Why: the developer asked for Ghostty's.

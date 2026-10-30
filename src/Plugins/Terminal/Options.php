@@ -109,5 +109,17 @@ final class Options
          * app-notifications = clipboard-copy does with a toast.
          */
         public ?Closure $onCopy = null,
+        /**
+         * When a command that finished tells the user, as Ghostty's
+         * notify-on-command-finish: never, while the view has not the focus,
+         * or always. The shell marks its commands (OSC 133), as fish and
+         * Nushell do, or zsh and bash with a shell integration, or none is
+         * told of.
+         */
+        public NotifyOnCommandFinish $notifyOnCommandFinish = NotifyOnCommandFinish::Never,
+        /** How: the bell, a desktop notification through $onNotify, or both, as Ghostty's notify-on-command-finish-action. */
+        public CommandFinishAction $notifyOnCommandFinishAction = new CommandFinishAction,
+        /** How long, in seconds, a command must have run to tell of its end, as Ghostty's notify-on-command-finish-after. */
+        public float $notifyOnCommandFinishAfter = 5.0,
     ) {}
 }

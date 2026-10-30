@@ -21,9 +21,12 @@ final class Terminal
         OPT_DEVICE_ATTRIBUTES = 8, OPT_COLOR_FOREGROUND = 11, OPT_COLOR_BACKGROUND = 12, OPT_COLOR_CURSOR = 13, OPT_COLOR_PALETTE = 14,
         OPT_KITTY_IMAGE_LIMIT = 15, OPT_SELECTION = 21, OPT_DEFAULT_CURSOR_STYLE = 22, OPT_DEFAULT_CURSOR_BLINK = 23, OPT_PWD_CHANGED = 25,
         OPT_CLIPBOARD_WRITE = 26, OPT_SCROLLBACK_MAX_BYTES = 27, OPT_DESKTOP_NOTIFICATION = 29, OPT_PROGRESS_REPORT = 30,
-        OPT_MODE_DEFAULT = 33, OPT_MODE = 34, OPT_TERMINFO_NAME = 37, OPT_CLIPBOARD_READ = 38, OPT_RESIZE_PULL_BACK = 40, OPT_RENDER_HOLD = 41;
+        OPT_MODE_DEFAULT = 33, OPT_MODE = 34, OPT_TERMINFO_NAME = 37, OPT_CLIPBOARD_READ = 38, OPT_RESIZE_PULL_BACK = 40, OPT_RENDER_HOLD = 41, OPT_SEMANTIC_PROMPT = 42;
     private const DATA_COLS = 1, DATA_ROWS = 2, DATA_CURSOR_X = 3, DATA_CURSOR_Y = 4, DATA_ACTIVE_SCREEN = 6, DATA_SCROLLBAR = 9,
         DATA_MOUSE_TRACKING = 11, DATA_TITLE = 12, DATA_PWD = 13, DATA_VIEWPORT_ACTIVE = 32, DATA_MODE = 37, DATA_MOUSE_SHAPE = 41;
+
+    /** The steps of a command a shell reports with OSC 133 (GhosttySemanticPromptKind): its prompt drawn, its input started, its output started (it runs), it ended. */
+    public const PROMPT_START = 1, INPUT_START = 2, OUTPUT_START = 3, COMMAND_END = 4;
 
     /** The shape of the cursor (mygo's vt.CursorStyle). */
     public const CURSOR_BAR = 0, CURSOR_BLOCK = 1, CURSOR_UNDERLINE = 2, CURSOR_BLOCK_HOLLOW = 3;
@@ -106,13 +109,16 @@ final class Terminal
         $cbs->progress_report = function ($t, $u, CData $r) use ($e): void {
             if ($e->progress !== null) { ($e->progress)((int)$r->state, (int)$r->progress); }
         };
+        $cbs->semantic_prompt = function ($t, $u, CData $ev) use ($e): void {
+            if ($e->semanticPrompt !== null) { ($e->semanticPrompt)((int)$ev->kind, $ev->has_exit_code ? (int)$ev->exit_code : null); }
+        };
         // A GhosttyMimeReader for pasteEvent(), which the library never calls (it reads nothing for an event); it gives no data if it did.
         $cbs->no_read = fn($u, $p, $n, $a, $b): bool => false;
         $this->cbs = $cbs;
         foreach ([[self::OPT_WRITE_PTY, 'write_pty'], [self::OPT_BELL, 'bell'], [self::OPT_TITLE_CHANGED, 'title_changed'], [self::OPT_PWD_CHANGED, 'pwd_changed'],
             [self::OPT_RENDER_HOLD, 'render_hold'], [self::OPT_CLIPBOARD_WRITE, 'clipboard_write'], [self::OPT_CLIPBOARD_READ, 'clipboard_read'], [self::OPT_SIZE, 'size'],
             [self::OPT_COLOR_SCHEME, 'color_scheme'], [self::OPT_DEVICE_ATTRIBUTES, 'device_attributes'], [self::OPT_DESKTOP_NOTIFICATION, 'desktop_notification'],
-            [self::OPT_PROGRESS_REPORT, 'progress_report']] as [$opt, $field]) {
+            [self::OPT_PROGRESS_REPORT, 'progress_report'], [self::OPT_SEMANTIC_PROMPT, 'semantic_prompt']] as [$opt, $field]) {
             $f->ghostty_terminal_set($this->h, $opt, $cbs->$field);
         }
         // Images of the Kitty graphics protocol are not drawn: refuse them, so that programs fall back to something else.

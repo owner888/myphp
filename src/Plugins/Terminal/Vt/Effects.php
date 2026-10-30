@@ -26,6 +26,7 @@ final class Effects
      * @param ?Closure(): bool $dark whether the colors are dark, for color scheme reports
      * @param ?Closure(string, string): void $notify shows a desktop notification (OSC 9, OSC 777)
      * @param ?Closure(int, int): void $progress reports the program's progress (OSC 9;4): its state and percent
+     * @param ?Closure(int, ?int): void $semanticPrompt reports a step of a command the shell marks (OSC 133): Terminal::PROMPT_START…COMMAND_END, and at its end its exit code when the shell gave it
      */
     public function __construct(
         public ?Closure $writePTY = null,
@@ -39,5 +40,6 @@ final class Effects
         public ?Closure $dark = null,
         public ?Closure $notify = null,
         public ?Closure $progress = null,
+        public ?Closure $semanticPrompt = null,
     ) {}
 }

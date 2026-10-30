@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Terminal\{Action, ClipboardAccess, ClipboardRequest, CopyOnSelect, Font, Keybind, Options, Padding, PaddingColor, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
+use MyPHP\Plugins\Terminal\{Action, ClipboardAccess, CommandFinishAction, ClipboardRequest, CopyOnSelect, Font, Keybind, NotifyOnCommandFinish, Options, Padding, PaddingColor, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
 use MyPHP\Plugins\Terminal\Vt\Terminal as VtTerminal;
 use MyPHP\Transfer\{Data, Format, Item, Representation};
 use MyPHP\UI\{DisplayList, InputEvent, Key};
@@ -613,6 +613,34 @@ TermClock::install();
     same([$gray, 1.0], $colorOf(3), 'minimum contrast: a legacy computing symbol, from the font, keeps its color');
     check(($a = $colorOf(4)) !== null && $a !== [$gray, 1.0], 'minimum contrast: the text takes it: ' . json_encode($a));
     $term->close();
+})();
+
+(function () {
+    // A command the shell marks (OSC 133) tells the user it finished, as Ghostty's notify-on-command-finish: never, while unfocused, or always; past a time; the bell, a notification, or both.
+    $run = function (Options $o, string $end, bool $focused = false) {
+        [$bells, $notes] = [0, []];
+        $o->onBell = function () use (&$bells): void { $bells++; };
+        $o->onNotify = function (string $t, string $b) use (&$notes): void { $notes[] = [$t, $b]; };
+        $term = Terminal::new($o);
+        $tt = new TermTester($term, 400, 200, $focused);
+        $term->feed("\x1b]133;A\x07$ \x1b]133;B\x07sleep 9\r\n\x1b]133;C\x07");
+        usleep(2000);
+        $term->feed("done\r\n\x1b]133;D$end\x07");
+        $term->close();
+        return [$bells, $notes];
+    };
+    $o = fn(NotifyOnCommandFinish $when, bool $bell, bool $notify, float $after = 0.0) => new Options(conn: new TermPipe, notifyOnCommandFinish: $when,
+        notifyOnCommandFinishAction: new CommandFinishAction($bell, $notify), notifyOnCommandFinishAfter: $after);
+    same([0, []], $run($o(NotifyOnCommandFinish::Never, true, true), ';0'), 'command finished: never by default');
+    [$bells, $notes] = $run($o(NotifyOnCommandFinish::Always, true, true), ';1');
+    check($bells === 1 && count($notes) === 1 && $notes[0][0] === 'Command Failed' && preg_match('/^Command took \d+ms and exited with code 1\.$/', $notes[0][1]) === 1, 'command finished: a failure, the bell and a notification: ' . json_encode($notes));
+    [$bells, $notes] = $run($o(NotifyOnCommandFinish::Always, false, true), ';0');
+    check($bells === 0 && ($notes[0][0] ?? '') === 'Command Succeeded', 'command finished: a success, a notification alone');
+    [, $notes] = $run($o(NotifyOnCommandFinish::Always, false, true), '');
+    check(($notes[0][0] ?? '') === 'Command Finished' && preg_match('/^Command took \d+ms\.$/', $notes[0][1] ?? '') === 1, 'command finished: no exit code given');
+    same([1, []], $run($o(NotifyOnCommandFinish::Unfocused, true, false), ';0'), 'command finished: unfocused, the bell alone');
+    same([0, []], $run($o(NotifyOnCommandFinish::Unfocused, true, true), ';0', true), 'command finished: nothing while the view has the focus');
+    same([0, []], $run($o(NotifyOnCommandFinish::Always, true, true, 5.0), ';0'), 'command finished: nothing for a command quicker than the time');
 })();
 
 (function () {

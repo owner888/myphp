@@ -5885,6 +5885,26 @@ in the text engine's table by their text, size and style, found again by
 a hash lookup each frame, which is what mygo's commit saves; its measuring
 pass sizes every node before arranging, which the grid's part would split.
 
+## A terminal tells of commands that finished (v1.87)
+
+Ghostty 1.3's notify-on-command-finish, which mygo has not (the developer
+asked for it): the library reports the steps of a command the shell marks
+with OSC 133 (`GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT`, in the libghostty-vt
+mygo pins), which `Vt\Terminal` hands to `Effects::$semanticPrompt`. The
+terminal notes when output starts (C) and, at the end (D), how long the
+command ran and its exit code; after the output it was written in,
+`Terminal::commandFinished` tells the user as `Options` say:
+`$notifyOnCommandFinish` (`NotifyOnCommandFinish`: Never, the default,
+Unfocused, while the view has not the focus, or Always),
+`$notifyOnCommandFinishAction` (`CommandFinishAction`: the bell, as BEL
+through `$onBell`, by default, and a desktop notification through
+`$onNotify`) and `$notifyOnCommandFinishAfter` (5 seconds). The
+notification is Ghostty's: "Command Succeeded", "Command Failed" or
+"Command Finished" (no exit code), "Command took 1m 5s 230ms and exited
+with code 1." (l10n, in Chinese too). Shells mark their commands
+themselves (fish, Nushell) or through an integration (zsh and bash,
+which Ghostty injects; the terminal injects none).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

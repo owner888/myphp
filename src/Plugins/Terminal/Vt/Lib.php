@@ -66,6 +66,7 @@ final class Lib
         typedef struct { size_t size; int32_t location; int32_t source; const GhosttyString *mimes; size_t mimes_len; GhosttyMimeReader reader; bool allow_unsafe; } GhosttyPaste;
         typedef struct { size_t size; GhosttyString title, body; } GhosttyTerminalDesktopNotification;
         typedef struct { size_t size; int32_t state; int8_t progress; } GhosttyTerminalProgressReport;
+        typedef struct { size_t size; int32_t kind; int32_t prompt_kind; bool has_exit_code; int32_t exit_code; GhosttyString command, error; } GhosttyTerminalSemanticPrompt;
         typedef struct { uint16_t conformance; uint16_t features[64]; size_t num_features; uint16_t device_type, firmware, rom_cartridge; uint32_t unit_id; } GhosttyDeviceAttributes;
         typedef struct { uint64_t bits[2]; } GhosttyRenderStateRowId;
 
@@ -79,12 +80,14 @@ final class Lib
         typedef bool (*GhosttyTerminalDeviceAttributesFn)(void *terminal, void *userdata, GhosttyDeviceAttributes *out);
         typedef void (*GhosttyTerminalDesktopNotificationFn)(void *terminal, void *userdata, const GhosttyTerminalDesktopNotification *n);
         typedef void (*GhosttyTerminalProgressReportFn)(void *terminal, void *userdata, const GhosttyTerminalProgressReport *r);
+        typedef void (*GhosttyTerminalSemanticPromptFn)(void *terminal, void *userdata, const GhosttyTerminalSemanticPrompt *e);
         typedef bool (*GhosttyMimeReaderFn)(void *userdata, const uint8_t *mime_ptr, size_t mime_len, void *writer_a, void *writer_b); /* GhosttyString and GhosttyWriter by value, as two registers each */
         typedef struct {
             GhosttyTerminalWritePtyFn write_pty; GhosttyTerminalBellFn bell, title_changed, pwd_changed; GhosttyTerminalRenderHoldFn render_hold;
             GhosttyTerminalClipboardWriteFn clipboard_write; GhosttyTerminalClipboardReadFn clipboard_read; GhosttyTerminalSizeFn size;
             GhosttyTerminalColorSchemeFn color_scheme; GhosttyTerminalDeviceAttributesFn device_attributes;
             GhosttyTerminalDesktopNotificationFn desktop_notification; GhosttyTerminalProgressReportFn progress_report; GhosttyMimeReaderFn no_read;
+            GhosttyTerminalSemanticPromptFn semantic_prompt;
         } MyPHPTerminalCallbacks;
 
         int32_t ghostty_terminal_new(const void *allocator, void **terminal, uint16_t cols, uint16_t rows);

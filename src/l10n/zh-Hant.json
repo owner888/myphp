@@ -1067,5 +1067,10 @@
   "clipboardRead": "某個程式想要讀取剪貼簿",
   "clipboardReadAllow": "允許",
   "clipboardReadDeny": "拒絕",
-  "clipboardReadEmpty": "剪貼簿中沒有文字。"
+  "clipboardReadEmpty": "剪貼簿中沒有文字。",
+  "commandSucceeded": "命令執行成功",
+  "commandFailed": "命令執行失敗",
+  "commandFinished": "命令已結束",
+  "commandTook": "命令執行了 {duration}。",
+  "commandTookExit": "命令執行了 {duration}，結束代碼為 {code, number, ::group-off}。"
 }
