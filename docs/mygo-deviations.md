@@ -2025,3 +2025,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   later asks for a frame through the terminal's redraw.
 - **The prompt**: one shows a pass; a second read waiting behind an
   answered one gets its prompt in the next frame.
+
+## Distribution (v1.76)
+
+- **Senders' donation**: mygo shows a sender's notification once the
+  donation of its interaction completes; the system calls that
+  completion on another queue, where PHP cannot run, so myphp donates it
+  and updates the content from the intent at once, the update needing
+  nothing of the donation. A notification shown, closed or cleared is
+  therefore never waiting on a donation, which mygo's cancels.

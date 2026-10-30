@@ -92,6 +92,13 @@ $heard = [];
 App::onNotificationClick(function (string $id) use (&$heard): void { $heard[] = "app $id"; });
 Notification::clicked('earlier-run');
 same(['app earlier-run'], $heard, 'one of an earlier run reaches the app');
+// A sender (mygo's dc7d966): copied with the options, named by the title when it has no name of its own.
+$sender = new \MyPHP\NotificationSender('user:ada', '', 'png');
+$opts = new \MyPHP\NotificationOptions('Ada', 'See you at noon', 'Lunch', 'message:7', group: 'conversation:3', sender: $sender);
+$n = new Notification($opts);
+$sender->avatar = 'changed'; $opts->title = 'Bob';
+same(['user:ada', 'Ada', 'png', 'Ada'], [$n->options->sender->id, $n->options->sender->name, $n->options->sender->avatar, $n->options->title], 'a sender, copied, named by the title');
+same(null, (new Notification(new \MyPHP\NotificationOptions('x')))->options->sender, 'none without one');
 
 // The theme's preferences, as pages get them.
 $p = new ThemePreferences(0x007aff, reduceMotion: true, textScale: 1.0);

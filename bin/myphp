@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.75.0';
+const VERSION = '1.76.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -36,7 +36,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Strings, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -210,8 +210,9 @@ function nodeTypeScriptFlags(string $node): ?array
  * updates, devUrl, devCommand, buildCommand, frontendDist, bindings,
  * framework, and macos: icon (an Assets.car or an Icon Composer .icon),
  * minimumSystemVersion (12.0), signingIdentity ("-", ad hoc),
- * entitlements, helperEntitlements, infoPlist, dmgTitle (the name) and
- * notarize ({"keychainProfile": …, "keychain": …}).
+ * entitlements, provisioningProfile (embedded before signing),
+ * helperEntitlements, infoPlist, dmgTitle (the name) and notarize
+ * ({"keychainProfile": …, "keychain": …}).
  *
  * @return array{dir: string, config: array}
  */
@@ -246,6 +247,8 @@ function project(array $args): array
     $m['minimumSystemVersion'] = orElse((string)($m['minimumSystemVersion'] ?? ''), '12.0');
     $m['signingIdentity'] = orElse((string)($m['signingIdentity'] ?? ''), '-');
     $m['dmgTitle'] = orElse((string)($m['dmgTitle'] ?? ''), $c['name']);
+    $m['provisioningProfile'] ??= '';
+    is_string($m['provisioningProfile']) || $bad('macos.provisioningProfile is the path of a provisioning profile');
     $m['infoPlist'] ??= [];
     is_array($m['infoPlist']) && ($m['infoPlist'] === [] || !array_is_list($m['infoPlist'])) || $bad('macos.infoPlist is an object of Info.plist keys');
     $m['helperEntitlements'] ??= [];
@@ -516,7 +519,7 @@ function devInputs(string $dir, array $c): array
     if ($i18n !== null) {
         $walk($i18n['path'], '.json');
     }
-    foreach (array_filter([CONFIG, CONFIG_TS, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', ...array_values($c['macos']['helperEntitlements'])]) as $f) {
+    foreach (array_filter([CONFIG, CONFIG_TS, $c['icon'] ?? '', $c['macos']['entitlements'] ?? '', $c['macos']['provisioningProfile'], ...array_values($c['macos']['helperEntitlements'])]) as $f) {
         $add(path($dir, $f));
     }
     ksort($out, SORT_STRING);
@@ -598,6 +601,7 @@ final class DevSession
             file_put_contents("$contents/PkgInfo", 'APPL????');
             buildExecLauncher("$contents/MacOS/$name", $c['entry'], $arch, $this->root);
             $m = $dc['macos'];
+            embedProfile($this->root, $m, $contents, $this->sign, false);
             Codesign::sign("$stage/$name.app", $this->sign, ($m['entitlements'] ?? '') !== '' ? path($this->root, $m['entitlements']) : '', array_map(fn(string $f) => path($this->root, $f), $m['helperEntitlements']), false, $c['configFile']);
             $final = "$dir/$name.app";
             replacePath("$stage/$name.app", $final);
@@ -869,6 +873,9 @@ function build(array $args): void
     if (isset($c['macos']['notarize']) && !$opts['skipNotarize'] && $opts['sign'] === '-') {
         fail('notarization needs a Developer ID signing identity: set macos.signingIdentity or pass -sign');
     }
+    if ($c['macos']['provisioningProfile'] !== '' && $opts['sign'] === '-') {
+        fail(PROFILE_AD_HOC); // before building anything, as codesign would
+    }
     // Check what the launcher needs before touching the output, so a failed build leaves the last one.
     if ($launcher === 'exec') {
         trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
@@ -1006,6 +1013,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
         }
         $entitlements = ($m['entitlements'] ?? '') !== '' ? path($dir, $m['entitlements']) : '';
         $helpers = array_map(fn(string $f) => path($dir, $f), $m['helperEntitlements']);
+        embedProfile($dir, $m, $contents, $opts['sign'], true);
         Codesign::sign($app, $opts['sign'], $entitlements, $helpers, !$opts['debug'], $c['configFile']);
         logf('Signed ' . basename($app) . ($opts['sign'] === '-' ? ' (ad hoc)' : ''));
         $artifacts = [$app];
@@ -1556,6 +1564,30 @@ function appLanguages(string $dir, array $c): array
     return $langs;
 }
 
+const PROFILE_AD_HOC = 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign';
+
+/**
+ * Copies the app's provisioning profile (macos.provisioningProfile, a path
+ * from $dir) to the bundle's Contents/embedded.provisionprofile before it is
+ * signed, as restricted entitlements, such as Communication Notifications,
+ * need one that authorizes them, Developer ID distribution included (mygo's
+ * writeBundle and codesign). Ad-hoc signing cannot use one: $production is
+ * a build, which names the configuration; dev, without -sign, is told to
+ * leave the profile out of development builds.
+ */
+function embedProfile(string $dir, array $m, string $contents, string $identity, bool $production): void
+{
+    $p = $m['provisioningProfile'];
+    if ($p === '') {
+        return;
+    }
+    if ($identity === '-') {
+        fail($production ? PROFILE_AD_HOC : 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: pass -sign, or leave the profile out when the command is "dev"');
+    }
+    @copy(path($dir, $p), "$contents/embedded.provisionprofile") || fail("provisioning profile $p: " . (error_get_last()['message'] ?? 'cannot copy it'));
+    chmod("$contents/embedded.provisionprofile", 0644);
+}
+
 /** The name of the localization folder of a tag in an app bundle, as Xcode names them: zh-Hans, zh-Hant or zh-HK for Chinese; the language with its script, else its region (sr-Latn, pt-BR) (mygo's lprojName). */
 function lprojName(string $tag): string
 {
@@ -1571,7 +1603,7 @@ function lprojName(string $tag): string
     return $lang . ($script !== '' ? "-$script" : ($region !== '' ? "-$region" : ''));
 }
 
-/** The bundle's localizations: a folder per language the app ships, which make AppKit say its own texts in it and System Settings list it for the app, whose InfoPlist.strings names the app in it where its catalog does (myphp.appName); and their Info.plist keys. @return array<string, mixed> */
+/** The bundle's localizations: a folder per language the app ships, which make AppKit say its own texts in it and System Settings list it for the app, whose InfoPlist.strings names the app in it where its catalog does (myphp.appName), keeping an InfoPlist.strings the app's resources put there and the name it gives (mygo's 2e50d4d); and their Info.plist keys. @return array<string, mixed> */
 function writeLocalizations(string $dir, array $c, string $resources): array
 {
     $langs = appLanguages($dir, $c);
@@ -1582,8 +1614,20 @@ function writeLocalizations(string $dir, array $c, string $resources): array
     foreach ($langs as [$tag, $name]) {
         $lproj = lprojName($tag);
         @mkdir("$resources/$lproj.lproj", 0755, true);
-        $strings = $name !== '' && $name !== $c['name'] ? ['CFBundleName' => $name, 'CFBundleDisplayName' => $name] : [];
-        file_put_contents("$resources/$lproj.lproj/InfoPlist.strings", Bundle::xml($strings));
+        $path = "$resources/$lproj.lproj/InfoPlist.strings";
+        $strings = [];
+        if (is_file($path)) { // the app's own, among its resources: its strings translate those of Info.plist, as the reasons the system gives asking for a permission
+            try {
+                $strings = Strings::parse((string)file_get_contents($path));
+            } catch (RuntimeException $e) {
+                fail("$lproj.lproj/InfoPlist.strings of the resources: " . $e->getMessage());
+            }
+        }
+        if ($name !== '' && $name !== $c['name']) {
+            $strings += ['CFBundleName' => $name, 'CFBundleDisplayName' => $name]; // where the app's own names none
+        }
+        if (is_link($path) || is_file($path)) { unlink($path); } // the copy of the resources keeps links: a new file, not written through one
+        file_put_contents($path, Bundle::xml($strings));
         if (!in_array($lproj, $names, true)) { $names[] = $lproj; }
     }
     // The app's own language, which the system falls back to, and those it ships, which AppKit picks its texts' language among.

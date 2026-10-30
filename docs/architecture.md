@@ -5594,6 +5594,39 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   sends (mygo's 8dc7b74); Select All copies with `$copyOnSelect`, which
   `Terminal::setCopyOnSelect` changes in a running terminal (4bda750).
 
+## Distribution: provisioning profiles, localized Info.plist strings, senders (v1.76)
+
+- **Provisioning profiles** (`macos.provisioningProfile`, mygo's f691dd8):
+  `embedProfile` in `bin/myphp` copies it to the bundle's
+  `Contents/embedded.provisionprofile` before `Codesign::sign`, in `build`
+  and `dev`, so the signed app, its disk image and its update archive hold
+  it. Ad-hoc signing cannot use one: `build` stops before it builds
+  anything, `dev` without `-sign` says to leave the profile out of
+  development builds (with a computed configuration, myphp.config.ts),
+  whose identifier, `<identifier>.dev`, the app's profile does not
+  authorize. The profile is among what `dev` watches.
+- **The app's InfoPlist.strings** (mygo's 2e50d4d): `writeLocalizations`
+  reads the one the resources copied into a language's `.lproj`
+  (`Native\Build\Strings`: Xcode's text format, in UTF-8 or UTF-16 with a
+  byte order mark, its comments and escapes, a surrogate pair's two `\U`s
+  as one character, or a property list in XML), keeps its strings, adds
+  the name the catalog gives (myphp.appName) where it gives none, and
+  writes them as XML, in place of the link the copy of the resources may
+  have left; one it cannot read stops the build, naming it.
+- **Senders** (`NotificationOptions::$sender`, a `NotificationSender`,
+  mygo's dc7d966): an incoming direct message's sender, copied with the
+  options, named by the title without a name. `show()` asks once whether
+  Intents has `INSendMessageIntent` and the content
+  `contentByUpdatingWithProvider:error:`, and whether the app is signed with
+  `com.apple.developer.usernotifications.communication`
+  (`SecTaskCopyValueForEntitlement`); then it makes an `INPerson` of the
+  sender's id (a handle of unknown type, no contact detail), name and
+  avatar, an incoming `INSendMessageIntent` with the subtitle above the
+  body and the group (else the id) as its conversation, donates its
+  interaction, and shows the content updated from the intent. Without the
+  capability, with no id or an avatar that is no image, or when the update
+  fails, the ordinary notification shows.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

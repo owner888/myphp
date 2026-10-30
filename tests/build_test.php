@@ -454,7 +454,49 @@ foreach (['arm64' => 'arm', 'amd64' => 'amd'] as $arch => $tool) {
 $log = file_get_contents($stubLog);
 check(str_contains($log, 'cc -O2 -Wall -arch arm64 ') && str_contains($log, 'cc -O2 -Wall -arch x86_64 ') && substr_count($log, 'codesign --force --deep --sign - ') === 2, 'compiled for each architecture and signed ad hoc');
 same(['.', '..', 'darwin-amd64', 'darwin-arm64'], scandir("$root/b/build"), 'no staging left');
+// A provisioning profile (mygo's f691dd8): embedded before signing; with ad-hoc signing, refused before anything is built.
+$cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
+$cfg['macos']['provisioningProfile'] = 'app.provisionprofile';
+file_put_contents("$root/b/myphp.json", json_encode($cfg));
+file_put_contents("$root/b/app.provisionprofile", 'profile');
+exec('rm -rf ' . escapeshellarg("$root/b/build"));
+[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+check($code !== 0 && str_contains($out, 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign') && !is_dir("$root/b/build"), 'a profile with ad-hoc signing: refused, nothing built: ' . $out);
+[$code, $out] = $myphp('build', '-skip-dmg', '-sign', 'Developer ID Application: X', "$root/b");
+same([0, 'profile'], [$code, @file_get_contents(glob("$root/b/build/darwin-*/b.app/Contents/embedded.provisionprofile")[0] ?? '')], 'signed with an identity: the profile in Contents/embedded.provisionprofile: ' . $out);
+// An app's own InfoPlist.strings among its resources, in a language it ships, is kept, with the name its catalog gives where it gives none (mygo's 2e50d4d).
+$cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
+unset($cfg['macos']['provisioningProfile']);
+$cfg['i18n'] = ['dir' => 'locales', 'source' => 'en'];
+file_put_contents("$root/b/myphp.json", json_encode($cfg));
+bldWrite("$root/b", ['locales/en.json' => '{}', 'locales/zh-Hans.json' => '{"myphp.appName": "乙"}', 'locales/fr.json' => '{"myphp.appName": "Bé"}',
+    'resources/zh-Hans.lproj/InfoPlist.strings' => "/* 中文 */\n\"NSMicrophoneUsageDescription\" = \"录音\";\n",
+    'resources/fr.lproj/InfoPlist.strings' => "\xFF\xFE" . mb_convert_encoding("\"CFBundleName\" = \"Bé à moi\";\n", 'UTF-16LE', 'UTF-8')]);
+exec('rm -rf ' . escapeshellarg("$root/b/build"));
+[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+$lp = glob("$root/b/build/darwin-*/b.app/Contents/Resources")[0] ?? '';
+same([0, ['CFBundleDisplayName' => '乙', 'CFBundleName' => '乙', 'NSMicrophoneUsageDescription' => '录音'], ['CFBundleDisplayName' => 'Bé', 'CFBundleName' => 'Bé à moi']], // the keys in order, as the plist writes them
+    [$code, \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/zh-Hans.lproj/InfoPlist.strings")), \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/fr.lproj/InfoPlist.strings"))],
+    'the app\'s strings kept, the name added where they give none: ' . $out);
+same('/* 中文 */', substr(file_get_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings"), 0, 12), 'the resources\' own file untouched');
+file_put_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings", '"a" = "b"');
+[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+check($code !== 0 && str_contains($out, 'zh-Hans.lproj/InfoPlist.strings of the resources: line 1: want a ; after "a"'), 'one it cannot read stops the build, naming it: ' . $out);
 putenv("PATH=$path");
+
+// The .strings files apps ship: Xcode's text, in UTF-8 or UTF-16, or a property list in XML (mygo's TestParseStrings).
+$text = "/* The reasons of Info.plist, in German. */\n\"NSMicrophoneUsageDescription\" = \"Mikrofon für \\\"Notizen\\\"\\nund mehr \\U00e4 \\UD83C\\UDF99\";\n// A line comment.\nNSCameraUsageDescription = \"Kamera\";\n\"CFBundleName\";\n";
+$want = ['NSMicrophoneUsageDescription' => "Mikrofon für \"Notizen\"\nund mehr ä 🎙", 'NSCameraUsageDescription' => 'Kamera', 'CFBundleName' => 'CFBundleName'];
+$utf16 = fn(string $s): string => "\xFF\xFE" . mb_convert_encoding($s, 'UTF-16LE', 'UTF-8');
+foreach (['UTF-8' => $text, 'UTF-8 BOM' => "\xEF\xBB\xBF$text", 'UTF-16' => $utf16($text)] as $what => $data) {
+    same($want, \MyPHP\Native\Build\Strings::parse($data), "strings in $what");
+}
+$xmlText = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n\t<key>NSCameraUsageDescription</key>\n\t<string>Kamera &amp; mehr</string>\n</dict>\n</plist>";
+same(['NSCameraUsageDescription' => 'Kamera & mehr'], \MyPHP\Native\Build\Strings::parse($xmlText), 'a property list');
+same(['NSCameraUsageDescription' => 'Kamera & mehr'], \MyPHP\Native\Build\Strings::parse($utf16(str_replace('UTF-8', 'UTF-16', $xmlText))), 'a property list in UTF-16');
+foreach (['"a" = "b"' => 'line 1: want a ; after', "\n\"a\" = \"b" => 'line 2: want the end of a string', '/* never ends' => 'the end of a comment', '"a" = ;' => 'a quoted string', "bplist00\x00\x01" => 'binary property list'] as $data => $err) {
+    check(str_contains(bldThrows(fn() => \MyPHP\Native\Build\Strings::parse($data)), $err), 'a malformed file: ' . $err);
+}
 
 // myphp dev: the development app built, launched, relaunched as App::relaunch() asks, built again on a change, until it quits.
 $stub = bldDir();

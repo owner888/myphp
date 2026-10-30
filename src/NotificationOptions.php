@@ -14,7 +14,14 @@ final class NotificationOptions
         public string $id = '',
         /** No sound. */
         public bool $silent = false,
-        /** Notifications sharing a group stack together in Notification Center. */
+        /** Notifications sharing a group stack together in Notification Center: a conversation's. */
         public string $group = '',
+        /**
+         * The sender of an incoming direct message: on macOS 12 and later its
+         * avatar shows, with the app's small icon, when the signed app has
+         * the Communication Notifications capability; otherwise, or when
+         * preparing the message fails, the ordinary notification shows.
+         */
+        public ?NotificationSender $sender = null,
     ) {}
 }
