@@ -96,6 +96,9 @@ final class Runtime
     public int $instantFrame = 0;
     /** That the desktop asks for less motion (macOS's Reduce Motion, mygo's Preferences.ReduceMotion): the window sets it from App::reduceMotion. */
     public bool $reduceMotion = false;
+    /** That none of the window shows (covered, minimized, on another space), as the frame builds, and when some of it last showed again (the clock's ns): a clip stands out of sight (ClipPlayer::advance). The window sets them. @internal */
+    public bool $occluded = false;
+    public int $shownAt = 0;
     /** The desktop's settings (Context::preferences): the window sets them from App::preferences. */
     public Preferences $preferences;
     /** That the window reads right to left: the window sets it from the app's language (I18n::direction of App::locale). */

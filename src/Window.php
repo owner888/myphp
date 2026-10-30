@@ -424,6 +424,7 @@ final class Window
                 $in = $this->runtime->inspector;
                 if ($in !== null && $in->open) { $in->hz = $this->refreshRate(); }
                 $this->runtime->fullScreen = $this->isFullScreen();
+                $this->runtime->occluded = !$this->showing();
                 $root = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
                     $in?->startPass();
                     $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
@@ -702,6 +703,7 @@ final class Window
                 }],
                 'windowDidChangeOcclusionState:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
                     $w = self::$open[ObjC::addr(ObjC::msg('p:', $note, 'object'))] ?? null;
+                    if ($w?->runtime !== null && $w->showing()) { $w->runtime->shownAt = hrtime(true); } // what moves goes on from now (mygo's engine.shown)
                     if ($w !== null && $w->held && $w->showing()) {
                         $w->held = false; // some of it shows again: what moved goes on (mygo's SurfaceShown)
                         $w->invalidate();

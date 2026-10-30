@@ -104,6 +104,7 @@ final class Service
             // A PHP int goes to a variadic C function as a 64-bit integer, libcurl's long and curl_off_t.
             $set = fn(int $opt, mixed $v) => $f->curl_easy_setopt($h, $opt, $v);
             $set(Curl::OPT_URL, $url);
+            \MyPHP\Native\NetProxy::apply($h, $url); // the system's proxy
             $set(Curl::OPT_NOSIGNAL, 1);
             $set(Curl::OPT_PROTOCOLS_STR, 'http,https');
             $set(Curl::OPT_REDIR_PROTOCOLS_STR, 'http,https');

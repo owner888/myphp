@@ -57,6 +57,7 @@ final class ImageIO
                 extern void* kCGImageDestinationLossyCompressionQuality;
                 void* CGImageDestinationCopyTypeIdentifiers(void);
                 void* CGImageCreateWithImageInRect(void*, CGRect);
+                void* CGImageSourceCopyPropertiesAtIndex(void*, unsigned long, void*);
             ', '/System/Library/Frameworks/ImageIO.framework/ImageIO');
             self::$c->dlopen('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics', 2);
             self::$colorSpace = self::$c->CGColorSpaceCreateDeviceRGB();
@@ -110,6 +111,57 @@ final class ImageIO
         Mem::copy($addr, Mem::addr($c->CGBitmapContextGetData($ctx)), $w * $h * 4);
         $c->CGContextRelease($ctx);
         return ['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => $addr];
+    }
+
+    /** The image source of an animated image's $bytes, and how many frames it has (UI\GifDecoder); release it with closeFrames(). @return array{0: CData, 1: int} */
+    public static function openFrames(string $bytes): array
+    {
+        $c = self::c();
+        $data = $c->CFDataCreate(null, $bytes, strlen($bytes));
+        $source = $c->CGImageSourceCreateWithData($data, null);
+        $c->CFRelease($data);
+        if ($source === null) {
+            throw new RuntimeException('not an image ImageIO can read');
+        }
+        return [$source, $c->CGImageSourceGetCount($source)];
+    }
+
+    /**
+     * Frame $i of $source, as ImageIO composes it over what the frames
+     * before it left, as its disposal says, and how long it shows in
+     * seconds by its GIF properties (the unclamped delay, else the delay;
+     * 0 for none): [w, h, premultiplied RGBA, top row first, seconds].
+     * @return array{0: int, 1: int, 2: string, 3: float}
+     */
+    public static function frame(CData $source, int $i): array
+    {
+        $c = self::c();
+        $image = $c->CGImageSourceCreateImageAtIndex($source, $i, null) ?? throw new RuntimeException("frame $i cannot be decoded");
+        $w = $c->CGImageGetWidth($image); $h = $c->CGImageGetHeight($image);
+        $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w * 4, self::$colorSpace, self::RGBA_PREMULTIPLIED_BIG)
+            ?? throw new RuntimeException('CGBitmapContextCreate');
+        $rect = $c->new('CGRect');
+        $rect->size->w = $w; $rect->size->h = $h;
+        $c->CGContextDrawImage($ctx, $rect, $image);
+        $c->CGImageRelease($image);
+        $rgba = FFI::string($c->cast('char*', $c->CGBitmapContextGetData($ctx)), $w * $h * 4);
+        $c->CGContextRelease($ctx);
+        $delay = 0.0;
+        if (($props = $c->CGImageSourceCopyPropertiesAtIndex($source, $i, null)) !== null) {
+            ObjC::boot(['Foundation']);
+            $gif = ObjC::msg('p:p', ObjC::import($props), 'objectForKey:', ObjC::str('{GIF}')); // kCGImagePropertyGIFDictionary
+            foreach (['UnclampedDelayTime', 'DelayTime'] as $key) { // kCGImagePropertyGIFUnclampedDelayTime, kCGImagePropertyGIFDelayTime
+                $v = $gif === null ? null : ObjC::msg('p:p', $gif, 'objectForKey:', ObjC::str($key));
+                if ($v !== null && ($delay = ObjC::msg('d:', $v, 'doubleValue')) > 0) { break; }
+            }
+            $c->CFRelease($props);
+        }
+        return [$w, $h, $rgba, $delay];
+    }
+
+    public static function closeFrames(CData $source): void
+    {
+        self::c()->CFRelease($source);
     }
 
     /** $w by $h pixels $rgba (premultiplied, top row first, opaque) as a JPEG of $quality, 0 to 1. */

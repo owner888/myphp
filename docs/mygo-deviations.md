@@ -2205,3 +2205,53 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     Media Session in browsers.
   - myphp: macOS only, as the rest of it.
   - Why: myphp runs on macOS.
+
+## Clips: videos in native UI, animated GIFs first (v1.103)
+
+- **The names**
+  - mygo: `ui.Video`, `ui.VideoPlayer`, `ui.VideoDecoder`, `ui.VideoFrame`,
+    `ui.NewGIFDecoder`.
+  - myphp: `Context::clip`, `UI\ClipPlayer`, `UI\ClipDecoder`,
+    `UI\ClipFrame`, `UI\GifDecoder`.
+  - Why: `Context::video` shows a `Media\Player`'s picture and
+    `UI\VideoPlayer` is the IINA player's layout, both myphp's since v1.33;
+    the developer chose the Clip names.
+- **Decoding**
+  - mygo: a goroutine decodes two frames ahead; a late decoder wakes the
+    window as it has the frame due.
+  - myphp: the player decodes on the main thread as the playhead reaches a
+    frame, during the frame that shows it; the frames due meanwhile pass
+    over as mygo's do.
+  - Why: PHP has no goroutines; ImageIO decodes a GIF's frame in well under
+    a frame's time.
+- **The decoder's end**
+  - mygo: `Next` returns `io.EOF` after the last frame; a decoder that is an
+    `io.Closer` is closed with its player.
+  - myphp: `next()` returns null after the last, throws for a frame that does
+    not decode; a decoder with a `close()` method has it called.
+  - Why: PHP has no error values.
+- **GIFs**
+  - mygo: decoded in Go (image/gif) into memory at once, a byte a pixel,
+    each frame drawn over the ones before as its disposal says.
+  - myphp: ImageIO composes each frame as it plays (macOS only).
+  - Why: the developer chose ImageIO.
+
+## The system's proxy (v1.103)
+
+- **The API**
+  - mygo: package `netproxy`, `Proxy` (an `http.Transport`'s) and
+    `Transport`, which apps' own Go clients can use.
+  - myphp: internal (`Native\NetProxy`): myphp's own requests use it, the
+    updater's, the fetch and WebSocket plugins', and a film's over HTTP.
+  - Why: myphp has no HTTP client type for apps to give it to.
+- **The environment**
+  - mygo: Go's `ProxyFromEnvironment` reads it.
+  - myphp: libcurl reads it (`http_proxy` in lowercase only, `HTTPS_PROXY`,
+    `ALL_PROXY`, `NO_PROXY`); that one of mygo's variables is set decides
+    that it does.
+  - Why: curl's own reading, which its users know.
+- **Redirects**
+  - mygo: the transport asks the proxy of each request, a redirect's too.
+  - myphp: the proxy of the URL a request starts at serves its redirects.
+  - Why: curl follows redirects itself, on the handle's proxy.
+

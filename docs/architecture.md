@@ -6183,6 +6183,39 @@ succeeds are told of, an empty line is none.
   the microphone together: while only one of them is muted, the other is
   made live again after it.
 
+## Clips: videos in native UI, animated GIFs first (v1.103)
+
+- mygo 41ec785: `Context::clip(ClipPlayer)` shows a clip as `image()`
+  shows an image, through an `Image` its player updates as each frame
+  comes due (`Image::update`, the frame's slot of the atlas). The player
+  (`ClipPlayer::advance`, once a frame) moves the playhead by the time
+  the clip showed since the frame that last built it — since the frame
+  before, which built it playing too, and since some of the window last
+  showed again (`Runtime::$shownAt`, which `windowDidChangeOcclusionState:`
+  sets) — decodes the frames due, of which the last shows, and asks for
+  the next with `after()`: the window draws one frame a frame of the clip.
+  Out of the view, or in a window out of sight (`Runtime::$occluded`, set
+  before each build), it stands; with less motion it shows its first frame.
+- `ClipDecoder` (`next()`, null after the last; `rewind()`), `ClipFrame`
+  (premultiplied RGBA and a duration, 100 ms for none); `GifDecoder`
+  through ImageIO (`ImageIO::openFrames`, `frame`: the frame composed,
+  its unclamped delay, 10 ms or less shown for 100 ms).
+
+## myphp's requests follow the system's proxy (v1.103)
+
+- mygo d20c33a: `Native\NetProxy::apply` sets each curl handle's proxy
+  (CURLOPT_PROXY) as browsers pick it: a loopback host direct (""); when
+  any proxy variable of the environment is set, nothing, curl reading it;
+  else the system's for the URL, kept 5 seconds a scheme and host
+  (WebSockets as their HTTP). `Native\SystemProxy` asks CFNetwork
+  (`CFNetworkCopySystemProxySettings`, `CFNetworkCopyProxiesForURL`) and
+  runs a setup script (PAC, by URL or text) on the main thread's run loop
+  in a mode of its own, for at most 5 seconds; `NetProxy::first` takes the
+  first proxy curl can use (HTTP, HTTPS, SOCKS5; SOCKS4 skipped;
+  `direct://` first is none). The updater, the fetch and WebSocket
+  plugins and a film's requests (`Media\HttpBytes`, `Https`, `Download`)
+  go through it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

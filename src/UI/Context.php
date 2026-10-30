@@ -4523,6 +4523,27 @@ final class Context
         return $n;
     }
 
+    /**
+     * Shows a clip that plays, as image() shows an image: at its size, or
+     * fitted to the one given (mygo's Video). A short clip looping behind
+     * the content, as a launcher's library or a music player's hero shows
+     * one, or a preview in a grid:
+     *
+     *     $app->waves = (new ClipPlayer(new GifDecoder($gif)))->setLoop(true);
+     *     $c->clip($app->waves)->grow(1);
+     *
+     * It moves on only while the view builds it and some of the window
+     * shows: one that went out of the view, or a window out of sight, goes
+     * on from where it stood. Each frame of the clip is a frame of the
+     * window, which after() asks for as it comes due. While the desktop
+     * asks for less motion, it shows its first frame and does not play.
+     * Clips have no sound.
+     */
+    public function clip(ClipPlayer $p, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
+    {
+        return $this->image($p->advance($this), $w, $h, $radius, $alpha);
+    }
+
     public function box(float $w, float $h, int $color): Node
     {
         return $this->add(new Node(Node::BOX, 0, 0, 0, $w, $h, 0, null, $color));
