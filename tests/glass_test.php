@@ -199,7 +199,7 @@ check(abs($g[0]) < 1e-5 && abs($g[1] - 10) < 1e-5 && abs($g[2] - 10) < 1e-5 && a
     };
     foreach ([[0, [10, 0.541, 0.15, 0.51, 0.35, 36]], [0.25, [7.5, 0.4455, 0.15, 0.555, 0.425, 42]], [0.5, [5, 0.35, 0.15, 0.6, 0.5, 48]],
         [0.75, [3.5, 0.275, 0.125, 0.725, 0.5, 48]], [1, [2, 0.2, 0.1, 0.85, 0.5, 48]], [-1, [10, 0.541, 0.15, 0.51, 0.35, 36]], [2, [2, 0.2, 0.1, 0.85, 0.5, 48]], [NAN, [10, 0.541, 0.15, 0.51, 0.35, 36]]] as [$k, $want]) {
-        same(array_map('floatval', $want), $tone($k), "clarity $k at 400 points");
+        same(array_map('floatval', $want), $tone($k), "clarity " . (is_nan((float)$k) ? "NaN" : $k) . " at 400 points");
     }
     // At clarity 0 every pane, of any size, scale and style, is exactly the measured material.
     $bad = [];

@@ -60,9 +60,7 @@ final class WebView
         } elseif ($o->backgroundColor !== '') {
             $this->setBackgroundColor($o->backgroundColor);
         }
-        if ($o->url !== '') {
-            $this->page->loadURL($o->url);
-        }
+        $this->page->loadFirst($o->page->sessionState, $o->url);
     }
 
     /** The web view's page (mygo's Page). */

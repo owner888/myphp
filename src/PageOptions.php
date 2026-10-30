@@ -10,6 +10,8 @@ final class PageOptions
     public function __construct(
         /** JavaScript run in every page before its own scripts, after window.myphp exists (mygo's PreloadScript). */
         public string $preloadScript = '',
+        /** Runs $preloadScript in the page's iframes too, of every origin, as they start, where window.myphp is not (mygo's PreloadAllFrames): it sees what a player embedded from another site loads. */
+        public bool $preloadAllFrames = false,
         /**
          * Origins, such as "https://example.com", whose pages may call the
          * app's bound methods too (mygo's TrustedOrigins). By default only
@@ -38,5 +40,17 @@ final class PageOptions
         public bool $pinchZoom = false,
         /** @var list<ContentRules> rules that block what the page loads and hide parts of it, as Page::setContentRules does, from its first load (mygo's ContentRules) */
         public array $contentRules = [],
+        /** Whether the page may play audible media before the user clicked or typed in it (mygo's Autoplay). */
+        public Autoplay $autoplay = Autoplay::UserGesture,
+        /** Whether the page slows down while its window is hidden, minimized or covered (mygo's BackgroundThrottling). */
+        public BackgroundThrottling $backgroundThrottling = BackgroundThrottling::On,
+        /**
+         * Brings back a page as Page::sessionState() saved it, in place of
+         * the window's or web view's URL: its back/forward list, with the
+         * scroll positions and form fields saved, at the entry it was at
+         * (mygo's SessionState). A state WebKit cannot read loads the URL it
+         * was at alone; one that is no state loads the URL.
+         */
+        public ?string $sessionState = null,
     ) {}
 }

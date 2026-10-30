@@ -56,6 +56,7 @@ final class Page
     /** @var list<string> PageOptions::$trustedOrigins */
     private array $trustedOrigins;
     private string $preload;
+    private bool $preloadAllFrames = false;
     private bool $devTools;
     /** The zoom the page was made with, which its first scripts tell the title bar's room in. */
     private float $zoom;
@@ -68,7 +69,9 @@ final class Page
         $this->preload = $o->preloadScript;
         $this->devTools = $o->devTools->on();
         $this->zoom = $o->zoomFactor > 0 ? $o->zoomFactor : 1.0;
-        $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom);
+        $this->preloadAllFrames = $o->preloadAllFrames;
+        $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom,
+            $o->autoplay === Autoplay::Allow, $o->backgroundThrottling === BackgroundThrottling::On);
         if ($o->contentRules !== []) { $this->setContentRules(...$o->contentRules); }
         $this->wire();
     }
@@ -115,6 +118,60 @@ final class Page
      * frontend's files otherwise. Besides http(s) and file: URLs, the
      * schemes Protocol serves load.
      */
+    /**
+     * The page's back/forward list, with the scroll positions and form
+     * fields WebKit saved, which PageOptions::$sessionState brings back in
+     * a new window or web view: at the next launch, as browsers bring back
+     * their windows, or after the app closed a page it was not showing
+     * (mygo's SessionState). WebKit saves them as it goes: the scroll
+     * position of the page it shows a moment after the user stops
+     * scrolling, its form fields as it goes out of view, the other
+     * entries' as the page leaves them. Bytes for the app to keep: the
+     * page's URL and WebKit's interactionState, which may hold what the
+     * user typed into forms, so keep it as the user's data; HTML that
+     * loadHTML() loaded is not in it.
+     */
+    public function sessionState(): string
+    {
+        if ($this->destroyed) { throw new RuntimeException('myphp: session state: the page is closed'); }
+        return self::encodeSessionState('darwin', $this->web->url(), $this->web->sessionState());
+    }
+
+    /** The ID of the page's web content process (WebKit's com.apple.WebKit.WebContent), 0 when WebKit does not tell it or runs none yet, or the page closed (mygo's ProcessID). WebKit may give a page another as it goes to another site or after its process crashed: ask again rather than keep it. */
+    public function processID(): int
+    {
+        return $this->destroyed ? 0 : $this->web->processID();
+    }
+
+    /** Loads the first page of a new window or web view: the one of $state (PageOptions::$sessionState), else $url (mygo's loadPage). @internal */
+    public function loadFirst(?string $state, string $url): void
+    {
+        if ($state !== null && ($s = self::decodeSessionState($state)) !== null) {
+            [$os, $u, $native] = $s;
+            if ($os === 'darwin' && $native !== '' && $this->web->restoreSessionState($native)) { return; }
+            if ($u !== '') { $url = $u; }
+        }
+        if ($url !== '') { $this->loadURL($url); }
+    }
+
+    /** Session states, as mygo's version 1: the magic, the version byte, the system that saved it and the URL each ended by a NUL, then WebKit's own. */
+    private const SESSION_MAGIC = 'mygo-session', SESSION_VERSION = 1;
+
+    /** @internal */
+    public static function encodeSessionState(string $os, string $url, string $native): string
+    {
+        return self::SESSION_MAGIC . chr(self::SESSION_VERSION) . "$os\0$url\0" . $native;
+    }
+
+    /** [system, URL, WebKit's] of a state encodeSessionState made, null for anything else, a later version's included. @internal @return ?array{0: string, 1: string, 2: string} */
+    public static function decodeSessionState(string $b): ?array
+    {
+        $head = self::SESSION_MAGIC . chr(self::SESSION_VERSION);
+        if (!str_starts_with($b, $head)) { return null; }
+        $parts = explode("\0", substr($b, strlen($head)), 3);
+        return count($parts) === 3 ? [$parts[0], $parts[1], $parts[2]] : null;
+    }
+
     public function loadURL(string $url): void
     {
         $this->html = null;
@@ -449,7 +506,7 @@ final class Page
             $scripts[] = $tell('myphp:title-bar', $this->titleBar());
         }
         if ($this->preload !== '') {
-            $scripts[] = $this->preload;
+            $scripts[] = [$this->preload, $this->preloadAllFrames];
         }
         return $scripts;
     }
@@ -573,7 +630,7 @@ final class Page
                 App::later($this->window->close(...));
             }
         };
-        $w->onOpen = function (string $url, string $frame, int $width, int $height, $configuration) {
+        $w->onOpen = function (string $url, string $frame, int $width, int $height, $configuration, bool $user) {
             if ($this->openHandler === null) {
                 $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
                 if ($scheme === 'http' || $scheme === 'https') {
@@ -581,7 +638,7 @@ final class Page
                 }
                 return null;
             }
-            $opts = ($this->openHandler)(new WindowOpenRequest($url, $frame, $width, $height));
+            $opts = ($this->openHandler)(new WindowOpenRequest($url, $frame, $width, $height, $user));
             if ($opts === null) {
                 return null;
             }

@@ -46,7 +46,7 @@ final class WebView
     public ?Closure $onFail = null;
     /** The page's web content process went away. @var ?Closure(string): void */
     public ?Closure $onGone = null;
-    /** window.open(), or a target=_blank link: (URL, frame name, width, height, the configuration WebKit hands over) → the WKWebView to open it in, or null. @var ?Closure(string, string, int, int, mixed): mixed */
+    /** window.open(), or a target=_blank link: (URL, frame name, width, height, the configuration WebKit hands over, whether a user's gesture opened it) → the WKWebView to open it in, or null. @var ?Closure(string, string, int, int, mixed, bool): mixed */
     public ?Closure $onOpen = null;
     /** The page called window.close(). @var ?Closure(): void */
     public ?Closure $onClosedByPage = null;
@@ -100,10 +100,12 @@ final class WebView
      * bridge first (mygo's createWebView): with the configuration WebKit
      * handed over for window.open(), or a new one, either way with a
      * content controller of its own, so that messages and scripts never
-     * leak between pages.
-     * @param list<string> $scripts
+     * leak between pages. $autoplay lets its page play audible media
+     * without a gesture (PageOptions::$autoplay), and !$throttle keeps it
+     * running while hidden (PageOptions::$backgroundThrottling).
+     * @param list<string|array{0: string, 1: bool}> $scripts a script, or one and whether it goes in every frame
      */
-    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false): self
+    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true): self
     {
         self::define();
         $self = new self($onMessage);
@@ -115,6 +117,10 @@ final class WebView
             foreach (\MyPHP\Protocol::schemes() as $scheme) { // the schemes PHP serves: handled before the view exists, as WebKit takes them only then
                 ObjC::msg('v:pp', $wk, 'setURLSchemeHandler:forURLScheme:', self::$schemeHandler, ObjC::str($scheme));
             }
+        }
+        self::setAutoplay($wk, $autoplay, $configuration !== null);
+        if (!$throttle || $configuration !== null) {
+            self::setThrottling($wk, $throttle, $configuration !== null); // a window.open() window's own, not its opener's
         }
         $prefs = ObjC::msg('p:', $wk, 'preferences');
         $yes = fn(bool $b) => ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', $b);
@@ -148,6 +154,9 @@ final class WebView
         // Both off in a new WKWebView (PageOptions::$swipeNavigation, $pinchZoom).
         if ($swipe) { ObjC::msg('v:b', $self->ns, 'setAllowsBackForwardNavigationGestures:', true); }
         if ($pinch) { ObjC::msg('v:b', $self->ns, 'setAllowsMagnification:', true); }
+        if (!$throttle && self::responds($self->ns, '_setWindowOcclusionDetectionEnabled:')) {
+            ObjC::msg('v:b', $self->ns, '_setWindowOcclusionDetectionEnabled:', false); // a window behind others counts as visible
+        }
         Drop::register($self->ns);
         ObjC::msg('v:p', $self->ns, 'setNavigationDelegate:', self::$navigationDelegate); // weak: the class keeps it
         ObjC::msg('v:p', $self->ns, 'setUIDelegate:', self::$uiDelegate);
@@ -157,12 +166,13 @@ final class WebView
         return $self;
     }
 
-    /** Replaces the scripts pages get at document start, which a content controller can only remove all of (mygo's SetUserScripts). @param list<string> $scripts */
+    /** Replaces the scripts pages get at document start, which a content controller can only remove all of (mygo's SetUserScripts). @param list<string|array{0: string, 1: bool}> $scripts a script of the main frame, or one and whether it goes in every frame */
     public function setUserScripts(array $scripts): void
     {
         ObjC::msg('v:', $this->ucc, 'removeAllUserScripts');
-        foreach ($scripts as $src) {
-            $script = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($src), self::INJECT_AT_DOCUMENT_START, true);
+        foreach ($scripts as $s) {
+            [$src, $all] = is_array($s) ? $s : [$s, false];
+            $script = ObjC::msg('p:plb', ObjC::alloc('WKUserScript'), 'initWithSource:injectionTime:forMainFrameOnly:', ObjC::str($src), self::INJECT_AT_DOCUMENT_START, !$all);
             ObjC::msg('v:p', $this->ucc, 'addUserScript:', $script);
             ObjC::msg('v:', $script, 'release');
         }
@@ -174,6 +184,111 @@ final class WebView
         if ($this->ucc === null) { return; }
         ObjC::msg('v:', $this->ucc, 'removeAllContentRuleLists');
         foreach ($lists as $l) { ObjC::msg('v:p', $this->ucc, 'addContentRuleList:', $l); }
+    }
+
+    private static function responds($obj, string $sel): bool
+    {
+        return ObjC::msg('b:p', $obj, 'respondsToSelector:', ObjC::sel($sel));
+    }
+
+    /**
+     * Lets the page of $cfg play audible media without a gesture: no media
+     * type requires the user's action (WKAudiovisualMediaTypeNone). A
+     * configuration window.open() handed over is a copy of the opener's,
+     * which a window that does not ask gets WebKit's default back on
+     * (mygo's setAutoplay).
+     */
+    private static function setAutoplay($cfg, bool $allow, bool $opened): void
+    {
+        if (!self::responds($cfg, 'setMediaTypesRequiringUserActionForPlayback:')) { return; }
+        if ($allow) {
+            ObjC::msg('v:L', $cfg, 'setMediaTypesRequiringUserActionForPlayback:', 0);
+        } elseif ($opened) {
+            $defaults = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
+            ObjC::msg('v:L', $cfg, 'setMediaTypesRequiringUserActionForPlayback:', ObjC::msg('L:', $defaults, 'mediaTypesRequiringUserActionForPlayback'));
+            ObjC::msg('v:', $defaults, 'release');
+        }
+    }
+
+    /**
+     * The preferences with which WebKit slows down a page it cannot see,
+     * and the value of each that keeps it running (mygo's throttlingPrefs):
+     * the public inactiveSchedulingPolicy, whose none keeps the web
+     * content process of a window behind others from being suspended
+     * (macOS 14), and private ones, looked up with respondsToSelector:,
+     * throttling a hidden page's timers, suspending its CSS animations and
+     * letting App Nap slow its process. [getter, setter, off, a bool].
+     */
+    private const THROTTLING = [
+        ['inactiveSchedulingPolicy', 'setInactiveSchedulingPolicy:', 2, false],
+        ['_hiddenPageDOMTimerThrottlingEnabled', '_setHiddenPageDOMTimerThrottlingEnabled:', 0, true],
+        ['_hiddenPageCSSAnimationSuspensionEnabled', '_setHiddenPageCSSAnimationSuspensionEnabled:', 0, true],
+        ['_pageVisibilityBasedProcessSuppressionEnabled', '_setPageVisibilityBasedProcessSuppressionEnabled:', 0, true],
+    ];
+
+    /**
+     * Sets THROTTLING in $cfg's preferences: WebKit's defaults when
+     * $throttle, else the values keeping a hidden page running. The
+     * preferences of a configuration window.open() hands over ($shared)
+     * are the opener's: a window that wants them otherwise gets a copy
+     * (mygo's setBackgroundThrottling).
+     */
+    private static function setThrottling($cfg, bool $throttle, bool $shared): void
+    {
+        $prefs = ObjC::msg('p:', $cfg, 'preferences');
+        $defaults = $throttle ? ObjC::msg('p:', ObjC::alloc('WKPreferences'), 'init') : null;
+        $get = fn($o, array $p): int => $p[3] ? (ObjC::msg('b:', $o, $p[0]) ? 1 : 0) : ObjC::msg('l:', $o, $p[0]);
+        foreach (self::THROTTLING as $p) {
+            if (!self::responds($prefs, $p[0]) || !self::responds($prefs, $p[1])) { continue; }
+            $v = $defaults !== null ? $get($defaults, $p) : $p[2];
+            if ($get($prefs, $p) === $v) { continue; }
+            if ($shared && self::responds($prefs, 'copyWithZone:')) {
+                $shared = false;
+                $prefs = ObjC::msg('p:', $prefs, 'copy');
+                ObjC::msg('v:p', $cfg, 'setPreferences:', $prefs);
+                ObjC::msg('v:', $prefs, 'release'); // the configuration keeps it
+            }
+            $p[3] ? ObjC::msg('v:b', $prefs, $p[1], $v === 1) : ObjC::msg('v:l', $prefs, $p[1], $v);
+        }
+        if ($defaults !== null) { ObjC::msg('v:', $defaults, 'release'); }
+    }
+
+    /** The page's web content process, from WebKit's private _webProcessIdentifier, 0 when it does not answer it or runs none yet (mygo's ProcessID). */
+    public function processID(): int
+    {
+        return self::responds($this->ns, '_webProcessIdentifier') ? ObjC::msg('i:', $this->ns, '_webProcessIdentifier') : 0;
+    }
+
+    /** WKWebView's interactionState, WebKit's own encoding of the back/forward list, '' when it gives none (mygo's SessionState). */
+    public function sessionState(): string
+    {
+        $s = ObjC::msg('p:', $this->ns, 'interactionState');
+        if ($s === null || !ObjC::msg('b:p', $s, 'isKindOfClass:', ObjC::cls('NSData'))) { return ''; }
+        $n = ObjC::msg('L:', $s, 'length');
+        return $n === 0 ? '' : \FFI::string(ObjC::$c->cast('char*', ObjC::msg('p:', $s, 'bytes')), $n);
+    }
+
+    /** Sets interactionState, which restores the back/forward list and goes to its current item, and reports whether there is one: WebKit ignores what it cannot decode (mygo's RestoreSessionState). */
+    public function restoreSessionState(string $state): bool
+    {
+        $this->loads++;
+        ObjC::msg('v:p', $this->ns, 'setInteractionState:', ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $state, strlen($state)));
+        if (ObjC::msg('p:', ObjC::msg('p:', $this->ns, 'backForwardList'), 'currentItem') !== null) { return true; }
+        $this->loads--;
+        return false;
+    }
+
+    /**
+     * Whether a user's gesture started $action: WebKit's private
+     * _isUserInitiated knows, a click whose handler navigates or calls
+     * window.open() included; without it, a link or a form (mygo's
+     * userInitiated).
+     */
+    private static function userInitiated($action): bool
+    {
+        if (self::responds($action, '_isUserInitiated')) { return ObjC::msg('b:', $action, '_isUserInitiated'); }
+        $type = ObjC::msg('l:', $action, 'navigationType');
+        return $type === 0 || $type === 1; // WKNavigationTypeLinkActivated, FormSubmitted
     }
 
     /** Lets the web view go: its observer, scripts and delegates, its page stopped (mygo's cleanup). */
@@ -349,7 +464,7 @@ final class WebView
                     if ($view->onNavigate !== null) {
                         $url = ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString'));
                         $type = ObjC::msg('l:', $action, 'navigationType'); // 0 a link, 1 a form, 3 a reload
-                        $allow = ($view->onNavigate)($url, $type === 0 || $type === 1, $type === 3, $unasked);
+                        $allow = ($view->onNavigate)($url, self::userInitiated($action), $type === 3, $unasked);
                     }
                 }
                 ObjC::callBlock('v:l', $handler, $allow ? 1 : 0); // WKNavigationActionPolicyAllow, Cancel
@@ -454,7 +569,7 @@ final class WebView
                     return $n === null ? 0 : ObjC::msg('l:', $n, 'integerValue');
                 };
                 $url = ObjC::msg('p:', ObjC::msg('p:', ObjC::msg('p:', $action, 'request'), 'URL'), 'absoluteString');
-                return ($view->onOpen)($url === null ? '' : ObjC::phpStr($url), '', $num('width'), $num('height'), $cfg);
+                return ($view->onOpen)($url === null ? '' : ObjC::phpStr($url), '', $num('width'), $num('height'), $cfg, self::userInitiated($action));
             }],
             'webViewDidClose:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
                 (self::$views[ObjC::addr($wk)] ?? null)?->onClosedByPage?->__invoke();

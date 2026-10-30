@@ -128,8 +128,8 @@ final class Window
         if (!App::isReady()) {
             throw new RuntimeException('create windows from App::whenReady()');
         }
-        if ($o->content === null && $o->html === null && $o->url === null && self::$opening === null) {
-            throw new RuntimeException('WindowOptions needs content, html or url');
+        if ($o->content === null && $o->html === null && $o->url === null && $o->page->sessionState === null && self::$opening === null) {
+            throw new RuntimeException('WindowOptions needs content, html, url or a page session state');
         }
         $this->id = self::$nextId++;
         $this->flyout = self::$creating;
@@ -211,7 +211,7 @@ final class Window
             if ($opening === null && $o->html !== null) {
                 $this->page->loadHTML($o->html);
             } elseif ($opening === null) {
-                $this->page->loadURL($o->url); // WebKit loads window.open()'s itself
+                $this->page->loadFirst($o->page->sessionState, $o->url ?? ''); // WebKit loads window.open()'s itself
             }
         } else {
             $this->view = $this->nativeView($o);

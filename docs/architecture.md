@@ -6118,6 +6118,33 @@ succeeds are told of, an empty line is none.
   touchpad's distance scaled, 1 by default), as Ghostty's
   mouse-scroll-multiplier; `Terminal::setScrollMultiplier()` changes it.
 
+## Pages: a gesture's windows, autoplay, throttling, frames, session state, the process (v1.99)
+
+- 07ebe19: `WindowOpenRequest::$userInitiated`, from WebKit's private
+  `-[WKNavigationAction _isUserInitiated]` (a click whose handler calls
+  window.open() included), else a link's or a form's navigation type;
+  the navigations' own `user` flag comes of it too.
+- 03ac070: `PageOptions::$autoplay` (`Autoplay::Allow`): the
+  configuration's `mediaTypesRequiringUserActionForPlayback` none; a
+  window.open() window that does not ask gets WebKit's default back on
+  the copy of its opener's.
+- 510c23b: `PageOptions::$backgroundThrottling` (`BackgroundThrottling::Off`):
+  `inactiveSchedulingPolicy` none and the private hidden-page timer
+  throttling, CSS animation suspension and process suppression off, on a
+  copy of the preferences when window.open() handed over the opener's,
+  and `_setWindowOcclusionDetectionEnabled:` off; private ones looked up
+  with respondsToSelector:.
+- 3d9d668: `PageOptions::$preloadAllFrames`: the preload script a
+  `WKUserScript` not for the main frame only (`WebView::setUserScripts`
+  takes [source, all frames] pairs).
+- f55d12c: `Page::sessionState()` and `PageOptions::$sessionState`:
+  WKWebView's `interactionState` behind mygo's header (its magic, version
+  1, the system and the URL each ended by a NUL), so that a state of
+  mygo's reads too; `Page::loadFirst` restores it, else loads the URL it
+  saved, else the window's or web view's. A window may be made of a
+  session state alone.
+- 15cb4a3: `Page::processID()`, WebKit's private `_webProcessIdentifier`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

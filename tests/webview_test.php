@@ -155,4 +155,28 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     $both = \MyPHP\Native\WebView::create($rect, [], function () {}, swipe: true, pinch: true);
     $ns = fn($w, string $p): bool => \MyPHP\Native\ObjC::msg('b:', $w->ns, $p);
     same([false, false, true, true], [$ns($plain, 'allowsBackForwardNavigationGestures'), $ns($plain, 'allowsMagnification'), $ns($both, 'allowsBackForwardNavigationGestures'), $ns($both, 'allowsMagnification')], 'swipes and pinches off unless asked (mygo\'s 32188db)');
+    // Autoplay, background throttling, the preload in every frame, the process (mygo's 03ac070, 510c23b, 3d9d668, 15cb4a3).
+    $O = \MyPHP\Native\ObjC::class;
+    $free = \MyPHP\Native\WebView::create($rect, ['a', ['b', true]], function () {}, autoplay: true, throttle: false);
+    $cfg = fn($w) => $O::msg('p:', $w->ns, 'configuration');
+    same([0, true], [$O::msg('L:', $cfg($free), 'mediaTypesRequiringUserActionForPlayback'), $O::msg('L:', $cfg($plain), 'mediaTypesRequiringUserActionForPlayback') !== 0], 'autoplay: no media type requires a gesture, unless asked');
+    $prefs = $O::msg('p:', $cfg($free), 'preferences');
+    if ($O::msg('b:p', $prefs, 'respondsToSelector:', $O::sel('inactiveSchedulingPolicy'))) {
+        same(2, $O::msg('l:', $prefs, 'inactiveSchedulingPolicy'), 'throttling off: WKInactiveSchedulingPolicyNone');
+    }
+    if ($O::msg('b:p', $prefs, 'respondsToSelector:', $O::sel('_hiddenPageDOMTimerThrottlingEnabled'))) {
+        same(false, $O::msg('b:', $prefs, '_hiddenPageDOMTimerThrottlingEnabled'), 'throttling off: a hidden page\'s timers');
+    }
+    $scripts = $O::msg('p:', $O::msg('p:', $cfg($free), 'userContentController'), 'userScripts');
+    same([true, false], [$O::msg('b:', $O::msg('p:L', $scripts, 'objectAtIndex:', 0), 'isForMainFrameOnly'), $O::msg('b:', $O::msg('p:L', $scripts, 'objectAtIndex:', 1), 'isForMainFrameOnly')], 'a script in the main frame, one in every frame');
+    check($free->processID() >= 0, 'a process ID, or 0 before one runs');
 }
+
+// Session states (mygo's session_state_test.go): the system, the URL and WebKit's own state, which a later version's or anything else is not.
+$st = \MyPHP\Page::encodeSessionState('darwin', 'app://localhost/docs?page=2', "bplist\0state");
+same(['darwin', 'app://localhost/docs?page=2', "bplist\0state"], \MyPHP\Page::decodeSessionState($st), 'session state: read back, WebKit\'s NULs kept');
+same(['darwin', '', ''], \MyPHP\Page::decodeSessionState(\MyPHP\Page::encodeSessionState('darwin', '', '')), 'session state: of a blank page');
+same(null, \MyPHP\Page::decodeSessionState('app://localhost/saved'), 'session state: not one');
+$later = $st; $later[strlen('mygo-session')] = chr(2);
+same(null, \MyPHP\Page::decodeSessionState($later), "session state: a later version's");
+same(false, (new \MyPHP\WindowOpenRequest('https://x.org'))->userInitiated, 'a window-open request: not a gesture\'s unless told');
