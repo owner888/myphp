@@ -15,5 +15,7 @@ final class ClipboardRead
         public bool $primary = false,
         /** The program holds the terminal's permission, as when it reads what a paste offered it. */
         public bool $granted = false,
+        /** The program asked with a password, the one a paste event gave it: a terminal that pasted knows it ($granted says so), and one that does not never can, and leaves the read to the one it is for. */
+        public bool $canRemember = false,
     ) {}
 }

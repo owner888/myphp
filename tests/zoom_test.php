@@ -56,7 +56,7 @@ same([200.0, 200 / 1.5], end($sizes), 'zoomed 1.5 times, the frame\'s last pass 
 same(1.5, $h->rt->frameZoom, 'and drew at it');
 foreach ([[0.0, 1.0], [NAN, 1.0], [-2.0, 1.0], [0.1, 0.25], [9.0, 5.0]] as [$asked, $got]) {
     $z = $asked; $h->frame(1);
-    same($got, $h->rt->zoom, 'setZoom(' . $asked . ')');
+    same($got, $h->rt->zoom, 'setZoom(' . var_export($asked, true) . ')'); // NAN as text: PHP 8.5 warns when it becomes a string
 }
 
 // What goes to the window, in its points: the caret input methods compose at, a context menu, a drag.

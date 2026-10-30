@@ -44,15 +44,24 @@ final class Options
         public int $scrollback = 0,
         /** Makes Option the Alt key of programs (Meta), rather than the key that types accented letters and symbols. */
         public bool $optionAsAlt = false,
-        /** Copies what the pointer selects as the selection ends, as Ghostty's copy-on-select. */
+        /** Copies what the pointer selects as the selection ends, and what Select All selects, as Ghostty's copy-on-select; Terminal::setCopyOnSelect changes it. */
         public CopyOnSelect $copyOnSelect = CopyOnSelect::CopyOnSelectNone,
         /** Bind keys to actions over Terminal::defaultKeybinds(), as Ghostty's keybind option: a binding replaces the defaults of its key and modifiers, and one to ActionNone unbinds them. $noDefaultKeybinds starts from none. */
         public array $keybinds = [],
         public bool $noDefaultKeybinds = false,
         /** What a secondary click does, as Ghostty's right-click-action. A program that takes the mouse gets the click instead, unless Shift is held. */
         public RightClickAction $rightClick = RightClickAction::RightClickContextMenu,
-        /** Keeps programs from writing to the clipboard (OSC 52, OSC 5522), as Ghostty's clipboard-write = deny; their reads go unanswered, but for what a paste offers them. */
+        /** Keeps programs from writing to the clipboard (OSC 52, OSC 5522), as Ghostty's clipboard-write = deny; reads go by $clipboardRead. */
         public bool $noClipboardWrite = false,
+        /**
+         * What programs get when they read the clipboard (OSC 52's "?", OSC
+         * 5522): refused by default, as Ghostty's clipboard-read = deny, or
+         * answered with what the clipboard holds, or the app asked first. The
+         * clipboard is read and the answer written as the view builds its
+         * next frame: a read of a terminal no view shows waits. What a paste
+         * offered a program is answered whatever this is.
+         */
+        public ClipboardAccess $clipboardRead = ClipboardAccess::ClipboardDeny,
         /** Leaves the terminal's background undrawn, so that what is under the view shows through, as Ghostty's background-opacity; cells with a background of their own still draw it. */
         public bool $transparent = false,
         /** When a program sets the title, when the program (or Conn) ends, when it rings the bell, and when it asks for a desktop notification (OSC 9, OSC 777). */
@@ -62,6 +71,8 @@ final class Options
         public ?Closure $onNotify = null,
         /** How a paste goes that a program reads itself (mode 5522): offered, then sending as the program reads, then sent; or not taken 5 seconds after the offer was written. */
         public ?Closure $onPasteStatus = null,
+        /** Asks the app before a program reads the clipboard, with $clipboardRead ClipboardAsk: fn(ClipboardRequest $req), whose allow() or deny() answers it, then or later; a request left unanswered waits. Without it the terminal shows its own prompt in the view, one read at a time, with a line of what the program would read, and Allow and Deny. */
+        public ?Closure $onClipboardRequest = null,
         /** Takes what a Command+click opens: a hyperlink (OSC 8), a URL printed as text, or, only with it set, a file path printed as text; it reports whether it opened the link. A hyperlink or a URL it leaves, or every one without it, opens with the system, and a path it leaves does nothing. */
         public ?Closure $openLink = null,
         /** Sees a paste of the clipboard before the program gets it, with every format the clipboard holds, and reports whether it took it. */

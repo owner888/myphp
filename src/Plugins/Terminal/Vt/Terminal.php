@@ -42,6 +42,8 @@ final class Terminal
     private CData $cbs;
     /** Set while a clipboard read goes unanswered: the refusal the library writes for it is dropped. */
     private bool $silent = false;
+    /** The clipboard read answered later: the library's refusal, which follows the read's effect, is held back and taken in it. */
+    private ?DeferredClipboardRead $deferred = null;
     /** What the library writes while it answers a clipboard read, which writePTY then gets at once; null when it answers none. */
     private ?string $reply = null;
 
@@ -57,6 +59,10 @@ final class Terminal
         $cbs->write_pty = function ($t, $u, $data, int $n) use ($e): void {
             if ($e->writePTY === null || $n <= 0) { return; }
             $p = FFI::string($data, $n);
+            if (($d = $this->deferred) !== null) { // a deferred read: what the library writes now is its refusal, which the read's answer replaces
+                $this->deferred = null;
+                if ($d->setRefusal($p)) { return; }
+            }
             if ($this->silent && str_starts_with($p, "\x1b]5522;type=read:status=EPERM")) {
                 // The refusal of a read that goes unanswered: the library writes it as the read's callback returns without a reply.
                 $this->silent = false;
@@ -148,7 +154,9 @@ final class Terminal
     {
         if ($p === '') { return; }
         $b = Lib::buffer($p);
+        $this->deferred = null; // a read deferred whose refusal never came is stale
         Lib::ffi()->ghostty_terminal_vt_write($this->h, $b, strlen($p));
+        $this->deferred = null;
         // A read that writes no refusal, as OSC 52's, leaves silent set; it is for that read alone.
         $this->silent = false;
     }
@@ -520,11 +528,16 @@ final class Terminal
     {
         if ($this->effects->clipboardRead === null) { return; } // refused by the library
         $f = Lib::ffi();
-        $in = new ClipboardRead([], (bool)$r->list, $r->location !== 0, (bool)$r->granted);
+        $in = new ClipboardRead([], (bool)$r->list, $r->location !== 0, (bool)$r->granted, (bool)$r->can_remember);
         for ($i = 0, $n = (int)$r->mimes_len; $i < $n; $i++) { $in->mimes[] = Lib::str($r->mimes[$i]); }
         $out = ($this->effects->clipboardRead)($in);
-        if ($out === null) {
+        if ($out === null) { // refused, and its refusal dropped: the read of a terminal that is not the one to answer
             $this->silent = true;
+            return;
+        }
+        if (($d = $out->deferred) !== null) { // answered later: the refusal the library writes as this returns is held back (answerClipboard)
+            [$d->mimes, $d->list, $d->primary] = [$in->mimes, $in->list, $in->primary];
+            $this->deferred = $d;
             return;
         }
         $reply = $f->new('GhosttyClipboardReadReply');
@@ -566,6 +579,15 @@ final class Terminal
         $written = $this->reply;
         $this->reply = null;
         if ($written !== '' && $this->effects->writePTY !== null) { ($this->effects->writePTY)($written); }
+    }
+
+    /** Answers a read the clipboardRead effect deferred (mygo's AnswerClipboard): $allowed serves $contents by MIME type and $available for the types listing, else the refusal the library wrote and the binding held back is written. A read whose refusal never came says nothing. @param array<string, string> $contents @param list<string> $available */
+    public function answerClipboard(DeferredClipboardRead $d, bool $allowed, array $contents = [], array $available = []): void
+    {
+        if ($this->effects->writePTY === null || $d->refusal === '') {
+            return;
+        }
+        ($this->effects->writePTY)($allowed ? $d->answer($contents, $available) : $d->refusal);
     }
 
     private static function clamp16(int $v): int { return max(1, min($v, 0xFFFF)); }

@@ -332,11 +332,15 @@ trait ViewInput
         $this->invalidate();
     }
 
+    /** Selects all the terminal holds, and copies it with Options::$copyOnSelect, as a release of the pointer does (mygo's selectAll). */
     private function selectAll(): void
     {
         $term = $this->t->term;
         if ($term !== null && ($s = $term->selectAll()) !== null) {
             $term->setSelection($s);
+            if ($this->t->opts->copyOnSelect === CopyOnSelect::CopyOnSelectClipboard && ($text = $term->selectionText()) !== null && $text !== '') {
+                $this->writeClipboard($text);
+            }
         }
         $this->invalidate();
     }

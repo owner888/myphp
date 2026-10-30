@@ -5566,6 +5566,34 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   under for less than they save the GPU, so they are not noted. Lists
   without a fill that large cost nothing.
 
+## The terminal and the clipboard (v1.75)
+
+- **Reading the clipboard** (`Options::$clipboardRead`, a
+  `ClipboardAccess`, and `$onClipboardRequest`, mygo's 123d8a9): what a
+  paste offered a program is answered as before; a read carrying a paste
+  event's password this terminal cannot grant stays silent, for the
+  terminal that pasted; with `ClipboardDeny`, the default, the effect
+  returns an empty reply, which the library encodes as its refusal (an
+  empty OSC 52 reply, EPERM for OSC 5522). Otherwise the effect returns a
+  reply carrying a `Vt\DeferredClipboardRead` and queues a
+  `ClipboardRequest` on the terminal; the binding takes the refusal the
+  library writes as the callback returns into it (`setRefusal`: OSC 52's
+  prefix and terminator, the Kitty read's id, location and terminator)
+  rather than sending it. As the view builds, it takes the queued reads
+  and answers them in order (`View::answerReads`): allowed ones from the
+  clipboard read then, the text always among them, as OSC 52 asks for it
+  alone; asked ones through the hook, once, whose `allow()` or `deny()`
+  asks for a frame, or through the terminal's own `alertDialog`, one a
+  pass and one at a time, with the text as one line of 200 characters at
+  most, Allow its default. `Vt\Terminal::answerClipboard` writes the
+  answer encoded as the library encodes one (`DeferredClipboardRead::answer`),
+  or the refusal held back. A read of the types available alone is
+  served without asking.
+- **Pastes**: with no text but other formats, as only an image, a program
+  that asks for bracketed pastes gets an empty one, as VS Code's terminal
+  sends (mygo's 8dc7b74); Select All copies with `$copyOnSelect`, which
+  `Terminal::setCopyOnSelect` changes in a running terminal (4bda750).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

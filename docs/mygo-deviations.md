@@ -2016,3 +2016,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   worker. myphp's quads draw in one instanced call a pass, which strips
   with scissors of their own would split; Apple's GPUs blend an opaque
   pixel at little more than writing it.
+
+## The terminal and the clipboard (v1.75)
+
+- **The request**: `$onClipboardRequest` gets the `ClipboardRequest`
+  itself, whose `allow()` and `deny()` answer it; PHP runs the app on one
+  thread, so there is no lock around the answer, and a request answered
+  later asks for a frame through the terminal's redraw.
+- **The prompt**: one shows a pass; a second read waiting behind an
+  answered one gets its prompt in the next frame.

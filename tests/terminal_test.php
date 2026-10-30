@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Terminal\{Action, CopyOnSelect, Font, Keybind, Options, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
+use MyPHP\Plugins\Terminal\{Action, ClipboardAccess, ClipboardRequest, CopyOnSelect, Font, Keybind, Options, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
 use MyPHP\Plugins\Terminal\Vt\Terminal as VtTerminal;
 use MyPHP\Transfer\{Data, Format, Item, Representation};
 use MyPHP\UI\{InputEvent, Key};
@@ -251,8 +251,22 @@ TermClock::install();
         $tt->move($x1 + 2, $y1);
         $tt->release($x1 + 2, $y1);
         same($on === CopyOnSelect::CopyOnSelectClipboard ? 'hello' : '', $tt->clipboard(), "copyOnSelect {$on->name}");
+        $tt->setClipboard('');
+        $tt->command('selectAll');
+        same($on === CopyOnSelect::CopyOnSelectClipboard ? 'hello world' : '', $tt->clipboard(), "Select All with copyOnSelect {$on->name} (mygo's 4bda750)");
         $term->close();
     }
+    $term = Terminal::new(new Options(conn: new TermPipe));
+    $term->feed('live');
+    $tt = new TermTester($term);
+    $tt->setClipboard('');
+    $term->setCopyOnSelect(CopyOnSelect::CopyOnSelectClipboard);
+    $tt->command('selectAll');
+    same('live', $tt->clipboard(), 'setCopyOnSelect turns it on in a running terminal');
+    $term->setCopyOnSelect(CopyOnSelect::CopyOnSelectNone);
+    $tt->setClipboard(''); $tt->command('selectAll');
+    same('', $tt->clipboard(), 'and off');
+    $term->close();
 })();
 
 (function () {
@@ -635,7 +649,10 @@ TermClock::install();
     same("\x1b[200~some text\x1b[201~", $conn->take(1), 'without the mode, the text, bracketed');
     $tt->setClipboardData(new Data(new Item(Representation::bytes(Format::PNG, $image))));
     $tt->key(Key::COMMAND, Key::V);
-    same('', $conn->take(0), 'only an image and no mode pastes nothing');
+    same("\x1b[200~\x1b[201~", $conn->take(1), 'only an image, bracketed pastes asked: an empty one, as VS Code sends (mygo\'s 8dc7b74)');
+    $term->feed("\x1b[?2004l");
+    $tt->key(Key::COMMAND, Key::V);
+    same('', $conn->take(0), 'only an image and neither mode pastes nothing');
     $seen = implode(' ', $statuses);
     check(str_starts_with($seen, 'PasteOffered PasteSending') && str_contains($seen, 'PasteSent+') && str_ends_with($seen, 'PasteNoText'), "statuses $seen");
     $term->close();
@@ -751,6 +768,104 @@ TermClock::install();
         $term->feed("\x1b]52;c;" . base64_encode('copied') . "\x1b\\");
         $tt->frame();
         same($deny ? '' : 'copied', $tt->clipboard(), 'noClipboardWrite ' . var_export($deny, true));
+        $term->close();
+    }
+})();
+
+(function () {
+    // Reading the clipboard (mygo's 123d8a9): allowed, the read is answered with it as the view builds; refused by default and with deny, an empty OSC 52 reply.
+    $conn = new TermPipe;
+    $term = Terminal::new(new Options(conn: $conn, clipboardRead: ClipboardAccess::ClipboardAllow));
+    $tt = new TermTester($term);
+    $tt->setClipboard('hello');
+    $term->feed("\x1b]52;c;?\x1b\\");
+    $tt->frame();
+    same("\x1b]52;c;" . base64_encode('hello') . "\x1b\\", $conn->take(16), 'allowed: the program reads the clipboard');
+    $term->close();
+    foreach ([null, ClipboardAccess::ClipboardDeny] as $p) {
+        $conn = new TermPipe;
+        $term = Terminal::new($p === null ? new Options(conn: $conn) : new Options(conn: $conn, clipboardRead: $p));
+        $tt = new TermTester($term);
+        $tt->setClipboard('secret');
+        $term->feed("\x1b]52;c;?\x1b\\");
+        $tt->frame();
+        same(["\x1b]52;c;\x1b\\", 'secret'], [$conn->take(1), $tt->clipboard()], 'refused ' . ($p === null ? 'by default' : 'with deny') . ': an empty reply');
+        $term->close();
+    }
+})();
+
+(function () {
+    // Asked: onClipboardRequest sees the read, with what it asks for, and allow() or deny() answers it, in the hook or later.
+    foreach ([1, 2, 0, 3] as $answer) {
+        $conn = new TermPipe;
+        $requests = []; $later = null;
+        $term = Terminal::new(new Options(conn: $conn, clipboardRead: ClipboardAccess::ClipboardAsk, onClipboardRequest: function (ClipboardRequest $req) use (&$requests, &$later, $answer): void {
+            $requests[] = $req;
+            match ($answer) { 1 => $req->allow(), 2 => $req->deny(), 0 => $later = $req->allow(...), 3 => $later = $req->deny(...) };
+        }));
+        $tt = new TermTester($term);
+        $tt->setClipboard('hello');
+        $term->feed("\x1b]52;c;?\x1b\\");
+        $tt->frame();
+        same(1, count($requests), "answer $answer: the hook saw one request");
+        same([['text/plain'], false, 'hello'], [$requests[0]->mimes, $requests[0]->list, $requests[0]->text], "answer $answer: what it asked for");
+        if ($later !== null) { $later(); $tt->frame(); }
+        same($answer === 1 || $answer === 0 ? "\x1b]52;c;aGVsbG8=\x1b\\" : "\x1b]52;c;\x1b\\", $conn->take(1), "answer $answer: what the program read");
+        $term->close();
+    }
+    // In order: one the app is asked about holds back those after it, as an OSC 52 reply tells not which read it answers.
+    $conn = new TermPipe;
+    $requests = [];
+    $term = Terminal::new(new Options(conn: $conn, clipboardRead: ClipboardAccess::ClipboardAsk, onClipboardRequest: function (ClipboardRequest $req) use (&$requests): void { $requests[] = $req; }));
+    $tt = new TermTester($term);
+    $tt->setClipboard('hello');
+    $term->feed("\x1b]52;c;?\x1b\\\x1b]52;p;?\x1b\\");
+    $tt->frame();
+    check(count($requests) === 1 && !$requests[0]->primary, 'the second read waits for the first');
+    $requests[0]->deny(); $tt->frame();
+    same("\x1b]52;c;\x1b\\", $conn->take(1), 'the first denied');
+    check(count($requests) === 2 && $requests[1]->primary, 'then the second asked about');
+    $requests[1]->allow(); $tt->frame();
+    same("\x1b]52;p;aGVsbG8=\x1b\\", $conn->take(1), 'and allowed');
+    $term->close();
+})();
+
+(function () {
+    // Without onClipboardRequest the terminal asks with its own prompt: Enter allows, Escape denies; the read waits across the frames until then.
+    $conn = new TermPipe;
+    $term = Terminal::new(new Options(conn: $conn, clipboardRead: ClipboardAccess::ClipboardAsk));
+    $tt = new TermTester($term);
+    $tt->setClipboard('hello');
+    $term->feed("\x1b]52;c;?\x1b\\");
+    $tt->frame();
+    same('', $conn->take(0), 'the prompt answers nothing on its own');
+    check($tt->h->byText('hello') !== null && $tt->h->byText('A program wants to read the clipboard') !== null, 'the prompt shows what the program would read: ' . json_encode($tt->h->texts()));
+    $tt->h->key(Key::RETURN, 'insertNewline:'); // on the default button, Allow, which has the focus
+    same("\x1b]52;c;aGVsbG8=\x1b\\", $conn->take(1), 'Enter allows');
+    $term->feed("\x1b]52;c;?\x1b\\");
+    $tt->frame();
+    $tt->key(0, Key::ESCAPE);
+    same("\x1b]52;c;\x1b\\", $conn->take(1), 'Escape denies');
+    $term->close();
+})();
+
+(function () {
+    // The Kitty protocol's reads (OSC 5522) go by the same: allowed, the text; refused, EPERM.
+    $read = "\x1b]5522;type=read;" . base64_encode('text/plain') . "\x1b\\";
+    foreach ([ClipboardAccess::ClipboardAllow, ClipboardAccess::ClipboardDeny] as $p) {
+        $conn = new TermPipe;
+        $term = Terminal::new(new Options(conn: $conn, clipboardRead: $p));
+        $tt = new TermTester($term);
+        $tt->setClipboard('hello');
+        $term->feed("\x1b[?5522h");
+        $term->feed($read);
+        $tt->frame();
+        $got = $conn->take(1);
+        if ($p === ClipboardAccess::ClipboardDeny) {
+            same("\x1b]5522;type=read:status=EPERM\x1b\\", $got, 'Kitty, denied: EPERM');
+        } else {
+            same("\x1b]5522;type=read:status=OK\x1b\\\x1b]5522;type=read:status=DATA:mime=" . base64_encode('text/plain') . ';' . base64_encode('hello') . "\x1b\\\x1b]5522;type=read:status=DONE\x1b\\", $got, 'Kitty, allowed: the text');
+        }
         $term->close();
     }
 })();

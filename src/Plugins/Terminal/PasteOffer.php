@@ -33,18 +33,21 @@ final class PasteOffer
     /** What the offer has of a MIME type, '' for nothing. */
     public function read(string $mime): string
     {
-        if (!in_array($mime, $this->mimes, true)) {
-            return '';
-        }
+        return in_array($mime, $this->mimes, true) ? self::readFormat($this->data, $mime) : '';
+    }
+
+    /** What $d holds of a MIME type, as the protocols carry it: a file list answers text/uri-list; '' for nothing (mygo's readFormat). */
+    public static function readFormat(Data $d, string $mime): string
+    {
         try {
-            return $this->data->read($mime);
+            return $d->read($mime);
         } catch (FormatUnavailable) {
             if ($mime !== Format::URI_LIST) { return ''; }
         } catch (\Throwable) {
             return '';
         }
         try {
-            return $this->data->read(Format::FILE_LIST);
+            return $d->read(Format::FILE_LIST);
         } catch (\Throwable) {
             return '';
         }

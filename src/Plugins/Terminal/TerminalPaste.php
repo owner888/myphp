@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Terminal;
 
-use MyPHP\Plugins\Terminal\Vt\{ClipboardRead, ClipboardReply, KeyEncoder, Terminal as VtTerminal};
+use MyPHP\Plugins\Terminal\Vt\{ClipboardRead, ClipboardReply, DeferredClipboardRead, KeyEncoder, Terminal as VtTerminal};
 use MyPHP\Transfer\{Data, Format};
 
 /**
@@ -38,7 +38,9 @@ trait TerminalPaste
      * as programs that take images do) is offered $d's formats as MIME
      * types (a file list as text/uri-list) and reads those it wants, even
      * over SSH; any other gets $d's text, bracketed when it asks (mode
-     * 2004), and nothing when there is none. The terminal keeps a snapshot
+     * 2004). With no text but other formats, as only an image, a program
+     * that asks for bracketed pastes gets an empty one, as VS Code's
+     * terminal sends, and any other nothing. The terminal keeps a snapshot
      * of $d until the program reads it or another paste comes, and answers
      * only that read.
      */
@@ -64,10 +66,16 @@ trait TerminalPaste
             } catch (\Throwable) {
                 $text = '';
             }
-            if ($text === '' && array_filter($held, fn(string $f) => $f !== Format::TEXT) !== []) {
-                $status = PasteStatus::PasteNoText;
+            $bracketed = $this->term->mode(VtTerminal::MODE_BRACKETED_PASTE);
+            if ($text !== '') {
+                $data = KeyEncoder::encodePaste($text, $bracketed);
+            } elseif (array_filter($held, fn(string $f) => $f !== Format::TEXT) !== []) { // no text, but something else, as only an image
+                if ($bracketed) {
+                    $data = "\x1b[200~\x1b[201~"; // an empty bracketed paste, as VS Code's terminal sends, which programs that take images, as Claude Code, read as a paste of what the clipboard holds, and read it themselves
+                } else {
+                    $status = PasteStatus::PasteNoText;
+                }
             }
-            $data = KeyEncoder::encodePaste($text, $this->term->mode(VtTerminal::MODE_BRACKETED_PASTE));
         }
         $this->term->scrollToBottom();
         $this->send($data);
@@ -92,12 +100,30 @@ trait TerminalPaste
         if ($this->opts->onPasteStatus !== null) { ($this->opts->onPasteStatus)($p); }
     }
 
-    /** Answers a program's read of the clipboard: only what a paste offered, once; any other read goes unanswered, as other windows of the same program may be the ones to answer. */
+    /**
+     * Answers a program's read of the clipboard (mygo's clipboardRead):
+     * what a paste offered the program, as it was; a read with a password
+     * this terminal cannot grant is left to the terminal the paste was made
+     * in, silent; other reads go by Options::$clipboardRead, refused, or
+     * answered with the clipboard as the view reads it next frame, which
+     * may ask the app first (View::answerReads).
+     */
     private function clipboardRead(ClipboardRead $req): ?ClipboardReply
     {
         $o = $this->offer;
         if (!$req->granted || $o === null) {
-            return null;
+            if ($req->canRemember) {
+                return null; // another window's paste follow-up, which the terminal that pasted answers
+            }
+            if ($this->opts->clipboardRead === ClipboardAccess::ClipboardDeny) {
+                return new ClipboardReply; // the refusal is the answer: an empty OSC 52 reply, EPERM for OSC 5522
+            }
+            $d = new DeferredClipboardRead;
+            // A read of the types available alone is served without asking, as Kitty does.
+            $this->clipReads[] = new ClipboardRequest($req->mimes, $req->list, $req->primary, $d,
+                $this->opts->clipboardRead === ClipboardAccess::ClipboardAsk && !($req->list && $req->mimes === []), $this);
+            $this->redraw();
+            return new ClipboardReply(deferred: $d);
         }
         $this->offer = null;
         $reply = new ClipboardReply;

@@ -62,6 +62,8 @@ final class Terminal
     private bool $closed = false;
     /** @internal what programs copied, for the view to write @var list<string> */
     public array $clipOut = [];
+    /** @internal the programs' reads of the clipboard waiting for a frame to answer them (View::answerReads) @var list<ClipboardRequest> */
+    public array $clipReads = [];
     /** @internal the keys bound to actions @var list<Keybind> */
     public array $binds = [];
     /** The size zooms set, 0 for the font's. */
@@ -402,6 +404,12 @@ final class Terminal
         $this->redraw();
     }
 
+    /** Changes where a selection is copied as it ends, as Options::$copyOnSelect, as when the user changes a setting (mygo's SetCopyOnSelect). */
+    public function setCopyOnSelect(CopyOnSelect $c): void
+    {
+        $this->opts->copyOnSelect = $c;
+    }
+
     /** Changes the colors, as Options::$theme and $darkTheme. */
     public function setTheme(?Theme $theme, ?Theme $dark): void
     {
@@ -453,6 +461,7 @@ final class Terminal
         }
         $this->closed = true;
         $this->offer = null;
+        $this->clipReads = [];
         $waiting = $this->launch !== null;
         $this->launch = null;
         $this->pollGen++; // no poll runs any more

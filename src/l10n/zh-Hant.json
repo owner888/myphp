@@ -1063,5 +1063,9 @@
   "iinaInputValueIsEmpty": "此項為必填項目。",
   "settingsDecoding": "解碼",
   "settingsSubtitleSource": "Subtitle source",
-  "settingsSubtitleSourceDesc": "This is the default source for searching subtiles. While playing, you can manually choose to search subtitles from other sources from the menu."
+  "settingsSubtitleSourceDesc": "This is the default source for searching subtiles. While playing, you can manually choose to search subtitles from other sources from the menu.",
+  "clipboardRead": "某個程式想要讀取剪貼簿",
+  "clipboardReadAllow": "允許",
+  "clipboardReadDeny": "拒絕",
+  "clipboardReadEmpty": "剪貼簿中沒有文字。"
 }

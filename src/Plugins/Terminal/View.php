@@ -6,6 +6,7 @@ namespace MyPHP\Plugins\Terminal;
 use MyPHP\L10n;
 use MyPHP\Plugins\Terminal\Vt\{Colors, Cursor, Gesture, KeyEncoder, MouseEncoder, Terminal as VtTerminal};
 use MyPHP\Text\System;
+use MyPHP\Transfer\Format;
 use MyPHP\UI\{Context, DisplayList, Menu, MenuItem, Node, Role, Runtime, TextInputClient, TextInputRange, TextInputSelection, TextPainter, TextState, Theme as UITheme};
 
 /**
@@ -91,6 +92,10 @@ final class View implements TextInputClient
     private bool $scrollZoom = false;
     /** An autoscroll tick is due. */
     public bool $ticking = false;
+    /** The programs' reads of the clipboard waiting to be answered, and the one the terminal's own prompt asks about while $clipOpen, one at a time. @var list<ClipboardRequest> */
+    private array $reads = [];
+    private ?ClipboardRequest $clipPrompt = null;
+    private bool $clipOpen = false, $prompted = false;
 
     public function __construct(public Terminal $t)
     {
@@ -158,6 +163,13 @@ final class View implements TextInputClient
         foreach ($copied as $s) {
             $this->writeClipboard($s);
         }
+        if ($t->term === null) {
+            [$this->reads, $this->clipPrompt, $this->clipOpen] = [[], null, false];
+        } else {
+            array_push($this->reads, ...$t->clipReads);
+            $t->clipReads = [];
+            $this->answerReads($c, $t->term);
+        }
         if ($focused !== $this->focused) {
             $this->focused = $focused;
             $this->blinkStart = $this->now;
@@ -175,6 +187,93 @@ final class View implements TextInputClient
         if ($this->ticking) {
             $this->services?->after(0.04);
         }
+    }
+
+    /**
+     * Answers the programs' reads of the clipboard as the frame builds, in
+     * order, as an OSC 52 reply does not tell which read it answers (mygo's
+     * answerReads): those allowed served from the clipboard; one the app is
+     * asked about, through Options::$onClipboardRequest or the terminal's
+     * own prompt, holds back those after it.
+     */
+    private function answerReads(Context $c, VtTerminal $term): void
+    {
+        $this->prompted = false;
+        while ($this->reads !== [] && $this->answerRead($c, $term, $this->reads[0])) {
+            if ($this->clipPrompt === $this->reads[0]) { [$this->clipPrompt, $this->clipOpen] = [null, false]; }
+            array_shift($this->reads);
+        }
+    }
+
+    /** Answers $r if it can this frame; whether it did. */
+    private function answerRead(Context $c, VtTerminal $term, ClipboardRequest $r): bool
+    {
+        if ($r->answer !== 0 || !$r->ask) {
+            $this->finishRead($term, $r, $r->answer !== 2);
+            return true;
+        }
+        if (($on = $this->t->opts->onClipboardRequest) !== null) {
+            if (!$r->asked) {
+                [$r->text, $r->asked] = [$this->readClipboard(), true];
+                $on($r);
+                if ($r->answer !== 0) {
+                    $this->finishRead($term, $r, $r->answer === 1);
+                    return true;
+                }
+            }
+            return false;
+        }
+        if ($this->prompted) { // one prompt a pass: the next read's shows in the next frame
+            $this->invalidate();
+            return false;
+        }
+        $this->prompted = true;
+        if ($this->clipPrompt !== $r) { // the terminal's own prompt, across the frames until it is answered
+            $r->text = $this->readClipboard();
+            [$this->clipPrompt, $this->clipOpen] = [$r, true];
+        }
+        $tx = L10n::in(\MyPHP\App::locale());
+        $chosen = $c->alertDialog($this->clipOpen, $tx->get('clipboardRead'), $this->readMessage($r), $tx->get('clipboardReadDeny'), $tx->get('clipboardReadAllow'));
+        if ($chosen === -1) {
+            return false;
+        }
+        $this->finishRead($term, $r, $chosen === 1);
+        return true;
+    }
+
+    /** Answers $r with what the clipboard holds of what the program asked for, the text too, as an OSC 52 read asks for it alone, or with its refusal (mygo's finishRead). */
+    private function finishRead(VtTerminal $term, ClipboardRequest $r, bool $allow): void
+    {
+        if (!$allow || $this->services === null) {
+            $term->answerClipboard($r->deferred, false);
+            return;
+        }
+        $formats = array_values(array_unique([Format::TEXT, ...$r->mimes]));
+        $d = ($this->services->readClipboardData)(...$formats);
+        $contents = [];
+        foreach ([...$r->mimes, Format::TEXT] as $mime) {
+            if (!isset($contents[$mime]) && ($b = PasteOffer::readFormat($d, $mime)) !== '') { $contents[$mime] = $b; }
+        }
+        $available = [];
+        foreach (($this->services->clipboardFormats)() as $f) {
+            if (($m = PasteOffer::mime($f)) !== '' && !in_array($m, $available, true)) { $available[] = $m; }
+        }
+        if ($this->t->term === $term) { $term->answerClipboard($r->deferred, true, $contents, $available); } // a terminal closed since says nothing
+    }
+
+    /** What the prompt says a read asks for: the text it would read as one line of 200 characters at most, the types it asked for when the clipboard holds no text, or that the clipboard is empty. */
+    private function readMessage(ClipboardRequest $r): string
+    {
+        if ($r->text !== '') {
+            $one = strtr($r->text, "\n\r\t", '   ');
+            return mb_strlen($one) > 200 ? mb_substr($one, 0, 200) . '…' : $one;
+        }
+        return $r->mimes !== [] ? implode(' ', $r->mimes) : L10n::in(\MyPHP\App::locale())->get('clipboardReadEmpty');
+    }
+
+    private function readClipboard(): string
+    {
+        return $this->services === null ? '' : ($this->services->readClipboard)();
     }
 
     /** Frees what the view made of the library, as the terminal closes. */
