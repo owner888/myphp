@@ -164,6 +164,8 @@ final class Node
     public bool $reverse = false;
     /** A control that does nothing for now (mygo's Disabled): it takes no focus, and assistive technology hears it is disabled; set on a container, it is painted at half its opacity. And whether a container around it was disabled as it was built (isDisabled). */
     public bool $disabled = false, $disabledIn = false;
+    /** Whether the node ignores the pointer and the keyboard (ignoreInput), and whether a node around it does, as it was recorded. @internal */
+    public bool $ignoreInput = false, $ignoringIn = false;
     /** Keeps its room in the layout but paints nothing and, with what is inside it, takes neither the pointer nor the focus (mygo's Invisible); outlined with what is inside it, margins, padding and content (mygo's Debug); passes the pointer to what is under it (mygo's PassThrough). */
     public bool $invisible = false, $debug = false, $passThrough = false;
     /** Taken out of the layout (hidden()); and, set by Layout, given no room, it or a node around it hidden: what is attached to it hides too. */
@@ -746,6 +748,45 @@ final class Node
     {
         $this->disabled = $d;
         return $this;
+    }
+
+    /**
+     * Makes the node and those inside it ignore the pointer and the
+     * keyboard when $ignore, while they still show and read to assistive
+     * technology (mygo's IgnoreInput). The pointer goes through to what is
+     * under them, as passThrough() lets it: hovering, pressing, scrolling,
+     * dragging and the cursor are those of what is under them. Neither Tab
+     * nor a click gives them the focus, and they lose it as they start
+     * ignoring input; their text is not selected. Assistive technology
+     * still finds them, with their roles and names, and presses them, which
+     * Context::clicked reports; it can neither focus them nor move a slider
+     * among them with its keys.
+     *
+     * A control a row shows while it is hovered, as a button deleting it,
+     * can stay built and described at rest, without taking a press meant
+     * for the row:
+     *
+     *     $row = $c->row(8, 8);
+     *       $c->text($item->title)->grow = 1;
+     *       $del = $c->button('Delete')->ignoreInput(!$c->hovered($row));
+     *       if (!$c->hovered($row)) { $del->opacity(0); }
+     *       if ($c->clicked($del)) { $removed = $item->id; }
+     *     $c->end();
+     *
+     * Unlike HTML's inert, it leaves them to assistive technology;
+     * invisible() and hidden() hide them from it too, and disabled() takes
+     * their press away.
+     */
+    public function ignoreInput(bool $ignore = true): static
+    {
+        $this->ignoreInput = $ignore;
+        return $this;
+    }
+
+    /** Whether the node or one around it ignores input, as it was recorded (ignoreInput). @internal */
+    public function ignoresInput(): bool
+    {
+        return $this->ignoreInput || $this->ignoringIn;
     }
 
     /** Whether the node or a container around it, as it was built, is disabled (mygo's IsDisabled). */

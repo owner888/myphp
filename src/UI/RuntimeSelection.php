@@ -53,7 +53,7 @@ trait RuntimeSelection
             $this->unselectables[$n->id] = true;
         }
         $scope = self::textScope($n, $parent);
-        if ($scope !== 0 && $n->kind === Node::RICH && !$n->inert) {
+        if ($scope !== 0 && $n->kind === Node::RICH && !$n->inert && !$n->ignoresInput()) {
             $n->textScope = $scope;
             $this->textIndex[$n->id] = count($this->texts);
             $this->texts[] = $n;

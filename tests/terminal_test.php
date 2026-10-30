@@ -1375,3 +1375,21 @@ TermClock::install();
     }
     $term->close();
 })();
+
+// Sextants are drawn across the cell, two across and three down, sharing edges, not taken from the font, which stops short of tall cells: a QR code of them is solid (mygo's TestSextants). The smooth mosaics after them stay with the font.
+(function () {
+    check(\MyPHP\Plugins\Terminal\Box::drawn(0x1fb00) && \MyPHP\Plugins\Terminal\Box::drawn(0x1fb3b) && !\MyPHP\Plugins\Terminal\Box::drawn(0x1fb3c), 'U+1FB00 to U+1FB3B drawn, U+1FB3C not');
+    $rects = function (int $r): array {
+        $ffi = \FFI::cdef();
+        $l = new DisplayList($ffi->new('float[' . (64 * 16) . ']'), 64, $ffi->new('float[' . (16 * 16) . ']'), 16);
+        $l->pushClip(0, 0, 100, 100);
+        \MyPHP\Plugins\Terminal\Box::draw($l, 1.0, $r, [10.0, 20.0, 8.0, 18.0], [0xff0000, 1.0]);
+        $out = [];
+        for ($i = 0; $i < $l->n; $i++) { $out[] = [$l->buf[$i * 16], $l->buf[$i * 16 + 1], $l->buf[$i * 16 + 2], $l->buf[$i * 16 + 3]]; }
+        return $out;
+    };
+    same([[10.0, 20.0, 4.0, 6.0]], $rects(0x1fb00), 'U+1FB00: the upper left alone');
+    same([[14.0, 20.0, 4.0, 6.0], [10.0, 26.0, 4.0, 6.0], [14.0, 26.0, 4.0, 6.0], [10.0, 32.0, 4.0, 6.0], [14.0, 32.0, 4.0, 6.0]], $rects(0x1fb3b), 'U+1FB3B: the other five, past ▌, ▐ and █, sharing their edges');
+    same([[10.0, 26.0, 4.0, 6.0], [10.0, 32.0, 4.0, 6.0]], $rects(0x1fb13), 'U+1FB13, mask 20: the middle and lower left');
+    same([[14.0, 20.0, 4.0, 6.0], [10.0, 26.0, 4.0, 6.0], [10.0, 32.0, 4.0, 6.0]], $rects(0x1fb14), 'U+1FB14, mask 22, past ▌ (21): the upper right, the middle and lower left');
+})();

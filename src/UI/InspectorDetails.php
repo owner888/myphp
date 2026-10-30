@@ -135,7 +135,7 @@ final class InspectorDetails
         }
         if ($n->opacity < 1) { $add('opacity', Inspector::num($n->opacity)); }
         if ($n->invisible) { $add('visibility', 'hidden'); }
-        if ($n->passThrough) { $add('pointer-events', 'none'); }
+        if ($n->passThrough || $n->ignoresInput()) { $add('pointer-events', 'none'); }
         if ($n->dividers !== null) { $add('dividers', Inspector::px($n->dividers[0]) . ' ' . Inspector::color($n->dividers[1], $n->dividers[2]), $n->dividers[1]); }
         if ($n->cursor !== null) { $add('cursor', $n->cursor->value); }
         if (($r = $rt->trans[$n->id] ?? null) !== null && $r->built + 1 >= $rt->frameNumber) {
@@ -236,7 +236,7 @@ final class InspectorDetails
         if ($n->leaving !== 0) { $state[] = ['leaving', 'true']; }
         [$role, $seen] = Inspector::accessibleRole($rt, $n);
         $name = $n->label !== '' ? $n->label : Inspector::clip(Runtime::innerText($n), 80);
-        $focusable = Runtime::takesFocus($n) && !$n->disabled;
+        $focusable = Runtime::takesFocus($n) && !$n->disabled && !$n->ignoresInput();
         $acc = [['role', $role], ['name', json_encode($name, JSON_UNESCAPED_UNICODE)], ['keyboard-focusable', $yes($focusable)], ['ignored', $yes(!$seen || $n->inert)]];
         if ($n->description !== null && $n->description !== '') { $acc[] = ['description', json_encode($n->description, JSON_UNESCAPED_UNICODE)]; }
         return [['title' => 'Element', 'rows' => $el], ['title' => 'State', 'rows' => $state], ['title' => 'Accessibility', 'rows' => $acc]];

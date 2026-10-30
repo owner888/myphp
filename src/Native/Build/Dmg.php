@@ -79,7 +79,7 @@ final class Dmg
             $disk = null;
             // LZMA gives the smallest images; it needs macOS 10.15, below the oldest MyPHP supports.
             $dmg = "$dir/$file";
-            Cmd::run(['hdiutil', 'convert', $rw, '-format', 'ULMO', '-ov', '-o', $dmg]);
+            Cmd::run(self::convertArgs($rw, $dmg));
             if ($sign !== '-') {
                 Cmd::run(['codesign', '--force', '--timestamp', '--sign', $sign, $dmg]);
             }
@@ -96,6 +96,22 @@ final class Dmg
             }
             Cmd::output(['rm', '-rf', $work]);
         }
+    }
+
+    /**
+     * The command that writes the writable image $rw as the compressed,
+     * read-only $dmg (mygo's convertDMG): macOS 27 fails "hdiutil convert"
+     * with "Resource temporarily unavailable" and asks for "diskutil image
+     * create from", which overwrites $dmg as -ov does; older systems, whose
+     * diskutil has no image verb, use hdiutil.
+     * @return list<string>
+     */
+    public static function convertArgs(string $rw, string $dmg): array
+    {
+        if (Cmd::look('diskutil') !== '' && Cmd::output(['diskutil', 'image', 'create', 'from', '-h'])[0] === 0) {
+            return ['diskutil', 'image', 'create', 'from', '--format', 'ULMO', $rw, $dmg];
+        }
+        return ['hdiutil', 'convert', $rw, '-format', 'ULMO', '-ov', '-o', $dmg];
     }
 
     /** The hdiutil arguments that create a writable HFS+ image of $src, as large as its contents need; without -quiet, which would leave out of the error why it failed. @return list<string> */

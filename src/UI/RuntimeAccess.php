@@ -331,13 +331,15 @@ trait RuntimeAccess
             if ($v[2] <= 0 || $v[3] <= 0) { $node->states |= AccessNode::OFFSCREEN; }
         }
         if ($n->choosable) { $node->states |= AccessNode::SELECTABLE; }
-        if ((self::takesFocus($n) && !$n->isDisabled()) || $n->choosable || ($n->scroll instanceof ListState && $n->scroll->selected !== null)) {
+        // What ignores input takes no focus, which moving a slider with its keys needs, but is pressed as any other.
+        $keys = !$n->ignoresInput();
+        if ($keys && ((self::takesFocus($n) && !$n->isDisabled()) || $n->choosable || ($n->scroll instanceof ListState && $n->scroll->selected !== null))) {
             // Focusing an item its container chooses chooses it.
             $node->states |= AccessNode::FOCUSABLE;
             $node->actions |= AccessNode::ACTION_FOCUS;
         }
         if ($n->kind === Node::BUTTON || isset($this->clickable[$n->id])) { $node->actions |= AccessNode::ACTION_PRESS; }
-        if ($node->role === Role::SLIDER || $node->role === Role::STEPPER) { $node->actions |= AccessNode::ACTION_INCREMENT | AccessNode::ACTION_DECREMENT; }
+        if (($node->role === Role::SLIDER || $node->role === Role::STEPPER) && $keys) { $node->actions |= AccessNode::ACTION_INCREMENT | AccessNode::ACTION_DECREMENT; }
         if ($n->expandable) { $node->actions |= AccessNode::ACTION_EXPAND; }
         if (($e = $n->edit) !== null && ($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA)) {
             if ($e->readOnly) { $node->states |= AccessNode::READ_ONLY; } else { $node->actions |= AccessNode::ACTION_SET_VALUE; }
@@ -374,6 +376,7 @@ trait RuntimeAccess
                 if ($n->kind === Node::BUTTON || isset($this->clickable[$id])) { $this->activated = $id; } else { $this->accessFocus($id); }
                 break;
             case AccessNode::FOCUS:
+                if ($n?->ignoresInput()) { break; }
                 if ($row !== null) {
                     // A row of a list choosing rows: its list takes the focus for it, choosing it.
                     $this->activated = $row[0];
@@ -397,6 +400,7 @@ trait RuntimeAccess
                 break;
             case AccessNode::INCREMENT:
             case AccessNode::DECREMENT:
+                if ($n?->ignoresInput()) { break; } // the keys would go to the node with the focus
                 $this->accessFocus($id);
                 // The key, as pressed: Up and Down, which raise and lower sliders and steppers whatever the direction (Left raises a slider right to left).
                 [$code, $selector] = $action === AccessNode::INCREMENT ? [Key::UP, 'moveUp:'] : [Key::DOWN, 'moveDown:'];
@@ -429,11 +433,11 @@ trait RuntimeAccess
         return strlen(mb_substr($s, 0, max(0, $i), 'UTF-8'));
     }
 
-    /** Gives node $id the keyboard focus, as Tab would (mygo's focusOn), if it takes it. */
+    /** Gives node $id the keyboard focus, as Tab would (mygo's focusOn), if it takes it and does not ignore input. */
     private function accessFocus(int $id): void
     {
         $n = $this->nodeOf[$id] ?? null;
-        if ($n === null || !(self::takesFocus($n) || isset($this->lists[$id]))) { return; }
+        if ($n === null || !(self::takesFocus($n) || isset($this->lists[$id])) || $n->ignoresInput()) { return; }
         $this->focus = $id;
         $this->focusVisible = true;
         $this->reveal($id);

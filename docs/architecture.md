@@ -6574,6 +6574,34 @@ succeeds are told of, an empty line is none.
 - IDs go as the unsigned decimal digits of the node's 64 bits, and come
   back through two 32-bit halves, as PHP's ints are signed.
 
+## Nodes ignoring input, sextants, diskutil (v1.117)
+
+- mygo d40aa87: `Node::ignoreInput(bool)` keeps a node and those inside
+  it (`ignoringIn`, set as `record` goes down, as `disabledIn` is) out of
+  the pointer (`$passing`, which `under` and so hovering, clicks, the
+  wheel and the cursor go by), the focus order, and text selection, and
+  takes the focus from it as it is recorded; it still paints and stays in
+  the access tree with its role, name and press, but not focusable nor
+  stepped (`accessDetails`, `accessAction`'s FOCUS, INCREMENT and
+  DECREMENT, `accessFocus`). A button a row shows on hover stays built
+  and described at rest without taking the row's press. The inspector
+  shows it as `pointer-events: none`, not keyboard-focusable.
+- mygo 003c212: the terminal draws the sextants of the legacy computing
+  symbols (U+1FB00 to U+1FB3B) across the cell, two columns by three
+  rows sharing their edges (`Box::sextant`), as the quadrants are: a QR
+  code of them, as Expo prints, is solid where fonts left gaps.
+- mygo 58c3edc: `Dmg::convertArgs` converts the writable image with
+  `diskutil image create from --format ULMO` where diskutil has the verb
+  (macOS 27, whose `hdiutil convert` fails with "Resource temporarily
+  unavailable"), else with `hdiutil convert` as before.
+- mygo 0cb6d05 (macOS's half) was myphp's already: a view's first frame,
+  long after any last one, draws at once from the run loop
+  (`Metal::requestFrame`'s `drawLater`), not at the display link's tick,
+  which a hidden window never has; so a window made hidden draws its
+  first frame and becomes ready to show. mygo 2b66322 has nothing to
+  port: its waking observer called into Go; myphp's run loop has no
+  observer.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

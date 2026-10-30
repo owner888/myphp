@@ -196,7 +196,7 @@ final class Runtime
      * @var array<int, int> $parents @var array<int, int> $pageOf
      */
     private array $parents = [], $pageOf = [], $kept = [], $inertIds = [], $targets = [];
-    /** @var array<int, true> the nodes the pointer goes through (Node::passThrough), and those disabled, or inside a disabled one (Node::isDisabled), last frame */
+    /** @var array<int, true> the nodes the pointer goes through (Node::passThrough, Node::ignoreInput), and those disabled, or inside a disabled one (Node::isDisabled), last frame */
     private array $passing = [], $disabledIds = [];
     /** @var array<int, int> the node each attached node is attached to (Node::attachTo), last frame; @var array<int, true> the overlays that asked for keys last frame, and this one (overlayShortcut) */
     private array $attachedTo = [], $overlayAskers = [], $overlayAsked = [];
@@ -1977,6 +1977,11 @@ final class Runtime
         if ($n->attachTarget !== null) { $this->attachedTo[$n->id] = $n->attachTarget->id; }
         if ($parent !== null && $parent->isDisabled()) { $n->disabledIn = true; } // inside a node disabled after it was built, as a fieldset (mygo's IsDisabled)
         if ($n->isDisabled()) { $this->disabledIds[$n->id] = true; }
+        if ($parent !== null && $parent->ignoresInput()) { $n->ignoringIn = true; }
+        if ($n->ignoresInput()) { // it shows and reads to assistive technology, but takes neither the pointer nor the focus (mygo's ignoreInput)
+            $this->passing[$n->id] = true;
+            if ($this->focus === $n->id) { $this->focus = null; }
+        }
         if ($n->focusTarget) { $this->targets[$n->id] = true; }
         if ($n->pose !== null) {
             $this->samplePose($n);
@@ -2043,7 +2048,7 @@ final class Runtime
             $group = $n->id;
             $this->groups[$group] = ['orient' => $n->focusGroup, 'selects' => $n->groupSelects, 'on' => null, 'rtl' => $n->rtl];
         }
-        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled()) {
+        if (($n->kind === Node::BUTTON || $n->kind === Node::INPUT || $n->kind === Node::TEXTAREA || $n->focusable) && !$inert && !$n->isDisabled() && !$n->ignoresInput()) {
             $this->focusables[] = $n->id;
             if (in_array($n->role, [Role::CHECK_BOX, Role::RADIO, Role::SWITCH], true)) { $this->toggles[$n->id] = true; }
             if ($group !== 0) {

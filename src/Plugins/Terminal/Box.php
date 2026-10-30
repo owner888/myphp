@@ -54,7 +54,7 @@ final class Box
     {
         return match (true) {
             $r >= 0x2500 && $r <= 0x257f => self::ARMS[$r - 0x2500] !== '' || ($r >= 0x256d && $r <= 0x2573),
-            $r >= 0x2580 && $r <= 0x259f, $r >= 0xe0b0 && $r <= 0xe0b7 => true,
+            $r >= 0x2580 && $r <= 0x259f, $r >= 0x1fb00 && $r <= 0x1fb3b, $r >= 0xe0b0 && $r <= 0xe0b7 => true,
             default => false,
         };
     }
@@ -71,6 +71,10 @@ final class Box
         $w = $x1 - $x0; $h = $y1 - $y0;
         if ($r >= 0x2580 && $r <= 0x259f) {
             self::block($r, $x0, $y0, $w, $h, $fill, $list, $col, $s);
+            return;
+        }
+        if ($r >= 0x1fb00 && $r <= 0x1fb3b) {
+            self::sextant($r, $x0, $y0, $w, $h, $fill);
             return;
         }
         if ($r >= 0xe0b0 && $r <= 0xe0b3) {
@@ -205,6 +209,28 @@ final class Box
                     if ($across === self::DOUBLE) { $out = $in; } elseif (!$vDouble) { $out = $mx - $light / 2; }
                     if ($right === self::DOUBLE) { $fill($out, $ly, $x1, $ly + $light); }
                 }
+            }
+        }
+    }
+
+    /**
+     * Draws a sextant of the legacy computing symbols (U+1FB00 to U+1FB3B)
+     * across the whole cell, which fonts often lack, and leave gaps in
+     * cells taller than their glyphs (mygo's drawSextant): a QR code drawn
+     * with them is solid. The sixty are the six-bit masks but 0, 21, 42 and
+     * 63, a space, ▌, ▐ and █; bit 0 is the upper left, then across and
+     * down, and neighbors share an edge, as the quadrants do.
+     */
+    private static function sextant(int $r, float $x0, float $y0, float $w, float $h, Closure $fill): void
+    {
+        $i = $r - 0x1fb00;
+        $pattern = $i + intdiv($i, 20) + 1;
+        $xs = [$x0, $x0 + round($w * 0.5), $x0 + $w];
+        $ys = [$y0, $y0 + round($h / 3), $y0 + round($h * 2 / 3), $y0 + $h];
+        for ($b = 0; $b < 6; $b++) {
+            if (($pattern & 1 << $b) !== 0) {
+                [$col, $row] = [$b % 2, intdiv($b, 2)];
+                $fill($xs[$col], $ys[$row], $xs[$col + 1], $ys[$row + 1]);
             }
         }
     }
