@@ -53,10 +53,18 @@ final class Metal
         bool sdf = kind < 0.5 || (kind > 2.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5) || (kind > 8.5 && kind < 11.5) || kind > 13.5;
         float pad = entry > 0.5 && sdf ? 1.0 : 0.0;   // turned or scaled, a shape's edge is smoothed past the quad's: the quad grows to take it in
         float2 p = i.rect.xy - pad + corner * (i.rect.zw + 2.0 * pad);
+        if (entry < 0.5 && sdf) {   // upright: drawn only within its clip, which its fragments outside would discard, as the pieces of a shape drawn in bands (UI\Bands)
+            float2 a = max(i.rect.xy, i.clip.xy), b = min(i.rect.xy + i.rect.zw, i.clip.xy + i.clip.zw);
+            if (b.x <= a.x || b.y <= a.y) {
+                o.pos = float4(0.0, 0.0, 0.0, 1.0);
+                return o;
+            }
+            p = mix(a, b, corner);
+        }
         float w = m.xygh.z * p.x + m.xygh.w * p.y + 1.0;
         float2 q = float2(m.abcd.x * p.x + m.abcd.z * p.y + m.xygh.x, m.abcd.y * p.x + m.abcd.w * p.y + m.xygh.y);   // times w: divided by it after interpolation, in perspective
         o.pos = float4(q.x / u.viewport.x * 2.0 - w, w - q.y / u.viewport.y * 2.0, 0.0, w);
-        o.local = (corner - 0.5) * (i.rect.zw + 2.0 * pad);
+        o.local = p - (i.rect.xy + 0.5 * i.rect.zw);   // from the quad's center, wherever the corner is drawn
         o.extent = i.rect.zw * 0.5;
         bool image = (kind > 1.5 && kind < 2.5) || (kind > 11.5 && kind < 13.5);   // an image, in color or gray: its uv spans the slot (color.xy pixels)
         o.uv = kind > 2.5 && !image ? i.params.zw   // a shadow's blur, a ring's thickness, a glass's style, a gradient's end alpha, a blur's fade

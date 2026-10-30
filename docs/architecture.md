@@ -6515,6 +6515,32 @@ succeeds are told of, an empty line is none.
   glass, holes, shaders or wide colors paints the window whole, and so
   does an atlas that starts over as the parts paint.
 
+## Rings and shadows drawn in bands (v1.115)
+
+- mygo 780796c (and the cut around a core before it, which myphp had
+  not): a ring (`DisplayList::ring`), a border-only box (`box` of a
+  transparent color with borders: focus rings, outlines, card borders,
+  circles) and an outer box shadow with the box casting it (`boxShadow`)
+  write nothing inside their holes, the ring's or border's inside and the
+  caster, nor a ring outside its outer edge; yet the shaders evaluate the
+  shape in every pixel of the quad. `UI\Bands::plan` cuts such a shape,
+  upright, through no map nor mask, into bands of rows, each holding only
+  the columns between where the outer edge may reach and where the inner
+  one certainly covers (2 points from either edge), with as many bands
+  across the corners as pay for their pieces (a piece costs 1024 square
+  points, mygo's 4096 pixels at a scale of 2), or none when drawing whole
+  costs less. `DisplayList::inBands` draws the quad once a piece, a copy
+  with its clip cut to the piece (its slots too, for a box), rather than
+  a draw call with a scissor each.
+- The vertex shader draws an upright SDF quad only within its clip
+  (`quad_vertex`, its `local` from the quad's center wherever the corner
+  is): the fragments outside it, which it discarded, are not shaded, for
+  the pieces as for anything a scroll view or a clip cuts.
+- In `tests/bands_test.php`'s cases a circle a point wide shades 25k
+  square points rather than 90k, a card's border alone 7k rather than
+  150k, a circle's shadow 45k rather than 62k; the pieces never overlap
+  and hold every point where the shader may draw, a point nearer.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

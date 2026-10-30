@@ -537,7 +537,43 @@ final class DisplayList
     public function ring(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $thickness): void
     {
         $this->quad($x, $y, $w, $h, $rgb, $alpha, $radius, 4.0, $thickness);
+        $r = min($radius, $w / 2, $h / 2);
+        if ($r > 0 && $thickness > 0) { // in bands that follow its round corners, inside and out (Bands)
+            $ri = max($r - $thickness, 0.0);
+            $this->inBands(1, [[$x, $y, $w, $h], [$r, $r, $r, $r]], [[[$x + $thickness, $y + $thickness, $w - 2 * $thickness, $h - 2 * $thickness], [$ri, $ri, $ri, $ri]]]);
+        }
     }
+
+    /**
+     * Draws the quad just added, of $slots slots, in the pieces of Bands
+     * planned for its shape, $outer and $holes, each a copy clipped to its
+     * piece, which the vertex shader draws within (mygo's addBands): what
+     * writes nothing, inside its holes and outside its outer edge, is not
+     * shaded. Only an upright quad, through no map nor mask.
+     * @param ?array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float, 2: float, 3: float}} $outer
+     * @param list<array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float, 2: float, 3: float}}> $holes
+     */
+    private function inBands(int $slots, ?array $outer, array $holes): void
+    {
+        if ($this->xk != 0.0 || $this->noBands) { return; }
+        $first = $this->n - $slots; $b = $this->buf; $k = $first * 16;
+        [$x0, $y0, $x1, $y1] = [max($b[$k], $b[$k + 12]), max($b[$k + 1], $b[$k + 13]), min($b[$k] + $b[$k + 2], $b[$k + 12] + $b[$k + 14]), min($b[$k + 1] + $b[$k + 3], $b[$k + 13] + $b[$k + 15])];
+        if ($x1 <= $x0 || $y1 <= $y0) { return; }
+        $pieces = Bands::plan([$x0, $y0, $x1, $y1], $outer, $holes);
+        if ($pieces === null) { return; }
+        if ($pieces === []) { $this->n = $first; return; } // nothing of it shows
+        $run = $this->copyOut($first, $this->n);
+        $this->n = $first;
+        foreach ($pieces as [$px0, $py0, $px1, $py1]) {
+            $at = $this->n * 16;
+            $this->copyIn($run);
+            [$cx0, $cy0] = [max($px0, $x0), max($py0, $y0)];
+            [$b[$at + 12], $b[$at + 13], $b[$at + 14], $b[$at + 15]] = [$cx0, $cy0, max(0.0, min($px1, $x1) - $cx0), max(0.0, min($py1, $y1) - $cy0)];
+        }
+    }
+
+    /** @internal tests: draws shapes whole, never in bands, to compare */
+    public bool $noBands = false;
 
     /** A line from (x0, y0) to (x1, y1), $thickness points wide with round ends: a capsule across the corners of its bounding rect. */
     public function line(float $x0, float $y0, float $x1, float $y1, int $rgb, float $alpha, float $thickness): void
@@ -595,6 +631,12 @@ final class DisplayList
         }
         $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? self::DASHED : 0) + ($borderPaint ? self::BORDER_PAINT : 0), $g);
         $this->stops($stops, $n, $borderPaint ? 1.0 : $this->opacity); // a border's color, at the opacity, times the gradient
+        if ($n === 0 && $paint === self::PAINT_COLOR && $alpha * $this->opacity <= 0.0 && max($borders) > 0) {
+            // A border alone (a focus ring, an outline, a card's border, a circle): in bands that leave out what lies inside it and outside it (mygo's addFill).
+            [$iw, $ih] = [$w - $borders[1] - $borders[3], $h - $borders[0] - $borders[2]];
+            $ir = [max($r[0] - max($borders[0], $borders[3]), 0.0), max($r[1] - max($borders[0], $borders[1]), 0.0), max($r[2] - max($borders[2], $borders[1]), 0.0), max($r[3] - max($borders[2], $borders[3]), 0.0)];
+            $this->inBands(2, [[$x, $y, $w, $h], $r], $iw > 0 && $ih > 0 ? [[[$x + $borders[3], $y + $borders[0], $iw, $ih], self::fitRadii($iw, $ih, $ir)]] : []);
+        }
     }
 
     /** The first $n of $stops, each a slot of kind -1 after a box's: its color, straight, at $opacity, its place, at the one before's or after, and its color in Oklab. @param list<array{0: int, 1: float, 2: float}> $stops */
@@ -642,6 +684,9 @@ final class DisplayList
         $this->quad($x - $e, $y - $e, $w + 2 * $e, $h + 2 * $e, $rgb, $alpha, 0.0, 15.0, $sigma, $inset ? 1.0 : 0.0, 2);
         $c = $cut[2] > 0 && $cut[3] > 0 ? self::fitRadii($cut[2], $cut[3], $cutRadii) : [0.0, 0.0, 0.0, 0.0];
         $this->slot(self::fitRadii($w, $h, $radii), $cut, $c[0], $c[1], $c[2], [$c[3], 0.0, 0.0, 0.0]);
+        if (!$inset && $cut[2] > 0 && $cut[3] > 0) { // in bands that leave out the box casting it, where it writes nothing (mygo's addShadow)
+            $this->inBands(2, null, [[[$cut[0], $cut[1], $cut[2], $cut[3]], $c]]);
+        }
     }
 
     /**
