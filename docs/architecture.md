@@ -6279,8 +6279,8 @@ succeeds are told of, an empty line is none.
   at the display's rate, as an event's, takes the next refresh. Before
   macOS 14, without a view's display link, the timer waits `$every`
   refreshes.
-- myphp builds each frame (`docs/mygo-deviations.md`, paint-only frames),
-  so a paced frame is built and painted, where mygo's only paints.
+- A paced frame only paints again, as mygo's, since v1.113 (frames that
+  only paint again).
 
 ## A still subtree kept in a bitmap (v1.107)
 
@@ -6470,6 +6470,36 @@ succeeds are told of, an empty line is none.
   WebKit pops up no other until it closes. A `Menu` made for the event is
   `transient`: changing it re-installs no menus. `Menu::remove` (mygo's
   `Remove`) removes items by id, from submenus too.
+
+## Frames that only paint again (v1.113)
+
+- mygo's repaintFrame, which myphp had left out (every frame built the
+  view): while nothing but drawings move, a frame paints the last frame's
+  nodes again at the time of this one, without building or laying out the
+  view, and so costs only its painting (in `tests/bench.php`'s views, a
+  fifth to an eighth of a frame's PHP time).
+- What paints asks for frames of its own: `Runtime::$painting`, set while
+  the window (and `Headless`) paints, makes `animationFrame()` a frame at
+  the display's rate that only paints again (`repaintFull`), and `after()`
+  one when it is due (`repaintAt`); `animationFrameRate` was already
+  paint's. An indeterminate progress bar asks as it paints, the spinner
+  for its next spoke, a content transition, a caret painted from the time
+  too. The build's own asks (`Context::animationFrame`, `Context::after`,
+  `needsFrame`, a tip, a toast, a caret's blink) build.
+- `Runtime::pace` decides, after the paint, whether the next frame may
+  only paint again (mygo's redraw): no build ask. The window asks for it
+  so (`Metal::requestFrame($view, $every, true)`, `View::wake($view, $s,
+  true)` for `wakeRepaints()`); any other ask since, an event's or the
+  app's, makes the frame build (`Metal::repaintAsked`, false for a frame
+  no ask asked for, as a resize's). The draw callback then paints again
+  only when `Runtime::mayRepaint`: no event pushed since (`Input::$pushed`),
+  none queued, the window at the size, scale and zoom the view was built
+  at, nothing opened, no inspector open (`beginRepaint`: the frame's clock,
+  what paint asks cleared, the build's timers kept). It neither answers
+  the window's asks nor sets the cursor again, as nothing built them.
+- Memos keep a drawing's paint asks: `memoPaintEnd` keeps quads only when
+  `repaintAt` did not change either, so a memo's drawing that asks again
+  is painted, not replayed.
 
 ## Open items
 

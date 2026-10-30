@@ -79,8 +79,12 @@ final class Input
      * content's; a wheel's lines scroll as far as unzoomed (mygo's
      * fromWindow).
      */
+    /** How many events were pushed: a frame that only paints again comes while none came since the last frame (Runtime::mayRepaint, mygo's input). */
+    public int $pushed = 0;
+
     public function push(array $event): bool
     {
+        $this->pushed++;
         if ($this->zoom !== 1.0) {
             $z = $this->zoom;
             switch ($event[0]) {

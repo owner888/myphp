@@ -76,6 +76,8 @@ final class Window
     private ?float $aspectAsked = null;
     /** The content's zoom the last frame drew (Context::setZoom): App::rescale rasterizes glyphs at the screen's scale times it. */
     private float $zoomDrawn = 1.0;
+    /** The root of the view the last frame built, which a frame that only paints again paints (mygo's c.root). */
+    private ?UI\Node $drawnRoot = null;
     /** The compact size the view asked for (a player's music mode): [width, height, least height, most height (0 none)], null for none; and what the window was before it, to go back to. */
     private ?array $compactAsked = null, $beforeCompact = null;
     /** Whether the view asked the window to float on top (a player's pin, IINA's), null before it asked. */
@@ -428,22 +430,30 @@ final class Window
                 if ($in !== null && $in->open) { $in->hz = $this->refreshRate(); }
                 $this->runtime->fullScreen = $this->isFullScreen();
                 $this->runtime->occluded = !$this->showing();
-                $root = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
-                    $in?->startPass();
-                    $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
-                    [$w, $h] = [$bounds->w / $z, $bounds->h / $z];
-                    $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
-                    $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
-                    $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
-                    ($content->view)($c);
-                    $c->toasts(); // over everything the view built
-                    if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content
-                    $this->frameStats?->lap(UI\FrameStats::BUILD);
-                    Layout::layout($c, $w, $h);
-                    $this->frameStats?->lap(UI\FrameStats::LAYOUT);
-                    if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->runtime, $c->root); }
-                    return $c->root;
-                });
+                $at = [(float)$bounds->w, (float)$bounds->h, App::scale()];
+                $repaint = $this->drawnRoot !== null && Metal::repaintAsked($view) && $this->runtime->mayRepaint($at);
+                if ($repaint) { // only drawings moved since the last frame: its nodes painted again, the view neither built nor laid out (mygo's repaintFrame)
+                    $this->runtime->beginRepaint();
+                    $root = $this->drawnRoot;
+                } else {
+                    $root = $this->drawnRoot = $this->runtime->frame(function () use ($content, $text, $bounds, $in) {
+                        $in?->startPass();
+                        $z = $this->runtime->frameZoom; // zoomed (Context::setZoom), laid out in a window 1/z its size
+                        [$w, $h] = [$bounds->w / $z, $bounds->h / $z];
+                        $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
+                        $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
+                        $c->vibrancy = $this->effect !== null || $this->popover !== null; // a popover draws its material
+                        ($content->view)($c);
+                        $c->toasts(); // over everything the view built
+                        if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content
+                        $this->frameStats?->lap(UI\FrameStats::BUILD);
+                        Layout::layout($c, $w, $h);
+                        $this->frameStats?->lap(UI\FrameStats::LAYOUT);
+                        if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->runtime, $c->root); }
+                        return $c->root;
+                    });
+                    $this->runtime->builtAt($at);
+                }
                 $z = $this->runtime->frameZoom;
                 if ($z !== $this->zoomDrawn) { // glyphs rasterized at the screen's scale times the zoom: as sharp as at that size
                     $this->zoomDrawn = $z;
@@ -454,10 +464,12 @@ final class Window
                     $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
                     $list->pushClip(0, 0, $bounds->w / $z, $bounds->h / $z); // what lies outside the window is not painted (mygo's visible)
                     $list->cull = true; // where the nodes are where the runtime recorded them
+                    $this->runtime->painting = true; // what drawings ask for now are frames that only paint again
                     try {
                         Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     } finally {
                         $list->cull = false;
+                        $this->runtime->painting = false;
                     }
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h / $z); }
                     Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
@@ -478,20 +490,22 @@ final class Window
                 if ($this->webViews !== [] || $this->videoHosts !== [] || $this->runtime->videoPlaces !== [] || $this->materials !== [] || $this->runtime->materialPlaces !== [] || $this->underNew) {
                     $this->placeWebViews($bounds->h);
                 }
-                $this->showCursor($this->runtime->cursor);
-                $this->answer($this->runtime->windowAsks);
+                if (!$repaint) {
+                    $this->showCursor($this->runtime->cursor);
+                    $this->answer($this->runtime->windowAsks);
+                }
                 if ($this->destroyed) { return; } // closed by its own frame (its view opened a film elsewhere, and its window went): no frame after it
-                $wake = $this->runtime->nextWake();
                 $every = $this->runtime->pace(Metal::refreshRate($view));
+                $wake = $this->runtime->nextWake();
                 if (($every !== null || $wake !== null) && !$this->showing()) {
                     // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
                     // does (windowDidChangeOcclusionState:) rather than draw frames nobody sees, as browsers pause the
                     // animation frames of windows out of sight (mygo's held). It goes on from where the time puts it.
                     $this->held = true;
                 } elseif ($every !== null) {
-                    Metal::requestFrame($view, $every); // at a drawing's rate (Painter::animationFrameRate), every so many refreshes
+                    Metal::requestFrame($view, $every, $this->runtime->repaints()); // at a drawing's rate (Painter::animationFrameRate), every so many refreshes; painting again alone when only drawings asked
                 } elseif ($wake !== null) {
-                    View::wake($view, $wake);
+                    View::wake($view, $wake, $this->runtime->wakeRepaints());
                 }
                 if (getenv('MYPHP_STATS')) {
                     $this->stat($t0, $list);

@@ -21,7 +21,14 @@ final class Painter
         return $this->rt?->now ?? hrtime(true);
     }
 
-    /** Asks for the next frame as soon as the display can show it, for a drawing that moves with now(): call it in every frame while it moves. */
+    /**
+     * Asks for the next frame as soon as the display can show it, for a
+     * drawing that moves with now(): call it in every frame while it moves.
+     * While nothing but drawings move, the frame only paints the last
+     * frame's nodes again, the view neither built nor laid out (mygo's
+     * Painter.AnimationFrame): what a drawing shows comes from the time and
+     * what it captured, not from state the view's build changes.
+     */
     public function animationFrame(): void
     {
         $this->rt?->animationFrame();
@@ -44,7 +51,7 @@ final class Painter
         $this->rt?->animationFrameRate($fps);
     }
 
-    /** Asks for a frame $seconds from now, for a drawing that changes then. */
+    /** Asks for a frame $seconds from now, for a drawing that changes then: one that only paints again, as animationFrame()'s, unless something else changed meanwhile (mygo's Painter.After). */
     public function after(float $seconds): void
     {
         $this->rt?->after($seconds);
@@ -855,7 +862,8 @@ final class Painter
             if ($n->fraction >= 0) {
                 $fill = $n->w * min(1.0, $n->fraction);
                 $list->rect($n->reverse !== $n->rtl ? $n->x + $n->w - $fill : $n->x, $y, $fill, $h, $n->color ?? $t->accent, 1.0, $r); // reversed, or right to left: from the right
-            } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s
+            } else { // indeterminate: a third of the bar sweeping across, once every 1.5 s, painted again every frame (mygo's indicators)
+                $rt?->animationFrame();
                 $phase = fmod(($rt?->now ?? hrtime(true)) / 1.5e9, 1.0);
                 $bar = $n->w / 3;
                 $x = $n->reverse !== $n->rtl ? $n->x + $n->w - $phase * ($n->w + $bar) : $n->x - $bar + $phase * ($n->w + $bar);

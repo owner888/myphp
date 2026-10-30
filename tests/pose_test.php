@@ -87,7 +87,7 @@ $now += 50_000_000; $t->frame(1);
 $g = glyphAlphas($t->paint());
 $faded = count(array_filter($g, fn($v) => $v > 0.05 && $v < 0.95));
 check($faded >= 2, "rolling, $faded of " . count($g) . ' glyphs faded');
-check($t->rt->needsFrame, 'rolling, it asks for frames');
+same([1, true], [$t->rt->pace(60.0), $t->rt->repaints()], 'rolling, it asks for frames that only paint again');
 $now += 100_000_000; $t->frame(1);
 $g = glyphAlphas($t->paint());
 check(count($g) === 3 && min($g) == 1.0, 'over, three opaque glyphs');

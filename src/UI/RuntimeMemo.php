@@ -297,10 +297,10 @@ trait RuntimeMemo
         return true;
     }
 
-    /** Before memo node $n is painted: where the display list and the painter are, to tell what painting it drew. @return array{0: int, 1: int, 2: int, 3: int, 4: int, 5: int, 6: ?float, 7: bool} */
+    /** Before memo node $n is painted: where the display list and the painter are, to tell what painting it drew. @return array{0: int, 1: int, 2: int, 3: int, 4: int, 5: int, 6: array{0: ?float, 1: ?float}, 7: bool} */
     public function memoPaintBegin(DisplayList $list, TextPainter $text): array
     {
-        return [$list->n, $list->throughs + $list->transforms, self::specials($list), $text->drawnMark(), $this->places(), $this->frameAsks, $this->wakeAt, $this->needsFrame];
+        return [$list->n, $list->throughs + $list->transforms, self::specials($list), $text->drawnMark(), $this->places(), $this->frameAsks, [$this->wakeAt, $this->repaintAt], $this->needsFrame];
     }
 
     /** After memo node $n is painted with $args: its quads kept, when they drew through nothing else, asked for no frame, and drew nothing the window places. */
@@ -309,7 +309,7 @@ trait RuntimeMemo
         [$from, $throughs, $specials, $drawn, $places, $asks, $wake, $needs] = $mark;
         unset($this->memos[$n->id]['paint']);
         if (!isset($this->memos[$n->id]) || $list->throughs + $list->transforms !== $throughs || self::specials($list) !== $specials || $this->places() !== $places
-            || $this->frameAsks !== $asks || $this->wakeAt !== $wake || ($this->needsFrame && !$needs) || ($text instanceof Text && $text->repaint)) {
+            || $this->frameAsks !== $asks || [$this->wakeAt, $this->repaintAt] !== $wake || ($this->needsFrame && !$needs) || ($text instanceof Text && $text->repaint)) {
             return;
         }
         $this->memos[$n->id]['paint'] = ['args' => $args, 'quads' => $list->copyOut($from, $list->n), 'drawn' => $text->drawnSince($drawn)];

@@ -466,7 +466,7 @@ final class DiffState
     /** Asks for the view to be built again when laying it out for painting moved what its nodes were built for, as expanding lines from a separator's button does. */
     private function rebuildIfMoved(): void
     {
-        if ($this->geom() !== $this->built) { $this->eds[1]->services?->animationFrame(); }
+        if ($this->geom() !== $this->built) { $this->eds[1]->services?->invalidate(); }
     }
 
     // difflayout.go

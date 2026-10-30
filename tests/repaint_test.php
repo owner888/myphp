@@ -1,11 +1,11 @@
 <?php
-// What of mygo's repaint_test.go myphp has (TestRepaintOnlyInView,
-// TestPainterAfter's times, TestIndicatorsRepaint's asks): every frame of
-// myphp builds the view (docs/mygo-deviations.md, paint-only frames), so
-// what is checked is what painting asks for: nothing for a drawing out of
-// view, a frame when after() is due by the frame's clock, the spinner's
-// next spoke and a moving progress bar's next frame; animationFrame() asked as
-// the frame is built, kept past the frame's end.
+// What of mygo's repaint_test.go myphp has (TestRepaintFrames,
+// TestRepaintOnlyInView, TestPainterAfter, TestIndicatorsRepaint's asks):
+// what painting asks for, nothing for a drawing out of view, a frame when
+// after() is due by the frame's clock, the spinner's next spoke and a
+// moving progress bar's next frame; animationFrame() asked as the frame is
+// built, kept past the frame's end; frames that only paint again while
+// only drawings move, and those built anew after anything else.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -49,7 +49,7 @@ $h->paint();
 $wake = $h->rt->nextWake();
 check(!$h->rt->needsFrame && $wake !== null && $wake <= 0.075, 'the spinner alone: its next spoke in ' . json_encode($wake));
 $value = -1.0; $h->frame(1); $h->paint();
-check($h->rt->needsFrame, 'a moving progress bar asks for the next frame');
+same([false, 1, true], [$h->rt->needsFrame, $h->rt->pace(60.0), $h->rt->repaints()], 'a moving progress bar asks for the next frame, one that only paints again (mygo\'s TestIndicatorsRepaint)');
 
 // animationFrame() as the frame is built (what moves with now() asks for every frame): the next frame comes, as one asked while painting.
 $moving = true;
@@ -90,3 +90,69 @@ same([24, 1], $paints(120.0, 24), 'with animationFrame() too: each refresh paint
 $full = false; $fps = 0.0; $h->frame(1);
 same(null, $h->rt->pace(120.0), 'nothing moving: no frame asked for');
 same(1, (function () use ($h) { $h->rt->animationFrameRate(30); $h->rt->needsFrame = true; return $h->rt->pace(120.0); })(), 'an event between the frames due: the next refresh');
+
+// Frames that only paint again (mygo's TestRepaintFrames): a drawing that moves is painted again where the time puts it, without
+// building the view; anything else that may change what the view builds builds it anew, and the frame after paints again.
+$builds = 0; $draws = 0; $drawnAt = 0; $now = 0; $size = 100.0;
+$h = poseTester(function (Context $c) use (&$builds, &$draws, &$drawnAt, &$size): void {
+    $builds++;
+    $c->column()->size($size, 20)->draw(function (DisplayList $l, Node $n) use (&$draws, &$drawnAt, $c): void { $draws++; $drawnAt = $c->runtime->now; $c->runtime->animationFrame(); }); $c->end();
+}, $now, 200, 100);
+$h->paint(); $h->rt->pace(60.0);
+same([true, 1], [$h->rt->repaints(), $h->rt->pace(60.0)], 'a drawing that moves asks for frames that only paint again');
+foreach ([1, 2] as $i) {
+    [$b, $d] = [$builds, $draws];
+    $now += 8_000_000;
+    $repainted = $h->windowFrame();
+    same([true, $b, $d + 1, $now, 1], [$repainted, $builds, $draws, $drawnAt, $h->rt->pace(60.0)], "frame $i: painted again at its time, not built, asking for the next");
+}
+foreach ([
+    'an event' => fn() => $h->input->push(['move', 150, 50]),
+    'a frame built anew asked for (an event\'s, the app\'s)' => null,
+    'the runtime asking for one' => function () use ($h) { $h->rt->needsFrame = true; },
+    'another size' => function () use ($h) { $h->w = 210; },
+] as $what => $change) {
+    if ($change !== null) { $change(); }
+    $b = $builds;
+    $h->windowFrame($change !== null);
+    check($builds === $b + 1, "after $what, the frame built the view");
+    $b = $builds;
+    check($h->windowFrame() && $builds === $b, "after $what, the next frame only painted again");
+}
+
+// A drawing's after() (mygo's TestPainterAfter): a frame that only paints again when due; the view's own after() builds.
+$draws = 0; $builds = 0; $now = 0; $viewAfter = false;
+$h = poseTester(function (Context $c) use (&$draws, &$builds, &$viewAfter): void {
+    $builds++;
+    if ($viewAfter) { $c->after(0.01); }
+    $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use (&$draws, $c): void { $draws++; $c->runtime->after(0.03); }); $c->end();
+}, $now, 200, 100);
+$h->paint(); $h->rt->pace(60.0);
+same([null, true, true], [$h->rt->pace(60.0), abs($h->rt->nextWake() - 0.03) < 1e-9, $h->rt->wakeRepaints()], 'due in 30 ms, a frame that only paints again');
+$now += 30_000_000;
+[$b, $d] = [$builds, $draws];
+check($h->windowFrame() && $builds === $b && $draws === $d + 1 && abs($h->rt->nextWake() - 0.03) < 1e-9, 'the frame painted it again, not built, the next due in 30 ms');
+$viewAfter = true; $h->rt->needsFrame = true; $h->windowFrame(false);
+same([true, false], [abs($h->rt->nextWake() - 0.01) < 1e-9, $h->rt->wakeRepaints()], 'the view\'s after() first: its frame builds');
+
+// A drawing out of view asks for nothing (mygo's TestRepaintOnlyInView).
+$h = new Headless(function (Context $c): void {
+    $c->scroll()->height(100);
+      $c->column()->size(100, 300)->shrink(0); $c->end();
+      $c->column()->size(100, 20)->shrink(0)->draw(function (DisplayList $l, Node $n) use ($c): void { $c->runtime->animationFrame(); }); $c->end();
+    $c->end();
+}, 200, 100);
+$h->frame(1); $h->paint();
+same([null, false], [$h->rt->pace(60.0), $h->rt->repaints()], 'out of view: no frame, none to paint again');
+
+// A drawing in a memo, painted from the memo's quads, still asks for its frames.
+$now = 0; $draws = 0;
+$h = poseTester(function (Context $c) use (&$draws): void {
+    $c->memo('m', [1], function () use ($c, &$draws): void {
+        $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use ($c, &$draws): void { $draws++; $c->runtime->after(0.05); }); $c->end();
+    });
+}, $now, 200, 100);
+$h->paint(); $h->rt->pace(60.0);
+$now += 50_000_000;
+$h->windowFrame();
+same([true, true], [$h->rt->wakeRepaints(), $h->rt->nextWake() !== null], 'a memo\'s drawing asks for its next frame again');

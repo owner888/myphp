@@ -1374,13 +1374,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `TextState::shown()` is what it paints, bullets for a password.
   - Why: myphp's fields keep their state in `TextState`, not in an editor
     of the node.
-- **Paint-only frames**
-  - mygo: a frame whose state did not change paints again without building
-    the view (repaintFrame): drawings, indicators, a content transition, a
-    draggable at rest.
-  - myphp: every frame builds the view.
-  - Why: an optimisation; it is not behaviour an app sees, and PHP's
-    build of a frame is what it is measured by (MYPHP_STATS).
 - **List keys**
   - mygo: `ListState.Key`, with the anchor, the choice and the rows' state
     kept by key across rows coming and going.
@@ -1569,10 +1562,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 ## Outlines, repaints, scrolling, selections and following, their tests (v1.22)
 
-- **Not ported**: TestRepaintFrames, TestHeldWhileOccluded and
-  TestFocusChangeFrames (every frame of myphp builds the view, Paint-only
-  frames, v1.14; the window draws a frame whenever it becomes or stops
-  being the key window), TestIndicatorsRepaint's pixels, TestTrackScrollList
+- **Not ported**: TestHeldWhileOccluded and TestFocusChangeFrames (the
+  window draws a frame whenever it becomes or stops being the key window;
+  TestRepaintFrames since v1.113, frames that only paint again),
+  TestIndicatorsRepaint's pixels, TestTrackScrollList
   (TrackScroll on a list, v1.15), TestDividers' pixels (style_test has the
   dividers of a column and a row).
 - **Paint order, not pixels**: the headless painter composes no pixels,

@@ -372,8 +372,27 @@ final class Runtime
     public function after(float $seconds): void
     {
         $at = $this->clockNow() / 1e9 + max(0.0, $seconds);
+        if ($this->painting) { // a drawing's (mygo's Painter.After): a frame that paints again, unless something else changes before
+            if ($this->repaintAt === null || $at < $this->repaintAt) { $this->repaintAt = $at; }
+            return;
+        }
         if ($this->wakeAt === null || $at < $this->wakeAt) { $this->wakeAt = $at; }
     }
+
+    /**
+     * @internal Window, Headless: set while the frame's nodes paint, when
+     * what asks for frames (animationFrame, after) asks for frames that
+     * only paint again (mygo's repainting and repaintAt)
+     */
+    public bool $painting = false;
+    /** What the paint asked for: the next frame at the display's rate (animationFrame), and when drawings change next (after). */
+    private bool $repaintFull = false;
+    private ?float $repaintAt = null;
+    /** Whether the next frame may paint the last one's nodes again rather than build the view (mygo's redraw), as only drawings asked for it; and the size, scale and zoom the view was built at. */
+    private bool $redraw = false;
+    private ?array $builtAt = null;
+    /** Input::$pushed as the last frame asked for the next: an event since builds the view anew. */
+    private int $pushedSeen = 0;
 
     /** The time now, in nanoseconds: the clock's (tests'), else hrtime's. */
     private function clockNow(): int
@@ -408,7 +427,9 @@ final class Runtime
     public function animationFrame(): void
     {
         $this->frameAsks++;
-        if ($this->building) { // asked as the frame is built: kept past its end, which clears what came before
+        if ($this->painting) { // a drawing that moves (mygo's Painter.AnimationFrame): frames that only paint again
+            $this->repaintFull = true;
+        } elseif ($this->building) { // asked as the frame is built: kept past its end, which clears what came before
             $this->animating = true;
         } else {
             $this->needsFrame = true;
@@ -436,9 +457,52 @@ final class Runtime
      */
     public function pace(float $hz): ?int
     {
-        if ($this->needsFrame) { return 1; }
+        // The next frame may only paint again while nothing but drawings asked for it (mygo's next): what else asks builds the view.
+        $this->redraw = !$this->needsFrame && ($this->repaintFull || $this->repaintRate > 0 || $this->repaintAt !== null);
+        $this->pushedSeen = $this->input->pushed;
+        if ($this->needsFrame || $this->repaintFull) { return 1; }
         if ($this->repaintRate <= 0) { return null; }
         return $hz > 0 ? max(1, (int)($hz / $this->repaintRate + 0.05)) : 1; // a display of 59.94 Hz draws 30 frames a second every 2
+    }
+
+    /** Whether the frame pace() asked for only paints again (mygo's redraw): the drawings alone asked for it. @internal Window */
+    public function repaints(): bool
+    {
+        return $this->redraw;
+    }
+
+    /**
+     * Whether the frame to draw may paint the last frame's nodes again
+     * rather than build the view (mygo's surfaceFrame): only drawings asked
+     * for it since the last frame (repaints()), and the window has the
+     * size, scale and zoom the view was built at, $at, no input came, and
+     * nothing asked for a frame built anew. @param array{0: float, 1: float, 2: float} $at @internal Window
+     */
+    public function mayRepaint(array $at): bool
+    {
+        return $this->redraw && !$this->needsFrame && $this->input->pushed === $this->pushedSeen && $this->input->events === [] && $this->builtAt === [...$at, $this->frameZoom]
+            && $this->opened === [] && ($this->inspector === null || !$this->inspector->open);
+    }
+
+    /**
+     * Begins a frame that paints the last frame's nodes again, at the time
+     * of this one, for drawings that move with it while nothing else
+     * changed (mygo's repaintFrame): the view is neither built nor laid out,
+     * so what moves costs only its painting. Its timers stay as the last
+     * frame built armed them. @internal Window, Headless
+     */
+    public function beginRepaint(): void
+    {
+        $this->now = $this->clockNow();
+        $this->lastFrame = hrtime(true);
+        $this->repaintFull = false; $this->repaintAt = null; $this->repaintRate = 0.0; $this->redraw = false;
+        $this->windowAsks = [];
+    }
+
+    /** @internal Window, Headless: the view was built at this size and scale, which a frame that only paints again needs (mayRepaint) @param array{0: float, 1: float, 2: float} $at */
+    public function builtAt(array $at): void
+    {
+        $this->builtAt = [...$at, $this->frameZoom];
     }
 
     /** Whether a refresh $elapsed seconds after the last frame began is when a frame that comes every $every refreshes of a display of $hz is due: half a refresh early at most, as refreshes come a little late or early (mygo's paceSkips). @internal Metal */
@@ -481,7 +545,7 @@ final class Runtime
         foreach ($this->scrolls as $state) {
             $state->glide($dt, $this->now);
         }
-        $this->wakeAt = null; $this->animating = false; $this->repaintRate = 0.0; // what this frame's build and paint ask for
+        $this->wakeAt = null; $this->animating = false; $this->repaintRate = 0.0; $this->repaintFull = false; $this->repaintAt = null; $this->redraw = false; // what this frame's build and paint ask for
         $this->glideWheels();
         $events = $this->input->events;
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)
@@ -900,6 +964,22 @@ final class Runtime
 
     /** Seconds until the window should draw a frame of its own accord (a caret toggle, a tip due, a toast going), or null. */
     public function nextWake(): ?float
+    {
+        $build = $this->buildWake();
+        $paint = $this->repaintAt === null ? null : max(0.0, $this->repaintAt - $this->clockNow() / 1e9); // a drawing's (mygo's repaintAt)
+        return $build === null ? $paint : ($paint === null ? $build : min($build, $paint));
+    }
+
+    /** Whether the frame nextWake() asks for only paints again: a drawing's change comes first (mygo's repaintDue), and only drawings asked for frames. @internal Window */
+    public function wakeRepaints(): bool
+    {
+        if (!$this->redraw || $this->repaintAt === null) { return false; }
+        $build = $this->buildWake();
+        return $build === null || $this->repaintAt - $this->clockNow() / 1e9 < $build;
+    }
+
+    /** Seconds until what the view builds changes of its own accord (a caret toggle, a tip due, a toast going, Context::after), or null. */
+    private function buildWake(): ?float
     {
         $wake = $this->nextBlink();
         if ($this->wakeAt !== null) {
@@ -1955,9 +2035,6 @@ final class Runtime
                 default => Cursor::Default, // a cursor around stops at what is clicked, which has its own (mygo's cursor of clickable elements)
             };
         }
-        if ($n->kind === Node::PROGRESS && $n->fraction < 0) {
-            $this->animating = true; // an indeterminate bar moves every frame; a spinner asks for its next spoke as it paints
-        }
         if ($n->wraps ? abs($n->w - $n->wrapWidth) > 0.5 : ($n->wrapLast && $parent !== null && abs($parent->w - 2 * $parent->padX() - $n->wrapWidth) > 0.5)) {
             $this->needsFrame = true; // wrapped at the width it, or its container, had last frame; this frame's differs
         }
@@ -2951,6 +3028,12 @@ final class Runtime
     public function animate(): void
     {
         $this->animating = true;
+    }
+
+    /** Asks for the next frame built anew, while painting too, where animationFrame() asks for one that only paints again: what painting found the view must build otherwise, as a diff's nodes laid out for other lines (mygo's services.Invalidate). */
+    public function invalidate(): void
+    {
+        if ($this->building) { $this->animating = true; } else { $this->needsFrame = true; }
     }
 
     /** Which half of stepper $id the mouse is held down on: 1 the upper, -1 the lower, 0 neither. */

@@ -229,7 +229,7 @@ final class View
             'redo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'redo')],
             'delete:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'delete')],
             // A frame some time from now (caret blink): see wake().
-            'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self); }],
+            'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self, 1, self::$wakeRepaints[ObjC::addr($self)] ?? false); }],
             'selectAll:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'selectAll')],
             'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => true],
             // NSTextInputClient
@@ -359,8 +359,13 @@ final class View
         self::$firstMouse[ObjC::addr($view)] = $on;
     }
 
-    public static function wake($view, float $seconds): void
+    /** @var array<int, bool> by view, whether the frame its wake asks for only paints again (wake's $repaint) */
+    private static array $wakeRepaints = [];
+
+    /** A frame of $view in $seconds; $repaint: one that only paints the last frame's nodes again, as a drawing asked (Painter::after), unless something else asks for one built anew meanwhile. */
+    public static function wake($view, float $seconds, bool $repaint = false): void
     {
+        self::$wakeRepaints[ObjC::addr($view)] = $repaint;
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('wake:'), null);
         ObjC::msg('v:ppd', $view, 'performSelector:withObject:afterDelay:', ObjC::sel('wake:'), null, $seconds);
     }

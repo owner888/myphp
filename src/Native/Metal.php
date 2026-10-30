@@ -732,7 +732,8 @@ final class Metal
             $key = ObjC::addr($view);
             if (isset(self::$drawing[$key])) { self::$drawing[$key] = true; return; } // asked while a frame waits for a sheet: drawn after it
             self::$drawing[$key] = false;
-            if (isset(self::$pace[$key])) { self::$pace[$key]['last'] = microtime(true); self::$pace[$key]['timing'] = false; }
+            self::$repaints[$key] = self::$pace[$key]['repaint'] ?? false; // a frame no ask asked for (a resize, AppKit's) builds the view
+            if (isset(self::$pace[$key])) { self::$pace[$key]['last'] = microtime(true); self::$pace[$key]['timing'] = false; self::$pace[$key]['repaint'] = null; }
             $list = $this->lists[$this->frame % self::RING];
             $list->reset(); $list->zoom = 1.0; // a view's draw zooms it (Context::setZoom); this ring's list was another's
             $draw($view, $list);
@@ -765,14 +766,16 @@ final class Metal
      * display took them: the next drawable kept a frame waiting a refresh
      * or two, and scrolling showed 40 to 58 frames a second.
      */
-    public static function requestFrame($view, int $every = 1): void
+    public static function requestFrame($view, int $every = 1, bool $repaint = false): void
     {
         $key = ObjC::addr($view);
         if (!isset(self::$onDraw[$key])) {
             return; // a view forgotten, its window closed (an event AppKit still sends it, its own frame that closed it): it draws no more, no link made for it
         }
         $p = &self::$pace[$key];
-        $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0, 'every' => 1, 'rate' => 0.0];
+        $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0, 'every' => 1, 'rate' => 0.0, 'repaint' => null];
+        // Whether the frame only paints the last one's nodes again (mygo's redraw): while every ask since the last frame said so; an event's, or anything else's, builds the view anew.
+        $p['repaint'] = $repaint && ($p['repaint'] ?? true);
         $refresh = self::refresh($view);
         $p['every'] = $p['due'] || $p['timing'] ? min($p['every'], $every) : $every; // asked at the display's rate too (an event): the next refresh
         $rate = $p['every'] > 1 ? 1 / ($refresh * $p['every']) : 0.0;
@@ -821,7 +824,7 @@ final class Metal
             ObjC::msg('v:', $link, 'invalidate');
             ObjC::msg('v:', $link, 'release');
         }
-        unset(self::$pace[$key], self::$onDraw[$key], self::$draws[$key], self::$afterFrame[$key], self::$afterPresent[$key]);
+        unset(self::$pace[$key], self::$onDraw[$key], self::$draws[$key], self::$afterFrame[$key], self::$afterPresent[$key], self::$repaints[$key]);
         ObjC::msg('v:ppp', ObjC::cls('NSObject'), 'cancelPreviousPerformRequestsWithTarget:selector:object:', $view, ObjC::sel('draw'), null);
     }
 
@@ -881,6 +884,15 @@ final class Metal
         }
         self::$pace[ObjC::addr($view)]['due'] = false;
         ObjC::msg('v:', $view, 'draw');
+    }
+
+    /** @var array<int, bool> by view, whether the frame drawing now was asked for only to paint again */
+    private static array $repaints = [];
+
+    /** Whether the frame $view draws now was asked for only to paint the last frame's nodes again (requestFrame's $repaint, every ask since the last frame): the draw callback may then paint without building the view. @internal Window */
+    public static function repaintAsked($view): bool
+    {
+        return self::$repaints[ObjC::addr($view)] ?? false;
     }
 
     /** How many times a second the view's display refreshes (mygo's RefreshRate). @internal Window */

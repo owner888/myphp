@@ -199,9 +199,32 @@ final class Headless
                 if ($in !== null && $in->open) { $in->lap(1); $in->snapshot($this->rt, $c->root); }
                 return $c->root;
             });
+            $this->rt->builtAt([$this->w, $this->h, 1.0]);
             if ($this->paints || ($in !== null && $in->open)) { $this->paint(); } // as a window paints it: the inspector's highlight, and its times
         }
         return $this->root;
+    }
+
+    /**
+     * The frame a window draws next, as the window decides (Window's draw
+     * callback): one that paints the last frame's nodes again when only
+     * drawings asked for it and nothing changed since (Runtime::mayRepaint,
+     * a frame asked for only to paint again, $repaintAsked), else one built
+     * anew; painted, and what it asks for next (Runtime::pace). Whether it
+     * only painted again.
+     */
+    public function windowFrame(bool $repaintAsked = true, float $hz = 60.0): bool
+    {
+        $repaint = $this->root !== null && $repaintAsked && $this->rt->mayRepaint([$this->w, $this->h, 1.0]);
+        if ($repaint) {
+            $this->rt->beginRepaint();
+        } else {
+            $paints = $this->paints; $this->paints = false;
+            try { $this->frame(1); } finally { $this->paints = $paints; }
+        }
+        $this->paint();
+        $this->rt->pace($hz);
+        return $repaint;
     }
 
     /** Paints everything, skipping nothing whose ink shows nowhere (mygo's noCull), to compare. */
@@ -218,10 +241,12 @@ final class Headless
         $this->list->pushClip(0, 0, $this->w / $this->rt->frameZoom, $this->h / $this->rt->frameZoom);
         $root = $this->root ?? $this->frame();
         $this->list->cull = !$this->noCull; // as the window's paint, which skips what shows nowhere
+        $this->rt->painting = true;
         try {
             Painter::paint($root, $this->list, $this->metrics, $this->theme, $this->rt);
         } finally {
             $this->list->cull = false;
+            $this->rt->painting = false;
         }
         if (($in = $this->rt->inspector) !== null && $in->open) {
             \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h / $this->rt->frameZoom);
