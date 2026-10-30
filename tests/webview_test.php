@@ -170,6 +170,16 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     $scripts = $O::msg('p:', $O::msg('p:', $cfg($free), 'userContentController'), 'userScripts');
     same([true, false], [$O::msg('b:', $O::msg('p:L', $scripts, 'objectAtIndex:', 0), 'isForMainFrameOnly'), $O::msg('b:', $O::msg('p:L', $scripts, 'objectAtIndex:', 1), 'isForMainFrameOnly')], 'a script in the main frame, one in every frame');
     check($free->processID() >= 0, 'a process ID, or 0 before one runs');
+    // The page's sound and capture (mygo's 37f56f6, 95de2cd): silent and capturing nothing before it loads; muted as asked, where WebKit mutes.
+    same([false, 0, 0, 0], [$free->isAudible(), $free->captureState(0), $free->captureState(1), $free->captureState(2)], 'a page loading nothing: silent, no capture');
+    if ($O::msg('b:p', $free->ns, 'respondsToSelector:', $O::sel('_setPageMuted:'))) {
+        $free->setAudioMuted(true);
+        $muted = $free->isAudioMuted();
+        $free->setAudioMuted(false);
+        same([true, false], [$muted, $free->isAudioMuted()], 'muted, and not again');
+    }
+    $free->setCaptureState(1, 2); // capturing nothing: nothing
+    same(0, $free->captureState(1), 'no capture to mute');
 }
 
 // Session states (mygo's session_state_test.go): the system, the URL and WebKit's own state, which a later version's or anything else is not.
@@ -180,3 +190,7 @@ same(null, \MyPHP\Page::decodeSessionState('app://localhost/saved'), 'session st
 $later = $st; $later[strlen('mygo-session')] = chr(2);
 same(null, \MyPHP\Page::decodeSessionState($later), "session state: a later version's");
 same(false, (new \MyPHP\WindowOpenRequest('https://x.org'))->userInitiated, 'a window-open request: not a gesture\'s unless told');
+
+// The theme color as the bridge tells it (mygo's 9bf2ce4): #rrggbbaa, "" or anything else none.
+same([[0x1e90ff, 1.0], [0xff0000, 128 / 255], null, null], [\MyPHP\Page::parseThemeColor('#1e90ffff'), \MyPHP\Page::parseThemeColor('#FF000080'), \MyPHP\Page::parseThemeColor(''), \MyPHP\Page::parseThemeColor('#fff')], 'theme colors: as [rgb, alpha]');
+check(in_array('themeColorChanged', \MyPHP\Page::EVENTS, true) && in_array('audibleChanged', \MyPHP\Page::EVENTS, true) && in_array('captureStateChanged', \MyPHP\Page::EVENTS, true), 'the page\'s events of its theme color, sound and capture');

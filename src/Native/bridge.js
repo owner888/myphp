@@ -256,7 +256,92 @@
   Object.defineProperty(window, "__myphp", { value: Object.freeze({ find, stopFind }) });
   window.myphp.on("myphp:title-bar", (t) => setVars({ "--myphp-titlebar-height": `${t.height}px`, "--myphp-titlebar-inset-left": `${t.left}px`, "--myphp-titlebar-inset-right": `${t.right}px` }));
   window.myphp.on("myphp:preferences", (p) => setVars({ "--myphp-accent": p.accent, "--myphp-text-scale": String(p.textScale) }));
-  document.addEventListener("DOMContentLoaded", () => post({ t: "dom-ready" }));
+  // The page's theme color (Page::themeColor, mygo's theme-color.ts): the content of the first <meta name="theme-color"> in the head whose
+  // media is absent, empty or matches, and whose content is a color, as browsers pick it; told as #rrggbbaa, or "" for none, as it changes.
+  // Before the DOM is ready only a color is told, so that going from a page to another of the same color tells nothing; once it is, none too.
+  const themeColorReady = (() => {
+    const hex2 = (n) => Math.round(Math.min(Math.max(n, 0), 255)).toString(16).padStart(2, "0");
+    // A canvas's fillStyle as #rrggbbaa: engines serialize sRGB colors as #rrggbb, or rgba(r, g, b, a) when translucent; other color spaces give null.
+    const fillStyleHex = (v) => {
+      if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase() + "ff";
+      const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?\s*\)$/i.exec(v);
+      return m ? "#" + hex2(+m[1]) + hex2(+m[2]) + hex2(+m[3]) + hex2(m[4] === undefined ? 255 : +m[4] * 255) : null;
+    };
+    let ctx;
+    // A CSS color parsed as the engine does, by a canvas, whose fillStyle keeps its value when given what is no color; others drawn and read back.
+    const parse = (value) => {
+      value = value.trim();
+      if (!value) return null;
+      if (ctx === undefined) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        ctx = canvas.getContext ? canvas.getContext("2d", { willReadFrequently: true }) : null;
+      }
+      if (!ctx) return null;
+      ctx.fillStyle = "#000";
+      ctx.fillStyle = value;
+      if (ctx.fillStyle === "#000000") {
+        ctx.fillStyle = "#fff";
+        ctx.fillStyle = value;
+        if (ctx.fillStyle === "#ffffff") return null; // no color
+      }
+      const hex = fillStyleHex(String(ctx.fillStyle));
+      if (hex) return hex;
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, al] = ctx.getImageData(0, 0, 1, 1).data;
+      return "#" + hex2(r) + hex2(g) + hex2(b) + hex2(al);
+    };
+    let last, ready = false; // last undefined: nothing told yet
+    const report = (c) => {
+      if (c === last || (c === null && last === undefined && !ready)) return;
+      last = c;
+      post({ t: "theme-color", v: c ?? "" });
+    };
+    const queries = new Map();
+    const matches = (media) => {
+      let q = queries.get(media);
+      if (!q) {
+        q = matchMedia(media);
+        q.addEventListener ? q.addEventListener("change", update) : q.addListener(update);
+        queries.set(media, q);
+      }
+      return q.matches;
+    };
+    const current = () => {
+      if (!document.head) return null;
+      for (const m of document.head.querySelectorAll('meta[name="theme-color" i]')) {
+        const media = m.getAttribute("media")?.trim();
+        if (media && !matches(media)) continue;
+        const c = parse(m.getAttribute("content") ?? "");
+        if (c !== null) return c;
+      }
+      return null;
+    };
+    function update() { report(current()); }
+    // The head's metas alone, so that pages changing their body pay nothing; the document and its root for a head that comes, or is replaced, later.
+    const isMeta = (n) => n.localName === "meta";
+    const hasMeta = (nodes) => Array.prototype.some.call(nodes, (n) => n.nodeType === 1 && (isMeta(n) || n.querySelector("meta")));
+    let head = null, root = null;
+    const observer = new MutationObserver((records) => {
+      let changed = false;
+      for (const r of records) {
+        if (r.target === document || r.target === document.documentElement) { observe(); changed = true; }
+        else if (r.type === "attributes") changed ||= isMeta(r.target);
+        else changed ||= hasMeta(r.addedNodes) || hasMeta(r.removedNodes);
+      }
+      if (changed) update();
+    });
+    function observe() {
+      if (document.documentElement !== root && (root = document.documentElement)) observer.observe(root, { childList: true });
+      if (document.head !== head && (head = document.head)) observer.observe(head, { childList: true, subtree: true, attributes: true, attributeFilter: ["name", "content", "media"] });
+    }
+    observer.observe(document, { childList: true });
+    observe();
+    update();
+    return () => { ready = true; report(current()); };
+  })();
+  document.addEventListener("DOMContentLoaded", () => { themeColorReady(); post({ t: "dom-ready" }); });
   // A press on an element whose --app-region (or -webkit-app-region) is drag moves the window; a double click zooms it as macOS is set to (mygo's drag regions). Controls stay controls.
   const controls = 'input,textarea,select,button,a[href],summary,label,[contenteditable]:not([contenteditable="false"]),video[controls],audio[controls]';
   const webkitRegion = typeof CSS !== "undefined" && CSS.supports("-webkit-app-region", "drag");

@@ -21,12 +21,14 @@ use RuntimeException;
  * the page's script; not loadURL() and friends), didNavigate (the URL: a
  * navigation committed, a new document started), domReady, didFinishLoad,
  * didFailLoad (a LoadError), renderProcessGone (the reason), willDownload
- * (a DownloadEvent, to choose where a download goes or prevent it) and
- * downloadDone (a Download).
+ * (a DownloadEvent, to choose where a download goes or prevent it),
+ * downloadDone (a Download), themeColorChanged (themeColor()'s, null for
+ * none), audibleChanged (isAudible()'s) and captureStateChanged (a
+ * CaptureKind and its CaptureState).
  */
 final class Page
 {
-    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone'];
+    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone', 'themeColorChanged', 'audibleChanged', 'captureStateChanged'];
     /** How many events wait for a page that never gets ready, as an image (mygo's maxHeldEvents). */
     private const MAX_HELD = 1024;
     /** The forms Page::eval tries, an expression first: one that does not compile is no expression (mygo's evalExpr, evalBody). */
@@ -57,6 +59,19 @@ final class Page
     private array $trustedOrigins;
     private string $preload;
     private bool $preloadAllFrames = false;
+    /**
+     * The page's theme color as its bridge told it, [0xRRGGBB, alpha] or
+     * null; pending from a navigation's commit until the new page tells
+     * it, which it does by the time its DOM is ready: a page without the
+     * bridge (an image) never does, and has none once it loaded.
+     * @var ?array{0: int, 1: float}
+     */
+    private ?array $themeColor = null;
+    private bool $themeColorPending = false;
+    /** What WebKit last told of the page's sound and capture, by CaptureKind, so that listeners hear changes alone. */
+    private bool $audible = false;
+    /** @var array<int, CaptureState> */
+    private array $capture = [];
     private bool $devTools;
     /** The zoom the page was made with, which its first scripts tell the title bar's room in. */
     private float $zoom;
@@ -135,6 +150,102 @@ final class Page
     {
         if ($this->destroyed) { throw new RuntimeException('myphp: session state: the page is closed'); }
         return self::encodeSessionState('darwin', $this->web->url(), $this->web->sessionState());
+    }
+
+    /**
+     * The page's theme color, [0xRRGGBB, alpha], null when it has none
+     * (mygo's ThemeColor): the content of the first <meta
+     * name="theme-color"> in its head whose media is absent or matches and
+     * whose content is a CSS color, as browsers pick it, so that a page
+     * with one for light and one for dark appearance has the app's
+     * appearance's. MyPHP's runtime in the page tells it, in pages of any
+     * origin; a page it does not run in, as an image or a PDF, has none.
+     * A page that just started loading has the color of the one before
+     * until its DOM is ready, so that going between pages of one color
+     * changes nothing. themeColorChanged tells its changes.
+     * @return ?array{0: int, 1: float}
+     */
+    public function themeColor(): ?array
+    {
+        return $this->themeColor;
+    }
+
+    /** "#rrggbbaa", as the bridge tells a theme color, as [0xRRGGBB, alpha]; null for "" or what is no such color. @internal @return ?array{0: int, 1: float} */
+    public static function parseThemeColor(string $v): ?array
+    {
+        if (preg_match('/^#([0-9a-f]{6})([0-9a-f]{2})$/iD', $v, $m) !== 1) { return null; }
+        return [(int)hexdec($m[1]), hexdec($m[2]) / 255.0];
+    }
+
+    /** The page's theme color, as its bridge told it, its listeners told when it changed. */
+    private function setThemeColor(?array $c): void
+    {
+        $this->themeColorPending = false;
+        if ($c === $this->themeColor) { return; }
+        $this->themeColor = $c;
+        $this->emit('themeColorChanged', $c);
+    }
+
+    /**
+     * Whether the page makes sound: a video or audio element playing, Web
+     * Audio, from any of its frames, as a browser tab's speaker shows; it
+     * can stay true while the page is muted (mygo's IsAudible). WebKit's
+     * private _isPlayingAudio, false where it does not answer it, and once
+     * the page closed. audibleChanged tells its changes.
+     */
+    public function isAudible(): bool
+    {
+        return !$this->destroyed && $this->web->isAudible();
+    }
+
+    /**
+     * Mutes all the page's sound, or lets it play again, as a browser mutes
+     * a tab: its own media elements, Web Audio and its frames of other
+     * sites, without the page seeing its elements muted; it lasts as the
+     * page navigates (mygo's SetAudioMuted). WebKit's private
+     * _setPageMuted:, nothing where it does not answer it. WebKit's mute of
+     * the page's sound mutes the camera and the microphone together, so
+     * while only one of them is muted (setCaptureState), it mutes the
+     * other for a moment.
+     */
+    public function setAudioMuted(bool $muted): void
+    {
+        if (!$this->destroyed) { $this->web->setAudioMuted($muted); }
+    }
+
+    /** Whether the page is muted (setAudioMuted): false where WebKit cannot mute, and once the page closed (mygo's IsAudioMuted). */
+    public function isAudioMuted(): bool
+    {
+        return !$this->destroyed && $this->web->isAudioMuted();
+    }
+
+    /**
+     * Whether the page captures the camera, the microphone or the display,
+     * from any of its frames, and whether it is muted, as Safari's
+     * recording indicators show (mygo's CaptureState). The page asks for
+     * the devices first, which setPermissionHandler decides. WKWebView's
+     * cameraCaptureState and microphoneCaptureState, and WebKit's private
+     * _displayCaptureState (macOS 13); None where WebKit does not answer
+     * them, and once the page closed. captureStateChanged tells changes.
+     */
+    public function captureState(CaptureKind $kind): CaptureState
+    {
+        return $this->destroyed ? CaptureState::None : CaptureState::from($this->web->captureState($kind->value));
+    }
+
+    /**
+     * Mutes the page's capture of a kind of device (Muted), unmutes it
+     * (Active) or stops it (None), as the mute button of a call app,
+     * without the page's help: a muted capture keeps the page's tracks,
+     * which get silence or black frames, and a stopped one ends them. The
+     * page cannot unmute it itself: asking for the device again goes to
+     * setPermissionHandler. Nothing while the page captures no such
+     * device. The change shows in captureState() a moment later, once the
+     * page took it (mygo's SetCaptureState).
+     */
+    public function setCaptureState(CaptureKind $kind, CaptureState $state): void
+    {
+        if (!$this->destroyed) { $this->web->setCaptureState($kind->value, $state->value); }
     }
 
     /** The ID of the page's web content process (WebKit's com.apple.WebKit.WebContent), 0 when WebKit does not tell it or runs none yet, or the page closed (mygo's ProcessID). WebKit may give a page another as it goes to another site or after its process crashed: ask again rather than keep it. */
@@ -537,6 +648,9 @@ final class Page
     private function message(string $raw): void
     {
         switch ($raw) {
+            case '{"t":"theme-color","v":""}':
+                $this->setThemeColor(null);
+                return;
             case '{"t":"dom-ready"}':
                 $this->domReady = true;
                 $held = $this->held;
@@ -558,6 +672,10 @@ final class Page
             case '{"t":"dblclick"}':
                 $this->window->pageDrag(2);
                 return;
+        }
+        if (str_starts_with($raw, '{"t":"theme-color","v":"#')) {
+            $this->setThemeColor(self::parseThemeColor((string)(json_decode($raw, true)['v'] ?? '')));
+            return;
         }
         $reply = Ipc::handle($raw, $this->secret, $this);
         if ($reply !== null) {
@@ -606,14 +724,35 @@ final class Page
                 }
             }
             $this->domReady = false;
+            $this->themeColorPending = true;
             $this->endDocument();
             $this->emit('didNavigate', $url);
         };
+        $w->onChange = function (string $key): void {
+            if ($key === '_isPlayingAudio') {
+                if (($a = $this->web->isAudible()) !== $this->audible) {
+                    $this->audible = $a;
+                    $this->emit('audibleChanged', $a);
+                }
+                return;
+            }
+            foreach (CaptureKind::cases() as $kind) {
+                $s = CaptureState::from($this->web->captureState($kind->value));
+                if ($s !== ($this->capture[$kind->value] ?? CaptureState::None)) {
+                    $this->capture[$kind->value] = $s;
+                    $this->emit('captureStateChanged', $kind, $s);
+                }
+            }
+        };
         $w->onFinish = function (): void {
+            if ($this->themeColorPending) { $this->setThemeColor(null); } // no bridge told one
             $this->emit('didFinishLoad');
             $this->window->pageReady($this); // pages without the bridge, as images, never tell their DOM is ready
         };
-        $w->onFail = fn(string $url, int $code, string $desc) => $this->emit('didFailLoad', new LoadError($url, $code, $desc));
+        $w->onFail = function (string $url, int $code, string $desc): void {
+            if ($this->themeColorPending) { $this->setThemeColor(null); }
+            $this->emit('didFailLoad', new LoadError($url, $code, $desc));
+        };
         $w->onGone = fn(string $reason) => $this->emit('renderProcessGone', $reason);
         $w->onTitle = function (string $title): void {
             if ($title === '') {

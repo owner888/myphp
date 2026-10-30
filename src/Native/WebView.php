@@ -38,6 +38,12 @@ final class WebView
     public ?Closure $onSchemeDownload = null;
     /** The page's <title> changed. @var ?Closure(string): void */
     public ?Closure $onTitle = null;
+    /** A property of the web view it observes changed: _isPlayingAudio, or a capture state's (CAPTURE_KEYS'). @var ?Closure(string): void */
+    public ?Closure $onChange = null;
+    /** @var list<string> the properties besides the title it observes, which WebKit answers */
+    private array $observed = [];
+    /** @var array<int, bool> the captures setCaptureState() muted, by kind, until they stop, which setAudioMuted() keeps apart for the camera and the microphone */
+    private array $captureMuted = [false, false, false];
     /** A navigation committed, at its URL. @var ?Closure(string): void */
     public ?Closure $onCommit = null;
     /** The page finished loading. @var ?Closure(): void */
@@ -162,6 +168,13 @@ final class WebView
         ObjC::msg('v:p', $self->ns, 'setUIDelegate:', self::$uiDelegate);
         ObjC::msg('v:L', $self->ns, 'setAutoresizingMask:', self::AUTORESIZE_WIDTH_HEIGHT);
         ObjC::msg('v:ppLp', $self->ns, 'addObserver:forKeyPath:options:context:', self::$navigationDelegate, ObjC::str('title'), 1, null); // NSKeyValueObservingOptionNew
+        // The page's sound and capture, which WebKit tells with willChangeValueForKey: and didChangeValueForKey:, as Safari's tabs hear.
+        foreach (['_isPlayingAudio', ...self::CAPTURE_KEYS] as $key) {
+            if (self::responds($self->ns, $key)) {
+                $self->observed[] = $key;
+                ObjC::msg('v:ppLp', $self->ns, 'addObserver:forKeyPath:options:context:', self::$navigationDelegate, ObjC::str($key), 0, null);
+            }
+        }
         self::$views[ObjC::addr($self->ns)] = $self;
         return $self;
     }
@@ -253,6 +266,75 @@ final class WebView
         if ($defaults !== null) { ObjC::msg('v:', $defaults, 'release'); }
     }
 
+    /** Whether the page makes sound, WebKit's private _isPlayingAudio; false when it does not answer it (mygo's IsAudible). */
+    public function isAudible(): bool
+    {
+        return self::responds($this->ns, '_isPlayingAudio') && ObjC::msg('b:', $this->ns, '_isPlayingAudio');
+    }
+
+    /** _WKMediaMutedState's bits that mute the page's sound and its camera and microphone together (WKWebViewPrivate.h). */
+    private const MUTED_AUDIO = 1, MUTED_CAPTURE = 2;
+
+    private function canMute(): bool
+    {
+        return self::responds($this->ns, '_mediaMutedState') && self::responds($this->ns, '_setPageMuted:');
+    }
+
+    /**
+     * Mutes the page's sound, or lets it play again, with WebKit's private
+     * _setPageMuted:, as Safari mutes a tab, the other bits of its state
+     * kept; nothing when WebKit does not answer it. One bit stands for the
+     * camera and the microphone: while only one of them is muted, the
+     * other is unmuted again after it, so that the muted one is never live
+     * between (mygo's SetAudioMuted).
+     */
+    public function setAudioMuted(bool $muted): void
+    {
+        if (!$this->canMute()) { return; }
+        $state = ObjC::msg('L:', $this->ns, '_mediaMutedState');
+        $state = $muted ? $state | self::MUTED_AUDIO : $state & ~self::MUTED_AUDIO;
+        ObjC::msg('v:L', $this->ns, '_setPageMuted:', $state);
+        [$camera, $mic] = [$this->captureMuted[0], $this->captureMuted[1]];
+        if (($state & self::MUTED_CAPTURE) !== 0 && $camera !== $mic) {
+            $this->changeCapture($camera ? 1 : 0, 1);
+        }
+    }
+
+    public function isAudioMuted(): bool
+    {
+        return $this->canMute() && (ObjC::msg('L:', $this->ns, '_mediaMutedState') & self::MUTED_AUDIO) !== 0;
+    }
+
+    /**
+     * WKWebView's properties of the page's capture of the camera and the
+     * microphone (macOS 12), and WebKit's private display capture (macOS
+     * 13), by kind, key-value observable; their setters, whose completion
+     * handler may be nil (mygo's captureKeys, captureSetters).
+     */
+    private const CAPTURE_KEYS = ['cameraCaptureState', 'microphoneCaptureState', '_displayCaptureState'];
+    private const CAPTURE_SETTERS = ['setCameraCaptureState:completionHandler:', 'setMicrophoneCaptureState:completionHandler:', '_setDisplayCaptureState:completionHandler:'];
+
+    /** The page's capture of $kind (MyPHP\CaptureKind's value): none (0), active (1) or muted (2); none when WebKit does not answer it. */
+    public function captureState(int $kind): int
+    {
+        return self::responds($this->ns, self::CAPTURE_KEYS[$kind]) ? ObjC::msg('l:', $this->ns, self::CAPTURE_KEYS[$kind]) : 0;
+    }
+
+    /** Changes the page's capture of $kind to $state while it captures such a device: WebKit would otherwise keep a mute set before (mygo's SetCaptureState). */
+    public function setCaptureState(int $kind, int $state): void
+    {
+        if ($this->captureState($kind) === 0) { return; }
+        $this->captureMuted[$kind] = $state === 2;
+        $this->changeCapture($kind, $state);
+    }
+
+    private function changeCapture(int $kind, int $state): void
+    {
+        if (self::responds($this->ns, self::CAPTURE_SETTERS[$kind])) {
+            ObjC::msg('v:lp', $this->ns, self::CAPTURE_SETTERS[$kind], $state, null);
+        }
+    }
+
     /** The page's web content process, from WebKit's private _webProcessIdentifier, 0 when it does not answer it or runs none yet (mygo's ProcessID). */
     public function processID(): int
     {
@@ -298,6 +380,8 @@ final class WebView
             return;
         }
         ObjC::msg('v:pp', $this->ns, 'removeObserver:forKeyPath:', self::$navigationDelegate, ObjC::str('title'));
+        foreach ($this->observed as $key) { ObjC::msg('v:pp', $this->ns, 'removeObserver:forKeyPath:', self::$navigationDelegate, ObjC::str($key)); }
+        $this->observed = [];
         ObjC::msg('v:p', $this->ucc, 'removeScriptMessageHandlerForName:', ObjC::str('myphp'));
         ObjC::msg('v:', $this->ucc, 'removeAllUserScripts');
         ObjC::msg('v:', $this->ns, 'stopLoading');
@@ -522,9 +606,15 @@ final class WebView
             }],
             'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
                 $view = self::$views[ObjC::addr($object)] ?? null;
-                if ($view?->onTitle !== null && ObjC::phpStr($keyPath) === 'title') {
+                $key = ObjC::phpStr($keyPath);
+                if ($view?->onTitle !== null && $key === 'title') {
                     $t = ObjC::msg('p:', $object, 'title');
                     ($view->onTitle)($t === null ? '' : ObjC::phpStr($t));
+                } elseif ($view !== null && in_array($key, $view->observed, true)) {
+                    if (($kind = array_search($key, self::CAPTURE_KEYS, true)) !== false && $view->captureState($kind) === 0) {
+                        $view->captureMuted[$kind] = false; // stopped: a later capture starts live
+                    }
+                    $view->onChange?->__invoke($key);
                 }
             }],
             'webView:didCommitNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {

@@ -6160,6 +6160,29 @@ succeeds are told of, an empty line is none.
   drawn per size; it is no asset catalog (`hasCatalog`), and one not
   starting with "icns" is refused. `myphp dev` still shows `icon`'s.
 
+## Pages: the theme color, sound and capture (v1.101)
+
+- mygo 9bf2ce4: `Page::themeColor()` ([0xRRGGBB, alpha] or null) and the
+  `themeColorChanged` event. The runtime (bridge.js) watches the head's
+  `<meta name="theme-color">`s with a MutationObserver and their media
+  with matchMedia, parses the content with a canvas as the engine does,
+  and tells `{"t":"theme-color","v":"#rrggbbaa"}` (or "" for none) as it
+  changes; before the DOM is ready only a color, so that going between
+  pages of one color changes nothing. A page without the runtime (an
+  image) has none once it loaded or failed (`themeColorPending`, from the
+  commit). tests: `src/Native/theme-color.test.ts` (bun), and the parse.
+- mygo 37f56f6: `Page::isAudible()` (WebKit's private `_isPlayingAudio`,
+  key-value observed: `audibleChanged`), `setAudioMuted()` and
+  `isAudioMuted()` (`_mediaMutedState`'s audio bit, `_setPageMuted:`), as
+  Safari mutes a tab.
+- mygo 95de2cd: `Page::captureState(CaptureKind)`, `setCaptureState()`
+  and `captureStateChanged`: WKWebView's `cameraCaptureState`,
+  `microphoneCaptureState` and the private `_displayCaptureState`,
+  observed, and their setters; a mute set while nothing is captured does
+  nothing, as WebKit would keep it. The page's mute mutes the camera and
+  the microphone together: while only one of them is muted, the other is
+  made live again after it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

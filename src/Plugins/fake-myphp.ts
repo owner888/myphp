@@ -68,7 +68,8 @@ export function fakeMyPHP(handlers: Record<string, Handler>): { calls: [string, 
     "__CONFIG__",
     JSON.stringify({ platform: "darwin", windowId: 1, version: "0.0.0-test", secret: "s", locale: "en", dir: "ltr" }),
   );
-  new Function("window", "document", "addEventListener", source)(win, { addEventListener() {}, createElement: () => ({ isConnected: false }) }, () => {});
+  new Function("window", "document", "addEventListener", "MutationObserver", "matchMedia", source)(win, { addEventListener() {}, createElement: () => ({ isConnected: false }) }, () => {},
+    class { observe() {} }, () => ({ matches: false, addEventListener() {} }));
   g.window = win;
   g.myphp = win.myphp; // in a page, window is the global object, where myphp-runtime finds it
   return { calls, posted, uninstall: () => { g.window = before; delete g.myphp; } };
