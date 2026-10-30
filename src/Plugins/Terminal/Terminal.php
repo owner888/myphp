@@ -475,6 +475,12 @@ final class Terminal
         $this->opts->copyOnSelect = $c;
     }
 
+    /** Changes how far the wheel and the touchpad scroll, as Options::$scrollMultiplier (mygo's SetScrollMultiplier). */
+    public function setScrollMultiplier(ScrollMultiplier $m): void
+    {
+        $this->opts->scrollMultiplier = $m;
+    }
+
     /** Changes the colors, as Options::$theme and $darkTheme. */
     public function setTheme(?Theme $theme, ?Theme $dark): void
     {

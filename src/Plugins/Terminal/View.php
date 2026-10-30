@@ -97,6 +97,8 @@ final class View implements TextInputClient
     public array $caretCell = [0, 0];
     /** The primary button selects; a press went to the program, which gets the release too. */
     public bool $selecting = false, $reporting = false;
+    /** A Shift-click extends the selection there was, from its anchor, as it drags (mygo's extending). */
+    public bool $extending = false;
     /** @var array{0: float, 1: float} */
     public array $pointer = [0.0, 0.0];
     /** @var ?array{0: int, 1: int, 2: int} the cells of the link Command is held over, [row, x0, x1) of the viewport, which a click opens and which shows underlined; null over none */

@@ -48,6 +48,8 @@ final class Options
         public bool $optionAsAlt = false,
         /** Copies what the pointer selects as the selection ends, and what Select All selects, as Ghostty's copy-on-select; Terminal::setCopyOnSelect changes it. */
         public CopyOnSelect $copyOnSelect = CopyOnSelect::CopyOnSelectNone,
+        /** Scales how far the wheel and the touchpad scroll, as Ghostty's mouse-scroll-multiplier (mygo's ScrollMultiplier); Terminal::setScrollMultiplier changes it. */
+        public ScrollMultiplier $scrollMultiplier = new ScrollMultiplier,
         /** Bind keys to actions over Terminal::defaultKeybinds(), as Ghostty's keybind option: a binding replaces the defaults of its key and modifiers, and one to ActionNone unbinds them. $noDefaultKeybinds starts from none. */
         public array $keybinds = [],
         public bool $noDefaultKeybinds = false,

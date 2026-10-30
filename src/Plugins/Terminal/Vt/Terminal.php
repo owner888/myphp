@@ -23,7 +23,7 @@ final class Terminal
         OPT_CLIPBOARD_WRITE = 26, OPT_SCROLLBACK_MAX_BYTES = 27, OPT_DESKTOP_NOTIFICATION = 29, OPT_PROGRESS_REPORT = 30,
         OPT_MODE_DEFAULT = 33, OPT_MODE = 34, OPT_TERMINFO_NAME = 37, OPT_CLIPBOARD_READ = 38, OPT_RESIZE_PULL_BACK = 40, OPT_RENDER_HOLD = 41, OPT_SEMANTIC_PROMPT = 42;
     private const DATA_COLS = 1, DATA_ROWS = 2, DATA_CURSOR_X = 3, DATA_CURSOR_Y = 4, DATA_ACTIVE_SCREEN = 6, DATA_SCROLLBAR = 9,
-        DATA_MOUSE_TRACKING = 11, DATA_TITLE = 12, DATA_PWD = 13, DATA_VIEWPORT_ACTIVE = 32, DATA_MODE = 37, DATA_MOUSE_SHAPE = 41;
+        DATA_MOUSE_TRACKING = 11, DATA_TITLE = 12, DATA_PWD = 13, DATA_SELECTION = 31, DATA_VIEWPORT_ACTIVE = 32, DATA_MODE = 37, DATA_MOUSE_SHAPE = 41;
 
     /** The steps of a command a shell reports with OSC 133 (GhosttySemanticPromptKind): its prompt drawn, its input started, its output started (it runs), it ended. */
     public const PROMPT_START = 1, INPUT_START = 2, OUTPUT_START = 3, COMMAND_END = 4;
@@ -374,6 +374,22 @@ final class Terminal
 
     /** Selects $s, a GhosttySelection, or nothing. */
     public function setSelection(?CData $s): void { $this->setTo(self::OPT_SELECTION, $s); }
+
+    /**
+     * Moves the selection's end to $ref, keeping its anchor, also of a
+     * selection made backwards; false with no selection (mygo's
+     * ExtendSelection). $ref is of a fresh snapshot: references do not
+     * outlive output, scrolling or resizing.
+     */
+    public function extendSelection(CData $ref): bool
+    {
+        $f = Lib::ffi();
+        $s = $f->new('GhosttySelection');
+        $s->size = FFI::sizeof($s);
+        if ($f->ghostty_terminal_get($this->h, self::DATA_SELECTION, FFI::addr($s)) !== Lib::SUCCESS) { return false; }
+        [$s->end, $s->rectangle] = [$ref, false];
+        return $f->ghostty_terminal_set($this->h, self::OPT_SELECTION, FFI::addr($s)) === Lib::SUCCESS;
+    }
 
     /** A selection of everything, scrollback included, or null. */
     public function selectAll(): ?CData

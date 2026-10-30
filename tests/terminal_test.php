@@ -1284,3 +1284,94 @@ TermClock::install();
     same(\MyPHP\UI\Cursor::Text, $tt->node->cursor, "scroll bar: none over a full-screen program's edge");
     $term->close();
 })();
+
+(function () {
+    // Shift-click extends the selection there is from its anchor, across lines, shrinking it too (mygo's TestShiftClickExtendsSelection, TestShiftClickKeepsSelectionAnchor).
+    $select = function (TermTester $tt, string $mode): void {
+        [$x, $y] = $tt->cell(0, 0);
+        if ($mode === 'reverse') {
+            [$x, $y] = $tt->cell(4, 1); $tt->press($x + 2, $y);
+            [$x, $y] = $tt->cell(0, 1); $tt->move($x - 2, $y); $tt->release($x - 2, $y);
+        } elseif ($mode === 'word' || $mode === 'line') {
+            for ($i = 1, $n = $mode === 'word' ? 2 : 3; $i <= $n; $i++) { $tt->click($x, $y, 0, $i); }
+        } else {
+            $tt->press($x - 2, $y);
+            [$x, $y] = $tt->cell(4, 0); $tt->move($x + 2, $y); $tt->release($x + 2, $y);
+        }
+    };
+    $term = Terminal::new(new Options(conn: new TermPipe, copyOnSelect: CopyOnSelect::CopyOnSelectClipboard));
+    $term->feed("hello world\r\nsecond line\r\nthird line");
+    $tt = new TermTester($term);
+    $select($tt, 'drag');
+    same('hello', $tt->clipboard(), 'Shift-click: the selection first');
+    foreach ([[5, 1, "hello world\nsecond"], [9, 2, "hello world\nsecond line\nthird line"], [2, 0, 'hel']] as [$col, $row, $want]) {
+        [$x, $y] = $tt->cell($col, $row);
+        $tt->click($x, $y, Key::SHIFT);
+        same($want, $tt->clipboard(), "Shift-click at ($col, $row) copies");
+        $tt->setClipboard('sentinel');
+        $tt->command('copy');
+        same($want, $tt->clipboard(), "Shift-click at ($col, $row): Copy");
+    }
+    $term->close();
+    foreach (['reverse', 'word', 'line', 'copy off', 'output', 'mouse tracking'] as $mode) {
+        $term = Terminal::new(new Options(conn: new TermPipe));
+        $term->feed("hello world\r\nsecond line\r\nthird line");
+        $tt = new TermTester($term);
+        $select($tt, $mode);
+        if ($mode === 'output') { $term->feed("\r\nmore output"); $tt->frame(); }
+        if ($mode === 'mouse tracking') { $term->feed("\x1b[?1000h\x1b[?1006h"); $tt->frame(); }
+        [$x, $y] = $mode === 'reverse' ? $tt->cell(0, 0) : $tt->cell(5, 1);
+        $tt->setClipboard('untouched');
+        $tt->click($x, $y, Key::SHIFT);
+        same('untouched', $tt->clipboard(), "Shift-click, $mode: nothing copied, copy on select off");
+        $tt->command('copy');
+        same($mode === 'reverse' ? "hello world\nsecon" : "hello world\nsecond", $tt->clipboard(), "Shift-click, $mode: extended from the anchor");
+        $term->feed("\x1b[?1000l\x1b[?1006l"); $tt->frame();
+        // A plain click clears the selection: a Shift-click then revives none.
+        [$x, $y] = $tt->cell(3, 2); $tt->click($x, $y);
+        [$x, $y] = $tt->cell(8, 2); $tt->click($x, $y, Key::SHIFT);
+        $tt->setClipboard('untouched');
+        $tt->command('copy');
+        same('untouched', $tt->clipboard(), "Shift-click, $mode: no cleared selection revived");
+        $term->close();
+    }
+    // A Shift-click held and dragged past the bottom scrolls, from the anchor (mygo's TestShiftClickDragAutoscroll).
+    $term = Terminal::new(new Options(conn: new TermPipe, copyOnSelect: CopyOnSelect::CopyOnSelectClipboard));
+    $tt = new TermTester($term);
+    $lines = '';
+    for ($i = 0; $i < 40; $i++) { $lines .= sprintf("row%02d\r\n", $i); }
+    $term->feed($lines);
+    $tt->frame();
+    $term->term->scrollBy(-1000);
+    $tt->frame();
+    [$x, $y] = $tt->cell(0, 0); $tt->press($x - 2, $y);
+    [$x, $y] = $tt->cell(4, 0); $tt->move($x + 2, $y); $tt->release($x + 2, $y);
+    same('row00', $tt->clipboard(), 'Shift-drag: the selection first');
+    [$x, $y] = $tt->cell(4, 1);
+    $tt->press($x, $y, Key::SHIFT);
+    $tt->move($x, 240);
+    for ($i = 0; $i < 6; $i++) { usleep(30000); $tt->frame(); }
+    $tt->release($x, 240);
+    $got = $tt->clipboard();
+    check(str_starts_with($got, "row00\nrow01\n") && str_contains($got, sprintf('row%02d', $term->v->rows)), 'Shift-drag: scrolled on from the anchor: ' . json_encode($got));
+    check(!$term->v->selecting && !$term->v->ticking, 'Shift-drag: released, done');
+    $term->close();
+})();
+
+(function () {
+    // The scroll multiplier: the rows a notch scrolls, a touchpad's distance scaled, changed in a running terminal (mygo's TestScrollMultiplier, TestScrollMultiplierRows).
+    $seen = [];
+    $term = Terminal::new(new Options(conn: new TermPipe, scrollMultiplier: new \MyPHP\Plugins\Terminal\ScrollMultiplier(discrete: 1), onScroll: function (int $rows) use (&$seen): bool { $seen[] = $rows; return true; }));
+    $tt = new TermTester($term);
+    $ch = $term->v->cellH / $term->v->scale;
+    $tt->scroll(100, 100, 1); $tt->scroll(100, 100, -1);
+    $term->setScrollMultiplier(new \MyPHP\Plugins\Terminal\ScrollMultiplier(precision: 0.5, discrete: 6));
+    $tt->scroll(100, 100, 1);
+    $tt->scroll(100, 100, 4 * $ch, 0, true);
+    same([1, -1, 6, 2], $seen, 'scroll multiplier: a notch a row, then six, a touchpad at half');
+    $M = \MyPHP\Plugins\Terminal\ScrollMultiplier::class;
+    foreach ([[new $M, 40, false, 12.0], [new $M, 20, true, 1.0], [new $M(discrete: 1.5), 40, false, 6.0], [new $M(precision: 0.5), 40, true, 1.0], [new $M(precision: 2), 40, false, 12.0]] as [$m, $dy, $precise, $want]) {
+        same($want, $m->rows($dy, 20, $precise, 10.0), 'scroll multiplier rows: ' . json_encode([$m, $dy, $precise]));
+    }
+    $term->close();
+})();

@@ -6103,6 +6103,21 @@ succeeds are told of, an empty line is none.
   light, black's tone in light mode, black's and white's in dark mode,
   the renderer choosing light or dark as before.
 
+## The terminal: Shift-click extends a selection, the scroll multiplier (v1.98)
+
+- mygo 3407c87: a Shift-click moves the end of the selection there is to
+  the cell, keeping its anchor, also of one made backwards, by words or
+  lines (`Vt\Terminal::extendSelection`: the selection read with
+  `GHOSTTY_TERMINAL_DATA_SELECTION`, its end set); dragged on, it follows
+  the pointer, scrolling past the top or the bottom (`View::$extending`,
+  `ViewInput::extendScroll`). With no selection, as after a plain click
+  cleared it, the click selects as ever; Shift over a program taking the
+  mouse selects too, as before.
+- mygo cbee0b2: `Options::$scrollMultiplier` (`ScrollMultiplier`:
+  `$discrete`, the rows a notch scrolls, 3 by default; `$precision`, a
+  touchpad's distance scaled, 1 by default), as Ghostty's
+  mouse-scroll-multiplier; `Terminal::setScrollMultiplier()` changes it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

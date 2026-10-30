@@ -402,6 +402,11 @@ trait ViewInput
                     return false;
                 }
                 $this->selecting = true;
+                $this->extending = ($ev->mods & Key::SHIFT) !== 0 && $term->extendSelection($ref);
+                if ($this->extending) {
+                    $this->gesture->reset($term);
+                    return true;
+                }
                 $term->setSelection($this->gesture->press($term, $ref, $px, $py, hrtime(true)));
                 return true;
             case InputEvent::POINTER_MOVE:
@@ -410,6 +415,11 @@ trait ViewInput
                 }
                 $ref = $term->cellAt($col, $row);
                 if ($ref === null) {
+                    return true;
+                }
+                if ($this->extending) {
+                    $term->extendSelection($ref);
+                    $this->ticking = $this->extendScroll() !== 0;
                     return true;
                 }
                 if (($s = $this->gesture->drag($term, $ref, $px, $py, $this->geometry(), ($ev->mods & Key::OPTION) !== 0)) !== null) {
@@ -422,7 +432,11 @@ trait ViewInput
                     return false;
                 }
                 $this->selecting = $this->ticking = false;
-                $this->gesture->release($term, $term->cellAt($col, $row));
+                if ($this->extending) {
+                    $this->extending = false;
+                } else {
+                    $this->gesture->release($term, $term->cellAt($col, $row));
+                }
                 if ($t->opts->copyOnSelect === CopyOnSelect::CopyOnSelectClipboard && ($text = $term->selectionText()) !== null) {
                     $this->copying = $text;
                 }
@@ -544,16 +558,27 @@ trait ViewInput
     private function autoscroll(): void
     {
         $term = $this->t->term;
-        $dir = $this->gesture->autoscroll($term);
+        $dir = $this->extending ? $this->extendScroll() : $this->gesture->autoscroll($term);
         if ($dir === 0 || !$this->selecting) {
             $this->ticking = false;
             return;
         }
         $term->scrollBy($dir);
         [$col, $row] = $this->cellAt($this->pointer[0], $this->pointer[1]);
+        if ($this->extending) {
+            if (($ref = $term->cellAt($col, $row)) !== null) { $term->extendSelection($ref); }
+            return;
+        }
         if (($s = $this->gesture->tick($term, $col, $row, $this->pointer[0] * $this->scale, $this->pointer[1] * $this->scale, $this->geometry(), false)) !== null) {
             $term->setSelection($s);
         }
+    }
+
+    /** Which way a Shift-click drag past the top (-1) or the bottom (1) scrolls, or 0 (mygo's selectionScrollDirection). */
+    private function extendScroll(): int
+    {
+        $y = $this->pointer[1] * $this->scale;
+        return $y < $this->oy ? -1 : ($y >= $this->oy + $this->rows * $this->cellH ? 1 : 0);
     }
 
     /** Reports the pointer to the program. */
@@ -602,11 +627,7 @@ trait ViewInput
             return true;
         }
         $ch = $this->cellH / $this->scale;
-        $dy = $ev->dy;
-        if (!$ev->precise) {
-            $dy = $dy / self::WHEEL_LINE * 3 * $ch; // a notch scrolls three rows
-        }
-        $this->scrolled += $dy;
+        $this->scrolled += $t->opts->scrollMultiplier->rows($ev->dy, $ch, $ev->precise, self::WHEEL_LINE) * $ch;
         $rows = (int)($this->scrolled / $ch);
         $this->scrolled -= $rows * $ch;
         if ($rows === 0) {
