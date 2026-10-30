@@ -21,6 +21,8 @@ final class ProtocolRequest
         public readonly string $body = '',
         /** The window whose page asked, null for one that is gone (mygo's RemoteAddr "mygo:<id>"). */
         public readonly ?Window $window = null,
+        /** The page that asked, a window's or a web view's (mygo's CallerPage of the request's context): how a page, untrusted ones too (PageOptions::$untrusted), speaks to the app. */
+        public readonly ?Page $page = null,
     ) {
         foreach ($headers as $k => $v) {
             $this->lower[strtolower((string)$k)] = $v;

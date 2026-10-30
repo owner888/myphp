@@ -6388,6 +6388,89 @@ succeeds are told of, an empty line is none.
   64 KiB pieces, the fiber waiting while it has nothing yet) share one sink
   (`Http::save`): the size, the SHA-256, the progress.
 
+## Untrusted pages (v1.112)
+
+- mygo a9b1c1a: `PageOptions::$untrusted` makes a page someone else's
+  whatever its URL, for a plugin's UI or a preview of user HTML served from
+  a scheme: `Page::isTrusted` and `trusts` are false (so `trustedOrigins`
+  no longer count, and permissions and the schemes' CORS treat it as any
+  foreign page). `Page::message` drops its messages above 4 KiB before
+  decoding; `Ipc::handle` rejects its calls, `myphp:window` ones too; its
+  drag regions do nothing; `Event::emit` and `Event::broadcast` leave it
+  out (`Event::emitPage` reaches it). Without the app's handlers it opens
+  no window nor the browser, downloads nothing (scheme downloads too), and
+  navigates its main frame no further than the origin of its committed
+  page (`Page::origin`, a blob:'s its maker's).
+- `ProtocolRequest::$page` is the page that made a scheme's request
+  (mygo's `CallerPage` of the request's context), the channel of untrusted
+  pages to the app.
+
+## Pages' videos in picture in picture (v1.112)
+
+- mygo 10c5033: `PageOptions::$pictureInPicture` sets WebKit's private
+  `_setAllowsPictureInPictureMediaPlayback:` (set either way where WebKit
+  answers it, as window.open() hands over the opener's configuration):
+  the button of a video's controls, its context menu's item and
+  `requestPictureInPicture()`. `Page::togglePictureInPicture` calls
+  `-[WKWebView _togglePictureInPicture]` when `_canTogglePictureInPicture`
+  says it can (a Mac with a Touch Bar), else evaluates the script that
+  moves the video playing, else the largest, of the document, as a user's
+  gesture (or `exitPictureInPicture()` for one out).
+- `Page::isPictureInPictureActive` is `_isPictureInPictureActive` (its
+  media controls' alone) or what the bridge last told (`cfg.pip`:
+  `{"t":"pip","v"}` at `pageshow` and as a video goes in or out), where
+  mygo asks the page's `document.pictureInPictureElement` at once: the same
+  answer, without an asynchronous call.
+- A main-frame navigation the page lets go turns WebKit's back/forward
+  cache off (`_setUsesPageCache:`) while the page leaves with a video out,
+  as WebKit restores such a page believing its video still out
+  (`NativeWebView::leavingPage`), and on again once one leaves without.
+
+## Sessions: website data stores chosen per page (v1.112)
+
+- mygo 2c51534: `PageOptions::$session` puts a page in a `Session`'s
+  WKWebsiteDataStore (`setWebsiteDataStore:` on its configuration; a
+  window window.open opens keeps its opener's configuration, and store).
+  `Session::newSession($name)` is the persistent session of a name,
+  `+dataStoreForIdentifier:` of a version 8 UUID made of the name
+  (`Session::id`, the first 16 bytes of SHA-256 of "myphp session
+  <name>") on macOS 14, else `+nonPersistentDataStore` kept until the app
+  quits, with a warning; `Session::newEphemeralSession()` is
+  `+nonPersistentDataStore`, released with the last page using it
+  (`attach`, `detach` from `Page::destroy`). `Session::defaultSession()`
+  is the default store, whose cookies stay `Cookies`'.
+- `Session::$cookies` is a `CookiesModule` (`list`, `set`, `delete`,
+  `clear`) on the session's store; the static `Cookies` calls the default
+  session's. `Session::clearData($types)` is `removeDataOfTypes:` of the
+  `SiteData` bits' WKWebsiteDataTypes this WebKit has (looked up with
+  dlsym), `allWebsiteDataTypes` for `SiteData::ALL`.
+
+## A page's context menu (v1.112)
+
+- mygo 2443e26: a page's `contextMenu` listeners (`Page::on`, mygo's
+  `OnContextMenu`) hear a `ContextMenuEvent` as WebKit's menu is about to
+  open: `MyPHPWebView`'s `willOpenMenu:withEvent:` (after super) hands the
+  NSMenu, when it is WebKit's (an item does `forwardContextMenuAction:` or
+  bears a `WKMenuItemIdentifier`), to `Native\ContextMenus::show`. It
+  describes the items as `MenuItem`s, each retained and numbered
+  (`MenuItem::$webKit`), named by `ContextMenus::name`: the shared names of
+  `ContextMenuEvent`'s constants for WebKit's identifiers, else the
+  identifier, else WebKit's tag or AppKit's action.
+- What was clicked is the page's: the bridge's capturing `contextmenu`
+  listener posts `{"t":"context-menu",x,y,l,lt,i,m,s,e}` just before the
+  menu opens, which counts when it lies where the pointer opened the menu,
+  at the page's zoom (`ContextMenus::recordOf`).
+- A menu the listeners left as it was (`ContextMenus::same`) is WebKit's;
+  otherwise the NSMenu is emptied and filled again: WebKit's items, each
+  once (`onceEach`), renamed, enabled, checked as the listeners set them,
+  a submenu filled again only when changed (keeping Services as AppKit
+  fills it), and the app's items built as its other menus'
+  (`Menu::buildItem`); separators tidied. Prevented, or a null menu, leaves
+  it empty, and an empty menu's tracking is cancelled on the next turn, as
+  WebKit pops up no other until it closes. A `Menu` made for the event is
+  `transient`: changing it re-installs no menus. `Menu::remove` (mygo's
+  `Remove`) removes items by id, from submenus too.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

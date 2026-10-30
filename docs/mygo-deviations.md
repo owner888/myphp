@@ -2255,3 +2255,29 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: the proxy of the URL a request starts at serves its redirects.
   - Why: curl follows redirects itself, on the handle's proxy.
 
+## Sessions and picture in picture (v1.112)
+
+- **The constructors of sessions**
+  - mygo: package functions `NewSession`, `NewEphemeralSession` and
+    `DefaultSession`, and `SiteData` constants.
+  - myphp: static methods of `Session` of those names in lowerCamel
+    (`Session::newSession`, `newEphemeralSession`, `defaultSession`), and
+    `SiteData::COOKIES`….
+  - Why: PHP has no package functions to autoload.
+- **Cookies**
+  - mygo: `Cookies` is a `CookiesModule` value, as `Session.Cookies` is.
+  - myphp: `Cookies` stays a class of static methods, which call the
+    default session's `CookiesModule`.
+  - Why: apps already call `Cookies::list()`.
+- **Picture in picture's state**
+  - mygo: `IsPictureInPictureActive` asks the page's
+    `document.pictureInPictureElement` when WebKit's flag says no.
+  - myphp: what the bridge last told of it (at `pageshow`, and as a video
+    goes in or out).
+  - Why: the same answer without waiting for an asynchronous call.
+- **Context menus**
+  - mygo: `Page.OnContextMenu`, and package constants `ContextMenuReload`….
+  - myphp: `Page::on('contextMenu', …)`, as the page's other events, and
+    `ContextMenuEvent::RELOAD`….
+  - Why: myphp's pages take their listeners by on(); PHP has no package
+    constants to autoload.

@@ -8,7 +8,8 @@ use MyPHP\{App, Cookie};
 use RuntimeException;
 
 /**
- * The default website data store's cookies (mygo's darwin cookies.go):
+ * The cookies of a website data store, a session's (mygo's darwin
+ * cookies.go and session.go):
  * WKHTTPCookieStore, whose completion handlers come on the main thread;
  * each call turns the run loop until its handler ran (App::wait).
  *
@@ -16,11 +17,46 @@ use RuntimeException;
  */
 final class CookieStore
 {
-    private static function store()
+    /** The cookie store of WKWebsiteDataStore $data. */
+    private static function store($data)
     {
-        App::running() || throw new RuntimeException('myphp: cookies need the running app (call them from App::whenReady)');
-        $data = ObjC::msg('p:', ObjC::cls('WKWebsiteDataStore'), 'defaultDataStore');
         return ObjC::msg('p:', $data, 'httpCookieStore');
+    }
+
+    /** The default WKWebsiteDataStore, the default session's. */
+    public static function defaultData()
+    {
+        App::running() || throw new RuntimeException('myphp: sessions and cookies need the running app (call them from App::whenReady)');
+        return ObjC::msg('p:', ObjC::cls('WKWebsiteDataStore'), 'defaultDataStore');
+    }
+
+    /**
+     * Removes the data of $types (SiteData bits) from WKWebsiteDataStore
+     * $data, whatever its age, and waits until WebKit is done (mygo's
+     * removeData): the WKWebsiteDataTypes of each kind this WebKit has.
+     */
+    public static function removeData($data, int $types): void
+    {
+        App::running() || throw new RuntimeException('myphp: sessions need the running app (call them from App::whenReady)');
+        $cls = ObjC::cls('WKWebsiteDataStore');
+        if (($types & \MyPHP\SiteData::ALL) === \MyPHP\SiteData::ALL) {
+            $set = ObjC::msg('p:', $cls, 'allWebsiteDataTypes');
+        } else {
+            $set = ObjC::msg('p:', ObjC::cls('NSMutableSet'), 'set');
+            $lib = ObjC::$c->dlopen('/System/Library/Frameworks/WebKit.framework/WebKit', 2);
+            $kinds = [\MyPHP\SiteData::COOKIES => ['WKWebsiteDataTypeCookies'], \MyPHP\SiteData::LOCAL_STORAGE => ['WKWebsiteDataTypeLocalStorage', 'WKWebsiteDataTypeSessionStorage'],
+                \MyPHP\SiteData::INDEXED_DB => ['WKWebsiteDataTypeIndexedDBDatabases', 'WKWebsiteDataTypeWebSQLDatabases'],
+                \MyPHP\SiteData::CACHES => ['WKWebsiteDataTypeDiskCache', 'WKWebsiteDataTypeMemoryCache', 'WKWebsiteDataTypeOfflineWebApplicationCache', 'WKWebsiteDataTypeFetchCache'],
+                \MyPHP\SiteData::SERVICE_WORKERS => ['WKWebsiteDataTypeServiceWorkerRegistrations']];
+            foreach ($kinds as $bit => $names) {
+                if (($types & $bit) === 0) { continue; }
+                foreach ($names as $n) {
+                    $sym = ObjC::$c->dlsym($lib, $n); // the constant, an NSString*, where this WebKit has it
+                    if ($sym !== null) { ObjC::msg('v:p', $set, 'addObject:', ObjC::import(ObjC::$c->cast('void*[1]', $sym)[0])); }
+                }
+            }
+        }
+        self::await('', fn($block) => ObjC::msg('v:ppp', $data, 'removeDataOfTypes:modifiedSince:completionHandler:', $set, ObjC::msg('p:', ObjC::cls('NSDate'), 'distantPast'), $block));
     }
 
     /** Runs $start with a block's arguments' receiver, and waits until the block was called. @return list<mixed> what the block got */
@@ -60,17 +96,17 @@ final class CookieStore
             self::str(ObjC::msg('p:', $c, 'path')), $expires, ObjC::msg('b:', $c, 'isSecure'), ObjC::msg('b:', $c, 'isHTTPOnly'), $same === '' ? Cookie::SAME_SITE_NONE : $same);
     }
 
-    /** @return list<Cookie> every cookie */
-    public static function all(): array
+    /** @return list<Cookie> every cookie of WKWebsiteDataStore $data */
+    public static function all($data): array
     {
-        $store = self::store();
+        $store = self::store($data);
         [$array] = self::await('p', fn($block) => ObjC::msg('v:p', $store, 'getAllCookies:', $block));
         return array_map(self::read(...), self::items($array));
     }
 
-    public static function set(Cookie $c): void
+    public static function set(Cookie $c, $data): void
     {
-        $store = self::store();
+        $store = self::store($data);
         $host = ltrim($c->domain, '.');
         if (str_contains($host, ':')) {
             $host = "[$host]";
@@ -110,9 +146,9 @@ final class CookieStore
         self::await('', fn($block) => ObjC::msg('v:pp', $store, 'setCookie:completionHandler:', $native, $block));
     }
 
-    public static function delete(string $name, string $domain, string $path): void
+    public static function delete(string $name, string $domain, string $path, $data): void
     {
-        $store = self::store();
+        $store = self::store($data);
         [$array] = self::await('p', fn($block) => ObjC::msg('v:p', $store, 'getAllCookies:', $block));
         $match = null;
         foreach (self::items($array) as $c) {
@@ -128,11 +164,9 @@ final class CookieStore
         }
     }
 
-    /** Removes the cookies of the default data store, its other data kept. */
-    public static function clear(): void
+    /** Removes the cookies of WKWebsiteDataStore $data, its other data kept. */
+    public static function clear($data): void
     {
-        self::store();
-        $data = ObjC::msg('p:', ObjC::cls('WKWebsiteDataStore'), 'defaultDataStore');
         $types = ObjC::msg('p:p', ObjC::cls('NSSet'), 'setWithObject:', ObjC::str('WKWebsiteDataTypeCookies'));
         self::await('', fn($block) => ObjC::msg('v:ppp', $data, 'removeDataOfTypes:modifiedSince:completionHandler:', $types, ObjC::msg('p:', ObjC::cls('NSDate'), 'distantPast'), $block));
     }

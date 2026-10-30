@@ -76,6 +76,8 @@ final class Menu
     private static $target = null;
 
     public $native = null;
+    /** @internal the menu of a ContextMenuEvent, which shows once as it is when the listeners return: changing it re-installs no menus */
+    public bool $transient = false;
 
     /** @param MenuItem[] $items */
     public function __construct(public array $items = [])
@@ -101,7 +103,7 @@ final class Menu
             $it->parent = $this;
             $this->items[] = $it;
         }
-        App::refreshMenus();
+        $this->refresh();
     }
 
     /** Adds $item at $pos, kept within the menu (mygo's Insert). */
@@ -111,7 +113,39 @@ final class Menu
         $items = array_values($this->items);
         array_splice($items, min(max($pos, 0), count($items)), 0, [$item]);
         $this->items = $items;
-        App::refreshMenus();
+        $this->refresh();
+    }
+
+    /**
+     * Removes the items with these ids from the menu and its submenus, as
+     * the web view's items of a page's context menu (mygo's Remove):
+     *
+     *     $e->menu->remove(ContextMenuEvent::RELOAD, ContextMenuEvent::INSPECT);
+     */
+    public function remove(string ...$ids): void
+    {
+        $this->items = self::without(array_values($this->items), $ids);
+        $this->refresh();
+    }
+
+    /** @param list<MenuItem> $items @param list<string> $ids @return list<MenuItem> */
+    private static function without(array $items, array $ids): array
+    {
+        $kept = [];
+        foreach ($items as $it) {
+            if ($it->id !== '' && in_array($it->id, $ids, true)) { continue; }
+            $it->submenu = self::without(array_values($it->submenu), $ids);
+            $kept[] = $it;
+        }
+        return $kept;
+    }
+
+    /** Re-installs the menus in use after the items changed, but for a context menu's, which shows once. */
+    private function refresh(): void
+    {
+        if (!$this->transient) {
+            App::refreshMenus();
+        }
     }
 
     public function itemById(string $id): ?MenuItem
@@ -168,7 +202,8 @@ final class Menu
         return $this->native;
     }
 
-    private static function buildItem(MenuItem $it)
+    /** @internal Native\ContextMenus: the NSMenuItem of $it, as the menu bar's and pop-up menus' */
+    public static function buildItem(MenuItem $it)
     {
         if ($it->type === MenuItem::SEPARATOR) {
             $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');

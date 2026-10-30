@@ -23,6 +23,8 @@ final class MenuItem
     /** Set when the item is built; the native NSMenuItem. */
     public $native = null;
     public int $uid = 0;
+    /** @internal the number of a web view's own item of a page's context menu (ContextMenuEvent), 0 for the app's items */
+    public int $webKit = 0;
     /** @internal what holds the item in its list: a Menu, or the item whose submenu it is */
     public Menu|MenuItem|null $parent = null;
 

@@ -116,6 +116,9 @@ final class Ipc
         if (!hash_equals($secret, (string)($msg['k'] ?? ''))) {
             return $t === 'call' ? ['t' => 'reply', 'id' => $id, 'k' => $secret, 'ok' => false, 'e' => 'rejected: wrong secret'] : null;
         }
+        if ($t === 'call' && $page->isUntrusted()) {
+            return self::reply($id, $secret, null, 'this page is untrusted (PageOptions::$untrusted) and may not call PHP methods');
+        }
         if ($t === 'call' && !$page->isTrusted()) {
             return self::reply($id, $secret, null, 'this page is not allowed to call PHP methods (see PageOptions::$trustedOrigins)');
         }

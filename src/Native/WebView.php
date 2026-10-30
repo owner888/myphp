@@ -24,6 +24,8 @@ final class WebView
     public $ns;
     /** Asked whether the main frame may go to a URL: (url, userInitiated, a reload, one the app started) → allowed. @var ?Closure(string, bool, bool, bool): bool */
     public ?Closure $onNavigate = null;
+    /** WebKit's context menu is about to open over the view: fn(NSMenu, NSEvent) changes it (ContextMenus::show). */
+    public ?Closure $onContextMenu = null;
     /** Loads the app starts, whose navigations onNavigate is told it started. */
     private int $loads = 0;
     /** Asked whether the page may use the camera or the microphone: (list of "camera", "microphone", the page's origin) → granted. @var ?Closure(list<string>, string): bool */
@@ -89,6 +91,8 @@ final class WebView
 
     /** Whether the page has its web inspector (WebView::create's $devTools). */
     private bool $devTools = false;
+    /** Whether WebKit's back/forward cache is off, as the page left with a video in picture in picture (leavingPage). */
+    private bool $pageCacheOff = false;
 
     /** WebKit's inspector of the page, which WKWebView keeps to itself (mygo's darwin inspector), or null without developer tools. */
     private function inspector()
@@ -126,7 +130,7 @@ final class WebView
      * running while hidden (PageOptions::$backgroundThrottling).
      * @param list<string|array{0: string, 1: bool}> $scripts a script, or one and whether it goes in every frame
      */
-    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true): self
+    public static function create($frame, array $scripts, Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): self
     {
         self::define();
         $self = new self($onMessage);
@@ -137,6 +141,9 @@ final class WebView
             $wk = ObjC::msg('p:', ObjC::alloc('WKWebViewConfiguration'), 'init');
             foreach (\MyPHP\Protocol::schemes() as $scheme) { // the schemes PHP serves: handled before the view exists, as WebKit takes them only then
                 ObjC::msg('v:pp', $wk, 'setURLSchemeHandler:forURLScheme:', self::$schemeHandler, ObjC::str($scheme));
+            }
+            if ($dataStore !== null) { // a session's (Session); window.open() hands over the opener's configuration, and its store with it
+                ObjC::msg('v:p', $wk, 'setWebsiteDataStore:', $dataStore);
             }
         }
         self::setAutoplay($wk, $autoplay, $configuration !== null);
@@ -150,6 +157,11 @@ final class WebView
         ObjC::msg('v:pp', $prefs, 'setValue:forKey:', $yes(true), ObjC::str('allowFileAccessFromFileURLs'));
         if (ObjC::msg('b:p', $prefs, 'respondsToSelector:', ObjC::sel('setElementFullscreenEnabled:'))) {
             ObjC::msg('v:b', $prefs, 'setElementFullscreenEnabled:', true);
+        }
+        // Picture in picture, which WKWebView keeps to Safari (PageOptions::$pictureInPicture): the button of videos' controls, their
+        // context menu's item and requestPictureInPicture(); set either way, as window.open() hands over the opener's configuration.
+        if (self::responds($prefs, '_setAllowsPictureInPictureMediaPlayback:')) {
+            ObjC::msg('v:b', $prefs, '_setAllowsPictureInPictureMediaPlayback:', $pip);
         }
         $self->ucc = ObjC::msg('p:', ObjC::alloc('WKUserContentController'), 'init');
         ObjC::msg('v:pp', $self->ucc, 'addScriptMessageHandler:name:', ObjC::msg('p:', ObjC::alloc('MyPHPScriptHandler'), 'init'), ObjC::str('myphp'));
@@ -506,6 +518,12 @@ final class WebView
         // A WKWebView that hands dropped files to PHP (the page's own drop events do not see paths).
         ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods() + [
             // The press a drag region of the page moves the window with (mygo's lastMouseDown): the page tells of it after the event.
+            // A page's context menu (mygo's contextMenuMethods): WebKit's NSMenu, about to show, which the page's 'contextMenu' listeners change.
+            'willOpenMenu:withEvent:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $menu, $event) {
+                ObjC::msgSuper('v:pp', $self, 'WKWebView', 'willOpenMenu:withEvent:', $menu, $event);
+                $view = self::$views[ObjC::addr($self)] ?? null;
+                if ($view?->onContextMenu !== null) { ($view->onContextMenu)($menu, $event); }
+            }],
             'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 if (self::$lastDown !== null) { ObjC::msg('v:', self::$lastDown, 'release'); }
                 self::$lastDown = ObjC::msg('p:', $event, 'retain');
@@ -960,6 +978,52 @@ final class WebView
     public static function lastDown()
     {
         return self::$lastDown;
+    }
+
+    /** Whether the page lets its videos go into picture in picture, as WebKit's private _allowsPictureInPictureMediaPlayback says; null when WebKit does not answer it. */
+    public function allowsPictureInPicture(): ?bool
+    {
+        $prefs = ObjC::msg('p:', ObjC::msg('p:', $this->ns, 'configuration'), 'preferences');
+        return self::responds($prefs, '_allowsPictureInPictureMediaPlayback') ? ObjC::msg('b:', $prefs, '_allowsPictureInPictureMediaPlayback') : null;
+    }
+
+    /**
+     * Moves the page's video into picture in picture, or back (mygo's
+     * TogglePictureInPicture): WebKit's private _togglePictureInPicture
+     * when _canTogglePictureInPicture says it can, else $script, which
+     * evaluateJavaScript runs as a user's gesture: WebKit says no on a Mac
+     * without a Touch Bar, where the script works.
+     */
+    public function togglePictureInPicture(string $script): void
+    {
+        if (self::responds($this->ns, '_canTogglePictureInPicture') && self::responds($this->ns, '_togglePictureInPicture') && ObjC::msg('b:', $this->ns, '_canTogglePictureInPicture')) {
+            ObjC::msg('v:', $this->ns, '_togglePictureInPicture');
+            return;
+        }
+        $this->evaluate($script);
+    }
+
+    /** WebKit's private _isPictureInPictureActive, which knows of its media controls' picture in picture only; false when WebKit does not answer it. */
+    public function pictureInPictureActive(): bool
+    {
+        return self::responds($this->ns, '_isPictureInPictureActive') && ObjC::msg('b:', $this->ns, '_isPictureInPictureActive');
+    }
+
+    /**
+     * The page is about to navigate, with a video in picture in picture
+     * when $pip (mygo's leavingPage): WebKit restores a page from its
+     * back/forward cache believing the video it had there still is, so a
+     * page leaving with one is not kept there: the private
+     * _setUsesPageCache: turns the cache off until a page leaves without.
+     */
+    public function leavingPage(bool $pip): void
+    {
+        $off = $pip || $this->pictureInPictureActive();
+        if ($off === $this->pageCacheOff) { return; }
+        $prefs = ObjC::msg('p:', ObjC::msg('p:', $this->ns, 'configuration'), 'preferences');
+        if (!self::responds($prefs, '_setUsesPageCache:')) { return; }
+        $this->pageCacheOff = $off;
+        ObjC::msg('v:b', $prefs, '_setUsesPageCache:', !$off);
     }
 
     /** Runs JavaScript; $completion is an ObjC block (id result, NSError* error) or null. */

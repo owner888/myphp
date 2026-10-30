@@ -20,6 +20,35 @@ final class PageOptions
          * `myphp dev`. "*" trusts every origin.
          */
         public array $trustedOrigins = [],
+        /**
+         * Makes the page someone else's, whatever its URL (mygo's
+         * Untrusted): a plugin's UI or a preview of a user's HTML served
+         * from a scheme Protocol serves. $trustedOrigins no longer count,
+         * and the page calls no PHP method, bound or MyPHP's own
+         * (myphp:window), and its window's drag regions do nothing; MyPHP
+         * drops whatever else it posts above 4 KiB without decoding it. It
+         * hears no Event::broadcast, nor the Event::emit of the window of
+         * native UI its web view is in: send to it with Event::emitPage. It
+         * gets no permission, opens no window nor the browser, downloads
+         * nothing and navigates to no other origin than its page's, unless
+         * setPermissionHandler, setWindowOpenHandler, 'willDownload' or
+         * 'willNavigate' listeners decide. Its requests to the schemes
+         * Protocol serves reach their handlers, which tell it by
+         * ProtocolRequest::$page, but it cannot read the responses of other
+         * origins than its own.
+         */
+        public bool $untrusted = false,
+        /**
+         * Lets the page's videos go into picture in picture, a small window
+         * floating over every app's (mygo's PictureInPicture): the button
+         * of a video's controls, its context menu's item and
+         * requestPictureInPicture(), with WebKit's private
+         * _allowsPictureInPictureMediaPlayback, which WKWebView keeps to
+         * Safari otherwise. Page::togglePictureInPicture moves one out.
+         */
+        public bool $pictureInPicture = false,
+        /** The session whose website data the page uses: cookies, storage, caches (mygo's Session); null for the default one. A window window.open opens keeps its opener's. */
+        public ?Session $session = null,
         /** The developer tools (mygo's DevTools): a page's web inspector; for a window showing native UI, the inspector of native UI (View → Toggle Developer Tools, F12). */
         public DevTools $devTools = DevTools::Auto,
         /** The page's zoom, 1 by default (mygo's ZoomFactor). */

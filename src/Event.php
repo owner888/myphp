@@ -38,14 +38,14 @@ final class Event
         return $this->name;
     }
 
-    /** Sends the event to the page of $w, or to the pages of its web views for a window showing native UI (mygo's Emit). */
+    /** Sends the event to the page of $w, or to the pages of its web views for a window showing native UI but untrusted ones (PageOptions::$untrusted; mygo's Emit). */
     public function emit(Window $w, mixed $payload = null): void
     {
         if ($w->isDestroyed()) {
             throw new \RuntimeException('myphp: the window has been destroyed');
         }
         foreach ($w->pages() as $p) {
-            $p->event($this->name, $payload);
+            if (!$p->isUntrusted()) { $p->event($this->name, $payload); }
         }
     }
 
@@ -63,7 +63,7 @@ final class Event
     {
         foreach (Window::all() as $w) {
             foreach ($w->pages() as $p) {
-                $p->event($this->name, $payload);
+                if (!$p->isUntrusted()) { $p->event($this->name, $payload); } // but untrusted pages (PageOptions::$untrusted)
             }
         }
     }

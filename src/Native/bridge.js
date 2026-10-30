@@ -403,6 +403,46 @@
       addEventListener("resize", () => measure(false)); // the window's own size changed what scrollbars show
     };
   })();
+  // What a context menu is opened on (Page's 'contextMenu' listeners; mygo's contextTarget), which WebKit does not tell: the link and its
+  // text, the image, the media, the selection, and whether it is editable, at the point it opened, told just before the menu opens.
+  const nonText = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
+  const contextTarget = (el, selection) => {
+    const t = {};
+    const field = el?.closest("input,textarea") ?? null;
+    const text = field && !(field.type && nonText.has(field.type.toLowerCase()));
+    if (text && !field.readOnly && !field.disabled) t.e = true;
+    else if (el?.isContentEditable) t.e = true;
+    if (text && field.type?.toLowerCase() !== "password") {
+      const a = field.selectionStart ?? 0, b = field.selectionEnd ?? 0;
+      if (b > a) selection = (field.value ?? "").slice(a, b);
+    } else if (text) selection = ""; // a password's stays in its field
+    if (selection) t.s = selection;
+    if (!el) return t;
+    const link = el.closest("a[href],area[href]");
+    if (link) {
+      const href = typeof link.href === "string" ? link.href : link.href?.baseVal ?? "";
+      if (href) t.l = href;
+      const label = (link.innerText ?? link.textContent ?? "").trim();
+      if (label) t.lt = label;
+    }
+    const img = el.closest("img");
+    if (img && (img.currentSrc || img.src)) t.i = img.currentSrc || img.src;
+    const media = el.closest("video,audio");
+    if (media && (media.currentSrc || media.src)) t.m = media.currentSrc || media.src;
+    return t;
+  };
+  addEventListener("contextmenu", (e) => {
+    const el = e.composedPath()[0];
+    try { post({ t: "context-menu", x: e.clientX, y: e.clientY, ...contextTarget(el instanceof Element ? el : null, getSelection()?.toString() ?? "") }); } catch {}
+  }, true);
+  // Whether the document has a video in picture in picture (PageOptions::$pictureInPicture; mygo's pipScript), told as the page shows and
+  // as a video goes in or out: WebKit's own flag knows of its media controls' picture in picture only, not of requestPictureInPicture().
+  if (cfg.pip) {
+    const tell = () => post({ t: "pip", v: !!document.pictureInPictureElement });
+    addEventListener("enterpictureinpicture", tell, true);
+    addEventListener("leavepictureinpicture", tell, true);
+    addEventListener("pageshow", tell);
+  }
   document.addEventListener("DOMContentLoaded", () => { themeColorReady(); fitStart(); post({ t: "dom-ready" }); });
   // A press on an element whose --app-region (or -webkit-app-region) is drag moves the window; a double click zooms it as macOS is set to (mygo's drag regions). Controls stay controls.
   const controls = 'input,textarea,select,button,a[href],summary,label,[contenteditable]:not([contenteditable="false"]),video[controls],audio[controls]';

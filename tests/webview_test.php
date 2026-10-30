@@ -218,3 +218,28 @@ same(false, (new \MyPHP\WindowOpenRequest('https://x.org'))->userInitiated, 'a w
 // The theme color as the bridge tells it (mygo's 9bf2ce4): #rrggbbaa, "" or anything else none.
 same([[0x1e90ff, 1.0], [0xff0000, 128 / 255], null, null], [\MyPHP\Page::parseThemeColor('#1e90ffff'), \MyPHP\Page::parseThemeColor('#FF000080'), \MyPHP\Page::parseThemeColor(''), \MyPHP\Page::parseThemeColor('#fff')], 'theme colors: as [rgb, alpha]');
 check(in_array('themeColorChanged', \MyPHP\Page::EVENTS, true) && in_array('audibleChanged', \MyPHP\Page::EVENTS, true) && in_array('captureStateChanged', \MyPHP\Page::EVENTS, true), 'the page\'s events of its theme color, sound and capture');
+
+// Untrusted pages (mygo's untrusted_test.go, the part without WebKit): their calls rejected whatever their URL, the origin they navigate
+// within, and the page a scheme's request came from.
+$ut = (new \ReflectionClass(\MyPHP\Page::class))->newInstanceWithoutConstructor();
+(new \ReflectionProperty(\MyPHP\Page::class, 'untrusted'))->setValue($ut, true);
+(new \ReflectionProperty(\MyPHP\Page::class, 'trustedOrigins'))->setValue($ut, ['*']);
+$reply = \MyPHP\Ipc::handle(json_encode(['t' => 'call', 'id' => 7, 'k' => 'sec', 'm' => 'myphp:window.close', 'a' => []]), 'sec', $ut);
+same([7, false, true], [$reply['id'] ?? null, $reply['ok'] ?? null, str_contains((string)($reply['e'] ?? ''), 'untrusted')], 'an untrusted page\'s call, even to myphp:window, rejected');
+same([true, false], [$ut->isUntrusted(), $ut->trusts('https://example.com')], 'trusting no origin, "*" in its trusted origins or not');
+same(false, (new \MyPHP\PageOptions())->untrusted, 'pages trusted as their URL says by default');
+same(['https://example.com', 'plugin://a', 'https://x.org:8443', 'plugin://a'], [\MyPHP\Page::origin('https://Example.com/a?b'), \MyPHP\Page::origin('plugin://a/index.html'), \MyPHP\Page::origin('https://x.org:8443/'), \MyPHP\Page::origin('blob:plugin://a/1234-5678')], 'the origins of pages, a blob\'s its maker\'s');
+same($ut, (new \MyPHP\ProtocolRequest('GET', 'plugin://a/x', [], '', null, $ut))->page, 'a scheme\'s request tells the page that made it');
+
+// Picture in picture (mygo's 10c5033), the part without WebKit: off by default; the bridge tells whether the document has a video out.
+same(false, (new \MyPHP\PageOptions())->pictureInPicture, 'pages\' videos kept out of picture in picture by default, as WKWebView does');
+$pp = (new \ReflectionClass(\MyPHP\Page::class))->newInstanceWithoutConstructor();
+(new \ReflectionProperty(\MyPHP\Page::class, 'untrusted'))->setValue($pp, false);
+(new \ReflectionProperty(\MyPHP\Page::class, 'pip'))->setValue($pp, true);
+$msg = new \ReflectionMethod(\MyPHP\Page::class, 'message');
+$pipActive = new \ReflectionProperty(\MyPHP\Page::class, 'pipActive');
+$msg->invoke($pp, '{"t":"pip","v":true}');
+$out = [$pipActive->getValue($pp)];
+$msg->invoke($pp, '{"t":"pip","v":false}');
+$out[] = $pipActive->getValue($pp);
+same([true, false], $out, 'a video of the document in picture in picture, then out, as the bridge tells');

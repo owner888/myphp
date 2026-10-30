@@ -23,12 +23,28 @@ use RuntimeException;
  * didFailLoad (a LoadError), renderProcessGone (the reason), willDownload
  * (a DownloadEvent, to choose where a download goes or prevent it),
  * downloadDone (a Download), themeColorChanged (themeColor()'s, null for
- * none), audibleChanged (isAudible()'s) and captureStateChanged (a
- * CaptureKind and its CaptureState).
+ * none), audibleChanged (isAudible()'s), captureStateChanged (a
+ * CaptureKind and its CaptureState), and contextMenu (a ContextMenuEvent,
+ * as the page's context menu is about to open, mygo's OnContextMenu: what
+ * was right-clicked, and the web view's menu to change or replace).
+ *
+ *     $page->on('contextMenu', function (ContextMenuEvent $e) {
+ *         $e->menu->remove(ContextMenuEvent::RELOAD, ContextMenuEvent::BACK, ContextMenuEvent::FORWARD);
+ *         if ($e->linkURL !== '') {
+ *             $e->menu->append(MenuItem::separator(), new MenuItem('Open in Browser', fn() => Shell::openExternal($e->linkURL)));
+ *         }
+ *     });
+ *
+ * Without a listener the page shows WebKit's menu as it is. A page's own
+ * contextmenu handler that calls preventDefault shows none, and the
+ * listeners are not called. What was clicked comes from the page's
+ * contextmenu event, which the bridge reports just before, in the page's
+ * own document: a click in a frame tells nothing. WebKit's items keep Look
+ * Up, Translate, Services and the spelling suggestions working.
  */
 final class Page
 {
-    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone', 'themeColorChanged', 'audibleChanged', 'captureStateChanged'];
+    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone', 'themeColorChanged', 'audibleChanged', 'captureStateChanged', 'contextMenu'];
     /** How many events wait for a page that never gets ready, as an image (mygo's maxHeldEvents). */
     private const MAX_HELD = 1024;
     /** The forms Page::eval tries, an expression first: one that does not compile is no expression (mygo's evalExpr, evalBody). */
@@ -57,6 +73,28 @@ final class Page
     private ?array $html = null;
     /** @var list<string> PageOptions::$trustedOrigins */
     private array $trustedOrigins;
+    /** PageOptions::$untrusted, and the origin of the page it shows, which it navigates no further than */
+    private bool $untrusted;
+    private string $origin = '';
+    /** PageOptions::$pictureInPicture, and whether the page's document has a video in picture in picture, as its bridge last told */
+    private bool $pip;
+    private bool $pipActive = false;
+    /** The session whose store the page's web view uses, which it leaves as it goes; null for the default one, and for a window window.open opened, which keeps its opener's */
+    private ?Session $session = null;
+    /** What the bridge recorded of the page's latest contextmenu event, while 'contextMenu' listeners listen: the target, at x, y CSS pixels of the viewport */
+    private ?array $contextTarget = null;
+    /**
+     * The script that moves the page's video into picture in picture, or the
+     * one out back (mygo's platform.TogglePictureInPicture): the video
+     * playing, else the largest that loaded, of the page's document, run as
+     * a user's gesture, which requestPictureInPicture() needs.
+     */
+    private const TOGGLE_PIP = '(() => { if (document.pictureInPictureElement) { document.exitPictureInPicture().catch(() => {}); return; }'
+        . ' let video, most = -1; for (const v of document.querySelectorAll("video")) { if (v.disablePictureInPicture || v.readyState === 0) continue;'
+        . ' const r = v.getBoundingClientRect(), score = (v.paused ? 0 : 1e9) + r.width * r.height; if (score > most) { video = v; most = score; } }'
+        . ' if (video) video.requestPictureInPicture().catch(() => {}); })()';
+    /** The largest message an untrusted page may post: what the bridge posts in pages that call no PHP method is much smaller (mygo's maxUntrustedMessage). */
+    private const MAX_UNTRUSTED_MESSAGE = 4 << 10;
     private string $preload;
     private bool $preloadAllFrames = false;
     /**
@@ -81,12 +119,15 @@ final class Page
     {
         $this->secret = bin2hex(random_bytes(16));
         $this->trustedOrigins = $o->trustedOrigins;
+        $this->untrusted = $o->untrusted;
+        $this->pip = $o->pictureInPicture;
         $this->preload = $o->preloadScript;
         $this->devTools = $o->devTools->on();
         $this->zoom = $o->zoomFactor > 0 ? $o->zoomFactor : 1.0;
         $this->preloadAllFrames = $o->preloadAllFrames;
+        $this->session = $configuration === null ? $o->session : null;
         $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom,
-            $o->autoplay === Autoplay::Allow, $o->backgroundThrottling === BackgroundThrottling::On);
+            $o->autoplay === Autoplay::Allow, $o->backgroundThrottling === BackgroundThrottling::On, $o->pictureInPicture, $this->session?->attach());
         if ($o->contentRules !== []) { $this->setContentRules(...$o->contentRules); }
         $this->wire();
     }
@@ -563,13 +604,55 @@ final class Page
      */
     public function isTrusted(): bool
     {
-        return Frontend::isTrusted($this->web->url(), $this->trustedOrigins);
+        return !$this->untrusted && Frontend::isTrusted($this->web->url(), $this->trustedOrigins);
     }
 
-    /** @internal whether pages of $origin ("scheme://host") are trusted here, as for CORS */
+    /** @internal whether pages of $origin ("scheme://host") are trusted here, as for CORS: none in an untrusted page */
     public function trusts(string $origin): bool
     {
-        return Frontend::isTrusted($origin, $this->trustedOrigins);
+        return !$this->untrusted && Frontend::isTrusted($origin, $this->trustedOrigins);
+    }
+
+    /**
+     * Moves a video of the page into picture in picture, or the one out
+     * back into the page, as the button of a video's controls does, for a
+     * menu item or a shortcut of the app; the page needs no click (mygo's
+     * TogglePictureInPicture). WebKit's private _togglePictureInPicture
+     * moves the video WebKit picks for its media controls, where it can (a
+     * Mac with a Touch Bar); elsewhere the page's script moves the video
+     * playing, else the largest, of its document. Nothing in a page without
+     * PageOptions::$pictureInPicture, where WebKit refuses it.
+     */
+    public function togglePictureInPicture(): void
+    {
+        if ($this->pip && !$this->destroyed) {
+            $this->web->togglePictureInPicture(self::TOGGLE_PIP);
+        }
+    }
+
+    /** Whether a video of the page is in picture in picture, whoever put it there: togglePictureInPicture, the video's controls or the page's script (mygo's IsPictureInPictureActive). */
+    public function isPictureInPictureActive(): bool
+    {
+        return !$this->destroyed && ($this->web->pictureInPictureActive() || $this->pip && $this->pipActive);
+    }
+
+    /** @internal whether the page is someone else's (PageOptions::$untrusted) */
+    public function isUntrusted(): bool
+    {
+        return $this->untrusted;
+    }
+
+    /** @internal the origin of a page at $url, as scheme://host[:port], lower-case; that of the page that made it for a blob: URL (mygo's pageOrigin) */
+    public static function origin(string $url): string
+    {
+        if (strncasecmp($url, 'blob:', 5) === 0) {
+            $url = substr($url, 5);
+        }
+        $u = parse_url($url);
+        if ($u === false) {
+            return '';
+        }
+        return strtolower(($u['scheme'] ?? '') . '://' . ($u['host'] ?? '') . (isset($u['port']) ? ":{$u['port']}" : ''));
     }
 
     // The bridge.
@@ -623,6 +706,7 @@ final class Page
         $this->endDocument();
         $this->destroyed = true;
         $this->web->close();
+        $this->session?->detach(); // the last page of an ephemeral session takes its data with it
     }
 
     /** @internal whether the page went with its window or web view */
@@ -662,6 +746,9 @@ final class Page
     private function scripts(): array
     {
         $config = ['platform' => 'darwin', 'windowId' => $this->window->id, 'version' => App::VERSION, 'secret' => $this->secret] + self::locale();
+        if ($this->pip) {
+            $config['pip'] = true; // the bridge tells whether the document has a video in picture in picture
+        }
         if (($fit = $this->fitContent()) !== null) {
             $config['fit'] = $fit->limits($this->zoomNow()); // the bridge lays the root out within them, in the page's CSS pixels
         }
@@ -714,6 +801,9 @@ final class Page
     /** A message the page's bridge posted. */
     private function message(string $raw): void
     {
+        if ($this->untrusted && strlen($raw) > self::MAX_UNTRUSTED_MESSAGE) {
+            return; // what the bridge posts is smaller
+        }
         switch ($raw) {
             case '{"t":"theme-color","v":""}':
                 $this->setThemeColor(null);
@@ -733,12 +823,23 @@ final class Page
             case '{"t":"escape"}': // an Escape the page left (no handler called preventDefault)
                 $this->window->pageEscape($this);
                 return;
+            case '{"t":"pip","v":true}':
+            case '{"t":"pip","v":false}':
+                $this->pipActive = $raw === '{"t":"pip","v":true}';
+                return;
             case '{"t":"drag"}':
-                $this->window->pageDrag(1);
+                if (!$this->untrusted) { $this->window->pageDrag(1); }
                 return;
             case '{"t":"dblclick"}':
-                $this->window->pageDrag(2);
+                if (!$this->untrusted) { $this->window->pageDrag(2); }
                 return;
+        }
+        if (str_starts_with($raw, '{"t":"context-menu",')) {
+            // What a context menu about to open was opened on, which WebKit does not tell (an untrusted page's record over 4 KiB, as of a long selection, is dropped with the rest).
+            if (($this->listeners['contextMenu'] ?? []) !== [] && is_array($m = json_decode($raw, true))) {
+                $this->contextTarget = $m;
+            }
+            return;
         }
         if (str_starts_with($raw, '{"t":"content-size",')) {
             $c = ($fit = $this->fitContent()) === null ? null : Native\FitContent::told((array)json_decode($raw, true));
@@ -766,24 +867,37 @@ final class Page
         $this->channels = [];
     }
 
+    /** Whether the page's main frame goes to $url: the reload of HTML loadHTML loaded loads it again; the app's own loads go; an untrusted page's no further than its origin without listeners; else 'willNavigate' listeners decide. */
+    private function decideNavigation(string $url, bool $user, bool $reload, bool $unasked): bool
+    {
+        $doc = $this->html;
+        if ($reload && $doc !== null && $doc[2]) {
+            App::later(function () use ($doc): void {
+                if ($this->html === $doc && !$this->destroyed) { $this->loadHTML($doc[0], $doc[1]); }
+            });
+            return false;
+        }
+        if ($unasked) {
+            return true;
+        }
+        if ($this->untrusted && ($this->listeners['willNavigate'] ?? []) === []) {
+            return self::origin($url) === $this->origin; // no further than its page's origin, unless the app decides
+        }
+        $e = new NavigateEvent($url, $user);
+        $this->emit('willNavigate', $e);
+        return !$e->prevented;
+    }
+
     /** The native web view's hooks. */
     private function wire(): void
     {
         $w = $this->web;
-        $w->onNavigate = function (string $url, bool $user, bool $reload, bool $unasked): bool {
-            $doc = $this->html;
-            if ($reload && $doc !== null && $doc[2]) { // the reload of HTML loadHTML loaded loads it again
-                App::later(function () use ($doc): void {
-                    if ($this->html === $doc && !$this->destroyed) { $this->loadHTML($doc[0], $doc[1]); }
-                });
-                return false;
+        $w->onNavigate = function (string $url, bool $user, bool $reload, bool $unasked) use ($w): bool {
+            $allow = $this->decideNavigation($url, $user, $reload, $unasked);
+            if ($allow && $this->pip) {
+                $w->leavingPage($this->pipActive); // a page leaving with a video in picture in picture is kept out of the back/forward cache
             }
-            if ($unasked) {
-                return true;
-            }
-            $e = new NavigateEvent($url, $user);
-            $this->emit('willNavigate', $e);
-            return !$e->prevented;
+            return $allow;
         };
         $w->onCommit = function (string $url): void {
             if ($this->html !== null) {
@@ -797,6 +911,7 @@ final class Page
             }
             $this->domReady = false;
             $this->themeColorPending = true;
+            if ($this->untrusted) { $this->origin = self::origin($url); }
             $this->endDocument();
             $this->emit('didNavigate', $url);
         };
@@ -843,6 +958,9 @@ final class Page
         };
         $w->onOpen = function (string $url, string $frame, int $width, int $height, $configuration, bool $user) {
             if ($this->openHandler === null) {
+                if ($this->untrusted) {
+                    return null; // neither a window nor the browser, unless the app decides
+                }
                 $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
                 if ($scheme === 'http' || $scheme === 'https') {
                     App::later(fn() => Shell::openExternal($url));
@@ -857,10 +975,30 @@ final class Page
             return $child->page()->web->ns;
         };
         $w->onPanel = $this->panel(...);
+        $w->onContextMenu = function ($menu, $event) use ($w): void {
+            if (($this->listeners['contextMenu'] ?? []) === []) {
+                $this->contextTarget = null;
+                return; // WebKit's menu as it is
+            }
+            Native\ContextMenus::show($w->ns, $menu, $event, function (Menu $m, ?array $at): ContextMenuEvent {
+                $r = $this->contextTarget;
+                $this->contextTarget = null;
+                if ($r !== null && !Native\ContextMenus::recordOf((float)($r['x'] ?? 0), (float)($r['y'] ?? 0), $at !== null, $at[0] ?? 0.0, $at[1] ?? 0.0, $this->zoomNow())) {
+                    $r = null; // another click's: the page's own document hears none of a click in a frame, and one it cancelled opened no menu
+                }
+                $s = fn(string $k): string => is_string($r[$k] ?? null) ? $r[$k] : '';
+                $e = new ContextMenuEvent($s('l'), $s('lt'), $s('i'), $s('m'), $s('s'), (bool)($r['e'] ?? false), '', $m);
+                $this->emit('contextMenu', $e);
+                return $e;
+            });
+        };
         $w->onPermission = function (array $kinds, string $origin): bool {
             return $this->permissionHandler !== null ? (bool)($this->permissionHandler)(new PermissionRequest($kinds, $origin)) : $origin === '://' || $this->trusts($origin); // '://': loadHTML's, of no origin
         };
         $w->onDownload = function (string $url, string $suggested): ?string {
+            if ($this->untrusted && ($this->listeners['willDownload'] ?? []) === []) {
+                return null; // nothing, unless the app decides
+            }
             $e = new DownloadEvent($url, Download::fileName($suggested), '');
             $dir = getenv('HOME') . '/Downloads';
             if (is_dir($dir) || @mkdir($dir, 0755, true)) {
@@ -872,10 +1010,10 @@ final class Page
         $w->onDownloadDone = fn(string $url, string $path, ?string $error) => $this->emit('downloadDone', new Download($url, $path, $error));
         $w->onScheme = function (array $r, Native\SchemeTask $task): void {
             [$method, $url, $headers, $body] = $r;
-            Native\Scheme::serve(new ProtocolRequest($method, $url, $headers, $body, $this->window), $task, $this->trusts(...));
+            Native\Scheme::serve(new ProtocolRequest($method, $url, $headers, $body, $this->window, $this), $task, $this->trusts(...));
         };
         $w->onSchemeDownload = function (string $url) use ($w): void {
-            App::later(fn() => Native\Scheme::download($url, new ProtocolRequest('GET', $url, [], '', $this->window), $w->onDownload, $w->onDownloadDone));
+            App::later(fn() => Native\Scheme::download($url, new ProtocolRequest('GET', $url, [], '', $this->window, $this), $w->onDownload, $w->onDownloadDone));
         };
     }
 
