@@ -170,3 +170,62 @@ $list = $h->paint(); $list->reset();
 (new Painter($list, $h->metrics, Theme::light()))->fillGradient([0, 0, 10, 10], new LinearGradient(angle: 45));
 $g = [$list->buf[28], $list->buf[29], $list->buf[30], $list->buf[31]];
 check(abs($g[0]) < 1e-5 && abs($g[1] - 10) < 1e-5 && abs($g[2] - 10) < 1e-5 && abs($g[3]) < 1e-5, 'a gradient at 45°: ' . json_encode($g));
+
+// Clarity (mygo's TestPaneMaterial, TestPaneClarity, TestClarityZero, TestClarityClear): panes up to 100 points keep the measured material whatever the clarity; from 200 theirs is the clarity's, eased between.
+(function () {
+    $mat = fn(float $m, float $s, float $k, bool $clear, bool $dark): array => Glass::paneMaterial($m, $s, $k, $clear, $dark);
+    $near = fn(float $a, float $b): bool => abs($a - $b) < 1e-9;
+    $bad = [];
+    foreach ([0, 0.25, 0.5, 1] as $k) {
+        foreach ([20, 44, 72, 100] as $m) {
+            foreach ([1, 2] as $s) {
+                $want = ['blur' => min(max($m * 0.035, 1), 10) * $s, 'bezel' => min(36, $m / 2) * $s, 'rim' => 0.35];
+                $l = $mat($m, $s, $k, false, false); $d = $mat($m, $s, $k, false, true);
+                if ($l != $want + ['low' => 0.541, 'high' => 1.0] || $d != $want + ['low' => 0.15, 'high' => 0.51]) { $bad[] = "$m at {$s}x, clarity $k"; }
+            }
+        }
+    }
+    same([], $bad, 'clarity: controls keep the measured material');
+    foreach ([200, 300, 900] as $m) {
+        $l = $mat($m, 2, 0.5, false, false); $d = $mat($m, 2, 0.5, false, true);
+        check($near($l['blur'], 10) && $near($l['bezel'], 96) && $near($l['rim'], 0.5) && $near($l['low'], 0.35) && $l['high'] == 1 && $near($d['high'], 0.6) && $d['low'] == 0.15, "clarity 0.5 at $m points: " . json_encode([$l, $d]));
+    }
+    $mid = $mat(150, 1, 0.5, false, false);
+    check($near($mid['low'], (0.541 + 0.35) / 2) && $near($mid['rim'], 0.425), 'clarity: half way at 150 points');
+    // Along the clarity, at 400 points: blur, light low, dark low, dark high, rim, bezel.
+    $tone = function (float $k) use ($mat): array {
+        $l = $mat(400, 1, $k, false, false); $d = $mat(400, 1, $k, false, true);
+        return [round($l['blur'], 9), round($l['low'], 9), round($d['low'], 9), round($d['high'], 9), round($l['rim'], 9), round($l['bezel'], 9)];
+    };
+    foreach ([[0, [10, 0.541, 0.15, 0.51, 0.35, 36]], [0.25, [7.5, 0.4455, 0.15, 0.555, 0.425, 42]], [0.5, [5, 0.35, 0.15, 0.6, 0.5, 48]],
+        [0.75, [3.5, 0.275, 0.125, 0.725, 0.5, 48]], [1, [2, 0.2, 0.1, 0.85, 0.5, 48]], [-1, [10, 0.541, 0.15, 0.51, 0.35, 36]], [2, [2, 0.2, 0.1, 0.85, 0.5, 48]], [NAN, [10, 0.541, 0.15, 0.51, 0.35, 36]]] as [$k, $want]) {
+        same(array_map('floatval', $want), $tone($k), "clarity $k at 400 points");
+    }
+    // At clarity 0 every pane, of any size, scale and style, is exactly the measured material.
+    $bad = [];
+    foreach ([1, 20, 72, 100, 150, 199, 200, 260, 900, 4000] as $m) {
+        foreach ([1, 1.5, 2] as $s) {
+            $base = ['bezel' => min(36, $m / 2) * $s, 'rim' => 0.35];
+            $blur = min(max($m * 0.035, 1), 10) * $s;
+            foreach ([[true, false, $s, 0.125, 1.082], [true, true, $s, 0.125, 1.082], [false, true, $blur, 0.15, 0.51], [false, false, $blur, 0.541, 1.0]] as [$clear, $dark, $b, $low, $high]) {
+                if ($mat($m, $s, 0, $clear, $dark) != ['blur' => $b] + $base + ['low' => $low, 'high' => $high]) { $bad[] = "$m at {$s}x"; }
+            }
+        }
+    }
+    same([], $bad, 'clarity 0: the measured material, exactly');
+    $f = $mat(400, 1, 0, true, false); $c = $mat(400, 1, 1, true, false);
+    check([$f['blur'], $f['low'], $f['high']] === [$c['blur'], $c['low'], $c['high']] && $c['rim'] == 0.5 && $c['bezel'] == 48, 'clarity on clear glass: the rim and the bezel alone');
+
+    // The pane's material goes to the shader in the slot after it.
+    $h = new Headless(function (Context $c): void {
+        $c->column()->at(0, 0)->size(400, 300)->round(20)->material(new Glass(clarity: 0.5));
+        $c->end();
+        $c->column()->at(0, 310)->size(100, 40)->round(20)->material(new Glass);
+        $c->end();
+    }, 420, 360);
+    $h->frame();
+    $list = $h->paint();
+    $slots = [];
+    foreach ($list->glass as [$at]) { $k = ($at + 1) * 16; $slots[] = [round($list->buf[$k], 6), round($list->buf[$k + 1], 6), round($list->buf[$k + 2], 6), round($list->buf[$k + 4], 6), round($list->buf[$k + 5], 6), $list->buf[$k + 9]]; }
+    same([[48.0, 0.5, 0.35, 0.15, 0.6, -1.0], [20.0, 0.35, 0.541, 0.15, 0.51, -1.0]], $slots, 'clarity: the bezel, rim and tones in the slot after each pane');
+})();

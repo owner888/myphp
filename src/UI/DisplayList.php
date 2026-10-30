@@ -434,11 +434,21 @@ final class DisplayList
         $this->holes[] = [$at, $this->n - $at];
     }
 
-    /** A pane of Liquid Glass over what was drawn before it: $style 0 regular, 1 clear; tinted by $tint at $tintAlpha; blurred by $sigma pixels. */
-    public function glass(float $x, float $y, float $w, float $h, float $radius, int $style, int $tint, float $tintAlpha, float $sigma): void
+    /** The glass's material as macOS measures it: the bezel's width in points, the rim's light, what black maps to in light mode, black and white in dark mode (Plugins\Glass\Glass::paneMaterial at clarity 0). */
+    public const GLASS_TONE = [36.0, 0.35, 0.541, 0.15, 0.51];
+
+    /**
+     * A pane of Liquid Glass over what was drawn before it: $style 0
+     * regular, 1 clear; tinted by $tint at $tintAlpha; blurred by $sigma
+     * pixels; its material $tone (GLASS_TONE's), in the slot after it,
+     * which the shader reads: clear glass takes its bezel and rim alone.
+     * @param array{0: float, 1: float, 2: float, 3: float, 4: float} $tone
+     */
+    public function glass(float $x, float $y, float $w, float $h, float $radius, int $style, int $tint, float $tintAlpha, float $sigma, array $tone = self::GLASS_TONE): void
     {
         $this->glass[] = [$this->n, $sigma];
-        $this->quad($x, $y, $w, $h, $tint, $tintAlpha, $radius, 5.0, (float)$style);
+        $this->quad($x, $y, $w, $h, $tint, $tintAlpha, $radius, 5.0, (float)$style, 0.0, 2);
+        $this->slot([$tone[0], $tone[1], $tone[2], 0.0], [$tone[3], $tone[4], 0.0, 0.0], 0.0, 0.0, 0.0, [0.0, 0.0, 0.0, 0.0]);
     }
 
     /** A vertical gradient of $rgb from $alphaTop to $alphaBottom. */

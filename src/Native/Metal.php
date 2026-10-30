@@ -114,13 +114,14 @@ final class Metal
         float k = (tone.y - tone.x) * tone.w;
         return clamp(t + (c - l) * k, 0.0, 1.0);
     }
-    float4 glass(V v, constant Uniforms& u, texture2d<float> backdrop) {
+    float4 glass(V v, constant Uniforms& u, texture2d<float> backdrop, const device Inst* in) {   // the slot after: the bezel's width in points, the rim's light, what black maps to in light mode, then black and white in dark mode (DisplayList::glass)
         constexpr sampler s(filter::linear, address::clamp_to_edge);
         float2 p = v.pos.xy;
         float r = v.radius * u.scale;
         float sd = sdRoundRect(p, v.rect, r);
         float t = max(-sd, 0.0);
-        float bezel = min(36.0 * u.scale, min(v.rect.z, v.rect.w) * 0.5);
+        Inst m = in[v.inst + 1];
+        float bezel = min(m.rect.x * u.scale, min(v.rect.z, v.rect.w) * 0.5);
         float refraction = 1.6 * bezel;
         float rimWidth = 1.0 * u.scale;
         float2 n = float2(0.0);
@@ -129,12 +130,12 @@ final class Metal
         if (t < bezel) { q -= n * (refraction * glassLens(t, bezel)); }
         float3 c = backdrop.sample(s, q / (u.viewport * u.scale)).rgb;
         float4 tone = v.uv.x > 0.5 ? float4(0.125, 1.082, 1.0, 1.0)              // clear
-                    : (u.dark > 0.5 ? float4(0.15, 0.51, 2.0, 2.2) : float4(0.541, 1.0, 1.2, 1.0));   // regular
+                    : (u.dark > 0.5 ? float4(m.color.x, m.color.y, 2.0, 2.2) : float4(m.rect.z, 1.0, 1.2, 1.0));   // regular
         c = glassTone(c, tone);
         c += (v.color.rgb - c) * v.color.a;   // the tint
         if (t < 3.0 * rimWidth) {   // the rim, lit from above and below
             float rr = t / rimWidth;
-            float a = 0.35 * exp(-rr * rr);
+            float a = m.rect.y * exp(-rr * rr);
             float l = abs(n.y);
             c += (l - c) * a;
         }
@@ -411,7 +412,7 @@ final class Metal
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
             return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * (1.0 - smoothstep(-0.5, 0.5, d)));
         }
-        if (v.kind > 4.5) { return glass(v, u, backdrop); }
+        if (v.kind > 4.5) { return glass(v, u, backdrop, in); }
         if (v.kind > 3.5) {   // a ring: the band between the rect's edge and thickness inside it
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;

@@ -315,12 +315,13 @@ final class Painter
      * Paints a pane of Liquid Glass over what was painted before (the
      * renderer's glass effect, which Plugins\Glass draws with): $style 0
      * regular, 1 clear; tinted by $tint at $tintAlpha; what shows through
-     * blurred by $sigma pixels.
+     * blurred by $sigma pixels; $tone as DisplayList::glass takes it.
      * @param array{0: float, 1: float, 2: float, 3: float} $box
+     * @param array{0: float, 1: float, 2: float, 3: float, 4: float} $tone
      */
-    public function glass(array $box, float $radius, int $style, int $tint, float $tintAlpha, float $sigma): void
+    public function glass(array $box, float $radius, int $style, int $tint, float $tintAlpha, float $sigma, array $tone = DisplayList::GLASS_TONE): void
     {
-        $this->list->glass($box[0], $box[1], $box[2], $box[3], $radius, $style, $tint, $tintAlpha, $sigma);
+        $this->list->glass($box[0], $box[1], $box[2], $box[3], $radius, $style, $tint, $tintAlpha, $sigma, $tone);
     }
 
     /**

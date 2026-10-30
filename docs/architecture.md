@@ -6085,6 +6085,24 @@ succeeds are told of, an empty line is none.
   measured and painted a run at a time, with no kerning across a change
   of face.
 
+## Glass panes as large as sidebars are clearer, with clarity (v1.97)
+
+- mygo 4047d03: `Glass::$clarity`, from 0 to 1, makes panes as large as
+  sidebars and inspectors clearer: 0, the default, is macOS's material,
+  unchanged; 0.5 blurs up to 5 points rather than 10, maps black to 35%
+  in light mode and white to 60% in dark mode, lights the rim more (0.5)
+  and curves the last 48 points; 1 blurs up to 2 points and maps black to
+  20% in light mode, black to 10% and white to 85% in dark mode, each
+  half of the range a straight step. Panes up to 100 points keep their
+  material whatever the clarity, which eases in (smoothstep) up to 200.
+  On clear glass it only lights the rim and curves the bezel.
+- `Glass::paneMaterial` works the material out in PHP, as mygo's; the
+  shader, which had the bezel, the rim and the tones fixed, reads them
+  from a slot of kind -1 after the glass's quad (`DisplayList::glass`'s
+  `$tone`, `GLASS_TONE` the measured one): the bezel in points, the rim's
+  light, black's tone in light mode, black's and white's in dark mode,
+  the renderer choosing light or dark as before.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
