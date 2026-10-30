@@ -1,6 +1,6 @@
 {
   "name": "@myphp-plugins/watch",
-  "version": "1.72.0",
+  "version": "1.73.0",
   "description": "The page side of MyPHP's watch plugin: changes to the files in the directories the app lets its pages watch, over myphp-runtime",
   "type": "module",
   "exports": "./index.ts",
@@ -16,6 +16,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "myphp-runtime": "^1.72.0"
+    "myphp-runtime": "^1.73.0"
   }
 }

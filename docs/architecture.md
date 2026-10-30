@@ -5491,6 +5491,58 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   `conic-gradient(from …, n stops)`, a border's gradient as
   `border-image: gradient`, a blur as `filter: blur(…)`.
 
+## Choosing by dragging over rows, blocks of cells (v1.73)
+
+- **Drag-select** (`ListState::$dragSelect`, mygo's 87d400a): in a list
+  with a selection, `Context::list` hands each row to `pressRow`. A
+  left press this frame on the row's first node itself
+  (`Runtime::pressOn`: the press's target, no control inside the row
+  taking it) chooses the row then, as `clickAt` with the press's
+  modifiers (`Runtime::$pressMods`), unless it is chosen; either way
+  the row's press is noted in `ListState::$rowPresses` (where, and
+  whether it chose), which its click then reads: a press that chose
+  makes the click do nothing more, one that did not has the click
+  choose where it pressed. Notes are by row, so a release of one row and
+  a press of another in one frame do not cross. Past 4 points of
+  `dragged()` the drag starts (`$dragSel`): the row alone, or with Cmd
+  from it besides those chosen (the pivot moved there), or with Shift
+  as the Shift-press extended. While the button is held,
+  `dragSelectRows` extends the choice to the row under the pointer, as
+  the rows showed last frame through any transform (`toLocal`), the
+  first or last built past them, and scrolls the list near its edges;
+  clicks on the rows while a drag is on are its release, no click. The
+  press's notes go once the button is up. A list cannot both drag-select
+  and reorder (`LogicException`).
+- **Cells** (`ListState::$cellSelect`, `$cells`, a `ColumnRange`,
+  `TableColumn::$rowHeader`; the `ListStateCells` trait): a table
+  choosing cells fills `ListState::$tableCols` with its columns in the
+  order shown and their headers' ids before it builds its rows; the
+  column at a point is the nearest header as it showed last frame. A
+  click on a cell sets the block's columns as mygo's `clickCell` does,
+  a row header's chooses every column; drags extend the columns too
+  and scroll sideways near the left and right edges. `Runtime::command`
+  gives Left and Right (mirrored right to left) to `cellKeys`, and the
+  keys moving the rows leave one column unless with Shift; Cmd+A
+  chooses every column. The block's cells are `selected` (the rows are
+  not), the painter's selection over them as over a chosen row, and the
+  cursor's cell in the row the keys move from has a 1-point accent ring
+  while the table has the focus; a cell holding the focus shows as it
+  is. A click on a row header column's header chooses everything and
+  focuses the table; a row header column does not sort
+  (`TableColumn::sorts`). `cellSelected`, `selectedColumns` and
+  `selectColumns` read and set it.
+- **Right-click** (`Runtime::chooseRowAt`, from `menuPress` once a menu
+  is to open): the first nodes of the rows of lists with a selection are
+  noted as the frame records them (`$listRows`); the innermost under the
+  pointer is chosen as a click with no modifiers would, unless chosen
+  (in a table choosing cells, unless the cell is in the block) or the
+  list's `$menuKeepsSelection` is set. The next build reports the change.
+- **Cells' menus and double clicks**: `ListState::$cellMenu` gives each
+  cell's box a context menu told its row and column;
+  `Context::rowDoubleClicked` tells a node built in a list's row that a
+  double click this frame landed on it (`Runtime::doubleClickOver`),
+  without taking it from the row.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

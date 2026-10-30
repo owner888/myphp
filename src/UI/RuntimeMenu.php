@@ -202,6 +202,7 @@ trait RuntimeMenu
         if ($s === 0) {
             return false;
         }
+        $this->chooseRowAt($x, $y);
         if (isset($this->selectScopes[$s]) && ($p = $this->textSelectionAt($s, $x, $y)) !== null) {
             $s = $p[0]; // in a Selectable container, the paragraph nearest
         }

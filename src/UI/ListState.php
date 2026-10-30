@@ -18,6 +18,8 @@ use Closure;
  */
 final class ListState implements Scrollable
 {
+    use ListStateCells;
+
     public int $row = 0;
     public float $offset = 0;
     /** @var array<int, float> the measured heights that differ from the first one measured ($default), by row: a list of rows all one height stores none; forgetHeights() clears them */
@@ -54,7 +56,7 @@ final class ListState implements Scrollable
     public bool $went = false;
     /** The chosen row, -1 for none; null leaves rows unchosen by clicks and keys. */
     public ?int $selected = null;
-    /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. */
+    /** Set, lets the user choose several rows, held by their keys (mygo's ListState.Selection): a click chooses one, Cmd-click adds or takes out, Shift-click and Shift with the keys extend, Cmd+A chooses all; $selected is then the row the keys move from. A right-click on a row not chosen chooses it before its context menu opens, as Finder does, so that the menu acts on it ($menuKeepsSelection keeps the choice). */
     public ?Selection $selection = null;
     /** Set, lets the user drag rows to another place (mygo's ListState.Reorder): called with the rows dragged (those chosen, when the row dragged is one, else that row), in order, and the row they go before (the count for the end); move them there. The list shows where they would go and scrolls near its edges. */
     public ?Closure $reorder = null;
@@ -100,6 +102,7 @@ final class ListState implements Scrollable
     public function __construct()
     {
         $this->columns = new TableLayout();
+        $this->cells = new ColumnRange();
     }
 
     /** The list built with this state in a pass of a context, the focus owner, and the pass (mygo's listFrame owner). */
@@ -465,11 +468,11 @@ final class ListState implements Scrollable
         $row = max(-1, min($this->count - 1, $row));
         $row = $this->rowOff($row, $row >= ($this->selected ?? -1) ? 1 : -1);
         if ($this->selection !== null && $row >= 0 && $this->selection->choose($row, $this->keyOf(...))) {
-            $this->didChange = true; $this->changes++;
+            $this->noteChange();
         }
         if ($row !== $this->selected) {
             $this->selected = $row;
-            $this->didChange = true; $this->changes++;
+            $this->noteChange();
         }
         if ($row >= 0) {
             $this->scrollIntoView($row);
@@ -481,7 +484,7 @@ final class ListState implements Scrollable
     {
         if ($this->selection === null) { $this->choose($row); return; }
         $row = max(0, min($this->count - 1, $row));
-        if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->didChange = true; $this->changes++; }
+        if ($this->selection->click($row, $mods, $this->count, $this->keyOf(...), $this->selected)) { $this->noteChange(); }
         $this->scrollIntoView($row);
     }
 
@@ -491,7 +494,7 @@ final class ListState implements Scrollable
         if ($this->selection === null) { $this->choose($row); return; }
         $row = $this->rowOff(max(0, min($this->count - 1, $row)), $row >= ($this->selected ?? -1) ? 1 : -1);
         if ($row < 0) { return; }
-        if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->didChange = true; $this->changes++; }
+        if ($this->selection->extend($row, $this->count, $this->keyOf(...))) { $this->noteChange(); }
         $this->selected = $row;
         $this->scrollIntoView($row);
     }
@@ -504,7 +507,7 @@ final class ListState implements Scrollable
         for ($j = 0; $j < $this->count; $j++) {
             if (!$this->isHeader($j)) { $changed = $this->selection->set($this->keyOf($j), true) || $changed; } // headers are not chosen
         }
-        if ($changed) { $this->didChange = true; $this->changes++; }
+        if ($changed) { $this->noteChange(); }
     }
 
     /** The rows a drag from row $i moves: those chosen when it is one of them, else row $i (mygo's listFrame.dragged). @return list<int> */
@@ -526,6 +529,12 @@ final class ListState implements Scrollable
     public function keyOf(int $row): int|string
     {
         return $this->key === null ? $row : ($this->key)($row);
+    }
+
+    /** The choice changed: changed() reports it, and the list's node as it is built next. */
+    private function noteChange(): void
+    {
+        $this->didChange = true; $this->changes++;
     }
 
     /** @internal Whether the choice changed since the list was last built, which its node's changed() reports, once. */

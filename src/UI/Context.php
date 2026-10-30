@@ -592,6 +592,23 @@ final class Context
     }
 
     /**
+     * Whether, while a row of a list or a table builds, the row was
+     * double-clicked this frame with the pointer over $n (mygo's
+     * RowDoubleClicked): a cell sees its row's double click this way and
+     * leaves the click to the row, which chooses, where doubleClicked()
+     * would take it:
+     *
+     *     $c->table($state, $cols, count($rows), function (int $row, int $col) use ($c, $rows, $app): void {
+     *         $cell = $c->column()->fillWidth(); $c->text($rows[$row][$col]); $c->end();
+     *         if ($c->rowDoubleClicked($cell)) { $app->edit($row, $col); }
+     *     });
+     */
+    public function rowDoubleClicked(Node $n): bool
+    {
+        return $this->listRow !== null && ($this->runtime?->doubleClickOver($n->id) ?? false);
+    }
+
+    /**
      * @internal UI\VideoPlayer: the keys pressed this frame that no shortcut
      * took, offered to $take (their characters, code, modifiers and the
      * characters without the modifiers); those it takes (true) taken.
@@ -780,6 +797,9 @@ final class Context
      */
     public function list(ListState $state, int $count, Closure $row, ?Closure $empty = null): Node
     {
+        if (($state->dragSelect || $state->choosesCells()) && $state->reorder !== null) {
+            throw new \LogicException('a list cannot both drag-select (or choose cells) and reorder'); // a drag over the rows is one or the other (mygo's buildList)
+        }
         $state->went = $count < $state->count;
         $state->sync($count); // rows that came or went above the place and the choice, with keys
         $state->count = $count;
@@ -835,7 +855,7 @@ final class Context
                 continue; // headers are not chosen
             }
             $first = $node->kids[$k];
-            if ($state->selected !== null) { $first->selected = $state->chosen($i); }
+            if ($state->selected !== null) { $first->selected = $state->chosen($i) && !$state->choosesCells(); } // a table choosing cells shows its cells chosen
             $rt = $this->runtime;
             if ($rt !== null && $state->reorder !== null) { // a press on the row, moved 4 points, drags it (and the rows chosen with it)
                 $d = $rt->dragged($first->id);
@@ -851,14 +871,23 @@ final class Context
                     self::fade($first, 0.4); // where the row was, as it moves with the pointer
                 }
             }
-            if ($rt !== null && $state->drag !== null && $state->drag['far']) {
+            if ($rt !== null && $state->dragSelects()) {
+                $this->pressRow($state, $first, $i);
+            }
+            if ($rt !== null && (($state->drag !== null && $state->drag['far']) || $state->dragSel !== null)) {
                 $rt->clicked($first->id); // the release that ends a drag is no click
             } elseif ($rt !== null && $state->selected !== null) { // rows not chosen leave a click to the row's own (mygo's TestDragAroundControls)
                 if ($rt->doubleClicked($first->id)) {
                     $state->choose($i);
                     $state->submit();
                 } elseif ($rt->clicked($first->id)) {
-                    $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection
+                    $p = $state->rowPresses[$i] ?? null;
+                    unset($state->rowPresses[$i]);
+                    if ($p === null) {
+                        $state->click($i, $rt->clickMods); // Cmd and Shift choose several, with a selection; by the keys or assistive technology, the row and no column
+                    } elseif (!$p[2]) {
+                        $state->clickAt($i, $p[0], $p[1], $rt->clickMods, $rt); // where it pressed, unless the press chose it
+                    }
                 }
             }
         }
@@ -905,6 +934,12 @@ final class Context
             $j = self::typedRow($state->typed, $state->selected, $count, $state->label, $state->isHeader(...));
             if ($j >= 0) { $state->choose($j); }
         }
+        if ($state->dragSel !== null && $this->runtime !== null) {
+            $this->dragSelectRows($state, $node);
+        }
+        if ($this->runtime !== null && !$this->runtime->held()) { // the press is over
+            [$state->rowPresses, $state->pressOn, $state->dragSel] = [[], null, null];
+        }
         $this->end();
         $state->remember();
         $node->changed = $state->changedSinceBuilt(); // the choice, by the keys before the build or a click in it (mygo's List Changed)
@@ -912,6 +947,86 @@ final class Context
             $this->reorderRows($state, $node, $count);
         }
         return $node;
+    }
+
+    /**
+     * A press on row $i of a list choosing by dragging (ListState::$dragSelect,
+     * a table choosing cells), whose first node is $first: one on a row or
+     * a cell not chosen chooses it as the pointer goes down, as spreadsheets
+     * do; one chosen waits for the release, which keeps a drag of the
+     * choice. Once the pointer goes 4 points, the drag chooses: from the row
+     * alone, or with Cmd held as it began, besides those chosen, or with
+     * Shift, as the Shift-press extended (mygo's listRowValueInput and
+     * dragSelect).
+     */
+    private function pressRow(ListState $state, Node $first, int $i): void
+    {
+        $rt = $this->runtime;
+        if (($p = $rt->pressOn($first->id)) !== null) {
+            [$state->pressOn, $state->pressDist] = [$i, 0.0];
+            $chose = !$state->chosenAt($i, $p[0], $p[1], $rt);
+            if ($chose) { $state->clickAt($i, $p[0], $p[1], $rt->pressMods, $rt); }
+            $state->rowPresses[$i] = [$p[0], $p[1], $chose];
+        }
+        if ($state->pressOn !== $i || $state->dragSel !== null || ($d = $rt->dragged($first->id)) === null) {
+            return;
+        }
+        $state->pressDist += hypot($d[0], $d[1]);
+        if ($state->pressDist < 4) { // mygo's dragStart
+            return;
+        }
+        $add = ($rt->pressMods & Key::COMMAND) !== 0; $extend = ($rt->pressMods & Key::SHIFT) !== 0;
+        $state->dragSel = ['from' => $i, 'add' => $add, 'fromCol' => ''];
+        if ($add) {
+            $state->selection->pivotAt($i, $state->keyOf(...)); // from it, besides the rows chosen
+            $state->selected = $i;
+        } elseif (!$extend) {
+            $state->choose($i);
+        }
+        $at = $state->rowPresses[$i] ?? [$rt->input->mouseX, $rt->input->mouseY];
+        if ($state->choosesCells()) { $state->startDragCells($at[0], $at[1], $extend, $rt); }
+    }
+
+    /**
+     * The drag choosing the rows of $list (ListState::$dragSel): those from
+     * the row it began on to the one under the pointer, as the rows showed
+     * last frame, the first or the last built when the pointer is above or
+     * below them; in a table choosing cells, the columns too. Near the
+     * list's edges, or past them, it scrolls the list, sideways too for
+     * cells (mygo's dragSelect and scrollDragSelect).
+     */
+    private function dragSelectRows(ListState $state, Node $list): void
+    {
+        $rt = $this->runtime;
+        if (!$rt->held()) {
+            return;
+        }
+        $x = $rt->input->mouseX; $y = $rt->input->mouseY;
+        $at = -1; $top = null; $bottom = null;
+        foreach ($list->rowStarts as $k => $i) { // as the rows show, through a transform around the list
+            $id = $list->kids[$k]->id;
+            $r = $rt->rectOf($id); $p = $rt->toLocal($id, $x, $y);
+            if ($r === null || $p === null || $i >= $state->count) { continue; }
+            if ($p[1] >= 0 && $p[1] < $r[3]) { $at = $i; }
+            if ($top === null || $r[1] < $top[0][1]) { $top = [$r, $i, $p[1]]; }
+            if ($bottom === null || $r[1] + $r[3] > $bottom[0][1] + $bottom[0][3]) { $bottom = [$r, $i, $p[1]]; }
+        }
+        if ($at < 0 && $top !== null) {
+            $at = $top[2] < 0 ? $top[1] : ($bottom[2] >= $bottom[0][3] ? $bottom[1] : -1);
+        }
+        if ($at >= 0 && !$state->isHeader($at)) {
+            $state->extendTo($at);
+        }
+        if ($state->choosesCells()) {
+            $state->dragCells($x, $y, $rt);
+            $lr = $rt->rectOf($list->id);
+            if ($lr !== null) { // sideways near the left or right edge, faster nearer and past
+                $edge = 32.0; $at = $x - $lr[0];
+                $dx = $at < $edge ? -min($edge - $at, 2 * $edge) / 2 : ($at > $lr[2] - $edge ? min($at - ($lr[2] - $edge), 2 * $edge) / 2 : 0.0);
+                if ($dx != 0) { $state->scrollByX($dx); $rt->animate(); }
+            }
+        }
+        $this->dragScroll($list, $state, $y);
     }
 
     /**
@@ -3602,9 +3717,14 @@ final class Context
         $least = 0.0; // the least width of the rows: the columns', those sharing the room left at their least
         foreach ($order as $j) { $least += $layout->width($columns[$j]) ?? max($columns[$j]->minWidth, $flexMin); }
         $fitting = []; // the cells of the column fitting its cells
-        $cells = function (Closure $fill, int $role) use ($columns, $order, $layout, $t, $flexMin, $drag, &$fitting): array {
+        // The block of cells chosen (ListState::$cellSelect): its columns' places, from lo to hi, and the cursor's; set once the headers are built.
+        $cellSel = $state->cellSelect && $state->selection !== null;
+        [$lo, $hi, $cur] = [0, -1, -1];
+        $state->tableCols = [];
+        $cells = function (Closure $fill, int $role) use ($columns, $order, $layout, $t, $flexMin, $drag, &$fitting, $state, $cellSel, &$lo, &$hi, &$cur): array {
             $boxes = [];
-            foreach ($order as $j) {
+            $row = $role === Role::CELL ? $this->listRow : null; // the list's row being built: [state, row, list]
+            foreach ($order as $k => $j) {
                 $col = $columns[$j];
                 $w = $layout->width($col);
                 // Keyed by its column, a cell keeps its state as the columns move: a header being dragged keeps the press.
@@ -3617,6 +3737,17 @@ final class Context
                 $box->role = $role;
                   $fill($j);
                 $this->end();
+                if ($row !== null && $state->cellMenu !== null) { // the cell's context menu, over the whole cell (mygo's CellMenu)
+                    $i = $row[1]; $menu = $state->cellMenu;
+                    $box->contextMenu(static fn(\MyPHP\UI\Menu $m) => $menu($m, $i, $j));
+                }
+                if ($row !== null && $cellSel && !$this->focusWithin($box)) {
+                    // A cell of the block shows as a chosen row does, a row header's with its whole row; the cursor's, in the row the keys move from, has a border while the table has the focus. One holding the focus, as an editor in it, shows what it holds.
+                    $box->selected = $state->chosen($row[1]) && $k >= $lo && $k <= $hi && (!$col->rowHeader || $state->cells->all);
+                    if ($k === $cur && $state->selected === $row[1] && $this->runtime !== null && $this->runtime->focused($row[2]->id)) {
+                        $box->drawOver(static function (DisplayList $list, Node $b, Theme $t): void { $list->ring($b->x, $b->y, $b->w, $b->h, $t->accent, 1.0, 0.0, 1.0); });
+                    }
+                }
                 if ($drag->fit !== null && $drag->fit === $col->id()) { $fitting[] = $box; }
                 $boxes[] = $box;
             }
@@ -3628,7 +3759,7 @@ final class Context
         $heads = $cells(function (int $j) use ($columns, $state, $t, &$edges, $layout, $order) {
             $col = $columns[$j];
             $this->text($col->title, $t->fontSize, $t->textMuted, Font::BOLD);
-            $place = $col->sortable ? $state->sortPlace($col->id()) : null;
+            $place = $col->sorts() ? $state->sortPlace($col->id()) : null;
             if ($place !== null) {
                 if ($state->sortBy !== null && count($state->sortBy) > 1) { // its place among the columns sorted by, from 1
                     $this->text((string)($place[0] + 1), $t->fontSize * 0.75, $t->textMuted)->role(Role::NONE)->marginStart($t->space(1));
@@ -3650,14 +3781,22 @@ final class Context
                 ($state->headerMenu)($m, $col);
             });
         }
+        if ($cellSel) {
+            foreach ($order as $k => $j) { $state->tableCols[] = ['id' => $columns[$j]->id(), 'col' => $j, 'rowHeader' => $columns[$j]->rowHeader, 'head' => $heads[$k]->id]; }
+            $state->fixCells();
+            [$lo, $hi] = $state->block();
+            foreach ($state->tableCols as $k => $tc) { if ($tc['id'] === $state->cells->cursor) { $cur = $k; } }
+        }
+        $chooseAll = false; // a click on a row header column's header chooses every cell
         foreach ($order as $k => $j) {
             $col = $columns[$j]; $h = $heads[$k]; $id = $col->id();
             $h->label = $col->title; // the title alone, not the arrow beside it
-            if ($col->sortable) {
+            if ($col->sorts()) {
                 $place = $state->sortPlace($id);
                 $h->sort = $place === null ? 0 : ($place[1] ? 2 : 1);
-                if ($this->hovered($h)) { $h->color = $t->surfaceHover; }
             }
+            if (($col->sorts() || ($col->rowHeader && $cellSel)) && $this->hovered($h)) { $h->color = $t->surfaceHover; }
+            if ($col->rowHeader && $cellSel && $this->clicked($h)) { $chooseAll = true; }
             if ($rt === null) {
                 continue;
             }
@@ -3701,7 +3840,7 @@ final class Context
                     if ($moved) { $this->clicked($h); }
                 }
             }
-            if ($col->sortable && $this->clicked($h)) {
+            if ($col->sorts() && $this->clicked($h)) {
                 $state->sortClicked($id, ($rt->clickMods & (Key::COMMAND | Key::SHIFT)) !== 0); // Cmd-click as Finder, Shift-click as web grids
                 $n->changed = true;
             }
@@ -3729,6 +3868,11 @@ final class Context
               $cells(fn(int $j) => $cell($i, $j), Role::CELL);
             $this->end();
         });
+        if ($chooseAll) {
+            $state->selectAll();
+            $state->chooseAllColumns();
+            $state->focus($this);
+        }
         $list->role = Role::NONE; $list->rowRole = Role::ROW; // the table's rows, under it
         $list->rowWidth($least);
         $head->scrollWith($list);

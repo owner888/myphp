@@ -1990,3 +1990,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Strokes in a conic gradient** do not fade with a trimmed length as
   mygo's `StrokePathConicGradient` does, as myphp's
   `strokePathGradient` does not either.
+
+## Choosing by dragging over rows, blocks of cells (v1.73)
+
+- **How chosen cells look**: the block's cells are drawn as myphp's
+  chosen rows are, under the theme's selection color, where mygo fills
+  them with the accent and its text color, as its chosen rows.
+- **The row a drag began on**: mygo keeps building it while it is
+  scrolled away, to keep the press; myphp's press stays the runtime's,
+  so the row is built only when in view.
+- **Rows chosen across passes**: mygo's fix keeping the row Shift
+  extends from through a second build pass has nothing to fix in
+  myphp, whose `Selection` keeps its pivot by its item's key.
+- **Linking**: mygo registers list code the first list builds, so that
+  apps without lists link none; PHP loads classes as they are used.

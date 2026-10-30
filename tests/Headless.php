@@ -235,11 +235,11 @@ final class Headless
         return $this->frame(1);
     }
 
-    /** The mouse pressed at ($x, $y) and held. */
-    public function press(float $x, float $y): Node
+    /** The mouse pressed at ($x, $y), with $mods held, and held. */
+    public function press(float $x, float $y, int $mods = 0): Node
     {
         $this->input->mouse($x, $y);
-        $this->input->push(['down', $x, $y, 0, 1, 0]);
+        $this->input->push(['down', $x, $y, 0, 1, $mods]);
         return $this->frame();
     }
 

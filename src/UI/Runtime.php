@@ -164,6 +164,10 @@ final class Runtime
     private ?array $hold = null;
     /** Where the mouse went down this frame, for pressed(); a popover closes on a press outside it. */
     private array $presses = [];
+    /** The modifiers held as the left button last went down (mygo's pressMods). */
+    public int $pressMods = 0;
+    /** @var array<int, array{0: ListState, 1: int}> the first nodes of the rows of the last frame's lists with a selection, by id, with their list and row: a right-click chooses the row under it (chooseRowAt) */
+    private array $listRows = [];
     /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
     private array $keys = [];
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
@@ -479,6 +483,7 @@ final class Runtime
                         break; // a selection starts: the paragraph pressed has the focus
                     }
                     $this->presses[] = [$e[1], $e[2]];
+                    $this->pressMods = ($e[5] ?? 0) & Key::MODIFIERS;
                     $this->pressAt($e[1], $e[2]);
                     if ($e[4] >= 2 && $this->focus !== null && isset($this->fields[$this->focus])) {
                         $this->fields[$this->focus][0]->{$e[4] === 2 ? 'selectWord' : 'selectLine'}(); // a double click takes the word, a triple the line
@@ -675,6 +680,7 @@ final class Runtime
         $this->activated = null; // taken by clicked() during the build, or dropped
         $this->typed = '';
         $this->rects = [];
+        $this->listRows = [];
         $this->frags = [];
         $this->order = [];
         $this->barrier = 0; $this->counter = 0; $this->overlays = []; $this->handles = []; $this->links = [];
@@ -1946,6 +1952,9 @@ final class Runtime
             if ($n->scroll instanceof ListState && $n->scroll->selected !== null) {
                 $this->focusables[] = $n->id;
                 $this->lists[$n->id] = $n->scroll;
+                if ($n->scroll->selection !== null) {
+                    foreach ($n->rowStarts as $k => $i) { $this->listRows[$n->kids[$k]->id] = [$n->scroll, $i]; }
+                }
             }
         }
         foreach ($n->ghosts as $g) {
@@ -2354,8 +2363,21 @@ final class Runtime
                 'moveToBeginningOfDocument:', 'scrollToBeginningOfDocument:' => 0, 'moveToEndOfDocument:', 'scrollToEndOfDocument:' => $l->count - 1,
                 default => null,
             };
-            if ($to !== null) { $extend ? $l->extendTo($to) : $l->choose($to); return true; }
-            if ($selector === 'selectAll:' && $l->selection !== null) { $l->selectAll(); return true; }
+            if ($to !== null) {
+                $extend ? $l->extendTo($to) : $l->choose($to);
+                if ($l->choosesCells()) { $l->cellKeys(0, $extend, !$extend, false, $this, $this->focus); } // one column, unless with Shift
+                return true;
+            }
+            if ($l->choosesCells() && ($base === 'moveLeft:' || $base === 'moveRight:')) { // a table choosing cells: the cursor's column, as the screen shows them
+                $d = ($base === 'moveRight:') !== ($this->scrollAxes[$this->focus][2] ?? false) ? 1 : -1;
+                $l->cellKeys($d, $extend, false, false, $this, $this->focus);
+                return true;
+            }
+            if ($selector === 'selectAll:' && $l->selection !== null) {
+                $l->selectAll();
+                if ($l->choosesCells()) { $l->cellKeys(0, false, false, true, $this, $this->focus); }
+                return true;
+            }
             if ($selector === 'insertNewline:') { // Enter submits the chosen row, or edits its editable text (mygo's listInput)
                 if ($l->selected >= 0) { if ($l->editables) { $l->editAsked = true; } else { $l->submit(); } }
                 return true;
@@ -2635,6 +2657,36 @@ final class Runtime
     public function pressedAnywhere(): bool
     {
         return $this->presses !== [];
+    }
+
+    /** @internal Context::list: where the left button went down this frame on node $id itself, no control inside it taking the press: [x, y], or null. @return ?array{0: float, 1: float} */
+    public function pressOn(int $id): ?array
+    {
+        return ($this->pointerPress['id'] ?? null) === $id ? $this->pressPoint($id) : null;
+    }
+
+    /**
+     * A right-click at (x, y) opening a context menu chooses the row of a
+     * list with a selection under it, unless it is chosen or the list's
+     * $menuKeepsSelection is set: the menu acts on the row it is on, as in
+     * Finder, and on all those chosen when it is one of them; in a table
+     * choosing cells, on the cell, unless it is in the block (mygo's
+     * chooseRowAt). The next frame's build reports the choice.
+     */
+    private function chooseRowAt(float $x, float $y): void
+    {
+        $best = null; $at = -1;
+        foreach ($this->listRows as $id => $row) {
+            if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y)) { [$best, $at] = [$row, $this->order[$id]]; }
+        }
+        if ($best === null) {
+            return;
+        }
+        [$s, $i] = $best;
+        if (!$s->menuKeepsSelection && $i < $s->count && !$s->chosenAt($i, $x, $y, $this)) {
+            $s->clickAt($i, $x, $y, 0, $this);
+            $this->needsFrame = true;
+        }
     }
 
     /** Whether a second press of a double click this frame landed on the node this id had last frame. */
