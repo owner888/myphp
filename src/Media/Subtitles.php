@@ -99,7 +99,7 @@ final class Subtitles
         };
     }
 
-    /** @internal UI\VideoPlayerState: the encoding of the subtitle files read next, iconv's name of it (IINA's default encoding), 'auto' to find it. */
+    /** @internal UI\MoviePlayerState: the encoding of the subtitle files read next, iconv's name of it (IINA's default encoding), 'auto' to find it. */
     public static string $encoding = 'auto';
 
     /** $bytes as UTF-8: by a byte order mark, else of $encoding where it is set, else as UTF-8 when it is, else as GB18030. */

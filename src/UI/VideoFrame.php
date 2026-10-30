@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-/** A picture of a clip and how long it shows (mygo's VideoFrame). */
-final class ClipFrame
+/** A picture of a video and how long it shows (mygo's VideoFrame). */
+final class VideoFrame
 {
     public function __construct(
         /** Its size in pixels. */

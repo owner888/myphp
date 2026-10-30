@@ -14,7 +14,7 @@ use RuntimeException;
  * temporary one. They are in the order they were saved, a renamed one
  * the last (IINA's are a Swift dictionary's, of no order).
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\MoviePlayerState
  */
 final class EqualizerProfiles
 {

@@ -27,7 +27,7 @@ final class HttpBytes implements Bytes, CacheMember
 {
     /** A block of the cache; IINA's defaultCacheSize, 153600 KiB. */
     public const BLOCK = 256 << 10;
-    /** @internal UI\VideoPlayerState: the User-Agent the films over the network are asked for with (IINA's userAgent, mpv's user-agent), '' for none; HLS's segments too (Download). */
+    /** @internal UI\MoviePlayerState: the User-Agent the films over the network are asked for with (IINA's userAgent, mpv's user-agent), '' for none; HLS's segments too (Download). */
     public static string $userAgent = '';
     /** How far ahead of the transfer a read may be and wait for it rather than start another. */
     private const NEAR = 2 << 20;

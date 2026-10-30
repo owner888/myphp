@@ -1,6 +1,6 @@
 <?php
-// The player's welcome and playback history windows (Context::videoPlayerWelcome,
-// Context::videoPlayerHistory), as IINA's: what they show of the films played
+// The player's welcome and playback history windows (Context::moviePlayerWelcome,
+// Context::moviePlayerHistory), as IINA's: what they show of the films played
 // (Media\PlaybackHistory, App::recentDocuments) and what they open.
 declare(strict_types=1);
 
@@ -26,7 +26,7 @@ PlaybackPositions::default()->set($a, 25.0);
 
 // The history: a group of the day, the latest first; a title over its file's name; where it was left.
 $opened = [];
-$h = new Headless(function (Context $c) use (&$opened) { $c->videoPlayerHistory(function (array $paths, bool $new) use (&$opened) { $opened[] = [$paths, $new]; }); }, 800, 600); // by reference all the way: an arrow function would hold a copy
+$h = new Headless(function (Context $c) use (&$opened) { $c->moviePlayerHistory(function (array $paths, bool $new) use (&$opened) { $opened[] = [$paths, $new]; }); }, 800, 600); // by reference all the way: an arrow function would hold a copy
 $h->frame();
 $texts = $h->texts();
 check(in_array('Playback History', $texts, true) && in_array('Media', $texts, true) && in_array('Progress', $texts, true), 'the title, the columns: ' . json_encode($texts));
@@ -58,7 +58,7 @@ $h->closeMenu();
 // The welcome window: the film played last to resume, the recent documents.
 App::clearRecentDocuments();
 App::addRecentDocument($b); App::addRecentDocument($a);
-$w = new Headless(function (Context $c) use (&$opened) { $c->videoPlayerWelcome(function (string $p) use (&$opened) { $opened[] = $p; }, fn() => null); }, 560, 440);
+$w = new Headless(function (Context $c) use (&$opened) { $c->moviePlayerWelcome(function (string $p) use (&$opened) { $opened[] = $p; }, fn() => null); }, 560, 440);
 $w->frame();
 check($w->byText('Resume') !== null && $w->byText('Open…') !== null && $w->byText('Open URL…') !== null, 'Resume, Open… and Open URL…');
 same(1, count(array_keys($w->texts(), 'Alpha.mkv', true)), 'the film played last, once: to resume, not among the recent');

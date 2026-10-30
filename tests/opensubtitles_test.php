@@ -4,7 +4,7 @@
 // Python's 64-bit sums), the system's languages as its codes, a search's
 // response as the rows IINA lists; the settings of IINA's Settings window
 // the player has (Media\PlayerSettings), the window's search, and, on
-// macOS, the window (UI\VideoPlayerSettings); what a file's
+// macOS, the window (UI\MoviePlayerSettings); what a file's
 // name tells of its film, to look it up on TMDB by (Media\MetaVideo, of
 // agc_player's names).
 declare(strict_types=1);
@@ -12,7 +12,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\Media\{MetaVideo, OpenSubtitles, PlayerSettings};
-use MyPHP\UI\{Context, VideoPlayerSettings, VideoPlayerSettingsPages, VideoPlayerState};
+use MyPHP\UI\{Context, MoviePlayerSettings, MoviePlayerSettingsPages, MoviePlayerState};
 
 $file = sys_get_temp_dir() . '/myphp-hash-' . getmypid() . '.bin';
 $n = 200003;
@@ -75,21 +75,21 @@ unlink($file);
 
 // The settings window's search (IINA's): every word in a word of a row (or a row under one); by page, then section, then label.
 $pages = [];
-(new Headless(function (Context $c) use (&$pages) { $pages = (new VideoPlayerSettingsPages($c, new VideoPlayerState(), (object)[]))->all(); $c->column(); $c->end(); }, 600, 480))->frame();
+(new Headless(function (Context $c) use (&$pages) { $pages = (new MoviePlayerSettingsPages($c, new MoviePlayerState(), (object)[]))->all(); $c->column(); $c->end(); }, 600, 480))->frame();
 same(['general', 'ui', 'video', 'audio', 'subtitles', 'network', 'control', 'key.bindings', 'advanced', 'utilities'], array_keys($pages), 'the pages, in IINA\'s order');
-same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'HARDWARE'), 'id'), 'a word of a label, whatever its case');
-same(['hardwareDecoder.label'], array_column(VideoPlayerSettings::search($pages, 'filters'), 'id'), 'a word of what an option says');
-same(['pauseWhenMinimized'], array_column(VideoPlayerSettings::search($pages, 'minimized'), 'id'), 'a row under another');
-same('Pause/resume when', VideoPlayerSettings::search($pages, 'minimized')[0]['parent'], 'with the row it is under');
-same([], VideoPlayerSettings::search($pages, 'source hardware'), 'each word in the same row');
-same([], VideoPlayerSettings::search($pages, '   '), 'nothing for no words');
+same(['hardwareDecoder.label'], array_column(MoviePlayerSettings::search($pages, 'HARDWARE'), 'id'), 'a word of a label, whatever its case');
+same(['hardwareDecoder.label'], array_column(MoviePlayerSettings::search($pages, 'filters'), 'id'), 'a word of what an option says');
+same(['pauseWhenMinimized'], array_column(MoviePlayerSettings::search($pages, 'minimized'), 'id'), 'a row under another');
+same('Pause/resume when', MoviePlayerSettings::search($pages, 'minimized')[0]['parent'], 'with the row it is under');
+same([], MoviePlayerSettings::search($pages, 'source hardware'), 'each word in the same row');
+same([], MoviePlayerSettings::search($pages, '   '), 'nothing for no words');
 
 if (PHP_OS_FAMILY === 'Darwin') {
-    // The window (Context::videoPlayerSettings): the pages, the Video page's sections, the hardware decoder's choices; the Subtitles page's account and languages.
+    // The window (Context::moviePlayerSettings): the pages, the Video page's sections, the hardware decoder's choices; the Subtitles page's account and languages.
     @unlink($file);
-    $s = new VideoPlayerState(); $s->playerSettings = $again = new PlayerSettings($file);
+    $s = new MoviePlayerState(); $s->playerSettings = $again = new PlayerSettings($file);
     $again->set('openSubUsername', 'kitty'); $again->set('subLang', ['zh-Hans']);
-    $h = new Headless(fn(Context $c) => $c->videoPlayerSettings($s), 600, 480);
+    $h = new Headless(fn(Context $c) => $c->moviePlayerSettings($s), 600, 480);
     $h->frame();
     check($h->byText('General') !== null && $h->byText('At launch') !== null, 'the General page first');
     $h->clickOn($h->byText('Video')); $h->frame();

@@ -19,12 +19,12 @@ use MyPHP\Window;
  * film played last to resume (where it was left, with the settings'
  * recordRecentFiles and resumeLastPosition), and the recent documents
  * under it, a click opening one, Up and Down choosing one, Return opening
- * it. Built by Context::videoPlayerWelcome, in a window of 560 by 440, its
+ * it. Built by Context::moviePlayerWelcome, in a window of 560 by 440, its
  * title bar hidden, over the under-window material.
  *
  * @internal UI\Context
  */
-final class VideoPlayerWelcome
+final class MoviePlayerWelcome
 {
     /** @param Closure(string): void $open @param Closure(): void $openURL */
     public static function build(Context $c, Closure $open, Closure $openURL): Node
@@ -53,11 +53,11 @@ final class VideoPlayerWelcome
             $c->end();
           $c->end();
           $c->row(0, 12)->absolute()->top(64)->right(30); // the buttons
-            if (VideoPlayerSettings::pushButton($c, $c->texts()->get('welcomeOpen'), false)) {
+            if (MoviePlayerSettings::pushButton($c, $c->texts()->get('welcomeOpen'), false)) {
                 $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), multiple: true));
                 foreach ($paths ?? [] as $p) { $open($p); }
             }
-            if (VideoPlayerSettings::pushButton($c, $c->texts()->get('welcomeOpenURL'), false)) { $openURL(); }
+            if (MoviePlayerSettings::pushButton($c, $c->texts()->get('welcomeOpenURL'), false)) { $openURL(); }
           $c->end();
           $header = 48 + 68; // the header's bottom
           if ($last !== null) {
@@ -70,10 +70,10 @@ final class VideoPlayerWelcome
                   default => [0, 0.0],
               };
               $b->background($rgb, $alpha);
-                VideoPlayerSettings::glyph($c, ['clock.arrow.trianglehead.counterclockwise.rotate.90', 'clock'], $t->text);
+                MoviePlayerSettings::glyph($c, ['clock.arrow.trianglehead.counterclockwise.rotate.90', 'clock'], $t->text);
                 $c->text($c->texts()->get('welcomeResume'), 13, $t->text)->singleLine()->shrink(0);
                 $c->text(basename($last[0]), 13, $t->text)->singleLine()->ellipsis('…')->grow(1);
-                $c->text(VideoPlayerState::clock($last[1]), 11, $t->textMuted)->fontFeatures('tnum');
+                $c->text(MoviePlayerState::clock($last[1]), 11, $t->textMuted)->fontFeatures('tnum');
               $c->end();
               if ($c->clicked($b)) { $open($last[0]); }
           }

@@ -17,7 +17,7 @@ use Closure;
  * darwin backend: the one to show it last has the commands, those it
  * handles enabled.
  *
- * @internal UI\VideoPlayerState, MyPHP\NowPlaying
+ * @internal UI\MoviePlayerState, MyPHP\NowPlaying
  */
 final class NowPlaying
 {

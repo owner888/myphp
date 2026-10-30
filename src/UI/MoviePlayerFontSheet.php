@@ -14,9 +14,9 @@ use MyPHP\WindowOptions;
  * Cancel and OK. A family chosen, not a face: the settings' bold and
  * italic choose the face, as the text's.
  *
- * @internal VideoPlayerSettingsPages
+ * @internal MoviePlayerSettingsPages
  */
-final class VideoPlayerFontSheet
+final class MoviePlayerFontSheet
 {
     private const WIDTH = 458, HEIGHT = 524, ROW = 18;
 
@@ -39,7 +39,7 @@ final class VideoPlayerFontSheet
     private static function build(Context $c, object $s, Closure $done, Closure $close): void
     {
         $t = $c->theme;
-        $k = VideoPlayerSettings::colors($t);
+        $k = MoviePlayerSettings::colors($t);
         $tx = $c->texts();
         $s->families ??= array_map(fn(FontFamily $f) => $f->name, Font::families());
         $filter = mb_strtolower(trim($s->filter->text));
@@ -78,7 +78,7 @@ final class VideoPlayerFontSheet
           $c->column()->grow(1);
           $c->end();
           $c->row(0, 12)->fillWidth()->justify(Node::END)->align(Node::CENTER);
-            if (VideoPlayerSettings::pushButton($c, $tx->get('fontPickerCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
+            if (MoviePlayerSettings::pushButton($c, $tx->get('fontPickerCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
             $ok = $c->row()->height(24)->width(80)->round(8)->center()->role(Role::BUTTON)->label($tx->get('fontPickerOK'))->background($t->accent);
               $c->text($tx->get('fontPickerOK'), 13, $t->accentText);
             $c->end();

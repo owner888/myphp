@@ -7,14 +7,14 @@ use MyPHP\Native\ImageIO;
 use RuntimeException;
 
 /**
- * Decodes an animated GIF for a ClipPlayer (mygo's NewGIFDecoder), as
+ * Decodes an animated GIF for a VideoPlayer (mygo's NewGIFDecoder), as
  * browsers show it: each frame composed over what the ones before it
  * left, as its disposal says, by ImageIO, which decodes a frame as it
  * plays; a frame of 10 ms or less shows for 100 ms. It plays once or loops
- * as ClipPlayer::setLoop says, whatever loop count the GIF gives. macOS
+ * as VideoPlayer::setLoop says, whatever loop count the GIF gives. macOS
  * only.
  */
-final class GifDecoder implements ClipDecoder
+final class GifDecoder implements VideoDecoder
 {
     private mixed $source = null;
     private int $count = 0, $next = 0;
@@ -39,12 +39,12 @@ final class GifDecoder implements ClipDecoder
         return new self($b === false ? throw new RuntimeException("cannot read $path") : $b);
     }
 
-    public function next(): ?ClipFrame
+    public function next(): ?VideoFrame
     {
         if ($this->source === null) { throw new RuntimeException('myphp: the GIF decoder is closed'); }
         if ($this->next >= $this->count) { return null; }
         [$w, $h, $rgba, $delay] = ImageIO::frame($this->source, $this->next++);
-        return new ClipFrame($w, $h, $rgba, $delay <= 0.010 ? 0.1 : $delay);
+        return new VideoFrame($w, $h, $rgba, $delay <= 0.010 ? 0.1 : $delay);
     }
 
     public function rewind(): void

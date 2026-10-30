@@ -71,7 +71,7 @@ final class Shell
     }
 
     /**
-     * @internal UI\VideoPlayerState: whether the file at $path is on a
+     * @internal UI\MoviePlayerState: whether the file at $path is on a
      * volume of this Mac, not a mounted remote drive (NSURLVolumeIsLocalKey),
      * as IINA asks before making a film's thumbnails.
      */
@@ -86,7 +86,7 @@ final class Shell
         return ObjC::msg('b:', $local, 'boolValue');
     }
 
-    /** @internal UI\VideoPlayerWelcome: the app's icon (the Dock's, NSApp's applicationIconImage) as a PNG of $size by $size pixels. */
+    /** @internal UI\MoviePlayerWelcome: the app's icon (the Dock's, NSApp's applicationIconImage) as a PNG of $size by $size pixels. */
     public static function appIcon(int $size): string
     {
         $img = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'applicationIconImage');

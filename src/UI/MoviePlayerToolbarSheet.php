@@ -14,9 +14,9 @@ use MyPHP\WindowOptions;
  * there are under it, one dragged into the box added where it is dropped;
  * Restore Default, Cancel, Done. A sheet of the window in front.
  *
- * @internal VideoPlayerSettings
+ * @internal MoviePlayerSettings
  */
-final class VideoPlayerToolbarSheet
+final class MoviePlayerToolbarSheet
 {
     /** The sheet's size, a button's in the box, a row's of the buttons there are (IINA's). */
     private const WIDTH = 424, HEIGHT = 470, BUTTON = 24, ROW = 26;
@@ -40,7 +40,7 @@ final class VideoPlayerToolbarSheet
     private static function build(Context $c, object $s, Closure $done, Closure $close): void
     {
         $t = $c->theme;
-        $root = $c->column(0, 0, 1)->padding(20)->background(VideoPlayerSettings::colors($t)['page']);
+        $root = $c->column(0, 0, 1)->padding(20)->background(MoviePlayerSettings::colors($t)['page']);
           $c->text($c->texts()->get('toolbarCurrentItems'), 13, $t->text, Font::BOLD);
           $c->text($c->texts()->get('toolbarDragOut'), 11, $t->textMuted)->margin(4, 0, 0, 0);
           // The box of the current buttons: each dragged out to take it out, along to move it; one there is dropped in, added where it falls.
@@ -49,7 +49,7 @@ final class VideoPlayerToolbarSheet
             $at = [];
             foreach ($s->buttons as $i => $b) {
                 $n = $c->key("current:$b")->column()->size(self::BUTTON, self::BUTTON)->center()->role(Role::BUTTON)->label($c->texts()->get('iinaOscToolbar' . self::name($b)));
-                  VideoPlayerSettings::glyph($c, VideoPlayerSettings::TOOLBAR[$b][0], $t->text);
+                  MoviePlayerSettings::glyph($c, MoviePlayerSettings::TOOLBAR[$b][0], $t->text);
                 $c->end();
                 $c->drag($n, ['current', $b]);
                 $at[$i] = $n;
@@ -58,10 +58,10 @@ final class VideoPlayerToolbarSheet
           $c->text($c->texts()->get('toolbarAvailableItems'), 13, $t->text, Font::BOLD)->margin(22, 0, 0, 0);
           $c->text($c->texts()->get('toolbarDragIn'), 11, $t->textMuted)->margin(4, 0, 0, 0);
           $c->column(0, 4)->margin(12, 0, 0, 0)->alignSelf(Node::CENTER)->width(240);
-            foreach (VideoPlayerSettings::TOOLBAR as $b => [$symbols]) {
+            foreach (MoviePlayerSettings::TOOLBAR as $b => [$symbols]) {
                 $row = $c->key("available:$b")->row(0, 4)->height(self::ROW)->round(13)->paddingX(2)->align(Node::CENTER)->fillWidth()->background($t->dark ? 0xffffff : 0x000000, 0.05);
                   $c->column()->size(self::ROW, self::ROW)->center();
-                    VideoPlayerSettings::glyph($c, $symbols, $t->text);
+                    MoviePlayerSettings::glyph($c, $symbols, $t->text);
                   $c->end();
                   $c->text($c->texts()->get('iinaOscToolbar' . self::name($b)), 13, $t->text)->singleLine();
                 $c->end();
@@ -72,10 +72,10 @@ final class VideoPlayerToolbarSheet
           $c->column()->grow(1);
           $c->end();
           $c->row(0, 12)->fillWidth()->align(Node::CENTER);
-            if (VideoPlayerSettings::pushButton($c, $c->texts()->get('toolbarRestoreDefault'), false)) { $s->buttons = VideoPlayerSettings::TOOLBAR_DEFAULT; }
+            if (MoviePlayerSettings::pushButton($c, $c->texts()->get('toolbarRestoreDefault'), false)) { $s->buttons = MoviePlayerSettings::TOOLBAR_DEFAULT; }
             $c->column()->grow(1);
             $c->end();
-            if (VideoPlayerSettings::pushButton($c, $c->texts()->get('toolbarCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
+            if (MoviePlayerSettings::pushButton($c, $c->texts()->get('toolbarCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
             $ok = $c->row()->height(24)->paddingX(12)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label($c->texts()->get('toolbarDone'))->background($t->accent);
               $c->text($c->texts()->get('toolbarDone'), 13, $t->accentText);
             $c->end();
@@ -103,6 +103,6 @@ final class VideoPlayerToolbarSheet
     /** The key of IINA's name of toolbar button $b: osc_toolbar.<key>, as the strings name it (OscToolbarFullScreen). */
     private static function name(int $b): string
     {
-        return implode('', array_map('ucfirst', explode('_', VideoPlayerSettings::TOOLBAR[$b][2])));
+        return implode('', array_map('ucfirst', explode('_', MoviePlayerSettings::TOOLBAR[$b][2])));
     }
 }

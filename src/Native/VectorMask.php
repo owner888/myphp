@@ -14,7 +14,7 @@ use RuntimeException;
  * the grown one where asked (libass's ass_fix_outline), as premultiplied white
  * RGBA (vImage's planes to ARGB), for an image the painter tints.
  *
- * @internal UI\VideoPlayer
+ * @internal UI\MoviePlayer
  */
 final class VectorMask
 {

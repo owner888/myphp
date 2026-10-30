@@ -3424,7 +3424,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   time, not the keyframe. Another audio track is a seek to where the
   player is. Matroska leaves out the frames of the cue's cluster before
   the cue, where a cluster holds several.
-- **The picture in the UI.** `Context::video` paints a hole as a web
+- **The picture in the UI.** `Context::movie` paints a hole as a web
   view's node does (`Painter::nativeHole`, shared): the window puts the
   player's layer, in a view of its own that clips it, under the native
   view where the frame showed the node (`Window::placeVideos`, without
@@ -3594,11 +3594,11 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 
 ## A video player for apps; the picture's aspect, crop and rotation; the sound's delay (v1.38)
 
-- **`Context::videoPlayer(Player, VideoPlayerState, ?VideoPlayerOptions)`**
-  builds what the `video` example built, for any app (`UI\VideoPlayer`):
+- **`Context::moviePlayer(Player, MoviePlayerState, ?MoviePlayerOptions)`**
+  builds what the `video` example built, for any app (`UI\MoviePlayer`):
   the picture, the title bar, the control bar, the messages, the sidebar
   of quick settings, IINA's keys; the options leave the title bar, the
-  messages, the sidebar or the keys out. `VideoPlayerState` keeps what
+  messages, the sidebar or the keys out. `MoviePlayerState` keeps what
   lasts across builds (the title, the volume, which a player built next
   takes, whether the subtitles show, the sidebar's tab, what failed) and
   does what the controls do, telling it as IINA's messages do, for an
@@ -3637,7 +3637,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 
 ## The wheel, going on from where a film was left (v1.39)
 
-- **The wheel over the picture** (`UI\VideoPlayer`), as IINA's: taken as
+- **The wheel over the picture** (`UI\MoviePlayer`), as IINA's: taken as
   it comes (`Node::handleInput`, `InputEvent::SCROLL`), up and down the
   volume (200 points all of it), across a seek (a tenth of a second a
   point), the seeks at most one a tenth of a second, what the wheel moved
@@ -3646,7 +3646,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **Where films were left** (`Media\PlaybackPositions`, `Player::path`):
   by the file's path in a JSON file (playback-positions.json in the
   app's user data), written through a temporary one, the most recent 500
-  kept. The player (`VideoPlayerOptions::$resume`, on by default) goes
+  kept. The player (`MoviePlayerOptions::$resume`, on by default) goes
   on from where a film was left when it is more than 5 s in and before
   its last 5, telling it; it notes where it is every 10 s of playing, at
   a pause and when another player comes, and forgets a film played to
@@ -3654,9 +3654,9 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 
 ## The playlist, picture in picture (v1.40)
 
-- **The state opens films.** `VideoPlayerState::open($path)` makes the
+- **The state opens films.** `MoviePlayerState::open($path)` makes the
   player of a film (`setPlayer` takes one the app made), and
-  `Context::videoPlayer($state, $options)` builds over the one it plays:
+  `Context::moviePlayer($state, $options)` builds over the one it plays:
   going to another film is the player's own (the playlist, the next at
   an end), the app's code a call. A player taken is gone back to where it
   was left at the first build with it, which knows the options.
@@ -3764,12 +3764,12 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   chapter, the one playing marked, the title (or "Chapter n", n from 0
   as IINA counts) over "start → next start", the last's "End"; lines
   between and below; a double click goes to it and plays
-  (`VideoPlayerState::playChapter`, IINA's `playChapter`). IINA writes
+  (`MoviePlayerState::playChapter`, IINA's `playChapter`). IINA writes
   "Chapter" and "End" in English whatever the language; the strings here
   are translated. The progress bar has no chapter marks: IINA's
   `showChapterPos` is off by default. With the sidebar open, which
   chapter plays is part of the look that asks for a frame.
-- **The loop** (`VideoPlayerState::$loop`, `nextLoop`): IINA's button
+- **The loop** (`MoviePlayerState::$loop`, `nextLoop`): IINA's button
   goes off, the file (`repeat.1`), the playlist (`repeat`), off, in the
   accent while on. The file's plays the film again at its end; the
   playlist's goes from the last to the first at an end and for Cmd+Right
@@ -3787,7 +3787,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   IINA's SleepPreventer (its default: the screen saver off, sound alone
   too), ended as it pauses, ends or fails, and with the player;
   `pmset -g assertions` lists it as "Playing <file>". `Player::setKeepAwake`
-  turns it off, as `VideoPlayerOptions::$keepAwake` (on) asks.
+  turns it off, as `MoviePlayerOptions::$keepAwake` (on) asks.
 - **Trap: the pointer shown in full screen.** A cursor of `Cursor::None`
   was a transparent NSCursor set once, as the shape changed: in a full
   screen window AppKit set its own back, and the pointer showed over the
@@ -3980,14 +3980,14 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   of sound changed, a delay set, play() after the end) goes by go(),
   which tells nothing.
 - **Keyframe seeks** (`seek($s, exact: false)`), as mpv's (IINA's arrow
-  keys, buttons and wheel, `VideoPlayerState::seekBy`): the source goes
+  keys, buttons and wheel, `MoviePlayerState::seekBy`): the source goes
   to the keyframe at or before the time as ever; behind, that one; ahead,
   the packets are read on to the first keyframe at or after it, kept
   (`$ahead`, which the next packets come from) but for the video before
   it, so it shows at once and nothing is decoded unseen. None ahead (past
   the last): to the time itself, as mpv goes to the end. Exact stays the
   default, the bar's (IINA's slider seeks exactly).
-- **Now Playing** (`Native\NowPlaying`, `VideoPlayerOptions::$nowPlaying`):
+- **Now Playing** (`Native\NowPlaying`, `MoviePlayerOptions::$nowPlaying`):
   IINA's NowPlayingInfoManager and RemoteCommandController. One for the
   process: the state that showed it last takes the commands (play,
   pause, the two, stop, next, previous, 15 s either way exactly, the
@@ -4009,7 +4009,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the packets' only when it has none, and the frame showing is found a
   quarter of a frame early let pass, else 0.083 reads as the frame
   before 0.0833 and a step stands still.
-- **Snapshots** (`Player::snapshot`, `VideoPlayerState::screenshot`, ⌘S):
+- **Snapshots** (`Player::snapshot`, `MoviePlayerState::screenshot`, ⌘S):
   the display layer's video renderer gives the pixel buffer it shows
   (`copyDisplayedPixelBuffer`, macOS 14.4), made a PNG by CoreImage and
   NSBitmapImageRep; no decoder of our own. Only of a layer on screen:
@@ -4055,7 +4055,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the main thread after a film opens (some 5 ms each: IINA's thread),
   each right after the window presents a frame (`Runtime::afterFrame`),
   where the next frame has the most time, or 20 ms on when it draws none;
-  the state's once all are (`VideoPlayerState::$thumbnails`,
+  the state's once all are (`MoviePlayerState::$thumbnails`,
   `thumbnailAt`: the one before the first at or after the time). Over the
   bar of the time: the time there (its chapter's title above it) in glass
   5 points above the bar, the thumbnail 5 above that, round by 4, ringed
@@ -4088,7 +4088,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   timer of its own, as a subtitle's change does, so it is told within a
   few milliseconds. One that seeks (a loop back) ends the round: the
   boundaries after it were not played past.
-- **The A-B loop** (`VideoPlayerState::abLoop`, ⌘L, mpv's ab-loop of
+- **The A-B loop** (`MoviePlayerState::abLoop`, ⌘L, mpv's ab-loop of
   IINA's): A where it plays, then B there (the earlier of the two A, it
   loops at once from A when B is where it plays), then none, each told as
   IINA's OSD tells it. B is a boundary that seeks to A. The points show
@@ -4123,7 +4123,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   element's head here, and the bytes of the block it reads) is asked before next(),
   which returns null for what is not here yet as for the end; the
   player's feed stops there and goes on as it comes. Opening a film over
-  HTTP reads its header and cues, waiting: `VideoPlayerState::open` does
+  HTTP reads its header and cues, waiting: `MoviePlayerState::open` does
   it in a fiber of its own (App::go), the window going on, IINA's
   "Opening stream…" in the middle meanwhile.
 - **Paused for the cache** (mpv's paused-for-cache, the buffering event):
@@ -4483,12 +4483,12 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   (a buffer's input or text area). The token field keys its input
   `input`, as mygo's: its chips before it, keyed, no longer took no
   place. The subtitles' overlays and the sidebars stay keyed, and
-  `Context::videoPlayer` keys its player by its state.
+  `Context::moviePlayer` keys its player by its state.
 
 
 ## The ad's countdown (v1.54)
 - **The indicator counts the ad down** (`Player::__construct`'s
-  `$waiting`, `VideoPlayerState::$adOver`): opening a web page's video
+  `$waiting`, `MoviePlayerState::$adOver`): opening a web page's video
   after an ad (`YtDlp::wait`), "Skipping ad… 13s", a frame each second,
   then IINA's "Opening stream…". IINA shows only that (mpv logs "Waiting
   N seconds for the stream to become available"): a wait of seconds
@@ -4707,7 +4707,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   software decoders dropped, the next packet decoded the other way), the
   thumbnails' decoder goes, and the film seeks exactly to where it is,
   its frames from the keyframe decoded again. The choice is the player
-  state's, of this film and the next (`VideoPlayerState::$hardwareDecoding`,
+  state's, of this film and the next (`MoviePlayerState::$hardwareDecoding`,
   applied in `setPlayer` as the volume and the equalizer are). The switch
   says how the film decodes (`hardwareDecoding()`: H.264 and HEVC only
   on the system's here, AV1 without its decoder only in software) and
@@ -4718,7 +4718,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 
 - **Online subtitles are IINA's of OpenSubtitles** (`Media\OpenSubtitles`,
   its REST API as IINA's OpenSubClient and OpenSub.Fetcher use it): the
-  subtitles tab's Search Online (`VideoPlayerState::searchOnlineSubtitles`,
+  subtitles tab's Search Online (`MoviePlayerState::searchOnlineSubtitles`,
   in a fiber, the requests on CurlLoop) says "Finding online subtitles…"
   until it ends, logs in with the settings' account first (once a
   process, its password the Keychain's; none stored, none), asks for the
@@ -4760,12 +4760,12 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   (`OpenSubtitles::KEY`, the developer's): an app built has it, where
   anyone can read it out of the bundle, as of any client (IINA keeps its
   own reversed in OpenSubClient); reversed, a search of the source for
-  keys does not find it. `VideoPlayerOptions::$openSubtitlesKey` gives an
+  keys does not find it. `MoviePlayerOptions::$openSubtitlesKey` gives an
   app's own (null: myphp's; '': none, the button disabled). The
   User-Agent is "MyPHP" (IINA's "IINA v<version>"). TMDB's key is the
   developer's too, kept so (`Tmdb::KEY`).
 - **The settings are IINA's Subtitles pane's the player has**
-  (`Context::videoPlayerSettings`, the app's settings window's;
+  (`Context::moviePlayerSettings`, the app's settings window's;
   `Media\SubtitleSettings`, subtitle-settings.json in the user data):
   Online Subtitles' OpenSubtitles account ("Not logged in" or "Logged in
   as", Login asking a name and password, `Dialog::login`, IINA's
@@ -4779,7 +4779,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   picture takes the wheel for the volume (its handleInput, given the
   events before the frame's hit test), so a list over it lets the wheel
   through as a sidebar does: the list's box of the last frame
-  (`VideoPlayer::over`) is where the picture leaves the wheel alone.
+  (`MoviePlayer::over`) is where the picture leaves the wheel alone.
 - **Trap: the size of a file PHP looked at before is its stat cache's.**
   `OpenSubtitles::hash` read a file rewritten in the test at its old
   size; it clears the cache of the path first (a film still being
@@ -4787,8 +4787,8 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 
 ## The player's settings window, its General page, the welcome and history windows (v1.61)
 - **The settings window is IINA's new one** (SettingsWindow and its
-  SettingsPage*, `UI\VideoPlayerSettings` drawing what
-  `UI\VideoPlayerSettingsPages` describes): a sidebar of the pages under a
+  SettingsPage*, `UI\MoviePlayerSettings` drawing what
+  `UI\MoviePlayerSettingsPages` describes): a sidebar of the pages under a
   capsule search field, the page chosen in the accent while the window
   has the focus, its sections under it with IINA's line and dot; the
   page's sections of cards, a row a setting (its symbol, label,
@@ -4822,7 +4822,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   after the last window only where asked, and has File > Open Recent
   and Playback History.
 - **The welcome and playback history windows are IINA's**
-  (`Context::videoPlayerWelcome`, `Context::videoPlayerHistory`,
+  (`Context::moviePlayerWelcome`, `Context::moviePlayerHistory`,
   `Media\PlaybackHistory`: history.json in the user data, a film once,
   the latest first): the welcome's film to resume over the recent
   documents (Up, Down, Return); the history's groups by day or folder
@@ -4841,7 +4841,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the one clicked stays marked until the page is scrolled again (a page
   that ends before the section reaches the band marked its last).
 - **Trap: window asks made between frames were lost.** The runtime's
-  asks start empty with each frame; `VideoPlayerState` keeps those of an
+  asks start empty with each frame; `MoviePlayerState` keeps those of an
   event (a film opened by the Finder, its end) and asks them as it
   attaches in the next frame.
 - **Trap: a test's arrow function holds a copy.** `fn(Context $c) =>
@@ -4870,7 +4870,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   Utilities. Each applies where the player is: most as it plays, those
   of opening a film (Player's statics, CacheBudget's, HttpBytes', YtDlp's,
   Subtitles' encoding) as the next opens.
-- **Music mode** (`UI\VideoPlayerMusic`, IINA's mini player in the same
+- **Music mode** (`UI\MoviePlayerMusic`, IINA's mini player in the same
   window, its compact size asked of the window): the album art, the
   tags (Matroska's Tags, AVAsset's common metadata), the controls, the
   playlist under it; automatic for audio as the settings say.
@@ -4881,7 +4881,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   AVAsset's (ID3's TXXX, iTunes's), mpv's sums (preamp, peak clipping,
   fallback).
 - **Text subtitles are ASS lines of the settings' style**
-  (`UI\VideoPlayerSubtitleStyle`: a Default style on a plane 720 high,
+  (`UI\MoviePlayerSubtitleStyle`: a Default style on a plane 720 high,
   mpv's scaled pixels), so SRT and VTT are drawn by v1.44's ASS renderer;
   ASS tracks forced to it (force), stripped to text (strip) or scaled by
   sub-scale (scale). The margins go into the black bars where asked
@@ -4910,14 +4910,14 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   what the pseudo-terminal's child (Plugins/Terminal/Pty/spawn.php) says
   on the terminal before it becomes the program, the user's to read
   there.
-- **Key bindings are IINA's input.conf sets** (`UI\VideoPlayerKeys`:
+- **Key bindings are IINA's input.conf sets** (`UI\MoviePlayerKeys`:
   IINA's five in src/UI/keybindings, the user's in input_conf of the user
   data; a key pressed named as mpv names it from charactersIgnoringModifiers,
   Runtime's takeKeys after the shortcuts) carried out by
-  `UI\VideoPlayerCommands` (mpv's seek, set, add, cycle, cycle-values,
+  `UI\MoviePlayerCommands` (mpv's seek, set, add, cycle, cycle-values,
   multiply of the properties the player has, IINA's commands). The page
   edits the user's sets; its key mapping alert records a key and builds
-  an action as IINA's NSRuleEditor does (`UI\VideoPlayerKeyRecord`).
+  an action as IINA's NSRuleEditor does (`UI\MoviePlayerKeyRecord`).
 - **The mouse and trackpad as IINA's**: the middle button, a pinch
   (magnifyWithEvent:) and a Force Touch (pressureChangeWithEvent:'s
   stage 2) reach `Context::middleClicked`, `magnified` and `forceClicked`
@@ -4928,7 +4928,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   VNRecognizeTextRequest performed by an NSInvocationOperation on its
   own queue, no PHP on that thread; polled each tenth of a second); its
   words, their boxes of the picture, chosen by a drag
-  (`UI\VideoPlayerLiveText`, through the picture's input), copied.
+  (`UI\MoviePlayerLiveText`, through the picture's input), copied.
 - **Trap: `setAudioOutputDeviceUniqueID:` takes no nil**: it throws
   NSInvalidArgumentException and PHP aborts. A renderer never set is left
   to follow the default; set back to the default, it is given the
@@ -5028,7 +5028,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the fill and the secondary are opaque and the line not fading
   (FILL_IN_BORDER), and out of the shadow unless the fill shows
   (FILL_IN_SHADOW); a shadow of no outline shows only of a fill that
-  shows (`VideoPlayerAssDrawing::rules`). A glyph's cut outline is a
+  shows (`MoviePlayerAssDrawing::rules`). A glyph's cut outline is a
   mask of its own (`Node::textCutOut`, CoreText drawing the glyph over
   the grown and blurred one in kCGBlendModeDestinationOut), a
   drawing's the same by VectorMask.
@@ -5038,7 +5038,7 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
 - **\t of a \clip rectangle moves it** from the line's (the plane's
   without one), as libass; a drawing's clip does not move (libass's
   neither).
-- **A run restyled keeps what it has** (`VideoPlayerSubtitleStyle::with`,
+- **A run restyled keeps what it has** (`MoviePlayerSubtitleStyle::with`,
   by its fields' names): forcing the settings' style (sub-ass-override)
   and sub-scale had built runs anew of their first twenty fields, which
   would have dropped a drawing, its turns and its blur. The settings'
@@ -6185,10 +6185,10 @@ succeeds are told of, an empty line is none.
 
 ## Clips: videos in native UI, animated GIFs first (v1.103)
 
-- mygo 41ec785: `Context::clip(ClipPlayer)` shows a clip as `image()`
+- mygo 41ec785: `Context::video(VideoPlayer)` shows a clip as `image()`
   shows an image, through an `Image` its player updates as each frame
   comes due (`Image::update`, the frame's slot of the atlas). The player
-  (`ClipPlayer::advance`, once a frame) moves the playhead by the time
+  (`VideoPlayer::advance`, once a frame) moves the playhead by the time
   the clip showed since the frame that last built it — since the frame
   before, which built it playing too, and since some of the window last
   showed again (`Runtime::$shownAt`, which `windowDidChangeOcclusionState:`
@@ -6196,7 +6196,7 @@ succeeds are told of, an empty line is none.
   the next with `after()`: the window draws one frame a frame of the clip.
   Out of the view, or in a window out of sight (`Runtime::$occluded`, set
   before each build), it stands; with less motion it shows its first frame.
-- `ClipDecoder` (`next()`, null after the last; `rewind()`), `ClipFrame`
+- `VideoDecoder` (`next()`, null after the last; `rewind()`), `VideoFrame`
   (premultiplied RGBA and a duration, 100 ms for none); `GifDecoder`
   through ImageIO (`ImageIO::openFrames`, `frame`: the frame composed,
   its unclamped delay, 10 ms or less shown for 100 ms).
@@ -6601,6 +6601,21 @@ succeeds are told of, an empty line is none.
   first frame and becomes ready to show. mygo 2b66322 has nothing to
   port: its waking observer called into Go; myphp's run loop has no
   observer.
+
+## mygo's names for videos (v1.118)
+
+- The videos of native UI take mygo's names: `Context::video`,
+  `UI\VideoPlayer`, `UI\VideoDecoder` and `UI\VideoFrame` (v1.103's
+  `Context::clip`, `ClipPlayer`, `ClipDecoder` and `ClipFrame`), as
+  mygo's `ui.Video`, `VideoPlayer`, `VideoDecoder` and `VideoFrame`; the
+  method no longer reads as `Node::clip`, which clips a node's children.
+- What held those names moved aside: a `Media\Player`'s film shows with
+  `Context::movie` (its node's `$movie`), and the player laid out as
+  IINA's is `UI\MoviePlayer` with its `MoviePlayer…` classes, built by
+  `Context::moviePlayer`, `moviePlayerSettings`, `moviePlayerWelcome` and
+  `moviePlayerHistory`; its tests are `tests/movieplayer*_test.php`. What
+  they store (settings, history, positions) is named as it was. The
+  sections above speak of them by their present names.
 
 ## Open items
 

@@ -11,7 +11,7 @@ use RuntimeException;
  * NSImage of the symbol, configured with a point size and a weight, drawn
  * into a CGBitmapContext at $scale pixels a point in one color.
  *
- * @internal Image::symbol, UI\VideoPlayerSettings
+ * @internal Image::symbol, UI\MoviePlayerSettings
  */
 final class Symbols
 {

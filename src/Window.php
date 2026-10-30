@@ -1993,7 +1993,7 @@ final class Window
 
     /**
      * Shows the pictures of the players where the frame showed their videos
-     * (Context::video), under the native view, and hides the others: each
+     * (Context::movie), under the native view, and hides the others: each
      * player's display layer in a view of this window's that clips it,
      * moved here from another window's if it showed there. The layer's
      * frame changes without the implicit animation of Core Animation.

@@ -18,7 +18,7 @@ use RuntimeException;
  * account logged in (login(), IINA's optional OpenSubtitles account) has
  * its token sent too, and its server (a VIP's) asked.
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\MoviePlayerState
  */
 final class OpenSubtitles
 {

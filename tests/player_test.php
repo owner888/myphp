@@ -307,7 +307,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     // The equalizer (IINA's): on, the audio decoded here (by the system, Vorbis in PHP), filtered and played as PCM, from where it is; Flat, as before.
     foreach (['clip.mkv', 'clip.mp4', 'clip-vorbis.mkv'] as $file) {
         $p = new Player(__DIR__ . "/testdata/$file");
-        $p->setEqualizer(\MyPHP\UI\VideoPlayerState::EQUALIZER_PRESETS['Rock']);
+        $p->setEqualizer(\MyPHP\UI\MoviePlayerState::EQUALIZER_PRESETS['Rock']);
         $p->play();
         for ($waited = 0; $p->time() === 0.0 && $waited < 40; $waited++) { $run(0.05); }
         $from = $p->time();

@@ -12,7 +12,7 @@ namespace MyPHP\Media;
  * the release (its resolution, source, codecs) is only to tell where the
  * name ends; it is not kept.
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\MoviePlayerState
  */
 final class MetaVideo
 {

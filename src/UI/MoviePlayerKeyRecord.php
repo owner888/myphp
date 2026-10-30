@@ -13,9 +13,9 @@ use Closure;
  * value goes), which writes the mpv command in the field under it, or one
  * typed there; OK once both are there.
  *
- * @internal VideoPlayerSettingsPages
+ * @internal MoviePlayerSettingsPages
  */
-final class VideoPlayerKeyRecord
+final class MoviePlayerKeyRecord
 {
     /** The properties of set, cycle, add, multiply and cycle-values, and their kinds (KeyBindingDataLoader.propertyList), '---' between groups. */
     private const PROPERTIES = [['pause', 'bool'], ['speed', 'num'], ['---', ''], ['video', 'num'], ['video-aspect-override', 'string'], ['contrast', 'num'], ['brightness', 'num'],
@@ -29,7 +29,7 @@ final class VideoPlayerKeyRecord
     public static function open(Context $c, string $key, string $action, Closure $done): void
     {
         $s = (object)['key' => $key, 'action' => new TextState($action), 'path' => [], 'values' => [], 'recording' => false];
-        VideoPlayerAlert::open(VideoPlayerSettings::iina($c, 'keymapping.title'), VideoPlayerSettings::iina($c, 'keymapping.message'), $s,
+        MoviePlayerAlert::open(MoviePlayerSettings::iina($c, 'keymapping.title'), MoviePlayerSettings::iina($c, 'keymapping.message'), $s,
             fn(Context $c, object $s) => self::view($c, $s), fn(object $s) => trim($s->key) !== '' && trim($s->action->text) !== '',
             fn(object $s) => $done(trim($s->key), trim($s->action->text)), 480, 330);
     }
@@ -37,9 +37,9 @@ final class VideoPlayerKeyRecord
     private static function view(Context $c, object $s): void
     {
         $t = $c->theme;
-        $k = VideoPlayerSettings::colors($t);
+        $k = MoviePlayerSettings::colors($t);
         // The box the key is pressed in: focused, it records any key (Escape and Return too).
-        $box = $c->column()->height(46)->fillWidth()->center()->round(8)->focusable()->role(Role::BUTTON)->label(VideoPlayerSettings::iina($c, 'keymapping.message'))
+        $box = $c->column()->height(46)->fillWidth()->center()->round(8)->focusable()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'keymapping.message'))
             ->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1);
         $box->borderColor($c->focused($box) ? $t->accent : $k['line']);
           $c->text($s->key, 24, $t->text)->textAlign(Node::CENTER)->singleLine();
@@ -48,7 +48,7 @@ final class VideoPlayerKeyRecord
         $s->recording = $c->focused($box);
         if ($s->recording) {
             $c->takeKeys(function (string $chars, int $code, int $mods, string $plain) use ($s): bool {
-                $name = VideoPlayerKeys::fromEvent($code, $mods, $plain);
+                $name = MoviePlayerKeys::fromEvent($code, $mods, $plain);
                 if ($name !== '') { $s->key = $name; }
                 return true;
             });
@@ -80,14 +80,14 @@ final class VideoPlayerKeyRecord
             $options = [];
             foreach ($items as $i => $it) { if ($it['type'] !== 'separator') { $options[$i] = self::label($c, $it, $l10n); } }
             $i = $s->path[$depth] ?? array_key_first($options);
-            $picked = VideoPlayerSettings::popUp($c, $options, $i, small: true);
+            $picked = MoviePlayerSettings::popUp($c, $options, $i, small: true);
             if ($picked !== null && $picked !== $i) { $s->path = array_slice($s->path, 0, $depth); $s->path[$depth] = (int)$picked; $i = (int)$picked; $changed = true; }
         } else {
             $i = 0;
             $it = $items[0];
             if ($it['type'] === 'string' || $it['type'] === 'number') {
                 $field = $s->values[$depth] ??= new TextState();
-                $k = VideoPlayerSettings::colors($c->theme);
+                $k = MoviePlayerSettings::colors($c->theme);
                 $c->row()->size(50, 20)->round(5)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
                   $n = $c->key("value:$depth")->input($field, '', 50, 11)->height(20);
                   $n->bordered = false;

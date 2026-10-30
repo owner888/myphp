@@ -91,7 +91,7 @@ final class Power
         return $battery;
     }
 
-    /** @internal UI\VideoPlayer: the charge of the Mac's own battery in percent (IOKit's Current Capacity of its InternalBattery), null for a Mac of none. */
+    /** @internal UI\MoviePlayer: the charge of the Mac's own battery in percent (IOKit's Current Capacity of its InternalBattery), null for a Mac of none. */
     public static function batteryLevel(): ?int
     {
         self::$ps ??= \FFI::cdef('void* IOPSCopyPowerSourcesInfo(void); void* IOPSCopyPowerSourcesList(void*); void* IOPSGetPowerSourceDescription(void*, void*); void CFRelease(void*);', '/System/Library/Frameworks/IOKit.framework/IOKit');

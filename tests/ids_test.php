@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, TextState, VideoPlayerState};
+use MyPHP\UI\{Context, TextState, MoviePlayerState};
 
 $st = ['open' => false, 'sel' => 'a', 'idx' => 0, 'tokens' => [], 'date' => new \DateTimeImmutable('2026-01-05 10:00'), 'rgb' => 0xff0000, 'a' => 1.0, 'n' => 3,
     'auto' => new TextState('a'), 'search' => new TextState('')];
@@ -55,11 +55,11 @@ $h = new Headless(function (Context $c) use (&$a, &$b) {
 $h->frame(); // their parts keyed under each one's own node: no duplicate (which throws in the tests)
 check($h->byText('2') !== null, 'two collapsibles one after the other: their parts apart');
 
-$s = new VideoPlayerState();
+$s = new MoviePlayerState();
 $banner = false; $id = null;
 $h = new Headless(function (Context $c) use ($s, &$banner, &$id) {
     if ($banner) { $c->text('a message above the player'); }
-    $id = $c->videoPlayer($s)->id;
+    $id = $c->moviePlayer($s)->id;
 }, 800, 450);
 $h->frame(); $first = $id;
 $banner = true; $h->frame();

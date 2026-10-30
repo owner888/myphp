@@ -15,9 +15,9 @@ use MyPHP\WindowOptions;
  * title, the message, the view, OK (enabled while $ready says) and Cancel;
  * a sheet of the window in front.
  *
- * @internal VideoPlayerSettingsPages
+ * @internal MoviePlayerSettingsPages
  */
-final class VideoPlayerAlert
+final class MoviePlayerAlert
 {
     /**
      * @param Closure(Context, object): void $view builds the view under the text, of the alert's state $s
@@ -34,7 +34,7 @@ final class VideoPlayerAlert
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: $width + 32, height: $height, disableResize: true,
             content: Content::view(function (Context $c) use ($title, $message, $s, $view, $ready, $ok, $close): void {
                 $t = $c->theme;
-                $c->column(0, 6, 1)->padding(20, 16, 16, 16)->align(Node::CENTER)->background(VideoPlayerSettings::colors($t)['page']);
+                $c->column(0, 6, 1)->padding(20, 16, 16, 16)->align(Node::CENTER)->background(MoviePlayerSettings::colors($t)['page']);
                   static $icon = null;
                   $icon ??= App::running() ? Image::fromBytes(Shell::appIcon((int)(64 * $c->scale)), 512) : null;
                   if ($icon !== null) { $c->image($icon, 64, 64); }
@@ -46,7 +46,7 @@ final class VideoPlayerAlert
                   $c->column()->grow(1);
                   $c->end();
                   $c->row(0, 8)->fillWidth();
-                    $cancel = $c->row()->height(24)->grow(1)->round(8)->center()->role(Role::BUTTON)->label($c->texts()->get('cancel'))->background(VideoPlayerSettings::colors($t)['control'], VideoPlayerSettings::colors($t)['controlAlpha']);
+                    $cancel = $c->row()->height(24)->grow(1)->round(8)->center()->role(Role::BUTTON)->label($c->texts()->get('cancel'))->background(MoviePlayerSettings::colors($t)['control'], MoviePlayerSettings::colors($t)['controlAlpha']);
                       $c->text($c->texts()->get('cancel'), 13, $t->text);
                     $c->end();
                     $enabled = $ready($s);
@@ -71,9 +71,9 @@ final class VideoPlayerAlert
     public static function prompt(Context $c, string $key, string $value, Closure $validate, Closure $done): void
     {
         $s = (object)['text' => new TextState($value)];
-        self::open(VideoPlayerSettings::iina($c, "alert.$key.title"), VideoPlayerSettings::iina($c, "alert.$key.message"), $s,
+        self::open(MoviePlayerSettings::iina($c, "alert.$key.title"), MoviePlayerSettings::iina($c, "alert.$key.message"), $s,
             function (Context $c, object $s) use ($validate): void {
-                $k = VideoPlayerSettings::colors($c->theme);
+                $k = MoviePlayerSettings::colors($c->theme);
                 $c->row()->height(26)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
                   $f = $c->input($s->text, '', 0, 13)->height(26);
                   $f->bordered = false;

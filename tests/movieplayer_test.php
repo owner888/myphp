@@ -1,6 +1,6 @@
 <?php
-// The video player Context::videoPlayer builds (UI\VideoPlayer,
-// VideoPlayerState): its subtitles outlined, its labels as IINA's in the
+// The video player Context::moviePlayer builds (UI\MoviePlayer,
+// MoviePlayerState): its subtitles outlined, its labels as IINA's in the
 // app's language (times, numbers, a track's row and its language's name);
 // on macOS, built over a film: the title, the times, the window asked to
 // keep the picture's shape and to show the traffic lights with the
@@ -14,50 +14,50 @@ namespace MyPHP\Tests;
 use MyPHP\App;
 use MyPHP\Media\{Player, Track};
 use MyPHP\Native\ObjC;
-use MyPHP\UI\{Context, Key, Node, VideoPlayer, VideoPlayerOptions, VideoPlayerState, VideoPlayerSubtitleStyle};
+use MyPHP\UI\{Context, Key, Node, MoviePlayer, MoviePlayerOptions, MoviePlayerState, MoviePlayerSubtitleStyle};
 
 // Text subtitles in the settings' style, as mpv's sub-* options give it: ASS lines of a Default style on a plane 720 high.
 $subSet = new \MyPHP\Media\PlayerSettings(sys_get_temp_dir() . '/myphp-substyle-' . getmypid() . '.json');
-[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ["two\nlines"], 16 / 9, 1.0);
+[$sl] = MoviePlayerSubtitleStyle::lines($subSet, ["two\nlines"], 16 / 9, 1.0);
 same([1280, 720, 2, 25, 25, 22, true], [$sl->playResX, $sl->playResY, $sl->alignment, $sl->marginLeft, $sl->marginRight, $sl->marginVertical, $sl->scaledBorder], 'its plane and place: IINA\'s defaults (bottom center, margins 25 and 22)');
 same(['two', "\n", 'lines'], array_map(fn($r) => $r->text, $sl->runs), 'its lines at its newline');
 $r0 = $sl->runs[0];
 same(['sans-serif', 55.0, 400, false, 0xffffff, 1.0, 0x000000, 1.0, 3.0, 0.0, 1], [$r0->font, $r0->size, $r0->weight, $r0->italic, $r0->color, $r0->alpha, $r0->outlineColor, $r0->outlineAlpha, $r0->border, $r0->shadow, $r0->borderStyle], 'its style: IINA\'s defaults');
-same('{\\i1}x', VideoPlayerSubtitleStyle::lines($subSet, ['{\\i1}x'], 16 / 9, 1.0)[0]->text(), 'its text as it is: no tags read');
+same('{\\i1}x', MoviePlayerSubtitleStyle::lines($subSet, ['{\\i1}x'], 16 / 9, 1.0)[0]->text(), 'its text as it is: no tags read');
 $subSet->set('subBold', true); $subSet->set('subAlignX', 0); $subSet->set('subAlignY', 0); $subSet->set('subTextColorString', '1/1/0/0.5'); $subSet->set('subBorderStyle', 4); $subSet->set('subShadowColorString', '0/0/1/1');
-[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
+[$sl] = MoviePlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
 same([960, 7, 50, 44, 700, 0xffff00, 0.5, 110.0, 3, 0x0000ff], [$sl->playResX, $sl->alignment, $sl->marginLeft, $sl->marginVertical, $sl->runs[0]->weight, $sl->runs[0]->color, round($sl->runs[0]->alpha, 2), $sl->runs[0]->size, $sl->runs[0]->borderStyle, $sl->runs[0]->outlineColor],
     'the settings\' (bold, top left, a color half clear, a box behind it of the shadow\'s color), its sizes scaled by the window');
-same(8, VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 1.0, true)[0]->alignment - 1 === 6 ? 8 : 0, 'the secondary at the top');
+same(8, MoviePlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 1.0, true)[0]->alignment - 1 === 6 ? 8 : 0, 'the secondary at the top');
 $ass = new \MyPHP\Media\Ass("[Script Info]\nPlayResY: 360\n");
-$forced = VideoPlayerSubtitleStyle::forced($subSet, $ass->line('{\\fs10}y', 'Default'), 1.0);
+$forced = MoviePlayerSubtitleStyle::forced($subSet, $ass->line('{\\fs10}y', 'Default'), 1.0);
 same([27.5, 700, 7, 13, 11], [$forced->runs[0]->size, $forced->runs[0]->weight, $forced->alignment, $forced->marginLeft, $forced->marginVertical], 'an ASS line forced to it (sub-ass-override=force): its sizes of its own plane');
 $subSet->set('subBlur', 2.0);
-[$sl] = VideoPlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
-$forced = VideoPlayerSubtitleStyle::forced($subSet, $ass->line('{\\frx20}y{\\p1}m 0 0 l 4 4', 'Default'), 1.0);
+[$sl] = MoviePlayerSubtitleStyle::lines($subSet, ['x'], 4 / 3, 2.0);
+$forced = MoviePlayerSubtitleStyle::forced($subSet, $ass->line('{\\frx20}y{\\p1}m 0 0 l 4 4', 'Default'), 1.0);
 same([4.0, 1.0, 20.0, 'l'], [$sl->runs[0]->blur, $forced->runs[0]->blur, $forced->runs[0]->rotationX, $forced->runs[1]->drawing[1][0]],
     'the settings\' Blur (sub-blur) on text subtitles, scaled by the window, and on ASS forced to them (of its plane), what else the runs have kept');
-same([[0xff8000, 0.5], '1/0.501961/0/0.5'], [VideoPlayerSubtitleStyle::color('1/0.5/0/0.5'), VideoPlayerSubtitleStyle::colorString(0xff8000, 0.5)], 'colors as IINA keeps them, r/g/b/a');
+same([[0xff8000, 0.5], '1/0.501961/0/0.5'], [MoviePlayerSubtitleStyle::color('1/0.5/0/0.5'), MoviePlayerSubtitleStyle::colorString(0xff8000, 0.5)], 'colors as IINA keeps them, r/g/b/a');
 @unlink(sys_get_temp_dir() . '/myphp-substyle-' . getmypid() . '.json');
-same(['12.5 Mi', '850 K', '0 ', '1 Gi'], [VideoPlayerState::byteCount(12.5 * 1024 * 1024, true), VideoPlayerState::byteCount(850000, false), VideoPlayerState::byteCount(0, true), VideoPlayerState::byteCount(1024 ** 3, true)], 'bytes as IINA writes them, binary and decimal');
-$opening = new VideoPlayerState(); $opening->opening = 'https://example.com/film.mkv';
-$t = new Headless(fn(Context $c) => $c->videoPlayer($opening), 960, 540);
+same(['12.5 Mi', '850 K', '0 ', '1 Gi'], [MoviePlayerState::byteCount(12.5 * 1024 * 1024, true), MoviePlayerState::byteCount(850000, false), MoviePlayerState::byteCount(0, true), MoviePlayerState::byteCount(1024 ** 3, true)], 'bytes as IINA writes them, binary and decimal');
+$opening = new MoviePlayerState(); $opening->opening = 'https://example.com/film.mkv';
+$t = new Headless(fn(Context $c) => $c->moviePlayer($opening), 960, 540);
 $t->frame();
 check($t->byText('Opening stream…') !== null, 'a URL opening, no film yet: IINA\'s "Opening stream…"');
 $opening->adOver = microtime(true) + 12.3;
 $t->frame();
 check($t->byText('Skipping ad… 13s') !== null, 'a web page\'s video waiting for the ad before it: the seconds left');
 $opening->adOver = null;
-same(['07:09', '1:58:37', '1.5', '2', '0.25'], [VideoPlayerState::clock(429), VideoPlayerState::clock(7117), VideoPlayerState::number(1.5), VideoPlayerState::number(2.0), VideoPlayerState::number(0.25)], 'times and numbers as IINA writes them');
+same(['07:09', '1:58:37', '1.5', '2', '0.25'], [MoviePlayerState::clock(429), MoviePlayerState::clock(7117), MoviePlayerState::number(1.5), MoviePlayerState::number(2.0), MoviePlayerState::number(0.25)], 'times and numbers as IINA writes them');
 App::setLanguages('en', 'zh-Hans'); App::setLocale('zh-Hans');
 $track = new Track(2, Track::AUDIO, 'A_AC3', '', 'chi', '国语', true, 0, 0, 0, 44100, 2);
 $row = null;
-$t = new Headless(function (Context $c) use ($track, &$row) { $row = VideoPlayer::trackRow($c, $track, '2ch, 44.1kHz'); $c->column(); $c->end(); }, 100, 100);
+$t = new Headless(function (Context $c) use ($track, &$row) { $row = MoviePlayer::trackRow($c, $track, '2ch, 44.1kHz'); $c->column(); $c->end(); }, 100, 100);
 $t->frame();
 same(['国语 (ac3, 2ch, 44.1kHz, 默认)', '中文'], $row, 'an audio track as IINA lists it, in the app\'s language');
-same(['English', '日本語'], [VideoPlayer::language('eng', 'en'), VideoPlayer::language('jpn', 'ja')], 'a language\'s name by its ISO 639-2 code, in a locale');
+same(['English', '日本語'], [MoviePlayer::language('eng', 'en'), MoviePlayer::language('jpn', 'ja')], 'a language\'s name by its ISO 639-2 code, in a locale');
 App::setLocale(''); App::setLanguages();
-same('', VideoPlayer::language('und', 'en'), 'none for an undetermined language');
+same('', MoviePlayer::language('und', 'en'), 'none for an undetermined language');
 
 // Where films were left (Media\PlaybackPositions): by path, in its JSON file, read again by another; forgotten; the most recent KEEP kept.
 $file = sys_get_temp_dir() . '/myphp-positions-' . getmypid() . '.json';
@@ -159,11 +159,11 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
     $thumbDir = sys_get_temp_dir() . '/myphp-thumbs-' . getmypid(); // not the user's cache
     $thumbCache = new \MyPHP\Media\ThumbnailCache($thumbDir);
-    $s = new VideoPlayerState(); $s->thumbnailCache = $thumbCache;
+    $s = new MoviePlayerState(); $s->thumbnailCache = $thumbCache;
     $s->setPlayer($p);
     $s->positions = new \MyPHP\Media\PlaybackPositions($scratch = sys_get_temp_dir() . '/myphp-positions-ui-' . getmypid() . '.json'); // not the user's
     $s->title = 'clip.mkv';
-    $h = new Headless(fn(Context $c) => $c->videoPlayer($s), 960, 540);
+    $h = new Headless(fn(Context $c) => $c->moviePlayer($s), 960, 540);
     $h->frame();
     check($h->byText('clip.mkv') !== null && $h->byText('00:00') !== null && $h->byText('00:02') !== null, 'the title, where it plays and how long it lasts');
     same([16 / 9, true], [$h->rt->windowAsks['aspect'] ?? null, $h->rt->windowAsks['buttons'] ?? null], 'the window asked to keep the picture\'s shape, its traffic lights showing with the controls');
@@ -176,7 +176,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     same([240, 135], [$s->thumbnails[0]->width ?? 0, $s->thumbnails[0]->height ?? 0], '240 pixels wide, of the film\'s shape');
     same(1.0, $s->thumbnailAt(1.5)?->time, 'the thumbnail at a time: the keyframe before');
     // Kept on disk: another state of the film has them at once, from JPEGs, their pixels close to those made.
-    $again = new VideoPlayerState(); $again->thumbnailCache = $thumbCache;
+    $again = new MoviePlayerState(); $again->thumbnailCache = $thumbCache;
     $again->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv'));
     same([0.0, 1.0], array_map(fn($t) => round($t->time, 3), $again->thumbnails), 'the thumbnails from the cache, at once');
     $a = $again->thumbnails[1]->rgba(); $b = $s->thumbnails[1]->rgba();
@@ -249,47 +249,47 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $s->settings()->set('useExactSeek', 0);
     // Where it was left noted at a pause, for the next time (more than 5 s in, which a clip of 2 s is not: noted, not gone back to).
     $posFile = sys_get_temp_dir() . '/myphp-positions-player-' . getmypid() . '.json';
-    $s2 = new VideoPlayerState(); $s2->thumbnailCache = $thumbCache; $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
+    $s2 = new MoviePlayerState(); $s2->thumbnailCache = $thumbCache; $s2->positions = new \MyPHP\Media\PlaybackPositions($posFile);
     $p2 = new Player(__DIR__ . '/testdata/clip.mp4'); $s2->setPlayer($p2);
-    $h2 = new Headless(fn(Context $c) => $c->videoPlayer($s2), 960, 540);
+    $h2 = new Headless(fn(Context $c) => $c->moviePlayer($s2), 960, 540);
     $h2->frame();
     $p2->play(); $s2->togglePause();
     same(round($p2->time(), 3), (new \MyPHP\Media\PlaybackPositions($posFile))->get($p2->path()), 'where it was paused noted');
     @unlink($posFile);
-    $off = new Headless(fn(Context $c) => $c->videoPlayer($s, new VideoPlayerOptions(titleBar: false, osd: false, sidebar: false, keys: false)), 960, 540);
+    $off = new Headless(fn(Context $c) => $c->moviePlayer($s, new MoviePlayerOptions(titleBar: false, osd: false, sidebar: false, keys: false)), 960, 540);
     $off->frame();
     check($off->byText('clip.mkv') === null && !isset($off->rt->windowAsks['buttons']), 'without its title bar: no title, the traffic lights left alone');
     $off->key(Key::SPACE, 'insertText:', 0, ' '); $off->frame();
     check(!$p->playing(), 'without its keys: Space is the app\'s');
     $p->play();
     check($p->awake(), 'playing, the display kept awake');
-    $sleepy = new Headless(fn(Context $c) => $c->videoPlayer($s, new VideoPlayerOptions(keepAwake: false)), 960, 540);
+    $sleepy = new Headless(fn(Context $c) => $c->moviePlayer($s, new MoviePlayerOptions(keepAwake: false)), 960, 540);
     $sleepy->frame();
     // The sidebar's nodes keep their ids as the subtitles come and go (the overlays keyed, their nodes scoped): its scroll stays.
-    $s3 = new VideoPlayerState(); $s3->thumbnailCache = $thumbCache;
+    $s3 = new MoviePlayerState(); $s3->thumbnailCache = $thumbCache;
     $p3 = new Player(__DIR__ . '/testdata/clip-subs.mkv'); $s3->setPlayer($p3);
     $p3->setSecondarySubtitleTrack($p3->subtitleTracks()[1]);
     $s3->sidebar = 'subtitles'; $s3->tab = 'subtitles';
-    $h3 = new Headless(fn(Context $c) => $c->videoPlayer($s3), 960, 540);
+    $h3 = new Headless(fn(Context $c) => $c->moviePlayer($s3), 960, 540);
     $ids = [];
     foreach ([0.5, 1.9, 1.1] as $at3) { $p3->seek($at3); $h3->frame(); $ids[] = $h3->byText('Load Subtitle…')?->id; }
     check($ids[0] !== null && count(array_unique($ids)) === 1, 'the sidebar\'s nodes keep their ids as the subtitles, first and secondary, come and go: ' . json_encode($ids));
     // The audio tab's equalizer: a preset chosen from its pop-up sets its gains, of this player and the next; an arrow on a band's slider makes it Manual.
-    $s4 = new VideoPlayerState(); $s4->thumbnailCache = $thumbCache;
+    $s4 = new MoviePlayerState(); $s4->thumbnailCache = $thumbCache;
     $p4 = new Player(__DIR__ . '/testdata/clip.mkv'); $s4->setPlayer($p4);
     $s4->sidebar = 'audio'; $s4->tab = 'audio';
-    $h4 = new Headless(fn(Context $c) => $c->videoPlayer($s4), 960, 900);
+    $h4 = new Headless(fn(Context $c) => $c->moviePlayer($s4), 960, 900);
     $h4->rt->reduceMotion = true;
     $h4->frame();
     $h4->clickText('Manual');
     same(['Save the current EQ as a preset…', '-', 'Manual'], array_slice($h4->menuLabels() ?? [], 0, 3), "the pop-up: saving, then Manual (IINA's; no profile yet, no renaming or removing)");
     check(in_array('Rock', $h4->menuLabels() ?? [], true), "then IINA's presets");
     $h4->chooseMenuItem('Rock');
-    same([array_map('floatval', VideoPlayerState::EQUALIZER_PRESETS['Rock']), 'Rock'], [$p4->equalizer(), $s4->equalizerPreset], 'Rock chosen: its gains the player\'s');
+    same([array_map('floatval', MoviePlayerState::EQUALIZER_PRESETS['Rock']), 'Rock'], [$p4->equalizer(), $s4->equalizerPreset], 'Rock chosen: its gains the player\'s');
     check($h4->byText('Rock') !== null, 'the pop-up says it');
     $band = $h4->byLabel('1k Hz');
     $h4->rt->focus = $band->id; $h4->up(); $h4->frame();
-    check($s4->equalizerPreset === '' && $p4->equalizer()[5] > VideoPlayerState::EQUALIZER_PRESETS['Rock'][5], 'an arrow up the 1 kHz band: higher, and Manual: ' . $p4->equalizer()[5]);
+    check($s4->equalizerPreset === '' && $p4->equalizer()[5] > MoviePlayerState::EQUALIZER_PRESETS['Rock'][5], 'an arrow up the 1 kHz band: higher, and Manual: ' . $p4->equalizer()[5]);
     // The gains saved as a profile of the user's: chosen, the pop-up shows it, and renaming and removing it; another's gains, then it again.
     $s4->profiles = new \MyPHP\Media\EqualizerProfiles($eqFile = sys_get_temp_dir() . '/myphp-eq-profiles-ui-' . getmypid() . '.json'); // not the user's
     @unlink($eqFile);
@@ -315,10 +315,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
     // The video tab's hardware decoding, as IINA's quick setting: an AV1 film switched to libdav1d as it plays and back, of the next film too;
     // a film the system alone decodes here (H.264), on and fixed.
     if (\MyPHP\Native\Dav1d::unavailable() === null && (new Player(__DIR__ . '/testdata/clip-av1.mkv'))->decodingSwitchable()) { // libdav1d and this Mac's AV1
-        $s6 = new VideoPlayerState(); $s6->thumbnailCache = $thumbCache;
+        $s6 = new MoviePlayerState(); $s6->thumbnailCache = $thumbCache;
         $p6 = new Player(__DIR__ . '/testdata/clip-av1.mkv'); $s6->setPlayer($p6);
         $s6->sidebar = 'video'; $s6->tab = 'video';
-        $h6 = new Headless(fn(Context $c) => $c->videoPlayer($s6), 960, 900);
+        $h6 = new Headless(fn(Context $c) => $c->moviePlayer($s6), 960, 900);
         $h6->rt->reduceMotion = true;
         $h6->frame();
         $was = $p6->hardwareDecoding();
@@ -337,10 +337,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
     }
     // Online subtitles (IINA's Find Online Subtitles): Search Online disabled of no key (''); the list of those found, a row each,
     // a click choosing one, Command another, Cancel taking it away (no request made: OpenSubtitles' own in opensubtitles_test, offline).
-    $s9 = new VideoPlayerState(); $s9->thumbnailCache = $thumbCache;
+    $s9 = new MoviePlayerState(); $s9->thumbnailCache = $thumbCache;
     $p9 = new Player(__DIR__ . '/testdata/clip.mkv'); $s9->setPlayer($p9);
     $s9->sidebar = 'subtitles'; $s9->tab = 'subtitles';
-    $h9 = new Headless(fn(Context $c) => $c->videoPlayer($s9, new \MyPHP\UI\VideoPlayerOptions(openSubtitlesKey: '')), 960, 900); // none: no request made
+    $h9 = new Headless(fn(Context $c) => $c->moviePlayer($s9, new \MyPHP\UI\MoviePlayerOptions(openSubtitlesKey: '')), 960, 900); // none: no request made
     $h9->rt->reduceMotion = true;
     $h9->frame();
     $h9->clickText('Search Online…');
@@ -359,7 +359,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $p->pause();
     @unlink($scratch);
     // Opening films: a player of each, the playlist of its folder; the next at the end of one; the playlist's sidebar, a double click playing a row.
-    $s3 = new VideoPlayerState(); $s3->thumbnailCache = $thumbCache; $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    $s3 = new MoviePlayerState(); $s3->thumbnailCache = $thumbCache; $s3->positions = new \MyPHP\Media\PlaybackPositions($scratch);
     // A folder of a few films, all of whose rows show in the sidebar (testdata's are more than it shows).
     $films = sys_get_temp_dir() . '/myphp-films-' . getmypid();
     @mkdir($films);
@@ -371,7 +371,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $first = $s3->player;
     check($s3->next() && $s3->player !== $first && !$first->playing(), 'the next one plays, the last one paused');
     check(!$s3->open(__DIR__ . '/testdata/upright.jpg') && $s3->error !== '' && $s3->player !== $first, 'what is no film: its error, the film playing going on');
-    $h3 = new Headless(fn(Context $c) => $c->videoPlayer($s3), 960, 540);
+    $h3 = new Headless(fn(Context $c) => $c->moviePlayer($s3), 960, 540);
     $s3->sidebar = 'playlist'; $h3->frame(); $run(0.3); $h3->frame();
     check($h3->byText('clip.mkv') !== null && count(array_filter($h3->texts(), fn($t) => str_starts_with($t, 'Total '))) === 1, 'the playlist\'s sidebar: its films, how long they last together');
     [$mx, $my] = $h3->middle($h3->byText('clip.mkv'));
@@ -418,10 +418,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $shown = array_map(fn($n) => array_map(fn($v) => round($v, 1), $h3->rect($n)), $images($h3->root));
     same([[356.5, 450.0, 247.0, 39.0]], $shown, 'the PGS picture where it shows, at half size');
     // ASS lines over the picture where they are, as libass puts them: the point of \an5 at \pos (1440, 540 of 1920 by 1080), the top line within its margin, the bottom rows above theirs.
-    $s4 = new VideoPlayerState(); $s4->thumbnailCache = $thumbCache; $s4->positions = new \MyPHP\Media\PlaybackPositions($scratch);
+    $s4 = new MoviePlayerState(); $s4->thumbnailCache = $thumbCache; $s4->positions = new \MyPHP\Media\PlaybackPositions($scratch);
     $s4->setPlayer(new Player(__DIR__ . '/testdata/clip-ass.mkv'));
     $s4->player->seek(1.0);
-    $h4 = new Headless(fn(Context $c) => $c->videoPlayer($s4), 960, 540);
+    $h4 = new Headless(fn(Context $c) => $c->moviePlayer($s4), 960, 540);
     $h4->frame(); $run(0.3); $h4->frame();
     $all = function (?\MyPHP\UI\Node $n, string $text) use (&$all): array { // the text's nodes: its shadow's and outline's copies, then the text, drawn last
         if ($n === null) { return []; }
@@ -535,7 +535,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $h3->click($mx, $my); $h3->click($mx, $my, 0, 2); $h3->frame();
     check(abs($s3->player->time() - 1.5) < 0.1 && $s3->player->playing() && $s3->player->chapter() === 2, 'a double click goes to a chapter and plays: ' . $s3->player->time());
     $s3->player->pause();
-    // The system's Now Playing (VideoPlayerOptions::$nowPlaying): the film, its chapter and rate (0 while paused) as it changes; ended without it.
+    // The system's Now Playing (MoviePlayerOptions::$nowPlaying): the film, its chapter and rate (0 while paused) as it changes; ended without it.
     $nowPlaying = function (): array {
         $center = ObjC::msg('p:', ObjC::cls('MPNowPlayingInfoCenter'), 'defaultCenter');
         $info = ObjC::msg('p:', $center, 'nowPlayingInfo');
@@ -554,7 +554,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $np = $nowPlaying();
     same(['1', 1], [$np['MPNowPlayingInfoPropertyPlaybackRate'] ?? null, $np['state']], 'and playing, told by the player');
     $s3->player->pause();
-    $off3 = new Headless(fn(Context $c) => $c->videoPlayer($s3, new VideoPlayerOptions(nowPlaying: false)), 960, 540);
+    $off3 = new Headless(fn(Context $c) => $c->moviePlayer($s3, new MoviePlayerOptions(nowPlaying: false)), 960, 540);
     $off3->frame();
     same(['state' => 3], $nowPlaying(), 'without it: nothing in Now Playing, stopped');
     @unlink($scratch);
@@ -566,10 +566,10 @@ if (PHP_OS_FAMILY === 'Darwin') {
 
     // Music mode (IINA's mini player): an audio file switches to it (autoSwitchToMusicMode), its title, artist and album shown, the window asked
     // to be 300 wide, the picture square (no cover: the art of its own), the controls 72 under it; back by hand, a film then leaves it so.
-    $m = new VideoPlayerState();
+    $m = new MoviePlayerState();
     $m->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
     check($m->musicMode, 'an audio file: music mode');
-    $mh = new Headless(fn(Context $c) => $c->videoPlayer($m), 300, 372);
+    $mh = new Headless(fn(Context $c) => $c->moviePlayer($m), 300, 372);
     $mh->frame();
     check($mh->byText('A Song') !== null && $mh->byText('The Band - The Album') !== null, 'its tags: ' . json_encode($mh->texts()));
     same([[300, 372, 372, 372], false], [$mh->rt->windowAsks['compact'] ?? null, $mh->rt->windowAsks['buttons'] ?? null], 'the window 300 by 300 + 72, of that height, its traffic lights hidden');
@@ -580,7 +580,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(!$m->musicMode && array_key_exists('compact', $mh->rt->windowAsks) && $mh->rt->windowAsks['compact'] === null, 'back to the video\'s window: its own size');
     $m->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
     check(!$m->musicMode, 'switched by hand: the next audio file leaves it so');
-    $m2 = new VideoPlayerState();
+    $m2 = new MoviePlayerState();
     $m2->setPlayer(new Player(__DIR__ . '/testdata/clip-tags.mka'));
     $m2->setPlayer(new Player(__DIR__ . '/testdata/clip.mkv'));
     check(!$m2->musicMode, 'a film after the audio: out of it');

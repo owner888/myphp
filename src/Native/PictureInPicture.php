@@ -16,7 +16,7 @@ use MyPHP\Media\Player;
  * starts and stops, which $changed hears. Told whenever the player plays,
  * pauses or seeks (invalidate), it shows it.
  *
- * @internal VideoPlayerState
+ * @internal MoviePlayerState
  */
 final class PictureInPicture
 {

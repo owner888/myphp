@@ -15,9 +15,9 @@ namespace MyPHP\Media;
  */
 final class CacheBudget
 {
-    /** @internal UI\VideoPlayerState: the bytes the cache holds, of the films opened next: IINA's defaultCacheSize (153600 KiB), mpv's demuxer-max-bytes. */
+    /** @internal UI\MoviePlayerState: the bytes the cache holds, of the films opened next: IINA's defaultCacheSize (153600 KiB), mpv's demuxer-max-bytes. */
     public static int $max = 153600 << 10;
-    /** @internal UI\VideoPlayerState: and the seconds it reads ahead at the most, of a stream of segments (HLS's): IINA's secPrefech, mpv's cache-secs. */
+    /** @internal UI\MoviePlayerState: and the seconds it reads ahead at the most, of a stream of segments (HLS's): IINA's secPrefech, mpv's cache-secs. */
     public static int $seconds = 36000;
 
     /** @var array<int, \WeakReference<CacheMember>> */

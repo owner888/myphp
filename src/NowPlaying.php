@@ -17,7 +17,7 @@ use Closure;
  *
  * An app playing with Audio\Player can let NowPlaying drive the player
  * instead (control()). Times are in seconds. A video player showing in Now
- * Playing (VideoPlayerOptions::$nowPlaying) takes it over, as the last to
+ * Playing (MoviePlayerOptions::$nowPlaying) takes it over, as the last to
  * show it: the system has one Now Playing for the app.
  */
 final class NowPlaying

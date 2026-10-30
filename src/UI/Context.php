@@ -610,7 +610,7 @@ final class Context
     }
 
     /**
-     * @internal UI\VideoPlayer: the keys pressed this frame that no shortcut
+     * @internal UI\MoviePlayer: the keys pressed this frame that no shortcut
      * took, offered to $take (their characters, code, modifiers and the
      * characters without the modifiers); those it takes (true) taken.
      * @param Closure(string, int, int, string): bool $take
@@ -621,19 +621,19 @@ final class Context
         $this->runtime?->takeKeys($take);
     }
 
-    /** @internal UI\VideoPlayer: whether the middle button clicked $n this frame. */
+    /** @internal UI\MoviePlayer: whether the middle button clicked $n this frame. */
     public function middleClicked(Node $n): bool
     {
         return $this->runtime?->middleClicked($n->id) ?? false;
     }
 
-    /** @internal UI\VideoPlayer: whether a Force Touch press went deep on $n this frame (its second stage, NSEvent's pressure). */
+    /** @internal UI\MoviePlayer: whether a Force Touch press went deep on $n this frame (its second stage, NSEvent's pressure). */
     public function forceClicked(Node $n): bool
     {
         return $this->runtime?->forceClicked($n->id) ?? false;
     }
 
-    /** @internal UI\VideoPlayer: a trackpad's pinch over $n this frame: [the magnification added, whether it began, whether it ended]; null for none. @return ?array{0: float, 1: bool, 2: bool} */
+    /** @internal UI\MoviePlayer: a trackpad's pinch over $n this frame: [the magnification added, whether it began, whether it ended]; null for none. @return ?array{0: float, 1: bool, 2: bool} */
     public function magnified(Node $n): ?array
     {
         return $this->runtime?->magnified($n->id);
@@ -4525,22 +4525,22 @@ final class Context
     }
 
     /**
-     * Shows a clip that plays, as image() shows an image: at its size, or
-     * fitted to the one given (mygo's Video). A short clip looping behind
+     * Shows a video that plays, as image() shows an image: at its size, or
+     * fitted to the one given (mygo's Video). A short video looping behind
      * the content, as a launcher's library or a music player's hero shows
      * one, or a preview in a grid:
      *
-     *     $app->waves = (new ClipPlayer(new GifDecoder($gif)))->setLoop(true);
-     *     $c->clip($app->waves)->grow(1);
+     *     $app->waves = (new VideoPlayer(new GifDecoder($gif)))->setLoop(true);
+     *     $c->video($app->waves)->grow(1);
      *
      * It moves on only while the view builds it and some of the window
      * shows: one that went out of the view, or a window out of sight, goes
-     * on from where it stood. Each frame of the clip is a frame of the
+     * on from where it stood. Each frame of the video is a frame of the
      * window, which after() asks for as it comes due. While the desktop
      * asks for less motion, it shows its first frame and does not play.
-     * Clips have no sound.
+     * Videos have no sound; Context::movie plays films.
      */
-    public function clip(ClipPlayer $p, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
+    public function video(VideoPlayer $p, float $w = 0, float $h = 0, float $radius = 0, float $alpha = 1.0): Node
     {
         return $this->image($p->advance($this), $w, $h, $radius, $alpha);
     }
@@ -4595,23 +4595,23 @@ final class Context
      * window at a time.
      *
      *     $c->column()->grow(1);
-     *       $c->video($app->player)->grow(1);
+     *       $c->movie($app->player)->grow(1);
      *       $c->row(12, 8)->absolute()->left(0)->right(0)->bottom(0); // over the picture
      *         controls($c, $app->player);
      *       $c->end();
      *     $c->end();
      */
-    public function video(\MyPHP\Media\Player $p): Node
+    public function movie(\MyPHP\Media\Player $p): Node
     {
         $n = $this->add(new Node(Node::BOX, 0, 0, 0, 0, 0, 0, null, null));
-        $n->video = $p;
+        $n->movie = $p;
         $n->self = Node::STRETCH;
         return $n;
     }
 
     /**
-     * A video player of the film $s plays (VideoPlayerState::open), laid
-     * out as IINA's window (UI\VideoPlayer), black before one opens: the
+     * A video player of the film $s plays (MoviePlayerState::open), laid
+     * out as IINA's window (UI\MoviePlayer), black before one opens: the
      * picture, its control bar in the system's glass, the title bar over
      * it (for a window whose title bar is hidden), the messages at the top
      * left, the sidebar of quick settings, IINA's keys; $s keeps its state
@@ -4619,10 +4619,10 @@ final class Context
      * out. It fills what it is built in; the window keeps the picture's
      * shape and hides the traffic lights with the controls.
      */
-    public function videoPlayer(VideoPlayerState $s, ?VideoPlayerOptions $o = null): Node
+    public function moviePlayer(MoviePlayerState $s, ?MoviePlayerOptions $o = null): Node
     {
-        if ($this->nextKey === null) { $this->key('video player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
-        return VideoPlayer::build($this, $s, $o ?? new VideoPlayerOptions());
+        if ($this->nextKey === null) { $this->key('movie player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
+        return MoviePlayer::build($this, $s, $o ?? new MoviePlayerOptions());
     }
 
     /**
@@ -4640,9 +4640,9 @@ final class Context
      * titleBarStyle 'hiddenInset', vibrancy 'sidebar'), as IINA's is, 600
      * by 480; it names the window after the page shown.
      */
-    public function videoPlayerSettings(VideoPlayerState $s): Node
+    public function moviePlayerSettings(MoviePlayerState $s): Node
     {
-        return VideoPlayerSettings::build($this, $s);
+        return MoviePlayerSettings::build($this, $s);
     }
 
     /**
@@ -4656,9 +4656,9 @@ final class Context
      * material, 560 by 440, as IINA's is.
      * @param Closure(string): void $open @param Closure(): void $openURL
      */
-    public function videoPlayerWelcome(Closure $open, Closure $openURL): Node
+    public function moviePlayerWelcome(Closure $open, Closure $openURL): Node
     {
-        return VideoPlayerWelcome::build($this, $open, $openURL);
+        return MoviePlayerWelcome::build($this, $open, $openURL);
     }
 
     /**
@@ -4672,9 +4672,9 @@ final class Context
      * Trash. For a window of a hidden title bar, 800 by 600, as IINA's is.
      * @param Closure(list<string>, bool): void $open
      */
-    public function videoPlayerHistory(Closure $open): Node
+    public function moviePlayerHistory(Closure $open): Node
     {
-        return VideoPlayerHistory::build($this, $open);
+        return MoviePlayerHistory::build($this, $open);
     }
 
     /**

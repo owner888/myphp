@@ -12,7 +12,7 @@ use RuntimeException;
 /**
  * The player's settings, those of IINA's Settings window, by IINA's
  * names of them (its Preference keys) and with IINA's defaults (DEFAULTS):
- * what Context::videoPlayerSettings shows and sets, what the player reads
+ * what Context::moviePlayerSettings shows and sets, what the player reads
  * as it plays, and what an app reads of those that are its own (what it
  * does at launch, whether it quits once its windows close…). In a JSON
  * file (default(): settings.json in App::path(UserData)) of those set,
@@ -249,7 +249,7 @@ final class PlayerSettings
         $this->listeners[$key][] = $fn;
     }
 
-    /** @internal UI\VideoPlayerState: whether $key was ever set (else the app's own choice holds, as Player::$hardwareDecoding's). */
+    /** @internal UI\MoviePlayerState: whether $key was ever set (else the app's own choice holds, as Player::$hardwareDecoding's). */
     public function stored(string $key): bool
     {
         return array_key_exists($key, $this->all());

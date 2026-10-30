@@ -14,9 +14,9 @@ use MyPHP\WindowOptions;
  * playlists, checked; OK makes it (Native\DefaultApp) and tells how it
  * went, Cancel does not.
  *
- * @internal VideoPlayerSettingsPages
+ * @internal MoviePlayerSettingsPages
  */
-final class VideoPlayerDefaultAppSheet
+final class MoviePlayerDefaultAppSheet
 {
     private const WIDTH = 300, HEIGHT = 150;
     /** The extensions of playlists, the third kind. */
@@ -35,17 +35,17 @@ final class VideoPlayerDefaultAppSheet
     private static function build(Context $c, object $s, \Closure $close, ?Window $parent): void
     {
         $t = $c->theme;
-        $c->column(0, 8, 1)->padding(24, 24, 24, 24)->background(VideoPlayerSettings::colors($t)['page']);
-          $c->text(VideoPlayerSettings::tr($c, '$PleaseSelectTheMediaTypes'), 13, $t->text);
-          $c->checkbox(VideoPlayerSettings::iina($c, 'sidebar.video'), $s->video);
-          $c->checkbox(VideoPlayerSettings::iina($c, 'sidebar.audio'), $s->audio);
-          $c->checkbox(VideoPlayerSettings::tr($c, '$Playlist'), $s->playlist);
+        $c->column(0, 8, 1)->padding(24, 24, 24, 24)->background(MoviePlayerSettings::colors($t)['page']);
+          $c->text(MoviePlayerSettings::tr($c, '$PleaseSelectTheMediaTypes'), 13, $t->text);
+          $c->checkbox(MoviePlayerSettings::iina($c, 'sidebar.video'), $s->video);
+          $c->checkbox(MoviePlayerSettings::iina($c, 'sidebar.audio'), $s->audio);
+          $c->checkbox(MoviePlayerSettings::tr($c, '$Playlist'), $s->playlist);
           $c->column()->grow(1);
           $c->end();
           $c->row(0, 8)->fillWidth()->justify(Node::END)->align(Node::CENTER);
-            if (VideoPlayerSettings::pushButton($c, VideoPlayerSettings::tr($c, '$Cancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
-            $ok = $c->row()->height(24)->paddingX(12)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label(VideoPlayerSettings::tr($c, '$OK'))->background($t->accent);
-              $c->text(VideoPlayerSettings::tr($c, '$OK'), 13, $t->accentText);
+            if (MoviePlayerSettings::pushButton($c, MoviePlayerSettings::tr($c, '$Cancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
+            $ok = $c->row()->height(24)->paddingX(12)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label(MoviePlayerSettings::tr($c, '$OK'))->background($t->accent);
+              $c->text(MoviePlayerSettings::tr($c, '$OK'), 13, $t->accentText);
             $c->end();
             if ($c->clicked($ok) || $c->shortcut(Key::RETURN)) {
                 $close();
@@ -54,7 +54,7 @@ final class VideoPlayerDefaultAppSheet
                     in_array($e, \MyPHP\Media\Playlist::AUDIO, true) => $s->audio,
                     default => $s->video,
                 }));
-                $text = VideoPlayerSettings::iina($c, 'alert.set_default.success');
+                $text = MoviePlayerSettings::iina($c, 'alert.set_default.success');
                 \MyPHP\App::later(function () use ($exts, $text, $parent): void {
                     try {
                         [$ok, $failed] = \MyPHP\Native\DefaultApp::set($exts);

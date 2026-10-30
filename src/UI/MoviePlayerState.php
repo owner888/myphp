@@ -30,13 +30,13 @@ use RuntimeException;
 
 /**
  * A video player's state, kept by the app across builds of
- * Context::videoPlayer: the title it shows, the volume (which a player
+ * Context::moviePlayer: the title it shows, the volume (which a player
  * built next takes), whether the subtitles show, the sidebar's tab, the
  * message showing, what failed. Its methods do what the controls and the
  * keys do, and tell it as IINA's messages do, for an app's own menus and
  * keys too; they act on the player it was last built with.
  */
-final class VideoPlayerState
+final class MoviePlayerState
 {
     /** IINA's aspect ratios, the crop's too: the label (null for "default", or "none" of a crop) and the ratio, null for the picture's own. */
     public const ASPECTS = [[null, null], ['4:3', 4 / 3], ['16:9', 16 / 9], ['16:10', 16 / 10], ['21:9', 21 / 9], ['5:4', 5 / 4]];
@@ -64,15 +64,15 @@ final class VideoPlayerState
     /** @var list<float> the equalizer's gains, of this player and the next (mpv's af stays as films change); the preset they are (EQUALIZER_PRESETS), '' for Manual */
     public array $equalizer = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     public string $equalizerPreset = '';
-    /** @var ?list<float> the gains of the sliders while one is dragged, set as it is let go @internal VideoPlayer */
+    /** @var ?list<float> the gains of the sliders while one is dragged, set as it is let go @internal MoviePlayer */
     public ?array $equalizerDraft = null;
-    /** OpenSubtitles, of the options' key (VideoPlayerOptions::$openSubtitlesKey), null without one @internal */
+    /** OpenSubtitles, of the options' key (MoviePlayerOptions::$openSubtitlesKey), null without one @internal */
     public ?OpenSubtitles $openSubtitles = null;
     /** TMDB, to look a film up by its name before OpenSubtitles (searchOnlineSubtitles); made as one is first looked up. */
     private ?Tmdb $tmdb = null;
     /** The settings of IINA's Settings window the player has: the app's, PlayerSettings::default(), unless set @internal */
     public ?PlayerSettings $playerSettings = null;
-    /** Whether an account logs in to OpenSubtitles from the settings (IINA's indicator by its Login) @internal VideoPlayerSettings */
+    /** Whether an account logs in to OpenSubtitles from the settings (IINA's indicator by its Login) @internal MoviePlayerSettings */
     public bool $loggingIn = false;
     /** The Keychain's key of an OpenSubtitles account's password (Secrets), by its user. */
     private const PASSWORD = 'opensubtitles:';
@@ -81,16 +81,16 @@ final class VideoPlayerState
      * null while none are shown; the ones chosen, by their place; whether a
      * search or its downloads go on (IINA's isSearchingOnlineSubtitle).
      * @var ?list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}>
-     * @internal VideoPlayer
+     * @internal MoviePlayer
      */
     public ?array $onlineSubtitles = null;
-    /** @var list<int> @internal VideoPlayer */
+    /** @var list<int> @internal MoviePlayer */
     public array $onlineChosen = [];
-    /** @internal VideoPlayer */
+    /** @internal MoviePlayer */
     public bool $searchingOnline = false;
-    /** Whether the video decodes on the system's decoders, as the quick setting set it (null: as Player::$hardwareDecoding has each film open) @internal VideoPlayer */
+    /** Whether the video decodes on the system's decoders, as the quick setting set it (null: as Player::$hardwareDecoding has each film open) @internal MoviePlayer */
     public ?bool $hardwareDecoding = null;
-    /** The profile of the user's the gains are (EqualizerProfiles), '' for none @internal VideoPlayer */
+    /** The profile of the user's the gains are (EqualizerProfiles), '' for none @internal MoviePlayer */
     public string $equalizerProfile = '';
     /** The profiles the user saved: the app's, EqualizerProfiles::default(), unless set @internal */
     public ?EqualizerProfiles $profiles = null;
@@ -118,14 +118,14 @@ final class VideoPlayerState
     /** @internal */
     public string $drawn = '';
     private ?\WeakReference $runtime = null;
-    /** Whether the player built last goes on from where it was left (VideoPlayerOptions::$resume), and shows in Now Playing ($nowPlaying). */
+    /** Whether the player built last goes on from where it was left (MoviePlayerOptions::$resume), and shows in Now Playing ($nowPlaying). */
     private bool $resume = false, $nowPlaying = false;
     /** The chapter Now Playing shows, to show the next as it comes. */
     private int $shownChapter = -1;
     /** @var list<Closure> the player's listeners, removed for another player */
     private array $off = [];
 
-    /** Where films were left (VideoPlayerOptions::$resume): the app's, PlaybackPositions::default(), unless set. */
+    /** Where films were left (MoviePlayerOptions::$resume): the app's, PlaybackPositions::default(), unless set. */
     public ?PlaybackPositions $positions = null;
     /** Seconds between two notes of where a film playing is. */
     public const NOTE_EVERY = 10.0;
@@ -156,7 +156,7 @@ final class VideoPlayerState
     public ?float $loopA = null, $loopB = null;
     /** The player's boundary at B, removed when the loop goes. */
     private ?Closure $loopOff = null;
-    /** The last screenshot's preview (IINA's ScreenshootOSDView, screenshotShowPreview): its image, its file (null, not kept), shown until when. @internal VideoPlayer */
+    /** The last screenshot's preview (IINA's ScreenshootOSDView, screenshotShowPreview): its image, its file (null, not kept), shown until when. @internal MoviePlayer */
     public ?array $shot = null;
     /** Whether the film plays in picture in picture (togglePictureInPicture), the system's floating window. */
     public bool $pictureInPicture = false;
@@ -165,7 +165,7 @@ final class VideoPlayerState
 
     /** The URL open() opens (a film over the network, read in a fiber), null when none: the player shows IINA's "Opening stream…" meanwhile. */
     public ?string $opening = null;
-    /** While it opens, when the ad before a web page's video is over (microtime), which the indicator counts down to; null without one. @internal VideoPlayer */
+    /** While it opens, when the ad before a web page's video is over (microtime), which the indicator counts down to; null without one. @internal MoviePlayer */
     public ?float $adOver = null;
 
     /**
@@ -328,7 +328,7 @@ final class VideoPlayerState
      * end (where the next film of the playlist plays) and when it fails.
      * Where it is is noted every NOTE_EVERY seconds, at a pause and when
      * another player comes, and forgotten at its end, with
-     * VideoPlayerOptions::$resume.
+     * MoviePlayerOptions::$resume.
      */
     public function setPlayer(Player $p): void
     {
@@ -474,9 +474,9 @@ final class VideoPlayerState
      * whether it goes on from where films were left: the first build with
      * a player taken goes back there (more than 5 s in and before its last
      * 5), telling it; and whether the player keeps the display awake.
-     * @internal Context::videoPlayer
+     * @internal Context::moviePlayer
      */
-    public function attach(Runtime $rt, VideoPlayerOptions $o): void
+    public function attach(Runtime $rt, MoviePlayerOptions $o): void
     {
         $this->runtime = \WeakReference::create($rt);
         foreach ($this->asks as $what => $value) { $rt->askWindow($what, $value); }
@@ -510,21 +510,21 @@ final class VideoPlayerState
         }
     }
 
-    /** Whether the player is in music mode (IINA's mini player, VideoPlayerMusic): toggleMusicMode(), or an audio file opened (autoSwitchToMusicMode). */
+    /** Whether the player is in music mode (IINA's mini player, MoviePlayerMusic): toggleMusicMode(), or an audio file opened (autoSwitchToMusicMode). */
     public bool $musicMode = false;
     /** Whether music mode was switched by hand (IINA's overrideAutoSwitchToMusicMode): the films opened then leave it as it is. */
     private bool $musicByHand = false;
-    /** Music mode's: whether its playlist and its picture (the album's art) show, and how high the playlist is, IINA's musicModeShowPlaylist and musicModeShowAlbumArt. @internal VideoPlayerMusic */
+    /** Music mode's: whether its playlist and its picture (the album's art) show, and how high the playlist is, IINA's musicModeShowPlaylist and musicModeShowAlbumArt. @internal MoviePlayerMusic */
     public float $musicPlaylistHeight = 300;
 
     /** IINA's speeds of the control bar's arrows (AppData.availableSpeedValues), 1x in the middle. */
     public const SPEEDS = [0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32];
-    /** @internal VideoPlayer: the control bar's arrows held (by node), and its bars of the time and of the volume as last built, which the wheel over them moves. */
+    /** @internal MoviePlayer: the control bar's arrows held (by node), and its bars of the time and of the volume as last built, which the wheel over them moves. */
     public array $arrowHeld = [];
-    /** @internal VideoPlayer: the floating bar's drag: where it began, and how far it went, [x, y, dx, dy]. */
+    /** @internal MoviePlayer: the floating bar's drag: where it began, and how far it went, [x, y, dx, dy]. */
     public ?array $oscDrag = null;
     public ?Node $seekBar = null, $volumeBar = null;
-    /** @internal VideoPlayer: when a single click on the picture acts, a double click's time after it (null for none waiting). */
+    /** @internal MoviePlayer: when a single click on the picture acts, a double click's time after it (null for none waiting). */
     public ?float $singleClickAt = null;
     /** Whether the window was placed by the settings' initial size and position (once, as its first film opens). */
     private bool $placed = false;
@@ -735,7 +735,7 @@ final class VideoPlayerState
     }
 
     /**
-     * @internal VideoPlayer: IINA's Find Online Subtitles, of OpenSubtitles:
+     * @internal MoviePlayer: IINA's Find Online Subtitles, of OpenSubtitles:
      * the film's subtitles in the settings' languages, else the system's
      * (those it has; English where none), found by its TMDB id as
      * agc_player finds them (tmdbSubtitles), else (none found, or no id) by
@@ -804,7 +804,7 @@ final class VideoPlayerState
         return $id === null ? [] : $os->searchTmdb($languages, $id, $meta->tv, $meta->season, $meta->episode);
     }
 
-    /** @internal VideoPlayer: the subtitles found online at places $chosen downloaded and loaded, told (IINA's Download of its list); in a fiber of its own. @param list<int> $chosen */
+    /** @internal MoviePlayer: the subtitles found online at places $chosen downloaded and loaded, told (IINA's Download of its list); in a fiber of its own. @param list<int> $chosen */
     public function downloadOnlineSubtitles(array $chosen): void
     {
         $found = $this->onlineSubtitles;
@@ -885,20 +885,20 @@ final class VideoPlayerState
         Logger::log($level, $message, "player{$this->number}");
     }
 
-    /** @internal VideoPlayerSettingsPages: forgets where all films were left (IINA's Clear Saved Playback Progress). */
+    /** @internal MoviePlayerSettingsPages: forgets where all films were left (IINA's Clear Saved Playback Progress). */
     public function clearPositions(): void
     {
         $this->positions()->clear();
     }
 
-    /** @internal VideoPlayerSettingsPages: forgets the films played and the recent ones (IINA's Clear Playback History). */
+    /** @internal MoviePlayerSettingsPages: forgets the films played and the recent ones (IINA's Clear Playback History). */
     public function clearHistory(): void
     {
         $this->history()->clear();
         if (App::running()) { App::clearRecentDocuments(); }
     }
 
-    /** @internal VideoPlayerSettingsPages: the thumbnails kept, their bytes; forgotten where $clear (IINA's Clear Thumbnail Cache). */
+    /** @internal MoviePlayerSettingsPages: the thumbnails kept, their bytes; forgotten where $clear (IINA's Clear Thumbnail Cache). */
     public function thumbnailBytes(bool $clear = false): int
     {
         $cache = $this->thumbnailCache ?? ThumbnailCache::default();
@@ -906,14 +906,14 @@ final class VideoPlayerState
         return $cache->size();
     }
 
-    /** @internal VideoPlayerSettings: the settings of IINA's Settings window the player has. */
+    /** @internal MoviePlayerSettings: the settings of IINA's Settings window the player has. */
     public function settings(): PlayerSettings
     {
         return $this->playerSettings ??= PlayerSettings::default();
     }
 
     /**
-     * @internal VideoPlayerSettings: logs in to OpenSubtitles as $user (IINA's
+     * @internal MoviePlayerSettings: logs in to OpenSubtitles as $user (IINA's
      * legacy Login of its Subtitles pane): the account tried, then its user kept in the
      * settings and its password in the Keychain; what fails told by
      * $failed. In a fiber of its own ($loggingIn meanwhile).
@@ -945,7 +945,7 @@ final class VideoPlayerState
         }
     }
 
-    /** @internal VideoPlayerSettings: the account logged out (IINA's Logout: its user forgotten; here its password too), its session ended. */
+    /** @internal MoviePlayerSettings: the account logged out (IINA's Logout: its user forgotten; here its password too), its session ended. */
     public function logOutOpenSubtitles(): void
     {
         $user = $this->settings()->get('openSubUsername');
@@ -976,7 +976,7 @@ final class VideoPlayerState
     }
 
     /**
-     * @internal VideoPlayerSettingsPages: sets setting $key of the player's
+     * @internal MoviePlayerSettingsPages: sets setting $key of the player's
      * settings to $value (PlayerSettings::set), what fails to be written
      * shown as the error; the hardware decoder's that of the films opened
      * next (Player::$hardwareDecoding), the quick setting of those playing
@@ -997,7 +997,7 @@ final class VideoPlayerState
         $this->changed();
     }
 
-    /** @internal VideoPlayer: the list of subtitles found online gone, none chosen (IINA's Cancel). */
+    /** @internal MoviePlayer: the list of subtitles found online gone, none chosen (IINA's Cancel). */
     public function cancelOnlineSubtitles(): void
     {
         $this->onlineSubtitles = null; $this->onlineChosen = [];
@@ -1112,9 +1112,9 @@ final class VideoPlayerState
         $this->changed();
     }
 
-    /** @internal VideoPlayer, VideoPlayerCommands: the subtitles' scale (mpv's sub-scale, 1 the settings' size), their vertical position (sub-pos, null the settings'), the ASS override level asked (sub-ass-override, null the settings'). */
+    /** @internal MoviePlayer, MoviePlayerCommands: the subtitles' scale (mpv's sub-scale, 1 the settings' size), their vertical position (sub-pos, null the settings'), the ASS override level asked (sub-ass-override, null the settings'). */
     public float $subScale = 1.0;
-    /** @internal VideoPlayerLiveText: the analysis of the frame paused at (its time, the job, the words, the choice, all shown, where a drag began, the words' boxes), null for none. @var ?array<string, mixed> */
+    /** @internal MoviePlayerLiveText: the analysis of the frame paused at (its time, the job, the words, the choice, all shown, where a drag began, the words' boxes), null for none. @var ?array<string, mixed> */
     public ?array $liveText = null;
     public ?float $subPos = null;
     public ?int $assOverride = null;
@@ -1296,7 +1296,7 @@ final class VideoPlayerState
         return $png;
     }
 
-    /** @internal VideoPlayer: the screenshot previewed deleted (IINA's DELETE), or opened (EDIT), or shown in the Finder (REVEAL); the preview gone. */
+    /** @internal MoviePlayer: the screenshot previewed deleted (IINA's DELETE), or opened (EDIT), or shown in the Finder (REVEAL); the preview gone. */
     public function shotAction(string $action): void
     {
         $path = $this->shot['path'] ?? null;
@@ -1481,7 +1481,7 @@ final class VideoPlayerState
         $this->applyEqualizer($gains, $preset, '');
     }
 
-    /** @internal VideoPlayer: decodes the video on the system's decoders or not, as IINA's quick setting, of this player and the next (Player::setHardwareDecoding). */
+    /** @internal MoviePlayer: decodes the video on the system's decoders or not, as IINA's quick setting, of this player and the next (Player::setHardwareDecoding). */
     public function setHardwareDecoding(bool $on): void
     {
         $this->hardwareDecoding = $on;
@@ -1489,7 +1489,7 @@ final class VideoPlayerState
         $this->changed();
     }
 
-    /** @internal VideoPlayer: the names of the profiles the user saved; what fails to read shows as the error @return list<string> */
+    /** @internal MoviePlayer: the names of the profiles the user saved; what fails to read shows as the error @return list<string> */
     public function profileNames(): array
     {
         try {
@@ -1500,7 +1500,7 @@ final class VideoPlayerState
         }
     }
 
-    /** @internal VideoPlayer: the profile $name's gains, it the one chosen (IINA's pop-up, a profile of the user's chosen) */
+    /** @internal MoviePlayer: the profile $name's gains, it the one chosen (IINA's pop-up, a profile of the user's chosen) */
     public function chooseProfile(string $name): void
     {
         $gains = null;
@@ -1510,7 +1510,7 @@ final class VideoPlayerState
         if ($gains !== null) { $this->applyEqualizer($gains, '', $name); }
     }
 
-    /** @internal VideoPlayer: the gains saved as the profile $name, it the one chosen (IINA's "Save the current EQ as a preset…") */
+    /** @internal MoviePlayer: the gains saved as the profile $name, it the one chosen (IINA's "Save the current EQ as a preset…") */
     public function saveProfile(string $name): void
     {
         $this->profiled(function () use ($name): void {
@@ -1519,7 +1519,7 @@ final class VideoPlayerState
         });
     }
 
-    /** @internal VideoPlayer: the profile chosen named $name (IINA's "Rename the current EQ preset…") */
+    /** @internal MoviePlayer: the profile chosen named $name (IINA's "Rename the current EQ preset…") */
     public function renameProfile(string $name): void
     {
         $this->profiled(function () use ($name): void {
@@ -1528,7 +1528,7 @@ final class VideoPlayerState
         });
     }
 
-    /** @internal VideoPlayer: the profile chosen forgotten, the gains as they are, Manual (IINA's "Remove the current EQ preset") */
+    /** @internal MoviePlayer: the profile chosen forgotten, the gains as they are, Manual (IINA's "Remove the current EQ preset") */
     public function removeProfile(): void
     {
         $this->profiled(function (): void {

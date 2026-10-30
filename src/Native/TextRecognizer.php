@@ -14,7 +14,7 @@ use RuntimeException;
  * read once it is done, each with its box, of the picture's size (0 to 1,
  * from its top left), its line's number among them.
  *
- * @internal UI\VideoPlayerLiveText
+ * @internal UI\MoviePlayerLiveText
  */
 final class TextRecognizer
 {

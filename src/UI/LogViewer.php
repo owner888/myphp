@@ -22,7 +22,7 @@ use MyPHP\WindowOptions;
  * window of a hidden title bar, 800 by 500; the video player's settings'
  * button opens one (open()).
  *
- * @internal UI\Context, UI\VideoPlayerSettingsPages
+ * @internal UI\Context, UI\MoviePlayerSettingsPages
  */
 final class LogViewer
 {
@@ -46,7 +46,7 @@ final class LogViewer
     public static function build(Context $c): Node
     {
         $t = $c->theme;
-        $k = VideoPlayerSettings::colors($t);
+        $k = MoviePlayerSettings::colors($t);
         $root = $c->column(0, 0, 1)->background($k['page']);
         $make = fn() => (object)['level' => Logger::level(), 'subsystems' => [], 'filter' => new TextState(), 'list' => self::listState(), 'chosen' => [], 'anchor' => null];
         $v = $c->runtime?->local($root->id, $make) ?? $make();
@@ -54,13 +54,13 @@ final class LogViewer
         $all = Logger::entries();
         $shown = array_values(array_filter($all, fn(array $e) => $e['level'] >= $v->level && ($v->subsystems === [] || in_array($e['subsystem'], $v->subsystems, true))
             && ($q === '' || str_contains(mb_strtolower($e['message']), $q))));
-        $c->runtime?->askWindow('title', VideoPlayerSettings::iina($c, 'logwindow.title'));
+        $c->runtime?->askWindow('title', MoviePlayerSettings::iina($c, 'logwindow.title'));
           self::toolbar($c, $v, $all, $shown);
           $c->row()->height(24)->fillWidth()->paddingX(16)->align(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($k['line']); // the columns' headers
             $c->box(self::LEVEL, 1, 0)->color = null;
-            $c->text(VideoPlayerSettings::iina($c, 'logwindow.time'), 11, $t->textMuted)->width(self::TIME);
-            $c->text(VideoPlayerSettings::iina($c, 'logwindow.subsystem'), 11, $t->textMuted)->width(self::SUBSYSTEM);
-            $c->text(VideoPlayerSettings::iina($c, 'logwindow.message'), 11, $t->textMuted)->grow(1);
+            $c->text(MoviePlayerSettings::iina($c, 'logwindow.time'), 11, $t->textMuted)->width(self::TIME);
+            $c->text(MoviePlayerSettings::iina($c, 'logwindow.subsystem'), 11, $t->textMuted)->width(self::SUBSYSTEM);
+            $c->text(MoviePlayerSettings::iina($c, 'logwindow.message'), 11, $t->textMuted)->grow(1);
           $c->end();
           $c->column(0, 0, 1)->padding(0, 8);
             $c->list($v->list, count($shown), function (int $i) use ($c, $t, $v, $shown): void {
@@ -78,7 +78,7 @@ final class LogViewer
                 $c->end();
                 if ($c->clicked($r)) { self::choose($c, $v, $i); }
                 $r->contextMenu(function (Menu $m) use ($c, $v, $shown, $i): void {
-                    if ($m->item(VideoPlayerSettings::iina($c, 'logwindow.copy'))->chosen()) { self::copy($v->chosen !== [] && in_array($i, $v->chosen, true) ? $v->chosen : [$i], $shown); }
+                    if ($m->item(MoviePlayerSettings::iina($c, 'logwindow.copy'))->chosen()) { self::copy($v->chosen !== [] && in_array($i, $v->chosen, true) ? $v->chosen : [$i], $shown); }
                 });
             });
           $c->end();
@@ -125,38 +125,38 @@ final class LogViewer
         $bar = $c->titleBar();
         $c->row(0, 8)->height(self::BAR)->fillWidth()->paddingStart(max(80.0, $bar['left'] + 12))->paddingEnd(12)->align(Node::CENTER)->dragWindow();
           $c->column(0, 0)->grow(1);
-            $c->text(VideoPlayerSettings::iina($c, 'logwindow.title'), 15, $t->text, Font::BOLD)->singleLine();
-            $c->text(($v->subsystems === [] ? VideoPlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level], 11, $t->textMuted)->singleLine()->ellipsis('…');
+            $c->text(MoviePlayerSettings::iina($c, 'logwindow.title'), 15, $t->text, Font::BOLD)->singleLine();
+            $c->text(($v->subsystems === [] ? MoviePlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level], 11, $t->textMuted)->singleLine()->ellipsis('…');
           $c->end();
           $following = $v->list->atEnd;
-          $now = self::button($c, $following ? 'arrow.up.left.circle.fill' : 'arrow.up.left.circle', VideoPlayerSettings::iina($c, 'logwindow.now.desc'), $following);
+          $now = self::button($c, $following ? 'arrow.up.left.circle.fill' : 'arrow.up.left.circle', MoviePlayerSettings::iina($c, 'logwindow.now.desc'), $following);
           if ($c->clicked($now)) { $v->list->scrollToEnd(); }
-          $level = self::button($c, 'circle.fill', VideoPlayerSettings::iina($c, 'logwindow.log_level'), false, self::COLORS[$v->level]);
+          $level = self::button($c, 'circle.fill', MoviePlayerSettings::iina($c, 'logwindow.log_level'), false, self::COLORS[$v->level]);
           $level->menu(function (Menu $m) use ($v): void {
               foreach (Logger::NAMES as $l => $name) {
                   if ($m->item($name)->checked($v->level === $l)->chosen()) { $v->level = $l; $v->chosen = []; }
               }
           });
-          $subs = self::button($c, 'square.stack.3d.up', VideoPlayerSettings::iina($c, 'logwindow.subsystem'), $v->subsystems !== []);
+          $subs = self::button($c, 'square.stack.3d.up', MoviePlayerSettings::iina($c, 'logwindow.subsystem'), $v->subsystems !== []);
           $subs->menu(function (Menu $m) use ($c, $v): void {
-              if ($m->item(VideoPlayerSettings::iina($c, 'logwindow.clear_subsystem_selections'))->chosen()) { $v->subsystems = []; }
+              if ($m->item(MoviePlayerSettings::iina($c, 'logwindow.clear_subsystem_selections'))->chosen()) { $v->subsystems = []; }
               $m->separator();
               foreach (Logger::subsystems() as $name) {
                   $on = in_array($name, $v->subsystems, true);
                   if ($m->item((string)$name)->checked($on)->chosen()) { $v->subsystems = $on ? array_values(array_diff($v->subsystems, [$name])) : [...$v->subsystems, (string)$name]; $v->chosen = []; }
               }
           });
-          $save = self::button($c, 'square.and.arrow.down', VideoPlayerSettings::iina($c, 'logwindow.save'), false);
+          $save = self::button($c, 'square.and.arrow.down', MoviePlayerSettings::iina($c, 'logwindow.save'), false);
           if ($c->clicked($save)) { self::save($c, $all, \MyPHP\App::name() . '.log'); }
           $save->contextMenu(function (Menu $m) use ($c, $v, $shown): void { // IINA's menu of the button: the logs shown
-              if ($m->item(VideoPlayerSettings::iina($c, 'logwindow.save_filtered'))->chosen()) {
-                  self::save($c, $shown, ($v->subsystems === [] ? VideoPlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level] . ' ' . \MyPHP\App::name() . '.log');
+              if ($m->item(MoviePlayerSettings::iina($c, 'logwindow.save_filtered'))->chosen()) {
+                  self::save($c, $shown, ($v->subsystems === [] ? MoviePlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level] . ' ' . \MyPHP\App::name() . '.log');
               }
           });
           $c->row()->width(180)->height(28)->round(14)->systemMaterial('glass')->align(Node::CENTER)->paddingX(4);
             $f = $c->searchField($v->filter, 0);
           $c->end();
-          $f->label(VideoPlayerSettings::iina($c, 'logwindow.filter'));
+          $f->label(MoviePlayerSettings::iina($c, 'logwindow.filter'));
         $c->end();
     }
 
@@ -165,7 +165,7 @@ final class LogViewer
     {
         $t = $c->theme;
         $b = $c->column()->size(36, 28)->round(14)->center()->systemMaterial('glass')->role(Role::BUTTON)->label($label)->tooltip($label);
-          VideoPlayerSettings::sf($c, $symbol, $rgb !== null ? 10 : 14, $rgb ?? ($on ? $t->accent : $t->text));
+          MoviePlayerSettings::sf($c, $symbol, $rgb !== null ? 10 : 14, $rgb ?? ($on ? $t->accent : $t->text));
         $c->end();
         return $b;
     }
@@ -177,7 +177,7 @@ final class LogViewer
         if ($path === '') { return; }
         if (@file_put_contents($path, implode('', array_map([Logger::class, 'line'], $entries))) === false) { // IINA's alert: the logs, and why
             $why = error_get_last()['message'] ?? 'cannot write';
-            Dialog::message(new MessageOptions(parent: Window::focused(), type: 'warning', message: sprintf(str_replace('%@', '%s', VideoPlayerSettings::iina($c, 'alert.error_saving_file')), VideoPlayerSettings::iina($c, 'logwindow.logs'), $why)));
+            Dialog::message(new MessageOptions(parent: Window::focused(), type: 'warning', message: sprintf(str_replace('%@', '%s', MoviePlayerSettings::iina($c, 'alert.error_saving_file')), MoviePlayerSettings::iina($c, 'logwindow.logs'), $why)));
         }
     }
 }

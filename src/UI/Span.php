@@ -57,7 +57,7 @@ final class Span
         public float $baselineShift = 0,
         /** The opacity of $background, as a code span's tint. */
         public ?float $backgroundAlpha = null,
-        /** @internal VideoPlayer (ASS's runs drawn apart): laid out, but nothing of it painted, its glyphs, outline, shadow, background or lines. */
+        /** @internal MoviePlayer (ASS's runs drawn apart): laid out, but nothing of it painted, its glyphs, outline, shadow, background or lines. */
         public bool $ghost = false,
     ) {}
 

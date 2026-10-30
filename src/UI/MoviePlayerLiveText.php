@@ -18,22 +18,22 @@ use MyPHP\Native\TextRecognizer;
  * text found; the controls hidden while text is chosen, as IINA's. Not of
  * a picture cropped or turned (the frame read is the film's own).
  *
- * @internal VideoPlayer
+ * @internal MoviePlayer
  */
-final class VideoPlayerLiveText
+final class MoviePlayerLiveText
 {
     /** How far from the picture's edges the button is (IINA's supplementaryInterfaceContentInsets), and its size. */
     private const INSET = 14, BUTTON = 30;
 
     /** Whether text is chosen, or all shown (IINA's isActive): the controls hidden then. */
-    public static function active(VideoPlayerState $s): bool
+    public static function active(MoviePlayerState $s): bool
     {
         $l = $s->liveText;
         return $l !== null && (($l['sel'] ?? null) !== null || ($l['all'] ?? false));
     }
 
     /** The analysis of the frame paused at, started, read when done, forgotten where it no longer is; its view over the picture at ($px, $py), $pw by $ph. */
-    public static function build(Context $c, VideoPlayerState $s, Player $p, float $px, float $py, float $pw, float $ph): void
+    public static function build(Context $c, MoviePlayerState $s, Player $p, float $px, float $py, float $pw, float $ph): void
     {
         $on = $s->settings()->get('enableLiveText') && !$p->playing() && !$s->pictureInPicture && !$s->musicMode && $p->videoTrack() !== null
             && $p->crop() === null && $p->rotation() === 0;
@@ -78,7 +78,7 @@ final class VideoPlayerLiveText
           $bottom = $s->settings()->get('oscPosition') === 2 ? ($s->settings()->get('compactUI') ? 50 : 64) : self::INSET;
           $b = $c->column()->absolute()->right(max(self::INSET, $c->width - $px - $pw + self::INSET))->bottom(max($bottom, $c->height - $py - $ph + $bottom))->size(self::BUTTON, self::BUTTON)
               ->round(self::BUTTON / 2)->center()->systemMaterial('glass')->role(Role::BUTTON)->label('Live Text')->tooltip('Live Text');
-            VideoPlayer::sf($c, 'text.viewfinder', 15, $l['all'] ? 1.0 : 0.8, 0.0, $l['all'] ? $c->theme->accent : null);
+            MoviePlayer::sf($c, 'text.viewfinder', 15, $l['all'] ? 1.0 : 0.8, 0.0, $l['all'] ? $c->theme->accent : null);
           $c->end();
           if ($c->clicked($b)) { $l['all'] = !$l['all']; }
         $c->end();
@@ -91,11 +91,11 @@ final class VideoPlayerLiveText
 
     /**
      * The picture's pointer at ($wx, $wy) of the window, before the
-     * picture's own (VideoPlayer): a press on a word begins choosing, a drag
+     * picture's own (MoviePlayer): a press on a word begins choosing, a drag
      * chooses on to the word under it (or nearest), a press elsewhere
      * chooses none and is the picture's. Whether it took it.
      */
-    public static function input(VideoPlayerState $s, InputEvent $e, float $wx, float $wy): bool
+    public static function input(MoviePlayerState $s, InputEvent $e, float $wx, float $wy): bool
     {
         if ($s->liveText === null || ($s->liveText['boxes'] ?? []) === []) { return false; }
         $l = &$s->liveText;

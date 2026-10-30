@@ -96,7 +96,7 @@ final class Runtime
     public int $instantFrame = 0;
     /** That the desktop asks for less motion (macOS's Reduce Motion, mygo's Preferences.ReduceMotion): the window sets it from App::reduceMotion. */
     public bool $reduceMotion = false;
-    /** That none of the window shows (covered, minimized, on another space), as the frame builds, and when some of it last showed again (the clock's ns): a clip stands out of sight (ClipPlayer::advance). The window sets them. @internal */
+    /** That none of the window shows (covered, minimized, on another space), as the frame builds, and when some of it last showed again (the clock's ns): a video stands out of sight (VideoPlayer::advance). The window sets them. @internal */
     public bool $occluded = false;
     public int $shownAt = 0;
     /** The desktop's settings (Context::preferences): the window sets them from App::preferences. */
@@ -267,11 +267,11 @@ final class Runtime
     public ?Closure $minimizeWindow = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
-    /** @internal VideoPlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */
+    /** @internal MoviePlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */
     public float $doubleClickInterval = 0.5;
     /**
      * What the view asked of its window this frame, which the window does
-     * once it is built (Context::videoPlayer's, videoPlayerSettings'): 'close'
+     * once it is built (Context::moviePlayer's, moviePlayerSettings'): 'close'
      * => true to close it, 'title' => its title, 'buttons' => whether the
      * traffic lights show, 'aspect' => the content's width over its height
      * to keep (null for none), 'fullScreen' => whether to be full screen.
@@ -1055,7 +1055,7 @@ final class Runtime
      */
     public array $webPlaces = [];
     /**
-     * Where the last frame showed videos (Context::video), as $webPlaces
+     * Where the last frame showed videos (Context::movie), as $webPlaces
      * for their players. The picture takes no pointer: what is built over
      * it, or the node itself, does.
      * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>

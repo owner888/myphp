@@ -9,7 +9,7 @@ use RuntimeException;
  * OpenSubtitles' downloads allowed are spent (its 406, remaining -1): IINA's
  * "Subtitle download limit reached", told when they come again.
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\MoviePlayerState
  */
 final class OpenSubtitlesQuota extends RuntimeException
 {

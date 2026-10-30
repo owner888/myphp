@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.117.0';
+const VERSION = '1.118.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -1169,7 +1169,7 @@ function natives(string $appDir, string $framework, string $arch): array
             $out[] = [$f['name'], fetchNative($f)];
         }
     }
-    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'VideoPlayer')) {
+    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MoviePlayer')) {
         array_push($out, ...dav1d($arch));
     }
     return $out;

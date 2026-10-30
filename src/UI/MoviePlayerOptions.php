@@ -4,14 +4,14 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 /**
- * What Context::videoPlayer builds besides the picture and its control
+ * What Context::moviePlayer builds besides the picture and its control
  * bar: the title bar over the picture (for a window of a hidden title
  * bar), the messages at the top left, the sidebar of quick settings,
  * IINA's default keys (off, the app binds its own), going on from where
  * a film was left, keeping the display awake while a film plays, the
  * system's Now Playing and media keys, and finding subtitles online.
  */
-final class VideoPlayerOptions
+final class MoviePlayerOptions
 {
     public function __construct(
         public readonly bool $titleBar = true,

@@ -10,7 +10,7 @@ use RuntimeException;
  * looks a film or a show up: its first result's id for a name and a
  * year. It goes as Https::request does and throws what fails.
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\MoviePlayerState
  */
 final class Tmdb
 {

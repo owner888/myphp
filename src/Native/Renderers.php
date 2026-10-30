@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * What decodes and plays a Player's packets, all of it the system's on
  * threads of its own: an AVSampleBufferDisplayLayer decodes the video and
- * shows it (the window places the layer where Context::video's node is),
+ * shows it (the window places the layer where Context::movie's node is),
  * an AVSampleBufferAudioRenderer the audio, and an
  * AVSampleBufferRenderSynchronizer runs both on one clock. The player tops
  * them up at its ticks while they ask for more. A video track the system

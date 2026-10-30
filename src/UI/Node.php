@@ -149,8 +149,8 @@ final class Node
     public mixed $dragValue = null;
     /** The web view the node shows (Context::webView): a MyPHP\WebView, which this package knows only through the window. */
     public ?object $webView = null;
-    /** The player whose picture the node shows (Context::video): a MyPHP\Media\Player, which the window places. */
-    public ?object $video = null;
+    /** The player whose picture the node shows (Context::movie): a MyPHP\Media\Player, which the window places. */
+    public ?object $movie = null;
     /** The system's material the node's box shows (systemMaterial()): its name and appearance, dark, light or null for the app's. @var ?array{0: string, 1: ?bool} */
     public ?array $systemMaterial = null;
     public ?string $accepts = null;
@@ -1011,7 +1011,7 @@ final class Node
     }
 
     /**
-     * @internal VideoPlayer (ASS's \clip and \iclip): cuts the node and
+     * @internal MoviePlayer (ASS's \clip and \iclip): cuts the node and
      * what is inside it by the coverage (alpha) of $mask laid over its box,
      * as it is laid out, upright, or by the box itself for null: what it
      * covers shows, or with $inverted what it covers is cut away (what is
@@ -1193,7 +1193,7 @@ final class Node
     }
 
     /**
-     * @internal VideoPlayer (ASS's \blur and \be): blurs text as a Gaussian
+     * @internal MoviePlayer (ASS's \blur and \be): blurs text as a Gaussian
      * of $sigma points, as libass does: its outline where it has one
      * (textOutline), the glyphs themselves staying sharp, else the glyphs;
      * its shadow (textShadow) is what was blurred, moved.
@@ -1206,7 +1206,7 @@ final class Node
     }
 
     /**
-     * @internal VideoPlayer (libass's ass_fix_outline): takes the glyphs out
+     * @internal MoviePlayer (libass's ass_fix_outline): takes the glyphs out
      * of the text's outline ($outline) and of its shadow ($shadow, of the
      * outline), so that they do not show through glyphs not quite opaque.
      */

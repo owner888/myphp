@@ -38,13 +38,13 @@ final class ThumbnailCache
         return self::$default ??= new self(App::path(PathName::Cache) . '/thumb_cache');
     }
 
-    /** @internal UI\VideoPlayerState: this cache's folder, of $bytes at most (the settings' maxThumbnailPreviewCacheSize). */
+    /** @internal UI\MoviePlayerState: this cache's folder, of $bytes at most (the settings' maxThumbnailPreviewCacheSize). */
     public function withMax(int $bytes): self
     {
         return new self($this->dir, $bytes);
     }
 
-    /** @internal UI\VideoPlayerState: the bytes of the thumbnails kept (IINA's, by Clear Thumbnail Cache). */
+    /** @internal UI\MoviePlayerState: the bytes of the thumbnails kept (IINA's, by Clear Thumbnail Cache). */
     public function size(): int
     {
         $n = 0;
@@ -54,7 +54,7 @@ final class ThumbnailCache
         return $n;
     }
 
-    /** @internal UI\VideoPlayerState: forgets all the thumbnails kept (IINA's, as the settings' thumbnail width changes). */
+    /** @internal UI\MoviePlayerState: forgets all the thumbnails kept (IINA's, as the settings' thumbnail width changes). */
     public function clear(): void
     {
         foreach (is_dir($this->dir) ? (scandir($this->dir) ?: []) : [] as $name) {

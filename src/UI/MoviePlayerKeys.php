@@ -21,9 +21,9 @@ use RuntimeException;
  * or IINA's ("#@iina toggle-pip"); shown as IINA shows it (⌃⌥⇧⌘, its
  * command read in words) unless the settings ask for the raw values.
  *
- * @internal VideoPlayer, VideoPlayerSettingsPages
+ * @internal MoviePlayer, MoviePlayerSettingsPages
  */
-final class VideoPlayerKeys
+final class MoviePlayerKeys
 {
     /** IINA's sets, by name: their files, of keybindings/. */
     public const DEFAULTS = ['IINA Default' => 'iina-default-input', 'mpv Default' => 'input', 'VLC Default' => 'vlc-default-input',
