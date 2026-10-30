@@ -180,6 +180,15 @@ final class Node
     public float $blur = 0.0;
     /** @internal Painter::paintBlurred: painted into its blur's canvas now */
     public bool $blurring = false;
+    /**
+     * @internal its ink, in the window, all that it and the nodes inside it
+     * may paint, as Runtime::record found it: [x0, y0, x1, y1], null before
+     * it is recorded; unless $noCull, painting skips it where its ink is
+     * clipped out (mygo's ink, noCull)
+     * @var ?array{0: float, 1: float, 2: float, 3: float}
+     */
+    public ?array $ink = null;
+    public bool $noCull = true;
     /** The effect the node draws through in place of drawing as it is (effect), or null. */
     public ?\MyPHP\UI\Shader\Effect $effect = null;
     public ?array $stripes = null;

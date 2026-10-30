@@ -5856,6 +5856,35 @@ mygo 12b177c, d5bcfdb, 344c353, and of 3473193 what is not the mirror's:
   the legacy computing symbols, Powerline's: `Box::noMinContrast`) keep
   their colors. A change draws every row again.
 
+## Painting skips what shows nowhere (v1.86)
+
+mygo d41f1ee. `Runtime::record`, which finds every node where it shows
+in the window each frame, sets its ink (`Node::$ink`, `setInk`): its box
+grown by its shadows' reach and 4 points, through its transform, and the
+union of its children's. The window's painting (`DisplayList::$cull`, set
+around `Painter::paint` of the root) skips a node whose ink lies outside
+the clip, its subtree with it (`Painter::paintNode`); before, only a node
+whose box was clipped and that held nothing, or clipped what it held, was
+skipped, so that a long column moved out of view by a translation or a
+scroll walked every row down to its leaves. Nodes that paint beyond their
+ink, or do more than paint, are `$noCull`, and those around them: words
+in a paragraph and rich text, effects and blurs, dividers, the debug
+overlay, exit transitions' copies, and drawings of the app's own (draw,
+drawOver, drawObjects). Canvases, blurs' and effects' layers, the layer
+under materials, a dragged copy and tooltips paint everything, as they
+paint nodes elsewhere than record found them. 1000 rows translated out of
+view: a paint 13.5 → 0.7 ms (headless); `setInk` costs nothing measurable
+of a frame. tests/paintcull_test.php counts the rows a scrolled column
+skips, and checks that trees styled to paint past their boxes, moved in
+and out of view, paint the same quads that show with the skipping and
+without (`Headless::$noCull`).
+
+mygo 4139cef (text measured once per element; a grid measuring only the
+items its tracks read) is not ported: myphp's text measurements are kept
+in the text engine's table by their text, size and style, found again by
+a hash lookup each frame, which is what mygo's commit saves; its measuring
+pass sizes every node before arranging, which the grid's part would split.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

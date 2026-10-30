@@ -924,6 +924,8 @@ final class Runtime
     public array $underPaints = [];
     /** @internal while the window paints its layer under the materials */
     public bool $paintingUnder = false;
+    /** @internal the nodes painting skipped as their ink showed nowhere (Painter::paintNode), for tests (mygo's culled) */
+    public int $culled = 0;
 
     /** Whether the focus came from the keyboard, as Tab moving it onto a web view's node, which enters its page from its first element, or its last with Shift (mygo's TabInto). */
     public function focusFromKeyboard(): bool
@@ -1964,8 +1966,43 @@ final class Runtime
         foreach ($n->paintOrder() as $k) {
             $this->record($k, $n, $group, $clip, $n->page ? $n->id : $page, $inert, $hidden, $clipper);
         }
+        $this->setInk($n);
         if ($n->memo !== 0) { $this->memoRecorded($n, $from); }
         if (isset($mark)) { $this->memoRecordEnd($n, $args, $mark); }
+    }
+
+    /**
+     * Sets $n's ink once those of the nodes inside it are set (mygo's
+     * setInk): the union of the areas in which each paints its own content,
+     * its box grown by its shadows' reach and 4 points (a focus ring), as it
+     * shows in the window, through its transform, so that painting, where none of it
+     * shows, would paint nothing of $n, and skips it, as Blink and Flutter
+     * skip what lies outside the cull rect by its visual overflow.
+     *
+     * Nodes that paint beyond those areas, or do more than paint as they
+     * are painted, are noCull, and so are those around them: words inside
+     * a paragraph and rich text, which paint over theirs; effects and
+     * blurs, which draw their content on a layer reaching beyond it;
+     * dividers, laid across a container; the debug overlay; exit
+     * transitions' copies; and drawings of the app's own (draw, drawOver,
+     * drawObjects), which may paint anywhere.
+     */
+    private function setInk(Node $n): void
+    {
+        $m = 4.0;
+        foreach ($n->shadows as [$sx, $sy, $blur, $spread, , , $inset]) {
+            if (!$inset) { $m = max($m, abs($sx) + abs($sy) + $blur + $spread + 4); }
+        }
+        [$x, $y, $w, $h] = $n->world->bounds($n->x - $m, $n->y - $m, $n->w + 2 * $m, $n->h + 2 * $m);
+        $ink = [$x, $y, $x + $w, $y + $h];
+        $no = $n->frags !== [] || ($n->kind === Node::TEXT && $n->kids !== []) || $n->effect !== null || $n->blur > 0 || $n->dividers !== null || $n->debug
+            || $n->ghosts !== [] || $n->leaving !== 0 || $n->draw !== null || $n->drawOver !== null || $n->drawObjects !== null;
+        foreach ($n->kids as $k) {
+            if ($k->ink === null) { $no = true; continue; }
+            $ink = [min($ink[0], $k->ink[0]), min($ink[1], $k->ink[1]), max($ink[2], $k->ink[2]), max($ink[3], $k->ink[3])];
+            $no = $no || $k->noCull;
+        }
+        [$n->ink, $n->noCull] = [$ink, $no];
     }
 
     /** The window's point (x, y) in last frame's layout of node $id, from its top left, through its transform (mygo's WindowToLocal); null for a singular transform. @return ?array{0: float, 1: float} */

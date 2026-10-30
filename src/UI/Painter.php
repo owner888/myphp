@@ -510,6 +510,10 @@ final class Painter
         if ($n->invisible || $n->backface && $n->transform->facesAway()) {
             return;
         }
+        if ($list->cull && !$n->noCull && $list->outOfClip($n->ink)) { // what it and the nodes inside it paint shows nowhere: skipped whole (mygo's paintable)
+            if ($rt !== null) { $rt->culled++; }
+            return;
+        }
         if ($n->belowMaterials && $rt !== null && $rt->underLayer && !$rt->paintingUnder) { // the window paints it under its materials, from where its painting is now
             $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
             return;

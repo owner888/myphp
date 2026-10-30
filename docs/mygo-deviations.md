@@ -2140,3 +2140,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `ShellQuote::forProgram` by the program's name alone: pwsh,
     powershell, cmd, else a POSIX shell's.
   - Why: macOS first; the Windows rules come with a Windows backend.
+
+## Painting skips what shows nowhere (v1.86)
+
+- **Drawings of the app's own and the skipping**
+  - mygo: an element's Draw and DrawOver paint within its ink; one that
+    paints past its box may be skipped where its box is out of view.
+  - myphp: a node with draw, drawOver or drawObjects is noCull, and so are
+    the nodes around it; painting goes on into them as before.
+  - Why: myphp's draw callbacks get the display list itself, with nothing
+    holding them to their boxes, and games and charts paint past them.

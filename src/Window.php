@@ -449,7 +449,12 @@ final class Window
                 $paint = function () use ($root, $list, $text, $bounds, $in, $z): void {
                     $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
                     $list->pushClip(0, 0, $bounds->w / $z, $bounds->h / $z); // what lies outside the window is not painted (mygo's visible)
-                    Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                    $list->cull = true; // where the nodes are where the runtime recorded them
+                    try {
+                        Painter::paint($root, $list, $text, App::theme(), $this->runtime);
+                    } finally {
+                        $list->cull = false;
+                    }
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h / $z); }
                     Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
                     Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);

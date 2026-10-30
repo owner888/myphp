@@ -199,6 +199,9 @@ final class Headless
         return $this->root;
     }
 
+    /** Paints everything, skipping nothing whose ink shows nowhere (mygo's noCull), to compare. */
+    public bool $noCull = false;
+
     /** Paints the root into a display list over an FFI buffer of $capacity quads, clipped to the window as the Window does, and returns the list (its ->n is the quad count). */
     public function paint(int $capacity = 65536): DisplayList
     {
@@ -208,7 +211,13 @@ final class Headless
         $this->list->reset(); $this->list->zoom = $this->rt->frameZoom;
         $this->rt->webPlaces = []; $this->rt->videoPlaces = []; $this->rt->materialPlaces = []; $this->rt->underPaints = []; // as the window's paint
         $this->list->pushClip(0, 0, $this->w / $this->rt->frameZoom, $this->h / $this->rt->frameZoom);
-        Painter::paint($root = $this->root ?? $this->frame(), $this->list, $this->metrics, $this->theme, $this->rt);
+        $root = $this->root ?? $this->frame();
+        $this->list->cull = !$this->noCull; // as the window's paint, which skips what shows nowhere
+        try {
+            Painter::paint($root, $this->list, $this->metrics, $this->theme, $this->rt);
+        } finally {
+            $this->list->cull = false;
+        }
         if (($in = $this->rt->inspector) !== null && $in->open) {
             \MyPHP\UI\InspectorOverlay::paint($this->list, $this->metrics, $this->rt, $in, $this->h / $this->rt->frameZoom);
             $in->lap(2);

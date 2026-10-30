@@ -65,6 +65,8 @@ final class DisplayList
     public int $n = 0;
     /** The zoom of the content it draws (Context::setZoom, mygo's scene Zoom): its points are this many of the view's, drawn at its scale times it. Set by the window. */
     public float $zoom = 1.0;
+    /** @internal painting skips the nodes whose ink (Node::$ink) is clipped out: set by the window around its frame's painting, where the nodes are where Runtime::record found them, in the window's points */
+    public bool $cull = false;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
     public array $glass = [];
     /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
@@ -309,6 +311,13 @@ final class DisplayList
     }
 
     /** Whether a rect lies entirely outside the current clip (nothing to draw). */
+    /** @internal whether $r, [x0, y0, x1, y1] in the window's points, lies outside the clip, as the window's frame paints */
+    public function outOfClip(array $r): bool
+    {
+        $c = $this->clip;
+        return $r[0] >= $c[0] + $c[2] || $r[1] >= $c[1] + $c[3] || $r[2] <= $c[0] || $r[3] <= $c[1];
+    }
+
     public function clipped(float $x, float $y, float $w, float $h): bool
     {
         if ($this->world->set) {
