@@ -57,6 +57,89 @@ final class Painter
         $this->rt?->after($seconds);
     }
 
+    /**
+     * Calls $n's draw callback (drawOver's when $over), noting what it
+     * painted when it asks to be painted again (mygo's Painter.draw,
+     * paintPart): its quads and the list's state as it began. Into another
+     * list than the window's (a layer's, a canvas's), or inside another
+     * callback, it is called as it is.
+     */
+    private static function callDraw(Node $n, bool $over, DisplayList $list, Theme $t, TextPainter $text, ?Runtime $rt): void
+    {
+        $call = static fn() => $over ? ($n->drawOver)($list, $n, $t) : ($n->draw)($list, $n, $t, $text);
+        if ($rt === null || $rt->inPart || $list !== $rt->partsList) {
+            $call();
+            return;
+        }
+        [$start, $state, $asks] = [$list->n, $list->state(), $rt->paintAsks];
+        $rt->inPart = true;
+        try {
+            $call();
+        } finally {
+            $rt->inPart = false;
+        }
+        if ($rt->paintAsks !== $asks) {
+            $rt->parts[] = ['node' => $n, 'over' => $over, 'theme' => $t, 'start' => $start, 'end' => $list->n, 'state' => $state];
+        }
+    }
+
+    /** @internal Window, Headless: the window's paint begins into $list, whose draw callbacks that ask to be painted again are noted (callDraw) */
+    public static function beginParts(Runtime $rt, DisplayList $list): void
+    {
+        [$rt->parts, $rt->partsList, $rt->untracked, $rt->partsBase] = [[], $list, false, null];
+    }
+
+    /** @internal Window, Headless: the window's paint into $list ended: the list as painted, for frames that paint again only the parts that asked */
+    public static function endParts(Runtime $rt, DisplayList $list): void
+    {
+        $rt->partsList = null;
+        $rt->partsBase = $rt->parts === [] || $rt->untracked ? null : $list->snapshot();
+    }
+
+    /**
+     * Paints again, into $list, the last frame as it was painted with only
+     * the draw callbacks that asked to be painted again called again, each
+     * from the list's state as it began, their quads in the place of those
+     * they painted (mygo's repaintParts), and tells whether it could: not
+     * when something else asked (untracked), nothing was noted, a drag
+     * goes on or the last frame had what the renderer reads apart. A part
+     * that no longer asks stays, as what it painted last.
+     */
+    public static function repaintParts(Runtime $rt, DisplayList $list, TextPainter $text): bool
+    {
+        $base = $rt->partsBase;
+        if ($base === null || $rt->untracked || $rt->parts === [] || !$rt->mayPaintParts()) {
+            return false;
+        }
+        $rt->partPaints++;
+        $list->loadTransforms($base);
+        $fresh = [];
+        $rt->inPart = true;
+        try {
+            foreach ($rt->parts as $i => $p) {
+                $list->setState($p['state']);
+                $from = $list->n;
+                $n = $p['node'];
+                $p['over'] ? ($n->drawOver)($list, $n, $p['theme']) : ($n->draw)($list, $n, $p['theme'], $text);
+                $fresh[$i] = $list->copyOut($from, $list->n);
+            }
+        } finally {
+            $rt->inPart = false;
+        }
+        $quads = ''; $last = 0; $q = 64;
+        foreach ($rt->parts as $i => $p) {
+            $quads .= substr($base[0], $last * $q, ($p['start'] - $last) * $q);
+            $start = intdiv(strlen($quads), $q);
+            $quads .= $fresh[$i];
+            [$last, $rt->parts[$i]['start'], $rt->parts[$i]['end']] = [$p['end'], $start, intdiv(strlen($quads), $q)];
+        }
+        $quads .= substr($base[0], $last * $q);
+        $list->n = 0;
+        $list->copyIn($quads);
+        $rt->partsBase = $list->snapshot(); // the transforms the parts wrote too
+        return true;
+    }
+
     /** The atlas slot of a bitmap: a canvas's in the canvases' pages, an image's in the image atlas. */
     private static function slot(TextPainter $text, Image $img): array
     {
@@ -853,7 +936,7 @@ final class Painter
             return;
         }
         if ($n->kind === Node::SLIDER) {
-            if ($n->draw !== null) { ($n->draw)($list, $n, $t, $text); } else { self::paintSlider($n, $list, $t); } // a draw of its own (a color picker's channel) paints the whole slider
+            if ($n->draw !== null) { self::callDraw($n, false, $list, $t, $text, $rt); } else { self::paintSlider($n, $list, $t); } // a draw of its own (a color picker's channel) paints the whole slider
             return;
         }
         if ($n->kind === Node::PROGRESS) { // a bar as thick as the node was made (a column stretches the node), in the accent or the color given (a meter's level)
@@ -986,7 +1069,7 @@ final class Painter
         }
         if ($n->draw !== null) {
             if ($n->content === null || $rt === null || $n->svg === null || !self::contentIcon($n, $list, $text, $t, $rt)) {
-                ($n->draw)($list, $n, $t, $text); // over the node's own face, under its children, with the text painter for what needs the atlas
+                self::callDraw($n, false, $list, $t, $text, $rt); // over the node's own face, under its children, with the text painter for what needs the atlas
             }
         }
         if ($n->scroll !== null) {
@@ -1004,7 +1087,7 @@ final class Painter
             self::dividerLines($n, $list);
         }
         if ($n->drawOver !== null) {
-            ($n->drawOver)($list, $n, $t); // over the children, inside a scrolling container's clip (mygo's DrawOver)
+            self::callDraw($n, true, $list, $t, $text, $rt); // over the children, inside a scrolling container's clip (mygo's DrawOver)
         }
         if ($n->clip !== 0 && $n->scroll === null) {
             $list->popClip();

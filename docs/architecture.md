@@ -6500,6 +6500,20 @@ succeeds are told of, an empty line is none.
 - Memos keep a drawing's paint asks: `memoPaintEnd` keeps quads only when
   `repaintAt` did not change either, so a memo's drawing that asks again
   is painted, not replayed.
+- mygo e39bd36, the drawings that asked alone: the window's paint notes,
+  for each `draw` or `drawOver` callback that asked to be painted again
+  (`Painter::callDraw`: an ask of `Runtime::paintAsked` while it ran), its
+  quads and the list's state as it began (`DisplayList::state`: the map,
+  the mask, the opacity, the clips), and keeps the list as painted
+  (`Painter::endParts`, `DisplayList::snapshot`: its quads and
+  transforms). A frame that only paints again then calls those callbacks
+  alone, each from its state, after the last frame's transforms
+  (`loadTransforms`), and puts their quads in the place of those they
+  painted (`Painter::repaintParts`). An ask from anything else (a progress
+  bar, a spinner, a content transition, a drawing in a layer or a canvas
+  of a blur, an effect or a cache), a drag, the inspector, or a list with
+  glass, holes, shaders or wide colors paints the window whole, and so
+  does an atlas that starts over as the parts paint.
 
 ## Open items
 

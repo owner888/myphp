@@ -374,6 +374,7 @@ final class Runtime
         $at = $this->clockNow() / 1e9 + max(0.0, $seconds);
         if ($this->painting) { // a drawing's (mygo's Painter.After): a frame that paints again, unless something else changes before
             if ($this->repaintAt === null || $at < $this->repaintAt) { $this->repaintAt = $at; }
+            $this->paintAsked();
             return;
         }
         if ($this->wakeAt === null || $at < $this->wakeAt) { $this->wakeAt = $at; }
@@ -388,6 +389,41 @@ final class Runtime
     /** What the paint asked for: the next frame at the display's rate (animationFrame), and when drawings change next (after). */
     private bool $repaintFull = false;
     private ?float $repaintAt = null;
+
+    /**
+     * Frames that paint again only the drawings that asked (mygo's
+     * paintPart, repaintParts): the window's list the frame paints, the
+     * draw callbacks of it that asked to be painted again, with where their
+     * quads are and the list's state as they began, and the list as it was
+     * painted; untracked, that something else asked, which paints the
+     * window whole. @internal Painter
+     * @var list<array{node: Node, over: bool, theme: Theme, start: int, end: int, state: array<string, mixed>}>
+     */
+    public array $parts = [];
+    /** @internal Painter */
+    public ?DisplayList $partsList = null;
+    /** @internal Painter @var ?array{0: string, 1: string, 2: int, 3: array} */
+    public ?array $partsBase = null;
+    /** @internal Painter */
+    public bool $untracked = false;
+    /** @internal Painter: a part paints now, and how many asks painting made */
+    public bool $inPart = false;
+    public int $paintAsks = 0;
+    /** @internal how many frames painted in parts, for tests */
+    public int $partPaints = 0;
+
+    /** @internal Painter: whether a frame may paint parts again: no drag goes on, no inspector shows */
+    public function mayPaintParts(): bool
+    {
+        return $this->drag === null && $this->valueDrag === null && ($this->inspector === null || !$this->inspector->open);
+    }
+
+    /** A drawing painting asked for frames: by itself, as its part, from a draw callback of the window's painting; else with the window whole (mygo's asks). */
+    private function paintAsked(): void
+    {
+        $this->paintAsks++;
+        if (!$this->inPart) { $this->untracked = true; }
+    }
     /** Whether the next frame may paint the last one's nodes again rather than build the view (mygo's redraw), as only drawings asked for it; and the size, scale and zoom the view was built at. */
     private bool $redraw = false;
     private ?array $builtAt = null;
@@ -429,6 +465,7 @@ final class Runtime
         $this->frameAsks++;
         if ($this->painting) { // a drawing that moves (mygo's Painter.AnimationFrame): frames that only paint again
             $this->repaintFull = true;
+            $this->paintAsked();
         } elseif ($this->building) { // asked as the frame is built: kept past its end, which clears what came before
             $this->animating = true;
         } else {
@@ -444,6 +481,7 @@ final class Runtime
     {
         $this->frameAsks++;
         $this->repaintRate = max($this->repaintRate, $fps);
+        $this->paintAsked();
     }
 
     /**

@@ -156,3 +156,63 @@ $h->paint(); $h->rt->pace(60.0);
 $now += 50_000_000;
 $h->windowFrame();
 same([true, true], [$h->rt->wakeRepaints(), $h->rt->nextWake() !== null], 'a memo\'s drawing asks for its next frame again');
+
+// Frames painting again only the drawings that asked (mygo's TestRepaintPartsMatchWhole): what they paint is what painting the window
+// whole does, without calling the callbacks of what does not move.
+$partsView = function (int &$statics) {
+    $static = function (DisplayList $l, Node $n) use (&$statics): void { $statics++; $l->rect($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4, 0x14a03c, 1.0, 4); };
+    return function (Context $c) use ($static): void {
+        $moving = function (DisplayList $l, Node $n, $t, $text) use ($c): void {
+            $ms = (float)(intdiv($c->runtime->now, 1_000_000) % 40);
+            $c->runtime->animationFrame();
+            $l->rect($n->x + $ms, $n->y, 6, $n->h, 0x2563eb, 1.0, 3);
+            $text->paint($l, 'ab', 10, $n->x + $ms / 2, $n->y + $n->h - 4, 0xdc2828);
+        };
+        $c->column(4)->background(0xfafafa)->padding(4);
+          $c->column()->size(120, 20)->draw($static); $c->end();
+          $c->scroll()->height(40)->radius(10);
+            $c->column()->size(120, 24)->shrink(0)->draw($moving); $c->end();
+            $c->column()->size(120, 24)->shrink(0)->draw($static); $c->end();
+          $c->end();
+          $c->row();
+            $c->column()->size(60, 20)->opacity(0.5)->background(0xdc2828)->draw($moving)->drawOver(fn(DisplayList $l, Node $n) => $static($l, $n)); $c->end();
+            $c->column()->size(60, 20)->scale(0.8, 1.2)->draw($static)->drawOver(function (DisplayList $l, Node $n) use ($c): void {
+                $c->runtime->after(0.016);
+                $l->rect($n->x + (float)(intdiv($c->runtime->now, 1_000_000) % 30), $n->y, 4, 4, 0xdc2828, 1.0, 0);
+            }); $c->end();
+          $c->end();
+          $c->column()->size(120, 20)->draw($static); $c->end();
+        $c->end();
+    };
+};
+$statics = 0; $wholeStatics = 0; $nowP = 0; $nowW = 0;
+$parts = poseTester($partsView($statics), $nowP, 200, 140);
+$whole = poseTester($partsView($wholeStatics), $nowW, 200, 140);
+$whole->noParts = true;
+$parts->paint(); $parts->rt->pace(60.0); $whole->paint(); $whole->rt->pace(60.0);
+$n = $statics; $same = true;
+for ($i = 0; $i < 12; $i++) {
+    $d = (5 + $i * 3) * 1_000_000; $nowP += $d; $nowW += $d;
+    $pr = $parts->windowFrame(); $wr = $whole->windowFrame();
+    if (!$pr || !$wr) { check(false, "frame $i built the view"); break; }
+    [$a, $b] = [$parts->painted(), $whole->painted()];
+    $same = $same && $a->copyOut(0, $a->n) === $b->copyOut(0, $b->n) && $a->transformBytes() === $b->transformBytes();
+}
+check($same, 'painted in parts, the same quads and maps as painted whole');
+same([0, 12, 0], [$statics - $n, $parts->rt->partPaints, $whole->rt->partPaints], 'the drawings that do not move not painted again; 12 frames in parts');
+
+// The window painted whole when something else than a draw callback asks (mygo's TestRepaintPartsWhole): a progress bar, a drawing in a blur's layer.
+$statics = 0; $now = 0;
+$h = poseTester(function (Context $c) use (&$statics): void {
+    $c->column()->size(100, 20)->draw(function () use (&$statics): void { $statics++; }); $c->end();
+    $c->column()->size(100, 20)->blur(2);
+      $c->column()->size(100, 20)->draw(function () use ($c): void { $c->runtime->animationFrame(); }); $c->end();
+    $c->end();
+}, $now, 200, 100);
+$h->paint(); $h->rt->pace(60.0);
+$n = $statics; $now += 16_000_000;
+check($h->windowFrame() && $statics === $n + 1 && $h->rt->partPaints === 0, 'a drawing in a layer asking: the window painted whole');
+$now = 0;
+$h = poseTester(function (Context $c): void { $c->progress(-1.0)->width(100); }, $now, 200, 100);
+$h->paint(); $h->rt->pace(60.0); $now += 16_000_000;
+check($h->windowFrame() && $h->rt->partPaints === 0, 'an indeterminate progress bar: painted whole');

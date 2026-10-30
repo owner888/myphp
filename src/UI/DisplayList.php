@@ -262,6 +262,42 @@ final class DisplayList
         $this->n += $n;
     }
 
+    /**
+     * @internal Painter::repaintParts: what drawing goes through now, the
+     * map, the mask, the opacity and the clips, which a drawing painted
+     * again in parts starts from as it did @return array<string, mixed>
+     */
+    public function state(): array
+    {
+        return ['world' => $this->world, 'given' => $this->given, 'base' => $this->base, 'based' => $this->based, 'xk' => $this->xk, 'mask' => $this->mask, 'maskKey' => $this->maskKey,
+            'opacity' => $this->opacity, 'clip' => $this->clip, 'clips' => $this->clips];
+    }
+
+    /** @internal Painter::repaintParts: draws through what state() gave, the transforms written since kept @param array<string, mixed> $s */
+    public function setState(array $s): void
+    {
+        ['world' => $this->world, 'given' => $this->given, 'base' => $this->base, 'based' => $this->based, 'xk' => $this->xk, 'mask' => $this->mask, 'maskKey' => $this->maskKey,
+            'opacity' => $this->opacity, 'clip' => $this->clip, 'clips' => $this->clips] = $s;
+    }
+
+    /** @internal Painter::repaintParts: the list as painted, its quads and the transforms they go through, or null for one with what the renderer reads apart (glass, holes, shaders, wide colors), which a frame painting in parts paints whole @return ?array{0: string, 1: string, 2: int, 3: array} */
+    public function snapshot(): ?array
+    {
+        if ($this->glass !== [] || $this->holes !== [] || $this->shaders !== [] || $this->shaderRuns !== [] || $this->wide !== []) {
+            return null;
+        }
+        return [$this->copyOut(0, $this->n), $this->transformBytes(), $this->transforms, $this->entries];
+    }
+
+    /** @internal Painter::repaintParts: the transforms of a snapshot, its quads left out (n 0), to paint parts of it again @param array{0: string, 1: string, 2: int, 3: array} $s */
+    public function loadTransforms(array $s): void
+    {
+        $this->reset();
+        if ($s[2] > $this->xformCapacity) { throw new RuntimeException("display list full ({$this->xformCapacity} transforms)"); }
+        if ($s[1] !== '') { \FFI::memcpy(\FFI::addr($this->xforms[0]), $s[1], strlen($s[1])); }
+        [$this->transforms, $this->entries] = [$s[2], $s[3]];
+    }
+
     public function reset(): void
     {
         $this->n = 0;

@@ -216,16 +216,30 @@ final class Headless
     public function windowFrame(bool $repaintAsked = true, float $hz = 60.0): bool
     {
         $repaint = $this->root !== null && $repaintAsked && $this->rt->mayRepaint([$this->w, $this->h, 1.0]);
+        $parts = false;
         if ($repaint) {
             $this->rt->beginRepaint();
+            if (!$this->noParts && $this->list !== null) { // the drawings that asked alone, as the window paints them (Painter::repaintParts)
+                $this->rt->painting = true;
+                try { $parts = Painter::repaintParts($this->rt, $this->list, $this->metrics); } finally { $this->rt->painting = false; }
+            }
         } else {
             $paints = $this->paints; $this->paints = false;
             try { $this->frame(1); } finally { $this->paints = $paints; }
         }
-        $this->paint();
+        if (!$parts) { $this->paint(); }
         $this->rt->pace($hz);
         return $repaint;
     }
+
+    /** The list the last frame painted, null before any. */
+    public function painted(): ?DisplayList
+    {
+        return $this->list;
+    }
+
+    /** Frames that only paint again paint the window whole, never in parts: to compare (mygo's noParts). */
+    public bool $noParts = false;
 
     /** Paints everything, skipping nothing whose ink shows nowhere (mygo's noCull), to compare. */
     public bool $noCull = false;
@@ -242,6 +256,7 @@ final class Headless
         $root = $this->root ?? $this->frame();
         $this->list->cull = !$this->noCull; // as the window's paint, which skips what shows nowhere
         $this->rt->painting = true;
+        Painter::beginParts($this->rt, $this->list);
         try {
             Painter::paint($root, $this->list, $this->metrics, $this->theme, $this->rt);
         } finally {
@@ -254,6 +269,7 @@ final class Headless
         }
         Painter::dragCopy($this->list, $this->metrics, $this->theme, $this->rt);
         Painter::tooltip($root, $this->list, $this->metrics, $this->theme, $this->rt); // the text tips, last, as the window paints them
+        Painter::endParts($this->rt, $this->list);
         return $this->list;
     }
 

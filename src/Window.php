@@ -465,6 +465,7 @@ final class Window
                     $list->pushClip(0, 0, $bounds->w / $z, $bounds->h / $z); // what lies outside the window is not painted (mygo's visible)
                     $list->cull = true; // where the nodes are where the runtime recorded them
                     $this->runtime->painting = true; // what drawings ask for now are frames that only paint again
+                    Painter::beginParts($this->runtime, $list);
                     try {
                         Painter::paint($root, $list, $text, App::theme(), $this->runtime);
                     } finally {
@@ -474,8 +475,20 @@ final class Window
                     if ($in !== null && $in->open) { UI\InspectorOverlay::paint($list, $text, $this->runtime, $in, $bounds->h / $z); }
                     Painter::dragCopy($list, $text, App::theme(), $this->runtime); // a value dragged: its source's copy under the pointer
                     Painter::tooltip($root, $list, $text, App::theme(), $this->runtime);
+                    Painter::endParts($this->runtime, $list);
                 };
-                $paint();
+                $parts = false;
+                if ($repaint) { // only the drawings that asked painted again, the rest of the last frame as it was (mygo's repaintParts)
+                    $this->runtime->painting = true;
+                    try {
+                        $parts = Painter::repaintParts($this->runtime, $list, $text);
+                    } finally {
+                        $this->runtime->painting = false;
+                    }
+                }
+                if (!$parts) {
+                    $paint();
+                }
                 if ($text->repaint) {
                     // An atlas started over during the paint: what was painted before points at slots that are gone.
                     $text->repaint = false;
