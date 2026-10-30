@@ -178,7 +178,7 @@
   "ok": "好",
   "open": "打开",
   "selectFolder": "选择文件夹",
-  "clearScrollback": "清除回滚",
+  "clearTerminal": "清除",
   "videoResume": "继续",
   "videoPause": "暂停",
   "videoStop": "停止",

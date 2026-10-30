@@ -87,7 +87,7 @@ T);
     $row = mb_str_split("see https://example.com/a_(b)?q=1. and (http://x.org/y), mailto:me@x.org!");
     $cols = array_keys($row);
     foreach ([0 => '', 4 => 'https://example.com/a_(b)?q=1', 20 => 'https://example.com/a_(b)?q=1', 33 => '', 40 => 'http://x.org/y', 58 => 'mailto:me@x.org'] as $col => $want) {
-        same($want, Links::urlAt($row, $cols, $col), "urlAt($col)");
+        same($want, Links::urlAt($row, $cols, $col)[0], "urlAt($col)");
     }
     foreach ([
         ['Updated internal/app/embed.go:51 and more', 10, 'internal/app/embed.go:51'],
@@ -100,6 +100,8 @@ T);
         ['version 1.2.3 ok', 9, ''],
     ] as [$s, $col, $want]) {
         $r = mb_str_split($s);
-        same($want, Links::pathAt($r, array_keys($r), $col), "pathAt(\"$s\", $col)");
+        same($want, Links::pathAt($r, array_keys($r), $col)[0], "pathAt(\"$s\", $col)");
     }
+    $r = mb_str_split('go to https://x.org/a. now');
+    same(['https://x.org/a', 6, 21], Links::urlAt($r, array_keys($r), 10), 'urlAt: the columns the URL spans');
 })();

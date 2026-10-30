@@ -5799,6 +5799,40 @@ keeps the text clear of it as before (tests/textarea_test.php).
   NSBitmapImageRep), as NSImage reads SVG, which the Intents image
   service refuses; what NSImage can't read keeps the plain notification.
 
+## A terminal's clears, copies, links, drops and colors for apps (v1.84)
+
+mygo 633b369, ea23ad2, e15e462, ff9e8ff, 2dd788b, 0faf347, c238c0c,
+135d776, 82a9154, dc20c14, in plugins/Terminal:
+
+- **Clears**: `Terminal::clearScreen` (what ActionClearScreen's keys do,
+  left out on a full-screen program's screen) and `clearScrollback` are
+  public; `Options::$onClear` sees the user's clear first (`Clear`), and
+  one it takes clears nothing here, so that a terminal showing a server's
+  has the server's terminal clear. The context menu's last item is Clear,
+  which clears as Command-K does (disabled on the alternate screen), where
+  it was Clear Scrollback, which changed nothing on the screen.
+- **Copies**: `Options::$onCopy` hears each text the terminal writes to
+  the clipboard and what copied it (`CopySource`: the user, a selection
+  copied, a program's OSC 52), all through `View::writeClipboard`.
+- **Links**: `Links::urlAt` and `pathAt` give the columns a link spans;
+  the link Command hovers is a span of cells (`View::$hover`, a
+  hyperlink's the cells around with its URL), underlined in its text's
+  color, and `Terminal::hoveredLink()` tells an app what it opens, whether
+  it is a path, and where its cells are, for a preview over the view.
+- **Dropped files** paste their paths (`dropFiles`), each quoted for the
+  program's shell (`ShellQuote`: backslashes, `$'…'` for control
+  characters, PowerShell's single quotes for pwsh), bracketed for a
+  program that asks, and offered as a file list to one that reads the
+  clipboard itself; the shells in the tests read each quoted path back.
+- **A snapshot** keeps the blank rows at the end of the screen, which
+  Ghostty's formatter leaves out (`Vt\Terminal::padRows`): replayed, the
+  scrollback is as long, and the line above the cursor is not written
+  over.
+- **Colors without a view**: `Terminal::useTheme` gives a terminal no
+  view shows its colors, `Options::$theme` from the start, which programs'
+  color questions get; a program that asked (mode 2031) is told when the
+  colors turn light or dark, by `useTheme` or a view's theme.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

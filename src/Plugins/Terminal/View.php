@@ -82,8 +82,11 @@ final class View implements TextInputClient
     public bool $selecting = false, $reporting = false;
     /** @var array{0: float, 1: float} */
     public array $pointer = [0.0, 0.0];
-    /** Command is held over a link, which a click opens; the primary button pressed one, and the press is the link's until the release. */
-    public bool $hoverLink = false, $linkPress = false;
+    /** @var ?array{0: int, 1: int, 2: int} the cells of the link Command is held over, [row, x0, x1) of the viewport, which a click opens and which shows underlined; null over none */
+    public ?array $hover = null;
+    /** What the hovered link opens, and whether it is a file path (Terminal::hoveredLink); the primary button pressed a link, and the press is the link's until the release. */
+    public string $hoverLink = '';
+    public bool $hoverPath = false, $linkPress = false;
     /** The pointer over the grid (pointerShape); whether the program took the mouse as of the last frame, and the shape taking or leaving it showed while the program's own (OSC 22) is still the one it had then. */
     public \MyPHP\UI\Cursor $pointerAt = \MyPHP\UI\Cursor::Text;
     private bool $tracking = false;
@@ -129,8 +132,11 @@ final class View implements TextInputClient
         $c->end();
         $e->ownRing = true; // no focus ring
         $e->role(Role::GROUP)->label('Terminal');
-        $v->update($c, $c->focused($e));
-        $e->cursor($v->hoverLink ? \MyPHP\UI\Cursor::Pointer : $v->pointerAt);
+        $v->update($c, $c->focused($e), $c->hovered($e));
+        $e->cursor($v->hover !== null ? \MyPHP\UI\Cursor::Pointer : $v->pointerAt);
+        if (($files = $c->droppedFiles($e)) !== null && $files !== []) {
+            $t->dropFiles($files);
+        }
         $e->handleInput($v->input(...));
         $e->handleTextInput($v);
         $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
@@ -172,7 +178,7 @@ final class View implements TextInputClient
     }
 
     /** Updates the view as a frame builds. */
-    private function update(Context $c, bool $focused): void
+    private function update(Context $c, bool $focused, bool $hovered): void
     {
         $t = $this->t;
         $this->now = $this->services?->now ?? hrtime(true);
@@ -189,12 +195,13 @@ final class View implements TextInputClient
                 $theme->apply($t->term);
                 $this->applied = $theme;
             }
+            $t->schemeChanged($t->curTheme, $theme);
             $t->curTheme = $theme;
             if ($focused !== $this->focused && $t->term->mode(VtTerminal::MODE_FOCUS_EVENT)) {
                 $t->push(KeyEncoder::encodeFocus($focused));
             }
-            // The hand over a link follows Command as it is pressed and let go of, with the pointer still.
-            $this->hoverLink = $this->linkUnder($c->modifiers(), $this->pointer[0], $this->pointer[1])[0] !== '';
+            // The hand over a link, and its underline, follow Command as it is pressed and let go of, with the pointer still.
+            [$this->hoverLink, $this->hoverPath, $this->hover] = $hovered ? $this->linkUnder($c->modifiers(), $this->pointer[0], $this->pointer[1]) : ['', false, null];
             $this->pointerAt = $this->pointerShape($t->term, $c->modifiers());
             // Input methods compose where the cursor is now, which the last frame may not show yet.
             $this->caretCell = [$this->cursor->x, $this->cursor->y];
@@ -205,7 +212,7 @@ final class View implements TextInputClient
         $copied = $t->clipOut;
         $t->clipOut = [];
         foreach ($copied as $s) {
-            $this->writeClipboard($s);
+            $this->writeClipboard($s, CopySource::CopyProgram);
         }
         if ($t->term === null) {
             [$this->reads, $this->clipPrompt, $this->clipOpen] = [[], null, false];
@@ -337,9 +344,11 @@ final class View implements TextInputClient
         $this->services?->changed();
     }
 
-    private function writeClipboard(string $s): void
+    /** Writes $s to the clipboard, and tells Options::$onCopy, by what copied it (mygo's copied). */
+    private function writeClipboard(string $s, CopySource $by): void
     {
         if ($this->services !== null) { ($this->services->writeClipboard)($s); }
+        if (($on = $this->t->opts->onCopy) !== null) { $on($s, $by); }
     }
 
     /** The terminal's context menu. */
@@ -349,7 +358,7 @@ final class View implements TextInputClient
         $text = $t->term?->selectionText();
         $tx = L10n::in(\MyPHP\App::locale());
         if ($this->menuItem($m, $tx->get('copy'), Action::ActionCopy)->disabled($text === null || $text === '')->chosen()) {
-            $this->writeClipboard((string)$text);
+            $this->writeClipboard((string)$text, CopySource::CopyUser);
         }
         if ($this->menuItem($m, $tx->get('paste'), Action::ActionPaste)->chosen()) {
             $this->paste();
@@ -358,8 +367,9 @@ final class View implements TextInputClient
             $this->selectAll();
         }
         $m->separator();
-        if ($m->item($tx->get('clearScrollback'))->chosen()) {
-            $t->feed("\x1b[3J");
+        // Clear clears as Command-K does, as Ghostty's: clearing the scrollback alone would change nothing on the screen.
+        if ($this->menuItem($m, $tx->get('clearTerminal'), Action::ActionClearScreen)->disabled($t->term?->altScreen() ?? false)->chosen()) {
+            $this->clearScreen();
         }
     }
 

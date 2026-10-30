@@ -346,6 +346,9 @@ trait ViewPaint
                 $list->popClip();
             }
         }
+        if (($h = $this->hover) !== null && isset($this->lines[$h[0]])) { // the link Command hovers, underlined
+            $this->drawDeco($list, $h[1], $h[2], VtStyle::UNDERLINE_SINGLE, $this->linkColor($this->lines[$h[0]], $h), $ox, $oy + $h[0] * $ch, $cw, $base);
+        }
         if ($cur[2] > 0 && !$block) {
             if ($this->focused || $this->cursor->style !== VtTerminal::CURSOR_BLOCK) {
                 $list->rect($cur[0], $cur[1], $cur[2], $cur[3], $curColor[0], $curColor[1]);
@@ -376,6 +379,17 @@ trait ViewPaint
             $this->drawPreedit($list, $text, $ox, $oy, $cw, $ch, $base);
         }
         $this->drawScrollbar($list, $r);
+    }
+
+    /** The color of the hovered link's underline: its text's, or the foreground's (mygo's linkColor). @param array{0: int, 1: int, 2: int} $h @return array{0: int, 1: float} */
+    private function linkColor(RowCache $line, array $h): array
+    {
+        foreach ($line->runs as [, $cols, $c]) {
+            foreach ($cols as $col) {
+                if ($col >= $h[1] && $col < $h[2]) { return $c; }
+            }
+        }
+        return self::opaque($this->colors->foreground);
     }
 
     /** Draws the glyphs, drawn characters and lines of a row, in their colors or, when $over is set, in $over. @param ?array{0: int, 1: float} $over */

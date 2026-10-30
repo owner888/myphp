@@ -82,6 +82,18 @@ TermClock::install();
     $c->feed('!');
     check(str_contains($c->text(), 'full screen') && str_contains($c->text(), 'here!'), 'a snapshot restores the alternate screen: ' . json_encode($c->text()));
     foreach ([$a, $b, $c] as $t) { $t->close(); }
+    // The blank rows at the end of the screen come too: the cursor on one under the last line, as while a program prints lines, keeps the line above from what is written next, and a screen cleared shows blank what it showed in the scrollback.
+    foreach (['', "\x1b[H\x1b[2J"] as $last) {
+        $d = $new();
+        for ($i = 0; $i < 10; $i++) { $d->feed("row $i\r\n"); }
+        $d->feed($last);
+        $e = $new();
+        $e->feed($d->snapshot());
+        $d->feed('next'); $e->feed('next');
+        same($d->text(), $e->text(), 'a snapshot restores the blank rows after ' . json_encode($last));
+        same($d->term->scrollbar(), $e->term->scrollbar(), 'and the scrollback after ' . json_encode($last));
+        $d->close(); $e->close();
+    }
 })();
 
 (function () {
@@ -232,7 +244,7 @@ TermClock::install();
     [$x, $y] = $tt->cell(1, 0);
     $tt->h->rightClick($x, $y);
     $labels = implode(',', $tt->h->menuLabels() ?? []);
-    check(str_contains($labels, 'Copy') && str_contains($labels, 'Clear Scrollback'), "the context menu: $labels");
+    check(str_contains($labels, 'Copy') && str_contains($labels, 'Clear'), "the context menu: $labels");
     $tt->setClipboard('again');
     check($tt->h->chooseMenuItem('Paste'), "the menu's Paste");
     same('again', $conn->take(5), "the menu's Paste sends");
@@ -379,6 +391,152 @@ TermClock::install();
     same("\x1b[5;2~", $conn->take(1), 'Shift-Page Up on the alternate screen goes to the program');
     $tt->key(Key::OPTION, Key::K, '˚');
     check($conn->take(1) !== '', 'a performable clear leaves the key on the alternate screen');
+    $term->close();
+})();
+
+(function () {
+    // OnClear sees the user's clears, the keys' and the menu's, and takes them or leaves them to the terminal; not on the alternate screen (mygo's TestOnClear).
+    $conn = new TermPipe;
+    $asked = []; $take = true;
+    $term = Terminal::new(new Options(conn: $conn, keybinds: [new Keybind(Key::OPTION, Key::K, Action::ActionClearScreen, true)],
+        onClear: function (\MyPHP\Plugins\Terminal\Clear $c) use (&$asked, &$take): bool { $asked[] = $c; return $take; }));
+    $tt = new TermTester($term);
+    $term->feed(termLines(100) . '$ ls');
+    $tt->frame();
+    $full = $term->text();
+    $tt->key(Key::OPTION, Key::K, '˚');
+    same([\MyPHP\Plugins\Terminal\Clear::ClearScreen], $asked, 'onClear: the clear keys asked');
+    check($conn->take(0) === '' && $term->text() === $full, 'onClear: a clear taken sent and cleared nothing');
+    [$x, $y] = $tt->cell(1, 0);
+    $tt->h->rightClick($x, $y);
+    check(str_ends_with(implode(',', $tt->h->menuLabels() ?? []), ',-,Clear'), 'onClear: the menu ends with Clear');
+    check($tt->h->chooseMenuItem('Clear'), "onClear: the menu's Clear");
+    check(count($asked) === 2 && $asked[1] === \MyPHP\Plugins\Terminal\Clear::ClearScreen && $term->text() === $full, "onClear: the menu's Clear asked ClearScreen, taken");
+    $take = false;
+    $tt->key(Key::OPTION, Key::K, '˚');
+    $tt->frame();
+    same('$ ls', trim($term->text()), 'onClear: a clear left to the terminal');
+    $term->feed("\r\n" . termLines(100) . '$ ls');
+    $tt->frame();
+    $tt->h->rightClick($x, $y);
+    $tt->h->chooseMenuItem('Clear');
+    $tt->frame();
+    same('$ ls', trim($term->text()), "onClear: the menu's Clear left to the terminal");
+    $term->feed("\x1b[?1049h");
+    $tt->frame();
+    $tt->key(Key::OPTION, Key::K, '˚');
+    same(4, count($asked), 'onClear: not asked on the alternate screen');
+    check($conn->take(1) !== '', 'a performable clear leaves the key on the alternate screen');
+    check(!$term->clearScreen(), 'clearScreen: not on the alternate screen');
+    $tt->h->rightClick($x, $y);
+    check(!$tt->h->chooseMenuItem('Clear'), "the menu's Clear is disabled on the alternate screen");
+    $tt->h->closeMenu();
+    $term->close();
+})();
+
+(function () {
+    // OnCopy tells of each copy, and what made it (mygo's TestOnCopy).
+    $got = [];
+    $term = Terminal::new(new Options(conn: new TermPipe, copyOnSelect: \MyPHP\Plugins\Terminal\CopyOnSelect::CopyOnSelectClipboard,
+        onCopy: function (string $text, \MyPHP\Plugins\Terminal\CopySource $by) use (&$got): void { $got[] = [$text, $by->name]; }));
+    $term->feed('hello world');
+    $tt = new TermTester($term);
+    [$x0, $y0] = $tt->cell(0, 0);
+    [$x1, $y1] = $tt->cell(4, 0);
+    $tt->press($x0 - 2, $y0);
+    $tt->move($x1 + 2, $y1);
+    $tt->release($x1 + 2, $y1);
+    $tt->key(Key::COMMAND, Key::C);
+    $tt->command('selectAll');
+    same([['hello', 'CopySelect'], ['hello', 'CopyUser'], ['hello world', 'CopySelect']], $got, 'onCopy');
+    $term->close();
+})();
+
+(function () {
+    // Dropped files' paths are quoted for the program's shell, so that each is one argument, whatever it holds: a newline does not end the command, nor do PowerShell's $(…) or $var expand (mygo's TestQuotePaths).
+    $Q = \MyPHP\Plugins\Terminal\ShellQuote::class;
+    $cases = [
+        [$Q::POSIX, '/Users/me/My Shots/shot (1).png', '/Users/me/My\ Shots/shot\ \(1\).png'],
+        [$Q::POSIX, '/tmp/a&b.txt', '/tmp/a\&b.txt'],
+        [$Q::POSIX, '/tmp/$(id)`id`;x|y*', '/tmp/\$\(id\)\`id\`\;x\|y\*'],
+        [$Q::POSIX, '/tmp/日本 語', '/tmp/日本\ 語'],
+        [$Q::POSIX, "/tmp/x\ntouch pwned", '$\'/tmp/x\x0atouch pwned\''],
+        [$Q::POSIX, "/tmp/it's\tthere\\", '$\'/tmp/it\\\'s\x09there\\\\\''],
+        [$Q::POSIX, "/tmp/a\rb\x1b[201~c", '$\'/tmp/a\x0db\x1b[201~c\''],
+        [$Q::POSIX, "/tmp/\xff.bin", '$\'/tmp/\xff.bin\''],
+        [$Q::POWERSHELL, 'C:\tmp\ab.txt', 'C:\tmp\ab.txt'],
+        [$Q::POWERSHELL, 'C:\Users\me\My Shots\shot (1).png', '\'C:\Users\me\My Shots\shot (1).png\''],
+        [$Q::POWERSHELL, 'C:\dl\$(Start-Process calc) x.txt', '\'C:\dl\$(Start-Process calc) x.txt\''],
+        [$Q::POWERSHELL, 'C:\dl\$env:USERNAME.txt', '\'C:\dl\$env:USERNAME.txt\''],
+        [$Q::POWERSHELL, 'C:\dl\a`b;c.txt', '\'C:\dl\a`b;c.txt\''],
+        [$Q::POWERSHELL, 'C:\dl\it\'s ‘q’.txt', '\'C:\dl\it\'\'s ‘‘q’’.txt\''],
+        [$Q::CMD, 'C:\tmp\ab.txt', 'C:\tmp\ab.txt'],
+        [$Q::CMD, 'C:\a b\c&d.txt', '"C:\a b\c&d.txt"'],
+    ];
+    foreach ($cases as [$q, $path, $want]) {
+        same($want, $Q::quote($q, $path), 'quote ' . json_encode($path));
+    }
+    foreach ([['/bin/zsh', $Q::POSIX], ['/usr/local/bin/pwsh', $Q::POWERSHELL], ['C:\Windows\System32\cmd.exe', $Q::CMD], ['C:\Program Files\Git\bin\bash.exe', $Q::POSIX], ['', $Q::POSIX]] as [$program, $want]) {
+        same($want, $Q::forProgram($program), "the quoting for \"$program\"");
+    }
+    // The shells read the paths back.
+    foreach (['bash', 'zsh'] as $sh) {
+        $bin = trim((string)shell_exec('command -v ' . $sh));
+        if ($bin === '') { continue; }
+        foreach ($cases as [$q, $path, $want]) {
+            if ($q !== $Q::POSIX) { continue; }
+            same($path, shell_exec(escapeshellarg($bin) . ' -c ' . escapeshellarg('printf %s ' . $want)), "$sh reads back " . json_encode($path));
+        }
+    }
+})();
+
+(function () {
+    // Files dropped on a terminal paste their paths, quoted for a shell and between spaces, as Ghostty does: bracketed for a program that asks (mygo's TestDropFiles).
+    $conn = new TermPipe;
+    $term = Terminal::new(new Options(conn: $conn));
+    $tt = new TermTester($term, 400, 200, false);
+    $paths = ['/Users/me/My Shots/shot (1).png', '/tmp/a&b.txt'];
+    check($tt->h->rt->fileDrop(100, 100, $paths), 'the terminal takes dropped files');
+    $tt->frame();
+    $want = '/Users/me/My\ Shots/shot\ \(1\).png /tmp/a\&b.txt';
+    same($want, $conn->take(strlen($want)), 'dropping pastes the paths');
+    $term->feed("\x1b[?2004h");
+    $tt->frame();
+    $tt->h->rt->fileDrop(100, 100, [$paths[1]]);
+    $tt->frame();
+    $want = "\x1b[200~/tmp/a\\&b.txt\x1b[201~";
+    same($want, $conn->take(strlen($want)), 'dropping in bracketed paste');
+    $term->close();
+})();
+
+(function () {
+    // A server's terminal has no view, but programs still ask the colors configured for it; once they subscribe (mode 2031), each change between light and dark is told once (mygo's TestHeadlessThemeQueries, TestHeadlessAppearanceChanges).
+    foreach ([['light', Terminal::lightTheme(), 2], ['dark', Terminal::darkTheme(), 1]] as [$name, $theme, $mode]) {
+        $p = new TermPipe;
+        $term = Terminal::new(new Options(conn: $p, theme: $theme));
+        $term->feed("\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b[?996n");
+        $got = $p->take(1);
+        $want = fn(int $i, int $c): string => sprintf("\x1b]%d;rgb:%04x/%04x/%04x\x1b\\", $i, (($c >> 16) & 255) * 257, (($c >> 8) & 255) * 257, ($c & 255) * 257);
+        check(str_contains($got, $want(10, $theme->foreground)) && str_contains($got, $want(11, $theme->background)) && str_contains($got, "\x1b[?997;{$mode}n"), "$name: a terminal no view shows answers its colors: " . json_encode($got));
+        $term->close();
+    }
+    $p = new TermPipe;
+    $term = Terminal::new(new Options(conn: $p, theme: Terminal::lightTheme()));
+    $term->useTheme(Terminal::darkTheme());
+    same('', $p->take(0), 'useTheme: nothing told a program that did not subscribe');
+    $term->feed("\x1b[?2031h");
+    $p->take(0);
+    $term->useTheme(Terminal::lightTheme());
+    same("\x1b[?997;2n", $p->take(1), 'useTheme: light, told');
+    $term->useTheme(Terminal::lightTheme());
+    same('', $p->take(0), 'useTheme: no change, nothing told');
+    $term->useTheme(Terminal::darkTheme());
+    same("\x1b[?997;1n", $p->take(1), 'useTheme: dark, told');
+    $term->feed("\x1b[?996n");
+    same("\x1b[?997;1n", $p->take(1), 'the scheme asked after the change');
+    $term->feed("\x1b[?2031l");
+    $term->useTheme(Terminal::lightTheme());
+    same('', $p->take(0), 'useTheme: nothing told once unsubscribed');
     $term->close();
 })();
 
@@ -538,9 +696,16 @@ TermClock::install();
     $tt->h->input->mods = Key::COMMAND;
     $tt->frame();
     same(\MyPHP\UI\Cursor::Pointer, $tt->node->cursor, 'the cursor over a link with Command');
+    same([0, 0, 4], $term->v->hover, 'the link under it shows underlined, all its cells');
+    [$link, $path, $at] = $term->hoveredLink();
+    [$x4] = $tt->cell(4, 0);
+    [$tx, $ty, $tx4] = [$x, $y, $x4]; // cell() is from the view's corner
+    $in = fn(float $px) => $px >= $at[0] && $px < $at[0] + $at[2] && $ty >= $at[1] && $ty < $at[1] + $at[3];
+    check($link === 'vscode://file/a.go' && !$path && $in($tx) && !$in($tx4), 'hoveredLink: the hyperlink over cells 0..4: ' . json_encode([$link, $path, $at]));
     $tt->h->input->mods = 0;
     $tt->frame();
     same(\MyPHP\UI\Cursor::Text, $tt->node->cursor, 'the cursor once Command is let go of');
+    check($term->v->hover === null && $term->hoveredLink()[0] === '', 'no link hovered once Command is let go of');
     $term->feed("\x1b[?1002h\x1b[?1006h");
     $tt->frame();
     $tt->click($x, $y, Key::COMMAND);

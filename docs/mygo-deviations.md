@@ -2124,3 +2124,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   quality past it. Blackhole's caption says its shaders are written in
   PHP, where mygo's says Go: the app, and the compiler of its shaders,
   are PHP here.
+
+## A terminal's clears, copies and drops (v1.84)
+
+- **Clear**
+  - mygo: `terminal.Clear` has ClearScrollback too, deprecated, which
+    OnClear is no longer asked since the context menu's Clear clears as
+    Command-K does.
+  - myphp: `Clear` has ClearScreen alone.
+  - Why: myphp never had the context menu ask ClearScrollback; no case
+    nothing asks.
+- **Dropped files' quoting**
+  - mygo: `quotingFor` takes PowerShell's quoting for programs other than
+    shells on Windows, and cmd.exe's where PowerShell is missing.
+  - myphp: `ShellQuote::forProgram` by the program's name alone: pwsh,
+    powershell, cmd, else a POSIX shell's.
+  - Why: macOS first; the Windows rules come with a Windows backend.

@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Terminal;
 
 use MyPHP\Plugins\Terminal\Vt\{ClipboardRead, ClipboardReply, DeferredClipboardRead, KeyEncoder, Terminal as VtTerminal};
-use MyPHP\Transfer\{Data, Format};
+use MyPHP\Transfer\{Data, Format, Item, Representation};
 
 /**
  * Pasting (mygo's paste.go): bracketed when the program asks, or offered
@@ -45,6 +45,32 @@ trait TerminalPaste
      * only that read.
      */
     public function pasteData(Data $d): void { $this->pasteHeld($d, null); }
+
+    /**
+     * @internal pastes the paths of files dropped on the terminal, as
+     * Ghostty does (mygo's dropFiles): each quoted for the program's shell,
+     * spaces between them, so that a shell takes them as arguments and an
+     * agent as files it attaches. A program that reads the clipboard itself
+     * (mode 5522) is offered them as a file list too, when the paths make
+     * one.
+     * @param list<string> $paths
+     */
+    public function dropFiles(array $paths): void
+    {
+        if ($paths === []) {
+            return;
+        }
+        $text = Representation::bytes(Format::TEXT, implode(' ', array_map(fn(string $p): string => ShellQuote::quote($this->quoting, $p), $paths)));
+        try {
+            $items = Data::files(...$paths)->items;
+        } catch (\InvalidArgumentException) { // no absolute paths, which make no file list: the text alone
+            $this->pasteData(new Data(new Item($text)));
+            return;
+        }
+        $first = $items[0]->read(Format::FILE_LIST);
+        $items[0] = new Item(Representation::bytes(Format::FILE_LIST, $first), Representation::bytes(Format::URI_LIST, $first), $text);
+        $this->pasteData(new Data(...$items));
+    }
 
     /** @internal pastes $d; $held are the formats the clipboard held when the view read only some of them, which tell whether a paste of no text had something else @param ?list<string> $held */
     public function pasteHeld(Data $d, ?array $held): void

@@ -31,7 +31,9 @@ final class Terminal
     // Modes (GhosttyMode): DEC private modes, or ANSI ones with bit 15.
     public const MODE_CURSOR_KEYS = 1, MODE_CURSOR_VISIBLE = 25, MODE_FOCUS_EVENT = 1004, MODE_ALT_SCROLL = 1007, MODE_BRACKETED_PASTE = 2004,
         /** A paste tells the program what the clipboard holds, which it reads itself (the Kitty clipboard protocol). */
-        MODE_PASTE_EVENTS = 5522, MODE_SYNC_OUTPUT = 2026, MODE_GRAPHEMES = 2027;
+        MODE_PASTE_EVENTS = 5522, MODE_SYNC_OUTPUT = 2026, MODE_GRAPHEMES = 2027,
+        /** Has the terminal tell the program when its colors turn light or dark (CSI ? 997 ; 1 or 2 n). */
+        MODE_COLOR_SCHEME = 2031;
 
     /** The formatter's format of text with escape sequences (GHOSTTY_FORMATTER_FORMAT_VT). */
     private const FORMAT_VT = 1;
@@ -419,7 +421,32 @@ final class Terminal
         $x = $o->extra;
         $x->modes = $x->scrolling_region = $x->tabstops = $x->pwd = $x->keyboard = true;
         $x->screen->cursor = $x->screen->style = $x->screen->hyperlink = $x->screen->protection = $x->screen->kitty_keyboard = $x->screen->charsets = true;
-        return $this->format($o);
+        return $this->padRows($this->format($o));
+    }
+
+    /**
+     * $b, a VT snapshot, with the blank rows at the end of the screen the
+     * formatter leaves out (mygo's padRows). Without them, the rows written
+     * scroll fewer into the scrollback of the terminal they are replayed
+     * in: what was scrollback shows on the screen, as after clear, and the
+     * cursor, on a blank row under the last one written, lands on that row,
+     * whose text what is written next overwrites. The rows end where the
+     * snapshot places the cursor, one "\r\n" after the other.
+     */
+    private function padRows(string $b): string
+    {
+        [, $rows] = $this->size();
+        [$total] = $this->scrollbar();
+        if ($total <= $rows || $this->altScreen()) {
+            return $b; // no scrollback, or a full-screen program's screen, which has none: the cursor's position alone places it
+        }
+        [$x, $y] = $this->cursor();
+        $end = strrpos($b, sprintf("\x1b[%d;%dH", $y + 1, $x + 1));
+        if ($end === false) {
+            return $b;
+        }
+        $pad = $total - (substr_count(substr($b, 0, $end), "\r\n") + 1);
+        return $pad <= 0 ? $b : substr($b, 0, $end) . str_repeat("\r\n", $pad) . substr($b, $end);
     }
 
     private function formatterOptions(): CData

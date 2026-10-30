@@ -46,7 +46,7 @@ trait ViewInput
                 }
                 if (($text = $this->copying) !== '') {
                     $this->copying = '';
-                    $this->writeClipboard($text);
+                    $this->writeClipboard($text, CopySource::CopySelect);
                 }
                 if (($a = $this->rightClick) !== RightClickAction::RightClickContextMenu) {
                     $this->rightClick = RightClickAction::RightClickContextMenu;
@@ -159,10 +159,11 @@ trait ViewInput
     }
 
     /**
-     * Clears the scrollback and the screen above the cursor's line, which
-     * moves to the top, as Kitty's clear_terminal to_cursor: the prompt the
-     * shell shows stays. A full-screen program's screen, which this would
-     * break, is left alone, as in Ghostty; it reports whether it cleared.
+     * Clears as ActionClearScreen does (Terminal::clearScreen), or has
+     * Options::$onClear clear, letting go of the selection and scrolling to
+     * the bottom; it reports whether it cleared. A full-screen program's
+     * screen, which this would break, is left alone, as in Ghostty, and
+     * onClear is not asked.
      */
     private function clearScreen(): bool
     {
@@ -172,14 +173,11 @@ trait ViewInput
         }
         $term->setSelection(null);
         $term->scrollToBottom();
-        [$x, $y] = $term->cursor();
-        $seq = "\x1b[3J";
-        if ($y > 0) {
-            // Delete the rows above the cursor's from the top, then put the cursor back on its line, now the first.
-            $seq .= "\x1b[H\x1b[{$y}M\x1b[1;" . ($x + 1) . 'H';
+        if (($on = $this->t->opts->onClear) !== null && $on(Clear::ClearScreen)) {
+            $this->invalidate();
+            return true;
         }
-        $this->t->feed($seq);
-        return true;
+        return $this->t->clearScreen();
     }
 
     private function keyUp(InputEvent $ev): bool
@@ -287,7 +285,7 @@ trait ViewInput
             return false;
         }
         if ($clear) { $term->setSelection(null); }
-        $this->writeClipboard($text);
+        $this->writeClipboard($text, CopySource::CopyUser);
         if ($clear) { $this->invalidate(); }
         return true;
     }
@@ -339,7 +337,7 @@ trait ViewInput
         if ($term !== null && ($s = $term->selectAll()) !== null) {
             $term->setSelection($s);
             if ($this->t->opts->copyOnSelect === CopyOnSelect::CopyOnSelectClipboard && ($text = $term->selectionText()) !== null && $text !== '') {
-                $this->writeClipboard($text);
+                $this->writeClipboard($text, CopySource::CopySelect);
             }
         }
         $this->invalidate();
@@ -371,9 +369,9 @@ trait ViewInput
             return true;
         }
         // Command over a link: a hand, and a click opens it, before a program that takes the mouse sees it.
-        [$link, $path] = $this->linkUnder($ev->mods, $ev->x, $ev->y);
-        if (($hover = $link !== '') !== $this->hoverLink) {
-            $this->hoverLink = $hover;
+        [$link, $path, $hover] = $this->linkUnder($ev->mods, $ev->x, $ev->y);
+        if ($hover !== $this->hover) {
+            [$this->hover, $this->hoverLink, $this->hoverPath] = [$hover, $link, $path];
             $this->invalidate();
         }
         if ($link !== '' && $ev->kind === InputEvent::POINTER_DOWN && $ev->button === 0) {
@@ -430,30 +428,44 @@ trait ViewInput
         return false;
     }
 
-    /** The link a click with $mods at ($x, $y) opens, and whether it is a file path: none without Command, or while the primary button selects or the program has a press. @return array{0: string, 1: bool} */
+    /** The link a click with $mods at ($x, $y) opens, whether it is a file path, and its cells, [row, x0, x1): none without Command, or while the primary button selects or the program has a press. @return array{0: string, 1: bool, 2: ?array{0: int, 1: int, 2: int}} */
     private function linkUnder(int $mods, float $x, float $y): array
     {
         if (($mods & Key::COMMAND) === 0 || $this->selecting || $this->reporting || $this->cellW === 0 || $this->t->term === null) {
-            return ['', false];
+            return ['', false, null];
         }
         return $this->linkAt(...$this->cellAt($x, $y));
     }
 
-    /** The link at a cell: a hyperlink (OSC 8), a URL printed as text, or with Options::$openLink a file path, or "". @return array{0: string, 1: bool} */
+    /** The link at a cell, as linkUnder() gives it: a hyperlink (OSC 8), a URL printed as text, or with Options::$openLink a file path, or "". @return array{0: string, 1: bool, 2: ?array{0: int, 1: int, 2: int}} */
     private function linkAt(int $col, int $row): array
     {
+        if (($url = $this->hyperlinkAt($col, $row)) !== '') {
+            // The hyperlink's cells are those around the cell with its URL.
+            [$x0, $x1] = [$col, $col + 1];
+            while ($x0 > 0 && $this->hyperlinkAt($x0 - 1, $row) === $url) { $x0--; }
+            while ($x1 < $this->cols && $this->hyperlinkAt($x1, $row) === $url) { $x1++; }
+            return [$url, false, [$row, $x0, $x1]];
+        }
+        [$text, $cols] = $this->t->term->rowText($row);
+        [$url, $x0, $x1] = Links::urlAt($text, $cols, $col);
+        if ($url !== '') {
+            return [$url, false, [$row, $x0, $x1]];
+        }
+        if ($this->t->opts->openLink !== null) {
+            [$p, $x0, $x1] = Links::pathAt($text, $cols, $col);
+            if ($p !== '') {
+                return [$p, true, [$row, $x0, $x1]];
+            }
+        }
+        return ['', false, null];
+    }
+
+    /** The URL of the hyperlink (OSC 8) at the cell, or "". */
+    private function hyperlinkAt(int $col, int $row): string
+    {
         $term = $this->t->term;
-        if (($ref = $term->cellAt($col, $row)) !== null && ($url = $term->hyperlink($ref)) !== '') {
-            return [$url, false];
-        }
-        [$text, $cols] = $term->rowText($row);
-        if (($url = Links::urlAt($text, $cols, $col)) !== '') {
-            return [$url, false];
-        }
-        if ($this->t->opts->openLink !== null && ($p = Links::pathAt($text, $cols, $col)) !== '') {
-            return [$p, true];
-        }
-        return ['', false];
+        return ($ref = $term->cellAt($col, $row)) !== null ? $term->hyperlink($ref) : '';
     }
 
     /** The grid in pixels, for selection gestures. @return array{0: int, 1: int, 2: int, 3: int} */

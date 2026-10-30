@@ -73,6 +73,8 @@ final class Terminal
     private ?Pty $proc = null;
     private ?PtyOptions $launch = null;
     private bool $srcClosed = false;
+    /** How dropped files' paths are quoted, for the program's shell (ShellQuote). */
+    private int $quoting = ShellQuote::POSIX;
     /** When the program exited, while what it wrote is still read. */
     private ?float $exitedAt = null;
     /** The size a Conn was last told. @var ?array{0: int, 1: int} */
@@ -141,12 +143,16 @@ final class Terminal
             CursorStyle::CursorBlock => VtTerminal::CURSOR_BLOCK,
         }, !$opts->noBlink);
         $this->rs = new RenderState;
+        // Programs asking the colors before a view shows the terminal, or in one no view shows, get the theme asked for.
+        $this->useTheme($opts->theme);
         if ($opts->conn !== null) {
             $this->src = $opts->conn;
+            $this->quoting = ShellQuote::forProgram('');
             $this->kick();
             return;
         }
         [$path, $args] = self::command($opts->command);
+        $this->quoting = ShellQuote::forProgram($path);
         $dir = $opts->dir !== '' ? $opts->dir : (string)getenv('HOME');
         $this->launch = new PtyOptions($path, $args, $dir, self::environment($opts->env));
         // The program starts once a view knows the size of the screen, so that it draws its first screen at that size; a terminal no view shows starts after half a second, at 80×24.
@@ -432,6 +438,83 @@ final class Terminal
 
     /** What the terminal shows as escape sequences: its scrollback and screen with their styles, the cursor and the modes programs set. Fed to a new terminal of the same size, it shows the same. */
     public function snapshot(): string { return $this->term?->vt() ?? ''; }
+
+    /**
+     * The link Command is held over in the view, which a click opens and
+     * which shows underlined, as Options::$openLink takes it; whether it is
+     * a file path; and the rectangle of its cells in points, [x, y, w, h]
+     * from the view's corner (mygo's HoveredLink). It is "" over no link,
+     * or while no view shows the terminal. An app shows a preview of a
+     * link with it, over the view: read it in the view function, after
+     * Terminal::view.
+     * @return array{0: string, 1: bool, 2: array{0: float, 1: float, 2: float, 3: float}}
+     */
+    public function hoveredLink(): array
+    {
+        $v = $this->v;
+        if ($v === null || $v->hover === null || $v->scale == 0) {
+            return ['', false, [0.0, 0.0, 0.0, 0.0]];
+        }
+        [$row, $x0, $x1] = $v->hover;
+        $cw = $v->cellW / $v->scale; $ch = $v->cellH / $v->scale;
+        return [$v->hoverLink, $v->hoverPath, [$v->ox / $v->scale + $x0 * $cw, $v->oy / $v->scale + $row * $ch, ($x1 - $x0) * $cw, $ch]];
+    }
+
+    /**
+     * Clears the scrollback and the screen above the cursor's line, which
+     * moves to the top, as ActionClearScreen does and Kitty's
+     * clear_terminal to_cursor: the prompt the shell shows stays, and the
+     * shell, which moves its cursor from where it is, goes on drawing there.
+     * A full-screen program's screen, which this would break, is left
+     * alone, as in Ghostty; it reports whether it cleared. A server calls it
+     * for a window that shows its terminal (Options::$onClear).
+     */
+    public function clearScreen(): bool
+    {
+        if ($this->term === null || $this->term->altScreen()) {
+            return false;
+        }
+        $this->term->setSelection(null);
+        $this->term->scrollToBottom();
+        [$x, $y] = $this->term->cursor();
+        $seq = "\x1b[3J";
+        if ($y > 0) {
+            // Delete the rows above the cursor's from the top, then put the cursor back on its line, now the first.
+            $seq .= "\x1b[H\x1b[{$y}M\x1b[1;" . ($x + 1) . 'H';
+        }
+        $this->write($seq);
+        $this->redraw();
+        return true;
+    }
+
+    /**
+     * Gives a terminal no view shows the colors of one that does, as a
+     * server's for the window showing its session (mygo's UseTheme):
+     * programs asking the colors (OSC 4, 10, 11, 12), or whether they are
+     * dark (CSI ? 996 n), get them. A view's own theme takes over in a
+     * terminal it shows.
+     */
+    public function useTheme(?Theme $theme): void
+    {
+        if ($theme === null || $this->term === null) {
+            return;
+        }
+        $theme->apply($this->term);
+        $this->schemeChanged($this->curTheme, $theme);
+        $this->curTheme = $theme;
+    }
+
+    /** @internal tells a program that asked to be told (mode 2031) that the colors went from light to dark or back, from $old to $theme, as Ghostty does */
+    public function schemeChanged(?Theme $old, Theme $theme): void
+    {
+        if ($old === null || $old === $theme || $old->isDark() === $theme->isDark() || !$this->term->mode(VtTerminal::MODE_COLOR_SCHEME)) {
+            return;
+        }
+        $this->push("\x1b[?997;" . ($theme->isDark() ? 1 : 2) . 'n');
+    }
+
+    /** Clears the scrollback, leaving the screen as it is. */
+    public function clearScrollback(): void { $this->write("\x1b[3J"); }
 
     /** Sends data to the program as if typed. */
     public function send(string $data): void

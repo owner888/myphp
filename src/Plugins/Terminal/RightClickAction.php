@@ -6,7 +6,7 @@ namespace MyPHP\Plugins\Terminal;
 /** What a secondary click does (Options::$rightClick), as Ghostty's right-click-action (mygo's terminal.RightClickAction). */
 enum RightClickAction: int
 {
-    /** Shows the context menu: Copy, Paste, Select All and Clear Scrollback. */
+    /** Shows the context menu: Copy, Paste, Select All and Clear. */
     case RightClickContextMenu = 0;
     /** Lets go of the selection and pastes. */
     case RightClickPaste = 1;

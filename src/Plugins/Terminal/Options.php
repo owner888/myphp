@@ -22,6 +22,8 @@ final class Options
      * @param ?Closure(int, int): bool $onKey
      * @param ?Closure(int): bool $onScroll
      * @param ?Closure(Zoom): bool $onZoom
+     * @param ?Closure(Clear): bool $onClear
+     * @param ?Closure(string, CopySource): void $onCopy
      */
     public function __construct(
         /** The program the terminal runs and its arguments. Empty runs the user's shell as a login shell, as terminal apps do: $SHELL, else /bin/zsh on macOS and /bin/sh elsewhere. */
@@ -34,7 +36,7 @@ final class Options
         public ?Conn $conn = null,
         /** The font of the text: the system's monospaced font at 13 points when unset. */
         public Font $font = new Font,
-        /** The colors, and those in dark windows when $darkTheme is set, as Ghostty's theme = light:…,dark:…; without either, the terminal follows the window's light or dark appearance, with Terminal::lightTheme() and Terminal::darkTheme(). */
+        /** The colors, and those in dark windows when $darkTheme is set, as Ghostty's theme = light:…,dark:…; without either, the terminal follows the window's light or dark appearance, with Terminal::lightTheme() and Terminal::darkTheme(). Until a view shows the terminal, or useTheme() gives it other colors, programs asking its colors get $theme's. */
         public ?Theme $theme = null,
         public ?Theme $darkTheme = null,
         /** The shape of the cursor, which programs may change; $noBlink keeps it from blinking unless a program asks it to. */
@@ -83,5 +85,23 @@ final class Options
         public ?Closure $onScroll = null,
         /** Sees a zoom: the wheel with Command held, or a key bound to a font size action; it reports whether it took it. */
         public ?Closure $onZoom = null,
+        /**
+         * Sees the user's clear, before the terminal clears: ClearScreen for
+         * ActionClearScreen's keys and the context menu's Clear. It reports
+         * whether it took the clear; a clear taken clears nothing here. A
+         * terminal that shows a server's takes it, for the server's
+         * terminal to clear (Terminal::clearScreen), which the next frame
+         * shows. It is not asked on a full-screen program's screen, which
+         * ActionClearScreen leaves alone.
+         */
+        public ?Closure $onClear = null,
+        /**
+         * Runs after the terminal writes text to the clipboard: the user's
+         * copy (ActionCopy's keys, the context menu, a secondary click), a
+         * selection $copyOnSelect copied, or a program's (OSC 52), as its
+         * CopySource tells. An app may say so, as Ghostty's
+         * app-notifications = clipboard-copy does with a toast.
+         */
+        public ?Closure $onCopy = null,
     ) {}
 }
