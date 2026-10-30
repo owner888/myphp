@@ -5,7 +5,7 @@ namespace MyPHP;
 
 use Closure;
 use InvalidArgumentException;
-use MyPHP\Native\FileWatch\{Backend, Backends, Scan};
+use MyPHP\Native\FileWatch\{Backend, Backends, Hints, Looker, Scan};
 use Throwable;
 
 /**
@@ -24,7 +24,7 @@ final class FileWatcher
     private ?Throwable $err = null;
     private bool $done = false;
     private Backend $native;
-    private Scan $scan;
+    private Looker $scan;
     /** When the changes seen have settled (a debounce running), and when the first of them came. */
     private ?float $deadline = null;
     private float $first = 0;
@@ -36,10 +36,10 @@ final class FileWatcher
      * @internal App::watchFiles() starts it
      * @param ?Closure(string, bool): bool $ignore
      */
-    public function __construct(private readonly string $root, private readonly float $debounce, private readonly float $maxDelay, bool $recursive, ?Closure $ignore, int $maxEntries)
+    public function __construct(private readonly string $root, private readonly float $debounce, private readonly float $maxDelay, bool $recursive, ?Closure $ignore, int $maxEntries, bool $hintsOnly)
     {
         $this->native = Backends::open();
-        $this->scan = new Scan($root, $recursive, $ignore, $maxEntries, $this->native, fn(): bool => $this->stopped);
+        $this->scan = new ($hintsOnly ? Hints::class : Scan::class)($root, $recursive, $ignore, $maxEntries, $this->native, fn(): bool => $this->stopped);
         try {
             $events = $this->scan->start();
         } catch (Throwable $e) {

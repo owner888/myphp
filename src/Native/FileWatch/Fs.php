@@ -16,6 +16,8 @@ use FFI;
 final class Fs
 {
     private const S_IFMT = 0o170000, S_IFDIR = 0o040000, S_IFREG = 0o100000;
+    /** struct dirent's d_type. */
+    private const DT_UNKNOWN = 0, DT_DIR = 4, DT_REG = 8;
 
     private static ?FFI $c = null;
 
@@ -50,6 +52,44 @@ final class Fs
             }
             self::c()->closedir($dir);
         }
+    }
+
+    /**
+     * The names of the directories in directory $path (mygo's
+     * fileWatchSubdirs), from the types readdir gives, so that what isn't a
+     * directory is not stat'ed; an entry of unknown type is lstat'ed, so a
+     * symlink is never one. @return list<string>
+     */
+    public static function subdirs(string $path): array
+    {
+        $c = self::c();
+        $dir = $c->opendir($path);
+        if ($dir === null || FFI::isNull($dir)) {
+            throw self::error('open', $path);
+        }
+        $names = [];
+        try {
+            while (($e = $c->readdir($dir)) !== null && !FFI::isNull($e)) {
+                $name = FFI::string($e->d_name);
+                if ($name === '.' || $name === '..') {
+                    continue;
+                }
+                $type = $e->d_type;
+                if ($type === self::DT_UNKNOWN) {
+                    try {
+                        $type = self::isDir(self::lstat("$path/$name")) ? self::DT_DIR : self::DT_REG;
+                    } catch (FsError) {
+                        continue; // gone in between
+                    }
+                }
+                if ($type === self::DT_DIR) {
+                    $names[] = $name;
+                }
+            }
+        } finally {
+            $c->closedir($dir);
+        }
+        return $names;
     }
 
     /** $path absolute, with its symlinks resolved (Go's filepath.Abs, then EvalSymlinks). */
@@ -122,7 +162,10 @@ final class Fs
 
     private static function c(): FFI
     {
-        $errno = PHP_OS_FAMILY === 'Darwin' ? 'int *__error(void);' : 'int *__errno_location(void);';
-        return self::$c ??= FFI::cdef("int lstat(const char *, void *); void *opendir(const char *); int closedir(void *); char *strerror(int); $errno");
+        // struct dirent: macOS's of 64-bit inodes, glibc's otherwise.
+        [$errno, $dirent] = PHP_OS_FAMILY === 'Darwin'
+            ? ['int *__error(void);', 'typedef struct { uint64_t d_ino; uint64_t d_seekoff; uint16_t d_reclen; uint16_t d_namlen; uint8_t d_type; char d_name[1024]; } dirent;']
+            : ['int *__errno_location(void);', 'typedef struct { uint64_t d_ino; int64_t d_off; uint16_t d_reclen; uint8_t d_type; char d_name[256]; } dirent;'];
+        return self::$c ??= FFI::cdef("$dirent int lstat(const char *, void *); void *opendir(const char *); dirent *readdir(void *); int closedir(void *); char *strerror(int); $errno");
     }
 }

@@ -44,7 +44,7 @@ final class Inotify implements Backend
             throw new Unsupported;
         }
         if (!$t->directory) {
-            return;
+            throw new Unsupported; // the watch of its directory names what changes in a file
         }
         $mask = self::IN_CREATE | self::IN_MODIFY | self::IN_CLOSE_WRITE | self::IN_ATTRIB | self::IN_DELETE | self::IN_MOVED_FROM | self::IN_MOVED_TO
             | self::IN_DELETE_SELF | self::IN_MOVE_SELF | self::IN_UNMOUNT | self::IN_ONLYDIR | self::IN_DONT_FOLLOW;

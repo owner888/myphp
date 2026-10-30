@@ -6,7 +6,7 @@ namespace MyPHP\Native\FileWatch;
 use Closure;
 
 /**
- * The backend of a new watch: kqueue on macOS, inotify on Linux, where
+ * The backend of a new watch: FSEvents on macOS, inotify on Linux, where
  * the tests run.
  *
  * @internal
@@ -22,7 +22,7 @@ final class Backends
             return (self::$fake)();
         }
         return match (PHP_OS_FAMILY) {
-            'Darwin' => new Kqueue,
+            'Darwin' => new FsEvents,
             'Linux' => new Inotify,
             default => throw new Unsupported('myphp: watch: file watches are not supported on ' . PHP_OS_FAMILY),
         };

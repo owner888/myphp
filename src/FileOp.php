@@ -19,4 +19,11 @@ enum FileOp: string
     case FileRemove = 'remove';
     /** A file or directory that moved within the watched directory. */
     case FileRename = 'rename';
+    /**
+     * Only that something in or under the directory at the path changed:
+     * which file, and how, is unknown. A watch with
+     * FileWatchOptions::$hintsOnly reports nothing else, but a FileRemove
+     * of "." when its directory goes away.
+     */
+    case FileHint = 'hint';
 }

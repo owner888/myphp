@@ -2034,3 +2034,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and updates the content from the intent at once, the update needing
   nothing of the donation. A notification shown, closed or cleared is
   therefore never waiting on a donation, which mygo's cancels.
+
+## Hints-only watches, FSEvents (v1.77)
+
+- **FSEvents' delivery**: mygo has its streams call back on a dispatch
+  queue; PHP cannot run there, so myphp schedules them on the main run
+  loop in a private mode that the watch runs when it polls. Notices then
+  wait in the stream until `next()` is called, up to 4096 held before the
+  watch looks at everything, rather than in a channel mygo spills into.
+- **Listing a hints-only watch's directories**: mygo reads getdents'
+  types through the directory's descriptor and opens each directory
+  beneath the root through it (`os.Root`); myphp reads readdir's `d_type`
+  by path, checking each directory's identity by lstat, as its scan does.

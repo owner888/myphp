@@ -1,13 +1,13 @@
 <?php
 // File watches (mygo's watch_test.go): the scan against a fake backend,
-// whose notices the tests send, then the system's (inotify here, kqueue on
-// macOS) on a real directory.
+// whose notices the tests send, then the system's (inotify here, FSEvents
+// on macOS) on a real directory.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
 use MyPHP\{App, ErrWatchLimit, FileEvent, FileOp, FileWatcher, FileWatchOptions};
-use MyPHP\Native\FileWatch\{Backend, Backends, FsError, Notice, Overflow, Scan, Target, Unsupported};
+use MyPHP\Native\FileWatch\{Backend, Backends, FsError, FsEvents, Hints, Notice, Overflow, Scan, Target, Unsupported};
 
 /** A backend whose notices the test sends (mygo's fake.FileWatch). */
 final class FakeFileWatch implements Backend
@@ -15,6 +15,8 @@ final class FakeFileWatch implements Backend
     public static ?self $last = null;
     /** Whether it watches a tree with one target. */
     public static bool $subtree = false;
+    /** Whether it refuses targets that aren't directories, as every system backend does (mygo's NoFiles). */
+    public static bool $noFiles = false;
     /** Called before each add, as mygo's FileWatchAddHook; what it throws is add's. @var ?\Closure(Target): void */
     public static ?\Closure $addHook = null;
     /** @var array<int, Target> */
@@ -27,7 +29,7 @@ final class FakeFileWatch implements Backend
 
     public function add(Target $t): void
     {
-        if ($t->subtree && !self::$subtree) {
+        if ($t->subtree && !self::$subtree || !$t->directory && self::$noFiles) {
             throw new Unsupported;
         }
         if (self::$addHook !== null) { (self::$addHook)($t); }
@@ -439,6 +441,130 @@ $noDebounce = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0
     }
 })();
 
+(function () use ($noDebounce) {
+    // A backend that watches files only through their directories is asked for no more files (mygo's 8cda101).
+    $dir = watchDir();
+    mkdir("$dir/sub");
+    file_put_contents("$dir/a", 'x');
+    file_put_contents("$dir/sub/b", 'y');
+    FakeFileWatch::$noFiles = true;
+    try {
+        $w = App::watchFiles($dir, $noDebounce(true));
+        same(['.', 'sub'], array_map(fn(string $p) => $p === $dir ? '.' : substr($p, strlen($dir) + 1), watchTargets()), 'only directories enrolled');
+        check(array_filter(FakeFileWatch::$last->targets, fn(Target $t) => !$t->directory) === [], 'every target a directory');
+        file_put_contents("$dir/sub/b", 'yy');
+        watchNotice($w, 'sub', new Notice(kind: Notice::WRITE, name: 'b'));
+        same(watchJson([ev(FileOp::FileWrite, 'sub/b')]), watchJson($w->next(2)), 'a write named by its directory');
+        $w->close();
+        // A file watched through its directory.
+        $w = App::watchFiles("$dir/a", $noDebounce());
+        same([$dir], watchTargets(), 'a file: its directory alone');
+        file_put_contents("$dir/a", 'xyz');
+        watchNotice($w, '..', new Notice(kind: Notice::WRITE, name: 'a'));
+        same(watchJson([ev(FileOp::FileWrite, '.')]), watchJson($w->next(2)), 'a file written');
+        $w->close();
+    } finally {
+        FakeFileWatch::$noFiles = false;
+    }
+})();
+
+(function () use ($noDebounce) {
+    // HintsOnly (mygo's fileWatchHints): directories alone, and hints of where something changed.
+    $hints = fn(bool $recursive = false, ?\Closure $ignore = null, int $max = 0) => new FileWatchOptions(recursive: $recursive, ignore: $ignore, debounce: -1, maxEntries: $max, hintsOnly: true);
+    $hint = fn(string $p, bool $isDir = true) => ev(FileOp::FileHint, $p, $isDir);
+    $rel = fn(string $dir) => array_map(fn(string $p) => $p === $dir ? '.' : substr($p, strlen($dir) + 1), watchTargets());
+    $dir = watchDir();
+    mkdir("$dir/sub/deep", 0777, true);
+    mkdir("$dir/node_modules/x", 0777, true);
+    file_put_contents("$dir/a", 'x');
+    $ignore = fn(string $p, bool $isDir) => $isDir && basename($p) === 'node_modules';
+    $w = App::watchFiles($dir, $hints(true, $ignore));
+    same(['.', 'sub', 'sub/deep'], $rel($dir), 'hints: directories enrolled, not files nor ignored ones');
+    same([], $w->next(0), 'hints: the first look reports nothing');
+    watchNotice($w, '.', new Notice(kind: Notice::WRITE, name: 'a'));
+    same(watchJson([$hint('.')]), watchJson($w->next(2)), 'hints: a file in the root hints the root');
+    watchNotice($w, 'sub/deep', new Notice(name: 'f'));
+    watchNotice($w, 'sub', new Notice(name: 'g'));
+    same(watchJson([$hint('sub')]), watchJson($w->next(2)), 'hints: one hint covers what is beneath');
+    mkdir("$dir/new");
+    watchNotice($w, '.', new Notice(kind: Notice::CREATE, name: 'new'));
+    same(watchJson([$hint('.')]), watchJson($w->next(2)), 'hints: a directory created');
+    check(in_array('new', $rel($dir), true), 'hints: and enrolled');
+    rename("$dir/sub", "$dir/moved");
+    watchNotice($w, '.', new Notice(kind: Notice::MOVE_FROM, name: 'sub'));
+    watchNotice($w, '.', new Notice(kind: Notice::MOVE_TO, name: 'moved'));
+    same(watchJson([$hint('.')]), watchJson($w->next(2)), 'hints: a directory moved');
+    $t = $rel($dir);
+    sort($t);
+    same(['.', 'moved', 'moved/deep', 'new'], $t, 'hints: enrolled where it went, dropped where it was');
+    FakeFileWatch::$last->queue[] = new Notice(err: new Overflow);
+    same(watchJson([$hint('.')]), watchJson($w->next(2)), 'hints: "." after the system lost changes');
+    exec('rm -rf ' . escapeshellarg($dir));
+    watchNotice($w, '.', new Notice(kind: Notice::LOST));
+    same(watchJson([ev(FileOp::FileRemove, '.', true)]), watchJson($w->next(2)), 'hints: the root gone');
+    same(null, $w->next(), 'hints: then the end');
+
+    // A file, through its directory.
+    $dir = watchDir();
+    file_put_contents("$dir/settings.json", '{}');
+    $w = App::watchFiles("$dir/settings.json", $hints());
+    same([$dir], watchTargets(), 'hints: a file, its directory alone');
+    watchNotice($w, '..', new Notice(name: 'other'));
+    same([], $w->next(0.03), 'hints: a sibling is not hinted');
+    watchNotice($w, '..', new Notice(kind: Notice::WRITE, name: 'settings.json'));
+    same(watchJson([$hint('.', false)]), watchJson($w->next(2)), 'hints: the file');
+    $w->close();
+
+    // Not recursive: only the root, and nothing deeper.
+    $dir = watchDir();
+    mkdir("$dir/sub");
+    $w = App::watchFiles($dir, $hints());
+    same(['.'], $rel($dir), 'hints: not recursive, the root alone');
+    $w->close();
+
+    // A subtree target watches the tree whole.
+    FakeFileWatch::$subtree = true;
+    try {
+        $w = App::watchFiles($dir, $hints(true));
+        same(['.'], $rel($dir), 'hints: one subtree target');
+        watchNotice($w, '.', new Notice(name: 'sub/x'));
+        same(watchJson([$hint('sub')]), watchJson($w->next(2)), 'hints: a path beneath it');
+        $w->close();
+    } finally {
+        FakeFileWatch::$subtree = false;
+    }
+
+    // MaxEntries counts directories.
+    $dir = watchDir();
+    mkdir("$dir/a");
+    mkdir("$dir/b");
+    for ($i = 0; $i < 5; $i++) { touch("$dir/f$i"); }
+    try { App::watchFiles($dir, $hints(true, null, 2)); check(false, 'hints: limit'); } catch (ErrWatchLimit) { check(true, 'hints: three directories over two'); }
+    $w = App::watchFiles($dir, $hints(true, null, 3));
+    check(true, 'hints: files are not counted');
+    $w->close();
+
+    same(watchJson([$hint('a'), $hint('b/c')]), watchJson(Hints::hintEvents(['b/c' => true, 'a/x' => true, 'a' => true, 'b/c/d' => true])), 'hints: sorted, the covered left out');
+})();
+
+(function () {
+    // FSEvents' events as notices (mygo's fseStream.event), with no stream.
+    $f = fn(string $path, int $flags, bool $subtree = true) => FsEvents::notice(7, '/w', $subtree, $path, $flags);
+    $is = fn(?Notice $n, int $kind, string $name) => $n !== null && $n->target === 7 && $n->err === null && $n->kind === $kind && $n->name === $name;
+    check($is($f('/w/a', FsEvents::ITEM_MODIFIED | FsEvents::ITEM_IS_FILE), Notice::WRITE, 'a'), 'fsevents: a write');
+    check($is($f('/w/a', FsEvents::ITEM_MODIFIED | FsEvents::ITEM_CREATED | FsEvents::ITEM_IS_FILE), Notice::DIRTY, 'a'), 'fsevents: created wins over modified');
+    check($is($f('/w/d/b', FsEvents::ITEM_REMOVED), Notice::DIRTY, 'd/b'), 'fsevents: a path beneath');
+    same(null, $f('/w/d/b', FsEvents::ITEM_CREATED, false), 'fsevents: deeper than a directory target');
+    check($is($f('/w/d', FsEvents::ITEM_CREATED, false), Notice::DIRTY, 'd'), 'fsevents: a child of a directory target');
+    check($is($f('/w', FsEvents::ROOT_CHANGED), Notice::DIRTY, ''), 'fsevents: the root changed');
+    check($is($f('/w', FsEvents::UNMOUNT), Notice::LOST, ''), 'fsevents: unmounted');
+    same(null, $f('/w', FsEvents::HISTORY_DONE), 'fsevents: history done');
+    same(null, $f('/elsewhere/a', FsEvents::ITEM_CREATED), 'fsevents: outside the stream');
+    same(null, $f('/wx', FsEvents::ITEM_CREATED), 'fsevents: a sibling sharing the prefix');
+    $o = $f('/w/a', FsEvents::MUST_SCAN_SUB_DIRS);
+    check($o !== null && $o->err instanceof Overflow, 'fsevents: changes dropped');
+})();
+
 Backends::$fake = null;
 
 (function () {
@@ -473,4 +599,21 @@ Backends::$fake = null;
     rename("$file.tmp", $file);
     same(watchJson([ev(FileOp::FileWrite, '.')]), watchJson($w->next(2)), 'system: a file replaced is written');
     $w->close();
+})();
+
+(function () {
+    // The system's hints-only watch.
+    $dir = watchDir();
+    mkdir("$dir/sub/deep", 0777, true);
+    $w = App::watchFiles($dir, new FileWatchOptions(recursive: true, debounce: 0.01, hintsOnly: true));
+    touch("$dir/sub/deep/c");
+    same(watchJson([ev(FileOp::FileHint, 'sub/deep', true)]), watchJson($w->next(2)), 'system hints: the directory of a new file');
+    mkdir("$dir/new");
+    same(watchJson([ev(FileOp::FileHint, '.', true)]), watchJson($w->next(2)), 'system hints: a new directory');
+    touch("$dir/new/x");
+    same(watchJson([ev(FileOp::FileHint, 'new', true)]), watchJson($w->next(2)), 'system hints: watched once enrolled');
+    exec('rm -rf ' . escapeshellarg($dir));
+    $last = null;
+    for ($i = 0; $i < 5 && ($b = $w->next(2)) !== null; $i++) { $last = $b; }
+    same(watchJson([ev(FileOp::FileRemove, '.', true)]), watchJson($last), 'system hints: the root gone');
 })();

@@ -20,8 +20,10 @@ use Throwable;
  *
  * @internal
  */
-final class Scan
+final class Scan implements Looker
 {
+    use Paths;
+
     /** The watched directory, or the directory of the watched file ($file), with its identity, and the file's name. */
     private string $dir;
     private array $identity;
@@ -36,9 +38,10 @@ final class Scan
     /** @var array<int, string> */
     private array $ids = [];
     private int $next = 0;
-    /** The root's target watches the whole tree, so no other directory is enrolled; $noSubtree that the backend can't. */
+    /** The root's target watches the whole tree, so no other directory is enrolled; $noSubtree that the backend can't, and $noFiles that it watches files only through their directories, so no file is enrolled. */
     private bool $subtree = false;
     private bool $noSubtree = false;
+    private bool $noFiles = false;
     /** What to look at again in the next update: directories to list, entries to stat, entries the system said were written, and whether to list every directory, after the system lost changes. @var array<string, true> */
     private array $lists = [];
     /** @var array<string, true> */
@@ -50,8 +53,8 @@ final class Scan
     private array $races = [];
     /** The directories Ignore ignored, by name in each listed directory, so that notices about what is in them are dropped. @var array<string, array<string, true>> */
     private array $ignored = [];
-    /** What an update changed, as it was before (null for an entry that didn't exist). @var array<string, ?array> */
-    private array $before = [];
+    /** What an update changed, as it was before (null for an entry that didn't exist); null during the first scan, whose contents are not events. @var ?array<string, ?array> */
+    private ?array $before = [];
     /** The watched file the last update found gone, as it was before: its stat, or null. */
     private ?array $removed = null;
 
@@ -90,9 +93,9 @@ final class Scan
         if ($this->file) {
             $info = Fs::lstat($this->path('.'));
         }
-        $this->before = [];
+        // The initial contents are not events, so what the scan sees is not kept as it was before (touch).
+        $this->before = null;
         $this->visit('.', $info);
-        // The initial contents are not events.
         $this->before = [];
         return $this->events();
     }
@@ -190,7 +193,7 @@ final class Scan
             }
             if ($this->file) {
                 $this->stats['.'] = true;
-                if ($n->kind === Notice::WRITE && $n->name !== '') { // a write named for the file; kqueue names nothing, and its directory's write is a sibling's as well: the stat tells
+                if ($n->kind === Notice::WRITE && $n->name !== '') { // a write named for the file, as the stream of its directory names it; one naming nothing is a sibling's as well: the stat tells
                     $this->writes['.'] = true;
                 }
             } else {
@@ -246,20 +249,6 @@ final class Scan
             $this->all = true;
             $this->lists = $this->stats = $this->writes = [];
         }
-    }
-
-    /** Whether $name names a child, or for a subtree a path beneath it. */
-    private static function validName(string $name, bool $subtree): bool
-    {
-        if (str_contains($name, "\0") || !$subtree && str_contains($name, '/')) {
-            return false;
-        }
-        foreach (explode('/', $name) as $part) {
-            if ($part === '' || $part === '.' || $part === '..') {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** Whether an update has anything to do. */
@@ -669,10 +658,10 @@ final class Scan
         return Fs::isDir($info) && !$this->file && ($p === '.' || $this->recursive);
     }
 
-    /** Remembers $p as it is before an update changes it. */
+    /** Remembers $p as it is before an update changes it; nothing during the first scan. */
     private function touch(string $p): void
     {
-        if (!array_key_exists($p, $this->before)) {
+        if ($this->before !== null && !array_key_exists($p, $this->before)) {
             $this->before[$p] = $this->entries[$p] ?? null;
         }
     }
@@ -703,12 +692,13 @@ final class Scan
 
     /**
      * Has the backend watch $p, which the scan saw as $info, unless the
-     * root's target covers it or it is a symlink or a special file. A
-     * watched file is enrolled only while it is a file.
+     * root's target covers it, it is a file the backend watches through its
+     * directory, or a symlink or a special file. A watched file is enrolled
+     * only while it is a file.
      */
     private function enroll(string $p, array $info): void
     {
-        if (!Fs::isRegular($info) && (!Fs::isDir($info) || $this->file) || $this->subtree && $p !== '.') {
+        if (!(Fs::isRegular($info) && !$this->noFiles || Fs::isDir($info) && !$this->file) || $this->subtree && $p !== '.') {
             $this->unenroll($p);
             return;
         }
@@ -760,22 +750,16 @@ final class Scan
             $this->native->add($t);
         } catch (Canceled $e) {
             throw $e;
+        } catch (Unsupported $e) {
+            if ($t->directory) {
+                throw self::wrap($path, $e);
+            }
+            $this->noFiles = true; // its directory, enrolled before it was listed, watches it
+            return;
         } catch (Throwable $e) {
             throw self::wrap($path, $e);
         }
         $this->record($p, $t);
-    }
-
-    /** $e as the error of watching $path (Go's &os.PathError{Op: "watch"}), which FsError's checks see through. */
-    private static function wrap(string $path, Throwable $e): Throwable
-    {
-        return $e instanceof FsError ? new FsError("watch $path: " . self::reason($e), $e->errno, $e) : new RuntimeException("watch $path: {$e->getMessage()}", 0, $e);
-    }
-
-    /** What an FsError says, without the path it names. */
-    private static function reason(FsError $e): string
-    {
-        return Fs::strerror($e->errno);
     }
 
     private function record(string $p, Target $t): void
@@ -895,28 +879,5 @@ final class Scan
         }
         usort($groups, fn(array $x, array $y): int => strcmp($x[0], $y[0]));
         return array_merge([], ...array_map(fn(array $g): array => $g[1], $groups));
-    }
-
-    /** The keys of $a as strings, which PHP keeps as integers when they look like ones. @return list<string> */
-    private static function keys(array $a): array
-    {
-        return array_map('strval', array_keys($a));
-    }
-
-    private static function dir(string $p): string
-    {
-        $i = strrpos($p, '/');
-        return $i === false ? '.' : substr($p, 0, $i);
-    }
-
-    private static function base(string $p): string
-    {
-        $i = strrpos($p, '/');
-        return $i === false ? $p : substr($p, $i + 1);
-    }
-
-    private static function join(string $dir, string $name): string
-    {
-        return $dir === '.' ? $name : "$dir/$name";
     }
 }

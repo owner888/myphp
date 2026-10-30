@@ -1933,21 +1933,25 @@ lists or stats those places again and the events are the differences
 (`Scan::diff`, renames paired by identity). There are no goroutines:
 `FileWatcher::next()` polls the backend, marks the notices, runs the
 debounce against the clock and looks once it has passed, blocking in
-`kevent`/`poll` for at most the time left when the app isn't running, and
+the run loop or `poll` for at most the time left when the app isn't running, and
 turning the run loop (`App::wait`, 50 ms at a time) while it is. A watch
 looks only when `next()` is called, so what changed meanwhile waits in
 the system's queue and comes in one batch. The page plugin calls
 `next(0)` from its generator and yields `Channel::wait` between, 10 ms
 backing off to 100 ms.
 
-The backends (`Native\FileWatch\Backend`) are libc through FFI: kqueue on
-macOS, an `O_EVTONLY` descriptor per file and directory (mygo's darwin
-watch), checked by `fstat` against the scan's stat so that a replacement
-racing the enrollment is not watched; inotify on Linux, where the tests
-run, an instance per watch, read without blocking. As Go does at start,
-the first kqueue watch raises the soft limit of open files to the hard
-one, at most OPEN_MAX (10240): macOS gives a process 256, and a watch
-takes a descriptor per entry. Stats are PHP's `lstat` with its stat cache
+The backends (`Native\FileWatch\Backend`) are the system's through FFI,
+and watch directories only: a file target is `Unsupported`, and the scan
+enrolls no more files, which the watch of their directory names. On macOS
+FSEvents (`FsEvents`, mygo's darwin fseWatch): one stream per directory
+target, covering the tree beneath it, so a recursive watch is the root's
+one subtree target and takes no descriptor per entry; scheduled on the
+run loop in a mode of its own, which `poll()` runs, so its callback comes
+on the main thread and only then. Its flags map to notices in the pure
+`FsEvents::notice()`, which the tests check without a stream. On Linux,
+where the tests run, inotify, an instance per watch, read without
+blocking, each target checked against the scan's stat so that a
+replacement racing the enrollment is not watched. Stats are PHP's `lstat` with its stat cache
 cleared first (it keeps the last path's), and when one fails libc's
 `lstat` again for its errno (`__error`, `__errno_location`), which PHP
 doesn't give, so that not found and permission denied are told apart as
@@ -5626,6 +5630,27 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   interaction, and shows the content updated from the intent. Without the
   capability, with no id or an avatar that is no image, or when the update
   fails, the ordinary notification shows.
+
+## Hints-only watches, FSEvents (v1.77)
+
+- **FSEvents** replaces kqueue on macOS (mygo's fseWatch): see "File
+  watches". `maxEntries` defaults to 65536 there, as a watch's cost is no
+  longer a descriptor per entry, and 8192 elsewhere.
+- **Directories only** (mygo's 8cda101): backends refuse file targets,
+  the scan then enrolls none (`$noFiles`), and the first scan keeps
+  nothing as it was before (`$before` null), its contents being no
+  events.
+- **`FileWatchOptions::$hintsOnly`** (`Native\FileWatch\Hints`, mygo's
+  fileWatchHints): no snapshot, no file stat'ed. It enrolls the root (one
+  subtree target where the backend takes one) or, on Linux, every
+  directory, found by `Fs::subdirs` from readdir's `d_type`, lstat'ing only
+  entries of unknown type. A notice hints at the directory it names; when
+  recursive without a subtree, the child it names is enrolled if it is a
+  new directory and its targets dropped if it moved; after an overflow
+  the tree is enrolled again and the hint is ".". Hints under another one
+  are left out (`Hints::hintEvents`). The watch drives either through
+  `Looker`, which `Scan` implements too. On a 20,000-file tree here the
+  first look takes 17 ms and 0.2 MB, against 160 ms and 9 MB.
 
 ## Open items
 

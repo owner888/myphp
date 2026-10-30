@@ -783,7 +783,8 @@ final class App
         }
         $debounce = $opts->debounce == 0 ? 0.05 : max($opts->debounce, 0.0);
         $maxDelay = max($opts->maxDelay == 0 ? 0.5 : $opts->maxDelay, $debounce);
-        return new FileWatcher(Native\FileWatch\Fs::realpath($path), $debounce, $maxDelay, $opts->recursive, $opts->ignore, $opts->maxEntries === 0 ? 8192 : $opts->maxEntries);
+        $max = $opts->maxEntries === 0 ? (PHP_OS_FAMILY === 'Darwin' ? 65536 : 8192) : $opts->maxEntries;
+        return new FileWatcher(Native\FileWatch\Fs::realpath($path), $debounce, $maxDelay, $opts->recursive, $opts->ignore, $max, $opts->hintsOnly);
     }
 
     /** @internal whether run() is running the event loop, which a wait must keep turning */
