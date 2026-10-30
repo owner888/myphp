@@ -336,8 +336,9 @@ final class BlockParser
         }
         [$text] = $d->contentOf($i);
         $pos = 0; $tn = strlen($text);
+        $m = $d->sourceMap($i);
         while ($pos < $tn && $text[$pos] === '[') {
-            $n = $d->inp->parseReference($d, substr($text, $pos), $d->srcOffset($i, $pos));
+            $n = $d->inp->parseReference($d, substr($text, $pos), $m->source($pos));
             if ($n === 0) {
                 break;
             }

@@ -14,6 +14,5 @@ final class Bracket
         public int $prevDelim,
         public int $index,
         public bool $image,
-        public bool $active,
     ) {}
 }

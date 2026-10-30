@@ -192,9 +192,18 @@ $timeOf = function (string $src): float {
     }
     return $best;
 };
-foreach (['mismatched openers' => '*a_ ', 'emphasis openers' => '*a ', 'unclosed links' => '[a](<b', 'brackets' => '[', 'backticks' => '`a``', 'escapes' => '\*'] as $name => $unit) {
+// A link closing closes the brackets before it to links in one step, and a paragraph of many lines finds its inlines' offsets by halving (mygo's bb363d6).
+$units = ['mismatched openers' => '*a_ ', 'emphasis openers' => '*a ', 'unclosed links' => '[a](<b', 'brackets' => '[', 'backticks' => '`a``', 'escapes' => '\*'];
+$made = [
+    'openers then links' => fn(int $n) => str_repeat('[', $n) . str_repeat('[a](b)', $n),
+    'indented lines' => fn(int $n) => str_repeat("*a*\n ", $n),
+    'quoted lines' => fn(int $n) => str_repeat("> `a`\n", $n),
+    'escaped pipes' => fn(int $n) => "| a |\n|---|\n| " . str_repeat('\| *a* ', $n) . '|',
+];
+foreach ($units as $name => $unit) { $made[$name] = fn(int $n) => str_repeat($unit, $n); }
+foreach ($made as $name => $src) {
     for ($k = 0; $k < 3; $k++) {
-        $small = $timeOf(str_repeat($unit, 5000)); $large = $timeOf(str_repeat($unit, 20000));
+        $small = $timeOf($src(5000)); $large = $timeOf($src(20000));
         if ($large <= 10 * $small || $large <= 0.02) {
             break;
         }

@@ -2049,3 +2049,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   GPU that isn't degraded and strokes a path on its CPU renderer; myphp
   always draws through Metal's quads, so an opaque line is capsules
   always. Its color's alpha is the `$alpha` parameter, as `strokePath`'s.
+
+## Markdown in linear time (v1.79)
+
+- **How linear time is checked**: mygo counts the parser's steps
+  (`Document.steps`) and its allocations, and checks that they grow
+  linearly; myphp times four times the input against once, as its parser
+  test did, since counting would add a step to every loop of the parser
+  that nothing but the test reads.

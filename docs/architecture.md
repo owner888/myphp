@@ -5677,6 +5677,21 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   the `uint64_t` parameter took as nothing usable, and v1.77's streams
   reported no change.
 
+## Markdown in linear time (v1.79)
+
+- **Source maps** (`Parser\SourceMap`, mygo's bb363d6): a block's content
+  joined from lines keeps where each line starts in it, or in a table cell
+  where each `\|` was, and a source offset is looked up by halving; one
+  map serves every inline of the block, and the definitions at its start.
+  `srcOffset` walked the lines for each offset, quadratic in a paragraph
+  of many lines: 5,000 lines of `*a*` took more than 100 s, now 0.16 s.
+- **Brackets a link closes**: links do not nest, so a link closing makes
+  the brackets open before it, but images, open none. That is now one
+  count (`InlineParser::$linked`), below which a bracket is spent, rather
+  than a walk marking each one: 5,000 brackets then 5,000 links took 1.8
+  s, now 0.07 s. The linear-time checks of the parser's test include
+  both, with lines indented, quoted, and escaped pipes in a cell.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

@@ -29,6 +29,8 @@ final class InlineParser
     private array $br = [];
     /** The last bracket. */
     private int $lastB = -1;
+    /** How many brackets there were when a link last closed: those before it, but for images, open no link, as links do not nest (mygo's linked), which a link closing marks in one step rather than walking them all. */
+    private int $linked = 0;
     /** @var list<int> */
     private array $backticks;
     private bool $scannedBackticks = false;
@@ -84,7 +86,7 @@ final class InlineParser
         $this->nodes = [$root];
         $this->dl = [];
         $this->br = [];
-        $this->last = -1; $this->lastB = -1;
+        $this->last = -1; $this->lastB = -1; $this->linked = 0;
         $this->scannedBackticks = false;
         $this->html = ['pi' => -1, 'comment' => -1, 'cdata' => -1, 'decl' => -1];
         $this->noMath = -1;
@@ -754,7 +756,7 @@ final class InlineParser
         if ($this->lastB >= 0) {
             $this->br[$this->lastB]->bracketAfter = true;
         }
-        $this->br[] = new Bracket($node, $this->lastB, $this->last, $index, $image, true);
+        $this->br[] = new Bracket($node, $this->lastB, $this->last, $index, $image);
         $this->lastB = count($this->br) - 1;
     }
 
@@ -773,7 +775,7 @@ final class InlineParser
             return;
         }
         $op = $this->br[$this->lastB];
-        if (!$op->active) {
+        if (!$op->image && $this->lastB < $this->linked) {
             $this->addText($start - 1, $start);
             $this->popBracket();
             return;
@@ -848,11 +850,7 @@ final class InlineParser
             $this->popBracket();
             $this->unlink($op->node);
             if (!$op->image) {
-                for ($b = $this->lastB; $b >= 0; $b = $this->br[$b]->prev) {
-                    if (!$this->br[$b]->image) {
-                        $this->br[$b]->active = false;
-                    }
-                }
+                $this->linked = count($this->br); // the brackets open before it are below: brackets are added at the end
             }
             return;
         }
@@ -1076,7 +1074,8 @@ final class InlineParser
             return [];
         }
         $out = [];
-        $walk = function (int $n) use (&$walk, &$out, $d, $block, $base, $healFrom): void {
+        $m = $d->sourceMap($block);
+        $walk = function (int $n) use (&$walk, &$out, $m, $base, $healFrom): void {
             for ($c = $this->nodes[$n]->first; $c >= 0; $c = $this->nodes[$c]->next) {
                 $this->text($c);
                 $nd = $this->nodes[$c];
@@ -1085,7 +1084,7 @@ final class InlineParser
                 }
                 $i = count($out);
                 $in = new Inline($nd->kind, $nd->text, $nd->dest, $nd->title,
-                    $d->srcOffset($block, $base + min($nd->start, $healFrom)), $d->srcOffset($block, $base + min($nd->end, $healFrom)),
+                    $m->source($base + min($nd->start, $healFrom)), $m->source($base + min($nd->end, $healFrom)),
                     auto: $nd->auto, display: $nd->display);
                 if ($nd->end > $healFrom && ($nd->kind === Inline::LINK || $nd->kind === Inline::IMAGE)) {
                     $in->pending = true;

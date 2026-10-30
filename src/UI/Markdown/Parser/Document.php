@@ -579,37 +579,33 @@ final class Document
         return [$b->text, $b->textS];
     }
 
-    /** The source offset of byte $off of block $i's content. @internal */
-    public function srcOffset(int $i, int $off): int
+    /** The map of block $i's content to the source (mygo's sourceMap), valid until the block changes. */
+    public function sourceMap(int $i): SourceMap
     {
         $b = $this->blocks[$i];
         if ($b->textS >= 0) {
-            return $b->textS + $off;
+            return new SourceMap($b->textS, $b->start, [], []);
         }
-        for ($k = $b->segA; $k < $b->segB; $k++) {
-            $s = $this->segs[$k];
-            $l = $s['pad'] + $s['end'] - $s['start'];
-            if ($s['cell']) {
-                // Each \| removed shifts what follows by one.
-                $src = substr($this->src, $s['start'], $s['end'] - $s['start']);
-                $o = 0;
-                for ($j = 0, $sl = strlen($src); $j < $sl && $o < $off; $j++) {
-                    if ($src[$j] === '\\' && $j + 1 < $sl && $src[$j + 1] === '|') {
-                        $j++;
-                    }
-                    $o++;
-                    if ($o === $off) {
-                        return $s['start'] + $j + 1;
-                    }
+        $segs = $this->segsOf($b);
+        $marks = [];
+        if ($segs !== [] && $segs[0]['cell']) {
+            // The offsets in the content of each | written \|.
+            $src = substr($this->src, $segs[0]['start'], $segs[0]['end'] - $segs[0]['start']);
+            for ($j = 0, $o = 0, $sl = strlen($src); $j < $sl; $j++, $o++) {
+                if ($src[$j] === '\\' && $j + 1 < $sl && $src[$j + 1] === '|') {
+                    $j++;
+                    $marks[] = $o;
                 }
-                return $s['start'] + min($off, strlen($src));
             }
-            if ($off <= $l || $k === $b->segB - 1) {
-                return $s['start'] + max(min($off - $s['pad'], $s['end'] - $s['start']), 0);
+        } else {
+            // The offset in the content where each line starts.
+            $o = 0;
+            foreach ($segs as $sg) {
+                $marks[] = $o;
+                $o += $sg['pad'] + $sg['end'] - $sg['start'] + 1;
             }
-            $off -= $l + 1;
         }
-        return $b->start;
+        return new SourceMap(-1, $b->start, $segs, $marks);
     }
 
     /** The content of a code, HTML or math block, each line ending with a newline. */
