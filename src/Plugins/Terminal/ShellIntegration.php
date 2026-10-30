@@ -17,7 +17,9 @@ namespace MyPHP\Plugins\Terminal;
  * reads $ENV, the integration's script, which leaves POSIX mode, reads the
  * user's startup files as bash would and adds its hooks. Only a shell
  * started alone, as the user's login shell is, takes it: what arguments
- * ask of a shell is left to it.
+ * ask of a shell is left to it. macOS's own /bin/bash (3.2) takes none,
+ * as in Ghostty: Apple's build reads the usual startup files in POSIX mode
+ * too, never $ENV; a bash installed apart, as Homebrew's, does.
  *
  * @internal
  */
@@ -103,15 +105,16 @@ final class ShellIntegration
     /**
      * The program $path, run with $args and the environment $env ("K=V"
      * each), as the integration starts it: [args, env], with its own when
-     * $path is zsh or bash started alone, else as they are.
+     * $path is zsh or bash started alone, else as they are; $os is the
+     * system's (PHP_OS_FAMILY), for macOS's /bin/bash, which takes none.
      * @param list<string> $args
      * @param list<string> $env
      * @return array{0: list<string>, 1: list<string>}
      */
-    public static function apply(string $path, array $args, array $env): array
+    public static function apply(string $path, array $args, array $env, string $os = PHP_OS_FAMILY): array
     {
         $shell = basename($path);
-        if (count($args) !== 1 || ($shell !== 'zsh' && $shell !== 'bash')) {
+        if (count($args) !== 1 || ($shell !== 'zsh' && $shell !== 'bash') || ($os === 'Darwin' && $path === '/bin/bash')) {
             return [$args, $env];
         }
         $vars = [];

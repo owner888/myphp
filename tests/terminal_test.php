@@ -650,10 +650,12 @@ TermClock::install();
     $zd = preg_grep('/^ZDOTDIR=/', $env);
     check($args === ['-zsh'] && in_array('MYPHP_ZDOTDIR=/z', $env, true) && count($zd) === 1 && is_file(substr(reset($zd), 8) . '/.zshenv'), 'zsh: its .zshenv the integration\'s, the user\'s ZDOTDIR kept');
     same([['bash', '-c', 'x'], ['A=1']], $Si::apply('/bin/bash', ['bash', '-c', 'x'], ['A=1']), 'a shell given arguments is started as it is');
-    same([['-bash', '--posix']], array_slice($Si::apply('/bin/bash', ['-bash'], []), 0, 1), 'bash: in POSIX mode, a login shell still');
+    same([['-bash', '--posix']], array_slice($Si::apply('/bin/bash', ['-bash'], [], 'Linux'), 0, 1), 'bash: in POSIX mode, a login shell still');
+    same([['-bash', '--posix']], array_slice($Si::apply('/opt/homebrew/bin/bash', ['-bash'], [], 'Darwin'), 0, 1), "bash: macOS, a bash installed apart");
+    same([['-bash'], ['A=1']], $Si::apply('/bin/bash', ['-bash'], ['A=1'], 'Darwin'), "bash: macOS's own, which reads no \$ENV, started as it is");
     foreach (['bash' => '.bashrc', 'zsh' => '.zshrc'] as $sh => $rc) {
         $bin = trim((string)shell_exec("command -v $sh"));
-        if ($bin === '') { continue; }
+        if ($bin === '' || $Si::apply($bin, [$bin], [])[0] === [$bin] && $sh === 'bash') { continue; } // none, or macOS's own bash
         $home = sys_get_temp_dir() . "/myphp-si-$sh-" . getmypid();
         @mkdir($home);
         file_put_contents("$home/$rc", "PS1='ready> '\nMYRC=read\n");

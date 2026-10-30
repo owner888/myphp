@@ -5928,6 +5928,10 @@ is (`Options::$shellIntegration`, on by default), starts with them:
   ~/.bash_profile, ~/.bash_login, ~/.profile; else ~/.bashrc), puts its
   prompt hook first in `PROMPT_COMMAND` (D, A) and marks a command's start
   with a DEBUG trap (C), unless the user set a trap of their own.
+- **macOS's own `/bin/bash`** (3.2) takes none, as in Ghostty: Apple's
+  build reads the usual startup files in POSIX mode too and never `ENV`
+  (v1.91.1: before, it ran with no marks, and the test waited for
+  them); a bash installed apart, as Homebrew's, takes it.
 
 tests/terminal_test.php runs bash and zsh in a terminal with a startup
 file of their own: it is read, a command that fails and one that
