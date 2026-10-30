@@ -2158,7 +2158,6 @@ final class Runtime
         return false;
     }
 
-    /** The innermost reachable node taking its input under a point. */
     /**
      * The system's $n-th quick press at ($x, $y), counted from the first on the node pressed (mygo's countPress): the
      * innermost of the press's target and the node taking its input, so that a click then a click on its neighbor is no
@@ -2176,6 +2175,7 @@ final class Runtime
         return $n - $this->clickBase;
     }
 
+    /** The innermost reachable node taking its input under a point. */
     private function inputAt(float $x, float $y): ?int
     {
         $best = null; $bestArea = INF;

@@ -208,3 +208,64 @@ same(-1, $selected, 'Escape clears it, and lets the focus go');
 $h->tab();
 $h->left();
 same(2, $selected, 'left from none goes to the last');
+
+// minMax: the extremes of each pixel column in their order, the ends of each run (mygo's TestMinMax).
+foreach ([
+    ['extrema order', [0, .01, .02, .03, .04, .05, .06], [3, 8, 2, 9, 0, 4, 5], 1, [0, 3, 4, 6]],
+    ['two per bucket', [0, .1, .2, .3, .4, .5, .6, .7, .8, .9], [2, 0, 4, 3, 2, 2, 0, 4, 3, 2], 2, [0, 1, 2, 6, 7, 9]],
+    ['sparse', [0, .3, .6, 1], [1, 2, 3, 4], 100, [0, 1, 2, 3]],
+    ['duplicate x', [.5, .5, .5, .5, .5], [2, 0, 3, 1, 2], 10, [0, 1, 2, 4]],
+    ['edges', [-2, -1, 0, .5, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], 10, [1, 2, 3, 4, 5]],
+    ['crossing the plot', [-2, -1, 2, 3], [0, 1, 2, 3], 10, [1, 2]],
+    ['outside left', [-2, -1], [0, 1], 10, []],
+    ['outside right', [2, 3], [0, 1], 10, []],
+    ['empty', [], [], 10, []],
+    ['no width', [0], [0], 0, []],
+    ['lengths apart', [0, .5, 1], [1, 2], 10, [0, 1]],
+    ['constant', [0, .01, .02, .03], [1, 1, 1, 1], 1, [0, 3]],
+    ['gap', [0, .1, .2, .3, .4], [1, 2, NAN, 3, 4], 1, [0, 1, -1, 3, 4]],
+    ['infinity', [0, .1, .2], [1, INF, 2], 1, [0, -1, 2]],
+    ['far beyond', [-1e30, 0, 1, 1e30], [0, 1, 2, 3], 10, [0, 1, 2, 3]],
+] as [$what, $xs, $ys, $width, $want]) {
+    $xs = array_map('floatval', $xs); $ys = array_map('floatval', $ys);
+    [$mx, $my] = Chart::minMax($xs, $ys, $width);
+    $at = fn(array $v) => array_map(fn(float $f) => is_nan($f) ? 'NaN' : $f, $v); // NaN, a break, compared as one
+    same([$at(array_map(fn(int $i) => $i < 0 ? NAN : $xs[$i], $want)), $at(array_map(fn(int $i) => $i < 0 ? NAN : $ys[$i], $want))], [$at($mx), $at($my)], "minMax: $what");
+}
+$xs = $ys = [];
+for ($i = 0; $i < 15000; $i++) { $xs[] = $i / 14999; $ys[] = sin($i); }
+$few = count(Chart::minMax($xs, $ys, 1280)[0]);
+$more = count(Chart::minMax($xs, $ys, 2560)[0]);
+check($few <= 2 * 1280 + 3 && $more > $few && $more <= 2 * 2560 + 3, "minMax: a few points per column, $few at 1280 and $more at 2560");
+
+// lineInto: line()'s path in one kept, its trim gone.
+$r = [10.0, 20.0, 200.0, 100.0];
+$kept = (new Path)->moveTo(0, 0)->lineTo(5, 5)->trim(0, 0.5);
+same(Chart::line($r, [0.0, 0.5, NAN, 0.8, 1.0], [0.2, 0.9, 0.1, 0.3, 0.6])->cmds, Chart::lineInto($kept, $r, [0.0, 0.5, NAN, 0.8, 1.0], [0.2, 0.9, 0.1, 0.3, 0.6])->cmds, 'lineInto: as line()');
+same([null, null], [$kept->kept, $kept->phases], 'lineInto: untrimmed');
+same([[Path::MOVE, 10.0, 100.0, 0, 0, 0, 0], [Path::LINE, 110.0, 30.0, 0, 0, 0, 0]], Chart::line($r, [0.0, 0.5], [0.2, 0.9])->cmds, 'line: straight, where x() and y() put the points');
+
+// strokePolyline: an opaque line a capsule a segment, a translucent one a stroked path, a point alone nothing (mygo's StrokePolyline).
+$kinds = function (array $points, float $alpha) {
+    $h = new Headless(function (Context $c) use ($points, $alpha): void {
+        $c->column()->fill()->draw(function (\MyPHP\UI\DisplayList $list, Node $n, \MyPHP\UI\Theme $t, \MyPHP\UI\TextPainter $text) use ($points, $alpha): void {
+            (new \MyPHP\UI\Painter($list, $text, $t))->strokePolyline($points, 3, 0x143ce6, $alpha);
+        });
+        $c->end();
+    }, 200, 100);
+    $list = $h->paint(); $out = [];
+    for ($i = 0; $i < $list->n; $i++) {
+        $b = $list->buf; $k = $i * \MyPHP\UI\DisplayList::FLOATS_PER_RECT;
+        if (abs($b[$k + 4] - 0x14 / 255) < 1e-3 && abs($b[$k + 6] - 0xe6 / 255) < 1e-3) { // the line's color
+            $kind = (int)round($b[$k + 9] - \MyPHP\UI\DisplayList::KIND_STRIDE * floor($b[$k + 9] / \MyPHP\UI\DisplayList::KIND_STRIDE));
+            $out[$kind] = ($out[$kind] ?? 0) + 1;
+        }
+    }
+    return $out;
+};
+$pts = [[10.0, 20.0], [30.0, 70.0], [60.0, 20.0], [60.0, 20.0], [80.0, 60.0], [NAN, NAN], [110.0, 25.0], [170.0, 60.0]];
+same([9 => 5], $kinds($pts, 1.0), 'strokePolyline: five capsules, the break between the runs');
+check(!isset($kinds($pts, 0.4)[9]) && $kinds($pts, 0.4) !== [], 'strokePolyline: translucent, a stroked path');
+foreach ([[], [[20.0, 20.0]], [[NAN, 0.0]], [[10.0, 10.0], [INF, 20.0], [30.0, 30.0]]] as $i => $p) {
+    same([], $kinds($p, 1.0), "strokePolyline: nothing for lone points ($i)");
+}

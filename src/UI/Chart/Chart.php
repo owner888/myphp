@@ -352,9 +352,29 @@ final class Chart
      */
     public static function line(array $r, array $xs, array $ys, Curve $k = Curve::Linear): Path
     {
-        $path = new Path;
+        return self::lineInto(new Path, $r, $xs, $ys, $k);
+    }
+
+    /**
+     * Replaces $path with line()'s geometry and returns it, clearing its
+     * trim (mygo's LineInto): one path kept per series of a live chart.
+     * @param array{0: float, 1: float, 2: float, 3: float} $r
+     * @param list<float> $xs
+     * @param list<float> $ys
+     */
+    public static function lineInto(Path $path, array $r, array $xs, array $ys, Curve $k = Curve::Linear): Path
+    {
+        $path->reset();
         $n = min(count($xs), count($ys));
         self::runs($n, fn(int $i): bool => !is_nan($xs[$i]) && !is_nan($ys[$i]), function (int $from, int $to) use ($path, $r, $xs, $ys, $k): void {
+            if ($k === Curve::Linear) { // straight to the path, without the points of a curve
+                [$x0, $y0, $w, $h] = $r; // as x() and y()
+                $path->moveTo($x0 + $xs[$from] * $w, $y0 + (1 - $ys[$from]) * $h);
+                for ($i = $from + 1; $i < $to; $i++) {
+                    $path->lineTo($x0 + $xs[$i] * $w, $y0 + (1 - $ys[$i]) * $h);
+                }
+                return;
+            }
             $pts = [];
             for ($i = $from; $i < $to; $i++) {
                 $pts[] = [self::x($r, $xs[$i]), self::y($r, $ys[$i])];
@@ -400,6 +420,85 @@ final class Chart
             $path->close();
         });
         return $path;
+    }
+
+    /**
+     * The lowest and highest of $xs and $ys in each pixel column of the
+     * plot, in their order, and the ends of each run of defined points, so
+     * that a line through them looks the same and narrow spikes still show
+     * (mygo's MinMax): [xs, ys]. $xs and $ys are fractions, as for line();
+     * $xs must not decrease, or the columns come out wrong, and a NaN or
+     * infinite value breaks the line, where a NaN is between the runs.
+     * Points left or right of the plot go, but for the nearest one on each
+     * side. $pixelWidth is the plot's width in pixels, ceil(w * scale).
+     * Keep the points themselves for selections and readings.
+     *
+     * @param list<float> $xs
+     * @param list<float> $ys
+     * @return array{0: list<float>, 1: list<float>}
+     */
+    public static function minMax(array $xs, array $ys, int $pixelWidth): array
+    {
+        $ox = $oy = [];
+        if ($pixelWidth <= 0) {
+            return [$ox, $oy];
+        }
+        $n = min(count($xs), count($ys));
+        // The runs of defined points, without runs()' closures: a live chart reduces tens of thousands a frame.
+        for ($from = 0; $from < $n;) {
+            if (!is_finite($xs[$from]) || !is_finite($ys[$from])) { $from++; continue; }
+            for ($to = $from + 1; $to < $n && is_finite($xs[$to]) && is_finite($ys[$to]); $to++);
+            self::extremes($xs, $ys, $from, $to, $pixelWidth, $ox, $oy);
+            $from = $to;
+        }
+        return [$ox, $oy];
+    }
+
+    /**
+     * Adds the extremes of each column of the run of points $from to $to
+     * (not included) to $ox and $oy, after a break when they have some.
+     * @param list<float> $xs
+     * @param list<float> $ys
+     * @param list<float> $ox
+     * @param list<float> $oy
+     */
+    private static function extremes(array $xs, array $ys, int $from, int $to, int $pixelWidth, array &$ox, array &$oy): void
+    {
+        // The first at or past each edge, found by halves: at most one point beyond either is kept.
+        [$a, $b] = [$from, $to];
+        while ($a < $b) { $m = ($a + $b) >> 1; if ($xs[$m] >= 0) { $b = $m; } else { $a = $m + 1; } }
+        $lo = $a;
+        if ($lo === $to) {
+            return;
+        }
+        [$a, $b] = [$lo, $to];
+        while ($a < $b) { $m = ($a + $b) >> 1; if ($xs[$m] > 1) { $b = $m; } else { $a = $m + 1; } }
+        $hi = $a;
+        if ($lo === $from && $lo === $hi) {
+            return;
+        }
+        if ($lo > $from) { $lo--; }
+        if ($hi < $to) { $hi++; }
+        if ($ox !== []) {
+            $ox[] = NAN; $oy[] = NAN;
+        }
+        $ox[] = $xs[$lo]; $oy[] = $ys[$lo];
+        $last = $lo;
+        for ($i = $lo; $i < $hi;) {
+            $bucket = floor($xs[$i] * $pixelWidth); // a float: a point beyond the plot may be far beyond an int
+            $low = $high = $i;
+            $yl = $yh = $ys[$i];
+            for ($i++; $i < $hi; $i++) {
+                $x = $xs[$i];
+                if ($x < 0 || $x > 1 || floor($x * $pixelWidth) != $bucket) { break; }
+                $y = $ys[$i];
+                if ($y < $yl) { $low = $i; $yl = $y; } elseif ($y > $yh) { $high = $i; $yh = $y; }
+            }
+            [$p, $q] = $low < $high ? [$low, $high] : [$high, $low];
+            if ($p !== $last) { $ox[] = $xs[$p]; $oy[] = $ys[$p]; $last = $p; }
+            if ($q !== $last) { $ox[] = $xs[$q]; $oy[] = $ys[$q]; $last = $q; }
+        }
+        if ($hi - 1 !== $last) { $ox[] = $xs[$hi - 1]; $oy[] = $ys[$hi - 1]; }
     }
 
     /** The index of the value of $xs, in ascending order, nearest $f, or -1 for none: the point of a line under the pointer. @param list<float> $xs */

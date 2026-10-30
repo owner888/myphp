@@ -148,6 +148,17 @@ check($draft->text === 'hello, world' && $draft->cursor === 6, 'typed there');
 $draft->setTextSelection(0, 99);
 same([0, strlen($draft->text)], [$draft->anchor, $draft->cursor], 'a selection past the end ends at the end');
 
+// A selection made backwards keeps its caret before its anchor, as the app reads it to extend it from its anchor (mygo's TestTextAnchorCaret), in runes.
+$draft = new TextState('aécde');
+$h = new Headless(fn(Context $c) => $c->textarea($draft)->label('Draft'), 400, 300);
+$h->frame();
+$h->clickOn($h->byLabel('Draft'));
+$draft->setTextSelection(5, 2);
+$h->frame();
+same([[5, 2], [2, 5]], [$draft->textAnchorCaret(), $draft->textSelection()], 'anchor and caret, and the selection in order');
+$h->key(Key::LEFT, 'moveLeftAndModifySelection:', Key::SHIFT);
+same([5, 1], $draft->textAnchorCaret(), 'Shift-Left moves the caret, not the anchor');
+
 /** The glyphs painted on the line of $r, [x, rgb] each, by the fake text engine's 7-point cells. @param array{0: float, 1: float, 2: float, 3: float} $r @return list<array{0: float, 1: int}> */
 function taGlyphs(\MyPHP\UI\DisplayList $list, array $r): array
 {

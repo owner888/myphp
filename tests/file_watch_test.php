@@ -606,6 +606,7 @@ Backends::$fake = null;
     $dir = watchDir();
     mkdir("$dir/sub/deep", 0777, true);
     $w = App::watchFiles($dir, new FileWatchOptions(recursive: true, debounce: 0.01, hintsOnly: true));
+    $w->next(0.2); // FSEvents may yet report the directories made just before the stream started, as a change of the root: a hint, not counted here
     touch("$dir/sub/deep/c");
     same(watchJson([ev(FileOp::FileHint, 'sub/deep', true)]), watchJson($w->next(2)), 'system hints: the directory of a new file');
     mkdir("$dir/new");

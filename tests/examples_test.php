@@ -540,3 +540,31 @@ $t->click(300, 520); $t->frame(); check($sideOpen, 'press on the bar keeps it');
 $t->click(300, 10); $t->frame(); check($sideOpen, 'press on the title bar keeps it');
 $t->press(700, 110); $t->drag(400, 110); $t->release(400, 110); $t->frame(); check($sideOpen, 'a slider let go over the picture keeps it');
 $t->click(300, 200); $t->frame(); check(!$sideOpen, 'press on the picture closes it');
+
+// chart-streaming: three waveforms, a few points per pixel column, a capsule each segment; path and raw as strokePath strokes them.
+[$view, $s] = Headless::load('chart-streaming');
+$csKinds = function (\Closure $view): array {
+    $t = new Headless($view, 1000, 600);
+    $t->frame();
+    $list = $t->paint(); $out = [];
+    $colors = array_map(fn(int $c) => [(($c >> 16) & 255) / 255, ($c & 255) / 255], \MyPHP\Examples\ChartStreaming\COLORS);
+    for ($i = 0; $i < $list->n; $i++) {
+        $b = $list->buf; $k = $i * \MyPHP\UI\DisplayList::FLOATS_PER_RECT;
+        foreach ($colors as $c => [$r, $bl]) {
+            if (abs($b[$k + 4] - $r) < 1e-3 && abs($b[$k + 6] - $bl) < 1e-3) {
+                $kind = (int)round($b[$k + 9] - \MyPHP\UI\DisplayList::KIND_STRIDE * floor($b[$k + 9] / \MyPHP\UI\DisplayList::KIND_STRIDE));
+                $out[$c][$kind] = ($out[$c][$kind] ?? 0) + 1;
+            }
+        }
+    }
+    return [$out, $t];
+};
+[$kinds, $t] = $csKinds($view);
+$lines = array_map(fn(array $k) => $k[9] ?? 0, $kinds);
+check(count($lines) === 3 && min($lines) > 100 && max($lines) < 2 * 1000 + 3, 'chart-streaming: three lines of capsules, a few a column: ' . json_encode($lines));
+check($t->byLabel('Three live waveforms') !== null, 'chart-streaming: the plot named');
+foreach (['path', 'raw'] as $mode) {
+    $w = new \MyPHP\Examples\ChartStreaming\Waveform($mode);
+    [$kinds] = $csKinds(fn(Context $c) => \MyPHP\Examples\ChartStreaming\view($c, $w));
+    check(count($kinds) === 3 && array_filter($kinds, fn(array $k) => isset($k[9])) === [], "chart-streaming $mode: stroked paths, no capsules");
+}

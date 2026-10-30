@@ -69,6 +69,14 @@ final class Path
         return $hw * max($this->join === self::JOIN_MITER ? $this->miter : 1.0, $this->cap === self::CAP_SQUARE ? M_SQRT2 : 1.0);
     }
 
+    /** Empties the path and removes its trim, keeping how it is stroked (mygo's Reset), and returns it. */
+    public function reset(): static
+    {
+        $this->cmds = [];
+        $this->kept = $this->phases = null;
+        return $this;
+    }
+
     public function moveTo(float $x, float $y): static { $this->cmds[] = [self::MOVE, $x, $y, 0, 0, 0, 0]; return $this; }
     public function lineTo(float $x, float $y): static { $this->cmds[] = [self::LINE, $x, $y, 0, 0, 0, 0]; return $this; }
     public function quadTo(float $cx, float $cy, float $x, float $y): static { $this->cmds[] = [self::QUAD, $cx, $cy, $x, $y, 0, 0]; return $this; }

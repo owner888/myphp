@@ -324,6 +324,44 @@ final class Painter
         $this->list->path($path, $rgb, $alpha, $width);
     }
 
+    /**
+     * Draws a line through $points ([x, y] each) $width points wide, with
+     * round joins and caps, as strokePath() draws a path of straight lines
+     * (mygo's StrokePolyline): a NaN or infinite point breaks the line
+     * there, and a point alone draws nothing. It suits lines that change
+     * every frame, as live charts: an opaque line draws each segment as a
+     * capsule of its own instead of a mask of the whole line, so that its
+     * edges can look a little bolder where segments overlap. A translucent
+     * line draws as strokePath() draws it, which keeps overlaps from
+     * showing darker.
+     *
+     * @param list<array{0: float, 1: float}> $points
+     */
+    public function strokePolyline(array $points, float $width, int $rgb, float $alpha = 1.0): void
+    {
+        if (!($width > 0) || !is_finite($width) || $alpha <= 0) {
+            return;
+        }
+        $through = $alpha < 1 || $this->list->opacity() < 1;
+        $path = $through ? new Path : null;
+        $prev = null; // the point before, in the run
+        foreach ($points as [$x, $y]) {
+            if (!is_finite($x) || !is_finite($y)) {
+                $prev = null;
+                continue;
+            }
+            if ($path !== null) {
+                $prev === null ? $path->moveTo($x, $y) : $path->lineTo($x, $y);
+            } elseif ($prev !== null) {
+                $this->list->line($prev[0], $prev[1], $x, $y, $rgb, $alpha, $width);
+            }
+            $prev = [$x, $y];
+        }
+        if ($path !== null && $path->cmds !== []) {
+            $this->list->path($path, $rgb, $alpha, $width);
+        }
+    }
+
     /** Draws the shapes of $svg fitted in $r in $rgb. @param array{0: float, 1: float, 2: float, 3: float} $r */
     public function icon(SVG $svg, array $r, int $rgb, float $alpha = 1.0): void
     {

@@ -182,6 +182,30 @@ final class TextState
         $this->anchor = $byte($start); $this->cursor = $byte($end);
     }
 
+    /** The selection as offsets in runes into the text, in order (mygo's TextSelection). @return array{0: int, 1: int} */
+    public function textSelection(): array
+    {
+        [$a, $b] = $this->selection();
+        return [$this->runes($a), $this->runes($b)];
+    }
+
+    /**
+     * The selection as offsets in runes into the text, from where it was
+     * started to its caret: the anchor is after the caret when it was made
+     * backwards, so an app's own keys that extend it, as Shift-Home, extend
+     * it from its anchor (mygo's TextAnchorCaret). @return array{0: int, 1: int}
+     */
+    public function textAnchorCaret(): array
+    {
+        return [$this->runes($this->anchor), $this->runes($this->cursor)];
+    }
+
+    /** The runes in the text before byte $b. */
+    private function runes(int $b): int
+    {
+        return mb_strlen(substr($this->text, 0, $b), 'UTF-8');
+    }
+
     /** The wrapped lines the area was last laid out in (layout), null before. */
     public function lastLayout(): ?FieldLayout
     {

@@ -36,7 +36,8 @@ final class FsEvents implements Backend
     private const LATENCY = 0.01;
     /** How many notices a watch holds before it has the scan look at everything again. */
     private const QUEUE = 4096;
-    private const UTF8 = 0x08000100, SINCE_NOW = 0xFFFFFFFFFFFFFFFF;
+    /** kCFStringEncodingUTF8, and kFSEventStreamEventIdSinceNow: UINT64_MAX, which PHP has as -1 (0xFFFFFFFFFFFFFFFF is a float to it, which the uint64_t would not take). */
+    private const UTF8 = 0x08000100, SINCE_NOW = -1;
 
     private static ?FFI $c = null;
     /** @var array<int, array{stream: CData, key: CData, path: string, subtree: bool}> the streams by target, with the cell holding the target's id that the stream's context points to */

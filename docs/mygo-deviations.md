@@ -1873,13 +1873,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     1024 frames), `Latency::Playback` about 256 ms (12).
   - Why: PHP fills the buffers on the main thread, which building a
     frame keeps busy; fewer of them run dry meanwhile.
-- **Which end of a text selection is the caret**
-  - mygo: `TextAnchorCaret` returns the selection from its anchor to its
-    caret, in runes.
-  - myphp: `TextState::$anchor` and `$cursor`, in bytes, are public, as
-    they were.
-  - Why: nothing to add; `TextState::setTextSelection` takes runes as
-    mygo's.
 - **A drag's end** (`Transfer\Result`)
   - mygo: `Result{Operation, Canceled, Escaped, Point, Err}`.
   - myphp: `new Result($operation, $canceled, $error, $escaped, $point)`:
@@ -2046,3 +2039,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   types through the directory's descriptor and opens each directory
   beneath the root through it (`os.Root`); myphp reads readdir's `d_type`
   by path, checking each directory's identity by lstat, as its scan does.
+
+## Live chart lines (v1.78)
+
+- **`Chart::minMax`'s output**: mygo appends to the slices it is given
+  and returns them, so that a view keeping them reduces without
+  allocating; PHP arrays are values, so myphp returns `[xs, ys]` new.
+- **`strokePolyline` on every renderer**: mygo draws capsules only on a
+  GPU that isn't degraded and strokes a path on its CPU renderer; myphp
+  always draws through Metal's quads, so an opaque line is capsules
+  always. Its color's alpha is the `$alpha` parameter, as `strokePath`'s.

@@ -5652,6 +5652,31 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   `Looker`, which `Scan` implements too. On a 20,000-file tree here the
   first look takes 17 ms and 0.2 MB, against 160 ms and 9 MB.
 
+## Live chart lines, a selection's caret (v1.78)
+
+- **`Painter::strokePolyline`** (mygo's adaee8c): an opaque line is a
+  capsule a segment (`DisplayList::line`, the quad that draws a line with
+  round ends), drawn as other quads are, with no mask of the whole line to
+  rasterize on the CPU; where the line or the painter is translucent it
+  goes through `DisplayList::path` as `strokePath` does, so that overlaps
+  do not show darker. A NaN or infinite point breaks it.
+- **`Chart::minMax`**: the lowest and highest point of each pixel column
+  of a run, in their order, with the ends of the run and at most one point
+  past either edge, found by halving; its loop does without `runs()`'s
+  closures, 2.2 ms for 15,000 points here. **`Chart::lineInto`** and
+  `Path::reset()` refill a kept path; a linear line goes to the path
+  straight, without the points a curve needs. `examples/chart-streaming`
+  scrolls three waveforms of 15,000 samples, 1,000 a second each, drawn
+  three ways (`polyline`, `path`, `raw`).
+- **A selection's caret** (`TextState::textAnchorCaret`, mygo's 0eae690):
+  the selection in runes from its anchor to its caret, beside
+  `textSelection`, in order, so that an app extends one made backwards
+  from its anchor; the bytes stay `$anchor` and `$cursor`.
+- **FSEvents' start**: `kFSEventStreamEventIdSinceNow` is UINT64_MAX,
+  which PHP writes as -1: as `0xFFFFFFFFFFFFFFFF` it is a float, which
+  the `uint64_t` parameter took as nothing usable, and v1.77's streams
+  reported no change.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
