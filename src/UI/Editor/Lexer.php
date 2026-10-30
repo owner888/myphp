@@ -93,6 +93,11 @@ class Lexer implements Tokenizer
         $k = $st->mode - self::MODE_STRING;
         $s = $this->strings[$k];
         $line = $st->line; $n = strlen($line);
+        if ($s->close === '' && $i < $n) { // a string that ends where it starts, as GraphQL's spread: its opening alone
+            Token::add($st->toks, $i, $s->kind);
+            $st->mode = 0; $st->regexOK = false;
+            return $i;
+        }
         for ($j = $i; $j < $n;) {
             $c = $line[$j];
             if ($s->escape !== '' && $c === $s->escape) {

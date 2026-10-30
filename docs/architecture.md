@@ -6354,6 +6354,22 @@ succeeds are told of, an empty line is none.
   in its new CSS pixels (`myphp:fit-content`), replaces the scripts of the
   next pages, and fits the last content again.
 
+## The code editor: Dart, GraphQL, R and Scala (v1.110)
+
+- mygo b8a5225: `Languages::named` and `Languages::for` find the four by
+  name, extension and file name, each with a `Lexer` as the others':
+  Dart (.dart: single, double and triple-quoted strings with `$name` and
+  `${}`, raw `r''` strings, nested comments, annotations); Scala (.scala,
+  .sc, .sbt: `s`, `f` and `raw` interpolated strings, single and
+  triple-quoted, backquoted names, nested comments, annotations); R (.r,
+  .R, .Rprofile: strings over lines, raw `r"(...)"` strings, `%op%`
+  operators, dotted names); GraphQL (.graphql, .gql, .graphqls: block
+  strings, `$variables`, `@directives`, spreads, keys).
+- A `LexString` without a close ends where it starts (GraphQL's spread,
+  `...`, so that the name after it is no property), as mygo's lexer has
+  it: `Lexer::startsWith` takes no empty prefix, so `inString` ends one at
+  once.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

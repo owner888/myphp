@@ -63,16 +63,42 @@ foreach ([
         'fn(echo)str(")var($HOME)str(/x")var($1)comment(# c)'],
     ['sql', ["SELECT id FROM users WHERE x = 'a'"],
         "kw(SELECT)var(id)kw(FROM)var(users)kw(WHERE)var(x)op(=)str('a')"],
+    ['dart', ['final s = r\'\\d\' + "a${b}c$d"; // c', "/* a /* b */ c */ var t = '''x", "y''';"],
+        'kw(final)var(s)op(=)str(r\'\\d\')op(+)str("a)esc(${)var(b)esc(})str(c)var($d)str(")punct(;)comment(// c) / '
+            . "comment(/* a /* b */ c */)kw(var)var(t)op(=)str('''x) / str(y''')punct(;)"],
+    ['scala', ['val s = s"Hi $name ${a + 1}" + raw"\\d" // c', '/* a /* b */ c */ def f[T](x: T): Unit = """multi', 'line"""'],
+        'kw(val)var(s)op(=)str(s"Hi)var($name)esc(${)var(a)op(+)num(1)esc(})str(")op(+)str(raw"\\d")comment(// c) / '
+            . 'comment(/* a /* b */ c */)kw(def)var(f)punct([)type(T)punct(]()var(x)op(:)type(T)punct())op(:)type(Unit)op(=)str("""multi) / str(line""")'],
+    ['r', ['x <- c(1L, NA) %in% r"(a\\b)" # c', 'if (TRUE) df$col.name |> is.na()'],
+        'var(x)op(<-)fn(c)punct(()num(1L)punct(,)const(NA)punct())op(%in%)str(r"(a\\b)")comment(# c) / '
+            . 'kw(if)punct(()const(TRUE)punct())var(df)op($)var(col.name)op(|>)fn(is.na)punct(())'],
+    ['graphql', ['query Get($id: ID!) @cached { user(id: $id) { ...F ... on User { name } } } # c', '"""Doc', '"""'],
+        'kw(query)type(Get)punct(()var($id)op(:)type(ID)op(!)punct())meta(@cached)punct({)var(user)punct(()prop(id)op(:)var($id)punct())punct({)'
+            . 'punct(...)type(F)punct(...)kw(on)type(User)punct({)var(name)punct(})punct(})punct(})comment(# c) / str("""Doc) / str(""")'],
 ] as [$lang, $lines, $want]) {
     $l = Languages::named($lang);
     check($l !== null, "a language named $lang");
     same($want, $lexLines($l->tokenizer, ...$lines), "$lang tokens of " . json_encode($lines));
 }
 
-foreach (['main.go' => 'Go', 'a/b/Makefile' => 'Makefile', 'x.TSX' => 'TypeScript', 'Dockerfile' => 'Dockerfile', 'x.unknown' => ''] as $name => $want) {
+foreach (['main.go' => 'Go', 'a/b/Makefile' => 'Makefile', 'x.TSX' => 'TypeScript', 'Dockerfile' => 'Dockerfile', 'x.unknown' => '',
+    'main.dart' => 'Dart', 'schema.graphql' => 'GraphQL', 'q.gql' => 'GraphQL', 'plot.r' => 'R', 'plot.R' => 'R', '.Rprofile' => 'R', 'Main.scala' => 'Scala', 'build.sc' => 'Scala'] as $name => $want) {
     same($want, Languages::for($name)?->name ?? '', "the language of $name");
 }
-same(28, count(Languages::all()), 'the languages');
+same(32, count(Languages::all()), 'the languages');
+// A language by its name, an extension or an alias, ignoring case, each with a tokenizer (mygo's TestLanguageNamed).
+foreach (['Go' => ['go', 'Go', 'golang'], 'Dart' => ['dart', 'Dart'], 'GraphQL' => ['graphql', 'GraphQL', 'gql'], 'R' => ['r', 'R', ' r '], 'Scala' => ['scala', 'Scala', 'sc']] as $want => $ns) {
+    foreach ($ns as $n) {
+        $l = Languages::named($n);
+        same([$want, true], [$l?->name, $l?->tokenizer !== null], "the language named \"$n\"");
+    }
+}
+same(null, Languages::named('nope'), 'no language named nope');
+// Their comments and brackets (mygo's TestLanguageCommentsAndBrackets).
+foreach (['dart' => ['//', '/*', '*/'], 'scala' => ['//', '/*', '*/'], 'graphql' => ['#', '', ''], 'r' => ['#', '', '']] as $n => $want) {
+    $l = Languages::named($n);
+    same([$want, '() [] {}'], [[$l->lineComment, $l->blockComment[0] ?? '', $l->blockComment[1] ?? ''], implode(' ', array_map(fn($b) => $b->open . $b->close, $l->brackets))], "$n's comments and brackets");
+}
 
 // After any edits, the states the highlighter keeps are those of tokenizing the text from the top.
 mt_srand(78);

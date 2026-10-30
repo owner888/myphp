@@ -155,6 +155,34 @@ final class Languages
                 words: Lexer::words(T::KEYWORD, 'as break class continue do else for fun if in interface is object package return super this throw try typealias typeof val var when while by catch constructor delegate dynamic field file finally get import init param property receiver set setparam where actual abstract annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg',
                     T::CONSTANT, 'true false null', T::TYPE, 'Any Boolean Byte Char Double Float Int Long Nothing Short String Unit'),
                 calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
+        // Scala's interpolated strings first, as the lexer's stack holds the index of a string with interpolations in five bits.
+        $scalaStrings = [];
+        foreach (['s', 'f', 'raw'] as $p) {
+            foreach (['"""', '"'] as $qq) {
+                $scalaStrings[] = new LexString($qq, $qq, $p === 'raw' ? '' : '\\', strlen($qq) === 3, interpOpen: '${', interpClose: '}', prefix: $p, dollar: true);
+            }
+        }
+        array_push($scalaStrings, new LexString('"""', '"""', multiline: true), $q('"'), $q("'"), new LexString('`', '`', kind: T::VARIABLE));
+        $scala = new Language('Scala', imports: '/^import\\s/', extensions: ['.scala', '.sc', '.sbt'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
+            tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true, strings: $scalaStrings,
+                words: Lexer::words(T::KEYWORD, 'abstract case catch class def derives do else end enum export extends extension final finally for forSome given if implicit import inline lazy match new object opaque override package private protected return sealed super then this throw trait transparent try type using val var while with yield',
+                    T::TYPE, 'Any AnyRef AnyVal Boolean Byte Char Double Float Int Long Nothing Null Short String Unit',
+                    T::CONSTANT, 'true false null None Some Nil'),
+                calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
+        // Dart's interpolated strings first, then its raw ones, r'…'.
+        $dartStrings = [];
+        foreach ([false, true] as $raw) {
+            foreach (['"""', "'''", '"', "'"] as $qq) {
+                $dartStrings[] = $raw ? new LexString($qq, $qq, multiline: strlen($qq) === 3, prefix: 'r')
+                    : new LexString($qq, $qq, '\\', strlen($qq) === 3, interpOpen: '${', interpClose: '}', dollar: true);
+            }
+        }
+        $dart = new Language('Dart', imports: '/^(import|export|part)\\s/', extensions: ['.dart'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), wordChars: '$', tabSize: 2,
+            tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true, strings: $dartStrings,
+                words: Lexer::words(T::KEYWORD, 'abstract as assert async await base break case catch class const continue covariant default deferred do else enum export extends extension external factory final finally for get hide if implements import in interface is late library mixin new on operator part required rethrow return sealed set show static super switch sync this throw try typedef var when while with yield',
+                    T::TYPE, 'bool double dynamic int num void Never Null Object String List Map Set Iterable Future FutureOr Stream Function Record Symbol Type',
+                    T::CONSTANT, 'true false null'),
+                identChars: '$', calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
         $swift = new Language('Swift', imports: '/^(@\\w+(\\([^)]*\\))?\\s+)?import\\s/', extensions: ['.swift'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true,
                 strings: [new LexString('"""', '"""', '\\', true), $q('"')],
@@ -189,6 +217,22 @@ final class Languages
                     T::TYPE, 'int integer bigint smallint tinyint real float double decimal numeric text varchar char boolean bool date time timestamp blob json jsonb uuid serial',
                     T::CONSTANT, 'true false null'),
                 calls: true, operators: '+-*/%=<>!|'));
+        // R's strings go on over lines; its raw strings, r"(…)", R'[…]' and the like, have no escapes; and its %op% operators, as %in% and
+        // %>%, are lexed as strings are.
+        $rStrings = [new LexString('"', '"', '\\', true), new LexString("'", "'", '\\', true), new LexString('%', '%', kind: T::OPERATOR), new LexString('`', '`', kind: T::VARIABLE)];
+        foreach (['r', 'R'] as $p) {
+            foreach (['"', "'"] as $qq) {
+                foreach (['()', '[]', '{}'] as $br) {
+                    $rStrings[] = new LexString($qq . $br[0], $br[1] . $qq, multiline: true, prefix: $p);
+                }
+            }
+        }
+        $r = new Language('R', imports: '/^(library|require)\\(/', extensions: ['.r'], filenames: ['.Rprofile'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), wordChars: '.', tabSize: 2,
+            tokenizer: new Lexer(lineComments: ['#'], strings: $rStrings,
+                words: Lexer::words(T::KEYWORD, 'if else repeat while function for in next break return',
+                    T::CONSTANT, 'TRUE FALSE NULL NA NA_integer_ NA_real_ NA_complex_ NA_character_ Inf NaN',
+                    T::FUNCTION, 'library require source print cat paste paste0 stop warning message invisible'),
+                identChars: '.', calls: true, operators: '+-*/^=&|!<>~?:$@\\'));
         $ruby = new Language('Ruby', imports: '/^require(_relative)?\\b/', extensions: ['.rb', '.rake', '.gemspec'], filenames: ['Gemfile', 'Rakefile', 'Podfile', 'Fastfile'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
             increaseIndent: '/^\s*(class|module|def|if|unless|else|elsif|while|until|for|begin|rescue|ensure|case|when)\b|\bdo(\s*\|.*\|)?\s*$|[\[({]\s*$/', decreaseIndent: '/^\s*(end|else|elsif|rescue|ensure|when)\b/',
             tokenizer: new Lexer(lineComments: ['#'],
@@ -237,13 +281,21 @@ final class Languages
                     T::TYPE, 'double float int32 int64 uint32 uint64 sint32 sint64 fixed32 fixed64 sfixed32 sfixed64 bool string bytes',
                     T::CONSTANT, 'true false'),
                 capitalTypes: true, operators: '=<>'));
+        $graphql = new Language('GraphQL', extensions: ['.graphql', '.gql', '.graphqls'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 2,
+            tokenizer: new Lexer(lineComments: ['#'],
+                // A spread, ..., is a string that ends where it starts, so that the name after it is no property, as one after a dot is.
+                strings: [new LexString('"""', '"""', multiline: true), $q('"'), new LexString('...', '', kind: T::PUNCTUATION)],
+                words: Lexer::words(T::KEYWORD, 'query mutation subscription fragment on type interface union enum input scalar schema extend implements directive repeatable',
+                    T::TYPE, 'Int Float String Boolean ID',
+                    T::CONSTANT, 'true false null'),
+                capitalTypes: true, keys: true, variables: true, decorator: '@', operators: '!=:|&'));
         $zig = new Language('Zig', imports: '/^(pub\\s+)?const\\s+\\w+\\s*=\\s*@import\\(/', extensions: ['.zig', '.zon'], lineComment: '//', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], strings: [$q('"'), $q("'"), new LexString('\\\\', "\0")],
                 words: Lexer::words(T::KEYWORD, 'addrspace align allowzero and anyframe anytype asm async await break callconv catch comptime const continue defer else enum errdefer error export extern fn for if inline linksection noalias noinline nosuspend opaque or orelse packed pub resume return struct suspend switch test threadlocal try union unreachable usingnamespace var volatile while',
                     T::TYPE, 'i8 u8 i16 u16 i32 u32 i64 u64 i128 u128 isize usize f16 f32 f64 f80 f128 bool void noreturn type anyerror comptime_int comptime_float',
                     T::CONSTANT, 'true false null undefined'),
                 calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
-        return [$go, $javascript, $typescript, $json, $python, $rust, $c, $cpp, $java, $kotlin, $swift, $csharp,
-            $shell, $yaml, $toml, $sql, $ruby, $lua, $php, $css, $html, $xml, $markdown, $diff, $dockerfile, $makefile, $protobuf, $zig];
+        return [$go, $javascript, $typescript, $json, $python, $rust, $c, $cpp, $java, $kotlin, $scala, $swift, $dart, $csharp,
+            $shell, $yaml, $toml, $sql, $r, $ruby, $lua, $php, $css, $html, $xml, $markdown, $diff, $dockerfile, $makefile, $protobuf, $graphql, $zig];
     }
 }
