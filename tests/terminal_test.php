@@ -502,6 +502,31 @@ TermClock::install();
 })();
 
 (function () {
+    // The pointer is Ghostty's (mygo's TestPointerShape): the I-beam, the arrow while a program takes the mouse (the I-beam with Shift, which selects then), and the shape a program asks for with OSC 22 until the mouse mode changes again.
+    $term = Terminal::new(new Options(conn: new TermPipe));
+    $term->feed('hello');
+    $tt = new TermTester($term);
+    [$x, $y] = $tt->cell(1, 0);
+    $tt->hover($x, $y);
+    $step = function (string $feed, int $mods, \MyPHP\UI\Cursor $want, string $why) use ($term, $tt): void {
+        $term->feed($feed);
+        $tt->h->input->mods = $mods;
+        $tt->frame();
+        same($want, $tt->node->cursor, "pointer: $why");
+    };
+    $step('', 0, \MyPHP\UI\Cursor::Text, 'a shell');
+    $step("\x1b[?1000h\x1b[?1006h", 0, \MyPHP\UI\Cursor::Default, 'a program taking the mouse');
+    $step('', Key::SHIFT, \MyPHP\UI\Cursor::Text, 'Shift over a program taking the mouse');
+    $step('', 0, \MyPHP\UI\Cursor::Default, 'Shift let go of');
+    $step("\x1b]22;pointer\x07", 0, \MyPHP\UI\Cursor::Pointer, 'OSC 22 pointer');
+    $step("\x1b]22;col-resize\x07", 0, \MyPHP\UI\Cursor::ResizeColumn, 'OSC 22 col-resize');
+    $step("\x1b[?1000l\x1b[?1006l", 0, \MyPHP\UI\Cursor::Text, 'the mouse given back');
+    $step("\x1b]22;crosshair\x07", 0, \MyPHP\UI\Cursor::Crosshair, 'OSC 22 without the mouse');
+    $step("\x1b]22;\x07", 0, \MyPHP\UI\Cursor::Text, 'OSC 22 reset, to the I-beam');
+    $term->close();
+})();
+
+(function () {
     // Without openLink, the system opens hyperlinks, paths are no links, a hand shows over a link while Command is held, and a click on a link goes before a program that takes the mouse.
     $conn = new TermPipe;
     $term = Terminal::new(new Options(conn: $conn));

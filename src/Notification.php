@@ -92,18 +92,35 @@ final class Notification
      * capability, with an incomplete sender or an avatar no image, or when
      * the update fails, $content as it is.
      */
+    /**
+     * The avatar's bytes as the Intents image service takes them (mygo's
+     * communicationAvatar): what NSImage reads, as a PNG, since NSImage
+     * reads SVG, which the service refuses; null for what it can't read,
+     * which keeps the ordinary notification.
+     */
+    private static function communicationAvatar(string $avatar)
+    {
+        $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $avatar, strlen($avatar));
+        $decoded = ObjC::msg('p:p', ObjC::alloc('NSImage'), 'initWithData:', $data);
+        if ($decoded === null) {
+            return null;
+        }
+        $rep = ObjC::msg('p:p', ObjC::cls('NSBitmapImageRep'), 'imageRepWithData:', ObjC::msg('p:', $decoded, 'TIFFRepresentation'));
+        $png = $rep === null ? null : ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary')); // NSBitmapImageFileTypePNG
+        ObjC::msg('v:', $decoded, 'release');
+        return $png !== null && ObjC::msg('L:', $png, 'length') > 0 ? $png : null;
+    }
+
     private function communicationContent($content)
     {
         $o = $this->options; $s = $o->sender;
         if ($s->id === '' || $s->avatar === '' || !self::communicationAuthorized()) {
             return $content;
         }
-        $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $s->avatar, strlen($s->avatar));
-        $decoded = ObjC::msg('p:p', ObjC::alloc('NSImage'), 'initWithData:', $data);
-        if ($decoded === null) {
+        $data = self::communicationAvatar($s->avatar);
+        if ($data === null) {
             return $content;
         }
-        ObjC::msg('v:', $decoded, 'release');
         $handle = ObjC::msg('p:pl', ObjC::alloc('INPersonHandle'), 'initWithValue:type:', ObjC::str($s->id), 0); // unknown: the app's own id, no contact detail
         $person = ObjC::msg('p:ppppppbl', ObjC::alloc('INPerson'), 'initWithPersonHandle:nameComponents:displayName:image:contactIdentifier:customIdentifier:isMe:suggestionType:',
             $handle, null, ObjC::str($s->name), ObjC::msg('p:p', ObjC::cls('INImage'), 'imageWithImageData:', $data), null, ObjC::str($s->id), false, 0);

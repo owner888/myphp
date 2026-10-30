@@ -5785,6 +5785,20 @@ inside its border now, as mygo's paintInput does: at the box's edges for a
 field without a border, a point in for the theme's, where the padding
 keeps the text clear of it as before (tests/textarea_test.php).
 
+## A terminal's pointer as Ghostty's, avatars as PNGs (v1.83)
+
+- **The terminal's pointer** (mygo 0104a5f): `View::pointerShape` picks
+  it each frame as Ghostty does: the I-beam over a shell, the arrow while
+  the program takes the mouse, the I-beam again while Shift is held (Shift
+  selects then), and the shape the program asks for with OSC 22
+  (`Vt\Terminal::mouseShape`, a GhosttyMouseShape, mapped to the nearest
+  `UI\Cursor` by `cursorOf`) until it takes or leaves the mouse again;
+  the hand over a link with Command stays first.
+- **A sender's avatar** (mygo 768644e): `Notification::communicationAvatar`
+  hands Intents the avatar redrawn as a PNG (NSImage, then
+  NSBitmapImageRep), as NSImage reads SVG, which the Intents image
+  service refuses; what NSImage can't read keeps the plain notification.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

@@ -142,6 +142,7 @@ check($t->byText('This window shows no material here, so the sidebar draws a bac
 // todo: the store, and its event in the TypeScript client.
 Headless::load('todo', 'function openWindow');
 $path = sys_get_temp_dir() . '/myphp-todo-' . getmypid() . '.json';
+if (is_file($path)) { unlink($path); } // left by a run that stopped early, under a process id used again
 \MyPHP\Examples\Todo\Todos::$changed = new \MyPHP\Event('todos:changed', \MyPHP\Examples\Todo\Stats::class);
 $store = new \MyPHP\Examples\Todo\Todos($path);
 $a = $store->add(' Milk '); $store->add('Bread');

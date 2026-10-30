@@ -27,7 +27,11 @@ use MyPHP\UI\{Context, DisplayList, Menu, MenuItem, Node, Role, Runtime, TextInp
  * the program takes the mouse, and zooms with Command held
  * (Options::$onZoom). Hold Shift to select while a program takes the
  * mouse, and Command to open a link on click: a hyperlink (OSC 8), a URL
- * printed as text, or a file path with Options::$openLink.
+ * printed as text, or a file path with Options::$openLink. The pointer
+ * is Ghostty's: the I-beam over a shell, the arrow while a program takes
+ * the mouse (the I-beam again while Shift is held, as Shift selects then),
+ * and the shape a program asks for with OSC 22 (pointer, crosshair,
+ * col-resize…) until it takes or leaves the mouse again.
  *
  * @internal
  */
@@ -80,6 +84,12 @@ final class View implements TextInputClient
     public array $pointer = [0.0, 0.0];
     /** Command is held over a link, which a click opens; the primary button pressed one, and the press is the link's until the release. */
     public bool $hoverLink = false, $linkPress = false;
+    /** The pointer over the grid (pointerShape); whether the program took the mouse as of the last frame, and the shape taking or leaving it showed while the program's own (OSC 22) is still the one it had then. */
+    public \MyPHP\UI\Cursor $pointerAt = \MyPHP\UI\Cursor::Text;
+    private bool $tracking = false;
+    private int $modeShape = self::SHAPE_TEXT, $modeOsc = 0;
+    /** Ghostty's pointer shapes (GhosttyMouseShape) the view picks itself: the arrow and the I-beam. */
+    private const SHAPE_DEFAULT = 0, SHAPE_TEXT = 8;
     /** The link a click asked to open, and whether it is a file path, which the system does not open. */
     public string $opening = '';
     public bool $openingPath = false;
@@ -120,12 +130,45 @@ final class View implements TextInputClient
         $e->ownRing = true; // no focus ring
         $e->role(Role::GROUP)->label('Terminal');
         $v->update($c, $c->focused($e));
-        $e->cursor($v->hoverLink ? \MyPHP\UI\Cursor::Pointer : \MyPHP\UI\Cursor::Text);
+        $e->cursor($v->hoverLink ? \MyPHP\UI\Cursor::Pointer : $v->pointerAt);
         $e->handleInput($v->input(...));
         $e->handleTextInput($v);
         $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
         $e->contextMenu($v->menu(...));
         return $e;
+    }
+
+    /**
+     * The pointer over the grid, as Ghostty shows it (mygo's pointerShape):
+     * the shape the program asked for (OSC 22), the I-beam until it asks;
+     * the arrow once it takes the mouse, and the I-beam again once it
+     * leaves it, until it asks for another; and the I-beam while Shift is
+     * held over a program that takes the mouse, as Shift selects then.
+     */
+    private function pointerShape(VtTerminal $term, int $mods): \MyPHP\UI\Cursor
+    {
+        $asked = $term->mouseShape();
+        if (($tracking = $term->mouseTracking()) !== $this->tracking) {
+            [$this->tracking, $this->modeOsc] = [$tracking, $asked];
+            $this->modeShape = $tracking ? self::SHAPE_DEFAULT : self::SHAPE_TEXT;
+        }
+        if ($this->tracking && ($mods & \MyPHP\UI\Key::SHIFT) !== 0) {
+            return \MyPHP\UI\Cursor::Text;
+        }
+        return self::cursorOf($asked === $this->modeOsc ? $this->modeShape : $asked);
+    }
+
+    /** The pointer for a Ghostty pointer shape, as OSC 22 names them: the nearest one the system has, or the arrow (mygo's cursorOf). */
+    private static function cursorOf(int $shape): \MyPHP\UI\Cursor
+    {
+        static $shapes = null;
+        $shapes ??= array_map(fn(string $c) => \MyPHP\UI\Cursor::from($c), [
+            'default', 'context-menu', 'default' /* help */, 'pointer', 'default' /* progress */, 'default' /* wait */, 'crosshair' /* cell */, 'crosshair',
+            'text', 'vertical-text', 'alias', 'copy', 'move', 'not-allowed' /* no-drop */, 'not-allowed', 'grab', 'grabbing', 'move' /* all-scroll */,
+            'col-resize', 'row-resize', 'n-resize', 'e-resize', 's-resize', 'w-resize', 'nesw-resize' /* ne */, 'nwse-resize' /* nw */, 'nwse-resize' /* se */,
+            'nesw-resize' /* sw */, 'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize', 'default' /* zoom-in */, 'default' /* zoom-out */,
+        ]);
+        return $shapes[$shape] ?? \MyPHP\UI\Cursor::Default;
     }
 
     /** Updates the view as a frame builds. */
@@ -152,6 +195,7 @@ final class View implements TextInputClient
             }
             // The hand over a link follows Command as it is pressed and let go of, with the pointer still.
             $this->hoverLink = $this->linkUnder($c->modifiers(), $this->pointer[0], $this->pointer[1])[0] !== '';
+            $this->pointerAt = $this->pointerShape($t->term, $c->modifiers());
             // Input methods compose where the cursor is now, which the last frame may not show yet.
             $this->caretCell = [$this->cursor->x, $this->cursor->y];
             if ($t->term->atBottom()) {
