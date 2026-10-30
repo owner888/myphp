@@ -2004,3 +2004,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   myphp, whose `Selection` keeps its pivot by its item's key.
 - **Linking**: mygo registers list code the first list builds, so that
   apps without lists link none; PHP loads classes as they are used.
+
+## Occlusion culling (v1.74)
+
+- **Occluders**: mygo looks under every opaque fill; myphp only under
+  those of 40,000 square points or more, and of a rect or a box, as the
+  look costs PHP more than a small one saves.
+- **Not taken**: drawing large shadows and border rings as strips around
+  their empty interiors, the unblended pipeline for opaque fill cores,
+  fragment pipelines specialized by batch class and compiled on a
+  worker. myphp's quads draw in one instanced call a pass, which strips
+  with scissors of their own would split; Apple's GPUs blend an opaque
+  pixel at little more than writing it.

@@ -900,6 +900,7 @@ final class Metal
             self::$redrew[$key] = 'nothing';
             return; // the same frame: the drawable shows it
         }
+        $list->cull(); // what later opaque fills hide whole is left out, the damage taken first: the pixels are the same
         $pass = ObjC::msg('p:', $view, 'currentRenderPassDescriptor');
         $drawable = ObjC::msg('p:', $view, 'currentDrawable');
         if ($pass === null || $drawable === null) {
@@ -928,7 +929,7 @@ final class Metal
             unset(self::$held[$key][$gone]);
         });
         $rects = $part !== null && FrameDamage::worth($part, (int)$ds->w, (int)$ds->h) && $list->n + count($part) <= $list->capacity ? $part : null;
-        self::$redrew[$key] = $rects === null ? 'whole' : count($rects) . ' rectangles';
+        self::$redrew[$key] = ($rects === null ? 'whole' : count($rects) . ' rectangles') . ($list->culled > 0 ? ", {$list->culled} quads hidden left out" : ''); // and what cull() left out, as mygo's frame stats count
         // One pass draws everything; a glass quad splits it: what is below it is drawn, copied and
         // blurred into the backdrop, and the pass goes on from the glass, which reads the blur.
         $this->drawList($cb, $pass, $texture, $list, [$this->buffers[$this->frame % self::RING], $this->xformBuffers[$this->frame % self::RING]], $rects, $cc);

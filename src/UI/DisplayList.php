@@ -67,6 +67,14 @@ final class DisplayList
     public array $glass = [];
     /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
     public array $holes = [];
+    /** @var list<array{0: int, 1: float, 2: float, 3: float, 4: float}> the opaque fills large enough to hide what is under them (cull()): their quad and the part of the window they certainly cover whole, x0 y0 x1 y1, within their clip */
+    private array $occluders = [];
+    /** How many quads the last cull() left out (mygo's Builder.Culled). */
+    public int $culled = 0;
+    /** The least area of an opaque fill that cull() looks under, in points, a panel's, a sheet's or a popover's: what a smaller one hides saves the GPU less than the look costs PHP (measured on the gallery, 0.3 ms a frame for 14 quads under its cards). */
+    private const OCCLUDER_AREA = 40000.0;
+    /** How many occluders cull() keeps as it goes back, the largest (mygo's cullOccluders). */
+    private const OCCLUDERS = 8;
     /** @var list<array{0: int, 1: float, 2: float, 3: float, 4: float, 5: float, 6: float}> the quads drawn in a wide color (WideColor): their first float, their sRGB components and their wide ones (mygo's scene Wide) */
     public array $wide = [];
     private array $clip = self::NO_CLIP;
@@ -251,6 +259,7 @@ final class DisplayList
         $this->n = 0;
         $this->glass = [];
         $this->holes = [];
+        $this->occluders = [];
         $this->wide = [];
         $this->clip = self::NO_CLIP;
         $this->clips = [];
@@ -313,7 +322,86 @@ final class DisplayList
         if ($rgb > 0xffffff && $b[$k + 7] > 0) { $this->noteWide($k, $rgb); } // a wide color that shows
         $b[$k + 8] = $radius; $b[$k + 9] = $this->xk;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
+        if ($w * $h >= self::OCCLUDER_AREA && $this->xk == 0.0 && $alpha * $this->opacity >= 1.0) { $this->occluder($this->n, $x, $y, $w, $h, $radius, 0.0); }
         $this->n++;
+    }
+
+    /**
+     * Notes quad $i, an opaque fill of $x $y $w $h through
+     * no map or mask, rounded by $radius at most, inside a border $border
+     * wide, as an occluder: the part of it whose every pixel it covers
+     * whole with its color, as the shader computes coverage (one where the
+     * edge is half a point away or more), the curve of its corners and its
+     * border left out, within its clip.
+     */
+    private function occluder(int $i, float $x, float $y, float $w, float $h, float $radius, float $border): void
+    {
+        $m = 0.3 * $radius + 0.5 + $border; // a rounded corner's curve stays outside the rect in by 0.29 of its radius
+        $c = $this->clip;
+        $x0 = max($x + $m, $c[0]); $y0 = max($y + $m, $c[1]);
+        $x1 = min($x + $w - $m, $c[0] + $c[2]); $y1 = min($y + $h - $m, $c[1] + $c[3]);
+        if ($x1 > $x0 && $y1 > $y0) { $this->occluders[] = [$i, $x0, $y0, $x1, $y1]; }
+    }
+
+    /**
+     * Leaves out the quads that a later opaque fill covers whole (mygo's
+     * occlusion culling, planCull): going back from the last fill noted
+     * (occluder()), keeping the largest few seen, a quad drawn through no
+     * map whose box, a point more each way for its smoothed edge, within its
+     * clip, lies inside one of them is given the kind -1, which draws
+     * nothing, as its slots after it. What reads what was drawn before it
+     * (glass, a backdrop blur, the hard scroll edge) stops it: what is drawn
+     * after it cannot hide what came before. The pixels are those of
+     * drawing everything. Run after the frame's damage was taken from the
+     * list, before it is drawn; returns how many it left out.
+     */
+    public function cull(): int
+    {
+        $this->culled = 0;
+        if ($this->occluders === []) {
+            return 0;
+        }
+        $b = $this->buf; $occ = $this->occluders; $next = count($occ) - 1;
+        $active = [];
+        for ($i = $occ[$next][0]; $i >= 0; $i--) {
+            $k = $i * 16;
+            $kind = $b[$k + 9];
+            if ($kind >= 0.0 && $kind < self::KIND_STRIDE) {
+                if ($kind > 4.5 && $kind < 8.5 && $kind != 6.0) { // glass (5), a backdrop blur's level (7), the hard scroll edge (8): a barrier
+                    $active = [];
+                } elseif ($active !== []) {
+                    $x0 = $b[$k] - 1; $y0 = $b[$k + 1] - 1; $x1 = $x0 + $b[$k + 2] + 2; $y1 = $y0 + $b[$k + 3] + 2;
+                    $cx = $b[$k + 12]; $cy = $b[$k + 13];
+                    if ($x0 < $cx) { $x0 = $cx; }
+                    if ($y0 < $cy) { $y0 = $cy; }
+                    if ($x1 > ($cx += $b[$k + 14])) { $x1 = $cx; }
+                    if ($y1 > ($cy += $b[$k + 15])) { $y1 = $cy; }
+                    foreach ($active as $o) {
+                        if ($x0 >= $o[1] && $y0 >= $o[2] && $x1 <= $o[3] && $y1 <= $o[4]) {
+                            $b[$k + 9] = -1.0;
+                            $this->culled++;
+                            break;
+                        }
+                    }
+                }
+            }
+            while ($next >= 0 && $occ[$next][0] === $i) { // it hides what came before it from here on
+                $o = $occ[$next--];
+                $o[0] = ($o[3] - $o[1]) * ($o[4] - $o[2]);
+                if (count($active) < self::OCCLUDERS) {
+                    $active[] = $o;
+                } else {
+                    $small = 0;
+                    foreach ($active as $j => $a) { if ($a[0] < $active[$small][0]) { $small = $j; } }
+                    if ($o[0] > $active[$small][0]) { $active[$small] = $o; }
+                }
+            }
+            if ($active === []) {
+                if ($next < 0) { break; }
+                $i = min($i, $occ[$next][0] + 1); // nothing to hide under until the next one
+            }
+        }
+        return $this->culled;
     }
 
     /**
@@ -440,6 +528,9 @@ final class DisplayList
             $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)($rgb2 & 0xffffff), $alpha2 * $this->opacity, 2); // a gradient's or stripes' second color and the border's are packed: they draw their sRGB twins
         }
         $r = self::fitRadii($w, $h, $radii);
+        if ($paint === self::PAINT_COLOR && $w * $h >= self::OCCLUDER_AREA && $this->xk == 0.0 && $alpha * $this->opacity >= 1.0) {
+            $this->occluder($this->n - 1, $x, $y, $w, $h, max($r), $borderAlpha > 0 ? max($borders) : 0.0);
+        }
         $this->slot($r, $borders, (float)($borderRgb & 0xffffff), $borderAlpha * $this->opacity, $paint + ($dashed ? self::DASHED : 0) + ($borderPaint ? self::BORDER_PAINT : 0), $g);
         $this->stops($stops, $n, $borderPaint ? 1.0 : $this->opacity); // a border's color, at the opacity, times the gradient
     }

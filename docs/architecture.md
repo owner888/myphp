@@ -5543,6 +5543,29 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   double click this frame landed on it (`Runtime::doubleClickOver`),
   without taking it from the row.
 
+## Occlusion culling (v1.74)
+
+- **What goes** (`DisplayList::cull`, mygo's 9e5bdc3 `planCull`): as
+  `rect()` and `box()` write an opaque fill (alpha 1 at the list's
+  opacity, plain color, through no map or mask) of at least 40,000
+  square points, a panel's, a sheet's or a popover's, the list notes the
+  part it certainly covers whole: its box less half a point of smoothed
+  edge, 0.3 of its largest corner radius (a corner's curve stays outside
+  the box in by 0.29 of its radius), and a box's border, within its clip.
+  `Metal::present`, once the frame's damage is taken from the list and
+  before it draws it, has `cull()` go back from the last fill noted,
+  keeping the eight largest seen, as mygo does: a quad drawn through no
+  map whose box, a point more each way, within its clip, lies inside one
+  gets the kind -1, which the vertex stage draws nothing for, as a box's
+  slots after it. Glass, a backdrop blur's level and the hard scroll
+  edge read what is under them: they stop the look. The pixels are those
+  of drawing everything; the frame's statistics count the quads left out.
+- **Cost**: the look reads the quads from the buffer, about 0.2 ms a
+  frame for the gallery's 495 quads in the Linux container the tests
+  run in, against its 0.9 ms of painting; smaller fills would be looked
+  under for less than they save the GPU, so they are not noted. Lists
+  without a fill that large cost nothing.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
