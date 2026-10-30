@@ -45,12 +45,52 @@ final class Http
      */
     public static function download(string $url, int $size, string $path, ?\Closure $progress, ?\Closure $stop = null): string
     {
+        return self::save(fn(\Closure $take) => self::request($url, $take, $stop), $size, $path, $progress);
+    }
+
+    /**
+     * download() for the file an UpdateSource opened, $in, a readable
+     * stream, which it reads to its end and closes.
+     *
+     * @param resource $in
+     * @param ?\Closure(int, int): void $progress
+     * @param ?\Closure(): bool $stop
+     */
+    public static function downloadStream($in, int $size, string $path, ?\Closure $progress, ?\Closure $stop = null): string
+    {
+        if (!is_resource($in)) {
+            throw new RuntimeException('the update source opened no stream');
+        }
+        try {
+            return self::save(function (\Closure $take) use ($in, $stop): void {
+                while (!feof($in)) {
+                    if ($stop !== null && $stop()) { throw new Canceled; }
+                    $b = fread($in, 1 << 16);
+                    if ($b === false) { throw new RuntimeException('reading the update source\'s file failed'); }
+                    if ($b !== '' && !$take($b)) { return; }
+                    if ($b === '') { Fibers::sleep(0.001); } // a stream that has nothing yet: the app runs meanwhile
+                }
+            }, $size, $path, $progress);
+        } finally {
+            fclose($in);
+        }
+    }
+
+    /**
+     * What $read gives its sink, the body, written into $path, which must
+     * have $size bytes; its SHA-256.
+     *
+     * @param \Closure(\Closure(string): bool): void $read
+     * @param ?\Closure(int, int): void $progress
+     */
+    private static function save(\Closure $read, int $size, string $path, ?\Closure $progress): string
+    {
         $out = fopen($path, 'wb') ?: throw new RuntimeException("cannot create $path");
         $sum = hash_init('sha256');
         $n = 0;
         $last = 0.0;
         try {
-            self::request($url, function (string $b) use ($out, $sum, &$n, $size, $progress, &$last): bool {
+            $read(function (string $b) use ($out, $sum, &$n, $size, $progress, &$last): bool {
                 $n += strlen($b);
                 if ($n > $size) {
                     return false;
@@ -62,7 +102,7 @@ final class Http
                     $progress($n, $size);
                 }
                 return true;
-            }, $stop);
+            });
         } catch (RuntimeException $e) {
             if ($n <= $size) {
                 throw new RuntimeException("downloading: {$e->getMessage()}", 0, $e);

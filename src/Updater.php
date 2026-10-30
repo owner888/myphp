@@ -35,6 +35,21 @@ final class Updater
     /** @internal set by tests in place of the bundle the app runs from */
     public static ?string $target = null;
     private static bool $prereleases = false;
+    private static ?UpdateSource $source = null;
+
+    /**
+     * Makes check() read the manifest from $s, and Update::install()
+     * download the files it names through $s, instead of from the feed of
+     * myphp.json; null restores the feed (mygo's SetSource). Updates are
+     * still enabled only in builds with updates in myphp.json (enabled()),
+     * which give the key updates are checked with: an update not signed
+     * with it is refused, and the app is left as it was. An Update check()
+     * returned keeps downloading from the source it came from.
+     */
+    public static function setSource(?UpdateSource $s): void
+    {
+        self::$source = $s;
+    }
 
     /**
      * Makes check() offer prereleases too, as 1.3.0-beta.1, for the users
@@ -81,8 +96,8 @@ final class Updater
     }
 
     /**
-     * Asks the update feed for a version newer than the running one and
-     * returns it, or null when the app is up to date. It throws
+     * Asks the update feed, or the source of setSource(), for a version
+     * newer than the running one and returns it, or null when the app is up to date. It throws
      * ErrUpdatesDisabled when the app cannot update itself.
      *
      * @param ?Closure(): bool $canceled stops it once it returns true (mygo's context)
@@ -92,7 +107,23 @@ final class Updater
         if (!self::enabled()) {
             throw new ErrUpdatesDisabled;
         }
-        return self::checkFeed(self::feed(), self::key(), App::version(), $canceled, self::$prereleases);
+        return self::$source !== null ? self::checkSource(self::$source, self::key(), App::version(), $canceled, self::$prereleases)
+            : self::checkFeed(self::feed(), self::key(), App::version(), $canceled, self::$prereleases);
+    }
+
+    /** @internal what check() asks of a source of setSource() */
+    public static function checkSource(UpdateSource $s, string $key, string $current, ?Closure $canceled = null, bool $prereleases = false): ?Update
+    {
+        try {
+            $json = $s->manifest($prereleases, $canceled);
+            if (strlen($json) > Format::MAX_MANIFEST_SIZE) {
+                throw new RuntimeException('the manifest is over ' . Format::MAX_MANIFEST_SIZE . ' bytes');
+            }
+            $m = Format::manifest($json);
+        } catch (RuntimeException $e) {
+            throw new RuntimeException("myphp: checking for updates: {$e->getMessage()}", 0, $e);
+        }
+        return self::newer($m, $key, $current, $s);
     }
 
     /** @internal what check() asks */
@@ -108,11 +139,17 @@ final class Updater
         } catch (RuntimeException $e) {
             throw new RuntimeException("myphp: checking for updates: {$e->getMessage()}", 0, $e);
         }
+        return self::newer($m, $key, $current, null);
+    }
+
+    /** The update of manifest $m, from $source (null: the feed), or null when it is no newer than $current. @param array<string, mixed> $m */
+    private static function newer(array $m, string $key, string $current, ?UpdateSource $source): ?Update
+    {
         if (Format::compare($m['version'], $current) <= 0) {
             return null;
         }
         $date = DateTimeImmutable::createFromFormat(DATE_RFC3339, (string)($m['date'] ?? '')) ?: null;
-        return new Update($m['version'], (string)($m['notes'] ?? ''), $date, $m, $key, $current);
+        return new Update($m['version'], (string)($m['notes'] ?? ''), $date, $m, $key, $current, $source);
     }
 
     /** @internal what an update replaces: the app bundle */

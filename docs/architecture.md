@@ -6370,6 +6370,24 @@ succeeds are told of, an empty line is none.
   it: `Lexer::startsWith` takes no empty prefix, so `inString` ends one at
   once.
 
+## Updates from a source the app supplies (v1.111)
+
+- mygo e8cf607: `Updater::setSource(?UpdateSource)` makes `check()` read
+  the manifest from the app's `UpdateSource` (`manifest($prereleases,
+  $canceled)`, the JSON `myphp build` writes, at most 1 MiB), and the
+  `Update` it returns download the archive or a delta through it
+  (`open($url, $canceled)`, a readable stream of the file the manifest
+  names, by whatever URL or id the source understands); null restores the
+  feed of myphp.json. An update service of the app's own, an endpoint that
+  needs the user's credentials, a channel chosen while the app runs.
+- The manifest's parsing and limits, the sizes, the signatures against the
+  build's public key, the staging and the swap are the feed's: an update
+  not signed with the key is refused and the app left as it was. Builds
+  still need updates in myphp.json (`enabled()`), which give the key.
+  `Http::download` and `Http::downloadStream` (a source's stream, read in
+  64 KiB pieces, the fiber waiting while it has nothing yet) share one sink
+  (`Http::save`): the size, the SHA-256, the progress.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

@@ -392,6 +392,47 @@ try {
         check(updThrows(fn() => Updater::checkFeed("$base/update.json", base64_encode($pk), '1.0.0', fn() => true)) !== '', 'a canceled check');
         // Builds without updates.
         Updater::$target = null;
+
+        // A source of the app's own (mygo's TestUpdaterSource): its manifest names the files by ids only open() knows, the feed unread.
+        $src = new class($www, $manifest) implements \MyPHP\UpdateSource {
+            public array $pre = [], $opened = [];
+            public function __construct(private string $www, public array $m) {}
+            public function manifest(bool $prereleases, ?\Closure $canceled): string { $this->pre[] = $prereleases; return json_encode($this->m); }
+            public function open(string $url, ?\Closure $canceled)
+            {
+                $this->opened[] = $url;
+                str_starts_with($url, 'service:') || throw new \RuntimeException("$url is not a file of the service");
+                return fopen($this->www . '/' . substr($url, 8), 'rb');
+            }
+        };
+        $src->m['url'] = 'service:my-1.1.0.tar.gz'; // which the updater's requests refuse: only the source opens it
+        file_put_contents("$www/update.json", '{}');
+        $u = Updater::checkSource($src, base64_encode($pk), '1.0.0', null, true);
+        same(['1.1.0', '- Faster', [true]], [$u?->version, $u?->notes, $src->pre], 'checked from the source, which hears of prereleases');
+        $target = $app(updDir(), '1.0.0', $bin);
+        Updater::$target = $target;
+        $seen = [];
+        $prog = function (int $n, int $total) use (&$seen) { $seen[] = [$n, $total]; };
+        updStaged(fn() => $u->install($prog), $target);
+        same(['1.1.0', ['service:my-1.1.0.tar.gz'], [filesize("$www/my-1.1.0.tar.gz"), filesize("$www/my-1.1.0.tar.gz")]],
+            [file_get_contents("$target/Contents/version.txt"), $src->opened, end($seen)], 'installed from the source\'s file, with its progress');
+        $src->m['signature'] = '';
+        check(updThrows(fn() => Updater::checkSource($src, base64_encode($pk), '1.0.0')) !== '', 'an unsigned update of a source refused');
+        $src->m['signature'] = base64_encode(str_repeat("\0", 64));
+        $u = Updater::checkSource($src, base64_encode($pk), '1.0.0');
+        $target = $app(updDir(), '1.0.0', $bin);
+        Updater::$target = $target;
+        check(str_contains(updThrows(fn() => $u->install()), 'not signed with the app\'s key'), 'one signed badly refused');
+        same('1.0.0', file_get_contents("$target/Contents/version.txt"), 'the app left as it was');
+        $src->m['size'] = $manifest['size'] + 5; $src->m['signature'] = $manifest['signature'];
+        $u = Updater::checkSource($src, base64_encode($pk), '1.0.0');
+        check(str_contains(updThrows(fn() => $u->install()), 'downloaded'), 'a source\'s file of another size refused');
+        check(str_contains(updThrows(fn() => Updater::checkSource(new class implements \MyPHP\UpdateSource {
+            public function manifest(bool $p, ?\Closure $c): string { return str_repeat(' ', Format::MAX_MANIFEST_SIZE + 1); }
+            public function open(string $url, ?\Closure $c) { return null; }
+        }, base64_encode($pk), '1.0.0')), 'over'), 'a manifest over 1 MiB refused');
+        Updater::setSource($src);
+        Updater::setSource(null);
         check(!Updater::enabled(), 'not enabled without a bundle and a feed');
         try { Updater::check(); check(false, 'checked'); } catch (ErrUpdatesDisabled) { check(true, 'ErrUpdatesDisabled'); }
     } finally {

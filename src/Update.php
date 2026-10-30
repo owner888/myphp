@@ -27,6 +27,8 @@ final class Update
         private readonly string $key,
         /** The version check compared with, which delta updates update. */
         private readonly string $current,
+        /** Where the manifest came from, which serves its files (Updater::setSource); null for the feed. */
+        private readonly ?UpdateSource $source = null,
     ) {}
 
     /**
@@ -90,7 +92,7 @@ final class Update
                 throw new RuntimeException("invalid size $size");
             }
             $archive = "$work/update.tar.gz";
-            self::download((string)$m['url'], $size, (string)$m['signature'], $pub, $archive, $progress, $canceled);
+            $this->download((string)$m['url'], $size, (string)$m['signature'], $pub, $archive, $progress, $canceled);
             mkdir($unpacked, 0o755);
             Archive::extract($archive, $unpacked);
             self::stageBundle($work, $unpacked, $target);
@@ -113,17 +115,18 @@ final class Update
             throw new RuntimeException("invalid size {$d['size']}");
         }
         $path = "$work/update.delta";
-        self::download($d['url'], $d['size'], $d['signature'], $pub, $path, $progress, $canceled);
+        $this->download($d['url'], $d['size'], $d['signature'], $pub, $path, $progress, $canceled);
         if (!@mkdir($dir, 0o755)) {
             throw new RuntimeException("cannot make $dir");
         }
         Delta::apply($path, $d['size'], $d['from'], $this->version, $target, $dir . '/' . basename($target));
     }
 
-    /** Fetches $url into $path and checks its size and signature. */
-    private static function download(string $url, int $size, string $signature, string $pub, string $path, ?Closure $progress, ?Closure $canceled): void
+    /** Fetches $url into $path, from the feed or the source the update came from, and checks its size and signature. */
+    private function download(string $url, int $size, string $signature, string $pub, string $path, ?Closure $progress, ?Closure $canceled): void
     {
-        $digest = Http::download($url, $size, $path, $progress, $canceled);
+        $digest = $this->source === null ? Http::download($url, $size, $path, $progress, $canceled)
+            : Http::downloadStream($this->source->open($url, $canceled), $size, $path, $progress, $canceled);
         Format::verify($pub, $digest, $signature);
     }
 
