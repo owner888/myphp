@@ -27,6 +27,25 @@ final class FlyoutOptions
         public int $gap = 0,
         public int $width = 200,
         public int $height = 200,
+        /**
+         * Sizes the flyout to its page's content, and follows it as it
+         * changes, as browsers size the popups of their extensions (mygo's
+         * FitContent): $width and $height are its size until the page tells
+         * its own, which it does before its DOM is ready, so a hidden flyout
+         * shown on 'readyToShow' shows at its size. The page's root element
+         * (html) is laid out at the width of its content, within $minWidth
+         * and $maxWidth, at which its text wraps; its height is its
+         * content's, the body's margins included, within $minHeight and
+         * $maxHeight, beyond which the page scrolls. A page that gives html
+         * a size of its own, as height: 100%, keeps the flyout at that size.
+         * Native UI ($content) does not fit.
+         */
+        public bool $fitContent = false,
+        /** Bound the size $fitContent gives the flyout, in points; 0 is no bound. The work area bounds it too, as any flyout. */
+        public int $minWidth = 0,
+        public int $minHeight = 0,
+        public int $maxWidth = 0,
+        public int $maxHeight = 0,
         /** Takes the keyboard as it shows, and closes as a menu does when the user presses outside it, another window takes the keyboard or the app is deactivated ('close' listeners may keep it open); a press on the anchor only closes it. Without it, it never takes the keyboard and stays until closed: tooltips, hover cards, a field's suggestions. Either closes on an Escape its content leaves. */
         public bool $focusable = false,
         public bool $hidden = false,

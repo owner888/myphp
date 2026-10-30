@@ -16,13 +16,18 @@
   let preferences = Object.freeze({ accent: null, reduceMotion: false, reduceTransparency: false, highContrast: false, textScale: 1 });
   let locale = cfg.locale || "en";
   let dir = cfg.dir === "rtl" ? "rtl" : "ltr";
-  // CSS variables PHP keeps on :root: the room of the window controls, the accent, the text scale.
+  // CSS variables PHP keeps on :root: the room of the window controls, the accent, the text scale; and the rule that fits the root to its
+  // content (fitRule), in MyPHP's style sheet.
   const vars = {};
+  let fitCss = "";
   let sheet = null, style = null;
   const setVars = (v) => {
     Object.assign(vars, v);
+    render();
+  };
+  const render = () => {
     const css = Object.entries(vars).filter(([, x]) => x !== null).map(([k, x]) => `${k}:${x}`).join(";");
-    const text = css ? `:root{${css}}` : "";
+    const text = (css ? `:root{${css}}` : "") + fitCss;
     if (document.adoptedStyleSheets) { // a constructed style sheet, which a Content Security Policy allows
       if (!sheet) { sheet = new CSSStyleSheet(); document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; }
       sheet.replaceSync(text);
@@ -341,7 +346,64 @@
     update();
     return () => { ready = true; report(current()); };
   })();
-  document.addEventListener("DOMContentLoaded", () => { themeColorReady(); post({ t: "dom-ready" }); });
+  // A window that takes the size of its page's content (FlyoutOptions::$fitContent, WindowOptions::$fitContent; mygo's fit-content.ts), as
+  // browsers size the popups of their extensions: the root is laid out at the width of its content within the window's limits (cfg.fit, in
+  // CSS pixels, 0 for none; myphp:fit-content as the zoom changes them), by a rule without specificity so that a page's own size for html
+  // wins, the room of a vertical scrollbar left out of the widths while the content is taller than the maximum height, so that text wraps
+  // at the maximum. Once the DOM is ready, before dom-ready, then from a ResizeObserver on the root and the window's resize events, it
+  // tells PHP the root's size and the scrollbars' room as they change; PHP clamps it, turns it into points and resizes the window.
+  const fitStart = (() => {
+    if (!cfg.fit) return () => {};
+    let limits = cfg.fit, scrollbar = 0, started = false, pending = false, last = null;
+    const rule = () => {
+      const d = ["width:max-content"];
+      if (limits.minWidth > 0) d.push(`min-width:${Math.max(limits.minWidth - scrollbar, 0)}px`);
+      if (limits.maxWidth > 0) d.push(`max-width:${Math.max(limits.maxWidth - scrollbar, 0)}px`);
+      if (limits.minHeight > 0) d.push(`min-height:${limits.minHeight}px`);
+      return `:where(:root){${d.join(";")}}`;
+    };
+    const apply = () => { fitCss = rule(); render(); };
+    const report = (s) => {
+      if (last && last.w === s.w && last.h === s.h && last.sw === s.sw && last.sh === s.sh) return;
+      last = s;
+      post({ t: "content-size", ...s });
+    };
+    // fromObserver: changing the root's size in a ResizeObserver's callback would end its loop with an error event, which the page would
+    // hear; the rule changes in the next frame then, and the observer tells the size.
+    const measure = (fromObserver) => {
+      const root = document.documentElement;
+      if (!root) return;
+      const viewport = document.scrollingElement ?? root;
+      const sw = Math.max(innerWidth - viewport.clientWidth, 0);
+      const sh = Math.max(innerHeight - viewport.clientHeight, 0);
+      let r = root.getBoundingClientRect();
+      // A vertical scrollbar shows for a moment whenever the content grows before the window does, and WebKit may keep it while it lays
+      // out: its room is left out of the width only where the content is taller than the window may be, and PHP decides whether it counts.
+      const room = limits.maxHeight > 0 && r.height > limits.maxHeight ? sw : 0;
+      if (room !== scrollbar) {
+        scrollbar = room;
+        if (!fromObserver) {
+          apply();
+          r = root.getBoundingClientRect();
+        } else if (!pending) {
+          pending = true;
+          requestAnimationFrame(() => { pending = false; apply(); });
+        }
+      }
+      const body = document.body; // the content overflows the root only when the root is at its maximum width
+      report({ w: r.width, h: r.height, sw, sh: body && body.scrollWidth > body.clientWidth ? sh : 0 });
+    };
+    apply();
+    window.myphp.on("myphp:fit-content", (l) => { limits = l; apply(); if (started) measure(false); });
+    return () => {
+      if (started) return;
+      started = true;
+      measure(false);
+      if (typeof ResizeObserver !== "undefined" && document.documentElement) new ResizeObserver(() => measure(true)).observe(document.documentElement);
+      addEventListener("resize", () => measure(false)); // the window's own size changed what scrollbars show
+    };
+  })();
+  document.addEventListener("DOMContentLoaded", () => { themeColorReady(); fitStart(); post({ t: "dom-ready" }); });
   // A press on an element whose --app-region (or -webkit-app-region) is drag moves the window; a double click zooms it as macOS is set to (mygo's drag regions). Controls stay controls.
   const controls = 'input,textarea,select,button,a[href],summary,label,[contenteditable]:not([contenteditable="false"]),video[controls],audio[controls]';
   const webkitRegion = typeof CSS !== "undefined" && CSS.supports("-webkit-app-region", "drag");

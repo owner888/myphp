@@ -6325,6 +6325,35 @@ succeeds are told of, an empty line is none.
   `scripts/gen-pinyin.php` writes it from the kMandarin field of Unicode
   16's Unihan (ext-zip, ext-intl), the first reading without its marks.
 
+## Windows that take their page's content's size (v1.109)
+
+- mygo 2311f8c: `FlyoutOptions::$fitContent` (with `$minWidth`,
+  `$minHeight`, `$maxWidth`, `$maxHeight`) and `WindowOptions::$fitContent`
+  (within the window's own limits) size the window to its page's content,
+  as browsers size their extensions' popups; native UI does not fit. The
+  bridge's configuration has `fit`, the limits in the page's CSS pixels
+  (`Native\FitContent::limits`), and the bridge adds
+  `:where(:root){width:max-content;min-width;max-width;min-height}` to
+  MyPHP's style sheet, without specificity so that a page's own size for
+  `html` wins, a vertical scrollbar's room left out of the widths while the
+  content is taller than the maximum height. At DOMContentLoaded, before
+  `dom-ready` (so a window shown on `readyToShow` shows at its size), then
+  from a `ResizeObserver` on the root and `resize` events, it posts
+  `{"t":"content-size","w","h","sw","sh"}`, the root's border box and the
+  scrollbars' room, as it changes. The same in every engine: WebKit's
+  private `_setSizeToContentAutoSizeMaximumSize:` is not used.
+- `Window::fitContentSize` turns it into points at the page's zoom (a
+  fraction of a pixel takes one; `FitContent::fit`) and clamps it; the
+  vertical scrollbar's room counts only where the content is taller than
+  the window may be. A flyout is placed again at it, as `setSize` does. A
+  window keeps in its display's work area and changes only in the
+  dimension that changed, so a user's resize holds until the content
+  changes, and not while maximized or in full screen; a size equal to the
+  last it took does nothing.
+- `Page::setZoomFactor` (and the zoom menu roles) sends the page its limits
+  in its new CSS pixels (`myphp:fit-content`), replaces the scripts of the
+  next pages, and fits the last content again.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

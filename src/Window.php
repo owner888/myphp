@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{Access, Dock, Drag, Drop, Metal, ObjC, Pasteboard, Screens, View, WindowStates};
+use MyPHP\Native\{Access, Dock, Drag, Drop, FitContent, Metal, ObjC, Pasteboard, Screens, View, WindowStates};
 use MyPHP\Transfer\{Data, DragOptions, Format, Operation, Result};
 use MyPHP\UI\{AccessTree, Context, DataDragEvent, DisplayList, Image, Input, Layout, Painter, Runtime};
 use RuntimeException;
@@ -31,6 +31,8 @@ final class Window
      * @var ?array{side: int, align: int, gap: int, anchor: Rectangle, tray: ?Tray, focusable: bool, popover: bool, width: int, height: int}
      */
     private ?array $flyout = null;
+    /** The limits and last size of a window that takes its page's content's (FlyoutOptions::$fitContent, WindowOptions::$fitContent), null for others. */
+    private ?FitContent $fit = null;
     /**
      * The NSPopover a flyout with FlyoutOptions::$popover shows in, and its
      * view controller: the popover makes its window as it shows, which is
@@ -204,6 +206,7 @@ final class Window
         $this->setTitle($o->title ?? App::name());
 
         if ($o->content === null) {
+            $this->fit = $this->flyout !== null ? $this->flyout['fit'] : ($o->fitContent ? new FitContent($o->minWidth, $o->minHeight, $o->maxWidth, $o->maxHeight) : null);
             $opening = self::$opening;
             self::$opening = null;
             $this->page = new Page($this, null, ObjC::rect(0, 0, $o->width, $o->height), $o->page, $opening);
@@ -2200,7 +2203,8 @@ final class Window
         }
         [$side, $align] = Flyout::PLACEMENTS[$o->placement] ?? throw new \InvalidArgumentException("unknown flyout placement \"{$o->placement}\"");
         $width = $o->width ?: 200; $height = $o->height ?: 200;
-        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'popover' => $o->popover, 'width' => $width, 'height' => $height, 'radius' => $o->cornerRadius];
+        self::$creating = ['side' => $side, 'align' => $align, 'gap' => $o->gap, 'anchor' => $o->anchor ?? new Rectangle(0, 0, 0, 0), 'tray' => $o->tray, 'focusable' => $o->focusable, 'popover' => $o->popover, 'width' => $width, 'height' => $height, 'radius' => $o->cornerRadius,
+            'fit' => $o->fitContent ? new FitContent($o->minWidth, $o->minHeight, $o->maxWidth, $o->maxHeight) : null];
         try {
             return new self(new WindowOptions(width: $width, height: $height, useContentSize: true, hidden: $o->hidden, frameless: true,
                 disableResize: true, disableMinimize: true, disableMaximize: true, disableFullScreen: true, disableShadow: !$o->shadow, transparent: true, vibrancy: $o->vibrancy,
@@ -2220,6 +2224,56 @@ final class Window
     public function isPanel(): bool
     {
         return $this->panel;
+    }
+
+    /** @internal Page: the limits of a window that takes its page's content's size, null for others */
+    public function fitContent(): ?FitContent
+    {
+        return $this->fit;
+    }
+
+    /**
+     * @internal Page: sizes a window that takes its page's size to its
+     * content's $c at its page's $zoom, as its bridge told it, unless that
+     * changes nothing (mygo's fitContentSize). A flyout is placed again at
+     * it, as setSize does. A window keeps in the work area of its display,
+     * and changes only in the dimension its content changed in: a size the
+     * user gave it holds until its content changes again; not while
+     * maximized or in full screen.
+     * @param array{w: float, h: float, sw: float, sh: float} $c
+     */
+    public function fitContentSize(array $c, float $zoom): void
+    {
+        $f = $this->fit;
+        if ($f === null || $this->destroyed) {
+            return;
+        }
+        if ($this->flyout !== null) {
+            $s = $f->fit($c, $zoom);
+            if ($s === null) { return; }
+            $f->content = $c;
+            if ($s === $f->size) { return; }
+            $f->size = $s;
+            if ($s !== [$this->flyout['width'], $this->flyout['height']]) { $this->setFlyoutSize(...$s); }
+            return;
+        }
+        $bounds = $this->bounds(); $content = $this->contentBounds();
+        [$maxW, $maxH] = [0, 0];
+        $wa = Flyout::workAreaFor($bounds, Screens::displays());
+        if ($wa->width > 0 && $wa->height > 0) {
+            $maxW = max($wa->width - ($bounds->width - $content->width), 1);
+            $maxH = max($wa->height - ($bounds->height - $content->height), 1);
+        }
+        $s = $f->fit($c, $zoom, $maxH);
+        if ($s === null) { return; }
+        $f->content = $c;
+        if ($maxW > 0) { $s[0] = min($s[0], $maxW); }
+        if ($s === $f->size || $this->isMaximized() || $this->isFullScreen()) { return; }
+        [$w, $h] = [$s[0] !== $f->size[0] ? $s[0] : $content->width, $s[1] !== $f->size[1] ? $s[1] : $content->height];
+        $f->size = $s;
+        if ($w !== $content->width || $h !== $content->height) {
+            $this->setContentBounds(new Rectangle($content->x, $content->y, $w, $h));
+        }
     }
 
     /** Places a flyout against another rectangle of its parent, in points from the top-left of the parent's content, as FlyoutOptions::$anchor; nothing for other windows. */

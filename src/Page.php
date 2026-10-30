@@ -379,6 +379,10 @@ final class Page
         $this->web->setZoom($f);
         $this->refreshScripts();
         $this->sendTitleBar();
+        if (($fit = $this->fitContent()) !== null) { // its limits in its new CSS pixels; the content keeps its size in CSS pixels, which are other points now
+            $this->event('myphp:fit-content', $fit->limits($f));
+            if ($fit->content !== null) { $this->window->fitContentSize($fit->content, $f); }
+        }
     }
 
     public function zoomFactor(): float { return $this->web->zoom(); }
@@ -658,6 +662,9 @@ final class Page
     private function scripts(): array
     {
         $config = ['platform' => 'darwin', 'windowId' => $this->window->id, 'version' => App::VERSION, 'secret' => $this->secret] + self::locale();
+        if (($fit = $this->fitContent()) !== null) {
+            $config['fit'] = $fit->limits($this->zoomNow()); // the bridge lays the root out within them, in the page's CSS pixels
+        }
         $tell = fn(string $name, mixed $p) => 'window.myphp&&window.myphp.__deliver(' . json_encode(['t' => 'event', 'n' => $name, 'p' => $p], JSON_THROW_ON_ERROR) . ');';
         $scripts = [str_replace('__CONFIG__', json_encode($config, JSON_THROW_ON_ERROR), (string)file_get_contents(__DIR__ . '/Native/bridge.js'))];
         $scripts[] = $tell('myphp:preferences', Theme::preferences());
@@ -680,9 +687,21 @@ final class Page
     /** The room of the window controls in the page's CSS pixels (mygo's NewTitleBar). @return array{height: float, left: float, right: float} */
     private function titleBar(): array
     {
-        $zoom = isset($this->web) ? $this->web->zoom() : $this->zoom;
-        $zoom = $zoom > 0 ? $zoom : 1.0;
+        $zoom = $this->zoomNow();
         return array_map(fn(float $v) => $v / $zoom, $this->window->titleBar());
+    }
+
+    /** The page's zoom, its options' before its web view is made. */
+    private function zoomNow(): float
+    {
+        $zoom = isset($this->web) ? $this->web->zoom() : $this->zoom;
+        return $zoom > 0 ? $zoom : 1.0;
+    }
+
+    /** The limits of the window's size this page takes the size of its content to (FlyoutOptions::$fitContent, WindowOptions::$fitContent): the window's page's alone, null for others. */
+    private function fitContent(): ?Native\FitContent
+    {
+        return $this->webView === null ? $this->window->fitContent() : null;
     }
 
     /** @return array{locale: string, dir: string} */
@@ -720,6 +739,11 @@ final class Page
             case '{"t":"dblclick"}':
                 $this->window->pageDrag(2);
                 return;
+        }
+        if (str_starts_with($raw, '{"t":"content-size",')) {
+            $c = ($fit = $this->fitContent()) === null ? null : Native\FitContent::told((array)json_decode($raw, true));
+            if ($c !== null) { $this->window->fitContentSize($c, $this->zoomNow()); }
+            return;
         }
         if (str_starts_with($raw, '{"t":"theme-color","v":"#')) {
             $this->setThemeColor(self::parseThemeColor((string)(json_decode($raw, true)['v'] ?? '')));

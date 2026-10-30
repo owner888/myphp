@@ -58,6 +58,17 @@ final class WindowOptions
         public ?string $url = null,
         /** The window's page: its preload script, trusted origins, developer tools, zoom and user agent; the developer tools serve native UI too (mygo's Page). */
         public PageOptions $page = new PageOptions(),
+        /**
+         * Sizes the page area to its page's content, and follows it, within
+         * $minWidth, $minHeight, $maxWidth and $maxHeight and the work area
+         * of its display, as FlyoutOptions::$fitContent sizes a flyout
+         * (mygo's FitContent): a panel whose results grow and shrink, as a
+         * launcher's. It follows the content only when the content's size
+         * changes, and only in the dimension that changed, so a size the
+         * user gives the window holds until then, and not while the window
+         * is maximized or in full screen. Native UI ($content) does not fit.
+         */
+        public bool $fitContent = false,
         /** Remembers the window's position and size under this key across runs (WindowState). */
         public string $stateKey = '',
         /** 'default', or 'hidden' / 'hiddenInset' (mygo's TitleBarStyle): the title bar hides but the traffic lights stay, over the view, which draws its own title bar under them (Context::titleBar, Node::dragWindow); hiddenInset lowers the lights as a toolbar would. */
