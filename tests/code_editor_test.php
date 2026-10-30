@@ -294,3 +294,82 @@ $h->frame();
 $h->type('¡');
 same('¡hello world', (string)$buf, 'typed in one editor');
 same([8, 13], [$b->selection()->start(), $b->selection()->end()], 'the other editor\'s selection moves with the text');
+
+// A run of imports folds as one, as the language writes them; one alone by its brackets; not in strings or comments (mygo's TestCodeEditorFoldImports).
+foreach ([
+    ['go', "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {}", [[2, 4]]],
+    ['go', "package main\n\nimport \"fmt\"\nimport (\n\t\"os\"\n)\n\nfunc main() {}", [[2, 5]]],
+    ['go', "package main\n\nimport \"fmt\"\n\nfunc main() {}", []],
+    ['typescript', "// x\nimport a from './a'\nimport {\n  b,\n  c,\n} from './b'\n\nimport './d'\n\nconst e = a", [[1, 7]]],
+    ['python', "\"\"\"Doc.\"\"\"\nimport os\nfrom x import (\n    a,\n)\nimport sys\n\nprint(os)", [[1, 5]]],
+    ['rust', "use std::io;\npub use crate::x;\n\nfn main() {}", [[0, 1]]],
+    ['c', "#include <stdio.h>\n#include \"x.h\"\n\nint main() {}", [[0, 1]]],
+    ['java', "package a;\n\nimport a.B;\nimport a.C;\n\nclass D {}", [[2, 3]]],
+    ['python', "\"\"\"\nfrom here on\nimport this\n\"\"\"\nimport os\nimport sys\n", [[4, 5]]],
+    ['go', "// import a\n// import b\npackage main\n", []],
+    ['markdown', "import a\nimport b\n", []],
+] as [$lang, $text, $want]) {
+    $ct = new EditorTest($lang, $text);
+    $ct->st->foldImports();
+    same($want, (fn() => $this->ed->folds)->call($ct->st), "foldImports in $lang: " . json_encode($text));
+}
+$ct = new EditorTest('javascript', "import a from 'a'\nimport b from 'b'\nimport c from 'c'\n\nf(a, b, c)");
+same([true, false], (fn() => [$this->ed->foldable(0), $this->ed->foldable(1)])->call($ct->st), "the gutter marks a run of imports' first line alone");
+
+// Text backgrounds fill their bytes where the editor lays them out, across wrapped rows, and nothing past the text (mygo's TestTextBackgrounds).
+$blueQuads = function (\MyPHP\UI\DisplayList $l): array {
+    $out = [];
+    for ($i = 0; $i < $l->n; $i++) {
+        $k = $i * 16;
+        if (fmod($l->buf[$k + 9], \MyPHP\UI\DisplayList::KIND_STRIDE) == 0.0 && $l->buf[$k + 4] == 0.0 && $l->buf[$k + 5] == 0.0 && $l->buf[$k + 6] == 1.0 && $l->buf[$k + 7] == 1.0) {
+            $out[] = [$l->buf[$k], $l->buf[$k + 1], $l->buf[$k + 2]];
+        }
+    }
+    return $out;
+};
+$edOf = fn(\MyPHP\UI\Editor\State $st) => (fn() => $this->ed)->call($st);
+$ct = new EditorTest('', "abc def ghi\nz|");
+$ct->st->noActiveLine = true;
+$ct->st->textBackgrounds = [new \MyPHP\UI\Editor\TextBackground(4, 7, [0x0000ff, 1.0])];
+$ct->h->frame();
+$q = $blueQuads($ct->h->paint());
+$ed = $edOf($ct->st);
+check(count($q) === 1 && abs($q[0][2] - ($ed->caretRect(7)[0] - $ed->caretRect(4)[0])) < 0.01, 'textBackgrounds: the bytes of def: ' . json_encode($q));
+$ct = new EditorTest('', str_repeat('x', 150) . "\nz|");
+$ct->st->noActiveLine = true; $ct->st->softWrap = true;
+$ct->st->textBackgrounds = [new \MyPHP\UI\Editor\TextBackground(40, 130, [0x0000ff, 1.0])];
+$ct->h->frame(); $ct->h->frame();
+$ed = $edOf($ct->st);
+$rows = count(array_unique(array_map(fn(int $o) => $ed->caretRect($o)[1], range(40, 129))));
+check($rows > 1 && count($blueQuads($ct->h->paint())) === $rows, "textBackgrounds: across the $rows rows of a wrapped line");
+$ct->st->textBackgrounds = [new \MyPHP\UI\Editor\TextBackground(140, 400, [0x0000ff, 1.0]), new \MyPHP\UI\Editor\TextBackground(500, 600, [0x0000ff, 1.0])];
+$ct->h->frame();
+check(count($blueQuads($ct->h->paint())) === 2, 'textBackgrounds: a range past the text cut to it (the end of the long line, z), one beyond it nothing');
+
+// The scroll in points, and where lines start (mygo's ScrollY, SetScrollY, LineTop).
+$ct = new EditorTest('', str_repeat("line\n", 300));
+$lh = $edOf($ct->st)->view->lineHeight;
+same([0.0, 10 * $lh, 300 * $lh], [$ct->st->lineTop(0), $ct->st->lineTop(10), $ct->st->lineTop(300)], 'lineTop: the lines one under the other');
+$ct->st->setScrollY(20 * $lh);
+$ct->h->frame();
+same(20 * $lh, $ct->st->scrollY(), 'setScrollY scrolls the lines');
+
+// An editor as high as its lines, in a scroll view, shows its caret as it takes the focus, not its first line (mygo's TestFitContentFocusRevealsCaret).
+$st = new \MyPHP\UI\Editor\State(new \MyPHP\UI\Editor\Buffer(str_repeat("line\n", 300)));
+$st->fitContent = true;
+$sv = null; $edNode = null;
+$h = new Headless(function (\MyPHP\UI\Context $c) use ($st, &$sv, &$edNode): void {
+    $sv = $c->scroll()->fill();
+      $c->box(0, 400, 0xffffff)->shrink(0);
+      $edNode = $st->view($c)->shrink(0);
+    $c->end();
+}, 600, 400);
+$h->paints = true; // as a window, which paints each frame: the editor knows its height as it paints
+$h->frame();
+$st->select(200 * 5, 200 * 5);
+$h->frame();
+$h->tab();
+$h->frame();
+$top = 400 + $st->lineTop(200);
+$y = $sv->scroll->y;
+check($st->focused() && $y <= $top && $y + 400 >= $top + $edOf($st)->view->lineHeight, "focused, the view scrolled to $y, showing the caret at $top");

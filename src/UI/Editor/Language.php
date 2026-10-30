@@ -24,6 +24,7 @@ final class Language
      * @param int $tabSize with $hardTabs, the indentation the language's files usually have, which editors take unless set: Go's tabs
      * @param ?Tokenizer $tokenizer highlights the text a line at a time, as TextMate grammars do (TokenHighlighter): the default highlighter, which $highlighter replaces
      * @param ?Closure(Snapshot): Highlighter $highlighter makes the highlighter of a buffer of the language, for highlighting of its own, as a parser's; when null, $tokenizer highlights
+     * @param ?string $imports a regular expression (PCRE, with delimiters) matching a line that imports, as one starting with import: a run of them folds as one, the lines in brackets of each with them, and State::foldImports folds the first (mygo's Imports)
      */
     public function __construct(
         public readonly string $name, public readonly array $extensions = [], public readonly array $filenames = [],
@@ -32,6 +33,7 @@ final class Language
         public readonly ?string $increaseIndent = null, public readonly ?string $decreaseIndent = null,
         public readonly string $wordChars = '', public readonly int $tabSize = 0, public readonly bool $hardTabs = false,
         public ?Tokenizer $tokenizer = null, public readonly ?Closure $highlighter = null,
+        public readonly ?string $imports = null,
     ) {}
 
     /** The highlighter of a buffer of this language with $text: its own, or one of its tokenizer; null for plain text. */

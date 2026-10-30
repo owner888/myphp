@@ -107,6 +107,9 @@ trait EditorPaint
             $f->matches = array_slice($m, $i, $j - $i);
             if ($this->find->current < count($m)) { $f->current = $m[$this->find->current]; }
         }
+        foreach ($this->o->textBackgrounds as $b) {
+            if ($b->start < $b->end && $b->end > $a && $b->start < $z && $b->color[1] > 0) { $f->texts[] = $b; }
+        }
         $p = $this->primary();
         if (!$p->empty() && $p->end() - $p->start() <= 200 && $t->lineOf($p->start()) === $t->lineOf($p->end())) {
             $s = $t->slice($p->start(), $p->end());
@@ -248,6 +251,12 @@ trait EditorPaint
                 if ($line >= $b->first && $line <= $b->last) { self::fill($list, $textX, $y, $textW, $lh, $b->color); }
             }
             if ($active && !$lineSelected) { self::fill($list, $textX, $y, $textW, $lh, $ct->c['activeLine']); }
+            // The app's ranges of text, at characters' edges.
+            foreach ($f->texts as $b) {
+                if ($b->end <= $l->start || $b->start >= $end) { continue; }
+                $ta = self::runeAt($l->text, max($b->start - $l->start, 0)); $tz = self::runeAt($l->text, min($b->end - $l->start, strlen($l->text)));
+                $this->fillRange($list, $l, $row, $ox, $y, $l->toDisp($ta, false), $l->toDisp($tz, false), $b->color, 0);
+            }
             // Words a diff changed.
             if ($this->o->decor !== null) {
                 foreach ($this->o->decor->words($line) as [$wa, $wb]) {
@@ -350,6 +359,13 @@ trait EditorPaint
         if ($d > $row['to']) { return $v->charWidth; }
         $w = $v->xOf($l, $row, $d) - $x;
         return $w > 0 ? $w : $v->charWidth;
+    }
+
+    /** $i, or the start of the character holding byte $i of $s. */
+    private static function runeAt(string $s, int $i): int
+    {
+        while ($i > 0 && $i < strlen($s) && (ord($s[$i]) & 0xc0) === 0x80) { $i--; }
+        return $i;
     }
 
     /** Fills displayed bytes $a to $b of a row. */

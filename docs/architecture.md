@@ -5948,6 +5948,30 @@ succeeds are told of, an empty line is none.
 - **Japanese** (165bc98): src/l10n/ja.json, mygo's translations of its
   own strings, and of the terminal's command notifications.
 
+## The code editor: imports folded, text tinted, scrolled in points (v1.90)
+
+- **A run of imports folds as one** (mygo d4067ac): `Language::$imports`,
+  a pattern of a line that imports, for 17 languages as mygo's; a run of
+  more than one (`EditorFold::importsEnd`), with the lines in brackets of
+  each and the blank lines between, folds as one, as VS Code folds them;
+  one alone, as Go's `import (`, by its brackets; lines in strings and
+  comments are none. `State::foldImports()` folds the first, as an
+  editor can on opening a file; the gutter marks the run's first line.
+- **Text backgrounds** (38c9fa7): `State::$textBackgrounds`
+  (`TextBackground`: bytes, [rgb, alpha]) fill ranges of the text under
+  it and over line backgrounds, as the words a merge changed, with
+  `fillRange` as a diff's words: across wrapped rows, tabs and wide
+  characters, cut to the text and to characters' edges.
+- **The scroll in points**: `State::scrollY()`, `setScrollY()` and
+  `lineTop()`, so that editors side by side scroll together and an app
+  draws the bands joining their lines.
+- **Focus shows a client's caret**: a node with an app's text input client
+  (a code editor) is revealed by its caret's box, not its whole box
+  (`Layout::clientCaret`): an editor as high as its lines in a scroll
+  view jumped to its first line. Such an editor takes its height as its
+  view's before it paints (`EditorBuild`), so that one out of view, which
+  painting skips, still gives its caret's bounds.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

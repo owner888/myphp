@@ -18,6 +18,8 @@ final class PaintFrame
     public bool $caretsOn = false;
     /** @var array<int, true> the lines with a caret */
     public array $activeLines = [];
+    /** @var list<TextBackground> the app's text backgrounds in the lines in view */
+    public array $texts = [];
     /** The guide of the block holding the caret, which shows stronger: its level, from -1, and its lines. */
     public int $guideLevel = -1, $guideFrom = 0, $guideTo = 0;
     /** The colors of the line being painted (View::colorsOf). */

@@ -80,6 +80,15 @@ final class State
      */
     public array $lineBackgrounds = [];
     /**
+     * @var list<TextBackground> fill ranges of the text with colors, under
+     * the text and over line backgrounds, as the words a merge changed:
+     * across wrapped rows, tabs and wide characters as the editor lays
+     * them out, not the lines folds hide. As lineBackgrounds, they stay
+     * where they are as the text is edited: compute them again when the
+     * buffer's version changes.
+     */
+    public array $textBackgrounds = [];
+    /**
      * Sees each input event before the editor, as keys for a mode of the
      * app's such as Vim's: returning true takes it, and the editor leaves
      * it. Text typed at the carets comes as TEXT; what an input method
@@ -134,7 +143,7 @@ final class State
         $o->indentGuides = !$this->noIndentGuides; $o->scrollPastEnd = !$this->noScrollPastEnd && !$this->fitContent;
         $o->autoClose = !$this->noAutoClose; $o->folding = !$this->noFolding; $o->activeLine = !$this->noActiveLine;
         $o->cursorShape = $this->cursorShape; $o->fitContent = $this->fitContent; $o->placeholder = $this->placeholder; $o->label = $this->label;
-        $o->theme = $this->theme; $o->bindings = $this->bindings; $o->gutterMarks = $this->gutterMarks; $o->backgrounds = $this->lineBackgrounds;
+        $o->theme = $this->theme; $o->bindings = $this->bindings; $o->gutterMarks = $this->gutterMarks; $o->backgrounds = $this->lineBackgrounds; $o->textBackgrounds = $this->textBackgrounds;
         $o->diffBase = $this->diffBase; $o->onCompletion = $this->onCompletion; $o->onHover = $this->onHover; $o->onDefinition = $this->onDefinition;
         $o->onGutterClick = $this->onGutterClick; $o->contextMenu = $this->contextMenu; $o->onInput = $this->onInput; $o->noInputMethod = $this->noInputMethod;
         $o->minDigits = 3;
@@ -237,7 +246,7 @@ final class State
         return [count($f->matches), $f->current];
     }
 
-    /** Folds the lines indented under $line, or up to its closing bracket, as the gutter's marker does; unfold unfolds them. */
+    /** Folds the lines indented under $line, up to its closing bracket, or the run of imports it starts, as the gutter's marker does; unfold unfolds them. */
     public function fold(int $line): void
     {
         $this->ensure();
@@ -248,6 +257,50 @@ final class State
     {
         $this->ensure();
         if ($this->ed->isFolded($line)) { $this->ed->toggleFoldLine($line); }
+    }
+
+    /** Folds the first run of imports of the text, or the first import alone by its brackets, as editors can on opening a file (Language::$imports; mygo's FoldImports). */
+    public function foldImports(): void
+    {
+        $this->ensure();
+        $ed = $this->ed;
+        $l = $ed->language();
+        if ($l === null || $l->imports === null) { return; }
+        $r = $ed->view->text;
+        for ($line = 0; $line < $r->lineCount(); $line++) {
+            if (!$ed->isImport($l, $line)) { continue; }
+            if (!$ed->isFolded($line)) { $ed->toggleFoldLine($line); }
+            return;
+        }
+    }
+
+    /**
+     * How far the editor's lines are scrolled up, in points, 0 for an
+     * editor as high as its lines (fitContent); setScrollY scrolls them,
+     * as far as they scroll, as editors side by side scroll together
+     * (mygo's ScrollY).
+     */
+    public function scrollY(): float { return $this->ed->scrollY; }
+
+    public function setScrollY(float $y): void
+    {
+        $this->ensure();
+        $this->ed->setScroll($y);
+    }
+
+    /**
+     * The top of a line, from 0, in points below the top of the first, as
+     * the last frame laid the lines out: less scrollY(), it is where the
+     * line shows in the editor. The lines a fold hides take no room, and
+     * lineTop of the count of lines is the height of them all. With soft
+     * wrap, the lines of a long text far from the view may take the rows
+     * they are estimated to for a few frames, until they are measured
+     * (mygo's LineTop).
+     */
+    public function lineTop(int $line): float
+    {
+        $this->ensure();
+        return $this->ed->view->heights->top($line);
     }
 
     /** The lines folds start at. @return list<int> */

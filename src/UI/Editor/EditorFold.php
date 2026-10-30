@@ -7,7 +7,8 @@ namespace MyPHP\UI\Editor;
  * Folding, as Zed falls back to without a syntax tree and VS Code does
  * (mygo's fold.go): a line ending with an opening bracket folds the lines
  * up to the one with its closing bracket, which stays; another folds the
- * lines indented more than it after it, but blank lines at the end.
+ * lines indented more than it after it, but blank lines at the end. A run
+ * of imports, as the language's imports find them, folds as one.
  */
 trait EditorFold
 {
@@ -19,6 +20,7 @@ trait EditorFold
         $r = $this->view->text;
         $n = $r->lineCount();
         if ($line >= $n - 1) { return null; }
+        if (($end = $this->importsEnd($line)) !== null) { return $end; }
         $s = $r->line($line);
         if (trim($s) === '') { return null; }
         // An opening bracket at the end of the line.
@@ -41,7 +43,58 @@ trait EditorFold
         return $end > $line ? $end : null;
     }
 
-    /** Whether $line starts a fold, cheaply, for the gutter: by indentation, or an opening bracket at its end. */
+    /**
+     * The last line of the run of imports $line starts, as VS Code folds
+     * them: the lines the language's imports match, the lines in brackets
+     * of each, and the blank lines between; null unless $line starts a run
+     * of more than one import. One alone, as Go's import (, folds by its
+     * brackets (mygo's importsEnd).
+     */
+    public function importsEnd(int $line): ?int
+    {
+        $l = $this->language();
+        $r = $this->view->text;
+        if ($l === null || $l->imports === null || !$this->isImport($l, $line)) {
+            return null;
+        }
+        // Not if an import is before it, ending on that line or before.
+        for ($p = $line - 1; $p >= 0; $p--) {
+            $s = $r->line($p);
+            $t = ltrim($s, " \t");
+            if ($t === '') { continue; }
+            if ($this->isImport($l, $p)) { return null; }
+            if (($m = $this->matchBracket($r->lineStart($p) + strlen($s) - strlen($t))) !== null && $this->isImport($l, $r->lineOf($m[0]))) { return null; }
+            break;
+        }
+        $end = $first = $this->importEnd($line);
+        for ($i = $end + 1; $i < $r->lineCount(); $i++) {
+            if (trim($r->line($i)) === '') { continue; }
+            if (!$this->isImport($l, $i)) { break; }
+            $end = $i = $this->importEnd($i);
+        }
+        return $end > $first ? $end : null;
+    }
+
+    /** Whether $line imports: the language's imports match it, and it doesn't start in a string or a comment, as a line of a docstring starting with from. */
+    public function isImport(Language $l, int $line): bool
+    {
+        $s = $this->view->text->line($line);
+        if (preg_match($l->imports, $s) !== 1) { return false; }
+        $k = self::kindAt($this->view->lineTokens($line, $s), 0);
+        return $k !== Token::STRING && $k !== Token::COMMENT;
+    }
+
+    /** The last line of the import at $line: the line of the bracket closing one that ends it, as Go's import (, or $line. */
+    private function importEnd(int $line): int
+    {
+        $r = $this->view->text;
+        if (($open = $this->trailingOpener($line, $r->line($line))) !== null && ($m = $this->matchBracket($r->lineStart($line) + $open)) !== null) {
+            return $r->lineOf($m[1]);
+        }
+        return $line;
+    }
+
+    /** Whether $line starts a fold, cheaply, for the gutter: by indentation, an opening bracket at its end, or a run of imports. */
     public function foldable(int $line): bool
     {
         if ($this->view->hl instanceof Folder) { return $this->view->hl->foldEnd($line) !== null; }
@@ -50,6 +103,7 @@ trait EditorFold
         if ($line >= $n - 1) { return false; }
         $s = $r->line($line);
         if (trim($s) === '') { return false; }
+        if ($this->importsEnd($line) !== null) { return true; }
         $tab = $this->tabSize();
         $in = Chars::indentWidth($s, $tab);
         for ($i = $line + 1; $i < min($n, $line + 50); $i++) {

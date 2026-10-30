@@ -63,6 +63,7 @@ trait EditorBuild
             $this->layout($w, $this->viewH, max(1.0, $this->view->scale));
             $this->view->measureWraps(0, 1.0);
             $e->fh = $this->view->heights->total();
+            $this->viewH = $e->fh; // the height its painting gets, known before it paints: one out of view, which paints nothing, gives its caret's bounds to a reveal on focus
             $this->scrollY = 0.0;
         } elseif ($this->r[2] > 0) {
             // Scroll to what moved before building what depends on it.

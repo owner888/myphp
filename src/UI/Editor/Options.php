@@ -43,6 +43,8 @@ final class Options
     public array $gutterMarks = [];
     /** @var list<LineBackground> */
     public array $backgrounds = [];
+    /** @var list<TextBackground> */
+    public array $textBackgrounds = [];
     public ?Buffer $diffBase = null;
     /** @var ?Closure(CompletionRequest): void */
     public ?Closure $onCompletion = null;

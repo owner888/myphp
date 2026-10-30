@@ -108,7 +108,11 @@ final class Layout
      * Scrolls the containers around the last node of $chain (its ancestors
      * from the root, then it), innermost first, as little as shows its box,
      * arranging each one scrolled again (mygo's reveal). The text inside a
-     * paragraph shows by its paragraph.
+     * paragraph shows by its paragraph; a node with an app's text input
+     * client (a code editor), by its caret's box, as the client gives it:
+     * the text it edits may be taller than the view, as an editor as high
+     * as its lines in a scroll view (mygo's clientCaret). Fields reveal
+     * their whole box, and scroll their caret into view themselves.
      * @param non-empty-list<Node> $chain
      */
     private static function reveal(array $chain): void
@@ -117,11 +121,12 @@ final class Layout
             array_pop($chain);
         }
         $e = $chain[count($chain) - 1];
+        [$rx, $ry, $rw, $rh] = self::clientCaret($e) ?? [0.0, 0.0, $e->w, $e->h]; // what shows, from the node's corner
         for ($i = count($chain) - 2; $i >= 0; $i--) {
             $p = $chain[$i]; $ch = $chain[$i + 1];
             if ($p->scroll instanceof ListState && !$ch->absolute) { // a list's rows: the place moves by as much, counted from the first row built
                 $l = $p->scroll;
-                $d = self::nearest(0.0, $e->y - $p->y - $p->padT() - $l->lag, $e->h, $l->viewport);
+                $d = self::nearest(0.0, $e->y + $ry - $p->y - $p->padT() - $l->lag, $rh, $l->viewport);
                 if ($d != 0) {
                     $l->offset += $d;
                     $l->aligning = null;
@@ -136,10 +141,10 @@ final class Layout
             $s = $p->scroll;
             $sx = $s->x; $sy = $s->y;
             if ($p->scrollX) { // where the box is in the content, and the offset that shows it
-                $sx = max(0.0, min(self::nearest($s->x, $e->x - $p->x - $p->padL() + $s->x, $e->w, $s->viewportW), $s->maxX));
+                $sx = max(0.0, min(self::nearest($s->x, $e->x + $rx - $p->x - $p->padL() + $s->x, $rw, $s->viewportW), $s->maxX));
             }
             if ($p->scrollY) {
-                $sy = max(0.0, min(self::nearest($s->y, $e->y - $p->y - $p->padT() + $s->y, $e->h, $s->viewport), $s->maxY));
+                $sy = max(0.0, min(self::nearest($s->y, $e->y + $ry - $p->y - $p->padT() + $s->y, $rh, $s->viewport), $s->maxY));
             }
             if ($sx != $s->x || $sy != $s->y) {
                 $s->x = $sx;
@@ -147,6 +152,21 @@ final class Layout
                 self::arrange($p, $p->x, $p->y, $p->w, $p->h); // what is inside it moves with the offset
             }
         }
+    }
+
+    /** The box of the caret of a node with an app's text input client, [x, y, w, h] from its corner, as the client places it, or null. @return ?array{0: float, 1: float, 2: float, 3: float} */
+    private static function clientCaret(Node $e): ?array
+    {
+        if ($e->textClient === null) {
+            return null;
+        }
+        $at = $e->textClient->selection()->caret();
+        $b = $e->textClient->boundsForRange(new TextInputRange($at, $at));
+        if ($b === null || $b[0][3] <= 0) {
+            return null;
+        }
+        [$x, $y, $w, $h] = $b[0];
+        return [$x, $y, max($w, 1.0), $h];
     }
 
     /** The offset that shows what spans [pos, pos + size) of a container's content in its viewport [0, view), scrolled by off, moving as little as it can: what is larger than the viewport shows from its start (mygo's nearest). */

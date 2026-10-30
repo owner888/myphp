@@ -91,7 +91,7 @@ final class Languages
         $cComment = ['/*', '*/'];
         $cBlock = [['/*', '*/']];
         $q = fn(string $s) => LexString::c($s);
-        $go = new Language('Go', extensions: ['.go'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), tabSize: 4, hardTabs: true,
+        $go = new Language('Go', imports: '/^import\\b/', extensions: ['.go'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), tabSize: 4, hardTabs: true,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock,
                 strings: [$q('"'), $q("'"), new LexString('`', '`', multiline: true)],
                 words: Lexer::words(T::KEYWORD, 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var',
@@ -103,11 +103,11 @@ final class Languages
             T::CONSTANT, 'true false null undefined NaN Infinity',
             T::TYPE, 'Array Boolean Date Error Function JSON Map Math Number Object Promise Proxy Reflect RegExp Set String Symbol WeakMap WeakSet BigInt console window document globalThis'];
         $jsStrings = [$q('"'), $q("'"), new LexString('`', '`', '\\', multiline: true, interpOpen: '${', interpClose: '}')];
-        $javascript = new Language('JavaScript', extensions: ['.js', '.mjs', '.cjs', '.jsx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), wordChars: '$', tabSize: 2,
+        $javascript = new Language('JavaScript', imports: '/^import[\\s{*\'"]/', extensions: ['.js', '.mjs', '.cjs', '.jsx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), wordChars: '$', tabSize: 2,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: $jsStrings, words: Lexer::words(...$jsWords), identChars: '$', calls: true, capitalTypes: true, regexps: true, decorator: '@', operators: self::C_OPERATORS));
         $tsWords = [...$jsWords, T::KEYWORD, 'abstract declare enum implements interface keyof namespace private protected public readonly type infer is satisfies override module',
             T::TYPE, 'any boolean never number object string symbol unknown void bigint'];
-        $typescript = new Language('TypeScript', extensions: ['.ts', '.mts', '.cts', '.tsx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), wordChars: '$', tabSize: 2,
+        $typescript = new Language('TypeScript', imports: '/^import[\\s{*\'"]/', extensions: ['.ts', '.mts', '.cts', '.tsx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'", '`'), wordChars: '$', tabSize: 2,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: $jsStrings, words: Lexer::words(...$tsWords), identChars: '$', calls: true, capitalTypes: true, regexps: true, decorator: '@', operators: self::C_OPERATORS));
         $json = new Language('JSON', extensions: ['.json', '.jsonc', '.json5', '.webmanifest'], filenames: ['.babelrc', '.eslintrc', 'tsconfig.json'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 2,
             tokenizer: new JsonLexer(lineComments: ['//'], blockComments: $cBlock, strings: [$q('"'), $q("'")], words: Lexer::words(T::CONSTANT, 'true false null'), operators: ':'));
@@ -118,7 +118,7 @@ final class Languages
                 $pyStrings[] = new LexString($qq, $qq, $raw ? '' : '\\', strlen($qq) === 3, $f ? '{' : '', $f ? '}' : '', $p);
             }
         }
-        $python = new Language('Python', extensions: ['.py', '.pyi', '.pyw'], filenames: ['SConstruct', 'SConscript'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $python = new Language('Python', imports: '/^(import|from)\\s/', extensions: ['.py', '.pyi', '.pyw'], filenames: ['SConstruct', 'SConscript'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             increaseIndent: '/^\s*(class|def|elif|else|except|finally|for|if|try|while|with|async|match|case)\b.*:\s*(#.*)?$|[\[({]\s*$/',
             tokenizer: new Lexer(lineComments: ['#'], strings: $pyStrings,
                 words: Lexer::words(T::KEYWORD, 'and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case',
@@ -126,7 +126,7 @@ final class Languages
                     T::TYPE, 'int float str bytes bool list dict set tuple object type complex frozenset bytearray range Exception',
                     T::FUNCTION, 'print len open isinstance super self cls'),
                 calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
-        $rust = new Language('Rust', extensions: ['.rs'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 4,
+        $rust = new Language('Rust', imports: '/^(pub(\\([^)]*\\))?\\s+)?(use|extern\\s+crate)\\s/', extensions: ['.rs'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true,
                 strings: [new LexString('"', '"', '\\', true), new LexString('"', '"', '\\', true, prefix: 'b'), new LexString('#"', '"#', multiline: true, prefix: 'r'), new LexString('"', '"', multiline: true, prefix: 'r'), $q("'")],
                 words: Lexer::words(T::KEYWORD, 'as async await break const continue crate dyn else enum extern fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait type unsafe use where while yield',
@@ -136,9 +136,9 @@ final class Languages
         $cWords = [T::KEYWORD, 'auto break case const continue default do else enum extern for goto if inline register restrict return sizeof static struct switch typedef union volatile while _Alignas _Alignof _Atomic _Bool _Generic _Noreturn _Static_assert _Thread_local',
             T::TYPE, 'char double float int long short signed unsigned void size_t ssize_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t bool FILE',
             T::CONSTANT, 'NULL true false'];
-        $c = new Language('C', extensions: ['.c', '.h'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $c = new Language('C', imports: '/^#\\s*(include|import)\\b/', extensions: ['.c', '.h'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: [$q('"'), $q("'")], words: Lexer::words(...$cWords), calls: true, directives: true, operators: self::C_OPERATORS));
-        $cpp = new Language('C++', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ino', '.mm', '.m'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $cpp = new Language('C++', imports: '/^#\\s*(include|import)\\b/', extensions: ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ino', '.mm', '.m'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: [$q('"'), $q("'"), new LexString('R"(', ')"', multiline: true)],
                 words: Lexer::words(...$cWords, ...[T::KEYWORD, 'alignas alignof and asm catch class concept consteval constexpr constinit co_await co_return co_yield decltype delete dynamic_cast explicit export friend mutable namespace new noexcept not operator or private protected public reinterpret_cast requires static_assert static_cast template this thread_local throw try typeid typename using virtual xor override final @interface @implementation @end @property self',
                     T::TYPE, 'wchar_t char8_t char16_t char32_t std string vector map', T::CONSTANT, 'nullptr nil YES NO']),
@@ -146,22 +146,22 @@ final class Languages
         $javaWords = [T::KEYWORD, 'abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package private protected public return static strictfp super switch synchronized this throw throws transient try volatile while var record sealed permits yield',
             T::TYPE, 'boolean byte char double float int long short void String Object Integer',
             T::CONSTANT, 'true false null'];
-        $java = new Language('Java', extensions: ['.java'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $java = new Language('Java', imports: '/^import\\s/', extensions: ['.java'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: [new LexString('"""', '"""', '\\', true), $q('"'), $q("'")],
                 words: Lexer::words(...$javaWords), calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
-        $kotlin = new Language('Kotlin', extensions: ['.kt', '.kts'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $kotlin = new Language('Kotlin', imports: '/^import\\s/', extensions: ['.kt', '.kts'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true,
                 strings: [new LexString('"""', '"""', multiline: true, interpOpen: '${', interpClose: '}', dollar: true), new LexString('"', '"', '\\', interpOpen: '${', interpClose: '}', dollar: true), $q("'")],
                 words: Lexer::words(T::KEYWORD, 'as break class continue do else for fun if in interface is object package return super this throw try typealias typeof val var when while by catch constructor delegate dynamic field file finally get import init param property receiver set setparam where actual abstract annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg',
                     T::CONSTANT, 'true false null', T::TYPE, 'Any Boolean Byte Char Double Float Int Long Nothing Short String Unit'),
                 calls: true, capitalTypes: true, decorator: '@', operators: self::C_OPERATORS));
-        $swift = new Language('Swift', extensions: ['.swift'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 4,
+        $swift = new Language('Swift', imports: '/^(@\\w+(\\([^)]*\\))?\\s+)?import\\s/', extensions: ['.swift'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, nestComments: true,
                 strings: [new LexString('"""', '"""', '\\', true), $q('"')],
                 words: Lexer::words(T::KEYWORD, 'associatedtype class deinit enum extension fileprivate func import init inout internal let open operator private precedencegroup protocol public rethrows static struct subscript typealias var break case catch continue default defer do else fallthrough for guard if in repeat return throw switch where while as is try await async throws some any self Self super actor nonisolated isolated mutating nonmutating override weak unowned lazy final required convenience',
                     T::CONSTANT, 'true false nil', T::TYPE, 'Int Double Float String Bool Character Array Dictionary Set Optional Void'),
                 calls: true, capitalTypes: true, decorator: '@', directives: true, operators: self::C_OPERATORS));
-        $csharp = new Language('C#', extensions: ['.cs', '.csx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $csharp = new Language('C#', imports: '/^(global\\s+)?using\\s+(static\\s+)?[\\w.]+(\\s*=\\s*[^;]+)?;/', extensions: ['.cs', '.csx'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock,
                 strings: [new LexString('@"', '"', multiline: true), new LexString('$"', '"', '\\', interpOpen: '{', interpClose: '}'), $q('"'), $q("'")],
                 words: Lexer::words(T::KEYWORD, 'abstract as base break case catch checked class const continue default delegate do else enum event explicit extern finally fixed for foreach goto if implicit in interface internal is lock namespace new operator out override params private protected public readonly ref return sealed sizeof stackalloc static struct switch this throw try typeof unchecked unsafe using virtual volatile while async await var get set init record when where yield',
@@ -189,26 +189,26 @@ final class Languages
                     T::TYPE, 'int integer bigint smallint tinyint real float double decimal numeric text varchar char boolean bool date time timestamp blob json jsonb uuid serial',
                     T::CONSTANT, 'true false null'),
                 calls: true, operators: '+-*/%=<>!|'));
-        $ruby = new Language('Ruby', extensions: ['.rb', '.rake', '.gemspec'], filenames: ['Gemfile', 'Rakefile', 'Podfile', 'Fastfile'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
+        $ruby = new Language('Ruby', imports: '/^require(_relative)?\\b/', extensions: ['.rb', '.rake', '.gemspec'], filenames: ['Gemfile', 'Rakefile', 'Podfile', 'Fastfile'], lineComment: '#', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
             increaseIndent: '/^\s*(class|module|def|if|unless|else|elsif|while|until|for|begin|rescue|ensure|case|when)\b|\bdo(\s*\|.*\|)?\s*$|[\[({]\s*$/', decreaseIndent: '/^\s*(end|else|elsif|rescue|ensure|when)\b/',
             tokenizer: new Lexer(lineComments: ['#'],
                 strings: [new LexString('"', '"', '\\', true, interpOpen: '#{', interpClose: '}'), new LexString("'", "'", '\\', true)],
                 words: Lexer::words(T::KEYWORD, 'alias and begin break case class def defined? do else elsif end ensure for if in module next not or redo rescue retry return self super then undef unless until when while yield require require_relative attr_accessor attr_reader attr_writer private protected public',
                     T::CONSTANT, 'true false nil'),
                 identChars: '?!', calls: true, capitalTypes: true, operators: self::C_OPERATORS));
-        $lua = new Language('Lua', extensions: ['.lua'], lineComment: '--', blockComment: ['--[[', ']]'], brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
+        $lua = new Language('Lua', imports: '/^local\\s+\\w+\\s*=\\s*require\\b/', extensions: ['.lua'], lineComment: '--', blockComment: ['--[[', ']]'], brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 2,
             increaseIndent: '/\b(then|do|else|function\b.*\))\s*$|^\s*(local\s+)?function\b|[\[({]\s*$/', decreaseIndent: '/^\s*(end|else|elseif|until|\}|\))/',
             tokenizer: new Lexer(lineComments: ['--'], blockComments: [['--[[', ']]']],
                 strings: [new LexString('[[', ']]', multiline: true), $q('"'), $q("'")],
                 words: Lexer::words(T::KEYWORD, 'and break do else elseif end for function goto if in local not or repeat return then until while', T::CONSTANT, 'true false nil'),
                 calls: true, operators: '+-*/%^#=<>~.:'));
-        $php = new Language('PHP', extensions: ['.php'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $php = new Language('PHP', imports: '/^(use|require|require_once|include|include_once)\\s/', extensions: ['.php'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//', '#'], blockComments: $cBlock,
                 strings: [new LexString('"', '"', '\\', true, dollar: true), new LexString("'", "'", '\\', true)],
                 words: Lexer::words(T::KEYWORD, 'abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield',
                     T::CONSTANT, 'true false null TRUE FALSE NULL'),
                 calls: true, capitalTypes: true, variables: true, operators: self::C_OPERATORS));
-        $css = new Language('CSS', extensions: ['.css', '.scss', '.less', '.sass', '.pcss'], blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), wordChars: '-', tabSize: 2, tokenizer: new CssLexer);
+        $css = new Language('CSS', imports: '/^@(import|use|forward)\\s/', extensions: ['.css', '.scss', '.less', '.sass', '.pcss'], blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), wordChars: '-', tabSize: 2, tokenizer: new CssLexer);
         $html = new Language('HTML', extensions: ['.html', '.htm', '.xhtml', '.vue', '.svelte'], blockComment: ['<!--', '-->'],
             brackets: [new BracketPair('<', '>'), new BracketPair('(', ')'), new BracketPair('[', ']'), new BracketPair('{', '}')],
             autoClose: self::cAutoClose('"', "'"), wordChars: '-', tabSize: 2,
@@ -231,13 +231,13 @@ final class Languages
                 strings: [new LexString('"', '"', '\\', dollar: true), new LexString("'", "'")],
                 words: Lexer::words(T::KEYWORD, 'ifeq ifneq ifdef ifndef else endif include define endef export override .PHONY'),
                 variables: true, keys: true, identChars: '-./', operators: '=:?+!@'));
-        $protobuf = new Language('Protobuf', extensions: ['.proto'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 2,
+        $protobuf = new Language('Protobuf', imports: '/^import\\s/', extensions: ['.proto'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"'), tabSize: 2,
             tokenizer: new Lexer(lineComments: ['//'], blockComments: $cBlock, strings: [$q('"'), $q("'")],
                 words: Lexer::words(T::KEYWORD, 'syntax package import option message enum service rpc returns repeated optional required oneof map reserved extend extensions to max stream public weak',
                     T::TYPE, 'double float int32 int64 uint32 uint64 sint32 sint64 fixed32 fixed64 sfixed32 sfixed64 bool string bytes',
                     T::CONSTANT, 'true false'),
                 capitalTypes: true, operators: '=<>'));
-        $zig = new Language('Zig', extensions: ['.zig', '.zon'], lineComment: '//', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
+        $zig = new Language('Zig', imports: '/^(pub\\s+)?const\\s+\\w+\\s*=\\s*@import\\(/', extensions: ['.zig', '.zon'], lineComment: '//', brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
             tokenizer: new Lexer(lineComments: ['//'], strings: [$q('"'), $q("'"), new LexString('\\\\', "\0")],
                 words: Lexer::words(T::KEYWORD, 'addrspace align allowzero and anyframe anytype asm async await break callconv catch comptime const continue defer else enum errdefer error export extern fn for if inline linksection noalias noinline nosuspend opaque or orelse packed pub resume return struct suspend switch test threadlocal try union unreachable usingnamespace var volatile while',
                     T::TYPE, 'i8 u8 i16 u16 i32 u32 i64 u64 i128 u128 isize usize f16 f32 f64 f80 f128 bool void noreturn type anyerror comptime_int comptime_float',
