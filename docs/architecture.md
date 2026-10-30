@@ -5776,6 +5776,15 @@ from it), in PHP:
   composer and chat-glow's field are inputs as mygo's are.
 
 
+## A field's text clipped at its border (v1.82)
+
+`Painter::paintField` clipped a field's text 2 points inside its box on
+either side, whatever its padding: a field with none (chat-glow's, padded
+only above and below) lost the first pixels of its first letter. It clips
+inside its border now, as mygo's paintInput does: at the box's edges for a
+field without a border, a point in for the theme's, where the padding
+keeps the text clear of it as before (tests/textarea_test.php).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

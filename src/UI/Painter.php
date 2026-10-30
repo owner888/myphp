@@ -1664,7 +1664,8 @@ final class Painter
         $at = fn(float $w): float => $w <= $inner && $align !== Node::START ? ($inner - $w) * ($align === Node::CENTER ? 0.5 : 1.0) : 0.0; // a text that fits goes where textAlign() puts it (mygo's TextAlign)
         $tx += $at($display === '' ? 0.0 : $tw); // an empty field's caret where its text would start
         $s->offsetX = $tx - ($n->x + $inset); // where the text starts in the field, which a click and the input method's caret go by
-        $list->pushClip($n->x + 2 + $n->insetL, $n->y, $n->w - 4 - $n->insetL - $n->insetR, $n->h);
+        $b = $n->bordered ? $n->borderWidth : 0.0; // clipped inside its border, as mygo's paintInput: a field without padding shows its text's first pixels
+        $list->pushClip($n->x + $b + $n->insetL, $n->y + $b, $n->w - 2 * $b - $n->insetL - $n->insetR, $n->h - 2 * $b);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
                 $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize, $s->style)[0]), $ty, $t->textMuted, 1.0, $s->style);

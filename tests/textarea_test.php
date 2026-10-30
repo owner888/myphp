@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, Key, Node, TextState};
+use MyPHP\UI\{Context, DisplayList, Key, Node, TextState};
 
 /** A window of one text area editing $s, focused by a click. */
 function taWindow(TextState $s, ?\Closure $after = null, int $w = 400, int $h = 300): Headless
@@ -289,3 +289,10 @@ for ($i = 0; $i < $list->n; $i++) {
     if (abs($list->buf[$k + 1] - $oy) < 0.01 && $list->buf[$k + 3] == $oh) { $radii[] = $list->buf[$k + 8]; }
 }
 same([14.0], $radii, 'its own radius, over the border\'s');
+[$bx, $by, $bw] = $h->rect($h->byLabel('Bare'));
+$clips = [];
+for ($i = 0; $i < $list->n; $i++) {
+    $k = $i * 16;
+    if (fmod($list->buf[$k + 9], DisplayList::KIND_STRIDE) == 1.0 && $list->buf[$k + 1] >= $by && $list->buf[$k + 1] < $by + $bh) { $clips[] = [$list->buf[$k + 12], $list->buf[$k + 14]]; }
+}
+check($clips !== [] && $clips[0] == [$bx, $bw], 'without padding or border, clipped at its edges, the first letter whole: ' . json_encode($clips[0] ?? null));
