@@ -16,7 +16,11 @@ spl_autoload_register(fn($c) => str_starts_with($c, 'MyPHP\\') && !str_starts_wi
 final class Metrics implements TextPainter
 {
     public function ascent(float $size, int $style = 0): float { return 12.0; }
-    public function measure(string $s, float $size, int $style = 0): array { return [mb_strlen($s) * 7.0, 16.0]; }
+    /** @var array<int, float> the advance of a character in a style (Font bits) other than 7, for a test of faces; and the runs paintRuns painted, [text, style], while not null */
+    public array $advances = [];
+    public ?array $painted = null;
+    private function adv(int $style): float { return $this->advances[$style] ?? 7.0; }
+    public function measure(string $s, float $size, int $style = 0): array { return [mb_strlen($s) * $this->adv($style), 16.0]; }
     /** @var array<string, float> min-content widths by text, kept as the Mac's line cache keeps them with the line */
     private array $mins = [];
     public function minContentWidth(string $s, float $size, int $style = 0): float
@@ -24,16 +28,17 @@ final class Metrics implements TextPainter
         if (!isset($this->mins[$s])) { $r = \MyPHP\Text\System::runes($s); $this->mins[$s] = \MyPHP\Text\LineBreaks::widest($r, array_map(fn(int $i) => $i * 7.0, range(0, count($r)))); }
         return $this->mins[$s];
     }
-    public function xForIndex(string $s, float $size, int $i, int $style = 0): float { return mb_strlen(substr($s, 0, $i)) * 7.0; }
-    public function indexForX(string $s, float $size, float $x, int $style = 0): int { return strlen(mb_substr($s, 0, max(0, min((int)round($x / 7), mb_strlen($s))))); }
+    public function xForIndex(string $s, float $size, int $i, int $style = 0): float { return mb_strlen(substr($s, 0, $i)) * $this->adv($style); }
+    public function indexForX(string $s, float $size, float $x, int $style = 0): int { return strlen(mb_substr($s, 0, max(0, min((int)round($x / $this->adv($style)), mb_strlen($s))))); }
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
     {
         for ($i = 0, $n = mb_strlen($text); $i < $n; $i++) { $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); }
     }
     public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void
     {
-        $byte = 0;
-        foreach (mb_str_split($text) as $i => $r) { [$rgb, $alpha] = $colorAt($byte); $list->glyph($x + $i * 7, $y, 7, 16, $rgb, $alpha, 0, 0); $byte += strlen($r); }
+        $byte = 0; $a = $this->adv($style);
+        if ($this->painted !== null) { $this->painted[] = [$text, $style, $x]; }
+        foreach (mb_str_split($text) as $i => $r) { [$rgb, $alpha] = $colorAt($byte); $list->glyph($x + $i * $a, $y, $a, 16, $rgb, $alpha, 0, 0); $byte += strlen($r); }
     }
     /** Each glyph's advance by its size, from the ascent above the baseline down, solid. */
     public function glyphCoverage(array $glyphs, float $x, float $y, int $w, int $h, float $scale): string

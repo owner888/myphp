@@ -106,7 +106,7 @@ final class DiffSideView implements Decor
     {
         $d = $this->d;
         $ov = $d->oldView;
-        $ov->theme = $ed->theme;
+        $ov->setTheme($ed->theme);
         $ov->advanceSyntax($b->to, 0);
         $dc = $this->colors($ed);
         $lh = $ed->view->lineHeight;

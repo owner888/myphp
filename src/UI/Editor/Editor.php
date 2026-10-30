@@ -125,7 +125,7 @@ final class Editor implements TextInputClient
     {
         $this->o = $o;
         $this->theme = Theme::resolve($o->theme, $t);
-        $this->view->theme = $this->theme;
+        $this->view->setTheme($this->theme);
         $this->view->readOnly = $o->readOnly;
         $this->view->style = $o->fontStyle;
         if ($this->view->buf !== null && $this->view->buf !== $buf) { $this->resetForBuffer(); }

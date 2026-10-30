@@ -300,7 +300,7 @@ final class DiffState
         $this->sides[0]->unified = false;
         $this->sides[1]->unified = $this->layout === DiffLayout::DiffUnified;
         if ($this->layout === DiffLayout::DiffUnified) {
-            $this->oldView->theme = $ct;
+            $this->oldView->setTheme($ct);
             $this->oldView->setBuffer($this->old);
             $this->oldView->sync(null);
             $o = $this->sideOptions(false);

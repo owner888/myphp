@@ -41,6 +41,11 @@ final class View
     public float $wrapWidth = 0.0;
     public float $scale = 0.0;
     public ?Theme $theme = null;
+    /** @var array<int, int> the faces of the kinds of tokens by the theme (Font::BOLD, Font::ITALIC bits); whether any is not the regular one */
+    private array $faces = [];
+    private bool $styled = false;
+    /** @var array<int, array<string, float>> the advances of characters in the bold and italic faces, by face, as $ascii and $other are the regular's */
+    private array $faceWidths = [];
 
     public Heights $heights;
     /** @var list<array{at: int, text: string, kind: int}> texts shown in lines that are not part of them, as inlay hints (kind 0) or a suggestion (1), sorted by offset */
@@ -95,7 +100,7 @@ final class View
     /** Measures characters for soft wraps and long lines without shaping them, as Zed's LineWrapper sums cached advances. */
     private function resetWidths(): void
     {
-        $this->ascii = []; $this->other = []; $this->mono = -1.0;
+        $this->ascii = []; $this->other = []; $this->mono = -1.0; $this->faceWidths = [];
         $mono = -1.0; $ok = true;
         $s = self::ASCII_PRINTABLE;
         for ($i = 0, $n = strlen($s); $i < $n; $i++) {
@@ -117,6 +122,95 @@ final class View
         $v = $this->m->measure($r, $this->size, $this->style)[0];
         if (count($this->other) < 4096) { $this->other[$r] = $v; }
         return $v;
+    }
+
+    /** The advance of rune $r in $face (Font bits), the regular's for 0. */
+    private function faceWidthOf(string $r, int $face): float
+    {
+        if ($face === 0) { return $this->widthOf($r); }
+        if (strlen($r) === 1 && ord($r) < 0x20) { return 0.0; }
+        return $this->faceWidths[$face][$r] ??= $this->m->measure($r, $this->size, $this->style | $face)[0];
+    }
+
+    /** The width of displayed bytes $a to $b of $l, by the advances of its characters in their faces. */
+    public function rangeWidth(LineLayout $l, int $a, int $b): float
+    {
+        $x = 0.0;
+        foreach ($this->runsIn($l, $a, $b) as [$from, $to, $face]) {
+            $s = substr($l->disp, $from, $to - $from);
+            if ($face === 0) { $x += $this->width($s); continue; }
+            foreach (mb_str_split($s, 1, 'UTF-8') as $r) { $x += $this->faceWidthOf($r, $face); }
+        }
+        return $x;
+    }
+
+    /** The runs of displayed bytes $a to $b of $l in one face each: [from, to, face]. @return list<array{0: int, 1: int, 2: int}> */
+    public function runsIn(LineLayout $l, int $a, int $b): array
+    {
+        if ($l->faces === []) { return $a < $b ? [[$a, $b, 0]] : []; }
+        $out = []; $prev = 0;
+        foreach ($l->faces as [$end, $face]) {
+            $from = max($prev, $a); $to = min($end, $b);
+            if ($from < $to) { $out[] = [$from, $to, $face]; }
+            $prev = $end;
+        }
+        if (($from = max($prev, $a)) < $b) { $out[] = [$from, $b, 0]; }
+        return $out;
+    }
+
+    /** Sets the theme, laying out lines anew when the faces of tokens change (mygo's setTheme). */
+    public function setTheme(Theme $ct): void
+    {
+        $this->theme = $ct;
+        $faces = [];
+        foreach ($ct->tokens as $k => $ts) {
+            $f = ($ts['bold'] ? Font::BOLD : 0) | ($ts['italic'] ? Font::ITALIC : 0);
+            if ($f !== 0) { $faces[$k] = $f; }
+        }
+        if ($faces !== $this->faces) {
+            [$this->faces, $this->styled] = [$faces, $faces !== []];
+            $this->lines = null;
+        }
+    }
+
+    /** The faces of $l's tokens, by displayed bytes, with inlays regular: [end, face] runs, none when all are regular (mygo's facesOf). @return list<array{0: int, 1: int}> */
+    private function facesOf(LineLayout $l): array
+    {
+        $runs = []; $styled = false;
+        foreach ($l->toks as [$end, $kind]) {
+            $f = $this->faces[$kind] ?? 0;
+            $styled = $styled || $f !== 0;
+            $e = $l->toDisp($end, false);
+            $n = count($runs);
+            if ($n > 0 && ($runs[$n - 1][1] === $f || $runs[$n - 1][0] >= $e)) { $runs[$n - 1][0] = max($runs[$n - 1][0], $e); continue; }
+            $runs[] = [$e, $f];
+        }
+        if (!$styled) { return []; }
+        foreach ($l->segs ?? [] as $i => $sg) {
+            if ($sg['kind'] === LineLayout::SEG_INLAY) { $runs = self::regular($runs, $sg['disp'], $sg['disp'] + $l->segLen($i)); }
+        }
+        return $runs;
+    }
+
+    /** Runs $runs with displayed bytes $a to $b regular. @param list<array{0: int, 1: int}> $runs @return list<array{0: int, 1: int}> */
+    private static function regular(array $runs, int $a, int $b): array
+    {
+        if ($a >= $b) { return $runs; }
+        $out = [];
+        $add = function (int $e, int $f) use (&$out): void {
+            $n = count($out);
+            if ($n > 0 && $out[$n - 1][0] >= $e) { return; }
+            if ($n > 0 && $out[$n - 1][1] === $f) { $out[$n - 1][0] = $e; return; }
+            $out[] = [$e, $f];
+        };
+        $prev = 0;
+        foreach ($runs as [$e, $f]) {
+            if ($prev < $a) { $add(min($e, $a), $f); }
+            if ($e > $a && $prev < $b) { $add(min($e, $b), 0); }
+            if ($e > $b) { $add($e, $f); }
+            $prev = $e;
+        }
+        return $out;
     }
 
     /** The width of $s, by the advances of its characters. */
@@ -226,8 +320,12 @@ final class View
             $l = $this->lines[$n];
             $l->used = $this->frame;
             if (!$l->exact) {
-                // A guess: the highlighter may know better now. The layout does not depend on the tokens, which only color it.
+                // A guess: the highlighter may know better now. The layout depends on the tokens only through their faces.
                 [$l->toks, $l->exact] = $this->tokens($n, $l->text);
+                if ($this->styled && $this->facesOf($l) !== $l->faces) {
+                    unset($this->lines[$n]);
+                    return $this->line($n);
+                }
             }
             return $l;
         }
@@ -236,6 +334,7 @@ final class View
         $l->used = $this->frame;
         [$l->toks, $l->exact] = $this->tokens($n, $l->text);
         $this->display($l);
+        if ($this->styled) { $l->faces = $this->facesOf($l); }
         $this->layoutRows($l);
         $this->lines[$n] = $l;
         if ($l->width > $this->maxLine) { $this->maxLine = $l->width; }
@@ -353,13 +452,12 @@ final class View
     private function layoutRows(LineLayout $l): void
     {
         $l->rows = [];
-        $breaks = $this->wrapBreaks($l->disp);
+        $breaks = $this->wrapBreaks($l->disp, $l->faces);
         $indent = $breaks !== [] ? $this->wrapIndent($l->disp) : 0.0;
         $from = 0;
         for ($i = 0; $i <= count($breaks); $i++) {
             $to = $i < count($breaks) ? $breaks[$i] : strlen($l->disp);
-            $text = substr($l->disp, $from, $to - $from);
-            $w = strlen($text) <= self::PIECE_BYTES && $breaks === [] ? $this->m->measure($text, $this->size, $this->style)[0] : $this->width($text);
+            $w = $to - $from <= self::PIECE_BYTES && $breaks === [] ? $this->shapedWidth($l, $from, $to) : $this->rangeWidth($l, $from, $to);
             $row = ['from' => $from, 'to' => $to, 'indent' => $i > 0 ? $indent : 0.0, 'width' => $w];
             $l->rows[] = $row;
             $l->width = max($l->width, $row['indent'] + $w);
@@ -377,34 +475,46 @@ final class View
             $b = min($a + self::PIECE_BYTES, $r['to']);
             while ($b < $r['to'] && (ord($l->disp[$b]) & 0xC0) === 0x80) { $b++; }
             $out[] = [$a, $b, $x];
-            $x += $this->width(substr($l->disp, $a, $b - $a));
+            $x += $this->rangeWidth($l, $a, $b);
             $a = $b;
         }
         return $out;
+    }
+
+    /** The width of displayed bytes $a to $b of $l as shaped, a run in each face. */
+    private function shapedWidth(LineLayout $l, int $a, int $b): float
+    {
+        $w = 0.0;
+        foreach ($this->runsIn($l, $a, $b) as [$from, $to, $face]) { $w += $this->m->measure(substr($l->disp, $from, $to - $from), $this->size, $this->style | $face)[0]; }
+        return $w;
     }
 
     /**
      * Where the displayed text $s breaks into rows when wrapping, as Zed's
      * LineWrapper: summing the advances of characters, breaking after
      * whitespace or between a word and what is not, anywhere in CJK, and
-     * inside a word too long for a row. @return list<int>
+     * inside a word too long for a row; $faces are those of $s ([end,
+     * face] runs), if known. @param list<array{0: int, 1: int}> $faces @return list<int>
      */
-    public function wrapBreaks(string $s): array
+    public function wrapBreaks(string $s, array $faces = []): array
     {
         if (!$this->wrap || $this->wrapWidth <= 0) { return []; }
         $width = $this->wrapWidth;
-        if ($this->mono > 0 && strlen($s) * $this->mono <= $width) { return []; }
-        $breaks = []; $indent = 0.0; $x = 0.0; $start = 0; $last = -1; $prev = '';
+        if ($faces === [] && $this->mono > 0 && strlen($s) * $this->mono <= $width) { return []; }
+        $l = null;
+        if ($faces !== []) { $l = new LineLayout(0, 0, $s); [$l->disp, $l->faces] = [$s, $faces]; }
+        $breaks = []; $indent = 0.0; $x = 0.0; $start = 0; $last = -1; $prev = ''; $fi = 0;
         for ($i = 0, $n = strlen($s); $i < $n;) {
             $r = Chars::runeAt($s, $i);
             if ($i > $start && self::canBreak($prev, $r)) { $last = $i; }
-            $w = $this->widthOf($r);
+            while ($fi < count($faces) && $faces[$fi][0] <= $i) { $fi++; }
+            $w = $this->faceWidthOf($r, $faces[$fi][1] ?? 0);
             if ($x + $w > $width && $i > $start) {
                 $at = $last > $start ? $last : $i;
                 $breaks[] = $at;
                 if ($indent == 0) { $indent = $this->wrapIndent($s); }
                 // Measure the new row from its start, after the indent.
-                $x = $indent + $this->width(substr($s, $at, $i - $at));
+                $x = $indent + ($l === null ? $this->width(substr($s, $at, $i - $at)) : $this->rangeWidth($l, $at, $i));
                 $start = $at; $last = -1;
             }
             $x += $w;
@@ -483,7 +593,13 @@ final class View
         $pieces = $this->pieces($l, $r);
         foreach ($pieces as $i => [$a, $b, $px]) {
             if ($d < $b || $i === count($pieces) - 1) {
-                return $r['indent'] + $px + $this->m->xForIndex(substr($l->disp, $a, $b - $a), $this->size, $d - $a, $this->style);
+                $runs = $this->runsIn($l, $a, $b);
+                foreach ($runs as $k => [$from, $to, $face]) {
+                    $t = substr($l->disp, $from, $to - $from);
+                    if ($d < $to || $k === count($runs) - 1) { return $r['indent'] + $px + $this->m->xForIndex($t, $this->size, $d - $from, $this->style | $face); }
+                    $px += $this->m->measure($t, $this->size, $this->style | $face)[0];
+                }
+                return $r['indent'] + $px;
             }
         }
         return $r['indent'];
@@ -498,7 +614,14 @@ final class View
         foreach ($pieces as $i => [$a, $b, $px]) {
             $pw = $i + 1 < count($pieces) ? $pieces[$i + 1][2] - $px : PHP_FLOAT_MAX;
             if ($x < $px + $pw || $i === count($pieces) - 1) {
-                $d = min($a + $this->m->indexForX(substr($l->disp, $a, $b - $a), $this->size, $x - $px, $this->style), $b);
+                $runs = $this->runsIn($l, $a, $b);
+                $d = $a;
+                foreach ($runs as $k => [$from, $to, $face]) {
+                    $t = substr($l->disp, $from, $to - $from);
+                    $w = $this->m->measure($t, $this->size, $this->style | $face)[0];
+                    if ($x < $px + $w || $k === count($runs) - 1) { $d = min($from + $this->m->indexForX($t, $this->size, $x - $px, $this->style | $face), $to); break; }
+                    $px += $w;
+                }
                 break;
             }
         }
@@ -568,13 +691,18 @@ final class View
         $def = $this->theme->c['text'];
         foreach ($this->pieces($l, $r) as $i => [$a, $b, $px0]) {
             $px = $x + $r['indent'] + $px0;
-            $pw = $this->width(substr($l->disp, $a, $b - $a));
+            $pw = $this->rangeWidth($l, $a, $b);
             if ($px + $pw < $clipX - 64 || $px > $clipX + $clipW + 64) { continue; }
-            $this->m->paintRuns($list, substr($l->disp, $a, $b - $a), $this->size, $px, $lineTop, $this->style, function (int $byte) use ($a, $cc, $def, $override): array {
-                $d = $a + $byte;
-                $c = self::colorAt($cc, $d, $def);
-                return $override !== null ? $override($d, $c) : $c;
-            });
+            $runs = $this->runsIn($l, $a, $b);
+            foreach ($runs as [$from, $to, $face]) {
+                $t = substr($l->disp, $from, $to - $from);
+                $this->m->paintRuns($list, $t, $this->size, $px, $lineTop, $this->style | $face, function (int $byte) use ($from, $cc, $def, $override): array {
+                    $d = $from + $byte;
+                    $c = self::colorAt($cc, $d, $def);
+                    return $override !== null ? $override($d, $c) : $c;
+                });
+                if (count($runs) > 1) { $px += $this->m->measure($t, $this->size, $this->style | $face)[0]; }
+            }
         }
     }
 

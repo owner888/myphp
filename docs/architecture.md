@@ -6067,6 +6067,24 @@ succeeds are told of, an empty line is none.
 - tests/content_rules_test.php covers the ids, the identifier and the
   stale lists; compiling and applying need the running app.
 
+## The code editor paints bold and italic tokens in their faces (v1.96)
+
+- mygo d1a2caf: a theme's bold and italic token styles (Markdown's
+  headings, strong and emphasis by default) reached only the theme; every
+  row was measured and painted in the editor's one style. `View::setTheme`
+  now keeps the faces of the kinds of tokens (Font::BOLD, Font::ITALIC
+  bits) and lays the lines out anew when they change; a line keeps the
+  faces of its tokens by displayed bytes (`LineLayout::$faces`, inlays
+  regular), checked again when confirmed tokens replace guessed ones.
+- `View::runsIn` splits a row's pieces into runs of one face each, which
+  `xOf`, `dispAt` and `paintRow` measure, hit and paint in the editor's
+  style with the face's bits, run after run; `rangeWidth` sums the
+  advances of characters in their faces for rows, pieces and wraps, as
+  mygo's `runsWidth`. mygo shapes each piece once with the faces as text
+  spans; myphp's text painter takes one style a call, so a piece is
+  measured and painted a run at a time, with no kerning across a change
+  of face.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

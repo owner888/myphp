@@ -22,6 +22,8 @@ final class LineLayout
     public array $toks = [];
     /** The tokens are from a confirmed state. */
     public bool $exact = false;
+    /** @var list<array{0: int, 1: int}> the faces of the tokens (Font::BOLD, Font::ITALIC bits) by displayed bytes: [end, face] runs, bytes past the last regular; none when all are */
+    public array $faces = [];
     public float $width = 0.0;
     public int $used = 0;
 

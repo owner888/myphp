@@ -373,3 +373,51 @@ $h->frame();
 $top = 400 + $st->lineTop(200);
 $y = $sv->scroll->y;
 check($st->focused() && $y <= $top && $y + 400 >= $top + $edOf($st)->view->lineHeight, "focused, the view scrolled to $y, showing the caret at $top");
+
+// Tokens whose style is bold or italic paint, measure and are hit in those faces (mygo's TestCodeEditorTokenFaces): carets and hits find the same places across the runs of faces, on one row and on a line wrapped into rows measured before they are painted.
+(function () {
+    $line = 'plain **strong** and *emph* téxt';
+    $ct = new EditorTest('markdown', $line);
+    $v = (fn() => $this->ed->view)->call($ct->st);
+    $m = new Metrics;
+    $m->advances = [\MyPHP\UI\Font::MONO | \MyPHP\UI\Font::BOLD => 9.0, \MyPHP\UI\Font::MONO | \MyPHP\UI\Font::ITALIC => 8.0];
+    $v->setStyle($m, $v->size, $v->lineHeight / $v->size, $v->scale, $v->tabSize);
+    $l = $v->line(0);
+    check($l->faces !== [], 'faces: of the strong and the emphasis');
+    $faceAt = function (string $sub) use ($v, $l, $line): int {
+        $d = strpos($line, $sub);
+        foreach ($v->runsIn($l, 0, strlen($l->disp)) as [$a, $b, $f]) { if ($d >= $a && $d < $b) { return $f; } }
+        return -1;
+    };
+    same([0, \MyPHP\UI\Font::BOLD, 0, \MyPHP\UI\Font::ITALIC, 0], [$faceAt('plain'), $faceAt('strong'), $faceAt(' and'), $faceAt('emph'), $faceAt('téxt')], 'faces: regular, bold, regular, italic, regular');
+    $ffi = \FFI::cdef();
+    $list = new \MyPHP\UI\DisplayList($ffi->new('float[' . (1024 * \MyPHP\UI\DisplayList::FLOATS_PER_RECT) . ']'), 1024, $ffi->new('float[' . (4 * \MyPHP\UI\DisplayList::FLOATS_PER_TRANSFORM) . ']'), 4);
+    $m->painted = [];
+    $v->paintRow($list, $l, $l->rows[0], 0, 0, $v->colorsOf($l), null, 0, 10000);
+    $strong = array_values(array_filter($m->painted, fn($p) => str_contains($p[0], 'strong')));
+    $after = array_values(array_filter($m->painted, fn($p) => str_starts_with($p[0], ' and')));
+    check((($strong[0][1] ?? 0) & \MyPHP\UI\Font::BOLD) !== 0, 'faces: the strong painted bold');
+    same($v->xOf($l, $l->rows[0], strpos($line, ' and')), $after[0][2] ?? null, 'faces: the run after it painted where it measures');
+    $plain = new EditorTest('', $line);
+    $pv = (fn() => $this->ed->view)->call($plain->st);
+    same([], $pv->line(0)->faces, 'faces: none in plain text');
+
+    $check = function (string $what) use ($v): void {
+        $l = $v->line(0);
+        foreach ($l->rows as $ri => $r) {
+            $prev = -1.0;
+            for ($d = $r['from']; $d < $r['to']; $d++) {
+                if ((ord($l->disp[$d]) & 0xC0) === 0x80) { continue; }
+                $x = $v->xOf($l, $r, $d);
+                if ($x <= $prev) { check(false, "faces, $what: row $ri: x of $d is $x, after $prev"); return; }
+                $prev = $x;
+                if (($got = $v->dispAt($l, $r, $x + 0.5)) !== $d) { check(false, "faces, $what: row $ri: the hit at $x of $d is $got"); return; }
+            }
+            check(abs($v->xOf($l, $r, $r['to']) - $r['indent'] - $r['width']) <= 1, "faces, $what: row $ri measured as wide as it shows");
+        }
+    };
+    $check('one row');
+    $v->setWrap(true, $v->rangeWidth($l, 0, strlen($line)) / 2);
+    check(count($v->line(0)->rows) >= 2, 'faces: the line wrapped');
+    $check('wrapped');
+})();
