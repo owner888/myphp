@@ -180,6 +180,8 @@ final class Node
     public float $blur = 0.0;
     /** @internal Painter::paintBlurred: painted into its blur's canvas now */
     public bool $blurring = false;
+    /** The effect the node draws through in place of drawing as it is (effect), or null. */
+    public ?\MyPHP\UI\Shader\Effect $effect = null;
     public ?array $stripes = null;
     /** Whether the border is solid or dashed (mygo's BorderStyle). */
     public BorderStyle $borderStyle = BorderStyle::Solid;
@@ -571,6 +573,28 @@ final class Node
     public function blur(float $sigma): static
     {
         $this->blur = max($sigma, 0.0);
+        return $this;
+    }
+
+    /**
+     * Draws the node, with its children, through $fx, the effect of a
+     * shader (Shader::effect), in place of drawing it as it is; null draws
+     * it as it is (mygo's Effect), as SwiftUI's colorEffect,
+     * distortionEffect and layerEffect do:
+     *
+     *     $c->text('Wavy', 24)->effect($wave->effect(new Options(uniforms: ['Time' => $t], maxSampleOffset: [0, 8])));
+     *
+     * What the node renders, with its children, shadows and what its draw
+     * callbacks paint, renders into a canvas of the size of its box and the
+     * effect's margin (Effect::effectMargin) around it, every frame it
+     * paints, which the effect then draws over the box and the margin,
+     * transformed, clipped and faded as the node would be. Hit testing,
+     * focus and accessibility do not change: only what shows. Web views
+     * inside it do not show through an effect.
+     */
+    public function effect(?\MyPHP\UI\Shader\Effect $fx): static
+    {
+        $this->effect = $fx;
         return $this;
     }
 

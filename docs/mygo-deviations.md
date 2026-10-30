@@ -2057,3 +2057,51 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   linearly; myphp times four times the input against once, as its parser
   test did, since counting would add a step to every loop of the parser
   that nothing but the test reads.
+
+## Shaders (v1.80)
+
+- **No CPU renderer**: mygo interprets a shader on the CPU where no GPU
+  draws (its CPU renderer, ui.Tester); myphp draws only with Metal, so
+  the interpreter (shaderir/interp) is not ported, nor the GLSL and HLSL
+  backends, which myphp's renderers would need on Linux and Windows.
+- **Compiling**: `Shader::compile` throws `Compiler\ParseError` (or
+  InvalidArgumentException) where mygo returns an error, so there is no
+  MustCompile. It takes tens of milliseconds in PHP, where mygo takes
+  about one; compile once, as the app starts. Syntax errors are the first
+  only, without " (and N more errors)"; errors that print a syntax node
+  print it as `&ast.Kind{...}`, where Go prints its pointers.
+- **Metal's pipeline**: mygo starts building a shader's library on a
+  goroutine as it compiles; PHP has none, so the first frame drawing a
+  shader waits for it (Metal keeps it on disk for later launches).
+- **Colors**: myphp's colors are ints, so an int set in
+  `Options::$uniforms` to a vec3 or vec4 is a color (0xRRGGBB, alpha 1);
+  `Values::color` takes the color and its alpha.
+- **The backdrop**: read at half size when blurred (the glass's backdrop),
+  and at full size, as it is, when not; mygo blurs and samples it at the
+  sizes its renderers choose.
+- **Constants**: integers beyond 64 bits, and fractions whose terms do
+  not fit, are floats, where Go keeps them exact.
+- **The examples drawing with shaders** (wind, blackhole, chat-glow)
+  - mygo: each asks `Painter.Accelerated()` and draws without its shaders
+    where the frame draws on the CPU (nothing, a line of text, a disc, a
+    plain "Thinking…", no edge glow), and its tests count the pixels the
+    CPU renderer draws; wind rasterizes its atlas with `ui.Render`
+    between the window's frames (`Window.Update`); wind's composer and
+    chat-glow's field are `TextInput`s given their own padding, corners,
+    background and border; blackhole's scene canvas is the window's
+    pixels at its quality, whatever their number; wind's hint names ⌘R
+    or Ctrl+R by platform.
+  - myphp: no `Accelerated()` and no CPU paths: the examples always draw
+    with their shaders, and their tests check what the display lists
+    give the GPU (the shaders' draws, their images, their uniforms); the
+    draw asks for the atlas and the next frame's view makes it with
+    `Context::shape`, `fontMetrics` and `renderGlyphs`; the fields are
+    a `textInputBase()` in a box of that look, which paints the
+    placeholder while the field is empty and takes the input's border
+    colors (`input()` keeps its own look whatever its setters say, and
+    the base has no placeholder); the scene renders at most
+    `Canvas::MAX` pixels a side, as at a lower quality, on a window
+    larger than that (1200 × 760 points at 2 pixels a point is); ⌘R.
+  - Why: myphp draws on Metal only (No CPU renderer, above); ui.Render
+    and the shaping functions are the view's here; myphp's field and
+    canvas as they are; macOS.

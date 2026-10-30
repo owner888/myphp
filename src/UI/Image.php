@@ -25,6 +25,8 @@ final class Image
     public int $addr;
     /** That update() gave it new pixels the atlas has yet to take. @internal */
     public bool $updated = false;
+    /** @internal how many times update() gave it new pixels, which a texture a shader reads it from was made of */
+    public int $version = 0;
     /** Shows its pixels as squares when scaled up, sampled at the nearest rather than blended, as pixel art wants (mygo's Bitmap.Pixelated); its levels, smaller, stay smooth. */
     public bool $pixelated = false;
     /** @internal the canvas whose bitmap this is: its pixels are on the GPU (Canvas::bitmap) */
@@ -117,6 +119,7 @@ final class Image
             $this->updated = true;
         }
         \FFI::memcpy($this->pix, $rgba, $n);
+        $this->version++;
         $this->levels = [];
     }
 

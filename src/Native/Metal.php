@@ -6,7 +6,8 @@ namespace MyPHP\Native;
 use Closure;
 use FFI;
 use MyPHP\UI\DisplayList;
-use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, ImageAtlas};
+use MyPHP\UI\{Atlas, Canvas, CanvasAtlas, Image, ImageAtlas};
+use MyPHP\UI\Shader\Code;
 use RuntimeException;
 
 /**
@@ -45,8 +46,8 @@ final class Metal
             o.pos = float4(0.0, 0.0, 0.0, 1.0);
             return o;
         }
-        float entry = floor(i.params.y / 16.0);   // the kind carries the quad's transform, as kind + 16 * entry
-        float kind = i.params.y - entry * 16.0;
+        float entry = floor(i.params.y / 32.0);   // the kind carries the quad's transform, as kind + 32 * entry (DisplayList::KIND_STRIDE)
+        float kind = i.params.y - entry * 32.0;
         Xform m = xf[uint(entry)];
         float2 corner = float2(vid & 1, vid >> 1);
         bool sdf = kind < 0.5 || (kind > 2.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5) || (kind > 8.5 && kind < 11.5) || kind > 13.5;
@@ -490,6 +491,17 @@ final class Metal
     private array $wideViews = [];
     private ?\FFI $cg = null;
     private $extended = null, $library = null;
+    /** The pixel format the frame or canvas being drawn draws to, and whether its alpha stays premultiplied (a canvas's), for the shaders' pipelines. */
+    private int $format = self::PIXEL_FORMAT_BGRA8;
+    private bool $premultiplied = false;
+    /** @var \WeakMap<Image, array{0: mixed, 1: int}> the textures shaders read images from, each with the version of the image it holds */
+    private \WeakMap $shaderImages;
+    /** @var \WeakMap<Canvas, mixed> the textures shaders read canvases' bitmaps from, copied from their place each frame they are read */
+    private \WeakMap $shaderCanvases;
+    /** A texture of one transparent pixel, which a shader reads in place of an image it was not given. */
+    private $noImage = null;
+    /** @var array<int, mixed> the textures a shader draw reads, by its draw: four each */
+    private array $shaderTextures = [];
     /** @var array<string, mixed> the textures canvases are rendered in before they are copied to their place, by size */
     private array $canvasTargets = [];
     /** The textures the glass reads: a copy of the drawable, the half-size blur in progress, the blurred backdrop. */
@@ -557,6 +569,8 @@ final class Metal
                 ObjC::$c->cast("float[$xfloats]", ObjC::msg('p:', $xbuf, 'contents')), self::TRANSFORMS);
         }
         $this->uniforms = ObjC::$c->new('float[8]'); // viewport.xy, atlas.xy, scale, atlasScale, dark, pad
+        $this->shaderImages = new \WeakMap();
+        $this->shaderCanvases = new \WeakMap();
         $this->blurParams = ObjC::$c->new('float[4]'); // dir.xy, sigma, pad
     }
 
@@ -607,12 +621,12 @@ final class Metal
     }
 
     /** A pipeline of the library's $vertex and $fragment functions drawing to $format, blended or not; the canvases' (RGBA, keeping alpha premultiplied, as the image atlas holds it) take their alpha as it is. */
-    private function buildPipeline(string $vertex, string $fragment, bool $blend, int $format, int $alphaFrom = self::BLEND_SRC_ALPHA, int $rgbFrom = self::BLEND_SRC_ALPHA)
+    private function buildPipeline(string $vertex, string $fragment, bool $blend, int $format, int $alphaFrom = self::BLEND_SRC_ALPHA, int $rgbFrom = self::BLEND_SRC_ALPHA, $lib = null)
     {
         $err = ObjC::$c->new('void*[1]');
         $this->library ??= ObjC::msg('p:ppp', $this->device, 'newLibraryWithSource:options:error:', ObjC::str(self::SHADER), null, $err)
             ?? throw new RuntimeException('MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
-        $lib = $this->library;
+        $lib ??= $this->library;
         $desc = ObjC::msg('p:', ObjC::alloc('MTLRenderPipelineDescriptor'), 'init');
         ObjC::msg('v:p', $desc, 'setVertexFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($vertex)));
         ObjC::msg('v:p', $desc, 'setFragmentFunction:', ObjC::msg('p:p', $lib, 'newFunctionWithName:', ObjC::str($fragment)));
@@ -643,7 +657,9 @@ final class Metal
     {
         $key = ObjC::addr($view);
         $now = hrtime(true) / 1e9;
-        if ($list->wide !== []) { $this->wideUntil[$key] = $now + self::WIDE_HOLD; }
+        $wide = $list->wide !== [];
+        foreach ($list->shaders as [, , $w]) { $wide = $wide || $w !== null; } // a shader reading a wide color
+        if ($wide) { $this->wideUntil[$key] = $now + self::WIDE_HOLD; }
         $want = $now < ($this->wideUntil[$key] ?? 0.0) && self::screenWide($view);
         if ($want !== array_key_exists($key, $this->wideViews)) {
             $layer = ObjC::msg('p:', $view, 'layer');
@@ -891,11 +907,11 @@ final class Metal
         foreach ($this->images?->pages ?? [] as $page) { $pages = $pages || $page->dirty; }
         // What changed since the last frame (FrameDamage, mygo's scene.Differ): nothing, and it draws nothing, taking no
         // drawable; else the drawable gets what changed since it was drawn, cleared and drawn again there, the rest kept.
-        // Glass reads what is below it, canvases and images changed pixels the quads do not tell: drawn whole.
+        // Glass reads what is below it, canvases, images and shaders (their uniforms) changed pixels the quads do not tell: drawn whole.
         $cc = ObjC::msg('k:', $view, 'clearColor');
         $changed = $damage->diff($list->copyOut(0, $list->n), $list->transformBytes(), [$cc->r, $cc->g, $cc->b, $cc->a, $this->uniforms[5], $this->uniforms[6], $list->glass, $list->holes,
             ObjC::msg('L:', $view, 'colorPixelFormat')], $this->uniforms[4], (int)$ds->w, (int)$ds->h);
-        if ($list->glass !== [] || $pages || $canvases !== [] || !(self::$partial ??= getenv('MYPHP_PARTIAL') !== '0')) { $changed = null; }
+        if ($list->glass !== [] || $list->shaders !== [] || $pages || $canvases !== [] || !(self::$partial ??= getenv('MYPHP_PARTIAL') !== '0')) { $changed = null; }
         if ($changed === [] && !$sync) {
             self::$redrew[$key] = 'nothing';
             return; // the same frame: the drawable shows it
@@ -1034,11 +1050,14 @@ final class Metal
      */
     private function drawList($cb, $pass, $texture, DisplayList $list, array $buffers, ?array $rects = null, $clear = null): void
     {
-        [$this->pipeline, $this->blurPipeline, $this->holePipeline, $this->clearPipeline] = $this->pipelines[ObjC::msg('L:', $texture, 'pixelFormat')]; // the target's: BGRA8, or a wide gamut's float16
+        $this->format = ObjC::msg('L:', $texture, 'pixelFormat');
+        $this->premultiplied = false;
+        [$this->pipeline, $this->blurPipeline, $this->holePipeline, $this->clearPipeline] = $this->pipelines[$this->format]; // the target's: BGRA8, or a wide gamut's float16
+        $this->shaderTextures($cb, $list);
         $start = 0;
         foreach ($list->glass as $g) {
             [$at, $sigma] = $g;
-            $this->pass($cb, $pass, $start, $at - $start, $start === 0, $buffers, $list->holes);
+            $this->pass($cb, $pass, $start, $at - $start, $start === 0, $buffers, $list->holes, null, $list);
             $this->blur($cb, $texture, $sigma);
             $start = $at;
         }
@@ -1052,7 +1071,7 @@ final class Metal
                 $b[$k + 12] = -1e6; $b[$k + 13] = -1e6; $b[$k + 14] = 2e6; $b[$k + 15] = 2e6;
             }
         }
-        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers, $list->holes, $rects);
+        $this->pass($cb, $pass, $start, $list->n - $start, $start === 0, $buffers, $list->holes, $rects, $list);
     }
 
     /**
@@ -1061,7 +1080,7 @@ final class Metal
      * with their pipeline.
      * @param list<array{0: int, 1: int}> $holes
      */
-    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers, array $holes = [], ?array $rects = null): void
+    private function pass($cb, $pass, int $from, int $count, bool $first, array $buffers, array $holes = [], ?array $rects = null, ?DisplayList $list = null): void
     {
         [$quads, $xforms] = $buffers;
         ObjC::msg('v:L', ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0), 'setLoadAction:',
@@ -1104,15 +1123,181 @@ final class Metal
             $cut($r);
             ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, 1);
         }
-        $at = $from;
-        foreach ($holes as [$h, $slots]) {
-            if ($h < $from || $h >= $from + $count) { continue; }
-            $draw($at, $h - $at, $this->pipeline);
-            $draw($h, $slots, $this->holePipeline);
-            $at = $h + $slots;
-        }
-        $draw($at, $from + $count - $at, $this->pipeline);
+        $this->drawRuns($enc, $from, $count, $holes, $list, $draw, $this->pipeline);
         ObjC::msg('v:', $enc, 'endEncoding');
+    }
+
+    /**
+     * Draws quads [$from, $from + $count) with $pipeline by $draw, but the
+     * holes among them, with their pipeline, and the runs shaders draw,
+     * each with its shader's, its uniforms and its images.
+     * @param list<array{0: int, 1: int}> $holes
+     * @param Closure(int, int, mixed): void $draw
+     */
+    private function drawRuns($enc, int $from, int $count, array $holes, ?DisplayList $list, Closure $draw, $pipeline): void
+    {
+        $runs = [];
+        foreach ($holes as [$h, $slots]) {
+            if ($h >= $from && $h < $from + $count) { $runs[] = [$h, $slots, -1]; }
+        }
+        foreach ($list?->shaderRuns ?? [] as $r) {
+            if ($r[0] >= $from && $r[0] < $from + $count) { $runs[] = $r; }
+        }
+        if (count($runs) > 1) {
+            usort($runs, fn(array $a, array $b): int => $a[0] <=> $b[0]);
+        }
+        $at = $from;
+        foreach ($runs as [$r, $n, $d]) {
+            $draw($at, $r - $at, $pipeline);
+            if ($d < 0) {
+                $draw($r, $n, $this->holePipeline);
+            } else {
+                [$code, $bytes, $wide] = $list->shaders[$d];
+                $bytes = $wide !== null && $this->format === self::PIXEL_FORMAT_RGBA16F ? $wide : $bytes; // a wide gamut's colors, in extended sRGB
+                $textures = $this->shaderTextures[$d];
+                if ($code->backdrop) {
+                    [$textures[2], $bytes] = $this->backdropOf($code, $bytes, $r, $list);
+                }
+                $size = strlen($bytes);
+                $buf = ObjC::$c->new("char[$size]");
+                FFI::memcpy($buf, $bytes, $size);
+                ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', ObjC::$c->cast('void*', FFI::addr($buf)), $size, 3); // copied by Metal as it is set
+                foreach ($textures as $i => $t) {
+                    ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $t, 5 + $i);
+                }
+                $draw($r, $n, $this->shaderPipeline($code));
+            }
+            $at = $r + $n;
+        }
+        $draw($at, $from + $count - $at, $pipeline);
+    }
+
+    /**
+     * The backdrop of a shader reading it drawn at quad $at, and its
+     * uniforms' bytes with where its texels lie: what the frame drew
+     * before it, blurred at half size (the backdrop the glass reads) when
+     * its glass entry asks a blur, or as it is; transparent in a canvas,
+     * where glass draws nothing. @return array{0: mixed, 1: string}
+     */
+    private function backdropOf(Code $code, string $bytes, int $at, DisplayList $list): array
+    {
+        $blur = 0.0;
+        foreach ($list->glass as [$g, $sigma]) {
+            if ($g === $at) { $blur = $sigma; }
+        }
+        $t = $this->premultiplied ? null : ($blur > 0 ? $this->backdrop : $this->snapshot);
+        if ($t === null) {
+            return [$this->noImage(), $bytes];
+        }
+        $w = ObjC::msg('L:', $t, 'width'); $h = ObjC::msg('L:', $t, 'height');
+        $down = $blur > 0 ? 2.0 : 1.0;
+        $put = function (int $word, float $v) use (&$bytes, $code): void {
+            $bytes = substr_replace($bytes, pack('g', $v), $code->lanes[$word], 4);
+        };
+        $put(\MyPHP\UI\Shader\Shader::BACKDROP_SIZE_WORD, (float)$w);
+        $put(\MyPHP\UI\Shader\Shader::BACKDROP_SIZE_WORD + 1, (float)$h);
+        $put(\MyPHP\UI\Shader\Shader::AREA_WORD, 0.0);
+        $put(\MyPHP\UI\Shader\Shader::AREA_WORD + 1, 0.0);
+        $put(\MyPHP\UI\Shader\Shader::AREA_WORD + 2, $down);
+        return [$t, $bytes];
+    }
+
+    /**
+     * The pipeline of $code drawing to the target being drawn, built the
+     * first time: its library, the shader's code and its tail, compiled by
+     * Metal, which keeps what it compiled on disk for the app's next
+     * launches (mygo's PrecompileShader starts it ahead, on a goroutine;
+     * PHP has none, so the first frame drawing a shader waits for it).
+     */
+    private function shaderPipeline(Code $code)
+    {
+        $key = "{$this->format}:" . ($this->premultiplied ? 1 : 0);
+        if (!isset($code->pipelines[$key])) {
+            $err = ObjC::$c->new('void*[1]');
+            $lib = ObjC::msg('p:ppp', $this->device, 'newLibraryWithSource:options:error:', ObjC::str($code->source), null, $err)
+                ?? throw new RuntimeException('shader MSL: ' . ObjC::phpStr(ObjC::msg('p:', $err[0], 'localizedDescription')));
+            $code->pipelines[$key] = $this->premultiplied
+                ? $this->buildPipeline('shader_vertex', 'shader_fragment', true, $this->format, self::BLEND_ONE, self::BLEND_SRC_ALPHA, $lib)
+                : $this->buildPipeline('shader_vertex', 'shader_fragment', true, $this->format, self::BLEND_SRC_ALPHA, self::BLEND_SRC_ALPHA, $lib);
+        }
+        return $code->pipelines[$key];
+    }
+
+    /**
+     * The textures each shader draw of $list reads, made before its passes:
+     * an image's, uploaded when it is new or updated; a canvas's bitmap's,
+     * copied from its place among the canvases' pages, where its pixels
+     * are, into a texture of its own, which a shader reads as an image of
+     * its own size, transparent beyond it.
+     */
+    private function shaderTextures($cb, DisplayList $list): void
+    {
+        $this->shaderTextures = [];
+        if ($list->shaders === []) {
+            return;
+        }
+        $copied = [];
+        foreach ($list->shaders as $d => [, , , $images]) {
+            $ts = [];
+            foreach ($images as $img) {
+                $ts[] = $img === null ? $this->noImage() : ($img->canvas !== null ? $copied[spl_object_id($img)] ??= $this->canvasTexture($cb, $img->canvas) : $this->imageTexture($img));
+            }
+            $this->shaderTextures[$d] = $ts;
+        }
+    }
+
+    private function noImage()
+    {
+        if ($this->noImage === null) {
+            $this->noImage = $this->sharedTexture(1, 1);
+            $region = ObjC::$c->new('MTLRegion');
+            $region->w = 1; $region->h = 1; $region->d = 1;
+            $zero = ObjC::$c->new('char[4]');
+            ObjC::msg('v:RLpL', $this->noImage, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, ObjC::$c->cast('void*', FFI::addr($zero)), 4);
+        }
+        return $this->noImage;
+    }
+
+    /** A texture of $w × $h RGBA pixels the CPU writes. */
+    private function sharedTexture(int $w, int $h)
+    {
+        $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_RGBA8, $w, $h, false);
+        ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ);
+        return ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('shader image texture');
+    }
+
+    /** The texture of $img's pixels, premultiplied as it holds them. */
+    private function imageTexture(Image $img)
+    {
+        [$t, $version] = $this->shaderImages[$img] ?? [null, -1];
+        if ($t !== null && $version === $img->version) {
+            return $t;
+        }
+        if ($t !== null) { ObjC::msg('v:', $t, 'release'); }
+        $t = $this->sharedTexture($img->w, $img->h);
+        $region = ObjC::$c->new('MTLRegion');
+        $region->w = $img->w; $region->h = $img->h; $region->d = 1;
+        ObjC::msg('v:RLpL', $t, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, ObjC::$c->cast('void*', $img->addr), $img->w * 4);
+        $this->shaderImages[$img] = [$t, $img->version];
+        return $t;
+    }
+
+    /** A texture of $c's size with its pixels, copied from its place among the canvases' pages. */
+    private function canvasTexture($cb, Canvas $c)
+    {
+        $t = $this->shaderCanvases[$c] ??= $this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8);
+        if ($c->slot === null) {
+            return $t; // never drawn: transparent
+        }
+        [$u, $v, $page] = $c->slot;
+        $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
+        $from = ObjC::$c->new('MTLOrigin');
+        [$from->x, $from->y] = [$u, $v];
+        $size = ObjC::$c->new('MTLSize');
+        [$size->w, $size->h, $size->d] = [$c->w, $c->h, 1];
+        ObjC::msg('v:pLLoZpLLo', $blit, 'copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:', $this->imagesTexture, $page, 0, $from, $size, $t, 0, 0, ObjC::$c->new('MTLOrigin'));
+        ObjC::msg('v:', $blit, 'endEncoding');
+        return $t;
     }
 
     /**
@@ -1144,6 +1329,7 @@ final class Metal
         ObjC::msg('v:L', $ca, 'setLoadAction:', self::LOAD_CLEAR);
         ObjC::msg('v:L', $ca, 'setStoreAction:', 1); // store
         ObjC::msg('v:k', $ca, 'setClearColor:', ObjC::$c->new('MTLClearColor')); // transparent
+        $this->shaderTextures($cb, $list); // copied before the pass, which may not copy
         $enc = ObjC::msg('p:p', $cb, 'renderCommandEncoderWithDescriptor:', $pass);
         if ($list->n > 0) {
             $quads = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($list->buf)), $list->n * DisplayList::FLOATS_PER_RECT * 4, 0);
@@ -1158,7 +1344,14 @@ final class Metal
             ObjC::msg('v:pLL', $enc, 'setFragmentBuffer:offset:atIndex:', $quads, 0, 0);
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->atlasTexture, 0);
             ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $this->imagesTexture, 1);
-            ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $list->n);
+            [$this->format, $this->premultiplied] = [self::PIXEL_FORMAT_RGBA8, true]; // the shaders it draws, into the canvas's RGBA, alpha kept premultiplied
+            $this->drawRuns($enc, 0, $list->n, [], $list, function (int $at, int $n, $pipeline) use ($enc): void {
+                if ($n <= 0) { return; }
+                ObjC::msg('v:p', $enc, 'setRenderPipelineState:', $pipeline);
+                ObjC::msg('v:LL', $enc, 'setVertexBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
+                ObjC::msg('v:LL', $enc, 'setFragmentBufferOffset:atIndex:', $at * DisplayList::FLOATS_PER_RECT * 4, 0);
+                ObjC::msg('v:LLLL', $enc, 'drawPrimitives:vertexStart:vertexCount:instanceCount:', self::PRIMITIVE_TRIANGLE_STRIP, 0, 4, $n);
+            }, $this->canvasPipeline);
             ObjC::msg('v:', $quads, 'release');
             ObjC::msg('v:', $xforms, 'release');
         }

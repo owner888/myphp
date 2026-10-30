@@ -45,9 +45,14 @@ final class Layout
     {
         self::$window = [$w, $h];
         self::$metrics = $c->metrics();
+        self::$aligned = [];
         self::measure($c->root);
         self::arrange($c->root, 0, 0, $w, $h);
         if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width)
+            // A list's row aligned again, from where it showed, as high as its lines wrap: a list following its end keeps it in view as a reply grows past the list.
+            foreach (self::$aligned as [$s, $aligning, $row, $top, $lag, $grew]) {
+                [$s->aligning, $s->shownRow, $s->shownTop, $s->lag, $s->grew] = [$aligning, $row, $top, $lag, $grew];
+            }
             self::measure($c->root);
             self::arrange($c->root, 0, 0, $w, $h);
         }
@@ -570,6 +575,7 @@ final class Layout
                 }
             }
             if ($s->aligning !== null && isset($kids[$k = $s->aligning[0] - $s->first])) { // a row to show in the middle or at the bottom, measured now (mygo's ScrollTo)
+                self::$aligned[] = [$s, $s->aligning, $s->shownRow, $s->shownTop, $s->lag, $s->grew];
                 $top = 0.0; $all = 0.0;
                 foreach ($kids as $i => $kid) { if ($i < $k) { $top += $kid->mh + $gap; } $all += $kid->mh + ($i > 0 ? $gap : 0); }
                 if ($s->aligning[1] === Node::START) { // under the header of its section, pinned at the top
@@ -896,6 +902,8 @@ final class Layout
 
     /** The window's size as the layout goes: what attachTo keeps popovers in. @var array{0: float, 1: float} */
     private static array $window = [INF, INF];
+    /** @var list<array{0: ListState, 1: array, 2: int, 3: float, 4: float, 5: bool}> the lists whose row this layout aligned (ListState::$aligning), as they were before: how, where they showed and their glide's lag; the arrange after texts wrap aligns them again from there */
+    private static array $aligned = [];
     /** The text metrics of the frame laid out, for the baselines of texts (boxBaseline). */
     private static ?TextMetrics $metrics = null;
 

@@ -5692,6 +5692,65 @@ codesign, ditto, hdiutil, xattr, xcrun) run them.
   s, now 0.07 s. The linear-time checks of the parser's test include
   both, with lines indented, quoted, and escaped pipes in a cell.
 
+## Shaders in Go's syntax (v1.80)
+
+mygo's ui/shader, with the compiler it forks from Ebitengine's Kage
+(Apache 2.0: src/UI/Shader/LICENSE, the notice kept in each file ported
+from it), in PHP:
+
+- **Syntax** (`UI\Shader\Syntax`): Go has go/parser; PHP has none, so a
+  scanner and a parser of Go's syntax make a tree of go/ast's nodes and
+  fields (lowerCamel), all of Go but generics; what a shader cannot have
+  (pointers, maps, closures, switch, go...) parses into `Unsupported`
+  nodes the compiler reports. It stops at the first error, which Go's
+  parser words the same in most cases.
+- **The compiler** (`UI\Shader\Compiler`, mygo's internal/shader) checks
+  the tree and makes the program of `UI\Shader\Ir` (internal/shaderir);
+  `Ir\Constant` is go/constant's part it uses, floats kept as exact
+  fractions while they fit 64 bits, as go/constant keeps them (0.13*4.5 is
+  0.585, which wind.kage folds). `compileFragment` adds the bridge (the
+  uniforms renderers set, image0At... layerAt, backdropAt) as bridge.go.
+- **MSL** (`UI\Shader\Msl`, shaderir/msl): the program as Metal's.
+- **Tests against mygo's compiler**: Go 1.24 builds internal/shader and
+  shaderir as they are, so their output for every source mygo's own
+  tests compile (3640, and the 22 shaders of its examples and ui/shader
+  tests) is in tests/testdata/shader: whether go/parser takes each, the
+  compiler's error, its program and its MSL. The port's errors match
+  word for word (but for five that print Go pointers), its programs and
+  its MSL byte for byte.
+- **Drawing** (`UI\Shader\Shader`): a draw is a quad of kind 16
+  (`DisplayList::shader`), a fill turns the glyphs' and paths' masks fn
+  painted into kind 17 (`shaderGlyphs`), each with its draw among
+  `$list->shaders` (the code, the uniforms' bytes in their lanes, those
+  of a wide gamut, the images) and in a run of `$list->shaderRuns`;
+  `KIND_STRIDE` is 32 to make room. Metal draws a run with the shader's
+  pipeline (`Shader\Code`'s library: the shader's MSL and a tail of its
+  own vertex and fragment stages, which place quads as quad_vertex does
+  and scale the shader's color by the quad's coverage, clip, mask and
+  opacity), built when first drawn; the uniforms are buffer 3, the images
+  textures 5 to 8, each an image's pixels or a canvas's copied from its
+  page. A shader reading its backdrop is a glass entry: the pass splits,
+  the frame so far is copied (and blurred at half size for a blur), and
+  Metal sets where its texels lie. An effect (`Node::effect`) renders the
+  node into a canvas, as a blur does, which the shader draws over as its
+  image3. A frame with a shader is drawn whole: its uniforms change what
+  the quads do not tell.
+- **mygo's examples drawing with shaders** (examples/wind, blackhole,
+  chat-glow, run headless by examples_test.php) load their .kage files
+  next to main.php. A frame costs ~1 ms of PHP in the headless runs
+  (wind ~1.0–1.4, blackhole ~0.4, chat-glow 0.7 at rest to 2–2.7 while it
+  writes, with JIT and without), a shader draw's uniforms ~0.15 ms of it.
+  Chat-glow found two things in lists following their end, both fixed as
+  mygo has them: a frame without a FollowAnimation, as when much came at
+  once, kept the lag of a glide on its way, which the next frame went on
+  gliding from (mygo's glideToEnd drops it: `Context::list` now jumps it
+  to 0); and the row a list aligns (`ListState::$aligning`, its end as a
+  reply grows) was aligned in the first arrange only, so when texts then
+  wrapped and the reply grew past the list's bottom, the list was no
+  longer at its end and stopped following (`Layout::layout` now aligns
+  it again, from where it showed, in the arrange after the wrap).
+
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

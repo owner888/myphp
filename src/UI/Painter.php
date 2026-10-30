@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
+
 /**
  * Turns a laid-out tree into display-list quads: fills, labels, clips
  * (the static methods). An instance draws into a display list as mygo's
@@ -54,6 +56,12 @@ final class Painter
     public function visible(): array
     {
         return $this->list->visible();
+    }
+
+    /** @internal Shader: the map from what is drawn now to the window, in points. */
+    public function world(): Affine
+    {
+        return $this->list->world();
     }
 
     public function theme(): Theme
@@ -362,6 +370,53 @@ final class Painter
         }
     }
 
+    /**
+     * @internal Shader: fills $r, rounded by $radius, with the shader of
+     * $code reading $bytes (its uniforms; $wide in their place where the
+     * window draws a wide gamut) and $images.
+     * @param array{0: float, 1: float, 2: float, 3: float} $r
+     * @param list<?Image> $images
+     */
+    public function shaderEffect(Shader\Code $code, array $r, float $radius, string $bytes, ?string $wide, array $images, float $blur = 0.0): void
+    {
+        if ($r[2] <= 0 || $r[3] <= 0 || $this->list->clipped(...$r)) {
+            return;
+        }
+        if ($code->backdrop) {
+            $this->list->glass[] = [$this->list->n, $blur]; // what is drawn before it, copied, and blurred by $blur pixels unless 0: its backdrop
+        }
+        $this->list->shader($r[0], $r[1], $r[2], $r[3], $radius, $this->shaderDraw($code, $bytes, $wide, $images));
+    }
+
+    /**
+     * @internal Shader: paints what $fn paints with the shader of $code in
+     * place of the colors of its glyphs' and paths' masks, filling $box
+     * (mygo's ShaderFill).
+     * @param array{0: float, 1: float, 2: float, 3: float} $box
+     * @param list<?Image> $images
+     */
+    public function shaderFill(Shader\Code $code, array $box, Closure $fn, string $bytes, ?string $wide, array $images): void
+    {
+        $from = $this->list->n;
+        $fn();
+        if ($this->list->n > $from) {
+            $draw = count($this->list->shaders);
+            if ($this->list->shaderGlyphs($from, $draw, $box[0], $box[1]) > 0) {
+                $this->shaderDraw($code, $bytes, $wide, $images);
+            }
+        }
+    }
+
+    /** A shader's draw among the list's, by its index. @param list<?Image> $images */
+    private function shaderDraw(Shader\Code $code, string $bytes, ?string $wide, array $images): int
+    {
+        foreach ($images as $img) {
+            $img?->canvas?->slot(); // a canvas the shader reads has its place, where it renders
+        }
+        $this->list->shaders[] = [$code, $bytes, $wide, $images];
+        return count($this->list->shaders) - 1;
+    }
+
     /** Draws the shapes of $svg fitted in $r in $rgb. @param array{0: float, 1: float, 2: float, 3: float} $r */
     public function icon(SVG $svg, array $r, int $rgb, float $alpha = 1.0): void
     {
@@ -393,6 +448,9 @@ final class Painter
         }
         if ($n->belowMaterials && $rt !== null && $rt->underLayer && !$rt->paintingUnder) { // the window paints it under its materials, from where its painting is now
             $rt->underPaints[] = ['node' => $n, 'world' => $list->world(), 'opacity' => $list->opacity(), 'clip' => $list->clip(), 'mask' => $list->mask()];
+            return;
+        }
+        if ($n->effect !== null && !$n->blurring && $rt !== null && self::paintEffected($n, $list, $text, $t, $rt)) {
             return;
         }
         if ($n->blur > 0 && !$n->blurring && $rt !== null && self::paintBlurred($n, $list, $text, $t, $rt)) {
@@ -471,6 +529,53 @@ final class Painter
         $slot = self::slot($text, $cv->bitmap());
         $list->setWorld($n->world);
         $list->image($x0 / $s, $y0 / $s, $w / $s, $h / $s, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
+        $list->setWorld($world);
+        return true;
+    }
+
+    /**
+     * Paints $n through its effect (mygo's paintEffect): its subtree
+     * rendered into its layer, a canvas of its box and the effect's margin
+     * on the pixel grid, then the effect over the box and the margin,
+     * through $n's map. Whether it did: a node too large to render apart
+     * paints as it is.
+     */
+    private static function paintEffected(Node $n, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): bool
+    {
+        [$mx, $my] = $n->effect->effectMargin();
+        [$mx, $my] = [max($mx, 0.0), max($my, 0.0)];
+        $world = $list->world();
+        $list->setWorld($n->world);
+        $out = $list->clipped($n->x - $mx, $n->y - $my, $n->w + 2 * $mx, $n->h + 2 * $my);
+        $list->setWorld($world);
+        if ($n->w <= 0 || $n->h <= 0 || $out) {
+            return true;
+        }
+        $s = $text->scale();
+        [$x0, $y0] = [floor(($n->x - $mx) * $s), floor(($n->y - $my) * $s)];
+        [$w, $h] = [(int)(ceil(($n->x + $n->w + $mx) * $s) - $x0), (int)(ceil(($n->y + $n->h + $my) * $s) - $y0)];
+        if ($w > Canvas::MAX || $h > Canvas::MAX) {
+            return false;
+        }
+        $cv = $rt->blurLayers[$n->id] ?? null; // the layers of blurs and of effects, by node
+        if ($cv === null || $cv->w !== $w || $cv->h !== $h || $cv->blur > 0) {
+            $cv = $rt->blurLayers[$n->id] = new Canvas($w, $h);
+        }
+        $base = Affine::matrix($s, 0, 0, $s, -$x0, -$y0); // the node's layout, in the canvas's pixels
+        if ($n->world->set) {
+            $base = $base->mul($n->world->inverse() ?? Affine::singular()); // drawn through its map, as a layer of its content
+        }
+        $cv->draw(new self($list, $text, $t, $rt), static function (Painter $cp) use ($n, $base, $t, $rt): void {
+            $cp->list->setBase($base);
+            $n->blurring = true;
+            try {
+                self::paintNode($n, $cp->list, $cp->text, $t, $rt);
+            } finally {
+                $n->blurring = false;
+            }
+        });
+        $list->setWorld($n->world);
+        $n->effect->paintEffect(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $cv->bitmap(), [$n->x * $s - $x0, $n->y * $s - $y0]);
         $list->setWorld($world);
         return true;
     }

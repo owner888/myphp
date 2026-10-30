@@ -46,7 +46,9 @@ use RuntimeException;
 final class DisplayList
 {
     public const FLOATS_PER_RECT = 16, FLOATS_PER_TRANSFORM = 16;
-    public const KIND_STRIDE = 16.0;
+    public const KIND_STRIDE = 32.0;
+    /** The kinds of what a shader draws (Shader\Shader): its rectangle (u: its draw among $shaders), and a glyph's mask it fills (color: its draw, and the corner of the box it fills, x y), which Metal draws with the shader's pipeline. */
+    public const KIND_SHADER = 16, KIND_SHADER_GLYPH = 17;
     /**
      * What box() fills with (mygo's scene.Paint): a color, a linear
      * gradient of two colors mixed in sRGB or in Oklab, stripes, or a
@@ -67,6 +69,10 @@ final class DisplayList
     public array $glass = [];
     /** @var list<array{0: int, 1: int}> the holes web views show through: the first slot of each, and how many it takes */
     public array $holes = [];
+    /** @var list<array{0: \MyPHP\UI\Shader\Code, 1: string, 2: ?string, 3: list<?Image>}> the shaders drawn this frame: the code, its uniforms' bytes, those a wide gamut reads in their place (null for the same), the images it reads */
+    public array $shaders = [];
+    /** @var list<array{0: int, 1: int, 2: int}> the runs of quads a shader draws, in order: the first, how many, and the draw among $shaders */
+    public array $shaderRuns = [];
     /** @var list<array{0: int, 1: float, 2: float, 3: float, 4: float}> the opaque fills large enough to hide what is under them (cull()): their quad and the part of the window they certainly cover whole, x0 y0 x1 y1, within their clip */
     private array $occluders = [];
     /** How many quads the last cull() left out (mygo's Builder.Culled). */
@@ -259,6 +265,7 @@ final class DisplayList
         $this->n = 0;
         $this->glass = [];
         $this->holes = [];
+        $this->shaders = []; $this->shaderRuns = [];
         $this->occluders = [];
         $this->wide = [];
         $this->clip = self::NO_CLIP;
@@ -367,7 +374,7 @@ final class DisplayList
             $k = $i * 16;
             $kind = $b[$k + 9];
             if ($kind >= 0.0 && $kind < self::KIND_STRIDE) {
-                if ($kind > 4.5 && $kind < 8.5 && $kind != 6.0) { // glass (5), a backdrop blur's level (7), the hard scroll edge (8): a barrier
+                if ($kind > 4.5 && $kind < 8.5 && $kind != 6.0 || $kind > 15.5) { // glass (5), a backdrop blur's level (7), the hard scroll edge (8), a shader's, which may read its backdrop: a barrier
                     $active = [];
                 } elseif ($active !== []) {
                     $x0 = $b[$k] - 1; $y0 = $b[$k + 1] - 1; $x1 = $x0 + $b[$k + 2] + 2; $y1 = $y0 + $b[$k + 3] + 2;
@@ -688,5 +695,46 @@ final class DisplayList
         $b[$k + 8] = 0.0; $b[$k + 9] = 1.0 + $this->xk; $b[$k + 10] = $u; $b[$k + 11] = $v;
         $b[$k + 12] = $c[0]; $b[$k + 13] = $c[1]; $b[$k + 14] = $c[2]; $b[$k + 15] = $c[3];
         $this->n++;
+    }
+
+    /**
+     * A rectangle a shader fills, rounded by $radius, its draw $draw (an
+     * index of $shaders, which Painter::shaderEffect adds), in a run of its
+     * own.
+     */
+    public function shader(float $x, float $y, float $w, float $h, float $radius, int $draw): void
+    {
+        $this->shaderRuns[] = [$this->n, 1, $draw];
+        $this->quad($x, $y, $w, $h, 0xffffff, 1.0, $radius, (float)self::KIND_SHADER, (float)$draw);
+    }
+
+    /**
+     * Has shader draw $draw fill the glyphs' masks among quads $from to the
+     * end, in place of their colors, the box it fills from ($ox, $oy): the
+     * masks (glyphs and paths, kind 1) become its, in runs of their own;
+     * the rest (images, emoji, rectangles) paints as it would. Returns how
+     * many it took.
+     */
+    public function shaderGlyphs(int $from, int $draw, float $ox, float $oy): int
+    {
+        $b = $this->buf; $taken = 0; $run = -1;
+        for ($i = $from; $i < $this->n; $i++) {
+            $k = $i * 16;
+            $kind = $b[$k + 9]; $entry = floor($kind / self::KIND_STRIDE) * self::KIND_STRIDE;
+            if ($kind - $entry != 1.0) {
+                $run = -1;
+                continue;
+            }
+            $b[$k + 9] = self::KIND_SHADER_GLYPH + $entry;
+            $b[$k + 4] = (float)$draw; $b[$k + 5] = $ox; $b[$k + 6] = $oy; // its alpha (color.a) stays: the painter's opacity
+            if ($run >= 0) {
+                $this->shaderRuns[$run][1]++;
+            } else {
+                $run = count($this->shaderRuns);
+                $this->shaderRuns[] = [$i, 1, $draw];
+            }
+            $taken++;
+        }
+        return $taken;
     }
 }

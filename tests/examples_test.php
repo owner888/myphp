@@ -568,3 +568,224 @@ foreach (['path', 'raw'] as $mode) {
     [$kinds] = $csKinds(fn(Context $c) => \MyPHP\Examples\ChartStreaming\view($c, $w));
     check(count($kinds) === 3 && array_filter($kinds, fn(array $k) => isset($k[9])) === [], "chart-streaming $mode: stroked paths, no capsules");
 }
+
+// wind (mygo's TestGrid): the grid's cells are 6.5 DIPs wide, in whole pixels, twice as high, centered on the pane and overhanging it; a pane too small has none.
+[$view, $s] = Headless::load('wind');
+$g = \MyPHP\Examples\Wind\Grid::of(2200, 1440, 2);
+same([13, 26, 170, 56], [$g->cellW, $g->cellH, $g->cols, $g->rows], 'wind: the grid of 2200×1440 at 2');
+same([-5, -8], [$g->left, $g->top], 'wind: the grid centered');
+same(7, \MyPHP\Examples\Wind\Grid::of(1100, 720, 1)->cellW, 'wind: cells 7 pixels wide at 1 (6.5 rounded)');
+same(null, \MyPHP\Examples\Wind\Grid::of(100, 100, 1), 'wind: no grid in a pane of 100×100');
+// TestWind: a seed picks the same wind every time, heading down the pane, and a look that the last visits did not show.
+check(\MyPHP\Examples\Wind\Wind::of(42, 'mixed') == \MyPHP\Examples\Wind\Wind::of(42, 'mixed'), 'wind: one seed, one wind');
+$windOk = true;
+for ($seed = 0; $seed < 200; $seed++) {
+    $w = \MyPHP\Examples\Wind\Wind::of($seed, 'mixed');
+    $windOk = $windOk && $w->heading > 0 && $w->heading < 3.1416 && $w->speed >= 42 && $w->speed <= 64 && $w->gustWidth >= 120 && $w->gustWidth <= 190
+        && \MyPHP\Examples\Wind\Texture::pickLook($seed, ['mixed', 'figured']) === 'lettered'
+        && \MyPHP\Examples\Wind\Texture::pickLook($seed, ['mixed', 'figured', 'lettered']) !== 'mixed';
+}
+check($windOk, 'wind: the winds of 200 seeds in range, their looks not the last ones');
+// TestClicks: clicks on the pane blow ripples from the pointer, every third a heart; a click on the composer blows none.
+$t = new Headless($view, 1100, 720);
+$t->frame();
+for ($i = 0; $i < 3; $i++) { $t->click(100 + $i * 50, 120); }
+$taps = $s->tex->hand->taps;
+check(count($taps) === 3 && $taps[0]->x == 100 && $taps[0]->y == 120, 'wind: three taps from (100, 120) on');
+check($taps[0]->force > 0 && $taps[1]->force > 0 && $taps[2]->force < 0, 'wind: the third a heart (negative)');
+$t->clickLabel('Task'); $t->frame();
+same(3, count($s->tex->hand->taps), 'wind: a click on the composer blows no ripple');
+// TestSettles: the wind blows for its budget, settles and fades out; whatever the user does next brings it back in.
+$tex = new \MyPHP\Examples\Wind\Texture(7, $s->tex->sh);
+$now = 1000 * 1_000_000_000;
+for ($i = 0; $i < (int)((\MyPHP\Examples\Wind\BUDGET + \MyPHP\Examples\Wind\SETTLE_TIME + 1) / 0.04); $i++) { $now += 40_000_000; $tex->step($now); }
+same(0.0, $tex->energy, 'wind: no energy after the budget');
+$frozen = $tex->windTime;
+$tex->step($now + 1_000_000_000);
+same($frozen, $tex->windTime, 'wind: the wind stands once settled');
+$tex->calm = true;
+$tex->move(10, 10, $now);
+check(!$tex->calm && $tex->revealFrom === $tex->active && $tex->until === $tex->active + \MyPHP\Examples\Wind\BUDGET, 'wind: woken, it comes in anew');
+// stillTexture: a texture whose wind stands still at a time, in a pane of 300×200 DIPs at 1, shown long ago, with a click a second old when $click; its atlas made by a view, as the window's.
+$windAtlas = null;
+(new Headless(function (Context $c) use (&$windAtlas): void { $windAtlas ??= new \MyPHP\Examples\Wind\Atlas($c, 7, 1); }))->frame(1);
+$stillTexture = function (bool $click) use ($s, $windAtlas, &$now): \MyPHP\Examples\Wind\Texture {
+    $tex = new \MyPHP\Examples\Wind\Texture(0x3fa1c2d9, $s->tex->sh);
+    $tex->windTime = 21.5;
+    [$tex->calm, $tex->active, $tex->revealFrom, $tex->energy] = [true, 10.0, 0.0, 1.0];
+    $tex->atlases['7@1'] = $windAtlas;
+    $tex->shown = $now - 3600 * 1_000_000_000;
+    if ($click) {
+        $tex->hand->tap(150, 100, 0);
+        $tex->start = $now - 1_000_000_000;
+    }
+    return $tex;
+};
+// render: paints the texture in a pane of 300×200 DIPs, and returns the display list the glyphs draw in.
+$render = function (\MyPHP\Examples\Wind\Texture $tex) use (&$now): \MyPHP\UI\DisplayList {
+    $t = new Headless(function (Context $c) use ($tex): void {
+        $rt = $c->runtime;
+        $c->column()->fill()->draw(function (\MyPHP\UI\DisplayList $list, \MyPHP\UI\Node $n, \MyPHP\UI\Theme $th, \MyPHP\UI\TextPainter $text) use ($tex, $rt): void {
+            $tex->draw(new \MyPHP\UI\Painter($list, $text, $th, $rt), [$n->x, $n->y, $n->w, $n->h], false);
+        });
+        $c->end();
+    }, 300, 200);
+    $t->rt->clock = function () use (&$now): int { return $now; };
+    $t->frame(1);
+    return $t->paint();
+};
+// TestRender (what the GPU is given: myphp has no CPU renderer to count pixels with): the wind's field drawn by wind.kage into its canvas, a pixel a sample, and the glyphs by glyphs.kage over the grid, reading it and the atlas; a click's blow goes to both.
+$tex = $stillTexture(false);
+$list = $render($tex);
+$sh = $s->tex->sh;
+check(count($list->shaders) === 1 && $list->shaders[0][0] === $sh->glyphs->code && $list->shaders[0][3][0] === $tex->field->bitmap() && $list->shaders[0][3][1] === $windAtlas->bitmap, 'wind: the glyphs drawn from the field and the atlas');
+check(count($tex->field->list->shaders) === 1 && $tex->field->list->shaders[0][0] === $sh->wind->code && $tex->field->size() === [43, 30], 'wind: the field drawn, 43×30 samples, two a cell down: ' . json_encode($tex->field->size()));
+same([0, 0, 1.0], [$tex->windValues['TapCount'], $tex->glyphValues['TapCount'], $tex->windValues['Reveal']], 'wind: no click, the wind whole');
+closeFloat(0.78, $tex->glyphValues['Opacity'], 'wind: the canvas faded in, at its strength');
+$tex = $stillTexture(true);
+$render($tex);
+check($tex->glyphValues['TapCount'] === 1 && $tex->glyphValues['Taps'] == [150, 100, 0, 1] && abs($tex->glyphValues['Now'] - 1) < 1e-9, 'wind: a click a second old blows from (150, 100): ' . json_encode($tex->glyphValues['Taps']));
+// TestStillWhileCalm: settled, the texture has faded out; asking for less motion then shows the wind as it stands, at once.
+$tex = $stillTexture(false);
+$tex->energy = 0;
+$render($tex);
+same(0.0, $tex->windValues['Reveal'], 'wind: nothing lit once settled');
+$tex->still = true;
+$render($tex);
+same(1.0, $tex->windValues['Reveal'], 'wind: the wind as it stands once still');
+$tex->still = false;
+$render($tex);
+same(0.0, $tex->windValues['Reveal'], 'wind: nothing lit moving again, settled');
+
+// blackhole (mygo's TestInput): a drag orbits the camera and keeps it turning after a throw, slowing to its own orbit; a scroll comes closer, no nearer than NEAR; the hint fades once the user moved the camera.
+[$view, $a] = Headless::load('blackhole');
+$t = new Headless($view, 1200, 760);
+$t->frame();
+check($t->byText('Drag to orbit · Scroll to zoom') !== null, 'blackhole: the hint');
+[$yaw, $pitch] = [$a->cam->yaw, $a->cam->pitch];
+$t->press(500, 300); $t->drag(560, 330); $t->drag(620, 360); $t->release(620, 360);
+check(abs($a->cam->yaw - ($yaw - 120 * 0.005)) <= 0.05, "blackhole: yaw {$a->cam->yaw} after dragging 120 DIPs right");
+check($a->cam->pitch > $pitch, "blackhole: pitch {$a->cam->pitch} after dragging down from $pitch");
+for ($i = 0; $i < 10; $i++) { $a->step(0.1, false); }
+same(0.0, $a->hint, 'blackhole: the hint faded after moving the camera');
+// A scroll of InputEvent dy -200 each, as mygo's Scroll(0, -200): the wheel's raw delta, which the event turns around.
+for ($i = 0; $i < 40; $i++) { $t->wheel(600, 380, 0, 200); }
+same((float)\MyPHP\Examples\Blackhole\NEAR, $a->cam->dist, 'blackhole: scrolled in a long way, at the nearest');
+// TestCamera: the camera looks at the hole, its axes a right-handed frame.
+$cam = new \MyPHP\Examples\Blackhole\Camera(yaw: 0.7, pitch: 0.3, dist: 20);
+[$eye, $right, $up, $forward] = $cam->axes();
+check(abs(sqrt($eye->dot($eye)) - 20) <= 1e-9, 'blackhole: the eye 20 from the hole');
+check(abs($forward->dot($eye->norm()) + 1) <= 1e-9, 'blackhole: the camera looks at the hole');
+check(abs($right->dot($up)) <= 1e-9 && abs($right->dot($forward)) <= 1e-9 && $up->y > 0, 'blackhole: axes orthogonal, up upward');
+// TestQuality: the resolution drops while frames come late, no lower than MIN_QUALITY, and rises again once they keep up.
+$q = new \MyPHP\Examples\Blackhole\BlackHole($a->sh);
+for ($i = 0; $i < 600; $i++) { $q->step(1.0 / 20, false); }
+same(\MyPHP\Examples\Blackhole\MIN_QUALITY, $q->quality, 'blackhole: the least quality after slow frames');
+for ($i = 0; $i < 2000; $i++) { $q->step(1.0 / 120, false); }
+same(1.0, $q->quality, 'blackhole: the whole quality after fast frames');
+// The three passes: the scene into its canvas at the quality's share of the window's pixels, its glow into a quarter of it, and both over the window.
+$q = new \MyPHP\Examples\Blackhole\BlackHole($a->sh);
+$t = new Headless(fn(Context $c) => \MyPHP\Examples\Blackhole\view($c, $q), 1200, 760);
+$t->frame();
+$list = $t->paint();
+check(count($list->shaders) === 1 && $list->shaders[0][0] === $q->sh->post->code && $list->shaders[0][3][0] === $q->scene->bitmap() && $list->shaders[0][3][1] === $q->glow->bitmap(), 'blackhole: the post pass over the window');
+check($q->scene->list->shaders[0][0] === $q->sh->hole->code && $q->glow->list->shaders[0][0] === $q->sh->bloom->code, 'blackhole: the scene and its glow, in their canvases');
+same([[1200, 760], [300, 190]], [$q->scene->size(), $q->glow->size()], 'blackhole: the canvases at the window\'s pixels and a quarter');
+
+// chat-glow (mygo's TestReply): a suggestion asks the assistant, which thinks, the window glowing, then writes its reply word by word, and the glow fades once it is done.
+[$view, $a] = Headless::load('chat-glow');
+$cgSh = $a->sh;
+$t = poseTester($view, $now, 860, 700);
+$t->clickText('Summarize my week');
+check(count($a->messages) === 2 && $a->busy, 'chat-glow: a suggestion asks');
+$t->frame();
+check($t->byText('Summarize my week') !== null, 'chat-glow: the question shows');
+$reply = $a->messages[1];
+$a->step(\MyPHP\Examples\ChatGlow\THINK_TIME / 2);
+check($reply->shown === 0 && $a->glow > 0, "chat-glow: thinking, $reply->shown words shown, glowing $a->glow");
+// Half a second on, the rows in their place, still thinking.
+for ($i = 0; $i < 30; $i++) { $now += (int)(1e9 / 60); $t->frame(1); }
+$list = $t->paint();
+$codes = array_map(fn(array $d) => $d[0], $list->shaders);
+check(in_array($cgSh->orb->code, $codes, true) && in_array($cgSh->ring->code, $codes, true) && in_array($cgSh->shimmer->code, $codes, true), 'chat-glow: the orb, the ring and "Thinking…" drawn by their shaders');
+$a->step(\MyPHP\Examples\ChatGlow\THINK_TIME / 2);
+$a->step(0.1);
+check($reply->shown > 0 && $reply->shown < count($reply->words), "chat-glow: $reply->shown words a moment into writing");
+for ($i = 0; $i < 200; $i++) { $a->step(0.05); }
+check(!$a->busy && $reply->shown === count($reply->words) && $a->glow == 0, 'chat-glow: done long after, the whole reply, no glow');
+same($reply->text, implode('', $reply->words), 'chat-glow: the words join into the reply');
+$t->frame();
+check($t->byText($reply->text) !== null, 'chat-glow: the reply shows');
+// TestTypeAndStop: Return sends what was typed; Escape stops the assistant while it thinks.
+$a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
+$t = new Headless(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), 860, 700);
+$t->frame();
+$t->type('Hello there'); $t->enter();
+check(count($a->messages) === 2 && $a->messages[0]->text === 'Hello there' && $a->input->text === '', 'chat-glow: Return sends the question');
+$t->escape();
+check(!$a->busy && $a->messages[1]->shown === 1 && $a->messages[1]->words[0] === 'Stopped.', 'chat-glow: Escape stops the reply');
+// TestSplitWords: splitWords keeps the spaces and line breaks, which joined give the text back.
+foreach (['one', 'one two', "a  b\n\nc ", "Day 1: x.\n\nDay 2"] as $text) {
+    same($text, implode('', \MyPHP\Examples\ChatGlow\splitWords($text)), 'chat-glow: splitWords and back');
+}
+same(4, count(\MyPHP\Examples\ChatGlow\splitWords("a b  c\n\nd")), 'chat-glow: four words');
+// TestScrollsToEnd: once the conversation is longer than the window, it shows its end, the whole of the last reply above the composer, not under it.
+$a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
+$t = poseTester(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), $now, 860, 500);
+for ($i = 0; $i < 3; $i++) {
+    if ($i === 0) {
+        $t->clickText('Summarize my week');
+    } else {
+        $t->clickLabel('Message');
+        $t->type('And then?'); $t->enter();
+    }
+    // The reply comes in word by word, as it shows.
+    while ($a->busy) { $a->step(0.1); $t->frame(); }
+}
+same(6, count($a->messages), 'chat-glow: three questions and their replies');
+// The rows glide up to their place (followAnimation), on the clock.
+for ($i = 0; $i < 120; $i++) { $now += (int)(1e9 / 60); $t->frame(1); }
+// The list ends RING_PADDING and the field's own 6 above the field's box (8 above its line), and its rows 16 above that once they settled.
+$cgEnd = function () use (&$t, &$a): array {
+    $r = $t->rect($t->byText($a->messages[count($a->messages) - 1]->text));
+    return [$r, $t->rect($t->byLabel('Message'))[1] - 8 - \MyPHP\Examples\ChatGlow\RING_PADDING - 6 - 12];
+};
+[$r, $limit] = $cgEnd();
+check($a->list->atEnd && $r[3] > 0 && $r[1] + $r[3] <= $limit, 'chat-glow: the end of the conversation in view: ' . json_encode([$r, $limit]));
+check($r[3] >= 3 * \MyPHP\Examples\ChatGlow\REPLY_SIZE, "chat-glow: the last reply shows all of its lines, $r[3] DIPs");
+// TestStops: the edge glow's stops lie in order around the window, and move to new places every SHUFFLE_EVERY seconds, easing there over SHUFFLE_TIME.
+$n = 0;
+$st = new \MyPHP\Examples\ChatGlow\Stops(function () use (&$n): float { $n++; return ($n % 7) / 7; });
+$sorted = function (array $stops): bool { for ($i = 1; $i < count($stops); $i++) { if ($stops[$i]->at < $stops[$i - 1]->at) { return false; } } return true; };
+check($sorted($st->show(0)), 'chat-glow: the stops in order');
+$st->step(0);
+[$from, $to] = [$st->from, $st->to];
+$halfway = true;
+foreach ($st->show(\MyPHP\Examples\ChatGlow\SHUFFLE_TIME / 2) as $i => $x) { $halfway = $halfway && abs($x->at - ($from[$i]->at + $to[$i]->at) / 2) <= 1e-9; }
+check($halfway, 'chat-glow: the stops halfway at half the time');
+$got = $st->show(\MyPHP\Examples\ChatGlow\SHUFFLE_TIME);
+check($sorted($got) && $got[0] == $to[0], 'chat-glow: the stops arrive in order');
+$st->step(\MyPHP\Examples\ChatGlow\SHUFFLE_EVERY / 2);
+same(0.0, $st->since, 'chat-glow: the stops wait for their time');
+$st->step(\MyPHP\Examples\ChatGlow\SHUFFLE_EVERY);
+same(\MyPHP\Examples\ChatGlow\SHUFFLE_EVERY, $st->since, 'chat-glow: the stops move again on time');
+$grad = $st->gradient(1);
+check(count($grad) === count(\MyPHP\Examples\ChatGlow\GLOW_COLORS) + 2 && $grad[0]->at == 0 && $grad[count($grad) - 1]->at == 1 && $grad[0]->color === $grad[count($grad) - 1]->color, 'chat-glow: the colors between two stops of one color at 0 and 1');
+same(\MyPHP\Examples\ChatGlow\GLOW_COLORS[3], \MyPHP\Examples\ChatGlow\srgb(...\MyPHP\Examples\ChatGlow\oklab(\MyPHP\Examples\ChatGlow\GLOW_COLORS[3])), 'chat-glow: a color through Oklab and back');
+// TestCatchesUp: a reply asked for before the window went out of sight, its frames paused, has come as far as the time tells once it shows again, done if long enough.
+$a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
+$a->send('Summarize my week');
+$a->step(\MyPHP\Examples\ChatGlow\THINK_TIME + 0.5);
+check($a->messages[1]->shown > 0 && $a->busy, 'chat-glow: half a second into writing, some words');
+$a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
+$a->send('Summarize my week');
+$a->step(60);
+check(!$a->busy && $a->messages[1]->shown === count($a->messages[1]->words), 'chat-glow: a minute later, the whole reply');
+// TestJumpsOnCatchUp: a reply that comes all at once shows its end at once rather than gliding up from below.
+$a = new \MyPHP\Examples\ChatGlow\ChatGlow($cgSh);
+$t = poseTester(fn(Context $c) => \MyPHP\Examples\ChatGlow\view($c, $a), $now, 860, 500);
+$t->clickText('Summarize my week');
+$a->step(60);
+$t->frame();
+[$r, $limit] = $cgEnd();
+check($r[1] + $r[3] <= $limit, 'chat-glow: the reply that came at once in view at once: ' . json_encode([$r, $limit]));

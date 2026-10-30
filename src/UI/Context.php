@@ -821,6 +821,8 @@ final class Context
             }
             $state->lag = $state->went ? $this->jump($node, 'follow', 0.0) : $this->animateTo($node, 'follow', 0.0, $state->followAnimation); // rows gone: in place at once
             if ($state->lag != 0.0 && $this->runtime->wheeled) { $state->lag = $this->jump($node, 'follow', 0.0); } // the user scrolling stops it
+        } elseif ($state->lag != 0.0) { // no glide this frame: the rows at their place at once, a glide on its way dropped (mygo's glideToEnd without a FollowAnimation)
+            $state->lag = $this->jump($node, 'follow', 0.0);
         }
         $node->focused = $state->selected !== null && ($this->runtime?->focused($node->id) ?? false);
         $start = $state->row; $y = -$state->offset;

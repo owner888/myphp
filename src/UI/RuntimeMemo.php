@@ -315,10 +315,10 @@ trait RuntimeMemo
         $this->memos[$n->id]['paint'] = ['args' => $args, 'quads' => $list->copyOut($from, $list->n), 'drawn' => $text->drawnSince($drawn)];
     }
 
-    /** The quads of the list the renderer reads apart (glass, holes, wide colors), which it counts by their index. */
+    /** The quads of the list the renderer reads apart (glass, holes, wide colors, shaders), which it counts by their index. */
     private static function specials(DisplayList $list): int
     {
-        return count($list->glass) + count($list->holes) + count($list->wide);
+        return count($list->glass) + count($list->holes) + count($list->wide) + count($list->shaderRuns);
     }
 
     /** The places of native views and of what is painted under the materials, which the window reads. */
