@@ -188,3 +188,48 @@ foreach ([[0, -1, false], [1, 0, true], [2, 0, false], [3, 1, true], [4, 1, fals
     $ed->setSels([$ed->newSel($off, $off)], Editor::REVEAL_NONE);
     same([$hunk, $inside], $d->currentHunk(), "the current hunk on new line $line");
 }
+
+// A deletion bar's stripes keep to the content: those of lines whose height is no multiple of 4 continue one another's, and scrolling moves them with the lines (mygo's TestBarStripes).
+(function () {
+    $spans = function (float $top, float $screenY, float ...$hs): array {
+        $out = []; $y = $screenY;
+        foreach ($hs as $h) {
+            foreach (\MyPHP\UI\Editor\Editor::barStripes($y, $h, $top + $y - $screenY) as [$sy, $sh]) {
+                [$a, $b] = [$sy - $screenY + $top, $sy + $sh - $screenY + $top];
+                $n = count($out);
+                if ($n > 0 && abs($out[$n - 1][1] - $a) < 1e-9) { $out[$n - 1][1] = $b; continue; } // a stripe split at a join
+                $out[] = [$a, $b];
+            }
+            $y += $h;
+        }
+        return $out;
+    };
+    $want = function (float $from, float $to): array {
+        $w = [];
+        for ($y = 0.0; $y < $to; $y += 4) { if (($b = min($y + 2, $to)) > ($a = max($y, $from))) { $w[] = [$a, $b]; } }
+        return $w;
+    };
+    same($want(0, 54), $spans(0, 10, 18, 18, 18), 'bar stripes: lines of 18 points, one pattern');
+    same($want(0, 58.5), $spans(0, 10, 19.5, 19.5, 19.5), 'bar stripes: of 19.5');
+    same($want(13.25, 13.25 + 54), $spans(13.25, 10, 18, 18, 18), 'bar stripes: scrolled, they move with the lines');
+})();
+
+// A filler's stripes are those in sight, however high it is, at -45° every 8 points from its bottom-left corner, which they keep to as it scrolls (mygo's TestFillerStripes).
+(function () {
+    $v = [100.0, 0.0, 600.0, 800.0];
+    $pieces = function (array $v, float $bottom): array {
+        $out = [];
+        foreach (\MyPHP\UI\Editor\DiffSideView::fillerStripes($v, [100.0, $bottom]) as [$x0, $y0, $x1, $y1]) {
+            if ($y0 !== $v[1] + $v[3] || $y1 !== $v[1] || abs($x1 - $x0 - $v[3]) > 1e-3 || $x0 >= $v[0] + $v[2] || $x1 <= $v[0]) { return null; }
+            $out[] = $x0 + $y0;
+        }
+        return $out;
+    };
+    $bottom = 6e6 + 0.3; // 12 million points high, scrolled to its middle
+    $got = $pieces($v, $bottom);
+    check($got !== null && abs(count($got) - 175) <= 1, 'filler stripes: from the bottom of what shows to its top, about 175 of them: ' . count($got ?? []));
+    $off = fn(float $s, float $at): bool => abs(fmod($s - $at, 8)) > 1e-3 && abs(abs(fmod($s - $at, 8)) - 8) > 1e-3;
+    check(array_filter($got ?? [], fn($s) => $off($s, 100 + $bottom)) === [], 'filler stripes: at the corner\'s phase, 8 apart');
+    check(array_filter($pieces($v, $bottom - 13.25) ?? [1.0], fn($s) => $off($s + 13.25, 100 + $bottom)) === [], 'filler stripes: scrolled, they move with it');
+    same([], $pieces([100.0, 50.0, 0.0, 0.0], $bottom), 'filler stripes: none in an empty rectangle');
+})();

@@ -464,6 +464,21 @@ exec('rm -rf ' . escapeshellarg("$root/b/build"));
 check($code !== 0 && str_contains($out, 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign') && !is_dir("$root/b/build"), 'a profile with ad-hoc signing: refused, nothing built: ' . $out);
 [$code, $out] = $myphp('build', '-skip-dmg', '-sign', 'Developer ID Application: X', "$root/b");
 same([0, 'profile'], [$code, @file_get_contents(glob("$root/b/build/darwin-*/b.app/Contents/embedded.provisionprofile")[0] ?? '')], 'signed with an identity: the profile in Contents/embedded.provisionprofile: ' . $out);
+// macos.icon an .icns (mygo's 8820ebb): the app's as it is, in place of the one rendered from icon, and no asset catalog; one that is no .icns refused.
+$cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
+unset($cfg['macos']['provisioningProfile']);
+$cfg['macos']['icon'] = 'App.icns';
+file_put_contents("$root/b/myphp.json", json_encode($cfg));
+file_put_contents("$root/b/App.icns", 'icns drawn per size');
+exec('rm -rf ' . escapeshellarg("$root/b/build"));
+[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+$app = glob("$root/b/build/darwin-*/b.app/Contents")[0] ?? '';
+same([0, 'icns drawn per size', false], [$code, @file_get_contents("$app/Resources/AppIcon.icns"), file_exists("$app/Resources/Assets.car")], 'macos.icon an .icns: bundled as it is, no catalog: ' . $out);
+file_put_contents("$root/b/App.icns", 'png');
+[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+check($code !== 0 && str_contains($out, 'macos.icon App.icns: not an .icns file'), 'one that is no .icns: refused: ' . $out);
+unset($cfg['macos']['icon']);
+file_put_contents("$root/b/myphp.json", json_encode($cfg));
 // An app's own InfoPlist.strings among its resources, in a language it ships, is kept, with the name its catalog gives where it gives none (mygo's 2e50d4d).
 $cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
 unset($cfg['macos']['provisioningProfile']);

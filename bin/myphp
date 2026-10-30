@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.99.0';
+const VERSION = '1.100.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -208,7 +208,7 @@ function nodeTypeScriptFlags(string $node): ?array
  * resources/icon.png), entry (the PHP file the app runs, default app.php),
  * out (default dist), resources, urlSchemes, fileAssociations, i18n,
  * updates, devUrl, devCommand, buildCommand, frontendDist, bindings,
- * framework, and macos: icon (an Assets.car or an Icon Composer .icon),
+ * framework, and macos: icon (an Assets.car, an Icon Composer .icon or an .icns),
  * minimumSystemVersion (12.0), signingIdentity ("-", ad hoc),
  * entitlements, provisioningProfile (embedded before signing),
  * helperEntitlements, infoPlist, dmgTitle (the name) and notarize
@@ -260,8 +260,8 @@ function project(array $args): array
         is_array($m['notarize']) && is_string($m['notarize']['keychainProfile'] ?? null) && $m['notarize']['keychainProfile'] !== '' || $bad('macos.notarize needs a keychainProfile (see xcrun notarytool store-credentials)');
         $m['notarize'] = ['keychainProfile' => $m['notarize']['keychainProfile'], 'keychain' => (string)($m['notarize']['keychain'] ?? '')];
     }
-    if (($m['icon'] ?? '') !== '' && !in_array(strtolower(pathinfo($m['icon'], PATHINFO_EXTENSION)), ['car', 'icon'], true)) {
-        $bad("macos.icon {$m['icon']} is an Assets.car or an Icon Composer .icon");
+    if (($m['icon'] ?? '') !== '' && !in_array(strtolower(pathinfo($m['icon'], PATHINFO_EXTENSION)), ['car', 'icon', 'icns'], true)) {
+        $bad("macos.icon {$m['icon']} is an Assets.car, an Icon Composer .icon or an .icns");
     }
     $c['macos'] = $m;
     $c['resources'] ??= [];
@@ -559,7 +559,7 @@ final class DevSession
         generateI18n($this->root, $c);
         $framework = frameworkOf($c);
         try {
-            $res = Resources::collect($this->root, $c['configFile'], $dc['resources'], 'darwin', $arch, natives($this->root, $framework, $arch), Resources::reserved(($dc['macos']['icon'] ?? '') !== ''));
+            $res = Resources::collect($this->root, $c['configFile'], $dc['resources'], 'darwin', $arch, natives($this->root, $framework, $arch), Resources::reserved(hasCatalog($dc)));
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         }
@@ -972,7 +972,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
     try {
         $m = $c['macos'];
         $framework = frameworkOf($c);
-        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'darwin', $arch, natives($dir, $framework, $arch), Resources::reserved(($m['icon'] ?? '') !== ''));
+        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'darwin', $arch, natives($dir, $framework, $arch), Resources::reserved(hasCatalog($c)));
         if (($other = Resources::otherArch($dir, 'darwin', $arch)) !== '') {
             warnf('No ' . Resources::DIR . "/darwin-$arch for darwin/$arch, though there is " . Resources::DIR . "/$other");
         }
@@ -995,7 +995,7 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
             copyTree(path($dir, $c['frontendDist']), "$contents/Resources/frontend", ['.DS_Store']);
         }
         [$car, $carIcns] = appCatalog($dir, $c);
-        $icns = $carIcns ?? appIcon($dir, $c); // the .icon's own rendering for older macOS
+        $icns = $carIcns ?? ownIcns($dir, $c) ?? appIcon($dir, $c); // the .icon's own rendering for older macOS, or macos.icon's .icns
         if ($icns !== null) {
             file_put_contents("$contents/Resources/" . Resources::ICON, $icns);
         }
@@ -1052,6 +1052,31 @@ function replacePath(string $src, string $dst): void
     }
 }
 
+/** Whether macos.icon is an asset catalog, an Assets.car or an Icon Composer .icon, rather than none or an .icns. */
+function hasCatalog(array $c): bool
+{
+    $src = (string)($c['macos']['icon'] ?? '');
+    return $src !== '' && strtolower(pathinfo($src, PATHINFO_EXTENSION)) !== 'icns';
+}
+
+/**
+ * macos.icon when it is an .icns, which the app gets in place of the one
+ * rendered from icon, for an icon drawn per size (a closer crop at 16 and
+ * 32 points, made with iconutil from an .iconset); null otherwise (mygo's
+ * bundleICNS). `myphp dev` still shows icon's.
+ */
+function ownIcns(string $dir, array $c): ?string
+{
+    $src = (string)($c['macos']['icon'] ?? '');
+    if ($src === '' || hasCatalog($c)) {
+        return null;
+    }
+    $data = @file_get_contents(path($dir, $src));
+    if ($data === false) { fail("macos.icon $src: cannot read it"); }
+    str_starts_with($data, 'icns') || fail("macos.icon $src: not an .icns file");
+    return $data;
+}
+
 /** The configured icon (a PNG) as .icns, or null without one (mygo's appIcon). */
 function appIcon(string $dir, array $c): ?string
 {
@@ -1078,8 +1103,8 @@ function appIcon(string $dir, array $c): ?string
 function appCatalog(string $dir, array $c): array
 {
     $src = (string)($c['macos']['icon'] ?? '');
-    if ($src === '') {
-        return [null, null];
+    if (!hasCatalog($c)) {
+        return [null, null]; // an .icns is no catalog: ownIcns takes it
     }
     $path = path($dir, $src);
     if (strtolower(pathinfo($src, PATHINFO_EXTENSION)) !== 'icon') {

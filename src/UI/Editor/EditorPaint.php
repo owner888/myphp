@@ -538,16 +538,27 @@ trait EditorPaint
         $list->popClip();
     }
 
-    /** Draws a diff's change bar: solid for additions, striped for deletions, as Pierre's, so the two differ without their colors. */
+    /** Draws a diff's change bar: solid for additions, striped for deletions, as Pierre's, so the two differ without their colors. The stripes keep to the content, not to the bar, so those of consecutive lines make one pattern, which scrolls with them (mygo's ac4e0ff). */
     public function paintBar(DisplayList $list, float $x, float $y, float $w, float $h, LineLook $s): void
     {
         if (!$s->stripes) {
             self::fill($list, $x, $y, $w, $h, $s->bar);
             return;
         }
-        $list->pushClip($x, $y, $w, $h);
-        for ($yy = $y; $yy < $y + $h; $yy += 4) { self::fill($list, $x, $yy, $w, 2, $s->bar); }
-        $list->popClip();
+        foreach (self::barStripes($y, $h, $y - $this->r[1] + $this->scrollY) as [$sy, $sh]) { self::fill($list, $x, $sy, $w, $sh, $s->bar); }
+    }
+
+    /** The stripes of a deletion bar from $y, $h high, whose top is at $top in the content: 2 points every 4 from the content's top, cut to the bar (mygo's barStripes). @return list<array{0: float, 1: float}> [y, height] each @internal */
+    public static function barStripes(float $y, float $h, float $top): array
+    {
+        $phase = fmod($top, 4.0);
+        if ($phase < 0) { $phase += 4.0; }
+        $out = [];
+        for ($s = $y - $phase; $s < $y + $h; $s += 4) {
+            $y0 = max($s, $y); $y1 = min($s + 2, $y + $h);
+            if ($y1 > $y0) { $out[] = [$y0, $y1 - $y0]; }
+        }
+        return $out;
     }
 
     /** Draws the scroll bars, the vertical one with markers of the matches, diagnostics, changes and carets. */

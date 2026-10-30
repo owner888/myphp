@@ -89,16 +89,39 @@ final class DiffSideView implements Decor
     {
         if ($b->kind === Block::SPACER) {
             if ($b->from === 0) { return; }
-            // A filler: hatched at -45°, every 8 points, as Pierre's.
+            // A filler: hatched at -45°, every 8 points from its bottom-left corner, as Pierre's; only the stripes in sight (mygo's fed2cc2): a filler across a whole file added is millions of points high.
             [$rx, $ry, $rw, $rh] = $r;
             $tx = $rx + $ed->gutterW; $tw = $rw - $ed->gutterW;
             $c = $ed->theme->c['text'];
             $list->pushClip($tx, $ry, $tw, $rh);
-            for ($x = $tx - $rh; $x < $tx + $tw; $x += 8) { $list->line($x, $ry + $rh, $x + $rh, $ry, $c[0], $c[1] * 0.07, 1); }
+            foreach (self::fillerStripes($list->visible(), [$tx, $ry + $rh]) as [$x0, $y0, $x1, $y1]) { $list->line($x0, $y0, $x1, $y1, $c[0], $c[1] * 0.07, 1); }
             $list->popClip();
         } elseif ($b->kind === Block::DELETED) {
             $this->paintDeleted($list, $ed, $b, $r);
         }
+    }
+
+    /**
+     * The stripes of a filler whose bottom-left corner is at $corner, from
+     * the bottom of $v, what shows of it, to its top: lines at -45°, up to
+     * the right, every 8 points along its bottom from the corner, those
+     * crossing $v alone, each as high as it (mygo's fillerStripes).
+     * @param array{0: float, 1: float, 2: float, 3: float} $v
+     * @param array{0: float, 1: float} $corner
+     * @return list<array{0: float, 1: float, 2: float, 3: float}> [x0, y0, x1, y1] each
+     * @internal
+     */
+    public static function fillerStripes(array $v, array $corner): array
+    {
+        [$x0, $y0, $w, $h] = $v;
+        if ($w <= 0 || $h <= 0) { return []; }
+        $x1 = $x0 + $w; $y1 = $y0 + $h;
+        $phase = $corner[0] + $corner[1]; // a stripe is where x + y is the corner's, give or take 8s
+        $out = [];
+        for ($s = $phase + 8 * (floor(($x0 + $y0 - $phase) / 8) + 1); $s < $x1 + $y1; $s += 8) {
+            $out[] = [$s - $y1, $y1, $s - $y0, $y0];
+        }
+        return $out;
     }
 
     /** Paints the lines a unified view shows deleted: the old text's, tinted, with their numbers in the gutter. */

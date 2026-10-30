@@ -6145,6 +6145,21 @@ succeeds are told of, an empty line is none.
   session state alone.
 - 15cb4a3: `Page::processID()`, WebKit's private `_webProcessIdentifier`.
 
+## Diff stripes keep to the content; macos.icon may be an .icns (v1.100)
+
+- mygo ac4e0ff: a deletion bar's stripes, 2 points every 4, are phased
+  from the content's top (`Editor::barStripes`), not the bar's: those of
+  consecutive lines make one pattern, which scrolls with them.
+- mygo fed2cc2: a split diff's filler draws only the stripes crossing
+  what shows of it (`DiffSideView::fillerStripes`), each from its bottom
+  to its top at -45°, phased from its bottom-left corner: a filler across
+  a whole file added is millions of points high, whose stripes the loop
+  went through every frame.
+- mygo 8820ebb, b553a90: `macos.icon` may be an `.icns` of the app's own,
+  bundled as it is in place of the one rendered from `icon`, for an icon
+  drawn per size; it is no asset catalog (`hasCatalog`), and one not
+  starting with "icns" is refused. `myphp dev` still shows `icon`'s.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

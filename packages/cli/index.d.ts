@@ -172,7 +172,8 @@ export interface MacOSConfig {
    * The icon as an asset catalog: an `Assets.car` compiled with actool (its
    * app icon named `AppIcon`, unless `infoPlist` sets `CFBundleIconName`), or
    * an Icon Composer `.icon`, which builds compile with Xcode 26 or later.
-   * The `.icns` made from `icon` remains the fallback.
+   * The `.icns` made from `icon` remains the fallback. Or an `.icns` in
+   * place of the one made from `icon`, for an icon drawn per size.
    */
   icon?: string;
   /** The oldest macOS the app runs on (default: `12.0`). */
