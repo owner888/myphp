@@ -168,6 +168,14 @@ final class WebView
         }
     }
 
+    /** Replaces the content controller's rule lists (WKContentRuleLists), which WebKit applies to the loads from then on. @param list<mixed> $lists */
+    public function setContentRules(array $lists): void
+    {
+        if ($this->ucc === null) { return; }
+        ObjC::msg('v:', $this->ucc, 'removeAllContentRuleLists');
+        foreach ($lists as $l) { ObjC::msg('v:p', $this->ucc, 'addContentRuleList:', $l); }
+    }
+
     /** Lets the web view go: its observer, scripts and delegates, its page stopped (mygo's cleanup). */
     public function close(): void
     {

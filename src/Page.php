@@ -69,6 +69,7 @@ final class Page
         $this->devTools = $o->devTools->on();
         $this->zoom = $o->zoomFactor > 0 ? $o->zoomFactor : 1.0;
         $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom);
+        if ($o->contentRules !== []) { $this->setContentRules(...$o->contentRules); }
         $this->wire();
     }
 
@@ -168,6 +169,18 @@ final class Page
     /** Overrides the user agent; '' restores WebKit's (mygo's SetUserAgent). */
     public function setUserAgent(string $ua): void { $this->web->setUserAgent($ua); }
     public function userAgent(): string { return $this->web->userAgent(); }
+
+    /**
+     * Replaces the content rules the page applies, which
+     * PageOptions::$contentRules set, with $rules; none removes them
+     * (mygo's SetContentRules). Loads from then on go through them: a page
+     * loaded already keeps what it loaded and hid until it reloads. Nulls
+     * are ignored.
+     */
+    public function setContentRules(?ContentRules ...$rules): void
+    {
+        $this->web->setContentRules(array_map(fn(ContentRules $r) => $r->list, array_values(array_filter($rules))));
+    }
 
     // Developer tools.
 

@@ -36,5 +36,7 @@ final class PageOptions
         public bool $swipeNavigation = false,
         /** Lets a pinch magnify the page, and the trackpad's smart zoom, as browsers do (mygo's PinchZoom, WKWebView's allowsMagnification): it scales what the page shows without laying it out again, as $zoomFactor does; off, as in desktop apps. */
         public bool $pinchZoom = false,
+        /** @var list<ContentRules> rules that block what the page loads and hide parts of it, as Page::setContentRules does, from its first load (mygo's ContentRules) */
+        public array $contentRules = [],
     ) {}
 }

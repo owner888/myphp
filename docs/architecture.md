@@ -6049,6 +6049,24 @@ succeeds are told of, an empty line is none.
   as the frame paints, on the main thread, where `CoreImage::decode`
   blocks until it is done.
 
+## Content rules block what pages load (v1.95)
+
+- mygo d89af4a: `ContentRules::compile($id, $rules)` compiles rules in
+  WebKit's content blocker format in the default `WKContentRuleListStore`
+  (`Native\ContentRuleStore`), which keeps compiled lists in the app's
+  container under the id and the first 16 hexadecimal digits of the
+  rules' SHA-256 (`ContentRules::identifier`): it looks that up first,
+  compiles only what it does not find, and then removes the id's lists of
+  other rules (`ContentRules::stale`). It waits with `App::wait`, as
+  Cookies do; the store's reason for a failure is in its error's
+  `NSHelpAnchorErrorKey`.
+- `PageOptions::$contentRules` and `Page::setContentRules()` put the lists
+  on the page's `WKUserContentController` (`removeAllContentRuleLists`,
+  `addContentRuleList:`), which WebKit applies to the loads from then on;
+  a web view's page takes them as a window's does.
+- tests/content_rules_test.php covers the ids, the identifier and the
+  stale lists; compiling and applying need the running app.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
