@@ -894,6 +894,13 @@ final class Metal
         ObjC::msg('v:', $view, 'draw');
     }
 
+    /** Whether a frame of $view was asked for and has not been drawn yet (mygo's frameAsked): the automation plugin's idle waits for none. @internal */
+    public static function framePending($view): bool
+    {
+        $key = ObjC::addr($view);
+        return isset(self::$onDraw[$key]) && ((self::$pace[$key]['repaint'] ?? null) !== null || (self::$drawing[$key] ?? false));
+    }
+
     /** @var array<int, bool> by view, whether the frame drawing now was asked for only to paint again */
     private static array $repaints = [];
 

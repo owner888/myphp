@@ -6541,6 +6541,39 @@ succeeds are told of, an empty line is none.
   150k, a circle's shadow 45k rather than 62k; the pieces never overlap
   and hold every point where the shader may draw, a point nearer.
 
+## Automation from another process (v1.116)
+
+- mygo fe62eb8: `Plugins\Automation\Automation::plugin()`, added with
+  `App::use` in the runs an app is driven in, listens on the Unix socket
+  `MYPHP_AUTOMATION` names (mode 0600, made under umask 0177; a stale
+  socket replaced, a live one or another file left alone) and answers
+  newline-delimited JSON requests: `windows`, `tree`, `act`, `input`,
+  `menu`, `capture`, `eval` and `idle` (`docs/automation.md`).
+- `Protocol` is the protocol without the app: it decodes a line (big
+  numbers as strings), checks params as mygo's `DisallowUnknownFields`
+  and types do, and answers with an array, or with a function that gives
+  the answer once ready, which `idle` is: the run loop has one thread, so
+  a waiting request is polled, not slept on. `Server` polls the socket on
+  the run loop every 5 ms (`App::after`, as `SingleInstance` polls its
+  own), answering each connection's requests in order up to one waiting;
+  `AppDriver` is the app's side.
+- The runtime's side: `Context::key` records its key on the node
+  (`Node::$key`); `Runtime::automationTree()` describes the last frame as
+  for VoiceOver, whether or not it reads the window, with those keys, and
+  `act` pushes the `['access', …]` event VoiceOver's actions push.
+  `Metal::framePending()` is mygo's `frameAsked`: an ask whose frame has
+  not been drawn.
+- Input goes to the content as its view's events: pointer and wheel
+  events into `Input`, a move while a button is down as a drag; keys as
+  AppKit key events through `View::automatedKey`, the keyboard's path but
+  typing nothing (only keys that type no character, or with Command or
+  Control, reach the text system, which makes their commands), as mygo's
+  key events whose text comes in text events; `text` events as
+  `insertText:`. `menu` performs the main menu's item by its titles
+  (`performActionForItemAtIndex:`), as mygo's darwin test hook does.
+- IDs go as the unsigned decimal digits of the node's 64 bits, and come
+  back through two 32-bit halves, as PHP's ints are signed.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

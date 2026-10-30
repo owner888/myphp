@@ -190,23 +190,7 @@ final class View
                 $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas'), ObjC::msg('L:', $event, 'momentumPhase') !== 0]); // its momentum: what the touchpad sends once the fingers left it
                 Metal::requestFrame($self);
             }],
-            'keyDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
-                $input = self::$inputs[ObjC::addr($self)];
-                $chars = ObjC::phpStr(ObjC::msg('p:', $event, 'characters')); $code = ObjC::msg('S:', $event, 'keyCode'); $mods = ObjC::msg('L:', $event, 'modifierFlags');
-                if ($input->textKey($code, $chars, $mods)) { // the app took the key: the field and the view see nothing of it
-                    Metal::requestFrame($self);
-                    return;
-                }
-                $input->mods = $mods & Key::MODIFIERS;
-                $plain = ObjC::msg('p:', $event, 'charactersIgnoringModifiers');
-                if ($input->push(['key', $chars, $code, $mods, ObjC::msg('b:', $event, 'isARepeat'), $plain === null ? '' : ObjC::phpStr($plain)])) { // a node taking its input as it comes took the key: the text system sees nothing of it
-                } elseif ($input->client !== null && !$input->inputMethod) { // input methods off: the key types the characters of the layout
-                    if ($chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/[\x{F700}-\x{F8FF}]/u', $chars) !== 1) { $input->client->replaceText(null, $chars); }
-                } else {
-                    ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
-                }
-                Metal::requestFrame($self);
-            }],
+            'keyDown:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::keyDown($self, $event, true)],
             // The release of a key, for a node taking its input as it comes (mygo's KeyReleased).
             'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $input = self::$inputs[ObjC::addr($self)];
@@ -397,6 +381,44 @@ final class View
     {
         if ((int)$range->location === self::NOT_FOUND) { return null; }
         return new TextInputRange(min((int)$range->location, 1 << 31), min((int)$range->location + (int)$range->length, 1 << 31));
+    }
+
+    /**
+     * A key pressed in the view: to the app's handlers and the node taking
+     * its input as it comes, then to the text system, which makes the
+     * focused field's commands and typing of it. A key that does not
+     * $type goes to the text system only when it types nothing, as Enter
+     * or an arrow, or with Command or Control, as a binding.
+     */
+    private static function keyDown($self, $event, bool $type): void
+    {
+        $input = self::$inputs[ObjC::addr($self)];
+        $chars = ObjC::phpStr(ObjC::msg('p:', $event, 'characters')); $code = ObjC::msg('S:', $event, 'keyCode'); $mods = ObjC::msg('L:', $event, 'modifierFlags');
+        if ($input->textKey($code, $chars, $mods)) { // the app took the key: the field and the view see nothing of it
+            Metal::requestFrame($self);
+            return;
+        }
+        $input->mods = $mods & Key::MODIFIERS;
+        $plain = ObjC::msg('p:', $event, 'charactersIgnoringModifiers');
+        if ($input->push(['key', $chars, $code, $mods, ObjC::msg('b:', $event, 'isARepeat'), $plain === null ? '' : ObjC::phpStr($plain)])) { // a node taking its input as it comes took the key: the text system sees nothing of it
+        } elseif ($input->client !== null && !$input->inputMethod) { // input methods off: the key types the characters of the layout
+            if ($type && self::types($chars)) { $input->client->replaceText(null, $chars); }
+        } elseif ($type || !self::types($chars) || ($mods & (Key::COMMAND | Key::CONTROL)) !== 0) {
+            ObjC::msg('v:p', $self, 'interpretKeyEvents:', ObjC::msg('p:p', ObjC::cls('NSArray'), 'arrayWithObject:', $event));
+        }
+        Metal::requestFrame($self);
+    }
+
+    /** Whether a key's characters type: not a control character nor one of AppKit's function keys (the arrows, F1…). */
+    private static function types(string $chars): bool
+    {
+        return $chars !== '' && ord($chars[0]) >= 0x20 && ord($chars[0]) !== 0x7f && preg_match('/[\x{F700}-\x{F8FF}]/u', $chars) !== 1;
+    }
+
+    /** @internal the automation plugin's keys: as the keyboard's, but typing nothing (mygo's key events, whose text comes in text events). */
+    public static function automatedKey($view, $event): void
+    {
+        self::keyDown($view, $event, false);
     }
 
     private static function insertText($self, $text, int $location, int $length): void

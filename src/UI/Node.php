@@ -30,6 +30,8 @@ final class Node
 
     /** Order of creation in the build, or a hash of its key path; what Runtime remembers rects by. */
     public int $id = 0;
+    /** The key Context::key gave the node, null for none: the automation plugin finds elements by it (mygo's node key). @internal */
+    public string|int|null $key = null;
     /** Set on a container that scrolls its children, on the axes scrollX/scrollY say. */
     public ?Scrollable $scroll = null;
     public bool $scrollX = false;

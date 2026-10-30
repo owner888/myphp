@@ -2274,3 +2274,31 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `ContextMenuEvent::RELOAD`….
   - Why: myphp's pages take their listeners by on(); PHP has no package
     constants to autoload.
+
+## Automation (v1.116)
+
+- **Turning it on**
+  - mygo: an app imports `plugins/automation` behind a build tag, and
+    builds without the inspector leave it out; it listens when
+    `MYGO_AUTOMATION` is set.
+  - myphp: `App::use(Automation::plugin())`, which the app calls in the
+    runs it is driven in; it listens when `MYPHP_AUTOMATION` is set.
+  - Why: PHP has no build tags nor imports that run code.
+- **Serving**
+  - mygo: a goroutine a connection, each request served as it comes.
+  - myphp: the socket polled on the run loop every 5 ms; `idle` waits
+    without holding other connections, but `eval` holds them while the
+    page answers.
+  - Why: PHP runs the app on one thread.
+- **Modifiers of key events**
+  - mygo: a key event's `mods` are ignored; its accelerator gives them.
+  - myphp: they join the accelerator's.
+  - Why: an event's fields are not dropped silently.
+- **Web views in native UI**
+  - mygo: a node marked `webView` stands for a web view's page.
+  - myphp: no such node; the tree has none for web views.
+  - Why: myphp's access tree has no node for them.
+- **CmdOrCtrl**
+  - mygo: Command on macOS, Control elsewhere.
+  - myphp: Command.
+  - Why: myphp runs on macOS.

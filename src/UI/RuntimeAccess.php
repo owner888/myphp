@@ -64,6 +64,28 @@ trait RuntimeAccess
         $this->describe();
     }
 
+    /**
+     * The last frame's tree, described now whether or not assistive
+     * technology reads the window, and the keys Context::key gave its
+     * nodes, by id (mygo's AutomationTree): the automation plugin's. The
+     * actions of assistive technology (the ['access', ...] events) reach
+     * its nodes. @internal
+     * @return array{0: AccessTree, 1: array<int, string|int>}
+     */
+    public function automationTree(): array
+    {
+        if ($this->root === null) {
+            return [new AccessTree, []];
+        }
+        $keys = [];
+        $walk = function (Node $n) use (&$walk, &$keys): void {
+            if ($n->key !== null) { $keys[$n->id] = $n->key; }
+            foreach ($n->kids as $k) { $walk($k); }
+        };
+        $walk($this->root);
+        return [$this->accessTreeOf($this->root), $keys];
+    }
+
     /** Describes the last frame, while assistive technology reads the window; its announcements go, read or not. */
     private function describe(): void
     {

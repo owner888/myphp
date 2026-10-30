@@ -135,6 +135,7 @@ final class Context
                 $this->runtime?->duplicateKey($n->id, $this->nextKey, Inspector::callSite());
             }
             $this->keyed[$n->id] = true;
+            $n->key = $this->nextKey;
             if ($in !== null && $in->open) { $in->keys[$n->id] = $this->nextKey; } // the tree shows it
             $this->nextKey = null; // the key is this node's alone: a leaf must not pass it on to the next node built
         } else {
