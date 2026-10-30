@@ -150,11 +150,13 @@ final class Text implements TextPainter
     {
         $slot = $this->images->get($image->key);
         if ($slot !== null && $image->updated) { // new pixels in the old slot (Image::update)
-            $this->images->replace($image->key, $image->addr);
+            $this->images->replace($image->key, $image->address());
+            $image->uploaded();
         }
         $image->updated = false;
         if ($slot === null) {
-            [$slot, $emptied] = $this->images->add($image->key, $image->w, $image->h, $image->addr);
+            [$slot, $emptied] = $this->images->add($image->key, $image->w, $image->h, $image->address());
+            $image->uploaded();
             if ($emptied) {
                 $this->repaint = true;
             }

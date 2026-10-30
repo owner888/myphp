@@ -49,3 +49,72 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check(str_contains((string)$err, 'no SF Symbol'), 'a name of no symbol throws');
 }
 
+
+// releasePixels (mygo's TestReleasePixels…): an image decoded lets its pixels go and decodes them again when something needs them, as the atlas or a level, which take them and let them go again; one of pixels, or updated, keeps them.
+(function () {
+    $w = 6; $h = 4;
+    $rgba = '';
+    for ($i = 0; $i < $w * $h; $i++) { $rgba .= chr(($i * 37) % 256) . chr(($i * 11) % 256) . chr(200) . chr(255); }
+    $decodes = 0;
+    $decode = function () use (&$decodes, $w, $h, $rgba): array {
+        $decodes++;
+        $pix = \MyPHP\Native\Mem::alloc($w * $h * 4);
+        \FFI::memcpy($pix, $rgba, $w * $h * 4);
+        return ['w' => $w, 'h' => $h, 'pix' => $pix, 'addr' => \MyPHP\Native\Mem::addr($pix)];
+    };
+    $img = Image::decoded($decode);
+    $kept = Image::fromPixels($w, $h, $rgba);
+    same(1, $decodes, 'released: decoded once, as made');
+    check($img->address() !== 0, 'released: its pixels, before');
+    $img->uploaded();
+    same([1, $rgba], [$decodes, $img->pixels()], 'released: kept while not released, uploaded or not');
+    $img->releasePixels();
+    same([$rgba, 2], [$img->pixels(), $decodes], 'released: pixels() decodes them again, as they were');
+    $n = $decodes;
+    $img->address(); $img->address();
+    same($n + 1, $decodes, 'released: decoded once for an upload');
+    $img->uploaded();
+    $img->address();
+    same($n + 2, $decodes, 'released: gone again once uploaded, decoded again for the next');
+    $img->uploaded();
+    // A level made after the release, the same as one of an image that kept its pixels; it goes once uploaded, and comes back the same.
+    $want = $kept->smaller(2)->pixels();
+    $lvl = $img->smaller(2);
+    same([3, 2, $want], [$lvl->w, $lvl->h, $lvl->pixels()], 'released: a level made from the pixels decoded again');
+    $lvl->address(); $lvl->uploaded();
+    same($want, $lvl->pixels(), 'released: the level decoded and halved again');
+    // A level made before the release goes with it.
+    $img2 = Image::decoded($decode);
+    $lvl2 = $img2->smaller(4);
+    $img2->releasePixels();
+    same($kept->smaller(4)->pixels(), $lvl2->pixels(), "released: a level made before, decoded again");
+    // An image of pixels has nothing to decode: it keeps them.
+    $addr = $kept->address();
+    $kept->releasePixels(); $kept->uploaded();
+    same([$addr, $rgba], [$kept->address(), $kept->pixels()], 'released: an image of pixels keeps them');
+    // update() on a released image: the new pixels kept, released no more.
+    $img->releasePixels();
+    $new = str_repeat("\x10\x20\x30\xff", $w * $h);
+    $img->update($w, $h, $new);
+    $img->releasePixels(); $img->uploaded();
+    $n = $decodes;
+    same([$new, $n], [$img->pixels(), $decodes], 'released: updated, it keeps its new pixels');
+    same([3, 2], [$img->smaller(2)->w, $img->smaller(2)->h], 'released and updated: a level of the new pixels');
+    // On macOS, the image atlas: it takes the pixels decoded again, and once more after it started over.
+    if (PHP_OS_FAMILY === 'Darwin') {
+        \MyPHP\Native\ObjC::boot(['Foundation', 'AppKit']);
+        $text = new \MyPHP\UI\Text(new \MyPHP\Native\CoreText(2.0), new \MyPHP\UI\Atlas(256, 256), new \MyPHP\UI\ImageAtlas(256, 256));
+        $a = Image::decoded($decode);
+        $a->releasePixels();
+        $n = $decodes;
+        $text->beginFrame();
+        $slot = $text->imageSlot($a);
+        $text->imageSlot($a);
+        $page = $text->images->pages[$slot['page']];
+        $row = \FFI::string(\FFI::addr($page->pix[($slot['v'] * $page->w + $slot['u']) * 4]), $w * 4);
+        same([$n + 1, substr($rgba, 0, $w * 4)], [$decodes, $row], 'released: the atlas has its pixels, decoded once');
+        $page->reset();
+        $text->imageSlot($a);
+        same($n + 2, $decodes, 'released: decoded again for the atlas started over');
+    }
+})();

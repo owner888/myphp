@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
 use FFI\CData;
 use MyPHP\Native\CoreImage;
 use MyPHP\Native\Mem;
@@ -12,17 +13,28 @@ use RuntimeException;
  * A decoded image the UI draws with Context::image(): RGBA pixels at
  * their own size (at most $max on a side), put into the image atlas the
  * first frame they are drawn and again whenever the atlas starts over,
- * so the pixels stay (w*h*4 bytes). Make one once and keep it in the
- * app's state; it is not a per-frame object.
+ * so the pixels stay (w*h*4 bytes), unless releasePixels() lets them go.
+ * Make one once and keep it in the app's state; it is not a per-frame
+ * object.
  */
 final class Image
 {
     private static int $next = 0;
-    /** What the atlas holds it by, its size and its pixels' address: update() changes them where the size changes. */
+    /** What the atlas holds it by, and its size: update() changes them where the size changes. */
     public string $key;
     public int $w, $h;
-    private CData $pix;
-    public int $addr;
+    /** Its pixels and their address, none while released. */
+    private ?CData $pix = null;
+    private int $addr = 0;
+    /**
+     * What decodes its pixels again, an image fromBytes() made's (and a
+     * level of one's), and whether releasePixels() let them go: they are
+     * decoded again when something needs them, and go again once uploaded
+     * (mygo's decode, released).
+     * @var ?Closure(): array{w: int, h: int, pix: CData, addr: int}
+     */
+    private ?Closure $decode = null;
+    private bool $released = false;
     /** That update() gave it new pixels the atlas has yet to take. @internal */
     public bool $updated = false;
     /** @internal how many times update() gave it new pixels, which a texture a shader reads it from was made of */
@@ -50,7 +62,20 @@ final class Image
      */
     public static function fromBytes(string $bytes, int $max = 1024): self
     {
-        return new self(CoreImage::decode($bytes, $max));
+        return self::decoded(static fn(): array => CoreImage::decode($bytes, $max));
+    }
+
+    /**
+     * The image $decode decodes, which it keeps to decode it again after
+     * releasePixels(): it gives the same pixels each time.
+     * @internal fromBytes, tests
+     * @param Closure(): array{w: int, h: int, pix: CData, addr: int} $decode
+     */
+    public static function decoded(Closure $decode): self
+    {
+        $img = new self($decode());
+        $img->decode = $decode;
+        return $img;
     }
 
     /** An image of $w × $h premultiplied RGBA pixels, four bytes a pixel, top row first. */
@@ -110,13 +135,17 @@ final class Image
         }
         $n = $w * $h * 4;
         if (strlen($rgba) !== $n) { throw new RuntimeException("image {$w}x{$h} needs $n bytes, got " . strlen($rgba)); }
+        // The pixels are no longer what it decoded: it keeps them.
+        [$this->decode, $this->released] = [null, false];
         if ($w !== $this->w || $h !== $this->h) {
-            Mem::free($this->pix);
-            $this->pix = Mem::alloc($n); $this->addr = Mem::addr($this->pix);
+            $this->drop();
             $this->w = $w; $this->h = $h;
             $this->key = 'img' . ++self::$next; // a slot of its new size
         } else {
             $this->updated = true;
+        }
+        if ($this->pix === null) {
+            $this->pix = Mem::alloc($n); $this->addr = Mem::addr($this->pix);
         }
         \FFI::memcpy($this->pix, $rgba, $n);
         $this->version++;
@@ -142,7 +171,75 @@ final class Image
         if ($this->canvas !== null) {
             throw new RuntimeException("myphp: a canvas's pixels are on the GPU");
         }
-        return \FFI::string($this->pix, $this->w * $this->h * 4);
+        $this->restore();
+        $s = \FFI::string($this->pix, $this->w * $this->h * 4);
+        if ($this->released) { $this->drop(); }
+        return $s;
+    }
+
+    /**
+     * Lets go of the pixels of an image fromBytes() made, and of its
+     * smaller levels, keeping the copies the GPU took: it draws as before
+     * (mygo's ReleasePixels). They are decoded again from the bytes it
+     * keeps when something needs them, as the image atlas starting over or
+     * a level for drawing it smaller, and go again once uploaded; the bytes
+     * cost a fraction of the pixels. An image fromPixels() made, a
+     * canvas's, a symbol, or one update() changed has nothing else to make
+     * its pixels from, and keeps them. Call it once the image has shown.
+     */
+    public function releasePixels(): void
+    {
+        if ($this->decode === null || $this->canvas !== null || $this->released) { return; }
+        $this->released = true;
+        $this->drop();
+        foreach ($this->levels as $i => $lvl) {
+            [$lvl->decode, $lvl->released] = [$this->levelDecode($i), true];
+            $lvl->drop();
+        }
+    }
+
+    /**
+     * The address of its pixels, decoded again if released, for the atlas
+     * or a texture to copy; uploaded() says it has.
+     * @internal
+     */
+    public function address(): int
+    {
+        $this->restore();
+        return $this->addr;
+    }
+
+    /** The atlas or a texture took the pixels: a released image lets them go again. @internal */
+    public function uploaded(): void
+    {
+        if ($this->released) { $this->drop(); }
+    }
+
+    private function restore(): void
+    {
+        if ($this->pix !== null || $this->decode === null) { return; }
+        $d = ($this->decode)();
+        [$this->pix, $this->addr] = [$d['pix'], $d['addr']];
+    }
+
+    private function drop(): void
+    {
+        if ($this->pix === null) { return; }
+        Mem::free($this->pix);
+        [$this->pix, $this->addr] = [null, 0];
+    }
+
+    /** What decodes level $i again, $i + 1 halvings of the image decoded again. @return Closure(): array{w: int, h: int, pix: CData, addr: int} */
+    private function levelDecode(int $i): Closure
+    {
+        $decode = $this->decode;
+        return static function () use ($decode, $i): array {
+            $img = new self($decode());
+            for ($j = 0; $j <= $i; $j++) { $img = $img->halved(); }
+            $d = ['w' => $img->w, 'h' => $img->h, 'pix' => $img->pix, 'addr' => $img->addr];
+            [$img->pix, $img->addr] = [null, 0]; // its pixels the level's now
+            return $d;
+        };
     }
 
     /**
@@ -159,7 +256,9 @@ final class Image
         for ($i = 0; $i < $k; $i++) {
             if ($i === count($this->levels)) {
                 if ($img->w < 2 && $img->h < 2) { return $img; }
-                $this->levels[] = $img->halved();
+                $lvl = $img->halved();
+                if ($this->released) { [$lvl->decode, $lvl->released] = [$this->levelDecode($i), true]; }
+                $this->levels[] = $lvl;
             }
             $img = $this->levels[$i];
         }
@@ -170,7 +269,7 @@ final class Image
     private function halved(): self
     {
         $w = max(1, intdiv($this->w + 1, 2)); $h = max(1, intdiv($this->h + 1, 2));
-        $src = \FFI::string($this->pix, $this->w * $this->h * 4); $stride = 4 * $this->w;
+        $src = $this->pixels(); $stride = 4 * $this->w;
         $out = '';
         for ($y = 0; $y < $h; $y++) {
             $r0 = 2 * $y * $stride; $r1 = min(2 * $y + 1, $this->h - 1) * $stride;
@@ -186,6 +285,6 @@ final class Image
 
     public function __destruct()
     {
-        Mem::free($this->pix);
+        $this->drop();
     }
 }

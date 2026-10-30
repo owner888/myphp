@@ -226,7 +226,7 @@ same('JP', Context::initials('  jean-luc  picard '), 'initials of the first and 
 $img = Image::fromPixels(3, 2, pack('C*', 0, 0, 0, 255, 100, 0, 0, 255, 200, 0, 0, 255, 0, 0, 0, 255, 100, 0, 0, 255, 200, 0, 0, 255));
 check($img->smaller(1.5) === $img, 'less than twice as small: the image itself');
 $half = $img->smaller(2.5); same([2, 1], [$half->w, $half->h], 'twice as small: half as large, rounded up');
-$buf = Mem::alloc(8); Mem::copy(Mem::addr($buf), $half->addr, 8);
+$buf = Mem::alloc(8); Mem::copy(Mem::addr($buf), $half->address(), 8);
 same([50, 0, 0, 255, 200, 0, 0, 255], array_values(unpack('C8', \FFI::string($buf, 8))), 'the averages: (0+100)/2, the last column twice'); Mem::free($buf);
 check($img->smaller(4) === $img->smaller(5.9) && $img->smaller(4) !== $half, 'four times: the next level, kept');
 

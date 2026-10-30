@@ -6031,6 +6031,24 @@ succeeds are told of, an empty line is none.
   show it having the commands. The artwork is not shown on macOS
   (docs/mygo-deviations.md).
 
+## An image lets its pixels go once shown (v1.94)
+
+- mygo c1b67c8: `Image::releasePixels()` lets go of the pixels of an image
+  `fromBytes()` made, and of its smaller levels; it keeps the bytes, which
+  cost a fraction of them, and decodes them again (`Image::decoded`'s
+  closure) when something needs them: the image atlas adding it again
+  after it evicted it or started over, a level for drawing it smaller, a
+  shader's texture, `pixels()`. What takes them says so (`address()`,
+  then `uploaded()`), and a released image lets them go again. An image
+  `fromPixels()` made, a canvas's, a symbol, or one `update()` changed has
+  nothing else to make its pixels from, and keeps them; `update()` on a
+  released one keeps the new pixels.
+- What it saves: the image's own copy. The atlas's pages keep theirs on
+  the CPU, as they always did, for the pages to be uploaded from; mygo's
+  GPU renderers hold the pixels in textures alone. Decoding again happens
+  as the frame paints, on the main thread, where `CoreImage::decode`
+  blocks until it is done.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

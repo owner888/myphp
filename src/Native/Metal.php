@@ -1288,7 +1288,8 @@ final class Metal
         $t = $this->sharedTexture($img->w, $img->h);
         $region = ObjC::$c->new('MTLRegion');
         $region->w = $img->w; $region->h = $img->h; $region->d = 1;
-        ObjC::msg('v:RLpL', $t, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, ObjC::$c->cast('void*', $img->addr), $img->w * 4);
+        ObjC::msg('v:RLpL', $t, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, ObjC::$c->cast('void*', $img->address()), $img->w * 4);
+        $img->uploaded();
         $this->shaderImages[$img] = [new Owned($t), $img->version]; // the last one released
         return $t;
     }
