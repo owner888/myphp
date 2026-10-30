@@ -66,6 +66,12 @@ final class Options
         public ClipboardAccess $clipboardRead = ClipboardAccess::ClipboardDeny,
         /** Leaves the terminal's background undrawn, so that what is under the view shows through, as Ghostty's background-opacity; cells with a background of their own still draw it. */
         public bool $transparent = false,
+        /** The room around the grid, in points, across ($x) and down ($y), as Ghostty's window-padding-x and window-padding-y: 6 across and 4 down when both are zero; a negative value leaves none. */
+        public Padding $padding = new Padding,
+        /** What the padding shows, as Ghostty's window-padding-color: the background, or the backgrounds of the cells nearest to it, so that a full-screen program's colors reach the edges of the view. */
+        public PaddingColor $paddingColor = PaddingColor::PaddingBackground,
+        /** The least contrast text has with its background, as Ghostty's minimum-contrast: a WCAG ratio from 1 (none, as when 0) to 21 (black on white). Text with less, as a program's light gray on a light theme, darkens or lightens as little as reaches it, keeping its hue; shapes (box drawing, blocks, Powerline's) keep their colors. Terminal::setMinimumContrast changes it. */
+        public float $minimumContrast = 0.0,
         /** When a program sets the title, when the program (or Conn) ends, when it rings the bell, and when it asks for a desktop notification (OSC 9, OSC 777). */
         public ?Closure $onTitle = null,
         public ?Closure $onExit = null,

@@ -513,6 +513,13 @@ final class Terminal
         $this->push("\x1b[?997;" . ($theme->isDark() ? 1 : 2) . 'n');
     }
 
+    /** Changes the least contrast of text with its background, as Options::$minimumContrast. */
+    public function setMinimumContrast(float $ratio): void
+    {
+        $this->opts->minimumContrast = $ratio;
+        $this->redraw();
+    }
+
     /** Clears the scrollback, leaving the screen as it is. */
     public function clearScrollback(): void { $this->write("\x1b[3J"); }
 

@@ -39,6 +39,16 @@ final class Box
     private const QUADRANTS = [0x2596 => '0010', 0x2597 => '0001', 0x2598 => '1000', 0x2599 => '1011', 0x259a => '1001',
         0x259b => '1110', 0x259c => '1101', 0x259d => '0100', 0x259e => '0110', 0x259f => '0111'];
 
+    /**
+     * Whether $r is a shape rather than text, which keeps its color under
+     * the minimum contrast, as Ghostty's (mygo's noMinContrast): box
+     * drawing, block elements, the legacy computing symbols and Powerline's.
+     */
+    public static function noMinContrast(int $r): bool
+    {
+        return $r >= 0x2500 && $r <= 0x259f || $r >= 0x1fb00 && $r <= 0x1fbff || $r >= 0xe0b0 && $r <= 0xe0d7;
+    }
+
     /** Whether the terminal draws $r itself. */
     public static function drawn(int $r): bool
     {

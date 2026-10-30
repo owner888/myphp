@@ -56,6 +56,8 @@ final class View implements TextInputClient
     public int $ox = 0, $oy = 0;
     public int $cols = 0, $rows = 0;
     public ?Colors $colors = null;
+    /** Options::$minimumContrast, as of the last paint. */
+    public float $contrast = 0.0;
     public Cursor $cursor;
     /** @var array{0: int, 1: int, 2: int} total, offset and length of the viewport, in rows */
     public array $scrollbar = [0, 0, 0];

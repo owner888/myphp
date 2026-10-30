@@ -9,10 +9,10 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Plugins\Terminal\{Action, ClipboardAccess, ClipboardRequest, CopyOnSelect, Font, Keybind, Options, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
+use MyPHP\Plugins\Terminal\{Action, ClipboardAccess, ClipboardRequest, CopyOnSelect, Font, Keybind, Options, Padding, PaddingColor, PasteProgress, PasteStatus, RightClickAction, Terminal, Theme, Zoom};
 use MyPHP\Plugins\Terminal\Vt\Terminal as VtTerminal;
 use MyPHP\Transfer\{Data, Format, Item, Representation};
-use MyPHP\UI\{InputEvent, Key};
+use MyPHP\UI\{DisplayList, InputEvent, Key};
 
 require_once __DIR__ . '/TerminalTest.php';
 
@@ -537,6 +537,81 @@ TermClock::install();
     $term->feed("\x1b[?2031l");
     $term->useTheme(Terminal::lightTheme());
     same('', $p->take(0), 'useTheme: nothing told once unsubscribed');
+    $term->close();
+})();
+
+(function () {
+    // The padding, and what it shows: the background, or the backgrounds of the cells nearest to it (mygo's TestPadding, TestPaddingPartialRows).
+    $th = Terminal::lightTheme();
+    [$red, $green, $blue] = [$th->palette[1], $th->palette[2], $th->palette[4]];
+    $at = function (DisplayList $l, float $x, float $y): int { // the color of the last opaque rectangle over the point
+        $c = -1;
+        for ($i = 0; $i < $l->n; $i++) {
+            $k = $i * 16;
+            if (fmod($l->buf[$k + 9], DisplayList::KIND_STRIDE) == 0.0 && $l->buf[$k + 7] > 0.99 && $x >= $l->buf[$k] && $x < $l->buf[$k] + $l->buf[$k + 2] && $y >= $l->buf[$k + 1] && $y < $l->buf[$k + 1] + $l->buf[$k + 3]) {
+                $c = ((int)round($l->buf[$k + 4] * 255) << 16) | ((int)round($l->buf[$k + 5] * 255) << 8) | (int)round($l->buf[$k + 6] * 255);
+            }
+        }
+        return $c;
+    };
+    foreach (PaddingColor::cases() as $mode) {
+        $term = Terminal::new(new Options(conn: new TermPipe, theme: $th, noBlink: true, padding: new Padding(20, 12), paddingColor: $mode));
+        $tt = new TermTester($term, 400, 200, false);
+        // Row 0 red across, as a full-width bar; row 1 green in its first two cells only, as a shell's highlight.
+        $term->feed("\x1b[41m\x1b[2K\x1b[0m\x1b[2;1H\x1b[42mab\x1b[0m\x1b[5;1H");
+        $tt->frame();
+        $l = $tt->h->paint();
+        same((int)round(20 * $term->v->scale), $term->v->ox, "padding: {$mode->name}: across");
+        [, $y0] = $tt->cell(0, 0); [, $y1] = $tt->cell(0, 1);
+        if ($mode === PaddingColor::PaddingBackground) {
+            same($th->background, $at($l, 5, $y0), 'padding: the background beside a red row');
+        } elseif ($mode === PaddingColor::PaddingExtend) {
+            same([$red, $red, $red, $th->background], [$at($l, 5, $y0), $at($l, 397, $y0), $at($l, 200, 3), $at($l, 5, $y1)], 'padding extended: beside, past and above a red row, not beside a row half green');
+            // A full-screen program's colors extend from its rows that fill.
+            $term->feed("\x1b[?1049h\x1b[44m\x1b[2J\x1b[0m\x1b[3;1H\x1b[42mab\x1b[0m");
+            $tt->frame();
+            $l = $tt->h->paint();
+            [, $y2] = $tt->cell(0, 2);
+            same([$green, $blue], [$at($l, 5, $y2), $at($l, 200, 197)], "padding extended: beside a full-screen program's green, below it");
+            // A program's own cursor, a character in inverse video, stays in its cell.
+            $term->feed("\x1b[2J\x1b[H\x1b[7m \x1b[0m\x1b[K");
+            $tt->frame();
+            $l = $tt->h->paint();
+            same([$th->background, $th->background], [$at($l, 5, $y0), $at($l, 5, 3)], "padding extended: not from a program's cursor");
+            // Rows with cells of the default background keep their colors in their cells.
+            $pad = str_repeat(' ', $term->v->cols);
+            $term->feed("\x1b[H\x1b[2J \x1b[44m Current \x1b[0m \x1b[47m Gists \x1b[0m\x1b[3;1H┃\x1b[47m" . substr($pad, 1) . "\x1b[0m");
+            $tt->frame();
+            $l = $tt->h->paint();
+            [$x3] = $tt->cell(3, 0);
+            same([$th->background, $th->background], [$at($l, $x3, 3), $at($l, 397, $y2)], 'padding extended: not above a tab, nor past a box with a border');
+        } else {
+            same($green, $at($l, 5, $y1), 'padding extended always: beside a row half green');
+        }
+        $term->close();
+    }
+})();
+
+(function () {
+    // The minimum contrast: text mixed toward black or white as little as reaches the ratio; shapes keep their colors (mygo's TestContrasted, TestMinimumContrastShapes).
+    $C = \MyPHP\Plugins\Terminal\Contrast::class;
+    foreach ([[0xf0f0f0, 0xffffff, 3.0], [0x1e1e1e, 0x000000, 3.0], [0xe5e510, 0xffffff, 4.5]] as [$fg, $bg, $ratio]) {
+        $r = $C::ratio($C::luminance($C::contrasted($fg, $bg, $ratio)), $C::luminance($bg));
+        check($r >= $ratio && $r <= $ratio * 1.1, sprintf('contrasted %06x on %06x to %.1f: %.2f', $fg, $bg, $ratio, $r));
+    }
+    same(0x000000, $C::contrasted(0x000000, 0xffffff, 4.5), 'black on white stays');
+    same(0x000000, $C::contrasted(0x646464, 0x808080, 21), 'gray on gray at 21: black, which contrasts more');
+    $term = Terminal::new(new Options(conn: new TermPipe, theme: new Theme(0x202020, 0xffffff), minimumContrast: 3));
+    $tt = new TermTester($term, 400, 200, false);
+    $gray = 0xe8e9eb;
+    $term->feed("\x1b[38;2;232;233;235m▄▀█\u{1fb82}A");
+    $tt->frame();
+    $tt->h->paint();
+    $line = $term->v->lines[0];
+    same([[$gray, 1.0], [$gray, 1.0], [$gray, 1.0]], array_map(fn(array $b) => $b[2], $line->boxes), 'minimum contrast: the shapes drawn keep their color');
+    $colorOf = function (int $col) use ($line): ?array { foreach ($line->runs as [, $cols, $c]) { if (in_array($col, $cols, true)) { return $c; } } return null; };
+    same([$gray, 1.0], $colorOf(3), 'minimum contrast: a legacy computing symbol, from the font, keeps its color');
+    check(($a = $colorOf(4)) !== null && $a !== [$gray, 1.0], 'minimum contrast: the text takes it: ' . json_encode($a));
     $term->close();
 })();
 

@@ -5833,6 +5833,29 @@ mygo 633b369, ea23ad2, e15e462, ff9e8ff, 2dd788b, 0faf347, c238c0c,
   color questions get; a program that asked (mode 2031) is told when the
   colors turn light or dark, by `useTheme` or a view's theme.
 
+## A terminal's padding and minimum contrast (v1.85)
+
+mygo 12b177c, d5bcfdb, 344c353, and of 3473193 what is not the mirror's:
+
+- **Padding**: `Options::$padding` (`Padding`, points across and down; 6
+  and 4 when zero) and `$paddingColor` (`PaddingColor`, Ghostty's
+  window-padding-color): the background, or the backgrounds of the cells
+  nearest to it extended into it (`ViewPaint::extendPadding`), beside each
+  row and above and below the top and bottom rows, out to the corners.
+  PaddingExtend takes only rows whose every cell has a background of its
+  own (`RowCache::$filled`), as Ghostty's extend, so that a shell's
+  highlights, a program's tabs and its boxes keep to their cells;
+  PaddingExtendAlways every row. A lone character in inverse video, as a
+  program draws its own cursor, keeps its background in its cell (the
+  fourth field of a row's backgrounds).
+- **Minimum contrast**: `Options::$minimumContrast` (and
+  `Terminal::setMinimumContrast`), a WCAG ratio, as Ghostty's
+  minimum-contrast: a cell's text with less contrast with its background
+  is mixed toward black or white, whichever contrasts more, as little as
+  reaches it (`Contrast`, eight halvings); shapes (box drawing, blocks,
+  the legacy computing symbols, Powerline's: `Box::noMinContrast`) keep
+  their colors. A change draws every row again.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

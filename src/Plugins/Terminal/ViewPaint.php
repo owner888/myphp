@@ -18,6 +18,13 @@ trait ViewPaint
 {
     /** Padding around the grid, in points. */
     private const PAD_X = 6, PAD_Y = 4;
+
+    /** The padding around the grid, in points: Options::$padding, or PAD_X and PAD_Y when it is zero (mygo's Options.padding). @return array{0: float, 1: float} */
+    private function padding(): array
+    {
+        $p = $this->t->opts->padding;
+        return $p->x == 0 && $p->y == 0 ? [(float)self::PAD_X, (float)self::PAD_Y] : [max($p->x, 0.0), max($p->y, 0.0)];
+    }
     /** A line of a mouse wheel, as the window's events have it, in points. */
     private const WHEEL_LINE = 10.0;
     private const ASCII = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
@@ -49,8 +56,9 @@ trait ViewPaint
             $this->baseline = (int)round(($this->cellH - ($ascent + $descent) * $scale) / 2 + $ascent * $scale);
             $this->lines = [];
         }
-        $this->ox = (int)round(self::PAD_X * $scale);
-        $this->oy = (int)round(self::PAD_Y * $scale);
+        [$px, $py] = $this->padding();
+        $this->ox = (int)round($px * $scale);
+        $this->oy = (int)round($py * $scale);
         $w = (int)round($r[2] * $scale) - 2 * $this->ox;
         $h = (int)round($r[3] * $scale) - 2 * $this->oy;
         $this->cols = max(intdiv(max($w, 0), $this->cellW), 1);
@@ -84,8 +92,10 @@ trait ViewPaint
             $rs->endUpdate();
         }
         $colors = $rs->colors();
-        $full = $rs->dirty() === RenderState::FULL || $this->colors === null || !$colors->equals($this->colors);
+        $contrast = $t->opts->minimumContrast;
+        $full = $rs->dirty() === RenderState::FULL || $this->colors === null || !$colors->equals($this->colors) || $contrast !== $this->contrast;
         $this->colors = $colors;
+        $this->contrast = $contrast;
         $this->cursor = $rs->cursor();
         [$cols, $rows] = $rs->size();
         if (count($this->lines) !== $rows) {
@@ -120,8 +130,12 @@ trait ViewPaint
         if ($s->inverse) {
             [$fg, $bg, $hasBg] = [$bg, $fg, true];
         }
-        if ($s->faint) { $fg = [$fg[0], 0.5]; }
-        return ['fg' => $fg, 'bg' => $bg, 'hasBg' => $hasBg, 'ul' => $ul, 'hasUl' => $hasUl, 'variant' => ($s->bold ? 1 : 0) | ($s->italic ? 2 : 0),
+        $shapeFg = $fg; // without the minimum contrast, for shapes (Box::noMinContrast)
+        if ($this->contrast > 1) {
+            $fg = [Contrast::contrasted($fg[0], $bg[0], $this->contrast), $fg[1]];
+        }
+        if ($s->faint) { [$fg, $shapeFg] = [[$fg[0], 0.5], [$shapeFg[0], 0.5]]; }
+        return ['fg' => $fg, 'shapeFg' => $shapeFg, 'bg' => $bg, 'hasBg' => $hasBg, 'inverse' => $s->inverse, 'ul' => $ul, 'hasUl' => $hasUl, 'variant' => ($s->bold ? 1 : 0) | ($s->italic ? 2 : 0),
             'invisible' => $s->invisible, 'underline' => $s->underline, 'strike' => $s->strikethrough, 'overline' => $s->overline];
     }
 
@@ -134,7 +148,7 @@ trait ViewPaint
             [$line->selA, $line->selB] = $sel;
             $line->sel = true;
         }
-        $def = ['fg' => self::opaque($this->colors->foreground), 'bg' => self::opaque($this->colors->background), 'hasBg' => false, 'ul' => self::opaque($this->colors->foreground),
+        $def = ['fg' => self::opaque($this->colors->foreground), 'shapeFg' => self::opaque($this->colors->foreground), 'bg' => self::opaque($this->colors->background), 'hasBg' => false, 'inverse' => false, 'ul' => self::opaque($this->colors->foreground),
             'hasUl' => false, 'variant' => 0, 'invisible' => false, 'underline' => 0, 'strike' => false, 'overline' => false];
         $styles = [];
         $run = ['text' => [], 'cols' => [], 'widths' => [], 'fg' => $def['fg'], 'variant' => 0];
@@ -158,12 +172,15 @@ trait ViewPaint
                 $st['bg'] = self::opaque($c->palette ? ($this->colors->palette[$c->background] ?? 0) : $c->background);
                 $st['hasBg'] = true;
             }
+            if (!$st['hasBg'] || $st['bg'] === $def['bg']) {
+                $line->filled = false;
+            }
             if ($st['hasBg'] && $st['bg'] !== $def['bg']) {
                 $k = count($line->bgs) - 1;
                 if ($k >= 0 && $line->bgs[$k][1] === $x && $line->bgs[$k][2] === $st['bg']) {
-                    $line->bgs[$k][1] = $x + $w;
+                    [$line->bgs[$k][1], $line->bgs[$k][3]] = [$x + $w, false];
                 } else {
-                    $line->bgs[] = [$x, $x + $w, $st['bg']];
+                    $line->bgs[] = [$x, $x + $w, $st['bg'], $st['inverse']];
                 }
             }
             if ($st['underline'] !== 0) { $this->addDeco($line, $x, $x + $w, $st['underline'], $st['hasUl'] ? $st['ul'] : $st['fg']); }
@@ -171,6 +188,9 @@ trait ViewPaint
             if ($st['overline']) { $this->addDeco($line, $x, $x + $w, self::DECO_OVERLINE, $st['fg']); }
             $cp = $c->codepoint;
             if ($cp === 0 || $st['invisible']) { $cp = 0x20; }
+            if (Box::noMinContrast($cp)) {
+                $st['fg'] = $st['shapeFg'];
+            }
             if (Box::drawn($cp)) {
                 $line->boxes[] = [$x, $cp, $st['fg']];
                 $cp = 0x20;
@@ -316,6 +336,9 @@ trait ViewPaint
         if (!$this->t->opts->transparent) {
             $list->rect($r[0], $r[1], $r[2], $r[3], $this->colors->background);
         }
+        if ($this->t->opts->paddingColor !== PaddingColor::PaddingBackground) {
+            $this->extendPadding($list, $r, $ox, $oy, $cw, $ch);
+        }
         $selection = $this->theme->selection !== null ? [$this->theme->selection, 1.0] : [$this->colors->foreground, 0.3];
         foreach ($this->lines as $y => $line) {
             if ($line === null) { continue; }
@@ -379,6 +402,54 @@ trait ViewPaint
             $this->drawPreedit($list, $text, $ox, $oy, $cw, $ch, $base);
         }
         $this->drawScrollbar($list, $r);
+    }
+
+    /**
+     * Paints the padding around the grid with the backgrounds of the cells
+     * nearest to it (Options::$paddingColor, mygo's extendPadding): a row's
+     * beside it, and the top and the bottom rows' above and below the grid,
+     * out to the corners.
+     * @param array{0: float, 1: float, 2: float, 3: float} $r
+     */
+    private function extendPadding(DisplayList $list, array $r, float $ox, float $oy, float $cw, float $ch): void
+    {
+        $lines = $this->lines;
+        if ($lines === [] || in_array(null, $lines, true)) {
+            return;
+        }
+        $always = $this->t->opts->paddingColor === PaddingColor::PaddingExtendAlways;
+        $extends = fn(RowCache $line): bool => $always || $line->filled;
+        $cols = $this->cols;
+        [$left, $right] = [$r[0], $r[0] + $r[2]];
+        $gx1 = $ox + $cols * $cw;
+        foreach ($lines as $y => $line) {
+            if (!$extends($line) || $line->bgs === []) {
+                continue;
+            }
+            $ry = $oy + $y * $ch;
+            $first = $line->bgs[0];
+            if ($first[0] === 0 && !$first[3] && $ox > $left) {
+                $list->rect($left, $ry, $ox - $left, $ch, $first[2][0], $first[2][1]);
+            }
+            $last = $line->bgs[count($line->bgs) - 1];
+            if ($last[1] >= $cols && !$last[3] && $right > $gx1) {
+                $list->rect($gx1, $ry, $right - $gx1, $ch, $last[2][0], $last[2][1]);
+            }
+        }
+        // Above and below: the edges' spans reach the view's edges.
+        $vertical = function (RowCache $line, float $y0, float $y1) use ($list, $extends, $ox, $cw, $cols, $left, $right): void {
+            if ($y1 <= $y0 || !$extends($line)) {
+                return;
+            }
+            foreach ($line->bgs as [$b0, $b1, $c, $cursor]) {
+                if ($cursor) { continue; }
+                $x0 = $b0 === 0 ? $left : $ox + $b0 * $cw;
+                $x1 = $b1 >= $cols ? $right : $ox + $b1 * $cw;
+                $list->rect($x0, $y0, $x1 - $x0, $y1 - $y0, $c[0], $c[1]);
+            }
+        };
+        $vertical($lines[0], $r[1], $oy);
+        $vertical($lines[count($lines) - 1], $oy + count($lines) * $ch, $r[1] + $r[3]);
     }
 
     /** The color of the hovered link's underline: its text's, or the foreground's (mygo's linkColor). @param array{0: int, 1: int, 2: int} $h @return array{0: int, 1: float} */
