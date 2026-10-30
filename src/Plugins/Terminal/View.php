@@ -61,6 +61,21 @@ final class View implements TextInputClient
     public Cursor $cursor;
     /** @var array{0: int, 1: int, 2: int} total, offset and length of the viewport, in rows */
     public array $scrollbar = [0, 0, 0];
+    /** @var array{0: float, 1: float} the node's size in points, as the last paint had it */
+    public array $size = [0.0, 0.0];
+    /**
+     * The scroll bar (mygo's): the primary button drags it, held $barGrab
+     * points below the thumb's top; the pointer is over the bar, as of its
+     * last move ($overBar) and of the last build ($barHover); the last
+     * paint showed it hovered or held ($barLit); how many rows the viewport
+     * was above the bottom ($barBack), and when either last changed
+     * ($barSeen, hrtime), from which the bar fades out.
+     */
+    public bool $barHeld = false, $overBar = false, $barHover = false, $barLit = false;
+    public float $barGrab = 0.0;
+    public int $barBack = 0, $barSeen = 0;
+    /** How wide the strip at the right edge is over which the scroll bar takes the pointer, in points. */
+    private const SCROLLBAR_STRIP = 12;
     /** @var list<?RowCache> */
     public array $lines = [];
     /** @var array<string, list<\MyPHP\Text\Glyph>> shaped text, the most recent last */
@@ -205,6 +220,10 @@ final class View implements TextInputClient
             // The hand over a link, and its underline, follow Command as it is pressed and let go of, with the pointer still.
             [$this->hoverLink, $this->hoverPath, $this->hover] = $hovered ? $this->linkUnder($c->modifiers(), $this->pointer[0], $this->pointer[1]) : ['', false, null];
             $this->pointerAt = $this->pointerShape($t->term, $c->modifiers());
+            $this->barHover = $hovered && $this->overScrollbar($this->pointer[0], $this->pointer[1]);
+            if ($this->barHover || $this->barHeld) {
+                $this->pointerAt = \MyPHP\UI\Cursor::Default; // the bar's, not the text's
+            }
             // Input methods compose where the cursor is now, which the last frame may not show yet.
             $this->caretCell = [$this->cursor->x, $this->cursor->y];
             if ($t->term->atBottom()) {

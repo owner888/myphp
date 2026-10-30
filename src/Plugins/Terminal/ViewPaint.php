@@ -18,6 +18,8 @@ trait ViewPaint
 {
     /** Padding around the grid, in points. */
     private const PAD_X = 6, PAD_Y = 4;
+    /** How long, in seconds, the scroll bar stays after the viewport last moved, or the pointer left it, and how long it then takes to fade out, as macOS's overlay scroll bars (mygo's barLinger, barFade). */
+    private const BAR_LINGER = 1.0, BAR_FADE = 0.3;
 
     /** The padding around the grid, in points: Options::$padding, or PAD_X and PAD_Y when it is zero (mygo's Options.padding). @return array{0: float, 1: float} */
     private function padding(): array
@@ -70,6 +72,7 @@ trait ViewPaint
     {
         $t = $this->t;
         $this->layout($r, $text->scale());
+        $this->size = [$r[2], $r[3]];
         if ($t->term === null || $t->rs === null) {
             if (!$t->opts->transparent) { $list->rect($r[0], $r[1], $r[2], $r[3], $this->theme->background); }
             return;
@@ -592,11 +595,34 @@ trait ViewPaint
     private function drawScrollbar(DisplayList $list, array $r): void
     {
         [$total, $offset, $len] = $this->scrollbar;
-        if ($total <= $len || $offset + $len >= $total) {
+        $now = $this->now;
+        if (($back = $total - $len - $offset) !== $this->barBack) {
+            [$this->barBack, $this->barSeen] = [$back, $now];
+        }
+        $lit = $this->barHeld || $this->barHover;
+        if ($this->barLit && !$lit) { $this->barSeen = $now; }
+        $this->barLit = $lit;
+        if ($total <= $len) {
             return;
         }
-        $h = max($r[3] * $len / $total, 24);
-        $y = $r[1] + ($r[3] - $h) * $offset / ($total - $len);
-        $list->rect($r[0] + $r[2] - 7, $y + 2, 4, $h - 4, $this->colors->foreground, 0.35, 2);
+        $a = 1.0;
+        if (!$lit) {
+            $d = ($now - $this->barSeen) / 1e9;
+            if ($d < self::BAR_LINGER) {
+                $this->services?->after(self::BAR_LINGER - $d);
+            } elseif ($d < self::BAR_LINGER + self::BAR_FADE) {
+                $a = 1 - ($d - self::BAR_LINGER) / self::BAR_FADE;
+                $this->services?->animationFrame();
+            } else {
+                return;
+            }
+        }
+        [$y, $h] = self::thumb($this->scrollbar, $r[3]);
+        [$w, $inset, $alpha] = [4.0, 3.0, 0.35 * $a];
+        if ($lit) {
+            [$w, $inset] = [8.0, 2.0];
+            if ($this->barHeld) { $alpha = 0.5; }
+        }
+        $list->rect($r[0] + $r[2] - $inset - $w, $r[1] + $y + 2, $w, $h - 4, $this->colors->foreground, $alpha, $w / 2);
     }
 }

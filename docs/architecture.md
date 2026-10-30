@@ -5972,6 +5972,22 @@ succeeds are told of, an empty line is none.
   view's before it paints (`EditorBuild`), so that one out of view, which
   painting skips, still gives its caret's bounds.
 
+## The terminal's scroll bar drags, and hides as macOS's (v1.91)
+
+- mygo 7a8d3a3: the scroll bar shows for a second after the viewport
+  last moves (a wheel, a key, output at the bottom does not move it) and
+  then fades out over 300 ms (`ViewPaint::BAR_LINGER`, `BAR_FADE`),
+  waking the loop with `after()` and then `animationFrame()`; at the
+  bottom it no longer stays hidden while hovered.
+- The pointer over the 12-point strip at the right edge
+  (`View::SCROLLBAR_STRIP`), while there is a scrollback, shows the bar
+  wider (8 points) and is the arrow; there Command+hover finds no link.
+- A press on the thumb holds it where it is pressed, one on the rest of
+  the track by its middle, which comes to the pointer; the drag scrolls
+  the scrollback (`Vt\Terminal::scrollBy`) until the release, off the
+  strip too, and selects nothing. A full-screen program's screen has no
+  scrollback, and no bar.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

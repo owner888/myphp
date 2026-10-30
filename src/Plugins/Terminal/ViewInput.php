@@ -368,6 +368,9 @@ trait ViewInput
             $this->linkPress = $ev->kind !== InputEvent::POINTER_UP;
             return true;
         }
+        if ($this->scrollbarEvent($ev)) {
+            return true;
+        }
         // Command over a link: a hand, and a click opens it, before a program that takes the mouse sees it.
         [$link, $path, $hover] = $this->linkUnder($ev->mods, $ev->x, $ev->y);
         if ($hover !== $this->hover) {
@@ -431,7 +434,7 @@ trait ViewInput
     /** The link a click with $mods at ($x, $y) opens, whether it is a file path, and its cells, [row, x0, x1): none without Command, or while the primary button selects or the program has a press. @return array{0: string, 1: bool, 2: ?array{0: int, 1: int, 2: int}} */
     private function linkUnder(int $mods, float $x, float $y): array
     {
-        if (($mods & Key::COMMAND) === 0 || $this->selecting || $this->reporting || $this->cellW === 0 || $this->t->term === null) {
+        if (($mods & Key::COMMAND) === 0 || $this->selecting || $this->reporting || $this->cellW === 0 || $this->t->term === null || $this->overScrollbar($x, $y)) {
             return ['', false, null];
         }
         return $this->linkAt(...$this->cellAt($x, $y));
@@ -466,6 +469,69 @@ trait ViewInput
     {
         $term = $this->t->term;
         return ($ref = $term->cellAt($col, $row)) !== null ? $term->hyperlink($ref) : '';
+    }
+
+    /** Whether the scroll bar takes the pointer at ($x, $y): over its strip while there is a scrollback, which shows the bar, or while it is dragged (mygo's overScrollbar). */
+    private function overScrollbar(float $x, float $y): bool
+    {
+        if ($this->barHeld) { return true; }
+        [$w, $h] = $this->size;
+        if ($x < $w - self::SCROLLBAR_STRIP || $x >= $w || $y < 0 || $y >= $h || $this->t->term === null) { return false; }
+        [$total, , $len] = $this->t->term->scrollbar();
+        return $total > $len;
+    }
+
+    /**
+     * Drags the scroll bar, and reports whether it took the event: a press
+     * on the thumb holds it where it is pressed, and one on the rest of the
+     * strip by its middle, which comes to the pointer; the moves until the
+     * release scroll the scrollback along (mygo's scrollbarEvent).
+     */
+    private function scrollbarEvent(InputEvent $ev): bool
+    {
+        if (($over = $this->overScrollbar($ev->x, $ev->y)) !== $this->overBar) {
+            $this->overBar = $over;
+            $this->invalidate(); // the pointer's shape
+        }
+        if ($this->barHeld && $ev->kind === InputEvent::POINTER_UP && $ev->button === 0) {
+            $this->barHeld = false;
+            $this->invalidate();
+        } elseif ($this->barHeld) {
+            $this->dragScrollbar($ev->y);
+        } elseif ($this->overBar && $ev->kind === InputEvent::POINTER_DOWN && $ev->button === 0) {
+            [$y, $h] = self::thumb($this->t->term->scrollbar(), $this->size[1]);
+            $this->barGrab = $ev->y >= $y && $ev->y < $y + $h ? $ev->y - $y : $h / 2;
+            $this->barHeld = true;
+            $this->dragScrollbar($ev->y);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    /** Scrolls the scrollback so that the thumb's top is $barGrab above $y (mygo's dragScrollbar). */
+    private function dragScrollbar(float $y): void
+    {
+        $term = $this->t->term;
+        $sb = $term->scrollbar();
+        [$total, $offset, $len] = $sb;
+        if ($total <= $len) { return; }
+        [, $h] = self::thumb($sb, $this->size[1]);
+        $travel = $this->size[1] - $h;
+        if ($travel <= 0) { return; }
+        $f = max(0.0, min(($y - $this->barGrab) / $travel, 1.0));
+        if (($d = (int)round($f * ($total - $len)) - $offset) !== 0) {
+            $term->scrollBy($d);
+            $this->invalidate();
+        }
+    }
+
+    /** The top of the scroll bar's thumb in a track $h points high, and its height; the scrollback is longer than the viewport. @param array{0: int, 1: int, 2: int} $sb @return array{0: float, 1: float} */
+    private static function thumb(array $sb, float $h): array
+    {
+        [$total, $offset, $len] = $sb;
+        $th = max($h * $len / $total, 24.0);
+        return [($h - $th) * $offset / ($total - $len), $th];
     }
 
     /** The grid in pixels, for selection gestures. @return array{0: int, 1: int, 2: int, 3: int} */
