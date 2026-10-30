@@ -175,7 +175,7 @@ final class Publish
             return [];
         }
         $notes = $this->notes();
-        $slug = trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower((string)$this->config['name'])), '-');
+        $slug = \MyPHP\Native\Build\Slug::ofConfig($this->config);
         $version = $this->version();
         $name = "$slug-$version-$target.tar.gz";
         $sum = Archive::write("$out/$name", $out, [$entry]);

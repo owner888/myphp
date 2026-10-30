@@ -42,6 +42,14 @@ export interface Config {
   /** The name users see: the app, its executable, menus and disk image (default: the directory's name). */
   name?: string;
   /**
+   * The name of the app's files where a name must be plain ASCII: its
+   * update archives and deltas. Lower-case letters, digits and single
+   * hyphens (default: the name made one, as `my-app` of "My App" and
+   * `yun-yin-le` of "云音乐"; kana and Hangul romanized, as `ramen` of
+   * "ラーメン" and `seoul` of "서울").
+   */
+  slug?: string;
+  /**
    * A reverse DNS name unique to the app, such as `com.example.myapp`, on
    * which macOS keys preferences, permissions and registrations (default:
    * `com.myphp.` and the name's letters and digits).

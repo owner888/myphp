@@ -6307,6 +6307,24 @@ succeeds are told of, an empty line is none.
   from, so that no map of the window's is written into the layer's list,
   which would differ as the node moves.
 
+## The slug an app's files are named by (v1.108)
+
+- mygo 304f1c5: `slug` in myphp.json (lower-case letters, digits and
+  single hyphens, `Native\Build\Slug::PATTERN`) names the update archives
+  and deltas (`Publish::write`); the dev app's is its own with `-dev`.
+  Without one it is the name's, `Slug::of` (mygo's slugify), which
+  `myphp init` also gives a web project's package: Chinese characters take
+  their most common Mandarin reading, each a word (yun-yin-le of 云音乐,
+  kanji too), kana their Hepburn romanization (ramen of ラーメン, kitte of
+  きって), Hangul syllables their Revised Romanization (hangugeo of 한국어);
+  a name of none of them is "app". Names in Chinese had an empty slug
+  before, and archives named `-1.0.0-…`.
+- The readings are `src/Native/Build/pinyin.bin`, mygo's: the toneless
+  readings on its first line, then a big-endian uint16 a code point of
+  U+4E00 to U+9FFF, its reading's position from 1, 0 for none.
+  `scripts/gen-pinyin.php` writes it from the kMandarin field of Unicode
+  16's Unihan (ext-zip, ext-intl), the first reading without its marks.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

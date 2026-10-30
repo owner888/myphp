@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.107.0';
+const VERSION = '1.108.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -36,7 +36,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Strings, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Slug, Strings, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -204,7 +204,8 @@ function nodeTypeScriptFlags(string $node): ?array
  * or myphp.config.ts,
  * with mygo's defaults and checks (mygo's loadConfig): every field is
  * optional. name (default: the directory's), identifier (com.myphp.<name>),
- * version (0.1.0), copyright, icon (a square PNG, default
+ * slug (lower-case letters, digits and hyphens: the name of the update
+ * archives, default the name's, Native\Build\Slug), version (0.1.0), copyright, icon (a square PNG, default
  * resources/icon.png), entry (the PHP file the app runs, default app.php),
  * out (default dist), resources, urlSchemes, fileAssociations, i18n,
  * updates, devUrl, devCommand, buildCommand, frontendDist, bindings,
@@ -233,6 +234,8 @@ function project(array $args): array
     $c['configFile'] = $name; // for messages, as mygo's configName
     $bad = fn(string $msg): never => fail("$name: $msg");
     $c['name'] = orElse((string)($c['name'] ?? ''), basename($dir));
+    $c['slug'] ??= '';
+    is_string($c['slug']) && ($c['slug'] === '' || preg_match(Slug::PATTERN, $c['slug']) === 1) || $bad('slug ' . json_encode($c['slug']) . ' is not a slug (lower-case letters and digits, with single hyphens between them)');
     if (($c['identifier'] ?? '') === '') {
         $c['identifier'] = 'com.myphp.' . orElse(strtolower((string)preg_replace('/[^a-zA-Z0-9]+/', '', $c['name'])), 'app');
     }
@@ -311,12 +314,6 @@ Flags:
   -template native|web  the project (default native)
 TXT;
 
-/** $s as a slug: lower-case letters and digits between dashes, "app" for none (mygo's slugify). */
-function slugify(string $s): string
-{
-    return orElse(trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower($s)), '-'), 'app');
-}
-
 function init(array $args): void
 {
     help($args, INIT_USAGE);
@@ -329,7 +326,7 @@ function init(array $args): void
     is_dir($dir) || mkdir($dir, 0755, true) || fail("cannot create $dir");
     $dir = realpath($dir);
     $name = $name !== '' ? $name : basename($dir);
-    $data = ['name' => $name, 'slug' => slugify($name), 'identifier' => 'com.example.' . str_replace('-', '', slugify($name)), 'framework' => realpath(FRAMEWORK),
+    $data = ['name' => $name, 'slug' => Slug::of($name), 'identifier' => 'com.example.' . str_replace('-', '', Slug::of($name)), 'framework' => realpath(FRAMEWORK),
         'runtime' => 'file:' . realpath(FRAMEWORK) . '/packages/runtime', 'cli' => 'file:' . realpath(FRAMEWORK) . '/packages/cli'];
     logf("Creating $dir");
     writeTemplate(TEMPLATES . "/$template", $dir, $data);
@@ -446,6 +443,7 @@ const DEV_RELAUNCH_CODE = 75;
 function devConfig(array $c): array
 {
     $c['name'] .= ' Dev';
+    if (($c['slug'] ?? '') !== '') { $c['slug'] .= '-dev'; }
     $c['identifier'] .= '.dev';
     return $c;
 }
