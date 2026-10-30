@@ -415,6 +415,38 @@ final class Runtime
         }
     }
 
+    /** The most frames a second the drawings that move ask for with Painter::animationFrameRate, in this frame. */
+    private float $repaintRate = 0.0;
+
+    /** animationFrame() for a drawing that moves as smoothly at $fps frames a second, while painted (mygo's Painter.AnimationFrameRate; Painter::animationFrameRate says more). */
+    public function animationFrameRate(float $fps): void
+    {
+        $this->frameAsks++;
+        $this->repaintRate = max($this->repaintRate, $fps);
+    }
+
+    /**
+     * The refreshes of a display of $hz a second the next frame comes after
+     * (mygo's engine.pace): 1, the next refresh, while anything asks for a
+     * frame at the display's rate (needsFrame), else every so many, the
+     * most that still give the frames a second the drawings ask for
+     * (animationFrameRate), so that they come evenly, as a 120 Hz display
+     * draws 60, 40 or 30 frames a second but not 50; null when nothing asks
+     * for a frame. With the display's rate unknown, each refresh. @internal Window
+     */
+    public function pace(float $hz): ?int
+    {
+        if ($this->needsFrame) { return 1; }
+        if ($this->repaintRate <= 0) { return null; }
+        return $hz > 0 ? max(1, (int)($hz / $this->repaintRate + 0.05)) : 1; // a display of 59.94 Hz draws 30 frames a second every 2
+    }
+
+    /** Whether a refresh $elapsed seconds after the last frame began is when a frame that comes every $every refreshes of a display of $hz is due: half a refresh early at most, as refreshes come a little late or early (mygo's paceSkips). @internal Metal */
+    public static function due(int $every, float $elapsed, float $hz): bool
+    {
+        return $every <= 1 || $hz <= 0 || $elapsed >= ($every - 0.5) / $hz;
+    }
+
     /**
      * Builds the frame: drains input, runs $build (again if a click changed
      * state while building, at most three times), records the layout.
@@ -449,7 +481,7 @@ final class Runtime
         foreach ($this->scrolls as $state) {
             $state->glide($dt, $this->now);
         }
-        $this->wakeAt = null; $this->animating = false; // what this frame's build and paint ask for
+        $this->wakeAt = null; $this->animating = false; $this->repaintRate = 0.0; // what this frame's build and paint ask for
         $this->glideWheels();
         $events = $this->input->events;
         foreach ($this->input->events as $e) { // what a node taking its input as it comes took never came here (Input::push)

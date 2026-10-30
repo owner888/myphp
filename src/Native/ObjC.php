@@ -43,13 +43,14 @@ final class ObjC
         's' => '*', 'v' => 'v', 'r' => '{CGRect={CGPoint=dd}{CGSize=dd}}', 'q' => '{CGPoint=dd}', 'z' => '{CGSize=dd}',
         'k' => '{MTLClearColor=dddd}', 'R' => '{MTLRegion={MTLOrigin=QQQ}{MTLSize=QQQ}}', 'n' => '{_NSRange=QQ}',
         'o' => '{MTLOrigin=QQQ}', 'Z' => '{MTLSize=QQQ}', 'T' => '{?=qiIq}', 'X' => '{?={?=qiIq}{?=qiIq}}',
+        'F' => '{CAFrameRateRange=fff}',
     ];
 
     private const MAP = [
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
         'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
         'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange', 'o' => 'MTLOrigin', 'Z' => 'MTLSize',
-        's' => 'const char*', 'v' => 'void', 'T' => 'CMTime', 'X' => 'CMTimeRange',
+        's' => 'const char*', 'v' => 'void', 'T' => 'CMTime', 'X' => 'CMTimeRange', 'F' => 'CAFrameRateRange',
     ];
 
     /**
@@ -78,6 +79,7 @@ final class ObjC
             typedef struct { unsigned long location, length; } NSRange;
             typedef struct { long long value; int timescale; unsigned int flags; long long epoch; } CMTime;
             typedef struct { CMTime start, duration; } CMTimeRange;
+            typedef struct { float minimum, maximum, preferred; } CAFrameRateRange;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
             typedef struct { void* receiver; void* super_class; } objc_super;

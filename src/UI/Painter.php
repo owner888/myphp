@@ -27,6 +27,23 @@ final class Painter
         $this->rt?->animationFrame();
     }
 
+    /**
+     * animationFrame() for a drawing that looks as smooth at $fps frames a
+     * second as at the display's rate, as a record turning, a slow wave or
+     * a level meter (mygo's AnimationFrameRate): the window paints it
+     * again as often, rather than at each of the display's refreshes, 120
+     * a second on ProMotion, and has the display refresh as often where it
+     * can, for less power. The rate rounds up to one the display shows
+     * evenly, a whole number of its refreshes a frame: 60, 40 or 30 a
+     * second of a 120 Hz display's, 60 or 30 of a 60 Hz one's. The window
+     * draws at the fastest anything in it asks for: at the display's while
+     * another drawing asks for animationFrame() or anything else moves.
+     */
+    public function animationFrameRate(float $fps): void
+    {
+        $this->rt?->animationFrameRate($fps);
+    }
+
     /** Asks for a frame $seconds from now, for a drawing that changes then. */
     public function after(float $seconds): void
     {

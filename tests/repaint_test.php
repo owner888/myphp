@@ -61,3 +61,32 @@ $h->frame();
 check($h->rt->needsFrame, 'asked as it is built: a frame to come');
 $moving = false; $h->frame();
 check(!$h->rt->needsFrame, 'asked for no more: none');
+
+// animationFrameRate() (mygo's TestAnimationFrameRate): the frames that only a drawing at a lower rate asks for come every
+// so many of the display's refreshes, the most that still give it as many a second; at each while anything asks for more.
+$fps = 0.0; $full = false; $draws = 0;
+$h = new Headless(function (Context $c) use (&$fps, &$full, &$draws): void {
+    $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use (&$fps, &$draws, $c): void { $draws++; if ($fps > 0) { $c->runtime->animationFrameRate($fps); } }); $c->end();
+    $c->column()->size(10, 10)->draw(function (DisplayList $l, Node $n) use (&$full, $c): void { if ($full) { $c->runtime->animationFrame(); } }); $c->end();
+}, 200, 100);
+$h->paints = true;
+// How many of $n refreshes of a display of $hz paint the drawing again, each asking for the next, and the last pace.
+$paints = function (float $hz, int $n) use ($h, &$draws): array {
+    $h->frame(1);
+    $start = $draws; $every = $h->rt->pace($hz); $since = 0.0;
+    for ($i = 0; $i < $n; $i++) {
+        $since += 1 / $hz;
+        check($every !== null, "at $hz Hz, refresh $i asked for another");
+        if (\MyPHP\UI\Runtime::due($every ?? 1, $since, $hz)) { $h->frame(1); $every = $h->rt->pace($hz); $since = 0.0; }
+    }
+    return [$draws - $start, $every];
+};
+foreach ([[120, 60, 2], [120, 50, 2], [120, 30, 4], [120, 100, 1], [120, 120, 1], [60, 60, 1], [60, 30, 2], [59.94, 30, 2]] as [$hz, $f, $every]) {
+    $fps = (float)$f;
+    same([intdiv(24, $every), $every], $paints((float)$hz, 24), "at $hz Hz asking for $f: painted of 24 refreshes, every");
+}
+$fps = 30.0; $full = true;
+same([24, 1], $paints(120.0, 24), 'with animationFrame() too: each refresh paints');
+$full = false; $fps = 0.0; $h->frame(1);
+same(null, $h->rt->pace(120.0), 'nothing moving: no frame asked for');
+same(1, (function () use ($h) { $h->rt->animationFrameRate(30); $h->rt->needsFrame = true; return $h->rt->pace(120.0); })(), 'an event between the frames due: the next refresh');

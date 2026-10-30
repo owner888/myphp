@@ -479,13 +479,14 @@ final class Window
                 $this->answer($this->runtime->windowAsks);
                 if ($this->destroyed) { return; } // closed by its own frame (its view opened a film elsewhere, and its window went): no frame after it
                 $wake = $this->runtime->nextWake();
-                if (($this->runtime->needsFrame || $wake !== null) && !$this->showing()) {
+                $every = $this->runtime->pace(Metal::refreshRate($view));
+                if (($every !== null || $wake !== null) && !$this->showing()) {
                     // Nothing of the window shows (covered, minimized, on another space): what moves waits until some of it
                     // does (windowDidChangeOcclusionState:) rather than draw frames nobody sees, as browsers pause the
                     // animation frames of windows out of sight (mygo's held). It goes on from where the time puts it.
                     $this->held = true;
-                } elseif ($this->runtime->needsFrame) {
-                    Metal::requestFrame($view);
+                } elseif ($every !== null) {
+                    Metal::requestFrame($view, $every); // at a drawing's rate (Painter::animationFrameRate), every so many refreshes
                 } elseif ($wake !== null) {
                     View::wake($view, $wake);
                 }

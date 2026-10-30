@@ -765,15 +765,24 @@ final class Metal
      * display took them: the next drawable kept a frame waiting a refresh
      * or two, and scrolling showed 40 to 58 frames a second.
      */
-    public static function requestFrame($view): void
+    public static function requestFrame($view, int $every = 1): void
     {
         $key = ObjC::addr($view);
         if (!isset(self::$onDraw[$key])) {
             return; // a view forgotten, its window closed (an event AppKit still sends it, its own frame that closed it): it draws no more, no link made for it
         }
         $p = &self::$pace[$key];
-        $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0];
+        $p ??= ['link' => self::linkOf($view), 'running' => false, 'due' => false, 'timing' => false, 'last' => 0.0, 'every' => 1, 'rate' => 0.0];
         $refresh = self::refresh($view);
+        $p['every'] = $p['due'] || $p['timing'] ? min($p['every'], $every) : $every; // asked at the display's rate too (an event): the next refresh
+        $rate = $p['every'] > 1 ? 1 / ($refresh * $p['every']) : 0.0;
+        if ($p['link'] !== null && $rate !== $p['rate']) {
+            // A ProMotion display refreshes as often while nothing else on it asks for more (mygo's SetFrameRate); 0 is the display's rate.
+            $p['rate'] = $rate;
+            $r = ObjC::$c->new('CAFrameRateRange');
+            $r->minimum = $r->maximum = $r->preferred = $rate;
+            ObjC::msg('v:F', $p['link'], 'setPreferredFrameRateRange:', $r);
+        }
         if ($p['link'] !== null) {
             if ($p['running']) {
                 $p['due'] = true;
@@ -789,7 +798,7 @@ final class Metal
             return;
         }
         $p['timing'] = true; // until the frame begins
-        self::drawLater($view, max(0.0, $refresh - (microtime(true) - $p['last'])));
+        self::drawLater($view, max(0.0, $p['every'] * $refresh - (microtime(true) - $p['last'])));
     }
 
     /** Lets go of the drawables view $key's frames tracked, and of its last frame: the next is drawn whole. */
@@ -866,8 +875,18 @@ final class Metal
             if ($p !== null) { self::$pace[ObjC::addr($view)]['running'] = false; }
             return;
         }
+        $refresh = self::refresh($view);
+        if (!\MyPHP\UI\Runtime::due($p['every'], microtime(true) - $p['last'], 1 / $refresh)) {
+            return; // a frame at a drawing's rate, not due yet: a later refresh draws it
+        }
         self::$pace[ObjC::addr($view)]['due'] = false;
         ObjC::msg('v:', $view, 'draw');
+    }
+
+    /** How many times a second the view's display refreshes (mygo's RefreshRate). @internal Window */
+    public static function refreshRate($view): float
+    {
+        return 1 / self::refresh($view);
     }
 
     /** The time between two refreshes of the view's display, as ProMotion screens vary it (mygo's refresh). */

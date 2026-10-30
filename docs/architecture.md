@@ -6260,6 +6260,28 @@ succeeds are told of, an empty line is none.
   by itself, comes to the front with it (`App::focus`). `App::isActive()`
   is `NSApp.isActive`.
 
+## Drawings at a lower frame rate (v1.106)
+
+- mygo 174a1ca: `Painter::animationFrameRate($fps)` (and
+  `Runtime::animationFrameRate` for `Node::draw` callbacks) is
+  `animationFrame()` for a drawing that looks as smooth at fewer frames a
+  second: a record turning, a slow wave, a level meter. After a frame,
+  `Runtime::pace($hz)` gives the refreshes the next frame comes after: 1
+  while anything asks for a frame at the display's rate (`needsFrame`:
+  `animationFrame()`, a pose, input), else the most refreshes that still
+  give the frames a second asked for, so that they come evenly (60, 40 or
+  30 of a 120 Hz display's, 60 or 30 of a 60 Hz one's).
+- `Metal::requestFrame($view, $every)` sets the display link's
+  `preferredFrameRateRange` to the display's rate over `$every` (0, the
+  display's, for 1), which has a ProMotion display refresh as often while
+  nothing else on it asks for more; a tick before the frame is due
+  (`Runtime::due`, half a refresh early at most) draws nothing. A request
+  at the display's rate, as an event's, takes the next refresh. Before
+  macOS 14, without a view's display link, the timer waits `$every`
+  refreshes.
+- myphp builds each frame (`docs/mygo-deviations.md`, paint-only frames),
+  so a paced frame is built and painted, where mygo's only paints.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
