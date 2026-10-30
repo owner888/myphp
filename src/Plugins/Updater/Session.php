@@ -4,7 +4,8 @@ declare(strict_types=1);
 namespace MyPHP\Plugins\Updater;
 
 use MyPHP\Native\Fibers;
-use MyPHP\{Window, WindowOptions};
+use Closure;
+use MyPHP\{App, Window, WindowOptions};
 use MyPHP\UI\Content;
 
 /**
@@ -70,15 +71,46 @@ final class Session
         return $win;
     }
 
-    /** Shows the window, in front when the user asked for the check (mygo's frontend.Show). */
-    public static function present(Window $win, bool $user): void
+    /** The app as present() sees it, which tests replace: whether it is active, its activation policy, bringing it to the front, and hearing it become active. @internal @var ?array{active: Closure(): bool, policy: Closure(): \MyPHP\ActivationPolicy, focus: Closure(): void, onActive: Closure(Closure): Closure} */
+    public static ?array $app = null;
+
+    /**
+     * Shows the window as Sparkle shows its update alert (mygo's
+     * frontend.Show): in front, with the keyboard, when the user asked for
+     * the check or the app is active. A check in the background takes the
+     * keyboard from no other app: the window waits until the app becomes
+     * active, unless the app has no Dock icon and so may never be, which
+     * comes to the front.
+     * @param Window $win a Window, or in tests an object of its show(),
+     *   focus(), isVisible() and on('closed')
+     */
+    public static function present(object $win, bool $user): void
     {
-        if ($user) {
-            $win->show();
-            $win->focus();
-        } else {
-            $win->showInactive();
+        $app = self::$app ?? ['active' => App::isActive(...), 'policy' => App::activationPolicy(...), 'focus' => App::focus(...), 'onActive' => App::onDidBecomeActive(...)];
+        if (!$user && !$app['active']()) {
+            if ($app['policy']() === \MyPHP\ActivationPolicy::Regular) {
+                self::showWhenActive($win, $app);
+                return;
+            }
+            $app['focus']();
         }
+        $win->show();
+        $win->focus();
+    }
+
+    /** Shows $win in front once the app becomes active, unless it closed first or the user had it shown already. */
+    private static function showWhenActive(object $win, array $app): void
+    {
+        $done = false; $offs = [];
+        $end = function (bool $front) use (&$done, &$offs, $win): void {
+            if ($done) { return; }
+            $done = true;
+            foreach ($offs as $off) { $off(); }
+            if ($front && !$win->isVisible()) { $win->show(); $win->focus(); }
+        };
+        $offs[] = $app['onActive'](fn() => $end(true));
+        $offs[] = $win->on('closed', fn() => $end(false));
+        if ($app['active']()) { $end(true); } // it became active before it was watched
     }
 
     /** Changes the view, and the window's size when the view needs another. @param array<string, mixed> $v */

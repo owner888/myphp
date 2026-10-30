@@ -456,3 +456,66 @@ function updRelease(string $version, ?\Closure $install = null): Release
         check(str_contains($p, $want), "the page has $want");
     }
 })();
+
+(function () {
+    // Session::present (mygo's frontend_test): the update window of a background check, as Sparkle shows it.
+    $win = fn() => new class {
+        public bool $visible = false, $focused = false;
+        /** @var list<\Closure> */
+        public array $closed = [];
+        public function show(): void { $this->visible = true; }
+        public function focus(): void { $this->focused = true; }
+        public function isVisible(): bool { return $this->visible; }
+        public function on(string $event, \Closure $fn): \Closure
+        {
+            same('closed', $event, 'present watches the window closing');
+            $this->closed[] = $fn;
+            return function (): void { $this->closed = []; };
+        }
+    };
+    $app = new class {
+        public bool $active = false, $focused = false;
+        public \MyPHP\ActivationPolicy $policy = \MyPHP\ActivationPolicy::Regular;
+        /** @var list<\Closure> */
+        public array $listeners = [];
+        public function activate(): void { $this->active = true; foreach ($this->listeners as $fn) { $fn(); } }
+    };
+    Session::$app = [
+        'active' => fn() => $app->active,
+        'policy' => fn() => $app->policy,
+        'focus' => function () use ($app): void { $app->focused = true; },
+        'onActive' => function (\Closure $fn) use ($app): \Closure { $app->listeners[] = $fn; return function () use ($app): void { $app->listeners = []; }; },
+    ];
+    try {
+        $app->active = true;
+        $w = $win();
+        Session::present($w, false);
+        same([true, true], [$w->visible, $w->focused], 'a background check while the app is active: the window in front');
+
+        $app->active = false;
+        $w = $win();
+        Session::present($w, true);
+        same([true, true], [$w->visible, $w->focused], 'a check the user asked for: in front');
+
+        $w = $win();
+        Session::present($w, false);
+        same(false, $w->visible, 'a background check while another app is in front waits');
+        $app->activate();
+        same([true, true, [], []], [$w->visible, $w->focused, $app->listeners, $w->closed], 'then shows in front once the app is active, and stops watching');
+
+        $app->active = false;
+        $w = $win();
+        Session::present($w, false);
+        foreach ($w->closed as $fn) { $fn(); }
+        $app->activate();
+        same(false, $w->visible, 'a window closed while it waits never shows');
+
+        $app->active = false;
+        $app->policy = \MyPHP\ActivationPolicy::Accessory;
+        $w = $win();
+        Session::present($w, false);
+        same([true, true, true], [$app->focused, $w->visible, $w->focused], 'an app without a Dock icon comes to the front with the window');
+    } finally {
+        Session::$app = null;
+    }
+})();

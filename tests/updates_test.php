@@ -214,6 +214,55 @@ function updThrows(\Closure $fn): string
     $plain = 'https://github.com/me/app/releases/latest/download/update-darwin-arm64.json';
     same($plain, Feed::resolve($plain, $get), 'other feeds are the manifest');
     check(updThrows(fn() => Feed::resolve('https://example.com/{version}/update.json', $get)) !== '', '{version} outside GitHub releases');
+
+    // Prereleases (mygo's TestResolvePrereleaseFeed): the highest version that is not a draft.
+    $latest = 'https://github.com/me/app/releases/latest/download/update-linux-amd64.json';
+    $tagged = Feed::tagged('me/app', 'desktop-v', 'update-linux-amd64.json');
+    $dl = 'https://github.com/me/app/releases/download/';
+    foreach ([
+        ['a prerelease newer than the latest release', $latest, [$rel('v1.3.0', true, false), $rel('v1.2.0-beta.2', false, true), $rel('v1.2.0-beta.10', false, true), $rel('v1.1.0', false, false)], 'v1.2.0-beta.10'],
+        ['a release newer than the prereleases', $latest, [$rel('v1.2.0', false, false), $rel('v1.2.0-beta.2', false, true)], 'v1.2.0'],
+        ['by version, not by date', $latest, [$rel('v1.1.1', false, false), $rel('v1.2.0-beta.1', false, true), $rel('nightly', false, true)], 'v1.2.0-beta.1'],
+        ['tagged', $tagged, [$rel('cli-v3.0.0-beta.1', false, true), $rel('desktop-v2.0.0-rc.1', false, true), $rel('desktop-v1.0.0', false, false)], 'desktop-v2.0.0-rc.1'],
+    ] as [$name, $f, $page, $want]) {
+        $pages = [$page];
+        same("{$dl}$want/update-linux-amd64.json", Feed::resolvePrerelease($f, $get), $name);
+    }
+    $pages = [[$rel('v1.0.0', true, false)]];
+    try { Feed::resolvePrerelease($latest, $get); check(false, 'resolved'); } catch (NotPublished) { check(true, 'with drafts only, NotPublished'); }
+    $plain = 'https://downloads.example.com/my-app/update-linux-amd64.json';
+    same($plain, Feed::resolvePrerelease($plain, fn() => throw new \RuntimeException('read')), 'other feeds are the manifest, unread');
+    check(updThrows(fn() => Feed::resolvePrerelease('https://example.com/{version}/update.json', $get)) !== '', 'prereleases: {version} outside GitHub releases');
+
+    // The pages read (mygo's TestResolvePrereleaseFeedPages): up to the one with a stable release.
+    $nightlies = function (int $n) use ($rel): array {
+        $rs = [];
+        for ($i = 0; $i < $n; $i++) { $rs[] = $rel('v2.0.0-nightly.' . ($n - $i), false, true); }
+        return $rs;
+    };
+    foreach ([
+        ['a full page with a stable release', [[...$nightlies(99), $rel('v1.9.0', false, false)], [$rel('v3.0.0-beta.1', false, true)]], 'v2.0.0-nightly.99', 1],
+        ['prereleases only on the first page', [$nightlies(100), [$rel('v2.0.0-beta.1', false, true), $rel('v1.9.0', false, false)], [$rel('v1.0.0', false, false)]], 'v2.0.0-nightly.100', 2],
+        ['a stable release after the prereleases', [$nightlies(100), [$rel('v2.0.0', false, false)]], 'v2.0.0', 2],
+    ] as [$name, $ps, $want, $reads]) {
+        $n = 0;
+        $counted = function (string $u) use ($ps, &$n): string {
+            $n++;
+            foreach ($ps as $i => $p) {
+                if ($u === 'https://api.github.com/repos/me/app/releases?per_page=100&page=' . ($i + 1)) { return '[' . implode(',', $p) . ']'; }
+            }
+            throw new \RuntimeException("GET $u");
+        };
+        same(["{$dl}$want/update-linux-amd64.json", $reads], [Feed::resolvePrerelease($latest, $counted), $n], "$name: the release and the pages read");
+    }
+    check(str_contains(updThrows(fn() => Feed::resolvePrerelease($latest, fn() => throw new \RuntimeException('GET: 403 Forbidden'))), '403'), 'an error reading the releases is the check\'s');
+
+    // Updater::setPrereleases (mygo's TestUpdaterPrereleases).
+    same(false, Updater::prereleases(), 'prereleases off at launch');
+    Updater::setPrereleases(true);
+    same(true, Updater::prereleases(), 'setPrereleases(true)');
+    Updater::setPrereleases(false);
+    same(false, Updater::prereleases(), 'setPrereleases(false)');
 })();
 
 (function () {
@@ -274,6 +323,10 @@ try {
         same(null, Updater::checkFeed("$base/update.json", base64_encode($pk), '1.1.0'), 'up to date');
         same('myphp-updater', \MyPHP\Native\Update\Http::$userAgent, 'asked as the updater, not the app (a store answers 400 to a name past ASCII)');
         same(null, Updater::checkFeed("$base/update.json", base64_encode($pk), '1.2.0'), 'newer than the feed');
+        // An app on a prerelease, whose user turned prereleases off, takes no older version, and the release of its version once there is one.
+        same(null, Updater::checkFeed("$base/update.json", base64_encode($pk), '1.2.0-beta.1'), 'no older version than a prerelease');
+        same('1.1.0', Updater::checkFeed("$base/update.json", base64_encode($pk), '1.1.0-rc.1')?->version, 'from 1.1.0-rc.1, 1.1.0');
+        same('1.1.0', Updater::checkFeed("$base/update.json", base64_encode($pk), '1.0.0', null, true)?->version, 'feeds of updates.url the same with prereleases on');
         check(str_contains(updThrows(fn() => Updater::checkFeed("$base/missing.json", base64_encode($pk), '1.0.0')), '404'), 'a missing manifest');
         check(str_contains(updThrows(fn() => Updater::checkFeed('http://example.com/update.json', base64_encode($pk), '1.0.0')), 'updates need HTTPS'), 'plain HTTP refused');
 

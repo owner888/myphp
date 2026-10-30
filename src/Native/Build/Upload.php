@@ -116,6 +116,9 @@ final class Upload
             if ($latest !== '') {
                 $args[] = '--latest=false';
             }
+            if (str_contains(explode('+', $version, 2)[0], '-')) {
+                $args[] = '--prerelease'; // as 1.3.0-beta.1: only apps that take prereleases (Updater::setPrereleases) update to it
+            }
             [$code, $out] = Cmd::output($args);
             if ($code !== 0) {
                 throw new RuntimeException("gh release create: exit status $code\n$out");

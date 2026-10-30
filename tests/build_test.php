@@ -436,6 +436,9 @@ touch("$d/update-darwin-arm64.json");
 Upload::publish(['updates' => ['github' => 'o/r', 'tagPrefix' => 'app-v']], '1.0', ["$d/A.app", $dmg, "$d/update-darwin-arm64.json"], 'notes', 'ua', 'myphp.json', fn() => null);
 same(['gh release view app-v1.0 --repo o/r', 'gh release create app-v1.0 --repo o/r --draft --title app-v1.0 --notes notes --latest=false',
     "gh release upload app-v1.0 --repo o/r --clobber $dmg", "gh release upload app-v1.0 --repo o/r --clobber $d/update-darwin-arm64.json"], file($stubLog, FILE_IGNORE_NEW_LINES), 'a draft release, the image, then the manifest');
+file_put_contents($stubLog, '');
+Upload::publish(['updates' => ['github' => 'o/r']], '1.3.0-beta.1+7', ["$d/update-darwin-arm64.json"], 'notes', 'ua', 'myphp.json', fn() => null);
+same('gh release create v1.3.0-beta.1+7 --repo o/r --draft --title v1.3.0-beta.1+7 --notes notes --prerelease', file($stubLog, FILE_IGNORE_NEW_LINES)[1], 'a pre-release version, a prerelease (only apps that take prereleases update to it)');
 // myphp build: the app of each platform in its directory, signed.
 file_put_contents($stubLog, '');
 $root = bldDir();

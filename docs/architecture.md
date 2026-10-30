@@ -6236,6 +6236,30 @@ succeeds are told of, an empty line is none.
   (all WebKit keeps of a certificate error), else the URL of the
   navigation started last (`didStartProvisionalNavigation`).
 
+## The updater: prereleases, and the window of a background check (v1.105)
+
+- mygo 74f2eed: `Updater::setPrereleases(true)` makes `check()` offer
+  prereleases (1.3.0-beta.1) to users who chose an app's beta. With
+  updates on GitHub, `Feed::resolvePrerelease` reads the releases through
+  the GitHub API, newest first, and takes the highest version
+  (`Format::compare`) that is not a draft among those tagged the feed's
+  prefix ("v" for the latest release's feed); it stops at the page holding
+  the newest release that is no prerelease, so a check stays one request.
+  `check()` never offers a version older than the running one, so turning
+  it off waits for the release after the prerelease. Feeds of
+  `updates.url` are the server's manifest either way. It is off at launch.
+- `myphp build --upload` creates the draft release of a version with a
+  pre-release part (before any `+`) with `--prerelease`, so publishing it
+  does not make it the latest release every installed app updates to.
+- mygo be16483: the update window of a background check shows as
+  Sparkle's alert does (`Session::present`): in front, with the keyboard,
+  when the user asked or the app is active (it used to show behind the
+  app's window); while another app is in front it waits for
+  `App::onDidBecomeActive` (or its closing), and an app without a Dock icon
+  (`App::activationPolicy()` not Regular), which may never become active
+  by itself, comes to the front with it (`App::focus`). `App::isActive()`
+  is `NSApp.isActive`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

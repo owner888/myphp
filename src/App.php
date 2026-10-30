@@ -906,6 +906,18 @@ final class App
         return ObjC::msg('b:', self::nsApp('isHidden'), 'isHidden');
     }
 
+    /** How the app shows in the Dock and the app switcher: Regular unless setActivationPolicy() changed it (mygo's ActivationPolicy). */
+    public static function activationPolicy(): ActivationPolicy
+    {
+        return self::$policy;
+    }
+
+    /** Whether the app is the active one, in front (mygo's IsActive). */
+    public static function isActive(): bool
+    {
+        return ObjC::msg('b:', self::nsApp('isActive'), 'isActive');
+    }
+
     /** Changes how the app shows in the Dock and the app switcher (mygo's SetActivationPolicy); before run() too, which starts it so. Regular brings it to the front. */
     public static function setActivationPolicy(ActivationPolicy $p): void
     {

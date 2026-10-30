@@ -34,6 +34,29 @@ final class Updater
     public static ?string $key = null;
     /** @internal set by tests in place of the bundle the app runs from */
     public static ?string $target = null;
+    private static bool $prereleases = false;
+
+    /**
+     * Makes check() offer prereleases too, as 1.3.0-beta.1, for the users
+     * of an app who chose its beta (mygo's SetPrereleases): with updates on
+     * GitHub, check() reads the release of the highest version that is not
+     * a draft through the GitHub API (usually one request a check), so that
+     * a release newer than the prereleases is offered too. check() never
+     * offers a version older than the running one, so turning it off waits
+     * for the release after the prerelease the app runs. Updates of
+     * updates.url are the manifest the server has, whichever is set. It is
+     * off at launch: the app keeps the user's choice and sets it again.
+     */
+    public static function setPrereleases(bool $on): void
+    {
+        self::$prereleases = $on;
+    }
+
+    /** Whether check() offers prereleases (setPrereleases). */
+    public static function prereleases(): bool
+    {
+        return self::$prereleases;
+    }
 
     /**
      * Whether the app can update itself: it was built with updates and can
@@ -69,17 +92,18 @@ final class Updater
         if (!self::enabled()) {
             throw new ErrUpdatesDisabled;
         }
-        return self::checkFeed(self::feed(), self::key(), App::version(), $canceled);
+        return self::checkFeed(self::feed(), self::key(), App::version(), $canceled, self::$prereleases);
     }
 
     /** @internal what check() asks */
-    public static function checkFeed(string $feed, string $key, string $current, ?Closure $canceled = null): ?Update
+    public static function checkFeed(string $feed, string $key, string $current, ?Closure $canceled = null, bool $prereleases = false): ?Update
     {
         // Not the app's name (mygo's bae6bfc): GitHub's release assets come from a store that answers 400 to a User-Agent
         // with bytes outside ASCII, as 云音乐's, for every file its CDN has not cached yet.
         Http::$userAgent = 'myphp-updater';
         try {
-            $url = Feed::resolve($feed, fn(string $u): string => Http::get($u, 64 << 20, $canceled));
+            $get = fn(string $u): string => Http::get($u, 64 << 20, $canceled);
+            $url = $prereleases ? Feed::resolvePrerelease($feed, $get) : Feed::resolve($feed, $get);
             $m = Format::manifest(Http::get($url, Format::MAX_MANIFEST_SIZE, $canceled));
         } catch (RuntimeException $e) {
             throw new RuntimeException("myphp: checking for updates: {$e->getMessage()}", 0, $e);
