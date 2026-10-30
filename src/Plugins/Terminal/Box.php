@@ -54,7 +54,7 @@ final class Box
     {
         return match (true) {
             $r >= 0x2500 && $r <= 0x257f => self::ARMS[$r - 0x2500] !== '' || ($r >= 0x256d && $r <= 0x2573),
-            $r >= 0x2580 && $r <= 0x259f, $r >= 0xe0b0 && $r <= 0xe0b3 => true,
+            $r >= 0x2580 && $r <= 0x259f, $r >= 0xe0b0 && $r <= 0xe0b7 => true,
             default => false,
         };
     }
@@ -81,6 +81,23 @@ final class Box
                 $path->moveTo($x1 / $s, $y0 / $s)->lineTo($x0 / $s, ($y0 + $h / 2) / $s)->lineTo($x1 / $s, $y1 / $s);
             }
             if ($r === 0xe0b0 || $r === 0xe0b2) {
+                $path->close();
+                $list->path($path, $col[0], $col[1]);
+            } else {
+                $list->path($path, $col[0], $col[1], max(1, round($s)) / $s);
+            }
+            return;
+        }
+        if ($r >= 0xe0b4 && $r <= 0xe0b7) {
+            // Powerline's rounded caps: half an ellipse spanning the cell, as the triangles do (mygo's); the font's glyph fell short of the taller cells a line height above 1 makes, next to the prompt's background.
+            $k = 0.5523; // a quarter circle's cubic control distance
+            $ym = $y0 + $h / 2;
+            [$ex, $fx] = $r >= 0xe0b6 ? [$x0, $x1] : [$x1, $x0]; // the cap's tip and its flat side
+            $kx = $fx + ($ex - $fx) * $k; $ky = $h / 2 * $k;
+            $path = (new Path)->moveTo($fx / $s, $y0 / $s)
+                ->cubeTo($kx / $s, $y0 / $s, $ex / $s, ($ym - $ky) / $s, $ex / $s, $ym / $s)
+                ->cubeTo($ex / $s, ($ym + $ky) / $s, $kx / $s, $y1 / $s, $fx / $s, $y1 / $s);
+            if ($r === 0xe0b4 || $r === 0xe0b6) {
                 $path->close();
                 $list->path($path, $col[0], $col[1]);
             } else {

@@ -98,10 +98,16 @@ T);
         ['(src/a.go)', 3, 'src/a.go'],
         ['just words here', 5, ''],
         ['version 1.2.3 ok', 9, ''],
+        ['write(notes.md)', 8, 'notes.md'],
+        ['notes.md (new file +2)', 2, 'notes.md'],
+        ['See notes.md.', 7, 'notes.md'],
+        ['notes.md:2:3', 2, 'notes.md:2:3'],
     ] as [$s, $col, $want]) {
         $r = mb_str_split($s);
         same($want, Links::pathAt($r, array_keys($r), $col)[0], "pathAt(\"$s\", $col)");
     }
     $r = mb_str_split('go to https://x.org/a. now');
     same(['https://x.org/a', 6, 21], Links::urlAt($r, array_keys($r), 10), 'urlAt: the columns the URL spans');
+    $r = mb_str_split('write(notes.md)');
+    same(['notes.md', 6, 14], Links::pathAt($r, array_keys($r), 8), 'pathAt: the columns a bare file name spans');
 })();

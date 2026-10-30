@@ -12,14 +12,22 @@ namespace MyPHP\Plugins\Terminal;
 final class Links
 {
     private const URL = '~(?:https?|ftp|file)://[^\s"\'<>`\x00-\x1f]+|mailto:[^\s"\'<>`]+~u';
-    /** Absolute, from ~, ./ or ../, with a slash, or a file name with a :line; each may end in :line or :line:col. */
-    private const PATH = '~(?:(?:\~|\.{1,2})?/[^\s"\'<>`\x00-\x1f:]+|[\w.@+-]+(?:/[\w.@+-]+)+/?)(?::\d+(?::\d+)?)?|[\w@+-][\w.@+-]*\.\w+:\d+(?::\d+)?~u';
+    /** Absolute, from ~, ./ or ../, with a slash, or a file name with an extension; each may end in :line or :line:col. */
+    private const PATH = '~(?:(?:\~|\.{1,2})?/[^\s"\'<>`\x00-\x1f:]+|[\w.@+-]+(?:/[\w.@+-]+)+/?)(?::\d+(?::\d+)?)?|[\w@+-][\w.@+-]*\.\w+(?::\d+(?::\d+)?)?~u';
 
     /** The URL of a row, whose runes $text are in columns $cols, at column $col, and the columns it spans, x0 up to x1: ['', 0, 0] for none (mygo's urlAt). @param list<string> $text @param list<int> $cols @return array{0: string, 1: int, 2: int} */
     public static function urlAt(array $text, array $cols, int $col): array { return self::matchAt(self::URL, $text, $cols, $col); }
 
     /** The file path of a row at column $col, as urlAt() (mygo's pathAt). @param list<string> $text @param list<int> $cols @return array{0: string, 1: int, 2: int} */
-    public static function pathAt(array $text, array $cols, int $col): array { return self::matchAt(self::PATH, $text, $cols, $col); }
+    public static function pathAt(array $text, array $cols, int $col): array
+    {
+        $m = self::matchAt(self::PATH, $text, $cols, $col);
+        // Dotted numbers, as version 1.2.3, are no files.
+        if (strpbrk($m[0], '/:') === false && preg_match('/\pL/u', $m[0]) !== 1) {
+            return ['', 0, 0];
+        }
+        return $m;
+    }
 
     /** @param list<string> $text @param list<int> $cols @return array{0: string, 1: int, 2: int} */
     private static function matchAt(string $re, array $text, array $cols, int $col): array

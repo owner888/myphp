@@ -1022,13 +1022,32 @@ final class Context
         if ($state->choosesCells()) {
             $state->dragCells($x, $y, $rt);
             $lr = $rt->rectOf($list->id);
-            if ($lr !== null) { // sideways near the left or right edge, faster nearer and past
-                $edge = 32.0; $at = $x - $lr[0];
-                $dx = $at < $edge ? -min($edge - $at, 2 * $edge) / 2 : ($at > $lr[2] - $edge ? min($at - ($lr[2] - $edge), 2 * $edge) / 2 : 0.0);
-                if ($dx != 0) { $state->scrollByX($dx); $rt->animate(); }
+            if ($lr !== null && ($dx = self::dragSpeed($x - $lr[0], $lr[2])) != 0) { // sideways near the left or right edge
+                $state->scrollByX($dx);
+                $rt->animate();
             }
         }
-        $this->dragScroll($list, $state, $y);
+        $lr = $rt->rectOf($list->id);
+        if ($lr !== null && ($dy = self::dragSpeed($y - $lr[1], $lr[3])) != 0) {
+            $state->scrollBy($dy);
+            $rt->animate();
+        }
+    }
+
+    /**
+     * How far a list a drag chooses rows in scrolls a frame, $at points into
+     * it along an axis $size long: near or past an edge, 32 points each, or
+     * half of a list shorter than both, faster nearer and past (mygo's
+     * scrollDragSelect).
+     */
+    private static function dragSpeed(float $at, float $size): float
+    {
+        $edge = min(32.0, $size / 2);
+        return match (true) {
+            $at < $edge => -min($edge - $at, 64.0) / 2,
+            $at > $size - $edge => min($at - ($size - $edge), 64.0) / 2,
+            default => 0.0,
+        };
     }
 
     /**

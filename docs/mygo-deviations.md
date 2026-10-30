@@ -2167,3 +2167,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     read myphp's integration, which marks their commands (OSC 133).
   - Why: the developer asked for command finished notifications, which
     zsh and bash give no marks for without one.
+
+## Japanese (v1.89)
+
+- **The strings myphp has beyond mygo's**
+  - mygo: every string of its own in Japanese.
+  - myphp: ja.json holds mygo's strings and the terminal's; the video
+    player's, its settings' and the IINA-ported windows' (myphp's own,
+    which mygo has not) show in English in Japanese.
+  - Why: mygo's translation covers its strings; myphp's player strings
+    were translated to Chinese alone so far.

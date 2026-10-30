@@ -300,3 +300,25 @@ $h->frame();
 $h->click($x, $y); $h->click($x, $y, 0, 2);
 same([[1, 1]], $seen, 'the cell double-clicked sees it, the others not');
 check($s->selected === 1 && $s->submitted(), 'the row still takes the click and the double click');
+
+// In a list shorter than its two edges, a drag held below its middle scrolls it down and one held above scrolls it up (mygo's TestDragSelectShortListScrollsTowardThePointer).
+$s = new ListState(); $s->selected = -1; $s->selection = new Selection(); $s->dragSelect = true;
+$short = null;
+$h = new Headless(function (Context $c) use ($s, &$short): void {
+    $c->column();
+      $short = $c->list($s, 30, fn(int $i) => $c->text("Row $i"))->height(50);
+    $c->end();
+}, 300, 300);
+$h->frame();
+foreach ([[30.0, true], [20.0, false]] as [$held, $down]) {
+    [$s->row, $s->offset] = [0, 0.0];
+    $s->scrollBy(100.0);
+    $h->frame();
+    [$lx, $ly] = $h->rect($short);
+    $x = $lx + 20; $from = $s->extent()[0];
+    $h->press($x, $ly + 25); $h->drag($x, $ly + 29); $h->drag($x, $ly + $held);
+    $h->frame();
+    $moved = $s->extent()[0] - $from;
+    check($down ? $moved > 0 : $moved < 0, "held $held down a list 50 tall: scrolled by $moved");
+    $h->release($x, $ly + $held);
+}

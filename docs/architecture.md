@@ -5933,6 +5933,21 @@ tests/terminal_test.php runs bash and zsh in a terminal with a startup
 file of their own: it is read, a command that fails and one that
 succeeds are told of, an empty line is none.
 
+## Bare file names, rounded caps, short lists, Japanese (v1.89)
+
+- **Bare file names** (mygo 156c6af): `Links::PATH` takes a file name
+  with an extension, a `:line` or not (`notes.md`, `write(notes.md)`), and
+  `pathAt` leaves dotted numbers (version 1.2.3) no link; Command-hover
+  underlines the cells Command-click opens.
+- **Powerline's rounded caps** (150f5bb): U+E0B4 to U+E0B7 are drawn by
+  the terminal (`Box::draw`), half an ellipse spanning the cell, filled or
+  stroked, as its triangles are: the font's fell short of tall cells.
+- **Drag choosing rows in a short list** (db2e1b8): the edges near which
+  the list scrolls (`Context::dragSpeed`) take 32 points each, or half of
+  a list shorter than both; a list 50 tall scrolled up whatever the drag.
+- **Japanese** (165bc98): src/l10n/ja.json, mygo's translations of its
+  own strings, and of the terminal's command notifications.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

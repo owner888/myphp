@@ -17,11 +17,11 @@ $h = new Headless(function (Context $c) use (&$open, $query, &$current): void {
     $c->end();
 }, 600, 200);
 $was = App::locale();
-App::setLanguages('en', 'en-GB', 'zh-Hans', 'zh-Hant', 'fa', 'de', 'fr-CA'); // as datetime_test's
+App::setLanguages('en', 'en-GB', 'ja', 'zh-Hans', 'zh-Hant', 'fa', 'de', 'fr-CA'); // as datetime_test's, and Japanese
 App::setLocale('en'); $h->frame();
 check($h->byText('No matches') !== null && $h->byText('Done') !== null, 'in English');
 $h->input->push(['accessOn']);
-foreach (['zh-Hans', 'zh-Hant'] as $lang) {
+foreach (['ja', 'zh-Hans', 'zh-Hant'] as $lang) {
     App::setLocale($lang); $h->frame();
     $tx = L10n::in($lang);
     check($h->byText($tx->get('noMatches')) !== null && $h->byText($tx->get('done')) !== null && $h->byText('Done') === null, "in $lang: " . json_encode($h->texts(), JSON_UNESCAPED_UNICODE));

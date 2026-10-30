@@ -45,7 +45,7 @@ foreach (["en-AU"=>["en-AU","en-001","en"],"zh-Hant-MO"=>["zh-Hant-MO","zh-Hant-
 same([], $bad, 'Normalize, Match, Direction, Base, Parent and chain as mygo tests them');
 
 // MyPHP's own strings: the languages they are in, formatted messages, what an app adds.
-same(['en', 'zh-Hans', 'zh-Hant'], L10n::languages(), 'the languages of the catalogs');
+same(['en', 'ja', 'zh-Hans', 'zh-Hant'], L10n::languages(), 'the languages of the catalogs');
 same(['尋找', '3 of 12', '移除php', 'Search', '[Šéåŕçĥ one]'], [L10n::in('zh-TW')->get('find'), L10n::in('en')->get('matches', ['current' => 3, 'total' => 12]), L10n::in('zh-Hans')->get('removeToken', ['token' => 'php']), L10n::in('fr')->get('search'), L10n::in('en-XA')->get('search')], 'a reader of zh-TW gets zh-Hant, of French English, of en-XA English transformed');
 try { L10n::in('en')->get('noSuchString'); check(false, 'a string MyPHP has not'); } catch (\RuntimeException) { check(true, 'a key MyPHP has no string of throws'); }
 $tmp = sys_get_temp_dir() . '/myphp-l10n-' . getmypid(); @mkdir($tmp);

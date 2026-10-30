@@ -680,6 +680,33 @@ TermClock::install();
 })();
 
 (function () {
+    // Command-hover underlines the cells Command-click opens, bare file names and paths to hidden directories too (mygo's TestCommandHoverFilePath).
+    foreach (['notes.md', '.log-outputs/takumi-session-analysis.md'] as $path) {
+        $term = Terminal::new(new Options(conn: new TermPipe, openLink: fn(string $l): bool => true));
+        $term->feed("write($path)\r\n");
+        $tt = new TermTester($term, 800, 200);
+        [$x, $y] = $tt->cell(8, 0);
+        $tt->hover($x, $y);
+        $tt->h->input->mods = Key::COMMAND;
+        $tt->frame();
+        same([0, 6, 6 + strlen($path)], $term->v->hover, "the hovered cells of $path");
+        same(\MyPHP\UI\Cursor::Pointer, $tt->node->cursor, "the hand over $path");
+        $term->close();
+    }
+})();
+
+(function () {
+    // Powerline's rounded caps are drawn, spanning the cell as its triangles do, not taken from the font, which fell short of tall cells (mygo's TestPowerlineRoundedCaps).
+    $term = Terminal::new(new Options(conn: new TermPipe, font: new Font(lineHeight: 1.6)));
+    $tt = new TermTester($term, 400, 200, false);
+    $term->feed("\x1b[38;2;255;0;0m\u{e0b4}\u{e0b5}\u{e0b6}\u{e0b7}");
+    $tt->frame();
+    $l = $tt->h->paint();
+    same([0xe0b4, 0xe0b5, 0xe0b6, 0xe0b7], array_map(fn(array $b) => $b[1], $term->v->lines[0]->boxes), 'the rounded caps drawn by the terminal');
+    $term->close();
+})();
+
+(function () {
     // The theme follows the window's appearance; a closed terminal shows nothing.
     $term = Terminal::new(new Options(conn: new TermPipe));
     $tt = new TermTester($term, 400, 200, false);
