@@ -462,3 +462,22 @@ render(HELD + 2000); // it plays 998 of the 1000, reading two ahead to interpola
 $src->ready = 1 << 30;
 render(500); $atFrame($p, 998, 'the device playing the wait');
 render(HELD); $atFrame($p, 998 + 500, 'the wait heard');
+
+// onEnd: once at each end, not while paused, not removed, not a loop's nor a stopped player's.
+setup();
+$p = Audio::newSound(RATE, 1, ramp(100))->newPlayer();
+$ends = 0;
+$off = $p->onEnd(function () use (&$ends): void { $ends++; });
+$p->play();
+render(200);
+same(1, $ends, 'onEnd: at the end');
+render(200);
+$p->play(); render(50); $p->pause(); render(200);
+same(1, $ends, 'onEnd: ended once, not paused');
+$p->seek(0); $off(); $p->play(); render(200);
+same(1, $ends, 'onEnd: removed');
+$loop = Audio::newSound(RATE, 1, ramp(100))->newPlayer()->setLoop(true);
+$loop->onEnd(function () use (&$ends): void { $ends++; });
+$loop->play(); render(350); $loop->stop(); render(200);
+same(1, $ends, 'onEnd: never a loop, nor a stopped player');
+check($p instanceof \MyPHP\MediaPlayer, 'a player is a MediaPlayer, for NowPlaying::control');

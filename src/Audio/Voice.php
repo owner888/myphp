@@ -37,6 +37,11 @@ final class Voice
      * @var list<array{0: int, 1: float}>
      */
     private array $marks = [];
+    /** It played to its end, for the mixer to tell $onEnd (Player::onEnd), by their ids. */
+    public bool $atEnd = false;
+    /** @var array<int, \Closure(): void> */
+    public array $onEnd = [];
+    public int $nextEnd = 0;
 
     /** @param int $length frames, or -1 */
     public function __construct(public Source $src, public float $rate, int $channels, public int $length)
@@ -222,6 +227,7 @@ final class Voice
                 $this->phase--;
             }
             if ($this->end >= 0 && $this->idx >= $this->end) {
+                $this->atEnd = $this->atEnd || $this->playing;
                 $this->playing = false;
                 $this->gain = [$g0, $g1, $g2, $g3];
                 return false;

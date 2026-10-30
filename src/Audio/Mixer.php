@@ -44,10 +44,14 @@ final class Mixer
     public static function mix(int $frames): array
     {
         $out = array_fill(0, $frames * 2, 0.0);
-        $kept = [];
+        $kept = $ended = [];
         [$at, $heard] = [self::$mixed, self::heard()];
         foreach (self::$voices as $v) {
             if ($v->closed || !$v->mix($out, $frames, self::$volume, $at, $heard)) {
+                if ($v->atEnd) {
+                    $v->atEnd = false;
+                    $ended[] = $v->onEnd;
+                }
                 $v->active = false;
                 if ($v->orphan) { $v->close(); }
                 continue;
@@ -57,6 +61,9 @@ final class Mixer
         self::$voices = $kept;
         self::$mixed += $frames;
         self::$unheard = min(self::$unheard + $frames, self::$held);
+        foreach ($ended as $listeners) {
+            foreach ($listeners as $fn) { $fn(); }
+        }
         foreach ($out as $i => $s) {
             if ($s > 1.0) { $out[$i] = 1.0; } elseif ($s < -1.0) { $out[$i] = -1.0; }
         }

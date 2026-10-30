@@ -6007,6 +6007,30 @@ succeeds are told of, an empty line is none.
   the position is the target at once and stands there until the output
   plays what it mixed since.
 
+## Now Playing and the media keys (v1.93)
+
+- mygo 138c63b: `MyPHP\NowPlaying` shows what the app plays in Control
+  Center and the menu bar, and reports the media keys and those controls
+  as commands (`onCommand`) while it shows something: `set()`,
+  `setPlayback()`, `clear()`, `info()`; `NowPlayingInfo`, `PlaybackState`,
+  `MediaCommand`'s bits. The play/pause key is PAUSE while playing, else
+  PLAY; only the commands offered reach `onCommand` (0 offers play, pause
+  and stop); a seek is clamped to the track, the other commands get where
+  playback is, which advances at the rate while playing.
+- `control(MediaPlayer)` lets the commands play, pause, stop and seek a
+  player, `Audio\Player` implementing `MediaPlayer`, offering them on top
+  of the info's (seek when it knows its duration), and shows its state;
+  `sync()` after the app moves it, and its end (`Player::onEnd`, new,
+  called after the mix the player ended in) syncs it.
+- What it shows is applied once the app is ready, each time from the
+  latest (`NowPlaying::$show`, a test's backend in tests/nowplaying_test.php).
+  `Native\NowPlaying::media` sets MPNowPlayingInfoCenter's info and
+  state, and enables MPRemoteCommandCenter's commands as offered (the
+  toggle with play or pause, seeking with a duration); the video
+  player's Now Playing (`show`) and it share the system's one, the last to
+  show it having the commands. The artwork is not shown on macOS
+  (docs/mygo-deviations.md).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

@@ -13,8 +13,11 @@ use Closure;
  * one that showed it last. One for the process, as the system's is: a
  * player shows it as it changes and ends it when nothing plays, the
  * system's own (Music's) taking it back then (IINA's issue 4331).
+ * MyPHP\NowPlaying shows what an app plays here too (media()), as mygo's
+ * darwin backend: the one to show it last has the commands, those it
+ * handles enabled.
  *
- * @internal UI\VideoPlayerState
+ * @internal UI\VideoPlayerState, MyPHP\NowPlaying
  */
 final class NowPlaying
 {
@@ -29,9 +32,11 @@ final class NowPlaying
     /** IINA's: the skips' interval, the rates offered. */
     private const SKIP = 15.0, RATES = [0.5, 1.0, 1.5, 2.0];
     /** MPNowPlayingPlaybackState's playing, paused and stopped; MPNowPlayingInfoMediaType's video. */
-    private const PLAYING = 1, PAUSED = 2, STOPPED = 3, VIDEO = 2;
+    private const PLAYING = 1, PAUSED = 2, STOPPED = 3, AUDIO = 1, VIDEO = 2;
+    /** MyPHP\NowPlaying's commands (MediaCommand's bits), by the name of the handler of each. */
+    private const MEDIA = ['play' => 1, 'pause' => 2, 'toggle' => 4, 'stop' => 8, 'next' => 16, 'previous' => 32, 'position' => 64];
     /** The info's keys, MediaPlayer's constants by their names. */
-    private const KEYS = ['MPMediaItemPropertyTitle', 'MPMediaItemPropertyPlaybackDuration', 'MPNowPlayingInfoPropertyElapsedPlaybackTime',
+    private const KEYS = ['MPMediaItemPropertyTitle', 'MPMediaItemPropertyArtist', 'MPMediaItemPropertyAlbumTitle', 'MPMediaItemPropertyPlaybackDuration', 'MPNowPlayingInfoPropertyElapsedPlaybackTime',
         'MPNowPlayingInfoPropertyPlaybackRate', 'MPNowPlayingInfoPropertyDefaultPlaybackRate', 'MPNowPlayingInfoPropertyMediaType',
         'MPNowPlayingInfoPropertyAssetURL', 'MPNowPlayingInfoPropertyPlaybackQueueCount', 'MPNowPlayingInfoPropertyPlaybackQueueIndex',
         'MPNowPlayingInfoPropertyChapterCount', 'MPNowPlayingInfoPropertyChapterNumber'];
@@ -48,6 +53,8 @@ final class NowPlaying
     private static array $keys = [];
     /** @var array<string, mixed> the blocks the commands call, made once */
     private static array $blocks = [];
+    /** What MyPHP\NowPlaying shows as. */
+    private static ?object $media = null;
 
     /**
      * Shows what $owner plays: the film at $path (titled by its name), its
@@ -86,12 +93,59 @@ final class NowPlaying
         $set('MPNowPlayingInfoPropertyDefaultPlaybackRate', $double(1.0));
         $center = self::center();
         ObjC::msg('v:p', $center, 'setNowPlayingInfo:', $info);
+        self::enable();
         if ($path !== self::$path && $paused) { // a film opened paused: Now Playing drops the app for Music's unless it played first (IINA's workaround)
             ObjC::msg('v:L', $center, 'setPlaybackState:', self::PLAYING);
         }
         self::$path = $path;
         ObjC::msg('v:L', $center, 'setPlaybackState:', $paused ? self::PAUSED : self::PLAYING);
+    }
+
+    /**
+     * Shows what the app plays, for MyPHP\NowPlaying (mygo's
+     * setNowPlaying): $info as it gives it (title, artist, album,
+     * duration, position, rate, state, commands), or null to show nothing;
+     * the commands it offers call $command with MediaCommand's bit and,
+     * for a seek, where to. The artwork is not shown: MPMediaItemArtwork
+     * asks for its image on another thread, where PHP cannot run.
+     * @param ?array<string, mixed> $info
+     * @param Closure(int, float): void $command
+     */
+    public static function media(?array $info, Closure $command): void
+    {
+        $owner = self::$media ??= new \stdClass();
+        if ($info === null) {
+            self::end($owner);
+            return;
+        }
+        self::boot();
+        $enabled = $info['commands'];
+        if ($enabled & (self::MEDIA['play'] | self::MEDIA['pause'])) { $enabled |= self::MEDIA['toggle']; }
+        if ($info['duration'] <= 0) { $enabled &= ~self::MEDIA['position']; }
+        $handlers = [];
+        foreach (self::MEDIA as $name => $bit) {
+            if ($enabled & $bit) { $handlers[$name] = static fn(object $o, float $at = 0.0) => $command($bit, $at); }
+        }
+        self::$owner = \WeakReference::create($owner);
+        self::$ownerId = spl_object_id($owner);
+        self::$handlers = $handlers;
+        self::$path = '';
+        $k = self::$keys;
+        $d = ObjC::msg('p:', ObjC::cls('NSMutableDictionary'), 'dictionary');
+        $set = fn(string $key, $value) => ObjC::msg('v:pp', $d, 'setObject:forKey:', $value, $k[$key]);
+        $double = fn(float $v) => ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $v);
+        foreach (['title' => 'MPMediaItemPropertyTitle', 'artist' => 'MPMediaItemPropertyArtist', 'album' => 'MPMediaItemPropertyAlbumTitle'] as $field => $key) {
+            if ($info[$field] !== '') { $set($key, ObjC::str($info[$field])); }
+        }
+        if ($info['duration'] > 0) { $set('MPMediaItemPropertyPlaybackDuration', $double($info['duration'])); }
+        $set('MPNowPlayingInfoPropertyMediaType', ObjC::msg('p:l', ObjC::cls('NSNumber'), 'numberWithLong:', self::AUDIO));
+        $set('MPNowPlayingInfoPropertyElapsedPlaybackTime', $double($info['position']));
+        $set('MPNowPlayingInfoPropertyDefaultPlaybackRate', $double(1.0));
+        $set('MPNowPlayingInfoPropertyPlaybackRate', $double($info['state'] === 'playing' ? $info['rate'] : 0.0));
+        $center = self::center();
+        ObjC::msg('v:p', $center, 'setNowPlayingInfo:', $d);
         self::enable();
+        ObjC::msg('v:L', $center, 'setPlaybackState:', match ($info['state']) { 'playing' => self::PLAYING, 'stopped' => self::STOPPED, default => self::PAUSED });
     }
 
     /** Ends what $owner showed, if it showed it last: nothing in Now Playing, the commands let go. */
@@ -114,14 +168,17 @@ final class NowPlaying
         self::$handlers = [];
     }
 
-    /** Gives each command its target, a block calling the handler of the one that showed it last. */
+    /** Gives each command its target, a block calling the handler of the one that showed it last, once; and enables those it handles. */
     private static function enable(): void
     {
+        $commands = ObjC::msg('p:', ObjC::cls('MPRemoteCommandCenter'), 'sharedCommandCenter');
+        foreach (self::COMMANDS as $name => [$getter]) {
+            ObjC::msg('v:b', ObjC::msg('p:', $commands, $getter), 'setEnabled:', isset(self::$handlers[$name]));
+        }
         if (self::$enabled) {
             return;
         }
         self::$enabled = true;
-        $commands = ObjC::msg('p:', ObjC::cls('MPRemoteCommandCenter'), 'sharedCommandCenter');
         $numbers = fn(array $vs) => self::array(array_map(fn(float $v) => ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $v), $vs));
         foreach (self::COMMANDS as $name => [$getter, $field, $type]) {
             $command = ObjC::msg('p:', $commands, $getter);

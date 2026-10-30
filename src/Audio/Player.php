@@ -9,7 +9,7 @@ namespace MyPHP\Audio;
  * return the player, to chain them. A stream's player dropped while
  * paused closes; one dropped while playing plays to its end.
  */
-final class Player
+final class Player implements \MyPHP\MediaPlayer
 {
     /** @internal */
     public readonly Voice $v;
@@ -43,6 +43,20 @@ final class Player
             Mixer::$voices[] = $v;
             Output::wake();
         }
+    }
+
+    /**
+     * Calls $fn each time it plays to its end, which a looping player never
+     * does, as a playlist plays the next track then: on the main thread,
+     * once the output mixed its last frames (mygo's OnEnd, on a goroutine).
+     * Returns a function that removes it.
+     */
+    public function onEnd(\Closure $fn): \Closure
+    {
+        $v = $this->v;
+        $id = $v->nextEnd++;
+        $v->onEnd[$id] = $fn;
+        return function () use ($v, $id): void { unset($v->onEnd[$id]); };
     }
 
     /** Pauses it where it is. */

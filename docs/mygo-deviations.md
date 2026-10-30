@@ -2177,3 +2177,31 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     which mygo has not) show in English in Japanese.
   - Why: mygo's translation covers its strings; myphp's player strings
     were translated to Chinese alone so far.
+
+## Now Playing and the media keys (v1.93)
+
+- **The artwork on macOS**
+  - mygo: `NowPlayingInfo.Artwork` shows in Control Center, as an
+    `MPMediaItemArtwork` whose handler decodes the image when asked.
+  - myphp: `NowPlayingInfo::$artwork` is kept and `NowPlaying::info()`
+    gives it back, but macOS does not show it.
+  - Why: the artwork's handler is called on a background thread, where
+    PHP cannot run, and a block calling no PHP cannot hand back an image.
+- **The commands' type**
+  - mygo: `MediaCommand`, a uint32 type of bits.
+  - myphp: `int` bits, constants of `MediaCommand` (`MediaCommand::PLAY`).
+  - Why: PHP's enums cannot be combined into sets.
+- **`NowPlaying::info()`**
+  - mygo: `Info() (NowPlayingInfo, bool)`.
+  - myphp: `info(): ?NowPlayingInfo`, null when nothing is shown.
+  - Why: PHP has one return value.
+- **`Player::onEnd`**
+  - mygo: each listener on a goroutine of its own.
+  - myphp: on the main thread, once the output mixed the player's last
+    frames.
+  - Why: PHP has no goroutines; the mixer runs on the main thread.
+- **Linux and Windows**
+  - mygo: MPRIS on Linux, SystemMediaTransportControls on Windows, the
+    Media Session in browsers.
+  - myphp: macOS only, as the rest of it.
+  - Why: myphp runs on macOS.

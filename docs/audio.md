@@ -47,6 +47,11 @@ drawn from it keep time with the sound: after `pause()` it goes on while
 the output plays what it held, and after `play()` it waits until the
 player is heard. `seek()` and `stop()` move it at once.
 
+`onEnd($fn)` calls `$fn` each time the player plays to its end, as a
+playlist plays the next track then (a looping player never ends), on the
+main thread once its last frames are mixed; it returns a function that
+removes it.
+
 | setting | effect |
 |---|---|
 | `setVolume($v)` | a gain: 1 as decoded, 0 silent |
@@ -58,6 +63,22 @@ player is heard. `seek()` and `stop()` move it at once.
 The setters return the player, to chain them. Volume changes, pauses and
 resumes ramp over 5 ms, so none clicks. `Audio::setVolume` sets the
 volume of everything.
+
+## Media keys and Now Playing
+
+`NowPlaying::control()` lets the media keys and Control Center's media
+controls play, pause, stop and seek a player, and shows its state there:
+
+```php
+$release = NowPlaying::control($music);
+NowPlaying::set(new NowPlayingInfo(title: 'Spring', artist: 'Vivaldi', commands: MediaCommand::NEXT));
+$music->play();
+NowPlaying::sync(); // after playing it from the app
+NowPlaying::onCommand(function (int $cmd, float $position): void { /* MediaCommand::NEXT: the next track */ });
+```
+
+`NowPlaying::set()`, `setPlayback()` and `onCommand()` serve an app that
+plays by other means; `clear()` takes the app out of the controls.
 
 ## Formats
 
