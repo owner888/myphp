@@ -40,6 +40,21 @@ final class WebView
     public ?Closure $onTitle = null;
     /** A property of the web view it observes changed: _isPlayingAudio, or a capture state's (CAPTURE_KEYS'). @var ?Closure(string): void */
     public ?Closure $onChange = null;
+    /**
+     * An HTTP sign-in challenge (host, port, realm, scheme, a proxy's?) →
+     * [user, password] to sign in with, [] to cancel, null for WebKit's
+     * handling; a server certificate that does not verify (URL, host, the
+     * error, the DER certificate) → whether to load it; null for none,
+     * when WebKit checks certificates itself.
+     * @var ?Closure(string, int, string, string, bool): ?array
+     */
+    public ?Closure $onAuth = null;
+    /** @var ?Closure(string, string, string, string): bool */
+    public ?Closure $onCertificate = null;
+    /** The URL of the navigation started last, which a load failed before it committed is of when its error does not tell. */
+    private string $provisionalURL = '';
+    private static ?\FFI $sec = null;
+    private static $mainQueue = null;
     /** @var list<string> the properties besides the title it observes, which WebKit answers */
     private array $observed = [];
     /** @var array<int, bool> the captures setCaptureState() muted, by kind, until they stop, which setAudioMuted() keeps apart for the camera and the microphone */
@@ -624,11 +639,20 @@ final class WebView
             'webView:didFinishNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
                 (self::$views[ObjC::addr($wk)] ?? null)?->onFinish?->__invoke();
             }],
+            'webView:didStartProvisionalNavigation:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $wk, $nav) {
+                if (($view = self::$views[ObjC::addr($wk)] ?? null) !== null) { $view->provisionalURL = $view->url(); }
+            }],
             'webView:didFailProvisionalNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
-                (self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error);
+                ($view = self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error, $view->provisionalURL);
             }],
             'webView:didFailNavigation:withError:' => ['v@:@@@', 'v(ppppp)', function ($self, $cmd, $wk, $nav, $error) {
-                (self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error);
+                ($view = self::$views[ObjC::addr($wk)] ?? null)?->loadFailed($error, $view->url());
+            }],
+            // HTTP sign-in and server certificates (mygo's auth.go).
+            'webView:didReceiveAuthenticationChallenge:completionHandler:' => ['v@:@@@?', 'v(ppppp)', function ($self, $cmd, $wk, $challenge, $handler) {
+                $view = self::$views[ObjC::addr($wk)] ?? null;
+                if ($view === null) { ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null); return; }
+                $view->authChallenge($challenge, $handler);
             }],
             'webViewWebContentProcessDidTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $wk) {
                 (self::$views[ObjC::addr($wk)] ?? null)?->onGone?->__invoke('terminated');
@@ -735,15 +759,113 @@ final class WebView
         ObjC::msg('p:p', $this->ns, 'loadRequest:', ObjC::msg('p:p', ObjC::cls('NSURLRequest'), 'requestWithURL:', $nsurl));
     }
 
-    /** A load failed: cancellations (-999) and interrupted frame loads (102), which a navigation replaced or denied, are none (mygo's loadFailed). */
-    private function loadFailed($error): void
+    /**
+     * A load failed: cancellations (-999) and interrupted frame loads (102),
+     * which a navigation replaced or denied, are none (mygo's loadFailed).
+     * Its URL is the error's string, or its NSURL, which is all WebKit
+     * keeps of a certificate error, else $fallback.
+     */
+    private function loadFailed($error, string $fallback): void
     {
         $code = ObjC::msg('l:', $error, 'code');
         if ($code === -999 || $code === 102 || $this->onFail === null) {
             return;
         }
-        $url = ObjC::msg('p:p', ObjC::msg('p:', $error, 'userInfo'), 'objectForKey:', ObjC::str('NSErrorFailingURLStringKey'));
-        ($this->onFail)($url === null ? '' : ObjC::phpStr($url), $code, ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')));
+        $info = ObjC::msg('p:', $error, 'userInfo');
+        $s = $info === null ? null : ObjC::msg('p:p', $info, 'objectForKey:', ObjC::str('NSErrorFailingURLStringKey'));
+        $url = $s === null ? '' : ObjC::phpStr($s);
+        $u = $url === '' && $info !== null ? ObjC::msg('p:p', $info, 'objectForKey:', ObjC::str('NSErrorFailingURLKey')) : null;
+        if ($u !== null && ObjC::msg('b:p', $u, 'isKindOfClass:', ObjC::cls('NSURL'))) { $url = ObjC::phpStr(ObjC::msg('p:', $u, 'absoluteString')); }
+        ($this->onFail)($url === '' ? $fallback : $url, $code, ObjC::phpStr(ObjC::msg('p:', $error, 'localizedDescription')));
+    }
+
+    /** NSURLSessionAuthChallengeDisposition's use the credential, the default handling, and reject the protection space (the server's refusal). */
+    private const AUTH_USE = 0, AUTH_DEFAULT = 1, AUTH_REJECT = 3;
+    /** The NSURLAuthenticationMethods of HTTP sign-in, by the scheme each is; others, client certificates among them, get WebKit's handling. */
+    private const AUTH_SCHEMES = ['NSURLAuthenticationMethodDefault' => 'basic', 'NSURLAuthenticationMethodHTTPBasic' => 'basic',
+        'NSURLAuthenticationMethodHTTPDigest' => 'digest', 'NSURLAuthenticationMethodNTLM' => 'ntlm', 'NSURLAuthenticationMethodNegotiate' => 'negotiate'];
+
+    /** Answers a challenge of the page or of what it loads (mygo's authChallenge). */
+    private function authChallenge($challenge, $handler): void
+    {
+        $space = ObjC::msg('p:', $challenge, 'protectionSpace');
+        $method = ObjC::phpStr(ObjC::msg('p:', $space, 'authenticationMethod'));
+        if ($method === 'NSURLAuthenticationMethodServerTrust') {
+            $this->serverTrust($challenge, $space, $handler);
+            return;
+        }
+        $scheme = self::AUTH_SCHEMES[$method] ?? null;
+        $str = fn($s): string => $s === null ? '' : ObjC::phpStr($s);
+        $r = $scheme === null || $this->onAuth === null ? null
+            : ($this->onAuth)($str(ObjC::msg('p:', $space, 'host')), ObjC::msg('l:', $space, 'port'), $str(ObjC::msg('p:', $space, 'realm')), $scheme, ObjC::msg('b:', $space, 'isProxy'));
+        if ($r === null) {
+            ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null);
+        } elseif ($r === [] || $r === ['', '']) {
+            ObjC::callBlock('v:lp', $handler, self::AUTH_REJECT, null); // without credentials: the server's refusal
+        } else {
+            $cred = ObjC::msg('p:ppL', ObjC::cls('NSURLCredential'), 'credentialWithUser:password:persistence:', ObjC::str($r[0]), ObjC::str($r[1]), 1); // NSURLCredentialPersistenceForSession
+            ObjC::callBlock('v:lp', $handler, self::AUTH_USE, $cred);
+        }
+    }
+
+    /**
+     * Checks the server's certificate while the app handles certificate
+     * errors, and asks about one that does not verify: otherwise WebKit
+     * checks it again (the default handling) and fails the load. The check
+     * calls back on the main queue (mygo's serverTrust).
+     */
+    private function serverTrust($challenge, $space, $handler): void
+    {
+        $trust = ObjC::msg('p:', $space, 'serverTrust');
+        if ($trust === null || $this->onCertificate === null) {
+            ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null);
+            return;
+        }
+        if (self::$sec === null) {
+            self::$sec = \FFI::cdef('int SecTrustEvaluateAsyncWithError(void*, void*, void*); void* SecTrustCopyCertificateChain(void*); void* SecCertificateCopyData(void*);',
+                '/System/Library/Frameworks/Security.framework/Security');
+            self::$mainQueue = ObjC::$c->dlsym(ObjC::$c->dlopen('/usr/lib/libSystem.B.dylib', 2), '_dispatch_main_q'); // dispatch_get_main_queue()
+        }
+        $host = ObjC::phpStr(ObjC::msg('p:', $space, 'host'));
+        $port = ObjC::msg('l:', $space, 'port');
+        $handler = ObjC::msg('p:', $handler, 'copy'); // called once the check ends
+        ObjC::msg('p:', $challenge, 'retain'); // and its trust
+        $block = ObjC::block('pbp', function ($t, bool $ok, $err) use ($challenge, $handler, $trust, $host, $port): void {
+            $allow = false;
+            if (!$ok && $this->onCertificate !== null && $this->ucc !== null) {
+                $origin = (str_contains($host, ':') ? "[$host]" : $host) . ($port !== 443 && $port !== 0 ? ":$port" : '');
+                $allow = ($this->onCertificate)("https://$origin", $host, $err === null ? '' : ObjC::phpStr(ObjC::msg('p:', $err, 'localizedDescription')), self::leafCertificate($trust));
+            }
+            if ($allow) {
+                ObjC::callBlock('v:lp', $handler, self::AUTH_USE, ObjC::msg('p:p', ObjC::cls('NSURLCredential'), 'credentialForTrust:', $trust));
+            } else {
+                ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null);
+            }
+            ObjC::msg('v:', $handler, 'release');
+            ObjC::msg('v:', $challenge, 'release');
+        });
+        if (self::$sec->SecTrustEvaluateAsyncWithError($trust, self::$mainQueue, $block) !== 0) { // errSecSuccess: the block never runs otherwise
+            ObjC::callBlock('v:lp', $handler, self::AUTH_DEFAULT, null);
+            ObjC::msg('v:', $handler, 'release');
+            ObjC::msg('v:', $challenge, 'release');
+        }
+    }
+
+    /** The DER encoding of the server's own certificate in $trust. */
+    private static function leafCertificate($trust): string
+    {
+        $chain = self::$sec->SecTrustCopyCertificateChain($trust);
+        if ($chain === null) { return ''; }
+        $chain = ObjC::import($chain);
+        $der = '';
+        if (ObjC::msg('L:', $chain, 'count') > 0) {
+            $data = ObjC::import(self::$sec->SecCertificateCopyData(ObjC::msg('p:L', $chain, 'objectAtIndex:', 0)));
+            $n = ObjC::msg('L:', $data, 'length');
+            $der = $n === 0 ? '' : \FFI::string(ObjC::$c->cast('char*', ObjC::msg('p:', $data, 'bytes')), $n);
+            ObjC::msg('v:', $data, 'release');
+        }
+        ObjC::msg('v:', $chain, 'release');
+        return $der;
     }
 
     /** A download ended, with $error or done. */

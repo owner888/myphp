@@ -180,6 +180,30 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     }
     $free->setCaptureState(1, 2); // capturing nothing: nothing
     same(0, $free->captureState(1), 'no capture to mute');
+    // HTTP sign-in (mygo's d9d1ef6): the handler's credentials, a cancel the server's refusal, none WebKit's handling; a client certificate WebKit's.
+    $challenge = function (string $method, bool $proxy = false) use ($O) {
+        $space = $proxy
+            ? $O::msg('p:plpp', $O::alloc('NSURLProtectionSpace'), 'initWithProxyHost:port:type:realm:authenticationMethod:', $O::str('proxy.lan'), 3128, $O::str('HTTPSProxy'), null, $O::str($method))
+            : $O::msg('p:plppp', $O::alloc('NSURLProtectionSpace'), 'initWithHost:port:protocol:realm:authenticationMethod:', $O::str('router.lan'), 80, $O::str('http'), $O::str('admin'), $O::str($method));
+        return $O::msg('p:pplppp', $O::alloc('NSURLAuthenticationChallenge'), 'initWithProtectionSpace:proposedCredential:previousFailureCount:failureResponse:error:sender:', $space, null, 0, null, null, null);
+    };
+    $answer = function ($challenge) use ($free, $O): array {
+        $got = null;
+        $handler = $O::block('lp', function (int $disposition, $cred) use (&$got, $O): void { $got = [$disposition, $cred === null ? null : $O::phpStr($O::msg('p:', $cred, 'user')) . ':' . $O::phpStr($O::msg('p:', $cred, 'password'))]; });
+        (fn() => $this->authChallenge($challenge, $handler))->call($free);
+        return $got;
+    };
+    same([1, null], $answer($challenge('NSURLAuthenticationMethodHTTPBasic')), 'sign-in: no handler, WebKit\'s handling');
+    $asked = [];
+    $free->onAuth = function (string $host, int $port, string $realm, string $scheme, bool $proxy) use (&$asked): array {
+        $asked[] = [$host, $port, $realm, $scheme, $proxy];
+        return $proxy ? [] : ['admin', 'hunter2'];
+    };
+    same([0, 'admin:hunter2'], $answer($challenge('NSURLAuthenticationMethodHTTPBasic')), 'sign-in: the handler\'s credentials');
+    same([3, null], $answer($challenge('NSURLAuthenticationMethodHTTPDigest', true)), 'sign-in: canceled, the server\'s refusal');
+    same([['router.lan', 80, 'admin', 'basic', false], ['proxy.lan', 3128, '', 'digest', true]], $asked, 'sign-in: what the handler was asked');
+    same([1, null], $answer($challenge('NSURLAuthenticationMethodClientCertificate')), 'sign-in: a client certificate, WebKit\'s');
+    $free->onAuth = null;
 }
 
 // Session states (mygo's session_state_test.go): the system, the URL and WebKit's own state, which a later version's or anything else is not.

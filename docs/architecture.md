@@ -6216,6 +6216,26 @@ succeeds are told of, an empty line is none.
   plugins and a film's requests (`Media\HttpBytes`, `Https`, `Download`)
   go through it.
 
+## Pages: HTTP sign-in and certificate errors (v1.104)
+
+- mygo d9d1ef6: the navigation delegate's
+  `webView:didReceiveAuthenticationChallenge:completionHandler:`.
+  `Page::setAuthHandler` answers HTTP sign-in (Basic, Digest, NTLM,
+  Negotiate; the server's or a proxy's) with an `AuthResponse`: a session
+  `NSURLCredential`, or with neither name nor password a rejection of the
+  protection space, the server's refusal; without a handler, and for
+  other methods (client certificates), WebKit's handling.
+- `Page::setCertificateErrorHandler`: while one is set, a server trust
+  challenge is checked with `SecTrustEvaluateAsyncWithError` on the main
+  queue (WebKit's completion handler copied until then), and one that does
+  not verify asks it with the origin, the host, the error and the leaf
+  certificate's DER (`SecTrustCopyCertificateChain`, `SecCertificateCopyData`);
+  a yes answers with `credentialForTrust:`, a no gets WebKit's handling,
+  which fails the load.
+- A failed load's URL is its error's string, else its `NSURLErrorFailingURL`
+  (all WebKit keeps of a certificate error), else the URL of the
+  navigation started last (`didStartProvisionalNavigation`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

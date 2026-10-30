@@ -248,6 +248,54 @@ final class Page
         if (!$this->destroyed) { $this->web->setCaptureState($kind->value, $state->value); }
     }
 
+    /**
+     * Answers the HTTP sign-in challenges (Basic, Digest, NTLM, Negotiate)
+     * of the page and of what it loads, the server's or a proxy's (mygo's
+     * SetAuthHandler): $fn returns the credentials, or an empty
+     * AuthResponse to cancel, on the main thread while the load waits. A
+     * server that refuses them asks again; WebKit keeps those it accepts
+     * for the rest of the session, for that server and realm, so $fn is
+     * not asked for every request. myphp never logs them.
+     *
+     *     $page->setAuthHandler(fn(AuthRequest $r) => $r->host === 'router.lan' && !$r->isProxy
+     *         ? new AuthResponse('admin', $password) : new AuthResponse());
+     *
+     * To ask the user, $fn can cancel and show the app's own prompt, then
+     * reload() once it has the credentials. Null restores WebKit's
+     * handling, which shows no prompt: the page gets the server's refusal.
+     * @param ?Closure(AuthRequest): AuthResponse $fn
+     */
+    public function setAuthHandler(?Closure $fn): void
+    {
+        $this->web->onAuth = $fn === null ? null : static function (string $host, int $port, string $realm, string $scheme, bool $proxy) use ($fn): array {
+            $r = $fn(new AuthRequest($host, $port, $realm, $scheme, $proxy));
+            return [$r->username, $r->password];
+        };
+    }
+
+    /**
+     * Decides about the server certificates that do not verify, for the
+     * page and what it loads (mygo's SetCertificateErrorHandler): $fn
+     * returns true to load them anyway, as for a dev server with a
+     * self-signed certificate, on the main thread while the load waits. By
+     * default, and whenever $fn returns false, the load fails as in a
+     * browser (didFailLoad). It is asked of each connection to the server,
+     * and a yes lasts for that connection; myphp checks the certificate
+     * itself (SecTrustEvaluateAsyncWithError) only while a handler is set.
+     * Allow only the certificate expected, never a host whatever its
+     * certificate, which anyone between the app and the server can present:
+     *
+     *     $page->setCertificateErrorHandler(fn(CertificateError $e) => $e->host === 'dev.example'
+     *         && hash('sha256', $e->certificate) === DEV_CERTIFICATE_SHA256);
+     *
+     * Null restores the default.
+     * @param ?Closure(CertificateError): bool $fn
+     */
+    public function setCertificateErrorHandler(?Closure $fn): void
+    {
+        $this->web->onCertificate = $fn === null ? null : static fn(string $url, string $host, string $error, string $der): bool => $fn(new CertificateError($url, $host, $error, $der)) === true;
+    }
+
     /** The ID of the page's web content process (WebKit's com.apple.WebKit.WebContent), 0 when WebKit does not tell it or runs none yet, or the page closed (mygo's ProcessID). WebKit may give a page another as it goes to another site or after its process crashed: ask again rather than keep it. */
     public function processID(): int
     {
