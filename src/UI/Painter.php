@@ -542,6 +542,9 @@ final class Painter
         if ($n->blur > 0 && !$n->blurring && $rt !== null && self::paintBlurred($n, $list, $text, $t, $rt)) {
             return;
         }
+        if ($n->cache && !$n->blurring && $rt !== null && self::paintCached($n, $list, $text, $t, $rt)) {
+            return;
+        }
         $world = $list->world(); $opacity = $list->opacity();
         $dim = $n->disabled; // disabled, at half its opacity, and what is inside it with it (mygo's paint)
         if ($n->opacity < 1 || $n->poseFade > 0 || $dim) {
@@ -599,28 +602,145 @@ final class Painter
             $cv = $rt->blurLayers[$n->id] = new Canvas($w, $h);
         }
         $cv->blur = sqrt(max($blur * $blur - $down * $down / 12, 0.0)) / $down; // the average of each square of $down pixels blurs it by its variance
-        $base = Affine::matrix($s, 0, 0, $s, -$x0, -$y0); // the node's layout, in the canvas's pixels
+        self::layer($n, $cv, new self($list, $text, $t, $rt), Affine::matrix($s, 0, 0, $s, -$x0, -$y0), $t, $rt);
+        $list->setWorld($n->world);
+        self::showLayer($list, $text, $cv, $x0 / $s, $y0 / $s, $w / $s, $h / $s);
+        $list->setWorld($world);
+        return true;
+    }
+
+    /**
+     * Paints $n's subtree into its layer, canvas $cv, through $base, the
+     * node's layout in the canvas's pixels, and through $n's map, as a
+     * layer of its content; a node kept (Node::cache) only draws it anew
+     * when what it paints differs (keep).
+     */
+    private static function layer(Node $n, Canvas $cv, Painter $p, Affine $base, Theme $t, Runtime $rt): void
+    {
         if ($n->world->set) {
-            $base = $base->mul($n->world->inverse() ?? Affine::singular()); // drawn through its map, as a layer of its content
+            $base = $base->mul($n->world->inverse() ?? Affine::singular());
         }
-        $cv->draw(new self($list, $text, $t, $rt), static function (Painter $cp) use ($n, $base, $t, $rt): void {
-            $cp->list->setBase($base);
+        $fn = static function (Painter $cp) use ($n, $base, $t, $rt): void {
+            $cp->list->setBase($base, $n->world); // the node's map from the start, which paintNode sets: no map of the window's written, as a kept layer compares them
             $n->blurring = true;
             try {
                 self::paintNode($n, $cp->list, $cp->text, $t, $rt);
             } finally {
                 $n->blurring = false;
             }
-        });
-        $list->setWorld($n->world);
+        };
+        $n->cache ? self::keep($cv, $p, $fn) : $cv->draw($p, $fn);
+    }
+
+    /**
+     * Draws kept canvas $cv as Canvas::draw does, into the other of its two
+     * lists, unless what $fn paints is what it painted last (mygo's
+     * layerCache): the same quads and transforms, the same versions of the
+     * same images, no shader, no glass, and no canvas drawn inside it; then
+     * it is not rendered again, and the window's frame finds its image the
+     * same. Its glyphs and images are in the atlases all the same, as this
+     * frame painted them.
+     */
+    private static function keep(Canvas $cv, Painter $p, Closure $fn): void
+    {
+        [$cv->list, $cv->spare] = [$cv->spare ?? Canvas::newList(), $cv->list];
+        $l = $cv->list;
+        $l->reset();
+        $l->pushClip(0, 0, $cv->w, $cv->h);
+        $cp = $p->forCanvas($l);
+        $draws = CanvasAtlas::$draws;
+        $fn($cp);
+        $kept = $l->glass !== [] || $l->shaders !== [] || $l->holes !== [] || CanvasAtlas::$draws !== $draws ? null
+            : $l->copyOut(0, $l->n) . "\0" . $l->transformBytes() . "\0" . json_encode($cp->text->images);
+        if ($kept === null || $kept !== $cv->kept || $cv->drawn === 0) {
+            $cv->rendered();
+        }
+        $cv->kept = $kept;
+    }
+
+    /** Shows layer $cv over ($x, $y, $w, $h), in points. */
+    private static function showLayer(DisplayList $list, TextPainter $text, Canvas $cv, float $x, float $y, float $w, float $h): void
+    {
         if ($cv->loose()) {
-            self::looseImage($list, $text, $cv, [$x0 / $s, $y0 / $s, $w / $s, $h / $s], [0.0, 0.0, (float)$w, (float)$h], 1.0, 0.0, false, false);
+            self::looseImage($list, $text, $cv, [$x, $y, $w, $h], [0.0, 0.0, (float)$cv->w, (float)$cv->h], 1.0, 0.0, false, false);
         } else {
             $slot = self::slot($text, $cv->bitmap());
-            $list->image($x0 / $s, $y0 / $s, $w / $s, $h / $s, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
+            $list->image($x, $y, $w, $h, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
         }
+    }
+
+    /**
+     * Paints $n kept in a bitmap (Node::cache, mygo's Cache), and tells
+     * whether it did: its subtree drawn into a canvas of its layer's area
+     * on the window's pixel grid, again only when what it paints differs
+     * (keep), shown where it was drawn from through $n's map. A node too
+     * large paints as it is; out of the clip, nothing.
+     */
+    private static function paintCached(Node $n, DisplayList $list, TextPainter $text, Theme $t, Runtime $rt): bool
+    {
+        [$ax, $ay, $ax1, $ay1] = self::layerArea($n);
+        $world = $list->world();
+        $list->setWorld($n->world);
+        $out = $list->clipped($ax, $ay, $ax1 - $ax, $ay1 - $ay);
+        $list->setWorld($world);
+        if ($n->w <= 0 || $n->h <= 0 || $out) {
+            return true;
+        }
+        $s = $text->scale();
+        [$x0, $y0] = [floor($ax * $s), floor($ay * $s)];
+        [$w, $h] = [(int)(ceil($ax1 * $s) - $x0), (int)(ceil($ay1 * $s) - $y0)];
+        if ($w > Canvas::MAX || $h > Canvas::MAX) {
+            return false;
+        }
+        $cv = $rt->blurLayers[$n->id] ?? null;
+        if ($cv === null || $cv->w !== $w || $cv->h !== $h || $cv->blur > 0) {
+            $cv = $rt->blurLayers[$n->id] = new Canvas($w, $h);
+        }
+        self::layer($n, $cv, new self($list, $text, $t, $rt), Affine::matrix($s, 0, 0, $s, -$x0, -$y0), $t, $rt);
+        $list->setWorld($n->world);
+        self::showLayer($list, $text, $cv, $x0 / $s, $y0 / $s, $w / $s, $h / $s);
         $list->setWorld($world);
         return true;
+    }
+
+    /**
+     * The area of a kept node's layer, in its layout (mygo's keptLayer.area):
+     * its box grown by its ink's margin (Node::inkMargin), and, unless it
+     * clips, those of the nodes inside it, through their maps, clipped by
+     * those that clip. @return array{0: float, 1: float, 2: float, 3: float} [x0, y0, x1, y1]
+     */
+    private static function layerArea(Node $n): array
+    {
+        $grown = static fn(Node $k, float $m): array => [$k->x - $m, $k->y - $m, $k->x + $k->w + $m, $k->y + $k->h + $m];
+        $area = $grown($n, $n->inkMargin());
+        $inv = $n->world->set ? $n->world->inverse() : Affine::identity();
+        if ($n->scroll !== null || $n->clip !== 0 || $inv === null) {
+            return $area; // all inside within the box
+        }
+        $in = static function (Node $k, array $r) use ($inv): array { // $r of $k's layout in $n's
+            $m = $k->world->set ? $inv->mul($k->world) : $inv;
+            [$x, $y, $w, $h] = $m->bounds($r[0], $r[1], $r[2] - $r[0], $r[3] - $r[1]);
+            return [$x, $y, $x + $w, $y + $h];
+        };
+        $meet = static fn(array $a, ?array $b): array => $b === null ? $a : [max($a[0], $b[0]), max($a[1], $b[1]), min($a[2], $b[2]), min($a[3], $b[3])];
+        $walk = static function (Node $p, ?array $clip) use (&$walk, &$area, $grown, $in, $meet): void {
+            foreach ($p->kids as $k) {
+                if ($k->invisible) { continue; }
+                $r = $meet($in($k, $grown($k, $k->inkMargin())), $clip);
+                if ($r[2] > $r[0] && $r[3] > $r[1]) {
+                    $area = [min($area[0], $r[0]), min($area[1], $r[1]), max($area[2], $r[2]), max($area[3], $r[3])];
+                }
+                if ($k->scroll !== null || $k->clip !== 0) {
+                    $c = $in($k, [($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x : -1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y : -1e6,
+                        ($k->clip & Node::CLIP_X) !== 0 || $k->scroll !== null ? $k->x + $k->w : 1e6, ($k->clip & Node::CLIP_Y) !== 0 || $k->scroll !== null ? $k->y + $k->h : 1e6]);
+                    $walk($k, $meet($c, $clip));
+                } else {
+                    $walk($k, $clip);
+                }
+            }
+        };
+        $walk($n, null);
+        return $area;
     }
 
     /**
@@ -647,23 +767,11 @@ final class Painter
         if ($w > Canvas::MAX || $h > Canvas::MAX) {
             return false;
         }
-        $cv = $rt->blurLayers[$n->id] ?? null; // the layers of blurs and of effects, by node
+        $cv = $rt->blurLayers[$n->id] ?? null; // the layers of blurs, of effects and of nodes kept, by node
         if ($cv === null || $cv->w !== $w || $cv->h !== $h || $cv->blur > 0) {
             $cv = $rt->blurLayers[$n->id] = new Canvas($w, $h);
         }
-        $base = Affine::matrix($s, 0, 0, $s, -$x0, -$y0); // the node's layout, in the canvas's pixels
-        if ($n->world->set) {
-            $base = $base->mul($n->world->inverse() ?? Affine::singular()); // drawn through its map, as a layer of its content
-        }
-        $cv->draw(new self($list, $text, $t, $rt), static function (Painter $cp) use ($n, $base, $t, $rt): void {
-            $cp->list->setBase($base);
-            $n->blurring = true;
-            try {
-                self::paintNode($n, $cp->list, $cp->text, $t, $rt);
-            } finally {
-                $n->blurring = false;
-            }
-        });
+        self::layer($n, $cv, new self($list, $text, $t, $rt), Affine::matrix($s, 0, 0, $s, -$x0, -$y0), $t, $rt); // the node's layout, in the canvas's pixels
         $list->setWorld($n->world);
         $n->effect->paintEffect(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $cv->bitmap(), [$n->x * $s - $x0, $n->y * $s - $y0]);
         $list->setWorld($world);

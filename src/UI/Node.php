@@ -180,6 +180,8 @@ final class Node
     public float $blur = 0.0;
     /** @internal Painter::paintBlurred: painted into its blur's canvas now */
     public bool $blurring = false;
+    /** Whether what the node paints, with its children, is kept in a bitmap (cache). */
+    public bool $cache = false;
     /**
      * @internal its ink, in the window, all that it and the nodes inside it
      * may paint, as Runtime::record found it: [x0, y0, x1, y1], null before
@@ -605,6 +607,47 @@ final class Node
     {
         $this->effect = $fx;
         return $this;
+    }
+
+    /**
+     * Keeps what the node paints, with its children, in a bitmap of the
+     * GPU that frames draw as one image (mygo's Cache), as Flutter's
+     * RepaintBoundary and SwiftUI's drawingGroup() do: for a still subtree
+     * that costs much to draw, as a card of gradients, blurred images and
+     * large shadows, under or around a drawing that moves. The window's
+     * frame then draws one image there, and, as the bitmap does not change,
+     * redraws only where something else did; moving, scaling or rotating
+     * the node (a transform, a pose) moves the bitmap, not what it holds.
+     *
+     *     $c->column()->size(900, 212)->radius(16)->shadow(0, 10, 40, 0, $shade)->cache();
+     *
+     * The bitmap is the size of the box at the window's scale, and of what
+     * it and those inside it paint around it: shadows, focus rings, and
+     * children beyond the box that it does not clip (what draw callbacks
+     * paint, within the box and the shadows' reach). Each frame still
+     * paints the subtree, to tell: the bitmap is drawn again when what it
+     * paints differs, built with other content, laid out at another size,
+     * at another scale or in another theme, an image in it updated, or as
+     * something inside it moves on its own (animationFrame, a pose, a
+     * transition), as then it is every frame. With blur() or effect(),
+     * their bitmap is the one kept. Web views inside it do not show, and a
+     * subtree larger than 8192 pixels across paints as it is. Drawn at the
+     * window's scale, it shows a little softer turned or scaled up.
+     */
+    public function cache(): static
+    {
+        $this->cache = true;
+        return $this;
+    }
+
+    /** @internal how far the node paints around its box: its shadows' reach and 4 points (a focus ring), as its ink (Runtime::setInk) */
+    public function inkMargin(): float
+    {
+        $m = 4.0;
+        foreach ($this->shadows as [$sx, $sy, $blur, $spread, , , $inset]) {
+            if (!$inset) { $m = max($m, abs($sx) + abs($sy) + $blur + $spread + 4); }
+        }
+        return $m;
     }
 
     /** Draws stripes of $rgb at $alpha over the background, $width points wide with $gap points between them, at $angle degrees clockwise from upwards: 0 vertical, 90 horizontal, 45 slanting like slashes (mygo's Stripes). */

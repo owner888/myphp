@@ -69,17 +69,32 @@ final class Canvas
      */
     public function draw(Painter $p, Closure $fn): void
     {
-        if ($this->list === null) {
-            $ffi = \MyPHP\Native\ObjC::$c ?? \FFI::cdef(); // the bridge's, whose pointers the renderer copies from; a test's without it
-            $this->list = new DisplayList($ffi->new('float[' . (self::CAPACITY * DisplayList::FLOATS_PER_RECT) . ']'), self::CAPACITY,
-                $ffi->new('float[' . (1024 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 1024);
-        }
+        $this->list ??= self::newList();
         $this->list->reset();
         $this->list->pushClip(0, 0, $this->w, $this->h);
         $fn($p->forCanvas($this->list));
+        $this->rendered();
+    }
+
+    /** @internal the list of a canvas's drawing */
+    public static function newList(): DisplayList
+    {
+        $ffi = \MyPHP\Native\ObjC::$c ?? \FFI::cdef(); // the bridge's, whose pointers the renderer copies from; a test's without it
+        return new DisplayList($ffi->new('float[' . (self::CAPACITY * DisplayList::FLOATS_PER_RECT) . ']'), self::CAPACITY,
+            $ffi->new('float[' . (1024 * DisplayList::FLOATS_PER_TRANSFORM) . ']'), 1024);
+    }
+
+    /** @internal drawn anew: it renders this frame */
+    public function rendered(): void
+    {
         $this->drawn = ++self::$draws;
         CanvasAtlas::drawn($this);
     }
+
+    /** @internal a kept canvas (Node::cache): the list it did not draw with last, which Painter::keep draws into and compares, and what its last drawing was */
+    public ?DisplayList $spare = null;
+    /** @internal */
+    public ?string $kept = null;
 
     /**
      * @internal whether it is larger than a page of the canvases' atlas:

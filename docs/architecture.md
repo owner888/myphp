@@ -6282,6 +6282,31 @@ succeeds are told of, an empty line is none.
 - myphp builds each frame (`docs/mygo-deviations.md`, paint-only frames),
   so a paced frame is built and painted, where mygo's only paints.
 
+## A still subtree kept in a bitmap (v1.107)
+
+- mygo e9796b7: `Node::cache()` keeps what a node paints, with its
+  children, in a canvas (`Painter::paintCached`), as Flutter's
+  `RepaintBoundary` and SwiftUI's `drawingGroup()`. The canvas covers the
+  layer's area on the window's pixel grid (`Painter::layerArea`, mygo's
+  `keptLayer.area`): the box grown by its ink's margin
+  (`Node::inkMargin`, the shadows' reach and 4 points), and, unless it
+  clips, the nodes inside it, through their maps, clipped by those that
+  clip; it is kept with the layers of blurs and effects
+  (`Runtime::$blurLayers`).
+- Each paint still paints the subtree, into the other of the canvas's two
+  lists (`Painter::keep`, mygo's `layerCache`), and compares the quads,
+  the transforms and the versions of the images painted (`CanvasText`
+  records them) with the last: only a drawing that differs, or one with a
+  shader, glass, a web view's hole or a canvas drawn inside it, renders
+  (`Canvas::rendered`, `CanvasAtlas::drawn`). A canvas not rendered is
+  none of the frame's canvases, so the window's `FrameDamage` still draws
+  only what changed around it, where any canvas rendered draws the frame
+  whole.
+- With `blur()` or `effect()`, their layer is the one kept
+  (`Painter::layer`). `DisplayList::setBase` takes the node's map to start
+  from, so that no map of the window's is written into the layer's list,
+  which would differ as the node moves.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

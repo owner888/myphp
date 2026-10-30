@@ -25,10 +25,13 @@ final class CanvasAtlas
     private static array $pending = [];
     /** Times the pages filled up and started over. */
     public static int $resets = 0;
+    /** Times a canvas was drawn, which a kept one compares (Painter::keep): one drawn inside it is new pixels its quads do not tell. */
+    public static int $draws = 0;
 
     /** $c was drawn: it renders this frame, placed if it has no place and fits a page. */
     public static function drawn(Canvas $c): void
     {
+        self::$draws++;
         if ($c->slot === null && !$c->loose()) {
             self::place($c);
         }

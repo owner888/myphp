@@ -2024,10 +2024,7 @@ final class Runtime
      */
     private function setInk(Node $n): void
     {
-        $m = 4.0;
-        foreach ($n->shadows as [$sx, $sy, $blur, $spread, , , $inset]) {
-            if (!$inset) { $m = max($m, abs($sx) + abs($sy) + $blur + $spread + 4); }
-        }
+        $m = $n->inkMargin();
         [$x, $y, $w, $h] = $n->world->bounds($n->x - $m, $n->y - $m, $n->w + 2 * $m, $n->h + 2 * $m);
         $ink = [$x, $y, $x + $w, $y + $h];
         $no = $n->frags !== [] || ($n->kind === Node::TEXT && $n->kids !== []) || $n->effect !== null || $n->blur > 0 || $n->dividers !== null || $n->debug

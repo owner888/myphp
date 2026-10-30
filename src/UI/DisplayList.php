@@ -129,12 +129,12 @@ final class DisplayList
         $this->through();
     }
 
-    /** @internal Painter::paintBlurred: draws what follows, and all drawn through setWorld after, through $base after its map: a subtree laid out in the window drawn into a canvas's pixels. */
-    public function setBase(Affine $base): void
+    /** @internal Painter::paintBlurred: draws what follows, and all drawn through setWorld after, through $base after its map: a subtree laid out in the window drawn into a canvas's pixels, from $world on (the map now by default). */
+    public function setBase(Affine $base, ?Affine $world = null): void
     {
         $this->base = $base;
         $this->based = [];
-        $m = $this->given;
+        $m = $world ?? $this->given;
         $this->given = Affine::singular(); // set again, through the base
         $this->setWorld($m);
     }

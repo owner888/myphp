@@ -6,6 +6,9 @@ namespace MyPHP\UI;
 /** The text of a canvas's painter: the window's, a pixel a point, as the canvas's units are its pixels. @internal */
 final class CanvasText implements TextPainter
 {
+    /** @var array<string, int> the images painted, by key, at their versions: pixels a kept canvas's quads do not tell (Painter::keep) */
+    public array $images = [];
+
     public function __construct(private readonly TextPainter $t) {}
 
     public function measure(string $text, float $size, int $style = 0): array { return $this->t->measure($text, $size, $style); }
@@ -18,7 +21,7 @@ final class CanvasText implements TextPainter
     public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void { $this->t->paintRuns($list, $text, $size, $x, $y, $style, $colorAt); }
     public function paintLayout(DisplayList $list, \MyPHP\Text\Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void { $this->t->paintLayout($list, $l, $x, $y, $colorAt, $stroke, $blur, $cutOut); }
     public function glyphCoverage(array $glyphs, float $x, float $y, int $w, int $h, float $scale): string { return $this->t->glyphCoverage($glyphs, $x, $y, $w, $h, $scale); }
-    public function imageSlot(Image $image): array { return $this->t->imageSlot($image); }
+    public function imageSlot(Image $image): array { $this->images[$image->key] = $image->version; return $this->t->imageSlot($image); }
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array { return $this->t->iconQuad($svg, $x, $y, $w, $h, $rotate); }
     public function svgSlot(SVG $svg, int $w, int $h, int $current): array { return $this->t->svgSlot($svg, $w, $h, $current); }
     public function scale(): float { return 1.0; }
