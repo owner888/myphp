@@ -14,4 +14,7 @@ interface Device
     public function start(): void;
 
     public function close(): void;
+
+    /** How many frames it holds ahead of what is heard, as it opened; what it was written before is not among them. */
+    public function held(): int;
 }

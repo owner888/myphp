@@ -20,6 +20,13 @@ function setup(): void
     foreach (Mixer::$voices as $v) { $v->active = false; }
     Mixer::$voices = [];
     Mixer::$volume = 1.0;
+    Mixer::$held = Mixer::$unheard = 0;
+}
+
+/** The output holds $n frames ahead of what is heard, as a device that just opened. */
+function hold(int $n): void
+{
+    [Mixer::$held, Mixer::$unheard] = [$n, 0];
 }
 
 /** Mixes $n frames, as the output does: the streams decode a little, then 256 frames are mixed. @return list<float> */
@@ -386,3 +393,72 @@ same([\MyPHP\Audio\Latency::Interactive, 4, 12], [Audio::latency(), \MyPHP\Audio
 Audio::setLatency(\MyPHP\Audio\Latency::Playback);
 same(\MyPHP\Audio\Latency::Playback, Audio::latency(), 'set');
 Audio::setLatency(\MyPHP\Audio\Latency::Interactive);
+
+// Player::position is where it is heard (mygo's position_test.go): the output holds 100 ms ahead here.
+const HELD = RATE / 10;
+$atFrame = function (Player $p, int $f, string $when): void {
+    check(abs($p->position() - $f / RATE) < 1e-6, "position: $when: " . $p->position() * RATE . " frames, want $f");
+};
+$long = fn(): Sound => Audio::newSound(RATE, 1, array_fill(0, 10 * RATE, 0.0));
+
+// It stands still while the device fills, then lags what was mixed by what the device holds; a device opening again holds nothing of what was mixed before.
+setup(); hold(HELD);
+$p = $long()->play();
+render(HELD / 2); $atFrame($p, 0, 'half the device filled');
+render(HELD / 2); $atFrame($p, 0, 'the device filled');
+render(3000); $atFrame($p, 3000, '3000 frames on');
+hold(HELD); $atFrame($p, HELD + 3000, 'a device opened again');
+
+// Right after a seek, where it seeked to, and on from there once the device plays what was mixed since.
+setup(); hold(HELD);
+$p = $long()->play();
+render(2 * HELD);
+$p->seek(2.0); $atFrame($p, 2 * RATE, 'right after seek');
+render(HELD - 100); $atFrame($p, 2 * RATE, 'before the seek is heard');
+render(600); $atFrame($p, 2 * RATE + 500, '500 frames into the seek heard');
+$p->stop(); $atFrame($p, 0, 'after stop');
+
+// Paused, it goes on for as long as the device plays what it holds, then stands still; playing again, it stands still until that is heard.
+setup(); hold(HELD);
+$p = $long()->play();
+render(10000);
+$p->pause(); $atFrame($p, 10000 - HELD, 'at pause');
+render(2000); $atFrame($p, 12000 - HELD, '2000 frames after pause');
+render(2 * HELD); $atFrame($p, 10000 + RAMP, 'played out, faded over the ramp');
+render(1000); $atFrame($p, 10000 + RAMP, 'paused, played out');
+$p->play();
+render(HELD - 100); $atFrame($p, 10000 + RAMP, 'before playing again is heard');
+render(600); $atFrame($p, 10000 + RAMP + 500, '500 frames into playing again');
+
+// At a speed, what the device holds is that many more frames of the source.
+setup(); hold(HELD);
+$p = $long()->newPlayer()->setSpeed(2);
+$p->play();
+render(3 * HELD); $atFrame($p, 4 * HELD, '200 ms heard at speed 2');
+$p->setSpeed(0.5);
+render(HELD * 3 / 2); $atFrame($p, 4 * HELD + 2 * HELD + intdiv(HELD, 4), 'after slowing down: of the 150 ms heard since, 100 at 2, 50 at 0.5');
+
+// A looping player's position heard comes back to the loop's start.
+setup(); hold(50);
+$p = Audio::newSound(RATE, 1, ramp(100))->newPlayer()->setLoopRange(30 / RATE, 60 / RATE);
+$p->play();
+render(160); $atFrame($p, 50, '110 frames heard');
+render(10); $atFrame($p, 30, '120 frames heard: 60, then two loops of 30');
+
+// A stream that is late stands still while it is, as heard.
+final class PositionLateSource implements \MyPHP\Audio\Source
+{
+    public function __construct(public int $ready) {}
+    public function read(int $frames): array { $n = min($frames, $this->ready); $this->ready -= $n; return [array_fill(0, $n, 0.0), false]; }
+    public function seek(int $frame): void {}
+    public function setLoop(bool $loop, int $start, int $end): void {}
+    public function close(): void {}
+}
+setup(); hold(HELD);
+$src = new PositionLateSource(1000);
+$p = new Player($src, RATE, 1, -1);
+$p->play();
+render(HELD + 2000); // it plays 998 of the 1000, reading two ahead to interpolate, then waits
+$src->ready = 1 << 30;
+render(500); $atFrame($p, 998, 'the device playing the wait');
+render(HELD); $atFrame($p, 998 + 500, 'the wait heard');

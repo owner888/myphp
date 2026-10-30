@@ -54,6 +54,7 @@ final class Output
             Audio::setErr($e);
             self::$dev = new NullDevice(null, retry: true);
         }
+        Mixer::setHeld(self::$dev->held());
         self::$dev->start();
     }
 

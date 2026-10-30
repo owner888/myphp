@@ -21,6 +21,20 @@ final class Mixer
     public static array $voices = [];
     /** The volume of everything (Audio::setVolume). */
     public static float $volume = 1.0;
+    /** The output's clock: the frames mixed so far, how many of the latest the device holds, not heard yet, and how many it holds at most. */
+    public static int $mixed = 0, $unheard = 0, $held = 0;
+
+    /** A device opened which holds $n frames ahead of what is heard, and none of what was mixed before. */
+    public static function setHeld(int $n): void
+    {
+        if (!Output::$testMode) { [self::$held, self::$unheard] = [$n, 0]; }
+    }
+
+    /** The output's frame heard now: the frames mixed before it are. */
+    public static function heard(): int
+    {
+        return self::$mixed - self::$unheard;
+    }
 
     /**
      * Mixes the next $frames frames, interleaved stereo, and whether a
@@ -31,8 +45,9 @@ final class Mixer
     {
         $out = array_fill(0, $frames * 2, 0.0);
         $kept = [];
+        [$at, $heard] = [self::$mixed, self::heard()];
         foreach (self::$voices as $v) {
-            if ($v->closed || !$v->mix($out, 0, $frames, self::$volume)) {
+            if ($v->closed || !$v->mix($out, $frames, self::$volume, $at, $heard)) {
                 $v->active = false;
                 if ($v->orphan) { $v->close(); }
                 continue;
@@ -40,6 +55,8 @@ final class Mixer
             $kept[] = $v;
         }
         self::$voices = $kept;
+        self::$mixed += $frames;
+        self::$unheard = min(self::$unheard + $frames, self::$held);
         foreach ($out as $i => $s) {
             if ($s > 1.0) { $out[$i] = 1.0; } elseif ($s < -1.0) { $out[$i] = -1.0; }
         }

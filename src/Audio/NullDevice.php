@@ -55,6 +55,12 @@ final class NullDevice implements Device
         }
     }
 
+    /** None: what it takes is heard as it takes it. */
+    public function held(): int
+    {
+        return 0;
+    }
+
     public function close(): void
     {
         $this->closed = true;

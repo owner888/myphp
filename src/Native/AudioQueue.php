@@ -115,6 +115,12 @@ final class AudioQueue implements Device
         });
     }
 
+    /** The buffers it keeps queued (Latency::buffers), which it is written to begin with. */
+    public function held(): int
+    {
+        return Output::$latency->buffers() * Output::FRAMES;
+    }
+
     public function close(): void
     {
         if ($this->closed) { return; }

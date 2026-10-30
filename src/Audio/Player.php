@@ -78,10 +78,14 @@ final class Player
         $v->reset($f);
     }
 
-    /** How far it is from the start, in seconds. */
+    /**
+     * How far it is from the start, in seconds, in what is heard: the
+     * output mixes ahead of it (Audio::setLatency), and it goes on for as
+     * long after a pause, but it is where seek() moved it at once.
+     */
     public function position(): float
     {
-        return $this->v->position() / $this->v->rate;
+        return $this->v->position($this->v->heardAt()) / $this->v->rate;
     }
 
     /** How long its audio is, in seconds, or 0 if unknown. */

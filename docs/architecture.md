@@ -5992,6 +5992,21 @@ succeeds are told of, an empty line is none.
   strip too, and selects nothing. A full-screen program's screen has no
   scrollback, and no bar.
 
+## Audio: a player's position is where it is heard (v1.92)
+
+- mygo 3d452cb: `Player::position()` is where a voice is heard, not
+  mixed. The mixer counts the frames it mixed (`Mixer::$mixed`) and, of
+  the latest, those the device holds (`$unheard`): as many as it was
+  written, up to what it holds (`Device::held()`, the Audio Queue's
+  buffers, none for the null device), from when it opened
+  (`Mixer::setHeld`). Each voice marks the output's frame and its own
+  source frame where each mix starts and ends, and forgets the marks the
+  output played; `position()` interpolates them at the frame heard
+  (`Voice::heardAt`), which carries speed changes, a stream waiting for
+  its decoder, and a pause playing out. A seek or a stop drops them, so
+  the position is the target at once and stands there until the output
+  plays what it mixed since.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

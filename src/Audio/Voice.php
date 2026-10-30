@@ -29,6 +29,14 @@ final class Voice
     public array $gain = [0.0, 0.0, 0.0, 0.0], $target = [0.0, 0.0, 0.0, 0.0];
     private array $step = [0.0, 0.0, 0.0, 0.0];
     private int $rampLeft = 0;
+    /**
+     * Where it was in its source as the output mixed its frames, oldest
+     * first, for Player::position to say where it is heard: [output
+     * frame, source frame counted on past its loop's end] each. Between
+     * two it moved evenly, or stood still where they are at the same frame.
+     * @var list<array{0: int, 1: float}>
+     */
+    private array $marks = [];
 
     /** @param int $length frames, or -1 */
     public function __construct(public Source $src, public float $rate, int $channels, public int $length)
@@ -45,6 +53,7 @@ final class Voice
         $this->phase = 3.0;
         $this->end = -1;
         $this->inPos = $this->inLen = 0;
+        $this->marks = []; // what it mixed before is not where it is any more, even while heard
     }
 
     /** Whether it played to the end of its source. */
@@ -53,10 +62,45 @@ final class Voice
         return $this->end >= 0 && $this->idx >= $this->end;
     }
 
-    /** The source frame it is at. */
-    public function position(): float
+    /** The source frame it mixes next, counted on past its loop's end. */
+    private function at(): float
     {
-        $p = max($this->idx + $this->phase, 0.0);
+        return $this->idx + $this->phase;
+    }
+
+    /** Notes that the output mixes its frame $out with it where it is, and forgets the marks before the frame heard. */
+    private function mark(int $out, int $heard): void
+    {
+        $m = [$out, $this->at()];
+        $n = count($this->marks);
+        if ($n > 0 && $this->marks[$n - 1] === $m) { return; }
+        $k = 0;
+        while ($k + 1 < $n && $this->marks[$k + 1][0] <= $heard) { $k++; }
+        if ($k > 0) { $this->marks = array_slice($this->marks, $k); }
+        $this->marks[] = $m;
+    }
+
+    /**
+     * The source frame it was at when the output mixed what is heard now,
+     * counted on past its loop's end: until the output plays what it mixed
+     * since a seek, where it seeked to.
+     */
+    public function heardAt(): float
+    {
+        $h = Mixer::heard();
+        foreach ($this->marks as $k => [$out, $pos]) {
+            if ($out <= $h) { continue; }
+            if ($k === 0) { return $pos; }
+            [$aOut, $aPos] = $this->marks[$k - 1];
+            return $aPos + ($pos - $aPos) * ($h - $aOut) / ($out - $aOut);
+        }
+        return $this->at();
+    }
+
+    /** Source frame $p, counted on past its loop's end, as a frame of the source. */
+    public function position(float $p): float
+    {
+        $p = max($p, 0.0);
         if ($this->length === 0) { return 0.0; }
         if ($this->loop) {
             $end = $this->loopEnd > 0 ? (float)$this->loopEnd : (float)$this->length;
@@ -145,16 +189,31 @@ final class Voice
     }
 
     /**
-     * Adds its next frames to $out, stereo, from frame $from to $to, and
-     * whether it is still active: false once at its end, or faded out.
+     * Adds its next $frames frames to $out, stereo, which the output mixes
+     * from its frame $at, $heard heard now, and whether it is still active:
+     * false once at its end, or faded out.
      * @param list<float> $out
      */
-    public function mix(array &$out, int $from, int $to, float $master): bool
+    public function mix(array &$out, int $frames, float $master, int $at, int $heard): bool
+    {
+        $this->mark($at, $heard);
+        $ok = $this->play($out, $frames, $master, $n);
+        $this->mark($at + $n, $heard);
+        return $ok;
+    }
+
+    /**
+     * Adds its next $frames frames to $out, $n of which it moved through its
+     * source for, and whether it is still active.
+     * @param list<float> $out
+     */
+    private function play(array &$out, int $frames, float $master, ?int &$n): bool
     {
         $this->retarget($this->gains($master));
         $step = $this->rate / Mixer::RATE * $this->speed;
         [$g0, $g1, $g2, $g3] = $this->gain;
-        for ($i = 2 * $from, $n = 2 * $to; $i < $n; $i += 2) {
+        for ($i = 0, $e = 2 * $frames; $i < $e; $i += 2) {
+            $n = $i >> 1;
             while ($this->phase >= 1) {
                 if (!$this->next()) {
                     $this->gain = [$g0, $g1, $g2, $g3];
@@ -184,6 +243,7 @@ final class Voice
             $out[$i + 1] += $l * $g1 + $r * $g3;
             $this->phase += $step;
         }
+        $n = $frames;
         $this->gain = [$g0, $g1, $g2, $g3];
         return true;
     }

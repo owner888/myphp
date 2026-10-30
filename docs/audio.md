@@ -40,6 +40,13 @@ A `Player` plays, pauses (`pause()`), and goes back to the start
 long it is, in seconds, and `playing()` turns false at its end, so a
 game can wait for a sound.
 
+`position()` is where the player is heard. The output mixes ahead of what
+the speakers play (see [the output](#the-output)), and `position()` lags
+what it mixed by that much, so lyrics, a progress bar or a visualizer
+drawn from it keep time with the sound: after `pause()` it goes on while
+the output plays what it held, and after `play()` it waits until the
+player is heard. `seek()` and `stop()` move it at once.
+
 | setting | effect |
 |---|---|
 | `setVolume($v)` | a gain: 1 as decoded, 0 silent |
@@ -112,7 +119,7 @@ than that makes the sound break up.
 | `Latency::Playback` | about 256 ms | music players: playback rides out the moments the system keeps the app waiting, as macOS does for up to 0.2 s while its appearance changes |
 
 With `Latency::Playback`, plays, pauses, seeks and volume changes are
-heard that much later. Set it before playing: an output open opens again,
+heard that much later; players' `position()` follows what is heard. Set it before playing: an output open opens again,
 which drops what it held.
 
 Where no output opens, as on a machine with no audio device, players
