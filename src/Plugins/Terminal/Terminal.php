@@ -166,7 +166,11 @@ final class Terminal
         [$path, $args] = self::command($opts->command);
         $this->quoting = ShellQuote::forProgram($path);
         $dir = $opts->dir !== '' ? $opts->dir : (string)getenv('HOME');
-        $this->launch = new PtyOptions($path, $args, $dir, self::environment($opts->env));
+        $env = self::environment($opts->env);
+        if ($opts->shellIntegration) {
+            [$args, $env] = ShellIntegration::apply($path, $args, $env);
+        }
+        $this->launch = new PtyOptions($path, $args, $dir, $env);
         // The program starts once a view knows the size of the screen, so that it draws its first screen at that size; a terminal no view shows starts after half a second, at 80×24.
         self::schedule(0.5, function (): void {
             $o = $this->launch;

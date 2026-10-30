@@ -644,6 +644,42 @@ TermClock::install();
 })();
 
 (function () {
+    // The shell integration: bash, started alone, reads the user's startup files and marks its commands (OSC 133), which the terminal tells of as they finish; zsh's ZDOTDIR is the integration's.
+    $Si = \MyPHP\Plugins\Terminal\ShellIntegration::class;
+    [$args, $env] = $Si::apply('/bin/zsh', ['-zsh'], ['HOME=/h', 'ZDOTDIR=/z']);
+    $zd = preg_grep('/^ZDOTDIR=/', $env);
+    check($args === ['-zsh'] && in_array('MYPHP_ZDOTDIR=/z', $env, true) && count($zd) === 1 && is_file(substr(reset($zd), 8) . '/.zshenv'), 'zsh: its .zshenv the integration\'s, the user\'s ZDOTDIR kept');
+    same([['bash', '-c', 'x'], ['A=1']], $Si::apply('/bin/bash', ['bash', '-c', 'x'], ['A=1']), 'a shell given arguments is started as it is');
+    same([['-bash', '--posix']], array_slice($Si::apply('/bin/bash', ['-bash'], []), 0, 1), 'bash: in POSIX mode, a login shell still');
+    foreach (['bash' => '.bashrc', 'zsh' => '.zshrc'] as $sh => $rc) {
+        $bin = trim((string)shell_exec("command -v $sh"));
+        if ($bin === '') { continue; }
+        $home = sys_get_temp_dir() . "/myphp-si-$sh-" . getmypid();
+        @mkdir($home);
+        file_put_contents("$home/$rc", "PS1='ready> '\nMYRC=read\n");
+        $notes = [];
+        $term = termShell(new Options(command: [$bin], env: ["HOME=$home"], notifyOnCommandFinish: NotifyOnCommandFinish::Always,
+            notifyOnCommandFinishAction: new CommandFinishAction(false, true), notifyOnCommandFinishAfter: 0.0,
+            onNotify: function (string $t, string $b) use (&$notes): void { $notes[] = [$t, $b]; }));
+        $tt = new TermTester($term);
+        termWait($tt, "the prompt of the user's $rc", fn() => str_contains($term->text(), 'ready>'));
+        $term->send("echo \$MYRC; sleep 0.1; false\r");
+        termWait($tt, "$sh: the command to finish", function () use (&$notes): bool { return $notes !== []; });
+        check(str_contains($term->text(), "\nread"), "$sh: the user's $rc read: " . json_encode($term->text()));
+        check(($notes[0][0] ?? '') === 'Command Failed' && str_contains($notes[0][1] ?? '', 'exited with code 1'), "$sh: the command marked, its end told: " . json_encode($notes));
+        $notes = [];
+        $term->send("\r");
+        $tt->frame(); usleep(200000); $tt->frame();
+        same([], $notes, "$sh: an empty line runs no command");
+        $term->send("true\r");
+        termWait($tt, "$sh: true to finish", function () use (&$notes): bool { return $notes !== []; });
+        same('Command Succeeded', $notes[0][0] ?? '', "$sh: a success");
+        $term->close();
+        @unlink("$home/$rc"); @rmdir($home);
+    }
+})();
+
+(function () {
     // The theme follows the window's appearance; a closed terminal shows nothing.
     $term = Terminal::new(new Options(conn: new TermPipe));
     $tt = new TermTester($term, 400, 200, false);

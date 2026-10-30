@@ -5905,6 +5905,34 @@ with code 1." (l10n, in Chinese too). Shells mark their commands
 themselves (fish, Nushell) or through an integration (zsh and bash,
 which Ghostty injects; the terminal injects none).
 
+## A shell integration for zsh and bash (v1.88)
+
+zsh and bash mark no commands of themselves, so v1.87's notifications
+told of none in them; Ghostty injects its own shell integration, and so
+does the terminal now (`ShellIntegration`, the developer's choice: written
+for myphp, not Ghostty's scripts, whose bash one is GPLv3, Kitty's). Its
+two scripts are written once into the system's temporary directory, by
+their contents' hash. A zsh or bash started alone, as the user's shell
+is (`Options::$shellIntegration`, on by default), starts with them:
+
+- **zsh**: `ZDOTDIR` points at the integration's directory, the user's
+  kept in `MYPHP_ZDOTDIR`; its `.zshenv` puts `ZDOTDIR` back (or unsets
+  it), reads the user's `.zshenv`, and in an interactive shell adds a
+  precmd hook (OSC 133 D and the exit code after a command, A before each
+  prompt) and a preexec one (C as a command runs); zsh then reads the
+  user's other startup files from their own place.
+- **bash** starts with `--posix` and `ENV` the integration's script (the
+  user's `ENV` kept in `MYPHP_BASH_ENV`), which an interactive shell in
+  POSIX mode reads and nothing else: it leaves POSIX mode, reads the
+  startup files bash would (a login shell's /etc/profile and the first of
+  ~/.bash_profile, ~/.bash_login, ~/.profile; else ~/.bashrc), puts its
+  prompt hook first in `PROMPT_COMMAND` (D, A) and marks a command's start
+  with a DEBUG trap (C), unless the user set a trap of their own.
+
+tests/terminal_test.php runs bash and zsh in a terminal with a startup
+file of their own: it is read, a command that fails and one that
+succeeds are told of, an empty line is none.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`.

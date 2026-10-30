@@ -2158,3 +2158,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `Options::$notifyOnCommandFinish`, `$notifyOnCommandFinishAction`
     and `$notifyOnCommandFinishAfter`, Ghostty 1.3's options, by OSC 133.
   - Why: the developer asked for Ghostty's.
+
+## A shell integration for zsh and bash (v1.88)
+
+- **Shell integration**
+  - mygo: none; shells start as they are.
+  - myphp: `Options::$shellIntegration` (on): zsh and bash started alone
+    read myphp's integration, which marks their commands (OSC 133).
+  - Why: the developer asked for command finished notifications, which
+    zsh and bash give no marks for without one.

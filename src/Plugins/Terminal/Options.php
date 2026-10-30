@@ -121,5 +121,7 @@ final class Options
         public CommandFinishAction $notifyOnCommandFinishAction = new CommandFinishAction,
         /** How long, in seconds, a command must have run to tell of its end, as Ghostty's notify-on-command-finish-after. */
         public float $notifyOnCommandFinishAfter = 5.0,
+        /** Starts zsh and bash, run alone as the user's shell is, with myphp's shell integration (ShellIntegration), which marks their prompts and commands (OSC 133), as Ghostty's shell-integration; false starts them as they are. */
+        public bool $shellIntegration = true,
     ) {}
 }
