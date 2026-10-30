@@ -214,6 +214,9 @@ final class Layout
             $n->metrics = null;
         } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $n->metrics !== null) {
             if ($n->ts !== null) { self::restyleField($n); } // a field in a style of its own: a launcher's query in 22 points (mygo's FontSize on a TextInput)
+            if ($n->kind === Node::INPUT && $n->pads !== null && $n->bordered) { // its own padding (mygo's on a TextInput): as high as its line and that
+                $n->fh = $n->metrics->measure('X', $n->fontSize, $n->edit?->style ?? $n->style)[1] + $n->padT() + $n->padB();
+            }
             $n->metrics = null;
         }
         if ($n->kind !== Node::CONTAINER) {

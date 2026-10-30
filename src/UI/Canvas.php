@@ -19,8 +19,8 @@ use InvalidArgumentException;
  */
 final class Canvas
 {
-    /** The largest side of a canvas, in pixels: a page of the canvases' atlas. */
-    public const MAX = 2048;
+    /** The largest side of a canvas, in pixels: what every GPU's textures allow (mygo's maxEffectLayer); one larger than a page of the canvases' atlas has a texture of its own (loose()). */
+    public const MAX = 8192;
     /** How many quads one drawing of a canvas holds. */
     public const CAPACITY = 16384;
     public readonly int $w, $h;
@@ -81,9 +81,22 @@ final class Canvas
         CanvasAtlas::drawn($this);
     }
 
+    /**
+     * @internal whether it is larger than a page of the canvases' atlas:
+     * it renders into a texture of its own, which shaders read, and is
+     * drawn as an image by a shader of the painter's (Painter::looseImage)
+     */
+    public function loose(): bool
+    {
+        return $this->w > CanvasAtlas::$w || $this->h > CanvasAtlas::$h;
+    }
+
     /** @internal its place in the canvases' atlas, made on first use; a canvas placed again is rendered again @return array{u: int, v: int, w: int, h: int, page: int} */
     public function slot(): array
     {
+        if ($this->loose()) {
+            throw new \LogicException('myphp: a canvas larger than a page of their atlas has no place in it');
+        }
         if ($this->slot === null) {
             CanvasAtlas::place($this);
         }

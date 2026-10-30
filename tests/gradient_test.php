@@ -172,6 +172,11 @@ check(str_contains($own, 'blur(6px)'), 'the inspector shows the filter');
 $h = new Headless(fn(Context $c) => $c->box(40, 40, 0x000000)->at(500, 500)->blur(2), 100, 100);
 $h->frame(); $l = $h->paint();
 same([[], -1], [$h->rt->blurLayers, gradBox($l)], 'out of the clip, no canvas');
-$h = new Headless(fn(Context $c) => $c->box(3000, 40, 0x000000)->at(0, 0)->blur(1), 100, 100);
+$h = new Headless(fn(Context $c) => $c->box(9000, 40, 0x000000)->at(0, 0)->blur(1), 100, 100);
 $h->frame(); $l = $h->paint();
 check($h->rt->blurLayers === [] && $l->n > 0, 'too wide a canvas: as it is');
+// Wider than a page of the canvases, its own texture, drawn by a shader.
+$h = new Headless(fn(Context $c) => $c->box(3000, 40, 0x000000)->at(0, 0)->blur(1), 100, 100);
+$h->frame(); $l = $h->paint();
+$layer = array_values($h->rt->blurLayers)[0] ?? null;
+check($layer?->loose() && count($l->shaders) === 1 && $l->shaders[0][3][0] === $layer->bitmap(), 'wider than a page: its own texture, a shader drawing it');

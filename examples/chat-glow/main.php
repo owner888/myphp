@@ -10,7 +10,7 @@
 // (borderConicGradient), a sharp one and blurred ones over it (blur), in
 // boxes over the whole window that the pointer goes through (absolute,
 // passThrough), as SwiftUI's recreations of the glow stack theirs. The
-// rest is shaders written in Go's syntax (UI\Shader): a glowing focus ring
+// rest is shaders written in PHP (UI\Shader): a glowing focus ring
 // drawn around a field, text filled with a shader (Shader::text), and an
 // avatar drawn by one. The replies are canned; Escape stops one.
 // Run: ./run.sh chat-glow
@@ -499,7 +499,7 @@ function composer(Context $c, ChatGlow $a): void
     $c->row()->justify(Node::CENTER)->padding(0, 24 - RING_PADDING, 22 - RING_PADDING, 24 - RING_PADDING);
       $c->row(0, 0, 1)->maxWidth(MAX_WIDTH + 2 * RING_PADDING)->padding(RING_PADDING)->draw(painted($c, $a->drawRing(...)));
         $c->row(0, 8, 1)->align(Node::CENTER)->padding(6, 6, 6, 16)->round(FIELD_RADIUS)->background($t->surface);
-          $in = field($c, $a->input, 'Ask anything', 'Message');
+          $in = $c->input($a->input, 'Ask anything', 0)->grow(1)->autoFocus()->background(0, 0.0)->border(null, 0)->padding(8, 0)->label('Message');
           $ready = trim($a->input->text) !== '';
           $send = $c->column()->size(34, 34)->round(17)->label($a->busy ? 'Stop' : 'Send')->cursor(Cursor::Pointer)->background($a->busy || $ready ? $t->text : $t->border);
           $send->draw(painted($c, fn(Painter $p, array $r) => drawSendIcon($p, $r, $a->busy, $t->background)));
@@ -514,26 +514,6 @@ function composer(Context $c, ChatGlow $a): void
         $c->end();
       $c->end();
     $c->end();
-}
-
-/**
- * The field, as mygo's TextInput with a clear background, no border and
- * Padding(8, 0): input() keeps a look of its own, so the field is a bare
- * input (textInputBase) in a box of that padding, which paints the
- * placeholder while the field is empty. It returns the input, which takes
- * the focus first and $label.
- */
-function field(Context $c, TextState $state, string $placeholder, string $label): Node
-{
-    $box = $c->row(0, 0, 1)->padding(8, 0);
-    $box->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($state, $placeholder): void {
-        if ($state->display() === '') { // nothing typed, nor composing in an input method
-            (new Painter($list, $text, $th))->text($n->x + $n->padL(), $n->y + $n->padT(), $placeholder, $th->fontSize, $th->textMuted);
-        }
-    });
-      $in = $c->textInputBase($state)->grow(1)->autoFocus()->label($label);
-    $c->end();
-    return $in;
 }
 
 /** The button's icon: an arrow up, or a square while the assistant works. @param array{0: float, 1: float, 2: float, 3: float} $r */

@@ -39,6 +39,64 @@ final class Painter
         return $img->canvas !== null ? $img->canvas->slot() : $text->imageSlot($img);
     }
 
+    /** The shader drawing a canvas larger than a page of the canvases' atlas as an image (looseImage), compiled on first use. */
+    private static ?Shader\Shader $loose = null;
+
+    /**
+     * The source of looseImage's shader: the part Src of image0, in its
+     * pixels (a negative size flips it), stretched over the rectangle,
+     * blended between its pixels as an image's quad samples, or at the
+     * nearest, in shades of gray (BT.709 luminance), tinted.
+     */
+    private const LOOSE = <<<'KAGE'
+    package main
+
+    var Src vec4
+    var Tint vec3
+    var Gray float
+    var Nearest float
+
+    func Fragment(dst vec4, pos vec2) vec4 {
+    	p := Src.xy + pos/rectSize()*Src.zw
+    	var c vec4
+    	if Nearest > 0 {
+    		c = image0At(p)
+    	} else {
+    		lo := min(Src.xy, Src.xy+Src.zw) + 0.5
+    		hi := max(Src.xy, Src.xy+Src.zw) - 0.5
+    		c = image0Sample(clamp(p, lo, hi))
+    	}
+    	if Gray > 0 {
+    		c.rgb = vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)))
+    	}
+    	c.rgb *= Tint
+    	return c
+    }
+    KAGE;
+
+    /**
+     * Draws the part $src of canvas $cv (in its pixels, a negative size
+     * flipping it), larger than a page of the canvases' atlas, in $dst, as
+     * DisplayList::image draws a bitmap from the atlas: a canvas so large
+     * has a texture of its own (Canvas::loose), which the quads' images do
+     * not reach, so a shader reads it.
+     * @param array{0: float, 1: float, 2: float, 3: float} $dst
+     * @param array{0: float, 1: float, 2: float, 3: float} $src
+     */
+    private static function looseImage(DisplayList $list, TextPainter $text, Canvas $cv, array $dst, array $src, float $alpha, float $radius, bool $gray, bool $pixelated, ?int $tint = null): void
+    {
+        if ($dst[2] <= 0 || $dst[3] <= 0 || $list->clipped(...$dst)) {
+            return;
+        }
+        $sh = self::$loose ??= Shader\Shader::compile(self::LOOSE);
+        $rgb = $tint ?? 0xffffff;
+        $o = new Shader\Options(uniforms: ['Src' => $src, 'Tint' => [(($rgb >> 16) & 255) / 255, (($rgb >> 8) & 255) / 255, ($rgb & 255) / 255],
+            'Gray' => $gray ? 1.0 : 0.0, 'Nearest' => $pixelated ? 1.0 : 0.0], images: [$cv->bitmap()]);
+        [$bytes, , $images] = $sh->inputAt($text->scale(), $dst, $o);
+        $list->shaders[] = [$sh->code, $bytes, null, $images];
+        $list->shader($dst[0], $dst[1], $dst[2], $dst[3], $tint === null ? $radius : 0.0, count($list->shaders) - 1, $alpha); // a tinted image is not rounded, as DisplayList::image's
+    }
+
     /** @internal the painter of a canvas drawn during this painter's frame: into $list, a pixel a point */
     public function forCanvas(DisplayList $list): self
     {
@@ -180,7 +238,7 @@ final class Painter
         // Far smaller than its pixels, a level of the bitmap, as smooth.
         $shrink = min($src[2] / ($dst[2] * $scale), $src[3] / ($dst[3] * $scale));
         $shown = $b->smaller($shrink);
-        $slot = self::slot($this->text, $shown);
+        $slot = $b->canvas?->loose() ? ['u' => 0, 'v' => 0, 'page' => -1] : self::slot($this->text, $shown); // a loose canvas's own texture: its pixels from 0
         $kx = $shown->w / $b->w; $ky = $shown->h / $b->h;
         $u = $slot['u'] + (int)round($src[0] * $kx); $v = $slot['v'] + (int)round($src[1] * $ky);
         $sw = max(1, (int)round($src[2] * $kx)); $sh = max(1, (int)round($src[3] * $ky));
@@ -197,6 +255,10 @@ final class Painter
         if (!$this->list->world()->set) {
             $x0 = round($dst[0] * $scale) / $scale; $y0 = round($dst[1] * $scale) / $scale;
             $r = [$x0, $y0, round(($dst[0] + $dst[2]) * $scale) / $scale - $x0, round(($dst[1] + $dst[3]) * $scale) / $scale - $y0];
+        }
+        if ($slot['page'] < 0) {
+            self::looseImage($this->list, $this->text, $b->canvas, $r, [(float)$u, (float)$v, (float)$sw, (float)$sh], $o->tint === null ? 1.0 : $o->tintAlpha, 0.0, false, $b->pixelated && $shrink <= 1, $o->tint);
+            return;
         }
         $this->list->image($r[0], $r[1], $r[2], $r[3], $u, $v, $sw, $sh, $slot['page'], $o->tint === null ? 1.0 : $o->tintAlpha, pixelated: $b->pixelated && $shrink <= 1, tint: $o->tint);
     }
@@ -411,7 +473,9 @@ final class Painter
     private function shaderDraw(Shader\Code $code, string $bytes, ?string $wide, array $images): int
     {
         foreach ($images as $img) {
-            $img?->canvas?->slot(); // a canvas the shader reads has its place, where it renders
+            if ($img?->canvas !== null && !$img->canvas->loose()) {
+                $img->canvas->slot(); // a canvas the shader reads has its place, where it renders
+            }
         }
         $this->list->shaders[] = [$code, $bytes, $wide, $images];
         return count($this->list->shaders) - 1;
@@ -526,9 +590,13 @@ final class Painter
                 $n->blurring = false;
             }
         });
-        $slot = self::slot($text, $cv->bitmap());
         $list->setWorld($n->world);
-        $list->image($x0 / $s, $y0 / $s, $w / $s, $h / $s, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
+        if ($cv->loose()) {
+            self::looseImage($list, $text, $cv, [$x0 / $s, $y0 / $s, $w / $s, $h / $s], [0.0, 0.0, (float)$w, (float)$h], 1.0, 0.0, false, false);
+        } else {
+            $slot = self::slot($text, $cv->bitmap());
+            $list->image($x0 / $s, $y0 / $s, $w / $s, $h / $s, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page']);
+        }
         $list->setWorld($world);
         return true;
     }
@@ -1056,8 +1124,12 @@ final class Painter
             $s = $text->svgSlot($pic, max(1, (int)round($fw * $scale)), max(1, (int)round($fh * $scale)), $rgb);
         } else { // far smaller than its pixels, a level of it, as smooth (mygo's drawBitmap)
             $shrink = min($frac[2] * $pic->w / ($dst[2] * $scale), $frac[3] * $pic->h / ($dst[3] * $scale));
-            $s = self::slot($text, $pic->smaller($shrink));
             $pixelated = $pic->pixelated && $shrink <= 1;
+            if ($pic->canvas?->loose()) {
+                self::looseImage($list, $text, $pic->canvas, $dst, [$frac[0] * $pic->w, $frac[1] * $pic->h, $frac[2] * $pic->w, $frac[3] * $pic->h], $alpha, $radius, $gray, $pixelated);
+                return;
+            }
+            $s = self::slot($text, $pic->smaller($shrink));
         }
         $sw = $s['w']; $sh = $s['h']; // the part of the slot that shows: the fractions of the picture within the box
         $u = $s['u'] + (int)round($frac[0] * $sw); $v = $s['v'] + (int)round($frac[1] * $sh);
@@ -1565,15 +1637,24 @@ final class Painter
     private static function paintField(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
-        $inset = Runtime::FIELD_INSET + $n->insetL;
+        // Its padding, radius, background and border as the app set them (mygo's on a TextInput), else the theme's field.
+        [$insetL, $insetR] = $n->pads !== null ? [$n->padL(), $n->padR()] : [Runtime::FIELD_INSET, Runtime::FIELD_INSET];
+        $inset = $insetL + $n->insetL;
         if ($n->bordered) { // its own box; a combobox's input sits in a field box drawn around it
-            $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
-            $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+            $radius = $n->radius > 0 ? $n->radius : $t->radius;
+            foreach ($n->shadows as $sh) { // outside the box, under it
+                if (!$sh[6]) { self::boxShadow($list, [$n->x, $n->y, $n->w, $n->h], [$radius, $radius, $radius, $radius], $sh); }
+            }
+            $bw = $n->borderWidth;
+            if ($bw > 0) {
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? self::inputBorder($n, $t, $rt), 1.0, $radius);
+            }
+            $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color ?? $t->surface, $n->bgAlpha, max($radius - $bw, 0.0));
         }
         $display = $s->shown(); // bullets for a password
         [$tw, $lh] = $text->measure($display === '' ? 'X' : $display, $n->fontSize, $s->style);
         $ty = $n->y + ($n->h - $lh) / 2;
-        $inner = $n->w - $inset - Runtime::FIELD_INSET - $n->insetR;
+        $inner = $n->w - $inset - $insetR - $n->insetR;
         // Keep the caret in view when the text is wider than the field; without the focus, its start shows (mygo's InputShowsItsStartUnfocused).
         $caretX = $text->xForIndex($display, $n->fontSize, $s->shownIndex($s->displayCaret()), $s->style);
         $shift = $n->focused ? max(0.0, $caretX - $inner) : 0.0;

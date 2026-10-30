@@ -1,6 +1,6 @@
 <?php
 // Black hole is a black hole and its accretion disk (mygo's
-// examples/blackhole), drawn by shaders written in Go's syntax (UI\Shader)
+// examples/blackhole), drawn by shaders written in PHP (UI\Shader)
 // on the GPU: every pixel's ray of light is traced back through the hole's
 // gravity, so the disk's far side shows above and below the shadow, the
 // side turning toward the camera blazes brighter and bluer, and the stars
@@ -164,8 +164,9 @@ final class BlackHole
         $this->step($dt, $reduce);
 
         $scale = $p->scale();
-        // A canvas is at most Canvas::MAX pixels on a side: a window larger
-        // than that renders the scene at that, as at a lower quality.
+        // A canvas is at most Canvas::MAX pixels on a side, what every GPU's
+        // textures allow: a window larger renders the scene at that, as at
+        // a lower quality.
         $fit = min(1.0, Canvas::MAX / ($r[2] * $scale * $this->quality), Canvas::MAX / ($r[3] * $scale * $this->quality));
         $w = max(1, (int)round($r[2] * $scale * $this->quality * $fit));
         $h = max(1, (int)round($r[3] * $scale * $this->quality * $fit));
@@ -299,7 +300,7 @@ function view(Context $c, BlackHole $a): void
     $root->handleInput($a->input(...));
       $c->column(0, 4);
         $c->text('Gargantua', 22)->fontWeight(600)->textColor(0xffffff, WHITE_ALPHA);
-        $c->text('A black hole, its light traced through gravity by shaders written in Go', 12)->textColor(0xffffff, MUTED_ALPHA);
+        $c->text('A black hole, its light traced through gravity by shaders written in PHP', 12)->textColor(0xffffff, MUTED_ALPHA);
       $c->end();
       $c->spacer();
       $c->text('Drag to orbit · Scroll to zoom', 12)->textColor(0xffffff, MUTED_ALPHA)->opacity($a->hint);

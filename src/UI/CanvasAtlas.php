@@ -26,10 +26,10 @@ final class CanvasAtlas
     /** Times the pages filled up and started over. */
     public static int $resets = 0;
 
-    /** $c was drawn: it renders this frame, placed if it has no place. */
+    /** $c was drawn: it renders this frame, placed if it has no place and fits a page. */
     public static function drawn(Canvas $c): void
     {
-        if ($c->slot === null) {
+        if ($c->slot === null && !$c->loose()) {
             self::place($c);
         }
         self::$pending[spl_object_id($c)] = $c;
@@ -82,7 +82,7 @@ final class CanvasAtlas
         $list = array_values(self::$pending);
         self::$pending = [];
         usort($list, fn(Canvas $a, Canvas $b): int => $a->drawn <=> $b->drawn);
-        return array_values(array_filter($list, fn(Canvas $c): bool => $c->slot !== null && $c->list !== null));
+        return array_values(array_filter($list, fn(Canvas $c): bool => ($c->slot !== null || $c->loose()) && $c->list !== null));
     }
 
     /** Forgets every canvas, for tests. */

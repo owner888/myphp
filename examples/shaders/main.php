@@ -1,5 +1,5 @@
 <?php
-// Shaders written in Go's syntax (Ebitengine's Kage, as mygo's ui/shader
+// Shaders written in PHP (UI\Shader, compiled in PHP as mygo's ui/shader
 // compiles them), on the GPU: waves a uniform moves, text and a path
 // filled with a shader, an element drawn through an effect, and a frosted
 // pane reading what moves behind it.

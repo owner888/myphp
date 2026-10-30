@@ -113,16 +113,16 @@ trait Exprs
     /** @return array{0: list<Expr>, 1: list<Type>, 2: list<Stmt>} */
     private function parseExpr(Block $block, string $fname, Syntax\Expr $expr, bool $markLocalVariableUsed): array
     {
-        return match (true) {
-            $expr instanceof Syntax\BasicLit => $this->parseBasicLit($expr),
-            $expr instanceof Syntax\BinaryExpr => $this->parseBinaryExpr($block, $fname, $expr, $markLocalVariableUsed),
-            $expr instanceof Syntax\CallExpr => $this->parseCallExpr($block, $fname, $expr, $markLocalVariableUsed),
-            $expr instanceof Syntax\Ident => $this->parseIdentExpr($block, $expr, $markLocalVariableUsed),
-            $expr instanceof Syntax\ParenExpr => $this->parseExpr($block, $fname, $expr->x, $markLocalVariableUsed),
-            $expr instanceof Syntax\SelectorExpr => $this->parseSelectorExpr($block, $fname, $expr),
-            $expr instanceof Syntax\UnaryExpr => $this->parseUnaryExpr($block, $fname, $expr, $markLocalVariableUsed),
-            $expr instanceof Syntax\CompositeLit => $this->parseCompositeLit($block, $fname, $expr, $markLocalVariableUsed),
-            $expr instanceof Syntax\IndexExpr => $this->parseIndexExpr($block, $fname, $expr, $markLocalVariableUsed),
+        return match ($expr::class) { // the nodes' classes are final: a jump by name
+            Syntax\BasicLit::class => $this->parseBasicLit($expr),
+            Syntax\BinaryExpr::class => $this->parseBinaryExpr($block, $fname, $expr, $markLocalVariableUsed),
+            Syntax\CallExpr::class => $this->parseCallExpr($block, $fname, $expr, $markLocalVariableUsed),
+            Syntax\Ident::class => $this->parseIdentExpr($block, $expr, $markLocalVariableUsed),
+            Syntax\ParenExpr::class => $this->parseExpr($block, $fname, $expr->x, $markLocalVariableUsed),
+            Syntax\SelectorExpr::class => $this->parseSelectorExpr($block, $fname, $expr),
+            Syntax\UnaryExpr::class => $this->parseUnaryExpr($block, $fname, $expr, $markLocalVariableUsed),
+            Syntax\CompositeLit::class => $this->parseCompositeLit($block, $fname, $expr, $markLocalVariableUsed),
+            Syntax\IndexExpr::class => $this->parseIndexExpr($block, $fname, $expr, $markLocalVariableUsed),
             default => $this->fail($expr->pos, 'expression not implemented: ' . self::nodeString($expr)),
         };
     }

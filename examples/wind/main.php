@@ -7,13 +7,13 @@
 // path; a click blows a ripple out from it, tinted, and every third click
 // blows a heart.
 //
-// It draws as the app's WebGL does, with two shaders (UI\Shader) in Go's
-// syntax: wind.kage works out the wind at two samples a cell, a pixel each
-// of a canvas, and glyphs.kage lights each pixel of the glyphs' ink, from
-// an atlas the system's text engine rasterizes (Context::renderGlyphs), by
-// the wind's samples around it, more where its edge faces the wind. The
-// CPU only moves the clock and the pointer's blows on, a few hundred
-// numbers a frame. Every visit has a wind of its own, picked by a random
+// It draws as the app's WebGL does, with two shaders written in PHP
+// (UI\Shader): wind.kage works out the wind at two samples a cell, a
+// pixel each of a canvas, and glyphs.kage lights each pixel of the
+// glyphs' ink, from an atlas the system's text engine rasterizes
+// (Context::renderGlyphs), by the wind's samples around it, more where
+// its edge faces the wind. The CPU only moves the clock and the
+// pointer's blows on, a few hundred numbers a frame. Every visit has a wind of its own, picked by a random
 // seed; ⌘R starts another. After three minutes without input the wind
 // settles and the texture fades out, to come back at the next move.
 // Run: ./run.sh wind
@@ -880,7 +880,8 @@ function view(Context $c, WindApp $s): void
       // The card's middle lies where the texture is calmest, 45% down.
       $c->spacer()->grow(45);
       $c->column(0, 12)->width(min(640, $w - 48));
-        $input = composer($c, $s->draft, 'Describe a task or ask a question', 'Task');
+        $input = $c->key('draft')->input($s->draft, 'Describe a task or ask a question', 0)->label('Task')->padding(14, 16)->round(14)
+            ->background($t->surface)->shadow(0, 4, 18, 0, 0x000000, 0x0f / 255);
         $s->controls = [$c->bounds($input)];
         $c->text('Move the pointer to warm the air, click to blow a ripple (every third a heart), ⌘R for another wind.', 12, $t->textMuted)->textAlign(Node::CENTER);
       $c->end();
@@ -889,29 +890,6 @@ function view(Context $c, WindApp $s): void
         $c->text(sprintf('%s/%08x', $s->tex->w->look, $s->tex->w->seed), 11, $t->textMuted)->font(FAMILY);
       $c->end();
     $c->end();
-}
-
-/**
- * The composer's field, as mygo's TextInput with Padding(14, 16),
- * Radius(14), the surface and a soft shadow: input() keeps a look of its
- * own, so the field is a bare input (textInputBase) in a box of that look,
- * its border as an input's (the accent focused, darker hovered), which
- * paints the placeholder while the field is empty. The box is the field's
- * bounds.
- */
-function composer(Context $c, TextState $state, string $placeholder, string $label): Node
-{
-    $t = $c->theme;
-    $box = $c->key('draft')->row()->padding(14, 16)->round(14)->background($t->surface)->shadow(0, 4, 18, 0, 0x000000, 0x0f / 255);
-    $box->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($state, $placeholder): void {
-        if ($state->display() === '') { // nothing typed, nor composing in an input method
-            (new Painter($list, $text, $th))->text($n->x + $n->padL(), $n->y + $n->padT(), $placeholder, $th->fontSize, $th->textMuted);
-        }
-    });
-      $in = $c->textInputBase($state)->grow(1)->label($label);
-      $box->border($c->focused($in) ? $t->accent : ($c->hovered($box) ? Theme::mix($t->border, $t->text, 0.25) : $t->border), 1);
-    $c->end();
-    return $box;
 }
 
 $s = new WindApp(random_int(0, U32), new Shaders());

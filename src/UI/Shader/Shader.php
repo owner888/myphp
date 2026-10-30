@@ -6,10 +6,10 @@ namespace MyPHP\UI\Shader;
 use Closure;
 use InvalidArgumentException;
 use LogicException;
-use MyPHP\UI\{Image, Painter, Path, Span, WideColor};
+use MyPHP\UI\{Affine, Image, Painter, Path, Span, WideColor};
 use MyPHP\UI\Shader\Compiler\{Compiler, ParseError};
 use MyPHP\UI\Shader\Ir\{BasicType, Type};
-use MyPHP\UI\Shader\Syntax\{FuncDecl, Parser, SyntaxError};
+use MyPHP\UI\Shader\Syntax\{Parser, SyntaxError};
 
 /**
  * A shader an app writes (mygo's ui/shader Shader): a fragment shader in
@@ -69,6 +69,8 @@ final class Shader
     /** @var array<string, array{0: Type, 1: int, 2: int}> the uniforms by name: type, first word and words */
     private array $uniforms = [];
     private int $words = 0;
+    /** @var list<int> its words, all zero, which a draw sets */
+    private array $zeros = [];
     /** @internal how Metal draws it */
     public readonly Code $code;
 
@@ -89,7 +91,21 @@ final class Shader
             // An effect draws over all of its content, its positions from the corner of the element's box within it.
             $full .= "\nfunc Fragment(dst vec4, pos vec2) vec4 {\n\tq := pos - __layerInset/pixelScale()\n\t" . self::ENTRIES[$kind][1] . "\n}\n";
         }
-        $p = Compiler::compileFragment($full);
+        $layerRead = $kind !== self::FRAGMENT && preg_match('/\bimage' . self::LAYER_IMAGE . '(At|Sample|Size)\b/', $src) === 1;
+        try {
+            $p = Compiler::compileFragment($full);
+        } catch (ParseError $e) {
+            if ($kind !== self::FRAGMENT && !self::parses($src)) {
+                Compiler::compileFragment($src); // throws its syntax error, as the source has it, no entry wrapped after it
+            }
+            if ($layerRead) {
+                throw self::layerRead();
+            }
+            throw $e;
+        }
+        if ($layerRead) {
+            throw self::layerRead();
+        }
         foreach (self::BRIDGE as $i => $name) {
             if (($p->uniformNames[$i] ?? null) !== $name) {
                 throw new LogicException('shader: the uniforms start with ' . implode(', ', $p->uniformNames) . ', not ' . implode(', ', self::BRIDGE));
@@ -108,34 +124,43 @@ final class Shader
             $s->uniforms[$p->uniformNames[$i]] = [$t, $s->words, $n];
             $s->words += $n;
         }
+        $s->zeros = array_fill(0, $s->words, 0);
         $s->code = new Code($p, $backdrop);
         return $s;
     }
 
-    /** The kind of the shader of $src by its entry point, of which it has one; a source that doesn't parse is the compiler's to report. */
+    /**
+     * The kind of the shader of $src by its entry point, of which it has
+     * one; a source that doesn't parse is the compiler's to report. Found
+     * in the source, its comments and literals left out, without parsing
+     * it, which compiling does: a function's name follows func, which a
+     * method's receiver or a function literal's parameters follow instead.
+     */
     private static function kindOf(string $src): int
     {
-        try {
-            $f = Parser::parse($src);
-        } catch (SyntaxError) {
-            return self::FRAGMENT;
-        }
-        $found = [];
-        foreach ($f->decls as $d) {
-            if ($d instanceof FuncDecl && $d->recv === null) {
-                foreach (self::ENTRIES as $k => [$name]) {
-                    if ($d->name->name === $name) { $found[] = $k; }
-                }
-            }
-        }
-        if (count($found) > 1) {
+        $code = preg_replace('~//[^\n]*|/\*.*?\*/|"(?:[^"\\\\\n]|\\\\.)*"|`[^`]*`|\'(?:[^\'\\\\\n]|\\\\.)*\'~s', ' ', $src) ?? throw new LogicException('shader: ' . preg_last_error_msg());
+        preg_match_all('/\bfunc\s+(' . implode('|', array_column(self::ENTRIES, 0)) . ')\s*\(/', $code, $m);
+        $found = array_map(static fn(string $name): int => array_search($name, array_column(self::ENTRIES, 0), true), $m[1]);
+        if (count($found) > 1 && self::parses($src)) {
             throw new InvalidArgumentException(sprintf('shader: %s and %s: a shader has one entry point', self::ENTRIES[$found[0]][0], self::ENTRIES[$found[1]][0]));
         }
-        $k = $found[0] ?? self::FRAGMENT;
-        if ($k !== self::FRAGMENT && preg_match('/\bimage' . self::LAYER_IMAGE . '(At|Sample|Size)\b/', $src)) {
-            throw new InvalidArgumentException('shader: an effect\'s shader reads image0 to image' . (self::LAYER_IMAGE - 1) . ': image' . self::LAYER_IMAGE . ' is its content (layerAt, layerSample)');
+        return count($found) === 1 ? $found[0] : self::FRAGMENT;
+    }
+
+    private static function layerRead(): InvalidArgumentException
+    {
+        return new InvalidArgumentException('shader: an effect\'s shader reads image0 to image' . (self::LAYER_IMAGE - 1) . ': image' . self::LAYER_IMAGE . ' is its content (layerAt, layerSample)');
+    }
+
+    /** Whether Go's syntax takes $src. */
+    private static function parses(string $src): bool
+    {
+        try {
+            Parser::parse($src);
+            return true;
+        } catch (SyntaxError) {
+            return false;
         }
-        return $k;
     }
 
     /** The uniform variable $name, which Values sets by: look it up once (mygo's Uniform). It throws for a name the shader has not. */
@@ -166,7 +191,7 @@ final class Shader
         if ($r[2] <= 0 || $r[3] <= 0) {
             return;
         }
-        [$bytes, $wide, $images] = $this->input($p, $r, $o, [0.0, 0.0]);
+        [$bytes, $wide, $images] = $this->input($p->scale(), $p->world(), $r, $o, [0.0, 0.0]);
         $p->shaderEffect($this->code, $r, $o->radius, $bytes, $wide, $images, max($o->backdropBlur, 0.0) * $p->scale());
     }
 
@@ -185,7 +210,7 @@ final class Shader
         if ($this->backdrop) {
             throw new LogicException('shader: a shader reading its backdrop fills rectangles (draw), not shapes (fill)');
         }
-        $p->shaderFill($this->code, $box, $fn, ...$this->input($p, $box, $o, [0.0, 0.0]));
+        $p->shaderFill($this->code, $box, $fn, ...$this->input($p->scale(), $p->world(), $box, $o, [0.0, 0.0]));
     }
 
     /** Fills $path with the shader (non-zero winding), the shader filling the path's bounds (mygo's FillPath). */
@@ -245,7 +270,7 @@ final class Shader
         $area = [$box[0] - $inset[0] / $s, $box[1] - $inset[1] / $s, $content->w / $s, $content->h / $s];
         $o = clone $o;
         $o->images = $images;
-        [$bytes, $wide, $imgs] = $this->input($p, $box, $o, $inset);
+        [$bytes, $wide, $imgs] = $this->input($p->scale(), $p->world(), $box, $o, $inset);
         $p->shaderEffect($this->code, $area, 0.0, $bytes, $wide, $imgs, max($o->backdropBlur, 0.0) * $p->scale());
     }
 
@@ -258,6 +283,18 @@ final class Shader
     }
 
     /**
+     * @internal what the shader reads drawn with $o in $r at $scale pixels
+     * a point, as input()'s, for a draw the painter makes itself (a canvas
+     * larger than a page of their atlas drawn as an image)
+     * @param array{0: float, 1: float, 2: float, 3: float} $r
+     * @return array{0: string, 1: ?string, 2: list<?Image>}
+     */
+    public function inputAt(float $scale, array $r, Options $o): array
+    {
+        return $this->input($scale, Affine::identity(), $r, $o, [0.0, 0.0]);
+    }
+
+    /**
      * What the shader reads drawn with $o in $r, the box it fills, its
      * corner at $inset in pixels from what it draws over: its uniforms'
      * bytes, the bridge's first, those a wide gamut reads in their place
@@ -266,15 +303,15 @@ final class Shader
      * @param array{0: float, 1: float} $inset
      * @return array{0: string, 1: ?string, 2: list<?Image>}
      */
-    private function input(Painter $p, array $r, Options $o, array $inset): array
+    private function input(float $scale, Affine $world, array $r, Options $o, array $inset): array
     {
-        $words = array_fill(0, $this->words, 0);
+        $words = $this->zeros;
         $colors = [];
         if ($o->values !== null) {
             if ($o->values->shader !== $this) {
                 throw new InvalidArgumentException('shader: Options::$values of another shader');
             }
-            for ($i = self::BRIDGE_WORDS; $i < $this->words; $i++) { $words[$i] = $o->values->words[$i]; }
+            $words = $o->values->words; // the bridge's words zero, which Values leaves to drawing
             $colors = $o->values->colors;
         }
         $f = static fn(float $x): int => unpack('V', pack('g', $x))[1];
@@ -284,11 +321,11 @@ final class Shader
             }
         }
         [$words[self::SCALE_WORD - 2], $words[self::SCALE_WORD - 1]] = [$f($r[2]), $f($r[3])];
-        $words[self::SCALE_WORD] = $f($p->scale());
+        $words[self::SCALE_WORD] = $f($scale);
         [$words[self::INSET_WORD], $words[self::INSET_WORD + 1]] = [$f($inset[0]), $f($inset[1])];
         if ($this->backdrop) {
             // The map from its points, from the box's corner, to the window's pixels; Metal sets where the texels lie, which only it knows.
-            $m = $p->world(); $s = $p->scale();
+            $m = $world; $s = $scale;
             [$a, $b, $c, $d, $x, $y] = $m->set ? [$m->a, $m->b, $m->c, $m->d, $m->x, $m->y] : [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
             foreach ([$a * $s, $c * $s, ($a * $r[0] + $c * $r[1] + $x) * $s, $b * $s, $d * $s, ($b * $r[0] + $d * $r[1] + $y) * $s] as $i => $v) {
                 $words[self::ROW0_WORD + $i] = $f($v);
@@ -336,30 +373,26 @@ final class Shader
      */
     private static function set(array &$words, int $at, int $n, int $kind, string $name, mixed $v): void
     {
-        $lane = static function (int|float|bool $x) use ($kind): int {
-            $f = is_bool($x) ? ($x ? 1.0 : 0.0) : (float)$x;
-            return match ($kind) {
-                BasicType::FLOAT => unpack('V', pack('g', $f))[1],
-                BasicType::BOOL => $f != 0 ? 1 : 0,
-                default => (is_int($x) ? $x : (is_bool($x) ? (int)$x : (int)$f)) & 0xffffffff,
-            };
-        };
         if (is_array($v)) {
-            $i = 0;
-            foreach ($v as $x) {
-                if ($i >= $n) { break; }
+            $xs = array_slice(array_values($v), 0, $n);
+            foreach ($xs as $x) {
                 if (!is_int($x) && !is_float($x) && !is_bool($x)) {
                     throw new InvalidArgumentException("shader: the uniform $name is set to an array of " . get_debug_type($x) . ', not numbers');
                 }
-                $words[$at + $i++] = $lane($x);
             }
+        } elseif (!is_int($v) && !is_float($v) && !is_bool($v)) {
+            throw new InvalidArgumentException("shader: the uniform $name is set to a " . get_debug_type($v) . ', not a number, numbers or a color');
+        } else {
+            $xs = $n > 0 ? [$v] : [];
+        }
+        if ($xs === []) {
             return;
         }
-        if (!is_int($v) && !is_float($v) && !is_bool($v)) {
-            throw new InvalidArgumentException("shader: the uniform $name is set to a " . get_debug_type($v) . ', not a number, numbers or a color');
-        }
-        if ($n > 0) {
-            $words[$at] = $lane($v);
-        }
+        $lanes = match ($kind) {
+            BasicType::FLOAT => array_values(unpack('V*', pack('g*', ...$xs))), // all at once: a bool as 0 or 1
+            BasicType::BOOL => array_map(static fn(int|float|bool $x): int => $x != 0 ? 1 : 0, $xs),
+            default => array_map(static fn(int|float|bool $x): int => (is_int($x) ? $x : (int)$x) & 0xffffffff, $xs), // a float's fraction dropped
+        };
+        foreach ($lanes as $i => $w) { $words[$at + $i] = $w; }
     }
 }

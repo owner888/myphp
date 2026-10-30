@@ -157,3 +157,7 @@ $throws(fn() => Shader::compile("package main\n\nfunc LayerEffect(pos vec2) vec4
 $throws(fn() => Shader::compile("package main\n\nfunc Fragment(dst vec4, pos vec2) vec4 { return backdropAt(pos) + image2At(pos) }\n"), \InvalidArgumentException::class, 'compile: a backdrop reader reading image2', 'image2');
 $throws(fn() => Shader::compile("package main\n\nfunc Fragment(dst vec4, pos vec2) vec4 {\n\treturn vec4(x)\n}\n"), ParseError::class, 'compile: an undefined name, by its line', '4:');
 $throws(fn() => Shader::compile("package main\n\nvar X float\n"), \Throwable::class, 'compile: no entry point');
+// The entry point found without parsing: not in comments or strings; a broken effect's error is the source's, no entry wrapped after it.
+check(Shader::compile("package main\n\n// func ColorEffect(pos vec2, c vec4) vec4\n/* func LayerEffect( */\nfunc Fragment(dst vec4, pos vec2) vec4 { return vec4(1) }\n") instanceof Shader, 'compile: entry points in comments are none');
+$throws(fn() => Shader::compile("package main\n\nfunc ColorEffect(pos vec2, c vec4) vec4 {\n\treturn c\n"), ParseError::class, 'compile: a broken effect', "expected '(', found rectSize"); // the bridge's next, as mygo's
+$throws(fn() => Shader::compile("package main\n\nfunc Fragment() vec4 { return vec4(1) }\nfunc ColorEffect(pos vec2, c vec4) vec4 { return c\n"), ParseError::class, 'compile: two entry points that do not parse', 'expected');

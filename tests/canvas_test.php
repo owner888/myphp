@@ -90,11 +90,39 @@ check(CanvasAtlas::$resets === $before + 1 && $cv->slot === null && $big[0]->slo
 $cv->slot();
 same([$cv], CanvasAtlas::take(), 'one drawn before renders again in its new place');
 
+// Larger than a page, a canvas renders into a texture of its own, and a shader of the painter's draws it as an image.
+$loose = new Canvas(3000, 1000);
+$h = new Headless(function (Context $c) use ($loose): void {
+    $c->column()->at(0, 0)->size(300, 100)->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($loose): void {
+        $p = new Painter($list, $text, $t);
+        $loose->draw($p, fn(Painter $lp) => $lp->fill([0, 0, 3000, 1000], 0x3366ff));
+        $p->image($loose->bitmap(), [0.0, 0.0, 300.0, 100.0], Node::FILL_BOX);
+        $p->imageRegion($loose->bitmap(), [1500, 0, 1500, 1000], [0.0, 0.0, 150.0, 100.0], new \MyPHP\UI\ImageOptions(flipX: true));
+    });
+    $c->end();
+}, 300, 100);
+$h->frame();
+$win = $h->paint();
+check($loose->loose() && $loose->slot === null, 'no place in the pages');
+same([$loose], CanvasAtlas::take(), 'rendered all the same');
+$kinds = [];
+for ($i = 0; $i < $win->n; $i++) { $kinds[] = fmod($win->buf[$i * 16 + 9], DisplayList::KIND_STRIDE); }
+same(2, count(array_keys($kinds, (float)DisplayList::KIND_SHADER)), 'drawn by a shader, twice: ' . json_encode($kinds));
+check(count($win->shaders) === 2 && $win->shaders[0][3] === [$loose->bitmap(), null, null, null], 'which reads it as image0');
+$src = static function (array $draw): array { // Src, the first words after the bridge's, at their lanes
+    return array_map(fn(int $w): float => unpack('g', substr($draw[1], $draw[0]->lanes[$w], 4))[1], range(23, 26));
+};
+same([0.0, 0.0, 3000.0, 1000.0], $src($win->shaders[0]), 'all of it');
+same([3000.0, 0.0, -1500.0, 1000.0], $src($win->shaders[1]), 'the region, flipped');
+$threw = 0;
+try { $loose->slot(); } catch (\LogicException) { $threw++; }
+same(1, $threw, 'it has no place to ask for');
+
 // Limits.
 $threw = 0;
-try { new Canvas(4096, 10); } catch (\InvalidArgumentException) { $threw++; }
+try { new Canvas(Canvas::MAX + 1, 10); } catch (\InvalidArgumentException) { $threw++; }
 try { $cv->bitmap()->pixels(); } catch (\RuntimeException) { $threw++; }
-same(2, $threw, 'larger than a page, and its pixels, which the GPU has');
+same(2, $threw, 'larger than mygo\'s largest, and its pixels, which the GPU has');
 same($cv->bitmap(), $cv->bitmap()->smaller(8), 'no smaller levels of a canvas');
 same([1, 1], (new Canvas(0, -3))->size(), 'at least a pixel');
 CanvasAtlas::reset();

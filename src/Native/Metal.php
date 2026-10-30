@@ -494,12 +494,16 @@ final class Metal
     /** The pixel format the frame or canvas being drawn draws to, and whether its alpha stays premultiplied (a canvas's), for the shaders' pipelines. */
     private int $format = self::PIXEL_FORMAT_BGRA8;
     private bool $premultiplied = false;
-    /** @var \WeakMap<Image, array{0: mixed, 1: int}> the textures shaders read images from, each with the version of the image it holds */
+    /** @var \WeakMap<Image, array{0: Owned, 1: int}> the textures shaders read images from, each with the version of the image it holds */
     private \WeakMap $shaderImages;
-    /** @var \WeakMap<Canvas, mixed> the textures shaders read canvases' bitmaps from, copied from their place each frame they are read */
+    /** @var \WeakMap<Canvas, Owned> the textures shaders read canvases' bitmaps from: copied from their place each frame they are read, or, a canvas larger than a page (Canvas::loose), the one it renders into */
     private \WeakMap $shaderCanvases;
     /** A texture of one transparent pixel, which a shader reads in place of an image it was not given. */
     private $noImage = null;
+    /** The most bytes setFragmentBytes takes (Metal's limit); a shader's uniforms beyond it go in a buffer. */
+    private const SET_BYTES_MAX = 4096;
+    /** The bytes of a shader draw's uniforms, set from here, which Metal copies. */
+    private $shaderBytes = null;
     /** @var array<int, mixed> the textures a shader draw reads, by its draw: four each */
     private array $shaderTextures = [];
     /** @var array<string, mixed> the textures canvases are rendered in before they are copied to their place, by size */
@@ -1159,9 +1163,17 @@ final class Metal
                     [$textures[2], $bytes] = $this->backdropOf($code, $bytes, $r, $list);
                 }
                 $size = strlen($bytes);
-                $buf = ObjC::$c->new("char[$size]");
-                FFI::memcpy($buf, $bytes, $size);
-                ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', ObjC::$c->cast('void*', FFI::addr($buf)), $size, 3); // copied by Metal as it is set
+                if ($size <= self::SET_BYTES_MAX) {
+                    $this->shaderBytes ??= ObjC::$c->new('char[' . self::SET_BYTES_MAX . ']');
+                    FFI::memcpy($this->shaderBytes, $bytes, $size);
+                    ObjC::msg('v:pLL', $enc, 'setFragmentBytes:length:atIndex:', ObjC::$c->cast('void*', FFI::addr($this->shaderBytes)), $size, 3); // copied by Metal as it is set, so one buffer serves every draw
+                } else { // more than Metal sets as bytes: a buffer, which the command buffer keeps until it is done
+                    $buf = ObjC::$c->new("char[$size]");
+                    FFI::memcpy($buf, $bytes, $size);
+                    $ub = ObjC::msg('p:pLL', $this->device, 'newBufferWithBytes:length:options:', ObjC::$c->cast('void*', FFI::addr($buf)), $size, 0);
+                    ObjC::msg('v:pLL', $enc, 'setFragmentBuffer:offset:atIndex:', $ub, 0, 3);
+                    ObjC::msg('v:', $ub, 'release');
+                }
                 foreach ($textures as $i => $t) {
                     ObjC::msg('v:pL', $enc, 'setFragmentTexture:atIndex:', $t, 5 + $i);
                 }
@@ -1269,25 +1281,24 @@ final class Metal
     /** The texture of $img's pixels, premultiplied as it holds them. */
     private function imageTexture(Image $img)
     {
-        [$t, $version] = $this->shaderImages[$img] ?? [null, -1];
-        if ($t !== null && $version === $img->version) {
-            return $t;
+        [$held, $version] = $this->shaderImages[$img] ?? [null, -1];
+        if ($held !== null && $version === $img->version) {
+            return $held->id;
         }
-        if ($t !== null) { ObjC::msg('v:', $t, 'release'); }
         $t = $this->sharedTexture($img->w, $img->h);
         $region = ObjC::$c->new('MTLRegion');
         $region->w = $img->w; $region->h = $img->h; $region->d = 1;
         ObjC::msg('v:RLpL', $t, 'replaceRegion:mipmapLevel:withBytes:bytesPerRow:', $region, 0, ObjC::$c->cast('void*', $img->addr), $img->w * 4);
-        $this->shaderImages[$img] = [$t, $img->version];
+        $this->shaderImages[$img] = [new Owned($t), $img->version]; // the last one released
         return $t;
     }
 
-    /** A texture of $c's size with its pixels, copied from its place among the canvases' pages. */
+    /** A texture of $c's size with its pixels: its own, a canvas larger than a page's, else copied from its place among the canvases' pages. */
     private function canvasTexture($cb, Canvas $c)
     {
-        $t = $this->shaderCanvases[$c] ??= $this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8);
+        $t = ($this->shaderCanvases[$c] ??= new Owned($this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8)))->id;
         if ($c->slot === null) {
-            return $t; // never drawn: transparent
+            return $t; // its own, or never drawn: transparent
         }
         [$u, $v, $page] = $c->slot;
         $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
@@ -1310,9 +1321,10 @@ final class Metal
     private function renderCanvas($cb, Canvas $c): void
     {
         $list = $c->list;
-        [$u, $v, $page] = $c->slot;
         $key = "{$c->w}x{$c->h}";
-        if (!isset($this->canvasTargets[$key])) {
+        if ($c->loose()) { // larger than a page: rendered into its own texture, where shaders read it
+            $target = ($this->shaderCanvases[$c] ??= new Owned($this->texture($c->w, $c->h, self::PIXEL_FORMAT_RGBA8)))->id;
+        } elseif (!isset($this->canvasTargets[$key])) {
             $desc = ObjC::msg('p:LLLb', ObjC::cls('MTLTextureDescriptor'), 'texture2DDescriptorWithPixelFormat:width:height:mipmapped:', self::PIXEL_FORMAT_RGBA8, $c->w, $c->h, false);
             ObjC::msg('v:L', $desc, 'setUsage:', self::TEXTURE_SHADER_READ | self::TEXTURE_RENDER_TARGET);
             ObjC::msg('v:L', $desc, 'setStorageMode:', 2); // private
@@ -1322,7 +1334,7 @@ final class Metal
             }
             $this->canvasTargets[$key] = ObjC::msg('p:p', $this->device, 'newTextureWithDescriptor:', $desc) ?? throw new RuntimeException('canvas texture');
         }
-        $target = $this->canvasTargets[$key];
+        $target ??= $this->canvasTargets[$key];
         $pass = ObjC::msg('p:', ObjC::cls('MTLRenderPassDescriptor'), 'renderPassDescriptor');
         $ca = ObjC::msg('p:L', ObjC::msg('p:', $pass, 'colorAttachments'), 'objectAtIndexedSubscript:', 0);
         ObjC::msg('v:p', $ca, 'setTexture:', $target);
@@ -1364,6 +1376,10 @@ final class Metal
             $this->blurPass($cb, $target, $tmp, 1.0, 0.0, $c->blur, $this->canvasBlurPipeline);
             $this->blurPass($cb, $tmp, $target, 0.0, 1.0, $c->blur, $this->canvasBlurPipeline);
         }
+        if ($c->slot === null) {
+            return; // its own texture
+        }
+        [$u, $v, $page] = $c->slot;
         $blit = ObjC::msg('p:', $cb, 'blitCommandEncoder');
         $from = ObjC::$c->new('MTLOrigin');
         $size = ObjC::$c->new('MTLSize');

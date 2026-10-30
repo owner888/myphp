@@ -24,8 +24,10 @@ final class Code
     public readonly array $lanes;
     /** The buffer's size in bytes. */
     public readonly int $size;
-    /** @var array<int, true> the words that are bools, a byte each in the buffer */
-    public readonly array $bools;
+    /** @var list<array{0: int, 1: int, 2: string, 3: bool}> how bytes() lays the words out: runs of words side by side, from their first, how many, the zeros before them, whether they are a bool (a byte) */
+    private readonly array $runs;
+    /** The zeros after the last run. */
+    private readonly string $tail;
     /** @var array<int, mixed> Metal's pipelines of it, by the pixel format they draw to and whether they keep alpha premultiplied (a canvas's) */
     public array $pipelines = [];
 
@@ -42,22 +44,30 @@ final class Code
             }
             $word += $n;
         }
-        $this->bools = $bools;
+        // The lanes rise word by word: the words whose lanes follow each other pack together, a gap of zeros between.
+        $runs = []; $end = 0;
+        foreach ($this->lanes as $i => $at) {
+            $bool = isset($bools[$i]);
+            $last = count($runs) - 1;
+            if (!$bool && $last >= 0 && !$runs[$last][3] && $at === $end) {
+                $runs[$last][1]++;
+            } else {
+                $runs[] = [$i, 1, str_repeat("\0", $at - $end), $bool];
+            }
+            $end = $at + ($bool ? 1 : 4);
+        }
+        $this->runs = $runs;
+        $this->tail = str_repeat("\0", $this->size - $end);
     }
 
     /** $words, the uniforms' 32-bit words, as the bytes of their buffer: each at its lane, a bool's in a byte. @param list<int> $words */
     public function bytes(array $words): string
     {
-        $b = str_repeat("\0", $this->size);
-        foreach ($words as $i => $w) {
-            $at = $this->lanes[$i];
-            if (isset($this->bools[$i])) {
-                $b[$at] = $w !== 0 ? "\1" : "\0";
-            } else {
-                $b = substr_replace($b, pack('V', $w & 0xffffffff), $at, 4);
-            }
+        $b = '';
+        foreach ($this->runs as [$from, $n, $gap, $bool]) {
+            $b .= $gap . ($bool ? ($words[$from] !== 0 ? "\1" : "\0") : ($n === 1 ? pack('V', $words[$from]) : pack('V*', ...array_slice($words, $from, $n))));
         }
-        return $b;
+        return $b . $this->tail;
     }
 
     /**

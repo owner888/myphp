@@ -745,10 +745,10 @@ for ($i = 0; $i < 3; $i++) {
 same(6, count($a->messages), 'chat-glow: three questions and their replies');
 // The rows glide up to their place (followAnimation), on the clock.
 for ($i = 0; $i < 120; $i++) { $now += (int)(1e9 / 60); $t->frame(1); }
-// The list ends RING_PADDING and the field's own 6 above the field's box (8 above its line), and its rows 16 above that once they settled.
+// The list ends RING_PADDING and the field's own 6 above the field's box, and its rows 16 above that once they settled.
 $cgEnd = function () use (&$t, &$a): array {
     $r = $t->rect($t->byText($a->messages[count($a->messages) - 1]->text));
-    return [$r, $t->rect($t->byLabel('Message'))[1] - 8 - \MyPHP\Examples\ChatGlow\RING_PADDING - 6 - 12];
+    return [$r, $t->rect($t->byLabel('Message'))[1] - \MyPHP\Examples\ChatGlow\RING_PADDING - 6 - 12];
 };
 [$r, $limit] = $cgEnd();
 check($a->list->atEnd && $r[3] > 0 && $r[1] + $r[3] <= $limit, 'chat-glow: the end of the conversation in view: ' . json_encode([$r, $limit]));

@@ -268,3 +268,24 @@ foreach ([1, 3, 6, 9, 15] as $caret) {
     }
 }
 check($ok, 'the ranges keep their letters while composing, the composition plain');
+
+// A field's own padding, radius, background and border (mygo's on a TextInput): as high as its line and its padding, its text inside the padding, no border at 0.
+$st = new TextState('hi');
+$h = new Headless(function (Context $c) use ($st): void {
+    $c->column(0, 10);
+      $c->input($st, 'Task', 300)->label('Own')->padding(14, 16)->round(14)->background(0x222222);
+      $c->input(new TextState(''), 'Bare', 300)->label('Bare')->background(0, 0.0)->border(null, 0)->padding(8, 0);
+    $c->end();
+}, 400, 200);
+$list = $h->paint();
+[, $oy, , $oh] = $h->rect($h->byLabel('Own'));
+[, , , $bh] = $h->rect($h->byLabel('Bare'));
+same([16.0 + 28 + 2, 16.0 + 16], [$oh, $bh], 'a field\'s padding: its line and the padding, and the border a point each side');
+$ox = $h->rect($h->byLabel('Own'))[0];
+same([16.0 + 1, 7.0 * 2], [round(taGlyphs($list, $h->rect($h->byLabel('Own')))[0][0] - $ox, 2), round(taGlyphs($list, $h->rect($h->byLabel('Own')))[1][0] - taGlyphs($list, $h->rect($h->byLabel('Own')))[0][0], 2) * 2], 'the text after the padding and the border');
+$radii = [];
+for ($i = 0; $i < $list->n; $i++) {
+    $k = $i * 16;
+    if (abs($list->buf[$k + 1] - $oy) < 0.01 && $list->buf[$k + 3] == $oh) { $radii[] = $list->buf[$k + 8]; }
+}
+same([14.0], $radii, 'its own radius, over the border\'s');

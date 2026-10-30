@@ -5749,6 +5749,31 @@ from it), in PHP:
   wrapped and the reply grew past the list's bottom, the list was no
   longer at its end and stopped following (`Layout::layout` now aligns
   it again, from where it showed, in the arrange after the wrap).
+## Large canvases, inputs as the app styles them, cheaper shaders (v1.81)
+
+- **Canvases larger than a page** (`Canvas::loose`): a canvas is up to
+  8192 pixels a side (mygo's maxEffectLayer, what every GPU's textures
+  allow), so that blackhole's scene is the window's pixels. One larger
+  than a page of their atlas (2048) has no place there: Metal renders it
+  into a texture of its own, kept with it (`Native\Owned`, released as it
+  goes, as the textures shaders read images and canvases from now are),
+  which shaders read as it is; drawn as an image (`picture`,
+  `imageRegion`, a blur's layer), a shader of the painter's samples it
+  (`Painter::LOOSE`, a quad of kind 16), as the quads' images do, gray,
+  pixelated or tinted. Its MSL is mygo's compiler's, byte for byte.
+- **What a draw and a compile cost**: `Code::bytes` lays the uniforms'
+  words out in runs worked out once (the words whose lanes follow each
+  other packed together, `pack('V*')`), where it wrote word by word
+  (wind's 451 words: 106 → 7 µs); a draw's uniforms set from a list pack
+  their floats at once; Metal copies a draw's bytes from one buffer it
+  keeps (into a buffer of their own past setFragmentBytes's 4096). The
+  entry point (Fragment or an effect's) is found in the source, its
+  comments and literals left out, where a parse of its own found it: a
+  quarter of a compile (wind.kage ~43 → ~32 ms here, the checking the rest).
+- **Inputs styled by the app**: `input()` takes the padding, corners,
+  background, border and shadows its setters give it, as mygo's
+  TextInput, its height its text's line and its padding, so wind's
+  composer and chat-glow's field are inputs as mygo's are.
 
 
 ## Open items

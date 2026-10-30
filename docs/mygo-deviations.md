@@ -2105,3 +2105,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: myphp draws on Metal only (No CPU renderer, above); ui.Render
     and the shaping functions are the view's here; myphp's field and
     canvas as they are; macOS.
+
+## Large canvases and styled inputs (v1.81)
+
+- **Canvas's size** (the v1.03 entry's 2048)
+  - mygo: `ui.NewCanvas` of any size its renderer's textures take.
+  - myphp: at most `Canvas::MAX`, 8192 pixels a side (mygo's
+    maxEffectLayer, what every GPU's textures allow); one larger than a
+    page of the canvases' atlas (2048) renders into a texture of its own
+    and draws as an image through a shader of the painter's; far smaller
+    than its pixels it has no smaller levels, as any canvas.
+  - Why: myphp's canvases live in the image atlas's pages, which its
+    quads sample.
+- **The examples drawing with shaders** (the v1.80 entry): wind's
+  composer and chat-glow's field are `input()`s given their padding,
+  corners, background and border, as mygo's `TextInput`s; blackhole's
+  scene is the window's pixels up to `Canvas::MAX` a side, as at a lower
+  quality past it. Blackhole's caption says its shaders are written in
+  PHP, where mygo's says Go: the app, and the compiler of its shaders,
+  are PHP here.

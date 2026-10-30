@@ -699,13 +699,13 @@ final class DisplayList
 
     /**
      * A rectangle a shader fills, rounded by $radius, its draw $draw (an
-     * index of $shaders, which Painter::shaderEffect adds), in a run of its
-     * own.
+     * index of $shaders, which Painter::shaderEffect adds), at opacity
+     * $alpha, in a run of its own.
      */
-    public function shader(float $x, float $y, float $w, float $h, float $radius, int $draw): void
+    public function shader(float $x, float $y, float $w, float $h, float $radius, int $draw, float $alpha = 1.0): void
     {
         $this->shaderRuns[] = [$this->n, 1, $draw];
-        $this->quad($x, $y, $w, $h, 0xffffff, 1.0, $radius, (float)self::KIND_SHADER, (float)$draw);
+        $this->quad($x, $y, $w, $h, 0xffffff, $alpha, $radius, (float)self::KIND_SHADER, (float)$draw);
     }
 
     /**
