@@ -20,7 +20,7 @@ final class Text implements TextPainter
     /** The bytes of a glyph of a shaped line: its pen's x and y (float64s), its font's id (int64), its glyph and its UTF-16 index (uint32s). */
     private const GLYPH_BYTES = 32;
 
-    /** @var array<string, array{key: string, w: float, h: float, ascent: float, glyphs: string, quads: array<int, string>, carets: ?array<int, float>, hot?: array<int, array<int, float>>, gen: int}> glyphs: the line's shaped glyphs, packed; quads, by the shade of the text painted: x y w h u v per glyph, float32s packed (a kilobyte a line, not nine), unpacked in hot while the line is in view; carets only once a field asked */
+    /** @var array<string, array{key: string, w: float, h: float, ascent: float, n: int, glyphs: string, quads: array<string, string>, carets: ?array<int, float>, hot?: array<string, array<int, float>>, gen: int}> glyphs: the line's shaped glyphs, packed, their pens in device pixels; n: the positions within a pixel its glyphs take (CoreText::positions); quads, by the shade of the text painted and where in its pixel the line starts ("shade|phase", quads()): x y w h u v per glyph, float32s packed (a kilobyte a line, not nine), unpacked in hot while the line is in view; carets only once a field asked */
     private array $lines = [];
     /** @var array<string, array{0: int, 1: int}> bitmap offsets by glyph key, in device pixels */
     private array $offsets = [];
@@ -74,15 +74,16 @@ final class Text implements TextPainter
                 if ($alpha <= 0) {
                     continue; // clear: nothing to draw
                 }
-                $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke, $blur, $cutOut && $stroke > 0);
+                // Placed as Core Graphics places it: at the position within its pixel left of the pen, on the whole pixel at or below the baseline.
+                $pen = ($x + $g->x) * $s; $ix = floor($pen); $n = CoreText::positions($g->size * $s);
+                $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke, $blur, $cutOut && $stroke > 0, min((int)(($pen - $ix) * $n), $n - 1), $n);
                 if ($glyph === null) {
                     continue; // no ink, as a space
                 }
                 [$slot, $color, $ox, $oy, $w, $h] = $glyph;
                 if ($slot !== null) { $this->drawn[] = ['a', $glyph[6], $slot['u'], $slot['v']]; }
-                // The pen and the baseline on device pixels, so the bitmap lands on its own grid.
-                $px = round(($x + $g->x) * $s) / $s + $ox / $s;
-                $py = round(($y + $g->y) * $s) / $s - ($oy + $h) / $s;
+                $px = ($ix + $ox) / $s;
+                $py = (CoreText::baseline(($y + $g->y) * $s) - $oy - $h) / $s;
                 if ($color !== null) {
                     $this->paintColor($list, $color, $px, $py, $alpha);
                 } else {
@@ -99,7 +100,8 @@ final class Text implements TextPainter
             if ($g->object || $g->font === null) {
                 continue;
             }
-            $b = $this->ct->rasterize($g->font->id, $g->id, $scale);
+            $pen = ($x + $g->x) * $scale; $ix = floor($pen); $n = CoreText::positions($g->size * $scale);
+            $b = $this->ct->rasterize($g->font->id, $g->id, $scale, dx: min((int)(($pen - $ix) * $n), $n - 1) / $n);
             if ($b === null) {
                 continue; // no ink, as a space
             }
@@ -108,9 +110,9 @@ final class Text implements TextPainter
             if ($b['color']) { // a color glyph covers as its alpha
                 $mask = implode('', array_map(static fn(string $px): string => $px[3], str_split($mask, 4)));
             }
-            // Placed as paintLayout places it: the pen on a whole pixel, the bitmap's bottom oy pixels below the baseline.
-            $left = (int)round(($x + $g->x) * $scale) + $b['ox'];
-            $top = (int)round(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
+            // Placed as paintLayout places it: from the pixel the pen is in, the bitmap's bottom oy pixels below the baseline's pixel.
+            $left = (int)$ix + $b['ox'];
+            $top = (int)CoreText::baseline(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
             for ($r = max(0, -$top); $r < $b['h'] && $top + $r < $h; $r++) {
                 $row = ($top + $r) * $w;
                 for ($c = max(0, -$left); $c < $b['w'] && $left + $c < $w; $c++) {
@@ -292,13 +294,13 @@ final class Text implements TextPainter
      * atlas; with its offsets and size in pixels; null without ink.
      * @return ?array{0: ?array{u: int, v: int, w: int, h: int}, 1: ?Image, 2: int, 3: int, 4: int, 5: int, 6?: string} 6: the mask's key
      */
-    private function glyph(int $font, int $id, int $shade, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): ?array
+    private function glyph(int $font, int $id, int $shade, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false, int $q = 0, int $n = 1): ?array
     {
-        $base = "$font:$id";
+        $base = $q === 0 ? "$font:$id" : "$font:$id/$q"; // drawn at position $q of the $n within a pixel (CoreText::positions)
         if ($stroke > 0 || $blur > 0) { // its outline (a mask of the glyph grown by it, the glyph cut out of it or not), or it blurred: unsmoothed, of no shade
             $key = "$base:o$stroke" . ($blur > 0 ? ":b$blur" : '') . ($cutOut ? ':c' : '');
             $slot = $this->atlas->get($key);
-            $b = $slot !== null || isset($this->colorIndex[$base]) ? null : $this->ct->rasterize($font, $id, null, -1, $stroke, $blur, $cutOut);
+            $b = $slot !== null || isset($this->colorIndex[$base]) ? null : $this->ct->rasterize($font, $id, null, -1, $stroke, $blur, $cutOut, $q / $n);
             if ($b !== null) {
                 $slot = $this->place($key, $b['w'], $b['h'], $b['addr']);
                 Mem::free($b['rows']);
@@ -321,7 +323,7 @@ final class Text implements TextPainter
         $key = "$base:$shade"; // a mask for each shade of text, as font smoothing draws it
         $slot = $this->atlas->get($key);
         if ($slot === null) {
-            $b = $this->ct->rasterize($font, $id, null, $shade);
+            $b = $this->ct->rasterize($font, $id, null, $shade, dx: $q / $n);
             if ($b === null) {
                 return null;
             }
@@ -508,9 +510,9 @@ final class Text implements TextPainter
     public function paint(DisplayList $list, string $text, float $size, float $x, float $y, int $rgb, float $alpha = 1.0, int $style = 0): void
     {
         $l = $this->line($text, $size, $style);
-        $baseline = $y + $l['ascent'];
         if ($l['glyphs'] === '') { return; }
-        $q = $this->quads($l['key'], self::shadeOf($rgb));
+        [$x, $baseline, $phase] = $this->origin($x, $y + $l['ascent']);
+        $q = $this->quads($l['key'], self::shadeOf($rgb) . "|$phase");
         for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
             if ($q[$i + 4] < 0) { // a color glyph: v is its picture
                 $this->paintColor($list, $this->colors[(int)$q[$i + 5]], $x + $q[$i], $baseline + $q[$i + 1], $alpha);
@@ -523,8 +525,8 @@ final class Text implements TextPainter
     public function paintRuns(DisplayList $list, string $text, float $size, float $x, float $y, int $style, \Closure $colorAt): void
     {
         $l = $this->line($text, $size, $style);
-        $baseline = $y + $l['ascent'];
         if ($l['glyphs'] === '') { return; }
+        [$x, $baseline, $phase] = $this->origin($x, $y + $l['ascent']);
         $bytes = null; // the byte each UTF-16 index starts at, for text beyond ASCII
         if (preg_match('/[\x80-\xFF]/', $text) === 1) {
             $bytes = []; $b = 0;
@@ -532,7 +534,7 @@ final class Text implements TextPainter
             $bytes[] = $b;
         }
         $key = $l['key'];
-        $q = $this->quads($key, 0); // the glyphs are alike in every shade's quads: the indexes are read from these
+        $q = $this->quads($key, "0|$phase"); // the glyphs are alike in every shade's quads: the indexes are read from these
         $qs = [];
         $lastU = -1; $rgb = 0; $alpha = 1.0; $shown = $q;
         for ($i = 1, $n = count($q); $i <= $n; $i += 7) {
@@ -540,7 +542,7 @@ final class Text implements TextPainter
             if ($u !== $lastU) {
                 [$rgb, $alpha] = $colorAt($bytes === null ? $u : $bytes[$u]); $lastU = $u;
                 $shade = self::shadeOf($rgb);
-                $shown = $qs[$shade] ??= $shade === 0 ? $q : $this->quads($key, $shade);
+                $shown = $qs[$shade] ??= $shade === 0 ? $q : $this->quads($key, "$shade|$phase");
             }
             if ($shown[$i + 4] < 0) {
                 $this->paintColor($list, $this->colors[(int)$shown[$i + 5]], $x + $shown[$i], $baseline + $shown[$i + 1], $alpha);
@@ -551,42 +553,61 @@ final class Text implements TextPainter
     }
 
     /**
-     * The quads of line $key for text of $shade, unpacked (1-based): x, y,
-     * w, h, u, v and the UTF-16 index of each glyph, in its bitmap for the
-     * shade; packed with the line, unpacked while the line is in view.
+     * Where a line drawn from ($x, $baseline) in points goes, as Core
+     * Graphics places it: from the left of the pixel $x is in, $phase
+     * pixels left of $x, which its quads are made for, on the whole pixel
+     * at or below the baseline (CoreText::baseline). @return array{0: float, 1: float, 2: float}
+     */
+    private function origin(float $x, float $baseline): array
+    {
+        $s = $this->ct->scale;
+        $ix = floor($x * $s);
+        return [$ix / $s, CoreText::baseline($baseline * $s) / $s, $x * $s - $ix];
+    }
+
+    /**
+     * The quads of line $key for text of a shade, from the left of a pixel
+     * its start is a phase into ($v: "shade|phase", origin()), unpacked
+     * (1-based): x, y, w, h, u, v and the UTF-16 index of each glyph, in
+     * its bitmap for the shade at the position in its pixel its pen is at
+     * (CoreText::positions); packed with the line, unpacked while the line
+     * is in view.
      * @return array<int, float>
      */
-    private function quads(string $key, int $shade): array
+    private function quads(string $key, string $v): array
     {
-        $this->drawn[] = ['l', $key, $shade];
-        if (($this->lines[$key]['marked'][$shade] ?? -1) !== $this->gen && isset($this->lines[$key]['slots'][$shade])) { // its glyphs drawn from this frame: kept in the atlas (Atlas::evict)
-            foreach ($this->lines[$key]['slots'][$shade] as $k) { $this->atlas->mark($k); }
-            $this->lines[$key]['marked'][$shade] = $this->gen;
+        $this->drawn[] = ['l', $key, $v];
+        if (($this->lines[$key]['marked'][$v] ?? -1) !== $this->gen && isset($this->lines[$key]['slots'][$v])) { // its glyphs drawn from this frame: kept in the atlas (Atlas::evict)
+            foreach ($this->lines[$key]['slots'][$v] as $k) { $this->atlas->mark($k); }
+            $this->lines[$key]['marked'][$v] = $this->gen;
         }
-        if (isset($this->lines[$key]['hot'][$shade])) { return $this->lines[$key]['hot'][$shade]; }
-        $packed = $this->lines[$key]['quads'][$shade] ?? null;
+        if (isset($this->lines[$key]['hot'][$v])) { return $this->lines[$key]['hot'][$v]; }
+        $packed = $this->lines[$key]['quads'][$v] ?? null;
         if ($packed === null) {
             $s = $this->ct->scale;
+            [$shade, $phase] = explode('|', $v); $shade = (int)$shade; $phase = (float)$phase;
+            $n = $this->lines[$key]['n'];
             $packed = ''; $slots = [];
             foreach (str_split($this->lines[$key]['glyphs'], self::GLYPH_BYTES) as $g) {
                 ['x' => $px, 'y' => $py, 'font' => $font, 'id' => $id, 'index' => $index] = unpack('ex/ey/qfont/Vid/Vindex', $g);
-                $glyph = $this->glyph($font, $id, $shade);
+                $pen = $phase + $px; $ix = floor($pen); $q = min((int)(($pen - $ix) * $n), $n - 1);
+                $glyph = $this->glyph($font, $id, $shade, q: $q, n: $n);
                 if ($glyph === null) { continue; } // no ink, as a space, in every shade
                 [$slot, $color, $ox, $oy, $w, $h] = $glyph;
-                if ($color === null) { $slots["$font:$id:$shade"] = true; }
-                [$u, $v] = $color === null ? [$slot['u'], $slot['v']] : [-1, $this->colorIndex["$font:$id"]]; // a color glyph's u is -1, its v the index of its picture
-                $packed .= pack('g7', $px + $ox / $s, $py - ($oy + $h) / $s, $w / $s, $h / $s, $u, $v, $index);
+                if ($color === null) { $slots[$glyph[6]] = true; }
+                [$u, $uv] = $color === null ? [$slot['u'], $slot['v']] : [-1, $this->colorIndex[$q === 0 ? "$font:$id" : "$font:$id/$q"]]; // a color glyph's u is -1, its v the index of its picture
+                $packed .= pack('g7', ($ix + $ox) / $s, ($py - $oy - $h) / $s, $w / $s, $h / $s, $u, $uv, $index);
             }
             if (!isset($this->lines[$key])) { // the atlas started over meanwhile: the frame paints again
                 return unpack('g*', $packed) ?: [];
             }
-            $this->lines[$key]['quads'][$shade] = $packed;
-            $this->lines[$key]['made'][$shade] = ++$this->makes;
-            $this->lines[$key]['slots'][$shade] = array_keys($slots);
+            $this->lines[$key]['quads'][$v] = $packed;
+            $this->lines[$key]['made'][$v] = ++$this->makes;
+            $this->lines[$key]['slots'][$v] = array_keys($slots);
             foreach ($slots as $k => $_) { $this->users[$k][$key] = true; }
-            $this->lines[$key]['marked'][$shade] = $this->gen;
+            $this->lines[$key]['marked'][$v] = $this->gen;
         }
-        return $this->lines[$key]['hot'][$shade] = $packed === '' ? [] : unpack('g*', $packed);
+        return $this->lines[$key]['hot'][$v] = $packed === '' ? [] : unpack('g*', $packed);
     }
 
     private function line(string $text, float $size, int $style = 0): array
@@ -618,12 +639,11 @@ final class Text implements TextPainter
         $shaped = $this->ct->shape($text, $size, $style);
         $glyphs = '';
         foreach ($shaped['glyphs'] as $g) {
-            // The pen snapped to device pixels, so the bitmap lands on its own grid.
-            $glyphs .= pack('eeqVV', round($g['x'] * $s) / $s, round(-$g['y'] * $s) / $s, $g['font'], $g['glyph'], $g['index']);
+            $glyphs .= pack('eeqVV', $g['x'] * $s, round(-$g['y'] * $s), $g['font'], $g['glyph'], $g['index']); // in device pixels, the pen where it is: placed as painted (quads)
         }
         return [
             'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'min' => self::minOf($text, $shaped['carets']), 'h' => $shaped['ascent'] + $shaped['descent'],
-            'ascent' => $shaped['ascent'], 'glyphs' => $glyphs, 'quads' => [], 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
+            'ascent' => $shaped['ascent'], 'n' => CoreText::positions($size * $s), 'glyphs' => $glyphs, 'quads' => [], 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
         ];
     }
 

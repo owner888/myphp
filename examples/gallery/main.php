@@ -120,6 +120,7 @@ function glyph(string $name): SVG
         'check' => icon('<path d="M20 6 9 17l-5-5"/>'),
         'chevron' => icon('<path d="m6 9 6 6 6-6"/>'),
         'loader' => icon('<path d="M21 12a9 9 0 1 1-6.2-8.6"/>'),
+        'dots' => icon('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
         'badge' => SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
     <defs>
         <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#ec4899"/></linearGradient>
@@ -345,7 +346,8 @@ final class Gallery
     /** @var array<string, bool> the tree's folders open */
     public array $tree = ['src' => true];
     public string $leaf = '';
-    public DateTimeImmutable $birthday, $now, $meeting;
+    public DateTimeImmutable $birthday, $now, $meeting, $due;
+    public bool $dueOpen = false;
     public bool $dialog = false, $menu = false;
     /** @var list<string> */
     public array $files = [];
@@ -384,6 +386,9 @@ final class Gallery
     /** The alert, the notes deleted with an undo, the find bar, the notifications' check boxes, and the path. */
     public bool $alert = false, $finding = false;
     public int $notes = 12, $findAt = 0;
+    /** What the Overlays card's menu did last, whether the card is pinned, and its zoom. */
+    public string $cardDid = '', $cardZoom = 'Medium';
+    public bool $cardPinned = false;
     public bool $notifyMail = true, $notifyCalendar = false, $notifyMessages = false;
     public int $pathAt = 4, $pathDepth = 4;
     /** The Glass page's style, what is under its toolbar (a bar of glass, a soft or hard scroll edge, or a progressive blur), and where its lens is. */
@@ -422,6 +427,7 @@ final class Gallery
         $this->birthday = new DateTimeImmutable('1815-12-10 00:00', new \DateTimeZone('UTC'));
         $this->now = new DateTimeImmutable();
         $this->meeting = new DateTimeImmutable('2026-10-15 09:30');
+        $this->due = new DateTimeImmutable('2026-10-29 00:00');
         $this->items = [new MotionItem(1, 'Item 1'), new MotionItem(2, 'Item 2'), new MotionItem(3, 'Item 3')];
         $this->swatches = new GridState();
         $this->swatchesChosen = new Selection();
@@ -613,7 +619,7 @@ final class Gallery
         card($c, 'Choices');
           $c->checkbox('I agree to the terms', $this->agree);
           $c->row(0, 10);
-            $c->switch('Notifications', $this->notify);
+            $c->switch('', $this->notify)->label('Notifications'); // named for assistive technology, as mygo's: the text after it shows
             $c->text($this->notify ? 'Notifications on' : 'Notifications off');
           $c->end();
           $c->radioGroup(function () use ($c): void {
@@ -707,6 +713,14 @@ final class Gallery
               $c->form(function () use ($c): void {
                   $c->field('Time', fn() => $c->timeInput($this->meeting)->label('Meeting'));
                   $c->field('Tint', fn() => $c->colorWell($this->tint, $this->tintAlpha));
+                  $c->field('Due', function () use ($c): void {
+                      $chip = $c->button($this->due->format('M j'));
+                      if ($c->clicked($chip)) { $this->dueOpen = !$this->dueOpen; }
+                      // Browse pages through the months without choosing, so the popover closes only on a day picked.
+                      $c->popover($chip, $this->dueOpen, function () use ($c): void {
+                          if ($c->changed($c->calendar($this->due)->browse())) { $this->dueOpen = false; }
+                      });
+                  });
               });
               $c->text($this->meeting->format('l, F j \a\t H:i'), color: $this->tint)->alpha = $this->tintAlpha;
             $c->end();
@@ -740,7 +754,7 @@ final class Gallery
                     if ($m->item("As $as")->chosen()) { $c->toast("Exported as $as"); }
                 }
             });
-            $c->link('Open mygo on GitHub', 'https://github.com/egoist/mygo');
+            $c->link('Open mygo.dev', 'https://github.com/egoist/mygo');
           $c->end();
           $c->text('Tab moves the focus; Enter or Space presses the focused button.', color: $t->textMuted);
         $c->end();
@@ -1039,7 +1053,7 @@ final class Gallery
               [$header, $day, $m] = $items[$i];
               if ($header) {
                   $label = $day < 0 ? (new DateTimeImmutable())->modify("$day days")->format('l, F j') : 'Today';
-                  $c->row(0, 0, 0, $t->background)->justify(Node::CENTER)->paddingY(6);
+                  $c->row(0, 0)->justify(Node::CENTER)->paddingY(6);
                     $c->row(0, 0, 0, $t->surface)->padding(3, 10)->radius(999)->border(1, $t->border);
                       $c->text($label, 12, style: Font::BOLD);
                     $c->end();
@@ -1047,7 +1061,7 @@ final class Gallery
                   return;
               }
               $c->row(0, 0)->padding(3, 12);
-                $bubble = $c->row(0, 0, 0, $t->surface)->maxWidthPercent(72)->padding(7, 12)->radius(14);
+                $bubble = $c->column(0, 0, 0, $t->surface)->maxWidthPercent(72)->padding(7, 12)->radius(14);
                 if ($m->mine) { $bubble->margin(0, 0, 0, Node::AUTO)->background($t->accent)->textColor($t->accentText); }
                   $c->text($m->text);
                 $c->end();
@@ -1077,7 +1091,7 @@ final class Gallery
     {
         $t = $c->theme;
         $vivid = Oklch::rgb(0.85, 0.3, 145); $warm = Oklch::rgb(0.7, 0.3, 30);
-        $c->text('Compare the columns on a Display P3 screen: the right one shows what sRGB cannot.', 12, $t->textMuted);
+        $c->text('Compare the columns on a Display P3 screen: the right one is more vivid.', 12, $t->textMuted);
         // pair builds a sample twice, in sRGB and then in Oklch, in equal columns.
         $pair = function (Closure $sample) use ($c): void {
             $c->row(0, 12);
@@ -1546,6 +1560,27 @@ final class Gallery
                     $c->end();
                 }
             });
+            // A menu drawn in the window, with the theme's look, rather than the system's: on a right-click, and below the card's ⋯ button.
+            $cardMenu = function (Menu $m): void {
+                if ($m->item('Duplicate')->shortcut(Key::COMMAND, Key::D)->chosen()) { $this->cardDid = 'Duplicated'; }
+                if ($m->item('Pinned')->checked($this->cardPinned)->chosen()) { $this->cardPinned = !$this->cardPinned; }
+                $m->submenu('Zoom', function (Menu $m): void {
+                    foreach (['Small', 'Medium', 'Large'] as $z) {
+                        if ($m->item($z)->radio($this->cardZoom === $z)->chosen()) { $this->cardZoom = $z; }
+                    }
+                });
+                $m->separator();
+                if ($m->item('Delete')->disabled($this->cardPinned)->chosen()) { $this->cardDid = 'Deleted'; }
+            };
+            $card = $c->row(0, 4)->alignItems(Node::CENTER)->padding(2, 2, 2, 12)->radius($t->radius)->border(1, $t->border)->focusable()->label('Card');
+            $card->popoverMenu($cardMenu);
+              $c->text($this->cardDid !== '' ? $this->cardDid : 'Right-click me');
+              $more = $c->buttonBase()->label('More')->padding(4)->radius($t->radius);
+              if ($c->hovered($more)) { $more->background($t->surfaceHover); }
+                $c->icon(glyph('dots'));
+              $c->end();
+              $more->popoverMenuButton($cardMenu);
+            $c->end();
             $c->button('Hover me')->tooltip('Tooltips show after the pointer rests a moment.');
             if ($c->clicked($c->button('Alert'))) { $this->alert = true; }
             if ($c->clicked($c->button('Delete a note'))) {
@@ -1785,7 +1820,7 @@ final class Gallery
         $doc = $this->note ??= new Document(sampleNote());
         $f = $doc->formatting();
         $button = function (string $label, bool $on, Closure $run) use ($c, $t): void {
-            $b = $c->button($label)->keepFocus();
+            $b = $c->button($label)->keepFocus()->padding(4, 9)->minWidth(30);
             if ($on) { $b->background($t->accent, 0.18); }
             if ($c->clicked($b)) { $run(); }
         };
@@ -1849,7 +1884,7 @@ final class Gallery
           }
           $weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
           $c->text(sprintf('Shows %s, %s; formats of %s: weeks start on %s, %d hours.',
-              $locale ?: 'en', I18n::direction($locale)->name, $region->locale ?: 'the language', $weekdays[$region->firstWeekday % 7], $region->hourCycle), 13, $t->textMuted);
+              $locale ?: 'en', I18n::direction($locale)->value, $region->locale ?: 'the language', $weekdays[$region->firstWeekday % 7], $region->hourCycle), 13, $t->textMuted);
         $c->end();
         card($c, 'Numbers and dates');
           $now = $this->now;

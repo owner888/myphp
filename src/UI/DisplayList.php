@@ -65,6 +65,13 @@ final class DisplayList
     public int $n = 0;
     /** The zoom of the content it draws (Context::setZoom, mygo's scene Zoom): its points are this many of the view's, drawn at its scale times it. Set by the window. */
     public float $zoom = 1.0;
+    /**
+     * The device pixels a point of the view takes, set by the window: fills,
+     * borders, shadows, clips and images then have their edges rounded to
+     * whole pixels, so that they stay crisp (mygo's Painter.snap); 0 leaves
+     * them where they are (a canvas, the headless tests).
+     */
+    public float $pixels = 0.0;
     /** @internal painting skips the nodes whose ink (Node::$ink) is clipped out: set by the window around its frame's painting, where the nodes are where Runtime::record found them, in the window's points */
     public bool $cull = false;
     /** @var list<array{0: int, 1: float}> the glass quads: index, blur sigma in pixels */
@@ -301,6 +308,7 @@ final class DisplayList
     public function reset(): void
     {
         $this->n = 0;
+        $this->pixels = 0.0; // until the window drawing it says
         $this->glass = [];
         $this->holes = [];
         $this->shaders = []; $this->shaderRuns = [];
@@ -318,12 +326,21 @@ final class DisplayList
     public function pushClip(float $x, float $y, float $w, float $h): void
     {
         $this->clips[] = $c = $this->clip;
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); }
         if ($this->world->set) {
             [$x, $y, $w, $h] = $this->world->bounds($x, $y, $w, $h); // as mygo's, the bounds of the clip as it shows
         }
         $x0 = max($c[0], $x); $y0 = max($c[1], $y);
         $x1 = min($c[0] + $c[2], $x + $w); $y1 = min($c[1] + $c[3], $y + $h);
         $this->clip = [$x0, $y0, max(0, $x1 - $x0), max(0, $y1 - $y0)];
+    }
+
+    /** ($x, $y, $w, $h) with its edges on whole device pixels (pixels). @return array{0: float, 1: float, 2: float, 3: float} */
+    private function snap(float $x, float $y, float $w, float $h): array
+    {
+        $s = $this->pixels * $this->zoom;
+        $x0 = round($x * $s); $y0 = round($y * $s);
+        return [$x0 / $s, $y0 / $s, (round(($x + $w) * $s) - $x0) / $s, (round(($y + $h) * $s) - $y0) / $s];
     }
 
     public function popClip(): void
@@ -368,6 +385,7 @@ final class DisplayList
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} rects)");
         }
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); }
         if ($radius * 2 > $w || $radius * 2 > $h) { $radius = max(0.0, min($w, $h) / 2); } // a capsule's ends round at most, as CSS's radii do: past half a side the shader's corners point
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
@@ -483,6 +501,7 @@ final class DisplayList
      */
     public function glass(float $x, float $y, float $w, float $h, float $radius, int $style, int $tint, float $tintAlpha, float $sigma, array $tone = self::GLASS_TONE): void
     {
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); }
         $this->glass[] = [$this->n, $sigma];
         $this->quad($x, $y, $w, $h, $tint, $tintAlpha, min($radius, $w / 2, $h / 2), 5.0, (float)$style, 0.0, 2); // a capsule's ends round at most, as rect()'s
         $this->slot([$tone[0], $tone[1], $tone[2], 0.0], [$tone[3], $tone[4], 0.0, 0.0], 0.0, 0.0, 0.0, [0.0, 0.0, 0.0, 0.0]);
@@ -491,12 +510,14 @@ final class DisplayList
     /** A vertical gradient of $rgb from $alphaTop to $alphaBottom. */
     public function gradient(float $x, float $y, float $w, float $h, int $rgb, float $alphaTop, float $alphaBottom, float $radius = 0.0): void
     {
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); }
         $this->quad($x, $y, $w, $h, $rgb, $alphaTop, min($radius, $w / 2, $h / 2), 6.0, $alphaBottom);
     }
 
     /** A gradient from $from at $fromAlpha to $to at $toAlpha, across the quad, or down it when $vertical. */
     public function gradient2(float $x, float $y, float $w, float $h, int $from, float $fromAlpha, int $to, float $toAlpha, bool $vertical = false, float $radius = 0.0): void
     {
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); }
         $this->quad($x, $y, $w, $h, $from, $fromAlpha, $radius, $vertical ? 11.0 : 10.0, (float)($to & 0xffffff), $toAlpha);
     }
 
@@ -531,12 +552,18 @@ final class DisplayList
     /** A soft shadow of a rounded rect, offset by (dx, dy), its edge feathered over $blur points each way. */
     public function shadow(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $blur, float $dx = 0, float $dy = 0): void
     {
+        if ($this->pixels > 0) { [$x, $y, $w, $h] = $this->snap($x + $dx, $y + $dy, $w, $h); $dx = $dy = 0.0; }
         $this->quad($x + $dx - $blur, $y + $dy - $blur, $w + 2 * $blur, $h + 2 * $blur, $rgb, $alpha, $radius, 3.0, $blur);
     }
 
     /** A ring: the rounded rect's outline, $thickness points wide inside its edge. */
     public function ring(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $thickness): void
     {
+        if ($this->pixels > 0) {
+            [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h);
+            $s = $this->pixels * $this->zoom;
+            if ($thickness > 0) { $thickness = max(round($thickness * $s), 1.0) / $s; } // whole pixels, as a border's
+        }
         $r = min($radius, $w / 2, $h / 2);
         $this->quad($x, $y, $w, $h, $rgb, $alpha, $r, 4.0, $thickness);
         if ($r > 0 && $thickness > 0) { // in bands that follow its round corners, inside and out (Bands)
@@ -620,6 +647,11 @@ final class DisplayList
     public function box(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, array $borders = [0.0, 0.0, 0.0, 0.0], int $borderRgb = 0, float $borderAlpha = 0.0, bool $dashed = false,
                         int $paint = self::PAINT_COLOR, int $rgb2 = 0, float $alpha2 = 0.0, array $g = [0.0, 0.0, 0.0, 0.0], array $stops = [], bool $borderPaint = false): void
     {
+        if ($this->pixels > 0) {
+            [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h);
+            $s = $this->pixels * $this->zoom;
+            foreach ($borders as $i => $bw) { if ($bw > 0) { $borders[$i] = max(round($bw * $s), 1.0) / $s; } } // whole pixels, one at least (mygo's borders)
+        }
         $n = $paint >= self::PAINT_LINEAR_STOPS ? min(count($stops), self::MAX_STOPS) : 0;
         if ($n > 0) { // u: how many stops follow the slot
             $this->quad($x, $y, $w, $h, $rgb, $alpha, 0.0, 14.0, (float)$n, 0.0, 2 + $n);
@@ -681,6 +713,10 @@ final class DisplayList
      */
     public function boxShadow(float $x, float $y, float $w, float $h, array $radii, int $rgb, float $alpha, float $sigma, bool $inset, array $cut, array $cutRadii): void
     {
+        if ($this->pixels > 0) {
+            [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h);
+            if ($cut[2] > 0 && $cut[3] > 0) { $cut = $this->snap(...$cut); }
+        }
         $e = $inset ? 0.0 : 3 * $sigma; // the quad takes in the blur
         $this->quad($x - $e, $y - $e, $w + 2 * $e, $h + 2 * $e, $rgb, $alpha, 0.0, 15.0, $sigma, $inset ? 1.0 : 0.0, 2);
         $c = $cut[2] > 0 && $cut[3] > 0 ? self::fitRadii($cut[2], $cut[3], $cutRadii) : [0.0, 0.0, 0.0, 0.0];
@@ -750,6 +786,7 @@ final class DisplayList
     /** The part of an image atlas slot at (u, v), sw × sh pixels on $page (negative to mirror it), drawn into the rect, rounded by $radius at $alpha, or tinted: its colors multiplied by $tint (0xRRGGBB, not rounded); $gray in shades of gray (kind 12 instead of 2), else $pixelated sampled at the nearest pixel (kind 13). */
     public function image(float $x, float $y, float $w, float $h, int $u, int $v, int $sw, int $sh, int $page, float $alpha = 1.0, float $radius = 0.0, bool $gray = false, bool $pixelated = false, ?int $tint = null): void
     {
+        if ($this->pixels > 0 && $this->xk == 0.0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); } // where a transform places it, not snapped: a part moving through a zoom would move in steps (mygo's)
         if ($tint !== null) {
             $radius = -1.0 - ($tint & 0xffffff); // a tinted image is not rounded: its radius carries the tint, as -1 - rgb, exact in a float32
         }

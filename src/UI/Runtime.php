@@ -327,9 +327,8 @@ final class Runtime
     /** What was typed this frame at a focused control that is no field. */
     private string $typed = '';
     private float $typedAt = 0.0;
-    /** Text drawn in a field starts this far from its left edge. */
-    /** A field's padding, mygo's Padding(Space(1.5), Space(2.5)): FIELD_INSET at the sides, FIELD_INSET_Y above and below the text of an area. */
-    public const FIELD_INSET = 10.0, FIELD_INSET_Y = 6.0;
+    /** Where a field's text starts from its edge: its border, a point, and mygo's Padding(Space(1.5), Space(2.5)) inside it (a border takes room, as mygo's): FIELD_INSET at the sides, FIELD_INSET_Y above and below the text of an area. */
+    public const FIELD_INSET = 11.0, FIELD_INSET_Y = 7.0;
 
     public function __construct(public Input $input, private ?TextMetrics $metrics = null)
     {

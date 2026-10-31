@@ -122,6 +122,7 @@ final class Metal
         float k = (tone.y - tone.x) * tone.w;
         return clamp(t + (c - l) * k, 0.0, 1.0);
     }
+    float cover(float d, float scale) { return saturate(0.5 - d * scale); }   // coverage of a pixel whose center is d points inside (negative) or outside an edge, as mygo's shader: in pixels
     float4 glass(V v, constant Uniforms& u, texture2d<float> backdrop, const device Inst* in) {   // the slot after: the bezel's width in points, the rim's light, what black maps to in light mode, then black and white in dark mode (DisplayList::glass)
         constexpr sampler s(filter::linear, address::clamp_to_edge);
         float2 p = v.pos.xy;
@@ -147,7 +148,7 @@ final class Metal
             float l = abs(n.y);
             c += (l - c) * a;
         }
-        return float4(c, 1.0 - smoothstep(-0.5, 0.5, sd));
+        return float4(c, cover(sd, u.scale));
     }
     // Boxes (14) and box shadows (15), as mygo's shader paints its fills and shadows: p from the box's top left, in points; coverage in pixels.
     float sdBox(float2 p, float2 size, float4 radii) {   // radii: top left, top right, bottom right, bottom left
@@ -157,7 +158,6 @@ final class Metal
         float2 a = abs(q) - h + r;
         return length(max(a, float2(0.0))) + min(max(a.x, a.y), 0.0) - r;
     }
-    float cover(float d, float scale) { return saturate(0.5 - d * scale); }
     float4 fitRadii(float2 size, float4 r) {   // as CSS, scaled down together where two of a side's overlap
         float f = 1.0;
         if (r.x + r.y > size.x) { f = min(f, size.x / (r.x + r.y)); }
@@ -387,7 +387,7 @@ final class Metal
             float4 c = mix(v.color, to, clamp(t, 0.0, 1.0));
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            return float4(c.rgb, c.a * (1.0 - smoothstep(-0.5, 0.5, d)));
+            return float4(c.rgb, c.a * cover(d, u.scale));
         }
         if (v.kind > 8.5) {   // a line: a capsule from one corner of the rect, inset by its radius (half the thickness), to the opposite corner; uv = the signs of its direction
             float2 h = v.extent - v.radius;
@@ -395,7 +395,7 @@ final class Metal
             float2 pa = v.local - a, ba = -2.0 * a;
             float t = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-4), 0.0, 1.0);
             float d = length(pa - ba * t) - v.radius;
-            return float4(v.color.rgb, v.color.a * (1.0 - smoothstep(-0.5, 0.5, d)));
+            return float4(v.color.rgb, v.color.a * cover(d, u.scale));
         }
         if (v.kind > 6.5) {   // a level of a backdrop blur (7), shown along its mask by w; macOS's hard scroll edge (8), toned under the color by its alpha
             constexpr sampler bs(filter::linear, address::clamp_to_edge);
@@ -412,19 +412,19 @@ final class Metal
             }
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            return float4(c, w * (1.0 - smoothstep(-0.5, 0.5, d)));
+            return float4(c, w * cover(d, u.scale));
         }
         if (v.kind > 5.5) {   // a vertical alpha gradient of the color
             float ty = (v.local.y + v.extent.y) / max(v.rect.w / u.scale, 1.0);
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * (1.0 - smoothstep(-0.5, 0.5, d)));
+            return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * cover(d, u.scale));
         }
         if (v.kind > 4.5) { return glass(v, u, backdrop, in); }
         if (v.kind > 3.5) {   // a ring: the band between the rect's edge and thickness inside it
             float2 q = abs(v.local) - (v.extent - v.radius);
             float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            float a = (1.0 - smoothstep(-0.5, 0.5, d)) * smoothstep(-0.5, 0.5, d + v.uv.x);
+            float a = cover(d, u.scale) * (1.0 - cover(d + v.uv.x, u.scale));
             return float4(v.color.rgb, v.color.a * a);
         }
         if (v.kind > 2.5) {   // a shadow: the rect inset by the blur, its edge feathered over the blur
@@ -439,7 +439,7 @@ final class Metal
         }
         float2 q = abs(v.local) - (v.extent - v.radius);
         float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-        float a = 1.0 - smoothstep(-0.5, 0.5, d);
+        float a = cover(d, u.scale);
         return float4(v.color.rgb, v.color.a * a);
     }
 
@@ -774,6 +774,13 @@ final class Metal
      * display took them: the next drawable kept a frame waiting a refresh
      * or two, and scrolling showed 40 to 58 frames a second.
      */
+    /** Whether some of $view's window shows on screen (its occlusion state); a view in no window counts as showing. */
+    private static function visible($view): bool
+    {
+        $win = ObjC::msg('p:', $view, 'window');
+        return $win === null || (ObjC::msg('L:', $win, 'occlusionState') & 2) !== 0; // NSWindowOcclusionStateVisible
+    }
+
     public static function requestFrame($view, int $every = 1, bool $repaint = false): void
     {
         $key = ObjC::addr($view);
@@ -797,9 +804,10 @@ final class Metal
         if ($p['link'] !== null) {
             if ($p['running']) {
                 $p['due'] = true;
-            } elseif (microtime(true) - $p['last'] > 2 * $refresh) {
+            } elseif (microtime(true) - $p['last'] > 2 * $refresh && ($p['last'] == 0.0 || self::visible($view))) {
                 self::drawLater($view, 0.0); // the first frame too, which a window waits for before it shows (readyToShow): a link of a window not on screen yet never ticks; the window holds the frames of one out of sight (Window::showing)
-            } else {
+            } else { // frames that follow each other, at the display's refreshes; or a window out of sight, whose frame waits for the link, which ticks once some of it shows (mygo's RequestFrame): what an app changes meanwhile draws then
+
                 $p['due'] = $p['running'] = true;
                 ObjC::msg('v:b', $p['link'], 'setPaused:', false);
             }

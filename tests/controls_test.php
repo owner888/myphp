@@ -47,7 +47,7 @@ $h = new Headless(function (Context $c) use (&$date, &$time, &$n, &$ev) {
       $c->row(0, 10); $n['cal'] = $c->calendar($date); if ($c->changed($n['cal'])) { $ev[] = 'cal ' . $date->format('Y-m-d'); } $c->end();
     $c->end();
 }, 600, 500);
-$h->frame(); same('10/16/2026', $n['d']->kids[0]->text, 'the date in en-US'); same('October 2026', $n['cal']->kids[0]->kids[1]->kids[0]->text, 'the calendar title');
+$h->frame(); same('10/16/2026', $n['d']->kids[0]->plainText(), 'the date in en-US'); same('October 2026', $n['cal']->kids[0]->kids[1]->kids[0]->text, 'the calendar title');
 $h->clickOn($n['d']); $grid = end($h->root->kids)->kids[0]; same($grid->id, $h->rt->focus, 'the calendar opens with the focus');
 $h->right(); $h->pageDown(); $h->enter(); same('2026-11-17 09:30', $date->format('Y-m-d H:i'), 'Right, Page Down, Enter: a month and a day on, the time kept'); same($n['d']->id, $h->rt->focus, 'the focus returns to the button');
 $cell = $n['cal']->kids[3]->kids[2]; $h->clickOn($cell); same('2026-11-10 09:30', $date->format('Y-m-d H:i'), 'a click in the calendar chooses that day');
@@ -98,10 +98,10 @@ same('Required', $n['f2']->kids[1]->kids[1]->text, 'the error below the control'
 $h->clickOn($n['f1']->kids[0]->kids[0]); same($n['f1']->kids[1]->kids[0]->id, $h->rt->focus, 'a click on the label focuses the input');
 $h->clickOn($n['f2']->kids[0]->kids[0]); check($agree, 'a click on a check box label checks it');
 $open = true; $h->frame(); $bar = $n['bar']; $in = $bar->kids[0]->kids[1];
-same($in->id, $h->rt->focus, 'the find bar takes the focus as it opens'); same([0, 3], $q->selection(), 'with the query selected'); same('1 of 3', $bar->kids[1]->kids[0]->text, 'the count');
+same($in->id, $h->rt->focus, 'the find bar takes the focus as it opens'); same([0, 3], $q->selection(), 'with the query selected'); same('1 of 3', $bar->kids[1]->kids[0]->plainText(), 'the count');
 $h->enter(); same(1, $cur, 'Enter steps forward'); $h->enter(Key::SHIFT); same(0, $cur, 'Shift+Enter back'); $h->enter(Key::SHIFT); same(2, $cur, 'round the end');
 $h->shortcut('g', Key::COMMAND); same(0, $cur, 'Cmd+G forward');
-$h->key(Key::END, 'moveToEndOfLine:'); $h->type('x'); same('1 of 4', $n['bar']->kids[1]->kids[0]->text, 'typing changes the count'); $h->escape(); check(!$open, 'Escape closes the bar');
+$h->key(Key::END, 'moveToEndOfLine:'); $h->type('x'); same('1 of 4', $n['bar']->kids[1]->kids[0]->plainText(), 'typing changes the count'); $h->escape(); check(!$open, 'Escape closes the bar');
 $open = true; $h->frame(); same([0, 4], $q->selection(), 'opened again, the query is selected again');
 
 // Checkbox group, breadcrumbs, alert.
@@ -118,7 +118,7 @@ $h->frame(); $head = $n['g']->kids[0]; check(!$head->on && $head->mixed, 'some c
 $h->clickOn($head); check($mail && $cal, 'its click checks all'); check($n['g']->kids[0]->on, 'and it is on'); $h->clickOn($head); check(!$mail && !$cal, 'again clears all');
 $h->clickOn($n['g']->kids[1]->kids[1]->kids[0]); check($n['g']->kids[0]->mixed, 'one checked: mixed again');
 $crumbs = array_map(fn(int $i) => $h->rect($n['bc']->kids[$i])[2], [0, 4, 8]); // shrunk alike by their widths less their padding (CSS flexbox §9.7), none below its least
-check(abs((96 - $crumbs[0]) / 84 - (33 - $crumbs[1]) / 21) < 1e-6 && abs((222 - $crumbs[2]) / 210 - (33 - $crumbs[1]) / 21) < 1e-6 && $crumbs[1] >= 24, 'the crumbs shrink alike: ' . json_encode($crumbs)); $h->clickOn($n['bc']->kids[2]); same(1, $chosen, 'a crumb clicked'); $h->clickOn($n['bc']->kids[8]); same(1, $chosen, 'the last is no link');
+check(abs((96 - $crumbs[0]) / 84 - (33 - $crumbs[1]) / 21) < 1e-6 && abs((207 - $crumbs[2]) / 195 - (33 - $crumbs[1]) / 21) < 1e-6 && $crumbs[1] >= 24, 'the crumbs shrink alike: ' . json_encode($crumbs)); $h->clickOn($n['bc']->kids[2]); same(1, $chosen, 'a crumb clicked'); $h->clickOn($n['bc']->kids[8]); same(1, $chosen, 'the last is no link');
 $h->clickOn($n['open']); check($asking, 'the alert opens'); same('B(Delete)', Headless::label($h->focused()), 'with its default focused'); $h->enter(); same('alert 1', end($ev), 'Enter chooses it');
 $h->clickOn($n['open']); $h->click(5, 5); check($asking, 'a click outside does nothing'); $h->escape(); same('alert -2', end($ev), 'Escape dismisses');
 
@@ -205,7 +205,7 @@ $h->frame(); same([13.0, 13.0], [$n['i']->w, $n['i']->h], 'an icon is as high as
 $list = $h->paint(); $quads = []; for ($q = 0; $q < $list->n; $q++) { $quads[] = [$list->buf[$q * 16], $list->buf[$q * 16 + 2], $list->buf[$q * 16 + 7], $list->buf[$q * 16 + 8]]; }
 $icon = array_values(array_filter($quads, fn($q) => $q[3] === 0.0 && $q[0] >= 0 && $q[0] < 13)); // glyph quads (kind 0) within the icon
 check($icon !== [] && $icon[0][2] === 1.0, 'the icon paints its paths in full (not the box\'s alpha)');
-same(['AL', 29.25, 14.625], [$n['a']->kids[0]->text, $n['a']->w, $n['a']->radius], 'an avatar: the initials, 2.25 × fontSize, round');
+same(['AL', 29.25, 14.625], [$n['a']->kids[0]->plainText(), $n['a']->w, $n['a']->radius], 'an avatar: the initials, 2.25 × fontSize, round');
 $art = SVG::parse('<svg viewBox="0 0 20 10"><rect width="20" height="10" fill="red"/></svg>');
 $h = new Headless(function (Context $c) use (&$n, $art, $search) { $c->row(0, 8); $n['p'] = $c->image($art); $n['h'] = $c->image($art, 0, 5); $n['r'] = $c->icon($search)->rotate(45); $c->end(); }, 300, 100);
 $h->frame(); same([20.0, 10.0, 10.0, 5.0, $art, 45.0], [$n['p']->w, $n['p']->h, $n['h']->w, $n['h']->h, $n['h']->svg, $n['r']->rotation], 'an SVG as an image: its own size, or scaled to a height; an icon turned');
@@ -233,8 +233,8 @@ check($img->smaller(4) === $img->smaller(5.9) && $img->smaller(4) !== $half, 'fo
 // A text area that grows with its lines (mygo's Lines); a read-only field keeps its text and takes no caret.
 $draft = new TextState; $log = new TextState("kept\nas is"); $log->readOnly = true; $n = [];
 $h = new Headless(function (Context $c) use (&$n, $draft, $log) { $c->column(0, 8); $n['d'] = $c->textarea($draft, '', 200, 0, null, 1, 3); $n['l'] = $c->textarea($log, '', 200, 60); $c->end(); }, 400, 300);
-$h->frame(); same(16.0 + 12, $n['d']->h, 'one line: a line plus the insets');
-$draft->insert("a\nb\nc\nd\ne"); $h->frame(); same(16.0 * 3 + 12, $n['d']->h, 'five lines: three at most, then it scrolls');
+$h->frame(); same(16.0 + 14, $n['d']->h, 'one line: a line plus the insets, the border inside them');
+$draft->insert("a\nb\nc\nd\ne"); $h->frame(); same(16.0 * 3 + 14, $n['d']->h, 'five lines: three at most, then it scrolls');
 $h->clickOn($n['l']); $h->type('x'); $h->key(Key::DELETE, 'deleteBackward:'); same("kept\nas is", $log->text, 'read-only: typing and deleting change nothing');
 $h->key(0, 'selectAll:', Key::COMMAND, 'a'); same("kept\nas is", $log->selectedText(), 'but the text is selected');
 $list = $h->paint(); $carets = 0; for ($q = 0; $q < $list->n; $q++) { if ($list->buf[$q * 16 + 2] === 1.0 && $list->buf[$q * 16 + 3] === 16.0) { $carets++; } }
@@ -254,4 +254,4 @@ for ($q = 0; $q < $list->n; $q++) {
     $o = $q * 16;
     if (abs($list->buf[$o] - $bx) < 0.01 && abs($list->buf[$o + 1] - $by) < 0.01 && abs($list->buf[$o + 2] - $bw) < 0.01) { $kinds[] = [(int)$list->buf[$o + 9], round($list->buf[$o + 7], 2)]; }
 }
-same([[0, 0.5], [4, 0.5]], $kinds, 'the face, then its ring, both dimmed');
+same([[14, 0.5]], $kinds, 'the face inside its border, one box, dimmed');

@@ -6878,6 +6878,41 @@ succeeds are told of, an empty line is none.
   The Markdown page's six reveal units stay wider than the page there,
   and scroll with it.
 
+## The gallery against mygo's, pixel by pixel (v1.132)
+
+- The gallery and mygo's, built as apps side by side on the Mac, their
+  windows captured and compared pixel by pixel, page by page. What did
+  not match, and why:
+- Text: a glyph goes where Core Graphics puts it, at one of up to five
+  positions within a pixel left of its pen (`CoreText::positions`, the
+  bitmaps rasterized at that offset and cached by it, a line's quads by
+  where in its pixel it starts), on the whole pixel at or below its
+  baseline (`CoreText::baseline`); the pens were rounded to whole pixels
+  and the baselines to the nearest, half a pixel up and a little right,
+  and a line's quads landed between pixels, sampled soft. Weights 500
+  and 600 are those weights (a text with a weight of its own lays out in
+  the text system, in the size it was given, `Node::textLayout`), not
+  bold; `Font::MONO` is the system's monospaced font, SF Mono, not the
+  user's fixed-pitch one, Menlo; tabular digits where mygo asks for them
+  (calendar, date and time inputs, the find bar's count); a cut line
+  keeps the characters that fit whole, the spaces before its ellipsis
+  left out; a line that reads right to left starts at the right of its
+  box; text wrapped at the width it was given is as wide as that.
+- Fills: their edges on whole device pixels (`DisplayList::$pixels`, the
+  window's backing scale), borders and rings whole pixels wide, one at
+  least, as mygo's `snap` and `borders`; the shader's coverage over a
+  pixel, not a point (`cover`), as mygo's: edges were two pixels soft.
+- Controls: a field's text and a search field's glass inside its border
+  (`Runtime::FIELD_INSET` 11, `FIELD_INSET_Y` 7: the border takes room);
+  absolute children placed in the padding box, inside the border
+  `border()` draws; an automatic margin takes what the node's largest
+  leaves (a chat's bubble at 72%). The stepper, the rating's stars, the
+  range slider's ticks, the segmented track, the color well, a check
+  box's border and a bordered face with an alpha of its own are mygo's.
+- A window out of sight draws nothing: its frames wait for the display
+  link, which ticks once some of it shows (`Metal::requestFrame`, mygo's
+  `RequestFrame`), as mygo's live chart stops while covered.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

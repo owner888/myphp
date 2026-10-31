@@ -355,3 +355,17 @@ $h->frame();
 $s->y = 200;
 $h->frame();
 same([200.0, true], [$s->y, $s->maxY > 400], 'scrolled over the wrapped rows: ' . $s->maxY);
+
+// An automatic margin takes what the node's largest leaves, not what it measured: a chat's bubble of its own at the end, at most 72% of the row.
+$bubble = null;
+$h = new Headless(function (Context $c) use (&$bubble) {
+    $c->column(0, 0)->size(400, 0);
+      $c->row(0, 0);
+        $bubble = $c->row(0, 0)->maxWidthPercent(72)->margin(0, 0, 0, Node::AUTO);
+          $c->text(str_repeat('word ', 60));
+        $c->end();
+      $c->end();
+    $c->end();
+}, 400, 400);
+$h->frame(3);
+same([112.0, 288.0], [$h->rect($bubble)[0], $h->rect($bubble)[2]], 'at the end, 72% of the row, its text wrapped in it');

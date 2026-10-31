@@ -994,8 +994,12 @@ final class Painter
         if ($n->material !== null) {
             $n->material->paintMaterial(new self($list, $text, $t, $rt), $box, $n->radius);
         } elseif ($n->bordered && $n->color !== null) { // a bordered face: a plain button, a select, a field's box; its ring over the face, which shows through neither when it is dimmed (a disabled button's border stays a ring, as mygo's)
-            $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, 1.0, $radius);
-            if ($n->borderGradient === null) { $list->ring($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? $t->border, 1.0, $radius, $n->borderWidth); }
+            if ($n->borderGradient === null) { // the face inside its border, as one fill (mygo's): a face of its own alpha (background()) under none of it
+                $bw = $n->borderWidth;
+                $list->box($n->x, $n->y, $n->w, $n->h, [$radius, $radius, $radius, $radius], $n->color, $n->bgAlpha, [$bw, $bw, $bw, $bw], $n->borderColor ?? $t->border, 1.0);
+            } else {
+                $list->rect($n->x, $n->y, $n->w, $n->h, $n->color, $n->bgAlpha, $radius);
+            }
         } elseif ($n->gradient !== null) {
             [$paint, $c1, $a1, $c2, $a2, $line, $stops] = self::gradientPaint($n->gradient, $n->w, $n->h, $n->alpha);
             $list->box($n->x, $n->y, $n->w, $n->h, $radii, $c1, $a1, paint: $paint, rgb2: $c2, alpha2: $a2, g: $line, stops: $stops);
@@ -1068,12 +1072,19 @@ final class Painter
                 [$tw] = $text->measure($shown, $n->fontSize, $n->style);
                 if ($tw > $room + 0.5) { // cut to the room, ending in an ellipsis
                     [$ew] = $text->measure('…', $n->fontSize, $n->style);
-                    $shown = substr($shown, 0, $text->indexForX($shown, $n->fontSize, max(0.0, $room - $ew))) . '…';
+                    // As many characters as fit whole with it, the spaces before it left out (mygo's ellipsize).
+                    $fit = max(0.0, $room - $ew);
+                    $cut = $text->indexForX($shown, $n->fontSize, $fit, $n->style);
+                    while ($cut > 0 && $text->xForIndex($shown, $n->fontSize, $cut, $n->style) > $fit + 1e-6) {
+                        do { $cut--; } while ($cut > 0 && (ord($shown[$cut]) & 0xC0) === 0x80);
+                    }
+                    $shown = rtrim(substr($shown, 0, $cut)) . '…';
                 }
             }
-            if ($n->kind === Node::TEXT && $n->rtl && !in_array($n->textStyle()->align ?? Node::START, [Node::CENTER, Node::END], true)) {
+            if ($n->kind === Node::TEXT && !in_array($n->textStyle()->align ?? Node::START, [Node::CENTER, Node::END], true)
+                && ($n->rtl || (preg_match('/[\x80-\xFF]/', $shown) === 1 && \MyPHP\Text\System::isRTL(array_map(mb_ord(...), mb_str_split($shown, 1, 'UTF-8')), false)))) {
                 [$tw] = $text->measure($shown, $n->fontSize, $n->style);
-                $x += max(0.0, $room - $tw); // right to left, a line starts at the right of its box
+                $x += max(0.0, $room - $tw); // right to left, a line starts at the right of its box; so does one that reads right to left (Arabic, Hebrew), as its paragraph's start (mygo's)
             }
             if ($n->content === null || $rt === null || $n->kind !== Node::TEXT || !self::contentText($n, $list, $text, $shown, $x, $y, $rt)) {
                 $text->paint($list, $shown, $n->fontSize, $x, $y, $n->fg, $n->alpha, $n->style);
@@ -1438,8 +1449,7 @@ final class Painter
                 $list->line($x + $box * 0.42, $y + $box * 0.71, $x + $box * 0.78, $y + $box * 0.31, $t->accentText, 1.0, $w);
             }
         } else {
-            $list->rect($x, $y, $box, $box, $hovered ? $t->accent : Theme::mix($t->border, $t->text, 0.25), 1.0, $radius);
-            $list->rect($x + 1, $y + 1, $box - 2, $box - 2, $t->background, 1.0, $radius - 1);
+            $list->box($x, $y, $box, $box, [$radius, $radius, $radius, $radius], $t->background, 1.0, [1.0, 1.0, 1.0, 1.0], $hovered ? $t->accent : Theme::mix($t->border, $t->text, 0.25), 1.0); // the background inside a border a point wide (mygo's Background and Border)
         }
         if ($n->focusVisible) {
             self::paintFocusRing($list, $x, $y, $box, $box, $radius, $t);

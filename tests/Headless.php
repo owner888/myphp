@@ -460,7 +460,8 @@ final class Headless
     {
         if ($n === null) { return 'none'; }
         $k = ['C', 'T', 'B', 'X', 'I', 'A', 'M', 'R', 'CB', 'RD', 'SL', 'SE', 'P', 'SW', 'SP'][$n->kind] ?? (string)$n->kind;
-        $t = $n->text ?? ($n->kids[0]->text ?? '');
+        $shown = fn(?Node $n): ?string => $n === null ? null : ($n->kind === Node::RICH ? $n->plainText() : $n->text); // a text laid out as rich text (tabular digits) too
+        $t = $shown($n) ?? ($shown($n->kids[0] ?? null) ?? '');
         return $k . ($t !== '' ? "($t)" : '');
     }
 

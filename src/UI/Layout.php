@@ -221,7 +221,7 @@ final class Layout
     {
         if ($n->kind === Node::RICH) { // laid out at the width it wraps at, unless given a size
             $l = $n->textLayout();
-            if ($n->fw <= 0) { $n->fw = $l->width; }
+            if ($n->fw <= 0) { $n->fw = $n->autoWrap && $n->wrapWidth !== null ? max($l->width, $n->wrapWidth) : $l->width; } // wrapped at the width it was given: as wide as that, not its widest line, as a box of text in CSS (mygo's)
             if ($n->fh <= 0) { $n->fh = $l->height; }
         } elseif ($n->kind === Node::TEXT && $n->metrics !== null && ($n->ts !== null || $n->maxLines > 0 || $n->noWrap || ($selects = ($n->scope !== 0 || $n->selectable) && !$n->unselectable && !$n->focusable && $n->url === null))) {
             if ($n->maxLines > 0 || $n->noWrap || ($selects ?? false) || $n->textStyle()->needsLayout()) { // selected text is laid out to find its runes
@@ -722,6 +722,7 @@ final class Layout
             }
             $autoCross = $row ? is_infinite($k->margins[0]) || is_infinite($k->margins[2]) : is_infinite($k->margins[1]) || is_infinite($k->margins[3]); // automatic margins across place it themselves, in all the room
             [$dx, $dy] = self::relative($k, $cw, $ch);
+            if (isset($autos[$i])) { if ($row) { $k->mw = $main[$i]; } else { $k->mh = $main[$i]; } } // its automatic margins share what its size along, as resolved (its largest, its least), leaves: not what it measured
             if ($row) {
                 [$mx, $my] = [$k->marW, $k->marH];
                 $kw = $main[$i] + ($autos[$i] ?? 0.0);
@@ -882,8 +883,9 @@ final class Layout
             $k->invisible = true;
             return;
         }
-        $bx = $n->x + $n->borders[3]; $by = $n->y + $n->borders[0];
-        $pw = $n->w - $n->borders[1] - $n->borders[3]; $ph = $n->h - $n->borders[0] - $n->borders[2];
+        [$bt, $br, $bb, $bl] = [$n->borderSide(0), $n->borderSide(1), $n->borderSide(2), $n->borderSide(3)]; // the padding box, inside the border all round as border() makes it too (mygo's)
+        $bx = $n->x + $bl; $by = $n->y + $bt;
+        $pw = $n->w - $br - $bl; $ph = $n->h - $bt - $bb;
         if (($on = $k->placeOn) !== null) { [$bx, $by, $pw, $ph] = [$on->x, $on->y, $on->w, $on->h]; } // on a sibling, where this frame lays it out
         [$mx, $my] = [$k->marW, $k->marH];
         $m = array_map(fn(float $v): float => is_finite($v) ? $v : 0.0, $k->margins);

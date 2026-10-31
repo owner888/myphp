@@ -14,12 +14,7 @@ file_put_contents("$dir/a.txt", str_repeat('a', 10)); file_put_contents("$dir/b.
 $h = new Headless($view, 960, 640);
 $names = fn() => array_map(fn($e) => $e['name'], $f->entries);
 /** The node showing text $s, or null. */
-$showing = function (string $s, ?Node $from = null) use (&$showing, $h): ?Node {
-    $from ??= $h->root;
-    if ($from->text === $s) { return $from; }
-    foreach ($from->kids as $k) { if (($r = $showing($s, $k)) !== null) { return $r; } }
-    return null;
-};
+$showing = fn(string $s, ?Node $from = null): ?Node => $h->byText($s, $from); // a text, or one laid out as rich text (a weight of its own)
 
 // The folder: folders first, then files by name; hidden ones left out; the grid, 4 items.
 $h->frame();

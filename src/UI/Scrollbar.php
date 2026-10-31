@@ -34,8 +34,8 @@ final class Scrollbar
         $travel = $inner - $thumb;
         $at = max(0.0, min($travel, $travel * $offset / $range));
         return $horizontal
-            ? [$r[0] + 2 + ($rtl ? $travel - $at : $at), $r[1] + $r[3] - $width - 2, $thumb, $width]
-            : [$rtl ? $r[0] + 2 : $r[0] + $r[2] - $width - 2, $r[1] + 2 + $at, $width, $thumb];
+            ? [$r[0] + 2 + ($rtl ? $travel - $at : $at), $r[1] + $r[3] - $width - 3, $thumb, $width] // three points in from the edge (mygo's scrollBars), two from the ends
+            : [$rtl ? $r[0] + 3 : $r[0] + $r[2] - $width - 3, $r[1] + 2 + $at, $width, $thumb];
     }
 
     /** How far the content moves when the thumb moves one point. */

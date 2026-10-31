@@ -1286,6 +1286,7 @@ final class Node
             $spans[] = $sp->textSpan($runes);
         }
         $t = $this->textStyle();
+        if ($this->ts?->size === null) { $t->size = null; } // in the size it was given (text()'s), not the size around it: its lines as high as that size's
         $align = $t->align ?? self::START;
         if ($this->rtl && $align !== self::CENTER) { // lines start at the right of a node laid out right to left, whatever they read, as in CSS and AppKit's cells
             $align = $align === self::END ? \MyPHP\Text\Params::LEFT : \MyPHP\Text\Params::RIGHT;
@@ -1848,7 +1849,8 @@ final class Node
         return [$w + ($bs[1] > 0 ? $bs[1] : $all) + ($bs[3] > 0 ? $bs[3] : $all), $h + ($bs[0] > 0 ? $bs[0] : $all) + ($bs[2] > 0 ? $bs[2] : $all)];
     }
 
-    private function borderSide(int $i): float
+    /** @internal Layout: the width of the border on side $i (top, right, bottom, left): borderWidth()'s, else border()'s all round. */
+    public function borderSide(int $i): float
     {
         return $this->borders[$i] > 0 ? $this->borders[$i] : ($this->bordered ? $this->borderWidth : 0.0);
     }

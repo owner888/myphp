@@ -462,6 +462,7 @@ final class Window
                     App::rescale();
                 }
                 $list->zoom = $z; // drawn at the window's scale times it, in a viewport 1/z the window's
+                $list->pixels = ObjC::msg('d:', $this->ns, 'backingScaleFactor'); // its fills on whole pixels
                 $paint = function () use ($root, $list, $text, $bounds, $in, $z): void {
                     $this->runtime->webPlaces = []; $this->runtime->videoPlaces = []; $this->runtime->materialPlaces = []; $this->runtime->underPaints = [];
                     $list->pushClip(0, 0, $bounds->w / $z, $bounds->h / $z); // what lies outside the window is not painted (mygo's visible)
@@ -1900,6 +1901,7 @@ final class Window
             $bounds = ObjC::msg('r:', $view, 'bounds');
             $list->pathQuad ??= $text->pathQuad(...);
             $list->zoom = $this->runtime->frameZoom; // as the window's content
+            $list->pixels = ObjC::msg('d:', $this->ns, 'backingScaleFactor'); // its fills on whole pixels
             $paint = function () use ($list, $text, $bounds): void {
                 $plain = $list->world();
                 $list->pushClip(0, 0, $bounds->w / $list->zoom, $bounds->h / $list->zoom);

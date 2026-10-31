@@ -67,8 +67,8 @@ $off(); App::setLocale('zh-Hans'); same(['zh-Hant', 'en'], $heard, 'the listener
 $date = new \DateTimeImmutable('2026-10-16 09:30'); $n = [];
 $h = new Headless(function (Context $c) use (&$n, &$date) { $c->column(0, 8); $n['d'] = $c->dateInput($date); $n['t'] = $c->timeInput($date); $n['c'] = $c->calendar($date); $c->end(); }, 400, 500);
 $h->frame();
-same('2026/10/16', $n['d']->kids[0]->text, 'the date input in zh-Hans');
-same(['09', ':', '30'], [$n['t']->kids[0]->kids[0]->text, $n['t']->kids[1]->kids[0]->text, $n['t']->kids[2]->kids[0]->text], '24 hours: two digits, no half of the day');
+same('2026/10/16', $n['d']->kids[0]->plainText(), 'the date input in zh-Hans');
+same(['09', ':', '30'], [$n['t']->kids[0]->kids[0]->plainText(), $n['t']->kids[1]->kids[0]->text, $n['t']->kids[2]->kids[0]->plainText()] /* the digits laid out as rich text, tabular */, '24 hours: two digits, no half of the day');
 same(2, count(array_filter($n['t']->kids, fn($k) => $k->focusable)), 'two segments');
 same(['2026年10月', '周一', '周日'], [$n['c']->kids[0]->kids[1]->kids[0]->text, $n['c']->kids[1]->kids[0]->kids[0]->text, $n['c']->kids[1]->kids[6]->kids[0]->text], 'the calendar\'s title and weekdays, Monday first');
 same('搜索', (function () { $n = null; $h = new Headless(function (Context $c) use (&$n) { $n = $c->searchField(new \MyPHP\UI\TextState); }, 300, 100); $h->frame(); return $n->text; })(), 'a search field\'s placeholder');

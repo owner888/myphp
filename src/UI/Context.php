@@ -1192,7 +1192,7 @@ final class Context
             $saved = $this->toRoot();
             [$tw, $th] = $this->metrics->measure((string)$count, $t->fontSize - 2);
             $this->row(0, 0, 0, $t->accent)->size(max($tw + 10, $th + 4), $th + 4)->radius(($th + 4) / 2)->center()->at($x + 10 - $this->root->padX(), $y - $th - 14 - $this->root->padY());
-              $this->text((string)$count, $t->fontSize - 2, $t->accentText, Font::BOLD);
+              $this->text((string)$count, $t->fontSize - 2, $t->accentText)->fontWeight(600);
             $this->end();
             $this->back($saved);
         }
@@ -1877,7 +1877,7 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         [$w, $h] = $this->metrics->measure($label, $size);
-        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $w + $t->space(11), max($h, $t->space(5)), 0, $label, null, $size, $t->text)); // the track Space(9), the gap Space(2)
+        $n = $this->add(new Node(Node::SWITCH, 0, 0, 0, $label === '' ? $t->space(9) : $w + $t->space(11), max($h, $t->space(5)), 0, $label, null, $size, $t->text)); // the track Space(9), the gap Space(2) before a label; without one the track alone, as mygo's
         $n->focusable = true;
         if ($this->runtime?->clicked($n->id)) {
             $on = !$on;
@@ -1931,7 +1931,7 @@ final class Context
           $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $n->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
-            $this->text($title, $t->fontSize, $t->text, Font::BOLD)->singleLine();
+            $this->text($title, $t->fontSize, $t->text)->fontWeight(500)->singleLine();
             $this->spacer();
             $a = $this->box($t->space(4), $t->space(4), 0); $a->alpha = 0.0;
             $deg = 90 + 180 * $p; // down, turning up as it opens
@@ -1964,7 +1964,7 @@ final class Context
         }
         $size = $t->fontSize * 1.25; $stars = []; $hover = -1;
           for ($i = 0; $i < $max; $i++) {
-              $stars[$i] = $this->box($size, $size, 0)->role(Role::NONE); $stars[$i]->color = null; // a glyph alone
+              $stars[$i] = $this->box($size, $size, 0)->role(Role::NONE); $stars[$i]->color = null; // a star drawn alone
               if ($this->hovered($stars[$i])) { $hover = $i; }
           }
         $this->end();
@@ -1972,11 +1972,24 @@ final class Context
             if ($this->clicked($star)) { $set($value === $i + 1 ? 0 : $i + 1); if ($rt !== null) { $rt->focus = $n->id; } }
             $filled = $i < $value; $color = $t->warning; $alpha = 1.0;
             if ($hover >= 0) { $filled = $i <= $hover; $alpha = 0.6; }
-            // A star glyph in place of mygo's star path: filled in the warning color, or outlined in the muted color.
-            $star->text = $filled ? '★' : '☆'; $star->fontSize = $size; $star->fg = $filled ? $color : $t->textMuted; $star->alpha = $alpha;
+            // mygo's star path: filled in the warning color, or outlined 1.2 wide in the muted color.
+            $star->draw(fn(Painter $p, array $r) => $filled ? $p->fillPath(self::starPath($r), $color, $alpha) : $p->strokePath(self::starPath($r), 1.2, $p->theme()->textMuted));
         }
         $n->range(0, $max, $value, 1);
         return $n;
+    }
+
+    /** A five-pointed star in $r (mygo's starPath). @param array{0: float, 1: float, 2: float, 3: float} $r */
+    private static function starPath(array $r): Path
+    {
+        $path = new Path();
+        $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2 + $r[3] * 0.04;
+        for ($i = 0; $i < 10; $i++) {
+            $rad = $r[2] * ($i % 2 === 1 ? 0.2 : 0.48);
+            $a = $i * M_PI / 5 - M_PI / 2;
+            $i === 0 ? $path->moveTo($cx + $rad * cos($a), $cy + $rad * sin($a)) : $path->lineTo($cx + $rad * cos($a), $cy + $rad * sin($a));
+        }
+        return $path->close();
     }
 
     /**
@@ -1992,8 +2005,10 @@ final class Context
         $rt = $this->runtime;
         $kw = $t->space(5);
         $low = max($lo, min($low, $high)); $high = min($hi, max($low, $high));
-        $n = $this->row(0, 0, $this->growsAlong($width, $kw))->padding(0, $kw / 2)->minWidth($t->space(25))->minHeight($t->space(5))->role(Role::GROUP);
-        if ($width > 0) { $n->size($width, $t->space(5)); } else { $n->size(0, $t->space(5)); }
+        $ticks = self::tickCount($lo, $hi, $step);
+        $sh = $t->space($ticks > 0 ? 7 : 5); // taller by the tick marks under the track, as a step slider
+        $n = $this->row(0, 0, $this->growsAlong($width, $kw))->padding(0, $kw / 2)->minWidth($t->space(25))->minHeight($sh)->role(Role::GROUP);
+        $n->size(max($width, 0.0), $sh);
         $keyStep = $step > 0 ? $step : ($hi - $lo) / 100;
         $snap = fn(float $v) => $step > 0 ? round(($v - $lo) / $step) * $step + $lo : $v;
         $set = function (string $which, float $to) use (&$low, &$high, $lo, $hi, $snap, $n) {
@@ -2007,7 +2022,7 @@ final class Context
           foreach (['low', 'high'] as $k => $which) { // the knobs: focusable, placed over the track; the arrows move the one focused
               $v = $which === 'low' ? $low : $high;
               $frac = $hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0;
-              $knob = $this->key($which)->box(0, 0, 0)->size($kw, $t->space(5))->at(($r === null ? 0 : ($r[2] - $kw)) * ($n->rtl ? 1 - $frac : $frac) - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in; right to left, lo is at the right
+              $knob = $this->key($which)->box(0, 0, 0)->size($kw, $sh)->at(($r === null ? 0 : ($r[2] - $kw)) * ($n->rtl ? 1 - $frac : $frac) - $kw / 2, 0)->focusable(); // centered where the knob is drawn: at() is from the padding box, kw/2 in; right to left, lo is at the right
               $knob->color = null; $knob->ownRing = true; // the knob is painted, ring and all, by the slider's draw
               $knob->role(Role::SLIDER)->range($lo, $hi, $v, $keyStep)->label(['minimum', 'maximum'][$k]);
               $knob->nameFrom = $n; $knob->nameJoin = true; // "Price minimum", of a slider labeled Price
@@ -2039,9 +2054,12 @@ final class Context
         $held = $this->animate($n, 'held', $dragging !== null ? 1 : 0, 0.15);
         $focusLow = $rt !== null && $rt->focus === $knobs['low']->id && $rt->focusVisible($knobs['low']->id);
         $focusHigh = $rt !== null && $rt->focus === $knobs['high']->id && $rt->focusVisible($knobs['high']->id);
-        $n->draw(function (Painter $p, array $r) use ($n, $low, $high, $lo, $hi, $kw, $dragging, $held, $focusLow, $focusHigh) {
+        $n->draw(function (Painter $p, array $r) use ($n, $low, $high, $lo, $hi, $kw, $ticks, $dragging, $held, $focusLow, $focusHigh) {
             [$x, $y, $w] = $r; $t = $p->theme();
             $h = $t->space(1.5); $cy = $y + $t->space(2.5);
+            for ($i = 0; $i < $ticks; $i++) { // the tick marks of the steps, under the track (mygo's paintTicks)
+                $p->fill([$x + $kw / 2 + ($w - $kw) * $i / max($ticks - 1, 1) - 0.5, $cy + $t->space(2) + $t->space(1), 1.0, $t->space(1.5)], $t->textMuted, 0.0, 0.6);
+            }
             $f = fn(float $v) => ($hi > $lo ? ($v - $lo) / ($hi - $lo) : 0.0) * ($n->rtl ? -1 : 1) + ($n->rtl ? 1 : 0); // right to left, from the right
             $x0 = $x + $kw / 2 + ($w - $kw) * $f($low); $x1 = $x + $kw / 2 + ($w - $kw) * $f($high);
             $p->fill([$x, $cy - $h / 2, $w, $h], $t->border, $h / 2);
@@ -2291,7 +2309,7 @@ final class Context
           $head = $this->row(0, 0)->padding($t->space(1), $t->space(2))->radius($t->radius)->alignItems(Node::CENTER)->role(Role::TREE_ITEM)->level(1);
           if ($open !== null && $this->clicked($head)) { $open = !$open; }
           if ($open !== null && ($e = $this->runtime?->expanded($head->id) ?? 0) !== 0) { $open = $e > 0; } // assistive technology opening or closing it
-            $this->text($title, $t->fontSize - 1, $t->textMuted, Font::BOLD);
+            $this->text($title, $t->fontSize - 1, $t->textMuted)->fontWeight(600);
             $this->spacer();
             if ($open !== null) { // the disclosure arrow, shown as the pointer rests on the title
                 $hovered = $this->hovered($head);
@@ -2556,7 +2574,7 @@ final class Context
         $rt = $this->runtime;
         $b = $this->buttonFace($t->space(1.5), $t->space(3.5))->minWidth($t->space(32.5))->minHeight(0); // its text and a page icon at its ends (Justify(SpaceBetween))
           [, $locale] = $this->formats();
-          $this->text(I18n::formatDate($locale, $date), $t->fontSize, $t->text)->singleLine();
+          $this->text(I18n::formatDate($locale, $date), $t->fontSize, $t->text)->singleLine()->fontFeatures('tnum');
           $this->row(0, 0, 1); $this->end();
           $page = $this->box($t->space(3.5), $t->space(3.5), 0); $page->color = null;
           $page->draw(function (Painter $p, array $r) use ($b) { // a calendar page: a box stroked 1.2 at radius 2, a 1.2 line under its top
@@ -2697,7 +2715,7 @@ final class Context
                   if ($chosen) { $cell->color = $t->accent; $fg = $t->accentText; }
                   elseif ($atCursor || $this->hovered($cell)) { $cell->color = $t->surfaceHover; }
                   if ($ymd === $today && !$chosen) { $cell->border(1, $t->accent); }
-                    $this->text(I18n::formatNumber($locale, (int)$day->format('j')), $t->fontSize, $fg);
+                    $this->text(I18n::formatNumber($locale, (int)$day->format('j')), $t->fontSize, $fg)->fontFeatures('tnum'); // digits of one width (mygo's)
                   $this->end();
                   if ($this->clicked($cell)) { $choose($day); if (!$moveChooses) { $cursor = $day; } } // with moveChooses the cursor is the date, which choose set
               }
@@ -2768,7 +2786,7 @@ final class Context
               };
               $focused[$k] = $rt?->focused($seg->id) ?? false;
               if ($focused[$k]) { $seg->color = $t->accent; }
-                $this->text($texts[$k], $t->fontSize, $focused[$k] ? $t->accentText : $t->text);
+                $this->text($texts[$k], $t->fontSize, $focused[$k] ? $t->accentText : $t->text)->fontFeatures('tnum');
               $this->end();
               $segs[$k] = $seg;
           }
@@ -2999,7 +3017,7 @@ final class Context
     {
         $t = $this->theme;
         $rt = $this->runtime;
-        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1), $t->space(1))->radius($t->radius)->border()->focusable()
+        $b = $this->row(0, 0, 0, $t->surface)->padding($t->space(1), $t->space(1))->radius($t->radius)->border()->focusable()->justify(Node::CENTER)->alignItems(Node::CENTER)->shrink(0) // a button's: its swatch in the middle
             ->role(Role::COLOR_WELL)->value(self::hexOf($rgb, $alpha));
         $b->description = self::hexOf($rgb, $alpha); // read as its value where buttons have none
         if ($this->hovered($b)) { $b->color = $rt->input->mouseDown ? $t->surfacePressed : $t->surfaceHover; }
@@ -3127,7 +3145,7 @@ final class Context
               $last = $i === $n - 1;
               $b = $this->key($i)->row(0, 0)->padding($t->space(0.5), $t->space(1.5))->radius($t->radius)->minWidth($t->space(6))->minHeight(0)->singleLine(); // shrinks with the others as room runs short
               if (!$last) { $b->focusable()->role(Role::LINK); if ($this->hovered($b)) { $b->color = $t->surfaceHover; } }
-                $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted, $last ? Font::BOLD : 0)->singleLine(); // the last, where the path is: no link, weight 500 (bold here)
+                $label = $this->text($item, $t->fontSize, $last ? $t->text : $t->textMuted)->singleLine(); if ($last) { $label->fontWeight(500); } // the last, where the path is: no link, weight 500
               $this->end();
               if (!$last && $this->clicked($b)) { $chosen = $i; $e->changed = true; }
           }
@@ -3169,8 +3187,7 @@ final class Context
               $panel->description = $message;
                 $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
                 if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
-                $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
-                $this->row(0, $t->space(2))->justify(Node::END);
+                $this->row(0, $t->space(2))->justify(Node::END)->margin($t->space(2), 0, 0, 0);
                   $make = fn() => (object)['opening' => true];
                   $local = $rt?->local($back->id, $make) ?? $make();
                   foreach ($buttons as $i => $label) {
@@ -3375,7 +3392,7 @@ final class Context
         $h = 2166136261; // the hue of the name's FNV-1a hash
         for ($i = 0, $n = strlen($name); $i < $n; $i++) { $h = (($h ^ ord($name[$i])) * 16777619) & 0xffffffff; }
         $e = $this->column(0, 0, 0, self::hsl($h % 360, 0.45, 0.55))->size($size, $size)->radius($size / 2)->center()->tooltip($name)->role(Role::IMAGE)->label($name);
-          $this->text(self::initials($name), $size * 0.4, 0xffffff, Font::BOLD)->singleLine(); // FontWeight(600)
+          $this->text(self::initials($name), $size * 0.4, 0xffffff)->fontWeight(600)->singleLine();
         $this->end();
         return $e;
     }
@@ -3491,13 +3508,13 @@ final class Context
         $t = $this->theme;
         $size ??= $t->fontSize;
         // mygo's field(): padding Space(1.5) by Space(2), the glass, the input and the clear button Space(1.5) apart.
-        $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2); $gap = $t->space(1.5);
+        $glass = $t->space(3.75); $clear = $t->space(4); $pad = $t->space(2) + 1; $gap = $t->space(1.5); // its padding inside its border, which takes a point
         $parent = $this->stack[count($this->stack) - 1];
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $n->search = true;
           $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
-          $this->box($glass, $glass, 0)->at($pad, ($n->fh - $glass) / 2)->draw(self::magnifier(...))->alpha = 0.0;
+          $this->icon(self::magnifier(), $glass, $t->textMuted)->at($pad, ($n->fh - $glass) / 2);
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
               $x = $this->column(0, 0, 0, $t->textMuted)->radius($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
                   ->draw(function (Painter $p, array $r) {
@@ -3518,11 +3535,12 @@ final class Context
     }
 
     /** The magnifying glass of a field for searching, as mygo's (MingCute's search icon, Apache 2.0): a ring and a handle stroked 2 on its 24 grid, in the muted color. */
-    private static function magnifier(Painter $p, array $r): void
+    private static ?SVG $magnifier = null;
+
+    /** The magnifying glass of a field for searching (mygo's searchIcon), shown Space(3.75) square in the muted color of text (its magnifier). */
+    private static function magnifier(): SVG
     {
-        [$x, $y, $w] = $r; $k = $w / 24; $stroke = 2 * $k; $c = $p->theme()->textMuted;
-        $p->stroke([$x + 2 * $k, $y + 2 * $k, 12 * $k, 12 * $k], $c, 6 * $k, $stroke);
-        $p->displayList()->line($x + 14.5 * $k, $y + 14.5 * $k, $x + 20 * $k, $y + 20 * $k, $c, 1.0, $stroke);
+        return self::$magnifier ??= SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M14.5 14.5L20 20m-4-10a6 6 0 1 1-12 0a6 6 0 0 1 12 0Z"/></svg>');
     }
 
     /**
@@ -3556,7 +3574,7 @@ final class Context
           // The field: mygo's field() with a magnifier and the input, grown to at most Space(90).
           $glass = $t->space(3.75);
           $f = $this->row(0, $t->space(1.5), 1, $t->surface)->padding($t->space(1.5), $t->space(2.5))->radius($t->radius)->border()->alignItems(Node::CENTER)->cursor(Cursor::Text)->role(Role::NONE)->label($this->texts()->get('find'));
-            $this->box($glass, $glass, 0)->draw(self::magnifier(...))->alpha = 0.0;
+            $this->icon(self::magnifier(), $glass, $t->textMuted);
             [, $h] = $this->metrics->measure('X', $t->fontSize);
             $in = $this->add(new Node(Node::INPUT, 0, 0, 0, 0, $h, 1, $this->texts()->get('find'), null, $t->fontSize, $t->text));
             $in->edit = $query; $in->changed = $query->editedSinceBuilt(); $in->inset(-Runtime::FIELD_INSET, -Runtime::FIELD_INSET); $in->minWidth($t->space(25))->minHeight(0);
@@ -3571,7 +3589,7 @@ final class Context
           if ($query->submitted) { $query->submitted = false; $step(($rt?->submitMods() ?? 0) & Key::SHIFT ? -1 : 1); }
           if ($in->focused && $this->shortcut(Key::ESCAPE)) { $open = false; }
           $status = $query->text === '' ? '' : ($matches > 0 ? $this->texts()->get('matches', ['current' => $current + 1, 'total' => $matches]) : $this->texts()->get('noMatches'));
-          $this->row(0, 0)->minWidth($t->space(18))->minHeight(0); $this->text($status, $t->fontSize, $t->textMuted)->role(Role::STATUS); $this->end();
+          $this->row(0, 0)->minWidth($t->space(18))->minHeight(0); $this->text($status, $t->fontSize, $t->textMuted)->fontFeatures('tnum')->role(Role::STATUS); $this->end();
           foreach ([-1, 1] as $d) { // previous and next: a chevron up or down, Space(3), stroked 1.5
               $btn = $this->key("step$d")->buttonFace($t->space(1.5), $t->space(2))->role(Role::BUTTON)->label($this->texts()->get($d < 0 ? 'previous' : 'next'));
               if ($matches === 0) { $btn->alpha = 0.5; $btn->focusable = false; }
@@ -3629,7 +3647,7 @@ final class Context
                 $l = $this->text($label, $t->fontSize, $t->text);
               $this->end();
           } else {
-              $l = $this->text($label, $t->fontSize, $t->text, Font::BOLD); // FontWeight(500): bold, the one weight besides regular
+              $l = $this->text($label, $t->fontSize, $t->text)->fontWeight(500);
           }
           $content = $this->column(0, $t->space(1.5), $inForm ? 1 : 0); // in a form: the rest of the row
             $saved = $this->field; $this->field = (object)['errors' => []];
@@ -3649,7 +3667,10 @@ final class Context
         if ($inForm && $ctrl->kind === Node::TEXTAREA) { // level with the first line of a text area (mygo's)
             [, $lh] = $this->metrics->measure('X', $ctrl->fontSize);
             $box->fh = $lh + ($ctrl->bare ? 0.0 : 2 * Runtime::FIELD_INSET_Y);
-        } elseif ($inForm) { $box->fh = $rt?->rectOf($ctrl->id)[3] ?? 0.0; } // level with the control: as high as it was last frame
+        } elseif ($inForm) { // level with the control's middle, where it was last frame: a control inside a box (a time input's fields) lower down in it
+            $r = $rt?->rectOf($ctrl->id); $cr = $rt?->rectOf($content->id);
+            $box->fh = $r === null || $cr === null ? 0.0 : max(0.0, 2 * ($r[1] + $r[3] / 2 - $cr[1]));
+        }
         if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
         $l->cursor = Cursor::Default;
         if ($this->clicked($l) && $rt !== null) {
@@ -3708,9 +3729,9 @@ final class Context
         $t = $this->theme;
         $parent = $this->stack[count($this->stack) - 1];
         $above = $parent->kids !== [];
-        if ($above) { $this->column(0, 0)->size(0, $t->space(3)); $this->end(); } // Margin(Space(3), 0, 0, 0)
-        $g = $this->column(0, $t->space(3))->role(Role::GROUP)->label($legend);
-          $this->text($legend, $t->fontSize, $t->text, Font::BOLD); // FontWeight(600)
+        $g = $this->column(0, $t->space(3))->shrink(0)->role(Role::GROUP)->label($legend);
+        if ($above) { $g->margin($t->space(3), 0, 0, 0); } // apart from what is above, as a section
+          $this->text($legend, $t->fontSize, $t->text)->fontWeight(600);
           $fn();
         $this->end();
         return $g;
@@ -3960,7 +3981,7 @@ final class Context
         $edges = [];
         $heads = $cells(function (int $j) use ($columns, $state, $t, &$edges, $layout, $order) {
             $col = $columns[$j];
-            $this->text($col->title, $t->fontSize, $t->textMuted, Font::BOLD);
+            $this->text($col->title, $t->fontSize, $t->textMuted)->fontWeight(600)->singleLine();
             $place = $col->sorts() ? $state->sortPlace($col->id()) : null;
             if ($place !== null) {
                 if ($state->sortBy !== null && count($state->sortBy) > 1) { // its place among the columns sorted by, from 1
@@ -4243,22 +4264,21 @@ final class Context
     {
         $t = $this->theme;
         $index = max(0, min($index, count($options) - 1));
-        $n = $this->row(1, 0, 0, $t->border)->radius($t->radius)->role(Role::NONE); // the track: a border around a surface
-          $track = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius - 1)->alignItems(Node::STRETCH)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP); // a radio group: the arrows choose
-          $track->nameFrom = $n; // named by the control's label
+        // The track, a radio group the arrows choose in: the surface inside its border, as wide as it is given (mygo's).
+        $n = $this->row($t->space(0.5), $t->space(0.5), 0, $t->surface)->radius($t->radius)->border(1, $t->border)->alignItems(Node::STRETCH)->shrink(0)->focusGroup(Node::HORIZONTAL, selects: true)->role(Role::RADIO_GROUP);
           foreach ($options as $i => $label) {
               $seg = $this->column(0, 0, 0, $i === $index ? $t->surfacePressed : null)->padding($t->space(1), $t->space(3))->radius(max($t->radius - $t->space(0.5), 0))->focusable()->center();
               $seg->on = $i === $index; // Tab enters the group at the one chosen
               $seg->role(Role::RADIO)->checked($seg->on); $seg->segment = true;
+              if ($seg->on) { $seg->shadow(0, 1, 2, 0, 0x000000, 0.12); } // raised
               if ($i !== $index && $this->hovered($seg)) { $seg->color = $t->surfaceHover; }
-                $this->text($label, $t->fontSize, $t->text);
+                $this->text($label, $t->fontSize, $t->text)->singleLine();
               $this->end();
               if ($this->clicked($seg) && $i !== $index) {
                   $index = $i;
                   $n->changed = true;
               }
           }
-          $this->end();
         $this->end();
         return $n;
     }
@@ -4284,7 +4304,8 @@ final class Context
                 });
             $tab->on = $on;
             $tab->role(Role::TAB)->checked($on);
-            $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted, $on ? Font::BOLD : 0);
+            $l = $this->text($label, $t->fontSize, $on || $this->hovered($tab) ? $t->text : $t->textMuted);
+            if ($on) { $l->fontWeight(600); }
             $this->end();
             if ($this->clicked($tab) && !$on) {
                 $index = $i;
@@ -4306,16 +4327,14 @@ final class Context
     {
         $t = $this->theme;
         $root = $this->column(0, 0);
-          $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->radius($t->radius)->alignItems(Node::CENTER)->alignSelf(Node::START)->focusable()->role(Role::DISCLOSURE);
+          $head = $this->row(0, $t->space(1))->padding($t->space(1), 0)->paddingStart($t->space(0.5))->paddingEnd($t->space(2))->radius($t->radius)->alignItems(Node::CENTER)->alignSelf(Node::START)->focusable()->role(Role::DISCLOSURE);
           $p = $this->collapsibleToggle($head, $open);
           if ($head->changed) { $root->changed = true; }
           if ($this->hovered($head)) { $head->color = $t->surfaceHover; }
-            $this->column(0, 0)->size($t->space(0.5), 0); $this->end(); // PaddingStart(Space(0.5))
             $arrow = $this->box($t->space(4), $t->space(4), 0); $arrow->alpha = 0.0;
             $deg = 90 * $p;
             $arrow->draw(fn(Painter $p, array $r) => self::disclosure($p->displayList(), $r, $deg, $p->theme()->textMuted));
             $this->text($label, $t->fontSize, $t->text)->singleLine();
-            $this->column(0, 0)->size($t->space(2), 0); $this->end(); // PaddingEnd(Space(2))
           $this->end();
           $this->collapsiblePanel($open, $p, $fn, $t->space(1), $t->space(5.5), 0, $t->space(1), $t->space(2)); // below the label
         $this->end();
@@ -4389,17 +4408,21 @@ final class Context
     public function stepper(int|float &$value, float $min, float $max, float $step = 1): Node
     {
         $t = $this->theme;
-        $n = $this->column(1, 1, 0, $t->border)->radius($t->radius)->focusable()->role(Role::STEPPER);
-        $n->size($t->space(5), $t->space(7));
+        $n = $this->column(0, 0, 0, $t->surface)->size($t->space(5), 0)->radius($t->radius)->border()->clip()->shrink(0)->focusable()->role(Role::STEPPER); // mygo's: a column of the two arrows, bordered
         $ticks = $this->runtime?->stepper($n->id, $n->rtl) ?? 0;
         $jump = $this->runtime?->jumped($n->id) ?? 0;
         $holding = $this->runtime?->holding($n->id) ?? 0;
         $v = $jump !== 0 ? ($jump > 0 ? $max : $min) : max($min, min($max, $value + $ticks * $step));
-        foreach ([1 => '▴', -1 => '▾'] as $dir => $arrow) {
+        foreach ([1, -1] as $dir) {
             $can = $dir > 0 ? $v < $max : $v > $min;
-            $this->column(0, 0, 1, $holding === $dir ? $t->surfacePressed : $t->surface)->radius($t->radius - 1)->center();
-              $this->text($arrow, $t->fontSize - 2, $can ? $t->text : $t->textMuted)->role(Role::NONE);
-            $this->end();
+            $a = $this->box(0, $t->space(3.5), 0)->role(Role::NONE); // Height(Space(3.5)), across the column
+            $a->color = $holding === $dir ? $t->surfacePressed : ($this->hovered($a) ? $t->surfaceHover : null);
+            $a->draw(function (Painter $p, array $r) use ($dir, $can) { // a chevron, stroked 1.5 wide
+                $t = $p->theme(); $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = $r[3] * 0.22; $c = $can ? $t->text : $t->textMuted;
+                $list = $p->displayList(); $a = $can ? 1.0 : 0.5;
+                $list->line($cx - $d, $cy + $dir * $d / 2, $cx, $cy - $dir * $d / 2, $c, $a, 1.5);
+                $list->line($cx, $cy - $dir * $d / 2, $cx + $d, $cy + $dir * $d / 2, $c, $a, 1.5);
+            });
         }
         $this->end();
         if ($v != $value) {

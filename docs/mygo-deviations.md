@@ -209,7 +209,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: the same `shadow()` and `insetShadow()` (`$rgb` and `$alpha`
     for the color) through two new quad kinds, a box (14) and a box
     shadow (15), each with a second slot; circular corners; rectangular
-    clips; boxes unsnapped; borders under clipped children; dividers
+    clips; boxes snapped to whole pixels since v1.132 (`DisplayList::$pixels`); borders under clipped children; dividers
     after all children; a nested `debug()` outlines its own subtree;
     a disabled node dims as mygo's (only containers did until v1.26);
     `Cursor` a string-backed enum named as CSS names them.
@@ -2238,3 +2238,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     in a light one; at once with Reduce Motion.
   - Why: the developer asked for it, as the buttons around show they can
     be clicked.
+
+## The gallery against mygo's (v1.132)
+
+- **Radial gradients**
+  - mygo: `RadialGradient` and `Painter.FillRadialGradient` (its 977740f);
+    the gallery's Styling page fills a bar with one.
+  - myphp: not yet; the bar is left out.
+  - Why: found comparing the galleries; to come.
+- **A switch's label**
+  - mygo: `Switch` has none; `Label` names it for assistive technology.
+  - myphp: `switch($label, …)` shows its label after the track; `''`
+    shows none, the track alone, and `label()` names it.
+  - Why: myphp's own since before; the gallery now passes `''`, as mygo's.

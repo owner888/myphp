@@ -18,7 +18,6 @@ final class CoreText
 {
     private const UTF8 = 0x08000100;         // kCFStringEncodingUTF8
     private const UI_FONT_SYSTEM = 2;        // kCTFontUIFontSystem
-    private const UI_FONT_USER_FIXED_PITCH = 1;
     private const TRAIT_ITALIC = 1 << 0, TRAIT_BOLD = 1 << 1; // CTFontSymbolicTraits
     private const ALPHA_ONLY = 7;            // kCGImageAlphaOnly
     private const RGBA_PREMULTIPLIED = 1 | 4 << 12; // kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big: R G B A in memory
@@ -92,6 +91,11 @@ final class CoreText
             void  CGContextTranslateCTM(void*, double, double);
             void  CGContextScaleCTM(void*, double, double);
             void  CGContextSetShouldSmoothFonts(void*, bool);
+            void  CGContextSetShouldAntialias(void*, bool);
+            void  CGContextSetAllowsFontSubpixelPositioning(void*, bool);
+            void  CGContextSetShouldSubpixelPositionFonts(void*, bool);
+            void  CGContextSetAllowsFontSubpixelQuantization(void*, bool);
+            void  CGContextSetShouldSubpixelQuantizeFonts(void*, bool);
             void  CGContextSetRGBFillColor(void*, double, double, double, double);
             void  CGContextAddPath(void*, void*);
             void  CGContextSetLineWidth(void*, double);
@@ -125,6 +129,23 @@ final class CoreText
         return $y <= 0.0031308 ? $y * 12.92 : 1.055 * $y ** (1 / 2.4) - 0.055;
     }
 
+    /**
+     * How many positions within a pixel Core Graphics draws glyphs of $px
+     * pixels an em at, its subpixel quantization, which AppKit leaves on:
+     * fewer the larger they are, at most five a pixel and one from 34
+     * pixels an em (mygo's positions). A glyph goes to the one left of its pen.
+     */
+    public static function positions(float $px): int
+    {
+        return $px <= 0 ? 1 : min(5, max(1, (int)ceil(100 / (3 * $px) - 1e-9)));
+    }
+
+    /** Where Core Graphics draws a baseline $y device pixels from the top: the whole pixel at or below it, as AppKit does on flipped views (mygo's baseline). */
+    public static function baseline(float $y): float
+    {
+        return ceil($y - 1e-3);
+    }
+
     /** Whether the glyphs of font $fontId are bitmaps in color (Apple Color Emoji), which rasterize() draws in their colors. */
     public function isColor(int $fontId): bool
     {
@@ -139,8 +160,13 @@ final class CoreText
         if (isset($this->fonts[$key])) {
             return $this->fonts[$key];
         }
-        $kind = $style & Font::MONO ? self::UI_FONT_USER_FIXED_PITCH : self::UI_FONT_SYSTEM;
-        $font = $this->c->CTFontCreateUIFontForLanguage($kind, $size, null) ?? throw new RuntimeException('system font');
+        if ($style & Font::MONO) { // the system's monospaced font, SF Mono, its weight bold or regular, as the text system's "monospace" (mygo's systemFont)
+            $ns = ObjC::msg('p:dd', ObjC::cls('NSFont'), 'monospacedSystemFontOfSize:weight:', $size, $style & Font::BOLD ? 0.4 : 0.0) ?? throw new RuntimeException('monospaced system font');
+            $font = $this->c->CFRetain($this->c->cast('void*', ObjC::addr($ns)));
+            $style &= ~Font::BOLD;
+        } else {
+            $font = $this->c->CTFontCreateUIFontForLanguage(self::UI_FONT_SYSTEM, $size, null) ?? throw new RuntimeException('system font');
+        }
         $traits = ($style & Font::BOLD ? self::TRAIT_BOLD : 0) | ($style & Font::ITALIC ? self::TRAIT_ITALIC : 0);
         if ($traits !== 0) {
             // A font without the variant (no italic fixed-pitch, say) gives null: it stays as it is.
@@ -244,11 +270,13 @@ final class CoreText
      * (points) blurs the mask so drawn as a Gaussian of that sigma
      * (Node::textBlur, ASS's \blur), unsmoothed, its bitmap grown to hold
      * it; $cutOut takes the glyph out of the outline so drawn and blurred
-     * (Node::textCutOut, libass's ass_fix_outline).
+     * (Node::textCutOut, libass's ass_fix_outline). $dx (pixels, under
+     * one) is where the pen is within its pixel (positions()): ox is then
+     * from the left of that pixel.
      *
      * @return array{w: int, h: int, ox: int, oy: int, rows: CData, addr: int, color: bool}|null
      */
-    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): ?array
+    public function rasterize(int $fontId, int $glyph, ?float $scale = null, int $shade = -1, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false, float $dx = 0.0): ?array
     {
         $c = $this->c;
         $font = $this->runFonts[$fontId] ?? throw new RuntimeException("unknown font $fontId");
@@ -266,21 +294,27 @@ final class CoreText
         }
         $smooth = $stroke <= 0 && $blur <= 0 && $shade >= 0 && !$color && ($this->smooth ??= self::fontSmoothing());
         $pad = ($smooth ? 2 : 1) + (int)ceil($stroke * $s) + (int)ceil(3 * $blur * $s); // smoothing spreads a glyph up to a pixel further, an outline its width, a blur three sigmas
-        $x0 = (int)floor($b->origin->x * $s) - $pad;
+        $x0 = (int)floor($b->origin->x * $s + $dx) - $pad;
         $y0 = (int)floor($b->origin->y * $s) - $pad;
-        $w = (int)ceil(($b->origin->x + $b->size->w) * $s) + $pad - $x0;
+        $w = (int)ceil(($b->origin->x + $b->size->w) * $s + $dx) + $pad - $x0;
         $h = (int)ceil(($b->origin->y + $b->size->h) * $s) + $pad - $y0;
         $bpp = $color ? 4 : 1;
         $ctx = ($color ? $c->CGBitmapContextCreate(null, $w, $h, 8, 4 * $w, $this->srgb, self::RGBA_PREMULTIPLIED) : $c->CGBitmapContextCreate(null, $w, $h, 8, $w, null, self::ALPHA_ONLY))
             ?? throw new RuntimeException('CGBitmapContextCreate');
+        $c->CGContextSetShouldAntialias($ctx, true);
         $c->CGContextSetShouldSmoothFonts($ctx, $smooth);
+        // Placed where the pen is within its pixel, $dx, as Core Graphics places glyphs (positions()): unquantized, as this does that.
+        $c->CGContextSetAllowsFontSubpixelPositioning($ctx, true);
+        $c->CGContextSetShouldSubpixelPositionFonts($ctx, true);
+        $c->CGContextSetAllowsFontSubpixelQuantization($ctx, false);
+        $c->CGContextSetShouldSubpixelQuantizeFonts($ctx, false);
         if ($smooth) {
             $gray = self::shadeGray($shade);
             $c->CGContextSetRGBFillColor($ctx, $gray, $gray, $gray, 1.0); // the lighter, the bolder, as for text of that color
         }
         // CG coordinates run y-up, but the bitmap's first row in memory is
         // the top of the image, which is the order the atlas wants.
-        $c->CGContextTranslateCTM($ctx, -$x0, -$y0);
+        $c->CGContextTranslateCTM($ctx, $dx - $x0, -$y0);
         $c->CGContextScaleCTM($ctx, $s, $s);
         if ($stroke > 0) { // the glyph grown by $stroke all round: its outline filled and stroked twice as wide, joins round
             $path = $c->CTFontCreatePathForGlyph($font, $glyph, null);
@@ -304,7 +338,7 @@ final class CoreText
         if ($blur > 0) { Gaussian::blur($addr, $w, $h, $blur * $s); }
         if ($cutOut && $stroke > 0) { // the glyph taken out of its outline, blurred or not: drawn over it so as to clear it
             $cut = $c->CGBitmapContextCreate($c->cast('void*', $addr), $w, $h, 8, $w, null, self::ALPHA_ONLY) ?? throw new RuntimeException('CGBitmapContextCreate');
-            $c->CGContextTranslateCTM($cut, -$x0, -$y0);
+            $c->CGContextTranslateCTM($cut, $dx - $x0, -$y0);
             $c->CGContextScaleCTM($cut, $s, $s);
             $c->CGContextSetBlendMode($cut, 23); // kCGBlendModeDestinationOut
             $c->CTFontDrawGlyphs($font, $ids, $c->new('CGPoint[1]'), 1, $cut);
