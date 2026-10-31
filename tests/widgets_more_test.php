@@ -81,6 +81,20 @@ $h->up();
 same(8.0, (float)$v, 'Up from 7.5');
 for ($k = 0; $k < 5; $k++) { $h->up(); }
 same(10.0, (float)$v, 'Up past the top');
+// As mygo's: at the top the button stepping up is disabled, at the bottom the one stepping down; the field tells its range.
+$access = function (int $role, string $label) use ($h): AccessNode {
+    foreach ($h->rt->accessTree->nodes as $n) { if ($n->role === $role && $n->label === $label) { return $n; } }
+    throw new \RuntimeException("no $label");
+};
+$h->input->push(['accessOn']);
+$h->frame();
+check(($access(Role::BUTTON, 'Increase')->states & AccessNode::DISABLED) !== 0 && ($access(Role::BUTTON, 'Decrease')->states & AccessNode::DISABLED) === 0, 'at the top, Increase is disabled');
+$h->clickLabel('Increase');
+same(10.0, (float)$v, 'and a click on it does nothing');
+$field = null; foreach ($h->root->kids[0]->kids[0]->kids as $k) { if ($k->kind === Node::INPUT) { $field = $k; } }
+same([[0.0, 10.0, 10.0], 0.5], [$field->accRange, $field->accStep], 'the field tells its range, value and step');
+for ($k = 0; $k < 25; $k++) { $h->down(); }
+check(($access(Role::BUTTON, 'Decrease')->states & AccessNode::DISABLED) !== 0, 'at the bottom, Decrease is disabled');
 
 // A toast: shown after the click, once for the same message, gone after its time.
 $now = 0;

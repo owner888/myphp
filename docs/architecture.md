@@ -6746,6 +6746,14 @@ succeeds are told of, an empty line is none.
   going from the innermost node out to the editor (mygo's ffc3f67); a
   test keeps it.
 
+## numberInput as mygo's (v1.125)
+
+- `numberInput` caught up with mygo's `NumberInput`, as `decimalInput`
+  was made: its − and + padded Space(1) by Space(2) (`stepButton`, which
+  both share), disabled at the bounds, the text showing the value they
+  stepped to; its field telling assistive technology its range, value and
+  step; the row not shrinking.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

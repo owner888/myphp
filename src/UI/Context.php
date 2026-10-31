@@ -1553,7 +1553,7 @@ final class Context
         $rt = $this->runtime;
         $decimals = ($s = rtrim(rtrim(sprintf('%.10F', $step), '0'), '.')) !== '' && str_contains($s, '.') ? strlen($s) - strpos($s, '.') - 1 : 0;
         $format = fn(float $v) => number_format($v, $decimals, '.', '');
-        $n = $this->row(0, $t->space(1))->alignItems(Node::CENTER);
+        $n = $this->row(0, $t->space(1))->shrink(0)->alignItems(Node::CENTER);
         $text = $rt?->local($n->id, fn() => new TextState($format($value))) ?? new TextState($format($value));
         $set = function (float $v) use (&$value, $lo, $hi, $decimals, $n) {
             $v = round(max($lo, min($hi, $v)), $decimals);
@@ -1567,10 +1567,15 @@ final class Context
           } elseif ($text->text !== $format($value)) {
               $text->text = $format($value); $text->setCursor(strlen($text->text)); // what the app set, or what was typed, shown in full
           }
-          $minus = $this->button('−')->label('Decrease'); $plus = $this->button('+')->label('Increase');
+          $in->range($lo, $hi, (float)$value, $step);
+          $buttons = [];
+          foreach ([['−', -1, 'Decrease'], ['+', 1, 'Increase']] as [$label, $sign, $name]) {
+              $buttons[$sign] = $this->stepButton($label, $name)->disabled($sign < 0 ? $value <= $lo : $value >= $hi);
+          }
         $this->end();
-        if ($this->clicked($minus) && $value > $lo) { $set($value - $step); }
-        if ($this->clicked($plus) && $value < $hi) { $set($value + $step); }
+        foreach ($buttons as $sign => $b) {
+            if ($this->clicked($b)) { $set($value + $sign * $step); $text->text = $format($value); $text->setCursor(strlen($text->text)); }
+        }
         return $n;
     }
 
@@ -1637,8 +1642,7 @@ final class Context
           $in->range($d->minF, $d->maxF, $d->now, $d->unitF); // assistive technology reads the value as the text of the field, exactly; the range in floating point
           $buttons = [];
           foreach ([['−', -1, 'Decrease'], ['+', 1, 'Increase']] as [$label, $sign, $name]) {
-              [$w, $h] = $this->metrics->measure($label, $t->fontSize);
-              $b = $this->button($label)->size($w + $t->space(4) + 2, $h + $t->space(2) + 2)->label($name); // mygo's Padding(Space(1), Space(2)) and the border
+              $b = $this->stepButton($label, $name);
               $b->disabled($d->v !== null && ($sign < 0 ? $d->min !== null && DecimalInput::cmp($d->v, $d->min) <= 0 : $d->max !== null && DecimalInput::cmp($d->v, $d->max) >= 0));
               $buttons[$sign] = $b;
           }
@@ -1647,6 +1651,14 @@ final class Context
             if ($this->clicked($b)) { $stepBy($sign); }
         }
         return $n;
+    }
+
+    /** The − or + of a numberInput or decimalInput, named $name for assistive technology: mygo's Padding(Space(1), Space(2)) and its border. */
+    private function stepButton(string $label, string $name): Node
+    {
+        $t = $this->theme;
+        [$w, $h] = $this->metrics->measure($label, $t->fontSize);
+        return $this->button($label)->size($w + $t->space(4) + 2, $h + $t->space(2) + 2)->label($name);
     }
 
     /**
