@@ -6754,6 +6754,25 @@ succeeds are told of, an empty line is none.
   stepped to; its field telling assistive technology its range, value and
   step; the row not shrinking.
 
+## The editor's scroll bars, web views scrolling the UI around them, buttons' padding (v1.126)
+
+- The code editor's scroll bars (mygo's 6b172e2, 5e6b296): their thumbs
+  and the carets' marks show while the pointer is over the editor, or
+  drags a thumb, as a scroll container's do; the marks of changes,
+  matches and diagnostics always. No track is drawn under the thumb.
+- `WebViewOptions::$scrollToContainer` (mygo's 2f67b1c, macOS's part):
+  the web view's `scrollWheel:` hands the event to the window's content
+  view (`View::scrollWheel`, which its own wheel goes through), by lines
+  for a mouse's wheel and by pixels for a touchpad, momentum included;
+  the page never scrolls with them and still takes presses, keys,
+  selection and a pinch.
+- A button's `padding()` sizes it, as mygo's Padding: `makeButton` notes
+  the padding and size it made (`Node::$madePad`), and layout makes the
+  button as much bigger or smaller as the padding set is
+  (`Layout::repad`), on each side not given a size. The − and + of
+  `numberInput` and `decimalInput` take mygo's `padding(Space(1),
+  Space(2))`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

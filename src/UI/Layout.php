@@ -230,6 +230,7 @@ final class Layout
                 self::restyle($n);
             }
         } elseif ($n->kind === Node::BUTTON && $n->metrics !== null) {
+            if ($n->madePad !== null && $n->pads !== null) { self::repad($n); }
             if ($n->ts !== null) { self::restyle($n); } // a label in a style of its own, as mygo's B, I, U and S buttons
             $n->metrics = null;
         } elseif (($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA) && $n->metrics !== null) {
@@ -317,6 +318,15 @@ final class Layout
         $n->natW = $n->mw; $n->natH = $n->mh;
         $n->mw = max($n->mw, $n->minW); $n->mh = max($n->mh, $n->minH);
         $n->minMw = $n->minSet ? $n->minW : max(min($n->minMw, $n->mw), $n->minW); // a least width set replaces its content's
+    }
+
+    /** A button given a padding of its own (padding()): as much bigger or smaller as it is than the one it was made with, on each side not given a size, as mygo's Padding on a button. */
+    private static function repad(Node $n): void
+    {
+        [[$t, $r, $b, $l], [$w, $h]] = $n->madePad;
+        $p = $n->pads;
+        if (!$n->sizedW && $n->fw == $w) { $n->fw += $p[1] + $p[3] - $r - $l; }
+        if ($n->fh == $h) { $n->fh += $p[0] + $p[2] - $t - $b; }
     }
 
     /**

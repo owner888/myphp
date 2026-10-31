@@ -72,6 +72,27 @@ final class View
     /** @var array<int, bool> whether a view takes the click that brings its window forward, by its address: true unless set */
     private static array $firstMouse = [];
 
+    /**
+     * @internal hands the wheel or touchpad event $event to $view, a content
+     * view, at the pointer's place in it: over the view, or over a web view
+     * giving its wheel to the native UI around it (mygo's scrollWheel).
+     */
+    public static function scrollWheel($view, $event): void
+    {
+        $input = self::$inputs[ObjC::addr($view)];
+        $p = ObjC::msg('q:qp', $view, 'convertPoint:fromView:', ObjC::msg('q:', $event, 'locationInWindow'), null);
+        $dx = ObjC::msg('d:', $event, 'scrollingDeltaX');
+        $dy = ObjC::msg('d:', $event, 'scrollingDeltaY');
+        $precise = ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas');
+        if (!$precise) {
+            $dx *= 10; $dy *= 10; // mouse wheel steps are in lines
+        }
+        $input->mouse($p->x, $p->y);
+        $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
+        $input->push(['scroll', $p->x, $p->y, $dx, $dy, $precise, ObjC::msg('L:', $event, 'momentumPhase') !== 0]); // its momentum: what the touchpad sends once the fingers left it
+        Metal::requestFrame($view);
+    }
+
     private static function define(): void
     {
         if (self::$defined) {
@@ -177,19 +198,7 @@ final class View
                 self::$inputs[ObjC::addr($self)]->mouseInside = false;
                 Metal::requestFrame($self);
             }],
-            'scrollWheel:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) use ($point) {
-                $input = self::$inputs[ObjC::addr($self)];
-                [$x, $y] = $point($self, $event);
-                $dx = ObjC::msg('d:', $event, 'scrollingDeltaX');
-                $dy = ObjC::msg('d:', $event, 'scrollingDeltaY');
-                if (!ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas')) {
-                    $dx *= 10; $dy *= 10; // mouse wheel steps are in lines
-                }
-                $input->mouse($x, $y);
-                $input->mods = ObjC::msg('L:', $event, 'modifierFlags') & Key::MODIFIERS;
-                $input->push(['scroll', $x, $y, $dx, $dy, ObjC::msg('b:', $event, 'hasPreciseScrollingDeltas'), ObjC::msg('L:', $event, 'momentumPhase') !== 0]); // its momentum: what the touchpad sends once the fingers left it
-                Metal::requestFrame($self);
-            }],
+            'scrollWheel:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::scrollWheel($self, $event)],
             'keyDown:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::keyDown($self, $event, true)],
             // The release of a key, for a node taking its input as it comes (mygo's KeyReleased).
             'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {

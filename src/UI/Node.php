@@ -101,6 +101,8 @@ final class Node
     public bool $wrapLast = false;
     /** That the app gave the node its width (width(), size()), which a column's stretch keeps: a button's own is its label's. */
     public bool $sizedW = false;
+    /** @internal a button's own padding, [top, right, bottom, left], and the size it made, [w, h]: padding() makes it as much bigger or smaller, as mygo's Padding on a button (Layout::repad). @var ?array{0: list<float>, 1: array{0: float, 1: float}} */
+    public ?array $madePad = null;
     /** That $wrapWidth is the width layout gave the text, narrower than its lines (Layout::wrapTexts, mygo's text wrapping at its width). */
     public bool $autoWrap = false;
     /** For rich text that wraps at no width: the width it was laid out across, wider than its lines, which an alignment or the direction places them in (Layout::arrange); 0 for none. */

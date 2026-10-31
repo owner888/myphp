@@ -94,6 +94,19 @@ $ed = (fn() => $this->ed)->call($ct->st);
 check($ed->scrollX > 0, 'dragging the horizontal scroll bar scrolls');
 $ct->want('|' . str_repeat('x', 200), 'and selects nothing');
 
+// The scroll bar's thumb shows while the pointer is over the editor, as a scroll container's does, and not otherwise, and over no track (mygo's TestCodeEditorScrollbarOnHover).
+$ct = $editor('go', "|package main\n\nfunc main() {}\n");
+$x = 600 - Editor::SCROLLBAR_WIDTH / 2;
+$thumb = fn(): bool => $ct->pixel($x, 5) !== $ct->pixel($x - Editor::SCROLLBAR_WIDTH, 5);
+$ct->h->frame();
+check(!$thumb(), 'the thumb hides with the pointer away');
+$ct->move(300, 200);
+check($thumb(), 'the thumb shows with the pointer over the editor');
+$ct->move(-10, -10);
+check(!$thumb(), 'the thumb goes as the pointer leaves');
+$ct->move($x, 5);
+same($ct->pixel($x - Editor::SCROLLBAR_WIDTH, 390), $ct->pixel($x, 390), 'over the bar, no track below its thumb');
+
 // Several carets: select next occurrence, add carets below, select all occurrences.
 $ct = $editor('go', "foo := 1\nbar := foo\nfoo++");
 $ct->st->select(0, 0);

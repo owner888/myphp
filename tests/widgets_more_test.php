@@ -96,6 +96,20 @@ same([[0.0, 10.0, 10.0], 0.5], [$field->accRange, $field->accStep], 'the field t
 for ($k = 0; $k < 25; $k++) { $h->down(); }
 check(($access(Role::BUTTON, 'Decrease')->states & AccessNode::DISABLED) !== 0, 'at the bottom, Decrease is disabled');
 
+// A button's padding, as mygo's: its size the label's and the padding's, whatever padding() sets; a size given to it stays.
+$btn = [];
+$h = new Headless(function (Context $c) use (&$btn): void {
+    $c->column(10, 8)->alignItems(Node::START);
+      $btn[] = $c->button('Go');
+      $btn[] = $c->button('Go')->padding(0);
+      $btn[] = $c->button('Go')->padding(4, 10);
+      $btn[] = $c->button('Go')->size(100, 0)->padding(0);
+    $c->end();
+}, 400, 300);
+$h->frame();
+$sp = $h->theme->space(1);
+same([[7 * $sp, 3 * $sp], [20 - 7 * $sp, 8 - 3 * $sp], 100.0], [[$btn[0]->w - $btn[1]->w, $btn[0]->h - $btn[1]->h], [$btn[2]->w - $btn[0]->w, $btn[2]->h - $btn[0]->h], $btn[3]->w], 'padding() resizes a button around its label; its width given stays');
+
 // A toast: shown after the click, once for the same message, gone after its time.
 $now = 0;
 $h = poseTester(function (Context $c): void {

@@ -1653,12 +1653,10 @@ final class Context
         return $n;
     }
 
-    /** The − or + of a numberInput or decimalInput, named $name for assistive technology: mygo's Padding(Space(1), Space(2)) and its border. */
+    /** The − or + of a numberInput or decimalInput, named $name for assistive technology, padded Space(1) by Space(2) as mygo's. */
     private function stepButton(string $label, string $name): Node
     {
-        $t = $this->theme;
-        [$w, $h] = $this->metrics->measure($label, $t->fontSize);
-        return $this->button($label)->size($w + $t->space(4) + 2, $h + $t->space(2) + 2)->label($name);
+        return $this->button($label)->padding($this->theme->space(1), $this->theme->space(2))->label($name);
     }
 
     /**
@@ -1708,7 +1706,9 @@ final class Context
         [$base, $hover, $pressed, $fg] = $primary ? [$t->accent, $t->accentHover, $t->accentPressed, $t->accentText] : [$toolbar || $segment ? null : $t->surface, $t->surfaceHover, $t->surfacePressed, $t->text];
         $bordered = !$primary && !$toolbar && !$segment;
         $edge = $bordered ? 2.0 : 0.0; // its border, a point each side, around the padding, as mygo's
-        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + $t->space($segment ? 6 : ($toolbar ? 5 : 7)) + $edge, $h + $t->space($segment ? 2 : 3) + $edge, 0, $s, $on ? $pressed : $base, $size, $fg));
+        [$py, $px] = [$t->space($segment ? 1 : 1.5), $t->space($segment ? 3 : ($toolbar ? 2.5 : 3.5))];
+        $n = $this->add(new Node(Node::BUTTON, 0, 0, 0, $w + 2 * $px + $edge, $h + 2 * $py + $edge, 0, $s, $on ? $pressed : $base, $size, $fg));
+        $n->madePad = [[$py, $px, $py, $px], [$n->fw, $n->fh]];
         $n->bordered = $bordered;
         $n->metrics = $this->metrics; // a style of its own (bold(), italic()) measures its label again in layout
         if ($segment) {

@@ -47,6 +47,7 @@ final class WebView
         }
         $this->page = new Page($host, $this, ObjC::rect(0, 0, 0, 0), $o->page);
         $web = $this->page->web->ns;
+        if ($o->scrollToContainer) { $this->page->web->scrollTo = $below; }
         ObjC::msg('v:L', $web, 'setAutoresizingMask:', 0);
         $this->clip = ObjC::msg('p:r', ObjC::alloc('MyPHPClipView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
         ObjC::msg('v:b', $this->clip, 'setWantsLayer:', true);

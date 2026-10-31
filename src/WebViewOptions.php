@@ -15,5 +15,13 @@ final class WebViewOptions
         public string $backgroundColor = '',
         /** Shows what the window's view paints under the web view through the transparent parts of its page. */
         public bool $transparent = false,
+        /**
+         * Gives the wheel and the touchpad over the page to the native UI
+         * under the pointer, as over its other elements, for a page as tall
+         * as its content in a scroll container (mygo's ScrollToContainer):
+         * the page never scrolls with them, and still takes the presses,
+         * the keyboard, selection and a touchpad's pinch.
+         */
+        public bool $scrollToContainer = false,
     ) {}
 }

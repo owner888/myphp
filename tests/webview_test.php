@@ -205,6 +205,34 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     same([['router.lan', 80, 'admin', 'basic', false], ['proxy.lan', 3128, '', 'digest', true]], $asked, 'sign-in: what the handler was asked');
     same([1, null], $answer($challenge('NSURLAuthenticationMethodClientCertificate')), 'sign-in: a client certificate, WebKit\'s');
     $free->onAuth = null;
+
+    // A web view giving the wheel to the native UI around it (mygo's TestEmbeddedWebViewScrollReachesSurface): a mouse's lines, by 10 points
+    // each as over the native UI, and a touchpad's pixels reach the content view's input; a page scrolling itself keeps them.
+    $surface = $O::msg('p:r', $O::alloc('NSView'), 'initWithFrame:', $rect);
+    $in = new \MyPHP\UI\Input();
+    $inputs = new \ReflectionProperty(\MyPHP\Native\View::class, 'inputs');
+    $inputs->setValue(null, $inputs->getValue() + [$O::addr($surface) => $in]);
+    $sv = \MyPHP\Native\WebView::create($rect, [], function () {});
+    $sv->scrollTo = $surface;
+    $cg = \FFI::cdef('void *CGEventCreateScrollWheelEvent2(void *, uint32_t, uint32_t, int32_t, int32_t, int32_t); void CFRelease(void *);', '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics');
+    /** Sends the web view a wheel event of $unit (kCGScrollEventUnitPixel 0, Line 1), and returns what it should come as: its deltas, in points. */
+    $wheel = function (int $unit, int $dy, int $dx) use ($cg, $O, $sv): array {
+        $e = $cg->CGEventCreateScrollWheelEvent2(null, $unit, 2, $dy, $dx, 0);
+        $ev = $O::msg('p:p', $O::cls('NSEvent'), 'eventWithCGEvent:', $e);
+        $O::msg('v:p', $sv->ns, 'scrollWheel:', $ev);
+        $k = $unit === 1 ? 10 : 1; // a mouse's lines by 10 points
+        $want = ['scroll', $O::msg('d:', $ev, 'scrollingDeltaX') * $k, $O::msg('d:', $ev, 'scrollingDeltaY') * $k, $unit === 0];
+        $cg->CFRelease($e);
+        return $want;
+    };
+    $want = [$wheel(1, 1, -2), $wheel(0, -3, 0)];
+    $got = array_map(fn(array $e) => [$e[0], $e[3], $e[4], $e[5]], array_values(array_filter($in->events, fn(array $e) => $e[0] === 'scroll')));
+    same($want, $got, 'a page giving its wheel to the native UI: lines and pixels reach it');
+    check($want[1][2] != 0 && $want[0][2] != 0, 'and the events scroll');
+    $sv->scrollTo = null;
+    $in->events = [];
+    $wheel(0, -3, 0);
+    same([], $in->events, 'a page scrolling itself keeps its wheel');
 }
 
 // Session states (mygo's session_state_test.go): the system, the URL and WebKit's own state, which a later version's or anything else is not.

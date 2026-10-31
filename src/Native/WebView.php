@@ -26,6 +26,8 @@ final class WebView
     public ?Closure $onNavigate = null;
     /** WebKit's context menu is about to open over the view: fn(NSMenu, NSEvent) changes it (ContextMenus::show). */
     public ?Closure $onContextMenu = null;
+    /** The content view the wheel and the touchpad over the page go to instead of WebKit, null for the page's own (WebViewOptions::$scrollToContainer). */
+    public mixed $scrollTo = null;
     /** Loads the app starts, whose navigations onNavigate is told it started. */
     private int $loads = 0;
     /** Asked whether the page may use the camera or the microphone: (list of "camera", "microphone", the page's origin) → granted. @var ?Closure(list<string>, string): bool */
@@ -523,6 +525,15 @@ final class WebView
                 ObjC::msgSuper('v:pp', $self, 'WKWebView', 'willOpenMenu:withEvent:', $menu, $event);
                 $view = self::$views[ObjC::addr($self)] ?? null;
                 if ($view?->onContextMenu !== null) { ($view->onContextMenu)($menu, $event); }
+            }],
+            // The wheel over a page that gives it to the native UI around it (mygo's ScrollToContainer), or the page's.
+            'scrollWheel:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
+                $to = (self::$views[ObjC::addr($self)] ?? null)?->scrollTo;
+                if ($to === null) {
+                    ObjC::msgSuper('v:p', $self, 'WKWebView', 'scrollWheel:', $event);
+                    return;
+                }
+                View::scrollWheel($to, $event);
             }],
             'mouseDown:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 if (self::$lastDown !== null) { ObjC::msg('v:', self::$lastDown, 'release'); }

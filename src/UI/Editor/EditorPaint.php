@@ -570,10 +570,12 @@ trait EditorPaint
         [$rx, $ry, $rw, $rh] = $r;
         [$vertical, $horizontal] = $this->scrollbars();
         $sw = self::SCROLLBAR_WIDTH;
+        // The thumbs and the carets' marks show while the pointer is over the editor, or drags a thumb, as a scroll container's do; the marks of changes, matches and diagnostics always.
+        $shown = $this->pointerIn || $this->scrollbar['active'];
         if ($vertical) {
             $x = $rx + $rw - $sw;
+            // No track under the thumb, as a scroll container draws none.
             $hovered = $this->pointerIn && $this->region === self::REGION_VSCROLL;
-            if ($hovered || $this->scrollbar['active']) { self::fill($list, $x, $ry, $sw, $rh, [$t->scrollbar, $t->scrollbarAlpha * 0.15]); }
             $span = $this->scrollMax() + $this->viewH;
             $mark = function (float $y, float $h, float $x0, float $w, array $c) use ($list, $x, $ry, $rh, $span) {
                 self::fill($list, $x + $x0, $ry + $y / $span * $rh, $w, max($h / $span * $rh, 2.0), $c);
@@ -614,6 +616,7 @@ trait EditorPaint
                 if ($i > 2000) { break; }
                 $mark($h->top($v->text->lineOf($dg->start)), $v->lineHeight, 7, 3, $ct->severityColor($dg->severity));
             }
+            if (!$shown) { return; }
             // Carets.
             if (count($this->sels) <= 100) {
                 $tc = $ct->c['text'];
@@ -623,7 +626,7 @@ trait EditorPaint
             $alpha = $hovered || $this->scrollbar['active'] ? 0.9 : 0.5;
             self::fill($list, $x + 2, $ry + $t0, $sw - 4, $t1 - $t0, [$t->scrollbar, $t->scrollbarAlpha * $alpha], ($sw - 4) / 2);
         }
-        if ($horizontal) {
+        if ($horizontal && $shown) {
             [$t0, $t1] = $this->thumb(true);
             $y = $ry + $rh - $sw;
             $alpha = $this->pointerIn && $this->region === self::REGION_HSCROLL || $this->scrollbar['active'] ? 0.9 : 0.4;
