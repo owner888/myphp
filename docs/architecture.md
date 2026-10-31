@@ -6804,6 +6804,50 @@ succeeds are told of, an empty line is none.
 - examples/code-editor's PHP file shows an enum, an attribute and a
   heredoc; the gallery's file list and tree are a PHP project's.
 
+## Texts and rows wrapping where they are laid out (v1.129)
+
+- A text given a `maxWidth()` narrower than its lines wraps there
+  (`Layout::wrapTexts` compares its width with its natural one, `natW`,
+  which the largest width does not cut), as one its container narrows:
+  the gallery's line under "Live data" ran past its card.
+- A wrapping row arranged at another width than it was measured at, as
+  one given none (`wrap(0)`, which the gallery's rows are) or last
+  frame's, is measured again at that width in the same frame
+  (`wrapTexts`' second pass), as high as its lines: the rich text
+  toolbar's second line went under the editor, and a frame was asked
+  for after each. Its lines break at its children's flex base sizes,
+  their `basis()` or their content's within their least and largest
+  (`Layout::lineSizes`, mygo's hypothetical sizes): the Charts page's
+  cards of basis 320 went four to a line, squeezing Live data.
+- The scroll containers' offsets are those the frame began with in that
+  second pass (`Layout::$scrolled`): the first, measuring the rows on one
+  line, had kept them within a shorter content, and the Charts page did
+  not scroll, nor Styling and Motion to their ends.
+- `alertDialog()` and `modal()` build in an overlay (mygo's Overlay and
+  DialogBase), over the whole window and centered in it wherever they
+  are built: built in a page beside a sidebar, they were placed from the
+  page's corner; a modal's panel is no larger than the window less
+  Space(10).
+
+## Interactive glass lit by the pointer (v1.129)
+
+- `Glass` with `interactive` follows the pointer over its node as it
+  follows its press: `buildMaterial` animates `$lit` to 1 while the node
+  is hovered, within 150 ms (at once with Reduce Motion, as `animate()`
+  is), and `paintMaterial` lays a veil over the glass by it, white at 10%
+  in a dark theme and black at 5% in a light one (mygo-deviations.md).
+- `DisplayList::rect`, `ring`, `gradient` and `glass` keep a radius to
+  half the shorter side, as CSS's radii are: past it the shader's corners
+  came to points, as a capsule's glass and its veil did (the gallery's
+  Done, radius 20 on 38 points).
+- While a press is held, the nodes under the pointer as it began keep
+  their hover as long as the pointer is over them, the topmost and those
+  around it (`Runtime::hitChain`, kept with the press; mygo's Hovered),
+  as well as the node pressed and those around it: a press on a page
+  inside a part that takes presses around it, as the gallery's router,
+  had left only that part hovering, and the page's scroll bars hid until
+  the release.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

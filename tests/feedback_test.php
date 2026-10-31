@@ -155,3 +155,22 @@ same('x', $query->text, 'opened again, typing goes over the last query');
 $h->type('yz');
 $h->input->push(['accessOn']); $h->frame();
 check($h->byText('No matches') !== null && fbNode($h, Role::STATUS, 'No matches') !== null, 'no matches, read as a status');
+
+// An alert or a modal built inside a part of the window, beside a sidebar, centered in the window over all of it, as mygo's are in an overlay (the gallery's showed toward its corner).
+foreach (['alert', 'modal'] as $what) {
+    $open = true; $panel = null;
+    $h = new Headless(function (\MyPHP\UI\Context $c) use (&$open, &$panel, $what) {
+        $c->row(0, 0, 1)->fill();
+          $c->column(0, 0)->size(200, 0); $c->end();
+          $c->column(80, 0, 1);
+            if ($what === 'alert') { $c->alertDialog($open, 'Delete?', 'For good.', 'Cancel', 'Delete'); }
+            else { $c->modal($open, function () use ($c) { $c->text('Inside'); }); }
+          $c->end();
+        $c->end();
+        $panel = null;
+        $find = function (\MyPHP\UI\Node $n) use (&$find, &$panel) { if (in_array($n->role, [\MyPHP\UI\Role::ALERT_DIALOG, \MyPHP\UI\Role::DIALOG], true)) { $panel = $n; } foreach ($n->kids as $k) { $find($k); } };
+        $find($c->root);
+    }, 1000, 700);
+    $h->frame();
+    same([500.0, 350.0], [round($panel->x + $panel->w / 2), round($panel->y + $panel->h / 2)], "$what: centered in the window");
+}

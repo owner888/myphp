@@ -2228,3 +2228,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     and properties after `->`; `enum`, `exit`, `die` keywords and the
     scalar types types.
   - Why: the developer asked for PHP done as a PHP editor does it.
+
+## Interactive glass lit by the pointer (v1.129)
+
+- **Hover**
+  - mygo: interactive glass grows while pressed, and nothing more.
+  - myphp: it also lights up while the pointer is over it, within 150
+    ms: a veil of white at 10% over it in a dark theme, of black at 5%
+    in a light one; at once with Reduce Motion.
+  - Why: the developer asked for it, as the buttons around show they can
+    be clicked.

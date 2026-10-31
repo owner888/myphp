@@ -94,3 +94,16 @@ $h = new Headless(function (Context $c) use (&$n): void {
 }, 400, 400);
 $h->frame(1);
 check($h->rect($n['t'])[2] >= 10 * 6.5 - 0.01, 'no narrower than bbbbbbbbbb, laid out by the stub engine: ' . json_encode($h->rect($n['t'])));
+
+// A text with a largest width wraps there, as one its container narrows (mygo's MaxWidth on a text): the gallery's line under "Live data" ran past its card.
+$n = null;
+$h = new Headless(function (Context $c) use (&$n) {
+    $c->row(0, 16)->alignItems(Node::START);
+      $c->column(18, 12, 0);
+        $n = $c->text('A timer pushes a sample every second with Window::update.')->maxWidth(260);
+        $c->box(260, 80, 0);
+      $c->end();
+    $c->end();
+}, 900, 600);
+$h->frame();
+check($n->w <= 260 && $n->h > 16 && $n->wrapWidth !== null, 'a text past its maxWidth wraps there: ' . json_encode([$n->w, $n->h]));

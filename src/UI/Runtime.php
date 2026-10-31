@@ -631,7 +631,7 @@ final class Runtime
                     foreach ($this->steppers as $id => $_) { // a press on a stepper's half steps it at once, though released before the frame is built (mygo's stepper press)
                         if (!isset($this->disabledIds[$id]) && ($dir = $this->holding($id)) !== 0) { $this->steps[$id] = ($this->steps[$id] ?? 0) + $dir; $this->hold[3] = 1; }
                     }
-                    $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($e[6] ?? $this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0]];
+                    $this->pointerPress = ['id' => $this->pressTarget($e[1], $e[2]), 'track' => new DragTrack($e[6] ?? $this->now, $e[1], $e[2]), 'down' => true, 'released' => false, 'v' => [0.0, 0.0], 'chain' => $this->hitChain($e[1], $e[2])];
                     $this->pressDragger = $this->pressDragger($this->pointerPress['id']);
                     foreach ($this->sliders as $id => $r) {
                         if ($e[1] >= $r[0] && $e[1] < $r[0] + $r[2] && $e[2] >= $r[1] && $e[2] < $r[1] + $r[3]) {
@@ -3326,7 +3326,19 @@ final class Runtime
         for ($a = $this->parents[$p] ?? 0, $n = 0; $a !== 0 && $n < 1024; $a = $this->parents[$a] ?? 0, $n++) {
             if ($a === $id) { return true; } // around the node pressed
         }
-        return false; // while a press is held, only the node pressed and those around it hover (mygo's hover while pressed)
+        return isset($this->pointerPress['chain'][$id]); // while a press is held, the nodes under the pointer as it began hover, the one pressed and those around it, a scroll container's bars staying, as long as the pointer is over them; the others hover no more (mygo's Hovered)
+    }
+
+    /** The topmost node at ($x, $y) and those around it, by id (mygo's hitChain): what hovers while a press that began there is held. @return array<int, true> */
+    private function hitChain(float $x, float $y): array
+    {
+        $top = null; $at = -1;
+        foreach ($this->rects as $id => $_) {
+            if (($this->order[$id] ?? -1) > $at && $this->under($id, $x, $y)) { $top = $id; $at = $this->order[$id]; }
+        }
+        $chain = [];
+        for ($a = $top ?? 0, $n = 0; $a !== 0 && $n < 1024; $a = $this->parents[$a] ?? 0, $n++) { $chain[$a] = true; }
+        return $chain;
     }
 
     /**

@@ -3160,25 +3160,28 @@ final class Context
         }
         $t = $this->theme;
         $chosen = -1;
-        $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
-        $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->radius($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)
-              ->role(Role::ALERT_DIALOG)->label($title);
-          $panel->description = $message;
-            $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
-            if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
-            $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
-            $this->row(0, $t->space(2))->justify(Node::END);
-              $make = fn() => (object)['opening' => true];
-              $local = $rt?->local($back->id, $make) ?? $make();
-              foreach ($buttons as $i => $label) {
-                  $b = $i === count($buttons) - 1 ? $this->primaryButton($label) : $this->button($label);
-                  if ($i === count($buttons) - 1 && $local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($b->id); } // AutoFocus: the default, which Enter clicks
-                  if ($this->clicked($b)) { $chosen = $i; }
-              }
+        $back = null;
+        $this->overlay(function () use (&$back, &$chosen, $t, $rt, $title, $message, $buttons): void { // over the window, wherever it is built (mygo's Overlay)
+            $back = $this->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block();
+            $back->alpha = 0.4;
+              $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->size(min($t->space(75), $this->width - $t->space(10)), 0)->radius($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)
+                  ->role(Role::ALERT_DIALOG)->label($title);
+              $panel->description = $message;
+                $this->text($title, $t->fontSize + 1, $t->text, Font::BOLD);
+                if ($message !== '') { $this->text($message, $t->fontSize, $t->textMuted); }
+                $this->column(0, 0)->size(0, $t->space(2)); $this->end(); // Margin(Space(2), 0, 0, 0) on the buttons
+                $this->row(0, $t->space(2))->justify(Node::END);
+                  $make = fn() => (object)['opening' => true];
+                  $local = $rt?->local($back->id, $make) ?? $make();
+                  foreach ($buttons as $i => $label) {
+                      $b = $i === count($buttons) - 1 ? $this->primaryButton($label) : $this->button($label);
+                      if ($i === count($buttons) - 1 && $local->opening && $rt !== null) { $local->opening = false; $rt->focusOn($b->id); } // AutoFocus: the default, which Enter clicks
+                      if ($this->clicked($b)) { $chosen = $i; }
+                  }
+                $this->end();
+              $this->end();
             $this->end();
-          $this->end();
-        $this->end();
+        });
         if ($chosen < 0 && $this->overlayShortcut($back, Key::ESCAPE)) { $chosen = self::ALERT_DISMISSED; } // the dialog on top's
         if ($chosen !== -1) { $open = false; }
         return $chosen;
@@ -3725,12 +3728,16 @@ final class Context
             return null;
         }
         $t = $this->theme;
-        $back = $this->key('modal')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes
-        $back->alpha = 0.4;
-          $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->radius($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)->role(Role::DIALOG);
-            $fn();
-          $this->end();
-        $this->end();
+        $back = $panel = null;
+        $this->overlay(function () use (&$back, &$panel, $t, $fn): void { // over the window, wherever it is built (mygo's DialogBase)
+            $back = $this->key('modal')->column(0, 0, 0, 0x000000)->at(0, 0)->size($this->width, $this->height)->center()->block(); // keyed: it comes and goes
+            $back->alpha = 0.4;
+              $panel = $this->column($t->space(5), $t->space(3), 0, $t->background)->radius($t->space(2.5))->shadow(0, 10, 30, 0, 0x000000, 0.3)->role(Role::DIALOG)
+                  ->maxWidth($this->width - $t->space(10))->maxHeight($this->height - $t->space(10));
+                $fn();
+              $this->end();
+            $this->end();
+        });
         if ($this->overlayShortcut($back, Key::ESCAPE) || ($this->clicked($back) && !$this->hovered($panel))) { // Escape is the dialog on top's
             $open = false;
             $back->dismissed = true;

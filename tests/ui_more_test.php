@@ -120,3 +120,21 @@ $h->drag(20, 60);
 check(!$rowHovered && $otherHovered && $h->byText('Remove') === null, 'the button over the row gone with the hover: what is under the pointer hovers');
 $h->release(20, 60);
 same(1, $removes, 'released away from it: no click');
+// A press on what is inside a node, in a part of the window that takes presses around it, keeps that node hovered, as the nodes under the pointer as the press began do (mygo's Hovered): a page's scroll bars stayed hidden while a press was held on it.
+$inner = false;
+$h = new Headless(function (Context $c) use (&$inner): void {
+    $outer = $c->column(0, 0, 1)->fill();
+    $c->clicked($outer); // takes presses around what is inside it
+      $box = $c->column(20, 0)->size(200, 100);
+        $c->text('Inside');
+      $c->end();
+      $inner = $c->hovered($box);
+    $c->end();
+}, 300, 200);
+$h->frame();
+$h->hover(50, 50); $h->frame();
+$h->press(50, 50); $h->frame();
+check($inner, 'pressed in it, a node around the point pressed stays hovered');
+$h->drag(250, 150); $h->frame();
+check(!$inner, 'and hovers no more as the pointer leaves it');
+$h->release(250, 150);

@@ -129,6 +129,22 @@ check(abs($g[0] - 48.9) < 1e-4 && abs($g[2] - 202.2) < 1e-4 && abs($g[1] - 49.55
 $h->release(150, 100);
 $h->frame();
 same(50.0, glassKind($h, 5)[0][0], 'let go, it shrinks back');
+// The pointer over it lights it up, a veil over it lightening dark glass (darkening light), and leaving puts it out (the developer asked for it, as the buttons around show they can be clicked).
+$veils = fn(): array => array_values(array_filter(glassKind($h, 0), fn(array $q) => abs($q[7] - 0.1) < 1e-6 && $q[0] == 50.0 && $q[2] == 200.0));
+check(count($veils()) === 1 && $veils()[0][4] == 1.0, 'the pointer over it, in a dark theme: a veil of white at 10%');
+$h->hover(280, 180);
+$h->frame();
+same([], $veils(), 'the pointer gone: none');
+// A capsule's glass and its veil, their radius past half its height kept to half: a radius past it made the shader's ends pointed.
+$h = new Headless(function (Context $c): void {
+    $c->column()->at(50, 50)->size(80, 38)->radius(20)->material(new Glass(interactive: true));
+    $c->end();
+}, 300, 200);
+$h->rt->reduceMotion = true;
+$h->hover(90, 69);
+$h->frame();
+$veil = array_values(array_filter(glassKind($h, 0), fn(array $q) => $q[0] == 50.0 && $q[2] == 80.0));
+same([19.0, 19.0], [glassKind($h, 5)[0][8], $veil[0][8] ?? null], 'a capsule\'s glass and veil: radius 19 of its 38 points');
 
 // Glass in a drawing.
 $h = new Headless(function (Context $c): void {

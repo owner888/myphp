@@ -368,6 +368,7 @@ final class DisplayList
         if ($this->n === $this->capacity) {
             throw new RuntimeException("display list full ({$this->capacity} rects)");
         }
+        if ($radius * 2 > $w || $radius * 2 > $h) { $radius = max(0.0, min($w, $h) / 2); } // a capsule's ends round at most, as CSS's radii do: past half a side the shader's corners point
         $b = $this->buf; $k = $this->n * 16; $c = $this->clip;
         $b[$k] = $x; $b[$k + 1] = $y; $b[$k + 2] = $w; $b[$k + 3] = $h;
         $b[$k + 4] = (($rgb >> 16) & 255) / 255; $b[$k + 5] = (($rgb >> 8) & 255) / 255; $b[$k + 6] = ($rgb & 255) / 255; $b[$k + 7] = $alpha * $this->opacity;
@@ -483,14 +484,14 @@ final class DisplayList
     public function glass(float $x, float $y, float $w, float $h, float $radius, int $style, int $tint, float $tintAlpha, float $sigma, array $tone = self::GLASS_TONE): void
     {
         $this->glass[] = [$this->n, $sigma];
-        $this->quad($x, $y, $w, $h, $tint, $tintAlpha, $radius, 5.0, (float)$style, 0.0, 2);
+        $this->quad($x, $y, $w, $h, $tint, $tintAlpha, min($radius, $w / 2, $h / 2), 5.0, (float)$style, 0.0, 2); // a capsule's ends round at most, as rect()'s
         $this->slot([$tone[0], $tone[1], $tone[2], 0.0], [$tone[3], $tone[4], 0.0, 0.0], 0.0, 0.0, 0.0, [0.0, 0.0, 0.0, 0.0]);
     }
 
     /** A vertical gradient of $rgb from $alphaTop to $alphaBottom. */
     public function gradient(float $x, float $y, float $w, float $h, int $rgb, float $alphaTop, float $alphaBottom, float $radius = 0.0): void
     {
-        $this->quad($x, $y, $w, $h, $rgb, $alphaTop, $radius, 6.0, $alphaBottom);
+        $this->quad($x, $y, $w, $h, $rgb, $alphaTop, min($radius, $w / 2, $h / 2), 6.0, $alphaBottom);
     }
 
     /** A gradient from $from at $fromAlpha to $to at $toAlpha, across the quad, or down it when $vertical. */
@@ -536,8 +537,8 @@ final class DisplayList
     /** A ring: the rounded rect's outline, $thickness points wide inside its edge. */
     public function ring(float $x, float $y, float $w, float $h, int $rgb, float $alpha, float $radius, float $thickness): void
     {
-        $this->quad($x, $y, $w, $h, $rgb, $alpha, $radius, 4.0, $thickness);
         $r = min($radius, $w / 2, $h / 2);
+        $this->quad($x, $y, $w, $h, $rgb, $alpha, $r, 4.0, $thickness);
         if ($r > 0 && $thickness > 0) { // in bands that follow its round corners, inside and out (Bands)
             $ri = max($r - $thickness, 0.0);
             $this->inBands(1, [[$x, $y, $w, $h], [$r, $r, $r, $r]], [[[$x + $thickness, $y + $thickness, $w - 2 * $thickness, $h - 2 * $thickness], [$ri, $ri, $ri, $ri]]]);

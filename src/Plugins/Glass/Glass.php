@@ -25,10 +25,12 @@ final class Glass implements MaterialBuilder
         /** Colors the glass by $tintAlpha, as for a prominent button: an opaque tint lets a little of the glass show, as AppKit's does. */
         public ?int $tint = null,
         public float $tintAlpha = 1.0,
-        /** Makes the glass grow a little while the node is pressed, as AppKit's interactive glass does. */
+        /** Makes the glass grow a little while the node is pressed, as AppKit's interactive glass does, and light up while the pointer is over it. */
         public bool $interactive = false,
         /** How far an interactive glass has grown, from 0 to 1, as its node is built. @internal */
         public float $grow = 0,
+        /** How lit an interactive glass is by the pointer over it, from 0 to 1, as its node is built. @internal */
+        public float $lit = 0,
         /**
          * From 0 to 1, makes panes as large as sidebars clearer, the content
          * under them reading through (mygo's Clarity): 0, the default, is
@@ -51,7 +53,15 @@ final class Glass implements MaterialBuilder
     private const BLUR = [10.0, 5.0, 2.0], LIGHT_LOW = [0.541, 0.35, 0.2], DARK_LOW = [0.15, 0.15, 0.1], DARK_HIGH = [0.51, 0.6, 0.85],
         RIM = [0.35, 0.5, 0.5], BEZEL = [36.0, 48.0, 48.0];
 
-    /** Follows the press of an interactive glass's node: it grows as it is pressed and shrinks back as it is let go, within 150 ms, as AppKit's does. */
+    /** How much an interactive glass lights up with the pointer over it: white over dark glass, black over light (the developer asked for it; mygo's reacts to the press alone). */
+    private const LIT_DARK = 0.1, LIT_LIGHT = 0.05;
+
+    /**
+     * Follows the press of an interactive glass's node: it grows as it is
+     * pressed and shrinks back as it is let go, within 150 ms, as AppKit's
+     * does; and the pointer over it, which lights it up as quickly, as the
+     * buttons around it show they can be clicked.
+     */
     public function buildMaterial(Context $c, Node $n): Material
     {
         if (!$this->interactive) {
@@ -60,6 +70,7 @@ final class Glass implements MaterialBuilder
         $pressed = ($c->runtime?->input->mouseDown ?? false) && $c->hovered($n);
         $g = clone $this;
         $g->grow = $c->animate($n, 'glass-press', $pressed ? 1.0 : 0.0, 0.15);
+        $g->lit = $c->animate($n, 'glass-hover', $c->hovered($n) ? 1.0 : 0.0, 0.15);
         return $g;
     }
 
@@ -67,7 +78,9 @@ final class Glass implements MaterialBuilder
      * Paints the glass, grown by how far it is pressed: as macOS 27's,
      * measured from NSGlassEffectView, by about 1.1 points left and right
      * and 0.45 above and below, whatever its size. AppKit stretches the
-     * content too, a pixel or so, which the children here are not.
+     * content too, a pixel or so, which the children here are not. Lit by
+     * the pointer, a veil over it lightens it in a dark theme and darkens
+     * it in a light one.
      */
     public function paintMaterial(Painter $p, array $box, float $radius): void
     {
@@ -79,6 +92,10 @@ final class Glass implements MaterialBuilder
             }
         }
         self::paint($p, $box, $radius, $this);
+        if ($this->lit > 0) {
+            $dark = $p->theme()->dark;
+            $p->fill($box, $dark ? 0xffffff : 0x000000, $radius, ($dark ? self::LIT_DARK : self::LIT_LIGHT) * $this->lit);
+        }
     }
 
     /**

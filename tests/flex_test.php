@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Anchor, Context, Direction, Node, Track};
+use MyPHP\UI\{Anchor, Context, Direction, Node, ScrollState, Track};
 
 /** The rects of the nodes labeled $labels once $view is laid out in a $w × $h window. @return array<string, array{0: float, 1: float, 2: float, 3: float}> */
 function flexBoxes(\Closure $view, float $w, float $h, string ...$labels): array
@@ -318,3 +318,40 @@ foreach ([false, true] as $rtl) {
     $at = fn($k) => array_slice($h->rect($n[$k]), 0, 2);
     same($rtl ? [[0.0, 0.0], [40.0, 0.0], [0.0, 20.0]] : [[60.0, 0.0], [20.0, 0.0], [60.0, 20.0]], [$at('a'), $at('b'), $at('c')], ($rtl ? 'right to left: ' : '') . 'a reversed wrapping row: each line from the far side');
 }
+
+// A wrapping row given no width (wrap(0)), or another than it gets: wrapped at the width it is arranged at, as high as its lines, in the same frame (mygo's Wrap);
+// what follows it in a column goes below its lines: the gallery's rich text toolbar went under the editor.
+$r = $below = null;
+$h = new Headless(function (Context $c) use (&$r, &$below) {
+    $c->column(16, 12, 1);
+      $r = $c->row(0, 4)->wrap(0)->alignItems(Node::CENTER);
+        foreach (range(1, 18) as $i) { $c->button("Button $i"); }
+      $c->end();
+      $below = $c->box(0, 100, 0x333333)->fillWidth();
+    $c->end();
+}, 500, 600);
+$h->frame(1);
+$last = end($r->kids);
+check($last->y + $last->h <= $r->y + $r->h + 0.5 && $below->y >= $r->y + $r->h, 'a row wrapping at the width it got is as high as its lines, what follows below them: ' . json_encode([$r->h, $last->y, $below->y]));
+// Its lines break at its children's flex base sizes, their basis (mygo's hypothetical sizes): cards of basis 320 two by two in 715 points, not four.
+$cards = [];
+$h = new Headless(function (Context $c) use (&$cards) {
+    $c->row(0, 16)->wrap(0)->alignItems(Node::START);
+      for ($i = 0; $i < 5; $i++) { $cards[$i] = $c->column(18, 12, 0)->basis(320)->grow(1)->minWidth(0); $c->box(100, 50, 0); $c->end(); }
+    $c->end();
+}, 715, 900);
+$h->frame();
+same([[0.0, 349.5], [365.5, 349.5], [0.0, 349.5], [365.5, 349.5], [0.0, 715.0]], array_map(fn($n) => [$n->x, $n->w], $cards), 'cards of basis 320 wrap two by two');
+// A scroll container whose content the wrapping makes taller: it scrolls over all of it, its offset not kept within the content as it measured before the wrapping (the gallery's Charts page did not scroll).
+$s = new ScrollState();
+$h = new Headless(function (Context $c) use ($s) {
+    $c->column(16, 16, 1)->fill()->scroll($s);
+      $c->row(0, 16)->wrap(0)->alignItems(Node::START);
+        for ($i = 0; $i < 5; $i++) { $c->column(18, 12, 0)->basis(320)->grow(1)->minWidth(0); $c->box(100, 300, 0); $c->end(); }
+      $c->end();
+    $c->end();
+}, 715, 600);
+$h->frame();
+$s->y = 200;
+$h->frame();
+same([200.0, true], [$s->y, $s->maxY > 400], 'scrolled over the wrapped rows: ' . $s->maxY);

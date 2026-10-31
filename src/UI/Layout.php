@@ -45,14 +45,16 @@ final class Layout
     {
         self::$window = [$w, $h];
         self::$metrics = $c->metrics();
-        self::$aligned = [];
+        self::$aligned = []; self::$scrolled = [];
         self::measure($c->root);
         self::arrange($c->root, 0, 0, $w, $h);
-        if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width)
+        if (self::wrapTexts($c->root)) { // texts arranged narrower than their lines wrap at the width they got, as high as their lines then (mygo's text wrapping at its width), and wrapping rows at theirs
             // A list's row aligned again, from where it showed, as high as its lines wrap: a list following its end keeps it in view as a reply grows past the list.
             foreach (self::$aligned as [$s, $aligning, $row, $top, $lag, $grew]) {
                 [$s->aligning, $s->shownRow, $s->shownTop, $s->lag, $s->grew] = [$aligning, $row, $top, $lag, $grew];
             }
+            // A scroll container where it was asked to scroll, which the content grown by the wrapping may let it (its offset kept within the first pass's content).
+            foreach (self::$scrolled as [$s, $x, $y]) { [$s->x, $s->y] = [$x, $y]; }
             self::measure($c->root);
             self::arrange($c->root, 0, 0, $w, $h);
         }
@@ -66,7 +68,7 @@ final class Layout
     private static function wrapTexts(Node $n): bool
     {
         if ($n->memo === 2) { return false; }
-        if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < $n->mw) {
+        if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < max($n->mw, $n->natW)) { // narrower than its lines, also by its maxWidth()
             if ($n->kind === Node::TEXT) {
                 [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it: a size given to it stays
                 $n->toRich();
@@ -80,7 +82,9 @@ final class Layout
             $n->wrapWidth = $n->w - $n->padL() - $n->padR(); $n->autoWrap = true; $n->layout = null; // inside its padding
             return true;
         }
-        $wrapped = false;
+        // A wrapping row arranged at another width than it was measured at, as one given none (wrap(0)) or last frame's: its lines at this width, and so its height, in this frame (mygo's Wrap).
+        $wrapped = $n->wraps && $n->w > 0 && abs($n->w - $n->wrapWidth) > 0.5;
+        if ($wrapped) { $n->wrapWidth = $n->w; }
         foreach ($n->kids as $k) { $wrapped = self::wrapTexts($k) || $wrapped; }
         return $wrapped;
     }
@@ -559,6 +563,7 @@ final class Layout
         $flexible = true;
         if ($n->scroll instanceof ScrollState) {
             $s = $n->scroll;
+            self::$scrolled[spl_object_id($s)] ??= [$s, $s->x, $s->y]; // where it was asked to scroll, before this layout keeps it within its content
             $contentMain = $used + $gap * ($cnt - 1);
             [$contentW, $contentH] = $row ? [$contentMain, $crossMax] : [$crossMax, $contentMain];
             if ($n->scrollY) {
@@ -947,6 +952,9 @@ final class Layout
     private static array $window = [INF, INF];
     /** @var list<array{0: ListState, 1: array, 2: int, 3: float, 4: float, 5: bool}> the lists whose row this layout aligned (ListState::$aligning), as they were before: how, where they showed and their glide's lag; the arrange after texts wrap aligns them again from there */
     private static array $aligned = [];
+    /** The scroll containers' states the frame laid out, and where they were to scroll as it began: [state, x, y] by the state's object id. @var array<int, array{0: ScrollState, 1: float, 2: float}> */
+    private static array $scrolled = [];
+
     /** The text metrics of the frame laid out, for the baselines of texts (boxBaseline). */
     private static ?TextMetrics $metrics = null;
 
@@ -1123,8 +1131,10 @@ final class Layout
         $lines = []; $line = []; $used = 0.0; $gap = $n->mainGap();
         foreach ($n->kids as $k) {
             if ($k->absolute || $k->hidden) { continue; }
-            if ($line !== [] && $used + $gap + $k->mw > $avail) { $lines[] = $line; $line = []; $used = 0.0; }
-            $used += ($line === [] ? 0 : $gap) + $k->mw; $line[] = $k;
+            [$base, $lo, $hi] = self::lineSizes($k, $avail);
+            $hyp = max($lo, min($base, $hi)); // its flex base size, its basis's or its content's, within its least and largest (mygo's hypothetical size)
+            if ($line !== [] && $used + $gap + $hyp > $avail) { $lines[] = $line; $line = []; $used = 0.0; }
+            $used += ($line === [] ? 0 : $gap) + $hyp; $line[] = $k;
         }
         if ($line !== []) { $lines[] = $line; }
         return $lines;
@@ -1162,17 +1172,24 @@ final class Layout
         $gap = $n->mainGap();
         $base = []; $lo = []; $hi = []; $pads = []; $used = 0.0; $grow = 0.0;
         foreach ($line as $i => $k) {
-            $mx = $k->marW;
-            $base[$i] = $k->basisPct !== null ? $k->basisPct * $w : ($k->wPct !== null ? $k->wPct * $w + $mx : $k->mw);
-            $lo[$i] = $k->minWPct !== null ? $k->minWPct * $w + $mx : $k->minMw;
-            $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $w, $k->maxW) : $k->maxW) + $mx;
-            if ($k->minWPct === null && !$k->minSet) { $lo[$i] = min($lo[$i], $hi[$i]); } // the content's least width bound by the largest, as arrangeFlex's (mygo's bbcc7b7)
-            $pads[$i] = $k->padW + $mx;
+            [$base[$i], $lo[$i], $hi[$i]] = self::lineSizes($k, $w);
+            $pads[$i] = $k->padW + $k->marW;
             $used += max($lo[$i], min($base[$i], $hi[$i])); $grow += $k->grow;
         }
         $avail = $w - $gap * (count($line) - 1);
         $growing = $used < $avail;
         return ($growing && $grow > 0) || !$growing ? self::flexible($line, $base, $lo, $hi, $pads, $avail, $growing) : array_map(fn($i) => max($lo[$i], min($base[$i], $hi[$i])), array_keys($line));
+    }
+
+    /** The width a child of a wrapping row $w wide starts from, its basis's or its content's, and its least and largest, its margins in each. @return array{0: float, 1: float, 2: float} */
+    private static function lineSizes(Node $k, float $w): array
+    {
+        $mx = $k->marW;
+        $base = $k->basisPct !== null ? $k->basisPct * $w : ($k->basis !== null ? $k->basis + $mx : ($k->wPct !== null ? $k->wPct * $w + $mx : $k->mw));
+        $lo = $k->minWPct !== null ? $k->minWPct * $w + $mx : $k->minMw;
+        $hi = ($k->maxWPct !== null ? min($k->maxWPct * $w, $k->maxW) : $k->maxW) + $mx;
+        if ($k->minWPct === null && !$k->minSet) { $lo = min($lo, $hi); } // the content's least width bound by the largest, as arrangeFlex's (mygo's bbcc7b7)
+        return [$base, $lo, $hi];
     }
 
     /** How high a child of a wrapping row's line is at width $main: as its aspect ratio makes it, when its height is not its own, else as it measured. */
