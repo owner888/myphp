@@ -2207,3 +2207,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     signed digit strings itself (no bcmath or gmp to count on).
   - Why: myphp's inputs apply what is typed as they build; PHP has no
     big numbers of its own.
+
+## The code editor's hover as VS Code's (v1.127)
+
+- **Showing it**
+  - mygo: the pointer rests 600 ms before the hover is asked for; the
+    hover shows at once.
+  - myphp: 300 ms (`Hover::DELAY`, VS Code's editor.hover.delay); it
+    fades in over 100 ms (`Hover::FADE_IN`), unless the desktop asks for
+    less motion; another word's hover while one shows does not fade
+    again.
+  - Why: the developer asked for VS Code's.

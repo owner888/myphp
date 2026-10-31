@@ -6773,6 +6773,22 @@ succeeds are told of, an empty line is none.
   `numberInput` and `decimalInput` take mygo's `padding(Space(1),
   Space(2))`.
 
+## The code editor's hover where it shows (v1.127)
+
+- The editor's hover and completions attach to boxes at the text hovered
+  and at the caret (mygo's anchor and AttachTo), laid out in the frame
+  they show in: the hover no longer showed over its line for a frame,
+  placed by the height its panel had the frame before, and then jumped
+  above it. It goes below the line where there is no room above, as an
+  attached box does; the default hover's room under it is its margin.
+- The hover is asked for once the pointer rested 300 ms (`Hover::DELAY`)
+  and fades in over 100 ms as it first shows (`Hover::FADE_IN`, its
+  `shownAt`), as VS Code's, unless the desktop asks for less motion
+  (mygo-deviations.md).
+- examples/code-editor opens a PHP file first (`Greeter.php`, the Go
+  server's counterpart), and completes the keywords of a file's language,
+  PHP's or Go's, rather than Go's in all.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

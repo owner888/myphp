@@ -7,7 +7,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\UI\{Context, Key, Node};
-use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, DiffHunkActions, DiffLayout, DiffLineRange, DiffSeparator, DiffSide, DiffState, FindBar, GoToLineBar, HoverCard, HoverRequest, State};
+use MyPHP\UI\Editor\{Buffer, Command, Completion, CompletionMenu, CompletionRequest, DiffHunkActions, DiffLayout, DiffLineRange, DiffSeparator, DiffSide, DiffState, FindBar, GoToLineBar, Hover, HoverCard, HoverRequest, State};
 
 require_once __DIR__ . '/EditorTest.php';
 
@@ -95,8 +95,12 @@ $move(100, 10);
 $rest();
 check($asked === [] && !$ed->hover->shown, 'no hover after the pointer left before resting');
 $move(400, 10);
-$rest();
-check(count($asked) === 1 && $ed->hover->shown, 'resting on a word asks for a hover');
+$ed->hover->restAt = hrtime(true) / 1e9 - 0.2;
+$h->frame();
+check($asked === [], 'resting 200 ms asks for nothing yet');
+$ed->hover->restAt = hrtime(true) / 1e9 - 0.31;
+$h->frame();
+check(count($asked) === 1 && $ed->hover->shown, 'resting 300 ms on a word asks for a hover, as VS Code\'s');
 $move(100, 10);
 check($ed->hover->shown, 'the hover stays a grace as the pointer leaves the editor');
 $ed->hover->hideAt = hrtime(true) / 1e9 - 0.001;
@@ -114,10 +118,23 @@ $ed = $edOf($ct->st);
 $y = $ed->view->heights->geometry(2)->rows - $ed->scrollY + $ed->view->lineHeight / 2;
 $ct->move($ed->textX + 80, $y);
 $ed->hover->restAt = hrtime(true) / 1e9 - 3600;
-$ct->h->frame();
+$ct->h->frame(1); // the frame the hover is asked for and shows in
 $card = $ct->h->byText('func bar() int');
 check($card !== null, 'the hover shows');
 $r = $ct->h->rect($card);
+// Attached to the text hovered from the frame it shows in, as mygo's AttachTo, clear of its line: it does not jump there a frame later.
+$lineTop = $ed->view->heights->geometry(2)->rows - $ed->scrollY;
+check($r[1] + $r[3] <= $lineTop || $r[1] >= $lineTop + $ed->view->lineHeight, 'the hover clear of the line from its first frame: ' . json_encode([$r, $lineTop]));
+$tooltip = function (Node $n) use (&$tooltip): ?Node {
+    if ($n->role === \MyPHP\UI\Role::TOOLTIP) { return $n; }
+    foreach ($n->kids as $k) { if (($f = $tooltip($k)) !== null) { return $f; } }
+    return null;
+};
+check($tooltip($ct->h->root)->opacity < 1, 'it fades in as it first shows, as VS Code\'s');
+$ed->hover->shownAt -= Hover::FADE_IN;
+$ct->h->frame();
+same($r, $ct->h->rect($ct->h->byText('func bar() int')), 'and where it stays');
+same(1.0, $tooltip($ct->h->root)->opacity, 'faded in');
 $ct->move($ed->textX + 80, $y - $ed->view->lineHeight);
 $ct->move($r[0] + 4, $r[1] + $r[3] / 2);
 $ed->hover->hideAt = hrtime(true) / 1e9 - 0.001;

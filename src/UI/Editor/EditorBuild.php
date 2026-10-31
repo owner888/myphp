@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Editor;
 
 use MyPHP\{Menu, MenuItem, Window};
-use MyPHP\UI\{AccessNode, Context, InputEvent, Node, Painter, Role, TextPainter, Theme as UITheme};
+use MyPHP\UI\{AccessNode, Anchor, Context, InputEvent, Node, Painter, Role, TextPainter, Theme as UITheme};
 
 /** Building an editor's element and its parts for a frame (mygo's build.go, and parts.go's placing of its parts). */
 trait EditorBuild
@@ -82,7 +82,7 @@ trait EditorBuild
             $h->pending = false; $h->restOff = -1;
         }
         if ($h->pending && $this->pointerIn && !$this->gesture->active) {
-            $wait = 0.6 - ($this->frameNow - $h->restAt);
+            $wait = Hover::DELAY - ($this->frameNow - $h->restAt);
             if ($wait > 0) {
                 $rt?->after($wait);
             } else {
@@ -91,14 +91,16 @@ trait EditorBuild
                 $h->byPointer = true;
             }
         }
-        // Popups attach to the caret, or to the text hovered: where it is in the window, [x, y, w, h].
-        $anchor = function (int $at): ?array {
+        // Popups attach to boxes at the caret, or at the text hovered (mygo's anchor), laid out with them in the same frame.
+        $anchor = function (string $key, int $at) use ($c): ?Node {
             $cr = $this->caretRect($at);
             if ($cr === null) { return null; }
-            return [$this->r[0] + $this->textX + $cr[0] - $this->scrollX, $this->r[1] + $cr[1] - $this->scrollY, 1.0, $cr[3]];
+            $box = $c->key($key)->column()->absolute()->left($this->textX + $cr[0] - $this->scrollX)->top($cr[1] - $this->scrollY)->size(1, $cr[3])->passThrough();
+            $c->end();
+            return $box;
         };
-        $caretAnchor = $this->complete->open() ? $anchor($this->complete->at) : null;
-        $hoverAnchor = $h->shown ? $anchor($h->start) : null;
+        $caretAnchor = $this->complete->open() ? $anchor('code caret', $this->complete->at) : null;
+        $hoverAnchor = $h->shown ? $anchor('code hover anchor', $h->start) : null;
         if (($ds = $this->o->decor) instanceof DiffSideView) { $ds->buildBlocks($c, $this); }
         if ($this->find->open) { $this->buildFindBar($c); }
         if ($this->goTo->open) { $this->buildGoToLine($c); }
@@ -223,11 +225,11 @@ trait EditorBuild
     }
 
     /** Places the list of completions below the word being completed, $anchor, above the window's content, and builds it. */
-    private function buildCompletions(Context $c, array $anchor): void
+    private function buildCompletions(Context $c, Node $anchor): void
     {
         $cc = $this->complete;
         $c->overlay(function () use ($c, $cc, $anchor) {
-            $panel = $c->key('code completions')->column()->at($anchor[0], $anchor[1] + $anchor[3])->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(self::shield(...))
+            $panel = $c->key('code completions')->column()->attachTo($anchor, Anchor::BottomLeft, Anchor::TopLeft)->cursor(\MyPHP\UI\Cursor::Default)->keepFocus()->handleInput(self::shield(...))
                 ->role(Role::LIST)->label($c->texts()->get('completions'));
             $m = new CompletionMenu($c, $this);
             ($this->o->renderCompletions ?? CompletionMenu::default(...))($c, $panel, $m);
@@ -245,16 +247,19 @@ trait EditorBuild
     }
 
     /** Places the hover above the text hovered, $anchor, above the window's content, and builds it. */
-    private function buildHover(Context $c, array $anchor): void
+    private function buildHover(Context $c, Node $anchor): void
     {
         $h = $this->hover;
         if (!$h->shown || $h->build === null && $h->text === '' && ($h->diags ?? []) === []) { return; }
         $c->overlay(function () use ($c, $h, $anchor) {
             // The hover takes the keyboard as it is pressed, for its text to be selected and copied; Escape gives it back to the editor.
-            $panel = $c->key('code hover')->column()->handleInput(self::shield(...))->role(Role::TOOLTIP);
+            $panel = $c->key('code hover')->column()->attachTo($anchor, Anchor::TopLeft, Anchor::BottomLeft)->handleInput(self::shield(...))->role(Role::TOOLTIP);
             $rt = $c->runtime;
             $last = $rt?->rectOf($panel->id);
-            $panel->at($anchor[0], $anchor[1] - ($last[3] ?? 0.0) - $c->theme->space(1));
+            // It fades in as it first shows, as VS Code's, unless the desktop asks for less motion; a hover of another word while it shows does not.
+            if ($h->shownAt == 0) { $h->shownAt = $this->frameNow; }
+            $k = $rt === null || $rt->reduceMotion ? 1.0 : min(1.0, ($this->frameNow - $h->shownAt) / Hover::FADE_IN);
+            if ($k < 1) { $panel->opacity($k); $rt->animate(); }
             $h->over = $c->hovered($panel);
             $h->focused = $rt !== null && $rt->focus !== null && $last !== null && $rt->focus !== $panel->id && self::inside($rt->rectOf($rt->focus), $last);
             if ($h->focused && $c->shortcut(\MyPHP\UI\Key::ESCAPE)) { $this->closeHover(); }

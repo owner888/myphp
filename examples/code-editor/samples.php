@@ -1,8 +1,45 @@
 <?php
-// The files the code editor example opens: [name, text] (mygo's samples.go).
+// The files the code editor example opens: [name, text] (mygo's samples.go),
+// a PHP file first, which it opens with.
 declare(strict_types=1);
 
 return [
+    ['Greeter.php', <<<'PHP'
+<?php
+declare(strict_types=1);
+
+namespace App\Http;
+
+use JsonException;
+
+/** Greets the names it is sent, and counts them. */
+final class Greeter
+{
+    /** @var array<string, int> */
+    private array $counts = [];
+
+    public function __construct(private readonly string $prefix = 'Hello') {}
+
+    /** Greets the name in the query, as JSON. */
+    public function handle(array $query): string
+    {
+        $name = trim((string)($query['name'] ?? ''));
+        if ($name === '') {
+            http_response_code(400);
+            return 'missing name';
+        }
+        $n = $this->counts[$name] = ($this->counts[$name] ?? 0) + 1;
+        // TODO: rate limit greetings per address.
+        header('Content-Type: application/json');
+        try {
+            return json_encode(['greeting' => sprintf('%s, %s!', $this->prefix, $name), 'count' => $n], JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            return $e->getMessage();
+        }
+    }
+}
+
+PHP],
     ['server.go', <<<'GO'
 // Package server serves greetings over HTTP.
 package server

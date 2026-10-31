@@ -39,7 +39,7 @@ final class EditorApp
 {
     /** @var list<File> */
     public array $files = [];
-    public string $selected = 'server.go';
+    public string $selected = 'Greeter.php';
     /** 0 the editor, 1 the diff. */
     public int $page = 0;
     /** The diff's: 0 split, 1 unified. */
@@ -132,7 +132,13 @@ function diffPage(Context $c, EditorApp $a, File $f): void
     $d->view($c)->grow = 1;
 }
 
-/** Completes $prefix with the words of the buffer, as editors do without a language server. @return list<Completion> */
+/** The keywords completed in the files of a language, by its name. */
+const KEYWORDS = [
+    'PHP' => ['function', 'return', 'namespace', 'use', 'class', 'public', 'private', 'readonly', 'static', 'foreach', 'match', 'array'],
+    'Go' => ['func', 'return', 'import', 'package', 'const', 'struct', 'interface', 'range'],
+];
+
+/** Completes $prefix with the words of the buffer, and the keywords of its language, as editors do without a language server. @return list<Completion> */
 function wordsOf(Buffer $b, string $prefix): array
 {
     $seen = []; $out = [];
@@ -141,10 +147,8 @@ function wordsOf(Buffer $b, string $prefix): array
         $seen[$w] = true;
         $out[] = new Completion($w, 'word', CompletionKind::CompletionText);
     }
-    if ($b->language() !== null) {
-        foreach (['func', 'return', 'import', 'package', 'const', 'struct', 'interface', 'range'] as $k) {
-            if (!isset($seen[$k])) { $out[] = new Completion($k, 'keyword', CompletionKind::CompletionKeyword); }
-        }
+    foreach (KEYWORDS[$b->language()?->name ?? ''] ?? [] as $k) {
+        if (!isset($seen[$k])) { $out[] = new Completion($k, 'keyword', CompletionKind::CompletionKeyword); }
     }
     usort($out, fn(Completion $x, Completion $y) => strcmp($x->label, $y->label));
     return $out;

@@ -10,6 +10,10 @@ final class Hover
 {
     /** How long a hover stays once the pointer has left the text hovered, for the pointer to go into it, as VS Code's editor.hover.hidingDelay. */
     public const HIDE_DELAY = 0.3;
+    /** How long the pointer rests on text before its hover is asked for, in seconds, as VS Code's editor.hover.delay (the developer asked for it; mygo waits 600 ms). */
+    public const DELAY = 0.3;
+    /** How long the hover takes to fade in, in seconds, as VS Code's (the developer asked for it; mygo shows it at once). */
+    public const FADE_IN = 0.1;
 
     public bool $shown = false;
     public int $start = 0, $end = 0;
@@ -29,6 +33,8 @@ final class Hover
     public bool $byPointer = false;
     /** When the hover goes (seconds of hrtime, 0 for not), the pointer having left the text hovered, unless it goes into the hover first; $focused reports the keyboard in the hover, as its text is selected and copied, which keeps it. */
     public float $hideAt = 0.0;
+    /** When the hover began showing, which its fade goes from; 0 while it is closed. */
+    public float $shownAt = 0.0;
     public bool $focused = false;
 
     public function open(): bool { return $this->shown; }
@@ -36,7 +42,7 @@ final class Hover
     public function close(): void
     {
         $this->shown = false; $this->build = null; $this->text = ''; $this->diags = null; $this->byPointer = false;
-        $this->hideAt = 0.0; $this->focused = false;
+        $this->hideAt = 0.0; $this->focused = false; $this->shownAt = 0.0;
         $this->asked = -1;
         $this->pending = false;
     }
