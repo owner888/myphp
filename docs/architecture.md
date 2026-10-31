@@ -6848,6 +6848,23 @@ succeeds are told of, an empty line is none.
   had left only that part hovering, and the page's scroll bars hid until
   the release.
 
+## A diff's horizontal scroll bar, the gallery at a narrow window (v1.130)
+
+- The code editor's horizontal scroll bar (mygo's 76e33e7): it shows for
+  an editor as high as its content and for the old side of a split
+  diff, which no longer turn off both bars, only the vertical one; it
+  goes at the bottom of the part of the editor the window shows
+  (`Editor::$hbarY`, from the painter's visible rect), and its track
+  (`hTrack`) leaves room for the vertical one only where that takes room.
+- The gallery, checked page by page at 980 × 690 and 700 × 560, left to
+  right and right to left, light and dark: the chat's bubbles took
+  `maxWidthPercent(0.72)`, under 1%, and squeezed their text (72); the
+  rows of buttons of Overlays and of Motion's list and counters wrap at
+  a narrow window. A chart's axis labels, centered on their ticks, reach
+  past the plot on purpose; the Styling grid's fr columns, as mygo's, take
+  no less than their share, so its labels pass them at the narrowest
+  window.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

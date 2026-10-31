@@ -128,7 +128,7 @@ trait EditorInput
     {
         [$vertical, $horizontal] = $this->scrollbars();
         if ($vertical && $x >= $this->r[2] - self::SCROLLBAR_WIDTH) { return self::REGION_VSCROLL; }
-        if ($horizontal && $y >= $this->viewH - self::SCROLLBAR_WIDTH) { return self::REGION_HSCROLL; }
+        if ($horizontal && $y >= $this->hbarY && $y < $this->hbarY + self::SCROLLBAR_WIDTH) { return self::REGION_HSCROLL; }
         if ($x < $this->gutterW) { return self::REGION_GUTTER; }
         return self::REGION_TEXT;
     }
@@ -369,13 +369,19 @@ trait EditorInput
     /**
      * Which scroll bars the editor shows, and takes presses on: the
      * vertical one while it scrolls, as it does past the end of a short
-     * text, and the horizontal one while a line runs under the vertical one
-     * or beyond. @return array{0: bool, 1: bool}
+     * text, and never for an editor as high as its content or the old side
+     * of a split diff; the horizontal one while a line runs under the
+     * vertical one's track or beyond (mygo's scrollbars). @return array{0: bool, 1: bool}
      */
     public function scrollbars(): array
     {
-        if ($this->trackWidth() == 0) { return [false, false]; }
-        return [$this->scrollMax() > 0, !$this->view->wrap && $this->view->maxLine > $this->r[2] - $this->textX - self::SCROLLBAR_WIDTH];
+        return [$this->trackWidth() > 0 && $this->scrollMax() > 0, !$this->view->wrap && $this->view->maxLine > $this->hTrack()];
+    }
+
+    /** The length of the horizontal scroll bar's track: the text's width, short of the vertical one's (mygo's hTrack). */
+    public function hTrack(): float
+    {
+        return $this->r[2] - $this->textX - $this->trackWidth();
     }
 
     public function maxScrollX(): float
@@ -403,7 +409,7 @@ trait EditorInput
         [$t0, $t1] = $this->thumb($this->scrollbar['horizontal']);
         $size = $t1 - $t0;
         if ($this->scrollbar['horizontal']) {
-            $track = $this->r[2] - $this->textX - self::SCROLLBAR_WIDTH;
+            $track = $this->hTrack();
             $f = ($ev->x - $this->textX - $this->scrollbar['grab']) / max(1.0, $track - $size);
             $this->scrollX = max(0.0, min($f * $this->maxScrollX(), $this->maxScrollX()));
             $this->o->sharedScroll?->setX($this->scrollX);
@@ -428,7 +434,7 @@ trait EditorInput
     public function thumb(bool $horizontal): array
     {
         if ($horizontal) {
-            $track = $this->r[2] - $this->textX - self::SCROLLBAR_WIDTH;
+            $track = $this->hTrack();
             $content = $this->view->maxLine + $this->view->charWidth * 4;
             $size = max(24.0, $track * $track / max($content, $track));
             $m = $this->maxScrollX();

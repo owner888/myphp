@@ -1041,7 +1041,7 @@ final class Gallery
                   return;
               }
               $c->row(0, 0)->padding(3, 12);
-                $bubble = $c->row(0, 0, 0, $t->surface)->maxWidthPercent(0.72)->padding(7, 12)->radius(14);
+                $bubble = $c->row(0, 0, 0, $t->surface)->maxWidthPercent(72)->padding(7, 12)->radius(14);
                 if ($m->mine) { $bubble->margin(0, 0, 0, Node::AUTO)->background($t->accent)->textColor($t->accentText); }
                   $c->text($m->text);
                 $c->end();
@@ -1414,7 +1414,7 @@ final class Gallery
           $c->end();
           card($c, 'Counters, check marks and lifts');
             $c->text('Digits roll as they change, a check mark draws itself in, and tiles lift in frames that only paint.', 12, $t->textMuted);
-            $c->row(0, 16)->alignItems(Node::CENTER);
+            $c->row(0, 16)->wrap(0)->gapY(8)->alignItems(Node::CENTER);
               if ($c->clicked($c->button('−'))) { $this->counter--; $this->countDown = true; }
               $c->text((string)$this->counter, 32, style: Font::BOLD)->size(80, 0)->textAlign(Node::CENTER)->contentTransition(new ContentTransition(numeric: true, down: $this->countDown));
               if ($c->clicked($c->button('+'))) { $this->counter++; $this->countDown = false; }
@@ -1439,7 +1439,7 @@ final class Gallery
         $c->text('Transitions move nodes where the layout puts them, and in and out as they come and go. F12 (Alt+Cmd+I) opens the inspector of the window\'s nodes.', color: $t->textMuted);
         $c->grid(2, 16);
           card($c, 'A list that moves');
-            $c->row(0, 8);
+            $c->row(0, 8)->wrap(0)->gapY(8);
               if ($c->clicked($c->button('Add'))) {
                   $this->nextItem++;
                   $at = $this->items === [] ? 0 : $this->nextItem % (count($this->items) + 1);
@@ -1524,7 +1524,7 @@ final class Gallery
     {
         $t = $c->theme;
         card($c, 'Overlays');
-          $c->row(0, 10);
+          $c->row(0, 10)->wrap(0)->gapY(10);
             if ($c->clicked($c->primaryButton('Open dialog'))) { $this->dialog = true; }
             $menu = $c->button('Menu ▾');
             if ($c->clicked($menu)) { $this->menu = !$this->menu; }

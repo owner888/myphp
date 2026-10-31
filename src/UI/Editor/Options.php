@@ -63,7 +63,7 @@ final class Options
     public ?Closure $renderFindBar = null, $renderGoToLine = null, $renderCompletions = null, $renderHover = null;
     /** Shows a diff in the editor. */
     public ?Decor $decor = null;
-    /** Draws no vertical scroll bar. */
+    /** Draws no vertical scroll bar, as the old side of a split diff, whose sides share the new one's. */
     public bool $noScrollbar = false;
     /** How many digits the gutter has room for at least. */
     public int $minDigits = 0;

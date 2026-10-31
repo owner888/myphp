@@ -58,6 +58,8 @@ final class Editor implements TextInputClient
     public float $gutterW = 0.0;
     public float $textX = 0.0;
     public float $viewH = 0.0;
+    /** The top of the horizontal scroll bar, at the bottom of the part of the editor the window showed last frame (mygo's hbarY). */
+    public float $hbarY = 0.0;
     /** @var array{0: int, 1: int} the first and last lines the last frame showed */
     public array $shown = [0, 0];
     /** The editor and its window have the keyboard. */

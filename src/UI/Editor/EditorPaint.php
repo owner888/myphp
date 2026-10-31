@@ -69,6 +69,8 @@ trait EditorPaint
         $clip = $list->visible();
         $y0 = $this->scrollY + max(0.0, $clip[1] - $ry);
         $y1 = $this->scrollY + min($rh, $clip[1] + $clip[3] - $ry);
+        // The horizontal scroll bar at the bottom of what shows, as an editor as high as its content may run far below the window's.
+        $this->hbarY = max(0.0, min($rh, $clip[1] + $clip[3] - $ry)) - self::SCROLLBAR_WIDTH;
         $f = new PaintFrame;
         [$f->first, $f->last] = $this->visibleLines($y0, $y1);
         $this->shown = [$f->first, $f->last];
@@ -628,7 +630,7 @@ trait EditorPaint
         }
         if ($horizontal && $shown) {
             [$t0, $t1] = $this->thumb(true);
-            $y = $ry + $rh - $sw;
+            $y = $ry + $this->hbarY;
             $alpha = $this->pointerIn && $this->region === self::REGION_HSCROLL || $this->scrollbar['active'] ? 0.9 : 0.4;
             self::fill($list, $rx + $this->textX + $t0, $y + 2, $t1 - $t0, $sw - 4, [$t->scrollbar, $t->scrollbarAlpha * $alpha], ($sw - 4) / 2);
         }

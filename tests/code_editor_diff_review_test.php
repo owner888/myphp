@@ -222,3 +222,35 @@ foreach ($cases as $name => [$find, $make]) {
         same(40.0, $d->eds[1]->scrollY, "$name, {$layout->name}: the wheel over the $name scrolls the diff");
     }
 }
+
+// A diff as high as its lines, in a scroll container, shows a horizontal scroll bar at the bottom of the part of it the window shows, on both sides of a split diff,
+// and dragging it scrolls the lines sideways (mygo's TestFitContentDiffHorizontalScrollbar).
+$a = [];
+for ($i = 0; $i < 200; $i++) { $a[] = "line $i " . str_repeat('x', 200); }
+$b = $a; $b[1] = 'changed ' . str_repeat('y', 200);
+foreach ([DiffLayout::DiffSplit, DiffLayout::DiffUnified] as $layout) {
+    $d = new DiffState(new Buffer(implode("\n", $a)), new Buffer(implode("\n", $b)));
+    $d->layout = $layout; $d->fitContent = true; $d->expandUnchanged = true;
+    $t = new Headless(function (Context $c) use ($d) {
+        $c->scroll()->fill();
+          $d->view($c)->fillWidth();
+        $c->end();
+    }, 900, 400);
+    $t->paints = true;
+    $t->frame(); $t->frame();
+    $eds = $layout === DiffLayout::DiffSplit ? [$d->eds[1], $d->eds[0]] : [$d->eds[1]];
+    foreach ($eds as $ed) {
+        check($ed->r[3] > 400, "{$layout->name}: the editor as high as its lines: {$ed->r[3]}");
+        check($ed->scrollbars()[1], "{$layout->name}: a horizontal scroll bar over lines wider than the view");
+        same(400 - $ed->r[1] - \MyPHP\UI\Editor\Editor::SCROLLBAR_WIDTH, $ed->hbarY, "{$layout->name}: the horizontal bar at the window's bottom");
+    }
+    $ed = $eds[0];
+    $y = $ed->r[1] + $ed->hbarY + \MyPHP\UI\Editor\Editor::SCROLLBAR_WIDTH / 2;
+    $x = $ed->r[0] + $ed->textX + 2;
+    $t->hover($x, $y);
+    $t->press($x, $y);
+    $t->drag($x + 200, $y);
+    $t->release($x + 200, $y);
+    $t->frame();
+    check($ed->scrollX > 0, "{$layout->name}: dragging the bar scrolls the lines: {$ed->scrollX}");
+}
