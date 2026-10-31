@@ -1072,5 +1072,10 @@
   "commandFailed": "命令執行失敗",
   "commandFinished": "命令已結束",
   "commandTook": "命令執行了 {duration}。",
-  "commandTookExit": "命令執行了 {duration}，結束代碼為 {code, number, ::group-off}。"
+  "commandTookExit": "命令執行了 {duration}，結束代碼為 {code, number, ::group-off}。",
+  "decimalInvalid": "請輸入數字",
+  "decimalWhole": "請輸入整數",
+  "decimalPlaces": "{n, plural, other {最多保留 # 位小數}}",
+  "decimalAtLeast": "請輸入不小於 {min} 的值",
+  "decimalAtMost": "請輸入不大於 {max} 的值"
 }

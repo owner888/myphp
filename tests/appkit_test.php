@@ -91,3 +91,9 @@ check(!App::openAtLogin(), 'without one, it does not');
 [$shift, $control, $option, $command] = [1 << 17, 1 << 18, 1 << 19, 1 << 20];
 same([false, false, false, false, true, true, true, true], array_map(fn(array $c) => \MyPHP\Tray::secondaryClick(...$c),
     [[$leftUp, 0], [$leftUp, $shift], [$leftUp, $option], [$leftUp, $command], [$leftUp, $control], [$leftUp, $control | $shift], [$rightUp, 0], [$rightUp, $control]]), 'a Control-click is a right-click');
+
+// The copy of a menu bar item a click hit, from the pointer's place on screen and the click's in the item's window: here on an external display, far from the window (mygo's TestClickedCopy);
+// kept while the window keeps the frame it had at the click, the window's without a click or once it moved (TestItemFrame).
+same([2221.0, 1410.0, 54.0, 24.0], \MyPHP\Tray::clickedCopy([2251.0, 1422.0], [30.0, 12.0], [54.0, 24.0]), 'the copy of the icon clicked');
+$window = [159.0, 1050.0, 54.0, 24.0]; $clicked = [2221.0, 1410.0, 54.0, 24.0]; $moved = [119.0, 1050.0, 54.0, 24.0];
+same([$window, $clicked, $moved], [\MyPHP\Tray::itemFrame($window, null, null), \MyPHP\Tray::itemFrame($window, $clicked, $window), \MyPHP\Tray::itemFrame($moved, $clicked, $window)], 'the icon shows where it was clicked, while its window stays');

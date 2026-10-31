@@ -28,6 +28,18 @@ final class Tray
     private array $onAppearance = [];
     /** Whether the menu bar under the icon was dark, as last told (dark()). */
     private bool $wasDark = false;
+    /**
+     * Where on screen the copy of the item the user last clicked is, and
+     * the frame the item's window had then, in Cocoa's coordinates, as
+     * [x, y, w, h]: macOS 26 shows a menu bar item on each display from one
+     * window, which is on one of them, or out of sight on a display whose
+     * menu bar has no room for it; the copies share its size. Null until a
+     * click.
+     * @var ?array{0: float, 1: float, 2: float, 3: float}
+     */
+    private ?array $clicked = null;
+    /** @var ?array{0: float, 1: float, 2: float, 3: float} */
+    private ?array $of = null;
 
     public function __construct(TrayOptions $o)
     {
@@ -83,6 +95,7 @@ final class Tray
                     return;
                 }
                 $event = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'currentEvent');
+                $tray->noteClick($event);
                 $right = $event !== null && self::secondaryClick(ObjC::msg('L:', $event, 'type'), ObjC::msg('L:', $event, 'modifierFlags'));
                 foreach ($right ? $tray->onRightClick : $tray->onClick as $fn) {
                     $fn();
@@ -214,11 +227,71 @@ final class Tray
         return $this->button();
     }
 
-    /** Where the icon is in the menu bar, on the screens (mygo's Bounds): nothing while it shows in none. */
+    /**
+     * Where the icon is in the menu bar, on the screens (mygo's Bounds):
+     * macOS shows a menu bar item on each display, and this is the copy the
+     * user last clicked, so a window placed against it, as a flyout, goes on
+     * the display the user clicked; nothing while it shows in none.
+     */
     public function bounds(): Rectangle
     {
+        [$x, $y, $w, $h] = $this->frame();
+        return $w <= 0 ? new Rectangle(0, 0, 0, 0) : Screens::fromMac((object)['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h]);
+    }
+
+    /**
+     * Keeps where on screen the copy of the item that the click $ev was on
+     * is: the pointer's place, less the click's place in the item's window,
+     * which the copies share. An event in another window, which an action
+     * that no click sent leaves current, changes nothing.
+     */
+    private function noteClick($ev): void
+    {
         $win = ObjC::msg('p:', $this->button(), 'window');
-        return $win === null ? new Rectangle(0, 0, 0, 0) : Screens::fromMac(ObjC::msg('r:', $win, 'frame'));
+        $evWin = $ev === null ? null : ObjC::msg('p:', $ev, 'window');
+        if ($win === null || $evWin === null || ObjC::addr($evWin) !== ObjC::addr($win)) { return; }
+        $f = ObjC::msg('r:', $win, 'frame');
+        $at = ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation');
+        $in = ObjC::msg('q:', $ev, 'locationInWindow');
+        $this->clicked = self::clickedCopy([$at->x, $at->y], [$in->x, $in->y], [$f->w, $f->h]);
+        $this->of = [$f->x, $f->y, $f->w, $f->h];
+    }
+
+    /**
+     * @internal the frame on screen of the copy of a menu bar item of $size
+     * that a click hit at $at, a point on screen, and at $in, its place in
+     * the item's window (mygo's clickedCopy).
+     * @param array{0: float, 1: float} $at @param array{0: float, 1: float} $in @param array{0: float, 1: float} $size
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    public static function clickedCopy(array $at, array $in, array $size): array
+    {
+        return [$at[0] - $in[0], $at[1] - $in[1], $size[0], $size[1]];
+    }
+
+    /**
+     * @internal where a menu bar item shows, given its $window's frame: the
+     * copy the user last clicked, while the window keeps the frame it had
+     * then, or else the window's frame. A window that moved, as the menu
+     * bar was laid out again, may have moved its copies too (mygo's
+     * itemFrame).
+     * @param array{0: float, 1: float, 2: float, 3: float} $window
+     * @param ?array{0: float, 1: float, 2: float, 3: float} $clicked
+     * @param ?array{0: float, 1: float, 2: float, 3: float} $of
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    public static function itemFrame(array $window, ?array $clicked, ?array $of): array
+    {
+        return $clicked !== null && $clicked[2] > 0 && $window == $of ? $clicked : $window;
+    }
+
+    /** Where the item shows on screen (itemFrame), in Cocoa's coordinates; nothing without a window. @return array{0: float, 1: float, 2: float, 3: float} */
+    private function frame(): array
+    {
+        $win = ObjC::msg('p:', $this->button(), 'window');
+        if ($win === null) { return [0.0, 0.0, 0.0, 0.0]; }
+        $f = ObjC::msg('r:', $win, 'frame');
+        return self::itemFrame([$f->x, $f->y, $f->w, $f->h], $this->clicked, $this->of);
     }
 
     /** Whether the event being handled is a press on the icon (mygo's pressed): a flyout of the icon leaves it to its click, which toggles it. */
@@ -234,10 +307,11 @@ final class Tray
             $p = ObjC::msg('q:qp', $button, 'convertPoint:fromView:', ObjC::msg('q:', $ev, 'locationInWindow'), null);
             return self::inRect($p, ObjC::msg('r:', $button, 'bounds'));
         }
-        // A button down with the pointer over it (mygo's 5a4e4b8): the app hears of the press only after it made the app
-        // resign, or in a monitor of other apps' events, which the menu bar's are on recent macOS.
+        // A button down with the pointer over it, or over the copy of it the user last clicked (mygo's 5a4e4b8, b89df06): the app
+        // hears of the press only after it made the app resign, or in a monitor of other apps' events, which the menu bar's are on recent macOS.
         if (ObjC::msg('L:', ObjC::cls('NSEvent'), 'pressedMouseButtons') === 0) { return false; }
-        return self::inRect(ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation'), ObjC::msg('r:', $win, 'frame'));
+        [$x, $y, $w, $h] = $this->frame();
+        return self::inRect(ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation'), (object)['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h]);
     }
 
     /** Whether point $p is in rect $r, its far edges out. */

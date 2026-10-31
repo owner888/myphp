@@ -131,35 +131,45 @@ final class Bsdiff
         return $out;
     }
 
-    /** The longest prefix of $new from $at found in $old, and where, by a binary search of the suffix array. @param list<int> $sa @return array{0: int, 1: int} */
+    /**
+     * Bounds the matches search compares (mygo's maxMatch). diff searches at
+     * each byte while a match is barely better than the previous alignment,
+     * so comparing whole matches makes a long one cost time quadratic in its
+     * length; a longer match is still taken, in pieces.
+     */
+    private const MAX_MATCH = 64 << 10;
+
+    /** The longest prefix of $new from $at, up to MAX_MATCH bytes, found in $old, and where, by a binary search of the suffix array. @param list<int> $sa @return array{0: int, 1: int} */
     private static function search(array $sa, string $old, string $new, int $at): array
     {
+        $end = min(strlen($new), $at + self::MAX_MATCH);
         $lo = 0;
         $hi = count($sa) - 1;
         while ($hi - $lo >= 2) {
             $mid = $lo + intdiv($hi - $lo, 2);
-            if (self::less($old, $sa[$mid], $new, $at)) {
+            if (self::less($old, $sa[$mid], $new, $at, $end)) {
                 $lo = $mid;
             } else {
                 $hi = $mid;
             }
         }
-        $x = self::matchLen($old, $sa[$lo], $new, $at);
-        $y = self::matchLen($old, $sa[$hi], $new, $at);
+        $x = self::matchLen($old, $sa[$lo], $new, $at, $end);
+        $y = self::matchLen($old, $sa[$hi], $new, $at, $end);
         return $x > $y ? [$x, $sa[$lo]] : [$y, $sa[$hi]];
     }
 
-    /** Whether the suffix of $old at $i sorts before that of $new at $j (Go's bytes.Compare < 0). */
-    private static function less(string $old, int $i, string $new, int $j): bool
+    /** Whether the suffix of $old at $i sorts before $new's bytes [$j, $end) (Go's bytes.Compare < 0). */
+    private static function less(string $old, int $i, string $new, int $j, int $end): bool
     {
-        $n = min(strlen($old) - $i, strlen($new) - $j);
+        $n = min(strlen($old) - $i, $end - $j);
         $c = $n > 0 ? strncmp(substr($old, $i, $n), substr($new, $j, $n), $n) : 0;
-        return $c < 0 || $c === 0 && strlen($old) - $i < strlen($new) - $j;
+        return $c < 0 || $c === 0 && strlen($old) - $i < $end - $j;
     }
 
-    private static function matchLen(string $a, int $i, string $b, int $j): int
+    /** How many bytes of $a from $i match $b's [$j, $end). */
+    private static function matchLen(string $a, int $i, string $b, int $j, int $end): int
     {
-        $n = min(strlen($a) - $i, strlen($b) - $j);
+        $n = min(strlen($a) - $i, $end - $j);
         if ($n <= 0) {
             return 0;
         }

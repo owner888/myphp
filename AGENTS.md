@@ -72,10 +72,10 @@ src/UI/Svg/        the SVG renderer in PHP (mygo's internal/svg): Elem (XML + st
                    Doc (pixels/rotated), Mask (a UI\Path's mask for Text::pathQuad), Colors
 src/UI/            Node, Direction, Inspector* (dev tools), Track, Path, SVG (over Svg\Doc: icon masks, pictures), Canvas (render to texture), Chart/ (scales, plot, marks), Context (column/row/grid/text/muted/richText/link/button/primaryButton/toggle/toolbar/checkbox/radio/switch/slider/
                    select/stepper/segmented/tabs/collapsible/split/table/sidebar(+Section/Item)/tree(+Item)/accordion(+Item)/rating/rangeSlider/combobox/autocomplete/tokenField/dateInput/calendar/timeInput/colorPicker/colorWell/findBar/form/field/fieldset/checkboxGroup/breadcrumbs/alertDialog/gridView/icon/avatar/titleBar/modal/popover/
-                   menuButton/toast/progress/meter/numberInput/spinner/badge/divider/spacer/input/searchField/
+                   menuButton/toast/progress/meter/numberInput/decimalInput/spinner/badge/divider/spacer/input/searchField/
                    textarea(minLines, maxLines)/image/box/list/scroll/radioGroup/editableText/shape; clicked/changed/hovered/dragged/shortcut; ->tooltip()/at()/
-                   round()/material()/align()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
-                   min()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
+                   radius()/material()/alignItems()/alignSelf()/justify()/center()/cursor()/shadow()/border()/margin()/padding()/borderWidth()/background()/block()/draw()/drawOver()/singleLine()/
+                   minWidth()/minHeight()/focusGroup()/wrap()/grid()/columnStart()/rowStart()/columnSpan()/rowSpan()/dragWindow();
                    rows center across,
                    columns stretch, as mygo), Material (+ MaterialBuilder, LinearGradient: Plugins/Glass/), Font (style
                    bits), Span (rich text run), TextStyle (inherited), Layout (flex, margins),

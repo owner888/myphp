@@ -187,5 +187,10 @@
   "commandFailed": "コマンドが失敗しました",
   "commandFinished": "コマンドが終了しました",
   "commandTook": "コマンドの実行時間は {duration} でした。",
-  "commandTookExit": "コマンドの実行時間は {duration}、終了コードは {code, number, ::group-off} でした。"
+  "commandTookExit": "コマンドの実行時間は {duration}、終了コードは {code, number, ::group-off} でした。",
+  "decimalInvalid": "数値を入力してください",
+  "decimalWhole": "整数を入力してください",
+  "decimalPlaces": "{n, plural, other {小数点以下は # 桁までにしてください}}",
+  "decimalAtLeast": "{min} 以上の値を入力してください",
+  "decimalAtMost": "{max} 以下の値を入力してください"
 }

@@ -440,6 +440,18 @@ it; typing applies once numeric and in range, Up and Down step while it
 has the focus (a focused single-line field leaves Up and Down to
 `shortcut`, a text area only Escape), and the text shows the value
 rounded to the step's decimals once the focus leaves.
+`decimalInput(&$value, $lo, $hi, $step)` is mygo's DecimalInput, the
+same row for amounts of money: `$value`, `$lo` and `$hi` are strings
+written with exactly the step's decimals (`"1234.50"`, `""` for no
+limit), held in `DecimalInput` (`Runtime::local`) as integers of units of
+the step's last decimal in digit strings, added and compared digit by
+digit (mygo's `math/big`; bcmath and gmp are not required), so no
+amount is a float. Text with more decimals than the step's (not zeros),
+out of range or not a number leaves the value and marks the field
+(`Node::$invalid`, its message the description, the border the danger
+color), and the enclosing `field()` shows the message below the control
+(mygo's fieldError), until the text is corrected; the − and + are
+padded Space(1) by Space(2) and disabled at the bounds.
 
 `accordion($fn)` / `accordionItem($title, &$open, $fn)` are mygo's
 Accordion: a bordered box, headers padded Space(2.5) by Space(3) with
@@ -6706,6 +6718,33 @@ succeeds are told of, an empty line is none.
   `visualNext`: the caret moves with the layout's `moveCaret` and keeps
   its affinity (`TextSelection::$affinity`), crossing to the text before
   or after in reading order at either end.
+
+## mygo's October 31 changes on macOS (v1.124)
+
+- Message dialogs (mygo's a80b292): `MessageOptions::$destructiveButtons`
+  sets apart the buttons that delete or can't be undone
+  (`setHasDestructiveAction:`, macOS 11 and later); a `$defaultButton` of
+  -1 leaves Return to no button. Escape and Cmd+. activate the cancel
+  button also when it is the default, through a local monitor of the keys
+  (`Dialog::runAlert`), as a button has one key equivalent, Return's then;
+  a key the input method composes with in a prompt's field stays its. A
+  `$cancelButton` of -1 is the first button labeled Cancel or No. Prompts
+  and logins cancel the same way.
+- A tray's bounds are those of the copy of its icon the user last
+  clicked (mygo's b89df06): macOS 26 shows a menu bar item on each display
+  from one window; the click's place in the window, taken from the
+  pointer's on screen, finds the copy, kept while the window keeps its
+  frame. A flyout goes on the display clicked, and a press on that copy
+  is the icon's.
+- `decimalInput` (mygo's 9b4bcbf), described with `numberInput`; a
+  `field()` shows the error an input inside it reports first, and joins
+  its own description to the input's.
+- Delta updates: the suffix search compares at most 64 KiB of a match
+  (mygo's d5777b2), so a long one at a shifted alignment, which diff steps
+  through byte by byte, no longer takes time quadratic in its length.
+- The wheel over a diff's separators already scrolled it, the scroll
+  going from the innermost node out to the editor (mygo's ffc3f67); a
+  test keeps it.
 
 ## Open items
 

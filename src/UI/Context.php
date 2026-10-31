@@ -37,6 +37,8 @@ final class Context
     private int $toolbars = 0;
     /** The form being built (Context::form): its labels' boxes and the widest label, for them all to be as wide. */
     private ?object $form = null;
+    /** The field being built (Context::field): the errors of the controls inside that check what is typed, as decimalInput, which show below the control (fieldError). */
+    private ?object $field = null;
     /** The list, the row and the list's node of the row being built (Context::list), for an editable text in it: [ListState, int, Node], or null. */
     private ?array $listRow = null;
     /** The checkbox group being built (Context::checkboxGroup): references to its check boxes' values, or null outside one. */
@@ -1570,6 +1572,94 @@ final class Context
         if ($this->clicked($minus) && $value > $lo) { $set($value - $step); }
         if ($this->clicked($plus) && $value < $hi) { $set($value + $step); }
         return $n;
+    }
+
+    /**
+     * A field holding $value as an exact decimal between $lo and $hi, as
+     * mygo's DecimalInput: a numberInput for amounts of money, which it
+     * never rounds. $value is written with exactly the decimals of $step,
+     * as "1234.50"; $lo and $hi are written the same way, "" for no limit.
+     * The arrows Up and Down, and the − and + beside it, step it by $step.
+     * What is typed applies as soon as it is a number in range, with '.'
+     * before its decimals and ',' between groups of three digits: "1,234.5"
+     * sets "1234.50", and shows so once the field loses the focus. Text with
+     * more decimals than $step's (other than zeros), out of range or not a
+     * number leaves $value as it was and marks the field with an error,
+     * whose message an enclosing field() shows, until it is corrected. A
+     * value the app sets replaces what was typed. changed() reports a new
+     * value.
+     *
+     *     $c->decimalInput($app->amount, '0', '', '0.01');
+     */
+    public function decimalInput(string &$value, string $lo, string $hi, string $step): Node
+    {
+        $t = $this->theme;
+        $rt = $this->runtime;
+        $n = $this->row(0, $t->space(1))->shrink(0)->alignItems(Node::CENTER);
+        $d = $rt?->local($n->id, fn() => new DecimalInput) ?? new DecimalInput;
+        if ($d->limits($lo, $hi, $step) || $value !== $d->shown) {
+            $d->show($value); // a value the app set replaces what was typed
+        }
+        $set = function (string $v) use (&$value, $d, $n, $rt): void {
+            if ($d->min !== null && DecimalInput::cmp($v, $d->min) < 0) { $v = $d->min; }
+            if ($d->max !== null && DecimalInput::cmp($v, $d->max) > 0) { $v = $d->max; }
+            if (($s = DecimalInput::formatDecimal($v, $d->scale)) !== $value) {
+                $value = $s;
+                $n->changed = true;
+                $rt?->changed();
+            }
+            $d->show($value);
+        };
+        // Steps the value, from 0 for none, and shows it in full.
+        $stepBy = fn(int $sign) => $set(DecimalInput::add($d->v ?? '0', $sign > 0 ? $d->unit : DecimalInput::neg($d->unit)));
+          $in = $this->input($d->text, '', $t->space(20));
+          if ($this->changed($in)) {
+              [$v, $f] = DecimalInput::parseDecimal($d->text->text, $d->scale);
+              if ($f === DecimalInput::FINE) { $f = $d->inRange($v); }
+              if (trim($d->text->text) === '') {
+                  $d->fault = DecimalInput::FINE; // nothing yet: the value stays, and shows again once the focus goes
+              } elseif ($f === DecimalInput::FINE) {
+                  $typed = [$d->text->text, $d->text->cursor, $d->text->anchor];
+                  $set($v);
+                  [$d->text->text, $d->text->cursor, $d->text->anchor] = $typed; // as typed, until the focus goes
+              } else {
+                  $d->fault = $f;
+              }
+          }
+          $focused = $this->focused($in);
+          if ($focused && $this->shortcut(Key::UP)) { $stepBy(1); }
+          if ($focused && $this->shortcut(Key::DOWN)) { $stepBy(-1); }
+          if (!$focused && $d->fault === DecimalInput::FINE && $d->text->text !== $d->full()) {
+              $d->put($d->full()); // what the app set, or what was typed, shown in full; what is wrong stays until it is corrected
+              $rt?->changed();
+          }
+          if ($d->fault !== DecimalInput::FINE) { $this->fieldError($in, $d->message($this->texts())); }
+          $in->range($d->minF, $d->maxF, $d->now, $d->unitF); // assistive technology reads the value as the text of the field, exactly; the range in floating point
+          $buttons = [];
+          foreach ([['−', -1, 'Decrease'], ['+', 1, 'Increase']] as [$label, $sign, $name]) {
+              [$w, $h] = $this->metrics->measure($label, $t->fontSize);
+              $b = $this->button($label)->size($w + $t->space(4) + 2, $h + $t->space(2) + 2)->label($name); // mygo's Padding(Space(1), Space(2)) and the border
+              $b->disabled($d->v !== null && ($sign < 0 ? $d->min !== null && DecimalInput::cmp($d->v, $d->min) <= 0 : $d->max !== null && DecimalInput::cmp($d->v, $d->max) >= 0));
+              $buttons[$sign] = $b;
+          }
+        $this->end();
+        foreach ($buttons as $sign => $b) {
+            if ($this->clicked($b)) { $stepBy($sign); }
+        }
+        return $n;
+    }
+
+    /**
+     * Marks $e, a control checking what is typed into it, as not
+     * valid for $msg, as field()'s $error does, and shows $msg below the
+     * control of the field() around it (mygo's fieldError).
+     */
+    private function fieldError(Node $e, string $msg): void
+    {
+        $e->invalid = true;
+        $e->description = ($e->description ?? '') === '' ? $msg : $msg . "\n" . $e->description;
+        if ($e->kind === Node::INPUT) { $e->borderColor = $this->theme->danger; }
+        if ($this->field !== null) { $this->field->errors[] = $msg; }
     }
 
     /** Secondary text, in the theme's muted color. */
@@ -3507,7 +3597,9 @@ final class Context
      * beside it in a form; a click on the label focuses the control (or
      * clicks a check box, switch or radio button). $description shows
      * below the control muted, $error in the danger color, which an input
-     * then borders in. The control is the first focusable $fn builds.
+     * then borders in; the errors of controls inside that check what is
+     * typed, as decimalInput, show first. The control is the first
+     * focusable $fn builds.
      */
     public function field(string $label, Closure $fn, string $description = '', string $error = ''): Node
     {
@@ -3525,7 +3617,10 @@ final class Context
               $l = $this->text($label, $t->fontSize, $t->text, Font::BOLD); // FontWeight(500): bold, the one weight besides regular
           }
           $content = $this->column(0, $t->space(1.5), $inForm ? 1 : 0); // in a form: the rest of the row
-            $fn();
+            $saved = $this->field; $this->field = (object)['errors' => []];
+              $fn();
+              foreach ($this->field->errors as $msg) { $this->text($msg, $t->fontSize - 1, $t->danger); } // those of the controls inside, below the control (mygo's fieldError)
+            $this->field = $saved;
             if ($description !== '') { $this->text($description, $t->fontSize - 1, $t->textMuted); }
             if ($error !== '') { $this->text($error, $t->fontSize - 1, $t->danger); }
           $this->end();
@@ -3534,7 +3629,7 @@ final class Context
         if ($ctrl === null) { return $f; }
         // A control that names itself, as a check box, names the field's group; others are named by the label.
         if (self::namesItself($ctrl)) { $f->role(Role::GROUP)->label($label); } elseif ($ctrl->nameFrom === null || $ctrl->nameFrom->label === '') { $ctrl->nameFrom = $l; }
-        if ($error !== '' || $description !== '') { $ctrl->description = implode("\n", array_filter([$error, $description], fn(string $s) => $s !== '')); } // the error first, as what to read first
+        if ($error !== '' || $description !== '') { $ctrl->description = implode("\n", array_filter([$error, $ctrl->description ?? '', $description], fn(string $s) => $s !== '')); } // the error first, as what to read first; a control's own error (fieldError) before the description
         if ($error !== '') { $ctrl->invalid = true; }
         if ($inForm && $ctrl->kind === Node::TEXTAREA) { // level with the first line of a text area (mygo's)
             [, $lh] = $this->metrics->measure('X', $ctrl->fontSize);

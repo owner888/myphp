@@ -2185,3 +2185,25 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     themes have no font family of their own.
   - Why: myphp's containers open and end rather than take a closure;
     its themes are set outside the view.
+
+## Message dialogs' cancel button (v1.124)
+
+- **No cancel button named**
+  - mygo: a `CancelButton` of zero is the first button labeled Cancel or
+    No.
+  - myphp: a `cancelButton` of -1, the default, is; 0 is the first button.
+  - Why: the first button can be named the cancel whatever its label,
+    which mygo's zero cannot; myphp's -1 came before the label search.
+
+## Decimal input (v1.124)
+
+- **What it reads and when**
+  - mygo: `DecimalInput` reads the typed text after the input
+    (`afterInput`), trims Unicode spaces, panics on bounds or a step that
+    are not decimals; its value's arithmetic is math/big's.
+  - myphp: `decimalInput` reads it as it builds, as `numberInput` does,
+    marking the error in the same frame; trims ASCII spaces; throws
+    `InvalidArgumentException` with mygo's message; adds and compares
+    signed digit strings itself (no bcmath or gmp to count on).
+  - Why: myphp's inputs apply what is typed as they build; PHP has no
+    big numbers of its own.

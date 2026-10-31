@@ -155,6 +155,22 @@ function updThrows(\Closure $fn): string
         check($out === $b, "patch $i makes the new file");
     }
     check(strlen(Bsdiff::diff($old, $new)) < 2000, 'a small change, a small patch');
+
+    // A long match also in the old file at the previous match's alignment, but for a byte at either end:
+    // diff steps through it byte by byte, quadratic in its length while each search compared it whole (mygo's TestDiffShiftedMatch).
+    $x = random_bytes(300 << 10);
+    $near = $x; $near[0] = chr(ord($near[0]) ^ 1); $near[-1] = chr(ord($near[-1]) ^ 1);
+    $head = 'a header found once in the old file';
+    [$a, $b] = [$x . $head . $near, $head . $x];
+    $t = microtime(true);
+    $patch = Bsdiff::diff($a, $b);
+    $took = microtime(true) - $t;
+    check($took < 30, 'a long shifted match diffs in pieces: ' . round($took, 1) . 's');
+    file_put_contents("$dir/old", $a);
+    file_put_contents("$dir/patch", $patch);
+    $out = '';
+    Bsdiff::patch(function (string $s) use (&$out) { $out .= $s; }, strlen($b), fopen("$dir/old", 'rb'), strlen($a), fopen("$dir/patch", 'rb'), 0, strlen($patch));
+    check($out === $b, 'and its patch makes the new file');
 })();
 
 (function () {

@@ -18,6 +18,9 @@ final class Dialog
     /** The block prompt()'s field's changes call, and the check it calls while a prompt is up. */
     private static mixed $textBlock = null;
     private static ?\Closure $textChanged = null;
+    /** The monitor of the keys that cancel alerts, made with the first; the cancel button of each alert's window showing, by the window's address. @var array<int, mixed> */
+    private static mixed $alertKeys = null;
+    private static array $alertCancels = [];
 
     /** @return string[] chosen paths; empty when canceled */
     public static function open(OpenDialogOptions $o = new OpenDialogOptions()): array
@@ -103,32 +106,94 @@ final class Dialog
 
     public static function message(MessageOptions $o): MessageResult
     {
-        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
-        ObjC::msg('v:l', $alert, 'setAlertStyle:', self::STYLE[$o->type] ?? 1);
-        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($o->message !== '' ? $o->message : $o->title));
-        if ($o->detail !== '') {
-            ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($o->detail));
-        }
         $buttons = $o->buttons ?: [L10n::in(App::locale())->get('ok')];
-        foreach ($buttons as $i => $label) {
-            $b = ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($label));
-            if ($i === $o->defaultButton) {
-                ObjC::msg('v:p', $b, 'setKeyEquivalent:', ObjC::str("\r"));
-            } elseif ($i === $o->cancelButton) {
-                ObjC::msg('v:p', $b, 'setKeyEquivalent:', ObjC::str("\e"));
-            } elseif ($i > 0) {
-                ObjC::msg('v:p', $b, 'setKeyEquivalent:', ObjC::str(''));
-            }
-        }
+        $alert = self::alert($o->type, $o->message !== '' ? $o->message : $o->title, $o->detail, $buttons, $o->defaultButton, $o->destructiveButtons);
         if ($o->checkboxLabel !== '') {
             ObjC::msg('v:b', $alert, 'setShowsSuppressionButton:', true);
             $box = ObjC::msg('p:', $alert, 'suppressionButton');
             ObjC::msg('v:p', $box, 'setTitle:', ObjC::str($o->checkboxLabel));
             ObjC::msg('v:l', $box, 'setState:', $o->checkboxChecked ? 1 : 0);
         }
-        $code = self::run($alert, $o->parent);
+        $code = self::runAlert($alert, $o->parent, $o->cancelButton >= 0 ? $o->cancelButton : self::cancelOf($buttons));
         $checked = $o->checkboxLabel !== '' && ObjC::msg('l:', ObjC::msg('p:', $alert, 'suppressionButton'), 'state') === 1;
         return new MessageResult($code - self::FIRST_BUTTON, $checked);
+    }
+
+    /** @internal the first of $buttons labeled Cancel or No, in English or the app's language, or -1 (mygo's Message). @param string[] $buttons */
+    public static function cancelOf(array $buttons): int
+    {
+        $cancel = L10n::in(App::locale())->get('cancel');
+        foreach ($buttons as $i => $b) {
+            if (in_array(strtolower($b), ['cancel', 'no'], true) || $b === $cancel) { return $i; }
+        }
+        return -1;
+    }
+
+    /**
+     * @internal an NSAlert of $buttons, retained: Return activates
+     * $default's (none for -1), no other a key of its own, as Escape is
+     * runAlert's; $destructive's are set apart, on macOS 11 and later
+     * (mygo's newAlert). @param string[] $buttons @param int[] $destructive
+     */
+    public static function alert(string $type, string $message, string $detail, array $buttons, int $default, array $destructive = []): mixed
+    {
+        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
+        ObjC::msg('v:l', $alert, 'setAlertStyle:', self::STYLE[$type] ?? 1);
+        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($message));
+        if ($detail !== '') {
+            ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($detail));
+        }
+        $items = [];
+        foreach ($buttons as $i => $label) {
+            $items[] = $b = ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($label));
+            ObjC::msg('v:p', $b, 'setKeyEquivalent:', ObjC::str($i === $default ? "\r" : ''));
+        }
+        foreach ($destructive as $i) {
+            if (isset($items[$i]) && ObjC::msg('b:p', $items[$i], 'respondsToSelector:', ObjC::sel('setHasDestructiveAction:'))) {
+                ObjC::msg('v:b', $items[$i], 'setHasDestructiveAction:', true);
+            }
+        }
+        return $alert;
+    }
+
+    /** Runs $alert as run() does, Escape and Cmd+. activating its button $cancel (none for -1), also when it is the default, which takes Return as its key (mygo's runAlert). */
+    private static function runAlert($alert, ?Window $parent, int $cancel): int
+    {
+        $win = ObjC::addr(ObjC::msg('p:', $alert, 'window'));
+        $items = ObjC::msg('p:', $alert, 'buttons');
+        if ($cancel >= 0 && $cancel < ObjC::msg('L:', $items, 'count')) {
+            self::$alertCancels[$win] = ObjC::msg('p:L', $items, 'objectAtIndex:', $cancel);
+            self::watchAlertKeys();
+        }
+        try {
+            return self::run($alert, $parent);
+        } finally {
+            unset(self::$alertCancels[$win]);
+        }
+    }
+
+    /** @internal whether a key typed with $mods (NSEvent's modifier flags) as $chars (ignoring them) cancels an alert: Escape alone, or Cmd+., Shift allowed as it may type the period, as on AZERTY. */
+    public static function cancels(int $mods, string $chars): bool
+    {
+        $mods &= 1 << 17 | 1 << 18 | 1 << 19 | 1 << 20; // Shift, Control, Option, Command
+        return $mods === 0 && $chars === "\e" || ($mods & ~(1 << 17)) === 1 << 20 && $chars === '.';
+    }
+
+    /** Sees the keys of the alerts before them, as a button has one key, Return's when the cancel is the default: made once. */
+    private static function watchAlertKeys(): void
+    {
+        if (self::$alertKeys !== null) { return; }
+        self::$alertKeys = ObjC::msg('p:Lp', ObjC::cls('NSEvent'), 'addLocalMonitorForEventsMatchingMask:handler:', 1 << 10, ObjC::block('p', function ($ev) { // NSEventMaskKeyDown
+            $win = ObjC::msg('p:', $ev, 'window');
+            $btn = $win === null ? null : self::$alertCancels[ObjC::addr($win)] ?? null;
+            if ($btn === null) { return $ev; }
+            // A key typed while the input method composes in a prompt's field is the input method's, as Escape giving the composition up.
+            $field = ObjC::msg('p:', $win, 'firstResponder');
+            if ($field !== null && ObjC::msg('b:p', $field, 'respondsToSelector:', ObjC::sel('hasMarkedText')) && ObjC::msg('b:', $field, 'hasMarkedText')) { return $ev; }
+            if (!self::cancels(ObjC::msg('L:', $ev, 'modifierFlags'), ObjC::phpStr(ObjC::msg('p:', $ev, 'charactersIgnoringModifiers')))) { return $ev; }
+            ObjC::msg('v:p', $btn, 'performClick:', null);
+            return null;
+        }, false, 'p'));
     }
 
     /**
@@ -142,13 +207,8 @@ final class Dialog
     public static function prompt(?Window $window, string $prompt, string $default, string $detail = '', ?\Closure $check = null): ?string
     {
         $t = L10n::in(App::locale());
-        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
-        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($prompt));
-        if ($detail !== '') {
-            ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($detail));
-        }
-        $ok = ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('ok')));
-        ObjC::msg('v:p', ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('cancel'))), 'setKeyEquivalent:', ObjC::str("\e"));
+        $alert = self::alert('info', $prompt, $detail, [$t->get('ok'), $t->get('cancel')], 0);
+        $ok = ObjC::msg('p:L', ObjC::msg('p:', $alert, 'buttons'), 'objectAtIndex:', 0);
         $field = ObjC::msg('p:r', ObjC::alloc('NSTextField'), 'initWithFrame:', ObjC::rect(0, $check === null ? 0 : 22, 280, 24));
         ObjC::msg('v:p', $field, 'setStringValue:', ObjC::str($default));
         $observer = null;
@@ -175,7 +235,7 @@ final class Dialog
         }
         ObjC::msg('v:p', $alert, 'setAccessoryView:', $view);
         ObjC::msg('v:p', ObjC::msg('p:', $alert, 'window'), 'setInitialFirstResponder:', $field);
-        $text = self::run($alert, $window) === self::FIRST_BUTTON ? ObjC::phpStr(ObjC::msg('p:', $field, 'stringValue')) : null;
+        $text = self::runAlert($alert, $window, 1) === self::FIRST_BUTTON ? ObjC::phpStr(ObjC::msg('p:', $field, 'stringValue')) : null;
         if ($observer !== null) {
             ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'removeObserver:', $observer);
             self::$textChanged = null;
@@ -196,11 +256,7 @@ final class Dialog
     public static function login(?Window $window, string $prompt, string $detail, string $user, string $password): ?array
     {
         $t = L10n::in(App::locale());
-        $alert = ObjC::msg('p:', ObjC::alloc('NSAlert'), 'init');
-        ObjC::msg('v:p', $alert, 'setMessageText:', ObjC::str($prompt));
-        ObjC::msg('v:p', $alert, 'setInformativeText:', ObjC::str($detail));
-        ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('ok')));
-        ObjC::msg('v:p', ObjC::msg('p:p', $alert, 'addButtonWithTitle:', ObjC::str($t->get('cancel'))), 'setKeyEquivalent:', ObjC::str("\e"));
+        $alert = self::alert('info', $prompt, $detail, [$t->get('ok'), $t->get('cancel')], 0);
         $view = ObjC::msg('p:r', ObjC::alloc('NSView'), 'initWithFrame:', ObjC::rect(0, 0, 280, 54));
         $fields = [];
         foreach ([['NSTextField', $user, 30], ['NSSecureTextField', $password, 0]] as [$cls, $placeholder, $y]) {
@@ -212,7 +268,7 @@ final class Dialog
         ObjC::msg('v:p', $fields[0], 'setNextKeyView:', $fields[1]); // Tab from the name to the password
         ObjC::msg('v:p', $alert, 'setAccessoryView:', $view);
         ObjC::msg('v:p', ObjC::msg('p:', $alert, 'window'), 'setInitialFirstResponder:', $fields[0]);
-        $got = self::run($alert, $window) === self::FIRST_BUTTON ? [ObjC::phpStr(ObjC::msg('p:', $fields[0], 'stringValue')), ObjC::phpStr(ObjC::msg('p:', $fields[1], 'stringValue'))] : null;
+        $got = self::runAlert($alert, $window, 1) === self::FIRST_BUTTON ? [ObjC::phpStr(ObjC::msg('p:', $fields[0], 'stringValue')), ObjC::phpStr(ObjC::msg('p:', $fields[1], 'stringValue'))] : null;
         foreach ([...$fields, $view, $alert] as $o) { ObjC::msg('v:', $o, 'release'); }
         return $got;
     }

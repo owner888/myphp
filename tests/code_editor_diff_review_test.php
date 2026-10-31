@@ -190,3 +190,35 @@ same("a\r\nx\r\nc\r\n", $files[0]->apply("a\r\nb\r\nc\r\n"), 'a patch with \\r\\
 $threw = false;
 try { FilePatch::parse("--- a/x\n+++ b/x\n@@ -1,1 +1,3 @@\n a\n b\n+c\n"); } catch (\RuntimeException) { $threw = true; }
 check($threw, 'a hunk longer than it counts does not parse');
+
+// The wheel over a separator, a hunk's header or the bar expanding the unmodified lines, scrolls the diff, as it does over the lines, in both layouts (mygo's TestDiffScrollsOverSeparator).
+$patch = "--- a/x\n+++ b/x\n";
+for ($h = 0; $h < 12; $h++) {
+    $n = 1 + $h * 100;
+    $patch .= "@@ -$n,6 +$n,6 @@ hunk $h\n";
+    for ($i = 0; $i < 6; $i++) { $patch .= "-old $i\n+new $i\n"; }
+}
+$files = FilePatch::parse($patch);
+$a = [];
+for ($i = 0; $i < 600; $i++) { $a[] = "line $i"; }
+$b = $a;
+for ($i = 0; $i < 600; $i += 50) { $b[$i] = 'changed'; }
+$cases = [
+    'header' => ['@@ -201,6 +201,6 @@ hunk 2', function () use ($files) { $d = new DiffState; $d->setPatch($files[0]); return $d; }],
+    'separator' => ['unmodified lines', fn() => new DiffState(new Buffer(implode("\n", $a)), new Buffer(implode("\n", $b)))],
+];
+foreach ($cases as $name => [$find, $make]) {
+    foreach ([DiffLayout::DiffSplit, DiffLayout::DiffUnified] as $layout) {
+        $d = $make();
+        $d->layout = $layout;
+        $t = diffViewer($d, 800, 600);
+        $t->frame();
+        $shown = array_values(array_filter($t->texts(), fn($s) => str_contains($s, $find)));
+        check($shown !== [], "$name, {$layout->name}: a node showing " . json_encode($find));
+        if ($shown === []) { continue; }
+        [$x, $y, $w, $h] = $t->rect($t->byText($shown[0]));
+        $t->wheel($x + $w / 2, $y + $h / 2, 0, -40);
+        $t->frame();
+        same(40.0, $d->eds[1]->scrollY, "$name, {$layout->name}: the wheel over the $name scrolls the diff");
+    }
+}
