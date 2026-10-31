@@ -264,6 +264,53 @@ final class Painter
         $this->list->ring($r[0], $r[1], $r[2], $r[3], $rgb, $alpha, $radius, $width);
     }
 
+    /** Paints the thumb of a scroll bar, as a scroll container's, on no track, if it has anywhere to scroll (mygo's Painter.Scrollbar). */
+    public function scrollbar(Scrollbar $s, ?ScrollbarState $st = null): void
+    {
+        self::paintScrollbar($this->list, $this->theme, $s, $st);
+    }
+
+    /** @internal scrollbar() into $list in theme $t, for views that paint into a list themselves (the code editor, rich text, the terminal). */
+    public static function paintScrollbar(DisplayList $list, Theme $t, Scrollbar $s, ?ScrollbarState $st = null): void
+    {
+        if (!$s->scrolls()) { return; }
+        self::thumbFill($list, $s->thumbBox($t->scrollbarWidth), $s->horizontal, $st?->dragging ?? false, $st?->color ?? $t->scrollbar, $t->scrollbarAlpha);
+    }
+
+    /** A scroll bar's thumb at $bar, widened toward the view while $dragging (mygo's scrollThumbFill). @param array{0: float, 1: float, 2: float, 3: float} $bar */
+    /**
+     * Cuts what $n holds by its rounded corners, as mygo's clipRect: the
+     * box inside its border, each corner's radius less the wider border
+     * beside it, its corners continuous, through the list's mask; only
+     * upright and with no mask in force (one rounded clip at a time, the
+     * outermost), else the rectangle alone cuts. Tells whether it did.
+     */
+    private static function roundClip(Node $n, DisplayList $list): bool
+    {
+        $r = $n->radii ?? [$n->radius, $n->radius, $n->radius, $n->radius];
+        if (max($r) <= 0 || $list->mask() !== null || $list->transformed()) {
+            return false;
+        }
+        [$bt, $br, $bb, $bl] = [$n->borderSide(0), $n->borderSide(1), $n->borderSide(2), $n->borderSide(3)];
+        $inner = [max($r[0] - max($bt, $bl), 0.0), max($r[1] - max($bt, $br), 0.0), max($r[2] - max($bb, $br), 0.0), max($r[3] - max($bb, $bl), 0.0)];
+        if (max($inner) <= 0) {
+            return false;
+        }
+        $list->setMask(DisplayList::roundedMask($n->x + $bl, $n->y + $bt, $n->w - $bl - $br, $n->h - $bt - $bb, $inner));
+        return true;
+    }
+
+    private static function thumbFill(DisplayList $list, array $bar, bool $horizontal, bool $dragging, int $rgb, float $alpha): void
+    {
+        [$x, $y, $w, $h] = $bar;
+        $r = ($horizontal ? $h : $w) / 2;
+        if ($dragging) {
+            if ($horizontal) { $y -= 2; $h += 2; } else { $x -= 2; $w += 2; }
+            $r++;
+        }
+        $list->rect($x, $y, $w, $h, $rgb, $alpha, $r);
+    }
+
     /** Paints the outline of a rounded rectangle in dashes, as a dashed border (mygo's StrokeDashed). @param array{0: float, 1: float, 2: float, 3: float} $r */
     public function strokeDashed(array $r, int $rgb, float $radius, float $width, float $alpha = 1.0): void
     {
@@ -394,13 +441,17 @@ final class Painter
         self::paintFocusRing($this->list, $r[0], $r[1], $r[2], $r[3], $radius, $this->theme);
     }
 
-    /** Restricts what $fn draws to $r. @param array{0: float, 1: float, 2: float, 3: float} $r */
-    public function clip(array $r, \Closure $fn): void
+    /** Restricts what $fn draws to $r, its corners rounded by $radius, continuous (mygo's Clip; rounded only upright and inside no other rounded clip or mask, as roundClip). @param array{0: float, 1: float, 2: float, 3: float} $r */
+    public function clip(array $r, \Closure $fn, float $radius = 0.0): void
     {
         $this->list->pushClip(...$r);
+        $mask = $this->list->mask();
+        $rounded = $radius > 0 && $mask === null && !$this->list->transformed();
+        if ($rounded) { $this->list->setMask(DisplayList::roundedMask($r[0], $r[1], $r[2], $r[3], [$radius, $radius, $radius, $radius])); }
         try {
             $fn();
         } finally {
+            if ($rounded) { $this->list->setMask($mask); }
             $this->list->popClip();
         }
     }
@@ -665,7 +716,7 @@ final class Painter
         $list->setWorld($n->world);
         $mask = $list->mask();
         if ($n->clipMask !== null) { // its box where it shows, upright, the image's slot over it
-            if ($mask !== null) { throw new \LogicException('a clip mask inside another'); }
+            if ($mask !== null && !DisplayList::roundMask($mask)) { throw new \LogicException('a clip mask inside another'); } // inside a rounded clip, the clip mask takes its place
             [$x0, $y0] = $n->world->point($n->x, $n->y); [$x1, $y1] = $n->world->point($n->x + $n->w, $n->y + $n->h);
             $slot = $n->clipMask[0] === null ? ['u' => 0, 'v' => 0, 'w' => 0, 'h' => 0, 'page' => 0] : $text->imageSlot($n->clipMask[0]); // none: the box itself
             $list->setMask([min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0), $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page'], $n->clipMask[1]]);
@@ -1106,6 +1157,8 @@ final class Painter
         } elseif ($n->clip !== 0) { // an axis not clipped reaches as far as the clip around it does
             $list->pushClip(($n->clip & Node::CLIP_X) !== 0 ? $n->x : -1e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->y : -1e6, ($n->clip & Node::CLIP_X) !== 0 ? $n->w : 2e6, ($n->clip & Node::CLIP_Y) !== 0 ? $n->h : 2e6);
         }
+        $outerMask = $list->mask();
+        $rounded = ($n->scroll !== null || $n->clip === (Node::CLIP_X | Node::CLIP_Y)) && self::roundClip($n, $list);
         foreach ($n->ghosts as $g) { // children leaving go under the others
             self::paint($g, $list, $text, $t, $rt);
         }
@@ -1118,6 +1171,7 @@ final class Painter
         if ($n->drawOver !== null) {
             self::callDraw($n, true, $list, $t, $text, $rt); // over the children, inside a scrolling container's clip (mygo's DrawOver)
         }
+        if ($rounded) { $list->setMask($outerMask); }
         if ($n->clip !== 0 && $n->scroll === null) {
             $list->popClip();
         }
@@ -1132,15 +1186,10 @@ final class Painter
             // The thumbs show while the pointer is over the container or drags one.
             if ($rt !== null && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
                 $r = Scrollbar::track([$n->x, $n->y, $n->w, $n->h], $n->barInsets);
-                $grow = $dragging ? 2.0 : 0.0; // the thumb being dragged thickens, as mygo's
-                $thumb = $n->scrollY ? Scrollbar::thumb($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
-                if ($thumb !== null) {
-                    $list->rect($thumb[0] - $grow, $thumb[1], $thumb[2] + $grow, $thumb[3], $t->scrollbar, $t->scrollbarAlpha, ($thumb[2] + $grow) / 2);
-                }
-                $thumb = $n->scrollX ? Scrollbar::thumb($r, $n->scroll->extentX(), $t->scrollbarWidth, true, $n->rtl) : null;
-                if ($thumb !== null) {
-                    $list->rect($thumb[0], $thumb[1] - $grow, $thumb[2], $thumb[3] + $grow, $t->scrollbar, $t->scrollbarAlpha, ($thumb[3] + $grow) / 2);
-                }
+                $thumb = $n->scrollY ? Scrollbar::thumbOf($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
+                if ($thumb !== null) { self::thumbFill($list, $thumb, false, $dragging, $t->scrollbar, $t->scrollbarAlpha); }
+                $thumb = $n->scrollX ? Scrollbar::thumbOf($r, $n->scroll->extentX(), $t->scrollbarWidth, true, $n->rtl) : null;
+                if ($thumb !== null) { self::thumbFill($list, $thumb, true, $dragging, $t->scrollbar, $t->scrollbarAlpha); }
             }
         }
     }

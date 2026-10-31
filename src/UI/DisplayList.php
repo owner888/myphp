@@ -162,6 +162,32 @@ final class DisplayList
         $this->through();
     }
 
+    /**
+     * @internal Painter (a rounded clip): the mask of the rect x y w h
+     * (points) with its corners of radii (top left, top right, bottom
+     * right, bottom left) continuous, as setMask takes it: no image, the
+     * radii where its slot would be (the bottom right one as -1 less it,
+     * where the slot's width, 0 for no image, would be), flagged round.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     * @return array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float, 6: float, 7: float, 8: int, 9: bool, 10: true}
+     */
+    public static function roundedMask(float $x, float $y, float $w, float $h, array $radii): array
+    {
+        return [$x, $y, $w, $h, $radii[0], $radii[1], -1.0 - $radii[2], $radii[3], 0, false, true];
+    }
+
+    /** @internal Painter: whether $mask is a rounded clip's (roundedMask). @param array<int, mixed> $mask */
+    public static function roundMask(array $mask): bool
+    {
+        return $mask[10] ?? false;
+    }
+
+    /** @internal Painter: whether what is drawn now goes through a map. */
+    public function transformed(): bool
+    {
+        return $this->world->set;
+    }
+
     /** @internal Painter: the mask what is drawn now is cut by. @return ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int, 6: int, 7: int, 8: int, 9: bool} */
     public function mask(): ?array
     {
@@ -786,7 +812,7 @@ final class DisplayList
     /** The part of an image atlas slot at (u, v), sw × sh pixels on $page (negative to mirror it), drawn into the rect, rounded by $radius at $alpha, or tinted: its colors multiplied by $tint (0xRRGGBB, not rounded); $gray in shades of gray (kind 12 instead of 2), else $pixelated sampled at the nearest pixel (kind 13). */
     public function image(float $x, float $y, float $w, float $h, int $u, int $v, int $sw, int $sh, int $page, float $alpha = 1.0, float $radius = 0.0, bool $gray = false, bool $pixelated = false, ?int $tint = null): void
     {
-        if ($this->pixels > 0 && $this->xk == 0.0) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); } // where a transform places it, not snapped: a part moving through a zoom would move in steps (mygo's)
+        if ($this->pixels > 0 && !$this->world->set) { [$x, $y, $w, $h] = $this->snap($x, $y, $w, $h); } // where a transform places it, not snapped: a part moving through a zoom would move in steps (mygo's)
         if ($tint !== null) {
             $radius = -1.0 - ($tint & 0xffffff); // a tinted image is not rounded: its radius carries the tint, as -1 - rgb, exact in a float32
         }

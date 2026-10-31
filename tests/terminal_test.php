@@ -1229,7 +1229,7 @@ TermClock::install();
 })();
 
 (function () {
-    // The scroll bar (mygo's TestScrollbarDrag) shows as the viewport moves, and over its strip, where the pointer is the arrow rather than the I-beam, and fades out a while after. It drags the scrollback along: by the thumb, or from where the track is pressed.
+    // The scroll bar (mygo's TestScrollbarDrag) shows while the pointer is over the terminal, as the code editor's does, and goes as it leaves; over its strip the pointer is the arrow rather than the I-beam. It drags the scrollback along: by the thumb, or from where the track is pressed.
     $term = Terminal::new(new Options(conn: new TermPipe));
     $tt = new TermTester($term);
     $now = 1_000_000 * 1_000_000_000;
@@ -1247,9 +1247,9 @@ TermClock::install();
         return false;
     };
     $bottom = termOffset($term);
-    $now += 5_000_000_000;
+    check(!$shows(188), 'scroll bar: none, the pointer away');
     $tt->hover(100, 100);
-    check(!$shows(188), 'scroll bar: not at the bottom with the pointer elsewhere');
+    check($shows(188), 'scroll bar: shows with the pointer over the terminal');
     $tt->hover(395, 100);
     same(\MyPHP\UI\Cursor::Default, $tt->node->cursor, 'scroll bar: the arrow over it');
     check($shows(188), 'scroll bar: shows with the pointer over it');
@@ -1264,16 +1264,12 @@ TermClock::install();
     same(null, $term->term->selectionText(), 'scroll bar: dragging it selects nothing');
     $tt->hover(100, 100);
     same(\MyPHP\UI\Cursor::Text, $tt->node->cursor, 'scroll bar: the I-beam over the text');
-    // It stays a while, and fades out though the viewport is up.
-    $now += 500_000_000;
-    $tt->frame();
-    check($shows(12), 'scroll bar: stays a while');
-    $now += 2_000_000_000;
-    $tt->frame();
-    check(!$shows(12), 'scroll bar: fades out');
-    // A wheel shows it again.
+    check($shows(12), 'scroll bar: stays with the pointer over the terminal');
+    // The pointer away, it goes though the viewport is up, and comes back with it.
+    $tt->hover(100, -50);
+    check(!$shows(12), 'scroll bar: goes with the pointer away');
     $tt->scroll(100, 100, 1);
-    check($shows(15), 'scroll bar: scrolling shows it');
+    check($shows(15), 'scroll bar: back with the pointer');
     // A press low on the track brings the thumb there.
     $tt->press(395, 190);
     $tt->release(395, 190);

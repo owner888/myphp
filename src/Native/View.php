@@ -23,7 +23,7 @@ use MyPHP\UI\{TextInputRange, Input, Key, TextState};
  */
 final class View
 {
-    private const TRACKING = 0x01 | 0x02 | 0x80 | 0x200; // enter/exit, moved, active always, visible rect
+    private const TRACKING = 0x01 | 0x02 | 0x40 | 0x200; // enter/exit, moved, while the app is active, visible rect: as mygo's surface tracks, an inactive app's hover staying where the last event left it
     private const NOT_FOUND = PHP_INT_MAX; // NSNotFound
     /** @var array<int, Input> by view address */
     private static array $inputs = [];

@@ -112,8 +112,8 @@ $h->frame();
 $h->input->mouse(50, 50); $h->input->push(['scroll', 50, 50, -30, -40]); $h->frame();
 same([-30.0, -40.0], [$content->x, $content->y], 'the wheel both ways');
 $st = $sc->scroll;
-$t = Scrollbar::thumb($h->rect($sc), $st->extentX(), $h->rt->scrollbarWidth, true);
-check($t !== null && Scrollbar::thumb($h->rect($sc), $st->extent(), $h->rt->scrollbarWidth) !== null, 'both scroll bars');
+$t = Scrollbar::thumbOf($h->rect($sc), $st->extentX(), $h->rt->scrollbarWidth, true);
+check($t !== null && Scrollbar::thumbOf($h->rect($sc), $st->extent(), $h->rt->scrollbarWidth) !== null, 'both scroll bars');
 [$x, $y] = [$t[0] + $t[2] / 2, $t[1] + $t[3] / 2];
 $h->hover($x, $y); $h->press($x, $y); $h->drag($x + 200, $y); $h->release($x + 200, $y);
 same([-300.0, -40.0], [$content->x, $content->y], 'the horizontal thumb dragged to its end');
@@ -219,3 +219,27 @@ $err = null;
 try { $outlined->textOutline(-1, 0); } catch (\InvalidArgumentException $e) { $err = $e->getMessage(); }
 same('an outline of a width of 0 or more', $err, 'an outline of a negative width throws');
 same(null, $outlined->textOutline(0, 0)->textStyle()->outline, 'one of no width: none');
+
+// A clip with rounded corners (mygo's clipRect): what the node holds is cut by the box inside its border, each corner's radius less the border, its corners continuous, through the list's mask; a clip mask inside takes its place.
+$h = new Headless(function (Context $c) {
+    $c->column()->size(100, 60)->radius(12)->border(2, 0x00ff00)->clip();
+      $c->column()->size(100, 60)->background(0xff0000);
+      $c->end();
+    $c->end();
+}, 300, 200);
+$h->frame();
+$l = $h->paint();
+$red = -1;
+for ($i = 0; $i < $l->n; $i++) { $b = $l->buf; $k = $i * DisplayList::FLOATS_PER_RECT; if ((int)round($b[$k + 4] * 255) === 255 && (int)round($b[$k + 5] * 255) === 0) { $red = $i; } }
+$x = $l->xforms; $k = (int)floor($l->buf[$red * DisplayList::FLOATS_PER_RECT + 9] / DisplayList::KIND_STRIDE) * DisplayList::FLOATS_PER_TRANSFORM;
+same([2.0, 2.0, 96.0, 56.0, 10.0, 10.0, -11.0, 10.0], [$x[$k + 8], $x[$k + 9], $x[$k + 10], $x[$k + 11], $x[$k + 12], $x[$k + 13], $x[$k + 14], $x[$k + 15]], 'a rounded clip: its child cut by the box inside the border, the corners 12 less the border');
+$h = new Headless(function (Context $c) {
+    $c->column()->size(100, 60)->radius(12)->clip();
+      $c->column()->size(50, 30)->clipMask(null);
+      $c->end();
+    $c->end();
+}, 300, 200);
+$h->frame();
+$err = null;
+try { $h->paint(); } catch (\LogicException $e) { $err = $e->getMessage(); }
+same(null, $err, 'a clip mask inside a rounded clip takes its place');

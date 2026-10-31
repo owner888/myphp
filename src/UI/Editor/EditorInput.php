@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
-use MyPHP\UI\{InputEvent, Key, TextInputRange, TextInputSelection, TextState};
+use MyPHP\UI\{InputEvent, Key, Scrollbar, TextInputRange, TextInputSelection, TextState};
 
 /** The editor's input as it comes, and the editor as the system's input methods see it (mygo's input.go). */
 trait EditorInput
@@ -392,13 +392,13 @@ trait EditorInput
     /** Grabs a thumb, or jumps to where the track was pressed. */
     private function scrollbarPress(InputEvent $ev, bool $horizontal): bool
     {
-        [$t0, $t1] = $this->thumb($horizontal);
-        $pos = $horizontal ? $ev->x - $this->textX : $ev->y;
+        [$t0, $n] = $this->bar($horizontal)->thumb();
+        $pos = $horizontal ? $ev->x : $ev->y;
         $this->scrollbar = ['active' => true, 'horizontal' => $horizontal, 'grab' => 0.0];
-        if ($pos >= $t0 && $pos <= $t1) {
+        if ($pos >= $t0 && $pos <= $t0 + $n) {
             $this->scrollbar['grab'] = $pos - $t0;
         } else {
-            $this->scrollbar['grab'] = ($t1 - $t0) / 2;
+            $this->scrollbar['grab'] = $n / 2;
             $this->dragScrollbar($ev);
         }
         return true;
@@ -406,18 +406,13 @@ trait EditorInput
 
     private function dragScrollbar(InputEvent $ev): void
     {
-        [$t0, $t1] = $this->thumb($this->scrollbar['horizontal']);
-        $size = $t1 - $t0;
+        $bar = $this->bar($this->scrollbar['horizontal']);
         if ($this->scrollbar['horizontal']) {
-            $track = $this->hTrack();
-            $f = ($ev->x - $this->textX - $this->scrollbar['grab']) / max(1.0, $track - $size);
-            $this->scrollX = max(0.0, min($f * $this->maxScrollX(), $this->maxScrollX()));
+            $this->scrollX = $bar->offsetAt($ev->x - $this->scrollbar['grab']);
             $this->o->sharedScroll?->setX($this->scrollX);
             return;
         }
-        $track = $this->viewH;
-        $f = ($ev->y - $this->scrollbar['grab']) / max(1.0, $track - $size);
-        $this->setScrollShared($f * $this->scrollMax());
+        $this->setScrollShared($bar->offsetAt($ev->y - $this->scrollbar['grab']));
     }
 
     /** Scrolls, through the owner when it shares the scroll among editors. */
@@ -430,23 +425,18 @@ trait EditorInput
         $this->setScroll($y);
     }
 
-    /** Where the scroll bar's thumb is along its track: from, to. @return array{0: float, 1: float} */
-    public function thumb(bool $horizontal): array
+    /**
+     * A scroll bar, in the element's coordinates: the vertical one along its
+     * right edge, the horizontal one under the text, at the bottom of what
+     * shows (hbarY), short of the vertical one's track (mygo's bar).
+     */
+    public function bar(bool $horizontal): Scrollbar
     {
         if ($horizontal) {
-            $track = $this->hTrack();
-            $content = $this->view->maxLine + $this->view->charWidth * 4;
-            $size = max(24.0, $track * $track / max($content, $track));
-            $m = $this->maxScrollX();
-            $f = $m > 0 ? $this->scrollX / $m : 0.0;
-            return [$f * ($track - $size), $f * ($track - $size) + $size];
+            return new Scrollbar([$this->textX, 0.0, $this->hTrack(), $this->hbarY + Editor::SCROLLBAR_WIDTH], true,
+                $this->r[2] - $this->textX, $this->view->maxLine + $this->view->charWidth * 4, $this->scrollX);
         }
-        $track = $this->viewH;
-        $content = $this->scrollMax() + $this->viewH;
-        $size = max(24.0, $track * $track / max($content, $track));
-        $m = $this->scrollMax();
-        $f = $m > 0 ? $this->scrollY / $m : 0.0;
-        return [$f * ($track - $size), $f * ($track - $size) + $size];
+        return new Scrollbar([0.0, 0.0, $this->r[2], $this->viewH], false, $this->viewH, $this->scrollMax() + $this->viewH, $this->scrollY);
     }
 
     /** Folds at a fold marker, selects lines at a number, or calls onGutterClick. */

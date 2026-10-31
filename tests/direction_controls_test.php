@@ -202,11 +202,11 @@ check($h->menu !== null && $h->menu['rtl'], 'the menu is right to left');
 check($h->menu['at'][0] >= $sort[0] + $sort[2] - 12, 'and shows at the button\'s right: ' . json_encode([$h->menu['at'], $sort]));
 
 // The vertical scroll bar on the left, the horizontal thumb at the right at the start.
-$v = Scrollbar::thumb([0, 0, 200, 100], [0, 200, 100], 6, false, true);
-$hz = Scrollbar::thumb([0, 0, 200, 100], [0, 200, 200], 6, true, true);
+$v = Scrollbar::thumbOf([0, 0, 200, 100], [0, 200, 100], 6, false, true);
+$hz = Scrollbar::thumbOf([0, 0, 200, 100], [0, 200, 200], 6, true, true);
 check($v !== null && $v[0] < 10, 'right to left, the vertical thumb at the left: ' . json_encode($v));
 check($hz !== null && $hz[0] + $hz[2] >= 190, 'right to left at the start, the horizontal thumb at the right: ' . json_encode($hz));
-$v = Scrollbar::thumb([0, 0, 200, 100], [0, 200, 100], 6, false, false);
+$v = Scrollbar::thumbOf([0, 0, 200, 100], [0, 200, 100], 6, false, false);
 check($v !== null && $v[0] >= 190, 'left to right, the vertical thumb at the right');
 
 // An input starts at the right: its caret, its placeholder, its text.

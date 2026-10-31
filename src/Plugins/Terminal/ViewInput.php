@@ -5,7 +5,7 @@ namespace MyPHP\Plugins\Terminal;
 
 use MyPHP\Plugins\Terminal\Vt\{Gesture, Key as VtKey, KeyEncoder, KeyEvent, MouseEncoder, Terminal as VtTerminal};
 use MyPHP\Transfer\{Data, Format};
-use MyPHP\UI\{InputEvent, Key};
+use MyPHP\UI\{InputEvent, Key, Scrollbar};
 
 /**
  * The terminal's input as it comes (mygo's view.go): keys, text, edit
@@ -513,7 +513,7 @@ trait ViewInput
         } elseif ($this->barHeld) {
             $this->dragScrollbar($ev->y);
         } elseif ($this->overBar && $ev->kind === InputEvent::POINTER_DOWN && $ev->button === 0) {
-            [$y, $h] = self::thumb($this->t->term->scrollbar(), $this->size[1]);
+            [$y, $h] = self::bar($this->t->term->scrollbar(), [0.0, 0.0, 0.0, $this->size[1]])->thumb();
             $this->barGrab = $ev->y >= $y && $ev->y < $y + $h ? $ev->y - $y : $h / 2;
             $this->barHeld = true;
             $this->dragScrollbar($ev->y);
@@ -530,22 +530,16 @@ trait ViewInput
         $sb = $term->scrollbar();
         [$total, $offset, $len] = $sb;
         if ($total <= $len) { return; }
-        [, $h] = self::thumb($sb, $this->size[1]);
-        $travel = $this->size[1] - $h;
-        if ($travel <= 0) { return; }
-        $f = max(0.0, min(($y - $this->barGrab) / $travel, 1.0));
-        if (($d = (int)round($f * ($total - $len)) - $offset) !== 0) {
+        if (($d = (int)round(self::bar($sb, [0.0, 0.0, 0.0, $this->size[1]])->offsetAt($y - $this->barGrab)) - $offset) !== 0) {
             $term->scrollBy($d);
             $this->invalidate();
         }
     }
 
-    /** The top of the scroll bar's thumb in a track $h points high, and its height; the scrollback is longer than the viewport. @param array{0: int, 1: int, 2: int} $sb @return array{0: float, 1: float} */
-    private static function thumb(array $sb, float $h): array
+    /** The scroll bar of the scrollback $sb (total, offset and length, in rows), along the right edge of $box (mygo's bar). @param array{0: int, 1: int, 2: int} $sb @param array{0: float, 1: float, 2: float, 3: float} $box */
+    private static function bar(array $sb, array $box): Scrollbar
     {
-        [$total, $offset, $len] = $sb;
-        $th = max($h * $len / $total, 24.0);
-        return [($h - $th) * $offset / ($total - $len), $th];
+        return new Scrollbar($box, false, (float)$sb[2], (float)$sb[0], (float)$sb[1]);
     }
 
     /** The grid in pixels, for selection gestures. @return array{0: int, 1: int, 2: int, 3: int} */

@@ -123,6 +123,97 @@ final class Metal
         return clamp(t + (c - l) * k, 0.0, 1.0);
     }
     float cover(float d, float scale) { return saturate(0.5 - d * scale); }   // coverage of a pixel whose center is d points inside (negative) or outside an edge, as mygo's shader: in pixels
+    // Continuous corners, Core Animation's, as macOS draws rounded rects and mygo's shader does there (its contCorner, contDist, contInset left
+    // out, contValue, contCoverage): a corner of radius r whose curve leaves the edges e from it, blended toward a quarter circle by cx along its
+    // horizontal edge and cy along its vertical one, its curve's box ending at eff as clamped. All in device pixels.
+    constant float contExtent = 1.528665;
+    struct ContCorner { float r, e, eff, cx, cy; };
+    ContCorner contCorner(float r, float rh, float rv, float w, float h) {
+        ContCorner c;
+        c.r = r;
+        c.e = contExtent * r;
+        c.cx = saturate((contExtent - w / max(r + rh, 1e-6)) / (contExtent - 1.0));
+        c.cy = saturate((contExtent - h / max(r + rv, 1e-6)) / (contExtent - 1.0));
+        c.eff = c.e + (r - c.e) * max(c.cx, c.cy);
+        return c;
+    }
+    float contDist(ContCorner c, float u, float v) {   // the corner's value at u inside its vertical edge, v inside its horizontal one: about the signed distance to its edge
+        float2 a = max(0.0, 1.0 - float2(u, v) / c.e);
+        float l = length(a);
+        float hi = max(a.x, a.y);
+        float rho = hi > 0.0 ? min(min(a.x, a.y) / hi, 1.0) : 0.0;
+        float pp = (((-0.926054 * rho + 3.15601) * rho - 3.64122) * rho + 1.26803) * rho + 0.268531;
+        float f1 = l + 1.0 - 1.0 / (1.0 - rho * rho * min(l, 1.0) * pp);
+        float f2 = length(max(0.0, a * contExtent - (contExtent - 1.0))) * 0.654166 + 0.345834;
+        float sg = a.y > a.x ? 1.0 : -1.0;
+        float w = saturate(0.5 - sg + sg * rho);
+        float fx = f1 + (f2 - f1) * c.cx, fy = f1 + (f2 - f1) * c.cy;
+        return min(max(c.eff - u, c.eff - v), 0.0) + c.e * (fx + (fy - fx) * w - 1.0);
+    }
+    float contInset(ContCorner c, float v) {   // how far inside its vertical edge the corner's edge is v inside its horizontal one, between the quarter circles of radius r and e, by regula falsi (Illinois)
+        if (v >= c.e || c.r <= 0.0) { return 0.0; }
+        float lo = v < c.r ? c.r - sqrt(v * (2.0 * c.r - v)) : 0.0;
+        float hi = c.e - sqrt(v * (2.0 * c.e - v));
+        float dlo = contDist(c, lo, v), dhi = contDist(c, hi, v);
+        if (dlo <= 0.0) { return lo; }
+        if (dhi >= 0.0) { return hi; }
+        int side = 0;
+        for (int n = 0; n < 5; n++) {
+            float m = (lo * dhi - hi * dlo) / (dhi - dlo);
+            float dm = contDist(c, m, v);
+            if (dm > 0.0) {
+                lo = m; dlo = dm;
+                if (side == 1) { dhi *= 0.5; }
+                side = 1;
+            } else {
+                hi = m; dhi = dm;
+                if (side == -1) { dlo *= 0.5; }
+                side = -1;
+            }
+        }
+        return (lo * dhi - hi * dlo) / (dhi - dlo);
+    }
+    float areaCoverage(float2 p, float4 rect) {   // the area of the pixel at p inside the rect: exact near square corners, and for lines thinner than a pixel
+        float2 c = saturate(min(rect.xy + rect.zw, p + 0.5) - max(rect.xy, p - 0.5));
+        return c.x * c.y;
+    }
+    float contValue(float2 p, float4 rect, thread const ContCorner *c, thread bool &curved) {
+        float4 d = float4(p - rect.xy, rect.xy + rect.zw - p);   // left, top, right, bottom
+        float4 uu = d.xzzx, vv = d.yyww;
+        float value = max(max(-d.x, -d.y), max(-d.z, -d.w));
+        curved = false;
+        for (int i = 0; i < 4; i++) {
+            if (c[i].r > 0.0 && uu[i] < c[i].e && vv[i] < c[i].e) {
+                value = max(value, contDist(c[i], uu[i], vv[i]));
+                curved = true;
+            }
+        }
+        return value;
+    }
+    float contCoverage(float2 p, float4 rect, float4 r) {   // away from the corners' curves, the area of the pixel inside; near them, the value over the sum of its derivatives, as Core Animation antialiases
+        ContCorner c[4] = { contCorner(r.x, r.y, r.w, rect.z, rect.w), contCorner(r.y, r.x, r.z, rect.z, rect.w),
+                            contCorner(r.z, r.w, r.y, rect.z, rect.w), contCorner(r.w, r.z, r.x, rect.z, rect.w) };
+        bool curved, ignored;
+        float d = contValue(p, rect, c, curved);
+        if (!curved) { return areaCoverage(p, rect); }
+        if (abs(d) > 2.0) { return d < 0.0 ? 1.0 : 0.0; }
+        const float h = 1.0 / 16.0;
+        float dx = contValue(p + float2(h, 0.0), rect, c, ignored);
+        float dy = contValue(p + float2(0.0, h), rect, c, ignored);
+        return saturate(0.5 - d * h / max(abs(dx - d) + abs(dy - d), 1e-6));
+    }
+    float shapeCover(float2 p, float2 size, float4 radii, float scale) {   // how much of the pixel at p (points from the box's top left) a box of size, its corners of radii, covers, as macOS draws it (mygo's rectCoverage)
+        return contCoverage(p * scale, float4(0.0, 0.0, size * scale), max(radii, float4(0.0)) * scale);
+    }
+    float imageValue(float2 p, float2 size, float radius) {   // the value of an image's rounded rect at p, its corners continuous: about the signed distance to its edge, in its own units, which a transform may zoom (mygo's localValue)
+        ContCorner c[4] = { contCorner(radius, radius, radius, size.x, size.y), contCorner(radius, radius, radius, size.x, size.y),
+                            contCorner(radius, radius, radius, size.x, size.y), contCorner(radius, radius, radius, size.x, size.y) };
+        bool curved;
+        return contValue(p, float4(0.0, 0.0, size), c, curved);
+    }
+    float rectCover(V v, float radius, float scale) {   // shapeCover of the quad's own rounded rect
+        return shapeCover(v.local + v.extent, 2.0 * v.extent, float4(radius), scale);
+    }
     float4 glass(V v, constant Uniforms& u, texture2d<float> backdrop, const device Inst* in) {   // the slot after: the bezel's width in points, the rim's light, what black maps to in light mode, then black and white in dark mode (DisplayList::glass)
         constexpr sampler s(filter::linear, address::clamp_to_edge);
         float2 p = v.pos.xy;
@@ -151,13 +242,6 @@ final class Metal
         return float4(c, cover(sd, u.scale));
     }
     // Boxes (14) and box shadows (15), as mygo's shader paints its fills and shadows: p from the box's top left, in points; coverage in pixels.
-    float sdBox(float2 p, float2 size, float4 radii) {   // radii: top left, top right, bottom right, bottom left
-        float2 h = size * 0.5;
-        float2 q = p - h;
-        float r = q.x < 0.0 ? (q.y < 0.0 ? radii.x : radii.w) : (q.y < 0.0 ? radii.y : radii.z);
-        float2 a = abs(q) - h + r;
-        return length(max(a, float2(0.0))) + min(max(a.x, a.y), 0.0) - r;
-    }
     float4 fitRadii(float2 size, float4 r) {   // as CSS, scaled down together where two of a side's overlap
         float f = 1.0;
         if (r.x + r.y > size.x) { f = min(f, size.x / (r.x + r.y)); }
@@ -269,14 +353,15 @@ final class Metal
         return s - s / (x * x);
     }
     float gaussian(float x, float sigma) { return exp(-(x * x) / (2.0 * sigma * sigma)) / (2.50662827463 * sigma); }
-    float shadowX(float x, float y, float sigma, float corner, float2 h) {
-        float delta = min(h.y - corner - abs(y), 0.0);
-        float curved = h.x - corner + sqrt(max(0.0, corner * corner - delta * delta));
+    float shadowX(float x, float y, float sigma, float corner, float2 h, ContCorner cc) {   // cc: the continuous corner, as mygo's on darwin
+        float v = h.y - abs(y);
+        float curved = corner > 0.0 && v < cc.e ? h.x - contInset(cc, v) : h.x;
         float2 integral = 0.5 + 0.5 * erf2((x + float2(-curved, curved)) * (sqrt(0.5) / sigma));
         return integral.y - integral.x;
     }
     float boxShadow(float2 p, float2 size, float sigma, float4 radii) {   // the blurred rounded box of Evan Wallace: exact along x, four samples along y
         float corner = max(max(radii.x, radii.y), max(radii.z, radii.w));
+        ContCorner cc = contCorner(corner, corner, corner, size.x, size.y);
         float2 h = size * 0.5;
         p -= h;
         float from = clamp(-3.0 * sigma, p.y - h.y, p.y + h.y);
@@ -285,7 +370,7 @@ final class Metal
         float y = from + dy * 0.5;
         float v = 0.0;
         for (int n = 0; n < 4; n++) {
-            v += shadowX(p.x, p.y - y, sigma, corner, h) * gaussian(y, sigma) * dy;
+            v += shadowX(p.x, p.y - y, sigma, corner, h, cc) * gaussian(y, sigma) * dy;
             y += dy;
         }
         return v;
@@ -303,7 +388,7 @@ final class Metal
         if (mask) { flags -= 32.0; }
         bool dashed = flags > 15.5;
         if (dashed) { flags -= 16.0; }
-        float outer = mask ? atlas.sample(s, (rad.xy + p * u.atlasScale) / u.atlas).r : cover(sdBox(p, size, rad), scale);
+        float outer = mask ? atlas.sample(s, (rad.xy + p * u.atlasScale) / u.atlas).r : shapeCover(p, size, rad, scale);
         float4 pc = paintAt(p, flags, v.color, float4(unpackRGB(v.uv.x), v.uv.y), v.g4, scale, in, v.inst + 2, flags > 3.5 ? int(v.uv.x + 0.5) : 0);
         float4 res = (borderPaint ? premul(v.color) : pc) * outer;
         float4 bw = v.b4;
@@ -312,7 +397,7 @@ final class Metal
             float inner = 0.0;
             if (isz.x > 0.0 && isz.y > 0.0) {
                 float4 ir = max(rad - float4(max(bw.x, bw.w), max(bw.x, bw.y), max(bw.z, bw.y), max(bw.z, bw.w)), float4(0.0));
-                inner = cover(sdBox(p - bw.wx, isz, fitRadii(isz, ir)), scale);
+                inner = shapeCover(p - bw.wx, isz, fitRadii(isz, ir), scale);
             }
             float bc = saturate(outer - inner);
             if (dashed) { bc *= dash(p, size, bw, scale); }
@@ -332,12 +417,12 @@ final class Metal
         if (v.uv.y < 0.5) {   // outside: the shape, the quad less three sigmas, blurred, outside the box casting it
             float e = 3.0 * sigma;
             float2 ss = size - 2.0 * e;
-            a = sigma > 0.0 ? boxShadow(p - e, ss, sigma, v.r4) : cover(sdBox(p - e, ss, v.r4), scale);
-            if (hasOther) { a *= 1.0 - cover(sdBox(p - other.xy, other.zw, orad), scale); }
+            a = sigma > 0.0 ? boxShadow(p - e, ss, sigma, v.r4) : shapeCover(p - e, ss, v.r4, scale);
+            if (hasOther) { a *= 1.0 - shapeCover(p - other.xy, other.zw, orad, scale); }
         } else {   // inside the quad, what the hole, blurred, leaves
             float hole = 0.0;
-            if (hasOther) { hole = sigma > 0.0 ? boxShadow(p - other.xy, other.zw, sigma, orad) : cover(sdBox(p - other.xy, other.zw, orad), scale); }
-            a = cover(sdBox(p, size, v.r4), scale) * (1.0 - hole);
+            if (hasOther) { hole = sigma > 0.0 ? boxShadow(p - other.xy, other.zw, sigma, orad) : shapeCover(p - other.xy, other.zw, orad, scale); }
+            a = shapeCover(p, size, v.r4, scale) * (1.0 - hole);
         }
         return float4(v.color.rgb, v.color.a * a);
     }
@@ -351,9 +436,9 @@ final class Metal
         if (v.mrect.z != 0.0) {
             float2 t = (v.pos.xy / u.scale - v.mrect.xy) / float2(abs(v.mrect.z), v.mrect.w);
             float m = 0.0;
-            if (v.mslot.z < 0.5) {   // no image: the rect itself, its edges a pixel soft
-                float2 inside = min(t, 1.0 - t) * float2(abs(v.mrect.z), v.mrect.w) * u.scale;   // pixels inside its nearer edges
-                m = clamp(min(inside.x, inside.y) + 0.5, 0.0, 1.0);
+            if (v.mslot.z < 0.5) {   // no image: the rect itself, its corners' radii where the slot would be (the bottom right one -1 less it in the slot's width), continuous, as mygo's rounded clips
+                float4 r = float4(v.mslot.x, v.mslot.y, v.mslot.z < -0.5 ? -1.0 - v.mslot.z : 0.0, v.mslot.w);
+                m = contCoverage(v.pos.xy, float4(v.mrect.xy, abs(v.mrect.z), v.mrect.w) * u.scale, r * u.scale);
             } else if (t.x >= 0.0 && t.y >= 0.0 && t.x <= 1.0 && t.y <= 1.0) {
                 constexpr sampler ms(filter::linear);
                 float page = floor(v.mslot.x / 4096.0);
@@ -373,8 +458,7 @@ final class Metal
             if (v.kind > 11.5 && v.kind < 12.5) { c.rgb = float3(dot(c.rgb, float3(0.2126, 0.7152, 0.0722))); }
             float radius = v.radius;
             if (radius < -0.5) { c.rgb *= unpackRGB(-radius - 1.0); radius = 0.0; }   // tinted (ImageOptions): the radius carries the tint's rgb, its alpha is in color.a
-            float2 q = abs(v.local) - (v.extent - radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+            float d = imageValue(v.local + v.extent, 2.0 * v.extent, radius);
             float aa = max(fwidth(d), 1e-4);   // a pixel of the screen, in the quad's units: zoomed by a transform, an image's edge stays one pixel soft, and tiles side by side show no seam between them
             float a = 1.0 - smoothstep(-0.5 * aa, 0.5 * aa, d);
             return float4(c.rgb / max(c.a, 1e-4), c.a * v.color.a * a);
@@ -385,9 +469,7 @@ final class Metal
             to.a = v.uv.y;
             float t = v.kind > 10.5 ? (v.local.y + v.extent.y) / max(2.0 * v.extent.y, 1.0) : (v.local.x + v.extent.x) / max(2.0 * v.extent.x, 1.0);
             float4 c = mix(v.color, to, clamp(t, 0.0, 1.0));
-            float2 q = abs(v.local) - (v.extent - v.radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            return float4(c.rgb, c.a * cover(d, u.scale));
+            return float4(c.rgb, c.a * rectCover(v, v.radius, u.scale));
         }
         if (v.kind > 8.5) {   // a line: a capsule from one corner of the rect, inset by its radius (half the thickness), to the opposite corner; uv = the signs of its direction
             float2 h = v.extent - v.radius;
@@ -416,15 +498,13 @@ final class Metal
         }
         if (v.kind > 5.5) {   // a vertical alpha gradient of the color
             float ty = (v.local.y + v.extent.y) / max(v.rect.w / u.scale, 1.0);
-            float2 q = abs(v.local) - (v.extent - v.radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * cover(d, u.scale));
+            return float4(v.color.rgb, (v.color.a + (v.uv.x - v.color.a) * ty) * rectCover(v, v.radius, u.scale));
         }
         if (v.kind > 4.5) { return glass(v, u, backdrop, in); }
         if (v.kind > 3.5) {   // a ring: the band between the rect's edge and thickness inside it
-            float2 q = abs(v.local) - (v.extent - v.radius);
-            float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-            float a = cover(d, u.scale) * (1.0 - cover(d + v.uv.x, u.scale));
+            float t = v.uv.x;
+            float2 p = v.local + v.extent, size = 2.0 * v.extent;
+            float a = shapeCover(p, size, float4(v.radius), u.scale) * (1.0 - shapeCover(p - t, size - 2.0 * t, float4(max(v.radius - t, 0.0)), u.scale));
             return float4(v.color.rgb, v.color.a * a);
         }
         if (v.kind > 2.5) {   // a shadow: the rect inset by the blur, its edge feathered over the blur
@@ -437,10 +517,7 @@ final class Metal
         if (v.kind > 0.5) {
             return float4(v.color.rgb, v.color.a * atlas.sample(s, v.uv).r);
         }
-        float2 q = abs(v.local) - (v.extent - v.radius);
-        float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - v.radius;
-        float a = cover(d, u.scale);
-        return float4(v.color.rgb, v.color.a * a);
+        return float4(v.color.rgb, v.color.a * rectCover(v, v.radius, u.scale));
     }
 
     // The blur of the backdrop: a fullscreen triangle, a 1-D Gaussian along dir (texels of the source), run twice.

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
-use MyPHP\UI\{DisplayList, Path, TextPainter, Theme as UITheme};
+use MyPHP\UI\{DisplayList, Painter, Path, Scrollbar, ScrollbarState, TextPainter, Theme as UITheme};
 
 /** Painting an editor (mygo's paint.go). */
 trait EditorPaint
@@ -563,6 +563,14 @@ trait EditorPaint
         return $out;
     }
 
+    /** A scroll bar in the window, the element at $r (mygo's barIn). @param array{0: float, 1: float, 2: float, 3: float} $r */
+    private function barIn(array $r, bool $horizontal): Scrollbar
+    {
+        $b = $this->bar($horizontal);
+        $b->box[0] += $r[0]; $b->box[1] += $r[1];
+        return $b;
+    }
+
     /** Draws the scroll bars, the vertical one with markers of the matches, diagnostics, changes and carets. */
     private function paintScrollbars(DisplayList $list, array $r): void
     {
@@ -576,8 +584,6 @@ trait EditorPaint
         $shown = $this->pointerIn || $this->scrollbar['active'];
         if ($vertical) {
             $x = $rx + $rw - $sw;
-            // No track under the thumb, as a scroll container draws none.
-            $hovered = $this->pointerIn && $this->region === self::REGION_VSCROLL;
             $span = $this->scrollMax() + $this->viewH;
             $mark = function (float $y, float $h, float $x0, float $w, array $c) use ($list, $x, $ry, $rh, $span) {
                 self::fill($list, $x + $x0, $ry + $y / $span * $rh, $w, max($h / $span * $rh, 2.0), $c);
@@ -624,15 +630,10 @@ trait EditorPaint
                 $tc = $ct->c['text'];
                 foreach ($this->sels as $s) { $mark($h->top($v->text->lineOf($s->head)), 2, 0, $sw, [$tc[0], $tc[1] * 0.5]); }
             }
-            [$t0, $t1] = $this->thumb(false);
-            $alpha = $hovered || $this->scrollbar['active'] ? 0.9 : 0.5;
-            self::fill($list, $x + 2, $ry + $t0, $sw - 4, $t1 - $t0, [$t->scrollbar, $t->scrollbarAlpha * $alpha], ($sw - 4) / 2);
+            Painter::paintScrollbar($list, $t, $this->barIn($r, false), new ScrollbarState($this->scrollbar['active'] && !$this->scrollbar['horizontal']));
         }
         if ($horizontal && $shown) {
-            [$t0, $t1] = $this->thumb(true);
-            $y = $ry + $this->hbarY;
-            $alpha = $this->pointerIn && $this->region === self::REGION_HSCROLL || $this->scrollbar['active'] ? 0.9 : 0.4;
-            self::fill($list, $rx + $this->textX + $t0, $y + 2, $t1 - $t0, $sw - 4, [$t->scrollbar, $t->scrollbarAlpha * $alpha], ($sw - 4) / 2);
+            Painter::paintScrollbar($list, $t, $this->barIn($r, true), new ScrollbarState($this->scrollbar['active'] && $this->scrollbar['horizontal']));
         }
     }
 }

@@ -519,6 +519,8 @@ final class WebView
         self::$defined = true;
         // A WKWebView that hands dropped files to PHP (the page's own drop events do not see paths).
         ObjC::defineClass('MyPHPWebView', 'WKWebView', Drop::methods() + [
+            // The first click in a window that is not key is the page's, as it is native UI's (View): WKWebView answers no, which spends the click on making the window key (mygo's 1fa2713).
+            'acceptsFirstMouse:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $event) => true],
             // The press a drag region of the page moves the window with (mygo's lastMouseDown): the page tells of it after the event.
             // A page's context menu (mygo's contextMenuMethods): WebKit's NSMenu, about to show, which the page's 'contextMenu' listeners change.
             'willOpenMenu:withEvent:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $menu, $event) {

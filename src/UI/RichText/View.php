@@ -73,6 +73,8 @@ final class View implements TextInputClient
     /** The pointer's shape where it hovers: an arrow over task boxes and the scroll bar, a hand over links, an I-beam over text. */
     public \MyPHP\UI\Cursor $cursor = \MyPHP\UI\Cursor::Text;
     public bool $thumb = false;
+    /** The pointer is over the editor, which shows the scroll bar. */
+    public bool $inView = false;
     public float $thumbGrab = 0;
     public bool $focused = false;
     /** Nanoseconds, of the runtime's clock. */
@@ -115,6 +117,7 @@ final class View implements TextInputClient
         $v->setLook($t, $styled);
         $v->sync();
         $now = $rt?->now ?? hrtime(true);
+        $v->inView = $c->hovered($e);
         $focused = $c->focused($e);
         if ($focused !== $v->focused) {
             $v->focused = $focused;

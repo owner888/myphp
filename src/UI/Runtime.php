@@ -2452,7 +2452,7 @@ final class Runtime
                     continue;
                 }
                 $extent = $axis ? $state->extentX() : $state->extent();
-                $t = Scrollbar::thumb($r, $extent, $barW, $axis, $rtl);
+                $t = Scrollbar::thumbOf($r, $extent, $barW, $axis, $rtl);
                 if ($t === null || $x < $t[0] - $g || $x >= $t[0] + $t[2] + $g || $y < $t[1] - $g || $y >= $t[1] + $t[3] + $g) {
                     continue;
                 }

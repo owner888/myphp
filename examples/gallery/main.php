@@ -13,7 +13,7 @@ declare(strict_types=1);
 use MyPHP\{App, Clipboard, DateOptions, Dialog, I18n, MessageOptions, NumberOptions, Style as DateStyle, Width, Window, WindowOptions};
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style as GlassStyle};
 use MyPHP\Text\Params;
-use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, Content, ContentTransition, Context, Cursor, Direction, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextState, Theme, Track, TransitionMotion, WideColor};
+use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, GradientStop, RadialGradient, Content, ContentTransition, Context, Cursor, Direction, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextState, Theme, Track, TransitionMotion, WideColor};
 use MyPHP\UI\Chart\{Axes, Band, Chart, Curve, Linear, Side, Stacking, Tick, Time};
 use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, Reveal, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, EditorOptions, FormatState, ListKind, Paragraph, ParagraphStyle, RichText, Run, Text as RichTextText};
@@ -1160,6 +1160,7 @@ final class Gallery
             $bar('sRGB')->gradient($blue, $yellow, 90);
             $bar('Oklab')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, oklab: true));
             $bar('Stops at 40% and 60%')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, 0.4, 0.6));
+            $bar('Radial, from the right')->radialGradient(new RadialGradient(centerX: 0.9, centerY: 0.5, oklab: true, stops: [new GradientStop($yellow, 0), new GradientStop($blue, 1)]));
             $c->row(0, 0, 0, $t->surface)->size(0, 30)->radius(6)->stripes($t->border, 4, 6, 45)->center();
               $c->text('Stripes: unavailable', 12, $t->textMuted);
             $c->end();
@@ -1547,7 +1548,7 @@ final class Gallery
     {
         $t = $c->theme;
         card($c, 'Overlays');
-          $c->row(0, 10)->wrap(0)->gapY(10);
+          $c->row(0, 10);
             if ($c->clicked($c->primaryButton('Open dialog'))) { $this->dialog = true; }
             $menu = $c->button('Menu ▾');
             if ($c->clicked($menu)) { $this->menu = !$this->menu; }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\RichText;
 
 use MyPHP\Text\Layout;
-use MyPHP\UI\{DisplayList, Node, Painter, Path, Span, TextPainter, Theme as UITheme};
+use MyPHP\UI\{DisplayList, Node, Painter, Path, ScrollbarState, Span, TextPainter, Theme as UITheme};
 
 /**
  * Painting an editor (mygo's richtext paint.go): its paragraphs'
@@ -73,9 +73,10 @@ trait ViewPaint
                 $list->rect($ox + $cx, $oy + $cy - $this->scroll, max(1 / $text->scale(), 1.0), $ch, $th->caret[0], $th->caret[1]);
             }
         }
-        if ($this->hs->top(count($this->paras)) > $h) {
-            [$top, $size] = $this->thumbBox();
-            $list->rect($r[0] + $r[2] - 8, $r[1] + $top, 5, $size, $th->text[0], $th->text[1] * 0.3, 2.5);
+        if ($this->inView || $this->thumb) { // the scroll bar while the pointer is over the editor or drags its thumb, as a scroll container's
+            $bar = $this->bar();
+            $bar->box[0] = $r[0]; $bar->box[1] = $r[1];
+            Painter::paintScrollbar($list, $theme, $bar, new ScrollbarState($this->thumb));
         }
         $this->moved();
     }

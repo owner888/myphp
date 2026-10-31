@@ -6913,6 +6913,37 @@ succeeds are told of, an empty line is none.
   link, which ticks once some of it shows (`Metal::requestFrame`, mygo's
   `RequestFrame`), as mygo's live chart stops while covered.
 
+## Continuous corners and upstream's scroll bars (v1.133)
+
+- Corners: continuous, as macOS draws its own and mygo's shader does on
+  darwin (`contCorner`, `contDist`, `contValue`, `contCoverage`, ported
+  into the shader as `shapeCover`): fills, boxes and their borders,
+  rings and sharp shadows; square corners covered by the pixel's area.
+  A blurred shadow's corner is the continuous one (`contInset` along
+  each row, mygo's `shadowX`), and an image's (`imageValue`, softened
+  over a pixel of the screen as before).
+- Clips with rounded corners (mygo's `clipRect`): a node that clips
+  both ways, or scrolls, cuts what it holds by the box inside its
+  border, each corner's radius less the wider border beside it, through
+  the list's mask (`DisplayList::roundedMask`: no image, the radii where
+  the slot would be), covered as `contCoverage` covers; `Painter::clip`
+  takes a radius. One at a time: inside another, or through a
+  transform, a clip cuts by its rectangle, and a `clipMask` inside one
+  takes its place. An image under a mask is still snapped to pixels.
+- Scroll bars: `Scrollbar` is a value, as mygo's `ui.Scrollbar` (box,
+  direction, view, content, offset: `scrolls()`, `thumb()`,
+  `offsetAt()`), painted by `Painter::scrollbar` with a
+  `ScrollbarState` (dragging widens the thumb); the editor, rich text
+  and the terminal use it, their bars showing while the pointer is over
+  them. A web view takes the click that brings its window forward
+  (`acceptsFirstMouse:`).
+- The view tracks the pointer while its app is active, as mygo's
+  surface does (`View::TRACKING`), not always: an app behind another
+  keeps the hover the last event left.
+- The gallery: the radial bar is mygo's, from the right, mixed in Oklab;
+  Overlays' row of buttons no longer wraps, its card shrinking and its
+  label wrapping, as mygo's.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

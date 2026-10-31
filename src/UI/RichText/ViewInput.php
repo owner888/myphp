@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\RichText;
 
 use MyPHP\Text\{Boundaries, Layout};
-use MyPHP\UI\{Context, InputEvent, Key, Menu};
+use MyPHP\UI\{Context, InputEvent, Key, Menu, Scrollbar};
 use MyPHP\UI\Editor\{Rope, RopeText};
 
 /**
@@ -524,26 +524,22 @@ trait ViewInput
         return $this->hs->top(count($this->paras)) > $this->viewH && $x >= $this->rect[2] - self::SCROLLBAR_WIDTH;
     }
 
+    /** The scroll bar, in the element (mygo's bar). */
+    private function bar(): Scrollbar
+    {
+        return new Scrollbar([0.0, 0.0, $this->rect[2], $this->rect[3]], false, $this->viewH, $this->hs->top(count($this->paras)), $this->scroll);
+    }
+
     /** The top and the height of the scroll bar's thumb, in the element. @return array{0: float, 1: float} */
     private function thumbBox(): array
     {
-        $total = $this->hs->top(count($this->paras));
-        $track = $this->rect[3] - 4;
-        $size = max(24.0, $track * $this->viewH / max($total, 1.0));
-        $room = $track - $size;
-        $at = ($max = $total - $this->viewH) > 0 ? $this->scroll / $max : 0.0;
-        return [2 + $room * $at, $size];
+        return $this->bar()->thumb();
     }
 
     /** Scrolls as the thumb is dragged to $y. */
     private function dragThumb(float $y): void
     {
-        [, $size] = $this->thumbBox();
-        $track = $this->rect[3] - 4 - $size;
-        $total = $this->hs->top(count($this->paras)) - $this->viewH;
-        if ($track <= 0 || $total <= 0) { return; }
-        $f = ($y - $this->thumbGrab - 2) / $track;
-        $this->setScroll(max(0.0, min($f, 1.0)) * $total);
+        $this->setScroll($this->bar()->offsetAt($y - $this->thumbGrab));
     }
 
     /** Builds the editor's context menu: the editing items of a text input (mygo's EditItems). */

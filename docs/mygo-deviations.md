@@ -208,13 +208,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Cursor` as a `uint8` enum.
   - myphp: the same `shadow()` and `insetShadow()` (`$rgb` and `$alpha`
     for the color) through two new quad kinds, a box (14) and a box
-    shadow (15), each with a second slot; circular corners; rectangular
-    clips; boxes snapped to whole pixels since v1.132 (`DisplayList::$pixels`); borders under clipped children; dividers
+    shadow (15), each with a second slot; continuous corners since
+    v1.133, as mygo's on darwin; clips with rounded corners since v1.133,
+    through the list's mask, one at a time (a rounded clip inside
+    another, or one through a transform, cuts by its rectangle); boxes snapped to whole pixels since v1.132 (`DisplayList::$pixels`); borders under clipped children; dividers
     after all children; a nested `debug()` outlines its own subtree;
     a disabled node dims as mygo's (only containers did until v1.26);
     `Cursor` a string-backed enum named as CSS names them.
-  - Why: the display list's quads hold one radius and rectangular clips;
-    myphp's widgets drew their disabled look before.
+  - Why: the display list's quads hold one radius and rectangular clips,
+    and a quad goes through one mask; myphp's widgets drew their
+    disabled look before.
 - **Input queries** (v1.07)
   - mygo: `PointerPosition`, `DragVelocity`, `DragEnded`,
     `PressedOutside`, `OverlayShortcut`, `Dismissed` are methods of the
@@ -500,13 +503,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `theme()`, `fill()`, `stroke()`, `strokeDashed()`, `shadow()`,
     `fillGradient()`, `line()`, `text()`, `image()`, `imageRegion()` (flipped, not
     tinted: `ImageOptions` has `flipX` and `flipY`), `focusRing()`,
-    `clip()` (square corners), `transform()`, `fillPath()`,
+    `clip()` (its radius last, optional, since v1.133), `transform()`, `fillPath()`,
     `strokePath()`, `icon()`; colors 0xRRGGBB with an opacity.
     `Node::draw()` and `drawOver()` hand a draw the painter and the node's
     box, as mygo's, since v1.123; the tree painter's own helpers became
     `paintIcon` and `paintFocusRing`.
-  - Why: what a game draws with, first; the display list has no tint
-    nor rounded clips.
+  - Why: what a game draws with, first; the display list has no tint;
+    `clip()`'s radius came after its callback.
 
 - **The glass plugin** (v0.99)
   - mygo: `glass.Glass{Style, Tint, Interactive}` with `Tint` a color
@@ -2241,11 +2244,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 ## The gallery against mygo's (v1.132)
 
-- **Radial gradients**
-  - mygo: `RadialGradient` and `Painter.FillRadialGradient` (its 977740f);
-    the gallery's Styling page fills a bar with one.
-  - myphp: not yet; the bar is left out.
-  - Why: found comparing the galleries; to come.
 - **A switch's label**
   - mygo: `Switch` has none; `Label` names it for assistive technology.
   - myphp: `switch($label, …)` shows its label after the track; `''`

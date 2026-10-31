@@ -381,3 +381,22 @@ foreach ($h->rt->accessTree->nodes as $a) { if ($a->role === \MyPHP\UI\Role::TEX
 check($ed !== null && $ed->value === 'hello world', 'the editor reads its text to assistive technology');
 $h->input->push(['access', $ed->id, \MyPHP\UI\AccessNode::SELECT_TEXT, '', 6, 11]); $h->frame();
 same([6, 11], $doc->selection(), 'assistive technology selects "world"');
+
+// The scroll bar's thumb shows while the pointer is over the editor, as a scroll container's does, and not otherwise (mygo's TestScrollbarOnHover).
+$doc = new Document(Text::new(str_repeat("line\n", 200)));
+$h = new Headless(function (Context $c) use ($doc) { RichText::editor($c, $doc)->fill(); }, 500, 400);
+$h->paints = true;
+$thumb = function () use ($h): bool { // a quad of the theme's scroll bar color along the right edge
+    $list = $h->paint();
+    for ($q = 0; $q < $list->n; $q++) {
+        $o = $q * 16;
+        if ($list->buf[$o] > 485 && $list->buf[$o] < 495 && $list->buf[$o + 2] <= 8 && $list->buf[$o + 3] >= 20) { return true; }
+    }
+    return false;
+};
+$h->hover(-10, -10); $h->frame();
+check(!$thumb(), 'the thumb hides with the pointer away');
+$h->hover(250, 200); $h->frame();
+check($thumb(), 'the thumb shows with the pointer over the editor');
+$h->hover(-10, -10); $h->frame();
+check(!$thumb(), 'it goes as the pointer leaves');
