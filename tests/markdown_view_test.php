@@ -248,6 +248,15 @@ same(1, $redrawn, 'the window is asked to draw again once it loaded');
 $h->frame();
 check(!$hasText($h, 'a red box'), 'the image shows in place of its description');
 
+// An image wider than the view: at most as wide, keeping its aspect (mygo's MaxWidthPercent(100) and AspectRatio), in the first frame it shows.
+$o = new Options(loadImage: fn(string $url) => \MyPHP\UI\SVG::parse('<svg viewBox="0 0 2000 1000"><rect width="2000" height="1000" fill="red"/></svg>'));
+$h = $view('![wide](wide.svg)', $o, 400, 600); $h->frame(); \MyPHP\Native\Fibers::drain(); $h->frame();
+$imgOf = function (Node $n) use (&$imgOf): ?Node { if ($n->kind === Node::IMAGE) { return $n; } foreach ($n->kids as $k) { if (($r = $imgOf($k)) !== null) { return $r; } } return null; };
+$wide = $imgOf($h->root);
+check($wide !== null, 'the wide image shows');
+[, , $iw, $ih] = $h->rect($wide);
+check($iw <= 400 && $iw > 300 && abs($ih - $iw / 2) < 0.5, "fitted to the view, its aspect kept: $iw × $ih");
+
 // Math within text drawn by the app (Options::$inlineMath, mygo's 610df69 math_test.go): objects in links and strong text too, as TeX where it makes none; copied as its source.
 $math = new class {
     public array $asked = [], $sizes = [], $drawn = [];

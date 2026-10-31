@@ -76,3 +76,30 @@ foreach ([[10, 1], [60, 2], [60, 3], [10, 4], [10, 1], [10, 2]] as [$x, $n]) {
     $h->frame();
 }
 same([[1, 1, 1, 2], [1, 2]], [$a, $b], 'counted per node');
+
+// The window losing the keyboard while a press is held (mygo's SurfaceBlur): its release will not come, so a node taking its input gets one now, and the press ends, the release that comes later clicking nothing.
+$ups = [];
+$h = new Headless(function (Context $c) use (&$ups) {
+    $c->box(100, 100, 0)->handleInput(function (InputEvent $ev) use (&$ups): bool {
+        if ($ev->kind === InputEvent::POINTER_UP) { $ups[] = $ev->button; }
+        return true;
+    });
+}, 100, 100);
+$h->frame();
+$h->input->mouse(50, 50); $h->input->push(['down', 50, 50, 0, 1, 0]);
+$h->rt->setWindowFocus(true);
+$h->rt->setWindowFocus(false);
+same([0], $ups, 'the node taking its input has its release, as the window loses the keyboard');
+$clicked = 0;
+$h = new Headless(function (Context $c) use (&$clicked) {
+    if ($c->clicked($c->button('Go')->size(80, 30))) { $clicked++; }
+}, 200, 100);
+$h->frame();
+$h->rt->setWindowFocus(true);
+[$gx, $gy] = $h->middle($h->byText('Go'));
+$h->press($gx, $gy);
+$h->rt->setWindowFocus(false); $h->frame();
+$h->release($gx, $gy);
+same(0, $clicked, 'a button pressed before the window lost the keyboard: its later release clicks nothing');
+$h->click($gx, $gy);
+same(1, $clicked, 'a click after it clicks');

@@ -123,6 +123,9 @@ trait RuntimeAccess
         return $t;
     }
 
+    /** Tells the node of a web view's page from its node's (mygo's pageNodeID, 0x9e3779b97f4a7c15 as PHP's signed ints have it). */
+    private const PAGE_NODE = -0x61C8864680B583EB;
+
     /** The node of the tree for row $i of the list of node $list, whose first node is $first. */
     private static function rowNodeId(Node $first): int
     {
@@ -192,6 +195,12 @@ trait RuntimeAccess
             $parent = count($t->nodes) - 1;
             if ($n->kind === Node::RICH) { $this->accessInline($t, $n, $parent, $clip, $focused); }
             if (Role::leaf($role)) { return; }
+        }
+        if ($n->webView !== null) { // its page first, as it paints, in a node of its own that the system's elements of the page are inside (mygo's)
+            $page = new AccessNode($n->id ^ self::PAGE_NODE, $parent, Role::GROUP);
+            $page->webView = $n->webView;
+            $page->bounds = $n->world->bounds($n->x + $n->padL(), $n->y + $n->padT(), max(0.0, $n->w - $n->padL() - $n->padR()), max(0.0, $n->h - $n->padT() - $n->padB())); // its content box
+            $t->nodes[] = $page;
         }
         if ($n->scroll !== null) {
             $box = $n->world->bounds($n->x, $n->y, $n->w, $n->h);
@@ -411,6 +420,8 @@ trait RuntimeAccess
                 if (($e = $n?->edit) !== null) {
                     $e->anchor = self::byteOf($e->text, $from);
                     $e->cursor = self::byteOf($e->text, $to);
+                } elseif (isset($this->inputs[$id])) { // a node taking its input as it comes, as a rich text editor, selects it itself (mygo's InputSelect)
+                    ($this->inputs[$id])(new InputEvent(InputEvent::SELECT, start: $from, end: $to));
                 }
                 break;
             case AccessNode::SET_VALUE:

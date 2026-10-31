@@ -735,10 +735,11 @@ final class ViewState
                 continue;
             }
             [$w, $h] = $src instanceof SVG ? [$src->w, $src->h] : [$src->w / $c->scale, $src->h / $c->scale];
-            if ($w > $room && $room > 0) { // at most as wide as the view, keeping its aspect
-                $h *= $room / $w; $w = $room;
+            $img = $c->image($src, $w, $h, $th->em(0.3))->maxWidthPercent(100)->label($alt); // at most as wide as the view, keeping its aspect (mygo's)
+            if ($w > 0 && $h > 0) {
+                $img->aspectRatio($w / $h);
+                $img->fh = 0.0; // its height follows its width
             }
-            $img = $c->image($src, $w, $h, $th->em(0.3))->label($alt);
             if ($n->title !== '') {
                 $img->tooltip($n->title);
             }

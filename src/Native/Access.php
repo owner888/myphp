@@ -57,7 +57,7 @@ final class Access
     /** NSAccessibilityPostNotification, NSAccessibilityPostNotificationWithUserInfo and NSAccessibilityActionDescription. */
     private static $postNote, $postInfo, $actionDescription;
 
-    /** @var array<int, array{obj: mixed, node: AccessNode, parent: int, children: list<int>, chosen: list<int>, count: int}> the elements by node ID */
+    /** @var array<int, array{obj: mixed, node: AccessNode, parent: int, children: list<int|string>, chosen: list<int>, count: int}> the elements by node ID */
     private array $elements = [];
     /** The top elements, retained. */
     private $topLevel = null;
@@ -370,9 +370,14 @@ final class Access
                     $el['parent'] = ObjC::addr($parent);
                     ObjC::msg('v:p', $el['obj'], 'setAccessibilityParent:', $parent);
                 }
-                if ($el['children'] !== ($children[$i] ?? [])) {
-                    $el['children'] = $children[$i] ?? [];
-                    ObjC::msg('v:p', $el['obj'], 'setAccessibilityChildren:', self::array($childObjs[$i] ?? []));
+                $ids = $children[$i] ?? []; $kids = $childObjs[$i] ?? [];
+                if ($n->webView !== null && !$n->webView->isDestroyed()) { // the page of a web view inside the element showing it (mygo's)
+                    $web = $n->webView->page()->web->ns;
+                    array_unshift($kids, $web); array_unshift($ids, 'web:' . ObjC::addr($web));
+                }
+                if ($el['children'] !== $ids) {
+                    $el['children'] = $ids;
+                    ObjC::msg('v:p', $el['obj'], 'setAccessibilityChildren:', self::array($kids));
                     $changed = true;
                 }
                 unset($el);

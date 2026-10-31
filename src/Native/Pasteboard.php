@@ -135,7 +135,13 @@ final class Pasteboard
             $reps = [];
             foreach ($formats as $f) {
                 $d = ObjC::msg('p:p', $pb, 'dataForType:', ObjC::str(Drag::macType($f)));
-                if ($d !== null) { $reps[] = Representation::bytes($f, Drag::bytes($d)); }
+                if ($d !== null) {
+                    $reps[] = Representation::bytes($f, Drag::bytes($d));
+                } elseif ($f === Format::PNG && ($tiff = ObjC::msg('p:p', $pb, 'dataForType:', ObjC::str('public.tiff'))) !== null) { // a TIFF, converted (mygo's)
+                    $rep = ObjC::msg('p:p', ObjC::cls('NSBitmapImageRep'), 'imageRepWithData:', $tiff) ?? throw new \RuntimeException('myphp: cannot convert the clipboard\'s image');
+                    $png = ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary')) ?? throw new \RuntimeException('myphp: cannot convert the clipboard\'s image'); // NSBitmapImageFileTypePNG
+                    $reps[] = Representation::bytes($f, Drag::bytes($png));
+                }
             }
             if ($reps !== []) { $items[] = new Item(...$reps); }
         }
@@ -188,6 +194,9 @@ final class Pasteboard
         }
         if ($type === self::FILE_LIST || $type === 'NSFilenamesPboardType') {
             return Format::FILE_LIST;
+        }
+        if ($type === 'public.tiff') {
+            return Format::PNG; // an image copied as TIFF, as screenshots and many apps copy them, read as a PNG (mygo's)
         }
         return Drag::macFormat($type);
     }

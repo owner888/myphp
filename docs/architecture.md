@@ -6663,6 +6663,32 @@ succeeds are told of, an empty line is none.
   the pointer takes its bars by. The text style under what nodes set is
   the window's theme's, whatever theme builds first.
 
+## What the deviations' review aligned (v1.122)
+
+- Markdown: a paragraph of images sizes each with `maxWidthPercent(100)`
+  and `aspectRatio`, as mygo's, not by the width its row had last frame;
+  code blocks read left to right in a right-to-left interface.
+- A wrapping row's lines: their children's widths (`Layout::lineMain`)
+  bound the content's least width by the largest, as `arrangeFlex`
+  does, and a child of an aspect ratio is as high as its width there
+  makes it (`lineHeight`), in measuring and arranging alike; `reverse()`
+  lays each line from the far side (mygo's flipMain).
+- `ListState::visible()` and `atEnd()` (mygo's `Visible`, `AtEnd`): the
+  rows of the last frame some of which showed; a frame that changes them
+  for a view that read them builds again. `GridState::scrollTo` takes an
+  alignment.
+- The window losing the keyboard while a press is held (mygo's
+  `SurfaceBlur`): a node taking its input gets the release that will not
+  come, the press ends clicking nothing, a selection stops being dragged.
+- The pasteboard lists a TIFF as `image/png`, which `readData` converts,
+  as mygo's.
+- A web view in native UI has a node of its page in the access tree
+  (`AccessNode::$webView`), inside which VoiceOver finds the page's own
+  elements and the automation plugin marks `webView`.
+- Assistive technology selects a rich text editor's text: `SELECT_TEXT`
+  on a node taking its input as it comes is an `InputEvent::SELECT`
+  (mygo's `InputSelect`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

@@ -134,9 +134,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     the runs' formats (`AccessTextRun`) and can select text
     (`InputSelect`).
   - myphp: Cut, Copy, Paste and Select All built by the editor's menu
-    function; the text, selection and placeholder only.
+    function; the text, selection and placeholder, and selecting text
+    (`InputEvent::SELECT`, v1.122), but not the runs' formats.
   - Why: myphp's `editItems()` knows text fields and selectable text,
-    and its `AccessNode` has no runs nor a text selection action.
+    and its `AccessNode` has no runs.
 
 ## Selecting text
 
@@ -244,31 +245,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `[0xRRGGBB, alpha]` pairs; a span's background has its own
     opacity (`Span::$backgroundAlpha`), and borders take the color alone.
   - Why: myphp's colors are ints.
-- **Images** (v0.85)
-  - mygo: `LoadImage` runs on a goroutine of its own and the view shows the
-    description until it is done; an image is at most 100% of the view's
-    width (`MaxWidthPercent`) with its aspect ratio (`AspectRatio`).
-  - myphp: the image loads in a fiber of its own (`App::go`), where
-    `Image`'s decoding waits off the main thread, the description showing
-    until it is done (v1.31); it is fitted to the width its row had last
-    frame.
-  - Why: myphp has no percentage sizes or aspect ratios yet.
-- **Right to left** (v0.85)
-  - mygo: code reads left to right in a right-to-left interface
-    (`Direction(LeftToRight)`), a quote's bar is on the side lines start.
-  - myphp: left to right only.
-  - Why: no right-to-left layout yet.
-
 ## Scrolling
 
 - **ListState and GridState methods** (v0.84)
   - mygo: `ScrollTo(row, align)`, `ScrollIntoView(row)`, `ScrollToEnd()`,
     `Visible()`, `AtEnd()`; `GridState.ScrollTo(item, align)`.
   - myphp: `scrollTo($row, $smooth, $align)`, `scrollToEnd()`,
-    `scrollIntoView($row)`; the public `$atEnd`, no `visible()`;
-    `GridState::scrollTo($item)` puts the item's row at the top.
-  - Why: written before the naming rule; `visible()`, `atEnd()` and the
-    grid's alignment to be aligned.
+    `scrollIntoView($row)`, `visible()`, `atEnd()` (v1.122);
+    `GridState::scrollTo($item, $align)`.
+  - Why: myphp's scrolls may glide, which `$smooth` asks for.
 
 ## Menus
 
@@ -481,15 +466,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     theme (the painter's), the rest in the window's.
   - Why: a link is one text in myphp's paragraphs; myphp's theme colors
     have no alpha, and its painter takes the app's theme.
-- **Reverse** (v0.97)
-  - mygo: `Reverse()` on rows and columns (and wrapping rows), check
-    boxes, radio buttons, progress bars; the layout also follows the
-    window's direction (`Direction`, right to left).
-  - myphp: `Node::reverse()` on rows and columns that do not wrap, check
-    boxes, radio buttons and progress bars; myphp lays out left to right
-    only, so a mirrored window reverses its rows itself (the update
-    window does).
-  - Why: what the update window needs; the direction of windows waits.
 - **Core additions it needed** (v0.96)
   - mygo: `Page.OnWillNavigate(NavigateEvent)`; `Power` with
     `OnSuspend`, `OnResume`, `OnLockScreen`, `OnUnlockScreen`, `KeepAwake`,
@@ -838,18 +814,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     stroke option); sizes in points; a line is 10 points, as the
     window's wheel events have it, and still scrolls three rows.
   - Why: myphp's CoreText rasterizer and its wheel events.
-- **The pointer when the window loses the keyboard** (v0.88)
-  - mygo: a press in the view gets its release when the window loses the
-    keyboard, which ends a selection being dragged.
-  - myphp: the runtime sends no release then; the test of it is not
-    ported.
-  - Why: myphp's runtime does not do it yet.
-- **Images on the clipboard** (v0.88)
-  - mygo: `ClipboardFormats` lists a TIFF as `transfer.PNG`, which
-    reading converts.
-  - myphp: `Runtime::$clipboardFormats` (`Pasteboard::formats`) lists
-    the types as they are, without converting TIFF.
-  - Why: the pasteboard's `readData` does not convert images yet.
 - **Tests** (v0.88)
   - mygo: checks colors in the pixels of the tester's image, registers
     Go's fonts to measure ink.
@@ -915,8 +879,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     content.
   - myphp: `Context::webView($v)` is a leaf node, what paints over it
     painted after it (an absolute node, an overlay); no
-    `AttachContent`, as the window makes its view itself; the page is
-    VoiceOver's own, beside the content's elements.
+    `AttachContent`, as the window makes its view itself; the page goes
+    in the content's tree for VoiceOver (v1.122), inside a node of its
+    own as mygo's.
   - Why: myphp's leaves take no children; its windows build their own
     views.
 
@@ -2193,10 +2158,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: a key event's `mods` are ignored; its accelerator gives them.
   - myphp: they join the accelerator's.
   - Why: an event's fields are not dropped silently.
-- **Web views in native UI**
-  - mygo: a node marked `webView` stands for a web view's page.
-  - myphp: no such node; the tree has none for web views.
-  - Why: myphp's access tree has no node for them.
 - **CmdOrCtrl**
   - mygo: Command on macOS, Control elsewhere.
   - myphp: Command.

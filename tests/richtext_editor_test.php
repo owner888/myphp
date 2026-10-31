@@ -371,3 +371,13 @@ foreach ([Format::HTML, Format::MARKDOWN] as $fmt) {
     richKey($h, Key::COMMAND, Key::V);
     same(dump($want), dump($doc->text()), "pasted from $fmt");
 }
+
+// Assistive technology selects characters of the editor's text (mygo's InputSelect).
+$doc = new Document(Text::new('hello world'));
+$h = richTester($doc);
+$h->input->push(['accessOn']); $h->frame();
+$ed = null;
+foreach ($h->rt->accessTree->nodes as $a) { if ($a->role === \MyPHP\UI\Role::TEXT_FIELD) { $ed = $a; } }
+check($ed !== null && $ed->value === 'hello world', 'the editor reads its text to assistive technology');
+$h->input->push(['access', $ed->id, \MyPHP\UI\AccessNode::SELECT_TEXT, '', 6, 11]); $h->frame();
+same([6, 11], $doc->selection(), 'assistive technology selects "world"');

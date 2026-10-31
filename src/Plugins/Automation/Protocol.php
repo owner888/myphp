@@ -349,6 +349,9 @@ final class Protocol
             foreach (['level', 'posInSet', 'setSize'] as $f) {
                 if ($n->$f !== 0) { $j[$f] = $n->$f; }
             }
+            if ($n->webView !== null) {
+                $j['webView'] = true; // a web view's page, whose elements the tree leaves out
+            }
             $nodes[] = $j;
         }
         $r['nodes'] = $nodes;

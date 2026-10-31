@@ -28,6 +28,8 @@ final class InputEvent
     public const SCROLL = 9;
     /** A pinch of a touchpad at x, y, to the node under the pointer that takes input (mygo's InputZoom): $scale is how much it grew the content since the last, 1.25 a quarter larger; no node zooms of its own. */
     public const ZOOM = 10;
+    /** Assistive technology selecting characters $start to $end of the text a node taking its input as it comes shows, as a rich text editor (mygo's InputSelect). */
+    public const SELECT = 11;
 
     public function __construct(
         public int $kind,
@@ -51,5 +53,7 @@ final class InputEvent
         public float $scale = 1.0,
         /** Marks a SCROLL a touchpad sends on its own, its momentum, once the fingers left it. */
         public bool $momentum = false,
+        /** The characters SELECT selects, from $start to $end. */
+        public int $start = 0, public int $end = 0,
     ) {}
 }

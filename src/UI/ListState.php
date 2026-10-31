@@ -72,6 +72,9 @@ final class ListState implements Scrollable
     public bool $followEnd = false;
     /** Set by Layout each frame: the last row's bottom is in view. */
     public bool $atEnd = false;
+    /** The first and the last row the last frame showed, the last below the first for none; whether the view read them (visible(), atEnd()). */
+    private int $visibleFirst = 0, $visibleLast = -1;
+    private bool $read = false;
     private bool $didChange = false;
     /** How many times the choice changed, and how many of those the list built last saw: changed() of its node reports the others (Context::list). */
     private int $changes = 0, $changesBuilt = 0;
@@ -411,6 +414,34 @@ final class ListState implements Scrollable
     public function scrollToEnd(): void
     {
         $this->scrollTo($this->count - 1, false, Node::END);
+    }
+
+    /**
+     * The first and the last row the list showed in the last frame, the
+     * last below the first when it showed none (mygo's Visible): a list
+     * nearing the end of what was loaded, say, loads more. A frame that
+     * changes them builds another, for what read them.
+     * @return array{0: int, 1: int}
+     */
+    public function visible(): array
+    {
+        $this->read = true;
+        return [$this->visibleFirst, $this->visibleLast];
+    }
+
+    /** Whether the list showed its end in the last frame, as visible() does its rows (mygo's AtEnd). */
+    public function atEnd(): bool
+    {
+        $this->read = true;
+        return $this->atEnd;
+    }
+
+    /** @internal Layout: the rows this frame shows; whether they changed for a view that read them. */
+    public function showed(int $first, int $last): bool
+    {
+        $changed = [$first, $last] !== [$this->visibleFirst, $this->visibleLast];
+        [$this->visibleFirst, $this->visibleLast] = [$first, $last];
+        return $changed && $this->read;
     }
 
     /** Scrolls as little as needed to bring row $row into view. */

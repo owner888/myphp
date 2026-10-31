@@ -304,3 +304,17 @@ $hide = false; $t->frame();
 check($nodes['c']->x === $nodes['a']->x + 70.0 && $nodes['inside']->w === 5.0, 'shown, it takes its room again');
 $hide = true;
 $hiddenChecks('hidden again');
+
+// A wrapping row in reverse (mygo's flipMain): each line goes from the right, in order, the lines still top to bottom; right to left, from the left.
+foreach ([false, true] as $rtl) {
+    $n = [];
+    $h = new Headless(function (Context $c) use (&$n, $rtl) {
+        $r = $c->row(0, 0)->size(100, 100)->reverse(); $r->wrap(100);
+        if ($rtl) { $r->direction(\MyPHP\UI\Direction::RightToLeft); }
+          foreach (['a', 'b', 'c'] as $k) { $n[$k] = $c->column(0, 0)->size(40, 20); $c->end(); }
+        $c->end();
+    }, 100, 100);
+    $h->frame();
+    $at = fn($k) => array_slice($h->rect($n[$k]), 0, 2);
+    same($rtl ? [[0.0, 0.0], [40.0, 0.0], [0.0, 20.0]] : [[60.0, 0.0], [20.0, 0.0], [60.0, 20.0]], [$at('a'), $at('b'), $at('c')], ($rtl ? 'right to left: ' : '') . 'a reversed wrapping row: each line from the far side');
+}

@@ -58,10 +58,10 @@ final class GridState
         return $this->key === null ? $i : ($this->key)($i);
     }
 
-    /** Scrolls the grid to show item $item at the top. */
-    public function scrollTo(int $item): void
+    /** Scrolls the grid to show item $item's row where $align says: at the top (Node::START), in the middle or at the bottom (mygo's ScrollTo). */
+    public function scrollTo(int $item, int $align = Node::START): void
     {
-        $this->rows->scrollTo(intdiv($item, max($this->cols, 1)), false);
+        $this->rows->scrollTo(intdiv($item, max($this->cols, 1)), false, $align);
     }
 
     /** Scrolls the grid as little as shows item $item. */

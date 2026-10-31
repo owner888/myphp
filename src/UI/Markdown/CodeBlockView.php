@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Markdown;
 
-use MyPHP\UI\{Context, Node, Role, SVG};
+use MyPHP\UI\{Context, Direction, Node, Role, SVG};
 
 /** A code block as Options::$codeBlock and Options::$code build it (mygo's CodeBlockView). */
 final class CodeBlockView
@@ -66,7 +66,8 @@ final class CodeBlockView
         $st->highlight($cs, $this->index);
         $pad = $th->em($th->codeBlockPadding);
         $outer = $st->o->wrapCode ? $c->column() : $c->row()->align(Node::START)->scroll($cs->scroll, true, false); // sideways (mygo's ScrollHorizontal)
-        $outer->alignSelf(Node::STRETCH)->font($th->codeFont)->fontSize($th->em($th->codeSize))->lineHeight($th->codeLineHeight);
+        // Code reads left to right in a right-to-left interface too, as in editors (mygo's).
+        $outer->direction(Direction::LeftToRight)->alignSelf(Node::STRETCH)->font($th->codeFont)->fontSize($th->em($th->codeSize))->lineHeight($th->codeLineHeight);
         $col = $c->column()->padding($th->em(0.25), $pad, $pad, $pad);
         if (!$st->o->wrapCode) {
             $col->shrink(0);

@@ -99,6 +99,9 @@ check($field['key'] === 42 && $field['value'] === 'hey' && $field['selection'] =
 same('18446744073709551611', $slider['id'], 'an ID with its top bit set goes unsigned');
 check($slider['max'] === 10 && $slider['now'] === 4 && $slider['min'] === 0 && !isset($button['min']), "a slider's range, which a button has not");
 same(-5, Protocol::parseId('18446744073709551611'), 'and comes back as the 64 bits it was');
+$pageTree = new AccessTree; $pageTree->nodes = [new AccessNode(3, -1, Role::GROUP)]; $pageTree->nodes[0]->webView = new \stdClass;
+same(true, Protocol::treeJSON(1, $pageTree, [])['nodes'][0]['webView'] ?? null, "a web view's page is marked webView, its elements left out");
+check(!isset($group['webView']), 'others are not');
 same(1 << 60, Protocol::parseId(1152921504606846976), 'an ID as a number');
 foreach (['18446744073709551616', '-1', 'seven', ''] as $bad) {
     try { Protocol::parseId($bad); check(false, "$bad: an ID"); } catch (Failure $e) { same(Failure::INVALID, $e->kind, "$bad is no ID"); }

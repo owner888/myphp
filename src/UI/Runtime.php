@@ -304,6 +304,8 @@ final class Runtime
     /** @var array<int, Closure> the nodes taking their input as it comes (Node::handleInput), from last frame, and the one that took a press, which the pointer's moves and release go to wherever they are */
     private array $inputs = [];
     private ?int $captured = null;
+    /** The button of the press the captured node took. */
+    private int $capturedButton = 0;
     /** The node the last press was counted on (countPress), and the system's count its clicks start after. */
     private ?int $clickNode = null;
     private int $clickBase = 0;
@@ -951,7 +953,20 @@ final class Runtime
     /** Whether the window is the key window, as of the frame: one that lost the keyboard lets go of the modifiers held, whose releases go to the window that has it (mygo's SetFocused). */
     public function setWindowFocus(bool $on): void
     {
-        if (!$on && $this->windowFocus) { $this->input->mods = 0; }
+        if (!$on && $this->windowFocus) {
+            $this->input->mods = 0; // keys let go of elsewhere never come back up here
+            $this->selection->dragging = false;
+            if ($this->input->mouseDown) { // its release will not come (mygo's SurfaceBlur): a node taking its input gets one now, and the press ends, clicking nothing
+                if ($this->captured !== null) {
+                    $up = ['up', $this->input->mouseX, $this->input->mouseY, $this->capturedButton, 1, 0];
+                    $this->deliver($up);
+                }
+                $this->input->mouseDown = false;
+                if ($this->pointerPress !== null) { $this->pointerPress['down'] = false; }
+                $this->sliding = null; $this->hold = null; $this->captured = null;
+                $this->needsFrame = true;
+            }
+        }
         $changed = $on !== $this->windowFocus;
         $this->windowFocus = $on;
         if ($changed) { $this->pauseToasts(false); } // the toasts' time stops with the window in the background, from now
@@ -2319,6 +2334,7 @@ final class Runtime
         if ($ev->kind === InputEvent::POINTER_DOWN) {
             $this->input->mouseDown = $took || $this->input->mouseDown;
             $this->captured = $took ? $id : ($ev->button === 0 ? null : $this->captured); // another button pressed meanwhile leaves the press it holds
+            if ($took) { $this->capturedButton = $ev->button; }
         } elseif ($ev->kind === InputEvent::POINTER_UP) {
             $this->input->mouseDown = false;
             $this->captured = null;

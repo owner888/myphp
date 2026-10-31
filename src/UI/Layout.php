@@ -297,7 +297,7 @@ final class Layout
             $main = 0.0; $cross = $padCross;
             foreach (self::lines($n, $n->wrapWidth - $padMain) as $i => $line) {
                 $lw = $gap * (count($line) - 1); $lh = 0.0;
-                foreach ($line as $k) { $lw += $k->mw; $lh = max($lh, $k->mh); }
+                foreach (self::lineMain($n, $line, $n->wrapWidth - $padMain) as $j => $kw) { $lw += $kw; $lh = max($lh, self::lineHeight($line[$j], $kw)); } // within the largest each takes, its height following its width
                 $lh = max($lh, self::baselineCross($n, $line));
                 $main = max($main, $lw + $padMain); $cross += $lh + ($i > 0 ? $n->crossGap() : 0);
             }
@@ -456,7 +456,7 @@ final class Layout
         } elseif ($n->wraps) { // each line is arranged as a row of its own, the lines stacked as alignContent says, from the bottom in reverse
             $lines = self::lines($n, $cw);
             $heights = [];
-            foreach ($lines as $i => $line) { $heights[$i] = 0.0; foreach ($line as $k) { $heights[$i] = max($heights[$i], $k->mh); } }
+            foreach ($lines as $i => $line) { $heights[$i] = 0.0; foreach (self::lineMain($n, $line, $cw) as $j => $kw) { $heights[$i] = max($heights[$i], self::lineHeight($line[$j], $kw)); } }
             $gap = $n->crossGap();
             $free = $ch - array_sum($heights) - $gap * max(0, count($lines) - 1);
             [$start, $between] = [0.0, 0.0];
@@ -628,6 +628,12 @@ final class Layout
             $cy -= $s->offset - $s->lag; // a glide to the end on its way: below its place
             $s->gap = max(0.0, $ch - ($used + $gap * ($cnt - 1) - $s->offset));
             $s->atEnd = $s->first + $cnt >= $s->count && $used + $gap * ($cnt - 1) - $s->offset <= $ch + 0.5;
+            $top = -$s->offset; [$vf, $vl] = [0, -1]; // the rows some of which show (mygo's Visible)
+            foreach ($s->count > 0 ? $kids : [] as $i => $k) {
+                if ($top + $k->mh > 0 && $top < $ch) { if ($vl < $vf) { $vf = $s->first + $i; } $vl = $s->first + $i; }
+                $top += $k->mh + $gap;
+            }
+            if ($s->showed($vf, $vl)) { $n->context?->runtime?->changed(); } // what read them builds again with these
             if ($s->gap > 0 && $s->first + $cnt < $s->count) {
                 $n->context?->runtime?->changed(); // rows far shorter than estimated fell short of the view: another pass builds more, so the frame shows no gap (mygo's buildLate)
             }
@@ -1118,25 +1124,15 @@ final class Layout
     private static function arrangeRow(Node $n, array $line, float $x, float $y, float $w, float $h): void
     {
         $gap = $n->mainGap();
-        $base = []; $lo = []; $hi = []; $pads = []; $used = 0.0; $grow = 0.0;
-        foreach ($line as $i => $k) {
-            $mx = $k->marW;
-            $base[$i] = $k->basisPct !== null ? $k->basisPct * $w : ($k->wPct !== null ? $k->wPct * $w + $mx : $k->mw);
-            $lo[$i] = $k->minWPct !== null ? $k->minWPct * $w + $mx : $k->minMw;
-            $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $w, $k->maxW) : $k->maxW) + $mx;
-            $pads[$i] = $k->padW + $mx;
-            $used += max($lo[$i], min($base[$i], $hi[$i])); $grow += $k->grow;
-        }
+        $main = self::lineMain($n, $line, $w);
         $avail = $w - $gap * (count($line) - 1);
-        $growing = $used < $avail;
-        $main = ($growing && $grow > 0) || !$growing ? self::flexible($line, $base, $lo, $hi, $pads, $avail, $growing) : array_map(fn($i) => max($lo[$i], min($base[$i], $hi[$i])), array_keys($line));
         [$cx, $between] = self::justifyOffsets($n->justify, max(0.0, $avail - array_sum($main)), count($line));
         $cx += $x;
         $align = $n->align === Node::AUTO ? Node::CENTER : $n->align;
         $size = function (int $i, Node $k) use ($main, $align, $h): array {
             $a = $k->self === Node::AUTO ? $align : $k->self;
             if ($k->mh <= 0) { $a = Node::STRETCH; }
-            return [$main[$i], self::clampH($k, $k->hPct !== null ? $k->hPct * $h : ($a === Node::STRETCH && $k->fh <= 0 ? $h : $k->mh), $h)];
+            return [$main[$i], self::clampH($k, $k->hPct !== null ? $k->hPct * $h : ($a === Node::STRETCH && $k->fh <= 0 && $k->aspect <= 0 ? $h : self::lineHeight($k, $main[$i])), $h)];
         };
         $lift = self::asksBaseline($align, $line) ? self::lineUp($n, $line, $align, $size) : [];
         foreach ($line as $i => $k) {
@@ -1144,10 +1140,35 @@ final class Layout
             if ($k->mh <= 0) { $a = Node::STRETCH; }
             [$kw, $kh] = $size($i, $k);
             [$dx, $dy] = self::relative($k, $w, $h);
-            $kx = ($n->rtl ? 2 * $x + $w - $cx - $kw : $cx) + $dx; // right to left, from the right
+            $kx = ($n->rtl !== $n->reverse ? 2 * $x + $w - $cx - $kw : $cx) + $dx; // right to left, or reversed, from the right (mygo's flipMain)
             if (isset($lift[$i])) { self::move($k, $kx, $y + $lift[$i] + $dy); } else { self::arrange($k, $kx, $y + self::across($a, $h, $kh) + $dy, $kw, $kh); }
             $cx += $kw + $gap + $between;
         }
+    }
+
+    /** The widths the children of one line of a wrapping row take in $w: growing ones share what is left, the others shrink where it overflows, each within its least and largest. @param list<Node> $line @return list<float> */
+    private static function lineMain(Node $n, array $line, float $w): array
+    {
+        $gap = $n->mainGap();
+        $base = []; $lo = []; $hi = []; $pads = []; $used = 0.0; $grow = 0.0;
+        foreach ($line as $i => $k) {
+            $mx = $k->marW;
+            $base[$i] = $k->basisPct !== null ? $k->basisPct * $w : ($k->wPct !== null ? $k->wPct * $w + $mx : $k->mw);
+            $lo[$i] = $k->minWPct !== null ? $k->minWPct * $w + $mx : $k->minMw;
+            $hi[$i] = ($k->maxWPct !== null ? min($k->maxWPct * $w, $k->maxW) : $k->maxW) + $mx;
+            if ($k->minWPct === null && !$k->minSet) { $lo[$i] = min($lo[$i], $hi[$i]); } // the content's least width bound by the largest, as arrangeFlex's (mygo's bbcc7b7)
+            $pads[$i] = $k->padW + $mx;
+            $used += max($lo[$i], min($base[$i], $hi[$i])); $grow += $k->grow;
+        }
+        $avail = $w - $gap * (count($line) - 1);
+        $growing = $used < $avail;
+        return ($growing && $grow > 0) || !$growing ? self::flexible($line, $base, $lo, $hi, $pads, $avail, $growing) : array_map(fn($i) => max($lo[$i], min($base[$i], $hi[$i])), array_keys($line));
+    }
+
+    /** How high a child of a wrapping row's line is at width $main: as its aspect ratio makes it, when its height is not its own, else as it measured. */
+    private static function lineHeight(Node $k, float $main): float
+    {
+        return $k->aspect > 0 && $k->fh <= 0 && $k->hPct === null ? ($main - $k->marW) / $k->aspect + $k->marH : $k->mh;
     }
 
     /**

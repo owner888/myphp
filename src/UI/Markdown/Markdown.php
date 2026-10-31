@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Markdown;
 
-use MyPHP\UI\{Context, Image, Node, Role, SVG};
+use MyPHP\UI\{Context, Direction, Image, Node, Role, SVG};
 
 /**
  * Markdown views (mygo's ui/markdown): view() shows finished Markdown,
@@ -45,7 +45,7 @@ final class Markdown
     public static function defaultCodeBlock(Context $c, CodeBlockView $b): Node
     {
         $th = $b->state()->th;
-        $box = $c->column()->background($th->codeBlockBackground[0], $th->codeBlockBackground[1])->borderWidth(1)->borderColor($th->codeBlockBorder[0])
+        $box = $c->column()->direction(Direction::LeftToRight)->background($th->codeBlockBackground[0], $th->codeBlockBackground[1])->borderWidth(1)->borderColor($th->codeBlockBorder[0])
             ->round($th->codeBlockRadius)->alignSelf(Node::STRETCH)->clip();
         $box->role(Role::GROUP)->label($b->language === '' ? 'Code' : 'Code, ' . $b->language);
         $c->row()->align(Node::CENTER)->padding($th->em(0.35), $th->em(0.4), 0, $th->em($th->codeBlockPadding));

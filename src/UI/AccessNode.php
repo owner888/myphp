@@ -48,6 +48,8 @@ final class AccessNode
     public int $posInSet = 0, $setSize = 0;
     /** The ACTION_ bits of what the element takes. */
     public int $actions = 0;
+    /** The web view (MyPHP\WebView) whose page the node stands for, its elements the page's own, which the tree leaves out (mygo's WebView); null for others. */
+    public ?object $webView = null;
 
     /**
      * @param int $id identifies the element from frame to frame

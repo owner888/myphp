@@ -46,6 +46,11 @@ trait ViewInput
                     return $this->move($ev);
                 case InputEvent::POINTER_UP:
                     return $this->release();
+                case InputEvent::SELECT: // assistive technology's
+                    $n = $this->shown->len();
+                    $this->selAnchor = max(0, min($ev->start, $n));
+                    $this->moveTo($ev->end, Layout::DOWNSTREAM, true);
+                    return true;
                 case InputEvent::SCROLL:
                     $before = $this->scroll;
                     $this->setScroll(max(0.0, min($this->scroll + $ev->dy, $this->hs->top(count($this->paras)) - $this->viewH)));

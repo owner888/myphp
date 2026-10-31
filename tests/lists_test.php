@@ -221,3 +221,20 @@ $gcBefore = gc_status()["collected"];
 for ($f = 0; $f < 60; $f++) { $ls->scrollBy(37); $h->frame(1); }
 gc_collect_cycles();
 same(0, gc_status()["collected"] - $gcBefore, 'nothing left for the collector');
+
+// The rows a list showed, and whether it showed its end (mygo's Visible and AtEnd): a view reading them, as one loading more near the end does, builds again when they change.
+$s = new ListState();
+$seen = [];
+$h = new Headless(function (Context $c) use ($s, &$seen) {
+    $seen[] = $s->visible();
+    $c->column(0, 0, 1);
+      $c->list($s, 100, function (int $i) use ($c) { $c->column()->size(0, 30); $c->text("Row $i"); $c->end(); })->grow = 1;
+    $c->end();
+}, 300, 300);
+$h->frame(1);
+same([0, 9], $s->visible(), 'visible: the rows of a 300-point list of 30-point rows');
+same([0, 9], end($seen), 'a frame that changed them built again for the view that read them');
+check(!$s->atEnd(), 'not at its end');
+$s->scrollToEnd(); $h->frame(3);
+same([90, 99], $s->visible(), 'scrolled to its end: the last rows');
+check($s->atEnd(), 'at its end');
