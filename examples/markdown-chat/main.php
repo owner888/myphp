@@ -87,7 +87,7 @@ function view(Context $c, Chat $app): void
     $app->list->followAnimation = Animation::smooth(); // glide up as the reply grows
     $app->md->reveal = new Reveal([RevealUnit::ByWord, RevealUnit::BySentence, RevealUnit::ByLine, RevealUnit::ByParagraph, RevealUnit::AtOnce][$app->reveal]);
     $c->column(0, 0, 1);
-      $c->row(0, 8)->align(Node::CENTER)->padding(8, 20)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
+      $c->row(0, 8)->alignItems(Node::CENTER)->padding(8, 20)->borderWidth(0, 0, 1, 0)->borderColor($t->border);
         $c->muted('Stream by');
         $c->segmented(REVEAL_NAMES, $app->reveal)->label('Stream by');
       $c->end();
@@ -113,7 +113,7 @@ function message(Context $c, Chat $app, Message $m): void
     if ($m->mine) {
         $c->row();
           $c->spacer();
-          $c->text($m->text)->selectable()->padding(8, 12)->round(14)->background($t->surface)->maxWidth(520);
+          $c->text($m->text)->selectable()->padding(8, 12)->radius(14)->background($t->surface)->maxWidth(520);
         $c->end();
         return;
     }

@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Canvas, Context, DisplayList, Image, Node, Painter, Path, TextPainter, Theme};
+use MyPHP\UI\{Canvas, Context, DisplayList, Image, Node, Painter, Path, Theme};
 use MyPHP\UI\Shader\{Options, Shader};
 use MyPHP\UI\Shader\Compiler\ParseError;
 
@@ -50,14 +50,14 @@ same(count($waves->code->lanes), 23 + 1 + 4 + 1 + 1 + 1 + 4, 'shader: a lane a w
 // Drawing: a quad of kind 16 whose u names the draw, its uniforms in their lanes.
 $frame = function (\Closure $draw, int $w = 300, int $h = 200): DisplayList {
     $h = new Headless(function (Context $c) use ($draw): void {
-        $c->column()->fill()->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($draw): void {
-            $draw(new Painter($list, $text, $t), $n, $list);
+        $c->column()->fill()->draw(function (Painter $p, array $r) use ($draw): void {
+            $draw($p, $r);
         });
         $c->end();
     }, $w, $h);
     return $h->paint();
 };
-$list = $frame(fn(Painter $p, Node $n) => $waves->draw($p, [10, 20, 100, 50], new Options(uniforms: ['Time' => 1.5, 'Tint' => 0x336699, 'Count' => 3, 'Flags' => -1, 'On' => true, 'Taps' => [1, 2, 3, 4], 'Nope' => 1], radius: 6)));
+$list = $frame(fn(Painter $p) => $waves->draw($p, [10, 20, 100, 50], new Options(uniforms: ['Time' => 1.5, 'Tint' => 0x336699, 'Count' => 3, 'Flags' => -1, 'On' => true, 'Taps' => [1, 2, 3, 4], 'Nope' => 1], radius: 6)));
 same(1, count($list->shaders), 'draw: one draw');
 same([[$list->n - 1, 1, 0]], $list->shaderRuns, 'draw: its run, the last quad');
 $q = ($list->n - 1) * 16;
@@ -126,7 +126,7 @@ same([[], []], [$list->shaders, $list->shaderRuns], 'fill: no mask, no draw');
 // Effects: the node renders into a canvas, the effect draws over it, the content image3.
 $wavy = Shader::compile("package main\n\nvar Time float\n\nfunc DistortionEffect(pos vec2) vec2 {\n\treturn pos + vec2(0, 6*sin(pos.x/12+Time))\n}\n");
 $h = new Headless(function (Context $c) use ($wavy): void {
-    $c->column(0, 0, 1)->fill()->align(Node::CENTER)->justify(Node::CENTER);
+    $c->column(0, 0, 1)->fill()->alignItems(Node::CENTER)->justify(Node::CENTER);
       $c->text('Wavy', 20)->label('wavy')->effect($wavy->effect(new Options(uniforms: ['Time' => 1.0], maxSampleOffset: [0, 6])));
     $c->end();
 }, 300, 200);

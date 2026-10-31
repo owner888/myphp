@@ -370,7 +370,7 @@ $G = fn(string $path = '/overview') => new \MyPHP\Examples\Gallery\Gallery($path
 $g = $G();
 $g->router->transition = \MyPHP\UI\Router::NONE;
 $t = new Headless(function (\MyPHP\UI\Context $c) use ($g) {
-    $c->row(0, 0, 1)->fill()->align(\MyPHP\UI\Node::STRETCH);
+    $c->row(0, 0, 1)->fill()->alignItems(\MyPHP\UI\Node::STRETCH);
       $g->sidebar($c);
       $c->column(0, 0, 1);
         $g->toolbar($c);
@@ -639,9 +639,8 @@ $stillTexture = function (bool $click) use ($s, $windAtlas, &$now): \MyPHP\Examp
 // render: paints the texture in a pane of 300×200 DIPs, and returns the display list the glyphs draw in.
 $render = function (\MyPHP\Examples\Wind\Texture $tex) use (&$now): \MyPHP\UI\DisplayList {
     $t = new Headless(function (Context $c) use ($tex): void {
-        $rt = $c->runtime;
-        $c->column()->fill()->draw(function (\MyPHP\UI\DisplayList $list, \MyPHP\UI\Node $n, \MyPHP\UI\Theme $th, \MyPHP\UI\TextPainter $text) use ($tex, $rt): void {
-            $tex->draw(new \MyPHP\UI\Painter($list, $text, $th, $rt), [$n->x, $n->y, $n->w, $n->h], false);
+        $c->column()->fill()->draw(function (\MyPHP\UI\Painter $p, array $r) use ($tex): void {
+            $tex->draw($p, $r, false);
         });
         $c->end();
     }, 300, 200);

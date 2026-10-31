@@ -19,7 +19,7 @@ use MyPHP\UI\{Context, DisplayList, Key, Node, TextState};
 function taWindow(TextState $s, ?\Closure $after = null, int $w = 400, int $h = 300): Headless
 {
     $t = new Headless(function (Context $c) use ($s, $after): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $c->textarea($s, '', 0, 0)->label('Area');
         $c->end();
         if ($after !== null) { $after(); }
@@ -273,8 +273,8 @@ check($ok, 'the ranges keep their letters while composing, the composition plain
 $st = new TextState('hi');
 $h = new Headless(function (Context $c) use ($st): void {
     $c->column(0, 10);
-      $c->input($st, 'Task', 300)->label('Own')->padding(14, 16)->round(14)->background(0x222222);
-      $c->input(new TextState(''), 'Bare', 300)->label('Bare')->background(0, 0.0)->border(null, 0)->padding(8, 0);
+      $c->input($st, 'Task', 300)->label('Own')->padding(14, 16)->radius(14)->background(0x222222);
+      $c->input(new TextState(''), 'Bare', 300)->label('Bare')->background(0, 0.0)->border(0, null)->padding(8, 0);
     $c->end();
 }, 400, 200);
 $list = $h->paint();

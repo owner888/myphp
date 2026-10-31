@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Canvas, CanvasAtlas, Context, DisplayList, ImageAtlas, Node, Painter, TextPainter, Theme};
+use MyPHP\UI\{Canvas, CanvasAtlas, Context, DisplayList, ImageAtlas, Node, Painter};
 
 CanvasAtlas::reset();
 /** The image quads of a list: [x, y, w, h, slot w, slot h, page, kind, u, v]. @return list<list<float>> */
@@ -30,8 +30,7 @@ $cv = new Canvas(8, 4);
 $cv->bitmap()->pixelated();
 $draws = 0;
 $h = new Headless(function (Context $c) use ($cv, &$draws): void {
-    $c->column()->at(0, 0)->size(32, 16)->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($cv, &$draws): void {
-        $p = new Painter($list, $text, $t);
+    $c->column()->at(0, 0)->size(32, 16)->draw(function (Painter $p, array $r) use ($cv, &$draws): void {
         if ($draws === 0) {
             $draws++;
             $cv->draw($p, function (Painter $cp): void {
@@ -61,8 +60,7 @@ check($draws === 1 && CanvasAtlas::take() === [] && count(canvasImages($h->paint
 $inner = new Canvas(4, 4);
 $outer = new Canvas(8, 8);
 $h = new Headless(function (Context $c) use ($inner, $outer): void {
-    $c->column()->at(0, 0)->size(80, 40)->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($inner, $outer): void {
-        $p = new Painter($list, $text, $t);
+    $c->column()->at(0, 0)->size(80, 40)->draw(function (Painter $p, array $r) use ($inner, $outer): void {
         $outer->draw($p, function (Painter $op) use ($p, $inner): void {
             $inner->draw($p, fn(Painter $ip) => $ip->fill([0, 0, 4, 4], 0x00c800));
             $op->image($inner->bitmap(), [2.0, 2.0, 4.0, 4.0], Node::FILL_BOX);
@@ -93,8 +91,7 @@ same([$cv], CanvasAtlas::take(), 'one drawn before renders again in its new plac
 // Larger than a page, a canvas renders into a texture of its own, and a shader of the painter's draws it as an image.
 $loose = new Canvas(3000, 1000);
 $h = new Headless(function (Context $c) use ($loose): void {
-    $c->column()->at(0, 0)->size(300, 100)->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($loose): void {
-        $p = new Painter($list, $text, $t);
+    $c->column()->at(0, 0)->size(300, 100)->draw(function (Painter $p, array $r) use ($loose): void {
         $loose->draw($p, fn(Painter $lp) => $lp->fill([0, 0, 3000, 1000], 0x3366ff));
         $p->image($loose->bitmap(), [0.0, 0.0, 300.0, 100.0], Node::FILL_BOX);
         $p->imageRegion($loose->bitmap(), [1500, 0, 1500, 1000], [0.0, 0.0, 150.0, 100.0], new \MyPHP\UI\ImageOptions(flipX: true));

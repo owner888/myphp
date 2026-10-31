@@ -79,7 +79,7 @@ final class UpdateWindow
         $this->keys($c, $v);
 
         $c->column(0, self::FOOT_GAP, 1, $t->background)->padding(self::PAD_TOP, self::PAD_SIDE, self::PAD_BOTTOM);
-          $top = $this->row($c, self::ICON_GAP)->align(!empty($v['release']) ? Node::STRETCH : Node::START);
+          $top = $this->row($c, self::ICON_GAP)->alignItems(!empty($v['release']) ? Node::STRETCH : Node::START);
           $top->grow = 1;
             if ($this->icon !== null) {
                 $c->image($this->icon, self::ICON_SIZE, self::ICON_SIZE)->shrink(0)->alignSelf(Node::START);
@@ -140,7 +140,7 @@ final class UpdateWindow
         if (($v['notes'] ?? []) !== []) {
             $c->key('notes')->column(0, 0, 1)->margin(6, 0, 0, 0);
               $c->text($this->texts->s->releaseNotes, $small, style: Font::BOLD)->margin(0, 0, 4, 0);
-              $panel = $c->column(0, 0, 1, Notes::panel($t))->border($t->border)->padding(8, 12);
+              $panel = $c->column(0, 0, 1, Notes::panel($t))->border(1, $t->border)->padding(8, 12);
               $panel->scroll($c->runtime?->local($panel->id, fn() => new ScrollState) ?? new ScrollState);
                 Notes::build($c, $t, $v['notes']);
               $c->end();

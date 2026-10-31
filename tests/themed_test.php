@@ -14,7 +14,7 @@ $dark = Theme::dark(); $light = Theme::light();
 $n = []; $themes = [];
 $open = true;
 $t = new Headless(function (Context $c) use (&$n, &$themes, &$open, $light) {
-    $c->row(0, 16)->align(Node::START);
+    $c->row(0, 16)->alignItems(Node::START);
       $c->text('dark side');
       $n['panel'] = $c->themed($light, 8);
         $themes['inside'] = $c->theme;

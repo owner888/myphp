@@ -17,7 +17,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, ConicGradient, Content, Context, Cursor, DisplayList, GradientStop, Key, ListState, Node, Painter, Path, Span, TextPainter, TextState, Theme};
+use MyPHP\UI\{Animation, ConicGradient, Content, Context, Cursor, GradientStop, Key, ListState, Node, Painter, Path, Span, TextState, Theme};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -381,15 +381,6 @@ function splitWords(string $text): array
     return $words;
 }
 
-/** $draw($p, $r) as a node's draw, with a painter of the frame. @param Closure(Painter, array{0: float, 1: float, 2: float, 3: float}): void $draw */
-function painted(Context $c, Closure $draw): Closure
-{
-    $rt = $c->runtime;
-    return function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($draw, $rt): void {
-        $draw(new Painter($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h]);
-    };
-}
-
 function view(Context $c, ChatGlow $a): void
 {
     $t = $c->theme;
@@ -421,15 +412,15 @@ function view(Context $c, ChatGlow $a): void
 function welcome(Context $c, ChatGlow $a): void
 {
     $t = $c->theme;
-    $c->column(0, 10, 1)->align(Node::CENTER)->justify(Node::CENTER)->padding(40, 24, 0, 24);
-      $c->column()->size(150, 150)->draw(painted($c, $a->drawOrb(...)))->label('Assistant');
+    $c->column(0, 10, 1)->alignItems(Node::CENTER)->justify(Node::CENTER)->padding(40, 24, 0, 24);
+      $c->column()->size(150, 150)->draw($a->drawOrb(...))->label('Assistant');
       $c->end();
       $c->text('How can I help?', 28, $t->text)->fontWeight(600)->margin(4, 0, 0, 0);
       $c->text('Ask anything, or start with one of these.', 14, $t->textMuted);
       // Wrapped at the column's width inside its padding.
       $c->row(0, 8)->wrap($c->width - 48)->justify(Node::CENTER)->margin(18, 0, 0, 0);
         foreach (SUGGESTIONS as $s) {
-            $chip = $c->key($s)->column()->padding(9, 14)->round(999)->border($t->border, 1)->label($s)->cursor(Cursor::Pointer);
+            $chip = $c->key($s)->column()->padding(9, 14)->radius(999)->border(1, $t->border)->label($s)->cursor(Cursor::Pointer);
             if ($c->hovered($chip)) {
                 $chip->background($t->surfaceHover);
             }
@@ -474,17 +465,17 @@ function message(Context $c, ChatGlow $a, Message $m): void
     if ($m->mine) {
         $c->row();
           $c->spacer();
-          $c->text($m->text)->selectable()->padding(9, 14)->round(18)->background($t->surface)->maxWidth(460);
+          $c->text($m->text)->selectable()->padding(9, 14)->radius(18)->background($t->surface)->maxWidth(460);
         $c->end();
         return;
     }
     $last = $m === $a->messages[count($a->messages) - 1];
-    $c->row(0, 12)->align(Node::START);
+    $c->row(0, 12)->alignItems(Node::START);
       $avatar = $c->column()->size(30, 30)->margin(-3, 0, 0, 0);
-      $avatar->draw(painted($c, $last ? $a->drawOrb(...) : fn(Painter $p, array $r) => $a->drawStillOrb($p, $r, $m->id)));
+      $avatar->draw($last ? $a->drawOrb(...) : fn(Painter $p, array $r) => $a->drawStillOrb($p, $r, $m->id));
       $c->end();
       if ($m->shown === 0 && $last && $a->busy) {
-          $c->column()->size(120, REPLY_SIZE * REPLY_LEADING)->label('Thinking')->draw(painted($c, fn(Painter $p, array $r) => $a->drawThinking($p, $r, $c->theme)));
+          $c->column()->size(120, REPLY_SIZE * REPLY_LEADING)->label('Thinking')->draw(fn(Painter $p, array $r) => $a->drawThinking($p, $r, $c->theme));
           $c->end();
       } else {
           $c->text(implode('', array_slice($m->words, 0, $m->shown)), REPLY_SIZE, $t->text)->selectable()->lineHeight(REPLY_LEADING)->grow(1)->minWidth(0);
@@ -497,12 +488,12 @@ function composer(Context $c, ChatGlow $a): void
 {
     $t = $c->theme;
     $c->row()->justify(Node::CENTER)->padding(0, 24 - RING_PADDING, 22 - RING_PADDING, 24 - RING_PADDING);
-      $c->row(0, 0, 1)->maxWidth(MAX_WIDTH + 2 * RING_PADDING)->padding(RING_PADDING)->draw(painted($c, $a->drawRing(...)));
-        $c->row(0, 8, 1)->align(Node::CENTER)->padding(6, 6, 6, 16)->round(FIELD_RADIUS)->background($t->surface);
-          $in = $c->input($a->input, 'Ask anything', 0)->grow(1)->autoFocus()->background(0, 0.0)->border(null, 0)->padding(8, 0)->label('Message');
+      $c->row(0, 0, 1)->maxWidth(MAX_WIDTH + 2 * RING_PADDING)->padding(RING_PADDING)->draw($a->drawRing(...));
+        $c->row(0, 8, 1)->alignItems(Node::CENTER)->padding(6, 6, 6, 16)->radius(FIELD_RADIUS)->background($t->surface);
+          $in = $c->input($a->input, 'Ask anything', 0)->grow(1)->autoFocus()->background(0, 0.0)->border(0, null)->padding(8, 0)->label('Message');
           $ready = trim($a->input->text) !== '';
-          $send = $c->column()->size(34, 34)->round(17)->label($a->busy ? 'Stop' : 'Send')->cursor(Cursor::Pointer)->background($a->busy || $ready ? $t->text : $t->border);
-          $send->draw(painted($c, fn(Painter $p, array $r) => drawSendIcon($p, $r, $a->busy, $t->background)));
+          $send = $c->column()->size(34, 34)->radius(17)->label($a->busy ? 'Stop' : 'Send')->cursor(Cursor::Pointer)->background($a->busy || $ready ? $t->text : $t->border);
+          $send->draw(fn(Painter $p, array $r) => drawSendIcon($p, $r, $a->busy, $t->background));
           $c->end();
           if ($a->busy) {
               if ($c->clicked($send)) {
@@ -544,8 +535,8 @@ function edge(Context $c, ChatGlow $a): void
     $g = new ConicGradient($a->stops->gradient($a->now), angle: 90, oklab: true);
     $c->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->passThrough()->opacity(ease($a->glow));
       foreach (GLOW_LAYERS as [$width, $blur]) {
-          $c->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->passThrough()->round(CORNER)
-              ->border(width: $width)->borderConicGradient($g)->blur(0.95 * $blur);
+          $c->column()->absolute()->top(0)->left(0)->right(0)->bottom(0)->passThrough()->radius(CORNER)
+              ->border($width)->borderConicGradient($g)->blur(0.95 * $blur);
           $c->end();
       }
     $c->end();

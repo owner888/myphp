@@ -160,7 +160,7 @@ final class MoviePlayer
             $bars[] = $title = $c->column()->absolute()->top(0)->left($left)->right($right)->height(($o->titleBar ? self::TITLE : 0) + $oscRow)->systemMaterial('titlebar', $c->theme->dark)->dragWindow();
               if ($o->titleBar) { self::titleRow($c, $s, $left > 0); }
               if ($at === 1) {
-                  $c->row(0, 8)->height(self::ROW)->fillWidth()->paddingX(6)->align(Node::CENTER)->keepFocus();
+                  $c->row(0, 8)->height(self::ROW)->fillWidth()->paddingX(6)->alignItems(Node::CENTER)->keepFocus();
                     $seek = self::inlineBar($c, $s, $p, $o);
                   $c->end();
               }
@@ -168,13 +168,13 @@ final class MoviePlayer
         }
         if ($at === 2) {
             $pad = $compact ? 8 : 12;
-            $bars[] = $osc = $c->row(0, 8)->absolute()->left($left)->right($right)->bottom(0)->height(self::ROW + 2 * $pad)->paddingStart($compact ? 12 : 16)->paddingEnd($pad)->align(Node::CENTER)
+            $bars[] = $osc = $c->row(0, 8)->absolute()->left($left)->right($right)->bottom(0)->height(self::ROW + 2 * $pad)->paddingStart($compact ? 12 : 16)->paddingEnd($pad)->alignItems(Node::CENTER)
                 ->systemMaterial(self::glass($s, 'OSC'))->keepFocus();
               $seek = self::inlineBar($c, $s, $p, $o);
             $c->end();
         } elseif ($at === 0) {
             [$oscX, $oscY] = self::floatingAt($c, $s, $left, $area);
-            $bars[] = $osc = $c->key('floating bar')->column()->absolute()->left($oscX)->top($oscY)->size(self::OSC_W, self::floatingHeight($s))->systemMaterial(self::glass($s, 'OSC'))->round(12)->keepFocus();
+            $bars[] = $osc = $c->key('floating bar')->column()->absolute()->left($oscX)->top($oscY)->size(self::OSC_W, self::floatingHeight($s))->systemMaterial(self::glass($s, 'OSC'))->radius(12)->keepFocus();
               $seek = self::floatingBar($c, $s, $p, $o);
             $c->end();
             self::dragFloating($c, $s, $osc, $left, $area);
@@ -347,9 +347,9 @@ final class MoviePlayer
     /** $n filled white at $fill and ringed white at $ring, round by $r: IINA's cards, lists and fields over the glass. */
     private static function frosted(Node $n, float $fill, float $ring, float $r): Node
     {
-        return $n->draw(static function (DisplayList $l, Node $n) use ($fill, $ring, $r): void {
-            $l->rect($n->x, $n->y, $n->w, $n->h, self::$ink, $fill, $r);
-            if ($ring > 0) { $l->ring($n->x, $n->y, $n->w, $n->h, self::$ink, $ring, $r, 1); }
+        return $n->draw(static function (Painter $p, array $box) use ($fill, $ring, $r): void {
+            $p->fill($box, self::$ink, $r, $fill);
+            if ($ring > 0) { $p->stroke($box, self::$ink, $r, 1, $ring); }
         });
     }
 
@@ -399,7 +399,7 @@ final class MoviePlayer
         $cx = $bx + $x;
         $thumb = $s->thumbnailAt($t);
         // A column centered on the pointer, its foot 5 points above the bar (its top 5 under a bar at the top): the thumbnail over the time.
-        $col = $c->column(0, 5)->absolute()->left($cx - 200)->width(400)->align(Node::CENTER)->passThrough()->opacity($alpha);
+        $col = $c->column(0, 5)->absolute()->left($cx - 200)->width(400)->alignItems(Node::CENTER)->passThrough()->opacity($alpha);
         $below ? $col->top($by + 5) : $col->bottom($c->height - $by + 5);
           if ($thumb !== null) {
               static $images = null;
@@ -407,13 +407,13 @@ final class MoviePlayer
               $img = $images[$thumb] ??= Image::fromPixels($thumb->width, $thumb->height, $thumb->rgba());
               $w = (float)$s->settings()->get('thumbnailWidth'); $h = round($w / (self::shownAspect($p) ?? $thumb->width / max(1, $thumb->height)));
               $turned = $p->rotation() % 180 === 90;
-              $c->column()->size($w, $h)->round(4)->shadow(0, 0, 2, 0, 0x000000)->center()->drawOver(static function (DisplayList $l, Node $n): void {
-                  $l->ring($n->x, $n->y, $n->w, $n->h, 0x999999, 0.5, 4, 1);
+              $c->column()->size($w, $h)->radius(4)->shadow(0, 0, 2, 0, 0x000000)->center()->drawOver(static function (Painter $p, array $r): void {
+                  $p->stroke($r, 0x999999, 4, 1, 0.5);
               });
                 $c->image($img, $turned ? $h : $w, $turned ? $w : $h, 4)->rotate($p->rotation());
               $c->end();
           }
-          $c->column()->padding(4, 8)->systemMaterial(self::glass($s, 'OSC'))->round(16);
+          $c->column()->padding(4, 8)->systemMaterial(self::glass($s, 'OSC'))->radius(16);
             $c->text($text, 11, self::$ink)->fontFeatures('tnum')->textAlign(Node::CENTER);
           $c->end();
         $c->end();
@@ -427,7 +427,7 @@ final class MoviePlayer
      */
     private static function titleRow(Context $c, MoviePlayerState $s, bool $afterList): void
     {
-        $c->row(0, 6)->height(self::TITLE)->fillWidth()->align(Node::CENTER)->paddingStart($afterList ? 12 : 84)->paddingEnd(8);
+        $c->row(0, 6)->height(self::TITLE)->fillWidth()->alignItems(Node::CENTER)->paddingStart($afterList ? 12 : 84)->paddingEnd(8);
           self::sf($c, 'doc.fill', 11, 0.6);
           $c->text($s->title, 13, self::$ink)->fontWeight(600)->opacity(0.85)->noWrap()->ellipsis('…')->grow(1);
           if ($s->onTop || $s->settings()->get('alwaysShowOnTopIcon')) {
@@ -520,7 +520,7 @@ final class MoviePlayer
      */
     private static function inlineBar(Context $c, MoviePlayerState $s, Player $p, MoviePlayerOptions $o): Node
     {
-        $c->row(0, 16)->align(Node::CENTER)->shrink(0);
+        $c->row(0, 16)->alignItems(Node::CENTER)->shrink(0);
           self::arrow($c, $s, false);
           $play = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label(self::t($c, $p->playing() ? 'videoPause' : 'videoPlay'));
             self::sf($c, $p->playing() ? 'pause.fill' : 'play.fill', 16, $c->hovered($play) ? 0.95 : 0.75);
@@ -528,22 +528,22 @@ final class MoviePlayer
           if ($c->clicked($play)) { $s->togglePause(); }
           self::arrow($c, $s, true);
         $c->end();
-        $c->row(0, 2)->grow(1)->min(120, 0)->align(Node::CENTER);
-          $c->text(MoviePlayerState::clock($p->time()), 11, self::$ink)->fontFeatures('tnum')->opacity(0.6)->min(46, 0)->textAlign(Node::CENTER);
-          $box = $c->row()->grow(1)->height(24)->align(Node::CENTER);
+        $c->row(0, 2)->grow(1)->minWidth(120)->minHeight(0)->alignItems(Node::CENTER);
+          $c->text(MoviePlayerState::clock($p->time()), 11, self::$ink)->fontFeatures('tnum')->opacity(0.6)->minWidth(46)->minHeight(0)->textAlign(Node::CENTER);
+          $box = $c->row()->grow(1)->height(24)->alignItems(Node::CENTER);
             $seek = self::seekBar($c, $s, $p)->fillWidth()->height(self::SEEK_H);
           $c->end();
-          self::endTime($c, $s, $p, 11)->min(46, 0)->textAlign(Node::CENTER);
+          self::endTime($c, $s, $p, 11)->minWidth(46)->minHeight(0)->textAlign(Node::CENTER);
         $c->end();
         $buttons = self::toolbarButtons($s);
-        $c->row(0, 4)->align(Node::CENTER)->paddingEnd(6)->shrink(0);
+        $c->row(0, 4)->alignItems(Node::CENTER)->paddingEnd(6)->shrink(0);
           $mute = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label(self::t($c, 'videoMute'));
             self::sf($c, self::volumeSymbol($s, $p), 13, $c->hovered($mute) ? 0.95 : 0.75);
           $c->end();
           if ($c->clicked($mute)) { $s->toggleMute(); }
           self::volumeSlider($c, $s, $p)->size(70, 16);
         $c->end();
-        $c->row()->align(Node::CENTER)->shrink(0);
+        $c->row()->alignItems(Node::CENTER)->shrink(0);
           foreach ($buttons as $b) { self::toolbarButton($c, $s, $o, $b); }
         $c->end();
         return $seek;
@@ -556,9 +556,9 @@ final class MoviePlayer
      */
     private static function additionalInfo(Context $c, MoviePlayerState $s, float $right): Node
     {
-        $box = $c->column(0, 8)->absolute()->top(8)->right($right + 8)->padding(8, 16)->systemMaterial(self::glass($s, 'OSD'))->round(16)->align(Node::END)->passThrough();
+        $box = $c->column(0, 8)->absolute()->top(8)->right($right + 8)->padding(8, 16)->systemMaterial(self::glass($s, 'OSD'))->radius(16)->alignItems(Node::END)->passThrough();
           $c->text($s->title, 18, self::$ink)->noWrap()->ellipsis('…')->maxWidth(max(100.0, $c->width / 2));
-          $c->row(0, 4)->align(Node::CENTER);
+          $c->row(0, 4)->alignItems(Node::CENTER);
             self::sf($c, 'clock', 18, 0.55, 0.6);
             $c->text((new \MyPHP\DateFormatter(\MyPHP\App::locale(), new \MyPHP\DateOptions(time: \MyPHP\Style::Short)))->format(new \DateTimeImmutable()), 18, self::$ink)->fontWeight(700)->fontFeatures('tnum')->opacity(0.55);
             if (($level = \MyPHP\Power::batteryLevel()) !== null) {
@@ -585,11 +585,11 @@ final class MoviePlayer
     {
         $level = $p->muted() ? 0.0 : $s->volume;
         $v = $c->sliderBase($level, 0, $s->maxVolume())->paddingX(7.5); // to the maximum volume, as IINA's
-        $v->draw(static function (DisplayList $l, Node $n): void {
-            $x0 = $n->x + 7.5; $w = $n->w - 15; $cy = $n->y + $n->h / 2; $k = $x0 + $w * $n->fraction;
-            $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.25, 2);
-            $l->rect($n->x, $cy - 2, $k - $n->x, 4, self::$ink, 0.8, 2);
-            $l->rect($k - 7.5, $cy - 5, 15, 10, 0xffffff, 0.92, 5);
+        $v->draw(static function (Painter $p, array $r) use ($v): void {
+            $x0 = $r[0] + 7.5; $w = $r[2] - 15; $cy = $r[1] + $r[3] / 2; $k = $x0 + $w * $v->fraction;
+            $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.25);
+            $p->fill([$r[0], $cy - 2, $k - $r[0], 4], self::$ink, 2, 0.8);
+            $p->fill([$k - 7.5, $cy - 5, 15, 10], 0xffffff, 5, 0.92);
         });
         if ($c->changed($v)) { $s->setVolume($level); }
         $s->volumeBar = $v;
@@ -673,12 +673,12 @@ final class MoviePlayer
         $seek = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->paddingX(1.5);
         if (!$c->pressed($seek)) { $s->at = $p->time(); }
         $marks = $s->settings()->get('showChapterPos') && $p->duration() > 0 ? array_map(fn($ch) => $ch->start / $p->duration(), array_slice($p->chapters(), 1)) : [];
-        $seek->draw(static function (DisplayList $l, Node $n) use ($marks): void {
-            $x0 = $n->x + 1.5; $w = $n->w - 3; $cy = $n->y + $n->h / 2; $k = $x0 + $w * $n->fraction;
-            $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.2, 2);
-            $l->rect($n->x, $cy - 2, $k - $n->x, 4, self::$ink, 0.45, 2);
-            foreach ($marks as $m) { $l->rect($x0 + $w * $m - 0.5, $cy - 2, 1, 4, 0x000000, 0.6); } // IINA's chapter marks: the track cut
-            $l->rect($k - 1.5, $cy - 7.5, 3, 15, 0xffffff, 0.92, 1.5);
+        $seek->draw(static function (Painter $p, array $r) use ($seek, $marks): void {
+            $x0 = $r[0] + 1.5; $w = $r[2] - 3; $cy = $r[1] + $r[3] / 2; $k = $x0 + $w * $seek->fraction;
+            $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.2);
+            $p->fill([$r[0], $cy - 2, $k - $r[0], 4], self::$ink, 2, 0.45);
+            foreach ($marks as $m) { $p->fill([$x0 + $w * $m - 0.5, $cy - 2, 1, 4], 0x000000, 0, 0.6); } // IINA's chapter marks: the track cut
+            $p->fill([$k - 1.5, $cy - 7.5, 3, 15], 0xffffff, 1.5, 0.92);
         });
         if ($c->changed($seek)) { $p->seek($s->at); }
         $s->seekBar = $seek;
@@ -691,8 +691,8 @@ final class MoviePlayer
         foreach (['a' => $s->loopA, 'b' => $s->loopB] as $which => $at) {
             if ($at === null) { continue; }
             $x = $sx + 1.5 + ($sw - 3) * $at / max($p->duration(), 0.001);
-            $knob = $c->column()->absolute()->left($x - 1.5)->top($sy + 1.5)->size(3, 15)->tooltip('A-B loop ' . strtoupper($which))->draw(static function (DisplayList $l, Node $n): void {
-                $l->rect($n->x, $n->y + 2, 3, 11, 0xa6a6a6, 1.0, 1);
+            $knob = $c->column()->absolute()->left($x - 1.5)->top($sy + 1.5)->size(3, 15)->tooltip('A-B loop ' . strtoupper($which))->draw(static function (Painter $p, array $r): void {
+                $p->fill([$r[0], $r[1] + 2, 3, 11], 0xa6a6a6, 1);
             });
             $c->end();
             if ($c->pressed($knob)) {
@@ -733,7 +733,7 @@ final class MoviePlayer
     private static function bufferIndicator(Context $c, MoviePlayerState $s, string $text, ?string $detail = null): void
     {
         $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->center()->passThrough();
-          $c->column(0, 4)->padding(12, 20)->systemMaterial(self::glass($s, 'OSD'))->round(16)->align(Node::CENTER)->width(150 + 40);
+          $c->column(0, 4)->padding(12, 20)->systemMaterial(self::glass($s, 'OSD'))->radius(16)->alignItems(Node::CENTER)->width(150 + 40);
             $c->spinner();
             $c->text($text, 13, self::$ink)->textAlign(Node::CENTER);
             if ($detail !== null) { $c->text($detail, 11, self::$ink)->fontFeatures('tnum')->opacity(0.7)->textAlign(Node::CENTER); }
@@ -748,7 +748,7 @@ final class MoviePlayer
         $size = (float)$s->settings()->get('osdTextSize'); // IINA's: the message at the size set, what is under it at 0.55 of it
         $small = round($size * 0.55, 1);
         if ($s->onlineSubtitles !== null) { $text = ''; } // the list of subtitles found says it, where the message is
-        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial(self::glass($s, 'OSD'))->round(12);
+        $box = $c->column(0, 1.5)->absolute()->left(8)->top(48)->padding(10, 16, 7, 16)->systemMaterial(self::glass($s, 'OSD'))->radius(12);
         if (($s->shot['path'] ?? null) === null) { $box->passThrough(); } // the pointer goes through, but to a screenshot's buttons
         $o = $c->animate($box, 'osd', $now < $until ? 1 : 0, 0.3);
         if ($now < $until && is_finite($until)) { $c->after($until - $now + 0.01); } // one till another (a search going on) fades with it
@@ -759,9 +759,9 @@ final class MoviePlayer
               $c->text(MoviePlayerState::clock($p->time()) . ' / ' . MoviePlayerState::clock($p->duration()), $small, self::$ink)->fontFeatures('tnum')->opacity(0.7);
           } elseif ($under === 'volume') {
               $level = ($p->muted() ? 0.0 : $s->volume) / $s->maxVolume(); // of the maximum volume, as IINA's
-              $c->row()->height(5)->fillWidth()->minWidth(90)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($level): void {
-                  $l->rect($n->x, $n->y, $n->w, $n->h, self::$ink, 0.25, 2.5);
-                  $l->rect($n->x, $n->y, $n->w * $level, $n->h, $t->accent, 1.0, 2.5); // the system's accent
+              $c->row()->height(5)->fillWidth()->minWidth(90)->draw(static function (Painter $p, array $r) use ($level): void {
+                  $p->fill($r, self::$ink, 2.5, 0.25);
+                  $p->fill([$r[0], $r[1], $r[2] * $level, $r[3]], $p->theme()->accent, 2.5); // the system's accent
               });
               $c->end();
           } elseif ($under !== '') { // a time of its own (an A-B loop's point moved)
@@ -777,8 +777,8 @@ final class MoviePlayer
     {
         $img = $s->shot['image'];
         $k = min(1.0, 300 / max(1, $img->w), 200 / max(1, $img->h));
-        $c->image($img, $img->w * $k, $img->h * $k, 4)->margin(8, 0, $s->shot['path'] === null ? 0 : 8, 0)->draw(static function (DisplayList $l, Node $n): void {
-            $l->ring($n->x, $n->y, $n->w, $n->h, 0x808080, 0.6, 4, 1);
+        $c->image($img, $img->w * $k, $img->h * $k, 4)->margin(8, 0, $s->shot['path'] === null ? 0 : 8, 0)->draw(static function (Painter $p, array $r): void {
+            $p->stroke($r, 0x808080, 4, 1, 0.6);
         });
         if ($s->shot['path'] === null) { return; }
         $c->row(0, 12);
@@ -802,7 +802,7 @@ final class MoviePlayer
     {
         $found = $s->onlineSubtitles ?? [];
         $day = new \MyPHP\DateFormatter(\MyPHP\App::locale(), new \MyPHP\DateOptions(date: \MyPHP\Style::Medium));
-        $box = $c->key('online subtitles')->column(0, 10)->absolute()->left(8)->top(48)->width(460)->padding(12, 14, 12, 14)->systemMaterial(self::glass($s, 'OSD'))->round(12)->keepFocus();
+        $box = $c->key('online subtitles')->column(0, 10)->absolute()->left(8)->top(48)->width(460)->padding(12, 14, 12, 14)->systemMaterial(self::glass($s, 'OSD'))->radius(12)->keepFocus();
           $c->text(self::t($c, 'videoSubtitlesFound', ['count' => count($found)]), 20, self::$ink);
           $c->text(self::t($c, 'videoSubtitlesChoose'), 12, self::$ink)->opacity(0.7);
           self::frosted($c->scroll()->height(min(5, count($found)) * 44.0)->fillWidth(), 0.08, 0, 6);
@@ -968,7 +968,7 @@ final class MoviePlayer
             $wrap = $l->wraps ? max(1.0, $fw - ($l->marginLeft + $l->marginRight) * $sx) : null;
             if ($row === 0 && ($place['pos'] ?? 100.0) != 100.0) { $box->translate(0, -(100 - $place['pos']) / 100 * $fh); } // sub-pos: of the height, 100 at the foot
         }
-        $box->align($across)->justify($along)->passThrough();
+        $box->alignItems($across)->justify($along)->passThrough();
           foreach ($row === 0 ? array_reverse($group) : $group as $line) { // at the bottom a later line goes above the ones before
               foreach (self::assRows($line) as $runs) {
                   self::assRow($c, $p, $line, $runs, $sx, $sy, $wrap, $across, $only, $rep);
@@ -1028,7 +1028,7 @@ final class MoviePlayer
               foreach ($runs as $r) {
                   if ($r->drawing === null) { $descent = max($descent, self::assDescent($c, $r) * $sy); }
               }
-              $c->row()->align(Node::END)->passThrough();
+              $c->row()->alignItems(Node::END)->passThrough();
                 $text = [];
                 foreach ([...$runs, null] as $r) {
                     if ($r !== null && $r->drawing === null) { $text[] = $r; continue; }
@@ -1117,10 +1117,11 @@ final class MoviePlayer
               };
               $boxes = static function (array $lines) use ($c, $s, $border, $shadow, $blur): void { // BorderStyle 3: a box of the outline's color behind each, its shadow the box moved; both blurred with it
                   $c->column()->absolute()->left(0)->top(0)->right(0)->bottom(0)->passThrough()
-                      ->draw(static function (DisplayList $list, Node $n) use ($lines, $s, $border, $shadow, $blur): void {
-                          $box = static function (float $dx, float $dy, int $rgb, float $alpha) use ($list, $n, $lines, $border, $blur): void {
+                      ->draw(static function (Painter $p, array $r) use ($lines, $s, $border, $shadow, $blur): void {
+                          $list = $p->displayList();
+                          $box = static function (float $dx, float $dy, int $rgb, float $alpha) use ($list, $r, $lines, $border, $blur): void {
                               foreach ($lines as [$x0, $x1, $top, $height]) {
-                                  [$x, $y, $w, $h] = [$n->x + $x0 - $border + $dx, $n->y + $top - $border + $dy, $x1 - $x0 + 2 * $border, $height + 2 * $border];
+                                  [$x, $y, $w, $h] = [$r[0] + $x0 - $border + $dx, $r[1] + $top - $border + $dy, $x1 - $x0 + 2 * $border, $height + 2 * $border];
                                   $blur > 0 ? $list->shadow($x, $y, $w, $h, $rgb, $alpha, 0.0, 1.64 * $blur) : $list->rect($x, $y, $w, $h, $rgb, $alpha); // a feather of 1.64 sigmas: a Gaussian's 10 to 90 percent
                               }
                           };
@@ -1326,7 +1327,7 @@ final class MoviePlayer
         // Keyed, as the playlist's: the messages, the buffering indicator and the seek bar's preview built before it come and go,
         // which would renumber its nodes (its scroll's place, the state of its controls).
         $side = $c->key('quick settings')->column()->absolute()->top(0)->right(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial(self::glass($s, 'Sidebar'))->translate(self::SIDEBAR * (1 - $slide), 0)->keepFocus();
-          $back = $c->column()->absolute()->left(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->round(19)->tooltip(self::t($c, 'videoHide'));
+          $back = $c->column()->absolute()->left(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->radius(19)->tooltip(self::t($c, 'videoHide'));
             self::sf($c, 'chevron.right', 14, $c->hovered($back) ? 0.9 : 0.6, 0.2);
           $c->end();
           if ($c->clicked($back)) { $s->sidebar = null; }
@@ -1374,9 +1375,9 @@ final class MoviePlayer
     {
         $set = $s->settings();
         $tagged = $set->get('playlistShowMetadata') && (!$set->get('playlistShowMetadataInMusicMode') || $s->musicMode);
-          $c->row(3, 0)->absolute()->left($tabsLeft)->top(9)->height(36)->align(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->round(18);
+          $c->row(3, 0)->absolute()->left($tabsLeft)->top(9)->height(36)->alignItems(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->radius(18);
             foreach ([['playlist', 'music.note.list', 'videoPlaylist'], ['chapters', 'list.and.film', 'videoChapters']] as [$id, $icon, $label]) {
-                $t = $c->row()->size(34, 30)->center()->round(15)->tooltip(self::t($c, $label));
+                $t = $c->row()->size(34, 30)->center()->radius(15)->tooltip(self::t($c, $label));
                 if ($s->playlistTab === $id) { $t->background(self::$ink, 0.16); }
                   self::sf($c, $icon, 14, $s->playlistTab === $id || $c->hovered($t) ? 0.95 : 0.7);
                 $c->end();
@@ -1384,7 +1385,7 @@ final class MoviePlayer
             }
           $c->end();
           if ($back) {
-              $hide = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->round(19)->tooltip(self::t($c, 'videoHide'));
+              $hide = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->radius(19)->tooltip(self::t($c, 'videoHide'));
                 self::sf($c, 'chevron.left', 14, $c->hovered($hide) ? 0.9 : 0.6, 0.2);
               $c->end();
               if ($c->clicked($hide)) { $s->sidebar = null; }
@@ -1398,14 +1399,14 @@ final class MoviePlayer
                 $c->column()->fillWidth()->dividers(1, self::$ink, 0.1);
                   foreach ($list?->files() ?? [] as $i => $path) {
                       $playing = $i === $list->index();
-                      $row = $c->row(0, 6)->height(32)->paddingStart(28)->paddingEnd(9)->align(Node::CENTER)->fillWidth();
+                      $row = $c->row(0, 6)->height(32)->paddingStart(28)->paddingEnd(9)->alignItems(Node::CENTER)->fillWidth();
                       if ($i === $s->chosen) { // the chosen row as AppKit's lists choose: the accent in the key window, gray in another
                           ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(self::$ink, 0.12);
                       }
                         if ($playing) { $c->column()->absolute()->left(9)->top(9)->size(14, 14)->center(); self::sf($c, 'play.fill', 9, 0.9); $c->end(); }
                         $tags = $tagged ? $list->tags($i) : null;
                         if ($tags !== null && $tags['title'] !== '' && $tags['artist'] !== '') { // IINA's: the track's name, its artist under it
-                            $c->column(0, 1)->grow(1)->min(0, 0);
+                            $c->column(0, 1)->grow(1)->minWidth(0)->minHeight(0);
                               $c->text($tags['title'], 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…');
                               $c->text($tags['artist'], 10.5, self::$ink)->opacity(0.55)->noWrap()->ellipsis('…');
                             $c->end();
@@ -1418,8 +1419,8 @@ final class MoviePlayer
                       if ($c->doubleClicked($row)) { $s->open($path); } elseif ($c->clicked($row)) { $s->chosen = $i; }
                   }
                 $c->end();
-                $c->column()->fillWidth()->height(max(0.0, $h - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
-                    for ($y = $n->y + 32; $y < $n->y + $n->h; $y += 32) { $l->rect($n->x, $y, $n->w, 1, self::$ink, 0.1); }
+                $c->column()->fillWidth()->height(max(0.0, $h - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (Painter $p, array $r): void { // the empty rows' lines below, as IINA's
+                    for ($y = $r[1] + 32; $y < $r[1] + $r[3]; $y += 32) { $p->fill([$r[0], $y, $r[2], 1], self::$ink, 0, 0.1); }
                 });
                 $c->end();
               $c->end();
@@ -1429,7 +1430,7 @@ final class MoviePlayer
           }
           $c->end();
           // The bar under the list: repeat, shuffle and sort (held), the time of them all, add, remove, clear.
-          $c->row(0, 12)->absolute()->left(0)->right(0)->bottom(0)->height(33)->paddingX(12)->align(Node::CENTER)->background(0x000000, 0.18);
+          $c->row(0, 12)->absolute()->left(0)->right(0)->bottom(0)->height(33)->paddingX(12)->alignItems(Node::CENTER)->background(0x000000, 0.18);
             // As IINA's: the loop button off, the file (repeat.1) or the playlist, in the accent while on; shuffle in it while shuffled; sort a menu.
             $loop = $c->column()->tooltip(self::t($c, 'videoRepeat'));
               $on = $s->loop !== 'off';
@@ -1474,11 +1475,11 @@ final class MoviePlayer
     private static function tabBar(Context $c, MoviePlayerState $s): void
     {
         $tabs = [['layout', 'paintbrush.pointed.fill', 'videoLayout'], ['video', 'photo', 'videoVideo'], ['audio', 'waveform', 'videoAudio'], ['subtitles', 'captions.bubble.fill', 'videoSubtitles']];
-        $c->row(3, 0)->absolute()->right(7)->top(9)->height(36)->align(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->round(18);
+        $c->row(3, 0)->absolute()->right(7)->top(9)->height(36)->alignItems(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->radius(18);
           foreach ($tabs as $i => [$id, $icon, $label]) {
               $on = $s->tab === $id;
               if ($i > 0 && !$on && $tabs[$i - 1][0] !== $s->tab) { $c->box(1, 18, self::$ink)->opacity(0.25); } // between two not chosen
-              $t = $c->row(0, 5)->height(30)->paddingX($on ? 10 : 7)->align(Node::CENTER)->round(15)->tooltip(self::t($c, $label));
+              $t = $c->row(0, 5)->height(30)->paddingX($on ? 10 : 7)->alignItems(Node::CENTER)->radius(15)->tooltip(self::t($c, $label));
               if ($on) { $t->background(self::$ink, 0.16); }
                 self::sf($c, $icon, 14, $on || $c->hovered($t) ? 0.95 : 0.7);
                 if ($on) { $c->text(self::t($c, $label), 13, self::$ink)->fontWeight(500)->opacity(0.95); }
@@ -1497,7 +1498,7 @@ final class MoviePlayer
     /** A heading in a card: symbol $icon and $title, and what $trailing builds at the right. */
     private static function heading(Context $c, string $icon, string $title, ?Closure $trailing = null): void
     {
-        $c->row(0, 8)->align(Node::CENTER)->fillWidth();
+        $c->row(0, 8)->alignItems(Node::CENTER)->fillWidth();
           $c->column()->size(16, 16)->center(); self::sf($c, $icon, 12, 0.7); $c->end();
           $c->text($title, 13, self::$ink)->fontWeight(600)->opacity(0.9)->grow(1);
           if ($trailing !== null) { $trailing(); }
@@ -1515,9 +1516,9 @@ final class MoviePlayer
         $clicked = null;
         self::frosted($c->column(), 0.05, 0.14, 8)->fillWidth()->dividers(1, self::$ink, 0.1);
           foreach (array_pad($rows, 4, null) as $i => $r) {
-              $row = $c->row(0, 6)->height(24.5)->paddingStart(20)->paddingEnd(8)->align(Node::CENTER)->fillWidth();
+              $row = $c->row(0, 6)->height(24.5)->paddingStart(20)->paddingEnd(8)->alignItems(Node::CENTER)->fillWidth();
               if ($r !== null) {
-                  if ($i === $chosen) { $c->box(3, 16, $c->theme->accent)->round(1.5)->absolute()->left(8)->top(4.25); }
+                  if ($i === $chosen) { $c->box(3, 16, $c->theme->accent)->radius(1.5)->absolute()->left(8)->top(4.25); }
                   $c->text($r[0], 13, self::$ink)->opacity($i === 0 ? 0.5 : 0.9)->noWrap()->ellipsis('…')->grow(1);
                   if ($r[1] !== '') { self::frosted($c->row()->padding(1, 3), 0.2, 0, 3); $c->text($r[1], 11, self::$ink)->opacity(0.85); $c->end(); }
                   if ($c->clicked($row)) { $clicked = $i; }
@@ -1532,11 +1533,11 @@ final class MoviePlayer
     private static function segments(Context $c, array $options, int $chosen, ?array $takes = null, bool $more = false): ?int
     {
         $clicked = null;
-        $c->row(0, 4)->align(Node::CENTER); // as wide as its options, not the card
-        self::frosted($c->row(0, 0), 0.1, 0, 6)->height(23)->align(Node::STRETCH);
+        $c->row(0, 4)->alignItems(Node::CENTER); // as wide as its options, not the card
+        self::frosted($c->row(0, 0), 0.1, 0, 6)->height(23)->alignItems(Node::STRETCH);
           foreach ($options as $i => $label) {
               if ($i > 0 && $i !== $chosen && $i - 1 !== $chosen) { $c->column()->width(1)->paddingY(5); $c->box(1, 13, self::$ink)->opacity(0.25); $c->end(); }
-              $seg = $c->column()->paddingX(11)->center()->round(6);
+              $seg = $c->column()->paddingX(11)->center()->radius(6);
               if ($i === $chosen) { $seg->background($c->theme->accent); } // the choice in the system's accent, as IINA's
                 $c->text($label, 13, self::$ink)->opacity(0.9);
               $c->end();
@@ -1552,9 +1553,9 @@ final class MoviePlayer
     /** A switch as macOS 26 draws one, 38 by 18, $label's to assistive technology; returns whether it was clicked (never, not $enabled). */
     private static function toggleSwitch(Context $c, string $label, bool $on, bool $enabled = true): bool
     {
-        $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on): void {
-            $l->rect($n->x, $n->y, $n->w, $n->h, $on ? $t->accent : self::$ink, $on ? 1.0 : 0.2, 9);
-            $l->rect($on ? $n->x + $n->w - 24 : $n->x + 2, $n->y + 2, 22, 14, 0xffffff, 1.0, 7);
+        $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (Painter $p, array $r) use ($on): void {
+            $p->fill($r, $on ? $p->theme()->accent : self::$ink, 9, $on ? 1.0 : 0.2);
+            $p->fill([$on ? $r[0] + $r[2] - 24 : $r[0] + 2, $r[1] + 2, 22, 14], 0xffffff, 7);
         });
         $c->end();
         if (!$enabled) { $sw->tooltip(self::t($c, 'videoNotYet')); return false; }
@@ -1585,8 +1586,8 @@ final class MoviePlayer
                 if ($c->doubleClicked($row)) { $s->playChapter($i); }
             }
           $c->end();
-          $c->column()->fillWidth()->height(max(0.0, $h - 86 - 40 * count($chapters)))->passThrough()->draw(static function (DisplayList $l, Node $n): void { // the empty rows' lines below, as IINA's
-              for ($y = $n->y + 40; $y < $n->y + $n->h; $y += 40) { $l->rect($n->x, $y, $n->w, 1, self::$ink, 0.1); }
+          $c->column()->fillWidth()->height(max(0.0, $h - 86 - 40 * count($chapters)))->passThrough()->draw(static function (Painter $p, array $r): void { // the empty rows' lines below, as IINA's
+              for ($y = $r[1] + 40; $y < $r[1] + $r[3]; $y += 40) { $p->fill([$r[0], $y, $r[2], 1], self::$ink, 0, 0.1); }
           });
           $c->end();
         $c->end();
@@ -1601,15 +1602,15 @@ final class MoviePlayer
      */
     private static function sideSlider(Context $c, float &$value, string $label, array $marks, string $field, int $dots): bool
     {
-        $c->row(0, 8)->align(Node::END)->fillWidth();
+        $c->row(0, 8)->alignItems(Node::END)->fillWidth();
           $c->column()->grow(1)->height(48);
             $sl = $c->sliderBase($value, 0, 1)->absolute()->left(0)->right(0)->top(14)->height(20)->paddingX(5);
             $f = $sl->fraction;
-            $sl->draw(static function (DisplayList $l, Node $n) use ($dots): void { // a track, dots under it, an upright white pill
-                $x0 = $n->x + 5; $w = $n->w - 10; $cy = $n->y + $n->h / 2;
-                $l->rect($n->x, $cy - 2, $n->w, 4, self::$ink, 0.15, 2);
-                for ($i = 0; $i < $dots; $i++) { $l->rect($x0 + $w * $i / ($dots - 1) - 0.75, $cy + 6, 1.5, 1.5, self::$ink, 0.3, 0.75); }
-                $l->rect($x0 + $w * $n->fraction - 4.5, $cy - 8.5, 9, 17, 0xffffff, 1.0, 4.5);
+            $sl->draw(static function (Painter $p, array $r) use ($sl, $dots): void { // a track, dots under it, an upright white pill
+                $x0 = $r[0] + 5; $w = $r[2] - 10; $cy = $r[1] + $r[3] / 2;
+                $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.15);
+                for ($i = 0; $i < $dots; $i++) { $p->fill([$x0 + $w * $i / ($dots - 1) - 0.75, $cy + 6, 1.5, 1.5], self::$ink, 0.75, 0.3); }
+                $p->fill([$x0 + $w * $sl->fraction - 4.5, $cy - 8.5, 9, 17], 0xffffff, 4.5);
             });
             $changed = $c->changed($sl);
             $c->text($label, 10, self::$ink)->opacity(0.8)->textAlign(Node::CENTER)->absolute()->leftPercent($f * 100)->top(0)->width(40)->translate(-20, 0)->passThrough();
@@ -1622,7 +1623,7 @@ final class MoviePlayer
                 };
             }
           $c->end();
-          self::frosted($c->row()->size(52, 26)->paddingX(8)->align(Node::CENTER), 0.1, 0, 6);
+          self::frosted($c->row()->size(52, 26)->paddingX(8)->alignItems(Node::CENTER), 0.1, 0, 6);
             $c->text($field, 13, self::$ink)->opacity(0.9);
           $c->end();
         $c->end();
@@ -1729,7 +1730,7 @@ final class MoviePlayer
         self::card($c);
           self::heading($c, 'slider.vertical.3', self::t($c, 'videoEqualizer'));
           $c->row();
-            $pop = self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->align(Node::CENTER), 0.12, 0, 6);
+            $pop = self::frosted($c->row(0, 6)->height(24)->width(189)->paddingX(12)->alignItems(Node::CENTER), 0.12, 0, 6);
               $c->text($s->equalizerProfile !== '' ? $s->equalizerProfile : self::t($c, $s->equalizerPreset === '' ? 'videoManual' : 'videoEq' . $s->equalizerPreset), 13, self::$ink)->opacity(0.9)->grow(1)->noWrap()->ellipsis('…');
               self::sf($c, 'chevron.up.chevron.down', 10, 0.8);
             $c->end();
@@ -1788,14 +1789,14 @@ final class MoviePlayer
         $moved = false;
         $c->row(0, 0)->fillWidth()->height(150);
           foreach (['32', '64', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'] as $i => $band) {
-              $c->column(0, 10)->width(26.8)->align(Node::CENTER);
+              $c->column(0, 10)->width(26.8)->alignItems(Node::CENTER);
                 $g = $gains[$i];
                 $sl = $c->sliderBase($g, -12, 12, 0.0, true)->size(16, 120)->label("$band Hz");
-                $sl->draw(static function (DisplayList $l, Node $n): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
-                    $cx = $n->x + $n->w / 2;
-                    $l->rect($cx - 1.5, $n->y, 3, $n->h, self::$ink, 0.15, 1.5);
-                    foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $l->rect($cx + 5, $n->y + $n->h * $f - 0.75, 1.5, 1.5, self::$ink, 0.3, 0.75); }
-                    $l->rect($n->x, $n->y + $n->h * (1 - $n->fraction) - 4, 16, 8, 0xffffff, 0.92, 4);
+                $sl->draw(static function (Painter $p, array $r) use ($sl): void { // the track, dots at +12, +6, 0, -6 and -12, the knob where the gain is
+                    $cx = $r[0] + $r[2] / 2;
+                    $p->fill([$cx - 1.5, $r[1], 3, $r[3]], self::$ink, 1.5, 0.15);
+                    foreach ([0.0, 0.25, 0.75, 1.0] as $f) { $p->fill([$cx + 5, $r[1] + $r[3] * $f - 0.75, 1.5, 1.5], self::$ink, 0.75, 0.3); }
+                    $p->fill([$r[0], $r[1] + $r[3] * (1 - $sl->fraction) - 4, 16, 8], 0xffffff, 4, 0.92);
                 });
                 if ($c->changed($sl)) { $gains[$i] = round($g, 2); $moved = true; }
                 $c->text($band, 10, self::$ink)->opacity(0.5);
@@ -1836,7 +1837,7 @@ final class MoviePlayer
             $p->setSecondarySubtitleTrack($i === 0 ? null : $texts[$i - 1]);
         }
         self::card($c);
-          $c->row(0, 8)->align(Node::CENTER);
+          $c->row(0, 8)->alignItems(Node::CENTER);
             if (self::sideButton($c, self::t($c, 'videoLoadSubtitles'))) {
                 $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoLoadSubtitles')));
                 if ($paths) { $s->loadSubtitles($paths[0]); }

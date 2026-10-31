@@ -16,7 +16,7 @@ use MyPHP\UI\{Context, Key, ListState, Node, Role, Selection, SortOrder, TableCo
 function tableView(ListState $s, array $cols, array $names, int $w = 500, int $h = 300): Headless
 {
     return new Headless(function (Context $c) use ($s, $cols, $names): void {
-        $c->column(10, 0, 1)->align(Node::STRETCH);
+        $c->column(10, 0, 1)->alignItems(Node::STRETCH);
           $c->table($s, $cols, count($names), function (int $row, int $col) use ($c, $names): void {
               match ($col) {
                   0 => $c->text($names[$row])->singleLine(),
@@ -224,7 +224,7 @@ same([['Reset Columns'], -1], [$h->menuLabels(), $built], 'past the columns, the
 $s = new ListState();
 $cols = [new TableColumn('Name', 100), new TableColumn('Size', 80)];
 $h = new Headless(function (Context $c) use ($s, $cols): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->table($s, $cols, 3, function (int $row, int $col) use ($c): void { $c->text(['file', '1 KB'][$col]); })->grow = 1;
     $c->end();
 }, 400, 200);
@@ -265,7 +265,7 @@ same([$r, $r, $r, $r], $corners($s, 0), 'a row of a table that does not choose, 
 $names = ['notes.txt', 'beach.jpeg', 'README']; $now = 0; $opened = -1;
 $ts = new ListState; $ts->selected = -1;
 $h = poseTester(function (Context $c) use ($ts, &$names, &$opened): void {
-    $c->column(10, 0, 1)->align(Node::STRETCH);
+    $c->column(10, 0, 1)->alignItems(Node::STRETCH);
       $c->table($ts, [new TableColumn('Name'), new TableColumn('Size', 80)], count($names), function (int $row, int $col) use ($c, &$names): void {
           if ($col === 0) { $c->editableText($names[$row]); } else { $c->text('1 KB'); }
       })->grow(1);

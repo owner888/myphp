@@ -66,13 +66,13 @@ function view(Context $c, Focus $a): void
     $t = $c->theme;
     $c->root->color = null;
     $box = $c->column(16, 12, 1);
-    if (!$c->vibrancy()) { $box->background($t->surface)->round(10)->border($t->border); } // over the popover's material, nothing
+    if (!$c->vibrancy()) { $box->background($t->surface)->radius(10)->border(1, $t->border); } // over the popover's material, nothing
       $c->text('Focus', 17, style: Font::BOLD);
-      $c->row(0, 12)->align(Node::CENTER);
+      $c->row(0, 12)->alignItems(Node::CENTER);
         $c->text('Focus mode')->grow(1);
         $c->key('focus')->switch('', $a->focus)->label('Focus mode');
       $c->end();
-      $c->row(0, 12)->align(Node::CENTER);
+      $c->row(0, 12)->alignItems(Node::CENTER);
         $c->text('Sound')->grow(1);
         $c->key('sound')->switch('', $a->sound)->label('Sound');
       $c->end();

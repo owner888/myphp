@@ -20,7 +20,7 @@ $h = poseTester(function (Context $c) use (&$shown, &$lefts, &$closed, &$undone)
     }
     $c->toastViewportBase(function (Node $viewport, array $toasts) use ($c, &$shown, &$lefts): void {
         $shown = array_merge($shown, $toasts);
-        $viewport->padding(16)->align(Node::END);
+        $viewport->padding(16)->alignItems(Node::END);
         $viewport->gap = 8;
         foreach ($toasts as $t) {
             $toast = $c->toastBase($t);

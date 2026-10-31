@@ -12,7 +12,7 @@ use MyPHP\UI\{Context, Node, Theme};
 // Widgets grow with the spacing; none is the default's.
 $measure = function (float $spacing): array {
     $h = new Headless(function (Context $c): void {
-        $c->column()->align(Node::START);
+        $c->column()->alignItems(Node::START);
           $c->button('OK')->label('button');
           $on = false; $tab = 0;
           $c->checkbox('', $on)->label('check');

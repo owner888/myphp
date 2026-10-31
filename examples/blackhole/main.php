@@ -15,7 +15,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Canvas, Content, Context, Cursor, DisplayList, InputEvent, Node, Painter, TextPainter, Theme};
+use MyPHP\UI\{Canvas, Content, Context, Cursor, InputEvent, Node, Painter};
 use MyPHP\UI\Shader\{Options, Shader, Uniform, Values};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -291,12 +291,9 @@ final class BlackHole
 function view(Context $c, BlackHole $a): void
 {
     $reduce = $c->preferences()->reduceMotion;
-    $rt = $c->runtime;
-    $root = $c->row(0, 0, 0, 0x000000)->fill()->align(Node::END)->padding(0, 28, 26, 30);
+    $root = $c->row(0, 0, 0, 0x000000)->fill()->alignItems(Node::END)->padding(0, 28, 26, 30);
     $root->cursor($a->down ? Cursor::Grabbing : Cursor::Grab);
-    $root->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($a, $reduce, $rt): void {
-        $a->draw(new Painter($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h], $reduce);
-    });
+    $root->draw(fn(Painter $p, array $r) => $a->draw($p, $r, $reduce));
     $root->handleInput($a->input(...));
       $c->column(0, 4);
         $c->text('Gargantua', 22)->fontWeight(600)->textColor(0xffffff, WHITE_ALPHA);

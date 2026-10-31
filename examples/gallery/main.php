@@ -13,7 +13,7 @@ declare(strict_types=1);
 use MyPHP\{App, Clipboard, DateOptions, Dialog, I18n, MessageOptions, NumberOptions, Style as DateStyle, Width, Window, WindowOptions};
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style as GlassStyle};
 use MyPHP\Text\Params;
-use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, Content, ContentTransition, Context, Cursor, Direction, DisplayList, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextPainter, TextState, Theme, Track, TransitionMotion, WideColor};
+use MyPHP\UI\{Anchor, Animation, Oklch, BorderStyle, Content, ContentTransition, Context, Cursor, Direction, DraggableOptions, Easing, ElementTransition, Font, GridState, Image, Keyframe, KeyframeOptions, Key, LinearGradient, ListState, Menu, MeterLevels, Motion, Node, OutlineState, Painter, Path, Pose, Route, Router, Selection, Span, SpringOptions, SVG, TableColumn, TextState, Theme, Track, TransitionMotion, WideColor};
 use MyPHP\UI\Chart\{Axes, Band, Chart, Curve, Linear, Side, Stacking, Tick, Time};
 use MyPHP\UI\Markdown\{Markdown, Options as MarkdownOptions, Reveal, RevealUnit};
 use MyPHP\UI\RichText\{Attributes, Document, EditorOptions, FormatState, ListKind, Paragraph, ParagraphStyle, RichText, Run, Text as RichTextText};
@@ -174,18 +174,9 @@ function hsl(float $h, float $s, float $l): int
 function card(Context $c, string $title): Node
 {
     $t = $c->theme;
-    $n = $c->column(18, 12, 0, $t->background)->round(10)->border($t->border)->shadow(0, 1, 3, 0, 0x000000, 0.06);
+    $n = $c->column(18, 12, 0, $t->background)->radius(10)->border(1, $t->border)->shadow(0, 1, 3, 0, 0x000000, 0.06);
     if ($title !== '') { $c->text($title, 15, style: Font::BOLD); }
     return $n;
-}
-
-/** Paints $draw with a Painter of the frame, for Node::draw. */
-function painted(Context $c, Closure $draw): Closure
-{
-    $rt = $c->runtime;
-    return function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($draw, $rt): void {
-        $draw(new Painter($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h]);
-    };
 }
 
 // The charts of the Charts page.
@@ -235,10 +226,10 @@ function axisLabel(Context $c): Closure
 /** Paints a line across the plot at each tick of $y, and along it at each of $x. @param list<Tick> $x @param list<Tick> $y */
 function gridLines(Context $c, Node $area, array $x, array $y, int $color): void
 {
-    $area->draw(painted($c, function (Painter $p, array $r) use ($x, $y, $color): void {
+    $area->draw(function (Painter $p, array $r) use ($x, $y, $color): void {
         foreach ($y as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $color); }
         foreach ($x as $tick) { $p->line(Chart::x($r, $tick->at), $r[1], Chart::x($r, $tick->at), $r[1] + $r[3], 1, $color); }
-    }));
+    });
 }
 
 /** The series' names by their colors. @param list<string> $names */
@@ -246,8 +237,8 @@ function legend(Context $c, array $names): void
 {
     $c->row(0, 14)->wrap(0);
       foreach ($names as $i => $name) {
-          $c->row(0, 6)->align(Node::CENTER);
-            $c->box(10, 10, CHART_COLORS[$i])->round(3);
+          $c->row(0, 6)->alignItems(Node::CENTER);
+            $c->box(10, 10, CHART_COLORS[$i])->radius(3);
             $c->text($name, 12, $c->theme->textMuted);
           $c->end();
       }
@@ -437,7 +428,7 @@ final class Gallery
     {
         $root = $c->row(0, 0, 1);
         if ($this->rtl) { $root->direction(Direction::RightToLeft); } // given first, so that what is built inside reads it
-        $root->fill()->align(Node::STRETCH);
+        $root->fill()->alignItems(Node::STRETCH);
           $this->sidebar($c);
           $c->column(0, 0, 1)->minWidth(0);
             $this->toolbar($c);
@@ -565,7 +556,7 @@ final class Gallery
         $t = $c->theme;
         $c->text('Everything here is laid out with flexbox and grids and drawn by MyPHP itself: no HTML, no JavaScript, no extension but FFI. '
             . 'The view is a PHP function of the app\'s state that runs again after every event.', color: $t->textMuted);
-        $c->row(0, 16)->wrap(0)->align(Node::START);
+        $c->row(0, 16)->wrap(0)->alignItems(Node::START);
           card($c, 'Counter');
             $c->text((string)$this->count, 40, style: Font::BOLD);
             $c->row(0, 8);
@@ -578,9 +569,9 @@ final class Gallery
             $this->sparkline($c)->size(260, 80);
           $c->end();
           card($c, 'Files');
-            $zone = $c->column(0, 2, 0, $t->surface)->size(260, 80)->padding(8, 12)->round(6)->border($t->border)->justify(Node::CENTER)->align(Node::CENTER);
+            $zone = $c->column(0, 2, 0, $t->surface)->size(260, 80)->padding(8, 12)->radius(6)->border(1, $t->border)->justify(Node::CENTER)->alignItems(Node::CENTER);
             if (($files = $c->droppedFiles($zone)) !== null) { $this->files = $files; }
-            if ($c->fileDragOver($zone)) { $zone->border($t->accent, 2); }
+            if ($c->fileDragOver($zone)) { $zone->border(2, $t->accent); }
               if ($this->files === []) { $c->text('Drop files here', color: $t->textMuted); }
               foreach ($this->files as $i => $f) {
                   if ($i === 3) {
@@ -597,7 +588,7 @@ final class Gallery
     private function sparkline(Context $c): Node
     {
         $t = $c->theme;
-        return $c->box(0, 0, $t->surface)->round(6)->draw(painted($c, function (Painter $p, array $r) use ($t): void {
+        return $c->box(0, 0, $t->surface)->radius(6)->draw(function (Painter $p, array $r) use ($t): void {
             $n = count($this->samples);
             if ($n < 2) { return; }
             $path = new Path();
@@ -607,7 +598,7 @@ final class Gallery
                 $i === 0 ? $path->moveTo($x, $y) : $path->lineTo($x, $y);
             }
             $p->strokePath($path, 2, $t->accent);
-        }));
+        });
     }
 
     public function controls(Context $c): void
@@ -622,7 +613,7 @@ final class Gallery
           $c->radioGroup(function () use ($c): void {
               foreach (['Free', 'Pro', 'Team'] as $p) { $c->radio($p, $this->plan, $p); }
           }, row: true)->label('Plan')->gap = 18;
-          $c->row(0, 10)->align(Node::CENTER);
+          $c->row(0, 10)->alignItems(Node::CENTER);
             $c->text('Size');
             $c->select(SIZES, $this->size)->label('Size');
           $c->end();
@@ -640,17 +631,17 @@ final class Gallery
           if ($this->tasks === []) {
               $this->tasks = [new GalleryTask('Write the docs'), new GalleryTask('Fix the layout'), new GalleryTask('Ship it'), new GalleryTask('Plan the release', true)];
           }
-          $c->row(0, 12)->align(Node::START);
+          $c->row(0, 12)->alignItems(Node::START);
             foreach (['To do', 'Done'] as $col => $title) {
                 $done = $col === 1;
-                $bin = $c->column(10, 6, 1, $t->surface)->basis(0)->round(8)->minHeight(150)->border($t->border)->label($title);
+                $bin = $c->column(10, 6, 1, $t->surface)->basis(0)->radius(8)->minHeight(150)->border(1, $t->border)->label($title);
                 $task = null;
                 if ($c->drop($bin, GalleryTask::class, $task)) { $task->done = $done; }
-                if ($c->dragOver($bin, GalleryTask::class, $task) && $task->done !== $done) { $bin->border($t->accent, 2); }
+                if ($c->dragOver($bin, GalleryTask::class, $task) && $task->done !== $done) { $bin->border(2, $t->accent); }
                   $c->text($title)->fontWeight(600);
                   foreach ($this->tasks as $task) {
                       if ($task->done !== $done) { continue; }
-                      $row = $c->key($task->name)->row(0, 0, 0, $t->background)->padding(7, 10)->round(6)->border($t->border)->cursor(Cursor::Pointer);
+                      $row = $c->key($task->name)->row(0, 0, 0, $t->background)->padding(7, 10)->radius(6)->border(1, $t->border)->cursor(Cursor::Pointer);
                       $c->drag($row, $task);
                         $c->text($task->name);
                       $c->end();
@@ -682,29 +673,29 @@ final class Gallery
           });
         $c->end();
         card($c, 'Ranges');
-          $c->row(0, 12)->align(Node::CENTER);
+          $c->row(0, 12)->alignItems(Node::CENTER);
             $c->slider($this->volume, 0, 100, 0)->label('Volume')->grow(1);
             $c->text(sprintf('%3.0f%%', $this->volume))->size(48, 0)->textAlign(Node::END);
           $c->end();
           $c->progress($this->volume / 100, 0)->fillWidth();
           $c->progress(-1, 0)->fillWidth();
-          $c->row(0, 10)->align(Node::CENTER);
+          $c->row(0, 10)->alignItems(Node::CENTER);
             $c->text('Copies');
             $c->numberInput($this->copies, 1, 99, 1)->label('Copies');
           $c->end();
-          $c->row(0, 12)->align(Node::CENTER);
+          $c->row(0, 12)->alignItems(Node::CENTER);
             $c->text('Quality')->size(64, 0);
             $c->stepSlider($this->quality, 0, 100, 25, 0)->label('Quality')->grow(1);
             $c->text(sprintf('%3.0f%%', $this->quality))->size(48, 0)->textAlign(Node::END);
           $c->end();
-          $c->row(0, 12)->align(Node::CENTER);
+          $c->row(0, 12)->alignItems(Node::CENTER);
             $c->text('Price')->size(64, 0);
             $c->rangeSlider($this->priceLow, $this->priceHigh, 0, 500, 10)->label('Price')->grow(1);
             $c->text(sprintf('$%.0f–%.0f', $this->priceLow, $this->priceHigh))->size(72, 0)->textAlign(Node::END);
           $c->end();
         $c->end();
         card($c, 'Dates, times and colors');
-          $c->row(0, 20)->align(Node::START)->wrap(0);
+          $c->row(0, 20)->alignItems(Node::START)->wrap(0);
             $c->calendar($this->meeting)->label('Meeting');
             $c->column(0, 12);
               $c->form(function () use ($c): void {
@@ -716,7 +707,7 @@ final class Gallery
           $c->end();
         $c->end();
         card($c, 'Indicators');
-          $c->row(0, 12)->align(Node::CENTER);
+          $c->row(0, 12)->alignItems(Node::CENTER);
             $c->spinner()->label('Syncing');
             $c->text('Syncing…', color: $t->textMuted)->grow(1);
             $c->rating($this->stars, 5)->label('Rating');
@@ -725,7 +716,7 @@ final class Gallery
           $c->text(sprintf('Disk: %.0f of 500 GB', $disk), 12, $t->textMuted);
           $c->meter($disk, 0, 500, new MeterLevels(400, 475), 0)->label('Disk')->fillWidth();
           $c->text(sprintf('Battery: %.0f%%', $this->battery), 12, $t->textMuted);
-          $c->row(0, 10)->align(Node::CENTER);
+          $c->row(0, 10)->alignItems(Node::CENTER);
             $c->meter($this->battery, 0, 100, new MeterLevels(20, 10), 0)->label('Battery')->grow(1);
             $c->stepper($this->battery, 0, 100, 5)->label('Battery');
           $c->end();
@@ -759,7 +750,7 @@ final class Gallery
               $c->segmented(['List', 'Grid', 'Columns'], $this->layout)->label('View');
               $c->spacer();
               $c->toggle($this->inspector, 'Inspector');
-          })->label('Document')->border($t->border)->round(8);
+          })->label('Document')->border(1, $t->border)->radius(8);
           $c->text('Tab stops once in the toolbar, and the arrows move between its controls. Narrow the window: what does not fit goes into the » menu.', color: $t->textMuted);
         $c->end();
         card($c, 'Tabs and panes');
@@ -772,38 +763,38 @@ final class Gallery
               $c->column(10, 0, 1)->fill();
                 $c->text('Drag the divider, or focus it and press the arrows.', color: $t->textMuted);
               $c->end();
-          })->size(0, 140)->border($t->border)->round($t->radius)->clip();
+          })->size(0, 140)->border(1, $t->border)->radius($t->radius)->clip();
         $c->end();
         card($c, 'Built on bases');
           $c->text('Bases are the widgets without their look: the pointer, the keys, the focus and accessibility, styled here anew.', color: $t->textMuted);
           $c->row(0, 16)->wrap(0);
             // A segmented control on tabsBase.
             $tabs = $c->tabsBase($this->period, 3);
-            $tabs->list->padding(3)->round(999)->background($t->surface);
+            $tabs->list->padding(3)->radius(999)->background($t->surface);
               foreach (['Day', 'Week', 'Month'] as $i => $name) {
-                  $seg = $tabs->tab($i)->padding(5, 14)->round(999);
+                  $seg = $tabs->tab($i)->padding(5, 14)->radius(999);
                   if ($i === $this->period) { $seg->background($t->background)->shadow(0, 1, 2, 0, 0x000000, 0.15); }
                     $c->text($name);
                   $c->end();
               }
             $c->end();
             // A pill that toggles, on switchBase.
-            $pill = $c->switchBase($this->pinned)->padding(5, 12)->round(999)->border($t->border);
+            $pill = $c->switchBase($this->pinned)->padding(5, 12)->radius(999)->border(1, $t->border);
             $pill->gap = 6;
-            if ($this->pinned) { $pill->background($t->accent)->textColor($t->accentText)->border($t->accent); }
+            if ($this->pinned) { $pill->background($t->accent)->textColor($t->accentText)->border(1, $t->accent); }
               $c->icon(glyph('star'));
               $c->text('Starred');
             $c->end();
             // A select with check marks, on selectBase.
             $sel = $c->selectBase($this->fruit);
-            $sel->trigger->padding(6, 10)->round(8)->border($t->border)->gap = 6;
+            $sel->trigger->padding(6, 10)->radius(8)->border(1, $t->border)->gap = 6;
               $c->text($this->fruit);
               $c->icon(glyph('chevron'), null, $t->textMuted);
             $c->end();
             $sel->popup(function (Node $panel) use ($c, $t, $sel): void {
-                $panel->margin(4, 0, 0, 0)->padding(4)->round(10)->background($t->background)->border($t->border)->shadow(0, 8, 24, 0, 0x000000, 0.15);
+                $panel->margin(4, 0, 0, 0)->padding(4)->radius(10)->background($t->background)->border(1, $t->border)->shadow(0, 8, 24, 0, 0x000000, 0.15);
                 foreach (['Apple', 'Banana', 'Cherry', 'Durian'] as $fruit) {
-                    $item = $sel->item($fruit)->padding(6, 10)->round(6);
+                    $item = $sel->item($fruit)->padding(6, 10)->radius(6);
                     $item->gap = 8;
                     if ($item->highlighted) { $item->background($t->accent)->textColor($t->accentText); }
                       $c->icon(glyph('check'))->opacity($fruit === $this->fruit ? 1 : 0);
@@ -838,7 +829,7 @@ final class Gallery
           $matches = $q === '' ? 0 : substr_count(strtolower($text), strtolower($q));
           if ($c->shortcut('f', Key::COMMAND)) { $this->finding = true; }
           if (!$this->finding && $c->clicked($c->button('Find…'))) { $this->finding = true; }
-          $c->findBar($this->finding, $this->findQuery, $matches, $this->findAt)?->round(8);
+          $c->findBar($this->finding, $this->findQuery, $matches, $this->findAt)?->radius(8);
           $c->text($text);
         $c->end();
         card($c, 'Typography');
@@ -916,7 +907,7 @@ final class Gallery
         $this->rows->key = fn(int $i): int => $rows[$i];
         $c->list($this->rows, count($rows), function (int $i) use ($c, $rows, $open): void {
             $n = $rows[$i];
-            $row = $c->row(0, 10)->size(0, 32)->paddingX(12)->align(Node::CENTER);
+            $row = $c->row(0, 10)->size(0, 32)->paddingX(12)->alignItems(Node::CENTER);
             $row->contextMenu(function (Menu $m) use ($n, $open): void {
                 if ($m->item('Open')->chosen()) { $open($n); }
                 if ($m->item('Pick')->chosen()) { $this->picked = $n; }
@@ -927,11 +918,11 @@ final class Gallery
               $c->text("Row $n" . (($this->starred[$n] ?? false) ? '  ★' : ''))->grow(1);
               $c->text(sprintf('%d²  =  %d', $n, $n * $n), 12)->font('monospace');
             $c->end();
-        })->size(0, 420)->border($t->border)->round(8)->padding(4);
+        })->size(0, 420)->border(1, $t->border)->radius(8)->padding(4);
         if ($this->rows->changed() && $this->rows->selected >= 0) { $this->picked = $rows[$this->rows->selected]; }
         if ($this->rows->submitted() && $this->rows->selected >= 0) { $open($rows[$this->rows->selected]); }
         $this->chatCard($c);
-        $c->row(0, 18)->align(Node::STRETCH)->size(0, 260);
+        $c->row(0, 18)->alignItems(Node::STRETCH)->size(0, 260);
           card($c, 'Tree')->size(220, 0);
             $item = function (string $path, string $label, ?Closure $children = null) use ($c): void {
                 $open = null;
@@ -999,7 +990,7 @@ final class Gallery
           $g->reorder = function (array $items, int $to): void { $this->swatchOrder = reorder($this->swatchOrder, $items, $to); };
           $c->gridView($g, count($this->swatchOrder), 96, 96, function (int $i) use ($c): void {
               $n = $this->swatchOrder[$i];
-              $c->box(0, 0, hsl(($n % 36) * 10, 0.6, 0.65))->grow(1)->margin(6)->round(6);
+              $c->box(0, 0, hsl(($n % 36) * 10, 0.6, 0.65))->grow(1)->margin(6)->radius(6);
               $c->text((string)$n, 12)->alignSelf(Node::CENTER)->margin(0, 0, 4);
           })->grow(1);
           $c->text(sprintf('%d chosen of 10,000, built only as they show. The arrows move in both directions; Shift and Cmd choose several, and dragging moves them.', $this->swatchesChosen->count()), 12, $t->textMuted);
@@ -1043,19 +1034,19 @@ final class Gallery
               if ($header) {
                   $label = $day < 0 ? (new DateTimeImmutable())->modify("$day days")->format('l, F j') : 'Today';
                   $c->row(0, 0, 0, $t->background)->justify(Node::CENTER)->paddingY(6);
-                    $c->row(0, 0, 0, $t->surface)->padding(3, 10)->round(999)->border($t->border);
+                    $c->row(0, 0, 0, $t->surface)->padding(3, 10)->radius(999)->border(1, $t->border);
                       $c->text($label, 12, style: Font::BOLD);
                     $c->end();
                   $c->end();
                   return;
               }
               $c->row(0, 0)->padding(3, 12);
-                $bubble = $c->row(0, 0, 0, $t->surface)->maxWidthPercent(0.72)->padding(7, 12)->round(14);
+                $bubble = $c->row(0, 0, 0, $t->surface)->maxWidthPercent(0.72)->padding(7, 12)->radius(14);
                 if ($m->mine) { $bubble->margin(0, 0, 0, Node::AUTO)->background($t->accent)->textColor($t->accentText); }
                   $c->text($m->text);
                 $c->end();
               $c->end();
-          })->size(0, 380)->justify(Node::END)->paddingY(4)->border($t->border)->round(8);
+          })->size(0, 380)->justify(Node::END)->paddingY(4)->border(1, $t->border)->radius(8);
           $c->row(0, 8);
             $input = $c->input($this->draft, 'Message', 0)->label('Message')->grow(1);
             $empty = trim($this->draft->text) === '';
@@ -1088,7 +1079,7 @@ final class Gallery
             $c->end();
         };
         $box = function (string $label) use ($c): Node {
-            $n = $c->row(0, 0)->size(0, 30)->round(6)->center();
+            $n = $c->row(0, 0)->size(0, 30)->radius(6)->center();
               $c->text($label, 12, 0x000000, Font::BOLD);
             $c->end();
             return $n;
@@ -1099,7 +1090,7 @@ final class Gallery
         $pair(fn(bool $wide) => $box('Gradient')->linearGradient(new LinearGradient($in($wide, $warm), 1, $in($wide, $vivid), 1, 90, oklab: true)));
         $pair(fn(bool $wide) => $box('Stripes')->background(0xffffff)->stripes($in($wide, $vivid), 4, 6, 45));
         $pair(function (bool $wide) use ($c, $in, $vivid): Node {
-            $n = $c->row(0, 0, 0, 0x141414)->size(0, 30)->round(6)->center();
+            $n = $c->row(0, 0, 0, 0x141414)->size(0, 30)->radius(6)->center();
               $c->text('Text', 14, $in($wide, $vivid), Font::BOLD);
             $c->end();
             return $n;
@@ -1115,7 +1106,7 @@ final class Gallery
           card($c, 'Grid');
             $c->grid([Track::fit(), Track::fr(1), Track::fr(1)], 6);
               $cell = function (string $s) use ($c, $t): Node {
-                  $n = $c->row(0, 0, 0, $t->surface)->padding(8, 10)->round(6);
+                  $n = $c->row(0, 0, 0, $t->surface)->padding(8, 10)->radius(6);
                     $c->text($s, 12);
                   $c->end();
                   return $n;
@@ -1134,14 +1125,14 @@ final class Gallery
             $c->row(0, 8, 0, $t->surface)->padding(8, 12)->borderWidth(0, 0, 0, 4)->borderColor($t->accent)->radius(0, 6, 6, 0);
               $c->text('A note with an accent on its left');
             $c->end();
-            $c->column(0, 0)->size(0, 56)->round(8)->border($t->border, 2)->borderStyle(BorderStyle::Dashed)->center();
+            $c->column(0, 0)->size(0, 56)->radius(8)->border(2, $t->border)->borderStyle(BorderStyle::Dashed)->center();
               $c->text('Dashed, as a place to drop files', color: $t->textMuted);
             $c->end();
           $c->end();
           card($c, 'Fills');
             $blue = 0x2563eb; $yellow = 0xfacc15;
             $bar = function (string $label) use ($c): Node {
-                $n = $c->row(0, 0)->size(0, 30)->paddingX(10)->round(6)->align(Node::CENTER);
+                $n = $c->row(0, 0)->size(0, 30)->paddingX(10)->radius(6)->alignItems(Node::CENTER);
                   $c->text($label, 12, 0xffffff, Font::BOLD);
                 $c->end();
                 return $n;
@@ -1149,7 +1140,7 @@ final class Gallery
             $bar('sRGB')->gradient($blue, $yellow, 90);
             $bar('Oklab')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, oklab: true));
             $bar('Stops at 40% and 60%')->linearGradient(new LinearGradient($blue, 1, $yellow, 1, 90, 0.4, 0.6));
-            $c->row(0, 0, 0, $t->surface)->size(0, 30)->round(6)->stripes($t->border, 4, 6, 45)->center();
+            $c->row(0, 0, 0, $t->surface)->size(0, 30)->radius(6)->stripes($t->border, 4, 6, 45)->center();
               $c->text('Stripes: unavailable', 12, $t->textMuted);
             $c->end();
           $c->end();
@@ -1164,19 +1155,19 @@ final class Gallery
             $c->text(str_repeat('A line cut with an ellipsis of its own. ', 3))->singleLine()->ellipsis(' →');
           $c->end();
           card($c, 'Motion');
-            $c->row(0, 14)->align(Node::CENTER);
+            $c->row(0, 14)->alignItems(Node::CENTER);
               $spin = $c->icon(glyph('loader'), 24, $t->accent);
               $spin->rotate($c->loop($spin, 'spin', 1, Easing::linear(...)) * 360);
-              $pulse = $c->box(0, 14, $t->border)->grow(1)->round(7);
+              $pulse = $c->box(0, 14, $t->border)->grow(1)->radius(7);
               $pulse->opacity(0.4 + 0.6 * $c->loop($pulse, 'pulse', 1.6, Easing::bounce(Easing::easeInOut(...))));
             $c->end();
             if ($c->clicked($c->button('Move along each easing'))) { $this->eased = !$this->eased; }
             foreach (['Linear' => Easing::linear(...), 'EaseIn' => Easing::easeIn(...), 'EaseOut' => Easing::easeOut(...), 'EaseInOut' => Easing::easeInOut(...)] as $name => $ease) {
-                $track = $c->key($name)->row(0, 0)->size(0, 18)->align(Node::CENTER);
+                $track = $c->key($name)->row(0, 0)->size(0, 18)->alignItems(Node::CENTER);
                 $at = $c->animateWith($track, 'x', $this->eased ? 1 : 0, 0.9, $ease);
                   $c->text($name, 12, $t->textMuted)->size(70, 0);
                   $c->column(0, 0, 1)->size(0, 18);
-                    $c->box(18, 18, $t->accent)->round(9)->absolute()->leftPercent($at * 0.9);
+                    $c->box(18, 18, $t->accent)->radius(9)->absolute()->leftPercent($at * 0.9);
                   $c->end();
                 $c->end();
             }
@@ -1184,29 +1175,29 @@ final class Gallery
           card($c, 'Layout');
             $c->row(0, 6)->reverse();
               foreach (['1', '2', '3'] as $s) {
-                  $c->row(0, 0, 0, $t->surface)->size(28, 28)->round(6)->center();
+                  $c->row(0, 0, 0, $t->surface)->size(28, 28)->radius(6)->center();
                     $c->text($s);
                   $c->end();
               }
               $c->text('reverse()', 12, $t->textMuted)->margin(0, Node::AUTO, 0, 0);
             $c->end();
-            $c->row(0, 6)->align(Node::CENTER);
+            $c->row(0, 6)->alignItems(Node::CENTER);
               $c->text('margin(…, Node::AUTO) pushes to the end', 12, $t->textMuted);
               $c->button('Save')->margin(0, 0, 0, Node::AUTO);
             $c->end();
-            $c->row(0, 6)->align(Node::CENTER);
+            $c->row(0, 6)->alignItems(Node::CENTER);
               $c->text('Inbox');
-              $c->row(0, 0, 0, $t->danger)->padding(1, 5)->round(8)->top(-6);
+              $c->row(0, 0, 0, $t->danger)->padding(1, 5)->radius(8)->top(-6);
                 $c->text('3', 10, 0xffffff, Font::BOLD);
               $c->end();
               $c->text('top(-6) moves a badge up', 12, $t->textMuted);
             $c->end();
           $c->end();
           card($c, 'Scrolling both ways');
-            $c->scrollBoth(0, 0)->size(0, 150)->round(6)->border($t->border);
+            $c->scrollBoth(0, 0)->size(0, 150)->radius(6)->border(1, $t->border);
               $c->grid(array_fill(0, 16, Track::fixed(56)), 4, pad: 6);
                 for ($i = 0; $i < 16 * 12; $i++) {
-                    $c->row(0, 0, 0, $t->accent)->size(0, 28)->round(4)->center()->alpha = 0.08 + 0.6 * ($i % 16) / 16 * intdiv($i, 16) / 12;
+                    $c->row(0, 0, 0, $t->accent)->size(0, 28)->radius(4)->center()->alpha = 0.08 + 0.6 * ($i % 16) / 16 * intdiv($i, 16) / 12;
                       $c->text(sprintf('%s%d', chr(ord('A') + $i % 16), intdiv($i, 16) + 1), 11);
                     $c->end();
                 }
@@ -1217,7 +1208,7 @@ final class Gallery
             $c->row(0, 6)->wrap(0);
               foreach (['ResizeColumn' => Cursor::ResizeColumn, 'ResizeRow' => Cursor::ResizeRow, 'ResizeE' => Cursor::ResizeE, 'Copy' => Cursor::Copy, 'Alias' => Cursor::Alias,
                   'ContextMenu' => Cursor::ContextMenu, 'VerticalText' => Cursor::VerticalText, 'None' => Cursor::None] as $name => $cursor) {
-                  $c->row(0, 0, 0, $t->surface)->padding(6, 10)->round(6)->cursor($cursor);
+                  $c->row(0, 0, 0, $t->surface)->padding(6, 10)->radius(6)->cursor($cursor);
                     $c->text($name, 12);
                   $c->end();
               }
@@ -1230,7 +1221,7 @@ final class Gallery
     {
         $t = $c->theme;
         $c->text('Node::draw paints with rectangles, shadows, paths and text. This drawing moves with the time of each frame, which paints it again without building the page.', color: $t->textMuted);
-        $c->box(0, 320, $t->surface)->round(10)->draw(painted($c, function (Painter $p, array $r) use ($t): void {
+        $c->box(0, 320, $t->surface)->radius(10)->draw(function (Painter $p, array $r) use ($t): void {
             $p->animationFrame();
             $phase = intdiv($p->now(), 1_000_000) % 4000 / 4000 * 2 * M_PI;
             // Bars.
@@ -1247,14 +1238,14 @@ final class Gallery
             $p->strokePath($wave, 3, $t->danger);
             $p->fillPath((new Path())->circle($r[0] + $r[2] - 70, $r[1] + 70, 36), $t->accent);
             $p->text($r[0] + 24, $r[1] + 20, "Animated at the display's rate", 14, $t->text);
-        }));
+        });
         card($c, 'Vector images');
           $c->text('SVGs stay sharp at any size: icons in the color of the text, pictures in their own colors.', color: $t->textMuted);
           $gold = 0xf5b400;
-          $c->row(0, 14)->align(Node::CENTER);
+          $c->row(0, 14)->alignItems(Node::CENTER);
             foreach ([16, 24, 40] as $size) { $c->icon(glyph('star'), $size, $gold); }
             // A button laid out as a row of its own children.
-            $done = $c->buttonBase()->padding($t->space(1.5), $t->space(3.5))->round($t->radius)->background($t->accent)->textColor($t->accentText);
+            $done = $c->buttonBase()->padding($t->space(1.5), $t->space(3.5))->radius($t->radius)->background($t->accent)->textColor($t->accentText);
             $done->gap = $t->space(1.5);
               $c->icon(glyph('check'));
               $c->text('Done')->singleLine();
@@ -1271,19 +1262,19 @@ final class Gallery
     {
         $t = $c->theme;
         $c->text("The glass plugin's Liquid Glass, a material, as macOS draws it: what is under it shows through, frosted and bent along its edges. Scroll under the toolbar, and drag the lens.", color: $t->textMuted);
-        $c->row(0, 16)->align(Node::CENTER)->wrap(0);
+        $c->row(0, 16)->alignItems(Node::CENTER)->wrap(0);
           $c->segmented(['Regular', 'Clear'], $this->glassStyle)->label('Glass');
           $c->segmented(['Glass bar', 'Soft edge', 'Hard edge', 'Progressive blur'], $this->glassEdge)->label('Under the toolbar');
         $c->end();
         $style = $this->glassStyle === 1 ? GlassStyle::Clear : GlassStyle::Regular;
         $tiles = [0xef4444, 0xf59e0b, 0x10b981, 0x06b6d4, 0x6366f1, 0xec4899];
-        $c->column(0, 0)->size(0, 420)->round(12)->clip()->border($t->border);
+        $c->column(0, 0)->size(0, 420)->radius(12)->clip()->border(1, $t->border);
           // What shows through: photos and text, which start below the toolbar, 64 points down, and scroll under it, with the scroll bar below what floats over the content.
           $bars = $this->glassEdge === 3 ? 88 : 64;
           $c->scroll(0, 12, 1)->fill()->padding(76, 16, 16)->scrollbarInsets($bars, 0, 0);
             for ($i = 0; $i < 12; $i++) {
                 $c->row(0, 14);
-                  $c->box(180, 96, 0)->round(12)->gradient($tiles[$i % 6], $tiles[($i + 2) % 6], 135);
+                  $c->box(180, 96, 0)->radius(12)->gradient($tiles[$i % 6], $tiles[($i + 2) % 6], 135);
                   $c->column(0, 4, 1);
                     $c->text(sprintf('Photo %d', $i + 1), style: Font::BOLD);
                     $c->text('Glass bends the light along its rim, and frosts what is under its middle.', color: $t->textMuted);
@@ -1301,22 +1292,22 @@ final class Gallery
               };
               $c->end();
           }
-          $bar = $c->row(0, 6)->absolute()->top(12)->left(12)->right(12)->padding(6, 8)->align(Node::CENTER)->round(26);
+          $bar = $c->row(0, 6)->absolute()->top(12)->left(12)->right(12)->padding(6, 8)->alignItems(Node::CENTER)->radius(26);
           $this->glassEdge === 0 ? $bar->material(new Glass($style)) : $bar->passThrough();
             foreach (['chevron', 'star', 'check'] as $ic) {
-                $b = $c->row(0, 0)->size(40, 40)->round(20)->center()->material(new Glass($style, interactive: true));
+                $b = $c->row(0, 0)->size(40, 40)->radius(20)->center()->material(new Glass($style, interactive: true));
                   $c->icon(glyph($ic), 18);
                 $c->end();
                 if ($c->clicked($b)) { $c->toast('Clicked'); }
             }
             $c->box(0, 0, 0)->grow(1)->alpha = 0.0;
-            $done = $c->row(0, 0)->padding(8, 16)->round(20)->material(new Glass($style, $t->accent, interactive: true));
+            $done = $c->row(0, 0)->padding(8, 16)->radius(20)->material(new Glass($style, $t->accent, interactive: true));
               $c->text('Done', color: $t->accentText, style: Font::BOLD);
             $c->end();
             if ($c->clicked($done)) { $c->toast('Done'); }
           $c->end();
           // A lens to drag over what is under it.
-          $lens = $c->column(0, 0)->absolute()->left($this->lens[0])->top($this->lens[1])->size(110, 110)->round(55)->material(new Glass($style, interactive: true));
+          $lens = $c->column(0, 0)->absolute()->left($this->lens[0])->top($this->lens[1])->size(110, 110)->radius(55)->material(new Glass($style, interactive: true));
           $c->end();
           if (($d = $c->dragged($lens)) !== null) {
               $this->lens = [max(0.0, $this->lens[0] + $d[0]), max(0.0, $this->lens[1] + $d[1])];
@@ -1335,9 +1326,9 @@ final class Gallery
           card($c, 'Transforms and interruptible springs');
             $c->text('Click repeatedly while moving. Edit the transformed field or open its anchored panel.', 12, $t->textMuted);
             if ($c->clicked($c->button('Retarget the spring'))) { $this->motionTarget = !$this->motionTarget; }
-            $stage = $c->key('transform-stage')->column(0, 0)->size(0, 220)->round(10)->border($t->border)->clip();
+            $stage = $c->key('transform-stage')->column(0, 0)->size(0, 220)->radius(10)->border(1, $t->border)->clip();
             $pose = $c->spring($stage, 'pose', $this->motionTarget ? 1 : 0, new SpringOptions(damping: 14));
-              $c->key('transformed-card')->column(12, 8, 0, $t->surface)->absolute()->left(35)->top(45)->size(185, 125)->round(10)->border($t->border)
+              $c->key('transformed-card')->column(12, 8, 0, $t->surface)->absolute()->left(35)->top(45)->size(185, 125)->radius(10)->border(1, $t->border)
                   ->scale(0.95 + 0.1 * $pose, 1)->rotate(-8 + 16 * $pose)->translate(65 * $pose, 0);
                 $c->text('Nested interactive content', 12, style: Font::BOLD);
                 $c->input($this->motionText, 'Type here', 155);
@@ -1350,12 +1341,12 @@ final class Gallery
           card($c, 'Keyframe sequences');
             $c->text('Replay during a sequence to interrupt it continuously. Motion follows the desktop preference.', 12, $t->textMuted);
             if ($c->clicked($c->button('Replay the sequence'))) { $this->motionRun++; }
-            $stage = $c->key('sequence-stage')->column(0, 0)->size(0, 220)->round(10)->border($t->border)->clip();
+            $stage = $c->key('sequence-stage')->column(0, 0)->size(0, 220)->radius(10)->border(1, $t->border)->clip();
             $progress = $c->keyframes($stage, 'pose', [
                 new Keyframe(0, 0), new Keyframe(0.25, 1, Easing::easeOut(...)),
                 new Keyframe(0.65, 0.4, Easing::easeInOut(...)), new Keyframe(1, 0, Easing::easeInOut(...)),
             ], new KeyframeOptions(run: $this->motionRun));
-              $c->row(0, 0, 0, $t->accent)->absolute()->left(40)->top(80)->size(160, 55)->center()->round(8)
+              $c->row(0, 0, 0, $t->accent)->absolute()->left(40)->top(80)->size(160, 55)->center()->radius(8)
                   ->scale(1 + 0.08 * $progress, 1 + 0.08 * $progress)->rotate(12 * $progress)->translate(80 * $progress, 0);
                 $c->text('Four timed keyframes', 12, $t->accentText, Font::BOLD);
               $c->end();
@@ -1368,8 +1359,8 @@ final class Gallery
             $c->text("Throw the card (draggable): a spring takes over at the pointer's velocity, to the side the throw carries it to.", 12, $t->textMuted);
             $c->segmented(['Smooth', 'Snappy', 'Bouncy'], $this->flingStyle);
             $travel = 200;
-            $c->key('fling-track')->column(0, 0)->size(0, 110)->round(10)->border($t->border)->clip();
-              $thrown = $c->key('fling-card')->row(0, 0, 0, $t->accent)->absolute()->left(16)->top(24)->size(90, 60)->center()->round(10);
+            $c->key('fling-track')->column(0, 0)->size(0, 110)->radius(10)->border(1, $t->border)->clip();
+              $thrown = $c->key('fling-card')->row(0, 0, 0, $t->accent)->absolute()->left(16)->top(24)->size(90, 60)->center()->radius(10);
               // Under the pointer, a little past either end, and to the side the throw carries it to once let go.
               $c->draggable($thrown, $this->fling, new DraggableOptions(Node::HORIZONTAL, [0, 0, $travel, 0], snap: Motion::nearest([0, 0], [$travel, 0]), animation: $flingStyles[$this->flingStyle]));
               $dragging = $c->dragging($thrown);
@@ -1380,11 +1371,11 @@ final class Gallery
           $c->end();
           card($c, 'Shared elements');
             $c->text('A tile opens into its detail view from where it was, and goes back to its place.', 12, $t->textMuted);
-            $c->key('tile-stage')->column(12, 0)->size(0, 190)->round(10)->border($t->border)->clip();
+            $c->key('tile-stage')->column(12, 0)->size(0, 190)->radius(10)->border(1, $t->border)->clip();
               if ($this->tileOpen === 0) {
                   $c->row(0, 12);
                     foreach (array_slice(MOTION_COLORS, 0, 3) as $i => $col) {
-                        $tile = $c->key("tile $i")->box(64, 64, $col)->round(12)->cursor(Cursor::Pointer);
+                        $tile = $c->key("tile $i")->box(64, 64, $col)->radius(12)->cursor(Cursor::Pointer);
                         $c->transition($tile, $tileMotion($i));
                         if ($c->clicked($tile)) { $this->tileOpen = $i + 1; }
                     }
@@ -1392,8 +1383,8 @@ final class Gallery
               } else {
                   $i = $this->tileOpen - 1;
                   $c->column(0, 10);
-                    $c->transition($c->key('hero')->box(240, 120, MOTION_COLORS[$i])->round(16), $tileMotion($i));
-                    $c->row(0, 10)->align(Node::CENTER);
+                    $c->transition($c->key('hero')->box(240, 120, MOTION_COLORS[$i])->radius(16), $tileMotion($i));
+                    $c->row(0, 10)->alignItems(Node::CENTER);
                       $c->text(sprintf('Tile %d', $i + 1), style: Font::BOLD)->grow(1);
                       if ($c->clicked($c->button('Back'))) { $this->tileOpen = 0; }
                     $c->end();
@@ -1409,12 +1400,12 @@ final class Gallery
             $stage = $c->key('flip-stage')->column(0, 0)->size(0, 150)->center();
             $turn = $c->animateTo($stage, 'turn', $this->cardFlipped ? 180 : 0, new Animation(spring: new SpringOptions(0.6, 0.15)));
               $c->key('flip-card')->column(0, 0)->size(200, 120);
-                $front = $c->key('front')->column(0, 4, 0, $t->surface)->absolute()->fill()->center()->round(14)->border($t->border)->shadow(0, 4, 16, 0, 0x000000, 0.12)
+                $front = $c->key('front')->column(0, 4, 0, $t->surface)->absolute()->fill()->center()->radius(14)->border(1, $t->border)->shadow(0, 4, 16, 0, 0x000000, 0.12)
                     ->rotateY($turn)->perspective(800)->backfaceHidden();
                   $c->text('Front', style: Font::BOLD);
                   $c->text('Click to turn over', 12, $t->textMuted);
                 $c->end();
-                $back = $c->key('back')->column(0, 0, 0, $t->accent)->absolute()->fill()->center()->round(14)->rotateY($turn + 180)->perspective(800)->backfaceHidden();
+                $back = $c->key('back')->column(0, 0, 0, $t->accent)->absolute()->fill()->center()->radius(14)->rotateY($turn + 180)->perspective(800)->backfaceHidden();
                   $c->text('Back', color: $t->accentText, style: Font::BOLD);
                 $c->end();
                 if ($c->clicked($front) || $c->clicked($back)) { $this->cardFlipped = !$this->cardFlipped; }
@@ -1423,22 +1414,22 @@ final class Gallery
           $c->end();
           card($c, 'Counters, check marks and lifts');
             $c->text('Digits roll as they change, a check mark draws itself in, and tiles lift in frames that only paint.', 12, $t->textMuted);
-            $c->row(0, 16)->align(Node::CENTER);
+            $c->row(0, 16)->alignItems(Node::CENTER);
               if ($c->clicked($c->button('−'))) { $this->counter--; $this->countDown = true; }
               $c->text((string)$this->counter, 32, style: Font::BOLD)->size(80, 0)->textAlign(Node::CENTER)->contentTransition(new ContentTransition(numeric: true, down: $this->countDown));
               if ($c->clicked($c->button('+'))) { $this->counter++; $this->countDown = false; }
-              $check = $c->key('check')->box(36, 36, 0)->round(8)->border($t->border, 2)->cursor(Cursor::Pointer);
+              $check = $c->key('check')->box(36, 36, 0)->radius(8)->border(2, $t->border)->cursor(Cursor::Pointer);
               $check->color = null;
               $drawn = $c->animateTo($check, 'drawn', $this->taskDone ? 1 : 0, Animation::smooth());
-              $check->draw(painted($c, function (Painter $p, array $r) use ($drawn, $t): void {
+              $check->draw(function (Painter $p, array $r) use ($drawn, $t): void {
                   $mark = (new Path())->moveTo($r[0] + 9, $r[1] + 19)->lineTo($r[0] + 15, $r[1] + 25)->lineTo($r[0] + 27, $r[1] + 11);
                   $p->strokePath($mark->trim(0, $drawn), 3, $t->accent);
-              }));
+              });
               if ($c->clicked($check)) { $this->taskDone = !$this->taskDone; }
             $c->end();
             $c->row(0, 10);
               foreach (array_slice(MOTION_COLORS, 0, 4) as $i => $col) {
-                  $tile = $c->key("lift $i")->box(56, 40, $col)->round(8);
+                  $tile = $c->key("lift $i")->box(56, 40, $col)->radius(8);
                   $tile->animatePose($c->hovered($tile) ? new Pose(y: -6, scale: 1.06) : new Pose(), Animation::snappy());
               }
             $c->end();
@@ -1464,13 +1455,13 @@ final class Gallery
               }
             $c->end();
             // Each row has the same transition, so that the rows move in step, and the column grows and shrinks with them; the lines between the rows come with the column.
-            $col = $c->column(0, 0)->round(8)->border($t->border)->clip()->dividers(1, $t->border);
+            $col = $c->column(0, 0)->radius(8)->border(1, $t->border)->clip()->dividers(1, $t->border);
             $c->transition($col, new ElementTransition(0.25, Easing::easeInOut(...), size: true));
               $removed = -1;
               foreach ($this->items as $it) {
-                  $row = $c->key("item {$it->id}")->row(0, 10, 0, $t->background)->padding(8, 10)->align(Node::CENTER);
+                  $row = $c->key("item {$it->id}")->row(0, 10, 0, $t->background)->padding(8, 10)->alignItems(Node::CENTER);
                   $c->transition($row, $itemMotion);
-                    $c->box(10, 10, MOTION_COLORS[$it->id % count(MOTION_COLORS)])->round(5);
+                    $c->box(10, 10, MOTION_COLORS[$it->id % count(MOTION_COLORS)])->radius(5);
                     $c->text($it->name)->grow(1);
                     if ($c->clicked($c->button('Remove'))) { $removed = $it->id; } // once the loop over the items is done
                   $c->end();
@@ -1481,12 +1472,12 @@ final class Gallery
           $c->end();
           card($c, 'A panel that opens');
             if ($c->clicked($c->button('Toggle the panel'))) { $this->panelOpen = !$this->panelOpen; }
-            $c->row(0, 0)->size(0, 120)->round(8)->border($t->border)->clip();
+            $c->row(0, 0)->size(0, 120)->radius(8)->border(1, $t->border)->clip();
               // The panel lays out its content at each width on the way; the content beside it moves with it.
               $panel = $c->column(10, 8, 0, $t->surface)->size($this->panelOpen ? 160 : 48, 0)->shrink(0)->clipX();
               $c->transition($panel, new ElementTransition(ease: Easing::easeInOut(...), size: true));
                 foreach (['Overview', 'Styling', 'Drawing'] as $p) {
-                    $c->row(0, 8)->align(Node::CENTER);
+                    $c->row(0, 8)->alignItems(Node::CENTER);
                       $c->icon(pageIcon($p), 18)->shrink(0);
                       $c->text($p)->singleLine();
                     $c->end();
@@ -1502,7 +1493,7 @@ final class Gallery
             $c->text('Their backgrounds and borders fade as the pointer comes and goes.', 12, $t->textMuted);
             $c->row(0, 10);
               foreach (array_slice(MOTION_COLORS, 0, 3) as $i => $col) {
-                  $tile = $c->key("fade $i")->box(64, 48, $col)->round(8)->border($t->border, 2);
+                  $tile = $c->key("fade $i")->box(64, 48, $col)->radius(8)->border(2, $t->border);
                   $tile->background($col, 0.15);
                   if ($c->hovered($tile)) { $tile->background($col)->borderColor(Theme::mix($col, 0x000000, 0.3)); }
                   $c->transition($tile, new ElementTransition(0.15, colors: true));
@@ -1515,12 +1506,12 @@ final class Gallery
               foreach (['Ada Lovelace', 'Alan Turing'] as $i => $name) {
                   $c->column(0, 0);
                     $c->avatar($name);
-                    $c->row(0, 0, 0, $t->danger)->padding(1, 5)->round(8)->attach(Anchor::TopRight, Anchor::Center);
+                    $c->row(0, 0, 0, $t->danger)->padding(1, 5)->radius(8)->attach(Anchor::TopRight, Anchor::Center);
                       $c->text((string)(3 + $i * 9), 10, 0xffffff, Font::BOLD);
                     $c->end();
                   $c->end();
               }
-              $c->column(0, 0, 0, $t->surface)->size(120, 64)->round(8);
+              $c->column(0, 0, 0, $t->surface)->size(120, 64)->radius(8);
                 $c->text('Bottom right', 11, $t->textMuted)->attach(Anchor::BottomRight, Anchor::BottomRight)->right(6)->bottom(4);
                 $c->text('Center', 11)->attach(Anchor::Center, Anchor::Center);
               $c->end();
@@ -1539,7 +1530,7 @@ final class Gallery
             if ($c->clicked($menu)) { $this->menu = !$this->menu; }
             $c->popover($menu, $this->menu, function () use ($c, $t): void {
                 foreach (['New file', 'Open…', 'Save as…'] as $item) {
-                    $entry = $c->key($item)->row(0, 0)->padding(6, 12)->round(5)->size(180, 0);
+                    $entry = $c->key($item)->row(0, 0)->padding(6, 12)->radius(5)->size(180, 0);
                     if ($c->hovered($entry)) { $entry->background($t->accent)->textColor($t->accentText); }
                     if ($c->clicked($entry)) { $this->menu = false; }
                       $c->text($item);
@@ -1576,7 +1567,7 @@ final class Gallery
     {
         $t = $c->theme;
         $c->text('UI\\Chart has scales, axes and marks without a look: the marks are nodes styled here, and lines, areas and slices paths these cards paint.', color: $t->textMuted);
-        $c->row(0, 16)->wrap(0)->align(Node::START);
+        $c->row(0, 16)->wrap(0)->alignItems(Node::START);
           foreach (['Sales' => $this->salesChart(...), 'Live data' => $this->liveChart(...), 'Visits by source' => $this->stackedChart(...), 'Weight and fuel use' => $this->scatterChart(...), 'Users by platform' => $this->donutChart(...)] as $title => $chart) {
               card($c, $title)->basis(320)->grow(1)->minWidth(0);
                 $chart($c);
@@ -1590,7 +1581,7 @@ final class Gallery
     {
         $t = $c->theme;
         $ch = $this->chart;
-        $c->row(0, 8)->align(Node::CENTER);
+        $c->row(0, 8)->alignItems(Node::CENTER);
           $c->text($ch->month >= 0 ? sprintf('%s: $%.1fk', CHART_MONTHS[$ch->month], $ch->sales[$ch->month]) : 'Click a bar to choose its month.', color: $t->textMuted)->grow(1);
           if ($c->clicked($c->button('Shuffle'))) {
               foreach ($ch->sales as $i => $_) { $ch->sales[$i] = 10 + 110 * mt_rand() / mt_getrandmax(); }
@@ -1605,7 +1596,7 @@ final class Gallery
         Chart::plot($c, new Axes(left: $ticks, bottom: $months, label: axisLabel($c)), function (Node $area) use ($c, $ch, $x, $y, $ticks, $t): void {
             gridLines($c, $area, [], $ticks, $t->border);
             foreach ($ch->sales as $i => $v) {
-                $bar = Chart::rect($c->key($i), $x->band($i), $y->span(0, $v))->round(3)->background($t->accent, $ch->month >= 0 && $i !== $ch->month ? 0.35 : 1.0)
+                $bar = Chart::rect($c->key($i), $x->band($i), $y->span(0, $v))->radius(3)->background($t->accent, $ch->month >= 0 && $i !== $ch->month ? 0.35 : 1.0)
                     ->tooltip(sprintf('%s: $%.1fk', CHART_MONTHS[$i], $v))->label(CHART_MONTHS[$i])->cursor(Cursor::Pointer);
                 $c->transition($bar, new ElementTransition(0.35)); // bars grow and shrink to new values
                 if ($c->clicked($bar)) { $ch->month = $ch->month === $i ? -1 : $i; }
@@ -1634,16 +1625,16 @@ final class Gallery
         $describe = fn(int $i) => sprintf('%s: %.0f%%', $at($i)->format('H:i:s'), 100 * $this->samples[$i]);
         $c->text($ch->selected >= 0 && $ch->selected < $n ? $describe($ch->selected) : 'Point at the line, or focus it and use the arrows.', color: $t->textMuted);
         Chart::plot($c, new Axes(left: $yt, bottom: $xt, label: axisLabel($c)), function (Node $area) use ($c, $ch, $xs, $ys, $yt, $describe, $n, $t): void {
-            $area->draw(painted($c, function (Painter $p, array $r) use ($xs, $ys, $yt, $t): void {
+            $area->draw(function (Painter $p, array $r) use ($xs, $ys, $yt, $t): void {
                 foreach ($yt as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
                 if (count($xs) < 2) { return; }
                 $p->fillPath(Chart::area($r, $xs, null, $ys, Curve::Monotone), $t->accent, 0.12);
                 $p->strokePath(Chart::line($r, $xs, $ys, Curve::Monotone), 2, $t->accent);
-            }));
+            });
             Chart::select($c, $area, $ch->selected, $xs, $describe);
             if (($i = $ch->selected) >= 0 && $i < $n) {
                 Chart::ruleX($c, $xs[$i], 1)->background($t->textMuted);
-                Chart::point($c, $xs[$i], $ys[$i], 10, 10)->round(5)->background($t->accent)->border($t->background, 2);
+                Chart::point($c, $xs[$i], $ys[$i], 10, 10)->radius(5)->background($t->accent)->border(2, $t->background);
             }
         })->label('Live samples')->size(0, 200)->gapX(8)->gapY(6);
     }
@@ -1663,7 +1654,7 @@ final class Gallery
         [$xt, $yt] = [$x->ticks(6), $y->ticks(4)];
         $xs = array_map(fn(int $i) => $x->at($i + 1), range(0, $weeks - 1));
         Chart::plot($c, new Axes(left: $yt, bottom: $xt, label: axisLabel($c)), function (Node $area) use ($c, $stack, $xs, $y, $yt, $t): void {
-            $area->draw(painted($c, function (Painter $p, array $r) use ($stack, $xs, $y, $yt, $t): void {
+            $area->draw(function (Painter $p, array $r) use ($stack, $xs, $y, $yt, $t): void {
                 foreach ($yt as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
                 foreach ($stack as $s => $series) {
                     $lo = array_map(fn($g) => $y->at($g->lo), $series);
@@ -1671,7 +1662,7 @@ final class Gallery
                     $p->fillPath(Chart::area($r, $xs, $lo, $hi, Curve::Monotone), CHART_COLORS[$s], 0.75);
                     $p->strokePath(Chart::line($r, $xs, $hi, Curve::Monotone), 1.5, CHART_COLORS[$s]);
                 }
-            }));
+            });
         })->label('Visits by source')->size(0, 180)->gapX(8)->gapY(6);
         legend($c, CHART_SOURCES);
     }
@@ -1693,7 +1684,7 @@ final class Gallery
             gridLines($c, $area, $xt, $yt, $t->border);
             foreach ($ch->scatter as $k => $class) {
                 foreach ($class as [$w, $u]) {
-                    Chart::point($c, $x->at($w), $y->at($u), 9, 9)->round(4.5)->background(CHART_COLORS[$k], 0.8)->border(CHART_COLORS[$k])
+                    Chart::point($c, $x->at($w), $y->at($u), 9, 9)->radius(4.5)->background(CHART_COLORS[$k], 0.8)->border(1, CHART_COLORS[$k])
                         ->tooltip(sprintf('%.0f kg, %.1f L/100 km', $w, $u));
                 }
             }
@@ -1706,23 +1697,23 @@ final class Gallery
         $t = $c->theme;
         $slices = Chart::pie(CHART_SHARES, 0.025);
         [$size, $inner, $outer] = [180.0, 56.0, 86.0];
-        $c->row(0, 28)->align(Node::CENTER);
-          $ring = $c->column(0, 0)->size($size, $size)->label('Users by platform')->align(Node::CENTER)->justify(Node::CENTER);
+        $c->row(0, 28)->alignItems(Node::CENTER);
+          $ring = $c->column(0, 0)->size($size, $size)->label('Users by platform')->alignItems(Node::CENTER)->justify(Node::CENTER);
             $hover = null;
             [$px, $py, $over] = $c->pointerPosition($ring);
             if ($over) { $hover = Chart::sliceAt($slices, $px - $size / 2, $py - $size / 2, $inner, $outer); }
-            $ring->draw(painted($c, function (Painter $p, array $r) use ($slices, $hover, $size, $inner, $outer): void {
+            $ring->draw(function (Painter $p, array $r) use ($slices, $hover, $size, $inner, $outer): void {
                 foreach ($slices as $i => $s) {
                     $p->fillPath(Chart::sector($r[0] + $size / 2, $r[1] + $size / 2, $inner, $i === $hover ? $outer : $outer - 4, $s), CHART_COLORS[$i]);
                 }
-            }));
+            });
             $c->text($hover === null ? '4.2M' : sprintf('%.0f%%', CHART_SHARES[$hover]), 24, style: Font::BOLD);
             $c->text($hover === null ? 'users' : CHART_PLATFORMS[$hover], 12, $t->textMuted);
           $c->end();
           $c->column(0, 8);
             foreach (CHART_PLATFORMS as $i => $name) {
-                $c->row(0, 8)->align(Node::CENTER);
-                  $c->box(10, 10, CHART_COLORS[$i])->round(3);
+                $c->row(0, 8)->alignItems(Node::CENTER);
+                  $c->box(10, 10, CHART_COLORS[$i])->radius(3);
                   $c->text($name, 13)->size(70, 0);
                   $c->text(sprintf('%.0f%%', CHART_SHARES[$i]), 13, $t->textMuted);
                 $c->end();
@@ -1736,14 +1727,14 @@ final class Gallery
         $m = $this->md;
         $t = $c->theme;
         $c->text('Markdown::view shows Markdown, and Markdown::stream a reply as it streams in, at an even pace, fading in.', color: $t->textMuted);
-        $c->row(0, 12)->align(Node::CENTER)->wrap(0);
+        $c->row(0, 12)->alignItems(Node::CENTER)->wrap(0);
           if ($c->clicked($c->primaryButton('Stream it'))) { $this->streamMarkdown(); }
           $c->segmented(REVEAL_NAMES, $m->unit);
           $c->checkbox('Wrap code', $m->wrap);
         $c->end();
         $m->opts->reveal = new Reveal(REVEAL_UNITS[$m->unit]);
         $m->opts->wrapCode = $m->wrap;
-        $c->column(0, 0, 0, $t->background)->padding(20, 24)->round($t->radius + 4)->border($t->border)->maxWidth(760);
+        $c->column(0, 0, 0, $t->background)->padding(20, 24)->radius($t->radius + 4)->border(1, $t->border)->maxWidth(760);
           $m->done ? Markdown::view($c, $m->text, $m->opts) : Markdown::stream($c, $m->text, $m->opts);
         $c->end();
     }
@@ -1790,7 +1781,7 @@ final class Gallery
             if ($c->clicked($b)) { $run(); }
         };
         $rule = fn() => $c->box(1, 20, $t->border);
-        $c->row(0, 4)->wrap(0)->align(Node::CENTER);
+        $c->row(0, 4)->wrap(0)->alignItems(Node::CENTER);
           $button('B', $f->bold === FormatState::FormatOn, $doc->toggleBold(...));
           $button('I', $f->italic === FormatState::FormatOn, $doc->toggleItalic(...));
           $button('U', $f->underline === FormatState::FormatOn, $doc->toggleUnderline(...));
@@ -1883,7 +1874,7 @@ final class Gallery
           }
         $c->end();
         card($c, 'Controls');
-          $c->row(0, 24)->align(Node::START)->wrap(0);
+          $c->row(0, 24)->alignItems(Node::START)->wrap(0);
             $c->calendar($this->meeting);
             $c->column(0, 12);
               $c->field('Day', fn() => $c->dateInput($this->meeting));

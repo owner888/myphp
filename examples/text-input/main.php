@@ -7,7 +7,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Clipboard, Menu, MenuItem, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, DisplayList, Font, InputEvent, Key, Node, Painter, Role, TextInputClient, TextInputRange, TextInputSelection, TextLayout, TextPainter, TextStyle, Theme};
+use MyPHP\UI\{Content, Context, Font, InputEvent, Key, Painter, Role, TextInputClient, TextInputRange, TextInputSelection, TextLayout, TextStyle};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -141,11 +141,11 @@ final class Field implements TextInputClient
         return false;
     }
 
-    public function draw(DisplayList $list, Node $n, Theme $t, TextPainter $text): void
+    public function draw(Painter $p, array $r): void
     {
         if ($this->layout === null) { return; }
-        $p = new Painter($list, $text, $t);
-        [$x, $y] = [$n->x + 12, $n->y + 12];
+        $t = $p->theme();
+        [$x, $y] = [$r[0] + 12, $r[1] + 12];
         foreach ($this->layout->selectionRects($this->selection->range) as $b) { $p->fill([$b[0] + $x, $b[1] + $y, $b[2], $b[3]], $t->selection); }
         $p->textLayout($this->layout, $x, $y, $t->text);
         $b = $this->layout->caret($this->selection->caret());
@@ -165,7 +165,7 @@ function view(Context $c, Field $f): void
     $c->column(24, 12, 1);
       $c->text('Application-owned text input', 22, style: Font::BOLD);
       $c->muted('Click, type, compose with your input method, select with Shift, and use the Edit menu.');
-      $c->box(0, 60, $t->surface)->fillWidth()->border($t->border)->round($t->radius)->label('Custom text field')->role(Role::TEXT_FIELD)->value($f->text)
+      $c->box(0, 60, $t->surface)->fillWidth()->border(1, $t->border)->radius($t->radius)->label('Custom text field')->role(Role::TEXT_FIELD)->value($f->text)
           ->focusable()->handleTextInput($f)->autoFocus()->handleInput($f->input(...))->draw($f->draw(...));
       $c->muted('Storage, navigation, clipboard policy and rendering belong to this example; the primitive supplies native text services.');
     $c->end();

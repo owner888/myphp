@@ -39,7 +39,7 @@ final class MoviePlayerKeyRecord
         $t = $c->theme;
         $k = MoviePlayerSettings::colors($t);
         // The box the key is pressed in: focused, it records any key (Escape and Return too).
-        $box = $c->column()->height(46)->fillWidth()->center()->round(8)->focusable()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'keymapping.message'))
+        $box = $c->column()->height(46)->fillWidth()->center()->radius(8)->focusable()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'keymapping.message'))
             ->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1);
         $box->borderColor($c->focused($box) ? $t->accent : $k['line']);
           $c->text($s->key, 24, $t->text)->textAlign(Node::CENTER)->singleLine();
@@ -54,12 +54,12 @@ final class MoviePlayerKeyRecord
             });
         }
         $c->text($c->texts()->get('keyRecordSelectAction'), 11, $t->text)->margin(8, 0, 0, 0);
-        $c->row(0, 4)->fillWidth()->align(Node::CENTER);
+        $c->row(0, 4)->fillWidth()->alignItems(Node::CENTER);
           $chosen = self::row($c, $s, self::tree(), 0, 'cmd');
         $c->end();
         if ($chosen !== null) { $s->action->text = self::command($chosen); }
         $c->text($c->texts()->get('keyRecordEnterCommand'), 11, $t->text)->margin(8, 0, 0, 0);
-        $c->row()->height(22)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+        $c->row()->height(22)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
           $f = $c->input($s->action, '', 0, 13)->height(22);
           $f->bordered = false;
         $c->end();
@@ -88,7 +88,7 @@ final class MoviePlayerKeyRecord
             if ($it['type'] === 'string' || $it['type'] === 'number') {
                 $field = $s->values[$depth] ??= new TextState();
                 $k = MoviePlayerSettings::colors($c->theme);
-                $c->row()->size(50, 20)->round(5)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+                $c->row()->size(50, 20)->radius(5)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
                   $n = $c->key("value:$depth")->input($field, '', 50, 11)->height(20);
                   $n->bordered = false;
                 $c->end();

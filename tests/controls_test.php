@@ -186,7 +186,7 @@ $drags = []; $count = 0; $n = [];
 $h = new Headless(function (Context $c) use (&$n, &$count) {
     $c->titleBar = ['height' => 28.0, 'left' => 78.0, 'right' => 0.0]; $bar = $c->titleBar();
     $c->column(0, 0, 1);
-      $n['bar'] = $c->row(0, 8, 0, 0x222222)->size(0, max($bar['height'], 32))->align(Node::CENTER)->dragWindow();
+      $n['bar'] = $c->row(0, 8, 0, 0x222222)->size(0, max($bar['height'], 32))->alignItems(Node::CENTER)->dragWindow();
         $c->column(0, 0)->size($bar['left'], 0); $c->end(); $c->text('Title'); $c->row(0, 0, 1); $c->end(); $n['btn'] = $c->button('Count'); if ($c->clicked($n['btn'])) { $count++; }
       $c->end();
       $c->column(10, 10, 1); $c->text('body'); $c->end();

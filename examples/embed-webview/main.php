@@ -54,12 +54,12 @@ function view(Context $c, Browser $a): void
     $shown = $a->tabs[0];
     foreach ($a->tabs as $tb) { if ($tb->id === $a->tab) { $shown = $tb; } }
     $page = $shown->view->page();
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $c->sidebar($a->tab, function () use ($c, $a) {
           foreach ($a->tabs as $tb) { $c->sidebarItem($tb->id, $tb->title); }
       }, 180);
-      $c->column(0, 0, 1)->min(0, 0);
-        $c->row(0, 8)->padding(8, 12)->align(Node::CENTER);
+      $c->column(0, 0, 1)->minWidth(0)->minHeight(0);
+        $c->row(0, 8)->padding(8, 12)->alignItems(Node::CENTER);
           if ($c->clicked($c->button('‹')->label('Back')->disabled(!$page->canGoBack()))) { $page->goBack(); }
           if ($c->clicked($c->button('›')->label('Forward')->disabled(!$page->canGoForward()))) { $page->goForward(); }
           if ($c->clicked($c->button('Reload'))) { $page->reload(); }
@@ -68,7 +68,7 @@ function view(Context $c, Browser $a): void
           // The popover shows over the page.
           $c->popover($menu, $a->menu, function () use ($c, $a, $t) {
               foreach (MENU as $item) {
-                  $entry = $c->key($item)->row(0, 0)->padding(6, 12)->round(5)->size(200, 0);
+                  $entry = $c->key($item)->row(0, 0)->padding(6, 12)->radius(5)->size(200, 0);
                   if ($c->hovered($entry)) { $entry->background($t->accent); }
                     $c->text($item, color: $c->hovered($entry) ? $t->accentText : $t->text);
                   $c->end();
@@ -91,8 +91,8 @@ function view(Context $c, Browser $a): void
         $c->end();
         // The page of the tab shown, rounded, with a badge over its corner; the others keep their pages.
         $c->column(0, 0, 1)->margin(0, 12, 12, 12);
-          $c->webView($shown->view)->grow(1)->round(12)->border($t->border);
-          $c->row(0, 0, 0, $t->accent)->absolute()->top(12)->right(16)->padding(4, 10)->round(12)->shadow(0, 2, 8, 0, 0x000000, 60 / 255);
+          $c->webView($shown->view)->grow(1)->radius(12)->border(1, $t->border);
+          $c->row(0, 0, 0, $t->accent)->absolute()->top(12)->right(16)->padding(4, 10)->radius(12)->shadow(0, 2, 8, 0, 0x000000, 60 / 255);
             $c->text("♥ {$a->likes}", 12, $t->accentText, Font::BOLD);
           $c->end();
         $c->end();

@@ -84,7 +84,7 @@ check($n->value === 'Courier' && $font === 'Courier', "after the focus left, it 
 // A click opening the options selects the choice, as the chevron does, so typing replaces it; a click while they show places the caret.
 $font = 'Arial'; $changes = 0;
 $h = new Headless(function (Context $c) use (&$font, &$changes, $fonts): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       if ($c->changed($c->combobox($font, $fonts, 200)->label('Font'))) { $changes++; }
     $c->end();
 }, 400, 400);
@@ -111,7 +111,7 @@ check(cbNode($h->rt->accessTree, Role::COMBO_BOX, 'Font')->value !== 'x', 'a sec
 // What assistive technology reads: the combobox open, its list, the option the arrows are on with the focus and its place.
 $font = 'Arial';
 $h = new Headless(function (Context $c) use (&$font, $fonts): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->combobox($font, $fonts, 200)->label('Font');
     $c->end();
 }, 400, 400);
@@ -133,7 +133,7 @@ check($f !== null && $f->role === Role::LIST_ITEM && $f->label === 'Helvetica' &
 $city = new TextState(''); $submitted = 0;
 $cities = ['Paris', 'Parma', 'Lyon', 'Comparis'];
 $h = new Headless(function (Context $c) use ($city, &$submitted, $cities): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->autocomplete($city, $cities, '', 200)->label('City');
       if ($city->submitted) { $submitted++; $city->submitted = false; }
     $c->end();
@@ -173,7 +173,7 @@ check((cbNode($h->rt->accessTree, Role::TEXT_FIELD, 'Search mail')->states & Acc
 // A token field: a comma and Enter add, Backspace takes the last out, a suggestion, Remove keeping the focus in the input.
 $tags = ['go']; $langs = ['typescript', 'python', 'rust'];
 $h = new Headless(function (Context $c) use (&$tags, $langs): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->tokenField($tags, $langs, 360)->label('Tags');
     $c->end();
 }, 500, 400);
@@ -194,7 +194,7 @@ check($h->focused()?->kind === Node::INPUT, 'the input keeps the focus');
 // A long popup scrolled by the wheel past the option the pointer highlighted; Down brings the next into view.
 $many = array_map(fn(int $i) => sprintf('Option %02d', $i), range(0, 59)); $choice = '';
 $h = new Headless(function (Context $c) use (&$choice, $many): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->combobox($choice, $many, 200)->label('Pick');
     $c->end();
 }, 400, 600);
@@ -213,7 +213,7 @@ check($r[1] >= $first[1] - $first[3] && $r[1] <= $first[1] + 200, 'Down highligh
 // A select whose popup scrolls: the option the keys highlight comes into view.
 $sizes = array_map(fn(int $i) => sprintf('Size %02d', $i), range(0, 39)); $size = $sizes[0]; $popupScroll = new \MyPHP\UI\ScrollState;
 $h = new Headless(function (Context $c) use (&$size, $sizes, $popupScroll): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $sel = $c->selectBase($size);
       $sel->trigger->label('Size'); $c->text($size); $c->end();
       $sel->popup(function (Node $panel) use ($c, $sel, $sizes, $popupScroll): void {

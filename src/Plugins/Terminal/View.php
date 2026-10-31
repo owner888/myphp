@@ -7,7 +7,7 @@ use MyPHP\L10n;
 use MyPHP\Plugins\Terminal\Vt\{Colors, Cursor, Gesture, KeyEncoder, MouseEncoder, Terminal as VtTerminal};
 use MyPHP\Text\System;
 use MyPHP\Transfer\Format;
-use MyPHP\UI\{Context, DisplayList, Menu, MenuItem, Node, Role, Runtime, TextInputClient, TextInputRange, TextInputSelection, TextPainter, TextState, Theme as UITheme};
+use MyPHP\UI\{Context, Menu, MenuItem, Node, Painter, Role, Runtime, TextInputClient, TextInputRange, TextInputSelection, TextState};
 
 /**
  * What a frame of the terminal needs from frame to frame (mygo's view):
@@ -158,7 +158,7 @@ final class View implements TextInputClient
         }
         $e->handleInput($v->input(...));
         $e->handleTextInput($v);
-        $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
+        $e->draw(function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r); });
         $e->contextMenu($v->menu(...));
         return $e;
     }

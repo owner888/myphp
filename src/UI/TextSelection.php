@@ -14,6 +14,8 @@ final class TextSelection
 {
     /** @var array{0: int, 1: int} */
     public array $anchor = [0, 0], $caret = [0, 0];
+    /** The caret's affinity, at the caret it was set with: which side of a boundary between directions it shows on, as the visual moves left it (\MyPHP\Text\Layout's DOWNSTREAM or UPSTREAM). @var ?array{0: array{0: int, 1: int}, 1: int} */
+    public ?array $affinity = null;
     /** @var array{0: array{0: int, 1: int}, 1: array{0: int, 1: int}} */
     public array $start = [[0, 0], [0, 0]];
     public int $unit = 0;

@@ -60,7 +60,7 @@ final class MoviePlayerSettings
         $t = $c->theme;
         $vibrant = $c->vibrancy();
         if ($vibrant) { $c->root->color = null; } // the sidebar's material shows through
-        $root = $c->row(0, 0, 1)->align(Node::STRETCH);
+        $root = $c->row(0, 0, 1)->alignItems(Node::STRETCH);
         $v = self::local($c, $root);
         $pages = (new MoviePlayerSettingsPages($c, $s, $v))->all();
         self::openFor($v, $pages);
@@ -120,8 +120,8 @@ final class MoviePlayerSettings
         $t = $c->theme;
         $k = self::colors($t);
         $c->box(0, self::BAR, 0)->fillWidth()->shrink(0)->dragWindow()->color = null;
-        $c->row()->height(30)->margin(0, 8)->round(15)->background($k['field'], $k['fieldAlpha'])->shrink(0); // IINA's large search field: a capsule
-          $field = $c->input($v->search, $c->texts()->get('search'), 0, 13)->height(30)->round(15)->inset(28, 10);
+        $c->row()->height(30)->margin(0, 8)->radius(15)->background($k['field'], $k['fieldAlpha'])->shrink(0); // IINA's large search field: a capsule
+          $field = $c->input($v->search, $c->texts()->get('search'), 0, 13)->height(30)->radius(15)->inset(28, 10);
           $field->bordered = false;
           $c->column()->absolute()->left(10)->top(7)->size(16, 16)->center()->passThrough();
             self::sf($c, 'magnifyingglass', 13, $t->textMuted);
@@ -132,7 +132,7 @@ final class MoviePlayerSettings
         $list = $c->scroll(0, 0, 1)->padding(8, 10, 8, 10);
           foreach ($pages as $id => $page) {
               $chosen = $id === $v->page;
-              $row = $c->key("page:$id")->row(0, 6)->height(self::PAGE_ROW)->paddingX(8)->round(8)->align(Node::CENTER)->role(Role::TREE_ITEM)->checked($chosen)->label($page['title']);
+              $row = $c->key("page:$id")->row(0, 6)->height(self::PAGE_ROW)->paddingX(8)->radius(8)->alignItems(Node::CENTER)->role(Role::TREE_ITEM)->checked($chosen)->label($page['title']);
               $key = $chosen && ($c->runtime?->windowFocus ?? true); // AppKit's: the page chosen in the accent while the window has the focus, gray else
               if ($chosen) { $key ? $row->background($t->accent) : $row->background($k['chosen'], $k['chosenAlpha']); }
               $fg = $key ? $t->accentText : $t->text;
@@ -157,14 +157,14 @@ final class MoviePlayerSettings
         $at = max(0, (int)array_search($v->section, $names, true));
         $box = $c->column()->height(12 + self::SECTION_ROW * count($names))->fillWidth()->justify(Node::CENTER);
           $top = $c->animate($box, 'dot', 8 + self::SECTION_ROW * $at, 0.1);
-          $c->column()->absolute()->left(10)->top(10)->size(16, self::SECTION_ROW * count($names) - 8)->passThrough()->draw(static function (DisplayList $l, Node $n) use ($t, $top): void { // IINA's: the line as high as the names, the dot 8 down on it at the first
-              $l->rect($n->x + 7.5, $n->y, 1, $n->h, $t->dark ? 0xffffff : 0x000000, 0.4);
-              $l->rect($n->x + 4, $n->y + $top - 4, 8, 8, 0x808080, 1.0, 4);
+          $c->column()->absolute()->left(10)->top(10)->size(16, self::SECTION_ROW * count($names) - 8)->passThrough()->draw(static function (Painter $p, array $r) use ($t, $top): void { // IINA's: the line as high as the names, the dot 8 down on it at the first
+              $p->fill([$r[0] + 7.5, $r[1], 1, $r[3]], $t->dark ? 0xffffff : 0x000000, 0, 0.4);
+              $p->fill([$r[0] + 4, $r[1] + $top - 4, 8, 8], 0x808080, 4);
           });
           $c->end();
           $c->column()->paddingStart(36)->height(self::SECTION_ROW * count($names));
             foreach ($names as $name) {
-                $b = $c->row()->height(self::SECTION_ROW)->align(Node::CENTER)->role(Role::BUTTON)->label($name);
+                $b = $c->row()->height(self::SECTION_ROW)->alignItems(Node::CENTER)->role(Role::BUTTON)->label($name);
                   $c->text($name, 11, $t->textMuted)->singleLine(); // as IINA shows them: the dot alone marks the one in view
                 $c->end();
                 if ($c->clicked($b)) { $v->jump = $name; }
@@ -180,7 +180,7 @@ final class MoviePlayerSettings
         $found = self::search($pages, $v->search->text);
         $open = $v->open;
         $panel = $c->popover($field, $open, function () use ($c, $t, $v, $pages, $found): void {
-            $c->scroll()->width(340)->min(0, 120)->maxHeight(400)->padding(0, 0, 8, 0);
+            $c->scroll()->width(340)->minWidth(0)->minHeight(120)->maxHeight(400)->padding(0, 0, 8, 0);
               if ($found === []) {
                   $c->column()->height(120)->center();
                     $c->text($c->texts()->get('settingsNoResult'), 13, $t->textMuted);
@@ -190,7 +190,7 @@ final class MoviePlayerSettings
               foreach ($found as $f) {
                   if ($f['page'] !== $shown) {
                       $shown = $f['page'];
-                      $c->row(0, 8)->height(38)->align(Node::END)->padding(0, 8, 8, 8);
+                      $c->row(0, 8)->height(38)->alignItems(Node::END)->padding(0, 8, 8, 8);
                         self::sf($c, $pages[$shown]['symbol'], 14, $t->textMuted, 0.4);
                         $c->text($pages[$shown]['title'], 13, $t->textMuted, Font::BOLD);
                       $c->end();
@@ -198,12 +198,12 @@ final class MoviePlayerSettings
                   $hover = false;
                   $row = $c->key("found:{$f['id']}")->column(0, 4)->height($f['parent'] !== '' ? 46 : 25)->justify(Node::CENTER)->paddingX(8)->role(Role::BUTTON)->label($f['label']);
                   if ($hover = $c->hovered($row)) { $row->background($t->accent); }
-                    $c->row(0, 4)->align(Node::CENTER);
-                      $c->text($f['section'] !== '' ? $f['section'] : $pages[$f['page']]['title'], 11, $t->dark ? 0x1e1e1e : 0xffffff)->singleLine()->paddingX(2)->round(3)->background($t->textMuted);
+                    $c->row(0, 4)->alignItems(Node::CENTER);
+                      $c->text($f['section'] !== '' ? $f['section'] : $pages[$f['page']]['title'], 11, $t->dark ? 0x1e1e1e : 0xffffff)->singleLine()->paddingX(2)->radius(3)->background($t->textMuted);
                       $c->text($f['parent'] !== '' ? $f['parent'] : $f['label'], $f['parent'] !== '' ? 11 : 13, $hover ? $t->accentText : ($f['parent'] !== '' ? $t->textMuted : $t->text))->singleLine()->ellipsis('…');
                     $c->end();
                     if ($f['parent'] !== '') {
-                        $c->row(0, 4)->align(Node::CENTER)->paddingStart(4);
+                        $c->row(0, 4)->alignItems(Node::CENTER)->paddingStart(4);
                           self::sf($c, 'arrow.turn.down.right', 9, $hover ? $t->accentText : $t->text);
                           $c->text($f['label'], 13, $hover ? $t->accentText : $t->text)->singleLine()->ellipsis('…');
                         $c->end();
@@ -213,7 +213,7 @@ final class MoviePlayerSettings
               }
             $c->end();
         });
-        $panel?->systemMaterial('popover')->round(10)->padding(0);
+        $panel?->systemMaterial('popover')->radius(10)->padding(0);
         if (!$open) { $v->open = false; }
     }
 
@@ -222,7 +222,7 @@ final class MoviePlayerSettings
     {
         $t = $c->theme;
         $k = self::colors($t);
-        $box = $c->column(0, 0, 1)->min(0, 0)->background($k['page']);
+        $box = $c->column(0, 0, 1)->minWidth(0)->minHeight(0)->background($k['page']);
           $sc = $v->scroll[$page['id']] ??= new ScrollState();
           $c->key('page:' . $page['id'])->column(0, 16, 1)->scroll($sc)->padding(self::BAR, 4, 8, 4);
             $titles = [];
@@ -236,7 +236,7 @@ final class MoviePlayerSettings
             }
             if ($titles === []) { $titles[$page['title']] = [$box, $box]; }
           $c->end();
-          $bar = $c->row()->absolute()->left(0)->right(0)->top(0)->height(self::BAR)->align(Node::CENTER)->paddingX(20)->dragWindow();
+          $bar = $c->row()->absolute()->left(0)->right(0)->top(0)->height(self::BAR)->alignItems(Node::CENTER)->paddingX(20)->dragWindow();
           if ($sc->y > 0) { $bar->material(new ScrollEdge(hard: true, background: $k['page'])); } // IINA's: the title bar shows once the page is under it, frosting it (macOS 26's hard scroll edge: our own content, which a system material would hide)
             $c->text($page['title'], 15, $t->text, Font::BOLD)->singleLine()->grow(1);
             if ($page['help'] !== '') { self::infoButton($c, $page['help']); }
@@ -249,7 +249,7 @@ final class MoviePlayerSettings
     private static function infoButton(Context $c, string $help): void
     {
         $t = $c->theme;
-        $b = $c->key('info')->column()->size(36, 36)->round(18)->center()->role(Role::BUTTON)->label($c->texts()->get('settingsMoreInfo'))->systemMaterial('glass');
+        $b = $c->key('info')->column()->size(36, 36)->radius(18)->center()->role(Role::BUTTON)->label($c->texts()->get('settingsMoreInfo'))->systemMaterial('glass');
           self::sf($c, 'info.circle', 16, $t->text);
         $c->end();
         $open = $c->runtime?->local($b->id, fn() => (object)['open' => false]) ?? (object)['open' => false];
@@ -259,7 +259,7 @@ final class MoviePlayerSettings
               $c->text($help, 13, $t->text);
             $c->end();
         });
-        $panel?->systemMaterial('popover')->round(10)->padding(0);
+        $panel?->systemMaterial('popover')->radius(10)->padding(0);
     }
 
     /**
@@ -302,7 +302,7 @@ final class MoviePlayerSettings
     private static function card(Context $c, object $v, array $list): void
     {
         $k = self::colors($c->theme);
-        $c->column()->margin(0, 8)->round(12)->borderWidth(1)->borderColor($k['line'])->background($k['card'], $k['cardAlpha'])->clip();
+        $c->column()->margin(0, 8)->radius(12)->borderWidth(1)->borderColor($k['line'])->background($k['card'], $k['cardAlpha'])->clip();
           $last = count($list) - 1;
           foreach ($list as $i => $item) {
               if ($i > 0) { $c->box(0, 1, $k['line'])->fillWidth()->margin(0, 0, 0, self::LABEL); }
@@ -330,7 +330,7 @@ final class MoviePlayerSettings
         $expand = $item['expand'];
         $open = $expand ? ($v->expanded[$item['id']] ?? false) : ($item['shows'] === null || ($item['shows'])());
         $box = $c->key('item:' . $item['id'])->column()->fillWidth();
-          $head = $c->row()->align(Node::START)->paddingStart(6)->paddingEnd(8)->fillWidth();
+          $head = $c->row()->alignItems(Node::START)->paddingStart(6)->paddingEnd(8)->fillWidth();
           if (!$enabled) { $head->disabled(); }
           if ($expand) {
               $head->role(Role::DISCLOSURE)->label($item['label'])->checked($open);
@@ -342,14 +342,14 @@ final class MoviePlayerSettings
               if ($item['symbol'] !== null) { self::glyph($c, $item['symbol'], $t->text); }
             $c->end();
             $c->column(0, 6)->grow(1)->paddingY($pad)->justify(Node::CENTER);
-              $c->row(0, 6)->align(Node::CENTER);
+              $c->row(0, 6)->alignItems(Node::CENTER);
                 $c->text($item['label'], $small ? 12 : 13, $t->text);
                 if ($item['help'] !== '') { self::helpButton($c, $item['help']); }
               $c->end();
               if ($item['desc'] !== '') { $c->text($item['desc'], 11, $t->textMuted); }
             $c->end();
             if ($item['value'] !== null) {
-                $c->row(0, 6)->height($pad * 2 + 16)->align(Node::CENTER);
+                $c->row(0, 6)->height($pad * 2 + 16)->alignItems(Node::CENTER);
                   ($item['value'])($enabled);
                 $c->end();
             }
@@ -389,9 +389,9 @@ final class MoviePlayerSettings
         if ($age < 0.05) { $box->scrollIntoView(); }
         $alpha = $age < 0.8 ? 1.0 : (1.0 - $age) / 0.2;
         $c->within($box, function () use ($c, $t, $alpha): void {
-            $c->column()->absolute()->left(-4)->right(-4)->top(-4)->bottom(-4)->passThrough()->draw(static function (DisplayList $l, Node $n) use ($t, $alpha): void {
-                $l->ring($n->x, $n->y, $n->w, $n->h, 0xffffff, $alpha, 8, 4);
-                $l->ring($n->x + 0.5, $n->y + 0.5, $n->w - 1, $n->h - 1, $t->accent, $alpha, 8, 3);
+            $c->column()->absolute()->left(-4)->right(-4)->top(-4)->bottom(-4)->passThrough()->draw(static function (Painter $p, array $r) use ($t, $alpha): void {
+                $p->stroke($r, 0xffffff, 8, 4, $alpha);
+                $p->stroke([$r[0] + 0.5, $r[1] + 0.5, $r[2] - 1, $r[3] - 1], $t->accent, 8, 3, $alpha);
             });
             $c->end();
         });
@@ -429,9 +429,9 @@ final class MoviePlayerSettings
           foreach ($options as $value => [$title, $desc]) {
               $on = $value === $chosen;
               $line = $on ? $t->accent : self::colors($t)['line'];
-              $b = $c->key("option:$value")->column(0, 2)->padding(6, 12)->round(6)->fillWidth()->role(Role::RADIO)->checked($on)->label($title)->background($on ? $t->accent : 0x808080, 0.1)
-                  ->draw(static function (DisplayList $l, Node $n) use ($line, $on): void { // the border over the face, 2 wide on the one chosen, the content staying where it is (NSBox's)
-                      $l->ring($n->x, $n->y, $n->w, $n->h, $line, 1.0, 6, $on ? 2 : 1);
+              $b = $c->key("option:$value")->column(0, 2)->padding(6, 12)->radius(6)->fillWidth()->role(Role::RADIO)->checked($on)->label($title)->background($on ? $t->accent : 0x808080, 0.1)
+                  ->draw(static function (Painter $p, array $r) use ($line, $on): void { // the border over the face, 2 wide on the one chosen, the content staying where it is (NSBox's)
+                      $p->stroke($r, $line, 6, $on ? 2 : 1);
                   });
                 $c->text($title, 13, $t->text);
                 if ($desc !== '') { $c->text($desc, 11, $t->textMuted); }
@@ -454,7 +454,7 @@ final class MoviePlayerSettings
         $clicked = null;
         $c->column(0, 6)->padding(0, 8, 12, self::INDENT - 8)->fillWidth()->role(Role::RADIO_GROUP);
           foreach ($options as $value => $title) {
-              $b = $c->key("radio:$value")->row(0, 6)->height(18)->align(Node::CENTER)->role(Role::RADIO)->checked($value === $chosen)->label($title);
+              $b = $c->key("radio:$value")->row(0, 6)->height(18)->alignItems(Node::CENTER)->role(Role::RADIO)->checked($value === $chosen)->label($title);
                 self::radio($c, $value === $chosen);
                 $c->text($title, 13, $t->text);
               $c->end();
@@ -468,11 +468,12 @@ final class MoviePlayerSettings
     private static function radio(Context $c, bool $on): void
     {
         $key = $c->runtime?->windowFocus ?? true;
-        $c->column()->size(14, 14)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on, $key): void {
+        $c->column()->size(14, 14)->draw(static function (Painter $p, array $r) use ($on, $key): void {
+            $t = $p->theme();
             $accent = $on && $key;
-            $l->rect($n->x, $n->y, 14, 14, $accent ? $t->accent : ($t->dark ? 0xffffff : 0x000000), $accent ? 1.0 : ($t->dark ? 0.12 : 0.06), 7);
-            if (!$accent && !$t->dark) { $l->ring($n->x, $n->y, 14, 14, 0x000000, 0.2, 7, 0.5); }
-            if ($on) { $l->rect($n->x + 4.5, $n->y + 4.5, 5, 5, $accent ? 0xffffff : ($t->dark ? 0xdfdfdf : 0x000000), $accent ? 1.0 : 0.85, 2.5); }
+            $p->fill([$r[0], $r[1], 14, 14], $accent ? $t->accent : ($t->dark ? 0xffffff : 0x000000), 7, $accent ? 1.0 : ($t->dark ? 0.12 : 0.06));
+            if (!$accent && !$t->dark) { $p->stroke([$r[0], $r[1], 14, 14], 0x000000, 7, 0.5, 0.2); }
+            if ($on) { $p->fill([$r[0] + 4.5, $r[1] + 4.5, 5, 5], $accent ? 0xffffff : ($t->dark ? 0xdfdfdf : 0x000000), 2.5, $accent ? 1.0 : 0.85); }
         });
         $c->end();
     }
@@ -489,10 +490,10 @@ final class MoviePlayerSettings
         $c->row(0, 8)->paddingStart(self::INDENT)->paddingEnd(8)->paddingY(4)->fillWidth()->justify(Node::CENTER);
           foreach ([0, 1, 2] as $at) {
               $title = self::tr($c, "oscPosition.items.$at");
-              $box = $c->key("osc:$at")->column(0, 8)->align(Node::CENTER)->padding(0, 0, 8, 0)->role(Role::RADIO)->checked($at === $chosen)->label($title);
-                $c->column()->size(105.6, 59.4)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($at): void { self::oscFigure($l, $n->x, $n->y, $n->w, $n->h, $at, $t); });
+              $box = $c->key("osc:$at")->column(0, 8)->alignItems(Node::CENTER)->padding(0, 0, 8, 0)->role(Role::RADIO)->checked($at === $chosen)->label($title);
+                $c->column()->size(105.6, 59.4)->draw(static fn(Painter $p, array $r) => self::oscFigure($p, $r, $at));
                 $c->end();
-                $c->row(0, 6)->align(Node::CENTER);
+                $c->row(0, 6)->alignItems(Node::CENTER);
                   self::radio($c, $at === $chosen);
                   $c->text($title, 13, $t->text);
                 $c->end();
@@ -504,28 +505,29 @@ final class MoviePlayerSettings
     }
 
     /** A small window of a landscape (a sky, a sun, two hills) with the control bar where $at puts it (0 floating, 1 at the top, 2 at the foot): myphp's own drawing of what IINA's figures show. */
-    private static function oscFigure(DisplayList $l, float $x, float $y, float $w, float $h, int $at, Theme $t): void
+    private static function oscFigure(Painter $p, array $r, int $at): void
     {
-        $l->rect($x, $y, $w, $h, 0x8bc9f8, 1.0, 6); // the sky
-        $l->rect($x + $w - 22, $y + 10, 14, 14, 0xdad97f, 1.0, 7); // the sun
+        [$x, $y, $w, $h] = $r;
+        $p->fill($r, 0x8bc9f8, 6); // the sky
+        $p->fill([$x + $w - 22, $y + 10, 14, 14], 0xdad97f, 7); // the sun
         foreach ([[0.4, 0.42, 0.45], [0.75, 0.5, 0.38]] as [$px, $py, $half]) { // two hills: their peaks, how far they spread, in slices
             for ($i = 0; $i < 24; $i++) {
                 $k = ($i + 0.5) / 12 - 1; // -1 to 1 across the hill
                 $top = $y + $h * ($py + (1 - $py) * abs($k) * 0.8);
                 $x0 = max($x + 1, $x + $w * ($px + $k * $half) - $w * $half / 24); $x1 = min($x + $w - 1, $x + $w * ($px + $k * $half) + $w * $half / 24 + 0.5);
-                if ($x1 > $x0) { $l->rect($x0, $top, $x1 - $x0, $y + $h - 1 - $top, 0x4a8f5c, 1.0); }
+                if ($x1 > $x0) { $p->fill([$x0, $top, $x1 - $x0, $y + $h - 1 - $top], 0x4a8f5c); }
             }
         }
-        $l->rect($x, $y, $w, 9, 0x506372, 1.0, 6); // the title bar, its lights
-        $l->rect($x, $y + 5, $w, 4, 0x506372, 1.0);
-        foreach ([0xfe5f57, 0xfebc2e, 0x28c840] as $i => $rgb) { $l->rect($x + 5 + $i * 7, $y + 2.5, 4.5, 4.5, $rgb, 1.0, 2.25); }
+        $p->fill([$x, $y, $w, 9], 0x506372, 6); // the title bar, its lights
+        $p->fill([$x, $y + 5, $w, 4], 0x506372);
+        foreach ([0xfe5f57, 0xfebc2e, 0x28c840] as $i => $rgb) { $p->fill([$x + 5 + $i * 7, $y + 2.5, 4.5, 4.5], $rgb, 2.25); }
         [$bx, $by, $bw, $bh] = match ($at) { 0 => [$x + $w * 0.25, $y + $h - 17, $w * 0.5, 12], 1 => [$x, $y + 9, $w, 11], default => [$x, $y + $h - 11, $w, 11] };
-        $l->rect($bx, $by, $bw, $bh, 0x2b3a30, 0.82, $at === 0 ? 2 : 0); // the bar, its buttons and its time
+        $p->fill([$bx, $by, $bw, $bh], 0x2b3a30, $at === 0 ? 2 : 0, 0.82); // the bar, its buttons and its time
         $cy = $by + $bh / 2;
-        $l->rect($bx + ($at === 0 ? $bw / 2 - 9 : 5), $cy - 1.5, 18, 3, 0xffffff, 0.85, 1.5);
-        if ($at !== 0) { $l->rect($bx + 27, $cy - 0.5, $bw - 40, 1, 0xffffff, 0.75); $l->rect($bx + $bw - 11, $cy - 1.5, 6, 3, 0xffffff, 0.85, 1.5); }
-        else { $l->rect($bx + 6, $by + $bh - 3, $bw - 12, 1, 0xffffff, 0.75); }
-        $l->ring($x, $y, $w, $h, $t->dark ? 0xffffff : 0x000000, 0.15, 6, 2); // NSColor.separatorColor, 2 wide
+        $p->fill([$bx + ($at === 0 ? $bw / 2 - 9 : 5), $cy - 1.5, 18, 3], 0xffffff, 1.5, 0.85);
+        if ($at !== 0) { $p->fill([$bx + 27, $cy - 0.5, $bw - 40, 1], 0xffffff, 0, 0.75); $p->fill([$bx + $bw - 11, $cy - 1.5, 6, 3], 0xffffff, 1.5, 0.85); }
+        else { $p->fill([$bx + 6, $by + $bh - 3, $bw - 12, 1], 0xffffff, 0, 0.75); }
+        $p->stroke($r, $p->theme()->dark ? 0xffffff : 0x000000, 6, 2, 0.15); // NSColor.separatorColor, 2 wide
     }
 
     /**
@@ -537,8 +539,8 @@ final class MoviePlayerSettings
     public static function toolbar(Context $c, object $v, array $buttons): ?array
     {
         $t = $c->theme;
-        $c->row(0, 8)->padding(0, 8, 8, self::INDENT)->fillWidth()->justify(Node::CENTER)->align(Node::CENTER);
-          $c->row(0, 0)->size(130, 26)->round(13)->justify(Node::END)->align(Node::CENTER)->paddingEnd(4)->background($t->dark ? 0xffffff : 0x000000, 0.05);
+        $c->row(0, 8)->padding(0, 8, 8, self::INDENT)->fillWidth()->justify(Node::CENTER)->alignItems(Node::CENTER);
+          $c->row(0, 0)->size(130, 26)->radius(13)->justify(Node::END)->alignItems(Node::CENTER)->paddingEnd(4)->background($t->dark ? 0xffffff : 0x000000, 0.05);
             foreach ($buttons as $b) {
                 $c->column()->size(24, 24)->center();
                   self::glyph($c, self::TOOLBAR[$b][0] ?? ['questionmark'], $t->text);
@@ -560,10 +562,11 @@ final class MoviePlayerSettings
     public static function toggle(Context $c, string $label, bool $on): bool
     {
         $t = $c->theme;
-        $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($on): void {
-            $l->rect($n->x, $n->y, $n->w, $n->h, $on ? $t->accent : ($t->dark ? 0xffffff : 0x000000), $on ? 1.0 : ($t->dark ? 0.2 : 0.09), 9);
-            if (!$t->dark) { $l->shadow($on ? $n->x + $n->w - 24 : $n->x + 2, $n->y + 2, 22, 14, 0x000000, 0.25, 7, 2, 0, 0.5); }
-            $l->rect($on ? $n->x + $n->w - 24 : $n->x + 2, $n->y + 2, 22, 14, 0xffffff, 1.0, 7);
+        $sw = $c->row()->size(38, 18)->role(Role::SWITCH)->label($label)->checked($on)->draw(static function (Painter $p, array $r) use ($on): void {
+            $t = $p->theme();
+            $p->fill($r, $on ? $t->accent : ($t->dark ? 0xffffff : 0x000000), 9, $on ? 1.0 : ($t->dark ? 0.2 : 0.09));
+            if (!$t->dark) { $p->displayList()->shadow($on ? $r[0] + $r[2] - 24 : $r[0] + 2, $r[1] + 2, 22, 14, 0x000000, 0.25, 7, 2, 0, 0.5); }
+            $p->fill([$on ? $r[0] + $r[2] - 24 : $r[0] + 2, $r[1] + 2, 22, 14], 0xffffff, 7);
         });
         $c->end();
         return $c->clicked($sw);
@@ -583,12 +586,12 @@ final class MoviePlayerSettings
         $k = self::colors($t);
         $size = $small ? 12 : 13;
         $title = $options[$chosen] ?? '';
-        $b = $c->row(0, 8)->height($small ? 22 : 24)->paddingStart($small ? 10 : 12)->paddingEnd($small ? 8 : 10)->round($small ? 7 : 8)->align(Node::CENTER)->role(Role::POP_UP_BUTTON)->label($title)
+        $b = $c->row(0, 8)->height($small ? 22 : 24)->paddingStart($small ? 10 : 12)->paddingEnd($small ? 8 : 10)->radius($small ? 7 : 8)->alignItems(Node::CENTER)->role(Role::POP_UP_BUTTON)->label($title)
             ->background($k['control'], $k['controlAlpha']);
         if (!$t->dark) { $b->shadow(0, 0.5, 1.5, 0, 0x000000, 0.25); }
         if ($fill) { $b->fillWidth(); }
           $label = $c->text($title, $size, $t->text)->singleLine();
-          if ($fill) { $label->grow(1); } else { $label->min(max(array_map(fn(?string $o) => $o === null ? 0.0 : $c->metrics()->measure($o, $size)[0], $options)), 0); }
+          if ($fill) { $label->grow(1); } else { $label->minWidth(max(array_map(fn(?string $o) => $o === null ? 0.0 : $c->metrics()->measure($o, $size)[0], $options)))->minHeight(0); }
           self::sf($c, 'chevron.up.chevron.down', $small ? 9 : 10, $t->text, 0.4);
         $c->end();
         $b->menu(function (Menu $m) use ($options, $chosen, &$picked): void {
@@ -605,7 +608,7 @@ final class MoviePlayerSettings
     {
         $t = $c->theme;
         $k = self::colors($t);
-        $b = $c->row()->height($small ? 22 : 24)->paddingX($small ? 10 : 12)->round($small ? 7 : 8)->align(Node::CENTER)->role(Role::BUTTON)->label($label)->background($k['control'], $k['controlAlpha']);
+        $b = $c->row()->height($small ? 22 : 24)->paddingX($small ? 10 : 12)->radius($small ? 7 : 8)->alignItems(Node::CENTER)->role(Role::BUTTON)->label($label)->background($k['control'], $k['controlAlpha']);
         if (!$t->dark) { $b->shadow(0, 0.5, 1.5, 0, 0x000000, 0.25); }
           $c->text($label, $small ? 12 : 13, $t->text);
         $c->end();
@@ -616,7 +619,7 @@ final class MoviePlayerSettings
     public static function symbolButton(Context $c, string $name, string $label, bool $on = false, float $width = 32): bool
     {
         $t = $c->theme;
-        $b = $c->row()->size($width, 25)->round(6)->center()->role(Role::BUTTON)->label($label)->borderWidth(1)->borderColor($t->dark ? 0x4a4a4a : 0xd0d0d0);
+        $b = $c->row()->size($width, 25)->radius(6)->center()->role(Role::BUTTON)->label($label)->borderWidth(1)->borderColor($t->dark ? 0x4a4a4a : 0xd0d0d0);
           self::sf($c, $name, 13, $on ? $t->accent : $t->text);
         $c->end();
         return $c->clicked($b);
@@ -635,9 +638,9 @@ final class MoviePlayerSettings
         $shown = $floats ? rtrim(rtrim(sprintf('%.2f', $value), '0'), '.') : (string)(int)round($value);
         $state = $v->fields[$id] ??= new TextState($shown);
         $new = null;
-        $c->row(0, 2)->align(Node::CENTER);
-          $c->row()->size(64, $small ? 22 : 26)->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
-            $f = $c->key("field:$id")->input($state, '', 64, $small ? 12 : 13)->height($small ? 22 : 26)->round(6);
+        $c->row(0, 2)->alignItems(Node::CENTER);
+          $c->row()->size(64, $small ? 22 : 26)->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+            $f = $c->key("field:$id")->input($state, '', 64, $small ? 12 : 13)->height($small ? 22 : 26)->radius(6);
             $f->bordered = false;
           $c->end();
           if (!$c->focused($f) && $state->text !== $shown && !$c->changed($f)) { $state->text = $shown; } // the value, while it is not being typed
@@ -671,8 +674,8 @@ final class MoviePlayerSettings
     {
         $k = self::colors($c->theme);
         $state = $v->fields[$id] ??= new TextState($value);
-        $c->row()->height($small ? 22 : 26)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
-          $f = $c->key("field:$id")->input($state, $placeholder, 0, $small ? 12 : 13)->height($small ? 22 : 26)->round(6);
+        $c->row()->height($small ? 22 : 26)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+          $f = $c->key("field:$id")->input($state, $placeholder, 0, $small ? 12 : 13)->height($small ? 22 : 26)->radius(6);
           $f->bordered = false;
         $c->end();
         if (!$c->focused($f) && $state->text !== $value && !$c->changed($f)) { $state->text = $value; }
@@ -683,7 +686,7 @@ final class MoviePlayerSettings
     private static function helpButton(Context $c, string $url): void
     {
         $t = $c->theme;
-        $b = $c->row()->size(16, 16)->round(8)->center()->role(Role::BUTTON)->label($c->texts()->get('help'))->background($t->dark ? 0xffffff : 0x000000, $t->dark ? 0.15 : 0.08);
+        $b = $c->row()->size(16, 16)->radius(8)->center()->role(Role::BUTTON)->label($c->texts()->get('help'))->background($t->dark ? 0xffffff : 0x000000, $t->dark ? 0.15 : 0.08);
           $c->text('?', 10, $t->text, Font::BOLD);
         $c->end();
         if ($c->clicked($b)) { $c->openURL($url); }
@@ -723,7 +726,7 @@ final class MoviePlayerSettings
             $c->column()->size(20, 18)->center();
               self::sf($c, $base, 13, $rgb);
               $k = self::colors($c->theme);
-              $c->column()->absolute()->right(-1)->bottom(-1)->size(11, 11)->round(5.5)->center()->background($c->theme->dark ? $k['card'] : 0xfafafa);
+              $c->column()->absolute()->right(-1)->bottom(-1)->size(11, 11)->radius(5.5)->center()->background($c->theme->dark ? $k['card'] : 0xfafafa);
                 self::sf($c, $badge, 8, $rgb, 0.4);
               $c->end();
             $c->end();

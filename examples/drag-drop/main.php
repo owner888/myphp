@@ -82,7 +82,7 @@ function view(Context $c, Pane $p): void
       $c->text($p->name, 24, style: Font::BOLD);
       $c->text('Drag a card to the other window, a text editor, or Finder/Explorer. Drop files, text, and URLs here.', color: $t->textMuted);
       foreach ($p->notes as $n) {
-          $card = $c->key($n->id)->column(14, 0, 0, $t->surface)->round(8)->border($t->border);
+          $card = $c->key($n->id)->column(14, 0, 0, $t->surface)->radius(8)->border(1, $t->border);
             $c->text($n->title);
           $c->end();
           $frozen = clone $n; // the note as it is when the drag starts
@@ -97,20 +97,20 @@ function view(Context $c, Pane $p): void
           }));
           if ($c->dragging($card)) { $card->opacity(0.5); }
       }
-      $url = $c->column(12, 0, 0)->border($t->border)->round(8);
+      $url = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
         $c->text('Drag the MyGo website URL');
       $c->end();
       $c->dragData($url, Data::url('https://mygo.egoist.dev'), new DragOptions(done: $p->completed(...)));
-      $file = $c->column(12, 0, 0)->border($t->border)->round(8);
+      $file = $c->column(12, 0, 0)->border(1, $t->border)->radius(8);
         $c->text('Drag a sample .txt file');
       $c->end();
       $c->dragData($file, Data::files($p->file), new DragOptions(done: $p->completed(...)));
-      $zone = $c->column(16, 0, 1)->minHeight(100)->round(8)->border($t->border, 2);
+      $zone = $c->column(16, 0, 1)->minHeight(100)->radius(8)->border(2, $t->border);
         $c->text('Drop here', style: Font::BOLD);
       $c->end();
       $opts = new DropOptions([NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST], Operation::COPY | Operation::MOVE);
       if ($c->dataDragOver($zone, $opts)) {
-          $zone->border($t->accent, 2)->background($t->surface);
+          $zone->border(2, $t->accent)->background($t->surface);
       }
       if ($c->dropData($zone, $opts, $drop)) {
           $p->receive($drop);

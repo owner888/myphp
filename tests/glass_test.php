@@ -9,7 +9,7 @@ declare(strict_types=1);
 namespace MyPHP\Tests;
 
 use MyPHP\Plugins\Glass\{Blur, Glass, ScrollEdge, Style};
-use MyPHP\UI\{Context, DisplayList, LinearGradient, Node, Painter, TextPainter, Theme};
+use MyPHP\UI\{Context, DisplayList, LinearGradient, Painter, Theme};
 
 /** The quads of a list: [x, y, w, h, r, g, b, a, radius, kind, u, v] each. @return list<list<float>> */
 function glassQuads(DisplayList $list): array
@@ -88,7 +88,7 @@ $first = $q[0]; // from nothing to 2 pixels: the bottom eighth fades it in
 check(abs(glassWeight($first, 50, 80)) < 1e-5 && abs(glassWeight($first, 50, 70) - 1) < 1e-5, 'the first level fades in over the bottom eighth');
 // An even blur: one level, everywhere, at the box's radius.
 $h = new Headless(function (Context $c): void {
-    $c->column()->at(10, 10)->size(60, 30)->round(8)->material(new Blur(6));
+    $c->column()->at(10, 10)->size(60, 30)->radius(8)->material(new Blur(6));
     $c->end();
 }, 100, 100);
 $h->frame();
@@ -99,7 +99,7 @@ same(6.0, $h->paint()->glass[0][1], 'blurred by its radius in pixels');
 // Glass: one quad of the glass's kind, blurred by its size, regular or clear, tinted.
 $glass = new Glass;
 $h = new Headless(function (Context $c) use (&$glass): void {
-    $c->row(8, 16)->at(20, 20)->size(200, 44)->round(22)->material($glass);
+    $c->row(8, 16)->at(20, 20)->size(200, 44)->radius(22)->material($glass);
       $c->text('On glass');
     $c->end();
 }, 300, 100);
@@ -116,7 +116,7 @@ same(1.0, $h->paint()->glass[0][1], 'clear glass blurs by a pixel');
 
 // Interactive glass grows while pressed, and back once let go.
 $h = new Headless(function (Context $c): void {
-    $c->column()->at(50, 50)->size(200, 100)->round(20)->material(new Glass(interactive: true));
+    $c->column()->at(50, 50)->size(200, 100)->radius(20)->material(new Glass(interactive: true));
     $c->end();
 }, 300, 200);
 $h->rt->reduceMotion = true; // at once
@@ -132,8 +132,8 @@ same(50.0, glassKind($h, 5)[0][0], 'let go, it shrinks back');
 
 // Glass in a drawing.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 1)->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text): void {
-        Glass::paint(new Painter($list, $text, $t), [20.0, 20.0, 100.0, 60.0], 20, new Glass);
+    $c->column(0, 0, 1)->draw(function (Painter $p, array $r): void {
+        Glass::paint($p, [20.0, 20.0, 100.0, 60.0], 20, new Glass);
     });
     $c->end();
 }, 200, 120);
@@ -218,9 +218,9 @@ check(abs($g[0]) < 1e-5 && abs($g[1] - 10) < 1e-5 && abs($g[2] - 10) < 1e-5 && a
 
     // The pane's material goes to the shader in the slot after it.
     $h = new Headless(function (Context $c): void {
-        $c->column()->at(0, 0)->size(400, 300)->round(20)->material(new Glass(clarity: 0.5));
+        $c->column()->at(0, 0)->size(400, 300)->radius(20)->material(new Glass(clarity: 0.5));
         $c->end();
-        $c->column()->at(0, 310)->size(100, 40)->round(20)->material(new Glass);
+        $c->column()->at(0, 310)->size(100, 40)->radius(20)->material(new Glass);
         $c->end();
     }, 420, 360);
     $h->frame();

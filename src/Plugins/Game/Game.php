@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Game;
 
-use MyPHP\UI\{Context, DisplayList, InputEvent, Node, Painter, TextPainter, Theme};
+use MyPHP\UI\{Context, InputEvent, Node, Painter};
 
 /**
  * What games need beyond what apps do, opt-in, out of MyPHP's core UI
@@ -75,9 +75,7 @@ abstract class Game
             $l->in->releaseAll();
         }
         return $e->handleInput(fn(InputEvent $ev): bool => $l->input($ev))
-            ->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($l, $rt): void {
-                $l->draw(new Painter($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h]);
-            });
+            ->draw($l->draw(...));
     }
 
     /**

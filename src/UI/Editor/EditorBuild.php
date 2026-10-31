@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\Editor;
 
 use MyPHP\{Menu, MenuItem, Window};
-use MyPHP\UI\{AccessNode, Context, DisplayList, InputEvent, Node, Role, TextPainter, Theme as UITheme};
+use MyPHP\UI\{AccessNode, Context, InputEvent, Node, Painter, Role, TextPainter, Theme as UITheme};
 
 /** Building an editor's element and its parts for a frame (mygo's build.go, and parts.go's placing of its parts). */
 trait EditorBuild
@@ -53,7 +53,7 @@ trait EditorBuild
             ->access($this->accessibility(...));
         $e->handleInput(fn(InputEvent $ev) => $this->input($ev));
         $e->cursor($this->region === self::REGION_TEXT ? \MyPHP\UI\Cursor::Text : \MyPHP\UI\Cursor::Default);
-        $e->draw(function (DisplayList $list, Node $n, UITheme $t, TextPainter $text) { $this->paint($list, $text, [$n->x, $n->y, $n->w, $n->h]); });
+        $e->draw(function (Painter $p, array $r) { $this->paint($p->displayList(), $p->textPainter(), $r); });
         if ($c->rightClicked($e) && ($w = Window::focused()) !== null) { (new Menu($this->menu()))->popup($w); }
         $last = $rt?->rectOf($e->id);
         if ($last !== null) { $this->r = $last; }

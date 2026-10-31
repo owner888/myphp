@@ -128,7 +128,7 @@ same(['Super+c', 'Ctrl+Shift+z', 'Alt+F4', 'Delete', 'Ctrl+,', ''], [
 // A menu button: its menu opens as it goes down, below it; Enter, Space and Down open it; a disabled one does not.
 $sort = 'Name'; $disabled = false; $n = [];
 $h = new Headless(function (Context $c) use (&$sort, &$disabled, &$n) {
-    $c->column(20, 10)->align(Node::START);
+    $c->column(20, 10)->alignItems(Node::START);
       $n['sort'] = $c->menuButton('Sort by', function (Menu $m) use (&$sort) {
           foreach (['Name', 'Date', 'Size'] as $by) {
               if ($m->item($by)->checked($sort === $by)->chosen()) { $sort = $by; }
@@ -163,7 +163,7 @@ same(null, $h->menuLabels(), 'a disabled menu button opens none');
 // A menu button inside what keeps the focus (Node::keepFocus), as a player's sidebar: its menu opens, the focus stays where it was, so Space is not the button's.
 $n = []; $spaces = 0;
 $h = new Headless(function (Context $c) use (&$n, &$spaces) {
-    $c->column(20, 10)->align(Node::START);
+    $c->column(20, 10)->alignItems(Node::START);
       $n['other'] = $c->button('Other');
       $c->column()->keepFocus();
         $n['eq'] = $c->menuButton('Preset', function (Menu $m) { $m->item('Rock')->chosen(); });

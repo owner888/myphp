@@ -31,10 +31,10 @@ final class MoviePlayerWelcome
     {
         $t = $c->theme;
         if ($c->vibrancy()) { $c->root->color = null; }
-        $root = $c->column(0, 0, 1)->dragWindow()->draw(static function (DisplayList $l, Node $n, Theme $t): void { // IINA's gradient over the material
-            [$a, $b] = $t->dark ? [0.4, 0.1] : [0.1, 0.0];
+        $root = $c->column(0, 0, 1)->dragWindow()->draw(static function (Painter $p, array $r): void { // IINA's gradient over the material
+            [$a, $b] = $p->theme()->dark ? [0.4, 0.1] : [0.1, 0.0];
             $steps = 24;
-            for ($i = 0; $i < $steps; $i++) { $l->rect($n->x, $n->y + $n->h * $i / $steps, $n->w, $n->h / $steps + 1, 0x000000, $a + ($b - $a) * $i / $steps); }
+            for ($i = 0; $i < $steps; $i++) { $p->fill([$r[0], $r[1] + $r[3] * $i / $steps, $r[2], $r[3] / $steps + 1], 0x000000, 0, $a + ($b - $a) * $i / $steps); }
         });
         $v = $c->runtime?->local($root->id, fn() => (object)['chosen' => -1]) ?? (object)['chosen' => -1];
         $set = PlayerSettings::default();
@@ -44,7 +44,7 @@ final class MoviePlayerWelcome
             if ($first !== null && (preg_match('~^https?://~i', $first['path']) === 1 || is_file($first['path']))) { $last = [$first['path'], PlaybackPositions::default()->get($first['path']) ?? 0.0]; }
         }
         $recent = array_values(array_filter(App::recentDocuments(), fn(string $p) => $p !== ($last[0] ?? null)));
-          $c->row(0, 12)->absolute()->top(48)->left(24)->align(Node::CENTER); // the header
+          $c->row(0, 12)->absolute()->top(48)->left(24)->alignItems(Node::CENTER); // the header
             $icon = self::icon($c);
             if ($icon !== null) { $c->image($icon, 68, 68); }
             $c->column(0, 4);
@@ -62,7 +62,7 @@ final class MoviePlayerWelcome
           $header = 48 + 68; // the header's bottom
           if ($last !== null) {
               $k = self::colors($t);
-              $b = $c->key('last')->row(0, 6)->absolute()->top($header + 16)->left(30)->right(30)->height(32)->paddingX(10)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label(basename($last[0]));
+              $b = $c->key('last')->row(0, 6)->absolute()->top($header + 16)->left(30)->right(30)->height(32)->paddingX(10)->radius(8)->alignItems(Node::CENTER)->role(Role::BUTTON)->label(basename($last[0]));
               [$rgb, $alpha] = match (true) { // IINA's InitialWindowViewActionButton: highlighted while no recent one is chosen
                   $c->hovered($b) && ($c->runtime?->input->mouseDown ?? false) => $k['pressed'],
                   $c->hovered($b) => $k['hover'],
@@ -79,7 +79,7 @@ final class MoviePlayerWelcome
           }
           $list = $c->scroll()->absolute()->top($header + ($last !== null ? 60 : 42))->left(24)->right(24)->bottom(24); // IINA's: 42 under the header, 18 more under the film to resume
             foreach ($recent as $i => $path) {
-                $row = $c->key("recent:$path")->row(0, 6)->height(28)->paddingX(8)->round(4)->align(Node::CENTER)->role(Role::BUTTON)->label(basename($path));
+                $row = $c->key("recent:$path")->row(0, 6)->height(28)->paddingX(8)->radius(4)->alignItems(Node::CENTER)->role(Role::BUTTON)->label(basename($path));
                 if ($i === $v->chosen) { $row->background($t->dark ? 0xffffff : 0x262626, 0.1); }
                   $fi = self::fileIcon($c, $path);
                   if ($fi !== null) { $c->image($fi, 16, 16); } else { $c->box(16, 16, 0)->color = null; }

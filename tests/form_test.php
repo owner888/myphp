@@ -20,7 +20,7 @@ function formNode(Headless $h, int $role, string $label): ?AccessNode
 $name = new TextState(''); $email = new TextState(''); $font = 'Arial'; $size = 'Small'; $notify = false; $express = false;
 $emailError = 'Enter an email address.';
 $h = new Headless(function (Context $c) use ($name, $email, &$font, &$size, &$notify, &$express, $emailError): void {
-    $c->column(0, 12)->align(Node::START);
+    $c->column(0, 12)->alignItems(Node::START);
       $c->field('Name', fn() => $c->input($name), 'As on your passport.');
       $c->field('Email', fn() => $c->input($email), 'For receipts.', $emailError);
       $c->field('Notifications', function () use ($c, &$notify): void { $c->checkbox('Send emails', $notify); }); // by reference: an arrow function would copy it

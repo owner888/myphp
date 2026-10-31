@@ -57,6 +57,12 @@ final class Painter
         $this->rt?->after($seconds);
     }
 
+    /** Calls $fn, a draw callback of $n's, with a painter into $list and the node's box (mygo's Draw: func(p *Painter, r Rect)). */
+    private static function draws(Node $n, \Closure $fn, DisplayList $list, Theme $t, TextPainter $text, ?Runtime $rt): void
+    {
+        $fn(new self($list, $text, $t, $rt), [$n->x, $n->y, $n->w, $n->h]);
+    }
+
     /**
      * Calls $n's draw callback (drawOver's when $over), noting what it
      * painted when it asks to be painted again (mygo's Painter.draw,
@@ -66,7 +72,7 @@ final class Painter
      */
     private static function callDraw(Node $n, bool $over, DisplayList $list, Theme $t, TextPainter $text, ?Runtime $rt): void
     {
-        $call = static fn() => $over ? ($n->drawOver)($list, $n, $t) : ($n->draw)($list, $n, $t, $text);
+        $call = static fn() => self::draws($n, $over ? $n->drawOver : $n->draw, $list, $t, $text, $rt);
         if ($rt === null || $rt->inPart || $list !== $rt->partsList) {
             $call();
             return;
@@ -120,7 +126,7 @@ final class Painter
                 $list->setState($p['state']);
                 $from = $list->n;
                 $n = $p['node'];
-                $p['over'] ? ($n->drawOver)($list, $n, $p['theme']) : ($n->draw)($list, $n, $p['theme'], $text);
+                self::draws($n, $p['over'] ? $n->drawOver : $n->draw, $list, $p['theme'], $text, $rt);
                 $fresh[$i] = $list->copyOut($from, $list->n);
             }
         } finally {
@@ -227,6 +233,18 @@ final class Painter
     public function world(): Affine
     {
         return $this->list->world();
+    }
+
+    /** @internal what the framework's own draw callbacks paint into below the painter's calls: the display list, and the text painter that places glyphs and icons in the atlas. */
+    public function displayList(): DisplayList
+    {
+        return $this->list;
+    }
+
+    /** @internal see displayList() */
+    public function textPainter(): TextPainter
+    {
+        return $this->text;
     }
 
     public function theme(): Theme
@@ -1581,10 +1599,10 @@ final class Painter
         };
         if ($r->oldDraw !== null) {
             $list->setOpacity($saved * (1 - $k));
-            $scaled(1 - 0.5 * $k, fn() => ($r->oldDraw)($list, $n, $t, $text)); // the old draw closure, in the node's box
+            $scaled(1 - 0.5 * $k, fn() => self::draws($n, $r->oldDraw, $list, $t, $text, $rt)); // the old draw closure, in the node's box
         }
         $list->setOpacity($saved * $k);
-        $scaled(0.5 + 0.5 * $k, fn() => ($n->draw)($list, $n, $t, $text));
+        $scaled(0.5 + 0.5 * $k, fn() => self::draws($n, $n->draw, $list, $t, $text, $rt));
         $list->setOpacity($saved);
         return true;
     }

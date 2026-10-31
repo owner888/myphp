@@ -18,7 +18,7 @@ use MyPHP\UI\{Context, Key, Node, Path, Track};
  *     $y = (new Linear(0, 120))->nice(4);
  *     Chart::plot($c, new Axes(left: $y->ticks(4), bottom: $x->ticks()), function (Node $area) use ($c, $x, $y, $sales, $t) {
  *         foreach ($sales as $i => $v) {
- *             Chart::rect($c, $x->band($i), $y->span(0, $v))->background($t->accent)->round(4);
+ *             Chart::rect($c, $x->band($i), $y->span(0, $v))->background($t->accent)->radius(4);
  *         }
  *     })->size(0, 200);
  *
@@ -97,10 +97,10 @@ final class Chart
               $p = max($prev, min(1.0, $p));
               $c->column()->basis(0)->grow($p - $prev); $c->end();
               $slot = match ($side) {
-                  Side::Left => $c->row()->size(0, self::NONE)->align(Node::CENTER)->justify(Node::END),
-                  Side::Right => $c->row()->size(0, self::NONE)->align(Node::CENTER),
-                  Side::Top => $c->column()->size(self::NONE, 0)->align(Node::CENTER)->justify(Node::END),
-                  Side::Bottom => $c->column()->size(self::NONE, 0)->align(Node::CENTER),
+                  Side::Left => $c->row()->size(0, self::NONE)->alignItems(Node::CENTER)->justify(Node::END),
+                  Side::Right => $c->row()->size(0, self::NONE)->alignItems(Node::CENTER),
+                  Side::Top => $c->column()->size(self::NONE, 0)->alignItems(Node::CENTER)->justify(Node::END),
+                  Side::Bottom => $c->column()->size(self::NONE, 0)->alignItems(Node::CENTER),
               };
                 $label($side, $t);
               $c->end();
@@ -117,7 +117,7 @@ final class Chart
      * area, which you style as any other, and name for assistive
      * technology. Build it in the function of plot().
      *
-     *     Chart::rect($c, $x->band($i), $y->span(0, $v))->background($t->accent)->round(4)->tooltip($label);
+     *     Chart::rect($c, $x->band($i), $y->span(0, $v))->background($t->accent)->radius(4)->tooltip($label);
      */
     public static function rect(Context $c, Span $x, Span $y): Node
     {
@@ -162,8 +162,8 @@ final class Chart
      */
     public static function anchor(Context $c, float $x, float $y, int $h, int $v, Closure $build): Node
     {
-        $n = $c->row()->absolute()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size(self::NONE, self::NONE)->align($v);
-          $c->column()->size(self::NONE, 0)->align($h);
+        $n = $c->row()->absolute()->leftPercent(100 * $x)->topPercent(100 * (1 - $y))->size(self::NONE, self::NONE)->alignItems($v);
+          $c->column()->size(self::NONE, 0)->alignItems($h);
             $build();
           $c->end();
         $c->end();

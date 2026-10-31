@@ -17,7 +17,7 @@ function note(Context $c, Document $doc, TextState $text): void
     $state = $doc->state();
     $c->column(0, 0, 1);
       if ($state->conflict) {
-          $c->row(10, 8)->background($t->warning, 0.15)->align(Node::CENTER);
+          $c->row(10, 8)->background($t->warning, 0.15)->alignItems(Node::CENTER);
             $c->text('Another app changed this note. Save to keep yours, or revert to theirs.', 13);
             $c->spacer();
             if ($c->clicked($c->button('Revert'))) { App::later(fn() => $doc->revert()); }
@@ -28,7 +28,7 @@ function note(Context $c, Document $doc, TextState $text): void
       if ($text->text !== $doc->content()) {
           $doc->set($text->text);
       }
-      $c->row(0, 12)->padding(6, 12)->align(Node::CENTER); // mygo's Padding(6, 12).Gap(12)
+      $c->row(0, 12)->padding(6, 12)->alignItems(Node::CENTER); // mygo's Padding(6, 12).Gap(12)
         $c->muted(sprintf('%d words', count(preg_split('/\s+/u', $text->text, -1, PREG_SPLIT_NO_EMPTY))), 12);
         $c->spacer();
         $c->muted(match (true) { $state->path === '' => 'Not saved', $state->readOnly => 'Read-only', $state->edited => 'Edited', default => 'Saved' }, 12);

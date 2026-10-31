@@ -63,7 +63,7 @@ final class MoviePlayerLiveText
           foreach ($words as $i => $w) {
               [$x, $y, $ww, $wh] = $box($w);
               $chosen = $l['sel'] !== null && $i >= min($l['sel']) && $i <= max($l['sel']);
-              $n = $c->key("word:$i")->column()->absolute()->left($x - 1)->top($y - 1)->size($ww + 2, $wh + 2)->round(3)->cursor(Cursor::Text);
+              $n = $c->key("word:$i")->column()->absolute()->left($x - 1)->top($y - 1)->size($ww + 2, $wh + 2)->radius(3)->cursor(Cursor::Text);
               if ($chosen) { // the menu of a right click on what is chosen: Copy
                   $n->background($c->theme->accent, 0.35)->contextMenu(function (Menu $m) use ($c, $s, $words): void {
                       if ($m->item($c->texts()->get('iinaLogwindowCopy'))->chosen() && ($s->liveText['sel'] ?? null) !== null) { Clipboard::writeText(self::text($words, $s->liveText['sel'])); }
@@ -77,7 +77,7 @@ final class MoviePlayerLiveText
           // The button at the bottom right: all the text shown (VisionKit's).
           $bottom = $s->settings()->get('oscPosition') === 2 ? ($s->settings()->get('compactUI') ? 50 : 64) : self::INSET;
           $b = $c->column()->absolute()->right(max(self::INSET, $c->width - $px - $pw + self::INSET))->bottom(max($bottom, $c->height - $py - $ph + $bottom))->size(self::BUTTON, self::BUTTON)
-              ->round(self::BUTTON / 2)->center()->systemMaterial('glass')->role(Role::BUTTON)->label('Live Text')->tooltip('Live Text');
+              ->radius(self::BUTTON / 2)->center()->systemMaterial('glass')->role(Role::BUTTON)->label('Live Text')->tooltip('Live Text');
             MoviePlayer::sf($c, 'text.viewfinder', 15, $l['all'] ? 1.0 : 0.8, 0.0, $l['all'] ? $c->theme->accent : null);
           $c->end();
           if ($c->clicked($b)) { $l['all'] = !$l['all']; }

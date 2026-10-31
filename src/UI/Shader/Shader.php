@@ -28,9 +28,8 @@ use MyPHP\UI\Shader\Syntax\{Parser, SyntaxError};
  *     }
  *     KAGE);
  *
- *     $c->box(0, 0)->fill()->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($waves) {
- *         $p = new Painter($list, $text, $t);
- *         $waves->draw($p, [$n->x, $n->y, $n->w, $n->h], new Options(uniforms: ['Time' => hrtime(true) / 1e9]));
+ *     $c->box(0, 0)->fill()->draw(function (Painter $p, array $r) use ($waves) {
+ *         $waves->draw($p, $r, new Options(uniforms: ['Time' => hrtime(true) / 1e9]));
  *     });
  *
  * Fragment returns the pixel's color, premultiplied; dst is its center in

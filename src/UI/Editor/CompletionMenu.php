@@ -79,14 +79,14 @@ final class CompletionMenu
         $size = $m->fontSize();
         $lh = $m->lineHeight();
         $panel->dir = Node::COLUMN; $panel->pad = $t->space(1);
-        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2)->min($t->space(60), 0);
+        $panel->color = $t->surface; $panel->radius($t->radius)->border(1, $t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2)->minWidth($t->space(60))->minHeight(0);
         $items = array_slice($m->items(), 0, self::MAX_ROWS);
         $rowH = $lh + 2;
         $list = $c->key('rows')->column();
         $scroll = $c->runtime?->local($list->id, fn() => new ScrollState) ?? new ScrollState;
         $list->scroll($scroll)->size(0, min(count($items), 9) * $rowH);
           foreach ($items as $i => $it) {
-              $row = $m->item($i, $scroll, $rowH)->align(Node::CENTER)->padding(0, $t->space(1.5))->round($t->radius - 2)->size(0, $rowH);
+              $row = $m->item($i, $scroll, $rowH)->alignItems(Node::CENTER)->padding(0, $t->space(1.5))->radius($t->radius - 2)->size(0, $rowH);
               $row->gap = $t->space(2);
               if ($i === $m->selected()) { $row->color = $t->accent; $row->alpha = 0.18; }
                 $c->text($it->kind->icon(), $size - 1, $ct->tokenColor($it->kind->token())[0], Font::MONO)->size($t->space(3), 0);

@@ -146,6 +146,7 @@ $shift('moveToEndOfDocument', Key::END);
 cmdKey($h, 'c');
 same("Alpha\nBeta", clip($h), 'extending down, then to the end');
 
+
 // Scopes: controls keep their presses, nested containers their own selection, Unselectable and disabled text none.
 $value = new TextState('editable'); $clicks = 0; $n = [];
 $h = new Headless(function (Context $c) use ($value, &$clicks, &$n) {

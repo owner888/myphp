@@ -68,7 +68,7 @@ dirX($h, $h->frame(), ['a' => 8, 'b' => 48], 'reversed: from the left');
 
 // A column aligns across from the right, start and end swapped, center and stretch alike.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 1)->align(Node::START);
+    $c->column(0, 0, 1)->alignItems(Node::START);
       dirBox($c, 'start', 30, 10);
       dirBox($c, 'end', 30, 10)->alignSelf(Node::END);
       dirBox($c, 'center', 30, 10)->alignSelf(Node::CENTER);
@@ -82,7 +82,7 @@ same(280.0, (float)dirFind($root, 'stretch')->w, 'stretched with a start margin 
 
 // Logical edges go by the node's direction; physical ones stay.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->row()->paddingStart(10)->paddingEnd(30); dirBox($c, 'padded', 10, 10); $c->end();
       $c->row()->padding(0, 0, 0, 7); dirBox($c, 'left', 10, 10); $c->end();
       $c->row()->borderStartWidth(5)->borderColor(0); dirBox($c, 'bordered', 10, 10); $c->end();
@@ -118,7 +118,7 @@ dirX($h, $root, ['window' => 290, 'ltr' => 0, 'rtl' => 290], 'laid out right to 
 
 // A direction given after the edges: they move.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->row()->paddingStart(20)->direction(Direction::RightToLeft);
         dirBox($c, 'late', 10, 10);
       $c->end();
@@ -154,7 +154,7 @@ same(50.0, $s->x, 'scrolled 50 to the left');
 
 // Text starts at the right of a node laid out right to left.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->text('Hi')->label('hi');
     $c->end();
 }, 300, 200);

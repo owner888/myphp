@@ -214,7 +214,7 @@ function view(Context $c, Launcher $l): void
     if ($c->shortcut(Key::RETURN)) { $l->open(); }
     $c->onShortcut(Key::Q, Key::COMMAND, App::quit(...));
     $c->column(0, 0, 1);
-      $c->row(0, 12)->padding(16, 18)->align(Node::CENTER);
+      $c->row(0, 12)->padding(16, 18)->alignItems(Node::CENTER);
         $c->icon($l->searchIcon, 20, $t->textMuted);
         if ($c->changed($c->textInputBase($l->query)->bind($l->input)->grow(1)->fontSize(22)->label('Search apps'))) { $l->filter(); }
       $c->end();
@@ -242,7 +242,7 @@ function row(Context $c, Launcher $l, int $i): void
     $app = $l->results[$i];
     $t = $c->theme;
     $chosen = $i === $l->chosen();
-    $r = $c->row(0, 12)->padding(6, 10)->align(Node::CENTER)->round(8);
+    $r = $c->row(0, 12)->padding(6, 10)->alignItems(Node::CENTER)->radius(8);
     if ($chosen) { $r->background($t->accent, 0.85); }
       if (($icon = $l->icon($app)) !== null) { $c->image($icon, ICON_SIZE, ICON_SIZE); } else { $c->avatar($app->name)->size(ICON_SIZE, ICON_SIZE); } // its initial
       $c->column(0, 1, 1);

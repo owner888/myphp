@@ -42,9 +42,9 @@ final class MoviePlayerDefaultAppSheet
           $c->checkbox(MoviePlayerSettings::tr($c, '$Playlist'), $s->playlist);
           $c->column()->grow(1);
           $c->end();
-          $c->row(0, 8)->fillWidth()->justify(Node::END)->align(Node::CENTER);
+          $c->row(0, 8)->fillWidth()->justify(Node::END)->alignItems(Node::CENTER);
             if (MoviePlayerSettings::pushButton($c, MoviePlayerSettings::tr($c, '$Cancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
-            $ok = $c->row()->height(24)->paddingX(12)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label(MoviePlayerSettings::tr($c, '$OK'))->background($t->accent);
+            $ok = $c->row()->height(24)->paddingX(12)->radius(8)->alignItems(Node::CENTER)->role(Role::BUTTON)->label(MoviePlayerSettings::tr($c, '$OK'))->background($t->accent);
               $c->text(MoviePlayerSettings::tr($c, '$OK'), 13, $t->accentText);
             $c->end();
             if ($c->clicked($ok) || $c->shortcut(Key::RETURN)) {

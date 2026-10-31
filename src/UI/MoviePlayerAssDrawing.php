@@ -101,15 +101,16 @@ final class MoviePlayerAssDrawing
         $outline = $grows ? $mask($cutOutline ? 'cut' : 'grown') : null;
         $shade = !$box && $shadow > 0 && $shadows ? ($grows ? $mask($cutShadow ? 'cut' : 'grown') : $fill) : null;
         [$bw, $bh] = [($x2 - $x1) * $sx, ($y2 - $y1) * $sy];
-        $node->draw(static function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($r, $fill, $outline, $shade, $fx, $fy, $fw, $fh, $shadow, $box, $border, $sigma, $x1, $y1, $sx, $sy, $bw, $bh): void {
-            $paint = static function (Image $img, float $dx, float $dy, int $rgb, float $alpha) use ($list, $n, $text, $fx, $fy, $fw, $fh): void {
+        $node->draw(static function (Painter $p, array $at) use ($r, $fill, $outline, $shade, $fx, $fy, $fw, $fh, $shadow, $box, $border, $sigma, $x1, $y1, $sx, $sy, $bw, $bh): void {
+            [$list, $text] = [$p->displayList(), $p->textPainter()];
+            $paint = static function (Image $img, float $dx, float $dy, int $rgb, float $alpha) use ($list, $at, $text, $fx, $fy, $fw, $fh): void {
                 if ($alpha <= 0) { return; }
                 $slot = $text->imageSlot($img);
-                $list->image($n->x + $fx + $dx, $n->y + $fy + $dy, $fw, $fh, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page'], $alpha, 0.0, false, false, $rgb);
+                $list->image($at[0] + $fx + $dx, $at[1] + $fy + $dy, $fw, $fh, $slot['u'], $slot['v'], $slot['w'], $slot['h'], $slot['page'], $alpha, 0.0, false, false, $rgb);
             };
             if ($box) { // BorderStyle 3: a box of the outline's color behind the drawing, its shadow the box moved, blurred with it
-                $rect = static function (float $d, int $rgb, float $alpha) use ($list, $n, $border, $sigma, $x1, $y1, $sx, $sy, $bw, $bh): void {
-                    [$x, $y, $w, $h] = [$n->x + $x1 * $sx - $border + $d, $n->y + $y1 * $sy - $border + $d, $bw + 2 * $border, $bh + 2 * $border];
+                $rect = static function (float $d, int $rgb, float $alpha) use ($list, $at, $border, $sigma, $x1, $y1, $sx, $sy, $bw, $bh): void {
+                    [$x, $y, $w, $h] = [$at[0] + $x1 * $sx - $border + $d, $at[1] + $y1 * $sy - $border + $d, $bw + 2 * $border, $bh + 2 * $border];
                     $sigma > 0 ? $list->shadow($x, $y, $w, $h, $rgb, $alpha, 0.0, 1.64 * $sigma) : $list->rect($x, $y, $w, $h, $rgb, $alpha);
                 };
                 if ($shadow > 0) { $rect($shadow, $r->shadowColor, $r->shadowAlpha); }

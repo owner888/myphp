@@ -110,7 +110,7 @@ $h->frame(); $l = $h->paint(); $i = gradBox($l);
 check(gradNear(gradAt($l, $i, 70, 50), [255, 0, 0, 255]) && gradNear(gradAt($l, $i, 95, 50), [0, 0, 255, 255]), 'radial stops: half way out red, past the radius blue');
 
 // A border painted with a conic gradient takes its colors around the node, over the background, which keeps its own.
-$h = new Headless(fn(Context $c) => $c->box(100, 100, 0)->at(0, 0)->background(0xffffff)->border(0x000000, 8)
+$h = new Headless(fn(Context $c) => $c->box(100, 100, 0)->at(0, 0)->background(0xffffff)->border(8, 0x000000)
     ->borderConicGradient(new ConicGradient([new GradientStop(0xff0000, 0), new GradientStop(0x0000ff, 0.5), new GradientStop(0xff0000, 1)])), 100, 100);
 $h->frame(); $l = $h->paint();
 $i = gradBox($l);
@@ -146,7 +146,7 @@ check(gradNear(gradAt($list, $i, 50, 85), [0, 0, 255, 255], 12) && gradAt($list,
 // what is left of it; the canvas shows where it was drawn from, and the node still takes clicks.
 $clicked = false;
 $h = new Headless(function (Context $c) use (&$clicked): void {
-    $c->column()->at(0, 0)->size(120, 120)->justify(Node::CENTER)->align(Node::CENTER);
+    $c->column()->at(0, 0)->size(120, 120)->justify(Node::CENTER)->alignItems(Node::CENTER);
     $b = $c->box(40, 40, 0x000000)->blur(6)->label('Blurred');
     if ($c->clicked($b)) { $clicked = true; }
     $c->end();

@@ -129,14 +129,14 @@ final class FindBar
         $tx = $c->texts();
         $bar->dir = Node::COLUMN;
         $bar->gap = $t->space(1); $bar->pad = $t->space(1.5);
-        $bar->color = $t->surface; $bar->round($t->radius)->border($t->border)->shadow(0, 2, 8, 0, 0x000000, 0.18);
+        $bar->color = $t->surface; $bar->radius($t->radius)->border(1, $t->border)->shadow(0, 2, 8, 0, 0x000000, 0.18);
         $field = fn(TextState $value, string $placeholder) => $c->input($value, $placeholder, $t->space(50), $t->fontSize - 1)->label($placeholder);
         $button = function (string $label, string $tip) use ($c, $t): Node {
             $b = $c->button($label, $t->fontSize - 1)->tooltip($tip)->label($tip)->keepFocus();
             $b->bordered = false; $b->color = $c->hovered($b) ? $t->surfaceHover : null;
             return $b;
         };
-        $c->row(0, $t->space(1))->align(Node::CENTER);
+        $c->row(0, $t->space(1))->alignItems(Node::CENTER);
           $f->queryInput($field($f->query(), $tx->get('find')));
           $toggle = function (bool &$on, string $label, string $tip) use ($c, $t) {
               $b = $c->toggle($on, $label, $t->fontSize - 1)->tooltip($tip)->label($tip)->keepFocus();
@@ -147,14 +147,14 @@ final class FindBar
           $toggle($f->wholeWord(), 'ab', $tx->get('matchWholeWord'));
           $toggle($f->regexp(), '.*', $tx->get('useRegularExpression'));
           $toggle($f->inSelection(), '[ ]', $tx->get('findInSelection'));
-          $c->text($f->status(), $t->fontSize - 2, $t->textMuted)->min($t->space(16), 0)->role(Role::STATUS);
+          $c->text($f->status(), $t->fontSize - 2, $t->textMuted)->minWidth($t->space(16))->minHeight(0)->role(Role::STATUS);
           if ($c->clicked($button('↑', $tx->get('previousMatch')))) { $f->previous(); }
           if ($c->clicked($button('↓', $tx->get('nextMatch')))) { $f->next(); }
           if ($f->canReplace() && $c->clicked($button('⇄', $tx->get('replace')))) { $f->setReplacing(!$f->replacing()); }
           if ($c->clicked($button('✕', $tx->get('close')))) { $f->close(); }
         $c->end();
         if ($f->replacing()) {
-            $c->row(0, $t->space(1))->align(Node::CENTER);
+            $c->row(0, $t->space(1))->alignItems(Node::CENTER);
               $f->replacementInput($field($f->replacement(), $tx->get('replace')));
               if ($c->clicked($c->button($tx->get('replace'), $t->fontSize - 1)->keepFocus())) { $f->replace(); }
               if ($c->clicked($c->button($tx->get('replaceAll'), $t->fontSize - 1)->keepFocus())) { $f->replaceAll(); }

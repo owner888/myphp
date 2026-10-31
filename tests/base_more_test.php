@@ -21,7 +21,7 @@ function baseNode(Headless $h, int $role, string $label): AccessNode
 // Toggle bases: clicks, their changes, Space, what assistive technology reads.
 $check = false; $on = false; $radio = 'a'; $changed = [];
 $h = new Headless(function (Context $c) use (&$check, &$on, &$radio, &$changed): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $b = $c->checkboxBase($check)->size(20, 20)->label('check'); $c->end();
       if ($c->changed($b)) { $changed[] = 'check'; }
       $c->switchBase($on)->size(20, 20)->label('switch'); $c->end();
@@ -47,7 +47,7 @@ foreach (['check' => Role::CHECK_BOX, 'switch' => Role::SWITCH, 'b' => Role::RAD
 // A slider base maps the pointer across its content box, inside its padding; Home, Right, End.
 $value = 0.0;
 $h = new Headless(function (Context $c) use (&$value): void {
-    $c->column(10, 0)->align(Node::START);
+    $c->column(10, 0)->alignItems(Node::START);
       $c->sliderBase($value, 0, 100)->size(120, 20)->paddingX(10)->label('volume');
     $c->end();
 }, 200, 100);
@@ -157,11 +157,11 @@ check(!$popover && $popoverDismissed, 'Escape dismisses it');
 foreach (['bottom right' => Node::END, 'top left' => Node::START] as $name => $at) {
     $open = false; $first = null;
     $h = new Headless(function (Context $c) use (&$open, &$first, $at): void {
-        $c->column(10, 0, 1)->justify($at)->align($at);
+        $c->column(10, 0, 1)->justify($at)->alignItems($at);
           $b = $c->buttonBase()->size(80, 24)->label('anchor'); $c->end();
           if ($c->clicked($b)) { $open = true; }
           $c->popoverBase($b, $open, function (Node $panel) use (&$first): void {
-              $panel->size(160, 120)->margin(4, 0, 0, 0)->draw(function ($list, Node $p) use (&$first): void { $first ??= [$p->x, $p->y, $p->w, $p->h]; });
+              $panel->size(160, 120)->margin(4, 0, 0, 0)->draw(function (\MyPHP\UI\Painter $p, array $r) use (&$first): void { $first ??= $r; });
           });
         $c->end();
     }, 300, 300);

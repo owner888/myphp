@@ -88,7 +88,7 @@ final class MoviePlayerMusic
         $tags = $p->tags();
         $title = $tags['title'] !== '' ? $tags['title'] : $p->title();
         $under = $tags['artist'] !== '' && $tags['album'] !== '' ? "{$tags['artist']} - {$tags['album']}" : $tags['artist'] . $tags['album'];
-        $box = $c->column(0, 4)->absolute()->left(24)->right(24)->top($under === '' ? 22 : 12)->align(Node::CENTER)->passThrough();
+        $box = $c->column(0, 4)->absolute()->left(24)->right(24)->top($under === '' ? 22 : 12)->alignItems(Node::CENTER)->passThrough();
         $alpha > 0.001 ? $box->opacity($alpha) : $box->invisible();
           $c->text($title, 13, $t->text, Font::BOLD)->singleLine()->ellipsis('…');
           if ($under !== '') { $c->text($under, 11, $t->textMuted)->singleLine()->ellipsis('…'); }
@@ -107,15 +107,15 @@ final class MoviePlayerMusic
         $alpha > 0.001 ? $box->opacity($alpha) : $box->invisible();
           $vol = $p->muted() || $s->volume == 0 ? 'speaker.slash.fill' : ($s->volume < 0.34 ? 'speaker.wave.1.fill' : ($s->volume < 0.67 ? 'speaker.wave.2.fill' : 'speaker.wave.3.fill'));
           if ($v->volume) { // IINA's volume control: a capsule of the popover's material, the button, the slider, the level
-              $c->row(0, 0)->absolute()->left(38)->top(8)->size(148, 36)->round(18)->systemMaterial('popover', $c->theme->dark)->borderWidth(1)->borderColor($t->border);
+              $c->row(0, 0)->absolute()->left(38)->top(8)->size(148, 36)->radius(18)->systemMaterial('popover', $c->theme->dark)->borderWidth(1)->borderColor($t->border);
               $c->end();
               $level = $p->muted() ? 0.0 : $s->volume;
               $slider = $c->sliderBase($level, 0, $s->maxVolume())->absolute()->left(83)->top(18)->size(100, 16);
-              $slider->draw(static function (DisplayList $l, Node $n) use ($t): void {
-                  $cy = $n->y + $n->h / 2; $k = $n->x + 6 + ($n->w - 12) * $n->fraction;
-                  $l->rect($n->x, $cy - 2, $n->w, 4, $t->dark ? 0xffffff : 0x000000, 0.2, 2);
-                  $l->rect($n->x, $cy - 2, $k - $n->x, 4, $t->accent, 1.0, 2);
-                  $l->rect($k - 6, $cy - 6, 12, 12, 0xffffff, 1.0, 6);
+              $slider->draw(static function (Painter $p, array $r) use ($slider, $t): void {
+                  $cy = $r[1] + $r[3] / 2; $k = $r[0] + 6 + ($r[2] - 12) * $slider->fraction;
+                  $p->fill([$r[0], $cy - 2, $r[2], 4], $t->dark ? 0xffffff : 0x000000, 2, 0.2);
+                  $p->fill([$r[0], $cy - 2, $k - $r[0], 4], $t->accent, 2);
+                  $p->fill([$k - 6, $cy - 6, 12, 12], 0xffffff, 6);
               });
               if ($c->changed($slider)) { $s->setVolume($level); }
               $c->text((string)(int)round(($p->muted() ? 0 : $s->volume) * 100), 11, $t->text)->absolute()->left(191)->top(19)->width(28);
@@ -148,14 +148,14 @@ final class MoviePlayerMusic
     private static function timeBar(Context $c, MoviePlayerState $s, Player $p): void
     {
         $t = $c->theme;
-        $c->row(0, 6)->absolute()->left(6)->right(6)->bottom(8)->height(14)->align(Node::CENTER);
+        $c->row(0, 6)->absolute()->left(6)->right(6)->bottom(8)->height(14)->alignItems(Node::CENTER);
           $c->text(MoviePlayerState::clock($p->time()), 9, $t->textMuted)->fontFeatures('tnum')->width(32)->textAlign(Node::END);
           $bar = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->grow(1)->height(14);
           if (!$c->pressed($bar)) { $s->at = $p->time(); }
-          $bar->draw(static function (DisplayList $l, Node $n) use ($t): void { // IINA's MiniPlaySlider: a thin track, the played part in the accent
-              $cy = $n->y + $n->h / 2; $k = $n->x + $n->w * $n->fraction;
-              $l->rect($n->x, $cy - 1.5, $n->w, 3, $t->dark ? 0xffffff : 0x000000, 0.2, 1.5);
-              $l->rect($n->x, $cy - 1.5, $k - $n->x, 3, $t->accent, 1.0, 1.5);
+          $bar->draw(static function (Painter $p, array $r) use ($bar, $t): void { // IINA's MiniPlaySlider: a thin track, the played part in the accent
+              $cy = $r[1] + $r[3] / 2; $k = $r[0] + $r[2] * $bar->fraction;
+              $p->fill([$r[0], $cy - 1.5, $r[2], 3], $t->dark ? 0xffffff : 0x000000, 1.5, 0.2);
+              $p->fill([$r[0], $cy - 1.5, $k - $r[0], 3], $t->accent, 1.5);
           });
           if ($c->changed($bar)) { $p->seek($s->at); }
           $c->text(MoviePlayerState::clock($p->duration()), 9, $t->textMuted)->fontFeatures('tnum')->width(32);
@@ -165,7 +165,7 @@ final class MoviePlayerMusic
     /** IINA's buttons at the top left, in a pill of the popover's material: close music mode (the window) and back to the video's window. */
     private static function corner(Context $c, MoviePlayerState $s, float $alpha): void
     {
-        $c->column(3, 4)->absolute()->left(8)->top(6)->round(10)->systemMaterial('popover', $c->theme->dark)->opacity($alpha);
+        $c->column(3, 4)->absolute()->left(8)->top(6)->radius(10)->systemMaterial('popover', $c->theme->dark)->opacity($alpha);
           $close = $c->column()->size(13, 13)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'mini_player.close'))->tooltip(MoviePlayerSettings::iina($c, 'mini_player.close'));
             MoviePlayerSettings::sf($c, 'xmark.circle.fill', 13, $c->theme->text);
           $c->end();
@@ -180,9 +180,9 @@ final class MoviePlayerMusic
     /** An album's art of its own where the file has none (IINA draws its own too): a note on a dark square, $h high. */
     private static function defaultArt(Context $c, float $h): void
     {
-        $c->column()->fillWidth()->height($h)->center()->draw(static function (DisplayList $l, Node $n): void {
+        $c->column()->fillWidth()->height($h)->center()->draw(static function (Painter $p, array $r): void {
             $steps = 16;
-            for ($i = 0; $i < $steps; $i++) { $l->rect($n->x, $n->y + $n->h * $i / $steps, $n->w, $n->h / $steps + 1, 0x3a3a3c - 0x010101 * (int)($i * 1.5), 1.0); }
+            for ($i = 0; $i < $steps; $i++) { $p->fill([$r[0], $r[1] + $r[3] * $i / $steps, $r[2], $r[3] / $steps + 1], 0x3a3a3c - 0x010101 * (int)($i * 1.5)); }
         });
           MoviePlayerSettings::sf($c, 'music.note', 96, 0xffffff)->opacity(0.25);
         $c->end();

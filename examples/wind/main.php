@@ -20,7 +20,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Canvas, Content, Context, DisplayList, Easing, Image, InputEvent, Key, Node, Painter, TextPainter, TextState, TextStyle, Theme};
+use MyPHP\UI\{Canvas, Content, Context, Easing, Image, InputEvent, Key, Node, Painter, TextState, TextStyle};
 use MyPHP\UI\Shader\{Options, Shader};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -851,11 +851,8 @@ function view(Context $c, WindApp $s): void
     $s->tex->makeAtlases($c);
     [$w] = $c->size();
 
-    $rt = $c->runtime;
-    $pane = $c->column(0, 0, 0, $t->background)->fill()->align(Node::CENTER);
-    $pane->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($s, $t, $rt): void {
-        $s->tex->draw(new Painter($list, $text, $th, $rt), [$n->x, $n->y, $n->w, $n->h], $t->dark);
-    });
+    $pane = $c->column(0, 0, 0, $t->background)->fill()->alignItems(Node::CENTER);
+    $pane->draw(fn(Painter $p, array $r) => $s->tex->draw($p, $r, $t->dark));
     // The pointer stirs the air wherever it is over the pane, but for the
     // controls, which take it themselves.
     $pane->handleInput(function (InputEvent $ev) use ($s): bool {
@@ -880,7 +877,7 @@ function view(Context $c, WindApp $s): void
       // The card's middle lies where the texture is calmest, 45% down.
       $c->spacer()->grow(45);
       $c->column(0, 12)->width(min(640, $w - 48));
-        $input = $c->key('draft')->input($s->draft, 'Describe a task or ask a question', 0)->label('Task')->padding(14, 16)->round(14)
+        $input = $c->key('draft')->input($s->draft, 'Describe a task or ask a question', 0)->label('Task')->padding(14, 16)->radius(14)
             ->background($t->surface)->shadow(0, 4, 18, 0, 0x000000, 0x0f / 255);
         $s->controls = [$c->bounds($input)];
         $c->text('Move the pointer to warm the air, click to blow a ripple (every third a heart), ⌘R for another wind.', 12, $t->textMuted)->textAlign(Node::CENTER);

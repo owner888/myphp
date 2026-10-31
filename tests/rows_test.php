@@ -119,7 +119,7 @@ $c = (new Path())->circle(0, 0, 10)->trim(0, 1);
 check(abs($c->kept - 2 * M_PI * 10) < 0.05, 'a circle, flattened: ' . $c->kept);
 $p = (new Path())->moveTo(10, 10)->lineTo(10, 10.5)->lineTo(30, 10.5)->trim(0, 0.05); // a point of 20.5
 $h = new Headless(function (Context $c) use ($p) {
-    $c->box(100, 100, 0)->draw(function ($list, $n, $t, $text) use ($p) { (new \MyPHP\UI\Painter($list, $text, $t))->strokePath($p, 4, 0xff0000); });
+    $c->box(100, 100, 0)->draw(function (\MyPHP\UI\Painter $painter, array $r) use ($p) { $painter->strokePath($p, 4, 0xff0000); });
 }, 200, 200);
 $h->frame();
 $l = $h->paint();

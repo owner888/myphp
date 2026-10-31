@@ -61,14 +61,14 @@ function view(Context $c, EditorApp $a): void
     $f = $a->current();
     $f->editor->softWrap = $a->wrap;
     $f->diff->wrap = $a->wrap;
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $c->column(0, 0, 0, $t->surface)->padding(12, 0);
         $c->sidebar($a->selected, function () use ($c, $a) {
             foreach ($a->files as $f) { $c->sidebarItem($f->name, $f->name . ($f->editor->buffer->modified() ? ' •' : '')); }
         }, 200)->grow = 1;
       $c->end();
       $c->column(0, 0, 1);
-        $c->row(0, 12)->padding(8, 12)->align(Node::CENTER);
+        $c->row(0, 12)->padding(8, 12)->alignItems(Node::CENTER);
           $c->segmented(['Editor', 'Changes'], $a->page);
           if ($a->page === 1) {
               $c->segmented(['Split', 'Unified'], $a->layout);

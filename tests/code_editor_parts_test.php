@@ -80,7 +80,7 @@ $st->onHover = function (HoverRequest $r) use ($st, &$asked) {
     $st->showHover($r->offset, $r->offset + 1, 'word');
 };
 $h = new Headless(function (Context $c) use ($st) {
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $c->column()->size(200, 0); $c->end();
       $st->view($c)->grow = 1;
     $c->end();

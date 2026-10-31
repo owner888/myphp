@@ -38,7 +38,7 @@ final class CodeBlockView
         $tx = $c->texts();
         self::$copyIcon ??= SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.6V3.2A1.7 1.7 0 0 0 8.8 1.5H4.2A1.7 1.7 0 0 0 2.5 3.2v4.6a1.7 1.7 0 0 0 1.7 1.7h.4"/></svg>');
         self::$checkIcon ??= SVG::parse('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>');
-        $btn = $c->buttonBase()->padding($th->em(0.2), $th->em(0.45))->round(5)->label($tx->get('copyCode'));
+        $btn = $c->buttonBase()->padding($th->em(0.2), $th->em(0.45))->radius(5)->label($tx->get('copyCode'));
         $btn->gap = $th->em(0.3);
         $btn->disabled = $this->open;
         if ($c->hovered($btn) && !$this->open) {
@@ -65,7 +65,7 @@ final class CodeBlockView
         $cs = $st->codeState($this->index);
         $st->highlight($cs, $this->index);
         $pad = $th->em($th->codeBlockPadding);
-        $outer = $st->o->wrapCode ? $c->column() : $c->row()->align(Node::START)->scroll($cs->scroll, true, false); // sideways (mygo's ScrollHorizontal)
+        $outer = $st->o->wrapCode ? $c->column() : $c->row()->alignItems(Node::START)->scroll($cs->scroll, true, false); // sideways (mygo's ScrollHorizontal)
         // Code reads left to right in a right-to-left interface too, as in editors (mygo's).
         $outer->direction(Direction::LeftToRight)->alignSelf(Node::STRETCH)->font($th->codeFont)->fontSize($th->em($th->codeSize))->lineHeight($th->codeLineHeight);
         $col = $c->column()->padding($th->em(0.25), $pad, $pad, $pad);

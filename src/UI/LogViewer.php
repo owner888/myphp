@@ -56,7 +56,7 @@ final class LogViewer
             && ($q === '' || str_contains(mb_strtolower($e['message']), $q))));
         $c->runtime?->askWindow('title', MoviePlayerSettings::iina($c, 'logwindow.title'));
           self::toolbar($c, $v, $all, $shown);
-          $c->row()->height(24)->fillWidth()->paddingX(16)->align(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($k['line']); // the columns' headers
+          $c->row()->height(24)->fillWidth()->paddingX(16)->alignItems(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($k['line']); // the columns' headers
             $c->box(self::LEVEL, 1, 0)->color = null;
             $c->text(MoviePlayerSettings::iina($c, 'logwindow.time'), 11, $t->textMuted)->width(self::TIME);
             $c->text(MoviePlayerSettings::iina($c, 'logwindow.subsystem'), 11, $t->textMuted)->width(self::SUBSYSTEM);
@@ -66,11 +66,11 @@ final class LogViewer
             $c->list($v->list, count($shown), function (int $i) use ($c, $t, $v, $shown): void {
                 $e = $shown[$i];
                 $on = in_array($i, $v->chosen, true);
-                $r = $c->row(0, 0)->fillWidth()->paddingX(8)->round(5)->align(Node::START);
+                $r = $c->row(0, 0)->fillWidth()->paddingX(8)->radius(5)->alignItems(Node::START);
                 $r->background($on ? $t->accent : ($t->dark ? 0xffffff : 0x000000), $on ? 1.0 : ($i % 2 === 1 ? 0.03 : 0.0)); // the rows alternating, as IINA's table
                 $ink = $on ? $t->accentText : $t->text;
                   $c->column()->size(self::LEVEL, self::ROW)->center();
-                    $c->box(8, 8, self::COLORS[$e['level']])->round(4);
+                    $c->box(8, 8, self::COLORS[$e['level']])->radius(4);
                   $c->end();
                   $c->text($e['time'], 11, $ink)->font('monospace')->width(self::TIME)->singleLine()->margin(2, 0, 2, 0);
                   $c->text($e['subsystem'], 11, $ink)->font('monospace')->width(self::SUBSYSTEM)->singleLine()->ellipsis('…')->margin(2, 0, 2, 0);
@@ -123,7 +123,7 @@ final class LogViewer
     {
         $t = $c->theme;
         $bar = $c->titleBar();
-        $c->row(0, 8)->height(self::BAR)->fillWidth()->paddingStart(max(80.0, $bar['left'] + 12))->paddingEnd(12)->align(Node::CENTER)->dragWindow();
+        $c->row(0, 8)->height(self::BAR)->fillWidth()->paddingStart(max(80.0, $bar['left'] + 12))->paddingEnd(12)->alignItems(Node::CENTER)->dragWindow();
           $c->column(0, 0)->grow(1);
             $c->text(MoviePlayerSettings::iina($c, 'logwindow.title'), 15, $t->text, Font::BOLD)->singleLine();
             $c->text(($v->subsystems === [] ? MoviePlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level], 11, $t->textMuted)->singleLine()->ellipsis('…');
@@ -153,7 +153,7 @@ final class LogViewer
                   self::save($c, $shown, ($v->subsystems === [] ? MoviePlayerSettings::iina($c, 'logwindow.all_subsystems') : '[' . implode(', ', $v->subsystems) . ']') . ' - ' . Logger::NAMES[$v->level] . ' ' . \MyPHP\App::name() . '.log');
               }
           });
-          $c->row()->width(180)->height(28)->round(14)->systemMaterial('glass')->align(Node::CENTER)->paddingX(4);
+          $c->row()->width(180)->height(28)->radius(14)->systemMaterial('glass')->alignItems(Node::CENTER)->paddingX(4);
             $f = $c->searchField($v->filter, 0);
           $c->end();
           $f->label(MoviePlayerSettings::iina($c, 'logwindow.filter'));
@@ -164,7 +164,7 @@ final class LogViewer
     private static function button(Context $c, string $symbol, string $label, bool $on, ?int $rgb = null): Node
     {
         $t = $c->theme;
-        $b = $c->column()->size(36, 28)->round(14)->center()->systemMaterial('glass')->role(Role::BUTTON)->label($label)->tooltip($label);
+        $b = $c->column()->size(36, 28)->radius(14)->center()->systemMaterial('glass')->role(Role::BUTTON)->label($label)->tooltip($label);
           MoviePlayerSettings::sf($c, $symbol, $rgb !== null ? 10 : 14, $rgb ?? ($on ? $t->accent : $t->text));
         $c->end();
         return $b;

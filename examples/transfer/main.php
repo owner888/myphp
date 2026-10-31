@@ -24,7 +24,7 @@ function view(Context $c, object $s): void
     $c->column(20, 14, 1);
       $c->text('Transfer', 20, style: Font::BOLD);
       $c->muted('Drag the note to TextEdit or Mail; drag text, a link or files from other apps onto the wells.', 12);
-      $note = $c->column(12, 4, 0, $t->surface)->round(10)->border($t->border)->size(260, 0);
+      $note = $c->column(12, 4, 0, $t->surface)->radius(10)->border(1, $t->border)->size(260, 0);
         $c->text('A note', 15, style: Font::BOLD);
         $c->muted($s->ended === '' ? 'Drag me out of the window' : $s->ended, 12);
       $c->end();
@@ -35,38 +35,38 @@ function view(Context $c, object $s): void
           $s->ended = $r->error !== null ? 'Failed: ' . $r->error->getMessage() : ($r->canceled ? 'Nothing took it' : 'Copied');
       }));
       $c->row(0, 12);
-        $well = $c->column(12, 4, 0, $t->surface)->round(10)->border($t->border)->size(260, 110);
+        $well = $c->column(12, 4, 0, $t->surface)->radius(10)->border(1, $t->border)->size(260, 110);
           $c->text('Text and links', 13, style: Font::BOLD);
           $o = new DropOptions([Format::URI_LIST, Format::MARKDOWN, Format::TEXT]);
           $over = $c->dataDragOver($well, $o, $offer);
           $c->muted($over ? 'Takes ' . $offer->preferred(...$o->formats) : ($s->dropped === '' ? 'Drop here' : mb_strimwidth($s->dropped, 0, 120, '…')), 12);
         $c->end();
-        if ($over) { $well->border($t->accent, 2); }
+        if ($over) { $well->border(2, $t->accent); }
         if ($c->dropData($well, $o, $drop)) {
             $f = $drop->data->preferred(...$o->formats);
             $s->dropped = $f === Format::URI_LIST ? implode(' ', $drop->data->urls()) : $drop->data->read($f);
         }
-        $files = $c->column(12, 4, 0, $t->surface)->round(10)->border($t->border)->size(260, 110);
+        $files = $c->column(12, 4, 0, $t->surface)->radius(10)->border(1, $t->border)->size(260, 110);
           $c->text('Files', 13, style: Font::BOLD);
           if ($s->files === []) { $c->muted('Drop files from the Finder', 12); }
           foreach (array_slice($s->files, -4) as $p) { $c->muted(basename($p), 12); }
         $c->end();
-        if ($c->fileDragOver($files)) { $files->border($t->accent, 2); }
+        if ($c->fileDragOver($files)) { $files->border(2, $t->accent); }
         if (($paths = $c->droppedFiles($files)) !== null) { $s->files = [...$s->files, ...$paths]; }
       $c->end();
       // Cards: within the window, the card itself moves between the lists; to another app, its text.
       $c->row(0, 12);
         foreach (['todo' => 'To do', 'done' => 'Done'] as $list => $title) {
-            $col = $c->column(10, 6, 0, $t->surface)->round(10)->size(260, 0);
+            $col = $c->column(10, 6, 0, $t->surface)->radius(10)->size(260, 0);
               $c->text($title, 13, style: Font::BOLD);
               foreach ($s->$list as $card) {
-                  $n = $c->key("$list-$card")->row(10, 0, 0, $t->background)->round(8)->border($t->border);
+                  $n = $c->key("$list-$card")->row(10, 0, 0, $t->background)->radius(8)->border(1, $t->border);
                     $c->text($card);
                   $c->end();
                   $c->dragData($c->drag($n, [$list, $card]), Data::text($card)); // the card itself to this window's lists, its text to other apps
               }
             $c->end();
-            if ($c->dragOver($col, 'array', $v) && $v[0] !== $list) { $col->border($t->accent, 2); }
+            if ($c->dragOver($col, 'array', $v) && $v[0] !== $list) { $col->border(2, $t->accent); }
             if ($c->drop($col, 'array', $v) && $v[0] !== $list) {
                 [$from, $card] = $v;
                 $s->$from = array_values(array_diff($s->$from, [$card]));

@@ -48,7 +48,7 @@ final class MoviePlayerHistory
         $groups = self::groups($c, $entries, $v->byFolder);
         $order = array_merge(...array_values(array_map(fn(array $g) => array_column($g, 'path'), $groups)) ?: [[]]);
           self::toolbar($c, $v, $groups, $history);
-          $c->row()->height(24)->fillWidth()->paddingX(16)->align(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor(MoviePlayerSettings::colors($t)['line']); // the columns' headers
+          $c->row()->height(24)->fillWidth()->paddingX(16)->alignItems(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor(MoviePlayerSettings::colors($t)['line']); // the columns' headers
             $c->text(MoviePlayerSettings::iina($c, 'history_window.col.filename'), 11, $t->textMuted)->grow(1);
             $c->text(MoviePlayerSettings::iina($c, 'history_window.col.progress'), 11, $t->textMuted)->width(self::PROGRESS);
             $c->text(MoviePlayerSettings::iina($c, 'history_window.col.played_at'), 11, $t->textMuted)->width($v->byFolder ? 145 : self::TIME);
@@ -56,7 +56,7 @@ final class MoviePlayerHistory
           $list = $c->scroll(0, 0, 1)->padding(4, 8);
             foreach ($groups as $name => $group) {
                 $closed = $v->closed[$name] ?? false;
-                $g = $c->key("group:$name")->row(0, 4)->height(self::GROUP)->paddingX(4)->align(Node::CENTER)->role(Role::DISCLOSURE)->label($name)->checked(!$closed);
+                $g = $c->key("group:$name")->row(0, 4)->height(self::GROUP)->paddingX(4)->alignItems(Node::CENTER)->role(Role::DISCLOSURE)->label($name)->checked(!$closed);
                   MoviePlayerSettings::sf($c, $closed ? 'chevron.right' : 'chevron.down', 10, $t->textMuted, 0.4);
                   $c->text($name, 13, $t->text, Font::BOLD)->singleLine()->ellipsis('…');
                 $c->end();
@@ -89,13 +89,13 @@ final class MoviePlayerHistory
     {
         $t = $c->theme;
         $bar = $c->titleBar();
-        $c->row(0, 8)->height(self::BAR)->fillWidth()->paddingStart(max(80.0, $bar['left'] + 12))->paddingEnd(12)->align(Node::CENTER)->dragWindow();
+        $c->row(0, 8)->height(self::BAR)->fillWidth()->paddingStart(max(80.0, $bar['left'] + 12))->paddingEnd(12)->alignItems(Node::CENTER)->dragWindow();
           $c->text(MoviePlayerSettings::iina($c, 'history_window.title'), 15, $t->text, Font::BOLD)->singleLine()->grow(1);
           // Group By: by date, by folder and website
-          $c->row(0, 0)->round(14)->systemMaterial('glass')->role(Role::RADIO_GROUP)->label(MoviePlayerSettings::iina($c, 'history_window.toolbar.group_by'));
+          $c->row(0, 0)->radius(14)->systemMaterial('glass')->role(Role::RADIO_GROUP)->label(MoviePlayerSettings::iina($c, 'history_window.toolbar.group_by'));
             foreach ([false => ['calendar.badge.clock', 'history_window.toolbar.group_by.date_tooltip'], true => ['folder', 'history_window.toolbar.group_by.location_tooltip']] as $folder => [$symbol, $tip]) {
                 $on = $v->byFolder === (bool)$folder;
-                $b = $c->column()->size(36, 28)->round(14)->center()->role(Role::RADIO)->checked($on)->label(MoviePlayerSettings::iina($c, $tip))->tooltip(MoviePlayerSettings::iina($c, $tip));
+                $b = $c->column()->size(36, 28)->radius(14)->center()->role(Role::RADIO)->checked($on)->label(MoviePlayerSettings::iina($c, $tip))->tooltip(MoviePlayerSettings::iina($c, $tip));
                 if ($on) { $b->background($t->dark ? 0xffffff : 0x000000, 0.12); }
                   MoviePlayerSettings::sf($c, $symbol, 14, $t->text);
                 $c->end();
@@ -106,9 +106,9 @@ final class MoviePlayerHistory
           $names = array_keys($groups);
           $anyClosed = array_filter($names, fn($n) => $v->closed[$n] ?? false) !== [];
           $anyOpen = array_filter($names, fn($n) => !($v->closed[$n] ?? false)) !== [];
-          $c->row(0, 0)->round(14)->systemMaterial('glass');
+          $c->row(0, 0)->radius(14)->systemMaterial('glass');
             foreach ([['chevron.down.circle', 'history_window.toolbar.expand_all', $anyClosed, false], ['chevron.up.circle', 'history_window.toolbar.collapse_all', $anyOpen, true]] as [$symbol, $tip, $enabled, $close]) {
-                $b = $c->column()->size(36, 28)->round(14)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, $tip))->tooltip(MoviePlayerSettings::iina($c, $tip));
+                $b = $c->column()->size(36, 28)->radius(14)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, $tip))->tooltip(MoviePlayerSettings::iina($c, $tip));
                 if (!$enabled) { $b->disabled(); }
                   MoviePlayerSettings::sf($c, $symbol, 14, $t->text);
                 $c->end();
@@ -116,12 +116,12 @@ final class MoviePlayerHistory
             }
           $c->end();
           $c->box(8, 0, 0)->color = null;
-          $clear = $c->column()->size(36, 28)->round(14)->center()->systemMaterial('glass')->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'history_window.toolbar.clear'))->tooltip(MoviePlayerSettings::iina($c, 'history_window.toolbar.clear'));
+          $clear = $c->column()->size(36, 28)->radius(14)->center()->systemMaterial('glass')->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'history_window.toolbar.clear'))->tooltip(MoviePlayerSettings::iina($c, 'history_window.toolbar.clear'));
             MoviePlayerSettings::sf($c, 'trash', 14, $t->text);
           $c->end();
           if ($c->clicked($clear) && self::ask($c, 'delete_all_history')) { $history->clear(); $v->chosen = []; }
           $c->box(8, 0, 0)->color = null;
-          $c->row(0, 4)->size(160, 28)->round(14)->paddingStart(10)->align(Node::CENTER)->systemMaterial('glass');
+          $c->row(0, 4)->size(160, 28)->radius(14)->paddingStart(10)->alignItems(Node::CENTER)->systemMaterial('glass');
             $glass = $c->column()->role(Role::MENU_BUTTON)->label(MoviePlayerSettings::iina($c, 'history_window.search.search_in'));
               MoviePlayerSettings::sf($c, 'magnifyingglass', 12, $t->textMuted);
             $c->end();
@@ -145,13 +145,13 @@ final class MoviePlayerHistory
         $chosen = in_array($e['path'], $v->chosen, true);
         $focused = $c->runtime?->windowFocus ?? true;
         $fg = $chosen && $focused ? $t->accentText : ($there ? $t->text : $t->textMuted);
-        $r = $c->key('film:' . $e['path'])->row(0, 8)->height(self::ROW)->paddingX(12)->round(6)->align(Node::CENTER)->role(Role::TREE_ITEM)->level(2)->checked($chosen)->label($e['title'] !== '' ? $e['title'] : $e['name']);
+        $r = $c->key('film:' . $e['path'])->row(0, 8)->height(self::ROW)->paddingX(12)->radius(6)->alignItems(Node::CENTER)->role(Role::TREE_ITEM)->level(2)->checked($chosen)->label($e['title'] !== '' ? $e['title'] : $e['name']);
         if ($chosen) { $focused ? $r->background($t->accent) : $r->background($t->dark ? 0xffffff : 0x000000, 0.1); }
           $c->column()->size(18, 18)->center();
             if ($url) { MoviePlayerSettings::sf($c, 'network', 14, $fg); }
             elseif ($there && \MyPHP\App::running()) { $c->image(self::icon($c, $e['path']), 18, 18); } // the Finder's icon: NSWorkspace's, of the running app (none built headless)
           $c->end();
-          $c->column(0, 1)->grow(1)->min(200, 0);
+          $c->column(0, 1)->grow(1)->minWidth(200)->minHeight(0);
             if ($e['title'] !== '' && $e['title'] !== $e['name']) {
                 $c->text($e['title'], 13, $fg)->singleLine()->ellipsis('…');
                 $c->text($url ? $e['path'] : $e['name'], 11, $chosen && $focused ? $t->accentText : $t->textMuted)->singleLine()->ellipsis('…');
@@ -159,13 +159,13 @@ final class MoviePlayerHistory
                 $c->text($url ? $e['path'] : $e['name'], 13, $fg)->singleLine()->ellipsis('…');
             }
           $c->end();
-          $c->row(0, 6)->width(self::PROGRESS)->align(Node::CENTER);
+          $c->row(0, 6)->width(self::PROGRESS)->alignItems(Node::CENTER);
             $at = $positions->get($e['path']);
             if ($at !== null && $e['duration'] > 0 && $there) {
                 $k = max(0.0, min(1.0, $at / $e['duration']));
-                $c->row()->height(5)->grow(1)->min(30, 0)->draw(static function (DisplayList $l, Node $n, Theme $t) use ($k): void { // IINA's continuous capacity indicator, mini
-                    $l->rect($n->x, $n->y, $n->w, $n->h, $t->dark ? 0xffffff : 0x000000, 0.15, 2.5);
-                    $l->rect($n->x, $n->y, $n->w * $k, $n->h, $t->accent, 1.0, 2.5);
+                $c->row()->height(5)->grow(1)->minWidth(30)->minHeight(0)->draw(static function (Painter $p, array $r) use ($k): void { // IINA's continuous capacity indicator, mini
+                    $p->fill($r, $p->theme()->dark ? 0xffffff : 0x000000, 2.5, 0.15);
+                    $p->fill([$r[0], $r[1], $r[2] * $k, $r[3]], $p->theme()->accent, 2.5);
                 });
                 $c->end();
                 $c->text(MoviePlayerState::clock($at), 12, $fg)->fontFeatures('tnum');

@@ -9,7 +9,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Content, Context, DisplayList, Node, Painter, Path, TextPainter, Theme};
+use MyPHP\UI\{Content, Context, Node, Painter, Path};
 use MyPHP\UI\Chart\{Axes, Chart, Linear, Side, Tick};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -80,9 +80,7 @@ function view(Context $c, Waveform $s): void
     $c->column(8, 8, 1, $t->background)->fill();
       Chart::plot($c, new Axes(left: $y->ticks(5), bottom: $x->ticks(5), label: $label), function (Node $area) use ($s, $y, $t): void {
           $area->description = '15 seconds at 1000 samples per second per series';
-          $area->label('Three live waveforms')->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($s, $y, $t): void {
-              $p = new Painter($list, $text, $th);
-              $r = [$n->x, $n->y, $n->w, $n->h];
+          $area->label('Three live waveforms')->draw(function (Painter $p, array $r) use ($s, $y, $t): void {
               foreach ($y->ticks(5) as $tick) { $p->line($r[0], Chart::y($r, $tick->at), $r[0] + $r[2], Chart::y($r, $tick->at), 1, $t->border); }
               $p->clip($r, function () use ($p, $r, $s): void {
                   foreach (COLORS as $k => $color) {

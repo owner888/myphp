@@ -30,8 +30,8 @@ final class Flyouts
     {
         $t = $c->theme;
         $c->column(16, 12)->fill()->center();
-          $c->row(0, 8)->align(Node::CENTER);
-            $c->box(14, 14, COLORS[$this->color][1])->round(7);
+          $c->row(0, 8)->alignItems(Node::CENTER);
+            $c->box(14, 14, COLORS[$this->color][1])->radius(7);
             $b = $c->key('color')->button(COLORS[$this->color][0] . ' ▾');
             if ($c->clicked($b)) { $this->toggleList(anchor($c, $b)); }
           $c->end();
@@ -64,11 +64,11 @@ final class Flyouts
         $c->root->color = null;
         panel($c)->padding(6);
           foreach (COLORS as $i => [$name, $color]) {
-              $row = $c->key($i)->row(0, 8)->height(28)->padding(0, 8)->align(Node::CENTER)->round(6);
+              $row = $c->key($i)->row(0, 8)->height(28)->padding(0, 8)->alignItems(Node::CENTER)->radius(6);
               if ($i === $this->hover) { $row->background($t->accent); }
               if ($c->hovered($row) && $this->hover !== $i) { $this->hover = $i; $c->runtime?->animate(); }
               if ($c->clicked($row)) { $this->choose($i); }
-                $c->box(12, 12, $color)->round(6);
+                $c->box(12, 12, $color)->radius(6);
                 $text = $c->text($name);
                 if ($i === $this->hover) { $text->textColor($t->accentText); }
               $c->end();
@@ -125,7 +125,7 @@ final class Flyouts
 /** The box a flyout draws, the window itself drawing nothing: the window's shadow outlines it on macOS. */
 function panel(Context $c): Node
 {
-    return $c->column()->fill()->background($c->theme->surface)->round(10);
+    return $c->column()->fill()->background($c->theme->surface)->radius(10);
 }
 
 /** The box of $n as an anchor, in points from the top-left of the window's content. */

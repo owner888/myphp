@@ -78,7 +78,7 @@ final class Node
     public float $shrink = 1.0;
     /** The opacity of the background (background()). */
     public float $bgAlpha = 1.0;
-    /** Paints this node itself, given the display list, the node (laid out) and the theme, before its children (mygo's Draw): icons, custom marks. */
+    /** Paints this node itself, given a painter and its box, before its children (mygo's Draw): icons, custom marks. */
     public ?\Closure $draw = null;
     /** The pointer over this node, or null for the arrow (mygo's Cursor). */
     public ?Cursor $cursor = null;
@@ -502,17 +502,10 @@ final class Node
         return $this;
     }
 
-    /** Rounds this container's corners by $radius (containers are square by default). */
-    public function round(float $radius): static
-    {
-        $this->radius = $radius; $this->radii = null;
-        return $this;
-    }
-
-    /** Rounds the corners (mygo's Radius): one radius for all, or top left, top right, bottom right and bottom left; $radius is then the top left's. */
+    /** Rounds the corners (mygo's Radius): one radius for all, or top left, top right, bottom right and bottom left; $radius is then the top left's. Containers are square by default. */
     public function radius(float ...$r): static
     {
-        if (count($r) === 1) { return $this->round($r[0]); }
+        if (count($r) === 1) { $this->radius = (float)$r[0]; $this->radii = null; return $this; }
         if (count($r) !== 4) { throw new \InvalidArgumentException('Node::radius takes one radius or four, not ' . count($r)); }
         $this->radii = [(float)$r[0], (float)$r[1], (float)$r[2], (float)$r[3]]; $this->radius = $this->radii[0];
         return $this;
@@ -881,7 +874,7 @@ final class Node
         return $this;
     }
 
-    /** Paints this node with $fn(DisplayList $list, Node $n, Theme $t, TextPainter $text) once laid out, before its children: a mark the list's rects, rings and lines draw; $text for what the atlas holds (an icon's mask). */
+    /** Paints this node with $fn(Painter $p, array $r) once laid out, before its children (mygo's Draw): $r is its box, [x, y, w, h], in the coordinates $p paints in, $p->theme() the theme it paints with. */
     public function draw(\Closure $fn): static
     {
         $this->draw = $fn;
@@ -1096,13 +1089,6 @@ final class Node
     public function grayscale(): static
     {
         $this->gray = true;
-        return $this;
-    }
-
-    /** Keeps this node at least $w wide and $h high, whatever its content measures (mygo's MinWidth and MinHeight); 0 leaves one to the content. */
-    public function min(float $w = 0, float $h = 0): static
-    {
-        $this->minW = $w; $this->minH = $h; $this->minSet = true;
         return $this;
     }
 
@@ -1624,7 +1610,7 @@ final class Node
         return $this;
     }
 
-    /** Paints over this node's children with $fn (list, node, theme), as mygo's DrawOver. */
+    /** Paints over this node's children with $fn(Painter $p, array $r), as draw() does (mygo's DrawOver). */
     public function drawOver(\Closure $fn): static
     {
         $this->drawOver = $fn;
@@ -1703,8 +1689,8 @@ final class Node
         return $this->wrap($width);
     }
 
-    /** Draws a border $width points wide around this container, in $color or the theme's border color, over its background if it has one (mygo's Border). */
-    public function border(?int $color = null, float $width = 1.0): static
+    /** Draws a border $width points wide inside this container's edges, in $color or the theme's border color, over its background if it has one (mygo's Border): it takes room within the node's size, the padding and the children inside it. */
+    public function border(float $width = 1.0, ?int $color = null): static
     {
         $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
         return $this;
@@ -1915,7 +1901,7 @@ final class Node
     public function shrink(float $s): static { $this->shrink = $s; return $this; }
 
     /** Places this container's children across its axis: a row's vertically, a column's horizontally (mygo's AlignItems); rows center by default, columns stretch. */
-    public function align(int $align): static
+    public function alignItems(int $align): static
     {
         $this->align = $align;
         return $this;

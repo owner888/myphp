@@ -44,7 +44,7 @@ function rtlTester(\Closure $view, float $w, float $h): Headless
 // Lines start at the right right to left, whatever they read, and End at the left.
 $align = Node::START;
 $h = rtlTester(function (Context $c) use (&$align): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->text('Hello')->textAlign($align);
     $c->end();
 }, 300, 100);
@@ -55,7 +55,7 @@ check(rtlGlyphsX($h)[1] <= 100, 'right to left, English at the end is at the lef
 // A switch mirrored, its knob on the left when on; a check box's label left of its box.
 $on = true; $checked = false;
 $view = function (Context $c) use (&$on, &$checked): void {
-    $c->column(10, 0)->align(Node::START);
+    $c->column(10, 0)->alignItems(Node::START);
       $c->switch('Wi-Fi', $on);
       $c->checkbox('Remember me', $checked);
     $c->end();
@@ -82,7 +82,7 @@ check(rtlGlyphsX($h)[1] < 290 - 16, 'and its label is left of its box');
 // A slider from the right: its fill, a click, the arrows, a press at the right.
 $v = 25.0;
 $h = rtlTester(function (Context $c) use (&$v): void {
-    $c->column(20, 0)->align(Node::START);
+    $c->column(20, 0)->alignItems(Node::START);
       $c->slider($v, 0, 100, 220)->label('Volume');
     $c->end();
 }, 260, 80);
@@ -102,7 +102,7 @@ same(0.0, $v, 'a press at the right sets 0');
 // Progress bars and meters fill from the right, a reversed bar from the left.
 $reverse = false;
 $h = rtlTester(function (Context $c) use (&$reverse): void {
-    $c->column(0, 10)->align(Node::START);
+    $c->column(0, 10)->alignItems(Node::START);
       $p = $c->progress(0.25, 200);
       if ($reverse) { $p->reverse(); }
       $c->meter(0.25, 0, 1, null, 200);
@@ -133,7 +133,7 @@ same(21.0, $low, 'Left on the minimum raises it');
 // The arrows go the way they point: tabs, ratings, steppers and toolbars.
 $tab = 0; $stars = 2; $step = 5.0;
 $h = rtlTester(function (Context $c) use (&$tab, &$stars, &$step): void {
-    $c->column(0, 10)->align(Node::START);
+    $c->column(0, 10)->alignItems(Node::START);
       $c->tabs(['One', 'Two', 'Three'], $tab);
       $c->rating($stars, 5)->label('Stars');
       $c->stepper($step, 0, 10, 1)->label('Step');
@@ -174,7 +174,7 @@ check(!$open, 'Right closes it');
 // A split's first pane on the right: dragging the divider left, and Left, widen it.
 $size = 100.0;
 $h = rtlTester(function (Context $c) use (&$size): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->split($size, fn() => $c->text('First'), fn() => $c->text('Second'))->grow(1);
     $c->end();
 }, 400, 200);
@@ -187,7 +187,7 @@ check($size > 130, "Left widens it: $size");
 // A popover lines up with the right of its anchor; a menu button's menu shows right to left at its right.
 $open = true; $anchorN = null;
 $h = rtlTester(function (Context $c) use (&$open, &$anchorN): void {
-    $c->column(20, 0)->align(Node::START);
+    $c->column(20, 0)->alignItems(Node::START);
       $anchorN = $c->button('Anchor');
       $c->popover($anchorN, $open, function () use ($c): void { $c->text('Panel content')->size(200, 0); });
       $c->menuButton('Sort', function (\MyPHP\UI\Menu $m): void { $m->item('Name'); });
@@ -212,7 +212,7 @@ check($v !== null && $v[0] >= 190, 'left to right, the vertical thumb at the rig
 // An input starts at the right: its caret, its placeholder, its text.
 $name = new TextState('');
 $h = rtlTester(function (Context $c) use ($name): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->input($name, 'Name', 200)->label('Name field');
     $c->end();
 }, 200, 100);
@@ -228,7 +228,7 @@ check(rtlGlyphsX($h)[0] >= 100, 'a short English text starts at the right');
 // Assistive technology sees the frames shown, and its increment raises a slider.
 $v = 30.0; $wideState = new \MyPHP\UI\ScrollState;
 $h = rtlTester(function (Context $c) use (&$v, $wideState): void {
-    $c->column(10, 10)->align(Node::START);
+    $c->column(10, 10)->alignItems(Node::START);
       $c->row(0, 8); $c->button('OK'); $c->button('Cancel'); $c->end();
       $c->slider($v, 0, 100, 200)->label('Volume');
       $c->row()->size(100, 30)->scroll($wideState, true, false);

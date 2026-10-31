@@ -231,7 +231,7 @@ final class MoviePlayerSettingsPages
                 $c->column(0, 6)->padding(0, 8, 8, MoviePlayerSettings::INDENT)->fillWidth();
                 if ($which === 'size') {
                     [$side, $value, $percent] = $g['size'];
-                    $c->row(0, 6)->align(Node::CENTER);
+                    $c->row(0, 6)->alignItems(Node::CENTER);
                       $s = MoviePlayerSettings::popUp($c, [0 => $tr('$Width'), 1 => $tr('$Height')], $side === 'w' ? 0 : 1, false, true);
                       $n = MoviePlayerSettings::number($c, $this->v, 'geometry.size', (float)$value, 0, 1e5, 0, false, '', true);
                       $u = MoviePlayerSettings::popUp($c, $units, $percent ? 1 : 0, false, true);
@@ -243,13 +243,13 @@ final class MoviePlayerSettingsPages
                 } else {
                     foreach (['x' => ['arrow.left.to.line', '$XOffset', ['+' => '$left', '-' => '$right']], 'y' => ['arrow.up.to.line', '$YOffset', ['-' => '$top', '+' => '$bottom']]] as $axis => [$icon, $name, $sides]) {
                         [$sign, $value, $percent] = $g[$axis];
-                        $c->row(0, 6)->align(Node::CENTER);
+                        $c->row(0, 6)->alignItems(Node::CENTER);
                           MoviePlayerSettings::sf($c, $icon, 12, $c->theme->textMuted);
                           $c->text($tr($name), 11, $c->theme->textMuted);
                           $n = MoviePlayerSettings::number($c, $this->v, "geometry.$axis", (float)$value, 0, 1e5, 0, false, '', true);
                           $u = MoviePlayerSettings::popUp($c, $units, $percent ? 1 : 0, false, true);
                         $c->end();
-                        $c->row(0, 6)->align(Node::CENTER)->paddingStart(18);
+                        $c->row(0, 6)->alignItems(Node::CENTER)->paddingStart(18);
                           $c->text($tr('$toThe'), 11, $c->theme->textMuted);
                           $keys = array_keys($sides);
                           $a = MoviePlayerSettings::popUp($c, array_map($tr, array_values($sides)), array_search($sign, $keys, true), false, true);
@@ -347,8 +347,8 @@ final class MoviePlayerSettingsPages
             $this->section('$TextSubtitles', [[
                 $this->item('$Font', symbol: 'textformat', id: 'subTextFont', terms: [MoviePlayerSettings::tr($c, 'subBold.label'), MoviePlayerSettings::tr($c, 'subItalic.label')], value: function (): void {
                     $c = $this->c;
-                    $c->row(0, 6)->align(Node::CENTER);
-                      $b = $c->row()->height(25)->minWidth(120)->paddingX(8)->round(6)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::tr($c, '$Font'))->borderWidth(1)->borderColor($c->theme->dark ? 0x4a4a4a : 0xd0d0d0);
+                    $c->row(0, 6)->alignItems(Node::CENTER);
+                      $b = $c->row()->height(25)->minWidth(120)->paddingX(8)->radius(6)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::tr($c, '$Font'))->borderWidth(1)->borderColor($c->theme->dark ? 0x4a4a4a : 0xd0d0d0);
                         $c->text($this->set->get('subTextFont'), 13, $c->theme->text)->singleLine();
                       $c->end();
                       if ($c->clicked($b)) { MoviePlayerFontSheet::open($this->set->get('subTextFont'), fn(string $f) => $this->s->setSetting('subTextFont', $f)); }
@@ -371,7 +371,7 @@ final class MoviePlayerSettingsPages
             $this->section('$Position', [[
                 $this->item('$Align', symbol: 'arrow.up.and.down.and.arrow.left.and.right', id: 'subAlignX', terms: [...$this->optionTerms('subAlignX', [0, 1, 2]), ...$this->optionTerms('subAlignY', [0, 1, 2])], value: function (): void {
                     $c = $this->c;
-                    $c->row(0, 6)->align(Node::CENTER);
+                    $c->row(0, 6)->alignItems(Node::CENTER);
                       foreach (['$X' => 'subAlignX', '$Y' => 'subAlignY'] as $label => $key) {
                           $c->text(trim(MoviePlayerSettings::tr($c, $label)), 11, $c->theme->text);
                           $picked = MoviePlayerSettings::popUp($c, array_map(fn(array $o) => $o[0], $this->options($key, [0, 1, 2])), $this->set->get($key), small: true);
@@ -381,7 +381,7 @@ final class MoviePlayerSettingsPages
                 }),
                 $this->item('$Margin', symbol: 'arrow.down.to.line', id: 'subMarginX', value: function (): void {
                     $c = $this->c;
-                    $c->row(0, 6)->align(Node::CENTER);
+                    $c->row(0, 6)->alignItems(Node::CENTER);
                       foreach (['$X' => 'subMarginX', '$Y' => 'subMarginY'] as $label => $key) {
                           $c->text(trim(MoviePlayerSettings::tr($c, $label)), 11, $c->theme->text);
                           $n = MoviePlayerSettings::number($c, $this->v, $key, $this->set->get($key), 0, PHP_INT_MAX, 0, false, small: true);
@@ -521,7 +521,7 @@ final class MoviePlayerSettingsPages
         $names = MoviePlayerKeys::configNames();
         $options = array_combine($names, array_map(fn(string $n) => (MoviePlayerKeys::editable($n) ? '' : '🔒 ') . $n, $names));
         if (!isset($options[$name])) { $options[$name] = $name; }
-        $c->row(0, 6)->align(Node::CENTER);
+        $c->row(0, 6)->alignItems(Node::CENTER);
           $picked = MoviePlayerSettings::popUp($c, $options, $name);
           if ($picked !== null && $picked !== $name) { $this->chooseKeySet((string)$picked); }
           $del = $c->row();
@@ -531,7 +531,7 @@ final class MoviePlayerSettingsPages
                 $this->chooseKeySet(MoviePlayerKeys::FALLBACK);
             }
           $c->end();
-          $add = $c->row()->size(32, 25)->round(6)->center()->role(Role::BUTTON)->label('Add Configuration')->borderWidth(1)->borderColor($c->theme->dark ? 0x4a4a4a : 0xd0d0d0);
+          $add = $c->row()->size(32, 25)->radius(6)->center()->role(Role::BUTTON)->label('Add Configuration')->borderWidth(1)->borderColor($c->theme->dark ? 0x4a4a4a : 0xd0d0d0);
             MoviePlayerSettings::sf($c, 'square.grid.3x1.folder.badge.plus', 13, $c->theme->text);
           $c->end();
           $add->menu(function (Menu $m) use ($c, $name): void {
@@ -596,9 +596,9 @@ final class MoviePlayerSettingsPages
         $this->v->kbSearch ??= new TextState();
         $q = mb_strtolower(trim($this->v->kbSearch->text));
         $c->column(0, 0)->padding(0, 0, 8, 16)->fillWidth();
-          $c->row(0, 8)->fillWidth()->align(Node::CENTER)->padding(8, 16, 0, 0);
+          $c->row(0, 8)->fillWidth()->alignItems(Node::CENTER)->padding(8, 16, 0, 0);
             $c->searchField($this->v->kbSearch, 0);
-            $plus = $c->column()->size(26, 26)->round(13)->center()->role(Role::BUTTON)->label('Add')->background($k['control'], $k['controlAlpha']);
+            $plus = $c->column()->size(26, 26)->radius(13)->center()->role(Role::BUTTON)->label('Add')->background($k['control'], $k['controlAlpha']);
               MoviePlayerSettings::sf($c, $editable ? 'plus' : 'lock', 13, $t->text);
             $c->end();
             if ($c->clicked($plus)) {
@@ -609,7 +609,7 @@ final class MoviePlayerSettingsPages
               $action = MoviePlayerKeys::displayAction($c, $m, $raw);
               if ($q !== '' && !str_contains(mb_strtolower(MoviePlayerKeys::rawAction($m)), $q) && !str_contains(mb_strtolower(MoviePlayerKeys::readable($c, $m['action'], $m['iina'])), $q)) { continue; }
               $on = $this->v->kbChosen === $i;
-              $r = $c->key("binding:$i")->row(0, 6)->height(32)->fillWidth()->paddingX(4)->round(6)->align(Node::CENTER);
+              $r = $c->key("binding:$i")->row(0, 6)->height(32)->fillWidth()->paddingX(4)->radius(6)->alignItems(Node::CENTER);
               if ($on) { $r->background($t->accent, 0.2); }
                 $text = $c->text($action, 13, $t->text)->singleLine()->ellipsis('…')->grow(1);
                 if ($raw) { $text->font('monospace'); }
@@ -624,7 +624,7 @@ final class MoviePlayerSettingsPages
                 } elseif ($on && MoviePlayerSettings::symbolButton($c, 'lock', 'Help', false, 20)) {
                     $this->alert('duplicate_config');
                 }
-                $c->row()->height(28)->minWidth(28)->paddingX(4)->round(4)->center()->borderWidth(1)->borderColor($k['line'])->background($t->dark ? 0x2a2a2a : 0xffffff);
+                $c->row()->height(28)->minWidth(28)->paddingX(4)->radius(4)->center()->borderWidth(1)->borderColor($k['line'])->background($t->dark ? 0x2a2a2a : 0xffffff);
                   $key = $c->text(MoviePlayerKeys::displayKey($m, $raw), 13, $t->text)->singleLine();
                   if ($raw) { $key->font('monospace'); }
                 $c->end();
@@ -672,7 +672,7 @@ final class MoviePlayerSettingsPages
         $logging = $this->sw('enableLogging');
         $toggle = $logging['value'];
         $logging['value'] = function () use ($c, $toggle): void {
-            $c->row(0, 8)->align(Node::CENTER);
+            $c->row(0, 8)->alignItems(Node::CENTER);
               if (MoviePlayerSettings::pushButton($c, MoviePlayerSettings::tr($c, '$OpenLogDirectory'))) { \MyPHP\Shell::openPath(\MyPHP\Logger::directory()); }
               $toggle();
             $c->end();
@@ -723,7 +723,7 @@ final class MoviePlayerSettingsPages
                 $this->item('$ClearPlaybackHistory', symbol: ['document.badge.clock', 'doc.badge.clock', 'doc'], desc: MoviePlayerSettings::tr($c, '$DeleteAllPlaybackHistories'),
                     value: $go('trash', '$ClearPlaybackHistory', function () use ($ask, $done): void { if ($ask('clear_history')) { $this->s->clearHistory(); $done('cleared'); } })),
                 $this->item('$ClearThumbnailCache', symbol: 'photo', value: function () use ($c, $ask): void {
-                    $c->row(0, 8)->align(Node::CENTER);
+                    $c->row(0, 8)->alignItems(Node::CENTER);
                       $this->v->thumbBytes ??= $this->s->thumbnailBytes(); // as the page opens, as IINA's label
                       $c->text(MoviePlayerState::byteCount($this->v->thumbBytes, true) . 'B', 11, $c->theme->textMuted);
                       if (MoviePlayerSettings::symbolButton($c, 'trash', MoviePlayerSettings::tr($c, '$ClearThumbnailCache')) && $ask('clear_cache')) { $this->v->thumbBytes = $this->s->thumbnailBytes(true); }
@@ -741,12 +741,12 @@ final class MoviePlayerSettingsPages
             $t = $c->theme;
             $v = (float)max(1, min(4, $this->set->get($key)));
             $slider = $c->sliderBase($v, 1, 4, 1)->size(100, 20);
-            $slider->draw(static function (DisplayList $l, Node $n) use ($t): void {
-                $x0 = $n->x + 6; $w = $n->w - 12; $cy = $n->y + 8;
-                $l->rect($x0, $cy - 2, $w, 4, $t->dark ? 0xffffff : 0x000000, 0.15, 2);
-                $l->rect($x0, $cy - 2, $w * $n->fraction, 4, $t->accent, 1.0, 2);
-                for ($i = 0; $i < 4; $i++) { $l->rect($x0 + $w * $i / 3 - 0.5, $cy + 5, 1, 4, $t->dark ? 0xffffff : 0x000000, 0.35); } // its ticks, under it
-                $l->rect($x0 + $w * $n->fraction - 6, $cy - 6, 12, 12, 0xffffff, 1.0, 6);
+            $slider->draw(static function (Painter $p, array $r) use ($slider, $t): void {
+                $x0 = $r[0] + 6; $w = $r[2] - 12; $cy = $r[1] + 8;
+                $p->fill([$x0, $cy - 2, $w, 4], $t->dark ? 0xffffff : 0x000000, 2, 0.15);
+                $p->fill([$x0, $cy - 2, $w * $slider->fraction, 4], $t->accent, 2);
+                for ($i = 0; $i < 4; $i++) { $p->fill([$x0 + $w * $i / 3 - 0.5, $cy + 5, 1, 4], $t->dark ? 0xffffff : 0x000000, 0, 0.35); } // its ticks, under it
+                $p->fill([$x0 + $w * $slider->fraction - 6, $cy - 6, 12, 12], 0xffffff, 6);
             });
             if ($c->changed($slider)) { $this->s->setSetting($key, (int)round($v)); }
         });
@@ -774,7 +774,7 @@ final class MoviePlayerSettingsPages
     private function sizeAndColor(string $label, string $sizeKey, string $colorKey): void
     {
         $c = $this->c;
-        $c->row(0, 6)->align(Node::CENTER);
+        $c->row(0, 6)->alignItems(Node::CENTER);
           $c->text(MoviePlayerSettings::tr($c, $label), 11, $c->theme->text);
           $n = MoviePlayerSettings::number($c, $this->v, $sizeKey, $this->set->get($sizeKey), $sizeKey === 'subBorderSize' ? 0 : -PHP_INT_MAX, PHP_INT_MAX, 0, true, small: true);
           if ($n !== null) { $this->s->setSetting($sizeKey, $n); }
@@ -855,7 +855,7 @@ final class MoviePlayerSettingsPages
         $c->column(0, 8)->padding(0, 8, 8, MoviePlayerSettings::INDENT)->fillWidth();
           MoviePlayerSettings::popUp($c, ['opensubtitles.com'], 0, true);
           $c->text(MoviePlayerSettings::tr($c, '$SubtitleSource.desc'), 11, $t->textMuted);
-          $c->row(0, 8)->align(Node::CENTER);
+          $c->row(0, 8)->alignItems(Node::CENTER);
             $user = $this->set->get('openSubUsername');
             $c->text($tx->get('videoOpenSubtitlesAccount'), 11, $t->textMuted);
             $b = $c->row();
@@ -953,7 +953,7 @@ final class MoviePlayerSettingsPages
         $text = $item['label'];
         $item['value'] = function () use ($switchKey, $inputKey, $min, $max, $floats, $unit, $text): void {
             $on = $this->set->get($switchKey);
-            $box = $this->c->row(0, 6)->align(Node::CENTER);
+            $box = $this->c->row(0, 6)->alignItems(Node::CENTER);
             if (!$on) { $box->disabled(); }
               $n = MoviePlayerSettings::number($this->c, $this->v, $inputKey, (float)$this->set->get($inputKey), $min, $max, 0, $floats, $unit === '' ? '' : MoviePlayerSettings::tr($this->c, $unit));
             $this->c->end();

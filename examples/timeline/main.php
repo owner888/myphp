@@ -32,9 +32,9 @@ function view(Context $c, Intro $s): void
     $t = $c->theme;
     // The pointer held the scrubber: the playhead stays where it put it, and goes on from there when it is let go.
     $o = new TimelineOptions(run: $s->run, paused: $s->paused, reverse: $s->reverse, progress: $s->held ? $s->scrub : null);
-    $c->column(24, 18, 1)->align(Node::CENTER)->justify(Node::CENTER);
+    $c->column(24, 18, 1)->alignItems(Node::CENTER)->justify(Node::CENTER);
       // One playhead for the whole intro, kept by the card.
-      $card = $c->key('card')->column(22, 10, 0, $t->surface)->size(300, 0)->round(16);
+      $card = $c->key('card')->column(22, 10, 0, $t->surface)->size(300, 0)->radius(16);
       $tl = $c->timeline($card, 'intro', $o);
       $slide = $tl->tween(new Tween(-420, 0, 0.45));
       $grow = $tl->tween(new Tween(0.9, 1, 0.45), Placement::withPrevious(0));

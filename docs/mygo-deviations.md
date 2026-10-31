@@ -155,13 +155,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     nothing focusable takes it from selectable text.
   - Why: clearing it always closed a combobox's options before the click
     on one chose it; myphp's popups do not keep the focus as mygo's do.
-- **Keys through the text system's selectors** (v0.82)
-  - mygo: `textSelectionKey` reads keys and modifiers, and the read-only
-    editor moves by visual graphemes (`visualNext`) in bidi text.
+- **Keys through the text system's selectors** (v0.82, v1.123)
+  - mygo: `textSelectionKey` reads keys and modifiers.
   - myphp: AppKit's selectors (`moveRightAndModifySelection:`…); Home and
     End are told from Cmd and the arrows by the key event before the
-    selector; Left and Right move by logical graphemes.
-  - Why: myphp's keys come as selectors; visual movement to be ported.
+    selector. Left and Right move by visual graphemes (`visualNext`, the
+    text layout's `moveCaret`) since v1.123, as mygo's.
+  - Why: myphp's keys come as selectors.
 - **Inherited disabled** (v0.82, v1.07)
   - mygo: `IsDisabled` walks the element's parents; `disabled()` also
     reads the last frame's state, for an element disabled after it was
@@ -180,18 +180,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 ## Box model and setters
 
-- **Older setters under other names** (v0.85)
+- **Setters under other names** (v0.85, v1.123)
   - mygo: `AlignItems`, `Radius`, `MinWidth`/`MinHeight`, `Width`/`Height`,
     `Border(width, color)`, `Gap`, `Grow`, `Padding(v...)` on any element.
-  - myphp: `align()`, `round()` (and mygo's `radius()` too),
-    `min($w, $h)`, `size($w, $h)`,
-    `border(?$color, $width)` (drawn over the padding, not inside it),
-    the `$gap` and `$grow` properties or `column($pad, $gap, $grow,
-    $color)`; mygo's names came only where myphp had none (`margin`,
-    `borderWidth`, `borderColor`, `background`, `shrink`, `paddingX`,
-    `paddingY`, `paddingStart`, `borderStartWidth`).
-  - Why: written before the naming rule; renaming them is a sweep over
-    the widgets and examples, to be decided.
+  - myphp: since v1.123 `alignItems()`, `radius()`, `minWidth()`/
+    `minHeight()` and `border($width, $color)` (within the node's size);
+    still `size($w, $h)` and the `$gap` and `$grow` properties or
+    `column($pad, $gap, $grow, $color)` beside mygo's `width()`,
+    `height()`, `gap()`, `grow()`.
+  - Why: `size()` and the builders' arguments are what every widget and
+    example builds with.
 - **Insets and percentages** (v1.03, v1.07)
   - mygo: `Top`, `Right`, `Bottom`, `Left`, `Start`, `End` and their
     `…Percent`s place an absolute element in its parent's padding box and
@@ -504,8 +502,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     tinted: `ImageOptions` has `flipX` and `flipY`), `focusRing()`,
     `clip()` (square corners), `transform()`, `fillPath()`,
     `strokePath()`, `icon()`; colors 0xRRGGBB with an opacity.
-    `Node::draw()` still hands a draw the display list and the node; the
-    tree painter's own helpers became `paintIcon` and `paintFocusRing`.
+    `Node::draw()` and `drawOver()` hand a draw the painter and the node's
+    box, as mygo's, since v1.123; the tree painter's own helpers became
+    `paintIcon` and `paintFocusRing`.
   - Why: what a game draws with, first; the display list has no tint
     nor rounded clips.
 
@@ -2013,8 +2012,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     paints past its box may be skipped where its box is out of view.
   - myphp: a node with draw, drawOver or drawObjects is noCull, and so are
     the nodes around it; painting goes on into them as before.
-  - Why: myphp's draw callbacks get the display list itself, with nothing
-    holding them to their boxes, and games and charts paint past them.
+  - Why: nothing holds a draw to its box, and games and charts paint past
+    them.
 
 ## A terminal tells of commands that finished (v1.87)
 

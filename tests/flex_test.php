@@ -46,7 +46,7 @@ function flexSame(array $want, array $got, string $what): void
 // Gaps and alignContent: two lines of 10 and a gap of 6, 74 left, 37 above.
 flexSame(['a' => [0, 37, 40, 10], 'b' => [50, 37, 40, 10], 'c' => [0, 53, 40, 10]], flexBoxes(function (Context $c) {
     $c->column();
-      $c->row()->wrap(100)->size(100, 100)->gapX(10)->gapY(6)->alignContent(Node::CENTER)->align(Node::START);
+      $c->row()->wrap(100)->size(100, 100)->gapX(10)->gapY(6)->alignContent(Node::CENTER)->alignItems(Node::START);
         flexBox($c, 40, 10, 'a'); flexBox($c, 40, 10, 'b'); flexBox($c, 40, 10, 'c');
       $c->end();
     $c->end();
@@ -55,7 +55,7 @@ flexSame(['a' => [0, 37, 40, 10], 'b' => [50, 37, 40, 10], 'c' => [0, 53, 40, 10
 // Stretched lines.
 $b = flexBoxes(function (Context $c) {
     $c->column();
-      $c->row()->wrap(100)->size(100, 100)->alignContent(Node::STRETCH)->align(Node::STRETCH);
+      $c->row()->wrap(100)->size(100, 100)->alignContent(Node::STRETCH)->alignItems(Node::STRETCH);
         $c->column()->width(60)->label('a'); $c->end();
         $c->column()->width(60)->label('b'); $c->end();
       $c->end();
@@ -69,10 +69,10 @@ flexSame([
     'c' => [0, 100, 20, 10], 'd' => [0, 90, 20, 10],
     'e' => [0, 140, 30, 10], 'f' => [0, 130, 30, 10],
 ], flexBoxes(function (Context $c) {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->row(0, 10)->reverse()->width(100); flexBox($c, 20, 10, 'a')->margin(0, 5, 0, 0); flexBox($c, 20, 10, 'b'); $c->end();
       $c->column()->reverse()->height(100); flexBox($c, 20, 10, 'c'); flexBox($c, 20, 10, 'd'); $c->end();
-      $c->row()->wrapReverse(50)->size(50, 40)->align(Node::START); flexBox($c, 30, 10, 'e'); flexBox($c, 30, 10, 'f'); $c->end();
+      $c->row()->wrapReverse(50)->size(50, 40)->alignItems(Node::START); flexBox($c, 30, 10, 'e'); flexBox($c, 30, 10, 'f'); $c->end();
     $c->end();
 }, 200, 300, 'a', 'b', 'c', 'd', 'e', 'f'), 'reverse');
 
@@ -87,7 +87,7 @@ flexSame(['centered' => [75, 0, 50, 10], 'left' => [0, 25, 20, 10], 'right' => [
 
 // Relative offsets and percentages.
 flexSame(['moved' => [3, 5, 20, 20], 'next' => [20, 0, 20, 20], 'quarter' => [40, 0, 50, 20], 'tenth' => [90, 0, 20, 20], 'half' => [100, 100, 10, 10]], flexBoxes(function (Context $c) {
-    $c->row()->width(200)->align(Node::START);
+    $c->row()->width(200)->alignItems(Node::START);
       flexBox($c, 20, 20, 'moved')->top(5)->left(3);
       flexBox($c, 20, 20, 'next');
       $c->column()->basisPercent(25)->height(20)->label('quarter'); $c->end();
@@ -114,7 +114,7 @@ check($col['pct'][3] <= 200.5, "a box limited to 50% of a 400-high column: {$col
 // Absolute nodes in the padding box: insets from inside the border, whatever the padding; percentages of the padding box.
 flexSame(['start' => [4, 4, 14, 14], 'end' => [28, 12, 4, 4], 'half' => [18, 10, 2, 2]], flexBoxes(function (Context $c) {
     $c->column();
-      $c->column()->size(36, 20)->borderWidth(1)->borderColor(0)->padding(5)->align(Node::START);
+      $c->column()->size(36, 20)->borderWidth(1)->borderColor(0)->padding(5)->alignItems(Node::START);
         flexBox($c, 14, 14, 'start')->absolute()->left(3)->top(3);
         flexBox($c, 4, 4, 'end')->absolute()->right(3)->bottom(3);
         flexBox($c, 2, 2, 'half')->absolute()->leftPercent(50)->topPercent(50);
@@ -131,7 +131,7 @@ flexSame([
     'fill' => [0, 120, 200, 80],
 ], flexBoxes(function (Context $c) {
     $c->column()->width(200)->height(200);
-      $c->row()->height(10)->align(Node::START);
+      $c->row()->height(10)->alignItems(Node::START);
         $c->column()->grow(1)->maxWidth(60)->height(10)->label('max'); $c->end();
         $c->column()->grow(1)->height(10)->label('grown'); $c->end();
       $c->end();
@@ -180,7 +180,7 @@ $b = $css(function (Context $c) {
 }, 'col', 'row');
 check($near($b['col'], 14, 0) && $near($b['row'], 14, 0), 'a box no smaller than its padding: ' . json_encode($b));
 $b = $css(function (Context $c) {
-    $c->row()->width(300)->align(Node::STRETCH);
+    $c->row()->width(300)->alignItems(Node::STRETCH);
       $c->box(0, 0, 0)->basis(200)->label('a');
       $c->box(0, 0, 0)->basis(200)->padding(0, 0, 0, 100)->label('b');
     $c->end();
@@ -204,7 +204,7 @@ $b = $css(function (Context $c) {
 }, 'a', 'b');
 check($near($b['a'], 600, 42) && $near($b['b'], 600, 8), 'a minimum over its maximum freezes the item: ' . json_encode($b));
 $b = $css(function (Context $c) {
-    $c->row()->align(Node::START);
+    $c->row()->alignItems(Node::START);
       $c->row()->label('fixed'); $c->box(0, 0, 0)->shrink(0)->basis(47); $c->end();
       $c->row()->label('capped'); $c->row()->basis(56); $c->box(117, 0, 0); $c->end(); $c->end();
     $c->end();
@@ -213,11 +213,11 @@ check($near($b['fixed'], 47, 0) && $near($b['capped'], 117, 0), 'a row as wide a
 
 // Children lined up by their baselines (mygo's baseline_test.go; the boxes without text Chrome's).
 $t = new Headless(function (Context $c) use (&$bl) {
-    $bl['row'] = $c->row(0, 4)->align(Node::BASELINE);
+    $bl['row'] = $c->row(0, 4)->alignItems(Node::BASELINE);
       $bl['price'] = $c->text('$42')->fontSize(40)->padding(10, 0, 0, 0); // the test's metrics are one size: the padding makes the ascent larger
       $bl['unit'] = $c->text('/month')->fontSize(13)->padding(3, 0, 6, 0);
     $c->end();
-    $c->row()->align(Node::START);
+    $c->row()->alignItems(Node::START);
       $bl['big'] = $c->text('Title')->fontSize(28)->alignSelf(Node::BASELINE);
       $bl['small'] = $c->text('note')->fontSize(11)->alignSelf(Node::BASELINE);
       $bl['dot'] = $c->box(6, 6, 0)->alignSelf(Node::BASELINE);
@@ -232,12 +232,12 @@ check(abs($row->h - max($price->h, $unit->y - $row->y + $unit->h)) < 0.01, "the 
 check(abs($baseline($bl['big']) - $baseline($bl['small'])) < 0.01 && abs($bl['dot']->y + $bl['dot']->h - $baseline($bl['big'])) < 0.01, 'alignSelf: those asking line up, a box without text by its bottom');
 same($bl['big']->y, $bl['top']->y, 'one aligned to the start stays at the top');
 $b = flexBoxes(function (Context $c) {
-    $c->column()->align(Node::START);
-      $c->grid([Track::fixed(100), Track::fixed(100)])->align(Node::BASELINE)->label('grid');
+    $c->column()->alignItems(Node::START);
+      $c->grid([Track::fixed(100), Track::fixed(100)])->alignItems(Node::BASELINE)->label('grid');
         $c->box(0, 20, 0)->margin(5, 0, 0, 0)->label('a'); $c->box(0, 50, 0)->label('b');
         $c->box(0, 10, 0)->label('c'); $c->box(0, 30, 0)->margin(0, 0, 4, 0)->alignSelf(Node::START)->label('d');
       $c->end();
-      $c->grid([Track::fixed(100), Track::fixed(100)], 0, [Track::fixed(200)])->align(Node::BASELINE)->label('fixed');
+      $c->grid([Track::fixed(100), Track::fixed(100)], 0, [Track::fixed(200)])->alignItems(Node::BASELINE)->label('fixed');
         $c->box(0, 20, 0)->label('e'); $c->box(0, 50, 0)->margin(3, 0, 0, 0)->label('f');
       $c->end();
     $c->end();
@@ -245,15 +245,15 @@ $b = flexBoxes(function (Context $c) {
 flexSame(['grid' => [0, 0, 200, 84], 'a' => [0, 30, 100, 20], 'b' => [100, 0, 100, 50], 'c' => [0, 50, 100, 10], 'd' => [100, 50, 100, 30],
     'fixed' => [0, 84, 200, 200], 'e' => [0, 117, 100, 20], 'f' => [100, 87, 100, 50]], $b, 'a grid\'s rows line up their items\' baselines');
 $b = flexBoxes(function (Context $c) {
-    $c->row()->width(300)->align(Node::BASELINE)->label('row');
+    $c->row()->width(300)->alignItems(Node::BASELINE)->label('row');
       $c->box(0, 40, 0)->label('a');
       $c->column()->padding(7, 0, 0, 0)->label('col'); $c->box(0, 10, 0); $c->box(0, 20, 0); $c->end();
-      $c->row()->align(Node::BASELINE)->margin(2, 0, 0, 0)->label('inner'); $c->box(0, 5, 0); $c->box(0, 15, 0)->margin(0, 0, 6, 0); $c->end();
+      $c->row()->alignItems(Node::BASELINE)->margin(2, 0, 0, 0)->label('inner'); $c->box(0, 5, 0); $c->box(0, 15, 0)->margin(0, 0, 6, 0); $c->end();
     $c->end();
 }, 400, 300, 'row', 'a', 'col', 'inner');
 flexSame(['row' => [0, 0, 300, 60], 'a' => [0, 0, 0, 40], 'col' => [0, 23, 0, 37], 'inner' => [0, 25, 0, 21]], $b, 'a row\'s baseline is its first child\'s by its baseline, a column\'s its first child\'s');
 $b = flexBoxes(function (Context $c) {
-    $c->column()->size(300, 100)->direction(Direction::RightToLeft)->align(Node::BASELINE);
+    $c->column()->size(300, 100)->direction(Direction::RightToLeft)->alignItems(Node::BASELINE);
       $c->box(50, 10, 0)->label('a'); $c->box(100, 10, 0)->margin(0, 10, 0, 0)->label('b');
     $c->end();
 }, 400, 300, 'a', 'b');
@@ -279,7 +279,7 @@ flexSame(['a' => [0, 0, 80, 10], 'b' => [80, 0, 30, 10], 'c' => [140, 0, 260, 10
 // A hidden node takes no room: its siblings close up with one gap between them, in rows, columns and grids, and what sizes itself by its content does not count it (mygo's TestHiddenTakesNoRoom).
 $hide = true; $nodes = [];
 $t = new Headless(function (Context $c) use (&$hide, &$nodes) {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $nodes['row'] = $c->row(0, 10);
         $nodes['a'] = $c->box(20, 20, 0);
         $c->column()->size(30, 30)->hidden($hide); $nodes['inside'] = $c->box(5, 5, 0); $c->end();

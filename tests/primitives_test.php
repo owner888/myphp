@@ -118,7 +118,7 @@ check(count($opened) === 3 && $opened[2] === 'https://example.com' && $calls ===
 // A popover's light dismiss: a press in a popover inside it is not outside; one in it closes the inner; outside closes it and goes on; its anchor toggles it; Escape.
 $open = false; $inner = true; $behind = 0;
 $h = new Headless(function (Context $c) use (&$open, &$inner, &$behind): void {
-    $c->row(10, 100)->align(Node::START);
+    $c->row(10, 100)->alignItems(Node::START);
       $more = $c->buttonBase()->size(60, 20)->label('more'); $c->end();
       if ($c->clicked($more)) { $open = !$open; }
       if ($c->clicked($c->buttonBase()->size(60, 20)->label('behind'))) { $behind++; }
@@ -166,7 +166,7 @@ same(66.0, $panel()[1], 'above, where there is no room below');
 // A modal overlay of the app's own: the focus into it, Tab kept in it, what is behind hidden from assistive technology, Escape giving the focus back.
 $open = false;
 $h = new Headless(function (Context $c) use (&$open): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       if ($c->clicked($c->buttonBase()->size(60, 20)->label('open'))) { $open = true; }
       $c->end();
       $c->buttonBase()->size(60, 20)->label('outside'); $c->end();
@@ -197,7 +197,7 @@ check(!$open && $focused('open'), 'Escape closes it, the focus back on its opene
 // A slider without a look: vertical, stepped; disabled, it moves no more.
 $v = 0.0; $hh = 0.0; $disabled = false;
 $h = new Headless(function (Context $c) use (&$v, &$hh, &$disabled): void {
-    $c->row(0, 20)->align(Node::START);
+    $c->row(0, 20)->alignItems(Node::START);
       $c->sliderBase($v, 0, 100, 10, vertical: true)->size(20, 100)->label('v');
       $n = $c->sliderBase($hh, 0, 100, 25)->size(100, 20)->label('h');
       $n->disabled = $disabled;
@@ -270,8 +270,8 @@ $h = new Headless(function (Context $c) use (&$drawer): void {
     $c->end();
     if ($drawer) {
         $c->overlay(function () use ($c, &$drawer): void {
-            $back = $c->row()->absolute()->left(0)->top(0)->right(0)->bottom(0)->justify(Node::END)->align(Node::STRETCH)->background(0x000000, 0.3)->block();
-              $panel = $c->column(16)->size(120, 0)->align(Node::START)->background($c->theme->background)->role(Role::DIALOG)->label('Filters');
+            $back = $c->row()->absolute()->left(0)->top(0)->right(0)->bottom(0)->justify(Node::END)->alignItems(Node::STRETCH)->background(0x000000, 0.3)->block();
+              $panel = $c->column(16)->size(120, 0)->alignItems(Node::START)->background($c->theme->background)->role(Role::DIALOG)->label('Filters');
                 $c->buttonBase()->size(60, 20)->label('apply'); $c->end();
               $c->end();
               if ($c->pressedOutside($panel) || $c->overlayShortcut($back, Key::ESCAPE)) { $drawer = false; }
@@ -291,7 +291,7 @@ check(!$drawer && $h->focused()?->label === 'filters', 'a press on the backdrop 
 $open = true; $sc = new ScrollState();
 $h = new Headless(function (Context $c) use (&$open, $sc): void {
     $c->column(0, 0, 1)->scroll($sc);
-      $c->column()->size(0, 1000)->align(Node::START);
+      $c->column()->size(0, 1000)->alignItems(Node::START);
         $c->box(0, 100, 0);
         $b = $c->buttonBase()->size(60, 20)->label('anchor'); $c->end();
         $c->popoverBase($b, $open, function (Node $p) use ($c): void { $c->box(40, 20, 0)->label('panel'); });
@@ -335,7 +335,7 @@ check($l[2] > 0 && $card[0] == $l[0] && $card[1] == $l[1] + $l[3], 'the card bel
 // How far the keys move each kind of range, as assistive technology learns it.
 $a = 50.0; $b = 50.0; $s = 5.0; $low = 10.0; $high = 90.0; $stars = 3;
 $h = new Headless(function (Context $c) use (&$a, &$b, &$s, &$low, &$high, &$stars): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->slider($a, 0, 200)->label('plain');
       $c->sliderBase($b, 0, 100, 5)->size(100, 20)->label('stepped');
       $c->stepper($s, 0, 10, 0.5)->label('stepper');

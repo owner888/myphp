@@ -13,7 +13,7 @@
 declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
-use MyPHP\UI\{Animation, BorderStyle, Content, Context, Cursor, DisplayList, Easing, Font, InputEvent, Node, Painter, Path, Pose, TextPainter, Theme, Transform};
+use MyPHP\UI\{Animation, BorderStyle, Content, Context, Cursor, Easing, Font, InputEvent, Node, Painter, Path, Pose, Transform};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -344,11 +344,9 @@ final class Confetti
 function shapeBox(Context $c, Piece $p): Node
 {
     $color = $p->color;
-    $paint = fn(Closure $path) => function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($path, $color) {
-        (new Painter($list, $text, $t))->fillPath($path($n->x, $n->y, $n->w, $n->h), $color);
-    };
+    $paint = fn(Closure $path) => fn(Painter $p, array $r) => $p->fillPath($path(...$r), $color);
     $n = match ($p->shape->kind) {
-        Shape::CIRCLE => $c->column(0, 0, 0, $color)->round($p->w / 2),
+        Shape::CIRCLE => $c->column(0, 0, 0, $color)->radius($p->w / 2),
         Shape::STAR => $c->column()->draw($paint(starPath(...))),
         Shape::HEART => $c->column()->draw($paint(heartPath(...))),
         Shape::TEXT => $c->column()->center(),
@@ -376,7 +374,7 @@ function view(Context $c, Confetti $s): void
     $s->emitters = array_values($s->emitters);
 
     $c->column(24, 20, 1);
-      $c->row(0, 12)->align(Node::END);
+      $c->row(0, 12)->alignItems(Node::END);
         $c->column(0, 4, 1);
           $c->text('Confetti', 28, style: Font::BOLD);
           $c->muted('canvas-confetti\'s demos in native UI, every piece moved by poses that only paint.');
@@ -384,10 +382,10 @@ function view(Context $c, Confetti $s): void
         $c->text($s->inAir() . ' in the air', 12, $t->textMuted);
       $c->end();
       if ($still) { $c->text('Confetti rests while the desktop asks for less motion.', color: $t->warning); }
-      $c->row(0, 16, 1)->align(Node::STRETCH);
+      $c->row(0, 16, 1)->alignItems(Node::STRETCH);
         $c->column(0, 16, 1);
           presetTiles($c, $s, $now, $still);
-          $stage = $c->key('stage')->column(0, 6, 1)->align(Node::CENTER)->justify(Node::CENTER)->round(12)->border($t->border)->borderStyle(BorderStyle::Dashed)->cursor(Cursor::Pointer);
+          $stage = $c->key('stage')->column(0, 6, 1)->alignItems(Node::CENTER)->justify(Node::CENTER)->radius(12)->border(1, $t->border)->borderStyle(BorderStyle::Dashed)->cursor(Cursor::Pointer);
             $c->text('Click anywhere here', style: Font::BOLD);
             $c->text('to throw your burst from the pointer', 12, $t->textMuted);
           $c->end();
@@ -422,7 +420,7 @@ function presetTiles(Context $c, Confetti $s, int $now, bool $still): void
     $t = $c->theme;
     $c->grid(3, 12);
       foreach (presets() as $i => [$name, $about, $run]) {
-          $tile = $c->key($i)->buttonBase()->label($name)->padding(12, 14)->round(10)->border($t->border)->cursor(Cursor::Pointer);
+          $tile = $c->key($i)->buttonBase()->label($name)->padding(12, 14)->radius(10)->border(1, $t->border)->cursor(Cursor::Pointer);
           [$bg, $lift] = $c->pressed($tile) ? [$t->surfacePressed, new Pose(scale: 0.97)] : ($c->hovered($tile) ? [$t->surfaceHover, new Pose(y: -2)] : [$t->surface, new Pose()]);
           $tile->background($bg)->animatePose($lift, Animation::snappy());
             $c->column(0, 4, 1);
@@ -439,10 +437,10 @@ function presetTiles(Context $c, Confetti $s, int $now, bool $still): void
 function controls(Context $c, Confetti $s): void
 {
     $t = $c->theme;
-    $c->column(16, 10, 0, $t->surface)->size(280, 0)->round(12)->border($t->border);
+    $c->column(16, 10, 0, $t->surface)->size(280, 0)->radius(12)->border(1, $t->border);
       $c->text('Your burst', style: Font::BOLD);
       $slider = function (string $label, float &$v, float $lo, float $hi, string $format) use ($c, $t) {
-          $c->row(0, 8)->align(Node::CENTER);
+          $c->row(0, 8)->alignItems(Node::CENTER);
             $c->text($label, 12)->size(62, 0);
             $c->key($label)->slider($v, $lo, $hi, 0)->label($label)->grow(1);
             $c->text(sprintf($format, $v), 12, $t->textMuted)->size(40, 0)->textAlign(Node::END);

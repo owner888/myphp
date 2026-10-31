@@ -34,7 +34,7 @@ final class MoviePlayerAlert
         $sheet = new Window(new WindowOptions(parent: $parent, modal: true, width: $width + 32, height: $height, disableResize: true,
             content: Content::view(function (Context $c) use ($title, $message, $s, $view, $ready, $ok, $close): void {
                 $t = $c->theme;
-                $c->column(0, 6, 1)->padding(20, 16, 16, 16)->align(Node::CENTER)->background(MoviePlayerSettings::colors($t)['page']);
+                $c->column(0, 6, 1)->padding(20, 16, 16, 16)->alignItems(Node::CENTER)->background(MoviePlayerSettings::colors($t)['page']);
                   static $icon = null;
                   $icon ??= App::running() ? Image::fromBytes(Shell::appIcon((int)(64 * $c->scale)), 512) : null;
                   if ($icon !== null) { $c->image($icon, 64, 64); }
@@ -46,11 +46,11 @@ final class MoviePlayerAlert
                   $c->column()->grow(1);
                   $c->end();
                   $c->row(0, 8)->fillWidth();
-                    $cancel = $c->row()->height(24)->grow(1)->round(8)->center()->role(Role::BUTTON)->label($c->texts()->get('cancel'))->background(MoviePlayerSettings::colors($t)['control'], MoviePlayerSettings::colors($t)['controlAlpha']);
+                    $cancel = $c->row()->height(24)->grow(1)->radius(8)->center()->role(Role::BUTTON)->label($c->texts()->get('cancel'))->background(MoviePlayerSettings::colors($t)['control'], MoviePlayerSettings::colors($t)['controlAlpha']);
                       $c->text($c->texts()->get('cancel'), 13, $t->text);
                     $c->end();
                     $enabled = $ready($s);
-                    $okButton = $c->row()->height(24)->grow(1)->round(8)->center()->role(Role::BUTTON)->label($c->texts()->get('ok'))->background($t->accent);
+                    $okButton = $c->row()->height(24)->grow(1)->radius(8)->center()->role(Role::BUTTON)->label($c->texts()->get('ok'))->background($t->accent);
                     if (!$enabled) { $okButton->disabled(); }
                       $c->text($c->texts()->get('ok'), 13, $t->accentText);
                     $c->end();
@@ -74,7 +74,7 @@ final class MoviePlayerAlert
         self::open(MoviePlayerSettings::iina($c, "alert.$key.title"), MoviePlayerSettings::iina($c, "alert.$key.message"), $s,
             function (Context $c, object $s) use ($validate): void {
                 $k = MoviePlayerSettings::colors($c->theme);
-                $c->row()->height(26)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+                $c->row()->height(26)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
                   $f = $c->input($s->text, '', 0, 13)->height(26);
                   $f->bordered = false;
                   $f->autoFocus();

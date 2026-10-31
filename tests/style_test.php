@@ -109,7 +109,7 @@ same([1.0, 2.0, 3.0, 4.0, 0.0], [...array_slice($boxes[1]['next'], 4, 4), $boxes
 
 // Shadows: outside, cut out under the box, inset inside its padding edge with the hole offset and shrunk by the spread.
 $h = new Headless(function (Context $c): void {
-    $c->column(0, 0, 0, 0xffffff)->size(100, 50)->margin(30)->round(8)->shadow(2, 4, 10, 3, 0x000000, 0.5)->insetShadow(1, 2, 4, 5, 0x112233)->borderWidth(1);
+    $c->column(0, 0, 0, 0xffffff)->size(100, 50)->margin(30)->radius(8)->shadow(2, 4, 10, 3, 0x000000, 0.5)->insetShadow(1, 2, 4, 5, 0x112233)->borderWidth(1);
 }, 200, 200);
 $h->frame();
 $sh = styleKind($h, 15);

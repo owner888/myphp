@@ -166,7 +166,7 @@ children translucent: each quad's alpha times the opacity in effect
 ## Liquid Glass
 
 A material (`UI\Material`, mygo's) fills a container in place of a
-background color: `->material()` takes it, shaped by `->round()`, and the
+background color: `->material()` takes it, shaped by `->radius()`, and the
 tree painter calls its `paintMaterial()` with a `Painter` over the node's
 box; a `MaterialBuilder` builds the material it paints as the node is
 built (`Node::material` reaches the node's context), as interactive glass
@@ -6688,6 +6688,24 @@ succeeds are told of, an empty line is none.
 - Assistive technology selects a rich text editor's text: `SELECT_TEXT`
   on a node taking its input as it comes is an `InputEvent::SELECT`
   (mygo's `InputSelect`).
+
+## mygo's setter names and draw signature, visual arrow keys (v1.123)
+
+- The box setters take mygo's names: `alignItems()` (was `align()`),
+  `radius()` (`round()` gone; one radius, or four corners),
+  `minWidth()`/`minHeight()` (was `min($w, $h)`), and
+  `border($width = 1, $color = null)` (the arguments in mygo's order,
+  the border within the node's size). Apps calling the old names need the
+  same rename.
+- `Node::draw()` and `drawOver()` call `$fn(Painter $p, array $r)`, mygo's
+  `Draw(func(p *Painter, r Rect))`: the node's box and a painter over the
+  display list with the theme it paints with (`$p->theme()`). Framework
+  code that paints what the painter has no method for reaches the list
+  through the `@internal` `displayList()` and `textPainter()`.
+- Left and Right in selectable text move by visual graphemes, mygo's
+  `visualNext`: the caret moves with the layout's `moveCaret` and keeps
+  its affinity (`TextSelection::$affinity`), crossing to the text before
+  or after in reading order at either end.
 
 ## Open items
 

@@ -46,9 +46,9 @@ final class Markdown
     {
         $th = $b->state()->th;
         $box = $c->column()->direction(Direction::LeftToRight)->background($th->codeBlockBackground[0], $th->codeBlockBackground[1])->borderWidth(1)->borderColor($th->codeBlockBorder[0])
-            ->round($th->codeBlockRadius)->alignSelf(Node::STRETCH)->clip();
+            ->radius($th->codeBlockRadius)->alignSelf(Node::STRETCH)->clip();
         $box->role(Role::GROUP)->label($b->language === '' ? 'Code' : 'Code, ' . $b->language);
-        $c->row()->align(Node::CENTER)->padding($th->em(0.35), $th->em(0.4), 0, $th->em($th->codeBlockPadding));
+        $c->row()->alignItems(Node::CENTER)->padding($th->em(0.35), $th->em(0.4), 0, $th->em($th->codeBlockPadding));
           $c->text($b->language)->fontSize($th->em(0.8))->textColor($th->muted[0], $th->muted[1])->unselectable();
           $c->spacer();
           $b->copyButton($c);

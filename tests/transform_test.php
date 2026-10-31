@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{AccessTree, Affine, Context, DisplayList, InputEvent, Node, Role, Theme, Transform};
+use MyPHP\UI\{AccessTree, Affine, Context, DisplayList, InputEvent, Painter, Role, Theme, Transform};
 
 /** The quads of $list: x, y, w, h, alpha, kind, and the transform entry each is drawn through. @return list<array{0: float, 1: float, 2: float, 3: float, 4: float, 5: float, 6: int}> */
 function quadsOf(DisplayList $list): array
@@ -143,9 +143,9 @@ same([-10.0, 0.0, 10.0, 20.0], Affine::rotation(90)->bounds(0, 0, 20, 10), 'turn
 
 // A draw closure's transform, around a point, nested.
 $t = new Headless(function (Context $c) {
-    $c->box(200, 100, 0)->draw(function (DisplayList $list, Node $n) {
-        $list->transform(Transform::translation(50, 0), 0, 0, fn() => $list->rect($n->x, $n->y, 20, 20, 0xdc141e));
-        $list->transform(Transform::scaling(2, 2), $n->x + 100, $n->y, fn() => $list->transform(Transform::rotation(90), $n->x + 110, $n->y + 10, fn() => $list->rect($n->x + 100, $n->y + 5, 20, 10, 0x1e3cdc)));
+    $c->box(200, 100, 0)->draw(function (Painter $p, array $r) {
+        $p->transform(Transform::translation(50, 0), 0, 0, fn() => $p->fill([$r[0], $r[1], 20, 20], 0xdc141e));
+        $p->transform(Transform::scaling(2, 2), $r[0] + 100, $r[1], fn() => $p->transform(Transform::rotation(90), $r[0] + 110, $r[1] + 10, fn() => $p->fill([$r[0] + 100, $r[1] + 5, 20, 10], 0x1e3cdc)));
     });
 }, 200, 100);
 $list = $t->paint();
@@ -159,9 +159,10 @@ closeFloat(110, min($corners[0][0], $corners[1][0]), 'the bar, its left'); close
 closeFloat(0, min($corners[0][1], $corners[1][1]), 'the bar, its top'); closeFloat(40, max($corners[0][1], $corners[1][1]), 'the bar, its bottom');
 // One moved out of view is culled; one moved into view is drawn.
 $t = new Headless(function (Context $c) {
-    $c->box(100, 100, 0)->draw(function (DisplayList $list, Node $n) {
-        $list->transform(Transform::translation(-1000, 0), 0, 0, function () use ($list, $n) { if (!$list->clipped($n->x, $n->y, 10, 10)) { $list->rect($n->x, $n->y, 10, 10, 0xff0000); } });
-        $list->transform(Transform::translation(1000, 0), 0, 0, function () use ($list, $n) { if (!$list->clipped($n->x - 1000, $n->y, 10, 10)) { $list->rect($n->x - 1000, $n->y, 10, 10, 0x00ff00); } });
+    $c->box(100, 100, 0)->draw(function (Painter $p, array $r) {
+        $list = $p->displayList();
+        $list->transform(Transform::translation(-1000, 0), 0, 0, function () use ($list, $r) { if (!$list->clipped($r[0], $r[1], 10, 10)) { $list->rect($r[0], $r[1], 10, 10, 0xff0000); } });
+        $list->transform(Transform::translation(1000, 0), 0, 0, function () use ($list, $r) { if (!$list->clipped($r[0] - 1000, $r[1], 10, 10)) { $list->rect($r[0] - 1000, $r[1], 10, 10, 0x00ff00); } });
     });
 }, 100, 100);
 same(1, count(array_filter(quadsOf($t->paint()), fn($q) => $q[2] == 10)), 'culled through the transform: the one in view is drawn');
@@ -211,7 +212,7 @@ same(1, $hits, 'an overlay moved away by its transform lets the pointer through 
 $clicks = 0; $child = null;
 $t = new Headless(function (Context $c) use (&$clicks, &$child, &$c0) {
     $c0 = $c;
-    $c->column()->absolute()->left(50)->top(50)->size(80, 60)->rotate(30)->round(12)->clip();
+    $c->column()->absolute()->left(50)->top(50)->size(80, 60)->rotate(30)->radius(12)->clip();
       $c->column()->size(50, 50)->clip()->scale(1.2, 0.8);
         $child = $c->box(100, 80, 0xe60000)->shrink(0);
         if ($c->clicked($child)) { $clicks++; }

@@ -496,18 +496,27 @@ trait RuntimeSelection
                 return true;
         }
         $t->desiredX = null;
-        if (($base === 'moveLeft:' && $at === 0) || ($base === 'moveRight:' && $at === $n)) { // across the boundary to the paragraph beside
-            $next = $this->neighboringText($t->caret, $base === 'moveLeft:' ? -1 : 1);
-            if ($next !== null) {
-                $t->caret = [$next->id, $base === 'moveLeft:' ? self::runeCount($next) : 0];
+        if ($base === 'moveLeft:' || $base === 'moveRight:') { // along the line as it shows, the other way through right-to-left runs (mygo's visualNext)
+            $dir = $base === 'moveLeft:' ? -1 : 1;
+            $aff = $t->affinity !== null && $t->affinity[0] === $t->caret ? $t->affinity[1] : \MyPHP\Text\Layout::DOWNSTREAM;
+            [$to, $toAff] = $l->moveCaret($at, $aff, $dir);
+            if ($to !== $at || $toAff !== $aff) {
+                $t->caret = [$s->id, $to];
+                $t->affinity = [$t->caret, $toAff];
                 return true;
             }
+            $step = $l->lines !== [] && $l->lines[0]->rtl ? -$dir : $dir; // at the line's edge: to the paragraph beside, after it the way this one reads
+            $next = $this->neighboringText($t->caret, $step);
+            if ($next !== null) {
+                $t->caret = [$next->id, $step < 0 ? self::runeCount($next) : 0];
+            }
+            return true;
         }
         $b = self::boundaries($s);
         $line = $l->lines === [] ? null : $l->lines[$l->lineAt($at)];
         $to = match ($base) {
-            'moveLeft:', 'moveBackward:' => $b->prevGrapheme($at),
-            'moveRight:', 'moveForward:' => $b->nextGrapheme($at),
+            'moveBackward:' => $b->prevGrapheme($at),
+            'moveForward:' => $b->nextGrapheme($at),
             'moveWordLeft:', 'moveWordBackward:' => $b->prevWord($at),
             'moveWordRight:', 'moveWordForward:' => $b->nextWord($at),
             'moveToBeginningOfLine:', 'moveToLeftEndOfLine:', 'moveToBeginningOfParagraph:' => $line?->start ?? 0,

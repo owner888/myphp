@@ -12,7 +12,7 @@ use MyPHP\UI\{Context, Material, MaterialBuilder, Node, Painter};
  * the rim of a lens, and lit along its hairline rim. Node::material() fills
  * a node with it, in place of a background, shaped by its round():
  *
- *     $c->row(8, 16)->round(22)->material(new Glass);
+ *     $c->row(8, 16)->radius(22)->material(new Glass);
  *
  * ScrollEdge is macOS's scroll edge effect, which content scrolling under
  * a bar fades or frosts under, and Blur blurs what is under a node without

@@ -68,7 +68,7 @@ final class InspectorPanel
         $c->overlay(function () use ($c, $rt, $in, $pal, $appW, $w, $h): void {
             // The panel reads left to right whatever the window, as browsers' developer tools do.
             $panel = $c->key(Inspector::KEY)->column(0, 0, 0, $pal['bg'])->at($appW, 0)->size($w - $appW, $h)->direction(Direction::LeftToRight)
-                ->borderWidth(0, 0, 0, 1)->borderColor($pal['border'])->align(Node::STRETCH)->fontSize(12)->textColor($pal['text'])->label('Developer tools');
+                ->borderWidth(0, 0, 0, 1)->borderColor($pal['border'])->alignItems(Node::STRETCH)->fontSize(12)->textColor($pal['text'])->label('Developer tools');
             $panel->theme = $in->theme;
             $in->panel = $panel->id;
               self::resizer($c, $rt, $in, $h);
@@ -104,7 +104,7 @@ final class InspectorPanel
     private static function toolbar(Context $c, Runtime $rt, Inspector $in): void
     {
         $pal = $in->pal; $icons = self::icons();
-        $c->row(0, 0, 0, $pal['toolbar'])->size(0, 30)->shrink(0)->paddingX(4)->align(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($pal['border']);
+        $c->row(0, 0, 0, $pal['toolbar'])->size(0, 30)->shrink(0)->paddingX(4)->alignItems(Node::CENTER)->borderWidth(0, 0, 1, 0)->borderColor($pal['border']);
           if (self::iconButton($c, $in, $icons['pick'], $in->picking, self::PICK)) {
               $in->picking = !$in->picking; $in->hovered = null; $in->tab = Inspector::ELEMENTS;
           }
@@ -122,7 +122,7 @@ final class InspectorPanel
               $rt->changed();
           }
           if ($n > 0) {
-              $badge = $c->row(0, 3)->paddingX(6)->align(Node::CENTER)->cursor(Cursor::Pointer)->label("$n issues");
+              $badge = $c->row(0, 3)->paddingX(6)->alignItems(Node::CENTER)->cursor(Cursor::Pointer)->label("$n issues");
                 $c->icon($icons['warn'], 13, $pal['warn']);
                 $c->text((string)$n, 11, $pal['muted']);
               $c->end();
@@ -138,7 +138,7 @@ final class InspectorPanel
     private static function iconButton(Context $c, Inspector $in, SVG $icon, bool $on, string $label): bool
     {
         $pal = $in->pal;
-        $b = $c->column()->size(26, 24)->round(4)->center()->label($label)->role(Role::BUTTON)->tooltip($label);
+        $b = $c->column()->size(26, 24)->radius(4)->center()->label($label)->role(Role::BUTTON)->tooltip($label);
         $color = $pal['muted'];
         if ($on) {
             $color = $pal['accent'];
@@ -179,12 +179,12 @@ final class InspectorPanel
     {
         if ($in->split == 0) { $in->split = max($h * 0.55, 120); }
         $c->split($in->split, function () use ($c, $rt, $in): void {
-            $c->column(0, 0, 1)->align(Node::STRETCH);
+            $c->column(0, 0, 1)->alignItems(Node::STRETCH);
               self::find($c, $rt, $in);
               self::tree($c, $rt, $in);
               self::breadcrumbs($c, $in);
             $c->end();
-        }, fn() => self::sidebar($c, $in), vertical: true)->grow(1)->min(0, 0);
+        }, fn() => self::sidebar($c, $in), vertical: true)->grow(1)->minWidth(0)->minHeight(0);
     }
 
     /** Lists the rows the tree shows: the nodes inside no node closed, and the closing tags of those open. */
@@ -236,12 +236,12 @@ final class InspectorPanel
         $list = $c->list($in->list, count($in->rows), function (int $r) use ($c, $in, &$hovered): void {
             [$i, $close] = $in->rows[$r];
             $n = $in->nodes[$i];
-            $row = $c->row()->size(0, 20)->padding(0, 6, 0, $n['depth'] * 14 + 4)->align(Node::CENTER)->label(trim($n['name'] . ' ' . Inspector::clip($n['text'], 40)));
+            $row = $c->row()->size(0, 20)->padding(0, 6, 0, $n['depth'] * 14 + 4)->alignItems(Node::CENTER)->label(trim($n['name'] . ' ' . Inspector::clip($n['text'], 40)));
             if ($c->hovered($row)) { $hovered = $n['id']; }
             if ($n['leaving']) { $row->opacity(0.5); }
               self::treeRow($c, $in, $i, $close);
             $c->end();
-        })->grow(1)->min(0, 0)->paddingY(2)->label('Elements');
+        })->grow(1)->minWidth(0)->minHeight(0)->paddingY(2)->label('Elements');
         $in->listId = $list->id;
         if ($in->list->changed()) { $pick(); } // a click on a row
         // Left closes the node chosen, else goes to the node around it; Right opens it, else goes into it.
@@ -295,9 +295,9 @@ final class InspectorPanel
                 $spans[] = $tag('></' . $n['name'] . '>');
             }
         }
-        $c->richText($spans, 11.5)->font('monospace')->noWrap()->ellipsis('…')->shrink(1)->min(0, 0);
+        $c->richText($spans, 11.5)->font('monospace')->noWrap()->ellipsis('…')->shrink(1)->minWidth(0)->minHeight(0);
         if (!$close && $n['trans']) {
-            $c->text('transition', 10, $pal['muted'])->font('monospace')->padding(0, 4)->margin(0, 0, 0, 6)->round(3)->borderWidth(1)->borderColor($pal['border'])->shrink(0);
+            $c->text('transition', 10, $pal['muted'])->font('monospace')->padding(0, 4)->margin(0, 0, 0, 6)->radius(3)->borderWidth(1)->borderColor($pal['border'])->shrink(0);
         }
     }
 
@@ -341,11 +341,11 @@ final class InspectorPanel
         $path = [];
         for ($i = $in->nodeOf($in->selected); $i >= 0; $i = $in->nodes[$i]['parent']) { $path[] = $i; }
         if ($path === []) { return; }
-        $c->row(0, 0, 0, $pal['toolbar'])->size(0, 24)->shrink(0)->borderWidth(1, 0, 0, 0)->borderColor($pal['border'])->align(Node::STRETCH);
-          $c->row(0, 1)->scroll($in->crumbs, true, false)->grow(1)->min(0, 0)->paddingX(4)->align(Node::CENTER);
+        $c->row(0, 0, 0, $pal['toolbar'])->size(0, 24)->shrink(0)->borderWidth(1, 0, 0, 0)->borderColor($pal['border'])->alignItems(Node::STRETCH);
+          $c->row(0, 1)->scroll($in->crumbs, true, false)->grow(1)->minWidth(0)->minHeight(0)->paddingX(4)->alignItems(Node::CENTER);
             for ($k = count($path) - 1; $k >= 0; $k--) {
                 $n = $in->nodes[$path[$k]];
-                $crumb = $c->key($n['key'])->column()->padding(2, 6)->round(3)->label($n['name'])->shrink(0);
+                $crumb = $c->key($n['key'])->column()->padding(2, 6)->radius(3)->label($n['name'])->shrink(0);
                 if ($k === 0) {
                     $crumb->background($pal['selected']);
                 } elseif ($c->hovered($crumb)) {
@@ -364,13 +364,13 @@ final class InspectorPanel
     private static function sidebar(Context $c, Inspector $in): void
     {
         $pal = $in->pal;
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $c->row(0, 0, 0, $pal['toolbar'])->size(0, 26)->shrink(0)->paddingX(4)->borderWidth(0, 0, 1, 0)->borderColor($pal['border']);
             foreach (['Styles', 'Computed', 'Properties'] as $i => $label) {
                 if (self::tab($c, $in, $label, $in->side === $i, 26)) { $in->side = $i; }
             }
           $c->end();
-          $c->column()->scroll($in->sideScroll)->grow(1)->min(0, 0)->align(Node::STRETCH);
+          $c->column()->scroll($in->sideScroll)->grow(1)->minWidth(0)->minHeight(0)->alignItems(Node::STRETCH);
             if ($in->sel === null) {
                 $c->text('Choose an element in the tree, or pick one in the window.', 12, $pal['muted'])->margin(12);
             } else {
@@ -398,10 +398,10 @@ final class InspectorPanel
             self::mono($c, [new Span($d[0], color: $name), new Span(': ' . $d[1] . ';', color: $pal['text'])])->selectable();
             return;
         }
-        $c->row()->align(Node::CENTER);
+        $c->row()->alignItems(Node::CENTER);
           self::mono($c, [new Span($d[0], color: $name), new Span(':', color: $pal['text'])])->shrink(0);
           $c->box(10, 10, $d[2])->margin(0, 4, 0, 6)->borderWidth(1)->borderColor($pal['border'])->shrink(0);
-          self::mono($c, [new Span($d[1] . ';', color: $pal['text'])])->shrink(1)->min(0, 0)->selectable();
+          self::mono($c, [new Span($d[1] . ';', color: $pal['text'])])->shrink(1)->minWidth(0)->minHeight(0)->selectable();
         $c->end();
     }
 
@@ -415,12 +415,12 @@ final class InspectorPanel
                   $c->richText([new Span('Inherited from ', color: $pal['muted']), new Span($r['selector'], color: $pal['tag'], font: 'monospace')], 11);
                 $c->end();
             }
-            $c->column(0, 1)->padding(6, 10, 8)->borderWidth(0, 0, 1, 0)->borderColor($pal['border'])->align(Node::STRETCH);
-              $c->row()->align(Node::CENTER);
+            $c->column(0, 1)->padding(6, 10, 8)->borderWidth(0, 0, 1, 0)->borderColor($pal['border'])->alignItems(Node::STRETCH);
+              $c->row()->alignItems(Node::CENTER);
                 self::mono($c, [new Span($r['selector'] . ' {', color: $pal['text'])]);
                 $c->spacer();
                 if ($i === 0 && $in->sel['source'] !== '') {
-                    $c->text(basename($in->sel['source']), 11, $pal['muted'])->underline()->singleLine()->shrink(1)->min(0, 0)->tooltip($in->sel['source']);
+                    $c->text(basename($in->sel['source']), 11, $pal['muted'])->underline()->singleLine()->shrink(1)->minWidth(0)->minHeight(0)->tooltip($in->sel['source']);
                 }
               $c->end();
               $c->column(0, 1)->padding(0, 0, 0, 16);
@@ -438,18 +438,18 @@ final class InspectorPanel
         $side = fn(float $v) => match (true) { is_infinite($v) => 'auto', $v == 0 => '-', default => Inspector::num($v) };
         $ink = 0x202124;
         $layer = function (string $name, int $bg, int $line, array $sides, \Closure $inner) use (&$layer, $c, $side, $ink): void {
-            $c->column(0, 0, 0, $bg)->borderWidth(1)->borderColor($line)->align(Node::STRETCH)->fontSize(11)->textColor($ink);
+            $c->column(0, 0, 0, $bg)->borderWidth(1)->borderColor($line)->alignItems(Node::STRETCH)->fontSize(11)->textColor($ink);
               $c->text($name, 10, $ink)->at(4, 2)->opacity(0.7);
               $c->text($side($sides[0]), 11, $ink)->textAlign(Node::CENTER)->margin(3, 0)->alignSelf(Node::CENTER);
-              $c->row()->align(Node::CENTER);
+              $c->row()->alignItems(Node::CENTER);
                 $c->column()->size(30, 0)->shrink(0)->center(); $c->text($side($sides[3]), 11, $ink); $c->end();
-                $c->column(0, 0, 1)->align(Node::STRETCH); $inner(); $c->end();
+                $c->column(0, 0, 1)->alignItems(Node::STRETCH); $inner(); $c->end();
                 $c->column()->size(30, 0)->shrink(0)->center(); $c->text($side($sides[1]), 11, $ink); $c->end();
               $c->end();
               $c->text($side($sides[2]), 11, $ink)->margin(3, 0)->alignSelf(Node::CENTER);
             $c->end();
         };
-        $c->column(12)->align(Node::STRETCH);
+        $c->column(12)->alignItems(Node::STRETCH);
           $layer('margin', 0xf9cc9d, 0x333333, $d['margin'], function () use ($layer, $c, $d, $ink): void {
               $layer('border', 0xfddd9b, 0x000000, $d['border'], function () use ($layer, $c, $d, $ink): void {
                   $layer('padding', 0xc3d08b, 0x808080, $d['padding'], function () use ($c, $d, $ink): void {
@@ -470,12 +470,12 @@ final class InspectorPanel
     {
         $pal = $in->pal;
         foreach ($in->sel['props'] as $s) {
-            $c->column(0, 2)->padding(6, 10, 8)->borderWidth(0, 0, 1, 0)->borderColor($pal['border'])->align(Node::STRETCH);
+            $c->column(0, 2)->padding(6, 10, 8)->borderWidth(0, 0, 1, 0)->borderColor($pal['border'])->alignItems(Node::STRETCH);
               $c->text($s['title'], 11, $pal['text'])->bold()->margin(0, 0, 2, 0);
               foreach ($s['rows'] as [$name, $value]) {
                   $color = match (true) { str_starts_with($value, '"') => $pal['str'], $value === 'true' || $value === 'false' => $pal['lit'], default => $pal['text'] };
                   $c->row()->padding(0, 0, 0, 8);
-                    self::mono($c, [new Span($name, color: $pal['tag']), new Span(': ', color: $pal['text']), new Span($value, color: $color)])->shrink(1)->min(0, 0)->selectable();
+                    self::mono($c, [new Span($name, color: $pal['tag']), new Span(': ', color: $pal['text']), new Span($value, color: $color)])->shrink(1)->minWidth(0)->minHeight(0)->selectable();
                   $c->end();
               }
             $c->end();
@@ -493,7 +493,7 @@ final class InspectorPanel
             $d = array_sum($in->history[$i]);
             $total += $d; $slowest = max($slowest, $d);
         }
-        $c->column(12, 12)->scroll($in->perfScroll)->grow(1)->min(0, 0)->align(Node::STRETCH); // the rows below wrap at $width less the panel's border and this padding
+        $c->column(12, 12)->scroll($in->perfScroll)->grow(1)->minWidth(0)->minHeight(0)->alignItems(Node::STRETCH); // the rows below wrap at $width less the panel's border and this padding
           $c->row(0, 16)->wrap($width - 25);
             $stat = function (string $label, string $value) use ($c, $pal): void {
                 $c->column(0, 2);
@@ -507,13 +507,13 @@ final class InspectorPanel
             $stat('Display', Inspector::num($hz) . ' Hz');
             $stat('Elements', (string)$in->elements);
           $c->end();
-          $c->column()->size(0, 150)->shrink(0)->round(4)->borderWidth(1)->borderColor($pal['border'])
-              ->draw(fn(DisplayList $list, Node $box) => self::paintFrames($list, $in, $box));
+          $c->column()->size(0, 150)->shrink(0)->radius(4)->borderWidth(1)->borderColor($pal['border'])
+              ->draw(fn(Painter $p, array $r) => self::paintFrames($p, $in, $r));
           $c->end();
           $c->row(0, 14)->wrap($width - 25);
             foreach ([['Build', self::BUILD, 0], ['Layout', self::LAYOUT, 1], ['Paint', self::PAINT, 2]] as [$name, $color, $k]) {
-                $c->row(0, 6)->align(Node::CENTER);
-                  $c->box(10, 10, $color)->round(2);
+                $c->row(0, 6)->alignItems(Node::CENTER);
+                  $c->box(10, 10, $color)->radius(2);
                   $c->text($name . ' ' . Inspector::ms($in->times[$k]) . ' ms', 11, $pal['text'])->fontFeatures('tnum');
                 $c->end();
             }
@@ -524,15 +524,15 @@ final class InspectorPanel
     }
 
     /** The last frames as bars in $box, the latest at the right, stacked by what they spent their time on. */
-    private static function paintFrames(DisplayList $list, Inspector $in, Node $box): void
+    private static function paintFrames(Painter $p, Inspector $in, array $box): void
     {
         $n = min($in->frames, Inspector::HISTORY);
         $budget = 1e9 / $in->hz;
         $scale = 2 * $budget;
         for ($i = 0; $i < $n; $i++) { $scale = max($scale, array_sum($in->history[$i]) * 1.1); }
-        [$x, $y, $w, $h] = [$box->x + 4, $box->y + 6, $box->w - 8, $box->h - 10];
+        [$x, $y, $w, $h] = [$box[0] + 4, $box[1] + 6, $box[2] - 8, $box[3] - 10];
         $ly = $y + $h - $budget / $scale * $h;
-        $list->line($x, $ly, $x + $w, $ly, $in->pal['muted'], 0.6, 1.0);
+        $p->displayList()->line($x, $ly, $x + $w, $ly, $in->pal['muted'], 0.6, 1.0);
         $bw = $w / Inspector::HISTORY;
         for ($k = 0; $k < $n; $k++) {
             $f = $in->history[($in->frames - $n + $k) % Inspector::HISTORY];
@@ -541,7 +541,7 @@ final class InspectorPanel
             foreach ([self::BUILD, self::LAYOUT, self::PAINT] as $j => $color) {
                 $bh = $f[$j] / $scale * $h;
                 if ($bh <= 0) { continue; }
-                $list->rect($bx + $bw * 0.15, $bottom - $bh, $bw * 0.7, $bh, $color);
+                $p->fill([$bx + $bw * 0.15, $bottom - $bh, $bw * 0.7, $bh], $color);
                 $bottom -= $bh;
             }
         }
@@ -551,14 +551,14 @@ final class InspectorPanel
     private static function issues(Context $c, Runtime $rt, Inspector $in): void
     {
         $pal = $in->pal;
-        $c->column()->scroll($in->issuesScroll)->grow(1)->min(0, 0)->align(Node::STRETCH);
+        $c->column()->scroll($in->issuesScroll)->grow(1)->minWidth(0)->minHeight(0)->alignItems(Node::STRETCH);
           if ($rt->warnings === []) {
               $c->text('No issues so far.', 12, $pal['muted'])->margin(12);
           }
           for ($i = count($rt->warnings) - 1; $i >= 0; $i--) {
               $c->row(0, 8)->padding(8, 10)->borderWidth(0, 0, 1, 0)->borderColor($pal['border']);
                 $c->icon(self::icons()['warn'], 14, $pal['warn'])->shrink(0);
-                $c->richText([new Span($rt->warnings[$i])], 11.5, $pal['text'], wrap: true)->grow(1)->min(0, 0)->selectable();
+                $c->richText([new Span($rt->warnings[$i])], 11.5, $pal['text'], wrap: true)->grow(1)->minWidth(0)->minHeight(0)->selectable();
               $c->end();
           }
         $c->end();

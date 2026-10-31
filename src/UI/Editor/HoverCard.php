@@ -35,11 +35,11 @@ final class HoverCard
         $t = $c->theme;
         $ct = $h->theme();
         $panel->dir = Node::COLUMN; $panel->pad = $t->space(2); $panel->gap = $t->space(1.5);
-        $panel->color = $t->surface; $panel->round($t->radius)->border($t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2);
+        $panel->color = $t->surface; $panel->radius($t->radius)->border(1, $t->border)->shadow(0, 4, 16, 0, 0x000000, 0.2);
         foreach ($h->diagnostics() as $d) {
             $c->row(0, $t->space(1.5));
               $sc = $ct->severityColor($d->severity);
-              $c->box(3, 0, $sc[0])->round(1.5)->alignSelf(Node::STRETCH);
+              $c->box(3, 0, $sc[0])->radius(1.5)->alignSelf(Node::STRETCH);
               $c->richText([new Span($d->message . ($d->source !== '' ? ' (' . $d->source . ')' : ''))], $t->fontSize - 1, null, $t->space(140));
             $c->end();
         }

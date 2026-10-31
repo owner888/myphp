@@ -15,7 +15,7 @@ $node = null; $show = true; $fade = 1.0;
 $h = new Headless(function (Context $c) use (&$node, &$show, &$fade): void {
     $c->column(0, 0, 1)->size(400, 300);
       if ($show) {
-          $node = $c->row(10, 0)->systemMaterial('hud', true)->absolute()->left(50)->top(40)->size(200, 80)->round(12)->border(0xffffff, 1)->opacity($fade);
+          $node = $c->row(10, 0)->systemMaterial('hud', true)->absolute()->left(50)->top(40)->size(200, 80)->radius(12)->border(1, 0xffffff)->opacity($fade);
             $c->text('over it');
           $c->end();
       }

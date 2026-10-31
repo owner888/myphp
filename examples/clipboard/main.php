@@ -96,15 +96,15 @@ function view(Context $c, Demo $d): void
             try { Clipboard::flush(); $d->status = 'Clipboard persisted; provider resources released'; } catch (\RuntimeException $e) { $d->status = $e->getMessage(); }
         }
       $c->end();
-      $note = $c->column(16)->border($t->border)->round(8);
+      $note = $c->column(16)->border(1, $t->border)->radius(8);
         $c->text('Drag this note', style: Font::BOLD);
       $c->end();
       $c->dragDataFrom($note, $d->data(...));
       $o = new DropOptions([NOTE_FORMAT, Format::TEXT, Format::FILE_LIST, Format::URI_LIST]);
-      $zone = $c->column(16)->border($t->border)->round(8);
+      $zone = $c->column(16)->border(1, $t->border)->radius(8);
         $c->text('Drop notes, text, or files here');
       $c->end();
-      if ($c->dataDragOver($zone, $o)) { $zone->border($t->accent, 2); }
+      if ($c->dataDragOver($zone, $o)) { $zone->border(2, $t->accent); }
       if ($c->dropData($zone, $o, $drop)) { $d->receive($drop->data); }
       $c->row(0, 8);
         $c->input($d->path, 'Absolute file path', 0);

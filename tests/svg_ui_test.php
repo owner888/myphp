@@ -54,7 +54,7 @@ check($sized[2] == 40 && $sized[3] == 20 && $q !== null && $q[2] == 20 && $q[0] 
 $logo = SVG::parse($logoSVG);
 same([30.0, 10.0], [(float)$logo->w, (float)$logo->h], 'its size');
 $h = new Headless(function (Context $c) use ($logo): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->image($logo)->label('logo');
       $c->image($logo, 60, 60)->fit(Node::COVER)->label('cover');
     $c->end();

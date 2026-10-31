@@ -18,7 +18,7 @@ require_once __DIR__ . '/SelectionTest.php';
 function rfTester(ListState $s, int &$n, float &$last, float &$below, ?int &$now): Headless
 {
     return poseTester(function (Context $c) use ($s, &$n, &$last, &$below): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $c->list($s, $n, function (int $i) use ($c, &$n, &$last): void { $c->box(0, $i === $n - 1 ? $last : 40.0, 0x333333)->label("r$i"); })->grow = 1;
           $c->box(0, $below, 0x000000);
         $c->end();
@@ -62,7 +62,7 @@ foreach (['row', 'max height', 'grid', 'wrap'] as $kind) {
     $h = poseTester(function (Context $c) use ($s, &$n, $kind): void {
         $list = fn(): Node => $c->list($s, $n, function (int $i) use ($c): void { $c->box(0, 40, 0x333333)->label("r$i"); });
         switch ($kind) {
-            case 'row': $c->row(0, 0, 1)->align(Node::STRETCH); $list()->grow = 1; $c->end(); break;
+            case 'row': $c->row(0, 0, 1)->alignItems(Node::STRETCH); $list()->grow = 1; $c->end(); break;
             case 'max height': $c->column(); $list()->maxHeight(300); $c->end(); break;
             case 'grid': $c->grid(1)->grow = 1; $list()->height(300); $c->end(); break;
             case 'wrap': $c->row()->wrap(300); $list()->size(200, 300); $c->box(150, 50, 0); $c->end(); break;
@@ -78,7 +78,7 @@ foreach (['many' => [30, Node::START, false], 'few at the end' => [2, Node::END,
     $isHeader = fn(int $i): bool => $i % 7 === 0;
     if ($headers) { $s->header = $isHeader; }
     $h = poseTester(function (Context $c) use ($s, &$n, &$last, $headers, $isHeader, $justify): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $l = $c->list($s, $n, function (int $i) use ($c, &$n, &$last, $headers, $isHeader): void {
               $c->box(0, $i === $n - 1 ? $last : ($headers && $isHeader($i) ? 24.0 : 40.0), 0x333333)->label("r$i");
           })->justify($justify);

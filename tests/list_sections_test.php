@@ -21,7 +21,7 @@ function lsSections(ListState $s, int &$n, ?\Closure $onHeader = null): Headless
 {
     $s->header = fn(int $i): bool => $i % 21 === 0;
     return new Headless(function (Context $c) use ($s, &$n, $onHeader): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $c->list($s, $n, function (int $i) use ($c, $onHeader): void {
               if ($i % 21 === 0) {
                   $c->column(0, 0, 0, 0xc8c8c8)->size(0, 24)->label("r$i");
@@ -58,7 +58,7 @@ $s = new ListState(); $n = 2100; $clicks = 0;
 $h = new Headless(function (Context $c) use ($s, &$n, &$clicks): void {
     $n++;
     $s->header = fn(int $i): bool => $i % 21 === 0;
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, $n, function (int $i) use ($c, &$clicks): void {
           if ($i % 21 === 0) {
               $c->column(0, 0, 0, 0xc8c8c8)->size(0, 24);
@@ -149,7 +149,7 @@ check($s->atEnd && $r !== null && $r[1] + $r[3] == 400.0, 'dragged to the end');
 // Tab through buttons in rows: the focus always shows, the rows following each other.
 $s = new ListState();
 $h = new Headless(function (Context $c) use ($s): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, 1000, function (int $i) use ($c): void { $c->row()->size(0, 44 + $i % 3 * 10)->label("r$i"); $c->button("Button $i"); $c->end(); })->grow = 1;
     $c->end();
 }, 300, 400);
@@ -166,7 +166,7 @@ check(lbVisible($h, $s)[0] >= 40, 'tabbed through 60 rows, the list shows them')
 // The view sees where the list is: the frame that scrolls away builds again, so the buttons are where the next click finds them.
 $s = new ListState(); $s->followEnd = true; $older = 0;
 $h = new Headless(function (Context $c) use ($s, &$older): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->row(0, 8);
         $c->text('200 messages')->grow = 1;
         if ($c->clicked($c->button('Load older'))) { $older++; }
@@ -187,7 +187,7 @@ check($s->atEnd && $h->byText('Jump to latest') === null, 'jumped to the end');
 // The place stays across resizes, the rows wrapping anew.
 $s = new ListState(); $w = 400;
 $h = new Headless(function (Context $c) use ($s): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, 1000, fn(int $i) => $c->text("Row $i " . str_repeat('words that wrap ', 1 + $i % 7))->label("r$i"))->grow = 1;
     $c->end();
 }, 400, 400);
@@ -204,7 +204,7 @@ check($ok, 'row 500 at the top at each width');
 // Shown again after another page, a list keeps its place; a new state starts at the start; one list showing the place of each page.
 $s = new ListState(); $show = true;
 $h = new Headless(function (Context $c) use (&$s, &$show): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       if ($show) { $c->list($s, 1000, fn(int $i) => $c->box(0, lbVaried($i), 0x333333)->label("r$i"))->grow = 1; } else { $c->text('Another page'); }
     $c->end();
 }, 300, 400);
@@ -217,7 +217,7 @@ $s = new ListState(); $show = false; $h->frame(); $show = true; $h->frame();
 check(lbVisible($h, $s)[0] === 0 && lbRowsOk($h, $s), 'a new state shows from the start');
 $pages = [new ListState(), new ListState()]; $page = 0;
 $h = new Headless(function (Context $c) use (&$pages, &$page): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($pages[$page], 1000, fn(int $i) => $c->text("Page $page row $i")->size(0, 20))->grow = 1;
     $c->end();
 }, 300, 400);
@@ -231,7 +231,7 @@ same(0.0, ($r = $h->byText('Page 0 row 500')) === null ? null : $h->rect($r)[1],
 // The focus kept out of view, brought back, shows in one frame without a gap.
 $s = new ListState();
 $h = new Headless(function (Context $c) use ($s): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, 1000, function (int $i) use ($c): void { $c->row()->size(0, 40 + $i % 3 * 10)->label("r$i"); $c->button("Button $i"); $c->end(); })->grow = 1;
     $c->end();
 }, 300, 400);
@@ -261,7 +261,7 @@ check($ok, 'a list of 30 rows of 20 is 600 high, one bounded to 200 is 200');
 $now = 0; $n = 30; $last = 40.0;
 $s = new ListState(); $s->followEnd = true; $s->followAnimation = Animation::smooth();
 $h = poseTester(function (Context $c) use ($s, &$n, &$last): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, $n, function (int $i) use ($c, &$n, &$last): void { $c->box(0, $i === $n - 1 ? $last : 40.0, 0x333333)->label("r$i"); })->grow = 1;
     $c->end();
 }, $now, 300, 400);

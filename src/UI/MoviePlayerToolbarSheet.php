@@ -44,7 +44,7 @@ final class MoviePlayerToolbarSheet
           $c->text($c->texts()->get('toolbarCurrentItems'), 13, $t->text, Font::BOLD);
           $c->text($c->texts()->get('toolbarDragOut'), 11, $t->textMuted)->margin(4, 0, 0, 0);
           // The box of the current buttons: each dragged out to take it out, along to move it; one there is dropped in, added where it falls.
-          $box = $c->row(0, 0)->size(self::BUTTON * max(4, count($s->buttons)) + 24, 26)->round(13)->alignSelf(Node::CENTER)->justify(Node::END)->align(Node::CENTER)->paddingX(4)->margin(14, 0, 0, 0)
+          $box = $c->row(0, 0)->size(self::BUTTON * max(4, count($s->buttons)) + 24, 26)->radius(13)->alignSelf(Node::CENTER)->justify(Node::END)->alignItems(Node::CENTER)->paddingX(4)->margin(14, 0, 0, 0)
               ->background($t->dark ? 0xffffff : 0x000000, 0.05);
             $at = [];
             foreach ($s->buttons as $i => $b) {
@@ -59,7 +59,7 @@ final class MoviePlayerToolbarSheet
           $c->text($c->texts()->get('toolbarDragIn'), 11, $t->textMuted)->margin(4, 0, 0, 0);
           $c->column(0, 4)->margin(12, 0, 0, 0)->alignSelf(Node::CENTER)->width(240);
             foreach (MoviePlayerSettings::TOOLBAR as $b => [$symbols]) {
-                $row = $c->key("available:$b")->row(0, 4)->height(self::ROW)->round(13)->paddingX(2)->align(Node::CENTER)->fillWidth()->background($t->dark ? 0xffffff : 0x000000, 0.05);
+                $row = $c->key("available:$b")->row(0, 4)->height(self::ROW)->radius(13)->paddingX(2)->alignItems(Node::CENTER)->fillWidth()->background($t->dark ? 0xffffff : 0x000000, 0.05);
                   $c->column()->size(self::ROW, self::ROW)->center();
                     MoviePlayerSettings::glyph($c, $symbols, $t->text);
                   $c->end();
@@ -71,12 +71,12 @@ final class MoviePlayerToolbarSheet
           $c->end();
           $c->column()->grow(1);
           $c->end();
-          $c->row(0, 12)->fillWidth()->align(Node::CENTER);
+          $c->row(0, 12)->fillWidth()->alignItems(Node::CENTER);
             if (MoviePlayerSettings::pushButton($c, $c->texts()->get('toolbarRestoreDefault'), false)) { $s->buttons = MoviePlayerSettings::TOOLBAR_DEFAULT; }
             $c->column()->grow(1);
             $c->end();
             if (MoviePlayerSettings::pushButton($c, $c->texts()->get('toolbarCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
-            $ok = $c->row()->height(24)->paddingX(12)->round(8)->align(Node::CENTER)->role(Role::BUTTON)->label($c->texts()->get('toolbarDone'))->background($t->accent);
+            $ok = $c->row()->height(24)->paddingX(12)->radius(8)->alignItems(Node::CENTER)->role(Role::BUTTON)->label($c->texts()->get('toolbarDone'))->background($t->accent);
               $c->text($c->texts()->get('toolbarDone'), 13, $t->accentText);
             $c->end();
             if ($c->clicked($ok) || $c->shortcut(Key::RETURN)) { $done($s->buttons); $close(); }

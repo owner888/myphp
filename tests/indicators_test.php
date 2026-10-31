@@ -38,7 +38,7 @@ check(!$h->rt->needsFrame && ($h->rt->nextWake() ?? 1) <= 0.075, 'it is painted 
 $levels = new MeterLevels(warning: 70, critical: 90); $battery = new MeterLevels(warning: 20, critical: 10);
 $meters = [];
 $h = indTester(function (Context $c) use ($levels, $battery, &$meters): void {
-    $c->column(10, 10)->align(Node::START);
+    $c->column(10, 10)->alignItems(Node::START);
       foreach (['Fine' => [50, $levels], 'Warning' => [80, $levels], 'Critical' => [95, $levels], 'Battery' => [15, $battery]] as $name => [$v, $l]) {
           $meters[$name] = $c->meter($v, 0, 100, $l, 100)->label($name);
       }
@@ -54,7 +54,7 @@ foreach (['Fine' => $th->success, 'Warning' => $th->warning, 'Critical' => $th->
 // A rating: a click on a star sets it, on the star set clears it; the arrows and End; what it says.
 $stars = 0; $changes = 0;
 $h = indTester(function (Context $c) use (&$stars, &$changes): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       if ($c->changed($c->rating($stars, 5)->label('Rating'))) { $changes++; }
     $c->end();
 }, 300, 100);
@@ -96,7 +96,7 @@ check($v <= 8, "held 0.7 s, it keeps stepping down: $v");
 // A step slider snaps to its steps: a click at 60 % sets 50; Right steps.
 $v = 20.0;
 $h = indTester(function (Context $c) use (&$v): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->stepSlider($v, 0, 100, 25, 220)->label('Quality');
     $c->end();
 }, 300, 100);
@@ -110,7 +110,7 @@ same(75.0, $v, 'Right');
 // A range slider: its two knobs, a press moving the nearest, Tab between them, End stopping the low one at the high one.
 $low = 20.0; $high = 80.0;
 $h = indTester(function (Context $c) use (&$low, &$high): void {
-    $c->column()->align(Node::START);
+    $c->column()->alignItems(Node::START);
       $c->rangeSlider($low, $high, 0, 100, 10, 220)->label('Price');
     $c->end();
 }, 300, 100);

@@ -125,7 +125,7 @@ same(['Before', 'Two', 'After'], tgTabs($h, false, 3, $labels), 'Tab: the tab ch
 // A toolbar's overflow: what does not fit goes into a menu, from the last; choosing does what a click does, a toggle checked; with room, all show.
 $clicked = ''; $italic = false; $names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo'];
 $h = new Headless(function (Context $c) use (&$clicked, &$italic, $names): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->toolbar(function () use ($c, &$clicked, &$italic, $names): void {
           foreach ($names as $n) { if ($c->clicked($c->button($n))) { $clicked = $n; } }
           $c->toggle($italic, 'Italic');

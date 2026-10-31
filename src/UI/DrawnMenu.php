@@ -140,7 +140,7 @@ final class DrawnMenu
         $panel = $c->key('drawn-menu:' . $this->id . ':' . $level)->column()->role(Role::MENU)->focusable();
         $panel->ownRing = true;
         $panel->scroll($rt->local($panel->id, fn() => new ScrollState)); // items past the room the window has scroll
-        $panel->minWidth($t->space(45))->padding($t->space(1))->round($t->radius + 2)->background($t->background)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18);
+        $panel->minWidth($t->space(45))->padding($t->space(1))->radius($t->radius + 2)->background($t->background)->border()->shadow(0, 6, 20, 0, 0x000000, 0.18);
         if ($level === 0 && $this->below) { // below the menu button, or above it where the window has no room, lined up with its start
             $panel->attachTo($anchor, Anchor::BottomStart, Anchor::TopStart)->margin($t->space(1), 0, 0, 0);
         } elseif ($level === 0) {
@@ -197,7 +197,7 @@ final class DrawnMenu
     private function item(int $level, NativeItem $it, bool $marks): Node
     {
         $c = $this->c; $t = $c->theme; $id = (int)$it->id;
-        $row = $c->row()->align(Node::CENTER)->gap($t->space(2))->padding($t->space(1.5), $t->space(2))->round($t->radius)->shrink(0);
+        $row = $c->row()->alignItems(Node::CENTER)->gap($t->space(2))->padding($t->space(1.5), $t->space(2))->radius($t->radius)->shrink(0);
         $row->label($it->label)->disabled($it->disabled);
         $row->role(match ($it->type) { NativeItem::CHECKBOX => Role::MENU_ITEM_CHECK_BOX, NativeItem::RADIO => Role::MENU_ITEM_RADIO, default => Role::MENU_ITEM });
         if ($it->type === NativeItem::CHECKBOX || $it->type === NativeItem::RADIO) { $row->checked($it->checked); }
@@ -222,13 +222,13 @@ final class DrawnMenu
               $mark->color = null;
               if ($it->checked) {
                   $radio = $it->type === NativeItem::RADIO;
-                  $mark->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($radio, $color): void {
+                  $mark->draw(function (Painter $p, array $r) use ($radio, $color): void {
+                      [$x, $y, $w, $h] = $r;
                       if ($radio) {
-                          $d = $n->w / 4;
-                          $list->rect($n->x + $n->w / 2 - $d / 2, $n->y + $n->h / 2 - $d / 2, $d, $d, $color, 1.0, $d / 2);
+                          $d = $w / 4;
+                          $p->fill([$x + $w / 2 - $d / 2, $y + $h / 2 - $d / 2, $d, $d], $color, $d / 2);
                       } else {
-                          $p = (new Path)->moveTo($n->x + $n->w * 0.25, $n->y + $n->h * 0.52)->lineTo($n->x + $n->w * 0.43, $n->y + $n->h * 0.7)->lineTo($n->x + $n->w * 0.76, $n->y + $n->h * 0.32);
-                          (new Painter($list, $text, $th))->strokePath($p, 1.5, $color);
+                          $p->strokePath((new Path)->moveTo($x + $w * 0.25, $y + $h * 0.52)->lineTo($x + $w * 0.43, $y + $h * 0.7)->lineTo($x + $w * 0.76, $y + $h * 0.32), 1.5, $color);
                       }
                   });
               }
@@ -238,10 +238,10 @@ final class DrawnMenu
           if ($sub) {
               $arrow = $c->box($t->space(4), $t->space(4), 0)->shrink(0);
               $arrow->color = null;
-              $arrow->draw(function (DisplayList $list, Node $n, Theme $th, TextPainter $text) use ($rtl, $muted): void { // a chevron pointing along the menus, the other way right to left
+              $arrow->draw(function (Painter $p, array $r) use ($rtl, $muted): void { // a chevron pointing along the menus, the other way right to left
+                  [$x, $y, $w, $h] = $r;
                   [$x0, $x1] = $rtl ? [0.625, 0.375] : [0.375, 0.625];
-                  $p = (new Path)->moveTo($n->x + $n->w * $x0, $n->y + $n->h * 0.25)->lineTo($n->x + $n->w * $x1, $n->y + $n->h * 0.5)->lineTo($n->x + $n->w * $x0, $n->y + $n->h * 0.75);
-                  (new Painter($list, $text, $th))->strokePath($p, 1.5, $muted);
+                  $p->strokePath((new Path)->moveTo($x + $w * $x0, $y + $h * 0.25)->lineTo($x + $w * $x1, $y + $h * 0.5)->lineTo($x + $w * $x0, $y + $h * 0.75), 1.5, $muted);
               });
           }
         $c->end();

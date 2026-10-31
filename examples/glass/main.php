@@ -26,7 +26,7 @@ function view(Context $c, array &$s): void
       $c->column(0, 12, 1)->scroll($s['scroll']);
         $c->image($s['photo'], $c->width, 0);
         $c->row(16, 10);
-          for ($i = 0; $i < 40; $i++) { $c->box(48, 48, ($i * 2654435761) & 0xffffff)->round(18); }
+          for ($i = 0; $i < 40; $i++) { $c->box(48, 48, ($i * 2654435761) & 0xffffff)->radius(18); }
         $c->end();
         $c->column(16, 8);
           for ($i = 0; $i < 12; $i++) { $c->text("Line $i under the glass — 玻璃下面的文字", 16); }
@@ -34,19 +34,19 @@ function view(Context $c, array &$s): void
       $c->end();
       // The toolbar: a glass row floating over the content.
       $glass = function () use (&$s, $t) { return new Glass($s['clear'] ? Style::Clear : Style::Regular, $s['tinted'] ? $t->accent : null, 0.5); }; // by reference: the checkboxes below change $s in this frame
-      $c->row(10, 14)->at(16, 16)->round(22)->material($glass());
+      $c->row(10, 14)->at(16, 16)->radius(22)->material($glass());
         $c->text('Liquid Glass', 15, style: Font::BOLD);
         $c->checkbox('Clear', $s['clear']);
         $c->checkbox('Tinted', $s['tinted']);
         $c->slider($s['x'], 0, $c->width - 260, 160)->tooltip('moves the pill');
-        $press = $c->row(6, 0)->round(14)->material(new Glass(interactive: true))->focusable();
+        $press = $c->row(6, 0)->radius(14)->material(new Glass(interactive: true))->focusable();
           $c->text('Press me', 13);
         $c->end();
         if ($c->clicked($press)) { $s['presses']++; }
         $c->muted("pressed {$s['presses']}", 12);
       $c->end();
       // A pill the slider moves across the photo: the lens bends what shows near its edge.
-      $c->row(14, 8)->at($s['x'], 120)->round(28)->material($glass());
+      $c->row(14, 8)->at($s['x'], 120)->radius(28)->material($glass());
         $c->richText([new Span('glass ', style: Font::BOLD), new Span('over the photo')], 14);
       $c->end();
       // A blur fading from full at its top to nothing at its bottom (a progressive blur, in levels), across the window.

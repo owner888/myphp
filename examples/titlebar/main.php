@@ -21,7 +21,7 @@ function view(Context $c, array &$s, string $style): void
     $bar = $c->titleBar();
     $c->column(0, 0, 1);
       // The title bar: as high as the controls' room (or 32), padded past them, a handle moving the window; the field and the button in it keep their presses.
-      $c->row(0, $t->space(2), 0, $t->surface)->size(0, max($bar['height'], 32))->align(Node::CENTER)->dragWindow();
+      $c->row(0, $t->space(2), 0, $t->surface)->size(0, max($bar['height'], 32))->alignItems(Node::CENTER)->dragWindow();
         $c->column(0, 0)->size($bar['left'], 0); $c->end();
         $c->text("Title bar: $style", $t->fontSize, $t->text, Font::BOLD);
         $c->muted(sprintf('controls take %d × %d', $bar['left'], $bar['height']));

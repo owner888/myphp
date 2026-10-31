@@ -160,7 +160,7 @@ $in = function (array $q, array $r): bool { return $q[0] >= $r[0] - 0.01 && $q[1
 $red = 0xff0000; $blue = 0x0000ff;
 $n = [];
 $h = new Headless(function (Context $c) use (&$n, $red, $blue) {
-    $c->column(10, 10)->align(Node::START);
+    $c->column(10, 10)->alignItems(Node::START);
       $n['rich'] = $c->richText([new Span('plain '), new Span('RED', 30, color: $red, weight: 700)]);
       $n['lined'] = $c->richText([new Span('under', underline: true, color: $blue), new Span(' over')]);
       $n['text'] = $c->text('plain RED');
@@ -179,7 +179,7 @@ check(count($lines) === 1 && $lines[0][2] >= $lined[2] * 0.4 && $lines[0][2] <= 
 // Text styles: inherited from the nodes around, a style text() does not measure laid out as rich text.
 $n = [];
 $h = new Headless(function (Context $c) use (&$n) {
-    $c->column(0, 8)->align(Node::START);
+    $c->column(0, 8)->alignItems(Node::START);
       $n['plain'] = $c->text('Wide');
       $n['spaced'] = $c->text('Wide')->letterSpacing(6);
       $c->row()->fontFeatures('tnum', 'liga=0')->letterSpacing(1);

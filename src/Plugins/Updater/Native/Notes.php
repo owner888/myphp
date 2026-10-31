@@ -85,7 +85,7 @@ final class Notes
             case 'list':
                 $c->column()->margin($gap, 0, 0, 0);
                 foreach ($b['items'] as $i => $item) {
-                    $row = $c->row()->align(Node::START);
+                    $row = $c->row()->alignItems(Node::START);
                     if ($this->rtl) {
                         $row->reverse();
                     }
@@ -114,7 +114,7 @@ final class Notes
                 $c->end();
                 return;
             case 'code':
-                $box = $c->column()->margin($gap, 0, 0, 0)->background(...self::track($t))->round(3);
+                $box = $c->column()->margin($gap, 0, 0, 0)->background(...self::track($t))->radius(3);
                 $box->scroll($c->runtime?->local($box->id, fn() => new ScrollState) ?? new ScrollState, horizontal: true, vertical: false);
                 $c->column()->padding(6, 8);
                 $c->text($b['text'], $t->fontSize * 12 / 13, style: Font::MONO)->noWrap()->selectable();

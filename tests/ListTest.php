@@ -53,7 +53,7 @@ function lbWheel(Headless $h, float $dy): void
 function lbList(ListState $s, int &$n, \Closure $height, int $w = 300, int $hh = 400, ?\Closure $build = null): Headless
 {
     return new Headless(function (Context $c) use ($s, &$n, $height, $build): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH);
           $l = $c->list($s, $n, function (int $i) use ($c, $height): void { $c->box(0, $height($i), 0x333333)->label("r$i"); });
           $l->grow = 1;
           if ($build !== null) { $build($l); }

@@ -7,7 +7,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, DisplayList, Node, TextPainter, Theme};
+use MyPHP\UI\{Context, DisplayList, Node, Painter};
 
 // The rows of a long column scrolled by a translation in a clip are painted only where they show.
 $dy = 0.0;
@@ -43,8 +43,8 @@ $extras = [
     fn(Node $n) => $n->scale(0.5, 3),
     fn(Node $n) => $n->blur(2),
     fn(Node $n) => $n->shadow(0, 60, 30, 10, 0x000000, 0.4),
-    fn(Node $n) => $n->draw(fn(DisplayList $l, Node $b) => $l->rect($b->x - 30, $b->y - 30, $b->w + 60, 10, 0x007800)),
-    fn(Node $n) => $n->drawOver(fn(DisplayList $l, Node $b) => $l->rect($b->x, $b->y + $b->h, 20, 40, 0x0000a0, 1.0, 2)),
+    fn(Node $n) => $n->draw(fn(Painter $p, array $r) => $p->fill([$r[0] - 30, $r[1] - 30, $r[2] + 60, 10], 0x007800)),
+    fn(Node $n) => $n->drawOver(fn(Painter $p, array $r) => $p->fill([$r[0], $r[1] + $r[3], 20, 40], 0x0000a0, 2)),
     fn(Node $n) => $n->dividers(1, 0x5a5a5a),
     fn(Node $n) => $n->debug(),
     fn(Node $n) => $n->background(0xfafac8),

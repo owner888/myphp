@@ -248,8 +248,8 @@ same([[Path::MOVE, 10.0, 100.0, 0, 0, 0, 0], [Path::LINE, 110.0, 30.0, 0, 0, 0, 
 // strokePolyline: an opaque line a capsule a segment, a translucent one a stroked path, a point alone nothing (mygo's StrokePolyline).
 $kinds = function (array $points, float $alpha) {
     $h = new Headless(function (Context $c) use ($points, $alpha): void {
-        $c->column()->fill()->draw(function (\MyPHP\UI\DisplayList $list, Node $n, \MyPHP\UI\Theme $t, \MyPHP\UI\TextPainter $text) use ($points, $alpha): void {
-            (new \MyPHP\UI\Painter($list, $text, $t))->strokePolyline($points, 3, 0x143ce6, $alpha);
+        $c->column()->fill()->draw(function (\MyPHP\UI\Painter $p, array $r) use ($points, $alpha): void {
+            $p->strokePolyline($points, 3, 0x143ce6, $alpha);
         });
         $c->end();
     }, 200, 100);

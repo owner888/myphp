@@ -24,7 +24,7 @@ $state['avatars'] !== [] || throw new RuntimeException('no app icons under /Syst
 function inbox(Context $c, array &$s): void
 {
     $t = $c->theme; // light or dark after the system, accent from its settings
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
     // Mailboxes: a sidebar, as Mail's; the arrows choose while it has the focus.
     $side = $c->sidebar($s['mailbox'], function () use ($c, &$s) {
         $c->sidebarSection('Favorites', $s['favorites'], function () use ($c, &$s) {

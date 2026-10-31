@@ -58,17 +58,17 @@ function view(Context $c, array &$s): void
       $c->end();
       $c->divider();
       if ($c->changed($c->tabs(['General', 'Advanced', 'About'], $s['tab']))) { $s['last'] = 'tab ' . $s['tab']; }
-      $c->key('tab' . $s['tab'])->column(12, 10, 0, $t->surface)->round($t->radius); // keyed by tab: each tab's controls keep their own state (hover, focus, locals) apart from the others'
+      $c->key('tab' . $s['tab'])->column(12, 10, 0, $t->surface)->radius($t->radius); // keyed by tab: each tab's controls keep their own state (hover, focus, locals) apart from the others'
         if ($s['tab'] === 0) {
             $c->row(0, 10); $c->text('Copies'); $c->text((string)$s['count']); if ($c->changed($c->stepper($s['count'], 1, 10))) { $s['last'] = "count {$s['count']}"; } $c->end();
             $c->row(0, 10); $c->text('Scale'); if ($c->changed($c->numberInput($s['scale'], 0.5, 4, 0.25))) { $s['last'] = "scale {$s['scale']}"; } $c->end();
             $c->row(0, 10); $c->text('Disk'); $c->meter($s['count'] * 10, 0, 100, new \MyPHP\UI\MeterLevels(80, 95)); $c->muted("{$s['count']}0 % used"); $c->end();
             // Icons in the text's color at the font size, or a size and color of their own; avatars from names.
-            $c->row(0, 10)->align(Node::CENTER); $c->text('Icons'); $c->icon($s['icons']['check']); $c->icon($s['icons']['star'], 20, $t->warning); $c->icon($s['icons']['bell'], 28); $c->icon($s['icons']['star'], 20)->rotate(45); $c->image($s['icons']['palette'], 28, 28); $c->image($s['icons']['palette'], 28, 28)->grayscale(); $c->avatar('Ada Lovelace'); $c->avatar('Grace Hopper'); $c->avatar('Linus'); $c->end();
-            $c->row(0, 10)->align(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();
-            $c->row(0, 10)->align(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
-            $c->row(0, 10)->align(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($s['when']))) { $s['last'] = 'date ' . $s['when']->format('Y-m-d'); } if ($c->changed($c->timeInput($s['when']))) { $s['last'] = 'time ' . $s['when']->format('H:i'); } $c->end();
-            $c->row(0, 10)->align(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($s['tags'], TAGS))) { $s['last'] = 'tags ' . implode(', ', $s['tags']); } $c->end();
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Icons'); $c->icon($s['icons']['check']); $c->icon($s['icons']['star'], 20, $t->warning); $c->icon($s['icons']['bell'], 28); $c->icon($s['icons']['star'], 20)->rotate(45); $c->image($s['icons']['palette'], 28, 28); $c->image($s['icons']['palette'], 28, 28)->grayscale(); $c->avatar('Ada Lovelace'); $c->avatar('Grace Hopper'); $c->avatar('Linus'); $c->end();
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Fruit'); if ($c->changed($c->combobox($s['fruit'], FRUITS))) { $s['last'] = "fruit {$s['fruit']}"; } $c->end();
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('City'); $ac = $c->autocomplete($s['city'], CITIES, 'City'); if ($c->changed($ac)) { $s['last'] = "city {$s['city']->text}"; } if ($c->submitted($ac)) { $s['last'] = "city {$s['city']->text} ⏎"; } $c->end();
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('When'); if ($c->changed($c->dateInput($s['when']))) { $s['last'] = 'date ' . $s['when']->format('Y-m-d'); } if ($c->changed($c->timeInput($s['when']))) { $s['last'] = 'time ' . $s['when']->format('H:i'); } $c->end();
+            $c->row(0, 10)->alignItems(Node::START); $c->text('Tags'); if ($c->changed($c->tokenField($s['tags'], TAGS))) { $s['last'] = 'tags ' . implode(', ', $s['tags']); } $c->end();
             $c->collapsible('More options', $s['more'], function () use ($c, &$s) {
                 $c->muted('Shown while the section is open; the header toggles it, and it grows into view.');
                 $c->row(0, 8); $c->badge('new'); $c->badge('3'); $c->badge('beta'); $c->end();
@@ -97,20 +97,20 @@ function view(Context $c, array &$s): void
                 });
             });
             // A list whose rows drag to another place (Cmd-click chooses several to drag together); the choice follows them by key.
-            $c->row(0, 10)->align(Node::START); $c->text('Steps');
-              $c->column(0, 0, 0, $t->background)->size(200, 5 * 28 + 2)->round($t->radius)->border();
-                $c->list($s['stepList'], count($s['steps']), function (int $i) use ($c, $t, &$s) { $c->row(0, 0)->size(0, 28)->padding(0, 10)->align(Node::CENTER); $c->text($s['steps'][$i]); $c->end(); });
+            $c->row(0, 10)->alignItems(Node::START); $c->text('Steps');
+              $c->column(0, 0, 0, $t->background)->size(200, 5 * 28 + 2)->radius($t->radius)->border();
+                $c->list($s['stepList'], count($s['steps']), function (int $i) use ($c, $t, &$s) { $c->row(0, 0)->size(0, 28)->padding(0, 10)->alignItems(Node::CENTER); $c->text($s['steps'][$i]); $c->end(); });
               $c->end();
             $c->end();
             // A calendar: a click or the arrows choose a day, Page Up and Page Down move by months.
-            $c->row(0, 10)->align(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
+            $c->row(0, 10)->alignItems(Node::START); $c->text('Calendar'); if ($c->changed($c->calendar($s['when']))) { $s['last'] = 'calendar ' . $s['when']->format('Y-m-d'); } $c->end();
         } else {
             $c->richText([new \MyPHP\UI\Span('MyPHP ', style: Font::BOLD), new \MyPHP\UI\Span(App::VERSION, color: $t->textMuted)]);
             $crumbs = ['Macintosh HD', 'Users', 'developer', 'Documents', 'Widgets']; // a path: the items but the last are links
             if ($c->changed($c->breadcrumbs(array_slice($crumbs, 0, $s['crumb'] + 1), $s['crumb']))) { $s['last'] = 'went to ' . $crumbs[$s['crumb']]; }
-            $c->row(0, 10)->align(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($s['color'], $s['alpha']))) { $s['last'] = 'color ' . Context::hexOf($s['color'], $s['alpha']); } $c->muted(Context::hexOf($s['color'], $s['alpha'])); $c->end();
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Color'); if ($c->changed($c->colorWell($s['color'], $s['alpha']))) { $s['last'] = 'color ' . Context::hexOf($s['color'], $s['alpha']); } $c->muted(Context::hexOf($s['color'], $s['alpha'])); $c->end();
             // The language the app shows: MyPHP's own strings (the search field, the find bar, the menus) and the date and time formats follow it.
-            $c->row(0, 10)->align(Node::CENTER); $c->text('Language');
+            $c->row(0, 10)->alignItems(Node::CENTER); $c->text('Language');
               $langs = ['en' => 'English', 'zh-Hans' => '简体中文', 'zh-Hant' => '繁體中文']; $lang = array_search(App::locale(), array_keys($langs), true) ?: 0;
               if ($c->changed($c->segmented(array_values($langs), $lang))) { App::setLocale(array_keys($langs)[$lang]); $s['last'] = 'language ' . App::locale(); }
               $c->muted('region ' . (App::region()->locale ?: '—') . ', ' . App::region()->hourCycle . 'h');

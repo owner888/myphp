@@ -12,7 +12,7 @@ use MyPHP\UI\{Context, Node};
 
 $scrub = 0.5; $slider = null; $box = null;
 $h = new Headless(function (Context $c) use (&$scrub, &$slider, &$box): void {
-    $c->column(24, 16, 1)->align(Node::CENTER);
+    $c->column(24, 16, 1)->alignItems(Node::CENTER);
       $c->row(0, 10);
         $slider = $c->slider($scrub, 0, 1, 0)->grow(1);
         $c->text('870 / 870 ms', 12)->size(96, 0);

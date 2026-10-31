@@ -46,19 +46,19 @@ final class MoviePlayerFontSheet
         $shown = $filter === '' ? $s->families : array_values(array_filter($s->families, fn(string $n) => str_contains(mb_strtolower($n), $filter)));
         $c->column(0, 0, 1)->padding(12, 12, 12, 12)->background($k['page']);
           $c->text($tx->get('fontPickerChoose'), 13, $t->text)->margin(0, 0, 8, 0);
-          $c->row()->height(24)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+          $c->row()->height(24)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
             $f = $c->input($s->filter, $tx->get('fontPickerFilter'), 0, 13)->height(24);
             $f->bordered = false;
           $c->end();
           // The families, in a box (IINA's table, its column's header).
-          $c->column()->fillWidth()->height(268)->margin(8, 0, 0, 0)->round(6)->borderWidth(1)->borderColor($k['line'])->clip()->background($k['card'], $k['cardAlpha']);
-            $c->row()->height(24)->fillWidth()->paddingX(8)->align(Node::CENTER)->background($t->dark ? 0xffffff : 0x000000, 0.04);
+          $c->column()->fillWidth()->height(268)->margin(8, 0, 0, 0)->radius(6)->borderWidth(1)->borderColor($k['line'])->clip()->background($k['card'], $k['cardAlpha']);
+            $c->row()->height(24)->fillWidth()->paddingX(8)->alignItems(Node::CENTER)->background($t->dark ? 0xffffff : 0x000000, 0.04);
               $c->text($tx->get('fontPickerFamily'), 11, $t->textMuted, Font::BOLD);
             $c->end();
             $chosen = $s->name->text;
             $c->list($s->list, count($shown), function (int $i) use ($c, $t, $shown, $s, $chosen): void {
                 $on = $shown[$i] === $chosen;
-                $r = $c->row()->height(self::ROW)->fillWidth()->paddingX(8)->align(Node::CENTER)->role(Role::BUTTON)->label($shown[$i]);
+                $r = $c->row()->height(self::ROW)->fillWidth()->paddingX(8)->alignItems(Node::CENTER)->role(Role::BUTTON)->label($shown[$i]);
                 if ($on) { $r->background($t->accent); }
                   $c->text($shown[$i], 13, $on ? $t->accentText : $t->text)->singleLine();
                 $c->end();
@@ -67,19 +67,19 @@ final class MoviePlayerFontSheet
           $c->end();
           $c->text($tx->get('fontPickerPreview'), 11, $t->textMuted)->margin(12, 0, 4, 0);
           $font = trim($s->name->text) === '' ? 'sans-serif' : trim($s->name->text);
-          $c->row()->height(36)->fillWidth()->paddingX(8)->align(Node::CENTER)->round(6)->borderWidth(1)->borderColor($k['line'])->background($k['card'], $k['cardAlpha'])->clip();
+          $c->row()->height(36)->fillWidth()->paddingX(8)->alignItems(Node::CENTER)->radius(6)->borderWidth(1)->borderColor($k['line'])->background($k['card'], $k['cardAlpha'])->clip();
             $c->text($tx->get('fontPickerTest'), 20, $t->text)->font($font)->singleLine();
           $c->end();
           $c->text($tx->get('fontPickerOther'), 13, $t->text)->margin(12, 0, 4, 0);
-          $c->row()->height(24)->fillWidth()->round(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
+          $c->row()->height(24)->fillWidth()->radius(6)->background($k['field'], $k['fieldAlpha'] / 2)->borderWidth(1)->borderColor($k['line']);
             $o = $c->input($s->name, 'sans-serif', 0, 13)->height(24);
             $o->bordered = false;
           $c->end();
           $c->column()->grow(1);
           $c->end();
-          $c->row(0, 12)->fillWidth()->justify(Node::END)->align(Node::CENTER);
+          $c->row(0, 12)->fillWidth()->justify(Node::END)->alignItems(Node::CENTER);
             if (MoviePlayerSettings::pushButton($c, $tx->get('fontPickerCancel'), false) || $c->shortcut(Key::ESCAPE)) { $close(); }
-            $ok = $c->row()->height(24)->width(80)->round(8)->center()->role(Role::BUTTON)->label($tx->get('fontPickerOK'))->background($t->accent);
+            $ok = $c->row()->height(24)->width(80)->radius(8)->center()->role(Role::BUTTON)->label($tx->get('fontPickerOK'))->background($t->accent);
               $c->text($tx->get('fontPickerOK'), 13, $t->accentText);
             $c->end();
             if ($c->clicked($ok) || $c->shortcut(Key::RETURN)) { $done($font); $close(); }

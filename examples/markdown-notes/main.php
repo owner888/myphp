@@ -183,7 +183,7 @@ function view(Context $c, Notes $notes): void
                   $c->column(20, 8); $c->muted('Choose a note, or make one with New (Cmd+N).'); $c->end();
               } else {
                   $c->textarea($notes->editor, 'Write Markdown…', 0, 0, 14); // 0, 0: fills the pane
-                  $c->row(8, 8)->align(Node::CENTER);
+                  $c->row(8, 8)->alignItems(Node::CENTER);
                     $c->muted(sprintf('%d words · edited %s', $notes->words(), date('M j, H:i', $notes->edited())), 12); $c->spacer();
                     $c->badge($notes->editor->text === $notes->savedText() ? 'saved' : 'editing');
                   $c->end();

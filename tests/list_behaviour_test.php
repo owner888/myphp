@@ -141,7 +141,7 @@ check(lbRow($h, 0) === null && $s->atEnd, 'no rows');
 // Choosing: a click, Down showing the choice, End, Home, Up at the start, Enter.
 $sel = -1; $s = new ListState(); $s->selected = &$sel; $submitted = 0; $list = null; $n = 500;
 $h = new Headless(function (Context $c) use ($s, &$n, &$submitted, &$list): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $list = $c->list($s, $n, fn(int $i) => $c->box(0, lbVaried($i), 0x333333)->label("r$i"));
       $list->grow = 1;
       if ($s->submitted()) { $submitted++; }
@@ -165,7 +165,7 @@ same(1, $submitted, 'Enter submits');
 // A focused field in a row scrolled far away keeps the focus and takes the keys.
 $texts = array_map(fn() => new TextState(''), range(0, 299)); $s = new ListState();
 $h = new Headless(function (Context $c) use ($s, $texts): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->list($s, 300, function (int $i) use ($c, $texts): void { $c->row()->size(0, 30); $c->input($texts[$i])->label("Field $i"); $c->end(); })->grow = 1;
     $c->end();
 }, 300, 400);

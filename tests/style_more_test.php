@@ -54,7 +54,7 @@ foreach (['a' => [0, 0, 100, 10], 'b' => [110, 0, 60, 10], 'c' => [180, 0, 310 /
 }
 // Alignment in cells: justifyItems, alignItems, a cell's own, automatic margins.
 $b = smBoxes(function (Context $c): void {
-    $c->grid(2, 0, [Track::fixed(50)])->size(200, 0)->justifyItems(Node::CENTER)->align(Node::END);
+    $c->grid(2, 0, [Track::fixed(50)])->size(200, 0)->justifyItems(Node::CENTER)->alignItems(Node::END);
       $c->box(20, 10, 0)->label('a');
       $c->box(20, 10, 0)->label('b')->justifySelf(Node::START)->alignSelf(Node::START);
       $c->box(20, 10, 0)->label('c')->margin(0, Node::AUTO);
@@ -72,7 +72,7 @@ $b = smBoxes(function (Context $c): void {
         $c->end();
       $c->end();
       $c->grid([Track::fit(), Track::fit()])->size(200, 0);
-        $c->box(0, 10, 0)->min(30, 0)->label('c'); $c->box(0, 10, 0)->min(50, 0)->label('d');
+        $c->box(0, 10, 0)->minWidth(30)->minHeight(0)->label('c'); $c->box(0, 10, 0)->minWidth(50)->minHeight(0)->label('d');
       $c->end();
     $c->end();
 }, 300, 200, 'grid', 'a', 'b', 'c', 'd');
@@ -92,7 +92,7 @@ check($b['x'][1] > $b['one'][1] + $b['one'][3] && $b['grid'][3] == $b['x'][1] + 
 
 // Text: a fixed line height; one that does not wrap is wider and lower than one that does.
 $b = smBoxes(function (Context $c): void {
-    $c->column()->size(60, 0)->align(Node::START);
+    $c->column()->size(60, 0)->alignItems(Node::START);
       $c->text("one\ntwo")->fixedLineHeight(30)->label('fixed');
       $c->text('a long line of words')->noWrap()->label('nowrap');
       $c->text('a long line of words')->label('wraps');

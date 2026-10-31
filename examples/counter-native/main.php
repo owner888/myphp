@@ -21,7 +21,7 @@ function view(Context $c, Counter $s): void
     if ($c->shortcut(Key::UP)) { $s->n++; }
     if ($c->shortcut(Key::DOWN)) { $s->n--; }
     $t = $c->theme;
-    $c->column(0, 16, 1)->fill()->align(Node::CENTER)->justify(Node::CENTER);
+    $c->column(0, 16, 1)->fill()->alignItems(Node::CENTER)->justify(Node::CENTER);
       $c->text((string)$s->n, 56, style: Font::BOLD);
       $c->row(0, 8);
         if ($c->clicked($c->key('decrement')->button('−')->label('Decrement')->size(44, 0))) { $s->n--; }

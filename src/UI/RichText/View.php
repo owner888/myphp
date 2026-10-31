@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI\RichText;
 
 use MyPHP\Text\{Layout, Params, System};
-use MyPHP\UI\{AccessNode, Context, DisplayList, Node, Role, Runtime, TextInputClient, TextInputRange, TextPainter, Theme as UITheme};
+use MyPHP\UI\{AccessNode, Context, Node, Painter, Role, Runtime, TextInputClient, TextInputRange, Theme as UITheme};
 use MyPHP\UI\Editor\{Rope, RopeText};
 
 /**
@@ -129,7 +129,7 @@ final class View implements TextInputClient
         if (!$v->opts->readOnly) { $e->handleTextInput($v); }
         $e->handleInput($v->input(...));
         $e->cursor($v->cursor);
-        $e->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) use ($v): void { $v->paint($list, $text, [$n->x, $n->y, $n->w, $n->h], $th); });
+        $e->draw(function (Painter $p, array $r) use ($v): void { $v->paint($p->displayList(), $p->textPainter(), $r, $p->theme()); });
         $e->contextMenu($v->menu(...));
         if ($styled) { $e->ownRing = true; } // FocusRing(false): the border shows it has the keyboard
         if (($r = $rt?->rectOf($e->id)) !== null) {
@@ -143,7 +143,7 @@ final class View implements TextInputClient
             if ($phase < 30) { $rt?->after(self::BLINK - fmod($phase, self::BLINK)); }
         }
         if ($styled) {
-            $e->round($t->radius)->background($t->surface)->borderWidth(1)->borderColor($focused ? $t->accent : $t->border)->min(0, $t->space(30));
+            $e->radius($t->radius)->background($t->surface)->borderWidth(1)->borderColor($focused ? $t->accent : $t->border)->minWidth(0)->minHeight($t->space(30));
         }
         return $e;
     }

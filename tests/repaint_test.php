@@ -10,14 +10,14 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, DisplayList, Node};
+use MyPHP\UI\{Context, Painter};
 
 // A drawing out of view is not painted, and asks for no frame.
 $draws = 0;
 $h = new Headless(function (Context $c) use (&$draws): void {
     $c->scroll()->height(100);
       $c->column()->size(100, 300)->shrink(0); $c->end();
-      $c->column()->size(100, 20)->shrink(0)->draw(function (DisplayList $l, Node $n) use (&$draws, $c): void { $draws++; $c->runtime->animationFrame(); }); $c->end();
+      $c->column()->size(100, 20)->shrink(0)->draw(function (Painter $p, array $r) use (&$draws, $c): void { $draws++; $c->runtime->animationFrame(); }); $c->end();
     $c->end();
 }, 200, 100);
 $h->paints = true; $h->frame();
@@ -26,7 +26,7 @@ check($draws === 0 && !$h->rt->needsFrame && $h->rt->nextWake() === null, "out o
 // after() asks for a frame when it is due, by the frame's clock; the frame painted asks again.
 $draws = 0; $now = 0;
 $h = poseTester(function (Context $c) use (&$draws): void {
-    $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use (&$draws, $c): void { $draws++; $c->runtime->after(0.03); }); $c->end();
+    $c->column()->size(100, 20)->draw(function (Painter $p, array $r) use (&$draws, $c): void { $draws++; $c->runtime->after(0.03); }); $c->end();
 }, $now, 200, 100);
 $h->paint();
 check($draws === 1 && !$h->rt->needsFrame && abs($h->rt->nextWake() - 0.03) < 1e-9, 'due in 30 ms: ' . json_encode($h->rt->nextWake()));
@@ -66,8 +66,8 @@ check(!$h->rt->needsFrame, 'asked for no more: none');
 // so many of the display's refreshes, the most that still give it as many a second; at each while anything asks for more.
 $fps = 0.0; $full = false; $draws = 0;
 $h = new Headless(function (Context $c) use (&$fps, &$full, &$draws): void {
-    $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use (&$fps, &$draws, $c): void { $draws++; if ($fps > 0) { $c->runtime->animationFrameRate($fps); } }); $c->end();
-    $c->column()->size(10, 10)->draw(function (DisplayList $l, Node $n) use (&$full, $c): void { if ($full) { $c->runtime->animationFrame(); } }); $c->end();
+    $c->column()->size(100, 20)->draw(function (Painter $p, array $r) use (&$fps, &$draws, $c): void { $draws++; if ($fps > 0) { $c->runtime->animationFrameRate($fps); } }); $c->end();
+    $c->column()->size(10, 10)->draw(function (Painter $p, array $r) use (&$full, $c): void { if ($full) { $c->runtime->animationFrame(); } }); $c->end();
 }, 200, 100);
 $h->paints = true;
 // How many of $n refreshes of a display of $hz paint the drawing again, each asking for the next, and the last pace.
@@ -96,7 +96,7 @@ same(1, (function () use ($h) { $h->rt->animationFrameRate(30); $h->rt->needsFra
 $builds = 0; $draws = 0; $drawnAt = 0; $now = 0; $size = 100.0;
 $h = poseTester(function (Context $c) use (&$builds, &$draws, &$drawnAt, &$size): void {
     $builds++;
-    $c->column()->size($size, 20)->draw(function (DisplayList $l, Node $n) use (&$draws, &$drawnAt, $c): void { $draws++; $drawnAt = $c->runtime->now; $c->runtime->animationFrame(); }); $c->end();
+    $c->column()->size($size, 20)->draw(function (Painter $p, array $r) use (&$draws, &$drawnAt, $c): void { $draws++; $drawnAt = $c->runtime->now; $c->runtime->animationFrame(); }); $c->end();
 }, $now, 200, 100);
 $h->paint(); $h->rt->pace(60.0);
 same([true, 1], [$h->rt->repaints(), $h->rt->pace(60.0)], 'a drawing that moves asks for frames that only paint again');
@@ -125,7 +125,7 @@ $draws = 0; $builds = 0; $now = 0; $viewAfter = false;
 $h = poseTester(function (Context $c) use (&$draws, &$builds, &$viewAfter): void {
     $builds++;
     if ($viewAfter) { $c->after(0.01); }
-    $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use (&$draws, $c): void { $draws++; $c->runtime->after(0.03); }); $c->end();
+    $c->column()->size(100, 20)->draw(function (Painter $p, array $r) use (&$draws, $c): void { $draws++; $c->runtime->after(0.03); }); $c->end();
 }, $now, 200, 100);
 $h->paint(); $h->rt->pace(60.0);
 same([null, true, true], [$h->rt->pace(60.0), abs($h->rt->nextWake() - 0.03) < 1e-9, $h->rt->wakeRepaints()], 'due in 30 ms, a frame that only paints again');
@@ -139,7 +139,7 @@ same([true, false], [abs($h->rt->nextWake() - 0.01) < 1e-9, $h->rt->wakeRepaints
 $h = new Headless(function (Context $c): void {
     $c->scroll()->height(100);
       $c->column()->size(100, 300)->shrink(0); $c->end();
-      $c->column()->size(100, 20)->shrink(0)->draw(function (DisplayList $l, Node $n) use ($c): void { $c->runtime->animationFrame(); }); $c->end();
+      $c->column()->size(100, 20)->shrink(0)->draw(function (Painter $p, array $r) use ($c): void { $c->runtime->animationFrame(); }); $c->end();
     $c->end();
 }, 200, 100);
 $h->frame(1); $h->paint();
@@ -149,7 +149,7 @@ same([null, false], [$h->rt->pace(60.0), $h->rt->repaints()], 'out of view: no f
 $now = 0; $draws = 0;
 $h = poseTester(function (Context $c) use (&$draws): void {
     $c->memo('m', [1], function () use ($c, &$draws): void {
-        $c->column()->size(100, 20)->draw(function (DisplayList $l, Node $n) use ($c, &$draws): void { $draws++; $c->runtime->after(0.05); }); $c->end();
+        $c->column()->size(100, 20)->draw(function (Painter $p, array $r) use ($c, &$draws): void { $draws++; $c->runtime->after(0.05); }); $c->end();
     });
 }, $now, 200, 100);
 $h->paint(); $h->rt->pace(60.0);
@@ -160,13 +160,13 @@ same([true, true], [$h->rt->wakeRepaints(), $h->rt->nextWake() !== null], 'a mem
 // Frames painting again only the drawings that asked (mygo's TestRepaintPartsMatchWhole): what they paint is what painting the window
 // whole does, without calling the callbacks of what does not move.
 $partsView = function (int &$statics) {
-    $static = function (DisplayList $l, Node $n) use (&$statics): void { $statics++; $l->rect($n->x + 2, $n->y + 2, $n->w - 4, $n->h - 4, 0x14a03c, 1.0, 4); };
+    $static = function (Painter $p, array $r) use (&$statics): void { $statics++; $p->fill([$r[0] + 2, $r[1] + 2, $r[2] - 4, $r[3] - 4], 0x14a03c, 4); };
     return function (Context $c) use ($static): void {
-        $moving = function (DisplayList $l, Node $n, $t, $text) use ($c): void {
+        $moving = function (Painter $p, array $r) use ($c): void {
             $ms = (float)(intdiv($c->runtime->now, 1_000_000) % 40);
             $c->runtime->animationFrame();
-            $l->rect($n->x + $ms, $n->y, 6, $n->h, 0x2563eb, 1.0, 3);
-            $text->paint($l, 'ab', 10, $n->x + $ms / 2, $n->y + $n->h - 4, 0xdc2828);
+            $p->fill([$r[0] + $ms, $r[1], 6, $r[3]], 0x2563eb, 3);
+            $p->text($r[0] + $ms / 2, $r[1] + $r[3] - 4, 'ab', 10, 0xdc2828);
         };
         $c->column(4)->background(0xfafafa)->padding(4);
           $c->column()->size(120, 20)->draw($static); $c->end();
@@ -175,10 +175,10 @@ $partsView = function (int &$statics) {
             $c->column()->size(120, 24)->shrink(0)->draw($static); $c->end();
           $c->end();
           $c->row();
-            $c->column()->size(60, 20)->opacity(0.5)->background(0xdc2828)->draw($moving)->drawOver(fn(DisplayList $l, Node $n) => $static($l, $n)); $c->end();
-            $c->column()->size(60, 20)->scale(0.8, 1.2)->draw($static)->drawOver(function (DisplayList $l, Node $n) use ($c): void {
+            $c->column()->size(60, 20)->opacity(0.5)->background(0xdc2828)->draw($moving)->drawOver(fn(Painter $p, array $r) => $static($p, $r)); $c->end();
+            $c->column()->size(60, 20)->scale(0.8, 1.2)->draw($static)->drawOver(function (Painter $p, array $r) use ($c): void {
                 $c->runtime->after(0.016);
-                $l->rect($n->x + (float)(intdiv($c->runtime->now, 1_000_000) % 30), $n->y, 4, 4, 0xdc2828, 1.0, 0);
+                $p->fill([$r[0] + (float)(intdiv($c->runtime->now, 1_000_000) % 30), $r[1], 4, 4], 0xdc2828, 0);
             }); $c->end();
           $c->end();
           $c->column()->size(120, 20)->draw($static); $c->end();

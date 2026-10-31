@@ -173,7 +173,7 @@ function view(Context $c, Files $f): void
     // Keys for the folder: Cmd+F finds, Backspace goes up, Enter opens the entry chosen, Space previews an image, Delete… asks.
     if ($c->shortcut('f', Key::COMMAND)) { $f->finding = true; }
     if ($c->shortcut(Key::DELETE, Key::COMMAND) && $f->chosenEntries() !== []) { $f->asking = true; }
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       // Places
       $side = $c->sidebar($f->place, function () use ($c, $f) {
           $open = null;
@@ -201,7 +201,7 @@ function view(Context $c, Files $f): void
         $c->divider();
         if ($f->view === 0) { grid($c, $f); } else { table($c, $f); }
         $c->divider();
-        $c->row(10, 10)->align(Node::CENTER);
+        $c->row(10, 10)->alignItems(Node::CENTER);
           $n = count($f->chosenEntries());
           $c->muted($f->status !== '' ? $f->status : ($n > 0 ? "$n of " . count($f->entries) . ' chosen' : count($f->entries) . ' items'), 12);
         $c->end();
@@ -236,7 +236,7 @@ function grid(Context $c, Files $f): void
     $t = $c->theme;
     $g = $c->gridView($f->grid, count($f->entries), 96, 108, function (int $i) use ($c, $t, $f) {
         $e = $f->entries[$i];
-        $c->column(0, 4, 1)->align(Node::CENTER);
+        $c->column(0, 4, 1)->alignItems(Node::CENTER);
           $c->column(0, 0)->size(64, 64)->center();
             $img = Files::isImage($e) ? $f->thumb($e) : null;
             if ($img !== null) { $k = min(64 / $img->w, 64 / $img->h); $c->image($img, $img->w * $k, $img->h * $k, $t->radius); } // the longer side fills the 64 square
@@ -257,7 +257,7 @@ function table(Context $c, Files $f): void
     $c->table($f->table, $f->columns, count($f->entries), function (int $i, int $j) use ($c, $t, $f) {
         $e = $f->entries[$i];
         switch ($j) {
-            case 0: $c->row(0, 6)->align(Node::CENTER); $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 16, $e['dir'] ? $t->accent : $t->textMuted); $c->text($e['name'])->singleLine(); $c->end(); break;
+            case 0: $c->row(0, 6)->alignItems(Node::CENTER); $c->icon($f->icons[$e['dir'] ? 'folder' : 'file'], 16, $e['dir'] ? $t->accent : $t->textMuted); $c->text($e['name'])->singleLine(); $c->end(); break;
             case 1: $c->muted(Files::size($e['size'])); break;
             case 2: $c->muted(date('Y-m-d H:i', $e['mtime'])); break;
         }

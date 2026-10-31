@@ -15,8 +15,8 @@ $lines = fn(Node $n) => $n->kind === Node::RICH ? count($n->textLayout()->lines)
 
 // In a column of the window, the card's text wraps within its padding; wider, on fewer lines; in the frame of the resize.
 $h = new Headless(function (Context $c) use ($long): void {
-    $c->column(20, 8)->align(Node::START);
-      $c->column(12, 0, 0, 0xffffff)->round(8)->label('card');
+    $c->column(20, 8)->alignItems(Node::START);
+      $c->column(12, 0, 0, 0xffffff)->radius(8)->label('card');
         $c->text($long)->label('text');
       $c->end();
       $c->text('After')->label('after');
@@ -36,7 +36,7 @@ same(Node::TEXT, $h->byLabel('text')->kind, 'with room, on one line, as text mea
 
 // In a row beside a fixed box: it takes the room left, and wraps in it.
 $h = new Headless(function (Context $c) use ($long): void {
-    $c->row(0, 10)->width(300)->align(Node::START);
+    $c->row(0, 10)->width(300)->alignItems(Node::START);
       $c->box(100, 40, 0x333333);
       $c->text($long)->label('text');
     $c->end();
@@ -47,7 +47,7 @@ check($r[0] == 110.0 && $r[2] <= 190.5 && $lines($h->byLabel('text')) > 1, 'besi
 
 // Chinese breaks between its characters; a word no line breaks in keeps its width.
 $h = new Headless(function (Context $c): void {
-    $c->column()->width(100)->align(Node::START);
+    $c->column()->width(100)->alignItems(Node::START);
       $c->text(str_repeat('中文排版测试', 4))->label('zh');
       $c->text(str_repeat('x', 30))->label('word');
     $c->end();
@@ -58,7 +58,7 @@ check($h->rect($h->byLabel('word'))[2] > 100, 'a long word overflows, unbroken')
 
 // At most two lines, the second ending in an ellipsis; on one line, cut; not wrapping, one line wider than the room.
 $h = new Headless(function (Context $c) use ($long): void {
-    $c->column(0, 4)->width(150)->align(Node::START);
+    $c->column(0, 4)->width(150)->alignItems(Node::START);
       $c->text($long)->maxLines(2)->label('two');
       $c->text($long)->singleLine()->label('one');
       $c->text($long)->noWrap()->label('nowrap');
@@ -87,7 +87,7 @@ same([6 * 7.0, 7.0, $made], [$n['plain']->minContentWidth(), $n['zh']->minConten
 // In a row too narrow for it, a text wraps between its words and keeps its widest word whole (v1.30): its min-content width was one glyph's.
 $n = [];
 $h = new Headless(function (Context $c) use (&$n): void {
-    $c->row(0, 0)->width(40)->align(Node::START);
+    $c->row(0, 0)->width(40)->alignItems(Node::START);
       $n['t'] = $c->text('aa bbbbbbbbbb cc');
       $c->text('x');
     $c->end();

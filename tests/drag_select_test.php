@@ -157,7 +157,7 @@ function cellTable(int $n, int $count, float $width, bool $rtl = false, mixed &$
     $cols = [new TableColumn('#', 40, sortable: $sortable, fixed: true, rowHeader: true)];
     for ($k = 0; $k < $count; $k++) { $cols[] = new TableColumn(chr(65 + $k), $width, sortable: $sortable); }
     $h = new Headless(function (Context $c) use ($s, $cols, $n, $rtl): void {
-        $c->column(0, 0, 1)->align(Node::STRETCH)->direction($rtl ? Direction::RightToLeft : Direction::LeftToRight);
+        $c->column(0, 0, 1)->alignItems(Node::STRETCH)->direction($rtl ? Direction::RightToLeft : Direction::LeftToRight);
           $c->table($s, $cols, $n, fn(int $row, int $col) => $c->text("r{$row}c{$col}")->contextMenu(fn($m) => $m->item('Copy')))->grow = 1;
         $c->end();
     }, 400, 300);

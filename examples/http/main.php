@@ -96,7 +96,7 @@ function view(Context $c, Http $h): void
 {
     $t = $c->theme;
     if ($c->shortcut(Key::RETURN, Key::COMMAND) || $h->url->submitted) { $h->url->submitted = false; $h->send(); }
-    $c->row(0, 1, 1, $t->border)->align(Node::STRETCH);
+    $c->row(0, 1, 1, $t->border)->alignItems(Node::STRETCH);
       // History
       $c->column(0, 0, 0, $t->surface)->size(320);
         $c->row(10, 8); $c->text('Requests', 15, style: Font::BOLD); $c->spacer(); $c->muted(count($h->history) . ''); $c->end();
@@ -123,7 +123,7 @@ function view(Context $c, Http $h): void
           $send = $c->primaryButton($h->inFlight === null ? 'Send' : 'Sending…')->tooltip('Cmd+Enter');
           if ($c->clicked($send)) { $h->send(); }
         $c->end();
-        $c->row(0, 10)->align(Node::STRETCH);
+        $c->row(0, 10)->alignItems(Node::STRETCH);
           $c->column(0, 4, 1); $c->muted('Headers, one a line', 11); $c->textarea($h->headers, 'Name: value', 0, 72, 12); $c->end();
           $c->column(0, 4, 1); $c->muted('Body', 11); $c->textarea($h->body, 'sent with POST, PUT, PATCH', 0, 72, 12); $c->end();
         $c->end();

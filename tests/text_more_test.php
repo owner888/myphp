@@ -14,7 +14,7 @@ use MyPHP\UI\{Context, Key, Span, TextLayout, TextLines, TextState, TextStyle};
 $s = new TextState("one\n" . str_repeat('word ', 80) . "\nthree\n" . str_repeat("short\n", 500));
 $lines = new TextLines();
 $h = new Headless(function (Context $c) use ($s, $lines): void {
-    $c->column(0, 0, 1)->align(\MyPHP\UI\Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(\MyPHP\UI\Node::STRETCH);
       $c->textarea($s, '', 400, 300)->trackLines($lines)->grow = 1;
     $c->end();
 }, 400, 300);

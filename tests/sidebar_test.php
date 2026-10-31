@@ -10,7 +10,7 @@ use MyPHP\UI\{Context, Key, Node};
 
 $place = 'recents'; $changes = 0; $locations = true; $other = null;
 $h = new Headless(function (Context $c) use (&$place, &$changes, &$locations, &$other): void {
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $fav = null;
       $sb = $c->sidebar($place, function () use ($c, &$locations, &$fav): void {
           $c->sidebarSection('Favorites', $fav, function () use ($c): void {

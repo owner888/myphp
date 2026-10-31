@@ -125,7 +125,7 @@ $page = function (bool $memo) use (&$on): \Closure {
         $c->column(8, 6)->fill();
           for ($i = 0; $i < 3; $i++) {
               $part = function () use ($c, $i, &$on): void {
-                  $c->row(4, 8)->fillWidth()->round(6)->background(0x202428)->label("p$i");
+                  $c->row(4, 8)->fillWidth()->radius(6)->background(0x202428)->label("p$i");
                     $c->text("Part $i, told at some length")->grow(1);
                     $c->toggle($on[$i], '');
                   $c->end();

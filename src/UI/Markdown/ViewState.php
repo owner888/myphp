@@ -5,7 +5,7 @@ namespace MyPHP\UI\Markdown;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\UI\{Context, Key, Menu, Node, Role, Router, SelectedText, Span, SVG, DisplayList, Theme as UITheme, TextPainter, Path};
+use MyPHP\UI\{Context, Key, Menu, Node, Role, Router, SelectedText, Span, SVG, Painter, Theme as UITheme, TextPainter, Path};
 use MyPHP\UI\Markdown\Parser\{Block, Document, Inline};
 use MyPHP\Transfer\{Data, Format, Item, Representation};
 
@@ -244,7 +244,7 @@ final class ViewState
     private function scrollHorizontal(): Node
     {
         $c = $this->c;
-        $n = $c->row()->align(Node::START);
+        $n = $c->row()->alignItems(Node::START);
         $state = $c->runtime?->local($n->id, fn() => new \MyPHP\UI\ScrollState()) ?? new \MyPHP\UI\ScrollState();
         return $n->scroll($state, true, false);
     }
@@ -416,12 +416,12 @@ final class ViewState
         $first = true;
         for ($j = $i + 1; $j < $b->next; $j = $d->block($j)->next) {
             $item = $d->block($j);
-            $row = $c->row()->align(Node::START)->role(Role::LIST_ITEM);
+            $row = $c->row()->alignItems(Node::START)->role(Role::LIST_ITEM);
             if (!$first) {
                 $row->margin($th->em($b->tight ? $th->itemSpacing : $th->blockSpacing), 0, 0, 0);
             }
             $this->marker($b, $item, $n, $depth, $width);
-            $content = $c->column()->shrink(1)->min(0, 0);
+            $content = $c->column()->shrink(1)->minWidth(0)->minHeight(0);
             $content->grow = 1;
             $this->blocks($j, $b->tight, $base);
             $c->end();
@@ -452,11 +452,12 @@ final class ViewState
             $size = $th->em(0.95);
             $lineH = $th->fontSize * $th->lineHeight * 1.2;
             $checked = $item->task === Block::CHECKED;
-            $cb = $c->column()->size($size, $size)->round(max(3, $size / 5))->margin(max(0, ($lineH - $size) / 2 - 1), 0, 0, 0)->role(Role::CHECK_BOX)->checked($checked);
+            $cb = $c->column()->size($size, $size)->radius(max(3, $size / 5))->margin(max(0, ($lineH - $size) / 2 - 1), 0, 0, 0)->role(Role::CHECK_BOX)->checked($checked);
             if ($checked) {
-                $cb->background($th->checkbox[0], $th->checkbox[1])->draw(function (DisplayList $list, Node $r) {
-                    $path = (new Path())->moveTo($r->x + $r->w * 0.25, $r->y + $r->h * 0.52)->lineTo($r->x + $r->w * 0.43, $r->y + $r->h * 0.7)->lineTo($r->x + $r->w * 0.76, $r->y + $r->h * 0.32);
-                    $list->path($path, 0xffffff, 1.0, max(1.5, $r->w / 9));
+                $cb->background($th->checkbox[0], $th->checkbox[1])->draw(function (Painter $p, array $r) {
+                    [$x, $y, $w, $h] = $r;
+                    $path = (new Path())->moveTo($x + $w * 0.25, $y + $h * 0.52)->lineTo($x + $w * 0.43, $y + $h * 0.7)->lineTo($x + $w * 0.76, $y + $h * 0.32);
+                    $p->strokePath($path, max(1.5, $w / 9), 0xffffff);
                 });
             } else {
                 $cb->borderWidth(1.5)->borderColor($th->muted[0]);
@@ -504,13 +505,13 @@ final class ViewState
                 continue;
             }
             $num = $this->notes[Document::normalizeLabel($b->label())];
-            $row = $c->row()->align(Node::START)->margin($th->em(0.25), 0, 0, 0);
+            $row = $c->row()->alignItems(Node::START)->margin($th->em(0.25), 0, 0, 0);
             if ($this->scrollTo === $i) {
                 $row->scrollIntoView();
                 $this->scrollTo = -1;
             }
             $c->text($num . '.')->textColor($th->muted[0], $th->muted[1])->fontSize($th->em(0.875))->size($th->em(1.6), 0)->shrink(0)->unselectable();
-            $col = $c->column()->shrink(1)->min(0, 0)->textColor($th->muted[0], $th->muted[1]);
+            $col = $c->column()->shrink(1)->minWidth(0)->minHeight(0)->textColor($th->muted[0], $th->muted[1]);
             $col->grow = 1;
             $this->blocks($i, false, $base);
             $c->end();
@@ -642,11 +643,11 @@ final class ViewState
         }
         $this->tables[$b->start] = ['widths' => $widths];
         $scroll = $this->scrollHorizontal()->alignSelf(Node::STRETCH);
-        $grid = $c->column()->borderWidth(1)->borderColor($th->tableBorder[0])->round($th->em(0.3))->clip()->shrink(0)->role(Role::TABLE);
+        $grid = $c->column()->borderWidth(1)->borderColor($th->tableBorder[0])->radius($th->em(0.3))->clip()->shrink(0)->role(Role::TABLE);
         $n = 0;
         for ($r = $i + 1; $r < $b->next; $r = $d->block($r)->next) {
             $row = $d->block($r);
-            $rowEl = $c->row()->role(Role::ROW)->align(Node::STRETCH);
+            $rowEl = $c->row()->role(Role::ROW)->alignItems(Node::STRETCH);
             if ($row->header) {
                 $rowEl->background($th->tableHeader[0], $th->tableHeader[1]);
             } elseif ($n % 2 === 1 && $th->tableStripe !== null && $th->tableStripe[1] > 0) {
@@ -729,7 +730,7 @@ final class ViewState
             $alt = Inline::plainText(array_slice($in, $k + 1, $n->next - $k - 1));
             $src = $this->image($n->dest);
             if ($src === null || $n->pending) {
-                $ph = $c->row()->padding($th->em(0.5), $th->em(0.75))->round($th->em(0.3))->background($th->codeBackground[0], $th->codeBackground[1])->role(Role::IMAGE)->label($alt);
+                $ph = $c->row()->padding($th->em(0.5), $th->em(0.75))->radius($th->em(0.3))->background($th->codeBackground[0], $th->codeBackground[1])->role(Role::IMAGE)->label($alt);
                 $c->text($alt !== '' ? $alt : $c->texts()->get('image'))->textColor($th->muted[0], $th->muted[1])->fontSize($th->em(0.875));
                 $c->end();
                 continue;

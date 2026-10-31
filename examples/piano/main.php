@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Window, WindowOptions};
 use MyPHP\Audio\{Audio, Player, Sound};
-use MyPHP\UI\{Content, Context, DisplayList, InputEvent, Key, Node, Painter, TextPainter, Theme};
+use MyPHP\UI\{Content, Context, InputEvent, Key, Node, Painter, Theme};
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
 
@@ -358,26 +358,26 @@ final class Piano
         $this->songHeld = [];
     }
 
-    public function draw(DisplayList $list, Node $n, Theme $t, TextPainter $text): void
+    public function draw(Painter $p, array $r): void
     {
-        $pt = new Painter($list, $text, $t);
+        $t = $p->theme();
         $labels = [];
         foreach (COMPUTER_KEYS as $i => [, $label]) { $labels[($this->octave + 1) * 12 + $i] = $label; }
-        $s = $n->w / keyboardWidth(); // the keyboard shrinks with the window
-        $at = fn(array $k) => [$n->x + $k[0] * $s, $n->y + $k[1] * $s, $k[2] * $s, $k[3] * $s];
+        $s = $r[2] / keyboardWidth(); // the keyboard shrinks with the window
+        $at = fn(array $k) => [$r[0] + $k[0] * $s, $r[1] + $k[1] * $s, $k[2] * $s, $k[3] * $s];
         foreach ([false, true] as $blacks) {
             for ($note = LOWEST; $note <= HIGHEST; $note++) {
                 if (black($note) !== $blacks) { continue; }
                 $k = $at(keyRect($note));
                 $sounding = ($this->sources[$note] ?? 0) > 0;
                 if (!$blacks) {
-                    $pt->fill($k, $sounding ? Theme::mix($t->accent, 0xfbfbf8, 0.55) : 0xfbfbf8, 4 * $s);
-                    $pt->stroke($k, 0xa1a1aa, 4 * $s, 1);
-                    if (isset($labels[$note])) { $pt->text($k[0] + $k[2] / 2 - 4 * $s, $k[1] + $k[3] - 24 * $s, $labels[$note], 11 * $s, 0x71717a); }
-                    if ($note % 12 === 0) { $pt->text($k[0] + 4 * $s, $k[1] + $k[3] - 42 * $s, 'C' . (intdiv($note, 12) - 1), 10 * $s, 0xa1a1aa); }
+                    $p->fill($k, $sounding ? Theme::mix($t->accent, 0xfbfbf8, 0.55) : 0xfbfbf8, 4 * $s);
+                    $p->stroke($k, 0xa1a1aa, 4 * $s, 1);
+                    if (isset($labels[$note])) { $p->text($k[0] + $k[2] / 2 - 4 * $s, $k[1] + $k[3] - 24 * $s, $labels[$note], 11 * $s, 0x71717a); }
+                    if ($note % 12 === 0) { $p->text($k[0] + 4 * $s, $k[1] + $k[3] - 42 * $s, 'C' . (intdiv($note, 12) - 1), 10 * $s, 0xa1a1aa); }
                 } else {
-                    $pt->fill($k, $sounding ? $t->accent : 0x18181b, 3 * $s);
-                    if (isset($labels[$note])) { $pt->text($k[0] + $k[2] / 2 - 4 * $s, $k[1] + $k[3] - 20 * $s, $labels[$note], 10 * $s, 0xd4d4d8); }
+                    $p->fill($k, $sounding ? $t->accent : 0x18181b, 3 * $s);
+                    if (isset($labels[$note])) { $p->text($k[0] + $k[2] / 2 - 4 * $s, $k[1] + $k[3] - 20 * $s, $labels[$note], 10 * $s, 0xd4d4d8); }
                 }
             }
         }
@@ -387,7 +387,7 @@ final class Piano
 function view(Context $c, Piano $p): void
 {
     $t = $c->theme;
-    $c->column(20, 18, 1)->align(Node::CENTER)->justify(Node::CENTER);
+    $c->column(20, 18, 1)->alignItems(Node::CENTER)->justify(Node::CENTER);
       $c->row(0, 8);
         foreach (SONGS as $i => [$name]) {
             if ($c->clicked($c->key($name)->button($name))) { $p->play($i); }

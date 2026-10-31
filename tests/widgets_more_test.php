@@ -32,7 +32,7 @@ check(count($tabs) === 3 && count(array_filter($tabs, fn($n) => ($n->states & Ac
 // A split: the second pane after the divider; the divider follows the pointer, within the window; the arrows once it has the focus; the handle over the first pane too.
 $size = 120.0;
 $h = new Headless(function (Context $c) use (&$size): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->split($size, fn() => $c->text('left'), fn() => $c->text('right'))->grow(1);
     $c->end();
 }, 400, 200);
@@ -52,7 +52,7 @@ same(70.0, $size, 'the handle reaches over the first pane');
 // A vertical split: the second pane below the divider; dragged down.
 $size = 60.0;
 $h = new Headless(function (Context $c) use (&$size): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->split($size, fn() => $c->text('top'), fn() => $c->text('bottom'), true)->grow(1);
     $c->end();
 }, 300, 200);
@@ -64,7 +64,7 @@ same(100.0, $size, 'dragged 40 down');
 // A number input: its buttons, a number typed, one out of range, Up, the top.
 $v = 5.0;
 $h = new Headless(function (Context $c) use (&$v): void {
-    $c->column(10, 0)->align(Node::START);
+    $c->column(10, 0)->alignItems(Node::START);
       $c->numberInput($v, 0, 10, 0.5)->label('Count');
     $c->end();
 }, 400, 100);
@@ -99,7 +99,7 @@ check($h->byText('Saved') === null, 'gone once its time is over');
 $names = []; for ($i = 0; $i < 100; $i++) { $names[] = 'file' . chr(65 + $i % 26) . intdiv($i, 26); }
 $s = new ListState; $s->selected = -1; $opened = -1;
 $h = new Headless(function (Context $c) use ($s, $names, &$opened): void {
-    $c->column(10, 0, 1)->align(Node::STRETCH);
+    $c->column(10, 0, 1)->alignItems(Node::STRETCH);
       $c->table($s, [new TableColumn('Name'), new TableColumn('Size', 80, align: Node::END)], count($names), function (int $row, int $col) use ($c, $names): void {
           $c->text($col === 0 ? $names[$row] : "$row KB");
       })->grow(1);
@@ -124,7 +124,7 @@ check($s->selected === 0 && $opened === 0, "a double click on the first row: sel
 $headerCols = 0;
 $s = new ListState; $s->header = fn(int $i) => $i % 10 === 0;
 $h = new Headless(function (Context $c) use ($s, &$headerCols): void {
-    $c->column(0, 0, 1)->align(Node::STRETCH);
+    $c->column(0, 0, 1)->alignItems(Node::STRETCH);
       $c->table($s, [new TableColumn('Name'), new TableColumn('Notes', 120)], 1000, function (int $row, int $col) use ($c, &$headerCols): void {
           if ($row % 10 === 0) { if ($col !== 0) { $headerCols++; } $c->text('Section ' . intdiv($row, 10)); }
           elseif ($col === 0) { $c->text("Row $row"); }
@@ -183,7 +183,7 @@ check(!$srcOpen && $h->byText('main.go') === null, 'Left on src closes it');
 // A date input: its date; a click shows the calendar; a day chosen closes it; from the keyboard; Next month; Escape.
 $date = new \DateTimeImmutable('2026-10-03 09:30:00', new \DateTimeZone('UTC')); $changes = 0;
 $h = new Headless(function (Context $c) use (&$date, &$changes): void {
-    $c->column(10, 0)->align(Node::START);
+    $c->column(10, 0)->alignItems(Node::START);
       if ($c->changed($c->dateInput($date)->label('Due'))) { $changes++; }
     $c->end();
 }, 400, 420);
@@ -204,7 +204,7 @@ check($h->byText('December 2026') === null, 'Escape closes it');
 // The calendar under a wide field is at its start, not across it.
 $date = new \DateTimeImmutable('2026-10-03');
 $h = new Headless(function (Context $c) use (&$date): void {
-    $c->column(10, 0, 1)->align(Node::STRETCH);
+    $c->column(10, 0, 1)->alignItems(Node::STRETCH);
       $c->dateInput($date)->label('Due');
     $c->end();
 }, 800, 420);
@@ -216,7 +216,7 @@ check($next[0] + $next[2] <= $field[0] + $field[2] / 2, 'the calendar is at the 
 // A reversed progress bar fills from the right.
 foreach ([false, true] as $reverse) {
     $h = new Headless(function (Context $c) use ($reverse): void {
-        $c->column(10, 0, 1)->align(Node::STRETCH);
+        $c->column(10, 0, 1)->alignItems(Node::STRETCH);
           $p = $c->progress(0.25, 0)->height(10);
           if ($reverse) { $p->reverse(); }
         $c->end();

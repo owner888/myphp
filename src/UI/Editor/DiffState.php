@@ -5,7 +5,7 @@ namespace MyPHP\UI\Editor;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\UI\{Context, DisplayList, Font, Node, Role, TextPainter, Theme as UITheme};
+use MyPHP\UI\{Context, Font, Node, Painter, Role, Theme as UITheme};
 
 /**
  * A diff viewer's state, kept by the app across frames (mygo's
@@ -307,15 +307,16 @@ final class DiffState
             $o->decor = $this->sides[1];
             if ($this->indicators === DiffIndicators::DiffClassic) { $o->signs = true; }
             $root = $c->row();
-            $root->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) {
+            $root->draw(function (Painter $p, array $r) {
+                [, , $w, $h] = $r; $text = $p->textPainter();
                 $ed = $this->eds[1];
                 $ed->tp = $text;
-                $ed->layout($n->w, $n->h, $text->scale());
+                $ed->layout($w, $h, $text->scale());
                 $this->oldView->style = $ed->view->style;
                 $this->oldView->setStyle($text, $ed->view->size, $ed->o->lineHeight, $text->scale(), $ed->tabSize());
                 $this->oldView->setWrap($ed->view->wrap, $ed->view->wrapWidth);
                 $this->prepare();
-                $ed->layout($n->w, $n->h, $text->scale());
+                $ed->layout($w, $h, $text->scale());
                 $this->rebuildIfMoved();
             });
               $ed = $this->eds[1]->build($c, $this->new, $o);
@@ -329,11 +330,11 @@ final class DiffState
         $this->scroll->eds = [$this->eds[0], $this->eds[1]];
         // The old text on the left, as code reads left to right.
         $row = $c->row();
-        $row->draw(function (DisplayList $list, Node $n, UITheme $th, TextPainter $text) {
-            $w = ($n->w - 1) / 2;
-            foreach ($this->eds as $ed) { $ed->tp = $text; $ed->layout($w, $n->h, $text->scale()); }
+        $row->draw(function (Painter $p, array $r) {
+            $w = ($r[2] - 1) / 2; $text = $p->textPainter();
+            foreach ($this->eds as $ed) { $ed->tp = $text; $ed->layout($w, $r[3], $text->scale()); }
             $this->prepare();
-            foreach ($this->eds as $ed) { $ed->layout($w, $n->h, $text->scale()); }
+            foreach ($this->eds as $ed) { $ed->layout($w, $r[3], $text->scale()); }
             if (!$this->fitContent) {
                 $this->scroll->set($this->scroll->y);
                 // The new side reveals its carets for both.
@@ -713,12 +714,12 @@ final class DiffState
     public static function defaultGutterButton(Context $c, Node $btn, DiffLineRange $r): void
     {
         $t = $c->theme;
-        $btn->round(4)->label($c->texts()->get('line', ['n' => $r->start + 1]));
+        $btn->radius(4)->label($c->texts()->get('line', ['n' => $r->start + 1]));
         $btn->color = $t->accent;
-        $btn->drawOver(function (DisplayList $list, Node $b, UITheme $th) {
-            $cx = $b->x + $b->w / 2; $cy = $b->y + $b->h / 2;
-            $list->line($cx - 4, $cy, $cx + 4, $cy, $th->accentText, 1.0, 1.5);
-            $list->line($cx, $cy - 4, $cx, $cy + 4, $th->accentText, 1.0, 1.5);
+        $btn->drawOver(function (Painter $p, array $r) {
+            $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $c = $p->theme()->accentText; $list = $p->displayList();
+            $list->line($cx - 4, $cy, $cx + 4, $cy, $c, 1.0, 1.5);
+            $list->line($cx, $cy - 4, $cx, $cy + 4, $c, 1.0, 1.5);
         });
     }
 

@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 use MyPHP\{App, Theme as AppTheme, ThemeSource, Window, WindowOptions};
 use MyPHP\Text\Glyph;
-use MyPHP\UI\{Content, Context, DisplayList, Image, LinearGradient, Node, Painter, Path, TextPainter, TextStyle, Theme};
+use MyPHP\UI\{Content, Context, Image, LinearGradient, Node, Painter, Path, TextStyle};
 use MyPHP\UI\Svg\Path as SvgPath;
 
 spl_autoload_register(fn($c) => require __DIR__ . '/../../src/' . str_replace('\\', '/', substr($c, 6)) . '.php');
@@ -758,9 +758,7 @@ function view(Context $c, Slider $s): void
     [$w, $h] = $c->size();
     // Centered across, on whole points so that the card's edges are crisp.
     $ox = round(($w - CARD_W) / 2); $oy = round(CARD_Y + ($h - WINDOW_H) / 2);
-    $rt = $c->runtime;
-    $c->column(0, 0, 1, PAGE_COLOR)->fill()->draw(function (DisplayList $list, Node $n, Theme $t, TextPainter $text) use ($s, $ox, $oy, $rt): void {
-        $p = new Painter($list, $text, $t, $rt);
+    $c->column(0, 0, 1, PAGE_COLOR)->fill()->draw(function (Painter $p, array $r) use ($s, $ox, $oy): void {
         if ($s->drawCard($p, $ox, $oy, $p->now())) { $p->animationFrame(); }
     });
       // The title bar, under the traffic lights, drags the window.

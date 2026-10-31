@@ -49,7 +49,7 @@ same([20.0, 40.0], array_map(fn($y) => round($y + 0.5), $ys), 'dividers on 20 an
 // A list in a column closing to no width shows its rows on the way, none once closed; opening, it shows them again.
 $open = true; $now = 0;
 $h = poseTester(function (Context $c) use (&$open): void {
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $col = $c->column()->clipX();
       $open ? $col->width(200) : $col->maxWidth(0); // width(0) leaves the width to the content
       $c->transition($col, new ElementTransition(ease: Easing::linear(...), size: true));

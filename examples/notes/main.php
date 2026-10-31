@@ -128,9 +128,9 @@ function view(Context $c, Notes $a): void
         $n = $a->add();
         $doc = $n->document();
     }
-    $c->row(0, 0, 1)->align(Node::STRETCH);
+    $c->row(0, 0, 1)->alignItems(Node::STRETCH);
       $c->column(0, 8, 0, $t->surface)->width(230)->shrink(0)->padding(12, 0);
-        $c->row(0, 0)->padding(0, 16)->align(Node::CENTER);
+        $c->row(0, 0)->padding(0, 16)->alignItems(Node::CENTER);
           $c->text('Notes')->bold()->grow(1);
           if ($c->clicked($c->button('New')->label('New note'))) { $a->add(); }
         $c->end();
@@ -165,7 +165,7 @@ function toolbar(Context $c, Notes $a, Document $doc): void
         return $b;
     };
     $divider = fn() => $c->box(1, 20, $t->border);
-    $c->row(0, 4)->wrap($c->width - 230 - 40)->align(Node::CENTER);
+    $c->row(0, 4)->wrap($c->width - 230 - 40)->alignItems(Node::CENTER);
       $styles = ['Title', 'Heading', 'Subheading', 'Body'];
       $style = $f->paragraphsMixed ? -1 : [1 => 0, 2 => 1, 3 => 2][$f->paragraph->heading] ?? 3;
       $before = $style;
@@ -181,7 +181,7 @@ function toolbar(Context $c, Notes $a, Document $doc): void
       $button('</>', 'Code (⌘E)', $f->code === FormatState::FormatOn, $doc->toggleCode(...));
       $link = $button('Link', 'Link (⌘K)', $f->link !== '', fn() => $a->openLink($doc));
       $c->popover($link, $a->linkOpen, function () use ($c, $a, $doc, $f) {
-          $c->row(0, 6)->align(Node::CENTER);
+          $c->row(0, 6)->alignItems(Node::CENTER);
             $input = $c->input($a->linkURL, 'https://', 260)->autoFocus()->label('URL');
             if ($c->submitted($input) || $c->clicked($c->primaryButton('Link'))) {
                 $doc->setLink(trim($a->linkURL->text));

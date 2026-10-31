@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI\Editor;
 
-use MyPHP\UI\{Context, DisplayList, Key, Node, Path, Theme as UITheme};
+use MyPHP\UI\{Context, Key, Node, Painter, Path};
 
 /**
  * A separator of a diff, as DiffState::$renderSeparator builds it (mygo's
@@ -52,23 +52,23 @@ final class DiffSeparator
         $ct = $s->theme();
         $sep->pad = 4;
         $bg = Theme::mixLab($ct->c['background'], $ct->c['text'], 0.06);
-        $bar = $c->row(0, $t->space(0.5), 1, $bg[0])->align(Node::CENTER)->padding(0, $t->space(1.5))->round(6)->alignSelf(Node::STRETCH);
+        $bar = $c->row(0, $t->space(0.5), 1, $bg[0])->alignItems(Node::CENTER)->padding(0, $t->space(1.5))->radius(6)->alignSelf(Node::STRETCH);
         $bar->alpha = $bg[1];
           if ($s->lines === 0) {
               $c->text($s->header, $s->fontSize() - 1, $t->textMuted, $s->fontStyle())->singleLine();
           } else {
               $chevron = function (int $dir, string $label, \Closure $fn) use ($c, $t, $ct, $s) {
-                  $b = $c->key($label)->row()->size(20, 20)->round(4)->label($label)->tooltip($label)->cursor(\MyPHP\UI\Cursor::Pointer)->focusable();
+                  $b = $c->key($label)->row()->size(20, 20)->radius(4)->label($label)->tooltip($label)->cursor(\MyPHP\UI\Cursor::Pointer)->focusable();
                   if ($c->hovered($b)) { $b->color = $ct->c['text'][0]; $b->alpha = $ct->c['text'][1] * 0.08; }
-                  $b->drawOver(function (DisplayList $list, Node $r, UITheme $th) use ($dir) {
-                      $cx = $r->x + $r->w / 2; $cy = $r->y + $r->h / 2; $d = 3.5;
+                  $b->drawOver(function (Painter $p, array $r) use ($dir) {
+                      $cx = $r[0] + $r[2] / 2; $cy = $r[1] + $r[3] / 2; $d = 3.5;
                       $path = match ($dir) {
                           1 => (new Path)->moveTo($cx - $d, $cy - $d / 2)->lineTo($cx, $cy + $d / 2)->lineTo($cx + $d, $cy - $d / 2),
                           -1 => (new Path)->moveTo($cx - $d, $cy + $d / 2)->lineTo($cx, $cy - $d / 2)->lineTo($cx + $d, $cy + $d / 2),
                           default => (new Path)->moveTo($cx - $d, $cy - 2)->lineTo($cx, $cy - 2 - $d)->lineTo($cx + $d, $cy - 2)
                               ->moveTo($cx - $d, $cy + 2)->lineTo($cx, $cy + 2 + $d)->lineTo($cx + $d, $cy + 2),
                       };
-                      $list->path($path, $th->textMuted, 1.0, 1.5);
+                      $p->strokePath($path, 1.5, $p->theme()->textMuted);
                   });
                   $c->end();
                   if ($c->clicked($b)) {
@@ -87,7 +87,7 @@ final class DiffSeparator
                   $chevron(-1, $tx->get('expandUp'), $s->expandUp(...));
               }
               $label = $tx->get('unmodifiedLines', ['n' => $s->lines]);
-              $b = $c->key('all')->row()->padding($t->space(0.5), $t->space(1))->round(4)->cursor(\MyPHP\UI\Cursor::Pointer)->focusable()->label($tx->get('expand', ['what' => $label]));
+              $b = $c->key('all')->row()->padding($t->space(0.5), $t->space(1))->radius(4)->cursor(\MyPHP\UI\Cursor::Pointer)->focusable()->label($tx->get('expand', ['what' => $label]));
                 $c->text($label, max($t->fontSize - 1, 11), $t->textMuted);
               $c->end();
               if ($c->clicked($b)) { $s->expandAll(); }

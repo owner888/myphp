@@ -80,11 +80,11 @@ function view(Context $c, Vibrancy $a): void
     $vibrant = $c->vibrancy();
     if ($vibrant) { $c->root->color = null; }
     $bar = $c->titleBar();
-    $row = $c->row(0, 0, 1)->align(Node::STRETCH);
+    $row = $c->row(0, 0, 1)->alignItems(Node::STRETCH);
     $shown = $c->animate($row, 'sidebar', $a->collapsed ? 0 : 1, 0.25);
       // The sidebar slides out to the left as it hides.
       $w = SIDEBAR_WIDTH * $shown;
-      $c->row()->size($w, 0)->shrink(0)->align(Node::STRETCH)->clip();
+      $c->row()->size($w, 0)->shrink(0)->alignItems(Node::STRETCH)->clip();
         $side = $c->column()->size(SIDEBAR_WIDTH, 0)->shrink(0)->margin(0, 0, 0, $w - SIDEBAR_WIDTH);
         if (!$vibrant) { $side->background($t->surface); }
           sidebar($c, $a, $vibrant);
@@ -95,7 +95,7 @@ function view(Context $c, Vibrancy $a): void
     $c->end();
     // Next to the window controls on the left, whether the sidebar shows or not.
     $label = $a->collapsed ? 'Show Sidebar' : 'Hide Sidebar';
-    $toggle = $c->key('toggle')->buttonBase()->absolute()->left($bar['left'] + 8)->top((TITLE_BAR_HEIGHT - 28) / 2)->size(32, 28)->round(6)->label($label)->tooltip($label);
+    $toggle = $c->key('toggle')->buttonBase()->absolute()->left($bar['left'] + 8)->top((TITLE_BAR_HEIGHT - 28) / 2)->size(32, 28)->radius(6)->label($label)->tooltip($label);
     if ($c->hovered($toggle)) { $toggle->background($t->surfaceHover); }
       $c->icon($a->sidebarIcon, 16, $t->textMuted);
     $c->end();
@@ -124,16 +124,16 @@ function pane(Context $c, Vibrancy $a, bool $vibrant, float $titleLeft): void
     $t = $c->theme;
     [$value, $label, $about] = $a->find();
     $bar = $c->titleBar();
-    $pane = $c->column(0, 0, 1)->min(0, 0);
+    $pane = $c->column(0, 0, 1)->minWidth(0)->minHeight(0);
     if (!$a->seeThrough || !$vibrant) { $pane->background($t->background); }
-      $c->row()->size(0, TITLE_BAR_HEIGHT)->fillWidth()->shrink(0)->align(Node::CENTER)->padding(0, $bar['right'] + 20, 0, $titleLeft)->dragWindow();
+      $c->row()->size(0, TITLE_BAR_HEIGHT)->fillWidth()->shrink(0)->alignItems(Node::CENTER)->padding(0, $bar['right'] + 20, 0, $titleLeft)->dragWindow();
         $c->text($label, 15, style: Font::BOLD)->singleLine();
       $c->end();
       $c->divider();
       $c->column(0, 0, 1)->scroll($a->scroll);
         $c->column(0, 16)->padding(24, 28)->maxWidth(560);
           $c->text($about, 15);
-          $c->text("new WindowOptions(vibrancy: '$value')  // or \$win->setVibrancy('$value')", 12)->font('monospace')->padding(12, 14)->round(8)->background($t->surface)->selectable();
+          $c->text("new WindowOptions(vibrancy: '$value')  // or \$win->setVibrancy('$value')", 12)->font('monospace')->padding(12, 14)->radius(8)->background($t->surface)->selectable();
           $c->text('A material shows wherever the view draws no background: the sidebar has none, this pane has one.');
           $c->checkbox('Show the material behind this pane too', $a->seeThrough)->disabled(!$vibrant);
           $c->text($vibrant ? 'The material is the system\'s, behind the window, and follows the appearance and the desktop.'
