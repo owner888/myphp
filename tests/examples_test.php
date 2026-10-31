@@ -19,6 +19,20 @@ same(2, $s->n, 'the arrow keys count');
 $t->clickText('Reset'); $t->frame();
 same(0, $s->n, 'Reset');
 
+// automation: what scripts/smoke-automation.php drives on a Mac, headless: the count, the field, the row whose Delete ignores input at rest.
+[$view, $s] = Headless::load('automation');
+$t = new Headless($view, 420, 400);
+$t->frame();
+$keys = $t->rt->automationTree()[1];
+same(['add', 'name', 'row', 'delete'], array_values(array_intersect(['add', 'name', 'row', 'delete'], array_map('strval', $keys))), 'automation: the keys the smoke test finds');
+$t->clickLabel('Add'); $t->frame();
+same(1, $s->count, 'automation: Add counts');
+[$dx, $dy] = $t->middle($t->byText('Delete'));
+$t->click($dx, $dy); $t->frame();
+same([1, 0], [$s->rowClicks, $s->deletes], "automation: a press on Delete at rest is the row's");
+$t->hover($dx, $dy); $t->click($dx, $dy); $t->frame();
+same([1, 1], [$s->rowClicks, $s->deletes], 'automation: shown, Delete takes it');
+
 // timeline: the intro lasts 870 ms; its controls hold, play, turn and restart it.
 [$view, $s] = Headless::load('timeline');
 $t = new Headless($view, 520, 480);

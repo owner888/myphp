@@ -6617,13 +6617,27 @@ succeeds are told of, an empty line is none.
   they store (settings, history, positions) is named as it was. The
   sections above speak of them by their present names.
 
+## A smoke test on the Mac, grid margins (v1.119)
+
+- `examples/automation` is an app the automation plugin drives (a
+  counter, a field, a row whose Delete ignores input at rest, a ring, a
+  border and a shadow drawn in bands, a window made hidden that shows
+  once drawn, a page), and `scripts/smoke-automation.php` drives it on a
+  Mac through the socket, a check a line: the plugin against real
+  windows, `ignoreInput` under a real pointer, `readyToShow` of a hidden
+  window, and the capture saved as `smoke-automation.png` to look at.
+  `tests/examples_test.php` builds its view headless.
+- A grid child's automatic margins take the room it leaves in its area,
+  which it is then not stretched over, whatever `justifySelf` and
+  `alignSelf` say (mygo's `gridPlaceIn`); right to left, physical margins
+  keep their side.
+- The open items below keep only what falls short; what was done there
+  went to its section.
+
 ## Open items
 
-Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
-
-- The player's settings (v1.62) are IINA's whole; what of them has no
-  equivalent without mpv is in `mygo-deviations.md`. Key bindings carry
-  out the mpv commands the player has the means for, the others logged.
+Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
+known to fall short of what it could be is here.
 
 - A screen of never-seen strings costs a shaping burst (one dropped-frame
   second at 1000 rows); the shaped-line cache is swept by age but the
@@ -6632,22 +6646,14 @@ Where myphp is not mygo's yet is listed in `mygo-deviations.md`.
   the masks of the turns before go as the atlas needs their room (v1.64).
 - Text glyphs still come from CoreText: the SVG renderer could draw
   fonts' outlines on Linux and Windows once a font parser exists.
-- `grid` has no automatic margins (nodes have no margins here); a child
-  fills its area across unless `justifyItems`/`justifySelf` place it.
-  mygo's `Margin` comes with the Markdown view, which uses it.
-- Video: ASS's outlines are cut out per glyph, not per line (v1.64, its
-  section and mygo-deviations.md; its styles, places and motion, v1.44;
-  image subtitles, PGS and VobSub, v1.43).
-  Vorbis is decoded in PHP (v1.55; FLAC by the system, v1.42; VP9, AV1 and Opus, v1.37),
-  nor DTS or TrueHD, which the system has no decoder of. A size
-  animated by \t rasterizes its glyphs anew each frame.
-- Video: the hardware AV1 decoder's display layer sometimes shows a
-  hidden frame (v1.52, its section).
 - `text()` measures with the old metrics unless its style needs the
   text system (`TextStyle::needsLayout`).
-- mygo's CodeEditor and diff viewer (ui/editor) and the Markdown parser
-  are in, with mygo's text system and paragraphs of inline text; the
-  RichText editor, Markdown view and Terminal are in (their sections
-  above); text is selectable (mygo's Selectable).
-- VoiceOver is in (Accessibility above); Linux's and Windows's assistive
-  technology come with those platforms.
+- Video: ASS's outlines are cut out per glyph, not per line (v1.64, its
+  section and mygo-deviations.md; its styles, places and motion, v1.44;
+  image subtitles, PGS and VobSub, v1.43); a size animated by \t
+  rasterizes its glyphs anew each frame.
+- Video: Vorbis is decoded in PHP (v1.55), FLAC by the system (v1.42),
+  VP9, AV1 and Opus as v1.37 says; DTS and TrueHD do not play, the system
+  having no decoder of them.
+- Video: the hardware AV1 decoder's display layer sometimes shows a
+  hidden frame (v1.52, its section).

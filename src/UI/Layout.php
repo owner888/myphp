@@ -423,6 +423,10 @@ final class Layout
                 $ah = $gy * ($rs - 1); for ($j = $r; $j < $r + $rs; $j++) { $ah += $rows[$j]; }
                 $a = $k->self !== Node::AUTO ? $k->self : ($n->align !== Node::AUTO ? $n->align : Node::STRETCH); // alignSelf, else the grid's align (mygo's AlignItems), else stretched
                 $j = $k->justifySelf !== Node::AUTO ? $k->justifySelf : ($n->justifyItems !== Node::AUTO ? $n->justifyItems : Node::STRETCH); // mygo's gridJustify
+                // Automatic margins take the room the child leaves in its area, which it is not stretched over, before alignment does (mygo's gridPlaceIn); right to left, the columns mirror the area, so its sides swap.
+                [$ml, $mr] = $n->rtl ? [$k->margins[1], $k->margins[3]] : [$k->margins[3], $k->margins[1]];
+                if (is_infinite($ml) || is_infinite($mr)) { $j = self::autoPlace($ml, $mr); }
+                if (is_infinite($k->margins[0]) || is_infinite($k->margins[2])) { $a = self::autoPlace($k->margins[0], $k->margins[2]); }
                 $kh = $k->hPct !== null ? $k->hPct * $ah : ($a === Node::STRETCH && $k->fh <= 0 ? $ah : $k->mh); // a size of its own is kept (mygo: an explicit size is not stretched)
                 $kw = $k->wPct !== null ? $k->wPct * $aw : ($j === Node::STRETCH && ($k->fw <= 0 || $k->kind === Node::TEXT) ? $aw : $k->mw); // a text's fw is what it measured, not a size given
                 return [$aw, $ah, $a, $j, self::clampW($k, $kw, $aw), self::clampH($k, $kh, $ah)];
@@ -1277,6 +1281,12 @@ final class Layout
             return ($h - $th) / 2 + $m->ascent($n->fontSize, $style);
         }
         return null;
+    }
+
+    /** How automatic margins on the start and the end of an axis place a child in its area: in the middle, at the end, or at the start. */
+    private static function autoPlace(float $start, float $end): int
+    {
+        return is_infinite($start) ? (is_infinite($end) ? Node::CENTER : Node::END) : Node::START;
     }
 
     private static function across(int $align, float $room, float $size): float

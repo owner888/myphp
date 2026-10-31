@@ -49,11 +49,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Context::within` (public, `@internal`) pushes the node while the
     closure runs, as a node cannot reach the context's stack.
   - Why: the builder's stack is the Context's.
-- **Whole-word line breaks on macOS** (v0.81)
-  - mygo: the CoreText engine's `noBreakWords` breaks by its own
-    word-boundary rules.
-  - myphp: `Native\TextEngine` approximates them (`lineBreaks`).
-  - Why: ported in a hurry; to be compared with mygo's code.
 - **Span style bits** (v0.81)
   - mygo: `Span` has `Font`, `Weight`, `Italic`.
   - myphp: `Span` keeps `$style` (`Font::BOLD`, `ITALIC`, `MONO`) beside
@@ -71,14 +66,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     frags.
   - myphp: `Runtime::under` checks a node's frags after its rect.
   - Why: myphp has no hit chain; same result.
-- **Grid and flex margins** (v0.81)
-  - mygo: `Margin`, `MarginX`, `MarginY`, `MarginStart`, `MarginEnd`,
-    automatic margins.
-  - myphp: `margin()`, `marginX()`, `marginY()` with automatic margins
-    since v0.85; no `marginStart()` or `marginEnd()`.
-  - Why: the Markdown view needed only those; the others come with
-    right-to-left layout.
-
 ## Rich text
 
 - **Value types as classes** (v0.86)
@@ -213,12 +200,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     in the flow); `at($x, $y)` stays myphp's own, placing from the
     content box. `grow()` takes fractions.
   - Why: `at()` came before the insets; the widgets place with it.
-- **The automatic least size** (v1.07)
-  - mygo: a flex item shrinks no smaller than its min-content size
-    unless `MinWidth(0)` says so, as CSS.
-  - myphp: the same; a basis of 0 in a row of long text needs
-    `minWidth(0)` as in mygo (the grid view's cells, the diff's editors).
-  - Why: kept as mygo; noted as a change from myphp before v1.07.
 - **Element styles** (v1.07)
   - mygo: `Shadow(x, y, blur, spread, color)` and `InsetShadow` with a
     Gaussian blur (sigma half the blur), continuous (squircle) corners,
@@ -280,31 +261,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 ## Scrolling
 
-- **ScrollIntoView inside a List** (v0.84)
-  - mygo: a node inside a List's row scrolls the list to it, the list
-    placing its rows anew from there and building those it lacked
-    (`relayoutList`).
-  - myphp: `Node::scrollIntoView()` scrolls the `ScrollState` containers
-    around a node; a list scrolls to a row by its place
-    (`ListState::scrollIntoView($row)`), which the app calls.
-  - Why: myphp's lists are placed by their anchor as they are built; the
-    relayout during layout is not ported.
 - **ListState and GridState methods** (v0.84)
   - mygo: `ScrollTo(row, align)`, `ScrollIntoView(row)`, `ScrollToEnd()`,
     `Visible()`, `AtEnd()`; `GridState.ScrollTo(item, align)`.
-  - myphp: `scrollTo($row, $smooth)` without an alignment, `end()`,
-    `scrollIntoView($row)`, the public `$atEnd`, no `visible()`;
+  - myphp: `scrollTo($row, $smooth, $align)`, `scrollToEnd()`,
+    `scrollIntoView($row)`; the public `$atEnd`, no `visible()`;
     `GridState::scrollTo($item)` puts the item's row at the top.
-  - Why: written before the naming rule; to be renamed and aligned.
+  - Why: written before the naming rule; `visible()`, `atEnd()` and the
+    grid's alignment to be aligned.
 
 ## Menus
 
-- **The toolbar's overflow menu** (v0.83)
-  - mygo: a toolbar's controls that do not fit go in a menu built as
-    others are.
-  - myphp: `Context::toolbar` pops a `MyPHP\Menu` of its own (`popupAt`),
-    as the router's back button's history does.
-  - Why: written before node menus; to be moved onto `Node::menu`.
 - **What a menu looks at under the pointer** (v0.83)
   - mygo: the hit chain from the innermost element out
     (`menuTarget(chain)`).
@@ -312,12 +279,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     containers, and the Unselectable nodes under the point, the last built
     first (`menuChain`).
   - Why: myphp has no hit chain; the build order stands in for it.
-- **Right to left, and Windows** (v0.83)
-  - mygo: a right-to-left node's menu opens to the left, a menu button's
-    at its bottom right; Windows opens context menus on the release, with
-    Undo and Delete in a text input's.
-  - myphp: macOS's menus only, left to right.
-  - Why: myphp has no right-to-left layout and no other platform yet.
+- **Windows** (v0.83)
+  - mygo: Windows opens context menus on the release, with Undo and
+    Delete in a text input's.
+  - myphp: macOS's menus only.
+  - Why: myphp runs on macOS.
 
 ## Markdown parser
 
@@ -586,7 +552,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     returning errors; `Network`, `Clipboard`, `Secrets`, `Cookies`
     singletons whose methods are safe from any goroutine and wait off the
     main thread; `mygo dev` runs a development bundle, so deep links work
-    there; pages get the network's state; the Open Recent menu role.
+    there; the Open Recent menu role.
   - myphp: static methods of `App`, `Network`, `Clipboard`, `Cookies` and
     `Secrets` (`Secrets::service()` returns a `SecretsModule`), throwing;
     they run on the main thread, and the Keychain may block it while the
@@ -685,8 +651,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: trust is decided as a page's navigation commits;
     `PageOptions.TrustedOrigins`.
   - myphp: as each call comes, from the page's URL;
-    `WindowOptions::$trustedOrigins` (and FlyoutOptions'); pages that
-    are not trusted get mygo's error with myphp's names.
+    `PageOptions::$trustedOrigins`; pages that are not trusted get mygo's
+    error with myphp's names.
   - Why: myphp's WebView reports no commit; a call is when it matters.
 
 ## Canvas and charts
@@ -740,28 +706,15 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     starting at the right, and the controls whose arrow keys go along
     the line (rating, slider, range slider, tree items, calendar,
     segmented, grid view, split) and whose parts sit on a side
-    (progress, checkbox, switch, slider); not yet: text fields and
-    areas (the caret and the lines from the left), `Start`/`End`
-    insets and attach anchors, popups opening toward the start, the
-    chevrons, a table header's scrolling, the color picker; the
-    variable is `MYPHP_DIRECTION` (`ltr` or `rtl`).
+    (progress, checkbox, switch, slider), `start()`/`end()` insets,
+    attach anchors, menus opening toward the start, the chevrons; not
+    yet: text fields and areas (the caret and the lines from the left);
+    the variable is `MYPHP_DIRECTION` (`ltr` or `rtl`).
   - Why: ported in steps; the rest needs TextState laid out right to
     left first.
 
 ## Inspector
 
-- **Developer tools** (v1.05)
-  - mygo: `PageOptions.DevTools` (`DevToolsAuto`, `DevToolsEnabled`,
-    `DevToolsDisabled`), `Page.OpenDevTools`, `CloseDevTools`,
-    `IsDevToolsOpened`, `ToggleDevTools`; the menu role `toggleDevTools`
-    in the View menu with `reload`, `forceReload` and the zoom roles.
-  - myphp: the enum `DevTools` (`Auto`, `Enabled`, `Disabled`) as
-    `WindowOptions::$devTools` and `FlyoutOptions::$devTools`; the
-    methods on `Window`, for a page or native UI; the role
-    `toggleDevTools` alone (Alt+Cmd+I), no View menu, reload or zoom
-    roles.
-  - Why: myphp's options and windows have no page object of their own;
-    the other View roles are not ported yet.
 - **Inspector** (v1.05)
   - mygo: `ui/inspector*.go`; production builds leave it out
     (`mygo_noinspector`, unless `MYGO_INSPECTOR=1` or `-debug`);
@@ -828,16 +781,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     plugins (the developer's rule), their page side a TypeScript client
     in the plugin's `client/`; "myphp" is reserved as well as "mygo".
   - Why: the developer's rule; `myphp:` names the framework's own calls.
-- **The context of a call** (v0.91)
-  - mygo: a bound method's first parameter is a `context.Context`, from
-    which `CallerWindow` and `CallerPage` read the caller, canceled as the
-    page navigates or its window closes.
-  - myphp: a parameter typed `CallContext`, anywhere: `window()`,
-    `done()`, `afterFunc()`; a document ends when the next one starts (the
-    bridge's `{"t":"page"}`) or the window closes. There is no `Page`
-    object yet, so no `CallerPage`.
-  - Why: PHP has no contexts; myphp's pages are its windows' WebViews.
-
 ## Terminal
 
 - **Package functions and results** (v0.88)
@@ -1026,25 +969,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: none of the four yet, as they wait for Linux and Windows;
     the same state, timed with `App::after`.
   - Why: the Mac is done first.
-- **Menus and trays**
-  - mygo: `Menu.Items()`, `Append`, `Insert`, `PopupAt(win, x, y)`,
-    `MenuItem` with `Hidden`, `ToolTip`, radio items; the Format, View,
-    Speech, Services, Window and Help roles; `Tray.Destroy`.
-  - myphp: the same (`Menu::popupAt`, `Tray::destroy`, renamed from
-    `remove`); a radio item knows its group from the menu or the item
-    holding it.
-  - Why: mygo's names.
-- **Page runtime**
-  - mygo: mygo-runtime's `preferences()`, `onPreferences`, `locale()`,
-    `direction()`, `onLocaleChange`, `once`, `onFileDrop`; the bridge
-    tells the drop's place, the page's own drops keep working.
-  - myphp: `window.myphp.preferences`, `locale`, `dir`, `once`, the
-    events `myphp:preferences`, `myphp:locale`, `myphp:file-drop` and
-    `myphp:title-bar`, the CSS variables `--myphp-*`; files dropped on a
-    page are the window's, as before.
-  - Why: myphp has no runtime package; its drops are native.
-
-
 ## Languages, messages and catalogs (v1.10)
 
 - **Package i18n**
@@ -1374,11 +1298,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `TextState::shown()` is what it paints, bullets for a password.
   - Why: myphp's fields keep their state in `TextState`, not in an editor
     of the node.
-- **List keys**
-  - mygo: `ListState.Key`, with the anchor, the choice and the rows' state
-    kept by key across rows coming and going.
-  - myphp: the same, `ListState::$key`.
-  - Why: (none: the same behaviour).
 - **Table sort**
   - mygo: headers sort the rows only with `ListState.Sort` or `SortBy` set
     (pointers the app gives); the table's `Changed` reports a click.
@@ -1457,12 +1376,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: the view is the NSTextInputClient and calls the app's client
     as AppKit calls it; text is shaped by MyPHP\Text.
   - Why: those layers are mygo's, for Linux and Windows.
-- **A text area's view on the app's text**
-  - mygo: the view moves to the caret when the caret moves.
-  - myphp: the same, the painter now asks the caret alone (it asked the
-    text's length too, so a log growing brought the caret back).
-  - Why: (none: the same behaviour).
-
 ## Primitives, styles and the window, their tests (v1.17)
 
 - **onTextKey**
@@ -1645,7 +1558,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 ## Video (v1.33)
 
 - **Media\Player and Context::movie**
-  - mygo: no video; `Bitmap.Update` shows frames an app decodes itself.
+  - mygo: no film player; `ui.Video` plays the frames a decoder gives it
+    (myphp's `Context::video`).
   - myphp: `Media\Player` plays Matroska, WebM, MP4, MOV and M4V (H.264,
     HEVC, and VP9 and AV1 where the Mac decodes them in hardware; AAC,
     AC-3, E-AC-3, MP3, Opus) with the system's decoders, and
@@ -1658,14 +1572,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Subtitles** (v1.34): `Player::subtitleTracks`, `setSubtitleTrack`,
   `loadSubtitles`, `subtitles`, `setSubtitleDelay` and `Media\Subtitles`
   are myphp's too, as IINA's behavior has them (files beside the film
-  loaded): mygo has no video.
+  loaded): mygo has no film player.
 - **The picture and the sound, a video player** (v1.38):
   `Player::setAspectRatio`, `setCrop`, `setRotation`, `setAudioDelay`,
   `Context::moviePlayer`, `MoviePlayerState` and `MoviePlayerOptions` are
-  myphp's, as IINA's window has them: mygo has no video.
+  myphp's, as IINA's window has them: mygo has no film player.
 - **Going on where a film was left** (v1.39): `Media\PlaybackPositions`,
   `Player::path` and `MoviePlayerOptions::$resume` are myphp's, as IINA's
-  "resume last playback position": mygo has no video.
+  "resume last playback position": mygo has no film player.
 - **The playlist, picture in picture** (v1.40): `Media\Playlist`,
   `Player::durationOf`, `MoviePlayerState::open`, `setPlayer`, `next`,
   `previous`, `togglePictureInPicture` are myphp's, as IINA's; mygo has
@@ -1676,7 +1590,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Playlist::shuffle`, `unshuffle`, `shuffled`, `sortByName`,
   `sortByPath` are myphp's, as IINA's, and `Player::awake`,
   `setKeepAwake` and `MoviePlayerOptions::$keepAwake` (the display kept
-  awake while it plays, as IINA's); mygo has no video.
+  awake while it plays, as IINA's); mygo has no film player.
 - **The player's events, keyframe seeks, Now Playing** (v1.46): the
   events play, pause, rate, seek and track of `Player::on`, the `$exact`
   of `Player::seek` and `MoviePlayerState::seekBy`, and
@@ -1684,17 +1598,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   and `Player::step`, `snapshot`, `MoviePlayerState::frameStep`,
   `screenshot` (IINA's frame steps and screenshots; its `$screenshots`
   went in v1.61, the settings saying where they go);
-  mygo has no video.
+  mygo has no film player.
 - **yt-dlp, two sources, AV1 in software** (v1.52): `Media\YtDlp`,
   `Merged`, `CacheBudget`, `CacheMember`, `Player::title`, `Player::playlist`, `Player::$hardwareDecoding`,
   `Playlist::title` (and its titles), the headers of `HttpBytes`,
   `Download` and `Hls`, `Native\Dav1d` and `SoftVideo` are myphp's, as
   mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
-  mygo has no video.
+  mygo has no film player.
 - **The equalizer** (v1.55): `Player::setEqualizer`, `equalizer`,
   `EQUALIZER_BANDS`, `MoviePlayerState::EQUALIZER_PRESETS`, `$equalizer`,
   `$equalizerPreset` and `setEqualizer` are myphp's, as IINA's audio
-  equalizer (its presets, its filter for mpv); mygo has no video. Flat
+  equalizer (its presets, its filter for mpv); mygo has no film player. Flat
   turns it off (IINA adds the filter all the same, of no effect).
 - **The equalizer's profiles** (v1.56): `Media\EqualizerProfiles`
   (equalizer-profiles.json in the app's user data, as IINA's
@@ -1704,7 +1618,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   (IINA's quickPromptPanel) are internal too.
 - **Online subtitles** (v1.60): `MoviePlayerOptions::$openSubtitlesKey`
   and `Context::moviePlayerSettings` are myphp's, as IINA's OpenSubtitles
-  (Find Online Subtitles) and its Subtitles pane; mygo has no video. With
+  (Find Online Subtitles) and its Subtitles pane; mygo has no film player. With
   no preferred language set, the system's are searched (IINA alerts and
   searches English); the languages are the codes of BCP 47 (zh-Hans, en),
   not IINA's ISO 639-2; Logout forgets the password too (IINA leaves it
@@ -1775,7 +1689,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     turned. The strings keep IINA's name where IINA's say it.
 - **External audio** (v1.55): `Player::loadAudio`,
   `MoviePlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
-  audio-add (IINA's Load External Audio); mygo has no video.
+  audio-add (IINA's Load External Audio); mygo has no film player.
 - **Secondary subtitles** (v1.53): `Player::secondarySubtitleTrack`,
   `setSecondarySubtitleTrack`, `secondarySubtitles`,
   `setSecondarySubtitleDelay`, `secondarySubtitleDelay`,
@@ -1787,22 +1701,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **MPEG-TS and HLS** (v1.51): `Media\Ts`, `Hls`, `HlsStream`,
   `Fragment`, `PackedAudio`, `Download`, `Elementary`, `Bits`, `Cache`, `Native\Aes` and
   `Source::choose` are myphp's, as FFmpeg's mpegts and hls demuxers
-  (mpv's, IINA's); mygo has no video.
+  (mpv's, IINA's); mygo has no film player.
 - **MP4 over HTTP** (v1.50): `Media\Mp4` is myphp's, as FFmpeg's mov
-  demuxer (mpv's, IINA's); mygo has no video.
+  demuxer (mpv's, IINA's); mygo has no film player.
 - **Films over HTTP** (v1.49): `Media\Bytes`, `FileBytes`, `HttpBytes`,
   `Source::ready`, `Player::remote`, `bufferingPercent`, `cacheBytes`,
   `cacheSpeed`, the buffering event, `MoviePlayerState::$opening` and
   `byteCount`, and `Native\CurlLoop` are myphp's, as mpv's network
-  cache and IINA's; mygo has no video.
+  cache and IINA's; mygo has no film player.
 - **Boundaries and the A-B loop** (v1.48): `Player::at`,
   `MoviePlayerState::abLoop`, `moveLoopPoint`, `$loopA` and `$loopB` are
-  myphp's, as AVPlayer's and IINA's; mygo has no video.
+  myphp's, as AVPlayer's and IINA's; mygo has no film player.
 - **The seek bar's thumbnails** (v1.47): `Media\Thumbnail`,
   `Player::thumbnail`, `Source::keyframe`, `MoviePlayerState::$thumbnails`,
   `thumbnailAt`, `$thumbnailCache`, `Media\ThumbnailCache` and
   `Runtime::afterFrame`
-  are myphp's, as IINA's; mygo has no video.
+  are myphp's, as IINA's; mygo has no film player.
 - **A layer under the materials** (v1.45): `Node::belowMaterials` is
   myphp's, as the video player's subtitles show under its control bar's
   glass (IINA's); mygo has no system materials.
@@ -1825,7 +1739,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   myphp's, for subtitles; mygo's text has neither. So are `textBlur`,
   `textCutOut`, `clipMask`, `Span::$ghost` and `DisplayList::setMask`
   (v1.64, `@internal` to the video player, for ASS's \blur, \be, outlines
-  and \clip); mygo has no video.
+  and \clip); mygo has no film player.
 - **ASS's effects** (v1.64): drawings, \frx \fry \fax \fay, \blur \be,
   \clip and \iclip of rectangles and drawings and the \kf sweep are
   drawn as libass draws them, each run with its own; what is left: a
@@ -1837,7 +1751,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   taller.
 - **ASS in its styles** (v1.44): `Media\Ass`, `AssLine`, `AssRun`,
   `Subtitles::styled`, `assFile`, `assPacket` and `Player::subtitleLines`
-  are myphp's, as IINA (libass) shows ASS; mygo has no video.
+  are myphp's, as IINA (libass) shows ASS; mygo has no film player.
 - **Image subtitles** (v1.43): `Media\Pgs`, `Media\VobSub`,
   `Media\SubtitlePicture`, `Player::subtitlePictures` and
   `subtitlePlane` are myphp's, as IINA (mpv) shows them; mygo has no
@@ -1891,14 +1805,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **Hidden** (`Node::hidden(bool)`): as mygo's, but focus that was on
   a node hidden goes where the runtime puts focus that lost its node,
   and a form's labels or a toolbar do not lay out apart for it.
-- **Text fields' words**: mygo's buffer moves by letters, digits and
-  underscores; myphp's moved by runs between spaces, and now moves as
-  mygo's.
-- **Taken in v1.70**: `TextLayout.Lines`, justified and indented
-  paragraphs, soft hyphens and baseline shift (a8f25ed), rich text's
-  paragraph indent and spacing (7e510df), Markdown's inline math
-  (610df69).
-
 ## Feel (v1.69)
 
 - **Scroll events without the flag**: mygo's events say whether they are

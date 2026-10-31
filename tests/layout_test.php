@@ -70,6 +70,22 @@ same([43.0, 14.0], [$r($n['a'])[0], $r($n['a'])[2]], 'centered in a 100 column: 
 same(186.0, $r($n['b'])[0], 'justifySelf end: at the right of the second column');
 same([0.0, 100.0], [$r($n['c'])[0], $r($n['c'])[2]], 'justifySelf stretch fills the cell'); same(100.0, $r($n['d'])[0], 'start');
 
+// A grid child's automatic margins take the room it leaves in its area, which it is not stretched over, before justifySelf (mygo's gridPlaceIn); right to left, a physical margin keeps its side.
+foreach ([false, true] as $rtl) {
+    $n = [];
+    $h = new Headless(function (Context $c) use (&$n, $rtl) {
+        $g = $c->grid(2, 0, [Track::fixed(100)])->size(400, 100);
+        if ($rtl) { $g->direction(\MyPHP\UI\Direction::RightToLeft); }
+          $n['mid'] = $c->column(0, 0)->size(40, 20)->margin(Node::AUTO); $c->end();
+          $n['end'] = $c->column(0, 0)->size(40, 20)->margin(0, 0, 0, Node::AUTO)->justifySelf(Node::START); $c->end();
+        $c->end();
+    }, 400, 100);
+    $h->frame(); $r = fn($k) => $h->rect($k);
+    $first = $rtl ? 200.0 : 0.0; $second = $rtl ? 0.0 : 200.0;
+    same([$first + 80.0, 40.0, 40.0, 20.0], $r($n['mid']), ($rtl ? 'right to left: ' : '') . 'automatic margins all around center it in its area');
+    same([$second + 160.0, 0.0], array_slice($r($n['end']), 0, 2), ($rtl ? 'right to left: ' : '') . 'an automatic left margin puts it at the right of its area, whatever justifySelf');
+}
+
 // Flex shrink: children of a row that overflows it give up width in proportion, none below its least width — a single-line text's minW, a leaf's own size, a container's children's least widths (nested rows shrink their texts).
 $n = [];
 $h = new Headless(function (Context $c) use (&$n) {
