@@ -6865,6 +6865,19 @@ succeeds are told of, an empty line is none.
   no less than their share, so its labels pass them at the narrowest
   window.
 
+## The gallery at the narrowest window (v1.131)
+
+- At the narrowest window, 640 points, the grids of cards (`cards()`) go
+  one to a row below a window of 880, where two would be narrower than
+  300 and their tiles, lists and flip card ran past them; the List page's
+  tree and table wrap, the table no narrower than 360, its notes no
+  longer past its edge; the Languages page's rows of locales wrap, the
+  date under the number, as an Arabic date has no break narrower than
+  the room left (and a Persian one ran past the card); the Drawing page's
+  bars and wave fit the box's width, the wave no longer drawn past it.
+  The Markdown page's six reveal units stay wider than the page there,
+  and scroll with it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

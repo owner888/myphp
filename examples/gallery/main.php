@@ -170,6 +170,12 @@ function hsl(float $h, float $s, float $l): int
     return (int)(($r + $m) * 255) << 16 | (int)(($g + $m) * 255) << 8 | (int)(($b + $m) * 255);
 }
 
+/** A grid of cards: two to a row where the window leaves room for two of 300 points beside the sidebar, else one, as at the narrowest window. */
+function cards(Context $c): Node
+{
+    return $c->grid($c->width >= 880 ? 2 : 1, 16);
+}
+
 /** A card: a titled panel, built in until end(). */
 function card(Context $c, string $title): Node
 {
@@ -922,8 +928,8 @@ final class Gallery
         if ($this->rows->changed() && $this->rows->selected >= 0) { $this->picked = $rows[$this->rows->selected]; }
         if ($this->rows->submitted() && $this->rows->selected >= 0) { $open($rows[$this->rows->selected]); }
         $this->chatCard($c);
-        $c->row(0, 18)->alignItems(Node::STRETCH)->size(0, 260);
-          card($c, 'Tree')->size(220, 0);
+        $c->row(0, 18)->wrap(0)->gapY(18)->alignItems(Node::STRETCH);
+          card($c, 'Tree')->size(220, 260);
             $item = function (string $path, string $label, ?Closure $children = null) use ($c): void {
                 $open = null;
                 if ($children !== null) { $open = $this->tree[$path] ?? false; }
@@ -939,7 +945,7 @@ final class Gallery
                 $item('composer.json', 'composer.json');
             });
           $c->end();
-          card($c, 'Table')->grow(1);
+          card($c, 'Table')->basis(360)->grow(1)->size(0, 260);
             $cols = [new TableColumn('Name', sortable: true), new TableColumn('Kind', 120, sortable: true), new TableColumn('Size', 90, align: Node::END, sortable: true)];
             // Several files chosen by their ids, the one last chosen opening; typing a name goes to it. The names are renamed in place.
             $this->table->sortBy ??= []; // Cmd-click a header to sort by it after the others
@@ -1102,7 +1108,7 @@ final class Gallery
     {
         $t = $c->theme;
         $c->text('Grids, borders of each side, gradients, stripes, text decorations, and motion along easings.', color: $t->textMuted);
-        $c->grid(2, 16);
+        cards($c);
           card($c, 'Grid');
             $c->grid([Track::fit(), Track::fr(1), Track::fr(1)], 6);
               $cell = function (string $s) use ($c, $t): Node {
@@ -1224,15 +1230,18 @@ final class Gallery
         $c->box(0, 320, $t->surface)->radius(10)->draw(function (Painter $p, array $r) use ($t): void {
             $p->animationFrame();
             $phase = intdiv($p->now(), 1_000_000) % 4000 / 4000 * 2 * M_PI;
-            // Bars.
+            // Bars, in the left half of the box at most, 28 points apart where it is wide enough.
+            $step = min(28.0, ($r[2] / 2 - 24) / 12);
             for ($i = 0; $i < 12; $i++) {
                 $h = 60 + 50 * sin($phase + $i * 0.6);
-                $p->fill([$r[0] + 24 + $i * 28, $r[1] + $r[3] - 24 - $h, 18, $h], $t->accent, 4, 0.35 + 0.05 * $i);
+                $p->fill([$r[0] + 24 + $i * $step, $r[1] + $r[3] - 24 - $h, $step * 0.65, $h], $t->accent, 4, 0.35 + 0.05 * $i);
             }
-            // A sine wave.
+            // A sine wave, across what the bars leave, up to 300 points wide: it stays in the box at any width.
+            $x0 = $r[0] + 24 + 12 * $step + 16;
+            $len = min(300.0, $r[0] + $r[2] - 24 - $x0);
             $wave = new Path();
             for ($i = 0; $i <= 100; $i++) {
-                $x = $r[0] + 380 + $i * 3; $y = $r[1] + $r[3] / 2 + 60 * sin($phase * 2 + $i / 12);
+                $x = $x0 + $i * $len / 100; $y = $r[1] + $r[3] / 2 + 60 * sin($phase * 2 + $i / 12);
                 $i === 0 ? $wave->moveTo($x, $y) : $wave->lineTo($x, $y);
             }
             $p->strokePath($wave, 3, $t->danger);
@@ -1322,7 +1331,7 @@ final class Gallery
         $itemMotion = new ElementTransition(0.25, Easing::easeInOut(...), enter: new TransitionMotion(collapse: true, scale: 0.9), exit: new TransitionMotion(collapse: true, scale: 0.9));
         $tileMotion = fn(int $i) => new ElementTransition(animation: new Animation(spring: new SpringOptions(0.45, 0.12)), match: "tile $i");
         $flingStyles = [Animation::smooth(), Animation::snappy(), Animation::bouncy()];
-        $c->grid(2, 16);
+        cards($c);
           card($c, 'Transforms and interruptible springs');
             $c->text('Click repeatedly while moving. Edit the transformed field or open its anchored panel.', 12, $t->textMuted);
             if ($c->clicked($c->button('Retarget the spring'))) { $this->motionTarget = !$this->motionTarget; }
@@ -1354,7 +1363,7 @@ final class Gallery
           $c->end();
         $c->end();
 
-        $c->grid(2, 16);
+        cards($c);
           card($c, 'Flings that land');
             $c->text("Throw the card (draggable): a spring takes over at the pointer's velocity, to the side the throw carries it to.", 12, $t->textMuted);
             $c->segmented(['Smooth', 'Snappy', 'Bouncy'], $this->flingStyle);
@@ -1394,7 +1403,7 @@ final class Gallery
           $c->end();
         $c->end();
 
-        $c->grid(2, 16);
+        cards($c);
           card($c, 'Cards that turn over');
             $c->text('Turned in 3D and seen in perspective, each face hides while it is turned away.', 12, $t->textMuted);
             $stage = $c->key('flip-stage')->column(0, 0)->size(0, 150)->center();
@@ -1437,7 +1446,7 @@ final class Gallery
         $c->end();
 
         $c->text('Transitions move nodes where the layout puts them, and in and out as they come and go. F12 (Alt+Cmd+I) opens the inspector of the window\'s nodes.', color: $t->textMuted);
-        $c->grid(2, 16);
+        cards($c);
           card($c, 'A list that moves');
             $c->row(0, 8)->wrap(0)->gapY(8);
               if ($c->clicked($c->button('Add'))) {
@@ -1866,7 +1875,7 @@ final class Gallery
         $c->end();
         card($c, 'The same, in other locales');
           foreach (['en-US', 'en-GB', 'de-DE', 'fr-FR', 'hi-IN', 'ar-EG', 'fa-IR', 'ja-JP', 'zh-Hans-CN'] as $l) {
-              $c->row(0, 12);
+              $c->row(0, 12)->wrap(0)->gapY(2); // a narrow window puts the date under the number
                 $c->text($l, color: $t->textMuted)->size(90, 0)->shrink(0);
                 $c->text(I18n::formatNumber($l, 1234567.891))->size(150, 0)->shrink(0);
                 $c->text(I18n::formatDate($l, $this->now, new DateOptions(DateStyle::Medium, DateStyle::Short)))->grow(1);
