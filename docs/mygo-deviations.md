@@ -2214,3 +2214,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Media\Player` with `Context::movie`.
   - Why: `VideoPlayer` and `Context::video` are mygo's names for its
     videos, which myphp's take; the films' player is myphp's own.
+
+## A part of the window in another theme (v1.121)
+
+- **Building it**
+  - mygo: `ui.Themed(c, t).Children(func() {…})`; `SetTheme` called inside
+    still themes the window; the column's text takes `t.Font` too.
+  - myphp: `$c->themed($t, $pad, $gap, $grow)` … `$c->end()`; the window's
+    theme is the app's (`App::setTheme`), not set while building; myphp's
+    themes have no font family of their own.
+  - Why: myphp's containers open and end rather than take a closure;
+    its themes are set outside the view.

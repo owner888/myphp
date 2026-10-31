@@ -87,6 +87,7 @@ final class Context
     public function __construct(private TextMetrics $metrics, public ?Runtime $runtime = null, public float $width = 0, public float $height = 0, public ?Theme $theme = null, public float $scale = 1.0)
     {
         $this->theme ??= Theme::light();
+        $this->window = $this->theme;
         $this->root = new Node(Node::CONTAINER, Node::COLUMN, 0, 0, 0, 0, 0, null, $this->theme->background);
         $this->root->rtl = $runtime?->direction() ?? false;
         $this->stack = [$this->root];
@@ -115,6 +116,9 @@ final class Context
         $top->kids[] = $n;
         $n->context = $this;
         $n->disabledIn = $top->isDisabled(); // inside a disabled node (mygo's IsDisabled)
+        if ($this->theme !== $this->window && $n->theme === null) { // built in a themed() scope: its theme, which an overlay opened there, at the root, takes as its own
+            if ($top === $this->root) { self::takeTheme($n, $this->theme); } else { $n->theme = $this->theme; }
+        }
         if (!$n->dirSet && $n->rtl !== $top->rtl) {
             $n->setDir($top->rtl, false); // the direction of the node it is built in
         }
@@ -713,7 +717,56 @@ final class Context
 
     public function end(): void
     {
-        array_pop($this->stack);
+        $n = array_pop($this->stack);
+        if ($this->outerThemes !== [] && isset($this->outerThemes[$id = spl_object_id($n)])) {
+            $this->theme = $this->outerThemes[$id];
+            unset($this->outerThemes[$id]);
+        }
+    }
+
+    /**
+     * A column whose children build with $t, which themes a part of the
+     * window as App::setTheme themes all of it (mygo's Themed): a theme
+     * picker previewing light beside dark, a light preview pane in dark
+     * chrome. end() closes it.
+     *
+     *     $c->row(0, 0)->fill()->align(Node::STRETCH);
+     *       foreach ([Theme::light(), Theme::dark()] as $t) {
+     *           $c->themed($t, 16, 8, 1);
+     *             $c->text('Preview');
+     *             $c->button('OK');
+     *           $c->end();
+     *       }
+     *     $c->end();
+     *
+     * Inside, all is as in a window of $t: $c->theme is $t while the
+     * children build, and the painter's while they paint (focus rings,
+     * selections, scroll bars, fields, draw callbacks), so widgets of the
+     * app's own follow too; the popovers, menus, tooltips and dialogs
+     * opened from inside take it, though they show above the window. The
+     * column paints $t's background, and its text takes $t's text color and
+     * size, as the root does the window's theme's; background() of another
+     * color, or a transparent one, overrides it. The root, and what is built
+     * after the column, keep the window's theme. Themes nest; a null theme
+     * makes it a plain column.
+     */
+    public function themed(?Theme $t, float $pad = 0, float $gap = 0, int $grow = 0): Node
+    {
+        if ($t === null) {
+            return $this->column($pad, $gap, $grow);
+        }
+        $n = $this->column($pad, $gap, $grow, $t->background);
+        self::takeTheme($n, $t);
+        $this->outerThemes[spl_object_id($n)] = $this->theme;
+        $this->theme = $t;
+        return $n;
+    }
+
+    /** Gives $n the theme $t to paint with, and the text inside it $t's color and size. */
+    private static function takeTheme(Node $n, Theme $t): void
+    {
+        $n->theme = $t;
+        $n->fontSize($t->fontSize)->textColor($t->text);
     }
 
     /**
@@ -1173,8 +1226,12 @@ final class Context
     /** @var list<int> the nodes the view asked to scroll into view in this frame (Node::scrollIntoView) */
     public array $reveal = [];
 
-    /** The theme's text style, under what the nodes being built set. */
+    /** The window's theme's text style, under what the nodes being built set. */
     private ?TextStyle $base = null;
+    /** The window's theme: $theme is another inside themed(). */
+    private Theme $window;
+    /** @var array<int, Theme> the theme each themed() node built in, by its object's id, which end() gives back */
+    private array $outerThemes = [];
 
     /** The Selectable container text built now is in: the innermost, unless a control, an Unselectable or a disabled node is nearer (mygo's prepareSelectable); 0 for none. */
     private function selectScope(): int
@@ -1196,8 +1253,8 @@ final class Context
     {
         if ($this->base === null) {
             $this->base = new TextStyle();
-            $this->base->size = $this->theme->fontSize;
-            $this->base->color = $this->theme->text;
+            $this->base->size = $this->window->fontSize;
+            $this->base->color = $this->window->text;
         }
         $in = $this->base;
         foreach ($this->stack as $n) {

@@ -320,7 +320,7 @@ final class Node
     public float $rotation = 0;
     public float $radius = 0;
     public float $alpha = 1;
-    /** What the node and those inside it paint with in place of the window's theme: the inspector's panel. */
+    /** What the node and those inside it paint with in place of the window's theme: a Context::themed() column and what is built in it, the inspector's panel. */
     public ?Theme $theme = null;
     /** @var Node[] */
     public array $kids = [];

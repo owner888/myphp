@@ -6594,13 +6594,13 @@ succeeds are told of, an empty line is none.
   `diskutil image create from --format ULMO` where diskutil has the verb
   (macOS 27, whose `hdiutil convert` fails with "Resource temporarily
   unavailable"), else with `hdiutil convert` as before.
-- mygo 0cb6d05 (macOS's half) was myphp's already: a view's first frame,
-  long after any last one, draws at once from the run loop
-  (`Metal::requestFrame`'s `drawLater`), not at the display link's tick,
-  which a hidden window never has; so a window made hidden draws its
-  first frame and becomes ready to show. mygo 2b66322 has nothing to
-  port: its waking observer called into Go; myphp's run loop has no
-  observer.
+- mygo 0cb6d05 (macOS's half): a view's first frame, long after any last
+  one, draws at once from the run loop (`Metal::requestFrame`'s
+  `drawLater`), not at the display link's tick, which a hidden window
+  never has; but a window of native UI made hidden asked for none until
+  it showed, so it never became ready to show: v1.120 asks for it. mygo
+  2b66322 has nothing to port: its waking observer called into Go;
+  myphp's run loop has no observer.
 
 ## mygo's names for videos (v1.118)
 
@@ -6633,6 +6633,35 @@ succeeds are told of, an empty line is none.
   keep their side.
 - The open items below keep only what falls short; what was done there
   went to its section.
+
+## What the smoke test found (v1.120)
+
+- A window of native UI made hidden (`WindowOptions::$hidden`) asks for
+  its first frame as it is made, which draws while it is hidden and makes
+  it ready to show (mygo 0cb6d05): `on('readyToShow', fn() => $w->show())`
+  never showed one before.
+- `Page::eval` of statements crashed the app: it tries the code as an
+  expression, and on WebKit's SyntaxError asks again as a function's
+  body from the completion handler. A block made then let go of the spent
+  ones, the handler running among them, which WebKit released once it
+  returned. A once block (`ObjC::block`) is spent once its closure
+  returned, not as it is called.
+
+## A part of the window in another theme (v1.121)
+
+- mygo afdd70d: `Context::themed(?Theme $t, $pad, $gap, $grow)` opens a
+  column whose children build with `$t` (mygo's `Themed`): it sets
+  `$c->theme`, which `end()` gives back (`$outerThemes`, by the column's
+  object), and gives the column `$t`'s background, text color and size,
+  as the root has the window's. A node built in the scope paints with
+  its theme (`Node::$theme`, which the painter already took in place of
+  the window's, for the inspector's panel): focus rings, selections,
+  scroll bars, fields and draw callbacks follow it. A node an overlay
+  builds at the root while the scope is open (popovers, menus, tooltips,
+  dialogs) takes the theme and its text color and size as its own. A
+  scroll container keeps its theme's bar width (`$scrollAxes`), which
+  the pointer takes its bars by. The text style under what nodes set is
+  the window's theme's, whatever theme builds first.
 
 ## Open items
 

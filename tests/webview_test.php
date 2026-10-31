@@ -159,7 +159,8 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     $O = \MyPHP\Native\ObjC::class;
     $free = \MyPHP\Native\WebView::create($rect, ['a', ['b', true]], function () {}, autoplay: true, throttle: false);
     $cfg = fn($w) => $O::msg('p:', $w->ns, 'configuration');
-    same([0, true], [$O::msg('L:', $cfg($free), 'mediaTypesRequiringUserActionForPlayback'), $O::msg('L:', $cfg($plain), 'mediaTypesRequiringUserActionForPlayback') !== 0], 'autoplay: no media type requires a gesture, unless asked');
+    $webKits = $O::msg('L:', $O::msg('p:', $O::alloc('WKWebViewConfiguration'), 'init'), 'mediaTypesRequiringUserActionForPlayback'); // WebKit's default, which macOS sets: none on recent ones
+    same([0, $webKits], [$O::msg('L:', $cfg($free), 'mediaTypesRequiringUserActionForPlayback'), $O::msg('L:', $cfg($plain), 'mediaTypesRequiringUserActionForPlayback')], 'autoplay: no media type requires a gesture; unless asked, WebKit\'s default');
     $prefs = $O::msg('p:', $cfg($free), 'preferences');
     if ($O::msg('b:p', $prefs, 'respondsToSelector:', $O::sel('inactiveSchedulingPolicy'))) {
         same(2, $O::msg('l:', $prefs, 'inactiveSchedulingPolicy'), 'throttling off: WKInactiveSchedulingPolicyNone');
@@ -183,7 +184,7 @@ if (PHP_OS_FAMILY === 'Darwin') { // the app's name and version after the user a
     // HTTP sign-in (mygo's d9d1ef6): the handler's credentials, a cancel the server's refusal, none WebKit's handling; a client certificate WebKit's.
     $challenge = function (string $method, bool $proxy = false) use ($O) {
         $space = $proxy
-            ? $O::msg('p:plpp', $O::alloc('NSURLProtectionSpace'), 'initWithProxyHost:port:type:realm:authenticationMethod:', $O::str('proxy.lan'), 3128, $O::str('HTTPSProxy'), null, $O::str($method))
+            ? $O::msg('p:plppp', $O::alloc('NSURLProtectionSpace'), 'initWithProxyHost:port:type:realm:authenticationMethod:', $O::str('proxy.lan'), 3128, $O::str('HTTPSProxy'), null, $O::str($method))
             : $O::msg('p:plppp', $O::alloc('NSURLProtectionSpace'), 'initWithHost:port:protocol:realm:authenticationMethod:', $O::str('router.lan'), 80, $O::str('http'), $O::str('admin'), $O::str($method));
         return $O::msg('p:pplppp', $O::alloc('NSURLAuthenticationChallenge'), 'initWithProtectionSpace:proposedCredential:previousFailureCount:failureResponse:error:sender:', $space, null, 0, null, null, null);
     };

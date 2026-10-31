@@ -186,10 +186,14 @@ final class ObjC
         $literal = self::$c->new('BlockLiteral');
         $addr = self::addr(FFI::addr($literal));
         $holder->fn = function ($block, ...$a) use ($fn, $once, $addr) {
-            if ($once) {
-                self::$spentBlocks[] = $addr;
+            try {
+                return $fn(...$a);
+            } finally {
+                // Spent once it returned, not before: a block made while it runs (a completion handler asking again, as Page::eval's second try) lets go of the spent ones, and the system still holds this one until it returns.
+                if ($once) {
+                    self::$spentBlocks[] = $addr;
+                }
             }
-            return $fn(...$a);
         };
         $sig = self::$c->new('char[' . (strlen($encoding) + 1) . ']');
         FFI::memcpy($sig, $encoding, strlen($encoding));

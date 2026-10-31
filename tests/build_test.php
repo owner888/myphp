@@ -421,6 +421,10 @@ foreach ([
     file_put_contents("$stub/$tool", "#!/bin/sh\necho \"$tool \$*\" >> \"$stubLog\"\n$body\n");
     chmod("$stub/$tool", 0755);
 }
+// A diskutil of no image verb, as before macOS 27: the stand-in hdiutil converts the image, not the Mac's own diskutil, which takes no stand-in's image.
+$oldDiskutil = "#!/bin/sh\nexit 1\n";
+file_put_contents("$stub/diskutil", $oldDiskutil);
+chmod("$stub/diskutil", 0755);
 $path = getenv('PATH');
 putenv("PATH=$stub:$path");
 $d = bldDir();
@@ -432,12 +436,12 @@ same(["$d/A 1.0 arm64.dmg", ['ditto --noclone', 'hdiutil create', 'hdiutil attac
 same(['Created A 1.0 arm64.dmg', 'Notarizing A 1.0 arm64.dmg (usually takes a few minutes)', 'Notarized A 1.0 arm64.dmg'], $said, 'its steps');
 same(['.', '..', 'A 1.0 arm64.dmg', 'A.app'], scandir($d), 'its work directory gone');
 // macOS 27's: diskutil converts the image, where hdiutil convert fails (mygo's convertDMG).
-file_put_contents("$stub/diskutil", "#!/bin/sh\necho \"diskutil \$*\" >> \"$stubLog\"\n[ \"\$5\" = -h ] && exit 0\nfor a; do last=\$a; done; : > \"\$last\"\n");
+file_put_contents("$stub/diskutil", "#!/bin/sh\necho \"diskutil \$*\" >> \"$stubLog\"\n[ \"\$4\" = -h ] && exit 0\nfor a; do last=\$a; done; : > \"\$last\"\n");
 chmod("$stub/diskutil", 0755);
 file_put_contents($stubLog, '');
 Dmg::build("$d/A.app", $d, 'A', 'A 1.0 arm64.dmg', '-', null, fn() => null);
 same(['diskutil image create from -h', "diskutil image create from --format ULMO {$d}/.dmg-" . getmypid() . "/rw.dmg $d/A 1.0 arm64.dmg"], array_values(array_filter(file($stubLog, FILE_IGNORE_NEW_LINES), fn(string $l) => str_starts_with($l, 'diskutil') || str_starts_with($l, 'hdiutil convert'))), 'with diskutil image, it converts the image, not hdiutil');
-unlink("$stub/diskutil");
+file_put_contents("$stub/diskutil", $oldDiskutil);
 file_put_contents($stubLog, '');
 touch("$d/update-darwin-arm64.json");
 Upload::publish(['updates' => ['github' => 'o/r', 'tagPrefix' => 'app-v']], '1.0', ["$d/A.app", $dmg, "$d/update-darwin-arm64.json"], 'notes', 'ua', 'myphp.json', fn() => null);

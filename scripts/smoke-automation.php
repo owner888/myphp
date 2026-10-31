@@ -3,7 +3,8 @@
 // reports each check: the plugin against real windows (windows, tree,
 // act, input, menu, capture, eval, idle, errors, quitting), a node
 // ignoring input at rest, and a window made hidden that shows once drawn.
-// It saves the main window's capture as smoke-automation.png, whose
+// It saves the main window's capture as smoke-automation.png in the
+// temporary folder, whose
 // rings, border and shadow show the shapes drawn in bands.
 //
 //     php -d ffi.enable=1 scripts/smoke-automation.php
@@ -13,7 +14,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $sock = sys_get_temp_dir() . '/myphp-smoke-' . getmypid() . '.sock';
-$png = getcwd() . '/smoke-automation.png';
+$png = sys_get_temp_dir() . '/smoke-automation.png'; // out of the checkout
 $failed = 0;
 
 function report(bool $ok, string $what): void

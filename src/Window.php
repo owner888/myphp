@@ -320,6 +320,8 @@ final class Window
         $this->maximized = $this->isMaximized();
         if (!$o->hidden) {
             $this->show();
+        } elseif ($this->runtime !== null) {
+            $this->invalidate(); // its first frame draws while it is hidden, which makes it ready to show (mygo 0cb6d05)
         }
         App::windowCreated($this);
     }

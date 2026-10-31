@@ -2102,7 +2102,7 @@ final class Runtime
                 $this->barsShown[$n->id] = true; // its bars show this frame, as the painter draws them: a press on them is theirs next frame
             }
             $this->scrolls[$n->id] = $n->scroll;
-            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl, $n->barInsets];
+            $this->scrollAxes[$n->id] = [$n->scrollX, $n->scrollY, $n->rtl, $n->barInsets, $n->theme?->scrollbarWidth ?? $this->scrollbarWidth]; // its bars' width, its theme's (Context::themed)
             if ($n->scroll->moving() || ($n->scroll instanceof ListState && $n->scroll->gap > 0)) {
                 $this->needsFrame = true;
             }
@@ -2410,9 +2410,9 @@ final class Runtime
     {
         foreach ($this->barsShown as $id => $_) {
             if (!isset($this->scrollAxes[$id], $this->rects[$id])) { continue; }
-            [$horizontal, $vertical, $rtl, $inset] = $this->scrollAxes[$id];
+            [$horizontal, $vertical, $rtl, $inset, $barW] = $this->scrollAxes[$id];
             $r = Scrollbar::track($this->rects[$id], $inset);
-            $w = $this->scrollbarWidth + Scrollbar::GRAB;
+            $w = $barW + Scrollbar::GRAB;
             $right = $rtl ? $r[0] : $r[0] + $r[2] - $w;
             $state = $this->scrolls[$id] ?? null;
             if ($state === null) { continue; }
@@ -2430,14 +2430,14 @@ final class Runtime
             if (!$this->reachable($id) || !isset($this->barsShown[$id])) {
                 continue; // hidden bars take no press, as AppKit's overlay scrollers (mygo's a8e04d9): it goes to what is under them
             }
-            [$horizontal, $vertical, $rtl, $inset] = $this->scrollAxes[$id];
+            [$horizontal, $vertical, $rtl, $inset, $barW] = $this->scrollAxes[$id];
             $r = Scrollbar::track($this->rects[$id], $inset);
             foreach ([[false, $vertical], [true, $horizontal]] as [$axis, $on]) {
                 if (!$on) {
                     continue;
                 }
                 $extent = $axis ? $state->extentX() : $state->extent();
-                $t = Scrollbar::thumb($r, $extent, $this->scrollbarWidth, $axis, $rtl);
+                $t = Scrollbar::thumb($r, $extent, $barW, $axis, $rtl);
                 if ($t === null || $x < $t[0] - $g || $x >= $t[0] + $t[2] + $g || $y < $t[1] - $g || $y >= $t[1] + $t[3] + $g) {
                     continue;
                 }
