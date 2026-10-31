@@ -46,11 +46,13 @@ if ($conn === false) {
 stream_set_timeout($conn, 30);
 
 $id = 0;
-/** The answer to a request: its result, or ['error' => …]. */
+/** The answer to a request: its result, or ['error' => …]; the app gone, the run stops there. */
 $call = function (string $method, array $params = []) use ($conn, &$id): array {
-    fwrite($conn, json_encode(['id' => ++$id, 'method' => $method, 'params' => (object)$params], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
-    $line = fgets($conn);
-    if ($line === false) { return ['error' => ['code' => 'gone', 'message' => 'no answer']]; }
+    $line = @fwrite($conn, json_encode(['id' => ++$id, 'method' => $method, 'params' => (object)$params], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n") === false ? false : fgets($conn);
+    if ($line === false) {
+        fwrite(STDERR, "the app is gone (no answer to $method): its error is above\n");
+        exit(1);
+    }
     $m = json_decode($line, true);
     return isset($m['error']) ? ['error' => $m['error']] : (array)$m['result'];
 };
@@ -62,6 +64,10 @@ for ($i = 0; $i < 30; $i++) { // the hidden one shows once its first frame is dr
     $wins = array_column($call('windows')['windows'] ?? [], null, 'title');
     if (($wins['Shown when ready']['visible'] ?? false) && isset($wins['Automation'], $wins['Automation page'])) { break; }
     usleep(100_000);
+}
+if (!isset($wins['Automation'], $wins['Automation page'])) {
+    fwrite(STDERR, 'the windows are not there: ' . json_encode(array_keys($wins)) . "\n");
+    exit(1);
 }
 $main = $wins['Automation']['id'] ?? 0;
 $page = $wins['Automation page']['id'] ?? 0;
@@ -80,7 +86,7 @@ $shows = function (string $text) use ($tree): bool {
     foreach ($tree()[1] as $n) { if (($n['label'] ?? '') === $text) { return true; } }
     return false;
 };
-$middle = fn(array $n): array => [$n['bounds']['x'] + $n['bounds']['width'] / 2, $n['bounds']['y'] + $n['bounds']['height'] / 2];
+$middle = fn(?array $n): array => $n === null ? [0.0, 0.0] : [$n['bounds']['x'] + $n['bounds']['width'] / 2, $n['bounds']['y'] + $n['bounds']['height'] / 2];
 
 echo "tree and act\n";
 report($code($idle()) === '', 'idle answers once the window settled');

@@ -72,7 +72,6 @@ App::whenReady(function () use ($s) {
     $hidden = new Window(new WindowOptions(title: 'Shown when ready', width: 260, height: 120, hidden: true,
         content: Content::view(fn(Context $c) => $c->text('Drawn while hidden, then shown'))));
     $hidden->on('readyToShow', fn() => $hidden->show());
-    $page = new Window(new WindowOptions(title: 'Automation page', width: 320, height: 200));
-    $page->page()->loadHTML('<!doctype html><title>Automation page</title><p>A page');
+    new Window(new WindowOptions(title: 'Automation page', width: 320, height: 200, html: '<!doctype html><title>Automation page</title><p>A page'));
 });
 App::run();
