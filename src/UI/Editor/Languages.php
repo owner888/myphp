@@ -247,11 +247,12 @@ final class Languages
                 words: Lexer::words(T::KEYWORD, 'and break do else elseif end for function goto if in local not or repeat return then until while', T::CONSTANT, 'true false nil'),
                 calls: true, operators: '+-*/%^#=<>~.:'));
         $php = new Language('PHP', imports: '/^(use|require|require_once|include|include_once)\\s/', extensions: ['.php'], lineComment: '//', blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), tabSize: 4,
-            tokenizer: new Lexer(lineComments: ['//', '#'], blockComments: $cBlock,
+            tokenizer: new PhpLexer(new Lexer(lineComments: ['//'], blockComments: $cBlock, // # comments, heredocs and tags are PhpLexer's
                 strings: [new LexString('"', '"', '\\', true, dollar: true), new LexString("'", "'", '\\', true)],
-                words: Lexer::words(T::KEYWORD, 'abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield',
+                words: Lexer::words(T::KEYWORD, 'abstract and array as break callable case catch class clone const continue declare default die do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile enum exit extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield',
+                    T::TYPE, 'bool float int iterable mixed never object parent self string void',
                     T::CONSTANT, 'true false null TRUE FALSE NULL'),
-                calls: true, capitalTypes: true, variables: true, operators: self::C_OPERATORS));
+                calls: true, capitalTypes: true, variables: true, operators: self::C_OPERATORS)));
         $css = new Language('CSS', imports: '/^@(import|use|forward)\\s/', extensions: ['.css', '.scss', '.less', '.sass', '.pcss'], blockComment: $cComment, brackets: $cBrackets, autoClose: self::cAutoClose('"', "'"), wordChars: '-', tabSize: 2, tokenizer: new CssLexer);
         $html = new Language('HTML', extensions: ['.html', '.htm', '.xhtml', '.vue', '.svelte'], blockComment: ['<!--', '-->'],
             brackets: [new BracketPair('<', '>'), new BracketPair('(', ')'), new BracketPair('[', ']'), new BracketPair('{', '}')],

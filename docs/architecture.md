@@ -6789,6 +6789,21 @@ succeeds are told of, an empty line is none.
   server's counterpart), and completes the keywords of a file's language,
   PHP's or Go's, rather than Go's in all.
 
+## PHP in the code editor, the gallery's files (v1.128)
+
+- PHP's tokenizer is `PhpLexer` around the lexer of C-like languages:
+  heredocs and nowdocs go on to their closing label, indented or not,
+  a heredoc's `$name`, `{$expression}` and escapes standing out in it;
+  `#` starts a comment but `#[` an attribute; `<?php`, `<?=` and `?>` are
+  tags; a name after `->` or `?->` is a property. It finds what is its
+  own in the lexer's tokens, outside strings and comments, lexes the line
+  up to it with the lexer, and goes on after it. Inside a heredoc its
+  state is the mode (0xf0, 0xf1 a nowdoc) and the label's number, within
+  the 40 bits Markdown holds for its code blocks. `enum`, `exit` and `die`
+  are keywords, the scalar types and `self` and `parent` types.
+- examples/code-editor's PHP file shows an enum, an attribute and a
+  heredoc; the gallery's file list and tree are a PHP project's.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

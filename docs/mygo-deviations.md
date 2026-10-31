@@ -2218,3 +2218,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     less motion; another word's hover while one shows does not fade
     again.
   - Why: the developer asked for VS Code's.
+
+## PHP in the code editor (v1.128)
+
+- **Its tokens**
+  - mygo: PHP is its lexer of C-like languages: `#` always a comment,
+    heredocs code, `->`'s names variables.
+  - myphp: `PhpLexer` adds heredocs and nowdocs, attributes' `#[`, tags
+    and properties after `->`; `enum`, `exit`, `die` keywords and the
+    scalar types types.
+  - Why: the developer asked for PHP done as a PHP editor does it.

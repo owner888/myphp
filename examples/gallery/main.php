@@ -337,7 +337,7 @@ final class Gallery
     public int $file = -1;
     public Selection $chosen;
     /** @var array<string, bool> the tree's folders open */
-    public array $tree = ['ui' => true];
+    public array $tree = ['src' => true];
     public string $leaf = '';
     public DateTimeImmutable $birthday, $now, $meeting;
     public bool $dialog = false, $menu = false;
@@ -354,7 +354,7 @@ final class Gallery
     /** The combobox's choice and the tags. */
     public string $font = 'Helvetica';
     /** @var list<string> */
-    public array $tags = ['go', 'native'];
+    public array $tags = ['php', 'native'];
     public bool $eased = false;
     /** @var list<MotionItem> the items of the Motion page's list, the next one's number, and whether its panel is open */
     public array $items = [];
@@ -624,7 +624,7 @@ final class Gallery
             $c->combobox($this->font, ['Avenir', 'Courier', 'Futura', 'Georgia', 'Gill Sans', 'Helvetica', 'Menlo', 'Optima', 'Palatino', 'Times'], 200)->label('Font');
             $c->autocomplete($this->city, ['Amsterdam', 'Berlin', 'Lisbon', 'London', 'Madrid', 'Paris', 'Prague', 'Rome', 'Vienna'], 'City', 200)->label('City');
           $c->end();
-          $c->tokenField($this->tags, ['design', 'go', 'native', 'performance', 'release', 'typescript'])->label('Tags');
+          $c->tokenField($this->tags, ['design', 'native', 'performance', 'php', 'release', 'typescript'])->label('Tags');
           $c->text('Type to filter; Up and Down move, Enter chooses. In the tags, Enter or a comma adds a tag, and Backspace takes out the last.', color: $t->textMuted);
         $c->end();
         card($c, 'Drag and drop');
@@ -757,7 +757,7 @@ final class Gallery
           $c->tabs(['Files', 'Search', 'History'], $this->tab);
           $c->split($this->split, function () use ($c, $t): void {
               $c->column(10, 6, 1, $t->surface)->fill();
-                foreach ([['main.go', 'go.mod', 'README.md'], ['Results'], ['Yesterday', 'Last week']][$this->tab] as $name) { $c->text($name)->singleLine(); }
+                foreach ([['index.php', 'composer.json', 'README.md'], ['Results'], ['Yesterday', 'Last week']][$this->tab] as $name) { $c->text($name)->singleLine(); }
               $c->end();
           }, function () use ($c, $t): void {
               $c->column(10, 0, 1)->fill();
@@ -932,11 +932,11 @@ final class Gallery
                 if ($c->clicked($n)) { $this->leaf = $path; }
             };
             $c->tree(function () use ($item): void {
-                $item('ui', 'ui', function () use ($item): void {
-                    $item('ui/widgets.go', 'widgets.go');
-                    $item('ui/text', 'text', fn() => $item('ui/text/layout.go', 'layout.go'));
+                $item('src', 'src', function () use ($item): void {
+                    $item('src/App.php', 'App.php');
+                    $item('src/UI', 'UI', fn() => $item('src/UI/Context.php', 'Context.php'));
                 });
-                $item('go.mod', 'go.mod');
+                $item('composer.json', 'composer.json');
             });
           $c->end();
           card($c, 'Table')->grow(1);

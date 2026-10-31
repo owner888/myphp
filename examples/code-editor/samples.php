@@ -12,13 +12,30 @@ namespace App\Http;
 
 use JsonException;
 
+/** How a greeting reads. */
+enum Tone: string
+{
+    case Warm = 'Hello';
+    case Brief = 'Hi';
+}
+
 /** Greets the names it is sent, and counts them. */
+#[\AllowDynamicProperties]
 final class Greeter
 {
     /** @var array<string, int> */
     private array $counts = [];
 
-    public function __construct(private readonly string $prefix = 'Hello') {}
+    public function __construct(private readonly Tone $tone = Tone::Warm) {}
+
+    # A page about the greeter, for a browser.
+    public function about(): string
+    {
+        return <<<HTML
+            <h1>{$this->tone->value}!</h1>
+            <p>Send ?name=… to be greeted.</p>
+            HTML;
+    }
 
     /** Greets the name in the query, as JSON. */
     public function handle(array $query): string
@@ -32,7 +49,7 @@ final class Greeter
         // TODO: rate limit greetings per address.
         header('Content-Type: application/json');
         try {
-            return json_encode(['greeting' => sprintf('%s, %s!', $this->prefix, $name), 'count' => $n], JSON_THROW_ON_ERROR);
+            return json_encode(['greeting' => sprintf('%s, %s!', $this->tone->value, $name), 'count' => $n], JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             return $e->getMessage();
         }
