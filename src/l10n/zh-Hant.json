@@ -1242,5 +1242,14 @@
   "iinaAlertAddWatchTitle": "加入監視屬性",
   "iinaAlertAddWatchMessage": "請輸入一個有效的 mpv 屬性名稱",
   "iinaMenuInspector": "檢閱器",
-  "iinaMenuAudioDevice": "音訊裝置"
+  "iinaMenuAudioDevice": "音訊裝置",
+  "iinaAlertTitleWarning": "警告",
+  "iinaAlertAssrtRegister": "由於射手網(偽) API 要求的數量限制，請務必在射手網(偽)註冊帳號後使用自己的 API token。預設的 API token 僅用於測試用途，並且可能由於 API 使用超出配額而要求失敗。",
+  "iinaAlertAssrtRegisterRegister": "去射手網(偽)註冊",
+  "iinaAlertAssrtRegisterTry": "先試用一下",
+  "iinaAlertAssrtTokenPromptTitle": "輸入你在射手網(偽)的 API token",
+  "iinaAlertAssrtTokenPromptMessage": "請在彈出的網頁中註冊帳號，然後進入使用者首頁檢視 API token 並在下方輸入：",
+  "iinaAlertAssrtTokenInvalid": "你的射手網(偽) API token 格式無效。",
+  "iinaOsdFindOnlineSubSource": "從",
+  "iinaOsdFileError": "讀取檔案發生錯誤"
 }

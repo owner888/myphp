@@ -396,7 +396,7 @@ final class MediaPlayerSettingsPages
                 $this->sw('displayInLetterBox', ['inset.filled.bottomthird.rectangle', 'rectangle.bottomthird.inset.filled', 'rectangle.bottomthird.inset.fill']),
             ]]),
             $this->section('$OnlineSubtitles', [[
-                $this->item('$SubtitleSource', symbol: 'server.rack', terms: [MediaPlayerSettings::tr($c, '$SubtitleSource.desc'), 'opensubtitles.com', $tx->get('videoOpenSubtitlesAccount')],
+                $this->item('$SubtitleSource', symbol: 'server.rack', terms: [MediaPlayerSettings::tr($c, '$SubtitleSource.desc'), ...array_values(MediaPlayerState::PROVIDERS), $tx->get('videoOpenSubtitlesAccount'), MediaPlayerSettings::tr($c, '$AssrtAPIToken')],
                     detail: fn() => $this->source()),
                 $this->sw('autoSearchOnlineSub', ['text.magnifyingglass', 'magnifyingglass'], desc: true),
             ]]),
@@ -845,27 +845,46 @@ final class MediaPlayerSettingsPages
         ]);
     }
 
-    /** The subtitles' source, as IINA's: a pop-up of the sources (OpenSubtitles'), what it is; and the OpenSubtitles account, Login or Logout (IINA's legacy window's). */
+    /**
+     * The subtitles' source, as IINA's: a pop-up of the sources
+     * (MediaPlayerState::PROVIDERS), what it is; under it, of
+     * opensubtitles.com the account, Login or Logout (IINA's legacy
+     * window's), of assrt.net the user's API token and its help button,
+     * of shooter.cn nothing.
+     */
     private function source(): void
     {
         $c = $this->c;
         $s = $this->s;
         $t = $c->theme;
         $tx = $c->texts();
+        $provider = $s->onlineProvider();
+        $token = null; $clicked = false; $user = $this->set->get('openSubUsername');
         $c->column(0, 8)->padding(0, 8, 8, MediaPlayerSettings::INDENT)->fillWidth();
-          MediaPlayerSettings::popUp($c, ['opensubtitles.com'], 0, true);
+          $picked = MediaPlayerSettings::popUp($c, MediaPlayerState::PROVIDERS, $provider, true);
           $c->text(MediaPlayerSettings::tr($c, '$SubtitleSource.desc'), 11, $t->textMuted);
-          $c->row(0, 8)->alignItems(Node::CENTER);
-            $user = $this->set->get('openSubUsername');
-            $c->text($tx->get('videoOpenSubtitlesAccount'), 11, $t->textMuted);
-            $b = $c->row();
-            if ($s->loggingIn) { $b->disabled(); }
-              $clicked = MediaPlayerSettings::pushButton($c, $tx->get($user === '' ? 'videoLogin' : 'videoLogout'));
-            $c->end();
-            $c->text($user === '' ? $tx->get('videoNotLoggedIn') : $tx->get('videoLoggedInAs', ['user' => $user]), 11, $t->textMuted);
-            if ($s->loggingIn) { $c->spinner(); }
-          $c->end();
+          if ($provider === ':opensubtitles') {
+              $c->row(0, 8)->alignItems(Node::CENTER);
+                $c->text($tx->get('videoOpenSubtitlesAccount'), 11, $t->textMuted);
+                $b = $c->row();
+                if ($s->loggingIn) { $b->disabled(); }
+                  $clicked = MediaPlayerSettings::pushButton($c, $tx->get($user === '' ? 'videoLogin' : 'videoLogout'));
+                $c->end();
+                $c->text($user === '' ? $tx->get('videoNotLoggedIn') : $tx->get('videoLoggedInAs', ['user' => $user]), 11, $t->textMuted);
+                if ($s->loggingIn) { $c->spinner(); }
+              $c->end();
+          } elseif ($provider === ':assrt') {
+              $c->row(0, 8)->alignItems(Node::CENTER)->fillWidth();
+                $c->text(MediaPlayerSettings::tr($c, '$AssrtAPIToken'), 13, $t->textMuted);
+                $c->column()->grow(1);
+                  $token = MediaPlayerSettings::textField($c, $this->v, 'assrtToken', $this->set->get('assrtToken'));
+                $c->end();
+                MediaPlayerSettings::helpButton($c, \MyPHP\Media\Assrt::HELP);
+              $c->end();
+          }
         $c->end();
+        if ($picked !== null) { $s->setSetting('onlineSubProvider', $picked); }
+        if ($token !== null) { $s->setSetting('assrtToken', $token); }
         if (!$clicked) {
             return;
         }

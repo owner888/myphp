@@ -322,7 +322,11 @@ final class MediaPlayerMenus
         $num = fn(string $name): float => $b[$name][1] ?? self::defaultValue($name);
         $sep = fn() => MenuItem::separator();
         $delay = fn(string $name, string $label) => $it($name, self::t($label, ['seconds' => MediaPlayerState::number(abs($num($name)))]), fn(float $v) => $s->setSubtitleDelay($s->player->subtitleDelay() + $v), alternate: str_ends_with($name, 'Slightly'));
-        $online = fn(): bool => $s->openSubtitles !== null && !$s->searchingOnline; // OpenSubtitles' key in the options, no search going
+        $online = fn(?string $provider = null): Closure => fn(): bool => $s->canSearchOnline($provider); // no search going; OpenSubtitles of a key in the options
+        $from = [];
+        foreach (MediaPlayerState::PROVIDERS as $id => $name) { // IINA's populateMenu: its sources, by name
+            $from[] = $it('onlineSub' . ucfirst(ltrim($id, ':')), $name, fn() => $s->searchOnlineSubtitles($id), $online($id));
+        }
         return [
             $it('subPanel', self::t($s?->sidebar === 'subtitles' ? 'iinaMenuHideSubtitles' : 'iinaMenuShowSubtitles'), fn() => $s->perform(['sub-panel'], true)),
             $sep(),
@@ -336,10 +340,8 @@ final class MediaPlayerMenus
                 if ($paths !== []) { $s->loadSubtitles($paths[0]); }
             }),
             $sep(),
-            $it('findOnlineSub', self::t('iinaMenuFindOnlineSub', ['provider' => 'OpenSubtitles']), fn() => $s->searchOnlineSubtitles(), $online),
-            new MenuItem(self::t('iinaMenuFindOnlineSubtitlesFrom'), id: 'iina.onlineSubSource', submenu: [ // IINA's providers; of them OpenSubtitles here
-                $it('onlineSubOpenSubtitles', 'OpenSubtitles', fn() => $s->searchOnlineSubtitles(), $online),
-            ]),
+            $it('findOnlineSub', self::t('iinaMenuFindOnlineSub', ['provider' => MediaPlayerState::PROVIDERS[$s?->onlineProvider() ?? ':opensubtitles']]), fn() => $s->searchOnlineSubtitles(), $online()),
+            new MenuItem(self::t('iinaMenuFindOnlineSubtitlesFrom'), id: 'iina.onlineSubSource', submenu: $from),
             $it('saveDownloadedSub', self::t('iinaMenuSaveDownloadedSubtitle'), fn() => $s->saveDownloadedSubtitle()),
             $sep(),
             self::list($s, 'encoding', self::t('iinaMenuEncoding'), fn() => self::encodings($s)),

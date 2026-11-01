@@ -5140,5 +5140,41 @@
   "iinaMenuAudioDevice": "Audio Device",
   "@iinaMenuAudioDevice": {
     "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaAlertTitleWarning": "Warning",
+  "@iinaAlertTitleWarning": {
+    "description": "IINA's \"alert.title_warning\"."
+  },
+  "iinaAlertAssrtRegister": "Due to limited API quota, you are strongly recommended to use your own API token. The default token is only for demo usage, and you may encounter network error.",
+  "@iinaAlertAssrtRegister": {
+    "description": "IINA's \"alert.assrt_register\"."
+  },
+  "iinaAlertAssrtRegisterRegister": "Register Now",
+  "@iinaAlertAssrtRegisterRegister": {
+    "description": "IINA's \"alert.assrt_register.register\"."
+  },
+  "iinaAlertAssrtRegisterTry": "Try First",
+  "@iinaAlertAssrtRegisterTry": {
+    "description": "IINA's \"alert.assrt_register.try\"."
+  },
+  "iinaAlertAssrtTokenPromptTitle": "Enter your API token",
+  "@iinaAlertAssrtTokenPromptTitle": {
+    "description": "IINA's \"alert.assrt_token_prompt.title\"."
+  },
+  "iinaAlertAssrtTokenPromptMessage": "Please register in the opened webpage. Get your token in your user home page and enter it below:",
+  "@iinaAlertAssrtTokenPromptMessage": {
+    "description": "IINA's \"alert.assrt_token_prompt.message\"."
+  },
+  "iinaAlertAssrtTokenInvalid": "Your Assrt API token seems to be invalid.",
+  "@iinaAlertAssrtTokenInvalid": {
+    "description": "IINA's \"alert.assrt_token_invalid\"."
+  },
+  "iinaOsdFindOnlineSubSource": "from",
+  "@iinaOsdFindOnlineSubSource": {
+    "description": "IINA's \"osd.find_online_sub.source\"."
+  },
+  "iinaOsdFileError": "Error reading file",
+  "@iinaOsdFileError": {
+    "description": "IINA's \"osd.file_error\"."
   }
 }

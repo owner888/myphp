@@ -1242,5 +1242,14 @@
   "iinaAlertAddWatchTitle": "添加监视属性",
   "iinaAlertAddWatchMessage": "请输入一个有效的 mpv 属性名称。",
   "iinaMenuInspector": "检查器",
-  "iinaMenuAudioDevice": "音频设备"
+  "iinaMenuAudioDevice": "音频设备",
+  "iinaAlertTitleWarning": "警告",
+  "iinaAlertAssrtRegister": "由于 API 配额限制，我们强烈建议您使用自己的 API token。默认 API token 仅做测试用途，且您有可能遇到网络错误。",
+  "iinaAlertAssrtRegisterRegister": "立即注册",
+  "iinaAlertAssrtRegisterTry": "试用一下",
+  "iinaAlertAssrtTokenPromptTitle": "输入您的 API token",
+  "iinaAlertAssrtTokenPromptMessage": "请在弹出网页中注册帐号。在您个人首页中获得 token 并在下方输入:",
+  "iinaAlertAssrtTokenInvalid": "您的 Assrt API token 疑似无效。",
+  "iinaOsdFindOnlineSubSource": "从",
+  "iinaOsdFileError": "读取文件错误"
 }

@@ -6,6 +6,7 @@ namespace MyPHP\UI;
 use Closure;
 use MyPHP\App;
 use MyPHP\Logger;
+use MyPHP\Media\Assrt;
 use MyPHP\Media\EqualizerProfiles;
 use MyPHP\Media\MetaVideo;
 use MyPHP\Media\OpenSubtitles;
@@ -18,6 +19,7 @@ use MyPHP\Media\PlaybackHistory;
 use MyPHP\Media\PlaybackPositions;
 use MyPHP\Media\Playlist;
 use MyPHP\Media\Player;
+use MyPHP\Media\Shooter;
 use MyPHP\Media\ThumbnailCache;
 use MyPHP\Media\CacheBudget;
 use MyPHP\Media\HttpBytes;
@@ -76,14 +78,19 @@ final class MediaPlayerState
     public bool $loggingIn = false;
     /** The Keychain's key of an OpenSubtitles account's password (Secrets), by its user. */
     private const PASSWORD = 'opensubtitles:';
+    /** IINA's sources of subtitles online (OnlineSubtitle.Providers), by their ids: their names. */
+    public const PROVIDERS = [':opensubtitles' => 'opensubtitles.com', ':assrt' => 'assrt.net', ':shooter' => 'shooter.cn'];
     /**
-     * The subtitles found online to choose from (OpenSubtitles::search's),
-     * null while none are shown; the ones chosen, by their place; whether a
-     * search or its downloads go on (IINA's isSearchingOnlineSubtitle).
-     * @var ?list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}>
+     * The subtitles found online to choose from (OpenSubtitles::search's,
+     * Assrt::search's), null while none are shown, and the source they are
+     * of (PROVIDERS); the ones chosen, by their place; whether a search or
+     * its downloads go on (IINA's isSearchingOnlineSubtitle).
+     * @var ?list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}|array{id: int, name: string, about: string, uploaded: string}>
      * @internal MediaPlayer
      */
     public ?array $onlineSubtitles = null;
+    /** @internal MediaPlayer */
+    public string $onlineSource = ':opensubtitles';
     /** @var list<int> @internal MediaPlayer */
     public array $onlineChosen = [];
     /** @internal MediaPlayer */
@@ -243,7 +250,7 @@ final class MediaPlayerState
             $this->placed = true;
         }
         if (!$set->get('pauseWhenOpen')) { $p->play(); }
-        if ($set->get('autoSearchOnlineSub') && !$url && $p->subtitleTracks() === [] && $p->duration() >= $set->get('autoSearchThreshold') * 60 && $this->openSubtitles !== null) { // IINA's: a film of no subtitles, long enough, searched for online
+        if ($set->get('autoSearchOnlineSub') && !$url && $p->subtitleTracks() === [] && $p->duration() >= $set->get('autoSearchThreshold') * 60 && $this->canSearchOnline()) { // IINA's: a film of no subtitles, long enough, searched for online
             $this->searchOnlineSubtitles();
         }
         if ($set->get('fullScreenWhenOpen')) { $this->ask('fullScreen', true); }
@@ -857,56 +864,167 @@ final class MediaPlayerState
         $this->changed();
     }
 
-    /**
-     * @internal MediaPlayer: IINA's Find Online Subtitles, of OpenSubtitles:
-     * the film's subtitles in the settings' languages, else the system's
-     * (those it has; English where none), found by its TMDB id as
-     * agc_player finds them (tmdbSubtitles), else (none found, or no id) by
-     * its file's hash and name, IINA's way (a stream's, by its title);
-     * told as it goes; one is downloaded and loaded at once, more are shown
-     * to choose from (onlineSubtitles). In a fiber of its own, the window
-     * going on; nothing while one goes on.
-     */
-    public function searchOnlineSubtitles(): void
+    /** @internal MediaPlayer, MediaPlayerMenus: the source the settings choose (IINA's onlineSubProvider), opensubtitles.com's for one unknown. */
+    public function onlineProvider(): string
     {
+        $id = $this->settings()->get('onlineSubProvider');
+        return isset(self::PROVIDERS[$id]) ? $id : ':opensubtitles';
+    }
+
+    /** @internal MediaPlayer, MediaPlayerMenus: whether subtitles may be searched for from $provider (the settings' where null): a film open, no search going, OpenSubtitles of a key (MediaPlayerOptions::$openSubtitlesKey). */
+    public function canSearchOnline(?string $provider = null): bool
+    {
+        return $this->player !== null && !$this->searchingOnline && (($provider ?? $this->onlineProvider()) !== ':opensubtitles' || $this->openSubtitles !== null);
+    }
+
+    /**
+     * @internal MediaPlayer: IINA's Find Online Subtitles, from $provider
+     * (PROVIDERS; the settings' where null), told as it goes ("from" the
+     * source):
+     * - opensubtitles.com: the film's subtitles in the settings' languages,
+     *   else the system's (those it has; English where none), found by its
+     *   TMDB id as agc_player finds them (tmdbSubtitles), else (none found,
+     *   or no id) by its file's hash and name, IINA's way (a stream's, by
+     *   its title);
+     * - assrt.net: by its file's name, IINA's own token tried after its
+     *   alert where the settings have none of the user's (assrtToken);
+     * - shooter.cn: by its file's hash, all of them downloaded and loaded
+     *   (IINA's), a stream or a file too small an error reading the file.
+     * Of the first two, one found is downloaded and loaded at once, more
+     * shown to choose from (onlineSubtitles). In a fiber of its own, the
+     * window going on; nothing while one goes on.
+     */
+    public function searchOnlineSubtitles(?string $provider = null): void
+    {
+        $provider ??= $this->onlineProvider();
         $p = $this->player;
-        $os = $this->openSubtitles;
-        if ($p === null || $os === null || $this->searchingOnline) {
+        if ($p === null || !$this->canSearchOnline($provider)) {
             return;
         }
         if (App::running() && \Fiber::getCurrent() === null) {
+            if ($provider === ':assrt' && !$this->assrtTokenChecked()) {
+                $this->say($this->t('videoCanceled'));
+                return;
+            }
             $this->searchingOnline = true;
-            App::go(function (): void { $this->searchingOnline = false; $this->searchOnlineSubtitles(); });
+            App::go(function () use ($provider): void { $this->searchingOnline = false; $this->searchOnlineSubtitles($provider); });
             return;
         }
         $this->searchingOnline = true;
-        $this->onlineSubtitles = null; $this->onlineChosen = [];
-        $this->tell($this->t('videoFindingOnline'), '', INF);
+        $this->onlineSubtitles = null; $this->onlineChosen = []; $this->onlineSource = $provider;
+        $this->tell($this->t('videoFindingOnline'), $this->fromSource(), INF);
         try {
-            $this->logInFromSettings($os);
-            $preferred = $this->settings()->get('subLang');
-            $languages = OpenSubtitles::languagesOf($preferred !== [] ? $preferred : App::preferredLanguages(), $os->languages()); // the settings', else the system's
-            $local = !$p->remote();
-            $found = $this->tmdbSubtitles($os, $languages, $local ? new MetaVideo(basename($p->path()), basename(dirname($p->path()))) : new MetaVideo($p->title()));
-            if ($found === []) {
-                $found = $os->search($languages, $local ? OpenSubtitles::hash($p->path()) : null, $local ? pathinfo($p->path(), PATHINFO_FILENAME) : $p->title());
-            }
-            if ($found === []) {
-                $this->say($this->t('videoSubtitlesNotFound'));
-            } elseif (count($found) === 1) {
-                $this->searchingOnline = false;
-                $this->onlineSubtitles = $found;
-                $this->downloadOnlineSubtitles([0]);
-                return;
+            if ($provider === ':shooter') {
+                $this->shooterSubtitles($p);
             } else {
-                $this->onlineSubtitles = $found;
-                $this->tell($this->t('videoSubtitlesFound', ['count' => count($found)]), '', INF); // over the list to choose from
+                $found = $provider === ':assrt' ? (new Assrt($this->settings()->get('assrtToken')))->search(pathinfo($p->remote() ? (string)parse_url($p->path(), PHP_URL_PATH) : $p->path(), PATHINFO_FILENAME)) : $this->openSubtitlesFound($p);
+                if ($found === []) {
+                    $this->say($this->t('videoSubtitlesNotFound'));
+                } elseif (count($found) === 1) {
+                    $this->searchingOnline = false;
+                    $this->onlineSubtitles = $found;
+                    $this->downloadOnlineSubtitles([0]);
+                    return;
+                } else {
+                    $this->onlineSubtitles = $found;
+                    $this->tell($this->t('videoSubtitlesFound', ['count' => count($found)]), '', INF); // over the list to choose from
+                }
             }
         } catch (RuntimeException $e) {
             $this->failedOnline($e);
         }
         $this->searchingOnline = false;
         $this->changed();
+    }
+
+    /** "from" the source searched (IINA's osd.find_online_sub.source). */
+    private function fromSource(): string
+    {
+        return $this->t('iinaOsdFindOnlineSubSource') . ' ' . self::PROVIDERS[$this->onlineSource];
+    }
+
+    /**
+     * Whether assrt.net may be searched: the settings have the user's token,
+     * else IINA's alert (its own token is for trying, of a small quota)
+     * offers to register (its page opened, the token asked for and kept,
+     * none valid told) or to try (Assrt.Fetcher's checkToken).
+     */
+    private function assrtTokenChecked(): bool
+    {
+        if (Assrt::valid($this->settings()->get('assrtToken'))) {
+            return true;
+        }
+        $parent = \MyPHP\Window::focused();
+        $register = \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: $parent, type: 'warning', message: $this->t('iinaAlertTitleWarning'), detail: $this->t('iinaAlertAssrtRegister'),
+            buttons: [$this->t('iinaAlertAssrtRegisterRegister'), $this->t('iinaAlertAssrtRegisterTry')], cancelButton: -1))->button === 0;
+        if (!$register) {
+            return true;
+        }
+        \MyPHP\Shell::openExternal(Assrt::REGISTER);
+        $token = \MyPHP\Dialog::prompt($parent, $this->t('iinaAlertAssrtTokenPromptTitle'), '', $this->t('iinaAlertAssrtTokenPromptMessage'));
+        if ($token === null) {
+            return false;
+        }
+        if (!Assrt::valid($token)) {
+            \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: $parent, type: 'warning', message: $this->t('iinaAlertAssrtTokenInvalid')));
+            return false;
+        }
+        $this->setSetting('assrtToken', $token);
+        return true;
+    }
+
+    /**
+     * OpenSubtitles' subtitles of the film playing in the settings'
+     * languages, else the system's: by its TMDB id, else its hash and name.
+     * @return list<array{file: int, name: string, language: string, year: int, fps: float, downloads: int, uploaded: string}>
+     */
+    private function openSubtitlesFound(Player $p): array
+    {
+        $os = $this->openSubtitles ?? throw new RuntimeException('OpenSubtitles: no key');
+        $this->logInFromSettings($os);
+        $preferred = $this->settings()->get('subLang');
+        $languages = OpenSubtitles::languagesOf($preferred !== [] ? $preferred : App::preferredLanguages(), $os->languages()); // the settings', else the system's
+        $local = !$p->remote();
+        $found = $this->tmdbSubtitles($os, $languages, $local ? new MetaVideo(basename($p->path()), basename(dirname($p->path()))) : new MetaVideo($p->title()));
+        return $found !== [] ? $found : $os->search($languages, $local ? OpenSubtitles::hash($p->path()) : null, $local ? pathinfo($p->path(), PATHINFO_FILENAME) : $p->title());
+    }
+
+    /** shooter.cn's subtitles of the film playing, by its file's hash: all downloaded and loaded, told (IINA's); a stream or a file too small an error reading the file. */
+    private function shooterSubtitles(Player $p): void
+    {
+        $hash = $p->remote() ? null : Shooter::hash($p->path());
+        if ($hash === null) {
+            $this->say($this->t('iinaOsdFileError'));
+            return;
+        }
+        $shooter = new Shooter();
+        $found = $shooter->search($hash, $p->path());
+        if ($found === []) {
+            $this->say($this->t('videoSubtitlesNotFound'));
+            return;
+        }
+        $this->tell($this->t('videoSubtitlesDownloading', ['count' => count($found)]), $this->fromSource(), INF);
+        $names = [];
+        foreach ($found as $i => $sub) {
+            [$name, $data] = $shooter->download($sub['files'][0]['link']);
+            $names[] = $this->keepOnline($i + 1, $name, $data); // IINA's from 1
+        }
+        $this->say($this->t('videoSubtitlesDownloaded'), implode("\n", $names));
+    }
+
+    /** A subtitle file downloaded, $name of $data, kept as IINA keeps it ("[index]name" in the temporary folder) and loaded: its name. */
+    private function keepOnline(int $index, string $name, string $data): string
+    {
+        $dir = sys_get_temp_dir() . '/myphp-subtitles';
+        if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+            throw new RuntimeException("cannot make $dir");
+        }
+        $path = "$dir/[$index]" . basename($name);
+        if (file_put_contents($path, $data) === false) {
+            throw new RuntimeException("cannot write $path");
+        }
+        $this->loadSubtitles($path);
+        return basename($name);
     }
 
     /**
@@ -927,12 +1045,11 @@ final class MediaPlayerState
         return $id === null ? [] : $os->searchTmdb($languages, $id, $meta->tv, $meta->season, $meta->episode);
     }
 
-    /** @internal MediaPlayer: the subtitles found online at places $chosen downloaded and loaded, told (IINA's Download of its list); in a fiber of its own. @param list<int> $chosen */
+    /** @internal MediaPlayer: the subtitles found online at places $chosen downloaded and loaded, told (IINA's Download of its list): an assrt.net subtitle's files, those of its archive; in a fiber of its own. @param list<int> $chosen */
     public function downloadOnlineSubtitles(array $chosen): void
     {
         $found = $this->onlineSubtitles;
-        $os = $this->openSubtitles;
-        if ($found === null || $os === null || $chosen === [] || $this->searchingOnline) {
+        if ($found === null || $chosen === [] || $this->searchingOnline || ($this->onlineSource === ':opensubtitles' && $this->openSubtitles === null)) {
             return;
         }
         if (App::running() && \Fiber::getCurrent() === null) {
@@ -942,21 +1059,19 @@ final class MediaPlayerState
         }
         $this->searchingOnline = true;
         $this->onlineSubtitles = null; $this->onlineChosen = [];
-        $this->tell($this->t('videoSubtitlesDownloading', ['count' => count($chosen)]), '', INF);
+        $this->tell($this->t('videoSubtitlesDownloading', ['count' => count($chosen)]), $this->fromSource(), INF);
         try {
-            $dir = sys_get_temp_dir() . '/myphp-subtitles';
-            if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
-                throw new RuntimeException("cannot make $dir");
-            }
             $names = [];
             foreach ($chosen as $i) {
-                [$name, $data] = $os->download($found[$i]['file']);
-                $path = "$dir/[$i]" . basename($name); // IINA's: "[index]name", in the temporary folder
-                if (file_put_contents($path, $data) === false) {
-                    throw new RuntimeException("cannot write $path");
+                if ($this->onlineSource === ':assrt') {
+                    $assrt = new Assrt($this->settings()->get('assrtToken'));
+                    foreach ($assrt->files($found[$i]['id']) as [$url, $name]) {
+                        $names[] = $this->keepOnline($i, $name, $assrt->download($url));
+                    }
+                } else {
+                    [$name, $data] = $this->openSubtitles->download($found[$i]['file']);
+                    $names[] = $this->keepOnline($i, $name, $data);
                 }
-                $this->loadSubtitles($path);
-                $names[] = basename($name);
             }
             $this->say($this->t('videoSubtitlesDownloaded'), implode("\n", $names));
         } catch (RuntimeException $e) {

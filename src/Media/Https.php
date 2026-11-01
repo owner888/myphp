@@ -22,19 +22,24 @@ final class Https
     private const OPT_COPYPOSTFIELDS = 10165, OPT_TIMEOUT = 13;
 
     /**
-     * $verb of $url with $headers, $body posted: the last response's status
-     * and body. What fails to be sent throws, curl's reason after $who.
+     * $verb of $url with $headers, $body posted: the last response's status,
+     * body and headers (their names in lower case). HTTPS alone, but where
+     * $plain lets HTTP too (assrt.net's files, which it serves over HTTP
+     * only, as IINA fetches them). What fails to be sent throws, curl's
+     * reason after $who.
      * @param array<string, string> $headers
-     * @return array{0: int, 1: string}
+     * @return array{0: int, 1: string, 2: array<string, string>}
      */
-    public static function request(string $verb, string $url, array $headers, ?string $body, string $who): array
+    public static function request(string $verb, string $url, array $headers, ?string $body, string $who, bool $plain = false): array
     {
         $f = Curl::ffi();
         $h = $f->curl_easy_init();
-        $state = (object)['status' => 0, 'body' => ''];
+        $state = (object)['status' => 0, 'body' => '', 'headers' => []];
         $cbs = $f->new('myphp_curl_callbacks');
         $cbs->header = function ($ptr, $size, $n, $user) use ($state): int {
-            if (preg_match('~^HTTP/\S+\s+(\d{3})~', FFI::string($ptr, $size * $n), $m) === 1) { $state->status = (int)$m[1]; $state->body = ''; } // the last response's, after redirects
+            $line = FFI::string($ptr, $size * $n);
+            if (preg_match('~^HTTP/\S+\s+(\d{3})~', $line, $m) === 1) { [$state->status, $state->body, $state->headers] = [(int)$m[1], '', []]; } // the last response's, after redirects
+            elseif (($at = strpos($line, ':')) !== false) { $state->headers[strtolower(substr($line, 0, $at))] = trim(substr($line, $at + 1)); }
             return $size * $n;
         };
         $cbs->write = function ($ptr, $size, $n, $user) use ($state): int {
@@ -48,8 +53,8 @@ final class Https
             $set(Curl::OPT_URL, $url);
             \MyPHP\Native\NetProxy::apply($h, $url); // the system's proxy
             $set(Curl::OPT_NOSIGNAL, 1);
-            $set(Curl::OPT_PROTOCOLS_STR, 'https');
-            $set(Curl::OPT_REDIR_PROTOCOLS_STR, 'https');
+            $set(Curl::OPT_PROTOCOLS_STR, $plain ? 'http,https' : 'https');
+            $set(Curl::OPT_REDIR_PROTOCOLS_STR, $plain ? 'http,https' : 'https');
             $set(Curl::OPT_FOLLOWLOCATION, 1);
             $set(Curl::OPT_MAXREDIRS, 10);
             $set(Curl::OPT_ACCEPT_ENCODING, ''); // what the server compresses, undone
@@ -69,7 +74,7 @@ final class Https
             if ($done !== 0) {
                 throw new RuntimeException("$who: " . $f->curl_easy_strerror($done));
             }
-            return [$state->status, $state->body];
+            return [$state->status, $state->body, $state->headers];
         } finally {
             if ($done === null) { CurlLoop::stop($h); }
             $f->curl_easy_cleanup($h);

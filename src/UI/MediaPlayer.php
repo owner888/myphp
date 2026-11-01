@@ -804,8 +804,9 @@ final class MediaPlayer
     /**
      * IINA's list of the subtitles found online (SubChooseViewController,
      * in its OSD): how many, and a row of each, its file's name over its
-     * language, year, frames a second and downloads, the day it was
-     * uploaded at the right; a click chooses one (Command one more), a
+     * language, year, frames a second and downloads (OpenSubtitles'), or
+     * its kind and language (assrt.net's), the day it was uploaded at the
+     * right; a click chooses one (Command one more), a
      * double click downloads it; Cancel, and Download of those chosen.
      */
     private static function onlineSubtitles(Context $c, MediaPlayerState $s): Node
@@ -823,7 +824,7 @@ final class MediaPlayer
                   if ($chosen) { ($c->runtime?->windowFocus ?? true) ? $row->background($c->theme->accent) : $row->background(self::$ink, 0.12); }
                     $c->text($f['name'], 13, self::$ink)->opacity(0.9)->noWrap()->ellipsis('…');
                     $c->row(0, 8)->fillWidth();
-                      $about = implode('  ', array_filter([$f['language'], $f['year'] > 0 ? "({$f['year']})" : '', $f['fps'] != 0 ? MediaPlayerState::number($f['fps']) . ' fps' : '', "\u{2b07}{$f['downloads']}"]));
+                      $about = $f['about'] ?? implode('  ', array_filter([$f['language'], $f['year'] > 0 ? "({$f['year']})" : '', $f['fps'] != 0 ? MediaPlayerState::number($f['fps']) . ' fps' : '', "\u{2b07}{$f['downloads']}"])); // assrt.net's its kind and language
                       $c->text($about, 11, self::$ink)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
                       $at = strtotime($f['uploaded']);
                       if ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
@@ -1908,7 +1909,7 @@ final class MediaPlayer
                 $paths = Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'videoLoadSubtitles')));
                 if ($paths) { $s->loadSubtitles($paths[0]); }
             }
-            if (self::sideButton($c, self::t($c, 'videoSearchOnline'), $s->openSubtitles !== null && !$s->searchingOnline)) { $s->searchOnlineSubtitles(); } // IINA's Find Online Subtitles, of OpenSubtitles: the options' key, else disabled
+            if (self::sideButton($c, self::t($c, 'videoSearchOnline'), $s->canSearchOnline())) { $s->searchOnlineSubtitles(); } // IINA's Find Online Subtitles, from the settings' source: OpenSubtitles of the options' key, else disabled
           $c->end();
         $c->end();
         self::card($c, 6);

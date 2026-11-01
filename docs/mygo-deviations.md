@@ -1733,7 +1733,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   menu items neither alternates nor a call as they open. Of IINA's items,
   left out so far: Video's Lock Window Aspect Ratio, Deinterlace,
   Delogo, Crop's Custom and the video filters; the audio filters; Find
-  Online Subtitles from has OpenSubtitles alone. The film's picture is its one track, shown always:
+  Online Subtitles from has OpenSubtitles alone (assrt.net and
+  shooter.cn since v1.139). The film's picture is its one track, shown always:
   Cycle Video Tracks and Video Track's <None> are disabled, as is <None>
   of the sound. IINA's hidden menu of a second key of an item's is left
   out: the window's keys carry out every binding. A key without Command
@@ -1770,6 +1771,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   AVSampleBufferAudioRenderer, its readers Matroska, MP4, MPEG-TS, HLS
   and AVFoundation. The watch table takes the properties the player
   gives by mpv's names (`propertyValue`), Error of the rest.
+- **assrt.net and shooter.cn** (v1.139): `Media\Assrt`, `Media\Shooter`,
+  `MediaPlayerState::PROVIDERS`, `onlineProvider`, `canSearchOnline` and
+  `searchOnlineSubtitles`'s source are myphp's, as IINA's sources of
+  subtitles online; mygo has no film player. IINA's plugins' sources are
+  left out (myphp has no plugins of IINA's). The settings keep
+  opensubtitles.com's account under its source, where IINA's new window
+  says the old support is deprecated: myphp's OpenSubtitles is of the
+  REST API and logs in from there. assrt.net's search answers now in
+  IINA's fields (id, native_name…), now in its site's (fileid,
+  video_chinese_name…), on which IINA's reading fails: each row is read
+  by those it has.
+  assrt.net's rows show when a subtitle
+  was uploaded as a date, as OpenSubtitles' do (IINA shows assrt.net's
+  text). A shooter.cn subtitle's file is named by the server's
+  Content-Disposition, else the link asked (IINA's, by Just, the link
+  after redirects).
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

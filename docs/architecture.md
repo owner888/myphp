@@ -7150,6 +7150,52 @@ succeeds are told of, an empty line is none.
   16384 in seconds and the window stopped. The next frame now starts
   from the whole paint's transforms, the parts writing theirs anew.
 
+## assrt.net and shooter.cn (v1.139)
+
+- IINA's three sources of subtitles online (OnlineSubtitle.Providers):
+  `MediaPlayerState::PROVIDERS`, ':opensubtitles', ':assrt' and
+  ':shooter' by their names opensubtitles.com, assrt.net and shooter.cn;
+  the settings' `onlineSubProvider` the one searched (opensubtitles.com
+  at first, and of an id unknown, as IINA's). `searchOnlineSubtitles`
+  takes one (the menus' Find Online Subtitles from), else searches the
+  settings'; it says "from" the source under "Finding online subtitles…"
+  and "Downloading n subtitles", as IINA's OSD. `canSearchOnline` is
+  whether one may: a film open, no search going, and of opensubtitles.com
+  a key (`MediaPlayerOptions::$openSubtitlesKey`); assrt.net and
+  shooter.cn need none.
+- assrt.net (`Media\Assrt`, as IINA's Assrt.Fetcher): sub/search of the
+  file's name (`is_file`, `no_muxer`), a row each of its native name, its
+  kind and language and when it was uploaded (`results`: none of
+  `sub: {subs: {}}`). Its search answers in either of two shapes, the
+  same query now one, now the other: the API's documented fields IINA
+  reads (id, native_name, subtype, lang, upload_time), or its site's
+  (fileid, video_chinese_name, m_subtype, m_lang, uploadtime), on which
+  IINA's reading fails; `results` reads each row by the fields it has,
+  HTML's entities undone. Its files are served over HTTP alone
+  (HTTPS answers 492), fetched so (`Https::request`'s `$plain`). One found is downloaded at once, more listed as
+  OpenSubtitles' are; a subtitle chosen is sub/detail's files (its
+  archive's, else its own, `filesOf`), each fetched and loaded as
+  "[index]name". The token is the settings' `assrtToken` (32 characters,
+  `Assrt::valid`), else IINA's own, kept reversed as OpenSubtitles' key:
+  without the user's, IINA's alert first offers to register (assrt.net's
+  page opened, the token asked for, `Dialog::prompt`, and kept; one not
+  of 32 characters told) or to try; canceled, "Canceled". assrt.net's
+  error statuses throw by IINA's names (invalidToken, exceedLimit…).
+- shooter.cn (`Media\Shooter`, as IINA's Shooter.Fetcher): the file's
+  hash (`hash`: the MD5s of 4 KB at 4096, two thirds, a third and 8 KB
+  before its end, joined by ";"; none of a file under 12 KB), posted with
+  its path; every subtitle found (`results`: none where the answer is no
+  JSON) downloaded at once, its first file, named as the server says
+  (Content-Disposition, `fileName`) else as its link, and loaded, IINA
+  listing none to choose from. A stream, or a file too small, is "Error
+  reading file".
+- `Https::request` gives the response's headers too, by lower-case name,
+  and fetches HTTP too where `$plain` (assrt.net's files).
+- The settings' Subtitle source: the pop-up of the three; under it,
+  opensubtitles.com's account as before, assrt.net's API token field and
+  IINA's help button (its wiki's page), nothing of shooter.cn's (IINA's
+  SubtitleSourceView).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

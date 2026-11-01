@@ -682,8 +682,8 @@ final class MediaPlayerSettings
         return $c->changed($f) && $state->text !== $value ? $state->text : null;
     }
 
-    /** IINA's help button after a label (NSButton, helpButton, mini): opens $url. */
-    private static function helpButton(Context $c, string $url): void
+    /** @internal MediaPlayerSettingsPages: IINA's help button after a label (NSButton, helpButton, mini): opens $url. */
+    public static function helpButton(Context $c, string $url): void
     {
         $t = $c->theme;
         $b = $c->row()->size(16, 16)->radius(8)->center()->role(Role::BUTTON)->label($c->texts()->get('help'))->background($t->dark ? 0xffffff : 0x000000, $t->dark ? 0.15 : 0.08);

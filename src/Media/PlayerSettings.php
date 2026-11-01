@@ -202,7 +202,9 @@ final class PlayerSettings
         'defaultEncoding' => 'auto',
         'autoSearchOnlineSub' => false,
         'autoSearchThreshold' => 20, // minutes: films no shorter
+        'onlineSubProvider' => ':opensubtitles', // ':opensubtitles', ':assrt' or ':shooter' (MediaPlayerState::PROVIDERS)
         'openSubUsername' => '',
+        'assrtToken' => '',
         'subLang' => [],
     ];
 
