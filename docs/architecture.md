@@ -7287,6 +7287,95 @@ succeeds are told of, an empty line is none.
   Crop's ratios remove `iina_crop`; none of them is checked while it is
   on; Delogo is checked while `iina_delogo` is.
 
+## IINA's plugins, of PHP (v1.143)
+
+The developer chose plugins of PHP, not IINA's JavaScript: the package,
+the folders, Info.json, the permissions and the APIs are IINA's, the code
+PHP. IINA's own JavaScript plugins (its OpenSubtitles one among them) do
+not run. This is the first of three parts: loading and managing them,
+and the APIs other than the views'. Overlays, sidebars, standalone
+windows, the plugin's settings and help pages (web views) are the
+second; GitHub, the plugin store, updates, websockets, input and the
+developer tool the third.
+
+- `PlayerPlugins\Plugins` keeps the plugins of the app's "plugins"
+  folder (its user data's): "<id>.iinaplugin" folders, and
+  "<name>.iinaplugin-dev" links to a folder being written (DEV in the
+  list). Which are on and their order are the player's settings
+  (`pluginsEnabled`, `pluginOrder`, IINA's PluginEnabled.<id> and
+  PluginOrder). The app turns plugins on with `Plugins::configure()`;
+  until then none load (tests and other apps are left alone), and
+  `Plugins::stop()` unloads them all again.
+- `Plugin` reads Info.json as IINA does (name, author, identifier of
+  reverse domain, version, entry, globalEntry, localized, permissions,
+  allowedDomains, subtitleProviders, preferencesPage, helpPage, ghRepo,
+  ghVersion, preferenceDefaults); a file of it outside its folder is
+  none. Its preferences are kept in ".preferences/<id>.json" (IINA's
+  plist), its data in ".data/<id>" (@data), its temporary files in
+  the system's temporary folder (@tmp).
+- An entry is a PHP file returning a function of an `Iina`:
+
+      <?php
+      use MyPHP\PlayerPlugins\Iina;
+      return function (Iina $iina) {
+          $iina->menu->addItem($iina->menu->item('Say Hello', fn() => $iina->core->osd('Hello')));
+      };
+
+  An `Instance` runs it for each player (`MediaPlayerState::loadPlugins`,
+  as IINA's PlayerCore) and the globalEntry once for the app. What the
+  plugin calls back (events, menu items, timers) runs in a fiber of its
+  own where the app runs, so that what IINA's promises give
+  (http, exec) is returned, the app going on; what IINA rejects is
+  thrown (`PluginError`, `HttpError`). What a plugin throws is logged
+  under its subsystem ("player0 - Name", "global - Name"). An instance
+  unloaded takes its timers, listeners, menu items and the players its
+  global instance made with it.
+- The APIs (`Iina`'s): console, preferences, menu (`PluginMenuItem`),
+  utils (exec, ask, prompt, chooseFile, the Keychain, open), file and
+  its handles, http (and XML-RPC), and of a player's instance core (and
+  its window, status, audio, subtitle and video objects), mpv, event,
+  playlist, subtitle; global (`GlobalApi` of the global instance,
+  `GlobalChildApi` of a player's); setTimeout, setInterval and their
+  clearing. IINA's paths (@tmp, @data, @current, ~, @sub/<id>) and its
+  permissions are checked as IINA checks them.
+- mpv's properties are those `MediaPlayerCommands::propertyValue` gives;
+  `set` and `command` are carried out as a key binding's at the next
+  frame, beyond IINA's safe options and commands of the file system's
+  permission. Its events are the player's (`PlayerPlugins\Events` of
+  `MediaPlayerState::events()`): mpv.start-file, mpv.file-loaded,
+  mpv.end-file, mpv.seek, mpv.playback-restart; iina.file-started,
+  iina.file-loaded, iina.window-loaded, iina.window-resized,
+  iina.window-moved, iina.window-fs.changed, iina.window-main.changed,
+  iina.window-miniaturized, iina.window-deminiaturized,
+  iina.window-will-close, iina.pip.changed, iina.music-mode.changed,
+  iina.thumbnails-ready; and mpv.<property>.changed of the properties
+  observed, compared as the film plays and the player changes (mpv's
+  observe_property, the first value told at once).
+- The Plugin menu (`MediaPlayerMenus::plugin`): Manage Plugins… (the
+  settings at Plugins, `MediaPlayerMenus::$showSettings`), each plugin's
+  items under its name (the first five, the rest under More…), a key a
+  binding of the player has left off and listed under Conflicting key
+  shortcuts…, Reload All Plugins. It is built anew as it opens; the menu
+  bar is built again as plugins or their items change
+  (`Plugins::$revision`, `Plugins::onChange`).
+- Settings > Plugins (`MediaPlayerPluginsPage`): how to install one,
+  Install Local Package… (unpacked, its permissions agreed to, one of
+  its identifier replaced where the user says so, moved to
+  "<id>.iinaplugin" and turned on; IINA's errors told); each plugin's
+  row of 60 (its switch, name, version, DEV, its menu of Uninstall and
+  Show in Finder, its description, its info button opening its About
+  sheet), dragged into another order.
+- Subtitle providers: those of the plugins on are sources after a line
+  in Find Online Subtitles From and in the settings' source
+  ("name — plugin", `MediaPlayerState::pluginProviders`); their search
+  and download are the plugin's (`SubtitleApi`), the subtitles found
+  listed to choose from as its desc says, the files it gives loaded.
+- `Window` tells the view's listeners it closed ('closed'), and keeps
+  itself in `Runtime::$window` (core.window's frame, screens,
+  miniaturized). `Playlist::insert` and `move` are a plugin's
+  playlist.add and move. `Https` sends PUT, PATCH and DELETE with a body
+  as those verbs.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

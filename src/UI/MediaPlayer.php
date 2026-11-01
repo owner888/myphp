@@ -192,6 +192,7 @@ final class MediaPlayer
         $linger = $s->linger();
         $shown = $now - $s->moved < $linger && !MediaPlayerLiveText::active($s); // hidden while Live Text's words are chosen, as IINA's
         foreach ($bars as $n) { $shown = $shown || $c->hovered($n); }
+        if ($s->uiDisabled) { $shown = false; } // a plugin's: the controls hidden for good (IINA's disableUI)
         $fade = $c->animate($box, 'controls', $shown ? 1 : 0, 0.25);
         $s->shown = $shown;
         if ($o->titleBar) { $c->runtime?->askWindow('buttons', $shown); } // the traffic lights go with the title bar
@@ -833,7 +834,8 @@ final class MediaPlayer
                       $about = $f['about'] ?? implode('  ', array_filter([$f['language'], $f['year'] > 0 ? "({$f['year']})" : '', $f['fps'] != 0 ? MediaPlayerState::number($f['fps']) . ' fps' : '', "\u{2b07}{$f['downloads']}"])); // assrt.net's its kind and language
                       $c->text($about, 11, self::$ink)->opacity(0.6)->grow(1)->noWrap()->ellipsis('…');
                       $at = strtotime($f['uploaded']);
-                      if ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
+                      if (($f['right'] ?? '') !== '') { $c->text($f['right'], 11, self::$ink)->opacity(0.6); } // a plugin's item's desc.right
+                      elseif ($at !== false) { $c->text($day->format((new \DateTimeImmutable("@$at"))->setTimezone(new \DateTimeZone(date_default_timezone_get()))), 11, self::$ink)->opacity(0.6); }
                     $c->end();
                   $c->end();
                   if ($c->doubleClicked($row)) { $s->onlineChosen = [$i]; $s->downloadOnlineSubtitles([$i]); }

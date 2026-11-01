@@ -1787,6 +1787,30 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **Player plugins** (v1.143): `PlayerPlugins\*` (`Plugins`, `Plugin`,
+  `Instance`, `Iina` and its APIs), `UI\MediaPlayerPluginsPage`,
+  `MediaPlayerMenus::plugin`, `MediaPlayerSettings::$showPage`,
+  `MediaPlayerState`'s plugins, events and the methods they call,
+  `Runtime::$window`, `Playlist::insert` and `move` are myphp's, as IINA's
+  plugins; mygo has no film player. By the developer's choice they are
+  PHP, not IINA's JavaScript: IINA's own plugins do not run, and a
+  plugin runs in the app's process, so its permissions keep what its
+  APIs do, not what PHP lets it do. IINA's promises are values returned
+  (waiting in a fiber), their rejections thrown; JavaScript's require is
+  PHP's own, and an entry is read again by Reload All Plugins, but a
+  class a plugin declared stays as first loaded (PHP declares a class
+  once). Without mpv: mpv's properties are those MyPHP gives, set and
+  command a key binding's, hooks none (addHook throws). Its
+  preferences are JSON, not a plist. core.window.frame is MyPHP's, its
+  top left from the main screen's; core.getVersion's mpv is MyPHP's
+  player; setUIVisibility(false) hides the controls (IINA's sets its
+  disableUI to the argument). utils.exec finds a program on the PATH.
+  The permissions to agree to are the alert's text, not a list beside
+  it; Conflicting key shortcuts… lists the plugins and keys under it.
+  Not yet: the views (overlay, sidebar, standalone windows, the plugin's
+  settings and help pages, the plugins panel), the playlist's menu items
+  of registerMenuItemBuilder, input, websockets, GitHub, the store,
+  updates and the developer tool.
 - **The interactive mode** (v1.142): `UI\MediaPlayerInteractive`,
   `MediaPlayerState::enterInteractive`, `exitInteractive`,
   `interactiveDone`, `toggleDelogo`, `hasLabel` and the window's

@@ -27,6 +27,10 @@ use MyPHP\Media\HttpBytes;
 use MyPHP\Media\Subtitles;
 use MyPHP\Media\YtDlp;
 use MyPHP\Media\Track;
+use MyPHP\PlayerPlugins\Events;
+use MyPHP\PlayerPlugins\Instance;
+use MyPHP\PlayerPlugins\Plugin;
+use MyPHP\PlayerPlugins\Plugins;
 use MyPHP\Native\NowPlaying;
 use MyPHP\Native\PictureInPicture;
 use RuntimeException;
@@ -219,6 +223,9 @@ final class MediaPlayerState
             if ($set->get('httpProxy') !== '') { putenv('http_proxy=http://' . $set->get('httpProxy')); } // as IINA sets it, for curl and yt-dlp
             [$ahead, $this->ahead] = [$this->ahead, null];
             $this->log("Opening $path" . ($manual ? ' (by hand)' : ''));
+            $this->loadPluginsOnce();
+            $this->emit('mpv.start-file');
+            $this->emit('iina.file-started');
             $p = ($ahead[0] ?? null) === $path && $ahead[1] !== null ? $ahead[1] // opened already, as its gapless audio
                 : new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
         } catch (RuntimeException $e) {
@@ -226,6 +233,7 @@ final class MediaPlayerState
             $this->opening = null;
             $this->error = $e->getMessage();
             $this->log("Cannot open $path: {$e->getMessage()}", Logger::ERROR);
+            $this->emit('mpv.end-file');
             $this->changed();
             return false;
         }
@@ -242,6 +250,8 @@ final class MediaPlayerState
         if ($set->get('recordRecentFiles') && ($manual || $set->get('trackAllFilesInRecentOpenMenu')) && App::running()) { App::addRecentDocument($path); }
         if ($set->get('recordPlaybackHistory')) { $this->history()->add($path, $url ? $path : basename($path), $p->title(), $p->duration()); }
         $this->setPlayer($p);
+        $this->emit('mpv.file-loaded');
+        $this->emit('iina.file-loaded', preg_match('~^[a-z]+://~i', $path) === 1 ? $path : 'file://' . $path);
         $this->say($p->title(), '', 'fileStart'); // IINA's message of the file opened
         if ($p->videoTrack() !== null) { // the window to the film's size, as IINA's settings say: on each film, those opened by hand, or never; its initial size and place the first time
             $timing = $set->get('resizeWindowTiming');
@@ -360,6 +370,7 @@ final class MediaPlayerState
             $this->pip = new PictureInPicture($p, function (bool $on): void { // the window hides, or goes to the Dock, or stays, while the film plays in the system's, as IINA's settings say, and comes back with it
                 if ($on === $this->pictureInPicture) { return; }
                 $this->pictureInPicture = $on;
+                $this->emit('iina.pip.changed', $on);
                 $set = $this->settings();
                 $rt = $this->runtime?->get();
                 match ($set->get('windowBehaviorWhenPip')) {
@@ -390,6 +401,7 @@ final class MediaPlayerState
         $noted = 0.0;
         $this->off = [
             $p->on('time', function () use (&$noted) { // a frame only when what shows changed: none while the controls are hidden and the subtitles stay
+                $this->pollPluginProperties();
                 $look = $this->look();
                 if ($look !== $this->drawn) { $this->drawn = $look; $this->changed(); }
                 if ($this->resume && abs($this->player->time() - $noted) >= self::NOTE_EVERY) { $noted = $this->player->time(); $this->note(); }
@@ -400,7 +412,9 @@ final class MediaPlayerState
             ...array_map(fn(string $e) => $p->on($e, function () use ($e): void { // IINA's "Always float on top while playing": on top as it plays, not as it pauses
                 if ($this->settings()->get('alwaysFloatOnTop')) { $this->onTop = $e === 'play'; $this->changed(); }
             }), ['play', 'pause']),
+            $p->on('seek', function (): void { $this->emit('mpv.seek'); $this->emit('mpv.playback-restart'); }),
             $p->on('ended', function () {
+                $this->emit('mpv.end-file');
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
                 if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
                 if (($this->settings()->get('playlistAutoPlayNext') || $this->loop === 'playlist') && $this->next()) { return; } // the next film plays (IINA's "Play next item automatically")
@@ -445,6 +459,7 @@ final class MediaPlayerState
         $width = self::thumbnailWidth($set);
         if (($kept = $cache->get($p->path(), $width)) !== null) {
             $this->thumbnails = $kept;
+            $this->emit('iina.thumbnails-ready');
             return;
         }
         $made = []; $jpegs = []; $i = 0;
@@ -457,6 +472,7 @@ final class MediaPlayerState
             $next = null; // the closures let themselves go
             $this->thumbnails = $made;
             $cache->put($p->path(), $width, $made, $jpegs);
+            $this->emit('iina.thumbnails-ready');
             $this->changed();
         };
         $next = function () use (&$step): void { // after the next frame presented, or the timer, whichever comes first
@@ -495,6 +511,9 @@ final class MediaPlayerState
     public function attach(Runtime $rt, MediaPlayerOptions $o): void
     {
         $this->runtime = \WeakReference::create($rt);
+        $this->loadPluginsOnce();
+        if (!$this->windowLoaded) { $this->windowLoaded = true; $this->emit('iina.window-loaded'); }
+        $this->pollPluginProperties();
         foreach ($this->asks as $what => $value) { $rt->askWindow($what, $value); }
         $this->asks = [];
         $set = $this->settings();
@@ -604,6 +623,7 @@ final class MediaPlayerState
         $this->musicByHand = !$this->musicByHand;
         $this->musicMode = !$this->musicMode;
         if ($this->musicMode) { $this->sidebar = null; } // IINA's: the sidebars go
+        $this->emit('iina.music-mode.changed', $this->musicMode);
         $this->changed();
     }
 
@@ -634,6 +654,7 @@ final class MediaPlayerState
      */
     private function windowEvent(string $e): void
     {
+        $this->windowEventForPlugins($e);
         $p = $this->player;
         if ($p === null) { return; }
         $set = $this->settings();
@@ -982,7 +1003,48 @@ final class MediaPlayerState
     public function onlineProvider(): string
     {
         $id = $this->settings()->get('onlineSubProvider');
-        return isset(self::PROVIDERS[$id]) ? $id : ':opensubtitles';
+        return isset(self::PROVIDERS[$id]) || isset(self::pluginProviders()[$id]) ? $id : ':opensubtitles';
+    }
+
+    /**
+     * The subtitle providers of the plugins on (their Info.json's
+     * subtitleProviders, IINA's Providers.fromPlugin): "plugin:<plugin's
+     * id>:<its id>" => "<its name> — <the plugin's name>", as IINA's menu
+     * lists them.
+     * @return array<string, string>
+     */
+    public static function pluginProviders(): array
+    {
+        $out = [];
+        foreach (Plugins::active() ? Plugins::all() : [] as $p) {
+            if (!$p->enabled()) { continue; }
+            foreach ($p->subProviders ?? [] as $sp) {
+                if (!is_array($sp) || !is_string($sp['id'] ?? null) || !is_string($sp['name'] ?? null)) { continue; } // IINA's: "should have an id and a name", logged as the plugin loads
+                $out["plugin:{$p->identifier}:{$sp['id']}"] = "{$sp['name']} — {$p->name}";
+            }
+        }
+        return $out;
+    }
+
+    /** The name of source $id: one of PROVIDERS', a plugin's provider's own (IINA's nameForID). */
+    public static function providerName(string $id): string
+    {
+        if (isset(self::PROVIDERS[$id])) { return self::PROVIDERS[$id]; }
+        $name = self::pluginProviders()[$id] ?? self::PROVIDERS[':opensubtitles'];
+        return explode(' — ', $name)[0];
+    }
+
+    /** The instance of the plugin of provider $id ("plugin:<plugin>:<provider>") in this player and the provider's own id, null where it has none. @return ?array{0: Instance, 1: string} */
+    private function pluginProvider(string $id): ?array
+    {
+        if (!str_starts_with($id, 'plugin:')) { return null; }
+        $rest = substr($id, 7);
+        $at = strrpos($rest, ':');
+        if ($at === false) { return null; }
+        foreach ($this->plugins as $i) {
+            if ($i->plugin->identifier === substr($rest, 0, $at)) { return [$i, substr($rest, $at + 1)]; }
+        }
+        return null;
     }
 
     /** @internal MediaPlayer, MediaPlayerMenus: whether subtitles may be searched for from $provider (the settings' where null): a film open, no search going, OpenSubtitles of a key (MediaPlayerOptions::$openSubtitlesKey). */
@@ -1030,6 +1092,8 @@ final class MediaPlayerState
         try {
             if ($provider === ':shooter') {
                 $this->shooterSubtitles($p);
+            } elseif (str_starts_with($provider, 'plugin:')) {
+                $this->pluginSubtitles($provider);
             } else {
                 $found = $provider === ':assrt' ? (new Assrt($this->settings()->get('assrtToken')))->search(pathinfo($p->remote() ? (string)parse_url($p->path(), PHP_URL_PATH) : $p->path(), PATHINFO_FILENAME)) : $this->openSubtitlesFound($p);
                 if ($found === []) {
@@ -1054,7 +1118,7 @@ final class MediaPlayerState
     /** "from" the source searched (IINA's osd.find_online_sub.source). */
     private function fromSource(): string
     {
-        return $this->t('iinaOsdFindOnlineSubSource') . ' ' . self::PROVIDERS[$this->onlineSource];
+        return $this->t('iinaOsdFindOnlineSubSource') . ' ' . self::providerName($this->onlineSource);
     }
 
     /**
@@ -1177,7 +1241,14 @@ final class MediaPlayerState
         try {
             $names = [];
             foreach ($chosen as $i) {
-                if ($this->onlineSource === ':assrt') {
+                if (str_starts_with($this->onlineSource, 'plugin:')) {
+                    [$instance, $id] = $this->pluginProvider($this->onlineSource) ?? throw new RuntimeException("Cannot find a plugin with id \"{$this->onlineSource}\"");
+                    try {
+                        foreach ($instance->iina->subtitle->download($id, $found[$i]['item']) as $path) { $this->loadSubtitles($path); $names[] = basename($path); }
+                    } catch (\Throwable $e) {
+                        throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
+                    }
+                } elseif ($this->onlineSource === ':assrt') {
                     $assrt = new Assrt($this->settings()->get('assrtToken'));
                     foreach ($assrt->files($found[$i]['id']) as [$url, $name]) {
                         $names[] = $this->keepOnline($i, $name, $assrt->download($url));
@@ -1357,6 +1428,35 @@ final class MediaPlayerState
     }
 
     /** What failed finding or downloading subtitles online, told: the downloads spent as IINA tells it, the rest as the error. */
+    /**
+     * The subtitles plugin provider $provider finds (IINA's JSPluginSub
+     * Fetcher): none told, one downloaded at once, more shown to choose
+     * from, each as its desc says (name, left, right); none where the
+     * plugin shows them itself (CUSTOM_IMPLEMENTATION). What the plugin
+     * throws is the error.
+     */
+    private function pluginSubtitles(string $provider): void
+    {
+        [$instance, $id] = $this->pluginProvider($provider) ?? throw new RuntimeException("Cannot find a plugin with id \"$provider\"");
+        try {
+            $items = $instance->iina->subtitle->search($id);
+        } catch (\Throwable $e) {
+            throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
+        }
+        if ($items === null) { $this->message = ['', '', 0.0]; return; }
+        $found = array_map(fn($item) => ['item' => $item, 'name' => (string)($item->desc['name'] ?? ''), 'about' => (string)($item->desc['left'] ?? ''), 'right' => (string)($item->desc['right'] ?? ''), 'uploaded' => ''], $items);
+        if ($found === []) {
+            $this->say($this->t('videoSubtitlesNotFound'));
+        } elseif (count($found) === 1) {
+            $this->searchingOnline = false;
+            $this->onlineSubtitles = $found;
+            $this->downloadOnlineSubtitles([0]);
+        } else {
+            $this->onlineSubtitles = $found;
+            $this->tell($this->t('videoSubtitlesFound', ['count' => count($found)]), '', INF);
+        }
+    }
+
     private function failedOnline(RuntimeException $e): void
     {
         if ($e instanceof OpenSubtitlesQuota) {
@@ -2142,4 +2242,191 @@ final class MediaPlayerState
     {
         return rtrim(rtrim(sprintf('%.2f', $v), '0'), '.');
     }
+
+    // The player's plugins (PlayerPlugins), as IINA's PlayerCore keeps them.
+
+    /** @var list<Instance> the instances of the plugins on, in the plugins' order (IINA's plugins) */
+    private array $plugins = [];
+    private bool $pluginsLoaded = false, $windowLoaded = false;
+    private ?Events $events = null;
+    /** The label a plugin's global instance gave the player it made ("1-io.iina.x", IINA's label of it), null for another; the plugin's own label of it (IINA's userLabel). */
+    public ?string $managedLabel = null, $userLabel = null;
+    /** Whether a plugin hid the player's controls for good (IINA's disableUI). @internal MediaPlayer */
+    public bool $uiDisabled = false;
+
+    /** Its events, which plugins listen to. @internal PlayerPlugins */
+    public function events(): Events
+    {
+        return $this->events ??= new Events();
+    }
+
+    /** Emits event $name with $data to its plugins' listeners. */
+    private function emit(string $name, mixed ...$data): void
+    {
+        $this->events?->emit($name, ...$data);
+    }
+
+    /** Its plugins' observed properties compared with what they were: their "mpv.<name>.changed" for those that changed. */
+    private function pollPluginProperties(): void
+    {
+        if ($this->events === null || $this->events->observed() === []) { return; }
+        $this->events->poll(fn(string $name): ?string => MediaPlayerCommands::propertyValue($this, $name));
+    }
+
+    /** Its window's event $e as IINA's plugins hear of it. */
+    private function windowEventForPlugins(string $e): void
+    {
+        if ($this->events === null) { return; }
+        $frame = function (): ?array {
+            $b = $this->window()?->bounds();
+            return $b === null ? null : ['x' => $b->x, 'y' => $b->y, 'width' => $b->width, 'height' => $b->height];
+        };
+        match ($e) {
+            'resize' => $this->emit('iina.window-resized', $frame()),
+            'move' => $this->emit('iina.window-moved', $frame()),
+            'minimize' => $this->emit('iina.window-miniaturized'),
+            'restore' => $this->emit('iina.window-deminiaturized'),
+            'enterFullScreen', 'leaveFullScreen' => $this->emit('iina.window-fs.changed', $e === 'enterFullScreen'),
+            'focus', 'blur' => $this->emit('iina.window-main.changed', $e === 'focus'),
+            'closed' => $this->closed(),
+            default => null,
+        };
+    }
+
+    /** The window gone: its plugins told (iina.window-will-close), then unloaded. */
+    private function closed(): void
+    {
+        $this->emit('iina.window-will-close');
+        $this->clearPlugins();
+        Plugins::unregister($this);
+    }
+
+    /** The plugins' instances made once, where the app runs plugins (Plugins::configure). */
+    private function loadPluginsOnce(): void
+    {
+        if (!$this->pluginsLoaded && Plugins::active()) { $this->loadPlugins(); }
+    }
+
+    /**
+     * Its instances of the plugins on made anew (IINA's loadPlugins), or of
+     * plugin $only alone, on or not (a global instance's player of its own
+     * plugin alone, IINA's reloadPlugin).
+     */
+    public function loadPlugins(?Plugin $only = null): void
+    {
+        $this->pluginsLoaded = true;
+        Plugins::register($this);
+        $this->clearPlugins();
+        foreach (Plugins::all() as $p) {
+            if ($only === null ? $p->enabled() : $p === $only) { $this->plugins[] = new Instance($p, $this); }
+        }
+        $this->changed();
+    }
+
+    /** Its plugins' instances unloaded (IINA's clearPlugins). */
+    public function clearPlugins(): void
+    {
+        foreach ($this->plugins as $i) { $i->cleanUp(); }
+        $this->plugins = [];
+    }
+
+    /** Its instance of $p made, or unloaded as it is turned off ($forced: made again), in the plugins' order (IINA's reloadPlugin). */
+    public function reloadPlugin(Plugin $p, bool $forced = false): void
+    {
+        if (!$this->pluginsLoaded) { return; }
+        $now = $this->pluginInstance($p);
+        if ($now !== null && (!$p->enabled() || $forced)) {
+            $now->cleanUp();
+            $this->plugins = array_values(array_filter($this->plugins, fn(Instance $i) => $i !== $now));
+            $now = null;
+        }
+        if ($now === null && $p->enabled()) { $this->plugins[] = new Instance($p, $this); }
+        $this->sortPlugins();
+        $this->changed();
+    }
+
+    /** Its instances in the plugins' order. */
+    public function sortPlugins(): void
+    {
+        $order = array_flip(array_map(fn(Plugin $p) => spl_object_id($p), Plugins::all()));
+        usort($this->plugins, fn(Instance $a, Instance $b): int => ($order[spl_object_id($a->plugin)] ?? PHP_INT_MAX) <=> ($order[spl_object_id($b->plugin)] ?? PHP_INT_MAX));
+    }
+
+    /** @return list<Instance> its plugins' instances */
+    public function plugins(): array
+    {
+        return $this->plugins;
+    }
+
+    /** Its instance of $p, null for none. */
+    public function pluginInstance(Plugin $p): ?Instance
+    {
+        foreach ($this->plugins as $i) { if ($i->plugin === $p) { return $i; } }
+        return null;
+    }
+
+    /** Its name in the log ("player0"). @internal PlayerPlugins */
+    public function logName(): string
+    {
+        $this->number ??= self::$players++;
+        return "player{$this->number}";
+    }
+
+    /** Its window, null before it shows (or in a test's). */
+    public function window(): ?\MyPHP\Window
+    {
+        return $this->runtime?->get()?->window?->get();
+    }
+
+    /** Pauses the film (a plugin's core.pause). */
+    public function pause(): void
+    {
+        if ($this->player?->playing()) { $this->togglePause(); }
+    }
+
+    /** Plays the film on (a plugin's core.resume). */
+    public function resume(): void
+    {
+        if ($this->player !== null && !$this->player->playing()) { $this->togglePause(); }
+    }
+
+    /** Floats the window on top, or not. */
+    public function setOnTop(bool $on): void
+    {
+        $this->onTop = $on;
+        $this->changed();
+    }
+
+    /** Shows the quick settings at tab $tab ('video', 'audio', 'subtitles'), or hides the sidebars (null), as a plugin's core.window.sidebar. */
+    public function showSidebar(?string $tab): void
+    {
+        if ($this->interactive !== null) { return; }
+        if ($tab !== null && !in_array($tab, ['video', 'audio', 'subtitles'], true)) { return; }
+        $this->sidebar = $tab;
+        if ($tab !== null) { $this->tab = $tab; }
+        $this->changed();
+    }
+
+    /** Hides the controls for good, or shows them again (IINA's disableUI). */
+    public function setUIDisabled(bool $on): void
+    {
+        $this->uiDisabled = $on;
+        $this->changed();
+    }
+
+    /** Adds $paths to the playlist before entry $at, at its end for -1 (IINA's addToPlaylist). @param list<string> $paths */
+    public function addToPlaylist(array $paths, int $at = -1): void
+    {
+        $this->playlist ??= new Playlist([]);
+        $this->playlist->insert($paths, $at);
+        $this->changed();
+    }
+
+    /** The films played, as a plugin's core.getHistory gives them: name, url, date (Unix time), progress (seconds where left, null for none), duration. @return list<array<string, mixed>> */
+    public function historyEntries(): array
+    {
+        return array_map(fn(array $e) => ['name' => $e['name'], 'url' => preg_match('~^[a-z]+://~i', $e['path']) === 1 ? $e['path'] : 'file://' . $e['path'],
+            'date' => $e['added'], 'progress' => $this->positions()->get($e['path']), 'duration' => $e['duration']], $this->history()->all());
+    }
+
 }

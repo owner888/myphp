@@ -71,7 +71,7 @@ $find = function (array $items, string $id) use (&$find): ?MenuItem {
     return null;
 };
 $menus = MediaPlayerMenus::menus($s);
-same(['opensubtitles.com', 'assrt.net', 'shooter.cn'], array_map(fn(MenuItem $m) => $m->label, $find($menus, 'iina.onlineSubSource')->submenu), 'Find Online Subtitles from: IINA\'s three');
+same(['opensubtitles.com', 'assrt.net', 'shooter.cn', ''], array_map(fn(MenuItem $m) => $m->label, $find($menus, 'iina.onlineSubSource')->submenu), 'Find Online Subtitles from: IINA\'s three, a line before the plugins\' (none here)');
 same('Find Online Subtitles from opensubtitles.com', $find($menus, 'iina.findOnlineSub')->label, 'Find Online Subtitles, from the source chosen');
 $s->setSetting('onlineSubProvider', ':assrt');
 same('Find Online Subtitles from assrt.net', $find(MediaPlayerMenus::menus($s), 'iina.findOnlineSub')->label, 'assrt.net chosen');
@@ -85,7 +85,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $s->openSubtitles = null;
     same([false, true, true, true], [$s->canSearchOnline(':opensubtitles'), $s->canSearchOnline(':assrt'), $s->canSearchOnline(':shooter'), $s->canSearchOnline()], 'of no key OpenSubtitles alone not searched');
     $menus = MediaPlayerMenus::menus($s);
-    same([false, true, true], array_map(fn(MenuItem $m) => !$m->disabled, $find($menus, 'iina.onlineSubSource')->submenu), 'its item alone disabled');
+    same([false, true, true, true], array_map(fn(MenuItem $m) => !$m->disabled, $find($menus, 'iina.onlineSubSource')->submenu), 'its item alone disabled (the line after them none)');
     $s->sidebar = 'subtitles'; $s->tab = 'subtitles';
     $s->onlineSource = ':assrt';
     $s->onlineSubtitles = Assrt::results(['sub' => ['subs' => [

@@ -10,6 +10,9 @@ use MyPHP\L10n;
 use MyPHP\Media\Track;
 use MyPHP\MenuItem;
 use MyPHP\OpenDialogOptions;
+use MyPHP\PlayerPlugins\Instance;
+use MyPHP\PlayerPlugins\PluginMenuItem;
+use MyPHP\PlayerPlugins\Plugins;
 use MyPHP\Window;
 
 /**
@@ -119,7 +122,7 @@ final class MediaPlayerMenus
     {
         $bindings = $s === null ? [] : array_map(fn(array $m) => [$m['normal'], $m['action'], $m['iina']], MediaPlayerKeys::current($s->settings()));
         $saved = $s === null ? [] : [$s->savedFilters(true), $s->savedFilters(false)]; // their keys the menus' too
-        return ($s === null ? '' : spl_object_id($s)) . ':' . md5(serialize([$bindings, $saved]));
+        return ($s === null ? '' : spl_object_id($s)) . ':' . md5(serialize([$bindings, $saved])) . ':' . Plugins::$revision; // the plugins' items' keys too
     }
 
     /** File's items of the film: Show Current File in Finder, Delete Current File, Save Current Playlist… @return list<MenuItem> */
@@ -151,7 +154,68 @@ final class MediaPlayerMenus
             $out[] = new MenuItem(self::t($label), submenu: $build(), id: "iina.$menu",
                 onOpen: function (MenuItem $m) use ($build): void { self::update($m->submenu, $build()); });
         }
+        if (Plugins::active()) { // IINA's Plugin menu, built anew as it opens: the plugins' items change as they will
+            $out[] = new MenuItem(self::t('iinaMenuPlugin'), submenu: self::plugin($s), id: 'iina.plugin', onOpen: fn(MenuItem $m) => $m->setSubmenu(self::plugin($s)));
+        }
         return $out;
+    }
+
+    /** Opens the settings window at page $page ('plugins'), the app's (Manage Plugins…). @var ?Closure(string): void */
+    public static ?Closure $showSettings = null;
+
+    /**
+     * IINA's Plugin menu (MenuController.updatePluginMenu) of player $s:
+     * Manage Plugins…; each plugin's items (its global instance's, then
+     * the player's) under its name, the first five, the rest under More…,
+     * a key taken by a key binding of the player's left off and the plugins
+     * so keyed listed under Conflicting key shortcuts… at the top; Reload
+     * All Plugins.
+     * @return list<MenuItem>
+     */
+    public static function plugin(?MediaPlayerState $s): array
+    {
+        $taken = [];
+        foreach ($s === null ? [] : MediaPlayerKeys::current($s->settings()) as $m) { $taken[$m['normal']] = true; }
+        $conflicts = [];
+        $out = [new MenuItem(self::t('iinaMenuManagePlugins'), fn() => (self::$showSettings)?->__invoke('plugins'), id: 'iina.managePlugins'), MenuItem::separator()];
+        $first = true;
+        foreach ($s?->plugins() ?? [] as $instance) {
+            $items = [...($instance->plugin->globalInstance?->menuItems ?? []), ...$instance->menuItems];
+            if ($items === []) { continue; }
+            if (!$first) { $out[] = MenuItem::separator(); }
+            $first = false;
+            $out[] = MenuItem::header($instance->plugin->name);
+            $more = [];
+            foreach ($items as $n => $item) {
+                $made = self::pluginItem($item, $instance, $taken, $conflicts);
+                if ($n < 5) { $out[] = $made; } else { $more[] = $made; }
+            }
+            if ($more !== []) {
+                $instance->log('Please avoid adding too much first-level menu items. IINA will only display the first 5 of them.', \MyPHP\Logger::WARNING);
+                $out[] = new MenuItem(self::t('iinaMenuMorePlugin'), submenu: $more);
+            }
+        }
+        if ($conflicts !== []) {
+            array_unshift($out, new MenuItem(self::t('iinaMenuConflictingShortcuts'), submenu: array_map(fn(array $c) => new MenuItem("{$c[0]}: {$c[1]}", disabled: true), $conflicts)));
+        }
+        $out[] = MenuItem::separator();
+        $out[] = new MenuItem(self::t('iinaMenuReloadPlugins'), fn() => Plugins::reloadAll(), id: 'iina.reloadPlugins');
+        return $out;
+    }
+
+    /** Plugin $instance's menu item $item as the menu's (IINA's add(menuItemDef:)): a key a binding has listed in $conflicts. @param array<string, true> $taken @param list<array{0: string, 1: string}> $conflicts */
+    private static function pluginItem(PluginMenuItem $item, Instance $instance, array $taken, array &$conflicts): MenuItem
+    {
+        if ($item->isSeparator) { return MenuItem::separator(); }
+        $accel = '';
+        if ($item->keyBinding !== null) {
+            $normal = MediaPlayerKeys::normalize($item->keyBinding);
+            if (isset($taken[$normal])) { $conflicts[] = [$instance->plugin->name, $item->keyBinding]; }
+            else { $accel = self::accelerator($normal) ?? ''; }
+        }
+        $sub = array_map(fn(PluginMenuItem $i) => self::pluginItem($i, $instance, $taken, $conflicts), $item->items);
+        return new MenuItem($item->title, $item->action === null ? null : fn() => $item->callAction(), $accel, type: $sub !== [] ? '' : MenuItem::CHECKBOX,
+            disabled: !$item->enabled, checked: $item->selected, submenu: $sub);
     }
 
     /**
@@ -334,6 +398,10 @@ final class MediaPlayerMenus
         foreach (MediaPlayerState::PROVIDERS as $id => $name) { // IINA's populateMenu: its sources, by name
             $from[] = $it('onlineSub' . ucfirst(ltrim($id, ':')), $name, fn() => $s->searchOnlineSubtitles($id), $online($id));
         }
+        $from[] = $sep(); // and after a line, the plugins' ("name — plugin")
+        foreach (MediaPlayerState::pluginProviders() as $id => $name) {
+            $from[] = new MenuItem($name, fn() => $s?->searchOnlineSubtitles($id), disabled: !($s?->canSearchOnline($id) ?? false), id: "iina.onlineSub:$id");
+        }
         return [
             $it('subPanel', self::t($s?->sidebar === 'subtitles' ? 'iinaMenuHideSubtitles' : 'iinaMenuShowSubtitles'), fn() => $s->perform(['sub-panel'], true)),
             $sep(),
@@ -347,7 +415,7 @@ final class MediaPlayerMenus
                 if ($paths !== []) { $s->loadSubtitles($paths[0]); }
             }),
             $sep(),
-            $it('findOnlineSub', self::t('iinaMenuFindOnlineSub', ['provider' => MediaPlayerState::PROVIDERS[$s?->onlineProvider() ?? ':opensubtitles']]), fn() => $s->searchOnlineSubtitles(), $online()),
+            $it('findOnlineSub', self::t('iinaMenuFindOnlineSub', ['provider' => MediaPlayerState::providerName($s?->onlineProvider() ?? ':opensubtitles')]), fn() => $s->searchOnlineSubtitles(), $online()),
             new MenuItem(self::t('iinaMenuFindOnlineSubtitlesFrom'), id: 'iina.onlineSubSource', submenu: $from),
             $it('saveDownloadedSub', self::t('iinaMenuSaveDownloadedSubtitle'), fn() => $s->saveDownloadedSubtitle()),
             $sep(),

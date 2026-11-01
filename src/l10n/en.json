@@ -5420,5 +5420,125 @@
   "iinaFilterPresetCustomFfmpegString": "Filter value",
   "@iinaFilterPresetCustomFfmpegString": {
     "description": "IINA's \"custom_ffmpeg.string\" (FilterPresets.strings)."
+  },
+  "iinaMenuManagePlugins": "Manage Plugins…",
+  "@iinaMenuManagePlugins": {
+    "description": "IINA's \"menu.manage_plugins\" (Localizable.strings)."
+  },
+  "iinaMenuMorePlugin": "More…",
+  "@iinaMenuMorePlugin": {
+    "description": "IINA's \"menu.more_plugin\" (Localizable.strings)."
+  },
+  "iinaMenuReloadPlugins": "Reload All Plugins",
+  "@iinaMenuReloadPlugins": {
+    "description": "IINA's \"menu.reload_plugins\" (Localizable.strings)."
+  },
+  "iinaMenuConflictingShortcuts": "Conflicting key shortcuts…",
+  "@iinaMenuConflictingShortcuts": {
+    "description": "IINA's \"menu.conflicting_shortcuts\" (Localizable.strings)."
+  },
+  "iinaPermissionsNetworkRequestName": "Network Request",
+  "@iinaPermissionsNetworkRequestName": {
+    "description": "IINA's \"permissions.network-request.name\" (Localizable.strings)."
+  },
+  "iinaPermissionsNetworkRequestDesc": "This plugin can make requests from or upload data to these websites:",
+  "@iinaPermissionsNetworkRequestDesc": {
+    "description": "IINA's \"permissions.network-request.desc\" (Localizable.strings)."
+  },
+  "iinaPermissionsNetworkRequestAnySite": "Any site",
+  "@iinaPermissionsNetworkRequestAnySite": {
+    "description": "IINA's \"permissions.network-request.any_site\" (Localizable.strings)."
+  },
+  "iinaPermissionsShowOsdName": "Show OSD",
+  "@iinaPermissionsShowOsdName": {
+    "description": "IINA's \"permissions.show-osd.name\" (Localizable.strings)."
+  },
+  "iinaPermissionsShowOsdDesc": "This plugin can show OSD (On Screen Display) messages.",
+  "@iinaPermissionsShowOsdDesc": {
+    "description": "IINA's \"permissions.show-osd.desc\" (Localizable.strings)."
+  },
+  "iinaPermissionsShowAlertName": "Show Alerts",
+  "@iinaPermissionsShowAlertName": {
+    "description": "IINA's \"permissions.show-alert.name\" (Localizable.strings)."
+  },
+  "iinaPermissionsShowAlertDesc": "This plugin can show pop-up alerts.",
+  "@iinaPermissionsShowAlertDesc": {
+    "description": "IINA's \"permissions.show-alert.desc\" (Localizable.strings)."
+  },
+  "iinaPermissionsVideoOverlayName": "Add overlays on videos",
+  "@iinaPermissionsVideoOverlayName": {
+    "description": "IINA's \"permissions.video-overlay.name\" (Localizable.strings)."
+  },
+  "iinaPermissionsVideoOverlayDesc": "This plugin can render additional content on the top of the video.",
+  "@iinaPermissionsVideoOverlayDesc": {
+    "description": "IINA's \"permissions.video-overlay.desc\" (Localizable.strings)."
+  },
+  "iinaPermissionsFileSystemName": "Access the file system",
+  "@iinaPermissionsFileSystemName": {
+    "description": "IINA's \"permissions.file-system.name\" (Localizable.strings)."
+  },
+  "iinaPermissionsFileSystemDesc": "This plugin can read or write files on your disk, which may include sensitive information. It can also execute other programs or applications that can harm your computer. So be sure to verify the source.",
+  "@iinaPermissionsFileSystemDesc": {
+    "description": "IINA's \"permissions.file-system.desc\" (Localizable.strings)."
+  },
+  "iinaPluginInstall": "Install",
+  "@iinaPluginInstall": {
+    "description": "IINA's \"plugin.install\" (Localizable.strings)."
+  },
+  "iinaPluginLocal": "Installed locally",
+  "@iinaPluginLocal": {
+    "description": "IINA's \"plugin.local\" (Localizable.strings)."
+  },
+  "iinaPluginInstallErrorInvalidUrl": "The URL is invalid.",
+  "@iinaPluginInstallErrorInvalidUrl": {
+    "description": "IINA's \"plugin.install_error.invalid_url\" (Localizable.strings)."
+  },
+  "iinaPluginInstallErrorFileNotFound": "Cannot find the package file.",
+  "@iinaPluginInstallErrorFileNotFound": {
+    "description": "IINA's \"plugin.install_error.file_not_found\" (Localizable.strings)."
+  },
+  "iinaPluginInstallErrorCannotDownload": "Failed to download the plugin.\n\nOutput:{output}\n",
+  "@iinaPluginInstallErrorCannotDownload": {
+    "description": "IINA's \"plugin.install_error.cannot_download\" (Localizable.strings)."
+  },
+  "iinaPluginInstallErrorCannotUnpackage": "Failed to unpackage the plugin.\n\nOutput:{output}\n",
+  "@iinaPluginInstallErrorCannotUnpackage": {
+    "description": "IINA's \"plugin.install_error.cannot_unpackage\" (Localizable.strings)."
+  },
+  "iinaPluginInstallErrorCannotLoad": "IINA cannot load this plugin. It might be in the wrong format.",
+  "@iinaPluginInstallErrorCannotLoad": {
+    "description": "IINA's \"plugin.install_error.cannot_load\" (Localizable.strings)."
+  },
+  "iinaAlertPluginInstallError": "Error occurred during the installation: {message}",
+  "@iinaAlertPluginInstallError": {
+    "description": "IINA's \"alert.plugin.install_error\" (Localizable.strings)."
+  },
+  "iinaAlertPluginUninstallTitle": "Are you sure to uninstall {name}?",
+  "@iinaAlertPluginUninstallTitle": {
+    "description": "IINA's \"alert.plugin_uninstall.title\" (Localizable.strings)."
+  },
+  "iinaAlertPluginUninstallMessage": "The plugin will be deleted from your disk.",
+  "@iinaAlertPluginUninstallMessage": {
+    "description": "IINA's \"alert.plugin_uninstall.message\" (Localizable.strings)."
+  },
+  "iinaAlertPluginReinstallTitle": "Plugin {name} already exists",
+  "@iinaAlertPluginReinstallTitle": {
+    "description": "IINA's \"alert.plugin_reinstall.title\" (Localizable.strings)."
+  },
+  "iinaAlertPluginReinstallMessage": "Do you want to reinstall the plugin?",
+  "@iinaAlertPluginReinstallMessage": {
+    "description": "IINA's \"alert.plugin_reinstall.message\" (Localizable.strings)."
+  },
+  "iinaAlertDuplicatedPluginId": "Duplicated plugin identifiers detected. Two or more plugins have the same identifier \"{id}\". This may cause abnormal behaviors. Please find them in Settings - Plugins and report to their authors. If a plugin is installed locally, you can also manually change its identifier in the plugin's Info.json file.",
+  "@iinaAlertDuplicatedPluginId": {
+    "description": "IINA's \"alert.duplicated_plugin_id\" (Localizable.strings)."
+  },
+  "iinaAlertPluginPermission": "This plugin requires the following permissions. Please review them before proceeding.",
+  "@iinaAlertPluginPermission": {
+    "description": "IINA's \"alert.plugin_permission\" (Localizable.strings)."
+  },
+  "iinaMenuPlugin": "Plugin",
+  "@iinaMenuPlugin": {
+    "description": "IINA's \"Y6q-cI-vfM.title\" (MainMenu.strings)."
   }
 }

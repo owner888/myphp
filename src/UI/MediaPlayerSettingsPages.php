@@ -34,7 +34,7 @@ final class MediaPlayerSettingsPages
     /** @return array<string, array<string, mixed>> the pages by id, in IINA's order */
     public function all(): array
     {
-        $pages = [$this->general(), $this->ui(), $this->video(), $this->audio(), $this->subtitles(), $this->network(), $this->control(), $this->keyBindings(), $this->advanced(), $this->utilities()];
+        $pages = [$this->general(), $this->ui(), $this->video(), $this->audio(), $this->subtitles(), $this->network(), $this->control(), $this->keyBindings(), $this->advanced(), ...(\MyPHP\PlayerPlugins\Plugins::active() ? [$this->plugins()] : []), $this->utilities()];
         return array_column($pages, null, 'id');
     }
 
@@ -733,6 +733,22 @@ final class MediaPlayerSettingsPages
         ], subsections: false);
     }
 
+    /**
+     * IINA's Plugins page (SettingsPagePlugin), where the app runs plugins:
+     * how to install one, Get Plugins… and Install Local Package…; the
+     * plugins installed (MediaPlayerPluginsPage).
+     */
+    private function plugins(): array
+    {
+        $c = $this->c;
+        return $this->page('plugins', MediaPlayerSettings::iina($c, 'preference.plugins'), 'puzzlepiece.extension', [
+            $this->section('', [[['id' => 'pluginsInstall', 'label' => MediaPlayerSettings::tr($c, '$InstallLocalPackage'), 'symbol' => null, 'desc' => '', 'help' => '', 'terms' => [MediaPlayerSettings::tr($c, '$GetPlugins')], 'value' => null, 'detail' => null, 'sub' => [], 'expand' => false, 'shows' => null, 'enables' => null,
+                'custom' => fn() => MediaPlayerPluginsPage::install($c, $this->v)]]]),
+            $this->section('', [[['id' => 'pluginsList', 'label' => MediaPlayerSettings::iina($c, 'preference.plugins'), 'symbol' => null, 'desc' => '', 'help' => '', 'terms' => [], 'value' => null, 'detail' => null, 'sub' => [], 'expand' => false, 'shows' => null, 'enables' => null,
+                'custom' => fn() => MediaPlayerPluginsPage::list($c, $this->v)]]]),
+        ], subsections: false);
+    }
+
     /** IINA's slider of a sensitivity, 1 to 4 at its 4 ticks, labeled "$key.label" (its SliderView). */
     private function sensitivity(string $key): array
     {
@@ -861,8 +877,10 @@ final class MediaPlayerSettingsPages
         $provider = $s->onlineProvider();
         $token = null; $clicked = false; $user = $this->set->get('openSubUsername');
         $c->column(0, 8)->padding(0, 8, 8, MediaPlayerSettings::INDENT)->fillWidth();
-          $picked = MediaPlayerSettings::popUp($c, MediaPlayerState::PROVIDERS, $provider, true);
+          $plugged = MediaPlayerState::pluginProviders();
+          $picked = MediaPlayerSettings::popUp($c, MediaPlayerState::PROVIDERS + ($plugged === [] ? [] : ['' => null] + $plugged), $provider, true); // the plugins' after a line, as IINA's populateMenu
           $c->text(MediaPlayerSettings::tr($c, '$SubtitleSource.desc'), 11, $t->textMuted);
+          if (isset($plugged[$provider])) { $c->text(MediaPlayerSettings::tr($c, '$SubtitleSourcePluginDesc'), 11, $t->textMuted)->fillWidth(); } // IINA's: its settings the plugin's
           if ($provider === ':opensubtitles') {
               $c->row(0, 8)->alignItems(Node::CENTER);
                 $c->text($tx->get('videoOpenSubtitlesAccount'), 11, $t->textMuted);
@@ -883,7 +901,7 @@ final class MediaPlayerSettingsPages
               $c->end();
           }
         $c->end();
-        if ($picked !== null) { $s->setSetting('onlineSubProvider', $picked); }
+        if ($picked !== null && $picked !== '') { $s->setSetting('onlineSubProvider', (string)$picked); }
         if ($token !== null) { $s->setSetting('assrtToken', $token); }
         if (!$clicked) {
             return;

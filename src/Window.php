@@ -174,6 +174,7 @@ final class Window
                 $this->show();
                 $this->placeVideos(ObjC::msg('r:', $this->view, 'bounds')->h); // a video given back (picture in picture) in its place now, as the last frame placed it: the system animates into it before a frame comes
             };
+            $this->runtime->window = \WeakReference::create($this);
             $this->runtime->minimizeWindow = function (bool $on): void { $on ? $this->minimize() : $this->restore(); }; // a player's window going to the Dock as its film goes to picture in picture, IINA's
             $this->runtime->startDataDrag = function (Data $data, mixed $local, DragOptions $o, float $x, float $y): ?\Throwable {
                 try {
@@ -783,6 +784,7 @@ final class Window
         if ($this->attention !== 0) { $this->flashFrame(false); }
         unset(self::$byView[ObjC::addr($this->view)]);
         if ($this->ns !== null) { Native\WindowDrag::forget($this->ns); }
+        foreach ($this->runtime?->windowListeners ?? [] as $listen) { $listen('closed'); } // the view's own (a player's plugins unloaded)
         if ($this->runtime !== null) { $this->cancelDataDrag(); Access::detach($this->view); View::forget($this->view); Metal::forget($this->view); }
         if ($this->under !== null) {
             Metal::forget($this->under);

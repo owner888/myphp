@@ -265,6 +265,8 @@ final class Runtime
     public ?Closure $showWindow = null;
     /** Minimizes the window (true) or brings it back, from outside a frame too (a film gone to picture in picture, as the settings say); the window sets it. */
     public ?Closure $minimizeWindow = null;
+    /** The window the view is built in, as it sets it; null in a test's. @var ?\WeakReference<\MyPHP\Window> */
+    public ?\WeakReference $window = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
     /** @internal MediaPlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */

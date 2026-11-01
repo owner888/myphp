@@ -313,11 +313,24 @@ final class Players
     /** Video > Settings…: the settings window, as IINA's (600 by 480, the sidebar's material under a hidden title bar). */
     public static function settings(): void
     {
-        if (self::$settings !== null && !self::$settings->isDestroyed()) { self::$settings->focus(); return; }
+        if (self::$settings !== null && !self::$settings->isDestroyed()) { self::$settings->focus(); self::$settings->invalidate(); return; } // a page asked of it shown (Manage Plugins…)
         $s = self::$settingsState ??= new MediaPlayerState(); // the settings are the app's, whatever player; this one logs in to OpenSubtitles from them
         self::$settings = new Window(new WindowOptions(title: 'Settings', width: 600, height: 480, minWidth: 600, minHeight: 300, stateKey: 'video settings v2',
             titleBarStyle: 'hiddenInset', trafficLightPosition: [18, 18], vibrancy: 'sidebar',
             content: Content::view(function (Context $c) use ($s): void { $c->mediaPlayerSettings($s); })));
+    }
+
+    /** A new player's window for a plugin's global instance (its createPlayerInstance). */
+    public static function forPlugin(): MediaPlayerState
+    {
+        return self::create()[1];
+    }
+
+    /** The plugins or their menus changed: the menu bar built again, the settings' window shown again. */
+    public static function pluginsChanged(): void
+    {
+        self::syncMenu();
+        if (self::$settings !== null && !self::$settings->isDestroyed()) { self::$settings->invalidate(); }
     }
 
     /** The menus, as IINA's: Open Recent of the recent documents, built again as they change. */
@@ -391,6 +404,12 @@ App::whenReady(function () use ($argv): void {
     $appearance = fn(int $theme) => Theme::setSource(match ($theme) { 2 => ThemeSource::Light, 4 => ThemeSource::System, default => ThemeSource::Dark }); // Settings > Interface > Appearance, IINA's: dark by default
     $appearance(PlayerSettings::default()->get('themeMaterial'));
     PlayerSettings::default()->onChange('themeMaterial', $appearance);
+    // IINA's plugins, of PHP (the app's user data's "plugins"): their global instances run, the Plugin menu, Settings > Plugins.
+    \MyPHP\PlayerPlugins\Plugins::configure();
+    \MyPHP\PlayerPlugins\Plugins::$newPlayer = fn(): MediaPlayerState => Players::forPlugin();
+    \MyPHP\PlayerPlugins\Plugins::onChange(fn() => Players::pluginsChanged());
+    MediaPlayerMenus::$showSettings = function (string $page): void { \MyPHP\UI\MediaPlayerSettings::$showPage = $page; Players::settings(); };
+    \MyPHP\PlayerPlugins\Plugins::loadGlobalInstances();
     Players::menu();
     if (isset($argv[1])) { // ./run.sh video file: no bundle, whose document types onOpenFile takes files from the command line by
         Players::open([$argv[1]]);

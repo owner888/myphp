@@ -125,6 +125,25 @@ final class Playlist
         }
     }
 
+    /** Puts $paths before the $at-th film (at the end for -1), those not in the list; the one playing stays the one playing. @param list<string> $paths */
+    public function insert(array $paths, int $at = -1): void
+    {
+        $paths = array_values(array_unique(array_filter($paths, fn(string $p) => !in_array($p, $this->files, true))));
+        $at = $at < 0 || $at > count($this->files) ? count($this->files) : $at;
+        array_splice($this->files, $at, 0, $paths);
+        if ($this->index >= $at) { $this->index += count($paths); }
+    }
+
+    /** Moves the $from-th film to the $to-th place; the one playing stays the one playing. */
+    public function move(int $from, int $to): void
+    {
+        if (!isset($this->files[$from]) || !isset($this->files[$to]) || $from === $to) { return; }
+        $playing = $this->files[$this->index] ?? null;
+        $f = array_splice($this->files, $from, 1)[0];
+        array_splice($this->files, $to, 0, [$f]);
+        $this->index = $playing === null ? -1 : (int)array_search($playing, $this->files, true);
+    }
+
     /** Takes the $i-th film out; the one playing stays the one playing, or none if it was it. */
     public function remove(int $i): void
     {

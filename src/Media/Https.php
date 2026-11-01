@@ -13,7 +13,7 @@ use RuntimeException;
  * the User-Agent "MyPHP", 30 seconds at the most; it waits as
  * CurlLoop::waitUntil does (in a fiber, the app going on).
  *
- * @internal Media\OpenSubtitles, Media\Tmdb
+ * @internal Media\OpenSubtitles, Media\Tmdb, Media\Assrt, Media\Shooter, PlayerPlugins\HttpApi
  */
 final class Https
 {
@@ -66,7 +66,8 @@ final class Https
             if ($body !== null) {
                 $set(Curl::OPT_POSTFIELDSIZE_LARGE, strlen($body));
                 $set(self::OPT_COPYPOSTFIELDS, $body);
-            } elseif ($verb !== 'GET') {
+            }
+            if ($verb !== 'GET' && !($verb === 'POST' && $body !== null)) { // a body posts; another verb's said
                 $set(Curl::OPT_CUSTOMREQUEST, $verb);
             }
             CurlLoop::start($h, function (int $code) use (&$done): void { $done = $code; });

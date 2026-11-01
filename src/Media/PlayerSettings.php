@@ -208,6 +208,8 @@ final class PlayerSettings
         'subLang' => [],
         'savedVideoFilters' => [], // IINA's: {name, filterString, shortcutKey, shortcutKeyModifiers} each
         'savedAudioFilters' => [],
+        'pluginsEnabled' => [], // the identifiers of the plugins on (IINA's PluginEnabled.<id>), PlayerPlugins\Plugins
+        'pluginOrder' => [], // their identifiers in the order the user put them (IINA's PluginOrder)
     ];
 
     private static ?self $default = null;

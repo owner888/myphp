@@ -55,6 +55,9 @@ final class MediaPlayerSettings
         return $c->runtime?->local($root->id, $make) ?? $make();
     }
 
+    /** The page the settings' window shows next ('plugins'), as Manage Plugins… asks it; taken as it builds. */
+    public static ?string $showPage = null;
+
     public static function build(Context $c, MediaPlayerState $s): Node
     {
         $t = $c->theme;
@@ -63,6 +66,8 @@ final class MediaPlayerSettings
         $root = $c->row(0, 0, 1)->alignItems(Node::STRETCH);
         $v = self::local($c, $root);
         $pages = (new MediaPlayerSettingsPages($c, $s, $v))->all();
+        if (self::$showPage !== null && isset($pages[self::$showPage])) { $v->page = self::$showPage; } // asked from outside (the Plugin menu's Manage Plugins…, IINA's navigateTo)
+        self::$showPage = null;
         self::openFor($v, $pages);
         $page = $pages[$v->page] ?? reset($pages);
         $v->page = $page['id'];
@@ -306,6 +311,7 @@ final class MediaPlayerSettings
           $last = count($list) - 1;
           foreach ($list as $i => $item) {
               if ($i > 0) { $c->box(0, 1, $k['line'])->fillWidth()->margin(0, 0, 0, self::LABEL); }
+              if (($item['custom'] ?? null) !== null) { ($item['custom'])(); continue; } // SettingsItem.Custom: its own view, the card's width
               self::row($c, $v, $item, $i === 0, $i === $last, false, true);
           }
         $c->end();
