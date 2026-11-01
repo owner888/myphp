@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\ObjC;
 
 /**
  * An entry of a Menu, as mygo's MenuItem. Fill the fields to build a menu;
@@ -20,9 +19,11 @@ final class MenuItem
     /** HEADER: the title of the group of items under it (NSMenuItem's section header, macOS 14), chosen by none; left out before macOS 14, which has none. */
     public const SEPARATOR = 'separator', CHECKBOX = 'checkbox', RADIO = 'radio', NORMAL = 'normal', SUBMENU = 'submenu', HEADER = 'header';
 
-    /** Set when the item is built; the native NSMenuItem. */
-    public $native = null;
-    public int $uid = 0;
+    /** @internal identifies the item to the backend, which reports its clicks by it (mygo's uid) */
+    public readonly int $uid;
+    private static int $nextUid = 0;
+    /** Whether a menu showed the item, whose native items follow its changes. */
+    private bool $shown = false;
     /** @internal the number of a web view's own item of a page's context menu (ContextMenuEvent), 0 for the app's items */
     public int $webKit = 0;
     /** @internal what holds the item in its list: a Menu, or the item whose submenu it is */
@@ -63,6 +64,7 @@ final class MenuItem
          */
         public ?Closure $onOpen = null,
     ) {
+        $this->uid = ++self::$nextUid;
         foreach ($this->submenu as $child) {
             $child->parent = $this;
         }
@@ -82,9 +84,7 @@ final class MenuItem
     public function setEnabled(bool $enabled): void
     {
         $this->disabled = !$enabled;
-        if ($this->native !== null) {
-            Menu::applyEnabled($this);
-        }
+        $this->update();
     }
 
     /** Whether the item is enabled (mygo's IsEnabled). */
@@ -97,9 +97,7 @@ final class MenuItem
     public function setVisible(bool $visible): void
     {
         $this->hidden = !$visible;
-        if ($this->native !== null) {
-            ObjC::msg('v:b', $this->native, 'setHidden:', !$visible);
-        }
+        $this->update();
     }
 
     /** Whether the item shows (mygo's IsVisible). */
@@ -128,21 +126,14 @@ final class MenuItem
     public function setLabel(string $label): void
     {
         $this->label = $label;
-        if ($this->native !== null) {
-            ObjC::msg('v:p', $this->native, 'setTitle:', ObjC::str($label));
-            if (($sub = ObjC::msg('p:', $this->native, 'submenu')) !== null) {
-                ObjC::msg('v:p', $sub, 'setTitle:', ObjC::str($label));
-            }
-        }
+        $this->update();
     }
 
     /** Replaces the image beside the label; null removes it (mygo's SetIcon). */
     public function setIcon(?MenuIcon $icon): void
     {
         $this->icon = $icon;
-        if ($this->native !== null && $this->type !== self::SEPARATOR) {
-            ObjC::msg('v:p', $this->native, 'setImage:', $icon?->image());
-        }
+        $this->update();
     }
 
     /**
@@ -152,12 +143,12 @@ final class MenuItem
      */
     public function setSubmenu(array $items): void
     {
-        [$old, $this->submenu] = [$this->submenu, $items];
+        $this->submenu = $items;
         foreach ($items as $child) {
             $child->parent = $this;
         }
-        if ($this->native !== null) {
-            Menu::refill($this, $old);
+        if ($this->shown && App::running()) {
+            App::backend()->replaceSubmenu($this->uid, Menu::snapshotItem($this)->submenu ?? new Platform\Menu);
         }
     }
 
@@ -165,11 +156,7 @@ final class MenuItem
     public function setAccelerator(string $accelerator): void
     {
         $this->accelerator = $accelerator;
-        if ($this->native !== null) {
-            [$key, $mask] = Menu::accelerator($accelerator);
-            ObjC::msg('v:p', $this->native, 'setKeyEquivalent:', ObjC::str($key));
-            ObjC::msg('v:L', $this->native, 'setKeyEquivalentModifierMask:', $key === '' && $this->alternate ? Menu::MOD_ALT : $mask);
-        }
+        $this->update();
     }
 
     /** @internal the kind the item is, its type or the one inferred */
@@ -181,8 +168,20 @@ final class MenuItem
     private function check(bool $checked): void
     {
         $this->checked = $checked;
-        if ($this->native !== null) {
-            ObjC::msg('v:l', $this->native, 'setState:', $checked && in_array($this->type, [self::CHECKBOX, self::RADIO], true) ? 1 : 0);
+        $this->update();
+    }
+
+    /** @internal Menu::snapshotItem: a menu shows the item */
+    public function shown(): void
+    {
+        $this->shown = true;
+    }
+
+    /** Has the native items of the item follow its state (mygo's update). */
+    private function update(): void
+    {
+        if ($this->shown && App::running()) {
+            App::backend()->updateMenuItem(Menu::snapshotItem($this, false));
         }
     }
 

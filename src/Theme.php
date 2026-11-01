@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{Appearance, ObjC};
 
 /**
  * The system's appearance (mygo's Theme): light or dark, the accent color
@@ -24,22 +23,13 @@ final class Theme
     /** Whether the app has a dark appearance now (mygo's IsDark). */
     public static function isDark(): bool
     {
-        return Appearance::isDark(self::nsApp());
+        return self::backend()->isDark();
     }
 
     /** The accent color and the accessibility settings of the desktop, read once until they change (mygo's Preferences). */
     public static function preferences(): ThemePreferences
     {
-        if (self::$prefs === null) {
-            $ws = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
-            self::$prefs = new ThemePreferences(
-                accent: Appearance::accent(self::nsApp()),
-                reduceMotion: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldReduceMotion'),
-                reduceTransparency: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldReduceTransparency'),
-                highContrast: (bool)ObjC::msg('b:', $ws, 'accessibilityDisplayShouldIncreaseContrast'),
-            );
-        }
-        return self::$prefs;
+        return self::$prefs ??= self::backend()->preferences();
     }
 
     /** The appearance setSource() set (mygo's Source). */
@@ -65,11 +55,10 @@ final class Theme
         return function () use ($k): void { unset(self::$onUpdated[$k]); };
     }
 
-    /** @internal gives NSApp the appearance of the source */
+    /** @internal gives the app the appearance of the source */
     public static function apply(): void
     {
-        $name = match (self::$source) { ThemeSource::Light => 'NSAppearanceNameAqua', ThemeSource::Dark => 'NSAppearanceNameDarkAqua', ThemeSource::System => null };
-        ObjC::msg('v:p', self::nsApp(), 'setAppearance:', $name === null ? null : ObjC::msg('p:p', ObjC::cls('NSAppearance'), 'appearanceNamed:', ObjC::str($name)));
+        self::backend()->setSource(self::$source);
     }
 
     /** @internal the appearance or the preferences changed: those read before are forgotten */
@@ -86,11 +75,11 @@ final class Theme
         }
     }
 
-    private static function nsApp()
+    private static function backend(): Platform\Theme
     {
         if (!App::running()) {
             throw new \RuntimeException('myphp: Theme needs the running app (App::whenReady)');
         }
-        return ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
+        return App::backend()->theme();
     }
 }

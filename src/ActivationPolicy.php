@@ -12,10 +12,4 @@ enum ActivationPolicy: string
     case Accessory = 'accessory';
     /** Hidden altogether. */
     case Prohibited = 'prohibited';
-
-    /** @internal NSApplicationActivationPolicy */
-    public function native(): int
-    {
-        return match ($this) { self::Regular => 0, self::Accessory => 1, self::Prohibited => 2 };
-    }
 }

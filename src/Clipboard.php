@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\Pasteboard;
 use MyPHP\Transfer\{Data, Format, Item, Representation};
 
 /**
@@ -13,6 +12,9 @@ use MyPHP\Transfer\{Data, Format, Item, Representation};
  */
 final class Clipboard
 {
+    /** @internal a provider of the app's data on the clipboard is giving it now: it must not read or replace the clipboard (mygo's clipboardProviding) */
+    public static bool $providing = false;
+
     /**
      * Replaces the clipboard with $data's items, each offering its formats
      * (mygo's Write). Providers run on the main thread at most once, when
@@ -26,21 +28,37 @@ final class Clipboard
         if (in_array(Format::DRAG_SESSION, $data->formats(), true)) {
             throw new \InvalidArgumentException('myphp: the clipboard cannot hold a drag session of the app');
         }
-        Pasteboard::writeData($data->snapshot(), $opts->onRelease);
+        // Each provider runs with the guard up, as mygo's Write wraps them, the snapshot's data model left as it is.
+        $items = [];
+        foreach ($data->snapshot()->items as $item) {
+            $reps = [];
+            foreach ($item->formats() as $f) {
+                $reps[] = Representation::lazy($f, static function () use ($item, $f): string {
+                    self::$providing = true;
+                    try {
+                        return $item->read($f);
+                    } finally {
+                        self::$providing = false;
+                    }
+                });
+            }
+            if ($reps !== []) { $items[] = new Item(...$reps); }
+        }
+        App::backend()->clipboard()->writeData(new Data(...$items), $opts->onRelease);
     }
 
     /** The clipboard's representations of $formats, all it offers without any (mygo's Read): data of no items when it is empty. The data is the app's to keep. */
     public static function read(string ...$formats): Data
     {
         self::guard();
-        return Pasteboard::readData(...($formats === [] ? Pasteboard::formats() : $formats));
+        return App::backend()->clipboard()->readData($formats);
     }
 
     /** The formats on the clipboard, without reading them (mygo's Formats). @return list<string> */
     public static function formats(): array
     {
         self::guard();
-        return Pasteboard::formats();
+        return App::backend()->clipboard()->formats();
     }
 
     /** One representation, of the items coalesced as Data::read does (mygo's ReadFormat); Transfer\FormatUnavailable when there is none. */
@@ -66,7 +84,7 @@ final class Clipboard
     public static function readText(): string
     {
         self::guard();
-        return Pasteboard::text();
+        return App::backend()->clipboard()->readText();
     }
 
     /** Puts plain text on the clipboard (mygo's WriteText). */
@@ -79,7 +97,7 @@ final class Clipboard
     public static function readHTML(): string
     {
         self::guard();
-        return Pasteboard::string('public.html');
+        return App::backend()->clipboard()->readHTML();
     }
 
     /** Puts HTML on the clipboard, which apps that paste plain text get as it is (mygo's WriteHTML). */
@@ -92,14 +110,14 @@ final class Clipboard
     public static function readImage(): string
     {
         self::guard();
-        return Pasteboard::image();
+        return App::backend()->clipboard()->readImage();
     }
 
     /** Puts a PNG image on the clipboard (mygo's WriteImage); throws when it is no image. */
     public static function writeImage(string $png): void
     {
         self::guard();
-        if (!Pasteboard::isImage($png)) {
+        if (!App::backend()->clipboard()->isImage($png)) {
             throw new \InvalidArgumentException('myphp: Clipboard::writeImage: not an image');
         }
         self::write(new Data(new Item(Representation::bytes(Format::PNG, $png))));
@@ -109,26 +127,26 @@ final class Clipboard
     public static function clear(): void
     {
         self::guard();
-        Pasteboard::clear();
+        App::backend()->clipboard()->clear();
     }
 
     /** The types on the clipboard as the system names them, 'public.utf8-plain-text'… (mygo's AvailableFormats); formats() names them as Transfer\Format does. @return list<string> */
     public static function availableFormats(): array
     {
         self::guard();
-        return Pasteboard::systemTypes();
+        return App::backend()->clipboard()->availableFormats();
     }
 
     /** Gives the system every representation of the app's data on the clipboard, so that it stays once the app quits, and lets go of its providers (mygo's Flush); nothing for another app's. */
     public static function flush(): void
     {
         self::guard();
-        Pasteboard::flush();
+        App::backend()->clipboard()->flush();
     }
 
     private static function guard(): void
     {
-        if (Pasteboard::$providing) {
+        if (self::$providing) {
             throw new ClipboardReentrant('myphp: clipboard access from a clipboard provider');
         }
     }

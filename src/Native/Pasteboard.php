@@ -18,8 +18,6 @@ final class Pasteboard
     private static bool $defined = false;
     /** The data on the pasteboard that providers give, while it is: its provider object, the pasteboard's change count after writing it, its items by their pasteboard item's address, and what runs once it is let go (mygo's macClipboardSource). @var ?array{obj: mixed, change: int, items: array<int, Item>, data: Data, onRelease: ?\Closure} */
     private static ?array $source = null;
-    /** A provider is giving its data now: it must not read or replace the clipboard. */
-    public static bool $providing = false;
 
     public static function text(): string
     {
@@ -234,12 +232,7 @@ final class Pasteboard
         if ($s === null || $s['change'] !== ObjC::msg('l:', $board, 'changeCount')) {
             return;
         }
-        self::$providing = true;
-        try {
-            $d = $s['data']->materialize($s['data']->formats());
-        } finally {
-            self::$providing = false;
-        }
+        $d = $s['data']->materialize($s['data']->formats());
         if (self::$source !== $s) {
             throw new \MyPHP\ClipboardChanged('myphp: the clipboard changed while it was flushed');
         }
@@ -276,13 +269,10 @@ final class Pasteboard
                     return;
                 }
                 $name = ObjC::phpStr($type);
-                self::$providing = true;
                 try {
                     $b = $s['items'][ObjC::addr($item)]->read(self::format($name));
                 } catch (\Throwable) {
                     return;
-                } finally {
-                    self::$providing = false;
                 }
                 if ($name === self::URL || $name === self::FILE_URL) {
                     $b = trim(explode("\n", $b)[0]); // one URL

@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\ObjC;
 use RuntimeException;
 
 /**
@@ -13,74 +12,57 @@ use RuntimeException;
  */
 final class Menu
 {
-    private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_CMD = 1 << 20;
-    /** @internal MenuItem: Option's modifier flag */
-    public const MOD_ALT = 1 << 19;
-
-    /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain, or '' for the roles PHP does: documents' roles, which act on the document of the window that has the keyboard (Documents), and toggleDevTools, on its developer tools (Window::toggleDevTools)] */
+    /** role => [the key of its label in MyPHP's strings (L10n), accelerator] (mygo's roleDefaults on macOS) */
     public const ROLES = [
-        'undo' => ['menuUndo', 'CmdOrCtrl+Z', 'undo:'],
-        'redo' => ['menuRedo', 'CmdOrCtrl+Shift+Z', 'redo:'],
-        'cut' => ['menuCut', 'CmdOrCtrl+X', 'cut:'],
-        'copy' => ['menuCopy', 'CmdOrCtrl+C', 'copy:'],
-        'paste' => ['menuPaste', 'CmdOrCtrl+V', 'paste:'],
-        'pasteAndMatchStyle' => ['menuPasteAndMatchStyle', 'Shift+Alt+CmdOrCtrl+V', 'pasteAsPlainText:'],
-        'delete' => ['menuDelete', '', 'delete:'],
-        'selectAll' => ['menuSelectAll', 'CmdOrCtrl+A', 'selectAll:'],
-        'reload' => ['menuReload', 'CmdOrCtrl+R', ''],
-        'forceReload' => ['menuForceReload', 'Shift+CmdOrCtrl+R', ''],
-        'resetZoom' => ['menuActualSize', 'CmdOrCtrl+0', ''],
-        'zoomIn' => ['menuZoomIn', 'CmdOrCtrl+Plus', ''],
-        'zoomOut' => ['menuZoomOut', 'CmdOrCtrl+-', ''],
-        'togglefullscreen' => ['menuToggleFullScreen', 'Ctrl+Cmd+F', 'toggleFullScreen:'],
-        'toggleDevTools' => ['menuToggleDevTools', 'Alt+Cmd+I', ''],
-        'minimize' => ['menuMinimize', 'CmdOrCtrl+M', 'performMiniaturize:'],
-        'zoom' => ['menuZoom', '', 'performZoom:'],
-        'close' => ['menuCloseWindow', 'CmdOrCtrl+W', 'performClose:'],
-        'quit' => ['menuQuitApp', 'Cmd+Q', 'terminate:'],
-        'about' => ['menuAbout', '', 'orderFrontStandardAboutPanel:'],
-        'hide' => ['menuHide', 'Cmd+H', 'hide:'],
-        'hideOthers' => ['menuHideOthers', 'Alt+Cmd+H', 'hideOtherApplications:'],
-        'unhide' => ['menuShowAll', '', 'unhideAllApplications:'],
-        'front' => ['menuBringAllToFront', '', 'arrangeInFront:'],
-        'startSpeaking' => ['menuStartSpeaking', '', 'startSpeaking:'],
-        'stopSpeaking' => ['menuStopSpeaking', '', 'stopSpeaking:'],
-        'bold' => ['menuBold', 'CmdOrCtrl+B', ''],
-        'italic' => ['menuItalic', 'CmdOrCtrl+I', ''],
-        'underline' => ['menuUnderline', 'CmdOrCtrl+U', ''],
-        'strikethrough' => ['menuStrikethrough', 'Shift+CmdOrCtrl+X', ''],
-        'alignLeft' => ['menuAlignLeft', 'Cmd+{', ''],
-        'alignCenter' => ['menuCenter', 'Cmd+|', ''],
-        'alignRight' => ['menuAlignRight', 'Cmd+}', ''],
-        'new' => ['menuNew', 'CmdOrCtrl+N', ''],
-        'open' => ['menuOpen', 'CmdOrCtrl+O', ''],
-        'save' => ['menuSave', 'CmdOrCtrl+S', ''],
-        'saveAs' => ['menuSaveAs', 'Alt+Shift+Cmd+S', ''],
-        'duplicate' => ['menuDuplicate', 'Shift+Cmd+S', ''],
-        'rename' => ['menuRename', '', ''],
-        'moveTo' => ['menuMoveTo', '', ''],
-        'revert' => ['menuRevertToSaved', '', ''],
-    ];
-
-    private const KEYS = [
-        'enter' => "\r", 'return' => "\r", 'tab' => "\t", 'space' => ' ', 'escape' => "\e", 'esc' => "\e",
-        'backspace' => "\x7f", 'delete' => "\u{F728}", 'up' => "\u{F700}", 'down' => "\u{F701}",
-        'left' => "\u{F702}", 'right' => "\u{F703}", 'home' => "\u{F729}", 'end' => "\u{F72B}",
-        'pageup' => "\u{F72C}", 'pagedown' => "\u{F72D}", 'plus' => '+', 'insert' => "\u{F727}", 'printscreen' => "\u{F72E}",
+        'undo' => ['menuUndo', 'CmdOrCtrl+Z'],
+        'redo' => ['menuRedo', 'CmdOrCtrl+Shift+Z'],
+        'cut' => ['menuCut', 'CmdOrCtrl+X'],
+        'copy' => ['menuCopy', 'CmdOrCtrl+C'],
+        'paste' => ['menuPaste', 'CmdOrCtrl+V'],
+        'pasteAndMatchStyle' => ['menuPasteAndMatchStyle', 'Shift+Alt+CmdOrCtrl+V'],
+        'delete' => ['menuDelete', ''],
+        'selectAll' => ['menuSelectAll', 'CmdOrCtrl+A'],
+        'reload' => ['menuReload', 'CmdOrCtrl+R'],
+        'forceReload' => ['menuForceReload', 'Shift+CmdOrCtrl+R'],
+        'resetZoom' => ['menuActualSize', 'CmdOrCtrl+0'],
+        'zoomIn' => ['menuZoomIn', 'CmdOrCtrl+Plus'],
+        'zoomOut' => ['menuZoomOut', 'CmdOrCtrl+-'],
+        'togglefullscreen' => ['menuToggleFullScreen', 'Ctrl+Cmd+F'],
+        'toggleDevTools' => ['menuToggleDevTools', 'Alt+Cmd+I'],
+        'minimize' => ['menuMinimize', 'CmdOrCtrl+M'],
+        'zoom' => ['menuZoom', ''],
+        'close' => ['menuCloseWindow', 'CmdOrCtrl+W'],
+        'quit' => ['menuQuitApp', 'Cmd+Q'],
+        'about' => ['menuAbout', ''],
+        'hide' => ['menuHide', 'Cmd+H'],
+        'hideOthers' => ['menuHideOthers', 'Alt+Cmd+H'],
+        'unhide' => ['menuShowAll', ''],
+        'front' => ['menuBringAllToFront', ''],
+        'startSpeaking' => ['menuStartSpeaking', ''],
+        'stopSpeaking' => ['menuStopSpeaking', ''],
+        'bold' => ['menuBold', 'CmdOrCtrl+B'],
+        'italic' => ['menuItalic', 'CmdOrCtrl+I'],
+        'underline' => ['menuUnderline', 'CmdOrCtrl+U'],
+        'strikethrough' => ['menuStrikethrough', 'Shift+CmdOrCtrl+X'],
+        'alignLeft' => ['menuAlignLeft', 'Cmd+{'],
+        'alignCenter' => ['menuCenter', 'Cmd+|'],
+        'alignRight' => ['menuAlignRight', 'Cmd+}'],
+        'new' => ['menuNew', 'CmdOrCtrl+N'],
+        'open' => ['menuOpen', 'CmdOrCtrl+O'],
+        'save' => ['menuSave', 'CmdOrCtrl+S'],
+        'saveAs' => ['menuSaveAs', 'Alt+Shift+Cmd+S'],
+        'duplicate' => ['menuDuplicate', 'Shift+Cmd+S'],
+        'rename' => ['menuRename', ''],
+        'moveTo' => ['menuMoveTo', ''],
+        'revert' => ['menuRevertToSaved', ''],
     ];
 
     /** The page's zoom steps the zoom roles go through (mygo's zoomSteps). */
     private const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 
-    /** @var array<int, array{0: MenuItem, 1: \Closure}> items and what their clicks do, by uid */
+    /** @var array<int, \WeakReference<MenuItem>> the items snapshotted, by uid, which clicks find (mygo's menuItems) */
     private static array $byUid = [];
-    private static int $nextUid = 1;
-    private static $target = null;
-    /** @var array<int, MenuItem> the items whose submenus call their onOpen as they open, by the address of the NSMenu */
-    private static array $opening = [];
-    private static $delegate = null;
 
-    public $native = null;
     /** @internal the menu of a ContextMenuEvent, which shows once as it is when the listeners return: changing it re-installs no menus */
     public bool $transient = false;
 
@@ -183,165 +165,48 @@ final class Menu
         ]);
     }
 
-    /** The roles of the editing commands, which native UI answers whether it would take (UI\Runtime::commandEnabled), and the speech roles, which it never takes: a menu holding one has AppKit ask the first responder (mygo's validatesItem). */
-    private const VALIDATED = ['undo', 'redo', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll', 'startSpeaking', 'stopSpeaking'];
-
-    /** Builds the NSMenu; called by App::setMenu and popup(). */
-    public function build(string $title = '')
-    {
-        self::$target ??= self::defineTarget();
-        $this->native = ObjC::msg('p:p', ObjC::alloc('NSMenu'), 'initWithTitle:', ObjC::str($title));
-        self::fill($this->native, $this->items);
-        return $this->native;
-    }
-
-    /** Adds the NSMenuItems of $items to NSMenu $ns. @param MenuItem[] $items */
-    private static function fill($ns, array $items): void
-    {
-        // A menu of an editing role's item enables its items as the first responder can act on them, the app's items as the app set them (the target's validateMenuItem:); the others keep theirs.
-        ObjC::msg('v:b', $ns, 'setAutoenablesItems:', array_filter($items, fn(MenuItem $it): bool => in_array($it->role, self::VALIDATED, true)) !== []);
-        foreach ($items as $it) {
-            if ($it->type === MenuItem::HEADER && !ObjC::msg('b:p', ObjC::cls('NSMenuItem'), 'respondsToSelector:', ObjC::sel('sectionHeaderWithTitle:'))) {
-                continue; // macOS 14's; before it menus have no headers, and the item is left out, as IINA leaves it
-            }
-            ObjC::msg('v:p', $ns, 'addItem:', self::buildItem($it));
-            if ($it->role === 'zoomIn' && $it->accelerator === '') { // Cmd+= too, without Shift, as other Mac apps take it: a hidden twin
-                $twin = self::buildItem(new MenuItem($it->label, $it->click, 'CmdOrCtrl+=', 'zoomIn', disabled: $it->disabled));
-                ObjC::msg('v:b', $twin, 'setHidden:', true);
-                if (ObjC::msg('b:p', $twin, 'respondsToSelector:', ObjC::sel('setAllowsKeyEquivalentWhenHidden:'))) {
-                    ObjC::msg('v:b', $twin, 'setAllowsKeyEquivalentWhenHidden:', true);
-                }
-                ObjC::msg('v:p', $ns, 'addItem:', $twin);
-            }
-        }
-    }
-
     /**
-     * @internal MenuItem::setSubmenu: the NSMenu of $it's submenu made of
-     * its items anew, those it had ($old) forgotten.
-     * @param list<MenuItem> $old
+     * @internal the snapshot of the menu the backend builds its native menu
+     * of (mygo's snapshot): roles expanded into their labels, in the
+     * language the app shows, so that relabelMenus says them again, their
+     * accelerators and their standard submenus.
      */
-    public static function refill(MenuItem $it, array $old): void
+    public function snapshot(bool $rightToLeft = false): Platform\Menu
     {
-        self::forget($old);
-        $sub = ObjC::msg('p:', $it->native, 'submenu');
-        if ($sub === null) {
-            $sub = self::submenuOf($it, $it->label);
-            ObjC::msg('v:p', $it->native, 'setSubmenu:', $sub);
-            return;
-        }
-        ObjC::msg('v:', $sub, 'removeAllItems');
-        self::fill($sub, $it->submenu);
+        return new Platform\Menu(array_map(self::snapshotItem(...), array_values($this->items)), $rightToLeft);
     }
 
-    /** What the menus kept of items gone: their clicks, the submenus to call onOpen of. @param list<MenuItem> $items */
-    private static function forget(array $items): void
+    /** @internal the snapshot of $it (mygo's snapshotLocked), its role expanded; without $deep, of its own state alone, as updateMenuItem takes it, its submenu left as it is */
+    public static function snapshotItem(MenuItem $it, bool $deep = true): Platform\MenuItem
     {
-        foreach ($items as $it) {
-            unset(self::$byUid[$it->uid]);
-            if ($it->native !== null && ($sub = ObjC::msg('p:', $it->native, 'submenu')) !== null) {
-                unset(self::$opening[ObjC::addr($sub)]);
+        self::$byUid[$it->uid] = \WeakReference::create($it);
+        $it->shown();
+        if (count(self::$byUid) > 256 && (count(self::$byUid) & 255) === 0) {
+            self::$byUid = array_filter(self::$byUid, fn(\WeakReference $w) => $w->get() !== null);
+        }
+        $label = $it->label; $accel = $it->accelerator;
+        if ($it->role !== '') {
+            [$label, $submenu] = self::expandRole($it->role, $it->label, $it->submenu);
+            if ($deep) {
+                $it->submenu = $submenu;
+                foreach ($it->submenu as $child) { $child->parent = $it; }
             }
-            self::forget($it->submenu);
-        }
-    }
-
-    /** The NSMenu of $it's submenu, titled $label, which calls its onOpen as it opens. */
-    private static function submenuOf(MenuItem $it, string $label)
-    {
-        $sub = new self($it->submenu);
-        foreach ($it->submenu as $child) { $child->parent = $it; } // the item's list, not the menu built of it
-        $ns = $sub->build($label);
-        if ($it->onOpen !== null) {
-            self::$delegate ??= self::defineDelegate();
-            ObjC::msg('v:p', $ns, 'setDelegate:', self::$delegate);
-            self::$opening[ObjC::addr($ns)] = $it;
-        }
-        return $ns;
-    }
-
-    private static function defineDelegate()
-    {
-        ObjC::defineClass('MyPHPMenuDelegate', 'NSObject', [
-            'menuWillOpen:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $menu) {
-                $it = self::$opening[ObjC::addr($menu)] ?? null;
-                if ($it?->onOpen !== null) { ($it->onOpen)($it); }
-            }],
-        ]);
-        return ObjC::msg('p:', ObjC::alloc('MyPHPMenuDelegate'), 'init');
-    }
-
-    /** @internal Native\ContextMenus: the NSMenuItem of $it, as the menu bar's and pop-up menus' */
-    public static function buildItem(MenuItem $it)
-    {
-        if ($it->type === MenuItem::SEPARATOR) {
-            $it->native = ObjC::msg('p:', ObjC::cls('NSMenuItem'), 'separatorItem');
-            ObjC::msg('v:b', $it->native, 'setHidden:', $it->hidden);
-            return $it->native;
-        }
-        if ($it->type === MenuItem::HEADER) {
-            $it->native = ObjC::msg('p:p', ObjC::cls('NSMenuItem'), 'sectionHeaderWithTitle:', ObjC::str($it->label));
-            ObjC::msg('v:b', $it->native, 'setHidden:', $it->hidden);
-            return $it->native;
-        }
-        $label = $it->label; $accel = $it->accelerator; $selector = null; $click = $it->click;
-        if ($it->role !== '') { // a role's label is in the language the app shows, so that relabelMenus can say it again
-            [$label, $it->submenu] = self::expandRole($it->role, $it->label, $it->submenu);
             if (isset(self::ROLES[$it->role])) {
-                [$key, $ra, $selector] = self::ROLES[$it->role];
+                [$key, $ra] = self::ROLES[$it->role];
                 $key = $it->role === 'close' && Native\Docs\Registry::has() ? 'menuClose' : $key; // a document's window closes the document
                 $label = $label !== '' ? $label : L10n::in(App::locale())->get($key, ['app' => App::name()]);
                 $accel = $accel !== '' ? $accel : $ra;
-                if ($selector === '') { // a role PHP performs, before the item's own click (mygo's performRole)
-                    $role = $it->role; $own = $click;
-                    [$selector, $click] = [null, function (MenuItem $m, ?Window $w) use ($role, $own): void {
-                        self::performRole($role, $w);
-                        if ($own !== null) { $own($m, $w); }
-                    }];
-                }
             }
         }
-        [$key, $mask] = self::accelerator($accel);
-        $sel = $selector !== null ? ObjC::sel($selector) : ($click !== null ? ObjC::sel('menuClicked:') : null);
-        $ns = ObjC::msg('p:ppp', ObjC::alloc('NSMenuItem'), 'initWithTitle:action:keyEquivalent:', ObjC::str($label), $sel, ObjC::str($key));
-        if ($key !== '') { // also a mask of 0 (F5 alone): NSMenuItem's default is Cmd
-            ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', $mask);
-        } elseif ($it->alternate) { // Option shows it, of no key
-            ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', self::MOD_ALT);
+        $p = new Platform\MenuItem($it->uid, $it->kind(), $label, $it->role, $accel, !$it->disabled, !$it->hidden, $it->checked, $it->toolTip,
+            $it->type === MenuItem::SEPARATOR ? null : $it->icon, alternate: $it->alternate, opens: $it->onOpen !== null);
+        if ($it->webKit !== 0 && $it->click === null) { // a web view's item does what the web view does, unless the app gave it a click of its own
+            [$p->native, $p->name] = [$it->webKit, $it->id];
         }
-        if ($it->alternate) {
-            ObjC::msg('v:b', $ns, 'setAlternate:', true);
+        if ($deep && ($it->submenu !== [] || $it->onOpen !== null || in_array($it->role, ['services', 'window', 'help'], true))) {
+            $p->submenu = new Platform\Menu(array_map(self::snapshotItem(...), array_values($it->submenu)));
         }
-        if ($selector === null && $click !== null) {
-            $it->uid = self::$nextUid++;
-            self::$byUid[$it->uid] = [$it, $click];
-            ObjC::msg('v:p', $ns, 'setTarget:', self::$target);
-            ObjC::msg('v:l', $ns, 'setTag:', $it->uid);
-        }
-        $it->native = $ns;
-        self::applyEnabled($it);
-        ObjC::msg('v:b', $ns, 'setHidden:', $it->hidden);
-        if ($it->checked && in_array($it->type, [MenuItem::CHECKBOX, MenuItem::RADIO], true)) {
-            ObjC::msg('v:l', $ns, 'setState:', 1);
-        }
-        if ($it->toolTip !== '') {
-            ObjC::msg('v:p', $ns, 'setToolTip:', ObjC::str($it->toolTip));
-        }
-        if ($it->icon !== null) { // drawn at 16 points from the representation fit for the display; a template tinted as the menu's text
-            ObjC::msg('v:p', $ns, 'setImage:', $it->icon->image());
-        }
-        if ($it->submenu !== [] || $it->onOpen !== null || in_array($it->role, ['services', 'window', 'help'], true)) {
-            $sub = self::submenuOf($it, $label);
-            ObjC::msg('v:p', $ns, 'setSubmenu:', $sub);
-            $app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
-            match ($it->role) {
-                'windowMenu', 'window' => ObjC::msg('v:p', $app, 'setWindowsMenu:', $sub),
-                'services' => ObjC::msg('v:p', $app, 'setServicesMenu:', $sub),
-                'help' => ObjC::msg('v:p', $app, 'setHelpMenu:', $sub),
-                default => null,
-            };
-        }
-        return $it->native = $ns;
+        return $p;
     }
 
     /** @return array{0: string, 1: MenuItem[]} label and submenu for the standard menus */
@@ -369,41 +234,59 @@ final class Menu
         };
     }
 
-    /** "CmdOrCtrl+Shift+Z" -> key equivalent and modifier mask. */
-    public static function accelerator(string $accel): array
+    /** @internal the item of $uid a menu showed, null once it is gone (mygo's lookupMenuItem) */
+    public static function lookup(int $uid): ?MenuItem
     {
-        if ($accel === '') {
-            return ['', 0];
-        }
-        $mask = 0; $key = '';
-        foreach (explode('+', $accel) as $part) {
-            $p = strtolower(trim($part));
-            switch ($p) {
-                case 'cmd': case 'command': case 'super': case 'meta': case 'cmdorctrl': case 'commandorcontrol': $mask |= self::MOD_CMD; break;
-                case 'ctrl': case 'control': $mask |= self::MOD_CTRL; break;
-                case 'alt': case 'option': $mask |= self::MOD_ALT; break;
-                case 'shift': $mask |= self::MOD_SHIFT; break;
-                default:
-                    if (isset(self::KEYS[$p])) {
-                        $key = self::KEYS[$p];
-                    } elseif (preg_match('/^f(\d{1,2})$/', $p, $m)) {
-                        $key = mb_chr(0xF704 + (int)$m[1] - 1, 'UTF-8');
-                    } else {
-                        $key = $p;
-                    }
-            }
-        }
-        return [$key, $mask];
+        return (self::$byUid[$uid] ?? null)?->get();
     }
 
     /**
-     * Performs a role PHP does for the window $w (mygo's performRole): the
-     * documents' roles, the page's reload and zoom, the developer tools,
-     * and the Format menu's on the selection of a rich text editor of
-     * native UI, or of an editable page.
+     * @internal the backend reports a click on the item of $uid, in the
+     * window that has the keyboard (mygo's menuItemClicked): a checkbox
+     * toggles, a radio item checks, then its role and its click run.
+     */
+    public static function clicked(int $uid, ?Window $w): void
+    {
+        $it = self::lookup($uid);
+        if ($it === null) {
+            return;
+        }
+        if ($it->type === MenuItem::CHECKBOX) {
+            $it->setChecked(!$it->checked);
+        } elseif ($it->type === MenuItem::RADIO) {
+            $it->setChecked(true);
+        }
+        self::performRole($it->role, $w);
+        if ($it->click !== null) {
+            ($it->click)($it, $w);
+        }
+    }
+
+    /** @internal the submenu of the item of $uid is about to show: its onOpen brings its items up to date */
+    public static function willOpen(int $uid): void
+    {
+        $it = self::lookup($uid);
+        if ($it?->onOpen !== null) {
+            ($it->onOpen)($it);
+        }
+    }
+
+    /**
+     * Performs a role the backend leaves to PHP for the window $w (mygo's
+     * performRole): the documents' roles, the page's reload and zoom, the
+     * developer tools, the Format menu's on the selection of a rich text
+     * editor of native UI, and the window's own where the backend reports
+     * them.
      */
     private static function performRole(string $role, ?Window $w): void
     {
+        if ($role === '') {
+            return;
+        }
+        if ($role === 'quit') {
+            App::quit();
+            return;
+        }
         if (in_array($role, ['new', 'open', 'save', 'saveAs', 'duplicate', 'rename', 'moveTo', 'revert'], true)) {
             Native\Docs\Registry::role($role, $w);
             return;
@@ -426,6 +309,10 @@ final class Menu
             'resetZoom' => $page?->setZoomFactor(1.0),
             'zoomIn' => $page?->setZoomFactor(self::nextZoom($page->zoomFactor(), 1)),
             'zoomOut' => $page?->setZoomFactor(self::nextZoom($page->zoomFactor(), -1)),
+            'togglefullscreen' => $w->setFullScreen(!$w->isFullScreen()),
+            'minimize' => $w->minimize(),
+            'zoom' => $w->isMaximized() ? $w->unmaximize() : $w->maximize(),
+            'close' => $w->close(),
             default => null,
         };
     }
@@ -445,67 +332,15 @@ final class Menu
         return (float)self::ZOOM_STEPS[0];
     }
 
-    /**
-     * @internal MenuItem: enables $it's NSMenuItem as the app set it; a
-     * role's item sent down the responder chain, which the first
-     * responder would enable in a menu that validates its items, targets
-     * the menu target while disabled, which lacks its action, so that its
-     * menu disables it, and nothing again once enabled (mygo's
-     * applyItemState).
-     */
-    public static function applyEnabled(MenuItem $it): void
-    {
-        ObjC::msg('v:b', $it->native, 'setEnabled:', !$it->disabled);
-        if (($it->role !== '' && (self::ROLES[$it->role][2] ?? '') !== '')) {
-            self::$target ??= self::defineTarget();
-            ObjC::msg('v:p', $it->native, 'setTarget:', $it->disabled ? self::$target : null);
-        }
-    }
-
-    private static function defineTarget()
-    {
-        ObjC::defineClass('MyPHPMenuTarget', 'NSObject', [
-            // The app's items keep the state it gave them in a menu that validates its items.
-            'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => ObjC::msg('b:', $item, 'isEnabled')],
-            'menuClicked:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                [$it, $click] = self::$byUid[ObjC::msg('l:', $sender, 'tag')] ?? [null, null];
-                if ($it === null) {
-                    return;
-                }
-                if ($it->type === MenuItem::CHECKBOX) {
-                    $it->setChecked(!$it->checked);
-                } elseif ($it->type === MenuItem::RADIO) {
-                    $it->setChecked(true);
-                }
-                $click($it, Window::focused());
-            }],
-        ]);
-        return ObjC::msg('p:', ObjC::alloc('MyPHPMenuTarget'), 'init');
-    }
-
     /** Shows the menu as a context menu with its top left at ($x, $y), points from the top-left corner of the window's content (mygo's PopupAt); right to left ($rtl), its top right, its items from the right and its submenus opening to the left. */
     public function popupAt(Window $window, float $x, float $y, bool $rtl = false): void
     {
-        $native = $this->build();
-        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
-        $p = ObjC::$c->new('NSPoint');
-        $p->x = $x; $p->y = ObjC::msg('r:', $view, 'bounds')->h - $y; // the content view is not flipped: y runs up from its bottom
-        $was = null;
-        if ($rtl) { // NSUserInterfaceLayoutDirectionRightToLeft: the items from the right, submenus to the left; a menu popped up in a view takes the view's direction, which it has only while the menu shows (mygo's popupMenu)
-            ObjC::msg('v:l', $native, 'setUserInterfaceLayoutDirection:', 1);
-            $was = ObjC::msg('l:', $view, 'userInterfaceLayoutDirection');
-            ObjC::msg('v:l', $view, 'setUserInterfaceLayoutDirection:', 1);
-        }
-        ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
-        if ($was !== null) { ObjC::msg('v:l', $view, 'setUserInterfaceLayoutDirection:', $was); }
+        App::backend()->popupMenu($this->snapshot($rtl), $window, [$x, $y]);
     }
 
     /** Shows the menu as a context menu at the pointer over $window (mygo's Popup). */
     public function popup(Window $window): void
     {
-        $native = $this->build();
-        $view = ObjC::msg('p:', $window->nativeHandle(), 'contentView');
-        $p = ObjC::msg('q:qp', $view, 'convertPoint:fromView:', ObjC::msg('q:', $window->nativeHandle(), 'mouseLocationOutsideOfEventStream'), null);
-        ObjC::msg('b:pqp', $native, 'popUpMenuPositioningItem:atLocation:inView:', null, $p, $view);
+        App::backend()->popupMenu($this->snapshot(), $window, null);
     }
 }

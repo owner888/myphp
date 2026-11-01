@@ -184,7 +184,7 @@ final class NowPlaying
     private static function apply(): void
     {
         $show = self::$show ??= static function (Closure $info): void {
-            App::whenReady(static fn() => Native\NowPlaying::media($info(), self::command(...)));
+            App::whenReady(static fn() => App::backend()->nowPlaying()->set($info()));
         };
         $show(static function (): ?array {
             if (!self::$showing) { return null; }

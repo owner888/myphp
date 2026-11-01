@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\NetworkMonitor;
 
 /** Whether the computer is online (mygo's Network). */
 final class Network
@@ -20,7 +19,7 @@ final class Network
     public static function status(): NetworkStatus
     {
         App::running() || throw new \RuntimeException('myphp: Network::status needs the running app (call it from App::whenReady)');
-        return NetworkMonitor::status();
+        return App::backend()->network()->status();
     }
 
     /** Calls $fn with the new state when the computer's network state changes (mygo's OnChanged). Returns a function that removes it. */
@@ -31,8 +30,9 @@ final class Network
         if (!self::$watching) {
             self::$watching = true;
             App::whenReady(function (): void {
-                NetworkMonitor::$onPath = self::changed(...);
-                self::$last = NetworkMonitor::status();
+                $n = App::backend()->network();
+                $n->watch();
+                self::$last = $n->status();
             });
         }
         return function () use ($k): void { unset(self::$onChanged[$k]); };

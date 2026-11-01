@@ -20,6 +20,19 @@ use MyPHP\{App, ContextMenuEvent, Menu, MenuItem};
  */
 final class ContextMenus
 {
+    /** The owner of the app's items of the menu shown last, tracked to follow their changes while it shows. */
+    private static ?int $owner = null;
+
+    private static function menus(): \MyPHP\Platform\Darwin\Menus
+    {
+        return App::backend()->menus();
+    }
+
+    private static function owner(): int
+    {
+        return self::$owner ??= self::menus()->newOwner();
+    }
+
     /** MyPHP's names of the items WebKit identifies (WKMenuItemIdentifiers.h, macOS 11) that other platforms have too. */
     private const IDENTIFIERS = [
         'WKMenuItemIdentifierCopy' => 'copy', 'WKMenuItemIdentifierCopyImage' => 'copyImage', 'WKMenuItemIdentifierCopyLink' => 'copyLink',
@@ -221,7 +234,7 @@ final class ContextMenus
         ObjC::msg('v:b', $ns, 'setEnabled:', !$it->disabled);
         if ($it->checked !== $w[2]) { ObjC::msg('v:l', $ns, 'setState:', $it->checked ? 1 : 0); }
         if ($it->accelerator !== $w[3]) {
-            [$key, $mask] = Menu::accelerator($it->accelerator);
+            [$key, $mask] = \MyPHP\Platform\Darwin\Menus::keyEquivalent($it->accelerator);
             ObjC::msg('v:p', $ns, 'setKeyEquivalent:', ObjC::str($key));
             ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', $mask);
         }
@@ -233,7 +246,7 @@ final class ContextMenus
         return $ns;
     }
 
-    /** An item of the app's, as its other menus' (Menu::buildItem), whose submenu may hold WebKit's items. */
+    /** An item of the app's, as its other menus', whose submenu may hold WebKit's items. */
     private static function app(MenuItem $it, array $natives, array $was)
     {
         if ($it->type === MenuItem::SEPARATOR) {
@@ -242,7 +255,7 @@ final class ContextMenus
         $kids = array_values($it->submenu);
         $it->submenu = [];
         try {
-            $ns = Menu::buildItem($it);
+            $ns = self::menus()->item(Menu::snapshotItem($it), self::owner());
         } finally {
             $it->submenu = $kids;
         }
@@ -266,6 +279,10 @@ final class ContextMenus
     public static function show($view, $menu, $event, \Closure $listen): void
     {
         if (!self::isWebKits($menu)) { return; }
+        if (self::$owner !== null) { // the items of the menu shown before, which closed
+            self::menus()->dropOwner(self::$owner);
+            self::$owner = null;
+        }
         $natives = []; $was = [];
         try {
             [$items, $numbers] = self::describe($menu, $natives, $was);

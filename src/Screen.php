@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{ObjC, Screens};
 
 /** The connected displays (mygo's Screen). Call it once the app runs. */
 final class Screen
@@ -17,7 +16,7 @@ final class Screen
     public static function displays(): array
     {
         self::needsApp();
-        return array_map(fn(array $d) => new Display($d['id'], $d['label'], $d['bounds'], $d['workArea'], $d['scale'], $d['rotation'], $d['internal'], $d['primary']), Screens::displays());
+        return App::backend()->screen()->displays();
     }
 
     /** The display with the menu bar (mygo's PrimaryDisplay); one of no size without any. */
@@ -34,8 +33,7 @@ final class Screen
     public static function cursorScreenPoint(): Point
     {
         self::needsApp();
-        $p = ObjC::msg('q:', ObjC::cls('NSEvent'), 'mouseLocation');
-        return new Point((int)round($p->x), (int)round(Screens::primaryHeight() - $p->y));
+        return App::backend()->screen()->cursorPoint();
     }
 
     /** The display nearest $p (mygo's DisplayNearestPoint). */

@@ -34,12 +34,15 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $flag = new MenuItem('Flag', icon: $a);
     $tmpl = new MenuItem('Template', icon: MenuIcon::of($png, true));
     $menu = new Menu([$flag, $tmpl, new MenuItem('Plain')]);
-    $menu->build('Test');
-    $img = \MyPHP\Native\ObjC::msg('p:', $flag->native, 'image');
+    $menus = \MyPHP\App::backend()->menus();
+    $ns = $menus->build($menu->snapshot(), 'Test', $menus->newOwner());
+    $native = fn(int $i) => \MyPHP\Native\ObjC::msg('p:l', $ns, 'itemAtIndex:', $i);
+    $img = \MyPHP\Native\ObjC::msg('p:', $native(0), 'image');
     check($img !== null, 'on macOS, the item\'s image');
     $size = \MyPHP\Native\ObjC::msg('z:', $img, 'size');
     same([16.0, 12.0], [$size->w, $size->h], 'fit to 16 points, its aspect kept');
-    check(!\MyPHP\Native\ObjC::msg('b:', $img, 'isTemplate') && \MyPHP\Native\ObjC::msg('b:', \MyPHP\Native\ObjC::msg('p:', $tmpl->native, 'image'), 'isTemplate'), 'a template image tinted');
+    check(!\MyPHP\Native\ObjC::msg('b:', $img, 'isTemplate') && \MyPHP\Native\ObjC::msg('b:', \MyPHP\Native\ObjC::msg('p:', $native(1), 'image'), 'isTemplate'), 'a template image tinted');
     $flag->setIcon(null);
-    same(null, \MyPHP\Native\ObjC::msg('p:', $flag->native, 'image'), 'taken away');
+    \MyPHP\App::backend()->updateMenuItem(Menu::snapshotItem($flag, false)); // as setIcon has it once the app runs
+    same(null, \MyPHP\Native\ObjC::msg('p:', $native(0), 'image'), 'taken away');
 }

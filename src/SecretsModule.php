@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use InvalidArgumentException;
-use MyPHP\Native\{Bundle, Keychain};
+use MyPHP\Native\Bundle;
 
 /**
  * The secrets of a service in the system's credential store (mygo's
@@ -22,19 +22,21 @@ final class SecretsModule
         if (strlen($value) > Secrets::MAX_SECRET_SIZE) {
             throw new InvalidArgumentException(sprintf('myphp: secret "%s" has %d bytes, more than MAX_SECRET_SIZE (%d)', $key, strlen($value), Secrets::MAX_SECRET_SIZE));
         }
-        Keychain::set($service, $key, $value);
+        App::backend()->secrets()->setSecret($service, $key, $value);
     }
 
     /** The secret stored under $key; SecretNotFound when there is none. */
     public function get(string $key): string
     {
-        return Keychain::get($this->check($key), $key);
+        $service = $this->check($key);
+        return App::backend()->secrets()->secret($service, $key);
     }
 
     /** Removes the secret stored under $key; none is no error. */
     public function delete(string $key): void
     {
-        Keychain::delete($this->check($key), $key);
+        $service = $this->check($key);
+        App::backend()->secrets()->deleteSecret($service, $key);
     }
 
     /** Checks $key and returns the service. */

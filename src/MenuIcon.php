@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use InvalidArgumentException;
-use MyPHP\Native\ObjC;
 use WeakReference;
 
 /**
@@ -13,8 +12,8 @@ use WeakReference;
  * items, tray menus' included. It fits a box of 16 by 16 points, keeping
  * its aspect: give it at least 32 by 32 pixels, for Retina displays. A
  * checkbox or radio item shows its check as well. Items showing the same
- * image share one NSImage, made the first time a menu shows it and let go
- * with the icon.
+ * image share what the backend makes of it (an NSImage), made the first
+ * time a menu shows it and let go with the icon.
  */
 final class MenuIcon
 {
@@ -23,8 +22,10 @@ final class MenuIcon
 
     /** @var array<string, WeakReference<self>> the icons by their image, so that those of the same image share it */
     private static array $made = [];
-    /** The NSImage, once a menu showed the icon. */
+    /** What a backend made of the icon, once a menu showed it, and what lets it go. */
     private mixed $native = null;
+    private bool $decoded = false;
+    private ?\Closure $free = null;
 
     private function __construct(public readonly string $png, public readonly bool $template) {}
 
@@ -52,32 +53,24 @@ final class MenuIcon
         return $ic;
     }
 
-    /** @internal Menu: the NSImage, made the first time, fit to SIZE points; null for an image AppKit cannot read. */
-    public function image(): mixed
+    /**
+     * @internal what $make made of the icon the first time it was asked (mygo's
+     * Native): a backend's decoding of it, kept for as long as the icon is,
+     * $free called with it as the icon goes; null for an image that cannot
+     * be decoded, kept too.
+     */
+    public function native(\Closure $make, ?\Closure $free = null): mixed
     {
-        if ($this->native === null) {
-            $data = ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $this->png, strlen($this->png));
-            $img = ObjC::msg('p:p', ObjC::alloc('NSImage'), 'initWithData:', $data);
-            if ($img === null) {
-                return $this->native = false;
-            }
-            $size = ObjC::msg('z:', $img, 'size');
-            if ($size->w > 0 && $size->h > 0) {
-                $k = self::SIZE / max($size->w, $size->h);
-                $s = ObjC::$c->new('CGSize');
-                [$s->w, $s->h] = [$size->w * $k, $size->h * $k];
-                ObjC::msg('v:z', $img, 'setSize:', $s);
-            }
-            ObjC::msg('v:b', $img, 'setTemplate:', $this->template);
-            $this->native = $img;
+        if (!$this->decoded) {
+            [$this->native, $this->decoded, $this->free] = [$make(), true, $free];
         }
-        return $this->native === false ? null : $this->native;
+        return $this->native;
     }
 
     public function __destruct()
     {
-        if ($this->native !== null && $this->native !== false) {
-            ObjC::msg('v:', $this->native, 'release');
+        if ($this->native !== null && $this->free !== null) {
+            ($this->free)($this->native);
         }
     }
 }

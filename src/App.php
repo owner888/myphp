@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{Appearance, CoreText, Metal, ObjC};
+use MyPHP\Native\{CoreText, Metal, ObjC};
 use MyPHP\UI\{Atlas, Text, Theme, ImageAtlas};
 use RuntimeException;
 
@@ -29,8 +29,11 @@ final class App
     private static bool $themeFixed = false;
     /** The desktop's settings, once read until they change (preferences). */
     private static ?UI\Preferences $preferences = null;
-    private static $nsApp = null;
+    /** Whether the backend initialized the app, which runs from then on. */
+    private static bool $initialized = false;
     private static ?Metal $metal = null;
+    /** The platform's backend, made on first use (mygo's backend()). */
+    private static ?Platform\Backend $backend = null;
     private static ?Text $text = null;
     private static float $scale = 1.0;
     private static ActivationPolicy $policy = ActivationPolicy::Regular;
@@ -369,112 +372,73 @@ final class App
             file_put_contents($out, TypeScript::generate());
             return;
         }
-        ObjC::boot(['Foundation', 'AppKit', 'QuartzCore', 'Metal', 'MetalKit', 'CoreText', 'WebKit', 'UniformTypeIdentifiers', 'UserNotifications']);
-        // The dates the app shows are in the user's time zone, as a Go app's local time, whatever zone php.ini names (the developer's own, a server's UTC).
-        date_default_timezone_set(ObjC::phpStr(ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSTimeZone'), 'localTimeZone'), 'name')));
-        // AppKit's AutoFill heuristics watch every text input client for contact and password fields, in a helper process
-        // ("AutoFill (App)") and with sync calls that cost CPU and stall scrolling (mygo's 23ac61d, 2317b80): myphp draws
-        // its own fields, which never take those suggestions. macOS 26 reads the first, macOS 27 only the second.
-        $no = ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false);
-        $defaults = ObjC::msg('p:pp', ObjC::cls('NSMutableDictionary'), 'dictionaryWithObject:forKey:', $no, ObjC::str('NSAutoFillHeuristicControllerEnabled'));
-        ObjC::msg('v:pp', $defaults, 'setObject:forKey:', $no, ObjC::str('NSAutoFillHeuristicsEnabled'));
-        ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSUserDefaults'), 'standardUserDefaults'), 'registerDefaults:', $defaults);
-        self::$nsApp = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
-        Native\Signals::quitOn(self::quit(...)); // SIGINT and SIGTERM quit as Quit does (mygo's quitOnSignals)
-        ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', self::$policy->native());
+        $b = self::backend();
+        $b->init(self::$policy);
+        self::$initialized = true;
         if (\MyPHP\Theme::source() !== ThemeSource::System) {
             \MyPHP\Theme::apply(); // the appearance setSource() asked for before
         }
-        ObjC::defineClass('MyPHPAppDelegate', 'NSObject', [
-            'observeValueForKeyPath:ofObject:change:context:' => ['v@:@@@^v', 'v(pppppp)', function ($self, $cmd, $keyPath, $object, $change, $context) {
-                if (ObjC::phpStr($keyPath) === 'effectiveAppearance') {
-                    self::systemChanged(); // the accent, read in the appearance
-                }
-            }],
-            'applicationWillFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                if (Native\Login::launchedAsLoginItem()) {
-                    Native\Login::$openedAtLogin = true;
-                }
-            }],
-            'applicationShouldTerminate:' => ['Q@:@', 'L(ppp)', fn($self, $cmd, $app) => self::shouldQuit() ? 1 : 0], // NSTerminateNow, NSTerminateCancel
-            'applicationDidBecomeActive:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                foreach (self::$onDidBecomeActive as $fn) { $fn(); }
-            }],
-            'applicationDidResignActive:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                foreach (self::$onDidResignActive as $fn) { $fn(); }
-            }],
-            'applicationDockMenu:' => ['@@:@', 'p(ppp)', fn($self, $cmd, $app) => Dock::nativeMenu()],
-            'screensChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Screen::changed(); }],
-            'applicationShouldHandleReopen:hasVisibleWindows:' => ['B@:@B', 'b(pppb)', function ($self, $cmd, $app, $visible) {
-                foreach (self::$onActivate as $fn) {
-                    $fn((bool)$visible);
-                }
-                return true;
-            }],
-            'applicationWillTerminate:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                Native\WindowStates::save();
-                try {
-                    Native\Pasteboard::flush(); // the app's data stays on the clipboard once it quit
-                } catch (\Throwable $e) {
-                    Logger::warn($e->getMessage(), 'clipboard');
-                }
-                $quit = self::$onQuit;
-                self::$onQuit = [];
-                foreach ($quit as $fn) {
-                    $fn();
-                }
-                if (self::$relaunch) {
-                    self::relaunchNow(); // after onQuit, which releases what the app holds
-                }
-            }],
-            'localeChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { Locales::changedFromSystem(); }],
-            'displayOptionsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) { // Reduce Motion turned on or off, as mygo's preferences change
-                self::systemChanged(); // the theme follows more contrast
-            }],
-            'applicationDidFinishLaunching:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $note) {
-                self::$ready = true;
-                Locales::start(); // the language the app shows and the user's formats, before the menus and windows show them
-                ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('localeChanged:'), ObjC::str('NSCurrentLocaleDidChangeNotification'), null);
-                $workspace = ObjC::msg('p:', ObjC::cls('NSWorkspace'), 'sharedWorkspace');
-                ObjC::msg('v:pppp', ObjC::msg('p:', $workspace, 'notificationCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('displayOptionsChanged:'), ObjC::str('NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification'), null);
-                Notification::attachDelegate(); // before the click that launched the app is delivered
-                ObjC::msg('v:pppp', ObjC::msg('p:', ObjC::cls('NSNotificationCenter'), 'defaultCenter'), 'addObserver:selector:name:object:', $self, ObjC::sel('screensChanged:'), ObjC::str('NSApplicationDidChangeScreenParametersNotification'), null);
-                self::installMenu(self::$menu ?? Menu::default());
-                if (self::$policy === ActivationPolicy::Regular) { // a plain php does not come to the front on its own
-                    ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
-                }
-                foreach (self::$onReady as $fn) {
-                    $fn();
-                }
-                $callbacks = self::$whenReady;
-                self::$whenReady = [];
-                foreach ($callbacks as $fn) {
-                    $fn();
-                }
-                // After the windows the app opens when ready, which URLs may target.
-                self::later(function (): void {
-                    Native\DeepLink::deliverArgs(array_slice($_SERVER['argv'] ?? [], 1), self::$startDir);
-                    Native\Docs\Registry::start(); // once the files the app was started with are in
-                });
-            }],
-            'application:openURLs:' => ['v@:@@', 'v(pppp)', function ($self, $cmd, $app, $urls) {
-                $files = $links = [];
-                for ($i = 0, $n = ObjC::msg('L:', $urls, 'count'); $i < $n; $i++) {
-                    $u = ObjC::msg('p:L', $urls, 'objectAtIndex:', $i);
-                    if (ObjC::msg('b:', $u, 'isFileURL')) {
-                        $files[] = ObjC::phpStr(ObjC::msg('p:', $u, 'path'));
-                    } else {
-                        $links[] = ObjC::phpStr(ObjC::msg('p:', $u, 'absoluteString'));
-                    }
-                }
-                Native\DeepLink::openFiles($files);
-                Native\DeepLink::openURLs($links);
-            }],
-        ]);
-        $delegate = ObjC::msg('p:', ObjC::alloc('MyPHPAppDelegate'), 'init');
-        ObjC::msg('v:p', self::$nsApp, 'setDelegate:', $delegate);
-        ObjC::msg('v:ppLp', self::$nsApp, 'addObserver:forKeyPath:options:context:', $delegate, ObjC::str('effectiveAppearance'), 0, null);
-        ObjC::msg('v:', self::$nsApp, 'run');
+        $b->run();
+    }
+
+    /** @internal the backend finished launching the app (mygo's handleReady) */
+    public static function ready(): void
+    {
+        self::$ready = true;
+        Locales::start(); // the language the app shows and the user's formats, before the menus and windows show them
+        self::installMenu(self::$menu ?? Menu::default());
+        if (Dock::menu() !== null) {
+            Dock::setMenu(Dock::menu());
+        }
+        if (self::$policy === ActivationPolicy::Regular) { // a plain php does not come to the front on its own
+            self::backend()->app()->activate();
+        }
+        foreach (self::$onReady as $fn) {
+            $fn();
+        }
+        $callbacks = self::$whenReady;
+        self::$whenReady = [];
+        foreach ($callbacks as $fn) {
+            $fn();
+        }
+        // After the windows the app opens when ready, which URLs may target.
+        self::later(function (): void {
+            Native\DeepLink::deliverArgs(array_slice($_SERVER['argv'] ?? [], 1), self::$startDir);
+            Native\Docs\Registry::start(); // once the files the app was started with are in
+        });
+    }
+
+    /** @internal the app is about to end (mygo's finish): the windows' state saved, the clipboard's data kept, the onQuit listeners, a relaunch */
+    public static function terminating(): void
+    {
+        Native\WindowStates::save();
+        try {
+            Clipboard::flush(); // the app's data stays on the clipboard once it quit
+        } catch (\Throwable $e) {
+            Logger::warn($e->getMessage(), 'clipboard');
+        }
+        $quit = self::$onQuit;
+        self::$onQuit = [];
+        foreach ($quit as $fn) {
+            $fn();
+        }
+        if (self::$relaunch) {
+            self::relaunchNow(); // after onQuit, which releases what the app holds
+        }
+    }
+
+    /** @internal the app became the active one, or stopped being it */
+    public static function activeChanged(bool $active): void
+    {
+        foreach ($active ? self::$onDidBecomeActive : self::$onDidResignActive as $fn) { $fn(); }
+    }
+
+    /** @internal the user activated the app again (mygo's Activated) */
+    public static function activated(bool $hasVisibleWindows): void
+    {
+        foreach (self::$onActivate as $fn) {
+            $fn($hasVisibleWindows);
+        }
     }
 
     /**
@@ -484,7 +448,7 @@ final class App
     public static function theme(): Theme
     {
         if (self::$theme === null) {
-            self::$theme = self::$nsApp === null ? Theme::light() : self::systemTheme();
+            self::$theme = !self::$initialized ? Theme::light() : self::systemTheme();
         }
         return self::$theme;
     }
@@ -493,7 +457,7 @@ final class App
     public static function preferences(): UI\Preferences
     {
         if (self::$preferences === null) {
-            if (self::$nsApp === null) {
+            if (!self::$initialized) {
                 return self::$preferences = new UI\Preferences();
             }
             $p = \MyPHP\Theme::preferences();
@@ -518,12 +482,12 @@ final class App
 
     private static function systemTheme(): Theme
     {
-        $dark = Appearance::isDark(self::$nsApp);
+        $dark = self::backend()->theme()->isDark();
         return ($dark ? Theme::dark() : Theme::light())->follow(self::preferences());
     }
 
-    /** The appearance or the desktop's settings changed (mygo's ThemeChanged): what was read of them is forgotten, the theme and the windows follow, then Theme's listeners hear it. */
-    private static function systemChanged(): void
+    /** @internal the appearance or the desktop's settings changed (mygo's ThemeChanged): what was read of them is forgotten, the theme and the windows follow, then Theme's listeners hear it */
+    public static function systemChanged(): void
     {
         self::$preferences = null;
         \MyPHP\Theme::forget();
@@ -537,7 +501,7 @@ final class App
     private static function themeChanged(): void
     {
         if (!self::$themeFixed) {
-            self::$theme = self::$nsApp === null ? null : self::systemTheme();
+            self::$theme = !self::$initialized ? null : self::systemTheme();
         }
         foreach (Window::all() as $w) {
             $w->themeChanged();
@@ -622,7 +586,7 @@ final class App
 
     private static function installMenu(Menu $menu): void
     {
-        ObjC::msg('v:p', self::$nsApp, 'setMainMenu:', $menu->build());
+        self::backend()->setApplicationMenu($menu->snapshot());
         self::$installed = $menu;
         Native\Docs\Registry::refreshMenus();
     }
@@ -634,16 +598,8 @@ final class App
      */
     public static function wait(Closure $until): void
     {
-        // NSRunLoop alone does not dispatch AppKit events (NSApp's run does),
-        // so pull and send them here, as a modal session would.
-        $mode = ObjC::str('kCFRunLoopDefaultMode');
         while (!$until()) {
-            $date = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', 0.05);
-            $event = ObjC::msg('p:Lppb', self::$nsApp, 'nextEventMatchingMask:untilDate:inMode:dequeue:', PHP_INT_MAX, $date, $mode, true);
-            if ($event !== null) {
-                ObjC::msg('v:p', self::$nsApp, 'sendEvent:', $event);
-            }
-            ObjC::msg('v:', self::$nsApp, 'updateWindows');
+            self::backend()->step();
         }
     }
 
@@ -717,47 +673,30 @@ final class App
 
     /** @var list<Closure> */
     private static array $later = [];
-    private static $laterTarget = null;
 
     /** Runs $fn on the next turn of the run loop, after the current event; events in between are handled first. */
     public static function later(Closure $fn): void
     {
-        if (self::$laterTarget === null) {
-            ObjC::boot(['Foundation']); // before App::run too: a transfer's timer (Native\CurlLoop), a test's
-            ObjC::defineClass('MyPHPLater', 'NSObject', [
-                'tick:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
-                    $queue = self::$later;
-                    self::$later = [];
-                    foreach ($queue as $fn) {
-                        $fn();
-                    }
-                }],
-                'fire:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $number) {
-                    $id = ObjC::msg('l:', $number, 'longValue');
-                    $fn = self::$timers[$id] ?? null;
-                    unset(self::$timers[$id]);
-                    $fn?->__invoke();
-                }],
-            ]);
-            self::$laterTarget = ObjC::msg('p:', ObjC::alloc('MyPHPLater'), 'init');
-        }
         self::$later[] = $fn;
         if (count(self::$later) === 1) {
-            ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('tick:'), null, 0.0);
+            self::backend()->signal();
         }
     }
 
-    /** @var array<int, Closure> pending timers by id */
-    private static array $timers = [];
-    private static int $nextTimer = 0;
+    /** @internal runs what later() queued (mygo's loop.drain) */
+    public static function dispatch(): void
+    {
+        $queue = self::$later;
+        self::$later = [];
+        foreach ($queue as $fn) {
+            $fn();
+        }
+    }
 
     /** Runs $fn once, $seconds from now, on the main thread (mygo's After). */
     public static function after(float $seconds, Closure $fn): void
     {
-        self::later(fn() => null); // defines MyPHPLater
-        $id = ++self::$nextTimer;
-        self::$timers[$id] = $fn;
-        ObjC::msg('v:ppd', self::$laterTarget, 'performSelector:withObject:afterDelay:', ObjC::sel('fire:'), ObjC::msg('p:l', ObjC::cls('NSNumber'), 'numberWithLong:', $id), $seconds);
+        self::backend()->timer($seconds, $fn);
     }
 
     /**
@@ -790,7 +729,7 @@ final class App
     /** @internal whether run() is running the event loop, which a wait must keep turning */
     public static function running(): bool
     {
-        return self::$nsApp !== null;
+        return self::$initialized;
     }
 
     /**
@@ -818,7 +757,7 @@ final class App
     /** Whether windows can show web pages (mygo's WebViewAvailable): WKWebView is part of macOS, so wherever the app runs. */
     public static function webViewAvailable(): bool
     {
-        return self::$nsApp !== null && ObjC::$c->objc_getClass('WKWebView') !== null;
+        return self::$initialized && self::backend()->webViewAvailable();
     }
 
     /**
@@ -885,25 +824,25 @@ final class App
     /** Brings the app to the front, as a click on its Dock icon does (mygo's Focus). */
     public static function focus(): void
     {
-        ObjC::msg('v:b', self::nsApp('focus'), 'activateIgnoringOtherApps:', true);
+        self::controller('focus')->activate();
     }
 
     /** Hides the app's windows, as Cmd+H does (mygo's Hide). */
     public static function hide(): void
     {
-        ObjC::msg('v:p', self::nsApp('hide'), 'hide:', null);
+        self::controller('hide')->hide();
     }
 
     /** Shows the app's windows again after hide() (mygo's Show). */
     public static function show(): void
     {
-        ObjC::msg('v:p', self::nsApp('show'), 'unhide:', null);
+        self::controller('show')->unhide();
     }
 
     /** Whether the app is hidden (mygo's IsHidden). */
     public static function isHidden(): bool
     {
-        return ObjC::msg('b:', self::nsApp('isHidden'), 'isHidden');
+        return self::controller('isHidden')->isHidden();
     }
 
     /** How the app shows in the Dock and the app switcher: Regular unless setActivationPolicy() changed it (mygo's ActivationPolicy). */
@@ -915,17 +854,18 @@ final class App
     /** Whether the app is the active one, in front (mygo's IsActive). */
     public static function isActive(): bool
     {
-        return ObjC::msg('b:', self::nsApp('isActive'), 'isActive');
+        return self::controller('isActive')->isActive();
     }
 
     /** Changes how the app shows in the Dock and the app switcher (mygo's SetActivationPolicy); before run() too, which starts it so. Regular brings it to the front. */
     public static function setActivationPolicy(ActivationPolicy $p): void
     {
         self::$policy = $p;
-        if (self::$nsApp !== null) {
-            ObjC::msg('b:l', self::$nsApp, 'setActivationPolicy:', $p->native());
+        if (self::$initialized) {
+            $c = self::backend()->app();
+            $c->setActivationPolicy($p);
             if ($p === ActivationPolicy::Regular) {
-                ObjC::msg('v:b', self::$nsApp, 'activateIgnoringOtherApps:', true);
+                $c->activate();
             }
         }
     }
@@ -939,18 +879,7 @@ final class App
     /** Shows the standard about panel, with what $opts says in place of the bundle's (mygo's ShowAboutPanel). */
     public static function showAboutPanel(AboutPanelOptions $opts = new AboutPanelOptions): void
     {
-        $app = self::nsApp('showAboutPanel');
-        $dict = ObjC::msg('p:', ObjC::cls('NSMutableDictionary'), 'dictionary');
-        foreach (['ApplicationName' => $opts->applicationName, 'ApplicationVersion' => $opts->applicationVersion, 'Version' => $opts->version, 'Copyright' => $opts->copyright] as $key => $v) {
-            if ($v !== '') { ObjC::msg('v:pp', $dict, 'setObject:forKey:', ObjC::str($v), ObjC::str($key)); }
-        }
-        if ($opts->credits !== '') {
-            $credits = ObjC::msg('p:p', ObjC::alloc('NSAttributedString'), 'initWithString:', ObjC::str($opts->credits));
-            ObjC::msg('v:pp', $dict, 'setObject:forKey:', $credits, ObjC::str('Credits'));
-            ObjC::msg('v:', $credits, 'release');
-        }
-        ObjC::msg('v:b', $app, 'activateIgnoringOtherApps:', true);
-        ObjC::msg('v:p', $app, 'orderFrontStandardAboutPanelWithOptions:', $dict);
+        self::controller('showAboutPanel')->showAboutPanel($opts);
     }
 
     /**
@@ -961,7 +890,7 @@ final class App
      */
     public static function clearBrowsingData(): void
     {
-        self::nsApp('clearBrowsingData');
+        self::controller('clearBrowsingData');
         $cls = ObjC::cls('WKWebsiteDataStore');
         $done = false;
         ObjC::msg('v:ppp', ObjC::msg('p:', $cls, 'defaultDataStore'), 'removeDataOfTypes:modifiedSince:completionHandler:', ObjC::msg('p:', $cls, 'allWebsiteDataTypes'),
@@ -969,15 +898,20 @@ final class App
         self::wait(function () use (&$done): bool { return $done; });
     }
 
-    /** NSApp, for $call, which needs the running app. */
-    private static function nsApp(string $call)
+    /** The backend's controller of the app, for $call, which needs the running app. */
+    private static function controller(string $call): Platform\AppController
     {
-        return self::$nsApp ?? throw new RuntimeException("myphp: App::$call needs the running app (App::whenReady)");
+        if (!self::$initialized) {
+            throw new RuntimeException("myphp: App::$call needs the running app (App::whenReady)");
+        }
+        return self::backend()->app();
     }
 
     public static function quit(): void
     {
-        ObjC::msg('v:p', self::$nsApp, 'terminate:', null);
+        if (self::$initialized) {
+            self::backend()->quit();
+        }
     }
 
     /** Ends the process with $code at once, without the quit events or asking the windows (mygo's Exit); the windows' state is saved. */
@@ -1049,5 +983,17 @@ final class App
     {
         self::metal();
         return self::$text;
+    }
+
+    /**
+     * @internal the platform's backend (mygo's backend()): Cocoa on macOS.
+     * Made on first use, before App::run too, as Secrets need it.
+     */
+    public static function backend(): Platform\Backend
+    {
+        return self::$backend ??= match (PHP_OS_FAMILY) {
+            'Darwin' => new Platform\Darwin\Backend(new AppHandler),
+            default => throw new Platform\Unsupported('myphp: ' . PHP_OS_FAMILY . ' has no backend yet'),
+        };
     }
 }
