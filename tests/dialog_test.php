@@ -11,8 +11,8 @@ use MyPHP\Dialog;
 use MyPHP\Native\ObjC;
 
 same([1, 0, -1, 2], [Dialog::cancelOf(['Delete', 'Cancel']), Dialog::cancelOf(['No', 'Yes']), Dialog::cancelOf(['OK']), Dialog::cancelOf(['Save', 'Don\'t Save', 'cancel'])], 'the cancel button: the first labeled Cancel or No');
-same([1, 0, 1, -1], [Dialog::cancelFor(-1, ['Delete', 'Cancel']), Dialog::cancelFor(-1, ['Delete', 'Keep']), Dialog::cancelFor(1, ['Delete', 'Keep']), Dialog::cancelFor(\MyPHP\MessageOptions::NO_CANCEL, ['Delete', 'Keep'])],
-    'Escape: the first labeled Cancel or No, else the first, even a destructive one; the one named; none for NO_CANCEL (mygo\'s CancelButton)');
+same([1, 0, 1, -1], [Dialog::cancelFor(0, ['Delete', 'Cancel']), Dialog::cancelFor(0, ['Delete', 'Keep']), Dialog::cancelFor(1, ['Delete', 'Keep']), Dialog::cancelFor(-1, ['Delete', 'Keep'])],
+    'Escape: for 0 the first labeled Cancel or No, else the first, even a destructive one; the one named; none for -1 (mygo\'s CancelButton)');
 $cmd = 1 << 20; $shift = 1 << 17;
 same([true, true, true, false, false, false], [Dialog::cancels(0, "\e"), Dialog::cancels($cmd, '.'), Dialog::cancels($cmd | $shift, '.'), Dialog::cancels($shift, "\e"), Dialog::cancels($cmd | 1 << 19, '.'), Dialog::cancels(0, '.')],
     'Escape alone and Cmd+. cancel, Shift allowed for the period');

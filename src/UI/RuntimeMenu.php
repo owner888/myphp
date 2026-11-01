@@ -416,6 +416,9 @@ trait RuntimeMenu
      * Copy of a password; any while input waits for the next frame, which
      * the command goes behind.
      */
+    /** The input that edits text, typed or commanded, which an editing command waiting for the next frame goes behind. */
+    private const EDITING_EVENTS = ['key', 'command', 'insert', 'compose', 'edit', 'access'];
+
     private function editCommandOn(int $id, string $name): bool
     {
         $text = isset($this->textIndex[$id]) ? $this->texts[$this->textIndex[$id]] : null;
@@ -426,8 +429,10 @@ trait RuntimeMenu
         if (isset($this->disabledIds[$id]) || ($text !== null ? !in_array($name, ['copy', 'selectAll'], true) : ($state->readOnly && $name !== 'copy' && $name !== 'selectAll') || ($state->password && ($name === 'cut' || $name === 'copy')))) {
             return false;
         }
-        if ($this->input->events !== []) {
-            return true; // behind the input the next frame takes, which changes what it acts on
+        foreach ($this->input->events as $e) {
+            if (in_array($e[0], self::EDITING_EVENTS, true)) {
+                return true; // behind the typing or editing the next frame takes, which changes what it acts on (mygo's editor's queue)
+            }
         }
         if ($text !== null) {
             if ($name === 'copy') {

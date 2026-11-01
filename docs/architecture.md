@@ -6987,9 +6987,11 @@ succeeds are told of, an empty line is none.
   version the last check found, cleared by a failed or up-to-date check
   and by Skip This Version, kept by Remind Me Later and by an update
   installed until the relaunch; `onChange` tells it.
-- A message's Escape: for a `cancelButton` of -1, the first button
-  labeled Cancel or No, else the first (`Dialog::cancelFor`);
-  `MessageOptions::NO_CANCEL` for none.
+- A message's Escape, as mygo's `CancelButton`: a `cancelButton` of 0,
+  the default, is the first button labeled Cancel or No, else the first,
+  even a destructive one (`Dialog::cancelFor`); -1 is none, Escape then
+  doing nothing; myphp's -1 was the label search and 0 the first button
+  until v1.134.
 - `examples/wavelength` is mygo's examples/video: a GIF looping behind
   the window's content, paused and played by a button.
 - `Native\VideoDecoder`, which decodes a film's keyframes into

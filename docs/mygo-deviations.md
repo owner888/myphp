@@ -2190,17 +2190,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: myphp's containers open and end rather than take a closure;
     its themes are set outside the view.
 
-## Message dialogs' cancel button (v1.124)
-
-- **No cancel button named**
-  - mygo: a `CancelButton` of zero is the first button labeled Cancel or
-    No.
-  - myphp: a `cancelButton` of -1, the default, is (else the first
-    button, as mygo's since its 0b9ed5b says); 0 is the first button;
-    `MessageOptions::NO_CANCEL` is mygo's -1, none.
-  - Why: the first button can be named the cancel whatever its label,
-    which mygo's zero cannot; myphp's -1 came before the label search.
-
 ## Decimal input (v1.124)
 
 - **What it reads and when**
@@ -2260,15 +2249,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `examples/wavelength`, the same, its GIF decoded by ImageIO
     (`GifDecoder`, macOS only, as its test runs).
   - Why: `examples/video` is myphp's film player.
-- **The Edit menu's items**
-  - mygo: a role's item counts as available when a shortcut of the focus
-    chain registered for its key would take it (`routeKey`).
-  - myphp: when a shortcut the last frame asked for would
-    (`Runtime::$askedKeys`), as `shortcut()` is asked while the view
-    builds, a node's `onShortcut` only while it has the focus; a field
-    with input on its way counts any command, as mygo's with its editor's
-    queue.
-  - Why: myphp's shortcuts are asked, not registered.
 - **Placeholder colors and alphas**
   - mygo: `PlaceholderColor(Color)`, a transparent one hiding it.
   - myphp: `placeholderColor(int $rgb, float $alpha = 1.0)`, an alpha of

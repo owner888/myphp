@@ -97,3 +97,13 @@ check(!$selectAll(), 'a lone empty paragraph: nothing to select');
 selectBetween($t, 'First', 0, 'Last', 4);
 $off = true; $t->frame();
 check(!$selectAll(), 'the focused paragraph disabled: it takes no command');
+
+// Only input that edits makes a command count while it waits: the pointer moving does not.
+$st = new TextState('');
+$t = new Headless(function (Context $c) use ($st): void { $c->input($st)->label('field'); }, 300, 60);
+$t->frame();
+$t->clickLabel('field'); $t->frame();
+$t->input->push(['move', 10, 10]);
+check(!$t->rt->commandEnabled('copy'), 'the pointer moving: an empty field still copies nothing');
+$t->input->push(['insert', 'x']);
+check($t->rt->commandEnabled('copy'), 'text on its way: the command goes behind it');
