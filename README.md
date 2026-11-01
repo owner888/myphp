@@ -190,6 +190,7 @@ Early. What works today, on macOS / Apple Silicon:
 | IINA's menus of the player (v1.135): Playback, Video, Audio and Subtitles, File's items of the film, Window's Log Viewer, their keys the player's bindings' (`UI\MediaPlayerMenus`); `MenuItem::$alternate`, `$onOpen` and `setSubmenu()`; Subtitles > Encoding reading the files again | works (the headless tests) |
 | The picture's adjustments (v1.136): IINA's video equalizer (brightness, contrast, saturation, gamma, hue) as Core Image filters of the video layer, Video > Flip (mirror and flip), the video tab's HDR switch | works (the headless tests) |
 | IINA's Inspector (v1.137): General, Tracks, File and Status with its watch table, of the player last in front; Audio > Audio Device; the player's classes and `Context` methods named MediaPlayer (`MediaPlayerState`, `Context::mediaPlayer`…; MoviePlayer before) | works (the headless tests) |
+| The loading plugin (v1.138, mygo's plugins/loading, `Plugins\Loading`): loading.dev's 29 indicators drawn by MyPHP (arcs, rings, dots, bars, blocks), their size, color, pace, easing, caps and directions as options, still where the desktop asks for less motion, paused where they are | works (`tests/loading_test.php`, `examples/loading`) |
 | The examples beside mygo's (v1.26): color emoji, tinted images, text areas wrapping a paragraph at a time (a document of 100 000 lines opens at once), padding of text, borders without a background, sliders, disabled controls dimmed, local time | works (`examples/farm`, `examples/text-buffer`, `examples/text-input`) |
 | App / Window API: mygo's window methods (showing, focus, minimize, maximize, full screen, bounds and sizes, limits, controls, on top, opacity, shadow, represented file, edited, Dock progress, attention, all Spaces, child windows and sheets) and events | works, with vibrancy, transparency and background colors, panels, flyouts (anchored to a rectangle or a tray icon, flipping and sliding into the screen, closing on a press outside or Escape) or in the system's popovers |
 | Router (mygo's): a history of pages with paths and queries, `{name}` and `{name...}` patterns, layouts, pages keeping their state and the focus, sliding and fading in, Back and Forward buttons, Cmd+[ and Cmd+], a mouse's back and forward buttons, links to paths | works (`examples/router`) |
@@ -322,6 +323,7 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh farm             # a farming game: till, plant, water, harvest, day and night, music
 ./run.sh mayoi            # a survivor game: sing at stage fright, gather stones, find your band
 ./run.sh gallery          # the tour of the toolkit: every widget, lists, charts, motion, languages
+./run.sh loading          # loading.dev's 29 indicators, their size, color, easing and caps
 ```
 
 ### Layout
@@ -527,6 +529,7 @@ App::run();
 | 播放器的 IINA 菜单（v1.135）：播放、视频、音频、字幕菜单，文件菜单中与影片相关的项，窗口菜单的日志查看器，快捷键取自播放器的按键绑定（`UI\MediaPlayerMenus`）；`MenuItem::$alternate`、`$onOpen` 与 `setSubmenu()`；字幕 > 编码会重新读取字幕文件 | 可用（无头测试） |
 | 画面调节（v1.136）：IINA 的视频均衡器（亮度、对比度、饱和度、伽玛、色调），用视频图层的 Core Image 滤镜实现；视频 > 翻转（水平镜像、垂直翻转）；视频面板的 HDR 开关 | 可用（无头测试） |
 | IINA 检查器（v1.137）：通用、轨道、文件、状态四个标签页（含属性监视表），显示最近一个在前台的播放器；音频 > 音频设备；播放器的类和 `Context` 方法改名为 MediaPlayer（`MediaPlayerState`、`Context::mediaPlayer` 等，原 MoviePlayer） | 可用（无头测试） |
+| 加载动画插件（v1.138，对应 mygo 的 plugins/loading，`Plugins\Loading`）：loading.dev 的 29 个加载指示器由 MyPHP 自绘（弧、环、点、条、方块），尺寸、颜色、速度、缓动、线端与方向可选；系统要求减少动态效果时静止，可暂停在当前位置 | 可用（`tests/loading_test.php`、`examples/loading`） |
 | 对照 mygo 逐个运行例子后修正（v1.26）：彩色 emoji、带着色的图片、文本区按段落折行（10 万行文档即时打开）、文字内边距、无背景的边框、滑块、禁用控件变暗、本地时区 | 可用（`examples/farm`、`examples/text-buffer`、`examples/text-input`） |
 | App / Window API：mygo 的窗口方法（显示、焦点、最小化、最大化、全屏、位置与尺寸、尺寸限制、窗口按钮、置顶、透明度、阴影、关联文件、已编辑标记、Dock 进度、请求注意、所有桌面、子窗口与 sheet）和事件 | 可用，含 vibrancy、透明窗口和背景色、面板、flyout（锚定到矩形或托盘图标，空间不够时翻转、滑回屏幕内，点外部或 Esc 关闭），也可以用系统 popover 样式 |
 | 路由（mygo 的 Router）：带路径和查询的页面历史、`{name}` 与 `{name...}` 模式、嵌套布局、页面保留状态和焦点、滑入淡入、前进后退按钮、Cmd+[ 与 Cmd+]、鼠标侧键、指向路径的链接 | 可用（`examples/router`） |
@@ -653,6 +656,7 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh farm             # 种田小游戏：翻地、播种、浇水、收获，昼夜与音乐
 ./run.sh mayoi            # 幸存者小游戏：对舞台恐惧唱歌、收集石子、找齐乐队
 ./run.sh gallery          # 工具包总览：所有控件、列表、图表、动效、语言
+./run.sh loading          # loading.dev 的 29 个加载指示器，可调尺寸、颜色、缓动、线端
 ```
 
 ### 目录

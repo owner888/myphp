@@ -2302,3 +2302,29 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     0 hiding it.
   - Why: myphp's colors are 0xRRGGBB with an alpha apart.
 
+## The loading plugin (v1.138)
+
+- **Options**
+  - mygo: `loading.Options{Size, Color ui.Color, Duration time.Duration,
+    Paused, Easing, Cap, Sweep, Direction, Origin}`, at most one per call
+    (two panic).
+  - myphp: `new Options(size:, color: ?int, duration: float, paused:,
+    easing:, cap:, sweep:, direction:, origin:)`, a nullable parameter:
+    the color 0xRRGGBB, null for the theme's text; the duration in
+    seconds; the choices enums (`Easing`, `Cap`, `Sweep`,
+    `RippleDirection`, `WaveOrigin`) of mygo's constants' names.
+  - Why: PHP's named arguments make one Options; myphp's colors are
+    0xRRGGBB and its times seconds.
+- **Names**
+  - mygo: `loading.Arc` … `loading.Wave`, `loading.Loading`, `All()`
+    of `Spinner{Name, New}`.
+  - myphp: `Loading::arc` … `Loading::wave`, `Loading::loading`,
+    `Loading::all()` of `Spinner($name, $new)`.
+  - Why: myphp's lowerCamel of mygo's names.
+- **The tests**
+  - mygo: loading_test.go counts the pixels of rendered frames, and
+    TestColor reads the color at the middle.
+  - myphp: tests/loading_test.php compares the quads and transforms
+    painted, places each quad's outline through its transform against
+    the box, and takes the colors of the quads.
+  - Why: Headless has no rasterizer.

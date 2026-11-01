@@ -817,3 +817,25 @@ if (PHP_OS_FAMILY === 'Darwin') {
     check($s->waves->playing(), 'Play goes on');
     $s->waves->close();
 }
+
+// loading: every indicator, named, 24 high; 48 makes them 48; Paused stops their frames.
+[$view, $s] = Headless::load('loading');
+$t = new Headless($view, 780, 2000);
+$t->frame();
+foreach (\MyPHP\Plugins\Loading\Loading::all() as $sp) {
+    $n = $t->byLabel($sp->name);
+    check($n !== null && $t->rect($n)[3] === 24.0 && $t->byText($sp->name) !== null, "loading: {$sp->name} shown, 24 high");
+}
+$t->clickText('48'); $t->frame();
+same(48.0, $t->rect($t->byLabel('Arc'))[3], 'loading: Arc 48 high after 48');
+$t->clickText('Paused'); $t->frame();
+$asks = $t->rt->paintAsks;
+$t->frame(); $t->paint();
+check($s->paused && $t->rt->paintAsks === $asks, 'loading: Paused, asking for no frames');
+// Painted in parts frame after frame, as the window paints them: the transforms of the indicators' parts written anew each frame, not piling up (the list filled in seconds).
+$s->paused = false; $now = 0;
+$t = poseTester($view, $now, 780, 640);
+$t->paint(); $t->rt->pace(60.0);
+$first = $t->painted()->transforms;
+for ($i = 0; $i < 200; $i++) { $now += 16_000_000; $t->windowFrame(); }
+check($t->rt->partPaints === 200 && $t->painted()->transforms <= 2 * $first, "loading: 200 frames in parts, {$t->painted()->transforms} transforms (the first {$first})");

@@ -142,7 +142,9 @@ final class Painter
         $quads .= substr($base[0], $last * $q);
         $list->n = 0;
         $list->copyIn($quads);
-        $rt->partsBase = $list->snapshot(); // the transforms the parts wrote too
+        // The quads as painted now, through the transforms of the whole paint: the parts, each painted again at the next, write theirs anew; kept, they would pile up a frame's worth each frame (a draw turning through transforms filled the list in seconds).
+        $now = $list->snapshot();
+        $rt->partsBase = $now === null ? null : [$now[0], $base[1], $base[2], $base[3]];
         return true;
     }
 

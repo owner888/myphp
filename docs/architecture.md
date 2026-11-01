@@ -7116,6 +7116,40 @@ succeeds are told of, an empty line is none.
   (`MediaPlayerState::$audioDevice`, mpv's audio-device), the settings'
   preferred device until then.
 
+## The loading plugin (v1.138)
+
+- `Plugins\Loading\Loading` is mygo's plugins/loading: loading.dev's 29
+  indicators (`Loading::all()`, by name in loading.dev's order; a static
+  function each, `arc` to `wave`, `loading` for Loading), each a column
+  of Options::$size (20 unless set) by as much times its aspect (1.15 for
+  Bouncing dots, 0.9375 for Linear dots), a progress indicator of unknown
+  length to assistive technology, drawn by a draw callback.
+- What it draws is mygo's draw.go: a `Drawing` over the painter, its
+  `Matrix` (Go's affine, applied as the painter's `Transform`) and a
+  `Shape` (the `Path` it builds, kept from frame to frame in the node's
+  `Timer`); rounded rects, hoops and capsules as the painter's rounded
+  fills and rings, arcs as paths, Comet's tail as a conic gradient. The
+  keyframes (`Drawing::frames`) and CSS's timing functions
+  (`Drawing::bezier`, `easeInOut`, `easeOut`, Cascade's `overshoot`) are
+  mygo's numbers.
+- Time: the node's `Timer` (`Runtime::local`) holds when it started, by
+  the frames' clock (`Context::now`, `Painter::now`, nanoseconds); a
+  frame draws `cycles` = the time run over the cycle and asks for the
+  next (`animationFrame`), unless paused (the time run held, going on from
+  there) or still (`Preferences::$reduceMotion`: loading.dev's pose for
+  reduced motion, no frames).
+- `examples/loading` is mygo's: the 29 in cards of 132 by 116 under a bar
+  of their size (16, 24, 32, 48), color, easing, cap and Paused.
+- `tests/loading_test.php` is mygo's loading_test.go headless: where a
+  quad lies in the window is its outline (a path's curves, a rounded
+  rect's corners) through its transform, as Headless has no rasterizer.
+- A fix it found: a frame painting only the draw callbacks that asked
+  (`Painter::repaintParts`) kept the transforms they wrote in the list it
+  paints the next from, so a callback drawing through transforms each
+  frame (the gallery's 29 indicators, some 100 a frame) filled the list's
+  16384 in seconds and the window stopped. The next frame now starts
+  from the whole paint's transforms, the parts writing theirs anew.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
