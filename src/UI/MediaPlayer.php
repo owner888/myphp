@@ -14,6 +14,7 @@ use MyPHP\Media\SubtitlePicture;
 use MyPHP\Media\Subtitles;
 use MyPHP\Media\Track;
 use MyPHP\OpenDialogOptions;
+use MyPHP\PlayerPlugins\InputApi;
 use MyPHP\Window;
 
 /**
@@ -237,13 +238,19 @@ final class MediaPlayer
         }
         // A click goes to the first node built that asks for it where it is: the picture asks after what is over it.
         // The clicks on the picture as the settings say (IINA's): a single one waits a double click's time where a double click does something.
-        if ($c->rightClicked($picture)) { self::clickAction($c, $s, $set->get('rightClickAction')); }
-        if ($c->middleClicked($picture)) { self::clickAction($c, $s, $set->get('middleClickAction')); }
+        // A plugin's input listeners first (IINA's PluginInputManager): one taking a release keeps the picture's action from it.
+        foreach ([[InputApi::MOUSE, 0], [InputApi::RIGHT_MOUSE, 1], [InputApi::OTHER_MOUSE, 2]] as [$button, $b]) {
+            if ($c->buttonPressed($picture, $b) !== null) { InputApi::handle($s, $button, InputApi::MOUSE_DOWN, self::inputArgs($c, ['clickCount' => $c->doubleClicked($picture) ? 2 : 1, 'pressure' => 1.0])); }
+        }
+        if (($c->runtime?->pass ?? 0) === 0 && $c->dragged($picture) !== null) { InputApi::handle($s, InputApi::MOUSE, InputApi::MOUSE_DRAG, self::inputArgs($c, ['clickCount' => 1, 'pressure' => 1.0])); } // once a frame, as its presses
+        $up = fn(string $button, int $count): bool => !InputApi::handle($s, $button, InputApi::MOUSE_UP, self::inputArgs($c, ['clickCount' => $count, 'pressure' => 0.0]));
+        if ($c->rightClicked($picture) && $up(InputApi::RIGHT_MOUSE, 1)) { self::clickAction($c, $s, $set->get('rightClickAction')); }
+        if ($c->middleClicked($picture) && $up(InputApi::OTHER_MOUSE, 1)) { self::clickAction($c, $s, $set->get('middleClickAction')); }
         if ($c->forceClicked($picture)) { self::clickAction($c, $s, $set->get('forceTouchAction')); }
         if ($c->doubleClicked($picture)) {
             $s->singleClickAt = null;
-            self::clickAction($c, $s, $set->get('doubleClickAction'));
-        } elseif ($c->clicked($picture)) {
+            if ($up(InputApi::MOUSE, 2)) { self::clickAction($c, $s, $set->get('doubleClickAction')); }
+        } elseif ($c->clicked($picture) && $up(InputApi::MOUSE, 1)) {
             $set->get('doubleClickAction') === 0 ? self::clickAction($c, $s, $set->get('singleClickAction')) : $s->singleClickAt = $now + ($c->runtime?->doubleClickInterval ?? 0.5);
         }
         if ($s->singleClickAt !== null) {
@@ -340,12 +347,33 @@ final class MediaPlayer
         if ($s->sidebar !== null && $c->shortcut(Key::ESCAPE)) { $s->sidebar = null; }
         $bound = [];
         foreach (MediaPlayerKeys::current($s->settings()) as $m) { $bound[$m['normal']] = $m; } // the later of a key's, as mpv's
-        $c->takeKeys(function (string $chars, int $code, int $mods, string $plain) use ($c, $s, $p, $bound): bool {
-            $m = $bound[MediaPlayerKeys::fromEvent($code, $mods, $plain)] ?? null;
-            if ($m === null) { return false; }
-            MediaPlayerCommands::run($c, $s, $p, $m);
-            return true;
+        $c->takeKeys(function (string $chars, int $code, int $mods, string $plain, bool $repeat) use ($c, $s, $p, $bound): bool {
+            $key = MediaPlayerKeys::fromEvent($code, $mods, $plain);
+            if ($key === '') { return false; }
+            $key = MediaPlayerKeys::normalize($key);
+            return InputApi::handle($s, $key, InputApi::KEY_DOWN, self::inputArgs($c, ['isRepeat' => $repeat]), function () use ($c, $s, $p, $bound, $key): bool {
+                $m = $bound[$key] ?? null;
+                if ($m === null) { return false; }
+                MediaPlayerCommands::run($c, $s, $p, $m);
+                return true;
+            });
         });
+        foreach ($c->keysReleased() as [, $code, $mods, $plain]) {
+            $key = MediaPlayerKeys::fromEvent($code, $mods, $plain);
+            if ($key !== '') { InputApi::handle($s, MediaPlayerKeys::normalize($key), InputApi::KEY_UP, self::inputArgs($c, ['isRepeat' => false])); }
+        }
+    }
+
+    /**
+     * What a plugin's input listener is given (IINA's keyEventArgs and
+     * mouseEventArgs): where the pointer is in the window, from its bottom
+     * left as AppKit's, and $more.
+     * @param array<string, mixed> $more @return array<string, mixed>
+     */
+    private static function inputArgs(Context $c, array $more): array
+    {
+        $rt = $c->runtime;
+        return ['x' => $rt?->input->mouseX ?? 0.0, 'y' => $c->height - ($rt?->input->mouseY ?? 0.0)] + $more;
     }
 
     /** SF Symbol $name at $size points in white, at the window's scale: drawn once. */
@@ -1495,6 +1523,7 @@ final class MediaPlayer
                         if ($d !== null) { $c->text(MediaPlayerState::clock($d), 11, self::$ink)->fontFeatures('tnum')->opacity(0.55); }
                       $c->end();
                       if ($c->doubleClicked($row)) { $s->open($path); } elseif ($c->clicked($row)) { $s->chosen = $i; }
+                      $row->contextMenu(function (Menu $m) use ($c, $s, $i): void { self::playlistMenu($c, $s, $m, $i); });
                   }
                 $c->end();
                 $c->column()->fillWidth()->height(max(0.0, $h - 86 - 32 * ($list?->count() ?? 0)))->passThrough()->draw(static function (Painter $p, array $r): void { // the empty rows' lines below, as IINA's
@@ -1547,6 +1576,83 @@ final class MediaPlayer
                 $s->chosen = -1;
             }
           $c->end();
+    }
+
+    /**
+     * IINA's menu of playlist entry $i (SidebarPlaylistPane.buildMenu): its
+     * title; Play Next, Play in New Window (where the app makes windows),
+     * Remove; a URL's Open in Browser and Copy URL, a file's Move to Trash
+     * and Show in Finder; the items the plugins' menu item builders give
+     * for it (playlist.registerMenuItemBuilder) under Plugin; Add File…,
+     * Add URL…, Clear Playlist.
+     */
+    private static function playlistMenu(Context $c, MediaPlayerState $s, Menu $m, int $i): void
+    {
+        $list = $s->playlist;
+        $path = $list?->files()[$i] ?? null;
+        if ($list === null || $path === null) { return; }
+        $m->item($list->title($path))->disabled(true);
+        $m->separator();
+        $m->header(self::t($c, 'iinaPlMenuPlayback'));
+        if ($m->item(self::t($c, 'iinaPlMenuPlayNext'))->chosen()) {
+            $now = $list->index();
+            if ($now >= 0 && $i !== $now) { $list->move($i, $i < $now ? $now : $now + 1); $s->chosen = -1; }
+        }
+        if (MediaPlayerMenus::$playInNewWindow !== null && $m->item(self::t($c, 'iinaPlMenuPlayInNewWindow'))->chosen()) { (MediaPlayerMenus::$playInNewWindow)([$path]); }
+        if ($m->item(self::t($c, 'iinaPlMenuRemove'))->chosen()) { $i === $list->index() ? $s->removeFromPlaylist() : $list->remove($i); $s->chosen = -1; }
+        $m->separator();
+        if (preg_match('~^[a-z][a-z0-9+.-]*://~i', $path) === 1) {
+            $m->header(self::t($c, 'iinaPlMenuNetworkResources'));
+            if ($m->item(self::t($c, 'iinaPlMenuBrowser'))->chosen()) { \MyPHP\Shell::openExternal($path); }
+            if ($m->item(self::t($c, 'iinaPlMenuCopyUrl'))->chosen()) { \MyPHP\Clipboard::writeText($path); }
+        } else {
+            $m->header(self::t($c, 'iinaPlMenuFileOperations'));
+            if ($m->item(self::t($c, 'iinaPlMenuDelete'))->chosen()) {
+                try {
+                    \MyPHP\Shell::trashItem($path);
+                    $i === $list->index() ? $s->removeFromPlaylist() : $list->remove($i);
+                    $s->chosen = -1;
+                } catch (\RuntimeException $e) {
+                    Dialog::message(new \MyPHP\MessageOptions(parent: Window::focused(), type: 'warning', message: self::t($c, 'iinaAlertPlaylistErrorDeleting', ['error' => $e->getMessage()])));
+                }
+            }
+            if ($m->item(self::t($c, 'iinaPlMenuShowInFinder'))->chosen()) { \MyPHP\Shell::showItemInFolder($path); }
+        }
+        $m->separator();
+        $plugins = [];
+        foreach ($s->plugins() as $instance) {
+            $builder = $instance->iina->playlist?->menuItemBuilder;
+            $items = $builder === null ? null : $instance->callNow($builder, [$i]);
+            if (is_array($items) && $items !== []) { $plugins[] = [$instance, array_values(array_filter($items, fn($it) => $it instanceof \MyPHP\PlayerPlugins\PluginMenuItem))]; }
+        }
+        if ($plugins !== []) {
+            $m->item(self::t($c, 'iinaPlMenuPlugin'))->disabled(true);
+            foreach ($plugins as [, $items]) { foreach ($items as $it) { self::pluginMenuItem($m, $it); } }
+            $m->separator();
+        }
+        $m->header(self::t($c, 'iinaPlMenuPlaylist'));
+        if ($m->item(self::t($c, 'iinaPlMenuAddFile'))->chosen()) {
+            $s->addToPlaylist(Dialog::open(new OpenDialogOptions(parent: Window::focused(), title: self::t($c, 'iinaPlMenuAddFile'), multiple: true)) ?? []);
+        }
+        if ($m->item(self::t($c, 'iinaPlMenuAddUrl'))->chosen()) {
+            $url = Dialog::prompt(Window::focused(), self::t($c, 'iinaAlertAddUrlTitle'), '', self::t($c, 'iinaAlertAddUrlMessage'));
+            if ($url !== null && $url !== '') {
+                if (preg_match('~^[a-z][a-z0-9+.-]*://\S+$~i', trim($url)) === 1) { $s->addToPlaylist([trim($url)]); }
+                else { Dialog::message(new \MyPHP\MessageOptions(parent: Window::focused(), type: 'warning', message: self::t($c, 'iinaAlertWrongUrlFormat'))); }
+            }
+        }
+        if ($m->item(self::t($c, 'iinaPlMenuClearPlaylist'))->chosen()) { $s->clearPlaylist(); $s->chosen = -1; }
+    }
+
+    /** A plugin's menu item in menu $m (IINA's add(menuItemDef:to:for:)): a separator, a submenu of its items, else an item calling its action. */
+    private static function pluginMenuItem(Menu $m, \MyPHP\PlayerPlugins\PluginMenuItem $it): void
+    {
+        if ($it->isSeparator) { $m->separator(); return; }
+        if ($it->items !== []) {
+            $m->submenu($it->title, function (Menu $sub) use ($it): void { foreach ($it->items as $i) { self::pluginMenuItem($sub, $i); } })->disabled(!$it->enabled);
+            return;
+        }
+        if ($m->item($it->title)->checked($it->selected)->disabled(!$it->enabled)->chosen()) { $it->callAction(); }
     }
 
     /** The tabs in a glass pill at the top right: the chosen one with its icon and name, the others their icon, divided. */

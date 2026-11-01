@@ -164,12 +164,16 @@ final class Player
      * the URL does not open (Media\YtDlp): the video of the page, or the
      * first of its playlist (playlist()). $waiting is told the seconds it
      * waits before a page's formats can be read (the ad before it), as it
-     * begins to.
+     * begins to. What a plugin's hooks made of it ($opening, changed)
+     * opens in its place: its URL, the audio added, its title, subtitles
+     * and headers.
      * @param ?Closure(float): void $waiting
      */
-    public function __construct(private readonly string $path, private readonly ?Closure $waiting = null)
+    public function __construct(private readonly string $path, private readonly ?Closure $waiting = null, ?Opening $opening = null)
     {
-        if (self::isUrl($path) && YtDlp::first($path) && YtDlp::find() !== null) { // YouTube's, Twitch's: read by yt-dlp first, then as a film (mpv's on_load hook)
+        if ($opening !== null && $opening->changed()) {
+            $this->hooked($opening);
+        } elseif (self::isUrl($path) && YtDlp::first($path) && YtDlp::find() !== null) { // YouTube's, Twitch's: read by yt-dlp first, then as a film (mpv's on_load hook)
             try {
                 $this->page($path);
             } catch (RuntimeException $page) {
@@ -778,6 +782,30 @@ final class Player
             $this->external[] = $t;
             $this->remote[spl_object_id($t)] = [$s['url'], $s['headers'], $s['ext'], null];
         }
+    }
+
+    /** What a plugin's hooks made of the film ($o): its URL and the audio added opened together, its title, its subtitles (loaded as they are chosen). */
+    private function hooked(Opening $o): void
+    {
+        $opened = self::together(array_map(fn(string $url) => fn(): array => self::open($url, $o->headers), [$o->url, ...$o->audio]));
+        if (count($opened) === 1) {
+            [$this->source, $this->net] = $opened[0];
+        } else {
+            $this->source = $this->net = new Merged(array_column($opened, 0), array_column($opened, 1));
+        }
+        $this->title = $o->title;
+        foreach ($o->subtitles as $s) {
+            $t = new Track(number: -1 - count($this->external), type: Track::SUBTITLE, codec: Subtitles::FILES[$s['ext']], private: '', language: $s['language'],
+                name: $s['name'], isDefault: false, frameDuration: 0.0, width: 0, height: 0, sampleRate: 0.0, channels: 0);
+            $this->external[] = $t;
+            $this->remote[spl_object_id($t)] = [$s['url'], $o->headers, $s['ext'], null];
+        }
+    }
+
+    /** @internal UI\MediaPlayerState: the chapters a plugin's on_preloaded hook set (mpv's chapter-list), in place of the film's. @param list<Chapter> $chapters */
+    public function setPageChapters(array $chapters): void
+    {
+        $this->pageChapters = $chapters;
     }
 
     /** The film's title: the page's (yt-dlp's), else its file's name (a URL's, decoded): IINA's media-title. */

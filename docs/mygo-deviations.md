@@ -1787,6 +1787,32 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **The plugins' last part** (v1.145): `PlayerPlugins\InputApi`,
+  `WsApi`, `WsMessage`, `WebSocketServer`, `DevTool`, `Plugins`' GitHub,
+  update and store functions, `UI\MediaPlayerPluginStore`,
+  `MediaPlayerDevTool`, the playlist's menu and mpv's hooks of a film
+  opening (`Media\Opening`) are myphp's, as IINA's; mygo has no film
+  player. Added to the framework: `Context::keysReleased`,
+  `Context::buttonPressed`, a key's repeat to `takeKeys`, a key's release
+  asking for a frame. The developer tool runs PHP (the developer's
+  choice), not JavaScript. The store lists myphp's official plugins of
+  PHP and myphp's repository's plugins.json, not IINA's of JavaScript,
+  whose plugins do not load (an entry not of PHP is refused). A mouse
+  button's release a plugin takes keeps the picture's action from it; a
+  double click's action is the second press's, as myphp's picture's (IINA's
+  the release's). The plugins' mouse down of the right and other buttons is
+  where they went down on the picture. Of mpv's hooks there are the three
+  of a film opening; a hook is over as it returns (its next may be left
+  out), and the film's properties it sets are those the player has a use
+  for (others logged); an EDL is read only as a single URL (a subtitle's
+  wrapper), not as fragments joined. The store's texts IINA leaves in
+  English are English here too. The playlist's menu has no subtitles
+  section (myphp keeps no subtitles matched to the playlist's entries)
+  and acts on the entry clicked (one chosen at a time). Online Media
+  switches a format by opening the page again (core.open, IINA's
+  loadfile); its yt-dlp is the user's or its own (no bundled one).
+  Reload All Plugins tells no iina.mpv-initialized again (there is no
+  mpv to tell of).
 - **The plugins' views** (v1.144): `PlayerPlugins\WebPane`,
   `OverlayApi`, `SidebarApi`, `StandaloneWindowApi`, the player's
   plugins panel and the details sheet's Settings and Help tabs are
@@ -1823,7 +1849,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   disableUI to the argument). utils.exec finds a program on the PATH.
   The permissions to agree to are the alert's text, not a list beside
   it; Conflicting key shortcuts… lists the plugins and keys under it.
-  Not yet: the playlist's menu items of registerMenuItemBuilder, input, websockets, GitHub, the store,
+  Not yet (v1.145 has them): the playlist's menu items of registerMenuItemBuilder, input, websockets, GitHub, the store,
   updates and the developer tool.
 - **The interactive mode** (v1.142): `UI\MediaPlayerInteractive`,
   `MediaPlayerState::enterInteractive`, `exitInteractive`,

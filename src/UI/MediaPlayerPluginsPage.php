@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
+use Closure;
 use MyPHP\App;
 use MyPHP\Dialog;
 use MyPHP\FileFilter;
@@ -17,12 +18,15 @@ use MyPHP\WindowOptions;
 /**
  * What IINA's Plugins page of its settings shows (SettingsPagePlugin's
  * PluginInstallView and PluginListView, PluginManager's dialogs): how a
- * plugin is installed and its buttons, a local package installed (its
- * permissions agreed to, one of its identifier replaced where the user
- * says so); the plugins, each a row of 60 (its switch, name, version, DEV
- * for a link to a folder elsewhere, its menu of Uninstall and Show in
- * Finder, its description, its info button opening its details), dragged
- * into another order.
+ * plugin is installed and its buttons (Get Plugins… the store,
+ * MediaPlayerPluginStore), a local package or a GitHub repository's plugin
+ * installed (its permissions agreed to, one of its identifier replaced
+ * where the user says so); the plugins checked for updates as they show
+ * (what was found above them), each a row of 60 (its switch, name,
+ * version, its update button where one was found, DEV for a link to a
+ * folder elsewhere, its menu of Uninstall and Show in Finder, its
+ * description, its info button opening its details), dragged into
+ * another order.
  *
  * @internal MediaPlayerSettingsPages
  */
@@ -39,9 +43,9 @@ final class MediaPlayerPluginsPage
         $c->column(0, 12)->padding(12, 12, 12, 12)->fillWidth()->alignItems(Node::START);
           $c->text(MediaPlayerSettings::tr($c, '$YouCanInstallANew'), 11, $t->textMuted)->fillWidth();
           $c->row(0, 8);
-            $get = $c->row()->tooltip($c->texts()->get('videoNotYet'))->disabled(); // the plugin store: not yet
-              MediaPlayerSettings::pushButton($c, MediaPlayerSettings::tr($c, '$GetPlugins'));
-            $c->end();
+            if (MediaPlayerSettings::pushButton($c, MediaPlayerSettings::tr($c, '$GetPlugins'))) {
+                App::later(fn() => MediaPlayerPluginStore::show($win, fn() => $rt?->changed()));
+            }
             if (MediaPlayerSettings::pushButton($c, MediaPlayerSettings::tr($c, '$InstallLocalPackage'))) {
                 App::later(function () use ($rt, $win): void {
                     $paths = Dialog::open(new OpenDialogOptions(parent: $win, title: 'Install from local package', filters: [new FileFilter('IINA plugin', ['iinaplgz'])]));
@@ -70,12 +74,100 @@ final class MediaPlayerPluginsPage
         }
     }
 
-    /** IINA's sheet of $p's permissions to agree to before it is installed: Install or Cancel. */
-    private static function agree(Plugin $p, ?Window $parent): bool
+    /**
+     * Installs the plugin of GitHub repository $repo ("owner/repo" or its
+     * URL) as IINA's PluginManager does: downloaded (where the app runs,
+     * not holding it up), then as a package is (installPackage); $done
+     * told 'installed', 'reinstalled' or 'cancelled'.
+     * @param Closure(string): void $done
+     */
+    public static function installFromGitHub(string $repo, ?Window $parent, Closure $done): void
     {
-        $list = implode("\n\n", array_map(fn(array $q) => ($q['isDangerous'] ? '⚠️ ' : '') . "{$q['name']}\n{$q['desc']}", $p->localizedPermissions()));
+        App::go(function () use ($repo, $parent, $done): void {
+            try {
+                $p = Plugins::fromGitHub($repo);
+            } catch (PluginInstallError $e) {
+                App::later(function () use ($e, $done): void { Plugins::alert(Plugins::t('iinaAlertPluginInstallError', ['message' => $e->getMessage()])); $done('cancelled'); });
+                return;
+            }
+            App::later(function () use ($p, $parent, $done): void {
+                $done(Plugins::install($p, fn(Plugin $p): bool => self::agree($p, $parent), fn(Plugin $p): bool => self::ask($parent, Plugins::t('iinaAlertPluginReinstallTitle', ['name' => $p->name]), Plugins::t('iinaAlertPluginReinstallMessage'))));
+            });
+        });
+    }
+
+    /** @var array<string, bool> whether each plugin has an update, by identifier (IINA's pluginHasUpdate) */
+    public static array $hasUpdate = [];
+    /** What the update check last said (IINA's PluginUpdateView): 'refreshing', 'error', or the updates found. */
+    public static string|int $updates = 'refreshing';
+    /** @var array<string, true> the plugins updating, by identifier */
+    public static array $updating = [];
+    private static bool $checking = false;
+
+    /** Checks each plugin for a newer version on GitHub (IINA's checkForAllPluginUpdates), where the app runs; $changed told once it is done. */
+    public static function checkForUpdates(?Closure $changed = null): void
+    {
+        if (self::$checking) { return; }
+        self::$checking = true;
+        self::$updates = 'refreshing';
+        App::go(function () use ($changed): void {
+            try {
+                $found = [];
+                foreach (Plugins::all() as $p) { $found[$p->identifier] = Plugins::newVersion($p) !== null; }
+                self::$hasUpdate = $found;
+                self::$updates = count(array_filter($found));
+                \MyPHP\Logger::debug('Finished checking for plugin updates, ' . self::$updates . ' updates found', Plugins::LOG);
+            } catch (PluginInstallError $e) {
+                \MyPHP\Logger::error("Error checking for plugin updates: {$e->getMessage()}", Plugins::LOG);
+                self::$updates = 'error';
+            } finally {
+                self::$checking = false;
+                if ($changed !== null) { App::later($changed); }
+            }
+        });
+    }
+
+    /**
+     * Updates $p as IINA's PluginManager.update: its newer version looked
+     * for (none: told so), the user asked, downloaded, more permissions or
+     * other hosts agreed to, put in its place; what went wrong told.
+     * $done told once it is over.
+     */
+    public static function update(Plugin $p, ?Window $parent, Closure $done): void
+    {
+        self::$updating[$p->identifier] = true;
+        $end = function () use ($p, $done): void { unset(self::$updating[$p->identifier]); $done(); };
+        $failed = function (PluginInstallError $e) use ($end): void { App::later(function () use ($e, $end): void { Plugins::alert(Plugins::t('iinaAlertPluginInstallError', ['message' => $e->getMessage()])); $end(); }); };
+        App::go(function () use ($p, $parent, $end, $failed): void {
+            try { $version = Plugins::newVersion($p); } catch (PluginInstallError $e) { $failed($e); return; }
+            App::later(function () use ($p, $parent, $end, $failed, $version): void {
+                if ($version === null) {
+                    Dialog::message(new MessageOptions(parent: $parent, type: 'info', message: Plugins::t('iinaAlertPluginNoUpdate')));
+                    self::$hasUpdate[$p->identifier] = false;
+                    $end();
+                    return;
+                }
+                if (!self::ask($parent, Plugins::t('iinaAlertPluginUpdateFoundTitle', ['name' => $p->name]), Plugins::t('iinaAlertPluginUpdateFoundMessage', ['latest' => $version, 'current' => $p->version]))) { $end(); return; }
+                App::go(function () use ($p, $parent, $end, $failed): void {
+                    try { $new = Plugins::downloadUpdate($p); } catch (PluginInstallError $e) { $failed($e); return; }
+                    App::later(function () use ($p, $new, $parent, $end): void {
+                        if ($new !== null && Plugins::replace($p, $new, fn(Plugin $new, Plugin $old): bool => self::agree($new, $parent, $old))) { self::$hasUpdate[$new->identifier] = false; }
+                        $end();
+                    });
+                });
+            });
+        });
+    }
+
+    /** IINA's sheet of $p's permissions to agree to before it is installed (those it adds to $old's, before it updates): Install or Cancel. */
+    private static function agree(Plugin $p, ?Window $parent, ?Plugin $old = null): bool
+    {
+        $added = $old === null ? null : array_values(array_diff($p->permissions, $old->permissions));
+        if ($added !== null && $p->domainList !== $old->domainList && $p->permitted(Plugin::NETWORK) && !in_array(Plugin::NETWORK, $added, true)) { $added[] = Plugin::NETWORK; } // its hosts changed (IINA's onlyShowAddedFrom)
+        $perms = $p->localizedPermissions($added);
+        $list = implode("\n\n", array_map(fn(array $q) => ($q['isDangerous'] ? '⚠️ ' : '') . "{$q['name']}\n{$q['desc']}", $perms));
         return Dialog::message(new MessageOptions(parent: $parent, type: 'warning', message: Plugins::t('iinaAlertTitleWarning'),
-            detail: Plugins::t('iinaAlertPluginPermission') . "\n\n" . $list, buttons: [Plugins::t('iinaPluginInstall'), Plugins::t('cancel')], cancelButton: 1))->button === 0;
+            detail: Plugins::t($old === null ? 'iinaAlertPluginPermission' : 'iinaAlertPluginPermissionAdded') . "\n\n" . $list, buttons: [Plugins::t('iinaPluginInstall'), Plugins::t('cancel')], cancelButton: 1))->button === 0;
     }
 
     /** IINA's ask: $title, $message, OK or Cancel; whether OK. */
@@ -91,6 +183,22 @@ final class MediaPlayerPluginsPage
         $k = MediaPlayerSettings::colors($t);
         $plugins = Plugins::all();
         $v->pluginDrag ??= null; // [the row dragged, how far]
+        $rt = $c->runtime;
+        if (!($v->pluginUpdatesChecked ?? false)) { // as the list shows, IINA's (its table moved to the window)
+            $v->pluginUpdatesChecked = true;
+            self::checkForUpdates(fn() => $rt?->changed());
+        }
+        // IINA's PluginUpdateView: what the check said, its button checking again.
+        $c->row(0, 4)->fillWidth()->alignItems(Node::CENTER)->padding(8, 16, 0, 16);
+          $c->text(match (self::$updates) { 'refreshing' => Plugins::t('iinaPluginCheckingForUpdates'), 'error' => Plugins::t('iinaPluginErrorCheckingForUpdates'),
+              0 => Plugins::t('iinaPluginAllUpToDate'), default => Plugins::t('iinaPluginUpdatesAvailable', ['count' => self::$updates]) }, 11, $t->textMuted, Font::BOLD);
+          if (self::$updates !== 'refreshing') {
+              $again = $c->row()->size(16, 16)->center()->role(Role::BUTTON)->label(Plugins::t('iinaPluginCheckForUpdates'));
+                MediaPlayerSettings::sf($c, 'arrow.clockwise.circle', 13, $t->text);
+              $c->end();
+              if ($c->clicked($again)) { self::checkForUpdates(fn() => $rt?->changed()); }
+          }
+        $c->end();
         $box = $c->column()->fillWidth();
           foreach ($plugins as $i => $p) {
               if ($i > 0) { $c->box(0, 1, $k['line'])->fillWidth(); }
@@ -121,7 +229,15 @@ final class MediaPlayerPluginsPage
             $c->row(0, 8)->alignItems(Node::CENTER);
               if (self::miniSwitch($c, $p->name, $p->enabled())) { Plugins::setEnabled($p, !$p->enabled()); }
               $c->text($p->name, 13, $t->text, Font::BOLD)->singleLine();
-              $c->text($p->version, 11, $t->textMuted)->opacity(0.7)->singleLine();
+              $updating = isset(self::$updating[$p->identifier]);
+              if ($updating) { $c->spinner()->size(12, 12); }
+              $c->text($updating ? Plugins::t('iinaPluginUpdating') : $p->version, 11, $t->textMuted)->opacity(0.7)->singleLine();
+              if (!$updating && (self::$hasUpdate[$p->identifier] ?? false)) { // IINA's update button, orange
+                  $up = $c->row()->size(16, 16)->center()->role(Role::BUTTON)->label(Plugins::t('iinaPluginCheckForUpdates'));
+                    MediaPlayerSettings::sf($c, 'arrow.up.circle', 13, 0xff9500);
+                  $c->end();
+                  if ($c->clicked($up)) { self::update($p, $win, fn() => $rt?->changed()); }
+              }
               if ($p->isExternal) { // a link to a folder elsewhere
                   $c->row()->paddingX(3)->radius(3)->background(0x5856d6);
                     $c->text('DEV', 9, 0x000000, Font::BOLD);
@@ -141,7 +257,7 @@ final class MediaPlayerPluginsPage
                   if ($m->item(Plugins::t('settingsShowInFinder'))->chosen()) { \MyPHP\Shell::showItemInFolder($p->root); }
               });
             $c->end();
-            $c->text($p->desc ?? 'No description', 11, $t->textMuted)->singleLine()->ellipsis('…')->fillWidth();
+            $c->text($p->desc ?? Plugins::t('iinaPluginNoDescription'), 11, $t->textMuted)->singleLine()->ellipsis('…')->fillWidth();
           $c->end();
           $about = $c->row()->size(18, 18)->center()->role(Role::BUTTON)->label(MediaPlayerSettings::tr($c, '$About'));
             MediaPlayerSettings::sf($c, 'info.circle', 15, $t->text);

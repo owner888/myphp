@@ -99,9 +99,10 @@ check(array_filter(\MyPHP\Logger::entries(), fn(array $e) => str_contains($e['su
 /** @var Iina $iina */
 $iina = $GLOBALS['pluginIina'];
 
-// The Plugin menu: Manage Plugins…, under the plugin's name its first five items and More…, Reload All Plugins.
+// The Plugin menu: Manage Plugins…, under the plugin's name its first five items and More…, Developer Tool, Reload All Plugins.
 $menu = MediaPlayerMenus::plugin($s);
-same(['Manage Plugins…', 'Show Plugins Panel', '', 'Alpha', 'Say', 'More', 'Item 1', 'Item 2', 'Item 3', 'More…', '', 'Reload All Plugins'], array_map(fn(MenuItem $m) => $m->label, $menu), 'the Plugin menu');
+same(['Manage Plugins…', 'Show Plugins Panel', '', 'Alpha', 'Say', 'More', 'Item 1', 'Item 2', 'Item 3', 'More…', '', 'Developer Tool', 'Reload All Plugins'], array_map(fn(MenuItem $m) => $m->label, $menu), 'the Plugin menu');
+same(['Alpha', 'Beta'], array_map(fn(MenuItem $m) => $m->label, $find($menu, 'iina.developerTool')->submenu), 'Developer Tool: each instance\'s');
 same(['Cmd+y', true, true], [$menu[4]->accelerator, $menu[6]->checked, $menu[7]->disabled], 'an item\'s key, check, enabled');
 ($menu[1]->click)();
 same(['plugins', 'Hide Plugins Panel'], [$s->sidebar, MediaPlayerMenus::plugin($s)[1]->label], 'Show Plugins Panel: the plugins\' sidebar, then Hide');
@@ -136,14 +137,126 @@ $areas = [[10, 10, 50, 20]];
 $hv->frame(); $hv->paint();
 check($hv->rt->webViewAt(20, 15) === $web && $hv->rt->webViewAt(200, 150) === null, 'its clickable part alone the page\'s');
 
+// input: a key's listeners in its normalized name; the high before the player's handling, the low after; one returning true stops it.
+$order = [];
+$iina->input->onKeyDown('Shift+a', function (array $a) use (&$order) { $order[] = 'low'; return false; });
+$iina->input->onKeyDown('A', function (array $a) use (&$order) { $order[] = 'high'; return false; }, \MyPHP\PlayerPlugins\InputApi::PRIORITY_HIGH);
+$took = \MyPHP\PlayerPlugins\InputApi::handle($s, 'A', \MyPHP\PlayerPlugins\InputApi::KEY_DOWN, ['isRepeat' => false], function () use (&$order) { $order[] = 'player'; return true; });
+same([['high', 'player'], true], [$order, $took], 'Shift+a is A: one listener, the later in its place, high before the player');
+$order = [];
+$iina->input->onKeyDown('A', function (array $a) use (&$order) { $order[] = 'high'; return true; }, 200);
+$took = \MyPHP\PlayerPlugins\InputApi::handle($s, 'A', \MyPHP\PlayerPlugins\InputApi::KEY_DOWN, [], function () use (&$order) { $order[] = 'player'; return true; });
+same([['high'], true], [$order, $took], 'returning true: the player handles it not');
+$order = [];
+$iina->input->onMouseUp($iina->input::MOUSE, function (array $a) use (&$order) { $order[] = $a['clickCount']; return false; });
+$took = \MyPHP\PlayerPlugins\InputApi::handle($s, '*mouse', \MyPHP\PlayerPlugins\InputApi::MOUSE_UP, ['clickCount' => 2]);
+same([[2], false], [$order, $took], 'a low one told after; nothing handled it: the click goes on');
+$iina->input->onKeyDown('A', null); $iina->input->onMouseUp('*mouse', null);
+same(false, \MyPHP\PlayerPlugins\InputApi::listened($s, 'A', \MyPHP\PlayerPlugins\InputApi::KEY_DOWN), 'null: none');
+same(['Ctrl+Meta+SHARP', 'SPACE'], [$iina->input->normalizeKeyCode('Meta+Ctrl+#'), $iina->input->normalizeKeyCode('space')], 'normalizeKeyCode: mpv\'s one form');
+$kb = $iina->input->getAllKeyBindings();
+check(isset($kb['SPACE']) && $kb['SPACE']['action'] === 'cycle pause' && $kb['SPACE']['isIINACommand'] === false, 'getAllKeyBindings: by key, its action');
+
+// The playlist's menu: an entry's items, IINA's; the plugins' builders' under Plugin, their actions the plugin's.
+$s->playlist = new \MyPHP\Media\Playlist(['/films/a.mkv', 'https://example.com/b.m3u8']);
+$built = []; $acted = [];
+$iina->playlist->registerMenuItemBuilder(function (array $rows) use ($iina, &$built, &$acted) {
+    $built[] = $rows;
+    return [$iina->menu->item('Tag It', function () use (&$acted, $rows) { $acted[] = $rows; }), $iina->menu->separator()];
+});
+if (PHP_OS_FAMILY === 'Darwin') { // the list's symbols are the system's
+    $pl = new Headless(function (Context $c) use ($s): void {
+        $side = $c->column()->size(360, 400);
+        \MyPHP\UI\MediaPlayer::playlistPane($c, $s, $side, 360, 400, 96, true);
+        $c->end();
+    }, 360, 400);
+    $pl->frame();
+    $pl->rightClick(150, 53 + 16 + 32);
+    same(['b.m3u8', '-', '# Playback', 'Play Next', 'Remove', '-', '# Network Resources', 'Open in Browser', 'Copy URL', '-', 'Plugin', 'Tag It', '-', '-', '# Playlist', 'Add File…', 'Add URL…', 'Clear Playlist'],
+        $pl->menuLabels(), 'a URL\'s: its title, playback, the network\'s, the plugin\'s, the playlist\'s; no Play in New Window where the app makes no windows');
+    check($pl->chooseMenuItem('Tag It') && end($acted) === [1], 'a plugin\'s item: its action, of the entry');
+    $pl->rightClick(150, 53 + 16);
+    check(in_array('Move to Trash', $pl->menuLabels() ?? [], true) && in_array('Show in Finder', $pl->menuLabels() ?? [], true), 'a file\'s: its operations');
+    $pl->closeMenu();
+}
+$iina->playlist->registerMenuItemBuilder(fn(array $rows) => []);
+$s->playlist = null;
+
+// ws: a server on a port, a connection's handshake, its message, the plugin's text back (binary, IINA's), a ping's pong, its close.
+$wsLog = [];
+$iina->ws->onStateUpdate(function (string $state) use (&$wsLog) { $wsLog[] = "state $state"; });
+$iina->ws->onNewConnection(function (string $conn, array $info) use (&$wsLog) { $wsLog[] = 'new'; $GLOBALS['wsConn'] = $conn; });
+$iina->ws->onConnectionStateUpdate(function (string $conn, string $state) use (&$wsLog) { $wsLog[] = "conn $state"; });
+$iina->ws->onMessage(function (string $conn, \MyPHP\PlayerPlugins\WsMessage $m) use (&$wsLog) { $wsLog[] = 'message ' . $m->text(); });
+$threw = '';
+try { $iina->ws->startServer(); } catch (PluginError $e) { $threw = $e->getMessage(); }
+same('ws.startServer: server not created', $threw, 'no server: none to start');
+$probe = stream_socket_server('tcp://127.0.0.1:0'); $wsPort = (int)substr(strrchr(stream_socket_get_name($probe, false), ':'), 1); fclose($probe);
+$iina->ws->createServer(['port' => $wsPort]);
+$iina->ws->startServer();
+$wsPoll = function () use ($iina) { (new \ReflectionProperty($iina->ws, 'server'))->getValue($iina->ws)->poll(); };
+$client = stream_socket_client("tcp://127.0.0.1:$wsPort");
+fwrite($client, "GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
+usleep(20000); $wsPoll();
+$head = fread($client, 4096);
+check(str_contains($head, '101 Switching Protocols') && str_contains($head, 's3pPLMBiTxaQ9kYGzzhZRbK+xOo='), 'the handshake: its accept key');
+$mask = "\x01\x02\x03\x04"; $text = 'héllo';
+fwrite($client, "\x81" . chr(0x80 | strlen($text)) . $mask . ($text ^ str_repeat($mask, 2)));
+usleep(20000); $wsPoll();
+same(['state ready', 'new', 'conn preparing', 'conn ready', 'message héllo'], $wsLog, 'its state, a connection come, its states, its message');
+same('success', $iina->ws->sendText($GLOBALS['wsConn'], 'back'), 'text sent');
+usleep(20000);
+same("\x82\x04back", fread($client, 64), 'as a binary message, IINA\'s');
+same('no_connection', $iina->ws->sendText('nobody', 'x'), 'to no connection: none');
+fwrite($client, "\x89\x80" . $mask); usleep(20000); $wsPoll();
+same("\x8a\x00", fread($client, 64), 'a ping: its pong');
+fwrite($client, "\x88\x80" . $mask); usleep(20000); $wsPoll();
+same('conn cancelled', end($wsLog), 'a close: the connection gone');
+fclose($client);
+
+// The developer tool: code run in the instance, $iina its Iina, its variables kept; an expression's value, statements' return; what it throws; the log as it comes.
+$tool = \MyPHP\PlayerPlugins\DevTool::for($s->plugins()[0]);
+$tool->run('$x = 40');
+$tool->run('$x + 2');
+$tool->run('if ($x > 1) { return $iina->preferences->get("color"); }');
+$tool->run('throw new RuntimeException("nope")');
+$tool->run('$iina->console->log("hello")');
+$kinds = array_map(fn(array $e) => [$e['kind'], $e['text'] ?? $e['value'] ?? $e['message'] ?? null], $tool->entries);
+same([['prompt', '$x = 40'], ['result', 40], ['prompt', '$x + 2'], ['result', 42], ['prompt', 'if ($x > 1) { return $iina->preferences->get("color"); }'], ['result', 'blue'],
+    ['prompt', 'throw new RuntimeException("nope")'], ['exception', 'nope'], ['prompt', '$iina->console->log("hello")'], ['log', 'hello'], ['result', null]], $kinds, 'its entries');
+same(['$iina->console->log("hello")', 'throw new RuntimeException("nope")'], array_slice($tool->history(), 0, 2), 'the code run, the last first');
+same(['array', 'Array (2)', [['0', '1'], ['a', 'Array (0)']]], \MyPHP\PlayerPlugins\DevTool::describe([1, 'a' => []]), 'an array as IINA\'s console shows it');
+$tool->clear();
+
 // mpv: a property MyPHP gives (none of a player without a film); a command beyond IINA's safe ones of the file system's permission; hooks none.
 same([null, false], [$iina->mpv->getString('pause'), $iina->mpv->getFlag('pause')], 'no film: no property');
 $iina->mpv->set('speed', 2);
 $iina->mpv->command('seek', ['10']);
 same([['action' => ['set', 'speed', '2'], 'iina' => false], ['action' => ['seek', '10'], 'iina' => false]], $s->performed(), 'set and command as a key binding\'s');
 $threw = '';
-try { $iina->mpv->addHook('on_load', 50, fn() => null); } catch (PluginError $e) { $threw = $e->getMessage(); }
-check(str_contains($threw, 'without mpv'), 'addHook: none');
+try { $iina->mpv->addHook('on_unload', 50, fn() => null); } catch (PluginError $e) { $threw = $e->getMessage(); }
+check(str_contains($threw, 'without mpv'), 'addHook: none but of a film opening');
+// The hooks of a film opening: on_load's of what opens (the URL in its place, its title, headers, the audio and subtitles added), its stream-open-filename while it runs.
+$seen = [];
+$iina->mpv->addHook('on_load', 10, function ($next) use ($iina, &$seen) {
+    $seen[] = $iina->mpv->getString('stream-open-filename');
+    $iina->mpv->set('stream-open-filename', 'https://cdn.example/v.mp4');
+    $iina->mpv->set('file-local-options/force-media-title', 'A Video');
+    $iina->mpv->set('file-local-options/user-agent', 'UA');
+    $iina->mpv->set('file-local-options/http-header-fields', ['Referer: https://example.com/', 'Cookie: a=b']);
+    $iina->mpv->command('audio-add', ['https://cdn.example/a.m4a', 'auto', 'medium']);
+    $iina->mpv->command('sub-add', ['edl://!no_clip;!delay_open,media_type=sub,codec=webvtt;%26%https://cdn.example/en.vtt', 'auto', 'English', 'en']);
+    $iina->mpv->command('sub-add', ['memory://WEBVTT', 'auto', 'x', 'x']);
+    $next();
+});
+$o = (new \ReflectionMethod($s, 'runHooks'))->invoke($s, 'on_load', new \MyPHP\Media\Opening('https://example.com/watch?v=1', 'https://example.com/watch?v=1'));
+same([['https://example.com/watch?v=1'], 'https://cdn.example/v.mp4', 'A Video', ['User-Agent' => 'UA', 'Referer' => 'https://example.com/', 'Cookie' => 'a=b'], ['https://cdn.example/a.m4a'],
+    [['url' => 'https://cdn.example/en.vtt', 'name' => 'English', 'language' => 'en', 'ext' => 'vtt']], null],
+    [$seen, $o->url, $o->title, $o->headers, $o->audio, $o->subtitles, $s->hooking], 'what the hook made of the film; none hooking after it');
+$iina->mpv->addHook('on_preloaded', 10, fn($next) => $iina->mpv->set('chapter-list', [['time' => 0, 'title' => 'Intro'], ['time' => 61.5, 'title' => 'Main']]));
+$o = (new \ReflectionMethod($s, 'runHooks'))->invoke($s, 'on_preloaded', new \MyPHP\Media\Opening('/f.mkv', '/f.mkv'));
+same([['Intro', 0.0], ['Main', 61.5]], array_map(fn($c) => [$c->title, $c->start], $o->chapters), 'on_preloaded: the chapters');
+(new \ReflectionProperty($s, 'hooks'))->setValue($s, []);
 
 // The file system by IINA's paths: @tmp and @data its own; a file overwritten only of its own; another path of its permission.
 $iina->file->write('@data/a.txt', 'one');
@@ -239,6 +352,26 @@ same([1, []], [count(array_filter(Plugins::all(), fn(Plugin $p) => $p->identifie
 $threw = '';
 try { Plugins::unpack("$root/nothing.iinaplgz"); } catch (\MyPHP\PlayerPlugins\PluginInstallError $e) { $threw = $e->getMessage(); }
 same('Cannot find the package file.', $threw, 'no package: IINA\'s error');
+// An update put in place of the plugin (Plugins::replace): more permissions agreed to, its place and its being on kept; refused, nothing changes.
+file_put_contents("$pkg/Info.json", json_encode(['name' => 'Delta', 'author' => ['name' => 'A'], 'identifier' => 'io.test.d', 'version' => '3.0', 'entry' => 'main.php', 'permissions' => ['show-alert', 'show-osd']]));
+@unlink("$root/delta3.iinaplgz"); exec('cd ' . escapeshellarg($pkg) . ' && zip -q -r ' . escapeshellarg("$root/delta3.iinaplgz") . ' .');
+$old = Plugins::byId('io.test.d'); $at = array_search($old, Plugins::all(), true);
+$offered = [];
+check(!Plugins::replace($old, Plugins::unpack("$root/delta3.iinaplgz"), function (Plugin $new, Plugin $was) use (&$offered) { $offered[] = [$new->version, $was->version]; return false; }), 'more permissions refused: not updated');
+same([[['3.0', '2.0']], '2.0', []], [$offered, Plugins::byId('io.test.d')->version, glob("$dir/.temp.*")], 'asked of the new and the old; the old kept, the new gone');
+check(Plugins::replace($old, Plugins::unpack("$root/delta3.iinaplgz"), fn() => true), 'agreed: updated');
+$new = Plugins::byId('io.test.d');
+same(['3.0', $at, true, "$dir/io.test.d.iinaplugin"], [$new->version, array_search($new, Plugins::all(), true), $new->enabled(), $new->root], 'in its place, on, in its folder');
+// GitHub: "owner/repo" or its URL; nothing else.
+same(['https://github.com/iina/plugin-x', 'https://github.com/iina/plugin-x'], [Plugins::githubURL('iina/plugin-x'), Plugins::githubURL('https://github.com/iina/plugin-x/')], 'a repository\'s URL');
+$threw = '';
+try { Plugins::githubURL('https://gitlab.com/a/b'); } catch (\MyPHP\PlayerPlugins\PluginInstallError $e) { $threw = $e->getMessage(); }
+same('The URL is invalid.', $threw, 'another: IINA\'s error');
+same(null, Plugins::newVersion($new), 'one not of GitHub: no newer version looked for');
+same(['Updated 3 days ago', 'Updated 1 hour ago', 'Updated on Jan 2, 2026'], [\MyPHP\UI\MediaPlayerPluginStore::updated(1000000, 1000000 + 3 * 86400 + 5), \MyPHP\UI\MediaPlayerPluginStore::updated(1000000, 1003600), \MyPHP\UI\MediaPlayerPluginStore::updated(gmmktime(12, 0, 0, 1, 2, 2026), gmmktime(12, 0, 0, 3, 2, 2026))], 'the store: when a repository was pushed to, as IINA tells it');
+// IINA's plugins of JavaScript: not loaded.
+same(null, Plugin::load($plugin('io.test.js.iinaplugin', ['identifier' => 'io.test.js', 'entry' => 'main.js'], '', ['main.js' => 'iina.console.log(1);'])), 'an entry of JavaScript: none');
+array_map('unlink', glob("$dir/io.test.js.iinaplugin/*")); @rmdir("$dir/io.test.js.iinaplugin");
 Plugins::remove(Plugins::byId('io.test.d'));
 check(Plugins::byId('io.test.d') === null && !is_dir("$dir/io.test.d.iinaplugin"), 'uninstalled: gone from the list and the disk');
 

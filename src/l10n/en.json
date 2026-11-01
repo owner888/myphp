@@ -5548,5 +5548,161 @@
   "iinaMenuHidePluginsPanel": "Hide Plugins Panel",
   "@iinaMenuHidePluginsPanel": {
     "description": "IINA's \"menu.hide_plugins_panel\" (Localizable.strings)."
+  },
+  "iinaPlMenuPlayNext": "Play Next",
+  "@iinaPlMenuPlayNext": {
+    "description": "IINA's \"pl_menu.play_next\" (Localizable.strings)."
+  },
+  "iinaPlMenuPlayInNewWindow": "Play in New Window",
+  "@iinaPlMenuPlayInNewWindow": {
+    "description": "IINA's \"pl_menu.play_in_new_window\" (Localizable.strings)."
+  },
+  "iinaPlMenuRemove": "Remove",
+  "@iinaPlMenuRemove": {
+    "description": "IINA's \"pl_menu.remove\" (Localizable.strings)."
+  },
+  "iinaPlMenuDelete": "Move to Trash",
+  "@iinaPlMenuDelete": {
+    "description": "IINA's \"pl_menu.delete\" (Localizable.strings)."
+  },
+  "iinaPlMenuShowInFinder": "Show in Finder",
+  "@iinaPlMenuShowInFinder": {
+    "description": "IINA's \"pl_menu.show_in_finder\" (Localizable.strings)."
+  },
+  "iinaPlMenuAddFile": "Add File…",
+  "@iinaPlMenuAddFile": {
+    "description": "IINA's \"pl_menu.add_file\" (Localizable.strings)."
+  },
+  "iinaPlMenuAddUrl": "Add URL…",
+  "@iinaPlMenuAddUrl": {
+    "description": "IINA's \"pl_menu.add_url\" (Localizable.strings)."
+  },
+  "iinaPlMenuClearPlaylist": "Clear Playlist",
+  "@iinaPlMenuClearPlaylist": {
+    "description": "IINA's \"pl_menu.clear_playlist\" (Localizable.strings)."
+  },
+  "iinaPlMenuBrowser": "Open in Browser",
+  "@iinaPlMenuBrowser": {
+    "description": "IINA's \"pl_menu.browser\" (Localizable.strings)."
+  },
+  "iinaPlMenuCopyUrl": "Copy URL",
+  "@iinaPlMenuCopyUrl": {
+    "description": "IINA's \"pl_menu.copy_url\" (Localizable.strings)."
+  },
+  "iinaPlMenuPlayback": "Playback",
+  "@iinaPlMenuPlayback": {
+    "description": "IINA's \"pl_menu.playback\" (Localizable.strings)."
+  },
+  "iinaPlMenuNetworkResources": "Network Resources",
+  "@iinaPlMenuNetworkResources": {
+    "description": "IINA's \"pl_menu.network_resources\" (Localizable.strings)."
+  },
+  "iinaPlMenuFileOperations": "File Operations",
+  "@iinaPlMenuFileOperations": {
+    "description": "IINA's \"pl_menu.file_operations\" (Localizable.strings)."
+  },
+  "iinaPlMenuPlugin": "Plugin",
+  "@iinaPlMenuPlugin": {
+    "description": "IINA's \"pl_menu.plugin\" (Localizable.strings)."
+  },
+  "iinaPlMenuPlaylist": "Playlist",
+  "@iinaPlMenuPlaylist": {
+    "description": "IINA's \"pl_menu.playlist\" (Localizable.strings)."
+  },
+  "iinaAlertAddUrlTitle": "Add URL",
+  "@iinaAlertAddUrlTitle": {
+    "description": "IINA's \"alert.add_url.title\" (Localizable.strings)."
+  },
+  "iinaAlertAddUrlMessage": "Please enter the URL:",
+  "@iinaAlertAddUrlMessage": {
+    "description": "IINA's \"alert.add_url.message\" (Localizable.strings)."
+  },
+  "iinaAlertWrongUrlFormat": "Wrong URL format.",
+  "@iinaAlertWrongUrlFormat": {
+    "description": "IINA's \"alert.wrong_url_format\" (Localizable.strings)."
+  },
+  "iinaAlertPlaylistErrorDeleting": "Error deleting: {error}",
+  "@iinaAlertPlaylistErrorDeleting": {
+    "description": "IINA's \"alert.playlist.error_deleting\" (Localizable.strings)."
+  },
+  "iinaAlertPluginNoUpdate": "No update found.",
+  "@iinaAlertPluginNoUpdate": {
+    "description": "IINA's \"alert.plugin_no_update\" (Localizable.strings)."
+  },
+  "iinaAlertPluginUpdateFoundTitle": "Update found for {name}",
+  "@iinaAlertPluginUpdateFoundTitle": {
+    "description": "IINA's \"alert.plugin_update_found.title\" (Localizable.strings)."
+  },
+  "iinaAlertPluginUpdateFoundMessage": "The latest version is {latest}. You have {current}. Would you like to update?",
+  "@iinaAlertPluginUpdateFoundMessage": {
+    "description": "IINA's \"alert.plugin_update_found.message\" (Localizable.strings)."
+  },
+  "iinaAlertPluginPermissionAdded": "This update requires additional permissions. Please review them before proceeding.",
+  "@iinaAlertPluginPermissionAdded": {
+    "description": "IINA's \"alert.plugin_permission_added\" (Localizable.strings)."
+  },
+  "iinaPluginUpdating": "Downloading update…",
+  "@iinaPluginUpdating": {
+    "description": "IINA's \"plugin.updating\" (Localizable.strings)."
+  },
+  "iinaPluginCheckingForUpdates": "Checking for updates…",
+  "@iinaPluginCheckingForUpdates": {
+    "description": "IINA's PluginUpdateView label, in English alone as IINA's (SettingsPagePlugin.swift)."
+  },
+  "iinaPluginErrorCheckingForUpdates": "Error checking for updates.",
+  "@iinaPluginErrorCheckingForUpdates": {
+    "description": "IINA's PluginUpdateView label, in English alone as IINA's (SettingsPagePlugin.swift)."
+  },
+  "iinaPluginAllUpToDate": "All plugins are up to date.",
+  "@iinaPluginAllUpToDate": {
+    "description": "IINA's PluginUpdateView label, in English alone as IINA's (SettingsPagePlugin.swift)."
+  },
+  "iinaPluginUpdatesAvailable": "Plugin updates available: {count}",
+  "@iinaPluginUpdatesAvailable": {
+    "description": "IINA's PluginUpdateView label, in English alone as IINA's (SettingsPagePlugin.swift)."
+  },
+  "iinaPluginNoDescription": "No description",
+  "@iinaPluginNoDescription": {
+    "description": "IINA's plugin row without a description, in English alone as IINA's (SettingsPagePlugin.swift)."
+  },
+  "iinaStoreLoading": "Loading…",
+  "@iinaStoreLoading": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreError": "Error: {message}",
+  "@iinaStoreError": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreRepositoryNotFound": "Repository not found",
+  "@iinaStoreRepositoryNotFound": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreRateLimited": "Rate limit exceeded. Try again later or add an API token.",
+  "@iinaStoreRateLimited": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreFailedToLoad": "Failed to load",
+  "@iinaStoreFailedToLoad": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreNoData": "No data",
+  "@iinaStoreNoData": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreUpdatedAgo": "Updated {ago}",
+  "@iinaStoreUpdatedAgo": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaStoreUpdatedOn": "Updated on {date}",
+  "@iinaStoreUpdatedOn": {
+    "description": "IINA's plugin store, in English alone as IINA's (PluginStorePanel.swift)."
+  },
+  "iinaPluginCheckForUpdates": "Check for Updates",
+  "@iinaPluginCheckForUpdates": {
+    "description": "IINA's \"plugin.check_for_updates\" (Localizable.strings)."
+  },
+  "iinaMenuDeveloperTool": "Developer Tool",
+  "@iinaMenuDeveloperTool": {
+    "description": "IINA's \"menu.developer_tool\" (Localizable.strings)."
   }
 }

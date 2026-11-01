@@ -112,6 +112,9 @@ final class Plugin
             in_array($p, self::PERMISSIONS, true) ? $permissions[] = $p : Logger::warn("Unknown permission: $p", Plugins::LOG);
         }
         $this->permissions = array_values(array_unique($permissions));
+        foreach (array_filter([$this->entryPath, $this->globalEntryPath]) as $entry) {
+            if (strtolower(pathinfo($entry, PATHINFO_EXTENSION)) !== 'php') { throw new RuntimeException("The entry file $entry is not of PHP: myphp's plugins are"); } // IINA's of JavaScript do not run
+        }
         $this->entryURL = self::resolve($this->entryPath, $root) ?? throw new RuntimeException("The entry file {$this->entryPath} doesn't exist");
         if ($this->globalEntryPath !== null) {
             $this->globalEntryURL = self::resolve($this->globalEntryPath, $root) ?? throw new RuntimeException("The entry file {$this->globalEntryPath} doesn't exist");

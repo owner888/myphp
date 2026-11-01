@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenSubtitles</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --highlight-color: rgb(37, 97, 221); --popup-bg: #222; --highlight-text: #fff; --searchbox-bg: rgba(0, 0, 0, 0.1); --searchbox-text: #dadada;
+    --text-secondary: rgba(255, 255, 255, 0.5); --input-border: rgba(255, 255, 255, 0.2); --box-bg: rgba(0, 0, 0, 0.2); --modal-overlay: rgba(0, 0, 0, 0.9); --modal-bg: #111;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --highlight-color: rgb(8, 127, 255); --popup-bg: #f0f0f0; --highlight-text: #000; --searchbox-bg: rgba(0, 0, 0, 0.05); --searchbox-text: #222;
+      --text-secondary: rgba(0, 0, 0, 0.5); --input-border: rgba(0, 0, 0, 0.1); --box-bg: rgba(0, 0, 0, 0.05); --modal-overlay: rgba(0, 0, 0, 0.5); --modal-bg: #f0f0f0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { margin: 0; padding: 0; }
+  body { margin: 0; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; color: #1f2023; background: none; }
+  @media (prefers-color-scheme: dark) { body { color: #dadada; } }
+  a { color: var(--highlight-color); cursor: pointer; }
+  .ui-lr { display: flex; justify-content: space-between; }
+  .ui-lr .left, .ui-lr .right { display: flex; }
+  .ui-clickable { user-select: none; }
+  .ui-hover:hover { text-decoration: underline; opacity: 1; }
+  .hidden { display: none !important; }
+  svg.icon { width: 11px; height: 11px; fill: currentColor; vertical-align: -1px; margin-right: 4px; }
+  #header { padding: 8px 7px 0 7px; }
+  .header-item { padding: 2px 8px; margin: -2px 0; border-radius: 8px; position: relative; }
+  .header-item.active { background: rgba(0, 0, 0, 0.2); }
+  .popup-menu-container { position: absolute; top: 24px; left: 4px; width: 300px; padding: 8px; background-color: var(--popup-bg); border-radius: 3px; border: 1px solid var(--input-border); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); z-index: 10; font-size: 90%; }
+  .popup-menu-container.log-container { left: unset; right: 0; max-height: 80vh; overflow-y: auto; }
+  .log-item { padding: 2px 0; }
+  .log-item .time { font-size: 90%; opacity: 0.8; }
+  .popup-menu-container .title { font-weight: bold; color: var(--highlight-text); }
+  .popup-menu-container .ui-clickable { color: var(--highlight-color); cursor: pointer; }
+  #search { margin: 12px 0 8px 0; padding: 0 7px; }
+  .search-container { width: 100%; padding-right: 8px; }
+  .search-container input { width: 100%; padding: 4px; color: var(--searchbox-text); border: 1px solid var(--input-border); background-color: var(--searchbox-bg); border-radius: 3px; margin-top: -2px; }
+  #search-options { display: none; margin: 0 7px 8px 7px; padding: 4px 8px; background-color: var(--box-bg); border-radius: 3px; border: 1px solid var(--input-border); font-size: 90%; }
+  #search-options.show { display: block; }
+  .search-opt-item { margin: 4px 0; display: flex; justify-content: space-between; }
+  .search-opt-item input { margin-right: 4px; }
+  .search-opt-actions { border-bottom: 1px solid var(--input-border); padding: 4px 0 8px 0; margin-bottom: 8px; }
+  .segmented-control { display: flex; border: 1px solid var(--input-border); border-radius: 4px; overflow: hidden; }
+  .segmented-control input { display: none; }
+  .segmented-control label { padding: 1px 6px; }
+  .segmented-control input:checked + label { background: var(--highlight-color); color: #fff; }
+  .lang-container { display: flex; width: 100%; flex-wrap: wrap; }
+  .lang-item { margin: 4px; }
+  .lang-item input { display: none; }
+  .lang-item label { margin: 0; padding: 2px 4px; background-color: var(--input-border); border-radius: 8px; }
+  .lang-item input:checked + label { background-color: var(--highlight-color); color: #fff; }
+  #messages { padding: 0 8px; font-size: 90%; }
+  .message-item { margin-bottom: 4px; color: #ff4455; }
+  .search-pagination { margin: 8px 0; text-align: center; }
+  .search-pagination span { margin: 0 8px; }
+  .search-pagination button { margin: 0 4px; }
+  .query-text-in-no-result { color: var(--text-secondary); font-size: 90%; }
+  #search-results { margin: 0 7px 8px; }
+  .search-results-alert, .search-results-container { background-color: var(--box-bg); border-radius: 3px; border: 1px solid var(--input-border); }
+  .search-results-alert { padding: 8px; text-align: center; }
+  .result-item { position: relative; padding: 6px 8px; border-top: 1px solid var(--input-border); width: 100%; overflow: hidden; }
+  .result-item:first-of-type { border-top: none; }
+  .result-feature { font-weight: bold; opacity: 0.6; margin-bottom: 2px; }
+  .result-filename { margin-bottom: 2px; word-break: break-all; }
+  .result-info { font-size: 10px; }
+  .result-info span { opacity: 0.8; }
+  .result-info .left span { margin-right: 8px; }
+  .result-info .right span { margin-left: 8px; }
+  .result-info .result-lang { background: var(--input-border); border-radius: 3px; padding: 0 4px; opacity: 1; }
+  .overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 6px 8px; background: linear-gradient(to right, transparent 40%, var(--popup-bg)); }
+  .result-item:hover .overlay { display: block; }
+  .overlay-btn-container { display: flex; }
+  .overlay-btn { padding: 4px 6px; margin-left: 4px; border-radius: 3px; background: var(--input-border); cursor: pointer; }
+  .overlay-btn svg.icon { margin: 0; }
+  .mp-background { position: fixed; top: 0; left: 0; z-index: 1000; width: 100vw; height: 100vh; background-color: var(--modal-overlay); }
+  .mp-container { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1001; width: 90vw; background-color: var(--modal-bg); border-radius: 3px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); }
+  .mp-header { position: relative; padding: 8px; border-bottom: 1px solid var(--input-border); }
+  .mp-header h4 { margin: 0; }
+  .mp-body { padding: 8px; max-height: 75vh; overflow: auto; }
+  .mp-footer { padding: 8px; border-top: 1px solid var(--input-border); }
+  .close { float: right; font-size: 14px; font-weight: bold; color: var(--highlight-text); cursor: pointer; }
+  .login-container { margin: 8px 0; }
+  .login-container input { display: block; width: 100%; margin-bottom: 4px; padding: 4px; }
+  .login-error { color: #ff4455; }
+  .sub-info-label { margin-right: 4px; }
+  .sub-info-label + span { opacity: 0.6; }
+  .sub-info-title { margin: 4px 0; font-weight: bold; word-break: break-all; }
+  .feature-title { font-weight: bold; margin-top: 8px; }
+  .feature-type { opacity: 0.6; font-weight: normal; }
+</style>
+</head>
+<body>
+<div id="header" class="ui-lr">
+  <div class="left" id="header-left"></div>
+  <div class="right">
+    <div id="quota" class="header-item ui-hover hidden"></div>
+    <div id="log-btn" class="header-item ui-clickable ui-hover">
+      <svg class="icon" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg><span>Log</span>
+      <div id="log" class="popup-menu-container log-container hidden"></div>
+    </div>
+  </div>
+</div>
+<div id="search" class="ui-lr">
+  <div class="left search-container"><input id="search-text" type="text" placeholder="Search…"></div>
+  <div class="right">
+    <button id="go" style="margin-right: 4px" disabled>GO</button>
+    <button id="toggle-options">...</button>
+  </div>
+</div>
+<div id="search-options">
+  <div class="search-opt-actions ui-lr">
+    <div class="left"><button id="set-languages">Languages...</button></div>
+    <div class="right"><button id="paste-filename" style="margin-right: 4px">Paste filename</button></div>
+  </div>
+  <div class="search-opt-item"><label>Type</label><div class="segmented-control" id="opt-type"></div></div>
+  <div class="search-opt-item"><label for="opt-machine">Include machine translated</label><input type="checkbox" id="opt-machine"></div>
+  <div class="search-opt-item"><label for="opt-ai">Include AI translated</label><input type="checkbox" id="opt-ai" checked></div>
+  <div class="search-opt-item"><label for="opt-trusted">Only from trusted source</label><input type="checkbox" id="opt-trusted"></div>
+  <div class="search-opt-item"><div>Hearing impared</div><div class="segmented-control" id="opt-impaired"></div></div>
+</div>
+<div id="messages"></div>
+<div id="search-results"></div>
+<div id="modal" class="mp-background hidden">
+  <div class="mp-container">
+    <div class="mp-header"><span class="close" id="modal-close">&times;</span><h4 id="modal-title"></h4></div>
+    <div class="mp-body" id="modal-body"></div>
+    <div class="mp-footer" id="modal-footer"></div>
+  </div>
+</div>
+<script>
+// IINA's plugin-opensub sidebar (its Vue app, its Client and API of opensubtitles.com), without a framework or a bundler.
+const ICON_USER = '<svg class="icon" viewBox="0 0 448 512"><path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/></svg>';
+const ICON_PIE = '<svg class="icon" viewBox="0 0 576 512"><path d="M304 240V16.6c0-9 7-16.6 16-16.6C443.7 0 544 100.3 544 224c0 9-7.6 16-16.6 16H304zM32 272C32 150.7 122.1 50.3 239 34.3c9.2-1.3 17 6.1 17 15.4V288L412.5 444.5c6.7 6.7 6.2 17.7-1.5 23.1C371.8 495.6 323.8 512 272 512C139.5 512 32 404.6 32 272zm526.4 16c9.3 0 16.6 7.8 15.4 17c-7.7 55.9-34.6 105.6-73.9 142.3c-6 5.6-15.4 5.2-21.2-.7L320 288H558.4z"/></svg>';
+const ICON_INFO = '<svg class="icon" viewBox="0 0 192 512"><path d="M48 80a48 48 0 1 1 96 0A48 48 0 1 1 48 80zM0 224c0-17.7 14.3-32 32-32H96c17.7 0 32 14.3 32 32V448h32c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H64V256H32c-17.7 0-32-14.3-32-32z"/></svg>';
+const ICON_DOWNLOAD = '<svg class="icon" viewBox="0 0 512 512"><path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V274.7l-73.4-73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l128 128c12.5 12.5 32.8 12.5 45.3 0l128-128c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L288 274.7V32zM64 352c-35.3 0-64 28.7-64 64v32c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V416c0-35.3-28.7-64-64-64H346.5l-45.3 45.3c-25 25-65.5 25-90.5 0L165.5 352H64z"/></svg>';
+const API_KEY = "bcfBKSz8jkLSdYRDgKnoZqIGNcGMVYVn".split("").reverse().join(""); // myphp's key of opensubtitles.com, reversed as myphp keeps it
+
+// IINA's rpcClient: a call posts "#call.$name" and waits for "#on.$name"; a function served answers so.
+const rpc = {
+  call(name, ...args) {
+    return new Promise((resolve) => {
+      iina.onMessage(`#on.${name}`, ({ res }) => { iina.onMessage(`#on.${name}`, null); resolve(res); });
+      iina.postMessage(`#call.${name}`, { args });
+    });
+  },
+  serve(name, fn) {
+    iina.onMessage(`#call.${name}`, async ({ args }) => {
+      const res = await fn(...(args || []));
+      iina.postMessage(`#on.${name}`, { res });
+    });
+  },
+};
+
+class ResponseError extends Error { constructor(code, message) { super(message); this.code = code; } }
+
+// IINA's API and Client (opensub.js) of fetch.
+const client = {
+  baseURL: "api.opensubtitles.com",
+  username: null,
+  jwt: null,
+  get loggedIn() { return this.jwt !== null; },
+  async req(method, path, { params = null, body = null, auth = false } = {}) {
+    let url = `https://${this.baseURL}/api/v1${path}`;
+    if (params) {
+      const q = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).sort().join("&");
+      if (q) url += `?${q}`;
+    }
+    const headers = { Accept: "*/*", "Content-Type": "application/json", "Api-Key": API_KEY };
+    if (auth && this.jwt) headers.Authorization = `Bearer ${this.jwt}`;
+    let res;
+    try {
+      res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    } catch (e) {
+      iina.postMessage("error", `Error requesting ${path}: no response received`);
+      throw new Error("No response received");
+    }
+    const data = await res.json().catch(() => ({}));
+    if (res.status !== 200) {
+      iina.postMessage("error", `Error requesting ${path}`);
+      if (res.status === 401) { this.jwt = null; throw new ResponseError(401, data.message || "Invalid credentials"); }
+      throw new ResponseError(res.status, `Error ${res.status}. ${data.message}`);
+    }
+    return data;
+  },
+  async login(username, password) {
+    try {
+      const data = await this.req("POST", "/login", { body: { username, password } });
+      const success = await rpc.call("$setJWT", username, data.token);
+      this.jwt = data.token;
+      this.username = username;
+      data.jwtSaved = success;
+      if (data.base_url) this.baseURL = data.base_url;
+      return data;
+    } catch (error) {
+      if (error instanceof ResponseError && error.code === 429) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.login(username, password);
+      }
+      throw error;
+    }
+  },
+  async logout() {
+    const res = await this.req("DELETE", "/logout", { auth: true });
+    this.jwt = null;
+    await rpc.call("$setJWT", this.username, null);
+    return res;
+  },
+  async getUserInfo() {
+    if (!this.loggedIn) throw new Error("Not logged in");
+    return this.req("GET", "/infos/user", { auth: true });
+  },
+  getLanguages() { return this.req("GET", "/infos/languages"); },
+  search(options) { return this.req("GET", "/subtitles", { params: options }); },
+  async download(idList) {
+    const resData = [];
+    for (const id of idList) resData.push(await this.req("POST", "/download", { body: { file_id: id }, auth: true }));
+    if (resData.length === 0) return;
+    await rpc.call("$downloadFile", resData.map(({ link, file_name }) => ({ link, file_name })));
+    return resData[resData.length - 1];
+  },
+};
+
+const state = {
+  userInfo: null, quotaInfo: null, langList: null, langMap: null, subLang: { en: true }, logs: [], showLog: false, userPopupShown: false,
+  optType: "all", optHearingImpaired: "include", searchResults: null, cachedSearch: null, pageNumber: 1, pageTotal: 1, isSearching: false,
+  errorGettingLanguages: false, errorSavingJWT: false, modal: null,
+};
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...children) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k.startsWith("on") ? (e[k] = v) : k === "html" ? (e.innerHTML = v) : e.setAttribute(k, v);
+  for (const c of children) e.append(c);
+  return e;
+};
+const langString = () => Object.keys(state.subLang).filter((k) => k && state.subLang[k]).sort().join(",");
+const fmtTime = (t) => [t.getHours(), t.getMinutes(), t.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+
+function log(message, level = "info") {
+  state.logs.push({ time: new Date(), message, level });
+  if (level === "error") console.error(message);
+  render();
+}
+
+function segmented(id, options, get, set) {
+  const box = $(id);
+  box.textContent = "";
+  for (const [key, label] of Object.entries(options)) {
+    const input = el("input", { type: "radio", name: id, id: `${id}-${key}` });
+    input.checked = get() === key;
+    input.onchange = () => set(key);
+    box.append(input, el("label", { for: `${id}-${key}` }, label));
+  }
+}
+
+function render() {
+  const userInfoAvailable = state.userInfo && !!state.userInfo.user_id;
+  const left = $("header-left");
+  left.textContent = "";
+  if (userInfoAvailable || state.userInfo?.username) {
+    const u = state.userInfo;
+    const item = el("div", { class: "header-item ui-clickable ui-hover" + (state.userPopupShown ? " active" : ""), html: ICON_USER });
+    item.append(el("span", {}, u.username), u.vip ? el("span", {}, " (VIP)") : "");
+    item.onclick = showUserPopup;
+    if (state.userPopupShown && userInfoAvailable) {
+      const pop = el("div", { class: "popup-menu-container" });
+      const rows = [["ID", u.user_id], ["Level", u.level], ["Allowed downloads", u.allowed_downloads], ["Allowed translations", u.allowed_translations],
+        ["Downloads count", u.downloads_count], ["Remaining downloads", u.remaining_downloads], ["Reset time (last updated)", u.reset_time]];
+      const info = el("div", { class: "user-info" });
+      for (const [k, v] of rows) info.append(el("span", { class: "title" }, k), `: ${v ?? ""}`, el("br"));
+      const out = el("div", { class: "ui-clickable ui-hover" }, "Log out");
+      out.onclick = (e) => { e.stopPropagation(); logout(); };
+      pop.append(info, el("hr"), out);
+      item.append(pop);
+    }
+    left.append(item);
+  } else {
+    const item = el("div", { class: "header-item ui-clickable ui-hover" }, "Log in");
+    item.onclick = login;
+    left.append(item);
+  }
+  const quota = $("quota");
+  quota.classList.toggle("hidden", !state.quotaInfo);
+  if (state.quotaInfo) {
+    quota.innerHTML = ICON_PIE;
+    quota.append(String(state.quotaInfo.remaining));
+    quota.title = `Requests: ${state.quotaInfo.requests}\nRemaining: ${state.quotaInfo.remaining}\n${state.quotaInfo.message}`;
+  }
+  $("log-btn").classList.toggle("active", state.showLog);
+  const logBox = $("log");
+  logBox.classList.toggle("hidden", !state.showLog);
+  logBox.textContent = "";
+  for (const l of state.logs) logBox.append(el("div", { class: "log-item" }, el("div", { class: "time" }, fmtTime(l.time)), el("div", {}, l.message)));
+  $("go").disabled = state.isSearching || !$("search-text").value;
+  const messages = $("messages");
+  messages.textContent = "";
+  if (state.errorGettingLanguages) messages.append(el("div", { class: "message-item" }, `Cannot get language list. Using ${langString()} for now.`));
+  if (langString().length < 1) {
+    const here = el("a", {}, "here");
+    here.onclick = setLanguages;
+    messages.append(el("div", { class: "message-item" }, "Language not set. Using English by default. Click ", here, " to set."));
+  }
+  if (state.errorSavingJWT) messages.append(el("div", { class: "message-item" }, "Cannot save the JWT token to keychain. Login status will not be saved."));
+  renderResults();
+  renderModal();
+}
+
+function pagination() {
+  const p = el("div", { class: "search-pagination" });
+  const b = (label, page, disabled) => { const x = el("button", {}, label); x.disabled = disabled; x.onclick = () => performSearch(page); return x; };
+  p.append(b("First", 1, state.pageNumber === 1), b("Prev", state.pageNumber - 1, state.pageNumber === 1), el("span", {}, `${state.pageNumber} / ${state.pageTotal}`),
+    b("Next", state.pageNumber + 1, state.pageNumber === state.pageTotal), b("Last", state.pageTotal, state.pageNumber === state.pageTotal));
+  return p;
+}
+
+function getLanguageName(code) {
+  let name = (state.langMap || {})[code.toLowerCase()] || code;
+  if (name.length > 7) name = name.slice(0, 6) + "..";
+  return name;
+}
+
+function renderResults() {
+  const box = $("search-results");
+  box.textContent = "";
+  if (state.isSearching) { box.append(el("div", { class: "search-results-alert" }, "Loading...")); return; }
+  if (state.searchResults === null) return;
+  if (state.searchResults.length === 0) {
+    box.append(el("div", { class: "search-results-alert" }, 'No result for query "', el("span", { class: "query-text-in-no-result" }, state.cachedSearch?.query ?? ""), '".'));
+    return;
+  }
+  if (state.pageTotal > 1) box.append(pagination());
+  const list = el("div", { class: "search-results-container" });
+  const single = (state.cachedSearch?.languages ?? "").indexOf(",") < 0;
+  for (const result of state.searchResults) {
+    const a = result.attributes;
+    const info = el("div", { class: "overlay-btn", html: ICON_INFO });
+    info.onclick = () => showSubInfo(result);
+    const dl = el("div", { class: "overlay-btn", html: ICON_DOWNLOAD });
+    dl.onclick = () => download(result);
+    const overlay = el("div", { class: "overlay" }, el("div", { class: "ui-lr" }, el("div", { class: "left" }), el("div", { class: "right" }, el("div", { class: "overlay-btn-container" }, info, dl))));
+    const count = a.download_count;
+    const leftInfo = el("div", { class: "left" });
+    if (!single) leftInfo.append(el("span", { class: "result-lang" }, getLanguageName(a.language)));
+    leftInfo.append(el("span", {}, `${a.fps}fps`), el("span", {}, `DL:${count > 1000 ? (count / 1000).toFixed(1) + "k" : count}`), el("span", {}, `${a.ratings}★`));
+    const rightInfo = el("div", { class: "right" });
+    if (a.ai_translated) rightInfo.append(el("span", {}, "AI"));
+    if (a.machine_translated) rightInfo.append(el("span", {}, "MT"));
+    rightInfo.append(el("span", {}, (a.upload_date || "").split("T")[0]));
+    list.append(el("div", { class: "result-item" }, overlay, el("div", { class: "result-feature" }, `${a.feature_details.title} (${a.feature_details.year})`),
+      el("div", { class: "result-filename" }, a.release), el("div", { class: "result-info ui-lr" }, leftInfo, rightInfo)));
+  }
+  box.append(list);
+  if (state.pageTotal > 1) box.append(pagination());
+}
+
+function renderModal() {
+  const m = state.modal;
+  $("modal").classList.toggle("hidden", !m);
+  if (!m) return;
+  $("modal-title").textContent = m.title;
+  const body = $("modal-body"), footer = $("modal-footer");
+  if (m.rendered === m.type && m.type !== "lang") return; // its inputs kept as they are typed in
+  m.rendered = m.type;
+  body.textContent = ""; footer.textContent = "";
+  if (m.type === "login") {
+    body.innerHTML = 'Please enter your <em>opensubtitles.com</em> username and password. Note that this is not the same as your <em>opensubtitles.org</em> account. If you have not <a href="https://www.opensubtitles.com/users/import">migrated</a> your account yet, please do so before logging in.';
+    const user = el("input", { type: "text", placeholder: "Username", autocorrect: "off", autocomplete: "off", id: "login-user" });
+    const pass = el("input", { type: "password", placeholder: "Password", id: "login-pass" });
+    body.append(el("div", { class: "login-container" }, user, pass), el("p", { class: "login-error", id: "login-error" }));
+    const go = el("button", { id: "login-go" }, "Login");
+    go.onclick = performLogin;
+    footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }), el("div", { class: "right" }, go)));
+  } else if (m.type === "subInfo") {
+    const a = state.subInfo.attributes, f = a.feature_details;
+    const row = (label, value) => el("div", { class: "sub-info-detail" }, el("span", { class: "sub-info-label" }, label), el("span", {}, String(value ?? "N/A")));
+    const files = el("ul");
+    for (const file of a.files) files.append(el("li", {}, file.file_name));
+    body.append(el("div", { class: "sub-info-title" }, a.release),
+      row("Language:", `${(state.langMap || {})[a.language.toLowerCase()] ?? a.language} (${a.language})`), row("Uploaded by", `${a.uploader.name} (${a.uploader.rank})`),
+      row("Date:", new Date(a.upload_date).toLocaleString()), el("div", {}, `${a.ratings}★ / ${a.votes} votes / ${a.points ?? "0"} points`),
+      el("div", { class: "feature-title" }, `${f.title} (${f.year}) `, el("span", { class: "feature-type" }, f.feature_type)),
+      el("div", {}, el("span", { class: "sub-info-label" }, "IMDB:"), el("span", {}, String(f.imdb_id)), " / ", el("span", { class: "sub-info-label" }, "TMDB:"), el("span", {}, String(f.tmdb_id))),
+      row("FPS:", a.fps), row("Downloads:", `${a.download_count} (${a.new_download_count} new)`), row("Trusted Source:", a.from_trusted), row("AI Translated:", a.ai_translated),
+      row("Machine Translated:", a.machine_translated), row("Hearing Impaired:", a.hearing_impaired), row("Comments:", a.comments), el("div", { class: "sub-info-label" }, "Files:"), files);
+    const browser = el("button", {}, "Show in browser");
+    browser.onclick = () => rpc.call("$openLink", a.url);
+    const dl = el("button", {}, "Download");
+    dl.onclick = () => download(state.subInfo);
+    footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }, browser), el("div", { class: "right" }, dl)));
+  } else if (m.type === "lang") {
+    if (state.langList === null) { body.append("Loading..."); }
+    else {
+      const box = el("div", { class: "lang-container" });
+      for (const lang of [...state.langList].sort((a, b) => a.language_name.localeCompare(b.language_name))) {
+        const input = el("input", { type: "checkbox", id: "lang-" + lang.language_code });
+        input.checked = !!state.subLang[lang.language_code];
+        input.onchange = () => { state.subLang[lang.language_code] = input.checked; rpc.call("$setLanguages", langString()); render(); };
+        box.append(el("div", { class: "lang-item" }, input, el("label", { for: "lang-" + lang.language_code }, lang.language_name)));
+      }
+      body.append(box);
+    }
+    const close = el("button", {}, "Close");
+    close.onclick = () => { state.modal = null; render(); };
+    footer.append(el("div", { class: "ui-lr" }, el("div", { class: "left" }, `Selected: ${langString()}`), el("div", { class: "right" }, close)));
+  }
+}
+
+function showModal(type, title) { state.modal = { type, title }; render(); }
+function showSubInfo(sub) { state.subInfo = sub; showModal("subInfo", "Subtitle Details"); }
+
+async function getUserInfo() {
+  log(`Login status: ${client.loggedIn}`);
+  if (client.loggedIn) {
+    const info = await client.getUserInfo();
+    state.userInfo = { ...info.data, username: client.username };
+    log(`Logged in as ${client.username}`);
+  }
+}
+
+async function showUserPopup() {
+  if (!(state.userInfo && state.userInfo.user_id)) await getUserInfo();
+  state.userPopupShown = !state.userPopupShown;
+  render();
+}
+
+function login() {
+  if (client.loggedIn) { getUserInfo().then(render); return; }
+  showModal("login", "Login");
+}
+
+async function logout() {
+  log("Logging out");
+  await client.logout();
+  state.userInfo = null;
+  state.userPopupShown = false;
+  log("Logged out");
+}
+
+async function performLogin() {
+  const go = $("login-go");
+  go.disabled = true;
+  const username = $("login-user").value;
+  try {
+    const resData = await client.login(username, $("login-pass").value);
+    state.userInfo = { ...resData.user, username };
+    state.modal = null;
+    state.errorSavingJWT = !resData.jwtSaved;
+    log(`Logged in as ${username}, jwt saved: ${resData.jwtSaved}`);
+  } catch (err) {
+    log(`Login error: ${err}`, "error");
+    $("login-error").textContent = err.message;
+  } finally {
+    if ($("login-go")) $("login-go").disabled = false;
+  }
+}
+
+async function refreshLanguageList() {
+  log("Getting language list...");
+  try {
+    state.langList = (await client.getLanguages()).data;
+    state.langMap = Object.fromEntries(state.langList.map((l) => [l.language_code, l.language_name]));
+    for (const key of Object.keys(state.subLang)) if (!(key in state.langMap)) delete state.subLang[key];
+    log("Languages updated");
+  } catch (err) {
+    log(`Error getting languages: ${err}`, "error");
+    state.errorGettingLanguages = true;
+  }
+  render();
+}
+
+function setLanguages() { showModal("lang", "Languages"); refreshLanguageList(); }
+
+async function pasteFilename() { $("search-text").value = await rpc.call("$getFileName"); render(); }
+
+async function download(item) {
+  const a = item.attributes;
+  log(`Downloading ${a.release} (ID: ${item.id}, ${a.files.length} files)`);
+  const fidList = a.files.map((f) => f.file_id);
+  if (fidList.length < 1) { rpc.call("$sendOSD", "No files to download"); return; }
+  rpc.call("$sendOSD", "Downloading…");
+  try {
+    const res = await client.download(fidList);
+    log(`Downloaded ${a.release} (${fidList.length} files)`);
+    const { requests, remaining, message } = res;
+    state.quotaInfo = { requests, remaining, message };
+    if (state.userInfo) Object.assign(state.userInfo, { downloads_count: requests, remaining_downloads: remaining, reset_time: message });
+  } catch (err) {
+    log(`Download error: ${err}`, "error");
+  }
+  render();
+}
+
+async function performSearch(page = null) {
+  if (state.langMap == null) await refreshLanguageList();
+  state.isSearching = true;
+  render();
+  if (page == null) log(`Searching for ${$("search-text").value}`);
+  try {
+    const options = page && state.cachedSearch ? { ...state.cachedSearch, page } : {
+      query: $("search-text").value, type: state.optType, languages: langString() || "en",
+      machine_translated: $("opt-machine").checked ? "include" : "exclude", ai_translated: $("opt-ai").checked ? "include" : "exclude",
+      trusted_sources: $("opt-trusted").checked ? "only" : "exclude", hearing_impaired: state.optHearingImpaired,
+    };
+    state.cachedSearch = null;
+    const resData = await client.search(options);
+    state.cachedSearch = options;
+    state.searchResults = resData.data;
+    state.pageNumber = resData.page;
+    state.pageTotal = resData.total_pages;
+    if (page == null) log(`Search results: ${resData.data.length} items`);
+  } catch (err) {
+    log(`Search error: ${err}`, "error");
+    state.searchResults = [];
+  } finally {
+    state.isSearching = false;
+    render();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  segmented("opt-type", { movie: "Movie", episode: "Episode", all: "All" }, () => state.optType, (k) => { state.optType = k; });
+  segmented("opt-impaired", { include: "Include", exclude: "Exclude", only: "Only" }, () => state.optHearingImpaired, (k) => { state.optHearingImpaired = k; });
+  $("search-text").addEventListener("input", render);
+  $("search-text").addEventListener("keypress", (e) => { if (e.key === "Enter") performSearch(); });
+  $("go").onclick = () => performSearch();
+  $("toggle-options").onclick = () => $("search-options").classList.toggle("show");
+  $("set-languages").onclick = setLanguages;
+  $("paste-filename").onclick = pasteFilename;
+  $("log-btn").onclick = () => { state.showLog = !state.showLog; render(); };
+  $("modal-close").onclick = () => { state.modal = null; render(); };
+  render();
+  rpc.serve("$requestDownload", async () => { // the provider's search (IINA's global.startSearch)
+    if (state.userInfo == null) await getUserInfo();
+    await pasteFilename();
+    await performSearch();
+  });
+  const cached = await rpc.call("$getJWT");
+  if (cached && typeof cached.jwt === "string" && cached.jwt.length > 0) {
+    client.jwt = cached.jwt;
+    client.username = cached.username;
+    state.userInfo = { username: client.username };
+  }
+  const lang = await rpc.call("$getLanguages");
+  for (const l of (lang || "").split(",")) if (l) state.subLang[l] = true;
+  render();
+});
+</script>
+</body>
+</html>

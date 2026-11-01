@@ -326,6 +326,12 @@ final class Players
         return self::create()[1];
     }
 
+    /** $paths played in a new window (the playlist's Play in New Window, IINA's newPlayerCore.openURLs). @param list<string> $paths */
+    public static function inNewWindow(array $paths): void
+    {
+        self::play(self::create(), $paths);
+    }
+
     /** The plugins or their menus changed: the menu bar built again, the settings' window shown again. */
     public static function pluginsChanged(): void
     {
@@ -408,6 +414,7 @@ App::whenReady(function () use ($argv): void {
     \MyPHP\PlayerPlugins\Plugins::configure();
     \MyPHP\PlayerPlugins\Plugins::$newPlayer = fn(): MediaPlayerState => Players::forPlugin();
     \MyPHP\PlayerPlugins\Plugins::onChange(fn() => Players::pluginsChanged());
+    MediaPlayerMenus::$playInNewWindow = fn(array $paths) => Players::inNewWindow($paths);
     MediaPlayerMenus::$showSettings = function (string $page): void { \MyPHP\UI\MediaPlayerSettings::$showPage = $page; Players::settings(); };
     \MyPHP\PlayerPlugins\Plugins::loadGlobalInstances();
     Players::menu();

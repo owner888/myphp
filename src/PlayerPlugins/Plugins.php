@@ -219,7 +219,7 @@ final class Plugins
         self::unloadAll();
         self::$plugins = null;
         self::loadGlobalInstances();
-        foreach (self::players() as $s) { $s->loadPlugins(); }
+        foreach (self::players() as $s) { $s->loadPlugins(); $s->replayPluginEvents(); }
         self::changed();
     }
 
@@ -256,6 +256,156 @@ final class Plugins
             throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotLoad'));
         }
         return $p;
+    }
+
+    /**
+     * The official plugins the store lists (IINA's defaultPlugins), myphp's
+     * of PHP in place of IINA's of JavaScript, which do not run.
+     * @var list<array{name: string, url: string, id: string, desc: string}>
+     */
+    public const OFFICIAL = [
+        ['name' => 'Online Media', 'url' => 'https://github.com/owner888/myphp-plugin-online-media', 'id' => 'io.myphp.ytdl',
+            'desc' => 'Official plugin for playing online media via yt-dlp / youtube-dl. The built-in youtube-dl support will be disabled when this plugin is enabled.'],
+        ['name' => 'Userscript', 'url' => 'https://github.com/owner888/myphp-plugin-userscript', 'id' => 'io.myphp.user-script', 'desc' => 'User Scripts for myphp'],
+        ['name' => 'Online Subtitles', 'url' => 'https://github.com/owner888/myphp-plugin-opensub', 'id' => 'io.myphp.opensub', 'desc' => 'Official OpenSubtitles plugin for myphp'],
+    ];
+    /** Whether the Online Media plugin is on (IINA's hasYTDL): pages are then the plugin's to read, not yt-dlp's of the player. */
+    public static function hasYTDL(): bool
+    {
+        foreach (self::$plugins ?? [] as $p) { if ($p->identifier === 'io.myphp.ytdl' && $p->enabled()) { return true; } }
+        return false;
+    }
+
+    /** The community's plugins the store lists (IINA's plugins.json of its repository), myphp's repository's. */
+    public const COMMUNITY_LIST = 'https://raw.githubusercontent.com/owner888/myphp/refs/heads/main/plugins.json';
+
+    /** IINA's Regex.githubRepo and Regex.githubURL: "owner/repo", "https://github.com/owner/repo". */
+    public const GITHUB_REPO = '~^([^/]+)/([^/]+)/?$~', GITHUB_URL = '~^https://github\.com/[\w-]+/[\w-]+/?$~';
+
+    /** $s ("owner/repo" or a GitHub URL) as the repository's URL (IINA's standardizeGithubURL); throws for another. */
+    public static function githubURL(string $s): string
+    {
+        if (preg_match('~^[\w-]+/[\w-]+$~', $s) === 1) { return "https://github.com/$s"; }
+        if (preg_match(self::GITHUB_URL, $s) !== 1) { throw new PluginInstallError(self::t('iinaPluginInstallErrorInvalidUrl')); }
+        return rtrim($s, '/');
+    }
+
+    /**
+     * Downloads the plugin of GitHub repository $s (IINA's create(fromGitURL:)):
+     * the .iinaplgz of its latest release where it has one, else its
+     * source (its main branch's archive); unpacked, not yet among them.
+     */
+    public static function fromGitHub(string $s): Plugin
+    {
+        $url = self::githubURL($s);
+        $path = (string)parse_url($url, PHP_URL_PATH);
+        Logger::debug("Installing plugin from GitHub URL: $url", self::LOG);
+        try {
+            [$status, $body] = \MyPHP\Media\Https::request('GET', "https://api.github.com/repos$path/releases/latest", ['Accept' => 'application/vnd.github+json'], null, 'plugins');
+            $json = $status === 200 ? json_decode($body, true) : null;
+            foreach (is_array($json['assets'] ?? null) ? $json['assets'] : [] as $asset) {
+                if (!str_ends_with((string)($asset['name'] ?? ''), '.iinaplgz') || !is_string($asset['browser_download_url'] ?? null)) { continue; }
+                [$status, $package] = \MyPHP\Media\Https::request('GET', $asset['browser_download_url'], [], null, 'plugins');
+                if ($status !== 200) { break; }
+                $file = sys_get_temp_dir() . '/' . basename((string)$asset['name']);
+                file_put_contents($file, $package);
+                try { return self::unpack($file); } finally { @unlink($file); }
+            }
+        } catch (\RuntimeException $e) {
+            Logger::debug("Cannot find an iinaplgz file in the latest release: {$e->getMessage()}", self::LOG);
+        }
+        Logger::debug('Installing from source', self::LOG);
+        try {
+            [$status, $zip] = \MyPHP\Media\Https::request('GET', "$url/archive/main.zip", [], null, 'plugins');
+        } catch (\RuntimeException $e) {
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotDownload', ['output' => $e->getMessage()]));
+        }
+        if ($status !== 200) { throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotDownload', ['output' => "HTTP $status"])); }
+        $tmp = self::dir() . '/.temp.' . bin2hex(random_bytes(8));
+        $file = "$tmp.zip"; $unzipped = "$tmp-1";
+        file_put_contents($file, $zip);
+        @mkdir($tmp); @mkdir($unzipped);
+        try {
+            $out = self::run(['/usr/bin/unzip', '-q', $file, '-d', $unzipped]);
+            $top = array_values(array_filter(array_map(fn(string $f) => "$unzipped/$f", array_diff(scandir($unzipped) ?: [], ['.', '..', '__MACOSX'])), 'is_dir')); // the archive's folder ("repo-main")
+            if ($out !== null || count($top) !== 1) {
+                self::removeTree($tmp);
+                throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotDownload', ['output' => $out ?? 'the archive holds no folder']));
+            }
+            foreach (scandir($top[0]) ?: [] as $f) {
+                if ($f !== '.' && $f !== '..') { rename("$top[0]/$f", "$tmp/$f"); }
+            }
+        } finally {
+            @unlink($file);
+            self::removeTree($unzipped);
+        }
+        $p = Plugin::load($tmp);
+        if ($p === null) {
+            self::removeTree($tmp);
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotLoad'));
+        }
+        if ($p->githubVersion === null || $p->githubRepo === null) {
+            Logger::warn("The plugin {$p->name} doesn't contain a ghVersion field or its ghRepo doesn't match the current requested URL $url.", self::LOG);
+        }
+        return $p;
+    }
+
+    /** The version of $p on GitHub newer than its (IINA's checkNewVersion: its repository's Info.json's ghVersion greater), null for none or one not of GitHub; throws where it cannot tell. */
+    public static function newVersion(Plugin $p): ?string
+    {
+        if ($p->githubVersion === null || $p->githubRepo === null) { return null; }
+        try {
+            [$status, $body] = \MyPHP\Media\Https::request('GET', "https://raw.githubusercontent.com/{$p->githubRepo}/main/Info.json", [], null, 'plugins');
+        } catch (\RuntimeException $e) {
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotDownload', ['output' => $e->getMessage()]));
+        }
+        $json = $status === 200 ? json_decode($body, true) : null;
+        if (!is_int($json['ghVersion'] ?? null) || !is_string($json['version'] ?? null)) {
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotDownload', ['output' => "HTTP $status"]));
+        }
+        return $json['ghVersion'] > $p->githubVersion ? $json['version'] : null;
+    }
+
+    /** $p as downloaded again from its repository (IINA's updated()): of its identifier, else it throws; null for one not of GitHub. */
+    public static function downloadUpdate(Plugin $p): ?Plugin
+    {
+        $url = $p->githubURL();
+        if ($url === null) { return null; }
+        $new = self::fromGitHub($url);
+        if ($new->identifier !== $p->identifier) {
+            Logger::error("The updated plugin has an identifier {$new->identifier}, which doesn't match the current one ({$p->identifier})", self::LOG);
+            self::removeTree($new->root);
+            throw new PluginInstallError(self::t('iinaPluginInstallErrorCannotLoad'));
+        }
+        return $new;
+    }
+
+    /**
+     * Puts $new, downloaded, in place of $old (IINA's PluginManager.update
+     * once agreed): where it asks for more permissions or other hosts,
+     * those agreed to ($agree, of the new and the old); its instances run
+     * anew. Whether it went in.
+     * @param Closure(Plugin, Plugin): bool $agree
+     */
+    public static function replace(Plugin $old, Plugin $new, Closure $agree): bool
+    {
+        $same = array_diff($new->permissions, $old->permissions) === [] && $new->domainList === $old->domainList;
+        if (!$same && !$agree($new, $old)) {
+            self::removeTree($new->root);
+            return false;
+        }
+        $on = $old->enabled();
+        $all = self::all();
+        $at = array_search($old, $all, true);
+        self::remove($old);
+        self::normalizePath($new);
+        $all = self::all();
+        array_splice($all, $at === false ? count($all) : (int)$at, 0, [$new]);
+        self::$plugins = $all;
+        self::saveOrder($all);
+        if ($on) { self::setEnabled($new, true); }
+        self::changed();
+        return true;
     }
 
     /** Runs $argv: null if it went well, else what it wrote. @param list<string> $argv */

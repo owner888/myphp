@@ -155,21 +155,23 @@ final class MediaPlayerMenus
                 onOpen: function (MenuItem $m) use ($build): void { self::update($m->submenu, $build()); });
         }
         if (Plugins::active()) { // IINA's Plugin menu, built anew as it opens: the plugins' items change as they will
-            $out[] = new MenuItem(self::t('iinaMenuPlugin'), submenu: self::plugin($s), id: 'iina.plugin', onOpen: fn(MenuItem $m) => $m->setSubmenu(self::plugin($s)));
+            $out[] = new MenuItem(self::t('iinaMenuPlugin'), submenu: self::plugin($s), id: 'iina.plugin', onOpen: function (MenuItem $m) use ($s): void { $s?->emitForPlugins('iina.menu-update'); $m->setSubmenu(self::plugin($s)); }); // iina.menu-update told first, IINA's
         }
         return $out;
     }
 
     /** Opens the settings window at page $page ('plugins'), the app's (Manage Plugins…). @var ?Closure(string): void */
     public static ?Closure $showSettings = null;
+    /** Plays $paths in a new player window, the app's (the playlist's Play in New Window, IINA's newPlayerCore.openURLs); none: the item is not there. @var ?Closure(list<string>): void */
+    public static ?Closure $playInNewWindow = null;
 
     /**
      * IINA's Plugin menu (MenuController.updatePluginMenu) of player $s:
      * Manage Plugins…, Show or Hide Plugins Panel; each plugin's items (its global instance's, then
      * the player's) under its name, the first five, the rest under More…,
      * a key taken by a key binding of the player's left off and the plugins
-     * so keyed listed under Conflicting key shortcuts… at the top; Reload
-     * All Plugins.
+     * so keyed listed under Conflicting key shortcuts… at the top; Developer
+     * Tool (each instance's, MediaPlayerDevTool), Reload All Plugins.
      * @return list<MenuItem>
      */
     public static function plugin(?MediaPlayerState $s): array
@@ -183,7 +185,11 @@ final class MediaPlayerMenus
             MenuItem::separator(),
         ];
         $first = true;
+        $devTool = [];
         foreach ($s?->plugins() ?? [] as $instance) {
+            foreach (array_filter([$instance, $instance->plugin->globalInstance]) as $i) { // its developer tool, and its global instance's (IINA's)
+                $devTool[] = new MenuItem(MediaPlayerDevTool::title($i), fn() => MediaPlayerDevTool::show($i, MediaPlayerDevTool::title($i)));
+            }
             $items = [...($instance->plugin->globalInstance?->menuItems ?? []), ...$instance->menuItems];
             if ($items === []) { continue; }
             if (!$first) { $out[] = MenuItem::separator(); }
@@ -203,6 +209,7 @@ final class MediaPlayerMenus
             array_unshift($out, new MenuItem(self::t('iinaMenuConflictingShortcuts'), submenu: array_map(fn(array $c) => new MenuItem("{$c[0]}: {$c[1]}", disabled: true), $conflicts)));
         }
         $out[] = MenuItem::separator();
+        $out[] = new MenuItem(self::t('iinaMenuDeveloperTool'), submenu: $devTool, id: 'iina.developerTool');
         $out[] = new MenuItem(self::t('iinaMenuReloadPlugins'), fn() => Plugins::reloadAll(), id: 'iina.reloadPlugins');
         return $out;
     }

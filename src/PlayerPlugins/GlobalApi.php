@@ -62,7 +62,7 @@ final class GlobalApi extends Api
         $players = match (true) {
             $target === null => $this->players,
             is_int($target) => array_filter([$this->players[$target] ?? null]),
-            default => array_filter(Plugins::players(), fn(MediaPlayerState $s) => $s->managedLabel === $target),
+            default => array_filter(Plugins::players(), fn(MediaPlayerState $s) => ($s->managedLabel ?? $s->logName()) === $target), // the label its messages came with
         };
         foreach ($players as $s) {
             $child = $s->pluginInstance($this->instance->plugin)?->iina->global;

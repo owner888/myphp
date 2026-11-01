@@ -7,7 +7,7 @@ use Closure;
 
 /**
  * What a plugin's entry is given, IINA's global `iina`: its APIs, those of
- * a player (core, mpv, event, playlist, subtitle, overlay, sidebar) only in a player's
+ * a player (core, mpv, event, playlist, subtitle, overlay, sidebar, input) only in a player's
  * instance, null in the global one's; and IINA's timers (setTimeout,
  * setInterval and their clearing, JavaScript's in IINA). What IINA's
  * promise gives, these return, waiting meanwhile (in a fiber of the
@@ -28,7 +28,9 @@ final class Iina
     public readonly ?SubtitleApi $subtitle;
     public readonly ?OverlayApi $overlay;
     public readonly ?SidebarApi $sidebar;
+    public readonly ?InputApi $input;
     public readonly StandaloneWindowApi $standaloneWindow;
+    public readonly WsApi $ws;
     /** The global instance's controller (GlobalApi), a player's child of it (GlobalChildApi), or null where the plugin has no globalEntry. */
     public readonly GlobalApi|GlobalChildApi|null $global;
 
@@ -48,7 +50,9 @@ final class Iina
         $this->subtitle = $player ? new SubtitleApi($instance) : null;
         $this->overlay = $player ? new OverlayApi($instance) : null;
         $this->sidebar = $player ? new SidebarApi($instance) : null;
+        $this->input = $player ? new InputApi($instance) : null;
         $this->standaloneWindow = new StandaloneWindowApi($instance);
+        $this->ws = new WsApi($instance);
         $this->global = $instance->isGlobal ? new GlobalApi($instance) : ($instance->plugin->globalEntryURL !== null ? new GlobalChildApi($instance) : null);
     }
 

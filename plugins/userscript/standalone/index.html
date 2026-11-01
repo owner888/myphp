@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>User Scripts</title>
+<style>
+  :root { color-scheme: light dark; --border: rgba(0,0,0,.15); --soft: rgba(0,0,0,.05); --accent: #0b6bcb; --danger: #c41c1c; --muted: rgba(0,0,0,.6); }
+  @media (prefers-color-scheme: dark) { :root { --border: rgba(255,255,255,.15); --soft: rgba(255,255,255,.06); --accent: #4393e4; --danger: #f09898; --muted: rgba(255,255,255,.6); } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  .card, .sheet { border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .card { padding: 12px; margin: 8px; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; }
+  .card p { margin: 0 0 8px; color: var(--muted); }
+  button { font: inherit; border: 0; border-radius: 6px; padding: 4px 10px; cursor: pointer; background: var(--soft); color: inherit; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  .group button + button { margin-left: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { font-weight: 600; }
+  #list-wrap { margin: 0 8px 8px; overflow: hidden; }
+  #editor { display: none; flex-direction: column; height: 100vh; padding: 8px; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px; gap: 16px; }
+  .name { display: flex; }
+  .name input { font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px 0 0 6px; background: transparent; color: inherit; }
+  .name button { border-radius: 0 6px 6px 0; }
+  textarea { flex: 1; margin-top: 8px; width: 100%; resize: none; padding: 8px; font: 12px Menlo, monospace; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; tab-size: 4; }
+  #notif { position: fixed; z-index: 100; right: 16px; bottom: 16px; width: 240px; padding: 8px 12px; border-radius: 6px; background: #1f7a1f; color: #fff; display: none; }
+</style>
+</head>
+<body>
+<div id="list">
+  <div class="card">
+    <h3>About User Scripts</h3>
+    <p>User Scripts work like those in browsers - they let you use the plugin API to add and share desired functionalities without the hassle of creating a plugin package.</p>
+    <div style="text-align: right"><button class="primary" id="add">＋ New Script</button></div>
+  </div>
+  <div id="list-wrap" class="sheet">
+    <table><thead><tr><th>Script Name</th><th></th><th>Action</th></tr></thead><tbody id="rows"></tbody></table>
+  </div>
+</div>
+<div id="editor">
+  <div class="toolbar sheet">
+    <div class="group"><button id="exit">← Exit</button><button class="primary" id="save">Save</button></div>
+    <div class="name"><input id="script-name"><button id="rename">✓</button></div>
+  </div>
+  <textarea id="code" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+</div>
+<div id="notif"></div>
+<script>
+// IINA's plugin-userscript window (its React app's List and Editor), without a framework: the messages of its global instance alike.
+const call = (name, data, done) => new Promise((resolve) => { iina.onMessage(done, resolve); iina.postMessage(name, data); });
+const loadUserScripts = () => call("load-scripts", null, "load-scripts-done");
+const saveUserScripts = (scripts) => call("save-scripts", scripts, "save-scripts-done");
+const uuidv4 = () => ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) => (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+let scripts = [];
+let notifTimeout = null;
+
+function notify(message) {
+  const n = document.getElementById("notif");
+  n.textContent = message;
+  n.style.display = "block";
+  clearTimeout(notifTimeout);
+  notifTimeout = setTimeout(() => { n.style.display = "none"; }, 2000);
+}
+
+function renderList() {
+  const rows = document.getElementById("rows");
+  rows.textContent = "";
+  for (const script of scripts) {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td");
+    name.textContent = "‹›  " + script.name;
+    const actions = document.createElement("td");
+    actions.className = "group";
+    const edit = document.createElement("button");
+    edit.textContent = "Edit";
+    edit.onclick = () => { location.hash = "#/edit/" + script.id; };
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.className = "danger";
+    del.onclick = async () => {
+      if (!window.confirm(`Are you sure to delete ${script.name}?`)) return;
+      scripts = scripts.filter((s) => s !== script);
+      await saveUserScripts(scripts);
+      renderList();
+    };
+    actions.append(edit, del);
+    tr.append(name, document.createElement("td"), actions);
+    rows.append(tr);
+  }
+}
+
+async function showList() {
+  document.getElementById("list").style.display = "block";
+  document.getElementById("editor").style.display = "none";
+  scripts = await loadUserScripts();
+  renderList();
+}
+
+async function showEditor(id) {
+  document.getElementById("list").style.display = "none";
+  document.getElementById("editor").style.display = "flex";
+  const { content } = await call("get-script-content", { id }, "get-script-content-done");
+  const info = await call("get-script-info", { id }, "get-script-info-done");
+  document.getElementById("code").value = content;
+  document.getElementById("script-name").value = info ? info.name : "";
+  document.getElementById("save").onclick = async () => {
+    await call("set-script-content", { id, content: document.getElementById("code").value }, "set-script-content-done");
+    notify("Saved.");
+  };
+  document.getElementById("rename").onclick = async () => {
+    await call("set-script-info", { id, name: document.getElementById("script-name").value }, "set-script-info-done");
+    notify("Name updated.");
+  };
+}
+
+function route() {
+  const m = location.hash.match(/^#\/edit\/(.+)$/);
+  m ? showEditor(m[1]) : showList();
+}
+
+document.getElementById("add").onclick = async () => {
+  let n = 1;
+  while (scripts.some((s) => s.name === `Untitled_${n}`)) n++;
+  const script = { id: uuidv4(), name: `Untitled_${n}` };
+  scripts = [...scripts, script];
+  await saveUserScripts(scripts);
+  location.hash = "#/edit/" + script.id;
+};
+document.getElementById("exit").onclick = () => { location.hash = "#/"; };
+document.getElementById("code").addEventListener("keydown", (e) => {
+  if (e.key === "Tab") { e.preventDefault(); document.execCommand("insertText", false, "    "); }
+  if (e.key === "s" && e.metaKey) { e.preventDefault(); document.getElementById("save").click(); }
+});
+window.addEventListener("hashchange", route);
+document.addEventListener("DOMContentLoaded", route);
+</script>
+</body>
+</html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status and Downloads</title>
+    <style>
+        body {
+            color-scheme: light dark;
+            font-size: 13px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+            user-select: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .text-secondary {
+            color: rgba(0, 0, 0, .6);
+            font-size: 85%;
+        }
+
+        .binary-status,
+        #js-runtime-alert {
+            display: none;
+            padding: 10px;
+        }
+
+        .binary-status.status-bundled,
+        #js-runtime-alert {
+            background: rgba(255, 59, 48, .1);
+        }
+
+        .binary-status.status-managed,
+        .binary-status.status-custom {
+            background: rgba(76, 217, 100, .1);
+        }
+
+        .binary-status .status-msg,
+        #js-runtime-alert .status-msg {
+            margin-bottom: 10px;
+        }
+
+        .binary-status .status-title,
+        #js-runtime-alert .status-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .download-item {
+            padding: 10px 10px 0 10px;
+        }
+
+        .filename {
+            font-weight: bold;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .progress {
+            color: rgba(0, 0, 0, .5);
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(0, 0, 0, .1);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .task-options a {
+            margin-left: 8px;
+        }
+
+        .no-task {
+            padding: 10px;
+        }
+
+        h4 {
+            margin: 0;
+            padding: 8px;
+            background: rgba(200, 200, 200, .6);
+        }
+
+        .info-container {
+            padding: 10px 10px 0 10px;
+        }
+
+        .binary-msg,
+        .download-container {
+            padding: 8px 2px;
+        }
+
+        .downloading {
+            display: none;
+            text-align: center;
+            padding: 20px 10px 10px 10px;
+        }
+
+        .downloading .message {
+            margin-bottom: 6px;
+        }
+
+        .download-error,
+        .download-info {
+            font-size: 85%;
+        }
+
+        .download-error {
+            color: #ff3b30;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                color: #eee;
+            }
+
+            .spinner div {
+                background: #fff;
+            }
+
+            a {
+                color: #007aff;
+                text-decoration: none;
+            }
+
+            .progress {
+                color: rgba(255, 255, 255, .5);
+                border-bottom: 1px solid rgba(255, 255, 255, .1);
+            }
+
+            h4 {
+                background: rgba(100, 100, 100, .6);
+            }
+
+            .text-secondary {
+                color: rgba(255, 255, 255, .7);
+            }
+        }
+    </style>
+    <style>
+        .spinner {
+            display: inline-block;
+            position: relative;
+            width: 80px;
+            height: 20px;
+        }
+
+        .spinner div {
+            position: absolute;
+            top: 7px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #000;
+            animation-timing-function: cubic-bezier(0, 1, 1, 0);
+        }
+
+        .spinner div:nth-child(1) {
+            left: 28px;
+            animation: spinner1 0.6s infinite;
+        }
+
+        .spinner div:nth-child(2) {
+            left: 28px;
+            animation: spinner2 0.6s infinite;
+        }
+
+        .spinner div:nth-child(3) {
+            left: 40px;
+            animation: spinner2 0.6s infinite;
+        }
+
+        .spinner div:nth-child(4) {
+            left: 52px;
+            animation: spinner3 0.6s infinite;
+        }
+
+        @keyframes spinner1 {
+            0% {
+                transform: scale(0);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes spinner3 {
+            0% {
+                transform: scale(1);
+            }
+
+            100% {
+                transform: scale(0);
+            }
+        }
+
+        @keyframes spinner2 {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            100% {
+                transform: translate(12px, 0);
+            }
+        }
+    </style>
+    <script src="downloads-window.js"></script>
+</head>
+
+<body>
+    <section id="status">
+        <h4>Status</h4>
+        <div class="binary-status status-bundled">
+            <div class="status-title">⚠ Not Found</div>
+            <div class="status-msg text-secondary">
+                No managed yt-dlp installation found. This means you are using a yt-dlp or youtube-dl found on your
+                system, if any. It may not work correctly.
+                Please download the latest yt-dlp.
+            </div>
+            <button id="download-binary">Download latest yt-dlp</button>
+            <div class="download-container" style="display: none;">
+                <div class="downloading">
+                    <div class="message">
+                        Downloading yt-dlp. This may take minutes depending on your connection speed.
+                    </div>
+                    <div class="spinner">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </div>
+                <div class="download-error"></div>
+                <div class="download-info"></div>
+            </div>
+        </div>
+        <div class="binary-status status-managed">
+            <div class="status-title">Managed</div>
+            <div class="status-msg text-secondary">
+                You are using a yt-dlp installation managed by this plugin.
+            </div>
+            <button id="update-managed-binary">Update yt-dlp</button>
+            <button id="show-binary-in-finder">Show in Finder</button>
+            <div class="download-container" style="display: none;">
+                <div class="downloading">
+                    <div class="message">
+                        Downloading yt-dlp. This may take minutes depending on your connection speed.
+                    </div>
+                    <div class="spinner">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </div>
+                <div class="download-error"></div>
+                <div class="download-info"></div>
+            </div>
+        </div>
+        <div class="binary-status status-custom">
+            <div class="status-title">Custom Binary</div>
+            <div class="status-msg text-secondary">
+                You are using your own custom yt-dlp binary. You may need to update it manually.
+            </div>
+        </div>
+        <div id="js-runtime-alert">
+            <div class="status-title">JavaScript Runtime Required</div>
+            <div class="status-msg text-secondary">
+                yt-dlp requires a JavaScript runtime for Youtube videos.
+                If you have any of the supported runtimes installed (Deno, Node, QuickJS, Bun),
+                please <b>specify the path in the plugin settings.</b>
+                The plugin can also download and use Deno for you, which takes about 80MB of disk space.
+            </div>
+            <button id="download-deno">Download JavaScript Runtime</button>
+            <div class="download-container" style="display: none;">
+                <div class="downloading">
+                    <div class="message">
+                        Downloading Deno. This may take minutes depending on your connection speed.
+                    </div>
+                    <div class="spinner">
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                    </div>
+                </div>
+                <div class="download-error"></div>
+                <div class="download-info"></div>
+            </div>
+        </div>
+        <div class="info-container">
+            <button id="check-binary">Verify yt-dlp binary</button>
+            <div class="binary-msg text-secondary" id="binary-desc">
+                This will print out information about your yt-dlp binary to make sure it is functioning correctly.
+            </div>
+            <div class="binary-msg text-secondary" id="binary-version"></div>
+        </div>
+    </section>
+    <section id="downloads">
+        <h4>Downloads</h4>
+        <div id="content"></div>
+    </section>
+</body>
+
+</html>

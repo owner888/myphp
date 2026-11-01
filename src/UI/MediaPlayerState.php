@@ -24,6 +24,7 @@ use MyPHP\Media\Shooter;
 use MyPHP\Media\ThumbnailCache;
 use MyPHP\Media\CacheBudget;
 use MyPHP\Media\HttpBytes;
+use MyPHP\Media\Opening;
 use MyPHP\Media\Subtitles;
 use MyPHP\Media\YtDlp;
 use MyPHP\Media\Track;
@@ -201,7 +202,7 @@ final class MediaPlayerState
     /** Opens $path, as the user asked ($manual: a file opened, not the next of the playlist). */
     private function openFile(string $path, bool $manual): bool
     {
-        $url = preg_match('~^https?://~i', $path) === 1;
+        $url = preg_match('~^(https?|ytdl)://~i', $path) === 1;
         if ($url && App::running() && \Fiber::getCurrent() === null) {
             $this->opening = $path;
             $this->error = '';
@@ -219,15 +220,30 @@ final class MediaPlayerState
             [Player::$cache, Player::$cachePauseInitial, Player::$cacheWait] = [$set->get('enableCache'), $set->get('cachePauseInitial'), $set->get('cachePauseWait')]; // the network's cache, as mpv's options
             [CacheBudget::$max, CacheBudget::$seconds] = [$set->get('defaultCacheSize') << 10, $set->get('secPrefech')];
             HttpBytes::$userAgent = $set->get('userAgent');
-            [YtDlp::$enabled, YtDlp::$searchPath, YtDlp::$rawOptions] = [$set->get('ytdlEnabled'), $set->get('ytdlSearchPath'), $set->get('ytdlRawOptions')];
+            [YtDlp::$enabled, YtDlp::$searchPath, YtDlp::$rawOptions] = [$set->get('ytdlEnabled') && !Plugins::hasYTDL(), $set->get('ytdlSearchPath'), $set->get('ytdlRawOptions')]; // not with the Online Media plugin on, IINA's
             if ($set->get('httpProxy') !== '') { putenv('http_proxy=http://' . $set->get('httpProxy')); } // as IINA sets it, for curl and yt-dlp
             [$ahead, $this->ahead] = [$this->ahead, null];
             $this->log("Opening $path" . ($manual ? ' (by hand)' : ''));
             $this->loadPluginsOnce();
             $this->emit('mpv.start-file');
             $this->emit('iina.file-started');
-            $p = ($ahead[0] ?? null) === $path && $ahead[1] !== null ? $ahead[1] // opened already, as its gapless audio
-                : new Player($path, function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); });
+            $opening = $url ? $this->runHooks('on_load', new Opening($path, $path)) : null; // the plugins' hooks, mpv's
+            if ($opening !== null && str_starts_with($opening->url, 'memory://')) { return $this->openMemoryPlaylist($opening->url, $manual); }
+            $waiting = function (float $seconds): void { $this->adOver = microtime(true) + $seconds; $this->changed(); };
+            try {
+                $p = ($ahead[0] ?? null) === $path && $ahead[1] !== null ? $ahead[1] // opened already, as its gapless audio
+                    : new Player($path, $waiting, $opening);
+            } catch (RuntimeException $e) {
+                if ($opening === null || !$this->hooked('on_load_fail')) { throw $e; }
+                $this->runHooks('on_load_fail', $opening);
+                if (str_starts_with($opening->url, 'memory://')) { return $this->openMemoryPlaylist($opening->url, $manual); }
+                if (!$opening->changed()) { throw $e; }
+                $p = new Player($path, $waiting, $opening);
+            }
+            if ($this->hooked('on_preloaded')) {
+                $loaded = $this->runHooks('on_preloaded', $opening ?? new Opening($path, $path));
+                if ($loaded->chapters !== []) { $p->setPageChapters($loaded->chapters); }
+            }
         } catch (RuntimeException $e) {
             $this->adOver = null;
             $this->opening = null;
@@ -266,6 +282,64 @@ final class MediaPlayerState
         }
         if ($set->get('fullScreenWhenOpen')) { $this->ask('fullScreen', true); }
         return true;
+    }
+
+    /** @var list<array{name: string, priority: int, instance: Instance, fn: Closure}> the plugins' hooks of mpv's (mpv.addHook) */
+    private array $hooks = [];
+    /** What the hook running makes of the film opening, null while none runs. @internal PlayerPlugins\MpvApi */
+    public ?Opening $hooking = null;
+
+    /** @internal PlayerPlugins\MpvApi: $instance's hook $name (on_load, on_load_fail, on_preloaded) of $priority, gone with it. */
+    public function addHook(string $name, int $priority, Instance $instance, Closure $fn): void
+    {
+        $this->hooks[] = ['name' => $name, 'priority' => $priority, 'instance' => $instance, 'fn' => $fn];
+        $instance->onCleanUp(function () use ($instance): void { $this->hooks = array_values(array_filter($this->hooks, fn(array $h) => $h['instance'] !== $instance)); });
+    }
+
+    /** Whether a plugin hooks $name. */
+    private function hooked(string $name): bool
+    {
+        foreach ($this->hooks as $h) { if ($h['name'] === $name) { return true; } }
+        return false;
+    }
+
+    /**
+     * Runs the plugins' hooks $name on $o, in the order of their priority
+     * (mpv's, lower first): each given its next (mpv's continue, which it
+     * may leave out: a hook is over as it returns, having waited for what
+     * it asked meanwhile); what they set of the film opening kept in $o.
+     */
+    private function runHooks(string $name, Opening $o): Opening
+    {
+        $hooks = array_values(array_filter($this->hooks, fn(array $h) => $h['name'] === $name));
+        usort($hooks, fn(array $a, array $b) => $a['priority'] <=> $b['priority']);
+        foreach ($hooks as $h) {
+            $this->hooking = $o;
+            try {
+                $h['instance']->callNow($h['fn'], static function (): void {});
+            } finally {
+                $this->hooking = null;
+            }
+        }
+        return $o;
+    }
+
+    /** Plays the playlist a hook gave as "memory://" and its text (an M3U's: its entries, their #EXTINF titles), from its first (mpv's). */
+    private function openMemoryPlaylist(string $memory, bool $manual): bool
+    {
+        $files = []; $titles = []; $title = null;
+        foreach (preg_split('/\r\n|\r|\n/', substr($memory, strlen('memory://'))) ?: [] as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, '#EXTINF:')) { $title = trim((string)substr($line, (int)strpos($line, ',') + 1)); continue; }
+            if ($line === '' || $line[0] === '#') { continue; }
+            $files[] = $line;
+            if ($title !== null && $title !== '') { $titles[$line] = $title; }
+            $title = null;
+        }
+        if ($files === []) { throw new RuntimeException('myphp: the playlist a plugin gave has no entries'); }
+        $this->playlist = new Playlist($files, $titles);
+        $this->playlist->select($files[0]);
+        return $this->openFile($files[0], $manual);
     }
 
     /** The films played (IINA's playback history): the app's, PlaybackHistory::default(), unless set. @internal */
@@ -2348,6 +2422,17 @@ final class MediaPlayerState
             if ($only === null ? $p->enabled() : $p === $only) { $this->plugins[] = new Instance($p, $this); }
         }
         $this->changed();
+    }
+
+    /** @internal PlayerPlugins\Plugins::reloadAll: the events told before its plugins were loaded again told again (IINA's reloadAllPlugins): the window's loading, a film's starting and loading where one plays. */
+    public function replayPluginEvents(): void
+    {
+        if ($this->windowLoaded) { $this->emit('iina.window-loaded'); }
+        if ($this->player !== null && $this->player->playing()) {
+            $path = $this->player->path();
+            $this->emit('iina.file-loaded', preg_match('~^[a-z]+://~i', $path) === 1 ? $path : 'file://' . $path);
+            $this->emit('iina.file-started');
+        }
     }
 
     /** Its plugins' instances unloaded (IINA's clearPlugins). */

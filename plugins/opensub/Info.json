@@ -1,0 +1,30 @@
+{
+  "name": "OpenSubtitles",
+  "identifier": "io.myphp.opensub",
+  "version": "1.0.0",
+  "description": "Official OpenSubtitles plugin for myphp",
+  "author": {
+    "name": "myphp Developers",
+    "url": "https://github.com/owner888/myphp-plugin-opensub"
+  },
+  "ghVersion": 1,
+  "ghRepo": "owner888/myphp-plugin-opensub",
+  "entry": "main.php",
+  "globalEntry": "global.php",
+  "permissions": ["show-osd", "file-system", "network-request"],
+  "allowedDomains": ["*"],
+  "sidebarTab": {
+    "name": "OpenSubtitles"
+  },
+  "subtitleProviders": [
+    {
+      "id": "open-sub",
+      "name": "OpenSubtitles"
+    }
+  ],
+  "preferencesPage": "pref.html",
+  "preferenceDefaults": {
+    "languages": "",
+    "save_login": "keychain"
+  }
+}

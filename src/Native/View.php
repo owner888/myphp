@@ -218,14 +218,14 @@ final class View
                 self::keyDown($self, $event, true);
                 return true;
             }],
-            // The release of a key, for a node taking its input as it comes (mygo's KeyReleased).
+            // The release of a key, for a node taking its input as it comes (mygo's KeyReleased) and the frame's (Context::keysReleased).
             'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $input = self::$inputs[ObjC::addr($self)];
                 $mods = ObjC::msg('L:', $event, 'modifierFlags');
                 $input->mods = $mods & Key::MODIFIERS;
-                if ($input->push(['keyup', ObjC::phpStr(ObjC::msg('p:', $event, 'characters')), ObjC::msg('S:', $event, 'keyCode'), $mods])) {
-                    Metal::requestFrame($self);
-                }
+                $plain = ObjC::msg('p:', $event, 'charactersIgnoringModifiers');
+                $input->push(['keyup', ObjC::phpStr(ObjC::msg('p:', $event, 'characters')), ObjC::msg('S:', $event, 'keyCode'), $mods, $plain === null ? '' : ObjC::phpStr($plain)]);
+                Metal::requestFrame($self); // a node taking it as it comes, or Context::keysReleased
             }],
             // The modifiers held, as Context::modifiers() reports them with the pointer still (mygo's ModifiersChanged).
             'flagsChanged:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {

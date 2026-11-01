@@ -580,6 +580,24 @@ final class Context
         return $this->runtime?->holds($n->id) ?? false;
     }
 
+    /**
+     * Where button $button (0 the left, 1 the right, 2 another) went down
+     * since the last frame on $n: [x, y] in the window's points, or null,
+     * told once (as clicked()). The left's on $n itself, nothing built
+     * over it taking the press.
+     * @return ?array{0: float, 1: float}
+     */
+    public function buttonPressed(Node $n, int $button = 0): ?array
+    {
+        return $this->runtime?->buttonPressOn($n->id, $button);
+    }
+
+    /** The keys let go since the last frame, whoever had the focus: their characters, code, modifiers and characters without the modifiers. @return list<array{0: string, 1: int, 2: int, 3: string}> */
+    public function keysReleased(): array
+    {
+        return $this->runtime?->keysReleased() ?? [];
+    }
+
     /** Whether the pointer went down since the last frame outside $n: on neither it, nor what is in it, nor the node it is attached to (Node::attachTo), nor what is attached to a node inside it. A popover closes then, the press going on to what is under it; the last press decides (mygo's PressedOutside). */
     public function pressedOutside(Node $n): bool
     {
@@ -617,9 +635,10 @@ final class Context
 
     /**
      * @internal UI\MediaPlayer: the keys pressed this frame that no shortcut
-     * took, offered to $take (their characters, code, modifiers and the
-     * characters without the modifiers); those it takes (true) taken.
-     * @param Closure(string, int, int, string): bool $take
+     * took, offered to $take (their characters, code, modifiers, the
+     * characters without the modifiers and whether the key repeats as it
+     * is held); those it takes (true) taken.
+     * @param Closure(string, int, int, string, bool): bool $take
      */
     public function takeKeys(Closure $take): void
     {

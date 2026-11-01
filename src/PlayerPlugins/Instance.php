@@ -29,6 +29,10 @@ final class Instance
     private bool $gone = false;
     /** @var list<Closure(): void> what to undo as it goes */
     private array $cleanUps = [];
+    /** Told what it logs, and its level (IINA's logHandler: its developer tool's). @var ?Closure(string, int): void */
+    public ?Closure $logHandler = null;
+    /** Told what its code throws (its developer tool's, IINA's exceptionHandler). @var ?Closure(Throwable): void */
+    public ?Closure $exceptionHandler = null;
 
     public function __construct(public readonly Plugin $plugin, public readonly ?MediaPlayerState $player)
     {
@@ -64,7 +68,7 @@ final class Instance
             try {
                 return $fn(...$args);
             } catch (Throwable $e) {
-                $this->log("{$e->getMessage()}\n---Stack Trace---\n{$e->getFile()}:{$e->getLine()}\n{$e->getTraceAsString()}\n-----------------", Logger::ERROR);
+                $this->thrown($e);
                 return null;
             }
         };
@@ -75,10 +79,30 @@ final class Instance
         return $run();
     }
 
+    /** Calls $fn of the plugin's with $args at once, what it returns returned (an input listener's, which says whether it took the input); what it throws logged, null. */
+    public function callNow(Closure $fn, mixed ...$args): mixed
+    {
+        if ($this->gone) { return null; }
+        try {
+            return $fn(...$args);
+        } catch (Throwable $e) {
+            $this->thrown($e);
+            return null;
+        }
+    }
+
+    /** What its code threw: logged as IINA logs an exception of a plugin's (its message and its trace), its developer tool told. */
+    private function thrown(Throwable $e): void
+    {
+        if ($this->exceptionHandler !== null) { ($this->exceptionHandler)($e); }
+        Logger::log(Logger::ERROR, "{$e->getMessage()}\n---Stack Trace---\n{$e->getFile()}:{$e->getLine()}\n{$e->getTraceAsString()}\n-----------------", $this->subsystem);
+    }
+
     /** Logs $message under its subsystem. */
     public function log(string $message, int $level = Logger::DEBUG): void
     {
         Logger::log($level, $message, $this->subsystem);
+        if ($this->logHandler !== null) { ($this->logHandler)($message, $level); }
     }
 
     /** Has $fn run as it goes (an API's cleanUp). */

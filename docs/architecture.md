@@ -7421,6 +7421,75 @@ the pages of its settings and help.
   page over the sidebar's material, the material over the overlay's
   page under it.
 
+## The plugins' last part (v1.145)
+
+The third of the plugins' parts: input, websockets, the playlist's menu,
+GitHub, the store, updates, the developer tool, mpv's hooks of a film
+opening; and myphp's official plugins of PHP.
+
+- `iina.input` (`PlayerPlugins\InputApi`): a player's keys (mpv's names,
+  normalized) and the mouse's buttons (MOUSE, RIGHT_MOUSE, OTHER_MOUSE)
+  as they go down, up, or drag; one listener of an instance for each.
+  `InputApi::handle` is IINA's PluginInputManager.handle: the listeners
+  of PRIORITY_HIGH or more before the player's handling (a key binding),
+  the others after, one returning true stopping it. `MediaPlayer::keys`
+  and the picture's clicks go through it. The framework gives what that
+  needs: `Context::keysReleased` (the keys let go, whoever has the
+  focus), `Context::buttonPressed` (where a button went down on a node,
+  once a frame), the repeat of a key held to `takeKeys`.
+- `iina.ws` (`WsApi`, `WebSocketServer`): a WebSocket server of the
+  plugin's on a TCP port of all the machine's addresses (no TLS, IINA's);
+  its handshake, frames (masked, fragmented, pings answered, closes) of
+  myphp's own; its state, connections (a UUID each) and messages told;
+  text sent as a binary message (IINA's). Its sockets are looked at
+  every 20 ms while it listens.
+- The playlist's menu (`MediaPlayer::playlistMenu`, IINA's
+  SidebarPlaylistPane.buildMenu): an entry's title, Play Next, Play in
+  New Window (`MediaPlayerMenus::$playInNewWindow`, the app's), Remove; a
+  URL's Open in Browser and Copy URL, a file's Move to Trash and Show in
+  Finder; the items of the plugins' `playlist.registerMenuItemBuilder`
+  under Plugin; Add File…, Add URL…, Clear Playlist.
+- GitHub (`Plugins::fromGitHub`, `newVersion`, `downloadUpdate`,
+  `replace`): a repository's plugin downloaded (its latest release's
+  .iinaplgz, else its main branch's source); a plugin's newer version
+  (its repository's Info.json's ghVersion), downloaded and put in its
+  place, more permissions or other hosts agreed to first.
+  `MediaPlayerPluginsPage` checks the plugins for updates as the list
+  shows (IINA's PluginUpdateView above it), each found an orange button
+  on its row (IINA's PluginManager.update: asked, downloaded, agreed).
+- The store (`MediaPlayerPluginStore`, Get Plugins…, IINA's
+  PluginStorePanel): a repository's "owner/repo" or URL installed; the
+  official plugins (`Plugins::OFFICIAL`) and the community's (myphp's
+  repository's plugins.json, `Plugins::COMMUNITY_LIST`) to choose from;
+  the one chosen's details and its repository as GitHub tells it.
+- The developer tool (`PlayerPlugins\DevTool`, `MediaPlayerDevTool`;
+  Plugin > Developer Tool, an item of each instance, " (Global)" after a
+  global one's): PHP run in the instance, `$iina` its Iina, the
+  variables kept; an expression's value or the statements' return
+  shown, what is thrown and what the instance logs among them
+  (`Instance::$logHandler`, `$exceptionHandler`).
+- mpv's hooks of a film opening (`mpv.addHook`: on_load, on_load_fail,
+  on_preloaded; `MediaPlayerState::runHooks`): while one runs, what it
+  gets and sets of the film is a `Media\Opening`'s (stream-open-filename,
+  force-media-title, user-agent, http-header-fields, chapter-list,
+  audio-add, sub-add); `Player` opens what they made of it in its place,
+  "memory://" an M3U of the playlist's entries. The Online Media plugin
+  on, the player's own yt-dlp is not (IINA's hasYTDL). `iina.menu-update`
+  is told as the Plugin menu opens.
+- Reload All Plugins tells the plugins loaded again what was told
+  before (`MediaPlayerState::replayPluginEvents`, IINA's): the window's
+  loading, and a film's starting and loading where one plays.
+- myphp's official plugins (plugins/), IINA's ported to PHP, their pages
+  without a framework: Online Media (`io.myphp.ytdl`: pages read by
+  yt-dlp through the hooks, its formats in the Plugin menu, yt-dlp and
+  Deno downloaded, videos downloaded), User Scripts
+  (`io.myphp.user-script`: scripts of PHP run with `$iina`, their window
+  and editor), OpenSubtitles (`io.myphp.opensub`: its sidebar searching
+  opensubtitles.com, logging in, downloading; the provider). Each is
+  published as a repository of its own (`Plugins::OFFICIAL`'s URLs), its
+  folder the repository's root; the community's list is the repository's
+  plugins.json (IINA's format: name, url, id, desc of each).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

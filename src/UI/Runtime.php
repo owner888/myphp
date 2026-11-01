@@ -171,8 +171,12 @@ final class Runtime
     public int $pressMods = 0;
     /** @var array<int, array{0: ListState, 1: int}> the first nodes of the rows of the last frame's lists with a selection, by id, with their list and row: a right-click chooses the row under it (chooseRowAt) */
     private array $listRows = [];
-    /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control]. */
+    /** Keys pressed this frame: [characters, key code, modifiers, taken by a focused control, characters without the modifiers, a repeat of a key held]. */
     private array $keys = [];
+    /** @var list<array{0: string, 1: int, 2: int, 3: string}> keys let go this frame: characters, key code, modifiers, characters without the modifiers */
+    private array $keyUps = [];
+    /** @var list<array{0: int, 1: float, 2: float}> the other buttons gone down this frame: the button (1 the right, 2 another), where */
+    private array $buttonPresses = [];
     /** Each node's place in last frame's record order, and the place of the last node that blocks what was built before it (a modal's backdrop): nodes before it are inert. */
     private array $order = [];
     private int $barrier = 0, $counter = 0;
@@ -570,7 +574,7 @@ final class Runtime
         $this->slid = [];
         $this->steps = [];
         $this->jumps = [];
-        $this->keys = [];
+        $this->keys = []; $this->keyUps = []; $this->buttonPresses = [];
         $this->presses = []; $this->keyClicked = null;
         $this->wheeled = false;
         $this->windowAsks = [];
@@ -603,6 +607,7 @@ final class Runtime
                         break; // a context menu opens: the menu takes the press
                     }
                     if ($e[3] !== 0) {
+                        $this->buttonPresses[] = [$e[3], $e[1], $e[2]];
                         break;
                     }
                     if (($t = $this->pressTarget($e[1], $e[2])) !== null && isset($this->menuNodes[$t]) && ($this->menuNodes[$t] & 2) !== 0) {
@@ -711,7 +716,7 @@ final class Runtime
                         }
                         break;
                     }
-                    $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false, $e[5] ?? $e[1]]; // and what it types without its modifiers (charactersIgnoringModifiers)
+                    $this->keys[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, false, $e[5] ?? $e[1], (bool)($e[4] ?? false)]; // and what it types without its modifiers (charactersIgnoringModifiers), whether it repeats
                     if ((($e[2] === Key::CONTEXT_MENU && ($e[3] & Key::MODIFIERS) === 0) || ($e[2] === Key::F10 && ($e[3] & Key::MODIFIERS) === Key::SHIFT)) && $this->menuKey()) {
                         $this->keys[array_key_last($this->keys)][3] = true; // the menu key or Shift+F10 opens the focused node's context menu
                         break;
@@ -719,6 +724,9 @@ final class Runtime
                     if (($e[3] & Key::MODIFIERS) === Key::COMMAND && in_array(strtolower($e[1]), ['a', 'c'], true) && $this->textSelectionCommand(strtolower($e[1]) === 'a' ? 'selectAll' : 'copy')) {
                         $this->keys[array_key_last($this->keys)][3] = true; // Cmd+A and Cmd+C on selectable text (mygo's textSelectionKey)
                     }
+                    break;
+                case 'keyup':
+                    $this->keyUps[] = [$e[1], $e[2], $e[3] & Key::MODIFIERS, $e[4] ?? $e[1]];
                     break;
                 case 'edit': // an editing command of the menus with no node taking its input: the focused field's, or Copy and Select All on selectable text
                     if ($this->focus !== null && isset($this->fields[$this->focus]) && !($this->fields[$this->focus][0]->readOnly && in_array($e[1], ['paste', 'pasteAndMatchStyle', 'cut', 'undo', 'redo'], true))) {
@@ -787,6 +795,7 @@ final class Runtime
             $this->rightClicks = [];
             $this->middleClicks = [];
             $this->doubleClicks = [];
+            $this->keyUps = []; $this->buttonPresses = []; // the pass told them
             if ($this->pointerPress !== null) {
                 $this->pointerPress['released'] = false; // the pass handled the release (mygo's forgetInput)
             }
@@ -2881,6 +2890,24 @@ final class Runtime
         return null;
     }
 
+    /** @internal Context::keysReleased: the keys let go this frame. @return list<array{0: string, 1: int, 2: int, 3: string}> */
+    public function keysReleased(): array
+    {
+        $this->readsKeys = true;
+        return $this->keyUps;
+    }
+
+    /** @internal Context::buttonPressed: where button $button (0 the left, on the node itself; 1 the right, 2 another) went down this frame on node $id (its last-frame rect), the last press there, or null; told in the frame's first pass alone, as its clicks. @return ?array{0: float, 1: float} */
+    public function buttonPressOn(int $id, int $button): ?array
+    {
+        if ($button === 0) { return $this->pass === 0 ? $this->pressOn($id) : null; }
+        for ($i = count($this->buttonPresses) - 1; $i >= 0; $i--) {
+            [$b, $x, $y] = $this->buttonPresses[$i];
+            if ($b === $button && $this->under($id, $x, $y)) { return [$x, $y]; }
+        }
+        return null;
+    }
+
     /** Whether the mouse went down anywhere in the window this frame. */
     public function pressedAnywhere(): bool
     {
@@ -3142,9 +3169,9 @@ final class Runtime
     /**
      * @internal Context: offers $take the keys pressed this frame that no
      * one took (nor the focused field, as shortcut()): their characters,
-     * code, modifiers and characters without the modifiers; those it
-     * returns true for, taken.
-     * @param \Closure(string, int, int, string): bool $take
+     * code, modifiers, characters without the modifiers and whether the
+     * key repeats as it is held; those it returns true for, taken.
+     * @param \Closure(string, int, int, string, bool): bool $take
      */
     public function takeKeys(\Closure $take): void
     {
@@ -3152,7 +3179,7 @@ final class Runtime
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
         foreach ($this->keys as $i => $k) {
             if ($k[3] || ($field && ($k[2] & (Key::COMMAND | Key::CONTROL)) === 0 && $k[1] !== Key::ESCAPE)) { continue; }
-            if ($take($k[0], $k[1], $k[2], $k[4] ?? $k[0])) {
+            if ($take($k[0], $k[1], $k[2], $k[4] ?? $k[0], $k[5] ?? false)) {
                 $this->keys[$i][3] = true;
                 $this->consumed = true;
             }
