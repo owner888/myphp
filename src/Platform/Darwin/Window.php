@@ -118,9 +118,9 @@ final class Window implements Platform\Window
      * Shows the page's web view $view in the window (mygo's window with a
      * webview): the content view holds it.
      */
-    public function setContent(mixed $view, \MyPHP\WindowOptions $o): void
+    public function setContent(Platform\Page $page, \MyPHP\WindowOptions $o): void
     {
-        $this->view = $view;
+        $this->view = $page->handle();
         $this->attach($o);
     }
 
@@ -132,7 +132,9 @@ final class Window implements Platform\Window
      */
     public function createSurface(\MyPHP\WindowOptions $o, \Closure $frame, ?\Closure $afterPresent): void
     {
-        $this->view = View::create(App::metal(), ObjC::rect(0, 0, $o->width, $o->height), $this->w->input, function ($view, DisplayList $list) use ($frame) {
+        $metal = Backend::metal();
+        $this->view = View::create($metal, ObjC::rect(0, 0, $o->width, $o->height), $this->w->input, function ($view, DisplayList $list) use ($frame, $metal) {
+            $metal->setDark(App::theme()->dark);
             $bounds = ObjC::msg('r:', $view, 'bounds');
             $frame($list, (float)$bounds->w, (float)$bounds->h);
         });
@@ -251,6 +253,12 @@ final class Window implements Platform\Window
     public function placeVideos(): void
     {
         $this->placeVideoViews(ObjC::msg('r:', $this->view, 'bounds')->h);
+    }
+
+    /** A web view of native UI showing $page, under the native view (mygo's Surface.NewWebView). */
+    public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
+    {
+        return new WebView($this, $page, $scrollToContainer, $transparent);
     }
 
     /** @internal the native view of the content, which takes the keyboard back from a web view */
@@ -535,6 +543,18 @@ final class Window implements Platform\Window
     }
 
     /** How many pixels a point is on the window's display. */
+    /** The Dock tile's progress, which the window that set it last wins. */
+    public function setProgressBar(string $state, float $value): void
+    {
+        \MyPHP\Native\Dock::setProgress($state, $value);
+    }
+
+    /** How the last frame was drawn, for FrameStats: whole, in rectangles, or nothing (FrameDamage). */
+    public function lastDraw(): string
+    {
+        return 'Metal, drew ' . (Metal::$redrew[ObjC::addr($this->view)] ?? 'whole');
+    }
+
     public function backingScale(): float
     {
         return ObjC::msg('d:', $this->ns, 'backingScaleFactor');
@@ -573,7 +593,7 @@ final class Window implements Platform\Window
     /** The last frame native UI drew: premultiplied BGRA, its width and height in pixels. @return array{0: string, 1: int, 2: int} */
     public function lastFrame(): array
     {
-        return App::metal()->lastFrame($this->view);
+        return Backend::metal()->lastFrame($this->view);
     }
 
     /** A PNG of native UI as it is. */
@@ -592,7 +612,7 @@ final class Window implements Platform\Window
     public function underFrame(): ?array
     {
         if ($this->under === null || !$this->underShown) { return null; }
-        [$bgra, $w, $h] = App::metal()->drawOffscreen($this->under); // drawn again: the ring's list of its last frame may be another view's by now
+        [$bgra, $w, $h] = Backend::metal()->drawOffscreen($this->under); // drawn again: the ring's list of its last frame may be another view's by now
         return [$bgra, $w, $h, $w / max(1.0, ObjC::msg('r:', $this->under, 'bounds')->w)];
     }
 
@@ -1356,7 +1376,7 @@ final class Window implements Platform\Window
     {
         $b = ObjC::msg('r:', $this->container, 'bounds');
         $text = App::text();
-        $view = App::metal()->createView(ObjC::rect(0, 0, $b->w, $b->h), function ($view, DisplayList $list) use ($text): void {
+        $view = Backend::metal()->createView(ObjC::rect(0, 0, $b->w, $b->h), function ($view, DisplayList $list) use ($text): void {
             $bounds = ObjC::msg('r:', $view, 'bounds');
             $list->pathQuad ??= $text->pathQuad(...);
             $list->zoom = $this->w->runtime->frameZoom; // as the window's content
@@ -1929,7 +1949,7 @@ final class Window implements Platform\Window
     {
         $window = ObjC::msg('p:', $this->view, 'window');
         $scale = $window === null ? App::scale() : ObjC::msg('d:', $window, 'backingScaleFactor');
-        [$frame, $fw, $fh] = App::metal()->lastFrame($this->view);
+        [$frame, $fw, $fh] = Backend::metal()->lastFrame($this->view);
         $out = str_repeat("\0", $w * $h * 4);
         for ($row = 0; $row < $h; $row++) {
             $py = (int)(($y + $row) * $scale);

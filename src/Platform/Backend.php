@@ -56,6 +56,16 @@ interface Backend
     /** The native window of $w, made as $o says, a panel's for $panel (the core's flyout state says a flyout's); its content comes with setContent or createSurface. */
     public function newWindow(\MyPHP\Window $w, \MyPHP\WindowOptions $o, bool $panel): Window;
 
+    /**
+     * A web page of $width by $height points, its documents getting
+     * $scripts at their start, the bridge's messages to $onMessage: with
+     * the configuration the engine handed over for window.open(), or a new
+     * one; the user agent, its suffix and zoom; swipe and pinch gestures,
+     * autoplay, throttling while hidden, picture in picture; the website
+     * data store of a session, null for the default one.
+     */
+    public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Page;
+
     /** The window that has the keyboard, or null. */
     public function focusedWindow(): ?\MyPHP\Window;
 
@@ -63,6 +73,12 @@ interface Backend
     public function doubleClickInterval(): float;
 
     public function newTray(TrayHandler $h): Tray;
+
+    /** The system's fonts the UI's text shapes and rasterizes with, at the main display's scale. */
+    public function fonts(): Fonts;
+
+    /** The UI's text now rasterizes glyphs at $scale pixels a point (App::rescale). */
+    public function rescaled(float $scale): void;
 
     public function dialogs(): Dialogs;
 

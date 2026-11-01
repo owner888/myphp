@@ -1,7 +1,6 @@
 # AGENTS.md — MyPHP
 
-Entry point for coding agents and contributors. `docs/architecture.md` has
-the reasoning, the numbers and the pitfalls behind the rules here.
+Entry point for coding agents and contributors. `docs/architecture.md` has the reasoning, the numbers and the pitfalls behind the rules here.
 
 ## Rules
 
@@ -55,7 +54,10 @@ src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenUR
                    window controls), Channel (+ ChannelClosed: streaming to pages), TypeScript (client), Protocol (+ Request/Response), autoload.php,
                    Locales (the language the app shows, the regional formats: App::locale/setLocale/setLanguages/
                    region/on*Changed), Region, I18n (tags, parents, plurals, dates, numbers, names; ext-intl + CldrTables),
-                   Message, Catalog, L10n (MyPHP's own strings, src/l10n: a library catalog "myphp"), Native/I18nGen (accessors)
+                   Message, Catalog, L10n (MyPHP's own strings, src/l10n: a library catalog "myphp"), Native/I18nGen (accessors);
+                   the core calls the system only through App::backend() (Platform\Backend, by PHP_OS_FAMILY)
+src/Platform/      the interfaces of mygo's internal/platform (Backend, Window, Page, WebView, Dialogs, Fonts, Tray, ...);
+                   Darwin/ their macOS side (mygo's internal/darwin) over src/Native/; Linux next, docs/architecture.md "Platform layer"
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale (AppleLanguages,
                    the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
@@ -155,8 +157,7 @@ run.sh             runs an example with the php -d flags; docs/architecture.md  
   a pointer's address is `ObjC::addr`, never a cast of `void*` to an integer (it reads through it); a slot
   for a pointer is an `unsigned long` of it (`->cdata` takes none); no `?:` on a maybe-`"0"` string (`mb_chr`, `substr`, `basename`).
 
-Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in
-~4–6 ms per frame at 60 fps; a million-row list ~1.3 ms, 8 MB flat.
+Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in ~4–6 ms per frame at 60 fps; a million-row list ~1.3 ms, 8 MB flat.
 
 ## Projects and bundles
 
@@ -195,5 +196,4 @@ radio, switch, slider, select, stepper, segmented, tabs, collapsible, split, tab
 sidebar, tree, accordion, rating, range slider, combobox, autocomplete, token field, date input, calendar, time input, color picker and well, find bar, form, checkbox group, breadcrumbs, alert, grid view, grid layout, icons (SVG), avatars, toolbar, toggle, modal, popover, menu button, toasts, search field, number input, progress, meter, spinner, badge, link, tooltips; soft shadows, rings, Liquid
 Glass, Blur, ScrollEdge; tray, global shortcuts, notifications, window
 events + state; child processes; channels, page window controls, preload; file drops; CLI + .app; app services; documents; protocol; canvas, charts; right to left; inspector; audio; mygo's element and layout API; widgets and context; app, page, menus, web views in native UI.
-Remaining: Linux (GTK4/WebKitGTK) and Windows (Win32/WebView2/D3D11)
-bridges; what building real apps turns up (see examples/logview, notes, photos, http).
+Remaining: Linux (GTK/WebKitGTK, behind src/Platform) and Windows (Win32/WebView2/D3D11) bridges; what building real apps turns up (see examples/logview, notes, photos, http).

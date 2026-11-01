@@ -3,13 +3,14 @@ declare(strict_types=1);
 
 namespace MyPHP\Platform\Darwin;
 
-use MyPHP\Native\{Carbon, ObjC};
+use MyPHP\Native\{Carbon, CoreText, Metal, ObjC};
 use MyPHP\Platform;
 use MyPHP\Platform\{Accelerator, AppHandler, Menu, MenuItem, TrayHandler};
 
 /** The macOS backend: Cocoa, WebKit and Metal over the Objective-C runtime (mygo's internal/darwin). */
 final class Backend implements Platform\Backend
 {
+    private static ?Metal $metal = null;
     /** Carbon's macOS virtual key codes of the accelerators' keys (ANSI layout), as mygo's keyCodes. */
     private const KEY_CODES = [
         'a' => 0x00, 's' => 0x01, 'd' => 0x02, 'f' => 0x03, 'h' => 0x04, 'g' => 0x05, 'z' => 0x06, 'x' => 0x07,
@@ -127,6 +128,11 @@ final class Backend implements Platform\Backend
         return new Window($this, $w, $o, $panel);
     }
 
+    public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
+    {
+        return \MyPHP\Native\WebView::create(ObjC::rect(0, 0, $width, $height), $scripts, $onMessage, $devTools, $configuration, $userAgent, $zoom, $suffix, $swipe, $pinch, $autoplay, $throttle, $pip, $dataStore);
+    }
+
     public function focusedWindow(): ?\MyPHP\Window
     {
         return Window::keyWindow();
@@ -135,6 +141,29 @@ final class Backend implements Platform\Backend
     public function doubleClickInterval(): float
     {
         return ObjC::msg('d:', ObjC::cls('NSEvent'), 'doubleClickInterval');
+    }
+
+    public function fonts(): Platform\Fonts
+    {
+        ObjC::boot(['AppKit']);
+        return new CoreText(ObjC::msg('d:', ObjC::msg('p:', ObjC::cls('NSScreen'), 'mainScreen'), 'backingScaleFactor'));
+    }
+
+    public function rescaled(float $scale): void
+    {
+        self::$metal?->setAtlasScale($scale);
+    }
+
+    /** The one Metal device every window draws with, its atlases App::text()'s. */
+    public static function metal(): Metal
+    {
+        if (self::$metal === null) {
+            $text = \MyPHP\App::text();
+            self::$metal = new Metal();
+            self::$metal->attachAtlas($text->atlas, $text->scale());
+            self::$metal->attachImages($text->images);
+        }
+        return self::$metal;
     }
 
     public function newTray(TrayHandler $h): Platform\Tray

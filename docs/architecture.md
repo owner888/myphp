@@ -7490,6 +7490,45 @@ opening; and myphp's official plugins of PHP.
   folder the repository's root; the community's list is the repository's
   plugins.json (IINA's format: name, url, id, desc of each).
 
+## Platform layer (v1.147)
+
+Before Linux, the core stopped calling Cocoa itself: it reaches the system
+only through `App::backend()`, a `Platform\Backend` picked by
+`PHP_OS_FAMILY` (mygo's `backend()`), and the interfaces of src/Platform
+follow mygo's internal/platform: `Backend` (run loop, timers, menus,
+windows, pages, services), `Window`, `Page`, `WebView`, `Dialogs`, `Tray`,
+`Clipboard`, `Shell`, `Screen`, `Theme`, `Power`, `Network`,
+`NowPlaying`, `Secrets` and `Fonts`. src/Platform/Darwin is mygo's
+internal/darwin: it holds the NSWindow, the MTKView and its Metal device
+(`Darwin\Backend::metal()`, its atlases App::text()'s), the WKWebView's
+clip view, the delegates, and sends their events to the core's objects
+(`Window::nativeEvent`, `shouldClose`, `closed`, ...); src/Native stays
+the bridges they use. Everything else does not move: the frame function,
+layout, painting, the state stores, flyouts' placement, IPC.
+
+- **Menus are snapshots**, as mygo's: the core expands roles
+  (`Menu::snapshot`), the backend builds native menus from them and
+  answers a click by the item's uid (`Menu::clicked`), items registered as
+  weak references (`Menu::lookup`); `MenuItem::update` sends one item
+  again.
+- **The handler is given at construction** (`new Darwin\Backend(new
+  AppHandler)`): Secrets and dialogs turn the run loop before `App::run`,
+  and their callbacks need it.
+- **Text**: `UI\Text` takes a `Platform\Fonts` (Core Text's
+  `Native\CoreText`), whose `engine()` is the `Text\Engine` the text
+  system lays out with; positions and baselines are the fonts', as they
+  are each engine's in mygo. `App::rescale` reads each window's
+  `backingScale()` and tells the backend (`rescaled`), which sets the
+  Metal atlas's scale; the dark uniform is set by the Darwin view before
+  each frame.
+- **Not behind it yet**: what pages need of WebKit beyond loading and
+  messages (context menus, the scheme handler's tasks, Session's data
+  stores), the video player's screen queries, the automation plugin's
+  frame requests, and the services step 2 brings (deep links, single
+  instance, recent documents, login items, the bundle, the system
+  locale): their interfaces are drawn once WebKitGTK and GTK's are there
+  to draw them from, two sides rather than one.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

@@ -13,7 +13,7 @@ use RuntimeException;
  * navigations, loads, failures, a crash, window.open(), the JavaScript
  * panels — reaches the hooks Page sets (mygo's darwin window.go).
  */
-final class WebView
+final class WebView implements \MyPHP\Platform\Page
 {
     private const INJECT_AT_DOCUMENT_START = 0;
     private const AUTORESIZE_WIDTH_HEIGHT = 2 | 16;
@@ -106,6 +106,11 @@ final class WebView
     }
 
     /** Opens the web inspector, docked in the window (mygo's OpenDevTools). */
+    public function handle(): mixed
+    {
+        return $this->ns;
+    }
+
     public function openDevTools(): void
     {
         if (($in = $this->inspector()) !== null) { ObjC::msg('v:', $in, 'show'); }

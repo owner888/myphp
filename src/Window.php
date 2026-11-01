@@ -163,8 +163,8 @@ final class Window
             $this->fit = $this->flyout !== null ? $this->flyout['fit'] : ($o->fitContent ? new FitContent($o->minWidth, $o->minHeight, $o->maxWidth, $o->maxHeight) : null);
             $opening = self::$opening;
             self::$opening = null;
-            $this->page = new Page($this, null, Native\ObjC::rect(0, 0, $o->width, $o->height), $o->page, $opening);
-            $this->native->setContent($this->page->web->ns, $o);
+            $this->page = new Page($this, null, $o->width, $o->height, $o->page, $opening);
+            $this->native->setContent($this->page->web, $o);
             if ($opening === null && $o->html !== null) {
                 $this->page->loadHTML($o->html);
             } elseif ($opening === null) {
@@ -176,7 +176,7 @@ final class Window
             if (($this->frameStats = UI\FrameStats::fromEnv()) !== null) {
                 $after = function (): void {
                     $this->frameStats->lap(UI\FrameStats::PRESENT);
-                    $this->frameStats->end($this->runtime->frameNumber, App::text()->textSystem()->made, 'Metal, drew ' . (Native\Metal::$redrew[Native\ObjC::addr($this->native->contentView())] ?? 'whole')); // whole, in rectangles, or nothing (FrameDamage)
+                    $this->frameStats->end($this->runtime->frameNumber, App::text()->textSystem()->made, $this->native->lastDraw());
                 };
             }
             $this->runtime->underLayer = true; // nodes belowMaterials() painted in a view of their own, under the materials
@@ -239,7 +239,6 @@ final class Window
         $this->runtime->reduceMotion = $this->runtime->preferences->reduceMotion;
         $this->runtime->rightToLeft = I18n::direction(App::locale()) === Dir::RightToLeft; // the direction of the language the app shows
         $this->runtime->setWindowFocus($n->isKey()); // a selection shows in the key window
-        App::metal()->setDark(App::theme()->dark);
         $in = $this->runtime->inspector;
         if ($in !== null && $in->open) { $in->hz = $n->refreshRate(); }
         $this->runtime->fullScreen = $this->isFullScreen();
@@ -1406,7 +1405,7 @@ final class Window
         if ($this->destroyed) {
             throw new RuntimeException('myphp: the window has been destroyed');
         }
-        $v = new WebView($this, $this->native->container, $this->native->contentView(), $o);
+        $v = new WebView($this, $o);
         $this->webViews[] = $v;
         $this->native->passThrough(fn(float $x, float $y): bool => $this->runtime->webViewAt($x / $this->runtime->frameZoom, $y / $this->runtime->frameZoom) !== null); // the content's points
         $this->invalidate();
@@ -1432,7 +1431,7 @@ final class Window
         if (!in_array($state, [ProgressBar::NONE, ProgressBar::NORMAL, ProgressBar::INDETERMINATE, ProgressBar::PAUSED, ProgressBar::ERROR], true)) {
             throw new \InvalidArgumentException("no progress state \"$state\"");
         }
-        Native\Dock::setProgress($state, $value);
+        $this->native->setProgressBar($state, $value);
     }
 
     /** The title setTitle set. */

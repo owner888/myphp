@@ -17,7 +17,7 @@ interface Window
 {
     public function handle(): mixed;
 
-    public function setContent(mixed $view, \MyPHP\WindowOptions $o): void;
+    public function setContent(Page $page, \MyPHP\WindowOptions $o): void;
 
     public function createSurface(\MyPHP\WindowOptions $o, \Closure $frame, ?\Closure $afterPresent): void;
 
@@ -34,6 +34,8 @@ interface Window
     public function placeWebViews(): void;
 
     public function placeVideos(): void;
+
+    public function newWebView(Page $page, bool $scrollToContainer, bool $transparent): WebView;
 
     public function contentView(): mixed;
 
@@ -66,6 +68,12 @@ interface Window
     public function repaintAsked(): bool;
 
     public function displayRate(): float;
+
+    /** Shows progress on the Dock icon or taskbar button: a ProgressBar state, $value 0 to 1 (mygo's SetProgressBar). */
+    public function setProgressBar(string $state, float $value): void;
+
+    /** How the last frame was drawn, for FrameStats. */
+    public function lastDraw(): string;
 
     public function backingScale(): float;
 

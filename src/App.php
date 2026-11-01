@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{CoreText, Metal, ObjC};
+use MyPHP\Native\ObjC;
 use MyPHP\UI\{Atlas, Text, Theme, ImageAtlas};
 use RuntimeException;
 
@@ -31,11 +31,9 @@ final class App
     private static ?UI\Preferences $preferences = null;
     /** Whether the backend initialized the app, which runs from then on. */
     private static bool $initialized = false;
-    private static ?Metal $metal = null;
     /** The platform's backend, made on first use (mygo's backend()). */
     private static ?Platform\Backend $backend = null;
     private static ?Text $text = null;
-    private static float $scale = 1.0;
     private static ActivationPolicy $policy = ActivationPolicy::Regular;
     /** Whether a quit is closing the windows, whose documents it took care of. */
     private static bool $quitting = false;
@@ -938,8 +936,7 @@ final class App
     /** The display's backing scale text is rasterized at. */
     public static function scale(): float
     {
-        self::metal();
-        return self::$scale;
+        return self::text()->scale();
     }
 
     /**
@@ -952,37 +949,23 @@ final class App
     {
         $scale = 1.0;
         foreach (Window::all() as $w) {
-            $scale = max($scale, ObjC::msg('d:', $w->nativeHandle(), 'backingScaleFactor') * $w->contentZoom());
+            $scale = max($scale, $w->native()->backingScale() * $w->contentZoom());
         }
-        if ($scale === self::$scale) {
+        $text = self::text();
+        if ($scale === $text->scale()) {
             return;
         }
-        self::$scale = $scale;
-        self::$text->rescale($scale);
-        self::$metal->setAtlasScale($scale);
+        $text->rescale($scale);
+        self::backend()->rescaled($scale);
         foreach (Window::all() as $w) {
             $w->invalidate();
         }
     }
 
-    /** The one Metal device, shared by every window. */
-    public static function metal(): Metal
-    {
-        if (self::$metal === null) {
-            self::$scale = ObjC::msg('d:', ObjC::msg('p:', ObjC::cls('NSScreen'), 'mainScreen'), 'backingScaleFactor');
-            self::$text = new Text(new CoreText(self::$scale), new Atlas(), new ImageAtlas());
-            self::$metal = new Metal();
-            self::$metal->attachAtlas(self::$text->atlas, self::$scale);
-            self::$metal->attachImages(self::$text->images);
-        }
-        return self::$metal;
-    }
-
-    /** The text engine every window measures and paints with. */
+    /** The text engine every window measures and paints with, rasterizing at the main display's scale to begin with. */
     public static function text(): Text
     {
-        self::metal();
-        return self::$text;
+        return self::$text ??= new Text(self::backend()->fonts(), new Atlas(), new ImageAtlas());
     }
 
     /**

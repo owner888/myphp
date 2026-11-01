@@ -2445,3 +2445,45 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     painted, places each quad's outline through its transform against
     the box, and takes the colors of the quads.
   - Why: Headless has no rasterizer.
+
+## The platform layer (v1.147)
+
+- **The backend's handler**
+  - mygo: `backend().Run(handler)` hands the backend its handler as it
+    runs.
+  - myphp: the handler is given when the backend is made
+    (`new Darwin\Backend(new AppHandler)`).
+  - Why: Secrets and synchronous dialogs turn the run loop before
+    `App::run`, and their callbacks reach the handler.
+- **Timers and waiting**
+  - mygo: goroutines and channels; no timer or step in the interface.
+  - myphp: `Backend::timer()` (`App::after`) and `Backend::step()`
+    (`App::wait` turns the run loop until a result comes).
+  - Why: PHP has one thread; a block-delivered result is waited for on
+    the run loop.
+- **Dialogs**
+  - mygo: dialogs answer through callbacks.
+  - myphp: `Platform\Dialogs` returns the answer.
+  - Why: myphp's Dialog API was synchronous already (`App::wait`).
+- **Menu snapshots**
+  - mygo: role, label, accelerator, checked, enabled, submenu.
+  - myphp: also `alternate` (an item shown with Option), `HEADER`
+    items, `opens` (menuWillOpen calls back) and `replaceSubmenu`.
+  - Why: the player's menus need them, as IINA's.
+- **Windows**
+  - mygo: `platform.Window` as the desktop needs it.
+  - myphp: also the player's: video hosts and materials, the layer
+    under the materials, legacy full screen, popover flyouts.
+  - Why: the video player and the plugins' views draw in them.
+- **Pages' handlers**
+  - mygo: a `PageHandler` interface the page passes.
+  - myphp: public closure properties of `Platform\Page`
+    (`onMessage`, `onNavigate`, ...).
+  - Why: the WebKit bridge had them already; one closure each is what
+    PHP's FFI callbacks hold.
+- **Fonts**
+  - mygo: the text engine shapes, rasterizes, places pens and baselines.
+  - myphp: `Platform\Fonts` rasterizes, places and shapes a line;
+    `Fonts::engine()` is the `Text\Engine` laying out paragraphs.
+  - Why: myphp's line cache shapes single lines with Core Text apart
+    from the paragraph engine.

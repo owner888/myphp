@@ -14,7 +14,7 @@ use RuntimeException;
  * fonts for scripts it lacks) and rasterizes single glyphs to 8-bit
  * coverage bitmaps at the display's backing scale.
  */
-final class CoreText
+final class CoreText implements \MyPHP\Platform\Fonts
 {
     private const UTF8 = 0x08000100;         // kCFStringEncodingUTF8
     private const UI_FONT_SYSTEM = 2;        // kCTFontUIFontSystem
@@ -42,6 +42,8 @@ final class CoreText
     private array $segs = [];
     /** The current point of the outline being read, and the start of its subpath. */
     private float $atX = 0, $atY = 0, $fromX = 0, $fromY = 0;
+
+    private ?TextEngine $engine = null;
 
     public function __construct(public float $scale)
     {
@@ -135,15 +137,30 @@ final class CoreText
      * fewer the larger they are, at most five a pixel and one from 34
      * pixels an em (mygo's positions). A glyph goes to the one left of its pen.
      */
-    public static function positions(float $px): int
+    public function positions(float $px): int
     {
         return $px <= 0 ? 1 : min(5, max(1, (int)ceil(100 / (3 * $px) - 1e-9)));
     }
 
     /** Where Core Graphics draws a baseline $y device pixels from the top: the whole pixel at or below it, as AppKit does on flipped views (mygo's baseline). */
-    public static function baseline(float $y): float
+    public function baseline(float $y): float
     {
         return ceil($y - 1e-3);
+    }
+
+    public function engine(): \MyPHP\Text\Engine
+    {
+        return $this->engine ??= new TextEngine($this);
+    }
+
+    public function scale(): float
+    {
+        return $this->scale;
+    }
+
+    public function setScale(float $scale): void
+    {
+        $this->scale = $scale;
     }
 
     /** Whether the glyphs of font $fontId are bitmaps in color (Apple Color Emoji), which rasterize() draws in their colors. */

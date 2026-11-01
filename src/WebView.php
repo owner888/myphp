@@ -3,8 +3,6 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\ObjC;
-
 /**
  * A web page inside a window's native UI, which the window's view places
  * with Context::webView (mygo's WebView): a document the web engine
@@ -30,35 +28,17 @@ use MyPHP\Native\ObjC;
 final class WebView
 {
     private Page $page;
-    /** The clip view the web view sits in, a subview of the window's content view under its native view: what of the page shows. */
-    private $clip;
-    private bool $destroyed = false, $shown = false;
+    /** The backend's web view, which the window places. */
+    private Platform\WebView $native;
+    private bool $destroyed = false;
     private ?Background $background = null;
-    private static bool $defined = false;
 
     /** @internal Window::newWebView makes it */
-    public function __construct(private readonly Window $host, $container, $below, WebViewOptions $o)
+    public function __construct(private readonly Window $host, WebViewOptions $o)
     {
-        if (!self::$defined) {
-            self::$defined = true;
-            ObjC::defineClass('MyPHPClipView', 'NSView', [
-                'isFlipped' => ['B@:', 'b(pp)', fn($self, $cmd) => true],
-            ]);
-        }
-        $this->page = new Page($host, $this, ObjC::rect(0, 0, 0, 0), $o->page);
-        $web = $this->page->web->ns;
-        if ($o->scrollToContainer) { $this->page->web->scrollTo = $below; }
-        ObjC::msg('v:L', $web, 'setAutoresizingMask:', 0);
-        $this->clip = ObjC::msg('p:r', ObjC::alloc('MyPHPClipView'), 'initWithFrame:', ObjC::rect(0, 0, 0, 0));
-        ObjC::msg('v:b', $this->clip, 'setWantsLayer:', true);
-        ObjC::msg('v:b', ObjC::msg('p:', $this->clip, 'layer'), 'setMasksToBounds:', true);
-        ObjC::msg('v:L', $this->clip, 'setAutoresizingMask:', 8); // NSViewMinYMargin: it keeps its distance to the top of the unflipped content view
-        ObjC::msg('v:b', $this->clip, 'setHidden:', true);
-        ObjC::msg('v:p', $this->clip, 'addSubview:', $web);
-        ObjC::msg('v:plp', $container, 'addSubview:positioned:relativeTo:', $this->clip, -1, $below); // NSWindowBelow: under the native view
-        if ($o->transparent) {
-            ObjC::msg('v:pp', $web, 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false), ObjC::str('drawsBackground'));
-        } elseif ($o->backgroundColor !== '') {
+        $this->page = new Page($host, $this, 0, 0, $o->page);
+        $this->native = $host->native()->newWebView($this->page->web, $o->scrollToContainer, $o->transparent);
+        if (!$o->transparent && $o->backgroundColor !== '') {
             $this->setBackgroundColor($o->backgroundColor);
         }
         $this->page->loadFirst($o->page->sessionState, $o->url);
@@ -80,36 +60,22 @@ final class WebView
     public function focus(): void
     {
         if (!$this->destroyed) {
-            ObjC::msg('b:p', $this->host->nativeHandle(), 'makeFirstResponder:', $this->page->web->ns);
+            $this->native->focus();
         }
     }
 
-    /** @internal Tab onto the web view's node: its page takes the keyboard at its first element, or its last for $back, through the window's key view loop (mygo's TabInto) */
+    /** @internal Tab onto the web view's node: its page takes the keyboard at its first element, or its last for $back (mygo's TabInto) */
     public function tabInto(bool $back): void
     {
-        if ($this->destroyed) {
-            return;
-        }
-        $content = $this->host->contentView();
-        $web = $this->page->web->ns;
-        if ($back) {
-            ObjC::msg('v:p', $web, 'setNextKeyView:', $content);
-            ObjC::msg('v:p', $this->host->nativeHandle(), 'selectKeyViewPrecedingView:', $content);
-        } else {
-            ObjC::msg('v:p', $content, 'setNextKeyView:', $web);
-            ObjC::msg('v:p', $this->host->nativeHandle(), 'selectKeyViewFollowingView:', $content);
+        if (!$this->destroyed) {
+            $this->native->tabInto($back);
         }
     }
 
-    /** @internal whether $view is the web view or inside it */
+    /** @internal whether the native view $view is the web view or inside it */
     public function holds($view): bool
     {
-        for ($v = $view; $v !== null; $v = ObjC::msg('p:', $v, 'superview')) {
-            if (ObjC::addr($v) === ObjC::addr($this->page->web->ns)) {
-                return true;
-            }
-        }
-        return false;
+        return $this->native->holds($view);
     }
 
     /** Sets the color filling the web view until its page paints, as WebViewOptions::$backgroundColor says it; one of light-dark() follows the appearance (mygo's SetBackgroundColor). */
@@ -125,14 +91,7 @@ final class WebView
         if ($this->background === null || $this->destroyed) {
             return;
         }
-        [$r, $g, $b, $a] = $this->background->for(App::theme()->dark);
-        $c = ObjC::msg('p:dddd', ObjC::cls('NSColor'), 'colorWithSRGBRed:green:blue:alpha:', $r / 255, $g / 255, $b / 255, $a / 255);
-        ObjC::msg('v:p', ObjC::msg('p:', $this->clip, 'layer'), 'setBackgroundColor:', ObjC::msg('p:', $c, 'CGColor'));
-        $web = $this->page->web->ns;
-        ObjC::msg('v:pp', $web, 'setValue:forKey:', ObjC::msg('p:b', ObjC::cls('NSNumber'), 'numberWithBool:', false), ObjC::str('drawsBackground'));
-        if (ObjC::msg('b:p', $web, 'respondsToSelector:', ObjC::sel('setUnderPageBackgroundColor:'))) {
-            ObjC::msg('v:p', $web, 'setUnderPageBackgroundColor:', $c);
-        }
+        $this->native->setBackgroundColor($this->background->for(App::theme()->dark));
     }
 
     /** A PNG of the web view's page (mygo's CapturePage). */
@@ -149,8 +108,7 @@ final class WebView
         }
         $this->destroyed = true;
         $this->page->destroy();
-        ObjC::msg('v:', $this->clip, 'removeFromSuperview');
-        ObjC::msg('v:', $this->clip, 'release');
+        $this->native->close();
         $this->host->forgetWebView($this);
     }
 
@@ -169,45 +127,26 @@ final class WebView
      */
     public function place(?array $frame, ?array $clip, float $height): void
     {
-        if ($this->destroyed) {
-            return;
-        }
-        if ($frame === null || $clip === null) {
-            if ($this->shown) {
-                $this->shown = false;
-                if ($this->hasKeyboard()) { // a hidden view keeps no keyboard: it goes back to the content
-                    ObjC::msg('b:p', $this->host->nativeHandle(), 'makeFirstResponder:', $this->host->contentView());
-                }
-                ObjC::msg('v:b', $this->clip, 'setHidden:', true);
-            }
-            return;
-        }
-        [$cx, $cy, $cw, $ch] = $clip;
-        [$fx, $fy, $fw, $fh] = $frame;
-        ObjC::msg('v:r', $this->clip, 'setFrame:', ObjC::rect($cx, $height - $cy - $ch, $cw, $ch));
-        ObjC::msg('v:r', $this->page->web->ns, 'setFrame:', ObjC::rect($fx - $cx, $fy - $cy, $fw, $fh)); // the clip view is flipped
-        if (!$this->shown) {
-            $this->shown = true;
-            ObjC::msg('v:b', $this->clip, 'setHidden:', false);
+        if (!$this->destroyed) {
+            $this->native->place($frame, $clip, $height);
         }
     }
 
-    /** Shows the web view at $alpha, 0 to 1 (NSView's alphaValue): a player's plugin's overlay's opacity. */
+    /** Shows the web view at $alpha, 0 to 1: a player's plugin's overlay's opacity. */
     public function setAlpha(float $alpha): void
     {
-        ObjC::msg('v:d', $this->clip, 'setAlphaValue:', max(0.0, min(1.0, $alpha)));
+        $this->native->setAlpha($alpha);
     }
 
     /** @internal the clip view, which the window stacks in paint order */
     public function clipView()
     {
-        return $this->clip;
+        return $this->native->clipView();
     }
 
     /** @internal whether the page has the keyboard */
     public function hasKeyboard(): bool
     {
-        $first = ObjC::msg('p:', $this->host->nativeHandle(), 'firstResponder');
-        return $first !== null && ObjC::msg('b:p', $first, 'isKindOfClass:', ObjC::cls('NSView')) && $this->holds($first);
+        return $this->native->hasKeyboard();
     }
 }

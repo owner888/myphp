@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 namespace MyPHP\UI;
 
-use MyPHP\Native\{CoreText, Mem, TextEngine};
+use MyPHP\Native\Mem;
+use MyPHP\Platform\Fonts;
 use MyPHP\Text\{Layout, System};
 
 /**
@@ -20,7 +21,7 @@ final class Text implements TextPainter
     /** The bytes of a glyph of a shaped line: its pen's x and y (float64s), its font's id (int64), its glyph and its UTF-16 index (uint32s). */
     private const GLYPH_BYTES = 32;
 
-    /** @var array<string, array{key: string, w: float, h: float, ascent: float, n: int, glyphs: string, quads: array<string, string>, carets: ?array<int, float>, hot?: array<string, array<int, float>>, gen: int}> glyphs: the line's shaped glyphs, packed, their pens in device pixels; n: the positions within a pixel its glyphs take (CoreText::positions); quads, by the shade of the text painted and where in its pixel the line starts ("shade|phase", quads()): x y w h u v per glyph, float32s packed (a kilobyte a line, not nine), unpacked in hot while the line is in view; carets only once a field asked */
+    /** @var array<string, array{key: string, w: float, h: float, ascent: float, n: int, glyphs: string, quads: array<string, string>, carets: ?array<int, float>, hot?: array<string, array<int, float>>, gen: int}> glyphs: the line's shaped glyphs, packed, their pens in device pixels; n: the positions within a pixel its glyphs take (Fonts::positions); quads, by the shade of the text painted and where in its pixel the line starts ("shade|phase", quads()): x y w h u v per glyph, float32s packed (a kilobyte a line, not nine), unpacked in hot while the line is in view; carets only once a field asked */
     private array $lines = [];
     /** @var array<string, array{0: int, 1: int}> bitmap offsets by glyph key, in device pixels */
     private array $offsets = [];
@@ -49,9 +50,9 @@ final class Text implements TextPainter
 
     private System $system;
 
-    public function __construct(private CoreText $ct, public Atlas $atlas, public ImageAtlas $images)
+    public function __construct(private Fonts $ct, public Atlas $atlas, public ImageAtlas $images)
     {
-        $this->system = new System(new TextEngine($ct));
+        $this->system = new System($ct->engine());
     }
 
     public function textSystem(): System
@@ -61,7 +62,7 @@ final class Text implements TextPainter
 
     public function paintLayout(DisplayList $list, Layout $l, float $x, float $y, \Closure $colorAt, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false): void
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         $stroke = round($stroke * 4) / 4; // the outlines of a few widths in the atlas, a quarter point apart
         $blur = round($blur * 8) / 8; // and blurs an eighth of a point apart
         foreach ($l->lines as $line) {
@@ -75,7 +76,7 @@ final class Text implements TextPainter
                     continue; // clear: nothing to draw
                 }
                 // Placed as Core Graphics places it: at the position within its pixel left of the pen, on the whole pixel at or below the baseline.
-                $pen = ($x + $g->x) * $s; $ix = floor($pen); $n = CoreText::positions($g->size * $s);
+                $pen = ($x + $g->x) * $s; $ix = floor($pen); $n = $this->ct->positions($g->size * $s);
                 $glyph = $this->glyph($g->font->id, $g->id, $shade, $stroke, $blur, $cutOut && $stroke > 0, min((int)(($pen - $ix) * $n), $n - 1), $n);
                 if ($glyph === null) {
                     continue; // no ink, as a space
@@ -83,7 +84,7 @@ final class Text implements TextPainter
                 [$slot, $color, $ox, $oy, $w, $h] = $glyph;
                 if ($slot !== null) { $this->drawn[] = ['a', $glyph[6], $slot['u'], $slot['v']]; }
                 $px = ($ix + $ox) / $s;
-                $py = (CoreText::baseline(($y + $g->y) * $s) - $oy - $h) / $s;
+                $py = ($this->ct->baseline(($y + $g->y) * $s) - $oy - $h) / $s;
                 if ($color !== null) {
                     $this->paintColor($list, $color, $px, $py, $alpha);
                 } else {
@@ -100,7 +101,7 @@ final class Text implements TextPainter
             if ($g->object || $g->font === null) {
                 continue;
             }
-            $pen = ($x + $g->x) * $scale; $ix = floor($pen); $n = CoreText::positions($g->size * $scale);
+            $pen = ($x + $g->x) * $scale; $ix = floor($pen); $n = $this->ct->positions($g->size * $scale);
             $b = $this->ct->rasterize($g->font->id, $g->id, $scale, dx: min((int)(($pen - $ix) * $n), $n - 1) / $n);
             if ($b === null) {
                 continue; // no ink, as a space
@@ -112,7 +113,7 @@ final class Text implements TextPainter
             }
             // Placed as paintLayout places it: from the pixel the pen is in, the bitmap's bottom oy pixels below the baseline's pixel.
             $left = (int)$ix + $b['ox'];
-            $top = (int)CoreText::baseline(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
+            $top = (int)$this->ct->baseline(($y + $g->y) * $scale) - $b['oy'] - $b['h'];
             for ($r = max(0, -$top); $r < $b['h'] && $top + $r < $h; $r++) {
                 $row = ($top + $r) * $w;
                 for ($c = max(0, -$left); $c < $b['w'] && $left + $c < $w; $c++) {
@@ -131,10 +132,10 @@ final class Text implements TextPainter
     /** The scale glyphs are rasterized at: when it changes, every glyph and line is made again. */
     public function rescale(float $scale): void
     {
-        if ($scale === $this->ct->scale) {
+        if ($scale === $this->ct->scale()) {
             return;
         }
-        $this->ct->scale = $scale;
+        $this->ct->setScale($scale);
         $this->atlas->reset();
         $this->lines = []; $this->users = [];
         $this->offsets = [];
@@ -144,7 +145,7 @@ final class Text implements TextPainter
 
     public function scale(): float
     {
-        return $this->ct->scale;
+        return $this->ct->scale();
     }
 
     /** The image atlas slot of $image, added to a page on first use; a page emptied for it has this frame painted again. */
@@ -169,7 +170,7 @@ final class Text implements TextPainter
 
     public function iconQuad(SVG $svg, float $x, float $y, float $w, float $h, float $rotate = 0.0): ?array
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         $dx = round($x * $s) / $s; $dy = round($y * $s) / $s; // snapped to the device grid
         $pw = (int)round($w * $s); $ph = (int)round($h * $s);
         if ($pw <= 0 || $ph <= 0 || $pw > 4096 || $ph > 4096) { return null; }
@@ -232,7 +233,7 @@ final class Text implements TextPainter
     {
         $b = $path->bounds();
         if ($b === null) { return []; }
-        $s = $this->ct->scale; $hw = $path->reach($width); // past half the width where square caps and miters reach
+        $s = $this->ct->scale(); $hw = $path->reach($width); // past half the width where square caps and miters reach
         $x0 = floor(($b[0] - $hw) * $s) / $s; $y0 = floor(($b[1] - $hw) * $s) / $s; // on the device grid
         $w = (int)ceil(($b[2] + $hw - $x0) * $s) + 1; $h = (int)ceil(($b[3] + $hw - $y0) * $s) + 1;
         $key = 'p' . max($width, 0) / 2;
@@ -267,7 +268,7 @@ final class Text implements TextPainter
     /** The quad of the mask $key of $path, $w × $h pixels from ($x0, $y0) in points, made and placed in the atlas once; null for a tile the path leaves empty. @return ?array{0: float, 1: float, 2: float, 3: float, 4: int, 5: int} */
     private function pathMask(string $key, Path $path, float $width, float $x0, float $y0, int $w, int $h): ?array
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         if (isset($this->emptyTiles[$key])) { return null; }
         $slot = $this->atlas->get($this->sharedTiles[$key] ?? $key);
         if ($slot === null) {
@@ -296,7 +297,7 @@ final class Text implements TextPainter
      */
     private function glyph(int $font, int $id, int $shade, float $stroke = 0.0, float $blur = 0.0, bool $cutOut = false, int $q = 0, int $n = 1): ?array
     {
-        $base = $q === 0 ? "$font:$id" : "$font:$id/$q"; // drawn at position $q of the $n within a pixel (CoreText::positions)
+        $base = $q === 0 ? "$font:$id" : "$font:$id/$q"; // drawn at position $q of the $n within a pixel (Fonts::positions)
         if ($stroke > 0 || $blur > 0) { // its outline (a mask of the glyph grown by it, the glyph cut out of it or not), or it blurred: unsmoothed, of no shade
             $key = "$base:o$stroke" . ($blur > 0 ? ":b$blur" : '') . ($cutOut ? ':c' : '');
             $slot = $this->atlas->get($key);
@@ -381,7 +382,7 @@ final class Text implements TextPainter
     /** A color glyph's picture with its top left at ($x, $y), at $alpha: in its own colors, as mygo's. */
     private function paintColor(DisplayList $list, Image $img, float $x, float $y, float $alpha): void
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         $slot = $this->imageSlot($img);
         $list->image($x, $y, $img->w / $s, $img->h / $s, $slot['u'], $slot['v'], $img->w, $img->h, $slot['page'], $alpha);
     }
@@ -556,13 +557,13 @@ final class Text implements TextPainter
      * Where a line drawn from ($x, $baseline) in points goes, as Core
      * Graphics places it: from the left of the pixel $x is in, $phase
      * pixels left of $x, which its quads are made for, on the whole pixel
-     * at or below the baseline (CoreText::baseline). @return array{0: float, 1: float, 2: float}
+     * at or below the baseline (Fonts::baseline). @return array{0: float, 1: float, 2: float}
      */
     private function origin(float $x, float $baseline): array
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         $ix = floor($x * $s);
-        return [$ix / $s, CoreText::baseline($baseline * $s) / $s, $x * $s - $ix];
+        return [$ix / $s, $this->ct->baseline($baseline * $s) / $s, $x * $s - $ix];
     }
 
     /**
@@ -570,7 +571,7 @@ final class Text implements TextPainter
      * its start is a phase into ($v: "shade|phase", origin()), unpacked
      * (1-based): x, y, w, h, u, v and the UTF-16 index of each glyph, in
      * its bitmap for the shade at the position in its pixel its pen is at
-     * (CoreText::positions); packed with the line, unpacked while the line
+     * (Fonts::positions); packed with the line, unpacked while the line
      * is in view.
      * @return array<int, float>
      */
@@ -584,7 +585,7 @@ final class Text implements TextPainter
         if (isset($this->lines[$key]['hot'][$v])) { return $this->lines[$key]['hot'][$v]; }
         $packed = $this->lines[$key]['quads'][$v] ?? null;
         if ($packed === null) {
-            $s = $this->ct->scale;
+            $s = $this->ct->scale();
             [$shade, $phase] = explode('|', $v); $shade = (int)$shade; $phase = (float)$phase;
             $n = $this->lines[$key]['n'];
             $packed = ''; $slots = [];
@@ -635,7 +636,7 @@ final class Text implements TextPainter
 
     private function shape(string $text, float $size, int $style, bool $carets = false): array
     {
-        $s = $this->ct->scale;
+        $s = $this->ct->scale();
         $shaped = $this->ct->shape($text, $size, $style);
         $glyphs = '';
         foreach ($shaped['glyphs'] as $g) {
@@ -643,7 +644,7 @@ final class Text implements TextPainter
         }
         return [
             'key' => "$size:$style\0$text", 'w' => $shaped['width'], 'min' => self::minOf($text, $shaped['carets']), 'h' => $shaped['ascent'] + $shaped['descent'],
-            'ascent' => $shaped['ascent'], 'n' => CoreText::positions($size * $s), 'glyphs' => $glyphs, 'quads' => [], 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
+            'ascent' => $shaped['ascent'], 'n' => $this->ct->positions($size * $s), 'glyphs' => $glyphs, 'quads' => [], 'carets' => $carets ? $shaped['carets'] : null, 'gen' => $this->gen,
         ];
     }
 

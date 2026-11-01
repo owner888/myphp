@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\{Frontend, ObjC, WebView as NativeWebView};
+use MyPHP\Native\Frontend;
 use RuntimeException;
 
 /**
@@ -56,7 +56,7 @@ final class Page
     private const EVAL_BODY = "try{return JSON.stringify({ok:true,v:await(async()=>{\n%s\n})()})}catch(e){return JSON.stringify({ok:false,e:String(e&&e.message||e)})}";
 
     /** @internal the WKWebView with the bridge */
-    public readonly NativeWebView $web;
+    public readonly Platform\Page $web;
     /** What every message the page's bridge posts carries. */
     private string $secret;
     private bool $domReady = false, $destroyed = false;
@@ -119,7 +119,7 @@ final class Page
     private float $zoom;
 
     /** @internal a window's page, or a web view's ($webView); $configuration the one WebKit hands over for window.open() */
-    public function __construct(private readonly Window $window, private readonly ?WebView $webView, $frame, PageOptions $o, $configuration = null)
+    public function __construct(private readonly Window $window, private readonly ?WebView $webView, int $width, int $height, PageOptions $o, $configuration = null)
     {
         $this->secret = bin2hex(random_bytes(16));
         $this->trustedOrigins = $o->trustedOrigins;
@@ -130,7 +130,7 @@ final class Page
         $this->zoom = $o->zoomFactor > 0 ? $o->zoomFactor : 1.0;
         $this->preloadAllFrames = $o->preloadAllFrames;
         $this->session = $configuration === null ? $o->session : null;
-        $this->web = NativeWebView::create($frame, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom,
+        $this->web = App::backend()->newPage($width, $height, $this->scripts(), $this->message(...), $this->devTools, $configuration, $o->userAgent, $o->zoomFactor, trim($o->userAgentSuffix), $o->swipeNavigation, $o->pinchZoom,
             $o->autoplay === Autoplay::Allow, $o->backgroundThrottling === BackgroundThrottling::On, $o->pictureInPicture, $this->session?->attach());
         if ($o->contentRules !== []) { $this->setContentRules(...$o->contentRules); }
         $this->wire();
@@ -983,7 +983,7 @@ final class Page
                 return null;
             }
             $child = Window::opened($opts, $width, $height, $configuration);
-            return $child->page()->web->ns;
+            return $child->page()->web->handle();
         };
         $w->onPanel = $this->panel(...);
         $w->onContextMenu = function ($menu, $event) use ($w): void {
