@@ -274,7 +274,8 @@ final class Runtime
      * once it is built (Context::mediaPlayer's, mediaPlayerSettings'): 'close'
      * => true to close it, 'title' => its title, 'buttons' => whether the
      * traffic lights show, 'aspect' => the content's width over its height
-     * to keep (null for none), 'fullScreen' => whether to be full screen.
+     * to keep (null for none), 'fixedSize' => whether it keeps the size it
+     * has, 'fullScreen' => whether to be full screen.
      * @var array<string, mixed>
      */
     public array $windowAsks = [];

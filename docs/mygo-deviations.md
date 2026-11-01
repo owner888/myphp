@@ -1731,9 +1731,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   menuWillOpen:, as IINA brings its menus up to date) and
   `MenuItem::setSubmenu` are myphp's; mygo has no film player, and its
   menu items neither alternates nor a call as they open. Of IINA's items,
-  left out so far: Video's Lock Window Aspect Ratio, Deinterlace,
-  Delogo, Crop's Custom and the video filters; the audio filters; Find
-  Online Subtitles from has OpenSubtitles alone (assrt.net and
+  left out so far: Video's Lock Window Aspect Ratio (Deinterlace since
+  v1.141, the filters since v1.140, Delogo and Crop's Custom since
+  v1.142); Find Online Subtitles from has OpenSubtitles alone (assrt.net and
   shooter.cn since v1.139). The film's picture is its one track, shown always:
   Cycle Video Tracks and Video Track's <None> are disabled, as is <None>
   of the sound. IINA's hidden menu of a second key of an item's is left
@@ -1787,6 +1787,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **The interactive mode** (v1.142): `UI\MediaPlayerInteractive`,
+  `MediaPlayerState::enterInteractive`, `exitInteractive`,
+  `interactiveDone`, `toggleDelogo`, `hasLabel` and the window's
+  `fixedSize` ask are myphp's, as IINA's interactive mode; mygo has no
+  film player. A click beside the picture does nothing (IINA's goes on to
+  the window's click actions); the subtitles do not show over the
+  picture meanwhile (mpv draws them into IINA's). The selection's height
+  is scaled by the picture's height (IINA's origin by its width, the same
+  where the pixels are square); an edge dragged past the other one
+  becomes it (IINA's box turns inside out). The quick settings' Crop has
+  no Custom yet.
 - **Deinterlace** (v1.141): `Native\Deinterlacer`,
   `Player::setDeinterlace`, `deinterlaced` and
   `MediaPlayerState::setDeinterlace` are myphp's, as IINA's Deinterlace;
@@ -1806,8 +1817,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   mask (a Gaussian a quarter of the matrix, not FFmpeg's matrix), delogo
   blurs the logo's rectangle (FFmpeg interpolates it from its edges),
   lut3d reads .cube files alone and interpolates trilinearly whatever its
-  interp. IINA's own filters (Video > Crop and Flip, the equalizer) are
-  not in the windows' lists, which hold the user's alone. The sheets are
+  interp. Of IINA's own filters, the interactive mode's custom crop and
+  delogo are in the lists, labeled (since v1.142); Crop's ratios, Flip and
+  the equalizer are not, MyPHP's own settings of the player. The sheets are
   taller than IINA's (New Filter 450 by 300, its parameters all in sight;
   Save Filter and Edit Filter for MyPHP's taller fields); a key
   with Command recorded goes to the menus first where one has it.

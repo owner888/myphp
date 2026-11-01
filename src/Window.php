@@ -79,7 +79,8 @@ final class Window
     /** The root of the view the last frame built, which a frame that only paints again paints (mygo's c.root). */
     private ?UI\Node $drawnRoot = null;
     /** The compact size the view asked for (a player's music mode): [width, height, least height, most height (0 none)], null for none; and what the window was before it, to go back to. */
-    private ?array $compactAsked = null, $beforeCompact = null;
+    private ?array $compactAsked = null, $beforeCompact = null, $beforeFixed = null;
+    private bool $fixedAsked = false;
     /** Whether the view asked the window to float on top (a player's pin, IINA's), null before it asked. */
     private ?bool $onTopAsked = null;
     /** The frame the window had before it went full screen by its own animation, which it goes back to. */
@@ -1035,7 +1036,8 @@ final class Window
      * Does what the view asked of the window this frame (Runtime::windowAsks),
      * once for each change: closed; its title; the traffic lights shown or hidden; the aspect
      * kept as the user resizes it, the window first made of that shape, its
-     * width kept; full screen or not. Resizing redraws the window at once
+     * width kept; its size kept, then its limits given back (fixedSize,
+     * before the aspect, which resizes it); full screen or not. Resizing redraws the window at once
      * (windowDidResize:): it waits for the frame to end.
      * @param array<string, mixed> $asks
      */
@@ -1050,6 +1052,27 @@ final class Window
         if (array_key_exists('buttons', $asks) && $asks['buttons'] !== $this->buttonsAsked) {
             $this->buttonsAsked = $asks['buttons'];
             $this->setWindowButtonVisibility($asks['buttons']);
+        }
+        if (array_key_exists('fixedSize', $asks) && $asks['fixedSize'] !== $this->fixedAsked) { // a player's interactive mode, IINA's windowWillResize: the size it has, kept; its limits given back after
+            $on = $this->fixedAsked = (bool)$asks['fixedSize'];
+            App::later(function () use ($on): void {
+                if ($this->destroyed) { return; }
+                $size = function (string $of): array { // as setMinimumSize and setMaximumSize take them: 0 for no limit
+                    $z = ObjC::msg('z:', $this->ns, $of);
+                    return [$z->w >= 1e30 ? 0 : (int)$z->w, $z->h >= 1e30 ? 0 : (int)$z->h];
+                };
+                if ($on) {
+                    $this->beforeFixed ??= [$size('minSize'), $size('maxSize')];
+                    $f = ObjC::msg('r:', $this->ns, 'frame'); // the limits are of the frame
+                    $this->setMinimumSize((int)round($f->w), (int)round($f->h));
+                    $this->setMaximumSize((int)round($f->w), (int)round($f->h));
+                } elseif ($this->beforeFixed !== null) {
+                    [$min, $max] = $this->beforeFixed;
+                    $this->beforeFixed = null;
+                    $this->setMinimumSize(...$min);
+                    $this->setMaximumSize(...$max);
+                }
+            });
         }
         if (array_key_exists('aspect', $asks) && $asks['aspect'] !== $this->aspectAsked) {
             $a = $this->aspectAsked = $asks['aspect'];

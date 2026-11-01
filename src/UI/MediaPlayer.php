@@ -58,6 +58,7 @@ final class MediaPlayer
         $c->runtime?->askWindow('blackOut', $s->settings()->get('blackOutMonitor'));
         if ($s->musicMode && $s->player !== null) { return MediaPlayerMusic::build($c, $s, $s->player, $o); } // IINA's mini player
         $c->runtime?->askWindow('compact', null); // the window's own size again
+        $c->runtime?->askWindow('fixedSize', false); // resized again, out of the interactive mode (MediaPlayerInteractive)
         $box = $c->column(0, 0, 1, 0x000000); // keyed by its state (Context::mediaPlayer)
         $p = $s->player;
         if ($p === null) { // nothing opened yet: black, and what failed to open, or what opens
@@ -68,6 +69,11 @@ final class MediaPlayer
         }
         self::performed($c, $s, $p);
         if ($o->keys) { self::keys($c, $s, $p); }
+        if ($s->interactive !== null && MediaPlayerInteractive::build($c, $s, $p, $box)) { // IINA's interactive mode: the picture, the box chosen over it and its bar alone
+            if ($o->osd) { self::osd($c, $s, $p, microtime(true)); }
+            $c->end();
+            return $box;
+        }
         $picture = $c->movie($p)->grow(1);
         $width = $c->width;
         $chooser = null; // the list of the subtitles found online, built below
@@ -303,8 +309,8 @@ final class MediaPlayer
         }
     }
 
-    /** The aspect the picture shows at in the window, its width over its height: its own or the one asked, cut, turned. */
-    private static function shownAspect(Player $p): ?float
+    /** The aspect the picture shows at in the window, its width over its height: its own or the one asked, cut, turned. @internal MediaPlayerInteractive */
+    public static function shownAspect(Player $p): ?float
     {
         [$w, $h] = $p->filteredSize(); // the video filters' crop or expand
         if ($w <= 0 || $h <= 0) { return null; }

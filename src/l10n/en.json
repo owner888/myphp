@@ -5217,6 +5217,14 @@
   "@iinaAlertFilterIncorrect": {
     "description": "IINA's \"alert.filter.incorrect\" (Localizable.strings)."
   },
+  "iinaMenuCropCustom": "Custom…",
+  "@iinaMenuCropCustom": {
+    "description": "IINA's \"menu.crop_custom\" (Localizable.strings)."
+  },
+  "iinaAlertNoVideoTrack": "There is no video track.",
+  "@iinaAlertNoVideoTrack": {
+    "description": "IINA's \"alert.no_video_track\" (Localizable.strings)."
+  },
   "iinaFilterVideoFilters": "Video Filters",
   "@iinaFilterVideoFilters": {
     "description": "IINA's \"filter.video_filters\" (Localizable.strings)."

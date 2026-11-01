@@ -7255,6 +7255,38 @@ succeeds are told of, an empty line is none.
   them all. Frames decoded only for those after them are not shown. AV1,
   decoded in software, has no interlacing and stays as it is.
 
+## The interactive mode (v1.142)
+
+- Video > Crop > Custom… and Video > Delogo enter IINA's interactive
+  mode (`MediaPlayerState::enterInteractive`, IINA's
+  InteractiveModeController): the film paused (played again on leaving
+  unless it was paused before), the sidebars and Live Text gone, the
+  state's `interactive` holding the selection in the video's pixels
+  from its top left. Without a video track, IINA's alert. Delogo while
+  one is on removes it instead (`toggleDelogo`).
+- `MediaPlayer::build` gives the window to `MediaPlayerInteractive`
+  then: the window's background color, no title bar, bars, subtitles or
+  traffic lights; the picture 20 from the top, as large as leaves 40
+  across and 108 down (NSSize.shrink), shadowed; the box over it in the
+  accent with IINA's gray fill. A press on an edge (4 points across it,
+  the resizing pointers over it) drags that edge, elsewhere it chooses
+  anew from where it went down; the pointer is kept on the picture, an
+  edge within 4 pixels of the picture's goes to it, and an edge dragged
+  past the other one becomes it. The bar 20 above the foot: the
+  selection "(x, y) (w×h)", IINA's six ratios (the largest box of one,
+  centered), Cancel and Done.
+- The window keeps its size meanwhile (the `fixedSize` ask: its frame
+  its minimum and maximum, the limits given back before an aspect
+  asked resizes it); going full screen or out of it leaves the mode, as
+  IINA's; the playlist's next and previous and the sidebars' commands do
+  nothing in it.
+- Done: a crop of the selection, labeled `iina_crop` among the video
+  filters, the crop ratio cleared, told "Crop: (x, y) (w×h)"; all of the
+  picture removes it. A delogo, labeled `iina_delogo`, in place of the
+  one there was; one it cannot do (nothing chosen) is IINA's alert.
+  Crop's ratios remove `iina_crop`; none of them is checked while it is
+  on; Delogo is checked while `iina_delogo` is.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

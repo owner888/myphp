@@ -1262,6 +1262,8 @@
   "iinaOsdFilterRemoved": "已移除滤镜",
   "iinaOsdDeinterlace": "反交错：{value}",
   "iinaAlertFilterIncorrect": "设置过滤器时出错。请检查您的参数格式。",
+  "iinaMenuCropCustom": "自定义…",
+  "iinaAlertNoVideoTrack": "无视频轨道。",
   "iinaFilterVideoFilters": "视频滤镜",
   "iinaFilterAudioFilters": "音频滤镜",
   "iinaFilterWindowSave": "保存",

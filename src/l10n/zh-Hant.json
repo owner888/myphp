@@ -1262,6 +1262,8 @@
   "iinaOsdFilterRemoved": "已移除濾鏡",
   "iinaOsdDeinterlace": "去交錯：{value}",
   "iinaAlertFilterIncorrect": "設定濾鏡時出現錯誤，請檢查參數格式",
+  "iinaMenuCropCustom": "自定⋯",
+  "iinaAlertNoVideoTrack": "沒有影片軌。",
   "iinaFilterVideoFilters": "視訊濾鏡",
   "iinaFilterAudioFilters": "音訊濾鏡",
   "iinaFilterWindowSave": "儲存",

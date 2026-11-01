@@ -291,10 +291,12 @@ final class MediaPlayerCommands
     {
         switch ($cmd) {
             case 'video-panel': case 'audio-panel': case 'sub-panel':
+                if ($s->interactive !== null) { return; } // IINA's showSideBar: no sidebar in the interactive mode
                 $tab = ['video-panel' => 'video', 'audio-panel' => 'audio', 'sub-panel' => 'subtitles'][$cmd];
                 $s->sidebar = $s->sidebar === $tab ? null : $tab; $s->tab = $tab; // the quick settings at its tab, or hidden (IINA's toggle)
                 return;
             case 'playlist-panel': case 'chapter-panel':
+                if ($s->interactive !== null) { return; }
                 $tab = $cmd === 'playlist-panel' ? 'playlist' : 'chapters';
                 $s->sidebar = $s->sidebar === 'playlist' && $s->playlistTab === $tab ? null : 'playlist'; $s->playlistTab = $tab;
                 return;

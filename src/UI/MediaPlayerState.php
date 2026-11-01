@@ -309,6 +309,7 @@ final class MediaPlayerState
     /** Plays the next film of the playlist; false after the last, unless the playlist loops, which goes to the first. */
     public function next(): bool
     {
+        if ($this->interactive !== null) { return false; } // IINA's navigateInPlaylist: not in the interactive mode
         $l = $this->playlist;
         $path = $l?->next() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[0] ?? null) : null);
         return $path !== null && $this->openFile($path, false);
@@ -317,6 +318,7 @@ final class MediaPlayerState
     /** Plays the film before; false before the first, unless the playlist loops, which goes to the last. */
     public function previous(): bool
     {
+        if ($this->interactive !== null) { return false; }
         $l = $this->playlist;
         $path = $l?->previous() ?? ($this->loop === 'playlist' && $l !== null ? ($l->files()[$l->count() - 1] ?? null) : null);
         return $path !== null && $this->openFile($path, false);
@@ -788,8 +790,116 @@ final class MediaPlayerState
     /** Video > Crop's: the picture cut to ratio $ratio, or whole for null, told (IINA's setCrop). */
     public function setCropRatio(?string $ratio): void
     {
+        if ($this->hasLabel(self::CROP)) { $this->setFilters(true, $this->withoutLabel(self::CROP)); } // one crop, as IINA's iina_crop: a custom one goes
         $this->player?->setCrop($ratio === null ? null : self::ratio($ratio));
         $this->say($this->t('videoCropTo', ['ratio' => $ratio ?? $this->t('videoNone')]));
+    }
+
+    /** The labels of IINA's own video filters, the custom crop and the delogo the interactive mode sets (Constants.FilterName). */
+    public const CROP = 'iina_crop', DELOGO = 'iina_delogo';
+
+    /**
+     * @internal MediaPlayerInteractive: IINA's interactive mode
+     * (InteractiveModeController), null out of it: 'mode' ('crop' or
+     * 'delogo'), 'rect' the selection in the video's pixels from its top
+     * left [x, y, w, h] (IINA's selectedRect), 'paused' whether it was
+     * paused before, 'fullScreen' whether the window was full screen,
+     * 'drag' the press ('free', 'top', 'bottom', 'left', 'right' or null),
+     * 'from' where it went down and 'last' where the pointer last was, in
+     * the picture's points, 'aspect' the ratio chosen (-1 for none).
+     * @var ?array<string, mixed>
+     */
+    public ?array $interactive = null;
+
+    /**
+     * Enters the interactive mode $mode, 'crop' or 'delogo' (IINA's
+     * InteractiveModeController.enter): paused, the sidebars and Live
+     * Text gone, nothing chosen or ($whole) all the picture; without video
+     * IINA's alert "There is no video track".
+     */
+    public function enterInteractive(string $mode, bool $whole = false): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        [$w, $h] = $p->size();
+        if ($w === 0 || $h === 0) {
+            \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: \MyPHP\Window::focused(), type: 'warning', message: $this->t('iinaAlertNoVideoTrack')));
+            return;
+        }
+        $paused = !$p->playing();
+        $p->pause();
+        $this->played();
+        $this->sidebar = null;
+        $this->liveText = null;
+        $this->interactive = ['mode' => $mode, 'rect' => $whole ? [0.0, 0.0, (float)$w, (float)$h] : [0.0, (float)$h, 0.0, 0.0], // IINA's empty rect is at its bottom left
+            'paused' => $paused, 'fullScreen' => $this->fullScreen(), 'drag' => null, 'from' => [0.0, 0.0], 'last' => [0.0, 0.0], 'aspect' => -1];
+        $this->changed();
+    }
+
+    /** Leaves the interactive mode (IINA's exit, Cancel): playing again unless it was paused before. */
+    public function exitInteractive(): void
+    {
+        $i = $this->interactive;
+        if ($i === null) { return; }
+        $this->interactive = null;
+        if (!$i['paused'] && $this->player !== null) {
+            $this->player->play();
+            $this->played();
+        }
+        $this->changed();
+    }
+
+    /**
+     * Done in the interactive mode (IINA's doneAction), its selection
+     * $x, $y, $w by $h in the video's pixels: a crop of it, labeled
+     * iina_crop, told "Crop: (x, y) (w×h)", none if it is all the picture;
+     * or a delogo of it, labeled iina_delogo, in place of the one there
+     * was, IINA's alert if it cannot be. Then out of the mode.
+     */
+    public function interactiveDone(int $x, int $y, int $w, int $h): void
+    {
+        $mode = $this->interactive['mode'] ?? null;
+        $p = $this->player;
+        if ($mode === null || $p === null) { return; }
+        $rest = $this->withoutLabel($mode === 'crop' ? self::CROP : self::DELOGO);
+        if ($mode === 'crop') {
+            [$vw, $vh] = $p->size();
+            $p->setCrop(null);
+            if ($x === 0 && $y === 0 && $w === $vw && $h === $vh) {
+                $this->setFilters(true, $rest); // IINA's removeCropFilter
+            } else {
+                $this->setFilters(true, [...$rest, Filter::of('crop', ['w' => (string)$w, 'h' => (string)$h, 'x' => (string)$x, 'y' => (string)$y], self::CROP)]);
+                $this->say($this->t('videoCropTo', ['ratio' => "($x, $y) ($w\u{d7}$h)"]));
+            }
+        } else {
+            $this->setFilters(true, $rest); // the one there was removed first, as IINA's
+            if (!$this->addFilter(true, Filter::lavfi('delogo', ['x' => (string)$x, 'y' => (string)$y, 'w' => (string)$w, 'h' => (string)$h], self::DELOGO))) {
+                \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: \MyPHP\Window::focused(), type: 'warning', message: $this->t('iinaAlertFilterIncorrect')));
+            }
+        }
+        $this->exitInteractive();
+    }
+
+    /** Video > Delogo (IINA's menuSetDelogo): the delogo removed while there is one, else chosen in the interactive mode. */
+    public function toggleDelogo(): void
+    {
+        if ($this->hasLabel(self::DELOGO)) {
+            $this->setFilters(true, $this->withoutLabel(self::DELOGO));
+            return;
+        }
+        $this->enterInteractive('delogo');
+    }
+
+    /** Whether a video filter labeled $label is on (IINA's delogoFilter, cropFilter). */
+    public function hasLabel(string $label): bool
+    {
+        return $this->withoutLabel($label) !== $this->videoFilters;
+    }
+
+    /** The video filters but the one labeled $label. @return list<Filter> */
+    private function withoutLabel(string $label): array
+    {
+        return array_values(array_filter($this->videoFilters, fn(Filter $f): bool => $f->label !== $label));
     }
 
     /** Subtitles > Encoding's choice, iconv's name of it or 'auto'; null till one is made, when the settings' default encoding reads the files (IINA's info.subEncoding). */

@@ -22,8 +22,7 @@ use MyPHP\Window;
  * do, a step's size and its title the binding's (updateKeyEquivalentsFrom).
  * Of no player (null) they are disabled.
  *
- * Not here yet: Video's Lock Window Aspect Ratio, Deinterlace,
- * Delogo, Crop's Custom and the filters; Audio's filters.
+ * Not here yet: Video's Lock Window Aspect Ratio.
  */
 final class MediaPlayerMenus
 {
@@ -276,6 +275,7 @@ final class MediaPlayerMenus
                 $it('flip', self::t('iinaMenuFlipVertical'), fn() => $s->setFlip(!$s->flip), checked: $s?->flip ?? false),
             ]),
             $it('deinterlace', self::t('iinaMenuDeinterlace'), fn() => $s->setDeinterlace(!$s->deinterlace), checked: $s?->deinterlace ?? false),
+            $it('delogo', self::t('iinaMenuDelogo'), fn() => $s->toggleDelogo(), checked: $s?->hasLabel(MediaPlayerState::DELOGO) ?? false),
             $sep(),
             ...self::filterItems($s, true),
         ];
@@ -484,14 +484,25 @@ final class MediaPlayerMenus
         return new MenuItem(self::t('iinaMenuInspector'), fn() => MediaPlayerInspector::open($player), 'Cmd+I', id: 'iina.inspector');
     }
 
-    /** Video > Aspect Ratio (Default and IINA's ratios) or Crop (None and them), the one set checked. @return list<MenuItem> */
+    /**
+     * Video > Aspect Ratio (Default and IINA's ratios) or Crop (None, them,
+     * and after a separator Custom…, the interactive mode's crop of all the
+     * picture to begin with), the one set checked: none of them for a
+     * custom crop, as IINA's.
+     * @return list<MenuItem>
+     */
     private static function ratios(MediaPlayerState $s, bool $crop): array
     {
         $now = $crop ? $s->player->crop() : $s->player->aspectRatio();
-        $items = [new MenuItem(self::t($crop ? 'iinaQuicksettingNone' : 'iinaQuicksettingDefault'), fn() => $crop ? $s->setCropRatio(null) : $s->setAspectRatio(null), type: MenuItem::CHECKBOX, checked: $now === null)];
+        $custom = $crop && $s->hasLabel(MediaPlayerState::CROP);
+        $items = [new MenuItem(self::t($crop ? 'iinaQuicksettingNone' : 'iinaQuicksettingDefault'), fn() => $crop ? $s->setCropRatio(null) : $s->setAspectRatio(null), type: MenuItem::CHECKBOX, checked: $now === null && !$custom)];
         foreach (self::ASPECTS as $ratio) {
             $items[] = new MenuItem($ratio, fn() => $crop ? $s->setCropRatio($ratio) : $s->setAspectRatio($ratio), type: MenuItem::CHECKBOX,
                 checked: $now !== null && abs($now - MediaPlayerState::ratio($ratio)) < 1e-3);
+        }
+        if ($crop) {
+            $items[] = MenuItem::separator();
+            $items[] = new MenuItem(self::t('iinaMenuCropCustom'), fn() => $s->enterInteractive('crop', true), type: MenuItem::CHECKBOX);
         }
         return $items;
     }
