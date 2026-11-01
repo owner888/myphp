@@ -33,7 +33,7 @@ final class Player
     /** A film over HTTP: the clock waits once less than STALL seconds are given ahead and the next are not here, until $cacheWait are; looked at every BUFFER_LOOK seconds meanwhile. */
     private const STALL = 0.1, BUFFER_LOOK = 0.05;
     /**
-     * @internal UI\MoviePlayerState: of the films opened next over the
+     * @internal UI\MediaPlayerState: of the films opened next over the
      * network, whether the clock waits for the cache (IINA's enableCache,
      * mpv's cache: without it, it plays on as the frames come), for how
      * many seconds of it (cachePauseWait, cache-pause-wait), and whether
@@ -53,11 +53,11 @@ final class Player
      * not decode (before Apple's M3) decodes in software anyway.
      */
     public static bool $hardwareDecoding = true;
-    /** @internal UI\MoviePlayerState: the threads of the software decoder of the films opened next (libdav1d's), 0 for as many as the cores: IINA's videoThreads. */
+    /** @internal UI\MediaPlayerState: the threads of the software decoder of the films opened next (libdav1d's), 0 for as many as the cores: IINA's videoThreads. */
     public static int $videoThreads = 0;
-    /** @internal UI\MoviePlayerState: the languages of the audio and of the subtitles chosen first in the films opened next, the first first (mpv's alang and slang, IINA's preferred languages). @var list<string> */
+    /** @internal UI\MediaPlayerState: the languages of the audio and of the subtitles chosen first in the films opened next, the first first (mpv's alang and slang, IINA's preferred languages). @var list<string> */
     public static array $audioLanguages = [], $subtitleLanguages = [];
-    /** @internal UI\MoviePlayerState: how the subtitle files of the films opened next are found (SubtitleMatcher::match's mode, priority words, search path, whether the folder is the playlist): IINA's auto load. @var array{0: int, 1: string, 2: string, 3: bool} */
+    /** @internal UI\MediaPlayerState: how the subtitle files of the films opened next are found (SubtitleMatcher::match's mode, priority words, search path, whether the folder is the playlist): IINA's auto load. @var array{0: int, 1: string, 2: string, 3: bool} */
     public static array $autoLoad = [2, '', './*', true];
 
     private Source $source;
@@ -431,7 +431,7 @@ final class Player
     }
 
     /**
-     * @internal UI\MoviePlayerState: where the subtitle $skip lines on (back
+     * @internal UI\MediaPlayerState: where the subtitle $skip lines on (back
      * when negative) from the one showing starts, of the film's time (its
      * delay counted), as mpv's sub-seek goes; null for none there.
      */
@@ -599,7 +599,7 @@ final class Player
         return $this->net !== null;
     }
 
-    /** @internal UI\MoviePlayer: whether the clock waits for the network as a seek lands (IINA's seeking throbber's), not as it played. */
+    /** @internal UI\MediaPlayer: whether the clock waits for the network as a seek lands (IINA's seeking throbber's), not as it played. */
     public function seekBuffering(): bool
     {
         return $this->buffering && $this->seekBuffering;
@@ -790,7 +790,7 @@ final class Player
     }
 
     /**
-     * @internal UI\MoviePlayer, UI\MoviePlayerState: the file's tags, as
+     * @internal UI\MediaPlayer, UI\MediaPlayerState: the file's tags, as
      * mpv's metadata for IINA's music mode, '' each where it has none (a
      * film over the network has none).
      * @return array{title: string, artist: string, album: string}
@@ -800,7 +800,7 @@ final class Player
         return $this->file instanceof Ts || $this->file === null ? ['title' => '', 'artist' => '', 'album' => ''] : $this->file->tags();
     }
 
-    /** @internal UI\MoviePlayer: the image of the file's cover (an audio file's album art), its bytes; null for none. */
+    /** @internal UI\MediaPlayer: the image of the file's cover (an audio file's album art), its bytes; null for none. */
     public function cover(): ?string
     {
         return $this->file instanceof Ts || $this->file === null ? null : $this->file->cover();
@@ -935,7 +935,7 @@ final class Player
         return $this->awake->held();
     }
 
-    /** @internal UI\MoviePlayerState: the audio output it plays on, by its unique ID (Native\AudioDevices), the system's default for null: IINA's preferred audio device. */
+    /** @internal UI\MediaPlayerState: the audio output it plays on, by its unique ID (Native\AudioDevices), the system's default for null: IINA's preferred audio device. */
     public function setAudioDevice(?string $uid): void
     {
         $this->out->setAudioDevice($uid);
@@ -948,13 +948,13 @@ final class Player
         return in_array($c['transfer'] ?? 2, [16, 18], true) && in_array($c['primaries'] ?? 2, [9, 12], true);
     }
 
-    /** @internal UI\MoviePlayerState: whether an HDR film shows in HDR (the system's high dynamic range), else tone mapped to the standard range: IINA's HDR mode. */
+    /** @internal UI\MediaPlayerState: whether an HDR film shows in HDR (the system's high dynamic range), else tone mapped to the standard range: IINA's HDR mode. */
     public function setHdr(bool $on): void
     {
         $this->out->setDynamicRange($on);
     }
 
-    /** @internal UI\MoviePlayerState: whether what it keeps awake while it plays is the display (its screen saver off), else only the system (IINA's "not while only playing audio"). */
+    /** @internal UI\MediaPlayerState: whether what it keeps awake while it plays is the display (its screen saver off), else only the system (IINA's "not while only playing audio"). */
     public function setAwakeDisplay(bool $display): void
     {
         $this->awake->setDisplay($display);
@@ -1147,7 +1147,7 @@ final class Player
     }
 
     /**
-     * @internal UI\MoviePlayerState: decodes this film's video on the
+     * @internal UI\MediaPlayerState: decodes this film's video on the
      * system's decoders or not, as IINA's quick setting of hardware
      * decoding (mpv's hwdec set as it plays): the frames from where it is
      * decoded again, from the keyframe before, the other way. Whether it
@@ -1164,13 +1164,13 @@ final class Player
         $this->go($this->time(), true);
     }
 
-    /** @internal UI\MoviePlayer: whether its video decodes on the system's decoders (what only they decode, whatever was asked; AV1 without them, in software). */
+    /** @internal UI\MediaPlayer: whether its video decodes on the system's decoders (what only they decode, whatever was asked; AV1 without them, in software). */
     public function hardwareDecoding(): bool
     {
         return $this->video !== null && !\MyPHP\Native\SoftVideo::wanted($this->video, $this->hardware);
     }
 
-    /** @internal UI\MoviePlayer: whether its video decodes either way, and so is switched (AV1, with libdav1d and the system's decoder). */
+    /** @internal UI\MediaPlayer: whether its video decodes either way, and so is switched (AV1, with libdav1d and the system's decoder). */
     public function decodingSwitchable(): bool
     {
         return $this->video !== null && \MyPHP\Native\SoftVideo::wanted($this->video, false) && \MyPHP\Native\CoreMedia::playable($this->video);
@@ -1207,7 +1207,7 @@ final class Player
     }
 
     /**
-     * @internal UI\MoviePlayerState: mpv's replaygain as IINA's settings
+     * @internal UI\MediaPlayerState: mpv's replaygain as IINA's settings
      * set it: $mode 0 none, 1 the track's, 2 the album's (the track's where
      * it has none) from the file's tags, $preamp dB more; clipping prevented
      * by the peak unless $clip; $fallback dB for a file of no tags.
@@ -1635,21 +1635,37 @@ final class Player
         return $span > 0 ? array_sum(array_column(array_slice($r, 0, -1), 1)) * 8 / $span : null;
     }
 
-    /** The container's format as mpv's file-format names it (FFmpeg's demuxer's): "matroska,webm", "mov,mp4,m4a,3gp,3g2,mj2", "mpegts", "hls"; of a file AVFoundation reads, its extension's. */
+    /**
+     * The container and what reads it (the Inspector's format): MyPHP's
+     * readers "Matroska", "MP4", "MPEG-TS", "HLS", yt-dlp's formats read
+     * apart, else AVFoundation's and the file's kind ("AVFoundation (MP3)").
+     */
     public function fileFormat(): string
     {
         return match (true) {
-            $this->source instanceof Matroska => 'matroska,webm',
-            $this->source instanceof Mp4, $this->source instanceof Merged => 'mov,mp4,m4a,3gp,3g2,mj2',
-            $this->source instanceof Ts => 'mpegts',
-            $this->source instanceof Hls => 'hls',
-            default => match ($ext = strtolower(pathinfo($this->path, PATHINFO_EXTENSION))) {
-                'mp4', 'm4v', 'm4a', 'mov', '3gp' => 'mov,mp4,m4a,3gp,3g2,mj2',
-                'mp3' => 'mp3', 'flac' => 'flac', 'ogg', 'oga', 'opus' => 'ogg', 'wav' => 'wav', 'aac' => 'aac', 'aif', 'aiff' => 'aiff',
-                default => $ext,
-            },
+            $this->source instanceof Matroska => 'Matroska',
+            $this->source instanceof Mp4 => 'MP4',
+            $this->source instanceof Merged => 'yt-dlp (video and audio apart)',
+            $this->source instanceof Ts => 'MPEG-TS',
+            $this->source instanceof Hls => 'HLS',
+            default => 'AVFoundation (' . strtoupper(pathinfo($this->path, PATHINFO_EXTENSION)) . ')',
         };
     }
+
+    /** What decodes the video shown: the system's VideoToolbox (the display layer's), or libdav1d here (AV1 in software); null without video. */
+    public function videoDecoder(): ?string
+    {
+        return $this->video === null ? null : ($this->hardwareDecoding() ? 'VideoToolbox' : 'libdav1d');
+    }
+
+    /** What decodes the audio played: MyPHP's Vorbis decoder (Audio\Vorbis), or the system's AudioToolbox (the audio renderer's); null without audio. */
+    public function audioDecoder(): ?string
+    {
+        return $this->audio === null ? null : (SoftAudio::wanted($this->audio) ? 'MyPHP Vorbis' : 'AudioToolbox');
+    }
+
+    /** What shows the picture and what plays the sound: AVFoundation's display layer and audio renderer. */
+    public const VIDEO_OUTPUT = 'AVSampleBufferDisplayLayer', AUDIO_OUTPUT = 'AVSampleBufferAudioRenderer';
 
     /** The size of the file it plays in bytes (mpv's file-size), null of one over the network. */
     public function fileSize(): ?int

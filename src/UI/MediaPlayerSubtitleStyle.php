@@ -17,9 +17,9 @@ use MyPHP\Media\PlayerSettings;
  * plane 720 high (the height mpv's "scaled pixels" are of); an ASS track's
  * lines given it too where sub-ass-override forces it.
  *
- * @internal MoviePlayer
+ * @internal MediaPlayer
  */
-final class MoviePlayerSubtitleStyle
+final class MediaPlayerSubtitleStyle
 {
     /** The height mpv's sizes of subtitles are of (its scaled pixels). */
     public const HEIGHT = 720;

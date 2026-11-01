@@ -11,14 +11,14 @@ namespace MyPHP\Tests;
 
 use MyPHP\Media\Player;
 use MyPHP\Native\ObjC;
-use MyPHP\UI\{Context, MoviePlayerState};
+use MyPHP\UI\{Context, MediaPlayerState};
 
 same(['brightness', 'contrast', 'saturation', 'gamma', 'hue'], Player::VIDEO_EQUALIZER, 'mpv\'s video equalizer, IINA\'s sliders');
 
 if (PHP_OS_FAMILY === 'Darwin') {
     Player::$autoLoad = [0, '', '', false];
     $p = new Player(__DIR__ . '/testdata/clip.mkv');
-    $s = new MoviePlayerState(); $s->setPlayer($p);
+    $s = new MediaPlayerState(); $s->setPlayer($p);
     $filters = function () use ($p): array { // Core Image's filters by name, after the layer's own
         $all = ObjC::msg('p:', $p->out->layer, 'filters');
         $names = [];
@@ -34,7 +34,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
     $s->setVideoEqualizer('gamma', 150); $s->setVideoEqualizer('hue', -30);
     same([100, ['CIColorControls', 'CIGammaAdjust', 'CIHueAdjust']], [$p->videoEqualizer('gamma'), $filters()], 'gamma kept within 100; gamma and hue of their own filters');
 
-    $h = new Headless(fn(Context $c) => $c->moviePlayer($s), 960, 540);
+    $h = new Headless(fn(Context $c) => $c->mediaPlayer($s), 960, 540);
     $s->perform(['add', 'contrast', '10']); $s->perform(['cycle', 'saturation']); $s->perform(['set', 'hue', '0']);
     $h->frame();
     same([10, 1, 0], [$p->videoEqualizer('contrast'), $p->videoEqualizer('saturation'), $p->videoEqualizer('hue')], 'the bindings\' add, cycle and set of them');
@@ -58,7 +58,7 @@ if (PHP_OS_FAMILY === 'Darwin') {
         foreach ($n->kids as $k) { if (($f = $button($k, $label)) !== null) { return $f; } }
         return null;
     };
-    $h = new Headless(fn(Context $c) => $c->moviePlayer($s), 960, 1000); // tall enough for the tab's last card
+    $h = new Headless(fn(Context $c) => $c->mediaPlayer($s), 960, 1000); // tall enough for the tab's last card
     $h->frame(30); // the sidebar slid in
     $reset = $button($h->frame(), 'Brightness');
     check($reset !== null, 'Brightness\'s button back to 0');

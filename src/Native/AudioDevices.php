@@ -12,7 +12,7 @@ use RuntimeException;
  * audioOutputDeviceUniqueID takes, and its name, as IINA's preferred audio
  * device lists them.
  *
- * @internal UI\MoviePlayerSettingsPages, Media\Player
+ * @internal UI\MediaPlayerSettingsPages, Media\Player
  */
 final class AudioDevices
 {

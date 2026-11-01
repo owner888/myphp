@@ -25,7 +25,7 @@ use MyPHP\Window;
  * Not here yet: Video's Lock Window Aspect Ratio, Deinterlace,
  * Delogo, Crop's Custom and the filters; Audio's filters.
  */
-final class MoviePlayerMenus
+final class MediaPlayerMenus
 {
     /** IINA's ratios of Aspect Ratio and Crop (AppData.aspects). */
     public const ASPECTS = ['4:3', '5:4', '16:9', '16:10', '1:1', '3:2', '2.21:1', '2.35:1', '2.39:1'];
@@ -116,14 +116,14 @@ final class MoviePlayerMenus
      * app builds them again (App::setMenu) when it changes, the player in
      * front another or the bindings changed.
      */
-    public static function key(?MoviePlayerState $s): string
+    public static function key(?MediaPlayerState $s): string
     {
-        $bindings = $s === null ? [] : array_map(fn(array $m) => [$m['normal'], $m['action'], $m['iina']], MoviePlayerKeys::current($s->settings()));
+        $bindings = $s === null ? [] : array_map(fn(array $m) => [$m['normal'], $m['action'], $m['iina']], MediaPlayerKeys::current($s->settings()));
         return ($s === null ? '' : spl_object_id($s)) . ':' . md5(serialize($bindings));
     }
 
     /** File's items of the film: Show Current File in Finder, Delete Current File, Save Current Playlist… @return list<MenuItem> */
-    public static function fileItems(?MoviePlayerState $s): array
+    public static function fileItems(?MediaPlayerState $s): array
     {
         $b = self::bindings($s);
         $local = fn(): bool => $s?->player !== null && !$s->player->remote(); // IINA's: of a file, not the network's
@@ -142,7 +142,7 @@ final class MoviePlayerMenus
     }
 
     /** IINA's Playback, Video, Audio and Subtitles menus of player $s. @return list<MenuItem> */
-    public static function menus(?MoviePlayerState $s): array
+    public static function menus(?MediaPlayerState $s): array
     {
         $out = [];
         foreach (['iinaMenuPlayback' => 'playback', 'iinaMenuVideo' => 'video', 'iinaMenuAudio' => 'audio', 'iinaMenuSubtitles' => 'subtitles'] as $label => $menu) {
@@ -180,7 +180,7 @@ final class MoviePlayerMenus
      * @param array<string, array{0: string, 1: ?float, 2: bool}> $b
      * @return Closure(string, string, Closure, ?Closure=, ?bool=, bool=, string=): MenuItem
      */
-    private static function itemer(?MoviePlayerState $s, array $b): Closure
+    private static function itemer(?MediaPlayerState $s, array $b): Closure
     {
         return function (string $name, string $label, Closure $click, ?Closure $enabled = null, ?bool $checked = null, bool $alternate = false, string $accel = '') use ($s, $b): MenuItem {
             [$key, $value, $exact] = $b[$name] ?? ['', self::defaultValue($name), false];
@@ -192,7 +192,7 @@ final class MoviePlayerMenus
     }
 
     /** @param array<string, array{0: string, 1: ?float, 2: bool}> $b @return list<MenuItem> */
-    private static function playback(?MoviePlayerState $s, array $b): array
+    private static function playback(?MediaPlayerState $s, array $b): array
     {
         $it = self::itemer($s, $b);
         $p = $s?->player;
@@ -203,18 +203,18 @@ final class MoviePlayerMenus
             $it('pause', self::t($p !== null && !$p->playing() ? 'iinaMenuResume' : 'iinaMenuPause'), fn() => $s->togglePause()),
             $it('stop', self::t('iinaMenuStopAndClearPlaylists'), fn() => $s->stop()),
             $sep(),
-            $it('forward', self::t('iinaMenuSeekForward', ['seconds' => MoviePlayerState::number(abs($num('forward')))]), fn(float $v, bool $exact) => $s->seekBy($v, $exact)),
+            $it('forward', self::t('iinaMenuSeekForward', ['seconds' => MediaPlayerState::number(abs($num('forward')))]), fn(float $v, bool $exact) => $s->seekBy($v, $exact)),
             $it('nextFrame', self::t('iinaMenuNextFrame'), fn() => $s->frameStep(), alternate: true),
-            $it('backward', self::t('iinaMenuSeekBackward', ['seconds' => MoviePlayerState::number(abs($num('backward')))]), fn(float $v, bool $exact) => $s->seekBy($v, $exact)),
+            $it('backward', self::t('iinaMenuSeekBackward', ['seconds' => MediaPlayerState::number(abs($num('backward')))]), fn(float $v, bool $exact) => $s->seekBy($v, $exact)),
             $it('previousFrame', self::t('iinaMenuPreviousFrame'), fn() => $s->frameStep(true), alternate: true),
             $it('jumpToBegin', self::t('iinaMenuJumpToBeginning'), fn() => $s->seekBy(-$s->player->time(), true)),
             $it('jumpTo', self::t('iinaMenuJumpTo'), fn() => $s->jumpTo(), accel: 'Cmd+J'),
             $sep(),
-            new MenuItem(self::t('iinaMenuSpeed', ['speed' => MoviePlayerState::number($p?->rate() ?? 1.0)]), disabled: true, id: 'iina.speedIndicator'),
-            $it('speedUp', self::t('iinaMenuSpeedUpBy', ['speed' => MoviePlayerState::number($num('speedUp'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v)),
-            $it('speedUpSlightly', self::t('iinaMenuSpeedUpBy', ['speed' => MoviePlayerState::number($num('speedUpSlightly'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v), alternate: true),
-            $it('speedDown', self::t('iinaMenuSpeedDownBy', ['speed' => MoviePlayerState::number($num('speedDown'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v)),
-            $it('speedDownSlightly', self::t('iinaMenuSpeedDownBy', ['speed' => MoviePlayerState::number($num('speedDownSlightly'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v), alternate: true),
+            new MenuItem(self::t('iinaMenuSpeed', ['speed' => MediaPlayerState::number($p?->rate() ?? 1.0)]), disabled: true, id: 'iina.speedIndicator'),
+            $it('speedUp', self::t('iinaMenuSpeedUpBy', ['speed' => MediaPlayerState::number($num('speedUp'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v)),
+            $it('speedUpSlightly', self::t('iinaMenuSpeedUpBy', ['speed' => MediaPlayerState::number($num('speedUpSlightly'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v), alternate: true),
+            $it('speedDown', self::t('iinaMenuSpeedDownBy', ['speed' => MediaPlayerState::number($num('speedDown'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v)),
+            $it('speedDownSlightly', self::t('iinaMenuSpeedDownBy', ['speed' => MediaPlayerState::number($num('speedDownSlightly'))]), fn(float $v) => $s->setSpeed($s->player->rate() * $v), alternate: true),
             $it('speedReset', self::t('iinaMenuResetSpeed'), fn() => $s->setSpeed(1.0)),
             $sep(),
             $it('screenshot', self::t('iinaMenuTakeScreenshot'), fn() => $s->screenshot()),
@@ -239,7 +239,7 @@ final class MoviePlayerMenus
     }
 
     /** @param array<string, array{0: string, 1: ?float, 2: bool}> $b @return list<MenuItem> */
-    private static function video(?MoviePlayerState $s, array $b): array
+    private static function video(?MediaPlayerState $s, array $b): array
     {
         $it = self::itemer($s, $b);
         $p = $s?->player;
@@ -277,15 +277,15 @@ final class MoviePlayerMenus
     }
 
     /** @param array<string, array{0: string, 1: ?float, 2: bool}> $b @return list<MenuItem> */
-    private static function audio(?MoviePlayerState $s, array $b): array
+    private static function audio(?MediaPlayerState $s, array $b): array
     {
         $it = self::itemer($s, $b);
         $p = $s?->player;
         $num = fn(string $name): float => $b[$name][1] ?? self::defaultValue($name);
         $sep = fn() => MenuItem::separator();
-        $volume = MoviePlayerState::number(round(($s?->volume ?? 1.0) * 100, 2));
-        $step = fn(string $name, string $label) => $it($name, self::t($label, ['volume' => MoviePlayerState::number(abs($num($name)))]), fn(float $v) => $s->setVolume($s->volume + $v / 100), alternate: str_ends_with($name, 'Slightly'));
-        $delay = fn(string $name, string $label) => $it($name, self::t($label, ['seconds' => MoviePlayerState::number(abs($num($name)))]), fn(float $v) => $s->setAudioDelay($s->player->audioDelay() + $v), alternate: str_ends_with($name, 'Slightly'));
+        $volume = MediaPlayerState::number(round(($s?->volume ?? 1.0) * 100, 2));
+        $step = fn(string $name, string $label) => $it($name, self::t($label, ['volume' => MediaPlayerState::number(abs($num($name)))]), fn(float $v) => $s->setVolume($s->volume + $v / 100), alternate: str_ends_with($name, 'Slightly'));
+        $delay = fn(string $name, string $label) => $it($name, self::t($label, ['seconds' => MediaPlayerState::number(abs($num($name)))]), fn(float $v) => $s->setAudioDelay($s->player->audioDelay() + $v), alternate: str_ends_with($name, 'Slightly'));
         return [
             $it('audioPanel', self::t($s?->sidebar === 'audio' ? 'iinaMenuHideAudio' : 'iinaMenuShowAudio'), fn() => $s->perform(['audio-panel'], true)),
             $sep(),
@@ -303,7 +303,7 @@ final class MoviePlayerMenus
             $step('decreaseVolumeSlightly', 'iinaMenuVolumeDown'),
             $it('mute', self::t('iinaMenuMute'), fn() => $s->toggleMute(), checked: $p?->muted() ?? false),
             $sep(),
-            new MenuItem(self::t('iinaMenuAudioDelay', ['seconds' => MoviePlayerState::number($p?->audioDelay() ?? 0.0)]), disabled: true, id: 'iina.audioDelayIndicator'),
+            new MenuItem(self::t('iinaMenuAudioDelay', ['seconds' => MediaPlayerState::number($p?->audioDelay() ?? 0.0)]), disabled: true, id: 'iina.audioDelayIndicator'),
             $delay('increaseAudioDelay', 'iinaMenuAudioDelayUp'),
             $delay('increaseAudioDelaySlightly', 'iinaMenuAudioDelayUp'),
             $delay('decreaseAudioDelay', 'iinaMenuAudioDelayDown'),
@@ -315,13 +315,13 @@ final class MoviePlayerMenus
     }
 
     /** @param array<string, array{0: string, 1: ?float, 2: bool}> $b @return list<MenuItem> */
-    private static function subtitles(?MoviePlayerState $s, array $b): array
+    private static function subtitles(?MediaPlayerState $s, array $b): array
     {
         $it = self::itemer($s, $b);
         $p = $s?->player;
         $num = fn(string $name): float => $b[$name][1] ?? self::defaultValue($name);
         $sep = fn() => MenuItem::separator();
-        $delay = fn(string $name, string $label) => $it($name, self::t($label, ['seconds' => MoviePlayerState::number(abs($num($name)))]), fn(float $v) => $s->setSubtitleDelay($s->player->subtitleDelay() + $v), alternate: str_ends_with($name, 'Slightly'));
+        $delay = fn(string $name, string $label) => $it($name, self::t($label, ['seconds' => MediaPlayerState::number(abs($num($name)))]), fn(float $v) => $s->setSubtitleDelay($s->player->subtitleDelay() + $v), alternate: str_ends_with($name, 'Slightly'));
         $online = fn(): bool => $s->openSubtitles !== null && !$s->searchingOnline; // OpenSubtitles' key in the options, no search going
         return [
             $it('subPanel', self::t($s?->sidebar === 'subtitles' ? 'iinaMenuHideSubtitles' : 'iinaMenuShowSubtitles'), fn() => $s->perform(['sub-panel'], true)),
@@ -348,25 +348,25 @@ final class MoviePlayerMenus
             $it('decreaseTextSize', self::t('iinaMenuScaleDown'), fn(float $v) => $s->setSubScale($s->subScale * $v)),
             $it('resetTextSize', self::t('iinaMenuResetSubtitleScale'), fn() => $s->setSubScale(1.0)),
             $sep(),
-            new MenuItem(self::t('iinaMenuSubDelay', ['seconds' => MoviePlayerState::number($p?->subtitleDelay() ?? 0.0)]), disabled: true, id: 'iina.subDelayIndicator'),
+            new MenuItem(self::t('iinaMenuSubDelay', ['seconds' => MediaPlayerState::number($p?->subtitleDelay() ?? 0.0)]), disabled: true, id: 'iina.subDelayIndicator'),
             $delay('increaseSubDelay', 'iinaMenuSubDelayUp'),
             $delay('increaseSubDelaySlightly', 'iinaMenuSubDelayUp'),
             $delay('decreaseSubDelay', 'iinaMenuSubDelayDown'),
             $delay('decreaseSubDelaySlightly', 'iinaMenuSubDelayDown'),
             $it('resetSubDelay', self::t('iinaMenuResetSubtitleDelay'), fn() => $s->setSubtitleDelay(0.0)),
             $sep(),
-            $it('subFont', self::t('iinaMenuFont'), fn() => MoviePlayerFontSheet::open($s->settings()->get('subTextFont'), fn(string $f) => $s->setSetting('subTextFont', $f))),
+            $it('subFont', self::t('iinaMenuFont'), fn() => MediaPlayerFontSheet::open($s->settings()->get('subTextFont'), fn(string $f) => $s->setSetting('subTextFont', $f))),
         ];
     }
 
     /** A submenu named $name of what there is as it opens, $items' (IINA's menus of the delegate). @param Closure(): list<MenuItem> $items */
-    private static function list(?MoviePlayerState $s, string $name, string $label, Closure $items): MenuItem
+    private static function list(?MediaPlayerState $s, string $name, string $label, Closure $items): MenuItem
     {
         return new MenuItem($label, disabled: $s?->player === null, id: "iina.$name", onOpen: fn(MenuItem $m) => $m->setSubmenu($s?->player === null ? [] : $items()));
     }
 
     /** Playback > Playlist: the playlist's films, the one playing checked (IINA's updatePlaylist). @return list<MenuItem> */
-    private static function playlist(MoviePlayerState $s): array
+    private static function playlist(MediaPlayerState $s): array
     {
         $l = $s->playlist;
         if ($l === null) { return []; }
@@ -378,14 +378,14 @@ final class MoviePlayerMenus
     }
 
     /** Playback > Chapters: "time – title", the time as long as the last's, the one playing checked (IINA's updateChapterList). @return list<MenuItem> */
-    private static function chapters(MoviePlayerState $s): array
+    private static function chapters(MediaPlayerState $s): array
     {
         $chapters = $s->player->chapters();
-        $longest = $chapters === [] ? '' : MoviePlayerState::clock($chapters[count($chapters) - 1]->start);
+        $longest = $chapters === [] ? '' : MediaPlayerState::clock($chapters[count($chapters) - 1]->start);
         $at = $s->player->chapter();
         $items = [];
         foreach ($chapters as $i => $ch) {
-            $time = MoviePlayerState::clock($ch->start);
+            $time = MediaPlayerState::clock($ch->start);
             $time = preg_replace('/\d/', '0', substr($longest, 0, max(0, strlen($longest) - strlen($time)))) . $time; // IINA's padder: "0:05:00" beside "1:02:03"
             $items[] = new MenuItem("$time – {$ch->title}", fn() => $s->playChapter($i), type: MenuItem::CHECKBOX, checked: $i === $at);
         }
@@ -399,7 +399,7 @@ final class MoviePlayerMenus
      * disabled.
      * @return list<MenuItem>
      */
-    private static function tracks(MoviePlayerState $s, string $type, bool $secondary = false): array
+    private static function tracks(MediaPlayerState $s, string $type, bool $secondary = false): array
     {
         $p = $s->player;
         [$tracks, $shown] = match ($type) {
@@ -415,7 +415,7 @@ final class MoviePlayerMenus
         $fixed = $type !== Track::SUBTITLE; // a film's picture and sound are not left out here
         $items = [new MenuItem(self::t('iinaTrackNone'), fn() => $choose(null), type: MenuItem::CHECKBOX, disabled: $fixed, checked: $shown === null)];
         foreach ($tracks as $t) {
-            $items[] = new MenuItem(MoviePlayer::trackName($t, MoviePlayer::trackDetails($t)), fn() => $choose($t), type: MenuItem::CHECKBOX,
+            $items[] = new MenuItem(MediaPlayer::trackName($t, MediaPlayer::trackDetails($t)), fn() => $choose($t), type: MenuItem::CHECKBOX,
                 disabled: $type === Track::VIDEO || ($type === Track::AUDIO && !\MyPHP\Media\Player::playable($t)), checked: $t === $shown);
         }
         return $items;
@@ -427,7 +427,7 @@ final class MoviePlayerMenus
      * checked (IINA's updateAudioDevice).
      * @return list<MenuItem>
      */
-    private static function audioDevices(MoviePlayerState $s): array
+    private static function audioDevices(MediaPlayerState $s): array
     {
         $now = $s->audioDevice ?? $s->settings()->get('audioDevice');
         $devices = ['auto' => 'Autoselect device'];
@@ -439,37 +439,37 @@ final class MoviePlayerMenus
         return $items;
     }
 
-    /** Window's Inspector (Cmd+I), of the player $player gives (MoviePlayerInspector::open). @param Closure(): ?MoviePlayerState $player */
+    /** Window's Inspector (Cmd+I), of the player $player gives (MediaPlayerInspector::open). @param Closure(): ?MediaPlayerState $player */
     public static function inspector(Closure $player): MenuItem
     {
-        return new MenuItem(self::t('iinaMenuInspector'), fn() => MoviePlayerInspector::open($player), 'Cmd+I', id: 'iina.inspector');
+        return new MenuItem(self::t('iinaMenuInspector'), fn() => MediaPlayerInspector::open($player), 'Cmd+I', id: 'iina.inspector');
     }
 
     /** Video > Aspect Ratio (Default and IINA's ratios) or Crop (None and them), the one set checked. @return list<MenuItem> */
-    private static function ratios(MoviePlayerState $s, bool $crop): array
+    private static function ratios(MediaPlayerState $s, bool $crop): array
     {
         $now = $crop ? $s->player->crop() : $s->player->aspectRatio();
         $items = [new MenuItem(self::t($crop ? 'iinaQuicksettingNone' : 'iinaQuicksettingDefault'), fn() => $crop ? $s->setCropRatio(null) : $s->setAspectRatio(null), type: MenuItem::CHECKBOX, checked: $now === null)];
         foreach (self::ASPECTS as $ratio) {
             $items[] = new MenuItem($ratio, fn() => $crop ? $s->setCropRatio($ratio) : $s->setAspectRatio($ratio), type: MenuItem::CHECKBOX,
-                checked: $now !== null && abs($now - MoviePlayerState::ratio($ratio)) < 1e-3);
+                checked: $now !== null && abs($now - MediaPlayerState::ratio($ratio)) < 1e-3);
         }
         return $items;
     }
 
     /** Video > Rotation: 0° to 270°, the one set checked. @return list<MenuItem> */
-    private static function rotations(MoviePlayerState $s): array
+    private static function rotations(MediaPlayerState $s): array
     {
         return array_map(fn(int $i, int $deg) => new MenuItem("{$deg}°", fn() => $s->setRotation($i), type: MenuItem::CHECKBOX, checked: $s->player->rotation() === $deg),
-            array_keys(MoviePlayerState::ROTATIONS), MoviePlayerState::ROTATIONS);
+            array_keys(MediaPlayerState::ROTATIONS), MediaPlayerState::ROTATIONS);
     }
 
     /** Subtitles > Encoding: Auto detect, then IINA's encodings, the one chosen checked. @return list<MenuItem> */
-    private static function encodings(MoviePlayerState $s): array
+    private static function encodings(MediaPlayerState $s): array
     {
         $now = $s->subEncoding ?? 'auto';
         $items = [new MenuItem(L10n::in(App::locale())->get('iinaSubencodingAuto'), fn() => $s->setSubEncoding('auto'), type: MenuItem::CHECKBOX, checked: $now === 'auto'), MenuItem::separator()];
-        foreach (MoviePlayerSettingsPages::ENCODINGS as [$title, $code]) {
+        foreach (MediaPlayerSettingsPages::ENCODINGS as [$title, $code]) {
             $items[] = new MenuItem($title, fn() => $s->setSubEncoding($code), type: MenuItem::CHECKBOX, checked: $now === $code);
         }
         return $items;
@@ -481,11 +481,11 @@ final class MoviePlayerMenus
      * seek's "exact" (IINA's updateKeyEquivalentsFrom).
      * @return array<string, array{0: string, 1: ?float, 2: bool}>
      */
-    private static function bindings(?MoviePlayerState $s): array
+    private static function bindings(?MediaPlayerState $s): array
     {
         if ($s === null) { return []; }
         $out = [];
-        foreach (MoviePlayerKeys::current($s->settings()) as $m) {
+        foreach (MediaPlayerKeys::current($s->settings()) as $m) {
             $accel = self::accelerator($m['normal']);
             if ($accel === null) { continue; }
             foreach (self::BOUND as $name => [$iina, $action, $num, $range]) {
@@ -539,7 +539,7 @@ final class MoviePlayerMenus
     }
 
     /**
-     * mpv's key $normal (MoviePlayerKeys::normalize) as a menu's accelerator
+     * mpv's key $normal (MediaPlayerKeys::normalize) as a menu's accelerator
      * (KeyCodeHelper.macOSKeyEquivalent): Meta as Cmd, a capital letter as
      * Shift and its letter; null for one of no key equivalent (the mouse's,
      * a sequence).

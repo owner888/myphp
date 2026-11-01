@@ -15,17 +15,17 @@ use MyPHP\Media\Player;
  * the foot, IINA's close and back buttons at the top left; the playlist
  * under it, the window as much higher as it is (300 points, more as it is
  * made higher). Its toggles are the settings' (musicModeShowPlaylist,
- * musicModeShowAlbumArt). Built by MoviePlayer while the state's
+ * musicModeShowAlbumArt). Built by MediaPlayer while the state's
  * $musicMode.
  *
- * @internal MoviePlayer
+ * @internal MediaPlayer
  */
-final class MoviePlayerMusic
+final class MediaPlayerMusic
 {
     /** The window's width, the height of the controls under the picture, the least height of the playlist, IINA's. */
     private const WIDTH = 300.0, CONTROLS = 72.0, PLAYLIST_LEAST = 200.0;
 
-    public static function build(Context $c, MoviePlayerState $s, Player $p, MoviePlayerOptions $o): Node
+    public static function build(Context $c, MediaPlayerState $s, Player $p, MediaPlayerOptions $o): Node
     {
         $set = $s->settings();
         $t = $c->theme;
@@ -45,8 +45,8 @@ final class MoviePlayerMusic
         $c->runtime?->askWindow('buttons', false); // IINA's: its own close and back buttons
         $c->runtime?->askWindow('compact', [(int)self::WIDTH, (int)$height, (int)($normal + ($listed ? self::PLAYLIST_LEAST : 0)), $listed ? 0 : (int)$normal]);
         $c->runtime?->askWindow('title', $p->tags()['title'] !== '' ? $p->tags()['title'] : $p->title());
-        MoviePlayer::performed($c, $s, $p);
-        if ($o->keys) { MoviePlayer::keys($c, $s, $p); }
+        MediaPlayer::performed($c, $s, $p);
+        if ($o->keys) { MediaPlayer::keys($c, $s, $p); }
 
         $root = $c->key('music mode')->column(0, 0, 1)->background(0x000000);
         $v = $c->runtime?->local($root->id, fn() => (object)['volume' => false]) ?? (object)['volume' => false];
@@ -74,7 +74,7 @@ final class MoviePlayerMusic
         if (!$shown) { $v->volume = false; }
         if ($listed) {
             $list = $c->key('music playlist')->column()->fillWidth()->grow(1)->systemMaterial('under-window', $t->dark)->borderWidth(1, 0, 0, 0)->borderColor($t->border);
-              MoviePlayer::playlistPane($c, $s, $list, self::WIDTH, $s->musicPlaylistHeight, 12, false);
+              MediaPlayer::playlistPane($c, $s, $list, self::WIDTH, $s->musicPlaylistHeight, 12, false);
             $c->end();
         }
         $c->clicked($panel); // a click on the controls none of them took is theirs, not the window's
@@ -83,7 +83,7 @@ final class MoviePlayerMusic
     }
 
     /** The track's title, bold, and its artist and album under it, centered, as IINA's (a title alone lower); at $alpha. */
-    private static function info(Context $c, MoviePlayerState $s, Player $p, float $alpha): void
+    private static function info(Context $c, MediaPlayerState $s, Player $p, float $alpha): void
     {
         $t = $c->theme;
         $tags = $p->tags();
@@ -101,7 +101,7 @@ final class MoviePlayerMusic
      * slider beside it, a click again mutes), back and on in the playlist
      * around play, the playlist's and the picture's toggles; at $alpha.
      */
-    private static function controls(Context $c, MoviePlayerState $s, Player $p, object $v, float $alpha, bool $listed, bool $art): void
+    private static function controls(Context $c, MediaPlayerState $s, Player $p, object $v, float $alpha, bool $listed, bool $art): void
     {
         $t = $c->theme;
         $box = $c->column()->absolute()->left(0)->right(0)->top(4)->height(48);
@@ -121,15 +121,15 @@ final class MoviePlayerMusic
               if ($c->changed($slider)) { $s->setVolume($level); }
               $c->text((string)(int)round(($p->muted() ? 0 : $s->volume) * 100), 11, $t->text)->absolute()->left(191)->top(19)->width(28);
           }
-          $mute = self::button($c, $vol, 15, 48, 21, 18, MoviePlayerSettings::iina($c, 'mini_player.volume'));
+          $mute = self::button($c, $vol, 15, 48, 21, 18, MediaPlayerSettings::iina($c, 'mini_player.volume'));
           if ($c->clicked($mute)) { $v->volume ? $s->toggleMute() : $v->volume = true; }
           if (!$v->volume) {
               if ($c->clicked(self::button($c, 'backward.end.fill', 16, 86, 12, 28))) { $s->previous(); }
               if ($c->clicked(self::button($c, $p->playing() ? 'pause.fill' : 'play.fill', 22, 138, 12, 28))) { $s->togglePause(); }
               if ($c->clicked(self::button($c, 'forward.end.fill', 16, 186, 12, 28))) { $s->next(); }
-              $list = self::button($c, $listed ? 'list.bullet.rectangle.fill' : 'list.bullet.rectangle', 14, 234, 21, 18, MoviePlayer::t($c, 'videoPlaylist'));
+              $list = self::button($c, $listed ? 'list.bullet.rectangle.fill' : 'list.bullet.rectangle', 14, 234, 21, 18, MediaPlayer::t($c, 'videoPlaylist'));
               if ($c->clicked($list)) { $s->setSetting('musicModeShowPlaylist', !$listed); }
-              $pic = self::button($c, $art ? 'photo.fill' : 'photo', 14, 268, 21, 18, MoviePlayerSettings::iina($c, 'mini_player.album_art'));
+              $pic = self::button($c, $art ? 'photo.fill' : 'photo', 14, 268, 21, 18, MediaPlayerSettings::iina($c, 'mini_player.album_art'));
               if ($c->clicked($pic)) { $s->setSetting('musicModeShowAlbumArt', !$art); }
           }
         $c->end();
@@ -140,17 +140,17 @@ final class MoviePlayerMusic
     {
         $b = $c->column()->absolute()->left($x)->top($y)->size($size, $size)->center()->role(Role::BUTTON)->label($tip !== '' ? $tip : $name);
         if ($tip !== '') { $b->tooltip($tip); }
-          MoviePlayerSettings::sf($c, $name, $symbol, $c->theme->text, 0.0)->opacity($c->hovered($b) ? 1.0 : 0.75);
+          MediaPlayerSettings::sf($c, $name, $symbol, $c->theme->text, 0.0)->opacity($c->hovered($b) ? 1.0 : 0.75);
         $c->end();
         return $b;
     }
 
     /** The time played, its bar and the length, at the foot: IINA's small monospaced digits, 6 from the edges. */
-    private static function timeBar(Context $c, MoviePlayerState $s, Player $p): void
+    private static function timeBar(Context $c, MediaPlayerState $s, Player $p): void
     {
         $t = $c->theme;
         $c->row(0, 6)->absolute()->left(6)->right(6)->bottom(8)->height(14)->alignItems(Node::CENTER);
-          $c->text(MoviePlayerState::clock($p->time()), 9, $t->textMuted)->fontFeatures('tnum')->width(32)->textAlign(Node::END);
+          $c->text(MediaPlayerState::clock($p->time()), 9, $t->textMuted)->fontFeatures('tnum')->width(32)->textAlign(Node::END);
           $bar = $c->sliderBase($s->at, 0, max($p->duration(), 0.001))->grow(1)->height(14);
           if (!$c->pressed($bar)) { $s->at = $p->time(); }
           $bar->draw(static function (Painter $p, array $r) use ($bar, $t): void { // IINA's MiniPlaySlider: a thin track, the played part in the accent
@@ -159,19 +159,19 @@ final class MoviePlayerMusic
               $p->fill([$r[0], $cy - 1.5, $k - $r[0], 3], $t->accent, 1.5);
           });
           if ($c->changed($bar)) { $p->seek($s->at); }
-          $c->text(MoviePlayerState::clock($p->duration()), 9, $t->textMuted)->fontFeatures('tnum')->width(32);
+          $c->text(MediaPlayerState::clock($p->duration()), 9, $t->textMuted)->fontFeatures('tnum')->width(32);
         $c->end();
     }
 
     /** IINA's buttons at the top left, in a pill of the popover's material: close music mode (the window) and back to the video's window. */
-    private static function corner(Context $c, MoviePlayerState $s, float $alpha): void
+    private static function corner(Context $c, MediaPlayerState $s, float $alpha): void
     {
         $c->column(3, 4)->absolute()->left(8)->top(6)->radius(10)->systemMaterial('popover', $c->theme->dark)->opacity($alpha);
-          $close = $c->column()->size(13, 13)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'mini_player.close'))->tooltip(MoviePlayerSettings::iina($c, 'mini_player.close'));
-            MoviePlayerSettings::sf($c, 'xmark.circle.fill', 13, $c->theme->text);
+          $close = $c->column()->size(13, 13)->center()->role(Role::BUTTON)->label(MediaPlayerSettings::iina($c, 'mini_player.close'))->tooltip(MediaPlayerSettings::iina($c, 'mini_player.close'));
+            MediaPlayerSettings::sf($c, 'xmark.circle.fill', 13, $c->theme->text);
           $c->end();
-          $back = $c->column()->size(13, 13)->center()->role(Role::BUTTON)->label(MoviePlayerSettings::iina($c, 'mini_player.back'))->tooltip(MoviePlayerSettings::iina($c, 'mini_player.back'));
-            MoviePlayerSettings::sf($c, 'arrow.uturn.backward.circle.fill', 13, $c->theme->text);
+          $back = $c->column()->size(13, 13)->center()->role(Role::BUTTON)->label(MediaPlayerSettings::iina($c, 'mini_player.back'))->tooltip(MediaPlayerSettings::iina($c, 'mini_player.back'));
+            MediaPlayerSettings::sf($c, 'arrow.uturn.backward.circle.fill', 13, $c->theme->text);
           $c->end();
         $c->end();
         if ($c->clicked($close)) { $c->runtime?->askWindow('close', true); }
@@ -185,7 +185,7 @@ final class MoviePlayerMusic
             $steps = 16;
             for ($i = 0; $i < $steps; $i++) { $p->fill([$r[0], $r[1] + $r[3] * $i / $steps, $r[2], $r[3] / $steps + 1], 0x3a3a3c - 0x010101 * (int)($i * 1.5)); }
         });
-          MoviePlayerSettings::sf($c, 'music.note', 96, 0xffffff)->opacity(0.25);
+          MediaPlayerSettings::sf($c, 'music.note', 96, 0xffffff)->opacity(0.25);
         $c->end();
     }
 

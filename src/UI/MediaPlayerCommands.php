@@ -18,24 +18,24 @@ use MyPHP\Window;
  * mode, the window's size…). A property or command the player has no
  * means for is logged and does nothing (video-zoom, deinterlace, edition…).
  *
- * @internal MoviePlayer
+ * @internal MediaPlayer
  */
-final class MoviePlayerCommands
+final class MediaPlayerCommands
 {
     /** mpv's words before a command that change how it shows, not what it does. */
     private const PREFIXES = ['no-osd', 'osd-auto', 'osd-bar', 'osd-msg', 'osd-msg-bar', 'raw', 'repeatable', 'expand-properties', 'async', 'sync'];
 
-    /** Carries out the action of binding $m (MoviePlayerKeys::mapping's) in the player of $s. */
-    public static function run(Context $c, MoviePlayerState $s, Player $p, array $m): void
+    /** Carries out the action of binding $m (MediaPlayerKeys::mapping's) in the player of $s. */
+    public static function run(Context $c, MediaPlayerState $s, Player $p, array $m): void
     {
         $words = array_values(array_filter($m['action'], fn(string $w) => !in_array($w, self::PREFIXES, true)));
         if ($words === []) { return; }
-        Logger::verbose('Key binding: ' . MoviePlayerKeys::rawAction($m), 'keybindings');
+        Logger::verbose('Key binding: ' . MediaPlayerKeys::rawAction($m), 'keybindings');
         $m['iina'] ? self::iina($c, $s, $p, $words[0]) : self::mpv($c, $s, $p, $words);
     }
 
     /** @param list<string> $w */
-    private static function mpv(Context $c, MoviePlayerState $s, Player $p, array $w): void
+    private static function mpv(Context $c, MediaPlayerState $s, Player $p, array $w): void
     {
         $args = array_map(fn(string $a) => trim($a, '"\''), array_slice($w, 1));
         switch ($w[0]) {
@@ -84,7 +84,7 @@ final class MoviePlayerCommands
     }
 
     /** The property's value as mpv writes it, of those cycle-values goes through; null for one it has none of. */
-    private static function value(Context $c, MoviePlayerState $s, Player $p, string $prop): ?string
+    private static function value(Context $c, MediaPlayerState $s, Player $p, string $prop): ?string
     {
         return match ($prop) {
             'pause' => $p->playing() ? 'no' : 'yes',
@@ -95,8 +95,8 @@ final class MoviePlayerCommands
             'secondary-sub-visibility' => $s->secondarySubtitlesVisible ? 'yes' : 'no',
             'loop', 'loop-file' => $s->loop === 'file' ? 'inf' : 'no',
             'loop-playlist' => $s->loop === 'playlist' ? 'inf' : 'no',
-            'speed' => MoviePlayerState::number($p->rate()),
-            'window-scale' => MoviePlayerState::number(self::windowScale($c, $p)),
+            'speed' => MediaPlayerState::number($p->rate()),
+            'window-scale' => MediaPlayerState::number(self::windowScale($c, $p)),
             'video-aspect-override' => ($a = $p->aspectRatio()) === null ? '-1' : (string)$a,
             'hwdec' => $p->hardwareDecoding() ? 'auto' : 'no',
             'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
@@ -106,12 +106,14 @@ final class MoviePlayerCommands
     }
 
     /**
-     * mpv's property $prop of player $s as mpv's getString gives it (the
-     * Inspector's watch table): yes or no, a number of six decimals, a
-     * string; null for one the player has no means to give (IINA's Error).
-     * @internal MoviePlayerInspector
+     * Property $prop of player $s by mpv's name of it, which key bindings
+     * and IINA's watch table take, written as mpv's getString writes it:
+     * yes or no, a number of six decimals, a string; of what MyPHP plays
+     * with, its own names (VideoToolbox, AVSampleBufferDisplayLayer, its
+     * readers); null for one the player has no means to give (IINA's Error).
+     * @internal MediaPlayerInspector
      */
-    public static function propertyValue(MoviePlayerState $s, string $prop): ?string
+    public static function propertyValue(MediaPlayerState $s, string $prop): ?string
     {
         $p = $s->player;
         if ($p === null) { return null; }
@@ -147,12 +149,13 @@ final class MoviePlayerCommands
             'loop-playlist' => $s->loop === 'playlist' ? 'inf' : 'no',
             'ontop' => $yes($s->onTop),
             'fullscreen' => $yes($s->fullScreen()),
-            'hwdec-current' => $p->videoTrack() === null ? null : ($p->hardwareDecoding() ? 'videotoolbox' : 'no'),
+            'hwdec-current' => $p->videoTrack() === null ? null : ($p->hardwareDecoding() ? 'VideoToolbox' : 'no'), // MyPHP's names, as the Inspector's
             'video-rotate' => (string)$p->rotation(),
             'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
             'video-bitrate' => ($b = $p->bitrate('video')) === null ? null : (string)(int)round($b),
             'audio-bitrate' => ($b = $p->bitrate('audio')) === null ? null : (string)(int)round($b),
-            'current-vo', 'current-ao' => 'avfoundation',
+            'current-vo' => Player::VIDEO_OUTPUT,
+            'current-ao' => Player::AUDIO_OUTPUT,
             default => null,
         };
     }
@@ -165,7 +168,7 @@ final class MoviePlayerCommands
     }
 
     /** mpv's set, add, multiply and cycle of property $prop by $arg, as the player has the means. */
-    private static function property(Context $c, MoviePlayerState $s, Player $p, string $prop, string $op, string $arg): void
+    private static function property(Context $c, MediaPlayerState $s, Player $p, string $prop, string $op, string $arg): void
     {
         $bool = fn(bool $now): bool => match ($op) { 'set' => $arg === 'yes' || $arg === 'true' || $arg === '1', default => !$now };
         $num = fn(float $now): float => match ($op) { 'set' => (float)$arg, 'add' => $now + (float)$arg, 'multiply' => $now * self::number($arg), default => $now };
@@ -252,7 +255,7 @@ final class MoviePlayerCommands
     }
 
     /** IINA's own commands (IINACommand). */
-    private static function iina(Context $c, MoviePlayerState $s, Player $p, string $cmd): void
+    private static function iina(Context $c, MediaPlayerState $s, Player $p, string $cmd): void
     {
         switch ($cmd) {
             case 'video-panel': case 'audio-panel': case 'sub-panel':

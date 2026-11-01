@@ -500,7 +500,7 @@ same('Received URLs: https://example.com/', $right->status, 'a URL dropped is re
 
 // video: a player's window; a file the system cannot read says why (playing is tests/player_test.php's, on macOS).
 Headless::load('video');
-$s = new \MyPHP\UI\MoviePlayerState();
+$s = new \MyPHP\UI\MediaPlayerState();
 $t = new Headless(function (Context $c) use ($s) { \MyPHP\Examples\Video\view($c, $s); }, 900, 600);
 $t->frame();
 $s->open(__DIR__ . '/testdata/upright.jpg');

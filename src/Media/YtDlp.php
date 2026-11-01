@@ -18,11 +18,11 @@ final class YtDlp
 {
     /** The yt-dlp run, null to find it: in $searchPath, PATH, Homebrew's, /usr/local/bin. */
     public static ?string $path = null;
-    /** @internal UI\MoviePlayerState: a folder looked in first (IINA's custom youtube-dl path, before its PATH), '' for none. */
+    /** @internal UI\MediaPlayerState: a folder looked in first (IINA's custom youtube-dl path, before its PATH), '' for none. */
     public static string $searchPath = '';
-    /** @internal UI\MoviePlayerState: whether pages are read by it (IINA's ytdlEnabled, mpv's ytdl). */
+    /** @internal UI\MediaPlayerState: whether pages are read by it (IINA's ytdlEnabled, mpv's ytdl). */
     public static bool $enabled = true;
-    /** @internal UI\MoviePlayerState: options given it, "key=value,key=value" (mpv's ytdl-raw-options): --key value, --key alone of none. */
+    /** @internal UI\MediaPlayerState: options given it, "key=value,key=value" (mpv's ytdl-raw-options): --key value, --key alone of none. */
     public static string $rawOptions = '';
 
     /** The program found, null for none. */

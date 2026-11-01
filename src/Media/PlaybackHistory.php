@@ -14,7 +14,7 @@ use RuntimeException;
  * file (default(): history.json in App::path(UserData)), written through
  * a temporary one. Where a film was left is PlaybackPositions'.
  *
- * @internal UI\MoviePlayerState, UI\MoviePlayerHistory, UI\MoviePlayerWelcome, UI\MoviePlayerSettingsPages
+ * @internal UI\MediaPlayerState, UI\MediaPlayerHistory, UI\MediaPlayerWelcome, UI\MediaPlayerSettingsPages
  */
 final class PlaybackHistory
 {

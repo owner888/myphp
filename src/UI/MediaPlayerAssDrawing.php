@@ -19,9 +19,9 @@ use MyPHP\Native\VectorMask;
  * display's pixels (fewer for one larger than an image may be), kept for
  * the frames it shows, and tinted as drawn.
  *
- * @internal MoviePlayer
+ * @internal MediaPlayer
  */
-final class MoviePlayerAssDrawing
+final class MediaPlayerAssDrawing
 {
     /** The largest side of a mask, in pixels: an image atlas page's, less a little. */
     private const MAX = 2040;

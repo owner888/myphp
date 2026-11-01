@@ -1,5 +1,5 @@
 <?php
-// IINA's menus of the player (UI\MoviePlayerMenus): the keys of the
+// IINA's menus of the player (UI\MediaPlayerMenus): the keys of the
 // bindings as menus' accelerators, a binding that does what an item does
 // (IINA's sameKeyAction), the items IINA binds taking the default set's
 // keys and its steps, all disabled of no player; their titles brought up
@@ -13,7 +13,7 @@ namespace MyPHP\Tests;
 
 use MyPHP\Media\{Player, Subtitles};
 use MyPHP\MenuItem;
-use MyPHP\UI\{MoviePlayerMenus, MoviePlayerState};
+use MyPHP\UI\{MediaPlayerMenus, MediaPlayerState};
 
 $find = function (array $items, string $id) use (&$find): ?MenuItem {
     foreach ($items as $it) {
@@ -24,20 +24,20 @@ $find = function (array $items, string $id) use (&$find): ?MenuItem {
 };
 
 $acc = [];
-foreach (['SPACE', 'Shift+Meta+LEFT', 'S', 'Ctrl+s', 'SHARP', 'F5', 'KP_ENTER', 'Meta+L', 'PLUS', 'Alt+Meta+]', 'MBTN_LEFT', 'a-b-c', 'WHEEL_UP'] as $k) { $acc[] = MoviePlayerMenus::accelerator($k); }
+foreach (['SPACE', 'Shift+Meta+LEFT', 'S', 'Ctrl+s', 'SHARP', 'F5', 'KP_ENTER', 'Meta+L', 'PLUS', 'Alt+Meta+]', 'MBTN_LEFT', 'a-b-c', 'WHEEL_UP'] as $k) { $acc[] = MediaPlayerMenus::accelerator($k); }
 same(['space', 'Shift+Cmd+left', 'Shift+s', 'Ctrl+s', '#', 'f5', 'enter', 'Cmd+Shift+l', 'plus', 'Alt+Cmd+]', null, null, null], $acc,
     'mpv\'s keys as accelerators: names, Meta as Cmd, a capital as Shift and its letter; none of the mouse\'s or a sequence');
 
-same([10.0, true], MoviePlayerMenus::sameAction(['seek', '10', 'exact'], ['seek', '5'], true, [5.0, 60.0]), 'a seek of the range, "exact" kept');
-same([-5.0, true], MoviePlayerMenus::sameAction(['seek', '-5', 'relative+exact'], ['seek', '-5'], true, [-60.0, -5.0]), '"relative" aside');
-same([5.0, true], MoviePlayerMenus::sameAction(['seek', '5', 'relative', 'exact'], ['seek', '5'], true, [5.0, 60.0]), 'mpv\'s old form of the flags');
-same(null, MoviePlayerMenus::sameAction(['seek', '5', 'keyframes'], ['seek', '5'], true, [5.0, 60.0]), 'a flag of no item: not the item\'s');
-same(null, MoviePlayerMenus::sameAction(['seek', '600'], ['seek', '5'], true, [5.0, 60.0]), 'out of the range');
-same([1.2, false], MoviePlayerMenus::sameAction(['multiply', 'speed', '1.2'], ['multiply', 'speed', '1.1'], true, [1.01, 1.49]), 'a number of the range');
-same([[1.0, false], null], [MoviePlayerMenus::sameAction(['set', 'speed', '1'], ['set', 'speed', '1.0'], true, null), MoviePlayerMenus::sameAction(['set', 'speed', '2'], ['set', 'speed', '1.0'], true, null)], 'of no range, the same number');
-same([[null, false], null], [MoviePlayerMenus::sameAction(['cycle', 'pause'], ['cycle', 'pause'], false, null), MoviePlayerMenus::sameAction(['cycle', 'mute'], ['cycle', 'pause'], false, null)], 'words alike');
+same([10.0, true], MediaPlayerMenus::sameAction(['seek', '10', 'exact'], ['seek', '5'], true, [5.0, 60.0]), 'a seek of the range, "exact" kept');
+same([-5.0, true], MediaPlayerMenus::sameAction(['seek', '-5', 'relative+exact'], ['seek', '-5'], true, [-60.0, -5.0]), '"relative" aside');
+same([5.0, true], MediaPlayerMenus::sameAction(['seek', '5', 'relative', 'exact'], ['seek', '5'], true, [5.0, 60.0]), 'mpv\'s old form of the flags');
+same(null, MediaPlayerMenus::sameAction(['seek', '5', 'keyframes'], ['seek', '5'], true, [5.0, 60.0]), 'a flag of no item: not the item\'s');
+same(null, MediaPlayerMenus::sameAction(['seek', '600'], ['seek', '5'], true, [5.0, 60.0]), 'out of the range');
+same([1.2, false], MediaPlayerMenus::sameAction(['multiply', 'speed', '1.2'], ['multiply', 'speed', '1.1'], true, [1.01, 1.49]), 'a number of the range');
+same([[1.0, false], null], [MediaPlayerMenus::sameAction(['set', 'speed', '1'], ['set', 'speed', '1.0'], true, null), MediaPlayerMenus::sameAction(['set', 'speed', '2'], ['set', 'speed', '1.0'], true, null)], 'of no range, the same number');
+same([[null, false], null], [MediaPlayerMenus::sameAction(['cycle', 'pause'], ['cycle', 'pause'], false, null), MediaPlayerMenus::sameAction(['cycle', 'mute'], ['cycle', 'pause'], false, null)], 'words alike');
 
-$none = MoviePlayerMenus::menus(null);
+$none = MediaPlayerMenus::menus(null);
 same(['Playback', 'Video', 'Audio', 'Subtitles'], array_map(fn(MenuItem $m) => $m->label, $none), 'IINA\'s four menus');
 $enabled = function (array $items) use (&$enabled): array {
     $on = [];
@@ -47,10 +47,10 @@ $enabled = function (array $items) use (&$enabled): array {
     }
     return $on;
 };
-same(['iina.playback', 'iina.video', 'iina.flipMenu', 'iina.audio', 'iina.subtitles', 'iina.onlineSubSource'], $enabled([...$none, ...MoviePlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus');
+same(['iina.playback', 'iina.video', 'iina.flipMenu', 'iina.audio', 'iina.subtitles', 'iina.onlineSubSource'], $enabled([...$none, ...MediaPlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus');
 
-$s = new MoviePlayerState();
-$menus = MoviePlayerMenus::menus($s);
+$s = new MediaPlayerState();
+$menus = MediaPlayerMenus::menus($s);
 $keys = [];
 foreach (['pause', 'stop', 'forward', 'backward', 'nextFrame', 'screenshot', 'abLoop', 'fileLoop', 'speedUp', 'speedDown', 'speedReset', 'increaseVolume', 'increaseVolumeSlightly', 'mute', 'decreaseSubDelay', 'videoPanel', 'fitToScreen', 'jumpTo', 'speedUpSlightly'] as $name) {
     $keys[$name] = $find($menus, "iina.$name")?->accelerator;
@@ -61,8 +61,8 @@ same(['pause' => 'space', 'stop' => 'Cmd+.', 'forward' => 'right', 'backward' =>
 same(['Step Forward 5s', 'Speed Up by 2x', 'Volume + 5%', 'Volume - 1%', 'Subtitle Delay - 0.5s', 'Pause', 'Show Video Panel', 'Enter Full Screen'],
     array_map(fn(string $id) => $find($menus, "iina.$id")->label, ['forward', 'speedUp', 'increaseVolume', 'decreaseVolumeSlightly', 'decreaseSubDelay', 'pause', 'videoPanel', 'fullScreen']), 'titles of their steps');
 same([true, true, false], [$find($menus, 'iina.nextFrame')->alternate, $find($menus, 'iina.speedUpSlightly')->alternate, $find($menus, 'iina.forward')->alternate], 'the slight steps shown with Option');
-check(MoviePlayerMenus::key(null) !== MoviePlayerMenus::key($s) && MoviePlayerMenus::key($s) !== MoviePlayerMenus::key(new MoviePlayerState()), 'another player: other menus');
-same(MoviePlayerMenus::key($s), MoviePlayerMenus::key($s), 'the same player and bindings: the same menus');
+check(MediaPlayerMenus::key(null) !== MediaPlayerMenus::key($s) && MediaPlayerMenus::key($s) !== MediaPlayerMenus::key(new MediaPlayerState()), 'another player: other menus');
+same(MediaPlayerMenus::key($s), MediaPlayerMenus::key($s), 'the same player and bindings: the same menus');
 
 // Their titles as they open: the panel shown, the subtitles hidden.
 $s->sidebar = 'video'; $s->subtitlesVisible = false; $s->loop = 'file';
@@ -79,8 +79,8 @@ same([['b', 'c'], [$m, $m]], [array_map(fn($i) => $i->label, $m->submenu), array
 if (PHP_OS_FAMILY === 'Darwin') {
     Player::$autoLoad = [0, '', '', false];
     $p = new Player(__DIR__ . '/testdata/clip-chapters.mkv');
-    $s = new MoviePlayerState(); $s->setPlayer($p);
-    $menus = MoviePlayerMenus::menus($s);
+    $s = new MediaPlayerState(); $s->setPlayer($p);
+    $menus = MediaPlayerMenus::menus($s);
     $chapters = $find($menus, 'iina.chapters'); ($chapters->onOpen)($chapters);
     check(count($chapters->submenu) === count($p->chapters()) && preg_match('/^\d+:\d\d – /u', $chapters->submenu[0]->label) === 1 && $chapters->submenu[0]->checked, 'the chapters, "time – title", the one playing checked');
     $audio = $find($menus, 'iina.audioTrack'); ($audio->onOpen)($audio);

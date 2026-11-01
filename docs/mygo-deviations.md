@@ -1543,27 +1543,27 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   loaded): mygo has no film player.
 - **The picture and the sound, a video player** (v1.38):
   `Player::setAspectRatio`, `setCrop`, `setRotation`, `setAudioDelay`,
-  `Context::moviePlayer`, `MoviePlayerState` and `MoviePlayerOptions` are
+  `Context::mediaPlayer`, `MediaPlayerState` and `MediaPlayerOptions` are
   myphp's, as IINA's window has them: mygo has no film player.
 - **Going on where a film was left** (v1.39): `Media\PlaybackPositions`,
-  `Player::path` and `MoviePlayerOptions::$resume` are myphp's, as IINA's
+  `Player::path` and `MediaPlayerOptions::$resume` are myphp's, as IINA's
   "resume last playback position": mygo has no film player.
 - **The playlist, picture in picture** (v1.40): `Media\Playlist`,
-  `Player::durationOf`, `MoviePlayerState::open`, `setPlayer`, `next`,
+  `Player::durationOf`, `MediaPlayerState::open`, `setPlayer`, `next`,
   `previous`, `togglePictureInPicture` are myphp's, as IINA's; mygo has
   no video.
 - **Chapters, the playlist's loop, shuffle and sort** (v1.41):
   `Media\Chapter`, `Source::chapters`, `Player::chapters`, `chapter`,
-  `MoviePlayerState::playChapter`, `$loop`, `nextLoop`, and
+  `MediaPlayerState::playChapter`, `$loop`, `nextLoop`, and
   `Playlist::shuffle`, `unshuffle`, `shuffled`, `sortByName`,
   `sortByPath` are myphp's, as IINA's, and `Player::awake`,
-  `setKeepAwake` and `MoviePlayerOptions::$keepAwake` (the display kept
+  `setKeepAwake` and `MediaPlayerOptions::$keepAwake` (the display kept
   awake while it plays, as IINA's); mygo has no film player.
 - **The player's events, keyframe seeks, Now Playing** (v1.46): the
   events play, pause, rate, seek and track of `Player::on`, the `$exact`
-  of `Player::seek` and `MoviePlayerState::seekBy`, and
-  `MoviePlayerOptions::$nowPlaying` are myphp's, as AVPlayer's and IINA's,
-  and `Player::step`, `snapshot`, `MoviePlayerState::frameStep`,
+  of `Player::seek` and `MediaPlayerState::seekBy`, and
+  `MediaPlayerOptions::$nowPlaying` are myphp's, as AVPlayer's and IINA's,
+  and `Player::step`, `snapshot`, `MediaPlayerState::frameStep`,
   `screenshot` (IINA's frame steps and screenshots; its `$screenshots`
   went in v1.61, the settings saying where they go);
   mygo has no film player.
@@ -1574,18 +1574,18 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   mpv's ytdl_hook, its audio-file and its libdav1d decoding (IINA's);
   mygo has no film player.
 - **The equalizer** (v1.55): `Player::setEqualizer`, `equalizer`,
-  `EQUALIZER_BANDS`, `MoviePlayerState::EQUALIZER_PRESETS`, `$equalizer`,
+  `EQUALIZER_BANDS`, `MediaPlayerState::EQUALIZER_PRESETS`, `$equalizer`,
   `$equalizerPreset` and `setEqualizer` are myphp's, as IINA's audio
   equalizer (its presets, its filter for mpv); mygo has no film player. Flat
   turns it off (IINA adds the filter all the same, of no effect).
 - **The equalizer's profiles** (v1.56): `Media\EqualizerProfiles`
   (equalizer-profiles.json in the app's user data, as IINA's
-  userEQPresets) and MoviePlayerState's profile methods are internal,
+  userEQPresets) and MediaPlayerState's profile methods are internal,
   the pop-up's; the profiles keep the order they were saved in (IINA's,
   a Swift dictionary's, have none). `Dialog::prompt`'s detail and check
   (IINA's quickPromptPanel) are internal too.
-- **Online subtitles** (v1.60): `MoviePlayerOptions::$openSubtitlesKey`
-  and `Context::moviePlayerSettings` are myphp's, as IINA's OpenSubtitles
+- **Online subtitles** (v1.60): `MediaPlayerOptions::$openSubtitlesKey`
+  and `Context::mediaPlayerSettings` are myphp's, as IINA's OpenSubtitles
   (Find Online Subtitles) and its Subtitles pane; mygo has no film player. With
   no preferred language set, the system's are searched (IINA alerts and
   searches English); the languages are the codes of BCP 47 (zh-Hans, en),
@@ -1599,9 +1599,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   (IINA's preferences by IINA's names and defaults: `default`, `get`,
   `set`, `onChange`; settings.json in the user data, replacing v1.60's
   SubtitleSettings and its file, so an OpenSubtitles account logs in
-  again), `Context::moviePlayerWelcome` and `Context::moviePlayerHistory`
+  again), `Context::mediaPlayerWelcome` and `Context::mediaPlayerHistory`
   (IINA's welcome and playback history windows) are myphp's; mygo has no
-  video. `MoviePlayerState::$screenshots`, `setSubtitleLanguages` and
+  video. `MediaPlayerState::$screenshots`, `setSubtitleLanguages` and
   `setHardwareDecoder` are gone (`setSetting`), and so is examples/video's
   MYPHP_VIDEO_SOFTWARE (Settings > Video). The settings window has IINA's
   General, Video and Subtitles pages so far. General's receive beta
@@ -1656,12 +1656,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     look-up, translation or data detectors; not of a picture cropped or
     turned. The strings keep IINA's name where IINA's say it.
 - **External audio** (v1.55): `Player::loadAudio`,
-  `MoviePlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
+  `MediaPlayerState::loadAudio` and `Merged::add` are myphp's, as mpv's
   audio-add (IINA's Load External Audio); mygo has no film player.
 - **Secondary subtitles** (v1.53): `Player::secondarySubtitleTrack`,
   `setSecondarySubtitleTrack`, `secondarySubtitles`,
   `setSecondarySubtitleDelay`, `secondarySubtitleDelay`,
-  `MoviePlayerState::$secondarySubtitlesVisible` and
+  `MediaPlayerState::$secondarySubtitlesVisible` and
   `toggleSecondarySubtitles` are myphp's, as mpv's secondary-sid,
   secondary-sub-delay and secondary-sub-visibility (IINA's); mygo has no
   video. Image subtitle tracks are not taken as secondary ones (mpv draws
@@ -1674,14 +1674,14 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   demuxer (mpv's, IINA's); mygo has no film player.
 - **Films over HTTP** (v1.49): `Media\Bytes`, `FileBytes`, `HttpBytes`,
   `Source::ready`, `Player::remote`, `bufferingPercent`, `cacheBytes`,
-  `cacheSpeed`, the buffering event, `MoviePlayerState::$opening` and
+  `cacheSpeed`, the buffering event, `MediaPlayerState::$opening` and
   `byteCount`, and `Native\CurlLoop` are myphp's, as mpv's network
   cache and IINA's; mygo has no film player.
 - **Boundaries and the A-B loop** (v1.48): `Player::at`,
-  `MoviePlayerState::abLoop`, `moveLoopPoint`, `$loopA` and `$loopB` are
+  `MediaPlayerState::abLoop`, `moveLoopPoint`, `$loopA` and `$loopB` are
   myphp's, as AVPlayer's and IINA's; mygo has no film player.
 - **The seek bar's thumbnails** (v1.47): `Media\Thumbnail`,
-  `Player::thumbnail`, `Source::keyframe`, `MoviePlayerState::$thumbnails`,
+  `Player::thumbnail`, `Source::keyframe`, `MediaPlayerState::$thumbnails`,
   `thumbnailAt`, `$thumbnailCache`, `Media\ThumbnailCache` and
   `Runtime::afterFrame`
   are myphp's, as IINA's; mygo has no film player.
@@ -1724,7 +1724,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Media\SubtitlePicture`, `Player::subtitlePictures` and
   `subtitlePlane` are myphp's, as IINA (mpv) shows them; mygo has no
   video.
-- **The player's menus** (v1.135): `UI\MoviePlayerMenus` (IINA's
+- **The player's menus** (v1.135): `UI\MediaPlayerMenus` (IINA's
   Playback, Video, Audio and Subtitles menus, File's items of the film,
   Window's Log Viewer), `MenuItem::$alternate` (NSMenuItem's alternate,
   IINA's slight steps under Option), `MenuItem::$onOpen` (NSMenuDelegate's
@@ -1741,7 +1741,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   favors the arrows only).
 - **The picture's adjustments** (v1.136): `Player::setVideoEqualizer`,
   `VIDEO_EQUALIZER`, `setFlip`, `setMirror`, `reversed`, `hdr`,
-  `Renderers::setPictureFilters` and `MoviePlayerState::setVideoEqualizer`,
+  `Renderers::setPictureFilters` and `MediaPlayerState::setVideoEqualizer`,
   `setFlip`, `setMirror`, `setHdr`, `hdrAvailable` are myphp's, as IINA's
   sidebar and Video > Flip; mygo has no film player. Core Image's filters
   stand for mpv's equalizer: its colors close to mpv's, not the same
@@ -1752,9 +1752,10 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   decoder's). mpv's video-zoom and video-pan, of no IINA menu or panel,
   are left out.
 - **The Inspector and the audio device** (v1.137):
-  `UI\MoviePlayerInspector` (and its `window()`), `MoviePlayerMenus::inspector`,
-  `MoviePlayerCommands::propertyValue`, `Player::bitrate`, `fileFormat`,
-  `fileSize`, `MoviePlayerState::setAudioDevice` and `$audioDevice` are
+  `UI\MediaPlayerInspector` (and its `window()`), `MediaPlayerMenus::inspector`,
+  `MediaPlayerCommands::propertyValue`, `Player::bitrate`, `fileFormat`,
+  `videoDecoder`, `audioDecoder`, `VIDEO_OUTPUT`, `AUDIO_OUTPUT`,
+  `fileSize`, `MediaPlayerState::setAudioDevice` and `$audioDevice` are
   myphp's, as IINA's Inspector and Audio > Audio Device; mygo has no film
   player. The Inspector is a window of the HUD's material, not IINA's
   utility panel: it does not float, nor hide as the app does (the menus
@@ -1763,9 +1764,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   dropped and mistimed frames, the estimated frame rates, the pixel
   format, the audio's decoded format, a file's comment and editions, the
   colorspace beyond whether it is HDR; Forced is never on (no track says
-  it). The watch table takes the mpv properties the player gives
-  (`propertyValue`), Error of the rest. The codecs' long names are
-  FFmpeg's, as mpv gives them, of the codecs the player plays.
+  it). IINA shows mpv's names (its decoders, vo and ao, FFmpeg's
+  demuxers); MyPHP, which plays without mpv, shows its own: VideoToolbox,
+  libdav1d, AudioToolbox, AVSampleBufferDisplayLayer and
+  AVSampleBufferAudioRenderer, its readers Matroska, MP4, MPEG-TS, HLS
+  and AVFoundation. The watch table takes the properties the player
+  gives by mpv's names (`propertyValue`), Error of the rest.
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.
@@ -2208,18 +2212,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: Command.
   - Why: myphp runs on macOS.
 
-## The movie player (v1.118)
+## The media player (v1.118)
 
 - **Its names**
   - mygo: no player of films; `ui.VideoPlayer` plays the frames of a
     decoder (`Context::video`'s, myphp's `UI\VideoPlayer`).
-  - myphp: the player laid out as IINA's is `UI\MoviePlayer` (its state
-    `MoviePlayerState`, its options, settings and parts `MoviePlayer…`),
-    built by `Context::moviePlayer`, `moviePlayerSettings`,
-    `moviePlayerWelcome` and `moviePlayerHistory`; it shows a
+  - myphp: the player laid out as IINA's is `UI\MediaPlayer` (its state
+    `MediaPlayerState`, its options, settings and parts `MediaPlayer…`),
+    built by `Context::mediaPlayer`, `mediaPlayerSettings`,
+    `mediaPlayerWelcome` and `mediaPlayerHistory`; it shows a
     `Media\Player` with `Context::movie`.
   - Why: `VideoPlayer` and `Context::video` are mygo's names for its
-    videos, which myphp's take; the films' player is myphp's own.
+    videos, which myphp's take; the films' player is myphp's own, called
+    MediaPlayer as players commonly are (MoviePlayer until v1.137).
 
 ## A part of the window in another theme (v1.121)
 

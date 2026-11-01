@@ -616,7 +616,7 @@ final class Context
     }
 
     /**
-     * @internal UI\MoviePlayer: the keys pressed this frame that no shortcut
+     * @internal UI\MediaPlayer: the keys pressed this frame that no shortcut
      * took, offered to $take (their characters, code, modifiers and the
      * characters without the modifiers); those it takes (true) taken.
      * @param Closure(string, int, int, string): bool $take
@@ -627,19 +627,19 @@ final class Context
         $this->runtime?->takeKeys($take);
     }
 
-    /** @internal UI\MoviePlayer: whether the middle button clicked $n this frame. */
+    /** @internal UI\MediaPlayer: whether the middle button clicked $n this frame. */
     public function middleClicked(Node $n): bool
     {
         return $this->runtime?->middleClicked($n->id) ?? false;
     }
 
-    /** @internal UI\MoviePlayer: whether a Force Touch press went deep on $n this frame (its second stage, NSEvent's pressure). */
+    /** @internal UI\MediaPlayer: whether a Force Touch press went deep on $n this frame (its second stage, NSEvent's pressure). */
     public function forceClicked(Node $n): bool
     {
         return $this->runtime?->forceClicked($n->id) ?? false;
     }
 
-    /** @internal UI\MoviePlayer: a trackpad's pinch over $n this frame: [the magnification added, whether it began, whether it ended]; null for none. @return ?array{0: float, 1: bool, 2: bool} */
+    /** @internal UI\MediaPlayer: a trackpad's pinch over $n this frame: [the magnification added, whether it began, whether it ended]; null for none. @return ?array{0: float, 1: bool, 2: bool} */
     public function magnified(Node $n): ?array
     {
         return $this->runtime?->magnified($n->id);
@@ -4814,8 +4814,8 @@ final class Context
     }
 
     /**
-     * A video player of the film $s plays (MoviePlayerState::open), laid
-     * out as IINA's window (UI\MoviePlayer), black before one opens: the
+     * A video player of the film $s plays (MediaPlayerState::open), laid
+     * out as IINA's window (UI\MediaPlayer), black before one opens: the
      * picture, its control bar in the system's glass, the title bar over
      * it (for a window whose title bar is hidden), the messages at the top
      * left, the sidebar of quick settings, IINA's keys; $s keeps its state
@@ -4823,10 +4823,10 @@ final class Context
      * out. It fills what it is built in; the window keeps the picture's
      * shape and hides the traffic lights with the controls.
      */
-    public function moviePlayer(MoviePlayerState $s, ?MoviePlayerOptions $o = null): Node
+    public function mediaPlayer(MediaPlayerState $s, ?MediaPlayerOptions $o = null): Node
     {
-        if ($this->nextKey === null) { $this->key('movie player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
-        return MoviePlayer::build($this, $s, $o ?? new MoviePlayerOptions());
+        if ($this->nextKey === null) { $this->key('media player ' . spl_object_id($s)); } // by its state: whatever the app builds before it, its nodes keep their ids
+        return MediaPlayer::build($this, $s, $o ?? new MediaPlayerOptions());
     }
 
     /**
@@ -4844,9 +4844,9 @@ final class Context
      * titleBarStyle 'hiddenInset', vibrancy 'sidebar'), as IINA's is, 600
      * by 480; it names the window after the page shown.
      */
-    public function moviePlayerSettings(MoviePlayerState $s): Node
+    public function mediaPlayerSettings(MediaPlayerState $s): Node
     {
-        return MoviePlayerSettings::build($this, $s);
+        return MediaPlayerSettings::build($this, $s);
     }
 
     /**
@@ -4860,9 +4860,9 @@ final class Context
      * material, 560 by 440, as IINA's is.
      * @param Closure(string): void $open @param Closure(): void $openURL
      */
-    public function moviePlayerWelcome(Closure $open, Closure $openURL): Node
+    public function mediaPlayerWelcome(Closure $open, Closure $openURL): Node
     {
-        return MoviePlayerWelcome::build($this, $open, $openURL);
+        return MediaPlayerWelcome::build($this, $open, $openURL);
     }
 
     /**
@@ -4876,9 +4876,9 @@ final class Context
      * Trash. For a window of a hidden title bar, 800 by 600, as IINA's is.
      * @param Closure(list<string>, bool): void $open
      */
-    public function moviePlayerHistory(Closure $open): Node
+    public function mediaPlayerHistory(Closure $open): Node
     {
-        return MoviePlayerHistory::build($this, $open);
+        return MediaPlayerHistory::build($this, $open);
     }
 
     /**

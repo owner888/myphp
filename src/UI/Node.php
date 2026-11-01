@@ -1026,7 +1026,7 @@ final class Node
     }
 
     /**
-     * @internal MoviePlayer (ASS's \clip and \iclip): cuts the node and
+     * @internal MediaPlayer (ASS's \clip and \iclip): cuts the node and
      * what is inside it by the coverage (alpha) of $mask laid over its box,
      * as it is laid out, upright, or by the box itself for null: what it
      * covers shows, or with $inverted what it covers is cut away (what is
@@ -1204,7 +1204,7 @@ final class Node
     }
 
     /**
-     * @internal MoviePlayer (ASS's \blur and \be): blurs text as a Gaussian
+     * @internal MediaPlayer (ASS's \blur and \be): blurs text as a Gaussian
      * of $sigma points, as libass does: its outline where it has one
      * (textOutline), the glyphs themselves staying sharp, else the glyphs;
      * its shadow (textShadow) is what was blurred, moved.
@@ -1217,7 +1217,7 @@ final class Node
     }
 
     /**
-     * @internal MoviePlayer (libass's ass_fix_outline): takes the glyphs out
+     * @internal MediaPlayer (libass's ass_fix_outline): takes the glyphs out
      * of the text's outline ($outline) and of its shadow ($shadow, of the
      * outline), so that they do not show through glyphs not quite opaque.
      */

@@ -13,16 +13,16 @@ use MyPHP\Plugins\Glass\ScrollEdge;
  * its title in the title bar, its sections a title over lists in cards,
  * a row a setting (SettingsItem: an icon, its label and description, its
  * control at the right, the settings under it, some shown at a click on
- * the row). The pages and their rows are MoviePlayerSettingsPages'; a
+ * the row). The pages and their rows are MediaPlayerSettingsPages'; a
  * search finds a setting by any word of what its row says, and goes to
  * it, ringed for a moment.
  *
- * Built by Context::moviePlayerSettings, in a window of a hidden title bar
+ * Built by Context::mediaPlayerSettings, in a window of a hidden title bar
  * over the sidebar's material (examples/video's Settings…).
  *
- * @internal UI\Context, UI\MoviePlayerSettingsPages
+ * @internal UI\Context, UI\MediaPlayerSettingsPages
  */
-final class MoviePlayerSettings
+final class MediaPlayerSettings
 {
     /** The sidebar's width, the title bar's height (IINA's toolbar), a row's height in the sidebar, a section's row in its index. */
     public const SIDEBAR = 200, BAR = 52, PAGE_ROW = 36, SECTION_ROW = 22;
@@ -55,14 +55,14 @@ final class MoviePlayerSettings
         return $c->runtime?->local($root->id, $make) ?? $make();
     }
 
-    public static function build(Context $c, MoviePlayerState $s): Node
+    public static function build(Context $c, MediaPlayerState $s): Node
     {
         $t = $c->theme;
         $vibrant = $c->vibrancy();
         if ($vibrant) { $c->root->color = null; } // the sidebar's material shows through
         $root = $c->row(0, 0, 1)->alignItems(Node::STRETCH);
         $v = self::local($c, $root);
-        $pages = (new MoviePlayerSettingsPages($c, $s, $v))->all();
+        $pages = (new MediaPlayerSettingsPages($c, $s, $v))->all();
         self::openFor($v, $pages);
         $page = $pages[$v->page] ?? reset($pages);
         $v->page = $page['id'];
@@ -82,7 +82,7 @@ final class MoviePlayerSettings
      * of a row's label, description or what else it says (its options),
      * ignoring case; a row under another is found as itself. By page, in
      * their order; a page's by section, then label.
-     * @param array<string, array<string, mixed>> $pages MoviePlayerSettingsPages::all()'s
+     * @param array<string, array<string, mixed>> $pages MediaPlayerSettingsPages::all()'s
      * @return list<array{page: string, id: string, section: string, label: string, parent: string}>
      */
     public static function search(array $pages, string $query): array
@@ -319,7 +319,7 @@ final class MoviePlayerSettings
      * on, or as the row is clicked open (its disclosure at the right);
      * dimmed and held while not $enabled, as what is under a switch that is
      * off. Ringed for a moment when a search went to it.
-     * @param array<string, mixed> $item MoviePlayerSettingsPages' row
+     * @param array<string, mixed> $item MediaPlayerSettingsPages' row
      */
     private static function row(Context $c, object $v, array $item, bool $first, bool $last, bool $small, bool $enabled): void
     {
@@ -549,7 +549,7 @@ final class MoviePlayerSettings
           $c->end();
           $customize = self::pushButton($c, self::tr($c, '$Customize'), false);
         $c->end();
-        if ($customize) { MoviePlayerToolbarSheet::open($c, $buttons, function (array $chosen) use ($v): void { $v->toolbarChosen = $chosen; }); }
+        if ($customize) { MediaPlayerToolbarSheet::open($c, $buttons, function (array $chosen) use ($v): void { $v->toolbarChosen = $chosen; }); }
         if (($v->toolbarChosen ?? null) !== null) {
             $chosen = $v->toolbarChosen;
             $v->toolbarChosen = null;
@@ -732,7 +732,7 @@ final class MoviePlayerSettings
             $c->end();
             return;
         }
-        throw new \RuntimeException('MoviePlayerSettings: none of the symbols ' . implode(', ', $names));
+        throw new \RuntimeException('MediaPlayerSettings: none of the symbols ' . implode(', ', $names));
     }
 
     /** Whether the system has SF Symbol $name. */

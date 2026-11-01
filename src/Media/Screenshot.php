@@ -11,7 +11,7 @@ use MyPHP\Native\ImageIO;
  * ImageIO writes here (IINA's mpv writes them all, by FFmpeg); a frame's
  * PNG (Player::snapshot) in one of them.
  *
- * @internal UI\MoviePlayerState, UI\MoviePlayerSettingsPages
+ * @internal UI\MediaPlayerState, UI\MediaPlayerSettingsPages
  */
 final class Screenshot
 {

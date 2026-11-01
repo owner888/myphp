@@ -12,7 +12,7 @@ use RuntimeException;
  * has for it (UTTypeCreateAllIdentifiersForTag), the app's bundle their
  * handler in all roles (LSSetDefaultRoleHandlerForContentType).
  *
- * @internal UI\MoviePlayerSettingsPages
+ * @internal UI\MediaPlayerSettingsPages
  */
 final class DefaultApp
 {

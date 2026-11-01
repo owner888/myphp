@@ -267,11 +267,11 @@ final class Runtime
     public ?Closure $minimizeWindow = null;
     /** Whether the window is full screen: the window sets it before each frame. */
     public bool $fullScreen = false;
-    /** @internal MoviePlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */
+    /** @internal MediaPlayer: the seconds of the system's double click (NSEvent's doubleClickInterval): the window sets it. */
     public float $doubleClickInterval = 0.5;
     /**
      * What the view asked of its window this frame, which the window does
-     * once it is built (Context::moviePlayer's, moviePlayerSettings'): 'close'
+     * once it is built (Context::mediaPlayer's, mediaPlayerSettings'): 'close'
      * => true to close it, 'title' => its title, 'buttons' => whether the
      * traffic lights show, 'aspect' => the content's width over its height
      * to keep (null for none), 'fullScreen' => whether to be full screen.

@@ -1169,7 +1169,7 @@ function natives(string $appDir, string $framework, string $arch): array
             $out[] = [$f['name'], fetchNative($f)];
         }
     }
-    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MoviePlayer')) {
+    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer')) {
         array_push($out, ...dav1d($arch));
     }
     return $out;

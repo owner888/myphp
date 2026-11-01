@@ -1,20 +1,20 @@
 <?php
 // A video player as IINA: a Matroska, WebM, MP4 or MOV file decoded and
 // shown by the system (Media\Player), in a window of the controls
-// Context::moviePlayer builds over it (the title bar, the control bar,
+// Context::mediaPlayer builds over it (the title bar, the control bar,
 // the messages, the sidebars of quick settings and of the playlist,
 // picture in picture, IINA's keys). It starts at the welcome window
-// (Context::moviePlayerWelcome: the film to resume, the recent ones), or
+// (Context::mediaPlayerWelcome: the film to resume, the recent ones), or
 // the open panel, or nothing, as Settings > General says. File > Open, or
 // a film dropped on a window, opens a film, the films of its folder its
 // playlist, as one opened from the Finder; File > Open URL a film over
 // http(s); File > Playback History the films played
-// (Context::moviePlayerHistory); a subtitle file dropped on a window
+// (Context::mediaPlayerHistory); a subtitle file dropped on a window
 // loads over its film. Each film in a window of its own, or in the one in
 // front, as the settings say (IINA's "Open media in new window", its
 // simultaneous opens in one window, its duplicates). Video > Settings…
 // (Cmd+,) has the player's settings, in a window as IINA's
-// (Context::moviePlayerSettings). Run: ./run.sh video [file or URL], which
+// (Context::mediaPlayerSettings). Run: ./run.sh video [file or URL], which
 // logs what the players do to the terminal (MYPHP_VIDEO_LOG=1). In
 // examples/video, ../../bin/myphp build makes Video.app and its .dmg.
 declare(strict_types=1);
@@ -22,7 +22,7 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\{PlayerSettings, Subtitles};
 use MyPHP\Plugins\Updater\{Options, Updater};
-use MyPHP\UI\{Content, Context, TextState, MoviePlayerInspector, MoviePlayerMenus, MoviePlayerState};
+use MyPHP\UI\{Content, Context, TextState, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
 require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
@@ -55,7 +55,7 @@ final class Log
     }
 
     /** Around a frame of a player's window: what changed, how long it took. */
-    public static function frame(MoviePlayerState $s, Closure $draw): void
+    public static function frame(MediaPlayerState $s, Closure $draw): void
     {
         if (!self::on()) { $draw(); return; }
         $id = spl_object_id($s);
@@ -74,7 +74,7 @@ final class Log
         }
     }
 
-    private static function watch(MoviePlayerState $s): void
+    private static function watch(MediaPlayerState $s): void
     {
         $p = self::$players[spl_object_id($s)] = $s->player;
         if ($p === null) { return; }
@@ -119,10 +119,10 @@ final class Log
 }
 
 /** A player's window: its film, or what failed to open. */
-function view(Context $c, MoviePlayerState $s): void
+function view(Context $c, MediaPlayerState $s): void
 {
     if ($s->player !== null || $s->opening !== null) { // a film, or a URL opening (the player's indicator)
-        $c->moviePlayer($s);
+        $c->mediaPlayer($s);
         return;
     }
     $c->column(0, 0, 1, 0x000000)->center();
@@ -138,7 +138,7 @@ function view(Context $c, MoviePlayerState $s): void
  */
 final class Players
 {
-    /** @var array<int, array{Window, MoviePlayerState}> by window id */
+    /** @var array<int, array{Window, MediaPlayerState}> by window id */
     private static array $players = [];
     private static ?Window $welcome = null, $history = null, $settings = null, $url = null;
     /** @var list<string> the files the Finder opens, in one go as IINA's openFile timer gathers them */
@@ -146,12 +146,12 @@ final class Players
     private static int $gathering = 0;
     /** Whether a film opened since launch (IINA's openFileCalled): the welcome window is not shown then. */
     public static bool $opened = false;
-    private static ?MoviePlayerState $settingsState = null;
+    private static ?MediaPlayerState $settingsState = null;
 
     /** A new player's window (IINA's PlayerCore.createPlayerCore and its window). */
     private static function create(): array
     {
-        $s = new MoviePlayerState();
+        $s = new MediaPlayerState();
         $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',
             content: Content::view(function (Context $c) use ($s): void { Log::frame($s, function () use ($c, $s): void { view($c, $s); }); self::syncMenu(); })));
         $w->on('fileDrop', fn(FileDropEvent $e) => self::drop($s, $e->paths));
@@ -214,7 +214,7 @@ final class Players
         return null;
     }
 
-    /** Plays the first of $paths in $player, the others after it in its playlist. @param array{Window, MoviePlayerState} $player @param list<string> $paths */
+    /** Plays the first of $paths in $player, the others after it in its playlist. @param array{Window, MediaPlayerState} $player @param list<string> $paths */
     private static function play(array $player, array $paths): void
     {
         [$w, $s] = $player;
@@ -240,7 +240,7 @@ final class Players
     }
 
     /** Dropped on a player's window: subtitle files over its film, films in it. @param list<string> $paths */
-    private static function drop(MoviePlayerState $s, array $paths): void
+    private static function drop(MediaPlayerState $s, array $paths): void
     {
         foreach ($paths as $i => $path) {
             if ($s->player !== null && isset(Subtitles::FILES[strtolower(pathinfo($path, PATHINFO_EXTENSION))])) { $s->loadSubtitles($path); unset($paths[$i]); }
@@ -273,7 +273,7 @@ final class Players
         if (self::$welcome !== null && !self::$welcome->isDestroyed()) { self::$welcome->focus(); return; }
         self::$welcome = new Window(new WindowOptions(title: 'Welcome', width: 560, height: 440, disableResize: true, disableMaximize: true, titleBarStyle: 'hidden', vibrancy: 'under-window',
             content: Content::view(function (Context $c): void {
-                $c->moviePlayerWelcome(fn(string $path) => self::open([$path]), fn() => self::askURL());
+                $c->mediaPlayerWelcome(fn(string $path) => self::open([$path]), fn() => self::askURL());
             })));
     }
 
@@ -306,7 +306,7 @@ final class Players
         if (self::$history !== null && !self::$history->isDestroyed()) { self::$history->focus(); return; }
         self::$history = new Window(new WindowOptions(title: 'Playback History', width: 800, height: 600, minWidth: 500, minHeight: 300, stateKey: 'video history', titleBarStyle: 'hiddenInset',
             content: Content::view(function (Context $c): void {
-                $c->moviePlayerHistory(fn(array $paths, bool $newWindow) => self::open($paths, $newWindow !== PlayerSettings::default()->get('alwaysOpenInNewWindow')));
+                $c->mediaPlayerHistory(fn(array $paths, bool $newWindow) => self::open($paths, $newWindow !== PlayerSettings::default()->get('alwaysOpenInNewWindow')));
             })));
     }
 
@@ -314,37 +314,37 @@ final class Players
     public static function settings(): void
     {
         if (self::$settings !== null && !self::$settings->isDestroyed()) { self::$settings->focus(); return; }
-        $s = self::$settingsState ??= new MoviePlayerState(); // the settings are the app's, whatever player; this one logs in to OpenSubtitles from them
+        $s = self::$settingsState ??= new MediaPlayerState(); // the settings are the app's, whatever player; this one logs in to OpenSubtitles from them
         self::$settings = new Window(new WindowOptions(title: 'Settings', width: 600, height: 480, minWidth: 600, minHeight: 300, stateKey: 'video settings v2',
             titleBarStyle: 'hiddenInset', trafficLightPosition: [18, 18], vibrancy: 'sidebar',
-            content: Content::view(function (Context $c) use ($s): void { $c->moviePlayerSettings($s); })));
+            content: Content::view(function (Context $c) use ($s): void { $c->mediaPlayerSettings($s); })));
     }
 
     /** The menus, as IINA's: Open Recent of the recent documents, built again as they change. */
-    /** What the menu bar's player menus were built of (MoviePlayerMenus::key). */
+    /** What the menu bar's player menus were built of (MediaPlayerMenus::key). */
     private static ?string $menuKey = null;
 
     /** The menu bar built again when the player in front or its key bindings changed: IINA's menus act on the player in front, none in another window. */
     private static function syncMenu(): void
     {
-        if (MoviePlayerMenus::key(self::front()) !== self::$menuKey) { self::menu(); }
+        if (MediaPlayerMenus::key(self::front()) !== self::$menuKey) { self::menu(); }
     }
 
     /** The player whose window was last in front (IINA's PlayerCore.lastActive): the Inspector's. */
     private static ?\WeakReference $lastActive = null;
 
     /** The player of the window in front, null for another window. */
-    private static function front(): ?MoviePlayerState
+    private static function front(): ?MediaPlayerState
     {
         $w = Window::focused();
-        if ($w !== null && $w === MoviePlayerInspector::window()) { return self::$lastActive?->get() ?? self::active()[1] ?? null; } // IINA's Inspector, a utility panel: the player stays the main window
+        if ($w !== null && $w === MediaPlayerInspector::window()) { return self::$lastActive?->get() ?? self::active()[1] ?? null; } // IINA's Inspector, a utility panel: the player stays the main window
         return $w !== null && isset(self::$players[$w->id]) ? self::$players[$w->id][1] : null;
     }
 
     public static function menu(): void
     {
         $s = self::front();
-        self::$menuKey = MoviePlayerMenus::key($s);
+        self::$menuKey = MediaPlayerMenus::key($s);
         $recent = array_map(fn(string $p) => new MenuItem(basename($p), fn() => self::open([$p])), App::recentDocuments());
         App::setMenu(new Menu([
             new MenuItem(role: 'appMenu', submenu: [ // the system's, Settings… and Check for Updates… after About, as IINA's
@@ -361,15 +361,15 @@ final class Players
                 MenuItem::separator(),
                 new MenuItem('Playback History', fn() => self::history(), 'CmdOrCtrl+Shift+H'),
                 MenuItem::separator(),
-                ...MoviePlayerMenus::fileItems($s),
+                ...MediaPlayerMenus::fileItems($s),
                 MenuItem::separator(),
                 new MenuItem(role: 'close'),
             ]),
             new MenuItem(role: 'editMenu'), // Cmd+V, Cmd+C and the rest in the URL's field: a menu's key equivalents, as macOS has them
-            ...MoviePlayerMenus::menus($s), // Playback, Video, Audio, Subtitles
+            ...MediaPlayerMenus::menus($s), // Playback, Video, Audio, Subtitles
             new MenuItem(role: 'window', submenu: [
                 new MenuItem(role: 'minimize'), new MenuItem(role: 'zoom'), MenuItem::separator(),
-                MoviePlayerMenus::inspector(fn() => self::$lastActive?->get() ?? self::active()[1] ?? null), // the first player's before one came in front, as IINA's lastActive MoviePlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),
+                MediaPlayerMenus::inspector(fn() => self::$lastActive?->get() ?? self::active()[1] ?? null), // the first player's before one came in front, as IINA's lastActive MediaPlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),
             ]),
         ]));
     }
