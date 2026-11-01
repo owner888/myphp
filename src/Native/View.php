@@ -24,6 +24,8 @@ use MyPHP\UI\{TextInputRange, Input, Key, TextState};
 final class View
 {
     /** The selectors of the editing roles, by the names the runtime takes them by (mygo's contextSelectors). */
+    /** NSEventTypeKeyDown */
+    private const KEY_DOWN = 10;
     private const EDIT_SELECTORS = ['cut:' => 'cut', 'copy:' => 'copy', 'paste:' => 'paste', 'pasteAsPlainText:' => 'pasteAndMatchStyle',
         'delete:' => 'delete', 'selectAll:' => 'selectAll', 'undo:' => 'undo', 'redo:' => 'redo'];
     private const TRACKING = 0x01 | 0x02 | 0x40 | 0x200; // enter/exit, moved, while the app is active, visible rect: as mygo's surface tracks, an inactive app's hover staying where the last event left it
@@ -203,6 +205,19 @@ final class View
             }],
             'scrollWheel:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::scrollWheel($self, $event)],
             'keyDown:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $event) => self::keyDown($self, $event, true)],
+            // A key without Command or Control types in the field focused, the client or a node taking text before a menu's key equivalent takes it (IINA's player menus have keys alone: Space, the arrows).
+            'performKeyEquivalent:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $event): bool {
+                $input = self::$inputs[ObjC::addr($self)] ?? null;
+                $window = ObjC::msg('p:', $self, 'window');
+                $typing = $input !== null && ($input->focus !== null || $input->client !== null || $input->textCaret !== null)
+                    && ObjC::msg('L:', $event, 'type') === self::KEY_DOWN && (ObjC::msg('L:', $event, 'modifierFlags') & (Key::COMMAND | Key::CONTROL)) === 0
+                    && $window !== null && ObjC::addr(ObjC::msg('p:', $window, 'firstResponder')) === ObjC::addr($self);
+                if (!$typing) {
+                    return ObjC::msgSuper('b:p', $self, 'MTKView', 'performKeyEquivalent:', $event);
+                }
+                self::keyDown($self, $event, true);
+                return true;
+            }],
             // The release of a key, for a node taking its input as it comes (mygo's KeyReleased).
             'keyUp:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $event) {
                 $input = self::$inputs[ObjC::addr($self)];

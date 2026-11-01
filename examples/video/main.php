@@ -22,7 +22,7 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\{PlayerSettings, Subtitles};
 use MyPHP\Plugins\Updater\{Options, Updater};
-use MyPHP\UI\{Content, Context, TextState, MoviePlayerState};
+use MyPHP\UI\{Content, Context, TextState, MoviePlayerMenus, MoviePlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
 require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
@@ -153,10 +153,12 @@ final class Players
     {
         $s = new MoviePlayerState();
         $w = new Window(new WindowOptions(title: 'Video', width: 960, height: 540, stateKey: 'video', backgroundColor: '#000000', titleBarStyle: 'hidden',
-            content: Content::view(function (Context $c) use ($s): void { Log::frame($s, function () use ($c, $s): void { view($c, $s); }); })));
+            content: Content::view(function (Context $c) use ($s): void { Log::frame($s, function () use ($c, $s): void { view($c, $s); }); self::syncMenu(); })));
         $w->on('fileDrop', fn(FileDropEvent $e) => self::drop($s, $e->paths));
         $id = $w->id;
-        $w->on('closed', function () use ($id, $s): void { $s->player?->pause(); unset(self::$players[$id]); });
+        $w->on('closed', function () use ($id, $s): void { $s->player?->pause(); unset(self::$players[$id]); self::syncMenu(); });
+        $w->on('focus', fn() => self::syncMenu());
+        $w->on('blur', fn() => App::later(fn() => self::syncMenu())); // the window in front then
         return self::$players[$id] = [$w, $s];
     }
 
@@ -319,8 +321,26 @@ final class Players
     }
 
     /** The menus, as IINA's: Open Recent of the recent documents, built again as they change. */
+    /** What the menu bar's player menus were built of (MoviePlayerMenus::key). */
+    private static ?string $menuKey = null;
+
+    /** The menu bar built again when the player in front or its key bindings changed: IINA's menus act on the player in front, none in another window. */
+    private static function syncMenu(): void
+    {
+        if (MoviePlayerMenus::key(self::front()) !== self::$menuKey) { self::menu(); }
+    }
+
+    /** The player of the window in front, null for another window. */
+    private static function front(): ?MoviePlayerState
+    {
+        $w = Window::focused();
+        return $w !== null && isset(self::$players[$w->id]) ? self::$players[$w->id][1] : null;
+    }
+
     public static function menu(): void
     {
+        $s = self::front();
+        self::$menuKey = MoviePlayerMenus::key($s);
         $recent = array_map(fn(string $p) => new MenuItem(basename($p), fn() => self::open([$p])), App::recentDocuments());
         App::setMenu(new Menu([
             new MenuItem(role: 'appMenu', submenu: [ // the system's, Settings… and Check for Updates… after About, as IINA's
@@ -337,10 +357,15 @@ final class Players
                 MenuItem::separator(),
                 new MenuItem('Playback History', fn() => self::history(), 'CmdOrCtrl+Shift+H'),
                 MenuItem::separator(),
+                ...MoviePlayerMenus::fileItems($s),
+                MenuItem::separator(),
                 new MenuItem(role: 'close'),
             ]),
             new MenuItem(role: 'editMenu'), // Cmd+V, Cmd+C and the rest in the URL's field: a menu's key equivalents, as macOS has them
-            new MenuItem(role: 'windowMenu'),
+            ...MoviePlayerMenus::menus($s), // Playback, Video, Audio, Subtitles
+            new MenuItem(role: 'window', submenu: [
+                new MenuItem(role: 'minimize'), new MenuItem(role: 'zoom'), MenuItem::separator(), MoviePlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),
+            ]),
         ]));
     }
 }

@@ -45,6 +45,7 @@ final class MoviePlayerMusic
         $c->runtime?->askWindow('buttons', false); // IINA's: its own close and back buttons
         $c->runtime?->askWindow('compact', [(int)self::WIDTH, (int)$height, (int)($normal + ($listed ? self::PLAYLIST_LEAST : 0)), $listed ? 0 : (int)$normal]);
         $c->runtime?->askWindow('title', $p->tags()['title'] !== '' ? $p->tags()['title'] : $p->title());
+        MoviePlayer::performed($c, $s, $p);
         if ($o->keys) { MoviePlayer::keys($c, $s, $p); }
 
         $root = $c->key('music mode')->column(0, 0, 1)->background(0x000000);

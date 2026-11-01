@@ -203,7 +203,7 @@ final class MoviePlayerState
             Player::$videoThreads = $this->settings()->get('videoThreads'); // and its threads of decoding in software (IINA's videoThreads)
             [Player::$audioLanguages, Player::$subtitleLanguages] = [$set->get('audioLanguage'), $set->get('subLang')]; // the tracks of the preferred languages first (mpv's alang and slang)
             Player::$autoLoad = [$set->get('subAutoLoadIINA'), $set->get('subAutoLoadPriorityString'), $set->get('subAutoLoadSearchPath'), $set->get('playlistAutoAdd')]; // its subtitle files as IINA's auto load finds them
-            Subtitles::$encoding = $set->get('defaultEncoding');
+            Subtitles::$encoding = $this->subEncoding ?? $set->get('defaultEncoding');
             [Player::$cache, Player::$cachePauseInitial, Player::$cacheWait] = [$set->get('enableCache'), $set->get('cachePauseInitial'), $set->get('cachePauseWait')]; // the network's cache, as mpv's options
             [CacheBudget::$max, CacheBudget::$seconds] = [$set->get('defaultCacheSize') << 10, $set->get('secPrefech')];
             HttpBytes::$userAgent = $set->get('userAgent');
@@ -707,6 +707,126 @@ final class MoviePlayerState
         $this->runtime?->get()?->changed();
     }
 
+    /** @var list<array{action: list<string>, iina: bool}> the actions perform() queued, which the next frame carries out */
+    private array $performing = [];
+
+    /**
+     * Carries out a key binding's action, as the player's keys do it
+     * (MoviePlayerCommands): mpv's command in words ['seek', '5'], or
+     * IINA's ($iina, ['video-panel']), in the window's next frame, which it
+     * asks for (IINA's menu items, MoviePlayerMenus).
+     * @param list<string> $action
+     */
+    public function perform(array $action, bool $iina = false): void
+    {
+        $this->performing[] = ['action' => $action, 'iina' => $iina];
+        $this->changed();
+    }
+
+    /** @internal MoviePlayer: the actions perform() queued, taken. @return list<array{action: list<string>, iina: bool}> */
+    public function performed(): array
+    {
+        [$out, $this->performing] = [$this->performing, []];
+        return $out;
+    }
+
+    /**
+     * Playback > Jump to…: asks for a time, as IINA's (its quick prompt,
+     * where it plays to the millisecond), and goes there: "1:02:03.5",
+     * "20:35" or seconds (IINA's VideoTime).
+     */
+    public function jumpTo(): void
+    {
+        $p = $this->player;
+        if ($p === null) { return; }
+        $at = $p->time();
+        $now = sprintf('%s%02d:%06.3f', $at >= 3600 ? intdiv((int)$at, 3600) . ':' : '', intdiv((int)$at % 3600, 60), fmod($at, 60));
+        $in = \MyPHP\Dialog::prompt(\MyPHP\Window::focused(), $this->t('iinaAlertJumpToTitle'), $now, $this->t('iinaAlertJumpToMessage'));
+        $to = $in === null ? null : self::videoTime($in);
+        if ($to === null) { return; }
+        $this->seekBy($to - $p->time(), true);
+    }
+
+    /** A time as IINA reads one (VideoTime(format)): seconds, minutes and seconds, or hours too, colon separated; null for none. */
+    public static function videoTime(string $s): ?float
+    {
+        $parts = array_reverse(explode(':', trim($s)));
+        $num = fn(?string $v, bool $int) => $v !== null && preg_match($int ? '/^[+-]?\d+$/' : '/^[+-]?(\d+\.?\d*|\.\d+)$/', $v) === 1 ? (float)$v : null;
+        [$sec, $min, $hour] = [$num($parts[0] ?? null, false), $num($parts[1] ?? null, true), $num($parts[2] ?? null, true)];
+        if ($sec === null && $min === null && $hour === null) { return null; }
+        return ($hour ?? 0) * 3600 + ($min ?? 0) * 60 + ($sec ?? 0);
+    }
+
+    /** Playback > Go to Screenshot Folder: the settings' folder in the Finder (IINA's menuOpenScreenshotFolder). */
+    public function openScreenshotFolder(): void
+    {
+        $folder = $this->settings()->get('screenShotFolder');
+        \MyPHP\Shell::openPath(str_starts_with($folder, '~/') ? getenv('HOME') . substr($folder, 1) : $folder);
+    }
+
+    /** Video > Aspect Ratio's: the picture at ratio $ratio ("16:9", "2.35:1"), or its own for null, told (IINA's setVideoAspect). */
+    public function setAspectRatio(?string $ratio): void
+    {
+        $this->player?->setAspectRatio($ratio === null ? null : self::ratio($ratio));
+        $this->say($this->t('videoAspectTo', ['ratio' => $ratio ?? $this->t('videoDefault')]));
+    }
+
+    /** Video > Crop's: the picture cut to ratio $ratio, or whole for null, told (IINA's setCrop). */
+    public function setCropRatio(?string $ratio): void
+    {
+        $this->player?->setCrop($ratio === null ? null : self::ratio($ratio));
+        $this->say($this->t('videoCropTo', ['ratio' => $ratio ?? $this->t('videoNone')]));
+    }
+
+    /** Subtitles > Encoding's choice, iconv's name of it or 'auto'; null till one is made, when the settings' default encoding reads the files (IINA's info.subEncoding). */
+    public ?string $subEncoding = null;
+
+    /** Subtitles > Encoding: the subtitle files read again in encoding $code (IINA's setSubEncoding, mpv's sub-codepage and sub-reload). */
+    public function setSubEncoding(string $code): void
+    {
+        $this->subEncoding = Subtitles::$encoding = $code;
+        try {
+            $this->player?->reloadSubtitles();
+        } catch (RuntimeException $e) {
+            $this->error = $e->getMessage();
+        }
+        $this->changed();
+    }
+
+    /**
+     * Subtitles > Save Downloaded Subtitle…: the subtitle shown, when it was
+     * downloaded (downloadOnlineSubtitles), copied where the user says, the
+     * file there before put in the Trash; else a warning to choose one
+     * (IINA's saveDownloadedSub).
+     */
+    public function saveDownloadedSubtitle(): void
+    {
+        $t = $this->player?->subtitleTrack();
+        $from = $t === null ? null : $this->player->subtitlePath($t);
+        if ($from === null || !str_starts_with($from, sys_get_temp_dir() . '/myphp-subtitles/')) {
+            \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: \MyPHP\Window::focused(), type: 'warning', message: $this->t('iinaAlertSubNoSelected')));
+            return;
+        }
+        $to = \MyPHP\Dialog::save(new \MyPHP\SaveDialogOptions(parent: \MyPHP\Window::focused(), title: $this->t('iinaAlertSubSaveDownloadedTitle'), defaultPath: basename($from)));
+        if ($to === '') { return; }
+        try {
+            if (file_exists($to)) { \MyPHP\Shell::trashItem($to); }
+            if (!@copy($from, $to)) { throw new RuntimeException(error_get_last()['message'] ?? "cannot write $to"); }
+        } catch (RuntimeException $e) {
+            \MyPHP\Dialog::message(new \MyPHP\MessageOptions(parent: \MyPHP\Window::focused(), type: 'warning',
+                message: sprintf(str_replace('%@', '%s', $this->t('iinaAlertErrorSavingFile')), 'subtitle', $e->getMessage())));
+            return;
+        }
+        $this->say($this->t('iinaOsdSubSaved'));
+    }
+
+    /** "16:9" as a number, its width over its height. */
+    public static function ratio(string $ratio): float
+    {
+        [$w, $h] = array_map('floatval', explode(':', $ratio, 2)) + [1 => 1.0];
+        return $h > 0 ? $w / $h : 1.0;
+    }
+
     /**
      * Shows $text at the top left, with the time ('time') or the volume
      * ('volume') under it, as IINA's messages, for the settings' time
@@ -1159,13 +1279,13 @@ final class MoviePlayerState
         $this->say($this->t(['file' => 'videoFileLoop', 'playlist' => 'videoPlaylistLoop'][$loop] ?? 'videoNoLoop'));
     }
 
-    /** The window to $k times the film's size (mpv's window-scale); to the screen's for a negative $k (IINA's fit-to-screen). */
+    /** The window to $k times the film's size (mpv's window-scale), its pixels the screen's where the settings say (usePhysicalResolution, as IINA's setWindowScale); to the screen's for a negative $k (IINA's fit-to-screen). */
     public function windowScale(float $k): void
     {
         $p = $this->player;
         if ($p === null || $p->videoTrack() === null) { return; }
         [$w, $h] = $p->size();
-        $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => true, 'ratio' => $k, 'physical' => false, 'geometry' => null, 'animate' => !$this->settings()->get('disableAnimations')]);
+        $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => true, 'ratio' => $k, 'physical' => $this->settings()->get('usePhysicalResolution'), 'geometry' => null, 'animate' => !$this->settings()->get('disableAnimations')]);
     }
 
     /** The player's film gone (mpv's quit: the window closes), where it was noted first ($watchLater, quit-watch-later). */
@@ -1392,15 +1512,13 @@ final class MoviePlayerState
     /** The picture's aspect ratio: the $i-th of ASPECTS. */
     public function setAspect(int $i): void
     {
-        $this->player?->setAspectRatio(self::ASPECTS[$i][1]);
-        $this->say($this->t('videoAspectTo', ['ratio' => self::ASPECTS[$i][0] ?? $this->t('videoDefault')]));
+        $this->setAspectRatio(self::ASPECTS[$i][0]);
     }
 
     /** The crop: the $i-th of ASPECTS, the first none. */
     public function setCrop(int $i): void
     {
-        $this->player?->setCrop(self::ASPECTS[$i][1]);
-        $this->say($this->t('videoCropTo', ['ratio' => self::ASPECTS[$i][0] ?? $this->t('videoNone')]));
+        $this->setCropRatio(self::ASPECTS[$i][0]);
     }
 
     /** The rotation: the $i-th of ROTATIONS. */
@@ -1447,6 +1565,12 @@ final class MoviePlayerState
         if ($this->pip->active()) { $this->pip->stop(); } elseif ($this->pip->possible()) { $this->pip->start(); }
     }
 
+    /** Whether the player's window is full screen. */
+    public function fullScreen(): bool
+    {
+        return $this->runtime?->get()?->fullScreen ?? false;
+    }
+
     /** Whether picture in picture can start now. */
     public function pictureInPicturePossible(): bool
     {
@@ -1462,6 +1586,7 @@ final class MoviePlayerState
     /** Loads subtitle file $path over the film and shows it; what fails shows as the error. */
     public function loadSubtitles(string $path): void
     {
+        Subtitles::$encoding = $this->subEncoding ?? $this->settings()->get('defaultEncoding'); // this player's, of all players' reader
         try {
             $this->player?->setSubtitleTrack($this->player->loadSubtitles($path));
         } catch (RuntimeException $e) {

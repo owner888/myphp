@@ -1724,6 +1724,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `Media\SubtitlePicture`, `Player::subtitlePictures` and
   `subtitlePlane` are myphp's, as IINA (mpv) shows them; mygo has no
   video.
+- **The player's menus** (v1.135): `UI\MoviePlayerMenus` (IINA's
+  Playback, Video, Audio and Subtitles menus, File's items of the film,
+  Window's Log Viewer), `MenuItem::$alternate` (NSMenuItem's alternate,
+  IINA's slight steps under Option), `MenuItem::$onOpen` (NSMenuDelegate's
+  menuWillOpen:, as IINA brings its menus up to date) and
+  `MenuItem::setSubmenu` are myphp's; mygo has no film player, and its
+  menu items neither alternates nor a call as they open. Of IINA's items,
+  left out so far: Video's Lock Window Aspect Ratio, Flip, Deinterlace,
+  Delogo, Crop's Custom and the video filters; Audio's Audio Device and
+  the audio filters; Window's Inspector; Find Online Subtitles from has
+  OpenSubtitles alone. The film's picture is its one track, shown always:
+  Cycle Video Tracks and Video Track's <None> are disabled, as is <None>
+  of the sound. IINA's hidden menu of a second key of an item's is left
+  out: the window's keys carry out every binding. A key without Command
+  or Control goes to a focused field before the menus take it (IINA
+  favors the arrows only).
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

@@ -13,7 +13,9 @@ use RuntimeException;
  */
 final class Menu
 {
-    private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_ALT = 1 << 19, MOD_CMD = 1 << 20;
+    private const MOD_SHIFT = 1 << 17, MOD_CTRL = 1 << 18, MOD_CMD = 1 << 20;
+    /** @internal MenuItem: Option's modifier flag */
+    public const MOD_ALT = 1 << 19;
 
     /** role => [the key of its label in MyPHP's strings (L10n), accelerator, selector sent down the responder chain, or '' for the roles PHP does: documents' roles, which act on the document of the window that has the keyboard (Documents), and toggleDevTools, on its developer tools (Window::toggleDevTools)] */
     public const ROLES = [
@@ -74,6 +76,9 @@ final class Menu
     private static array $byUid = [];
     private static int $nextUid = 1;
     private static $target = null;
+    /** @var array<int, MenuItem> the items whose submenus call their onOpen as they open, by the address of the NSMenu */
+    private static array $opening = [];
+    private static $delegate = null;
 
     public $native = null;
     /** @internal the menu of a ContextMenuEvent, which shows once as it is when the listeners return: changing it re-installs no menus */
@@ -186,24 +191,84 @@ final class Menu
     {
         self::$target ??= self::defineTarget();
         $this->native = ObjC::msg('p:p', ObjC::alloc('NSMenu'), 'initWithTitle:', ObjC::str($title));
+        self::fill($this->native, $this->items);
+        return $this->native;
+    }
+
+    /** Adds the NSMenuItems of $items to NSMenu $ns. @param MenuItem[] $items */
+    private static function fill($ns, array $items): void
+    {
         // A menu of an editing role's item enables its items as the first responder can act on them, the app's items as the app set them (the target's validateMenuItem:); the others keep theirs.
-        ObjC::msg('v:b', $this->native, 'setAutoenablesItems:', array_filter($this->items, fn(MenuItem $it): bool => in_array($it->role, self::VALIDATED, true)) !== []);
-        foreach ($this->items as $it) {
+        ObjC::msg('v:b', $ns, 'setAutoenablesItems:', array_filter($items, fn(MenuItem $it): bool => in_array($it->role, self::VALIDATED, true)) !== []);
+        foreach ($items as $it) {
             if ($it->type === MenuItem::HEADER && !ObjC::msg('b:p', ObjC::cls('NSMenuItem'), 'respondsToSelector:', ObjC::sel('sectionHeaderWithTitle:'))) {
                 continue; // macOS 14's; before it menus have no headers, and the item is left out, as IINA leaves it
             }
-            ObjC::msg('v:p', $this->native, 'addItem:', self::buildItem($it));
+            ObjC::msg('v:p', $ns, 'addItem:', self::buildItem($it));
             if ($it->role === 'zoomIn' && $it->accelerator === '') { // Cmd+= too, without Shift, as other Mac apps take it: a hidden twin
-                $twin = new MenuItem($it->label, $it->click, 'CmdOrCtrl+=', 'zoomIn', disabled: $it->disabled);
-                $ns = self::buildItem($twin);
-                ObjC::msg('v:b', $ns, 'setHidden:', true);
-                if (ObjC::msg('b:p', $ns, 'respondsToSelector:', ObjC::sel('setAllowsKeyEquivalentWhenHidden:'))) {
-                    ObjC::msg('v:b', $ns, 'setAllowsKeyEquivalentWhenHidden:', true);
+                $twin = self::buildItem(new MenuItem($it->label, $it->click, 'CmdOrCtrl+=', 'zoomIn', disabled: $it->disabled));
+                ObjC::msg('v:b', $twin, 'setHidden:', true);
+                if (ObjC::msg('b:p', $twin, 'respondsToSelector:', ObjC::sel('setAllowsKeyEquivalentWhenHidden:'))) {
+                    ObjC::msg('v:b', $twin, 'setAllowsKeyEquivalentWhenHidden:', true);
                 }
-                ObjC::msg('v:p', $this->native, 'addItem:', $ns);
+                ObjC::msg('v:p', $ns, 'addItem:', $twin);
             }
         }
-        return $this->native;
+    }
+
+    /**
+     * @internal MenuItem::setSubmenu: the NSMenu of $it's submenu made of
+     * its items anew, those it had ($old) forgotten.
+     * @param list<MenuItem> $old
+     */
+    public static function refill(MenuItem $it, array $old): void
+    {
+        self::forget($old);
+        $sub = ObjC::msg('p:', $it->native, 'submenu');
+        if ($sub === null) {
+            $sub = self::submenuOf($it, $it->label);
+            ObjC::msg('v:p', $it->native, 'setSubmenu:', $sub);
+            return;
+        }
+        ObjC::msg('v:', $sub, 'removeAllItems');
+        self::fill($sub, $it->submenu);
+    }
+
+    /** What the menus kept of items gone: their clicks, the submenus to call onOpen of. @param list<MenuItem> $items */
+    private static function forget(array $items): void
+    {
+        foreach ($items as $it) {
+            unset(self::$byUid[$it->uid]);
+            if ($it->native !== null && ($sub = ObjC::msg('p:', $it->native, 'submenu')) !== null) {
+                unset(self::$opening[ObjC::addr($sub)]);
+            }
+            self::forget($it->submenu);
+        }
+    }
+
+    /** The NSMenu of $it's submenu, titled $label, which calls its onOpen as it opens. */
+    private static function submenuOf(MenuItem $it, string $label)
+    {
+        $sub = new self($it->submenu);
+        foreach ($it->submenu as $child) { $child->parent = $it; } // the item's list, not the menu built of it
+        $ns = $sub->build($label);
+        if ($it->onOpen !== null) {
+            self::$delegate ??= self::defineDelegate();
+            ObjC::msg('v:p', $ns, 'setDelegate:', self::$delegate);
+            self::$opening[ObjC::addr($ns)] = $it;
+        }
+        return $ns;
+    }
+
+    private static function defineDelegate()
+    {
+        ObjC::defineClass('MyPHPMenuDelegate', 'NSObject', [
+            'menuWillOpen:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $menu) {
+                $it = self::$opening[ObjC::addr($menu)] ?? null;
+                if ($it?->onOpen !== null) { ($it->onOpen)($it); }
+            }],
+        ]);
+        return ObjC::msg('p:', ObjC::alloc('MyPHPMenuDelegate'), 'init');
     }
 
     /** @internal Native\ContextMenus: the NSMenuItem of $it, as the menu bar's and pop-up menus' */
@@ -241,6 +306,11 @@ final class Menu
         $ns = ObjC::msg('p:ppp', ObjC::alloc('NSMenuItem'), 'initWithTitle:action:keyEquivalent:', ObjC::str($label), $sel, ObjC::str($key));
         if ($key !== '') { // also a mask of 0 (F5 alone): NSMenuItem's default is Cmd
             ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', $mask);
+        } elseif ($it->alternate) { // Option shows it, of no key
+            ObjC::msg('v:L', $ns, 'setKeyEquivalentModifierMask:', self::MOD_ALT);
+        }
+        if ($it->alternate) {
+            ObjC::msg('v:b', $ns, 'setAlternate:', true);
         }
         if ($selector === null && $click !== null) {
             $it->uid = self::$nextUid++;
@@ -260,15 +330,14 @@ final class Menu
         if ($it->icon !== null) { // drawn at 16 points from the representation fit for the display; a template tinted as the menu's text
             ObjC::msg('v:p', $ns, 'setImage:', $it->icon->image());
         }
-        if ($it->submenu !== [] || in_array($it->role, ['services', 'window', 'help'], true)) {
-            $sub = new self($it->submenu);
-            foreach ($it->submenu as $child) { $child->parent = $it; } // the item's list, not the menu built of it
-            ObjC::msg('v:p', $ns, 'setSubmenu:', $sub->build($label));
+        if ($it->submenu !== [] || $it->onOpen !== null || in_array($it->role, ['services', 'window', 'help'], true)) {
+            $sub = self::submenuOf($it, $label);
+            ObjC::msg('v:p', $ns, 'setSubmenu:', $sub);
             $app = ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication');
             match ($it->role) {
-                'windowMenu', 'window' => ObjC::msg('v:p', $app, 'setWindowsMenu:', $sub->native),
-                'services' => ObjC::msg('v:p', $app, 'setServicesMenu:', $sub->native),
-                'help' => ObjC::msg('v:p', $app, 'setHelpMenu:', $sub->native),
+                'windowMenu', 'window' => ObjC::msg('v:p', $app, 'setWindowsMenu:', $sub),
+                'services' => ObjC::msg('v:p', $app, 'setServicesMenu:', $sub),
+                'help' => ObjC::msg('v:p', $app, 'setHelpMenu:', $sub),
                 default => null,
             };
         }

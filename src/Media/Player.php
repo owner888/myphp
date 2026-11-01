@@ -123,6 +123,8 @@ final class Player
     private ?Track $subtitle = null;
     /** @var list<Track> */
     private array $external = [];
+    /** @var array<int, string> the files of the subtitles loaded, by their track's object id */
+    private array $files = [];
     private float $subtitleDelay = 0.0;
     /** The secondary subtitle track shown (mpv's secondary-sid), null for none, and how late it shows (secondary-sub-delay). */
     private ?Track $secondary = null;
@@ -357,20 +359,47 @@ final class Player
      */
     public function loadSubtitles(string $path): Track
     {
-        [$codec, $cues] = Subtitles::file($path);
-        if (Subtitles::styled($codec)) { // its lines in their styles, which subtitles() gives as text
-            $cues = Subtitles::assFile($path);
-        }
+        [$codec, $cues] = self::subtitleFile($path);
         $parts = explode('.', basename($path));
         $t = new Track(number: -1 - count($this->external), type: Track::SUBTITLE, codec: $codec, private: '', language: count($parts) > 2 ? $parts[count($parts) - 2] : 'und',
             name: basename($path), isDefault: false, frameDuration: 0.0, width: 0, height: 0, sampleRate: 0.0, channels: 0);
         $this->external[] = $t;
-        $all = $this->cues[spl_object_id($t)] = new Cues();
+        $this->cues[spl_object_id($t)] = $cues;
+        $this->files[spl_object_id($t)] = $path;
+        $this->subtitle = $t;
+        return $t;
+    }
+
+    /**
+     * Reads the subtitle files loaded again (mpv's sub-reload), as their
+     * encoding now says (Subtitles::$encoding: IINA's Subtitles >
+     * Encoding).
+     */
+    public function reloadSubtitles(): void
+    {
+        foreach ($this->files as $id => $path) {
+            $this->cues[$id] = self::subtitleFile($path)[1];
+        }
+    }
+
+    /** The file subtitle track $t was loaded from (loadSubtitles), null for the film's own and the page's. */
+    public function subtitlePath(Track $t): ?string
+    {
+        return $this->files[spl_object_id($t)] ?? null;
+    }
+
+    /** @return array{0: string, 1: Cues} the codec of subtitle file $path and its lines, those of styles in their styles, which subtitles() gives as text */
+    private static function subtitleFile(string $path): array
+    {
+        [$codec, $cues] = Subtitles::file($path);
+        if (Subtitles::styled($codec)) {
+            $cues = Subtitles::assFile($path);
+        }
+        $all = new Cues();
         foreach ($cues as [$start, $end, $text]) {
             $all->add($start, $end, $text);
         }
-        $this->subtitle = $t;
-        return $t;
+        return [$codec, $all];
     }
 
     /** Shows the subtitles $seconds later (earlier, negative), as a file timed for another cut of the film needs. */

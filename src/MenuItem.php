@@ -49,6 +49,19 @@ final class MenuItem
         public string $toolTip = '',
         /** An image shown beside the label (MenuIcon::of), null for none. */
         public ?MenuIcon $icon = null,
+        /**
+         * Shown in place of the item before it while Option is held
+         * (NSMenuItem's alternate): its accelerator that one's with Alt,
+         * none the menu takes alone.
+         */
+        public bool $alternate = false,
+        /**
+         * Called as the item's submenu is about to show (NSMenuDelegate's
+         * menuWillOpen:), to bring its items up to date: their set methods,
+         * or setSubmenu for others; the item has a submenu, empty till then.
+         * @var null|Closure(MenuItem): void
+         */
+        public ?Closure $onOpen = null,
     ) {
         foreach ($this->submenu as $child) {
             $child->parent = $this;
@@ -132,6 +145,22 @@ final class MenuItem
         }
     }
 
+    /**
+     * Replaces the items of the item's submenu, which the menu shows at once
+     * (an onOpen's list of what there is now: a playlist, the tracks).
+     * @param list<MenuItem> $items
+     */
+    public function setSubmenu(array $items): void
+    {
+        [$old, $this->submenu] = [$this->submenu, $items];
+        foreach ($items as $child) {
+            $child->parent = $this;
+        }
+        if ($this->native !== null) {
+            Menu::refill($this, $old);
+        }
+    }
+
     /** Changes the item's keyboard shortcut (mygo's SetAccelerator). */
     public function setAccelerator(string $accelerator): void
     {
@@ -139,7 +168,7 @@ final class MenuItem
         if ($this->native !== null) {
             [$key, $mask] = Menu::accelerator($accelerator);
             ObjC::msg('v:p', $this->native, 'setKeyEquivalent:', ObjC::str($key));
-            ObjC::msg('v:L', $this->native, 'setKeyEquivalentModifierMask:', $mask);
+            ObjC::msg('v:L', $this->native, 'setKeyEquivalentModifierMask:', $key === '' && $this->alternate ? Menu::MOD_ALT : $mask);
         }
     }
 

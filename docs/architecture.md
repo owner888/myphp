@@ -6998,6 +6998,50 @@ succeeds are told of, an empty line is none.
   thumbnails, is `Native\ThumbnailDecoder`, apart from `UI\VideoDecoder`,
   mygo's interface of videos' frames.
 
+## IINA's menus of the player (v1.135)
+
+- `UI\MoviePlayerMenus` builds IINA's Playback, Video, Audio and
+  Subtitles menus (MenuController and MainMenu.xib, item for item, in
+  the app's locale: the titles are IINA's strings), File's Show Current
+  File in Finder, Delete Current File and Save Current Playlist…, and
+  Window's Log Viewer, of the player in front. `key($s)` names what they
+  are built of, the player and its key bindings; examples/video builds
+  its menu bar again when it changes, as a player's window frames,
+  gains or loses the focus, or closes.
+- Keys: each item IINA binds (`BOUND`, updateKeyEquivalentsFrom's table)
+  takes the key of the first binding that does what it does
+  (`sameAction`, IINA's sameKeyAction: a seek's `relative` aside and its
+  `exact` kept, a step's number within the item's range); the binding's
+  number is the item's step and its title ("Step Forward 10s").
+  `accelerator()` turns mpv's key into a menu's (Meta as Cmd, a capital
+  as Shift and its letter, mpv's names as AppKit's keys).
+- As a menu opens (`MenuItem::$onOpen`, the submenu's NSMenuDelegate
+  `menuWillOpen:`), it is built again and its items take the titles,
+  checks and states of the fresh ones (Pause or Resume, the panels'
+  Show or Hide, Speed:, Volume:, the delays, the loops, Float on Top,
+  Mute); the lists (Playlist, Chapters, the tracks, Aspect Ratio, Crop,
+  Rotation, Encoding) are made anew (`MenuItem::setSubmenu`, which
+  `Menu::refill`s the NSMenu, forgetting the old items' clicks).
+- `MenuItem::$alternate`: the item shows in place of the one before it
+  while Option is held (Next Frame under Step Forward, the slight
+  steps); an alternate of no key takes Option's mask alone.
+- Clicks act on the player directly, or through `MoviePlayerState::perform`
+  for what the window's frame does (the panels, full screen, the window's
+  size), which `MoviePlayer::performed` carries out as the next frame
+  builds.
+- A key without Command or Control reaches the focused field, the text
+  client or a node taking text before the menus' key equivalents
+  (`performKeyEquivalent:` of the view first responder): IINA's menus
+  take Space and the arrows.
+- New with them: `MoviePlayerState::jumpTo` (Jump to…, IINA's VideoTime
+  read by `videoTime`), `openScreenshotFolder`, `setAspectRatio` and
+  `setCropRatio` of IINA's ratios, `setSubEncoding` (the subtitle files
+  read again, `Player::reloadSubtitles`, as mpv's sub-codepage and
+  sub-reload), `saveDownloadedSubtitle` (a subtitle downloaded, its file
+  `Player::subtitlePath` in the temporary folder, copied where the user
+  says), `fullScreen()`; the window sizes take the settings'
+  `usePhysicalResolution`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

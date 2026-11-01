@@ -5,7 +5,9 @@ namespace MyPHP\UI;
 
 use Closure;
 use Locale;
+use MyPHP\App;
 use MyPHP\Dialog;
+use MyPHP\L10n;
 use MyPHP\Media\{AssLine, AssRun};
 use MyPHP\Media\Player;
 use MyPHP\Media\SubtitlePicture;
@@ -64,6 +66,7 @@ final class MoviePlayer
             $c->end();
             return $box;
         }
+        self::performed($c, $s, $p);
         if ($o->keys) { self::keys($c, $s, $p); }
         $picture = $c->movie($p)->grow(1);
         $width = $c->width;
@@ -307,6 +310,12 @@ final class MoviePlayer
         if ($w <= 0 || $h <= 0) { return null; }
         $a = $p->crop() ?? $p->aspectRatio() ?? $w / $h;
         return $p->rotation() % 180 === 90 ? 1 / $a : $a;
+    }
+
+    /** Carries out the actions the menus asked for (MoviePlayerState::perform), as a key's. @internal MoviePlayerMusic */
+    public static function performed(Context $c, MoviePlayerState $s, Player $p): void
+    {
+        foreach ($s->performed() as $m) { MoviePlayerCommands::run($c, $s, $p, $m); }
     }
 
     /**
@@ -1663,10 +1672,26 @@ final class MoviePlayer
     /** A track's row: its name and what it is in brackets, "default" if it is, and its language. @return array{0: string, 1: string} */
     public static function trackRow(Context $c, Track $t, string $details): array
     {
-        $lang = self::language($t->language, $c->locale());
+        return [self::trackName($t, $details), self::language($t->language, $c->locale())];
+    }
+
+    /** What a track is besides its codec: a picture's size and frame rate, a sound's channels and rate, unplayable where the Mac has no decoder of it; nothing of subtitles. @internal MoviePlayerMenus */
+    public static function trackDetails(Track $t): string
+    {
+        return implode(', ', array_filter(match ($t->type) {
+            Track::VIDEO => ["{$t->width}×{$t->height}", $t->frameDuration > 0 ? MoviePlayerState::number(1 / $t->frameDuration) . 'fps' : ''],
+            Track::AUDIO => [$t->channels > 0 ? "{$t->channels}ch" : '', $t->sampleRate > 0 ? MoviePlayerState::number($t->sampleRate / 1000) . 'kHz' : '', Player::playable($t) ? '' : L10n::in(App::locale())->get('videoUnplayable')],
+            default => [],
+        }));
+    }
+
+    /** A track's name and what it is in brackets, as its row and the menus show it, in the app's language. @internal MoviePlayerMenus */
+    public static function trackName(Track $t, string $details): string
+    {
+        $lang = self::language($t->language, App::locale());
         $name = $t->name !== '' ? $t->name : ($lang !== '' ? $lang : "#{$t->number}");
-        $what = implode(', ', array_filter([self::codecName($t->codec), $details, $t->isDefault ? self::t($c, 'videoDefault') : '']));
-        return ["$name ($what)", $lang];
+        $what = implode(', ', array_filter([self::codecName($t->codec), $details, $t->isDefault ? L10n::in(App::locale())->get('videoDefault') : '']));
+        return "$name ($what)";
     }
 
     private static function videoTab(Context $c, MoviePlayerState $s, Player $p): void
@@ -1674,7 +1699,7 @@ final class MoviePlayer
         $t = $p->videoTrack();
         $rows = [[self::t($c, 'videoNoTrack'), '']];
         if ($t !== null) {
-            $rows[] = self::trackRow($c, $t, implode(', ', array_filter(["{$t->width}×{$t->height}", $t->frameDuration > 0 ? MoviePlayerState::number(1 / $t->frameDuration) . 'fps' : ''])));
+            $rows[] = self::trackRow($c, $t, self::trackDetails($t));
         }
         self::trackList($c, $rows, $t === null ? 0 : 1); // one picture: what it shows
         $ratios = array_column(MoviePlayerState::ASPECTS, 1);
@@ -1710,7 +1735,7 @@ final class MoviePlayer
         $tracks = $p->audioTracks();
         $rows = [[self::t($c, 'videoNoTrack'), '']];
         foreach ($tracks as $t) {
-            $rows[] = self::trackRow($c, $t, implode(', ', array_filter([$t->channels > 0 ? "{$t->channels}ch" : '', $t->sampleRate > 0 ? MoviePlayerState::number($t->sampleRate / 1000) . 'kHz' : '', Player::playable($t) ? '' : self::t($c, 'videoUnplayable')])));
+            $rows[] = self::trackRow($c, $t, self::trackDetails($t));
         }
         $at = array_search($p->audioTrack(), $tracks, true);
         $i = self::trackList($c, $rows, $at === false ? 0 : $at + 1);

@@ -413,8 +413,8 @@ final class MoviePlayerSettingsPages
         ]);
     }
 
-    /** IINA's encodings of subtitles (CharEncoding.list), after its "Auto detect": [title, iconv's name]. */
-    private const ENCODINGS = [['Universal (UTF-8)', 'UTF-8'], ['Universal (UTF-16)', 'UTF-16'], ['Universal (UTF-16BE)', 'UTF-16BE'], ['Universal (UTF-16LE)', 'UTF-16LE'],
+    /** IINA's encodings of subtitles (CharEncoding.list), after its "Auto detect": [title, iconv's name]; Subtitles > Encoding's too (MoviePlayerMenus). */
+    public const ENCODINGS = [['Universal (UTF-8)', 'UTF-8'], ['Universal (UTF-16)', 'UTF-16'], ['Universal (UTF-16BE)', 'UTF-16BE'], ['Universal (UTF-16LE)', 'UTF-16LE'],
         ['Arabic (ISO-8859-6)', 'ISO-8859-6'], ['Arabic (WINDOWS-1256)', 'WINDOWS-1256'], ['Baltic (LATIN7)', 'LATIN7'], ['Baltic (WINDOWS-1257)', 'WINDOWS-1257'], ['Celtic (LATIN8)', 'LATIN8'],
         ['Central European (WINDOWS-1250)', 'WINDOWS-1250'], ['Cyrillic (ISO-8859-5)', 'ISO-8859-5'], ['Cyrillic (WINDOWS-1251)', 'WINDOWS-1251'], ['Eastern European (ISO-8859-2)', 'ISO-8859-2'],
         ['Western Languages (WINDOWS-1252)', 'WINDOWS-1252'], ['Greek (ISO-8859-7)', 'ISO-8859-7'], ['Greek (WINDOWS-1253)', 'WINDOWS-1253'], ['Hebrew (ISO-8859-8)', 'ISO-8859-8'],

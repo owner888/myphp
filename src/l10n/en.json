@@ -4480,5 +4480,409 @@
         "type": "String"
       }
     }
+  },
+  "iinaMenuPlayback": "Playback",
+  "@iinaMenuPlayback": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVideo": "Video",
+  "@iinaMenuVideo": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudio": "Audio",
+  "@iinaMenuAudio": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubtitles": "Subtitles",
+  "@iinaMenuSubtitles": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowCurrentFileInFinder": "Show Current File in Finder",
+  "@iinaMenuShowCurrentFileInFinder": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuDeleteCurrentFile": "Delete Current File",
+  "@iinaMenuDeleteCurrentFile": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSaveCurrentPlaylist": "Save Current Playlist...",
+  "@iinaMenuSaveCurrentPlaylist": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuStopAndClearPlaylists": "Stop and Clear Playlists",
+  "@iinaMenuStopAndClearPlaylists": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuNextFrame": "Next Frame",
+  "@iinaMenuNextFrame": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPreviousFrame": "Previous Frame",
+  "@iinaMenuPreviousFrame": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuJumpToBeginning": "Jump to Beginning",
+  "@iinaMenuJumpToBeginning": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuJumpTo": "Jump to…",
+  "@iinaMenuJumpTo": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuResetSpeed": "Reset Speed",
+  "@iinaMenuResetSpeed": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuTakeScreenshot": "Take a Screenshot",
+  "@iinaMenuTakeScreenshot": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuGoToScreenshotFolder": "Go to Screenshot Folder",
+  "@iinaMenuGoToScreenshotFolder": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAbLoop": "A-B Loop",
+  "@iinaMenuAbLoop": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFileLoop": "File Loop",
+  "@iinaMenuFileLoop": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPlaylistLoop": "Playlist Loop",
+  "@iinaMenuPlaylistLoop": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPlaylist": "Playlist",
+  "@iinaMenuPlaylist": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuNextMedia": "Next Media",
+  "@iinaMenuNextMedia": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPreviousMedia": "Previous Media",
+  "@iinaMenuPreviousMedia": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuChapters": "Chapters",
+  "@iinaMenuChapters": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuNextChapter": "Next Chapter",
+  "@iinaMenuNextChapter": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPreviousChapter": "Previous Chapter",
+  "@iinaMenuPreviousChapter": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuCycleVideoTracks": "Cycle Video Tracks",
+  "@iinaMenuCycleVideoTracks": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVideoTrack": "Video Track",
+  "@iinaMenuVideoTrack": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHalfSize": "Half Size",
+  "@iinaMenuHalfSize": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuNormalSize": "Normal Size",
+  "@iinaMenuNormalSize": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuDoubleSize": "Double Size",
+  "@iinaMenuDoubleSize": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFitToScreen": "Fit to Screen",
+  "@iinaMenuFitToScreen": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuBiggerSize": "Bigger Size",
+  "@iinaMenuBiggerSize": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSmallerSize": "Smaller Size",
+  "@iinaMenuSmallerSize": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFloatOnTop": "Float on Top",
+  "@iinaMenuFloatOnTop": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuLiveText": "Live Text",
+  "@iinaMenuLiveText": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAspectRatio": "Aspect Ratio",
+  "@iinaMenuAspectRatio": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuCrop": "Crop",
+  "@iinaMenuCrop": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuRotation": "Rotation",
+  "@iinaMenuRotation": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuCycleAudioTracks": "Cycle Audio Tracks",
+  "@iinaMenuCycleAudioTracks": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudioTrack": "Audio Track",
+  "@iinaMenuAudioTrack": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuLoadExternalAudio": "Load External Audio…",
+  "@iinaMenuLoadExternalAudio": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuMute": "Mute",
+  "@iinaMenuMute": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuResetAudioDelay": "Reset Audio Delay",
+  "@iinaMenuResetAudioDelay": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuCycleSubtitles": "Cycle Subtitles",
+  "@iinaMenuCycleSubtitles": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubtitle": "Subtitle",
+  "@iinaMenuSubtitle": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSecondarySubtitle": "Secondary Subtitle",
+  "@iinaMenuSecondarySubtitle": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuLoadExternalSubtitle": "Load External Subtitle…",
+  "@iinaMenuLoadExternalSubtitle": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFindOnlineSubtitlesFrom": "Find Online Subtitles from",
+  "@iinaMenuFindOnlineSubtitlesFrom": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSaveDownloadedSubtitle": "Save Downloaded Subtitle…",
+  "@iinaMenuSaveDownloadedSubtitle": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuEncoding": "Encoding",
+  "@iinaMenuEncoding": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuScaleUp": "Scale Up",
+  "@iinaMenuScaleUp": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuScaleDown": "Scale Down",
+  "@iinaMenuScaleDown": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuResetSubtitleScale": "Reset Subtitle Scale",
+  "@iinaMenuResetSubtitleScale": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuResetSubtitleDelay": "Reset Subtitle Delay",
+  "@iinaMenuResetSubtitleDelay": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFont": "Font...",
+  "@iinaMenuFont": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuLogViewer": "Log Viewer",
+  "@iinaMenuLogViewer": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVolume": "Volume: {volume}",
+  "@iinaMenuVolume": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVolumeMuted": "Volume: {volume} (Muted)",
+  "@iinaMenuVolumeMuted": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudioDelay": "Audio Delay: {seconds}s",
+  "@iinaMenuAudioDelay": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubDelay": "Subtitle Delay: {seconds}s",
+  "@iinaMenuSubDelay": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubHide": "Hide Subtitles",
+  "@iinaMenuSubHide": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubShow": "Show Subtitles",
+  "@iinaMenuSubShow": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubSecondHide": "Hide Secondary Subtitles",
+  "@iinaMenuSubSecondHide": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubSecondShow": "Show Secondary Subtitles",
+  "@iinaMenuSubSecondShow": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFullscreen": "Enter Full Screen",
+  "@iinaMenuFullscreen": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuExitFullscreen": "Exit Full Screen",
+  "@iinaMenuExitFullscreen": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPip": "Enter Picture-in-Picture",
+  "@iinaMenuPip": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuExitPip": "Exit Picture-in-Picture",
+  "@iinaMenuExitPip": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuMiniPlayer": "Enter Music Mode",
+  "@iinaMenuMiniPlayer": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuExitMiniPlayer": "Exit Music Mode",
+  "@iinaMenuExitMiniPlayer": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuPause": "Pause",
+  "@iinaMenuPause": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuResume": "Resume",
+  "@iinaMenuResume": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSpeed": "Speed: {speed}x",
+  "@iinaMenuSpeed": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowChapters": "Show Chapters Panel",
+  "@iinaMenuShowChapters": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHideChapters": "Hide Chapters Panel",
+  "@iinaMenuHideChapters": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowPlaylist": "Show Playlist Panel",
+  "@iinaMenuShowPlaylist": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHidePlaylist": "Hide Playlist Panel",
+  "@iinaMenuHidePlaylist": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowVideo": "Show Video Panel",
+  "@iinaMenuShowVideo": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHideVideo": "Hide Video Panel",
+  "@iinaMenuHideVideo": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowAudio": "Show Audio Panel",
+  "@iinaMenuShowAudio": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHideAudio": "Hide Audio Panel",
+  "@iinaMenuHideAudio": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuShowSubtitles": "Show Subtitles Panel",
+  "@iinaMenuShowSubtitles": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuHideSubtitles": "Hide Subtitles Panel",
+  "@iinaMenuHideSubtitles": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSeekForward": "Step Forward {seconds}s",
+  "@iinaMenuSeekForward": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSeekBackward": "Step Backward {seconds}s",
+  "@iinaMenuSeekBackward": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSpeedUpBy": "Speed Up by {speed}x",
+  "@iinaMenuSpeedUpBy": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSpeedDownBy": "Speed Down by {speed}x",
+  "@iinaMenuSpeedDownBy": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVolumeUp": "Volume + {volume}%",
+  "@iinaMenuVolumeUp": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuVolumeDown": "Volume - {volume}%",
+  "@iinaMenuVolumeDown": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudioDelayUp": "Audio Delay + {seconds}s",
+  "@iinaMenuAudioDelayUp": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudioDelayDown": "Audio Delay - {seconds}s",
+  "@iinaMenuAudioDelayDown": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubDelayUp": "Subtitle Delay + {seconds}s",
+  "@iinaMenuSubDelayUp": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuSubDelayDown": "Subtitle Delay - {seconds}s",
+  "@iinaMenuSubDelayDown": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFindOnlineSub": "Find Online Subtitles from {provider}",
+  "@iinaMenuFindOnlineSub": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaTrackNone": "<None>",
+  "@iinaTrackNone": {
+    "description": "IINA's \"track.none\"."
+  },
+  "iinaQuicksettingDefault": "Default",
+  "@iinaQuicksettingDefault": {
+    "description": "IINA's \"quicksetting.item_default\"."
+  },
+  "iinaQuicksettingNone": "None",
+  "@iinaQuicksettingNone": {
+    "description": "IINA's \"quicksetting.item_none\"."
+  },
+  "iinaAlertJumpToTitle": "Jump to",
+  "@iinaAlertJumpToTitle": {
+    "description": "IINA's \"alert.jump_to.title\"."
+  },
+  "iinaAlertJumpToMessage": "Please enter the time you want to jump to. Example: 20:35",
+  "@iinaAlertJumpToMessage": {
+    "description": "IINA's \"alert.jump_to.message\"."
+  },
+  "iinaAlertSubNoSelected": "Please select a downloaded subtitle first.",
+  "@iinaAlertSubNoSelected": {
+    "description": "IINA's \"alert.sub.no_selected\"."
+  },
+  "iinaAlertSubSaveDownloadedTitle": "Save Downloaded Subtitle",
+  "@iinaAlertSubSaveDownloadedTitle": {
+    "description": "IINA's \"alert.sub.save_downloaded.title\"."
+  },
+  "iinaOsdSubSaved": "Subtitle saved",
+  "@iinaOsdSubSaved": {
+    "description": "IINA's \"osd.sub_saved\"."
   }
 }
