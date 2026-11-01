@@ -1787,6 +1787,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **Deinterlace** (v1.141): `Native\Deinterlacer`,
+  `Player::setDeinterlace`, `deinterlaced` and
+  `MediaPlayerState::setDeinterlace` are myphp's, as IINA's Deinterlace;
+  mygo has no film player. mpv deinterlaces with a motion-adaptive filter
+  (bwdif or yadif, at the field rate); MyPHP blends each frame's lines
+  ([1 2 1] / 4, FFmpeg's pp lb), at the frame rate, every frame alike
+  (mpv's deinterlace=yes), decoded on the main thread while it is on.
 - **Video and audio filters** (v1.140): `Media\Filter`, `FilterPresets`,
   `VideoFilters`, `AudioFilters`, `Lut3d`, `Native\Biquads`,
   `AudioChain`, `UI\MediaPlayerFilters`, `Player::setVideoFilters`,

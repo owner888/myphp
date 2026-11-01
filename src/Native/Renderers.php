@@ -285,6 +285,18 @@ final class Renderers
         unset(self::$askers[spl_object_id($this)]);
     }
 
+    /** Whether the video is decoded here and deinterlaced (IINA's Deinterlace), where the layer would decode it: setDeinterlace. */
+    private bool $deinterlace = false;
+    /** @var array<int, Deinterlacer> the deinterlacers, by track number */
+    private array $deinterlacers = [];
+
+    /** Decodes the video here and deinterlaces it ($on), or gives it the layer to decode (Player::setDeinterlace): flush and feed again after. A track decoded in software (AV1, which has no interlacing) stays so. */
+    public function setDeinterlace(bool $on): void
+    {
+        $this->deinterlace = $on;
+        $this->deinterlacers = [];
+    }
+
     /** The software decoder of video track $t, made at its first packet; null for one the layer decodes. */
     private function softVideo(Track $t): ?SoftVideo
     {
@@ -301,6 +313,7 @@ final class Renderers
             return;
         }
         foreach ($this->soft as $s) { $s->take($this->layer, true); }
+        foreach ($this->deinterlacers as $d) { $d->drain($this->layer); }
     }
 
     /** Gives $p to its renderer: a video frame shown unless $show is false (decoded for those after it). */
@@ -310,6 +323,16 @@ final class Renderers
         $video = $t->type === Track::VIDEO;
         if (!$video && ($this->gains !== null || $this->gain != 1.0 || $this->audioFilters !== null)) { // the equalizer on, a gain, or audio filters: decoded here, filtered, given as PCM
             $this->enqueueFiltered($p);
+            return;
+        }
+        if ($video && $this->deinterlace && !SoftVideo::wanted($t, $this->hardware)) { // decoded here, deinterlaced, given as pictures
+            $d = $this->deinterlacers[$t->number] ??= new Deinterlacer();
+            if ($p->sample !== null) {
+                $d->send($p->sample->buffer, $p->time, $p->duration, $show, $this->layer);
+            } else {
+                $sb = CoreMedia::videoSample($p, $this->formats[$t->number] ??= CoreMedia::format($t, $p->data), true);
+                try { $d->send($sb, $p->time, $p->duration, $show, $this->layer); } finally { CoreMedia::c()->CFRelease($sb); }
+            }
             return;
         }
         if ($p->sample !== null) {
@@ -471,6 +494,7 @@ final class Renderers
         foreach ($this->decoders as $d) { $d->reset(); }
         foreach ($this->eqs as $e) { $e->reset(); }
         foreach ($this->chains as $c) { $c->reset(); }
+        foreach ($this->deinterlacers as $d) { $d->flush(); }
         $this->nextAudio = null;
     }
 

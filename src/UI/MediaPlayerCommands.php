@@ -17,7 +17,7 @@ use MyPHP\Window;
  * cycle-values, multiply of its properties, frame-step, ab-loop,
  * playlist-next…) and IINA's own (its panels, picture in picture, music
  * mode, the window's size…). A property or command the player has no
- * means for is logged and does nothing (video-zoom, deinterlace, edition…).
+ * means for is logged and does nothing (video-zoom, edition…).
  *
  * @internal MediaPlayer
  */
@@ -101,6 +101,7 @@ final class MediaPlayerCommands
             'window-scale' => MediaPlayerState::number(self::windowScale($c, $p)),
             'video-aspect-override' => ($a = $p->aspectRatio()) === null ? '-1' : (string)$a,
             'hwdec' => $p->hardwareDecoding() ? 'auto' : 'no',
+            'deinterlace' => $s->deinterlace ? 'yes' : 'no',
             'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
             'sub-ass-override' => ['yes', 'force', 'strip', 'scale', 'no'][$s->assOverride ?? $s->settings()->get('subOverrideLevel')],
             default => null,
@@ -233,6 +234,7 @@ final class MediaPlayerCommands
                 $s->setHardwareDecoding($on);
                 $s->say($c->texts()->get('videoHwdecTo', ['state' => $c->texts()->get($on ? 'videoOn' : 'videoOff')]));
                 return;
+            case 'deinterlace': $s->setDeinterlace($bool($s->deinterlace)); return;
             case 'brightness': case 'contrast': case 'saturation': case 'gamma': case 'hue': // mpv's video equalizer, cycle going up by 1
                 $s->setVideoEqualizer($prop, (int)round($op === 'cycle' ? $p->videoEqualizer($prop) + ($arg === 'down' ? -1 : 1) : $num((float)$p->videoEqualizer($prop))));
                 return;

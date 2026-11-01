@@ -275,6 +275,7 @@ final class MediaPlayerMenus
                 $it('mirror', self::t('iinaMenuMirror'), fn() => $s->setMirror(!$s->mirror), checked: $s?->mirror ?? false),
                 $it('flip', self::t('iinaMenuFlipVertical'), fn() => $s->setFlip(!$s->flip), checked: $s?->flip ?? false),
             ]),
+            $it('deinterlace', self::t('iinaMenuDeinterlace'), fn() => $s->setDeinterlace(!$s->deinterlace), checked: $s?->deinterlace ?? false),
             $sep(),
             ...self::filterItems($s, true),
         ];

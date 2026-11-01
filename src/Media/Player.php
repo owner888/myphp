@@ -1483,6 +1483,31 @@ final class Player
         }
     }
 
+    private bool $deinterlace = false;
+
+    /**
+     * Deinterlaces the video (IINA's Deinterlace, mpv's deinterlace=yes):
+     * decoded here, not by the display layer, and its fields blended
+     * (Native\Deinterlacer); the picture given again from here. A track
+     * decoded in software (AV1) is never interlaced.
+     */
+    public function setDeinterlace(bool $on): void
+    {
+        if ($on === $this->deinterlace) {
+            return;
+        }
+        $this->deinterlace = $on;
+        $this->out->setDeinterlace($on);
+        if ($this->video !== null) {
+            $this->go($this->time(), true); // the picture given again, deinterlaced from here
+        }
+    }
+
+    public function deinterlaced(): bool
+    {
+        return $this->deinterlace;
+    }
+
     /** @var list<Filter> the audio filters (mpv's af) */
     private array $audioFilters = [];
 

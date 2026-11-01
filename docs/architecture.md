@@ -7237,6 +7237,24 @@ succeeds are told of, an empty line is none.
   of another name or of an expression throws; the window shows IINA's
   "Error occurred when setting filters", the list left as it was.
 
+## Deinterlace (v1.141)
+
+- Video > Deinterlace (IINA's, mpv's deinterlace option; the key
+  bindings' `deinterlace` property): `MediaPlayerState::setDeinterlace`,
+  of this player and the next, told "Deinterlace: On"; `Player::
+  setDeinterlace` gives the picture again from where it is.
+- On, the video the display layer would decode is decoded here
+  (`Native\Deinterlacer`): a VideoToolbox session of NV12 output, each
+  frame decoded synchronously (the callback on VideoToolbox's thread only
+  keeps the frame, as the thumbnails' decoder), its planes blended down
+  their lines by vImage ([1 2 1] / 4, the chroma's interleaved bytes a
+  plane of twice the width), into a pixel buffer of a pool with the
+  frame's attachments, given to the layer at its time. Four frames are
+  held and given by their time, the order they show in (the decoder
+  gives them in the order they decode); a seek drops them, the end gives
+  them all. Frames decoded only for those after them are not shown. AV1,
+  decoded in software, has no interlacing and stays as it is.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

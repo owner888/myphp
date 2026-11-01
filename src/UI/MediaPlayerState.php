@@ -379,7 +379,7 @@ final class MediaPlayerState
         $this->hdr = $this->settings()->get('enableHdrSupport'); // IINA's HDR mode, each film: HDR as HDR, else tone mapped
         $p->setHdr($this->hdr);
         foreach ($this->videoEq as $option => $v) { if ($v !== 0) { $p->setVideoEqualizer($option, $v); } } // as mpv's options and filters, the next film's too
-        $p->setFlip($this->flip); $p->setMirror($this->mirror);
+        $p->setFlip($this->flip); $p->setMirror($this->mirror); $p->setDeinterlace($this->deinterlace);
         foreach ([true, false] as $video) { // the filters, as mpv's vf and af stay as films change
             try { $this->applyFilters($p, $video, $this->filters($video)); } catch (RuntimeException $e) { $this->error = $e->getMessage(); }
         }
@@ -1744,6 +1744,17 @@ final class MediaPlayerState
         $this->mirror = $on;
         $this->player?->setMirror($on);
         $this->changed();
+    }
+
+    /** Whether the video is deinterlaced (IINA's Deinterlace, mpv's deinterlace option), of this player and the next. */
+    public bool $deinterlace = false;
+
+    /** Deinterlaces the video or not (Player::setDeinterlace), told as IINA's OSD tells it: "Deinterlace: On". */
+    public function setDeinterlace(bool $on): void
+    {
+        $this->deinterlace = $on;
+        $this->player?->setDeinterlace($on);
+        $this->say($this->t('iinaOsdDeinterlace', ['value' => $this->t($on ? 'videoOn' : 'videoOff')]));
     }
 
     /** @var list<Filter> the video filters and the audio's (mpv's vf and af), of this player and the next */
