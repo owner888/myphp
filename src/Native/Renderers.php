@@ -80,11 +80,13 @@ final class Renderers
     private ?array $gains = null;
     /** The gain the audio is given in PHP, linear (a volume past 100%, ReplayGain's): 1 for none, the audio then going to the renderer as it comes. */
     private float $gain = 1.0;
-    private static ?\FFI $vdsp = null;
     /** @var array<int, AudioDecoder> the system's decoders of the audio the equalizer filters, by track number */
     private array $decoders = [];
     /** @var array<string, Equalizer> the equalizer's filters, by rate and channels; @var array<string, CData> the formats of the PCM filtered, by rate, channels and layout */
     private array $eqs = [], $pcmFormats = [];
+    /** The audio filters (mpv's af, Media\AudioFilters), null for none; their stages made for each rate and channels. @var array<string, AudioChain> */
+    private ?\MyPHP\Media\AudioFilters $audioFilters = null;
+    private array $chains = [];
 
     /** Renderers whose video the system decodes, unless $hardware is off (IINA's hardware decoding, mpv's hwdec): then what libdav1d decodes (AV1) is decoded so. */
     public function __construct(private bool $hardware = true)
@@ -139,9 +141,17 @@ final class Renderers
      * 8^(gamma / 100), the colors raised to its inverse), hue CIHueAdjust's
      * angle (hue / 100 × π); none of them set, no filter of these: the
      * layer's own (AVSampleBufferDisplayLayer has some) kept before them.
+     * After them the video filters' (Media\VideoFilters::$effects), on the
+     * layer's picture $px points a pixel of the decoded one, $w by $h
+     * points (the space Core Image filters a layer in): unsharp CIUnsharpMask's (its radius a quarter of the matrix,
+     * its intensity the amount, negative blurring), negative
+     * CIColorInvert, lut3d CIColorCube's of the LUT, delogo
+     * CIMaskedVariableBlur's of a mask of the logo's rectangle, blurred by
+     * half its larger side.
      * @param array{brightness: int, contrast: int, saturation: int, gamma: int, hue: int} $eq
+     * @param list<array<int, mixed>> $effects
      */
-    public function setPictureFilters(array $eq): void
+    public function setPictureFilters(array $eq, array $effects = [], float $px = 1.0, float $w = 0.0, float $h = 0.0): void
     {
         ObjC::boot(['CoreImage']);
         $own = ObjC::msg('p:', $this->layer, 'filters'); // the layer's own, which stay first
@@ -151,7 +161,7 @@ final class Renderers
             $f = ObjC::msg('p:p', ObjC::cls('CIFilter'), 'filterWithName:', ObjC::str($name));
             ObjC::msg('v:', $f, 'setDefaults');
             foreach ($values as $key => $v) {
-                ObjC::msg('v:pp', $f, 'setValue:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $v), ObjC::str($key));
+                ObjC::msg('v:pp', $f, 'setValue:forKey:', is_float($v) || is_int($v) ? ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', (float)$v) : $v, ObjC::str($key));
             }
             ObjC::msg('v:p', $filters, 'addObject:', $f);
         };
@@ -163,6 +173,17 @@ final class Renderers
         }
         if ($eq['hue'] !== 0) {
             $filter('CIHueAdjust', ['inputAngle' => $eq['hue'] / 100 * M_PI]);
+        }
+        foreach ($effects as $e) {
+            match ($e[0]) {
+                'unsharp' => $filter('CIUnsharpMask', ['inputRadius' => $e[1] / 4 * $px, 'inputIntensity' => (float)$e[2]]),
+                'negative' => $filter('CIColorInvert', []),
+                'lut3d' => $filter('CIColorCube', ['inputCubeDimension' => (float)$e[1]->size,
+                    'inputCubeData' => ObjC::msg('p:sL', ObjC::cls('NSData'), 'dataWithBytes:length:', $e[1]->data, strlen($e[1]->data))]),
+                'delogo' => $filter('CIMaskedVariableBlur', ['inputRadius' => max($e[3] * $w, $e[4] * $h) / 2,
+                    'inputMask' => ObjC::msg('p:r', ObjC::msg('p:p', ObjC::cls('CIImage'), 'imageWithColor:', ObjC::msg('p:', ObjC::cls('CIColor'), 'whiteColor')),
+                        'imageByCroppingToRect:', ObjC::rect($e[1] * $w, (1 - $e[2] - $e[4]) * $h, $e[3] * $w, $e[4] * $h))]), // Core Image's y up
+            };
         }
         ObjC::msg('v:p', $this->layer, 'setFilters:', ObjC::msg('L:', $filters, 'count') === 0 ? null : $filters);
     }
@@ -287,7 +308,7 @@ final class Renderers
     {
         $t = $p->track;
         $video = $t->type === Track::VIDEO;
-        if (!$video && ($this->gains !== null || $this->gain != 1.0)) { // the equalizer on, or a gain: decoded here, filtered, given as PCM
+        if (!$video && ($this->gains !== null || $this->gain != 1.0 || $this->audioFilters !== null)) { // the equalizer on, a gain, or audio filters: decoded here, filtered, given as PCM
             $this->enqueueFiltered($p);
             return;
         }
@@ -347,17 +368,11 @@ final class Renderers
         $this->gain = $linear;
     }
 
-    /** Float PCM $pcm times $k (vDSP_vsmul). */
-    private static function amplify(string $pcm, float $k): string
+    /** Runs the audio filters $filters over the audio (null for none), after the equalizer and the gain: decoded here, as the equalizer's. Flush and feed again after (Player::setAudioFilters). */
+    public function setAudioFilters(?\MyPHP\Media\AudioFilters $filters): void
     {
-        $v = self::$vdsp ??= \FFI::cdef('void vDSP_vsmul(const float*, long, const float*, float*, long, unsigned long);', '/System/Library/Frameworks/Accelerate.framework/Accelerate');
-        $n = intdiv(strlen($pcm), 4);
-        $buf = $v->new("float[$n]");
-        \FFI::memcpy($buf, $pcm, $n * 4);
-        $scale = $v->new('float');
-        $scale->cdata = $k;
-        $v->vDSP_vsmul($buf, 1, \FFI::addr($scale), $buf, 1, $n);
-        return \FFI::string($buf, $n * 4);
+        $this->audioFilters = $filters;
+        $this->chains = [];
     }
 
     /** Audio packet $p decoded (by the system, Vorbis by SoftAudio), filtered by the equalizer, given its gain and given to the renderer as float PCM. */
@@ -379,7 +394,12 @@ final class Renderers
             return; // the codec holds them yet
         }
         if ($this->gains !== null) { $pcm = ($this->eqs["$rate/$ch"] ??= new Equalizer($this->gains, $rate, $ch))->process($pcm, $frames); }
-        if ($this->gain != 1.0) { $pcm = self::amplify($pcm, $this->gain); }
+        if ($this->gain != 1.0) { $pcm = AudioChain::amplify($pcm, $this->gain); }
+        if ($this->audioFilters !== null) {
+            $chain = $this->chains["$rate/$ch"] ??= new AudioChain($this->audioFilters, $rate, $ch);
+            $pcm = $chain->process($pcm, $frames);
+            if ($chain->channels !== $ch) { [$ch, $layout] = [$chain->channels, CoreMedia::bitmapLayout(SoftAudio::BITS[$chain->channels])]; } // panned to other channels
+        }
         $format = $this->pcmFormats["$rate/$ch/" . bin2hex($layout)] ??= CoreMedia::pcmFormat($rate, $ch, $layout);
         $sb = CoreMedia::pcmSample($pcm, $format, $this->audioAt($p, $rate, $frames), $rate, $frames);
         ObjC::msg('v:p', $this->audio, 'enqueueSampleBuffer:', ObjC::import($sb));
@@ -450,6 +470,7 @@ final class Renderers
         foreach ($this->softAudio as $s) { $s->reset(); }
         foreach ($this->decoders as $d) { $d->reset(); }
         foreach ($this->eqs as $e) { $e->reset(); }
+        foreach ($this->chains as $c) { $c->reset(); }
         $this->nextAudio = null;
     }
 

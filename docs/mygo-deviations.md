@@ -1787,6 +1787,23 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **Video and audio filters** (v1.140): `Media\Filter`, `FilterPresets`,
+  `VideoFilters`, `AudioFilters`, `Lut3d`, `Native\Biquads`,
+  `AudioChain`, `UI\MediaPlayerFilters`, `Player::setVideoFilters`,
+  `setAudioFilters`, `filteredSize`, `MediaPlayerState::setFilters` and
+  the rest are myphp's, as IINA's Filters windows; mygo has no film
+  player. Without mpv and FFmpeg, MyPHP does the filters of IINA's
+  presets and a few of FFmpeg's audio ones (volume, equalizer, bass,
+  treble, highpass, lowpass, pan); any other, and FFmpeg's expressions
+  (iw/2), are IINA's error. Sharpen and blur are Core Image's unsharp
+  mask (a Gaussian a quarter of the matrix, not FFmpeg's matrix), delogo
+  blurs the logo's rectangle (FFmpeg interpolates it from its edges),
+  lut3d reads .cube files alone and interpolates trilinearly whatever its
+  interp. IINA's own filters (Video > Crop and Flip, the equalizer) are
+  not in the windows' lists, which hold the user's alone. The sheets are
+  taller than IINA's (New Filter 450 by 300, its parameters all in sight;
+  Save Filter and Edit Filter for MyPHP's taller fields); a key
+  with Command recorded goes to the menus first where one has it.
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

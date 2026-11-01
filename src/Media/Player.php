@@ -1309,7 +1309,67 @@ final class Player
             throw new RuntimeException("myphp: no video equalizer option \"$option\"");
         }
         $this->videoEq[$option] = max(-100, min(100, $value));
-        $this->out->setPictureFilters($this->videoEq);
+        $this->applyPictureFilters();
+    }
+
+    /** @var list<Filter> the video filters (mpv's vf) */
+    private array $videoFilters = [];
+    private ?VideoFilters $vf = null;
+    /** The layer's points a decoded picture's pixel, and its size in points, as the window last laid it out (layerShown). @var array{0: float, 1: float, 2: float} */
+    private array $shownAt = [1.0, 0.0, 0.0];
+
+    /**
+     * Sets the video filters (mpv's vf, IINA's Video Filters), in order, as
+     * VideoFilters does them: crop and expand the part of the picture shown,
+     * vflip and hflip it reversed, the rest Core Image's filters of the
+     * layer (Renderers::setPictureFilters). One MyPHP cannot do throws, the
+     * filters left as they were.
+     * @param list<Filter> $filters
+     */
+    public function setVideoFilters(array $filters): void
+    {
+        [$w, $h] = $this->size();
+        $vf = new VideoFilters(array_values($filters), $w, $h);
+        $this->videoFilters = array_values($filters);
+        $this->vf = $vf->any() ? $vf : null;
+        $this->applyPictureFilters();
+    }
+
+    /** @return list<Filter> */
+    public function videoFilters(): array
+    {
+        return $this->videoFilters;
+    }
+
+    /** The picture's size after the video filters' crop and expand (mpv's dwidth and dheight, before the aspect and the rotation), [0, 0] without video. @return array{0: int, 1: int} */
+    public function filteredSize(): array
+    {
+        [$w, $h] = $this->size();
+        $part = $this->vf?->part;
+        return $part === null ? [$w, $h] : [(int)round($w * $part[2]), (int)round($h * $part[3])];
+    }
+
+    /**
+     * @internal the window: the decoded picture shows $w by $h points (its
+     * layer's, in which Core Image's filters of the layer work), for the
+     * filters whose sizes are its (unsharp's radius, delogo's rectangle):
+     * set again as it changes.
+     */
+    public function layerShown(float $w, float $h): void
+    {
+        [$vw] = $this->size();
+        $at = [$vw > 0 ? $w / $vw : 1.0, round($w), round($h)];
+        if ($at == $this->shownAt) {
+            return;
+        }
+        $this->shownAt = $at;
+        if ($this->vf !== null && $this->vf->effects !== []) { $this->applyPictureFilters(); }
+    }
+
+    /** The equalizer's filters and the video filters' effects on the layer. */
+    private function applyPictureFilters(): void
+    {
+        $this->out->setPictureFilters($this->videoEq, $this->vf?->effects ?? [], ...$this->shownAt);
     }
 
     public function videoEqualizer(string $option): int
@@ -1350,25 +1410,28 @@ final class Player
     public function reversed(): array
     {
         $turned = $this->rotation === 90 || $this->rotation === 270;
-        return $turned ? [$this->flip, $this->mirror] : [$this->mirror, $this->flip];
+        [$flip, $mirror] = [$this->flip !== ($this->vf?->flip ?? false), $this->mirror !== ($this->vf?->mirror ?? false)]; // the video filters' too
+        return $turned ? [$flip, $mirror] : [$mirror, $flip];
     }
 
     /**
      * Where the picture shows in a box $w by $h, as setAspectRatio,
-     * setCrop and setRotation lay it out: see Picture::fit.
+     * setCrop, setRotation and the video filters' crop and expand lay it
+     * out: see Picture::fit.
      * @internal the window places the video's layer by it
-     * @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float}}
+     * @return array{0: array{0: float, 1: float, 2: float, 3: float}, 1: array{0: float, 1: float}, 2: array{0: float, 1: float, 2: float, 3: float}}
      */
     public function picture(float $w, float $h): array
     {
         [$vw, $vh] = $this->size();
-        return Picture::fit($w, $h, $this->aspect ?? ($vh > 0 ? $vw / $vh : 16 / 9), $this->crop, $this->rotation);
+        $part = $this->vf?->part;
+        return Picture::fit($w, $h, $this->aspect ?? ($vh > 0 ? $vw * ($part[2] ?? 1) / ($vh * ($part[3] ?? 1)) : 16 / 9), $this->crop, $this->rotation, $part);
     }
 
-    /** Whether the picture shows as the file has it: its own aspect, uncut, upright, neither flipped nor mirrored. */
+    /** Whether the picture shows as the file has it: its own aspect, uncut, upright, neither flipped nor mirrored, of no video filter. */
     public function plainPicture(): bool
     {
-        return $this->aspect === null && $this->crop === null && $this->rotation === 0 && !$this->flip && !$this->mirror;
+        return $this->aspect === null && $this->crop === null && $this->rotation === 0 && !$this->flip && !$this->mirror && $this->vf === null;
     }
 
     /** Plays the sound $seconds later than the picture (earlier when negative), from where it is. */
@@ -1418,6 +1481,33 @@ final class Player
         if (!Equalizer::flat($was) || !Equalizer::flat($gains)) {
             $this->go($this->time(), true); // the sound given again, filtered from here
         }
+    }
+
+    /** @var list<Filter> the audio filters (mpv's af) */
+    private array $audioFilters = [];
+
+    /**
+     * Sets the audio filters (mpv's af, IINA's Audio Filters), in order, as
+     * AudioFilters does them, after the equalizer and the gain: the sound
+     * given again from here, filtered. One MyPHP cannot do throws, the
+     * filters left as they were.
+     * @param list<Filter> $filters
+     */
+    public function setAudioFilters(array $filters): void
+    {
+        $af = new AudioFilters(array_values($filters));
+        $had = $this->audioFilters !== [];
+        $this->audioFilters = array_values($filters);
+        $this->out->setAudioFilters($af->any() ? $af : null);
+        if ($had || $af->any()) {
+            $this->go($this->time(), true); // the sound given again, filtered from here
+        }
+    }
+
+    /** @return list<Filter> */
+    public function audioFilters(): array
+    {
+        return $this->audioFilters;
     }
 
     /** The equalizer's gains, dB, of EQUALIZER_BANDS. @return list<float> */

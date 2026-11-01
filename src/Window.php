@@ -2071,13 +2071,16 @@ final class Window
                 ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(0, 0, $fw, $fh));
                 ObjC::msg('v:L', $video, 'setAutoresizingMask:', 18);
             } else { // laid out here: the crop view the part that shows, the picture's view its whole size in it, stretched to it and turned
-                [[$vx, $vy, $vw, $vh], [$pw, $ph]] = $player->picture($fw, $fh);
+                [[$vx, $vy, $vw, $vh], , [$dw, $dh, $dx, $dy]] = $player->picture($fw, $fh);
                 ObjC::msg('v:r', $crop, 'setFrame:', ObjC::rect($rx + $vx, $ry + $fh - $vy - $vh, $vw, $vh));
                 ObjC::msg('v:L', $crop, 'setAutoresizingMask:', 0);
                 ObjC::msg('v:L', $video, 'setAutoresizingMask:', 0);
                 ObjC::msg('v:p', $layer, 'setVideoGravity:', ObjC::str('AVLayerVideoGravityResize'));
-                ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(($vw - $pw) / 2, ($vh - $ph) / 2, $pw, $ph));
+                // The decoded picture (the video filters' crop and expand cut it, or put it in a larger one) about the middle of what shows, its offset turned as it is.
+                [$ox, $oy] = match ($player->rotation()) { 90 => [-$dy, $dx], 180 => [-$dx, -$dy], 270 => [$dy, -$dx], default => [$dx, $dy] };
+                ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(($vw - $dw) / 2 + $ox, ($vh - $dh) / 2 - $oy, $dw, $dh)); // y up
                 ObjC::msg('v:d', $video, 'setFrameCenterRotation:', -(float)$player->rotation()); // clockwise: AppKit turns counterclockwise
+                $player->layerShown($dw, $dh); // Core Image's filters of a layer work in its points
             }
             self::reverse($crop, $player->reversed());
             ObjC::msg('v:b', $clip, 'setHidden:', false);

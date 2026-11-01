@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\UI;
 
 use MyPHP\Dialog;
+use MyPHP\Media\Filter;
 use MyPHP\Media\Player;
 use MyPHP\Logger;
 use MyPHP\OpenDialogOptions;
@@ -65,6 +66,7 @@ final class MediaPlayerCommands
             case 'write-watch-later-config': $s->note(); return;
             case 'show-progress': $s->showProgress(); return;
             case 'show-text': $s->say(implode(' ', $args)); return;
+            case 'vf': case 'af': self::filters($s, $w[0] === 'vf', $args[0] ?? '', $args[1] ?? ''); return;
             case 'set': self::property($c, $s, $p, $args[0] ?? '', 'set', $args[1] ?? ''); return;
             case 'add': self::property($c, $s, $p, $args[0] ?? '', 'add', $args[1] ?? '1'); return;
             case 'multiply': self::property($c, $s, $p, $args[0] ?? '', 'multiply', $args[1] ?? '1'); return;
@@ -252,6 +254,34 @@ final class MediaPlayerCommands
             return (float)$b != 0.0 ? (float)$a / (float)$b : 1.0;
         }
         return (float)$v;
+    }
+
+    /**
+     * mpv's vf and af commands of the video's filters ($video) or the
+     * audio's: set, add, remove, toggle (each of $list, filters split at
+     * their commas, as mpv's lists are), clr; what MyPHP cannot do logged.
+     */
+    private static function filters(MediaPlayerState $s, bool $video, string $op, string $list): void
+    {
+        $given = [];
+        foreach ($list === '' ? [] : (preg_split('/,(?![^\[]*\])/', $list) ?: []) as $one) {
+            $f = Filter::parse(trim($one));
+            if ($f === null) { Logger::warn("No filter \"$one\"", 'keybindings'); return; }
+            $given[] = $f;
+        }
+        $now = $s->filters($video);
+        $without = fn(array $all, Filter $f): array => array_values(array_filter($all, fn(Filter $g) => !$g->equals($f)));
+        $ok = match ($op) {
+            'set' => $s->setFilters($video, $given),
+            'add', 'append' => $s->setFilters($video, [...$now, ...$given]),
+            'pre' => $s->setFilters($video, [...$given, ...$now]),
+            'remove', 'del' => $s->setFilters($video, array_reduce($given, $without, $now)),
+            'toggle' => array_reduce($given, fn(bool $ok, Filter $f) => $s->toggleFilter($video, $f->string()) && $ok, true),
+            'clr' => $s->setFilters($video, []),
+            default => null,
+        };
+        if ($ok === null) { Logger::warn("mpv's " . ($video ? 'vf' : 'af') . " has no \"$op\"", 'keybindings'); }
+        elseif (!$ok) { Logger::warn('Failed to ' . ($video ? 'vf' : 'af') . " $op $list", 'keybindings'); }
     }
 
     /** IINA's own commands (IINACommand). */

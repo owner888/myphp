@@ -159,8 +159,8 @@ same([480, 2880, 1920, 120, 1920, 2880], [$toc(0 << 3), $toc(3 << 3), $toc(13 <<
 
 // Where the picture shows (Media\Picture, the player's aspect ratio, crop and rotation): a 16:9 picture in a 4:3 box, at 4:3, cut to 21:9, turned.
 use MyPHP\Media\Picture;
-same([[0.0, 3.75, 40.0, 22.5], [40.0, 22.5]], Picture::fit(40, 30, 16 / 9, null, 0), 'its own aspect: as wide as the box, centered');
-same([[0.0, 0.0, 40.0, 30.0], [40.0, 30.0]], Picture::fit(40, 30, 4 / 3, null, 0), 'at 4:3: the box');
+same([[0.0, 3.75, 40.0, 22.5], [40.0, 22.5], [40.0, 22.5, 0.0, 0.0]], Picture::fit(40, 30, 16 / 9, null, 0), 'its own aspect: as wide as the box, centered, the decoded picture the whole');
+same([[0.0, 0.0, 40.0, 30.0], [40.0, 30.0]], array_slice(Picture::fit(40, 30, 4 / 3, null, 0), 0, 2), 'at 4:3: the box');
 [$shown, $whole] = Picture::fit(40, 30, 16 / 9, 4 / 3, 0);
 same([[0.0, 0.0, 40.0, 30.0], 30.0], [$shown, $whole[1]], 'cut to 4:3: the part fills the box, the picture as tall');
 check(abs($whole[0] - 30 * 16 / 9) < 1e-9, 'and wider, at its own aspect');

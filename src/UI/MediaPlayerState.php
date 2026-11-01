@@ -8,6 +8,7 @@ use MyPHP\App;
 use MyPHP\Logger;
 use MyPHP\Media\Assrt;
 use MyPHP\Media\EqualizerProfiles;
+use MyPHP\Media\Filter;
 use MyPHP\Media\MetaVideo;
 use MyPHP\Media\OpenSubtitles;
 use MyPHP\Media\OpenSubtitlesQuota;
@@ -244,7 +245,7 @@ final class MediaPlayerState
         $this->say($p->title(), '', 'fileStart'); // IINA's message of the file opened
         if ($p->videoTrack() !== null) { // the window to the film's size, as IINA's settings say: on each film, those opened by hand, or never; its initial size and place the first time
             $timing = $set->get('resizeWindowTiming');
-            [$w, $h] = $p->size();
+            [$w, $h] = $p->filteredSize(); // the video filters' crop or expand, as mpv's dwidth
             $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => $timing === 0 || ($timing === 1 && $manual), 'ratio' => [-1.0, 0.5, 1.0, 1.5, 2.0][$set->get('resizeWindowOption')] ?? 1.0,
                 'physical' => $set->get('usePhysicalResolution'), 'geometry' => $this->placed ? null : $set->get('initialWindowSizePosition'), 'animate' => !$set->get('disableAnimations')]);
             $this->placed = true;
@@ -379,6 +380,9 @@ final class MediaPlayerState
         $p->setHdr($this->hdr);
         foreach ($this->videoEq as $option => $v) { if ($v !== 0) { $p->setVideoEqualizer($option, $v); } } // as mpv's options and filters, the next film's too
         $p->setFlip($this->flip); $p->setMirror($this->mirror);
+        foreach ([true, false] as $video) { // the filters, as mpv's vf and af stay as films change
+            try { $this->applyFilters($p, $video, $this->filters($video)); } catch (RuntimeException $e) { $this->error = $e->getMessage(); }
+        }
         if ($this->hardwareDecoding !== null) { $p->setHardwareDecoding($this->hardwareDecoding); } // the quick setting's, of this player and the next (mpv's hwdec stays as films change)
         $this->moved = microtime(true);
         $noted = 0.0;
@@ -1402,7 +1406,7 @@ final class MediaPlayerState
     {
         $p = $this->player;
         if ($p === null || $p->videoTrack() === null) { return; }
-        [$w, $h] = $p->size();
+        [$w, $h] = $p->filteredSize();
         $this->ask('fitVideo', ['w' => $w, 'h' => $h, 'resize' => true, 'ratio' => $k, 'physical' => $this->settings()->get('usePhysicalResolution'), 'geometry' => null, 'animate' => !$this->settings()->get('disableAnimations')]);
     }
 
@@ -1740,6 +1744,114 @@ final class MediaPlayerState
         $this->mirror = $on;
         $this->player?->setMirror($on);
         $this->changed();
+    }
+
+    /** @var list<Filter> the video filters and the audio's (mpv's vf and af), of this player and the next */
+    private array $videoFilters = [], $audioFilters = [];
+
+    /** The video filters ($video) or the audio's. @return list<Filter> */
+    public function filters(bool $video): array
+    {
+        return $video ? $this->videoFilters : $this->audioFilters;
+    }
+
+    /**
+     * Sets the video filters ($video) or the audio's, of this player and
+     * the next (mpv's vf set, af set): whether it could, MyPHP doing them
+     * (Media\VideoFilters, Media\AudioFilters); one it cannot leaves them as
+     * they were, its reason the log's (IINA's "Error occurred when setting
+     * filters", which MediaPlayerFilters shows).
+     * @param list<Filter> $filters
+     */
+    public function setFilters(bool $video, array $filters): bool
+    {
+        $filters = array_values($filters);
+        try {
+            if ($this->player !== null) { $this->applyFilters($this->player, $video, $filters); }
+        } catch (RuntimeException $e) {
+            $this->log('Failed to set ' . ($video ? 'video' : 'audio') . " filters: {$e->getMessage()}", Logger::WARNING);
+            return false;
+        }
+        if ($video) { $this->videoFilters = $filters; } else { $this->audioFilters = $filters; }
+        $this->changed();
+        return true;
+    }
+
+    /** @param list<Filter> $filters */
+    private function applyFilters(Player $p, bool $video, array $filters): void
+    {
+        $video ? $p->setVideoFilters($filters) : $p->setAudioFilters($filters);
+    }
+
+    /** Adds filter $f to the video's ($video) or the audio's, last (mpv's vf add): whether it could (setFilters). */
+    public function addFilter(bool $video, Filter $f): bool
+    {
+        return $this->setFilters($video, [...$this->filters($video), $f]);
+    }
+
+    /** Removes the video's ($video) or the audio's filter at $index (IINA's removeVideoFilter of its place), told (IINA's "Removed Filter"): whether it could. */
+    public function removeFilter(bool $video, int $index): bool
+    {
+        $filters = $this->filters($video);
+        if (!isset($filters[$index])) {
+            return false;
+        }
+        array_splice($filters, $index, 1);
+        if (!$this->setFilters($video, $filters)) {
+            return false;
+        }
+        $this->say($this->t('iinaOsdFilterRemoved'));
+        return true;
+    }
+
+    /**
+     * Turns filter $string on or off (IINA's saved filters' toggles, their
+     * menu items and keys; mpv's vf toggle): removed where it is (the same
+     * filter, whatever the order of its parameters), else added; told as
+     * $name was added, or removed. Whether it could.
+     */
+    public function toggleFilter(bool $video, string $string, string $name = ''): bool
+    {
+        $f = Filter::parse($string);
+        if ($f === null) {
+            return false;
+        }
+        foreach ($this->filters($video) as $i => $g) {
+            if ($g->equals($f)) { return $this->removeFilter($video, $i); }
+        }
+        if (!$this->addFilter($video, $f)) {
+            return false;
+        }
+        $this->say($this->t('iinaOsdFilterAdded', ['name' => $name !== '' ? $name : $f->string()]));
+        return true;
+    }
+
+    /** Whether filter $string is on, of the video's ($video) or the audio's (IINA's saved filters checked). */
+    public function filterOn(bool $video, string $string): bool
+    {
+        $f = Filter::parse($string);
+        foreach ($f === null ? [] : $this->filters($video) as $g) {
+            if ($g->equals($f)) { return true; }
+        }
+        return false;
+    }
+
+    /**
+     * The saved filters of the video ($video) or the audio (IINA's
+     * savedVideoFilters and savedAudioFilters): each its name, filter
+     * string, key and its modifiers (IINA's: c Control, o Option, s Shift,
+     * m Command).
+     * @return list<array{name: string, filterString: string, shortcutKey: string, shortcutKeyModifiers: string}>
+     */
+    public function savedFilters(bool $video): array
+    {
+        return $this->settings()->get($video ? 'savedVideoFilters' : 'savedAudioFilters');
+    }
+
+    /** @param list<array{name: string, filterString: string, shortcutKey: string, shortcutKeyModifiers: string}> $saved */
+    public function setSavedFilters(bool $video, array $saved): void
+    {
+        $this->setSetting($video ? 'savedVideoFilters' : 'savedAudioFilters', array_values($saved));
     }
 
     /** Whether the player's window is full screen. */

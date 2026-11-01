@@ -119,7 +119,8 @@ final class MediaPlayerMenus
     public static function key(?MediaPlayerState $s): string
     {
         $bindings = $s === null ? [] : array_map(fn(array $m) => [$m['normal'], $m['action'], $m['iina']], MediaPlayerKeys::current($s->settings()));
-        return ($s === null ? '' : spl_object_id($s)) . ':' . md5(serialize($bindings));
+        $saved = $s === null ? [] : [$s->savedFilters(true), $s->savedFilters(false)]; // their keys the menus' too
+        return ($s === null ? '' : spl_object_id($s)) . ':' . md5(serialize([$bindings, $saved]));
     }
 
     /** File's items of the film: Show Current File in Finder, Delete Current File, Save Current Playlist… @return list<MenuItem> */
@@ -142,9 +143,10 @@ final class MediaPlayerMenus
     }
 
     /** IINA's Playback, Video, Audio and Subtitles menus of player $s. @return list<MenuItem> */
-    public static function menus(?MediaPlayerState $s): array
+    public static function menus(?MediaPlayerState $s, ?Closure $lastActive = null): array
     {
         $out = [];
+        self::$lastActive = $lastActive ?? fn(): ?MediaPlayerState => $s;
         foreach (['iinaMenuPlayback' => 'playback', 'iinaMenuVideo' => 'video', 'iinaMenuAudio' => 'audio', 'iinaMenuSubtitles' => 'subtitles'] as $label => $menu) {
             $build = fn(): array => self::$menu($s, self::bindings($s));
             $out[] = new MenuItem(self::t($label), submenu: $build(), id: "iina.$menu",
@@ -273,6 +275,8 @@ final class MediaPlayerMenus
                 $it('mirror', self::t('iinaMenuMirror'), fn() => $s->setMirror(!$s->mirror), checked: $s?->mirror ?? false),
                 $it('flip', self::t('iinaMenuFlipVertical'), fn() => $s->setFlip(!$s->flip), checked: $s?->flip ?? false),
             ]),
+            $sep(),
+            ...self::filterItems($s, true),
         ];
     }
 
@@ -311,6 +315,8 @@ final class MediaPlayerMenus
             $it('resetAudioDelay', self::t('iinaMenuResetAudioDelay'), fn() => $s->setAudioDelay(0.0)),
             $sep(),
             self::list($s, 'audioDevice', self::t('iinaMenuAudioDevice'), fn() => self::audioDevices($s)),
+            $sep(),
+            ...self::filterItems($s, false),
         ];
     }
 
@@ -365,6 +371,36 @@ final class MediaPlayerMenus
     private static function list(?MediaPlayerState $s, string $name, string $label, Closure $items): MenuItem
     {
         return new MenuItem($label, disabled: $s?->player === null, id: "iina.$name", onOpen: fn(MenuItem $m) => $m->setSubmenu($s?->player === null ? [] : $items()));
+    }
+
+    /** The player the filters' windows show (menus()' $lastActive). @var Closure(): ?MediaPlayerState */
+    private static Closure $lastActive;
+
+    /**
+     * Video Filters… (Shift+Cmd+F) and Saved Video Filters, or Audio
+     * Filters… (Shift+Cmd+G) and Saved Audio Filters ($video): the window
+     * (MediaPlayerFilters), and an item of each saved filter, its key the
+     * one saved, checked while it is on, turning it on or off (IINA's
+     * menuToggleVideoFilterString).
+     * @return list<MenuItem>
+     */
+    private static function filterItems(?MediaPlayerState $s, bool $video): array
+    {
+        $player = self::$lastActive;
+        $saved = [];
+        foreach ($s?->savedFilters($video) ?? [] as $i => $f) {
+            $saved[] = new MenuItem($f['name'], function () use ($s, $video, $f): void {
+                if ($s->player !== null && !$s->toggleFilter($video, $f['filterString'], $f['name'])) {
+                    Dialog::message(new \MyPHP\MessageOptions(parent: Window::focused(), type: 'warning', message: self::t('iinaAlertFilterIncorrect')));
+                }
+            }, MediaPlayerFilters::accelerator($f['shortcutKey'], $f['shortcutKeyModifiers']), type: MenuItem::CHECKBOX,
+                checked: $s->filterOn($video, $f['filterString']), disabled: $s->player === null, id: ($video ? 'iina.savedVideoFilter' : 'iina.savedAudioFilter') . $i);
+        }
+        return [
+            new MenuItem(self::t($video ? 'iinaMenuVideoFilters' : 'iinaMenuAudioFilters'), fn() => MediaPlayerFilters::open($video, $player), $video ? 'Cmd+Shift+f' : 'Cmd+Shift+g',
+                id: $video ? 'iina.videoFilters' : 'iina.audioFilters'),
+            new MenuItem(self::t($video ? 'iinaMenuSavedVideoFilters' : 'iinaMenuSavedAudioFilters'), submenu: $saved, id: $video ? 'iina.savedVideoFilters' : 'iina.savedAudioFilters'),
+        ];
     }
 
     /** Playback > Playlist: the playlist's films, the one playing checked (IINA's updatePlaylist). @return list<MenuItem> */

@@ -47,7 +47,8 @@ $enabled = function (array $items) use (&$enabled): array {
     }
     return $on;
 };
-same(['iina.playback', 'iina.video', 'iina.flipMenu', 'iina.audio', 'iina.subtitles', 'iina.onlineSubSource'], $enabled([...$none, ...MediaPlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus');
+same(['iina.playback', 'iina.video', 'iina.flipMenu', 'iina.videoFilters', 'iina.savedVideoFilters', 'iina.audio', 'iina.audioFilters', 'iina.savedAudioFilters', 'iina.subtitles', 'iina.onlineSubSource'],
+    $enabled([...$none, ...MediaPlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus and the filters\' windows (IINA\'s, of the app)');
 
 $s = new MediaPlayerState();
 $menus = MediaPlayerMenus::menus($s);

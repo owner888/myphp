@@ -306,7 +306,7 @@ final class MediaPlayer
     /** The aspect the picture shows at in the window, its width over its height: its own or the one asked, cut, turned. */
     private static function shownAspect(Player $p): ?float
     {
-        [$w, $h] = $p->size();
+        [$w, $h] = $p->filteredSize(); // the video filters' crop or expand
         if ($w <= 0 || $h <= 0) { return null; }
         $a = $p->crop() ?? $p->aspectRatio() ?? $w / $h;
         return $p->rotation() % 180 === 90 ? 1 / $a : $a;

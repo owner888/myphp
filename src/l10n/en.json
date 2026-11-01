@@ -5176,5 +5176,241 @@
   "iinaOsdFileError": "Error reading file",
   "@iinaOsdFileError": {
     "description": "IINA's \"osd.file_error\"."
+  },
+  "iinaMenuDeinterlace": "Deinterlace",
+  "@iinaMenuDeinterlace": {
+    "description": "IINA's \"yHI-7D-OaI.title\" (MainMenu.strings)."
+  },
+  "iinaMenuDelogo": "Delogo",
+  "@iinaMenuDelogo": {
+    "description": "IINA's \"ArE-2s-JIV.title\" (MainMenu.strings)."
+  },
+  "iinaMenuVideoFilters": "Video Filters…",
+  "@iinaMenuVideoFilters": {
+    "description": "IINA's \"PyY-pR-jz7.title\" (MainMenu.strings)."
+  },
+  "iinaMenuSavedVideoFilters": "Saved Video Filters",
+  "@iinaMenuSavedVideoFilters": {
+    "description": "IINA's \"BDr-G9-IRx.title\" (MainMenu.strings)."
+  },
+  "iinaMenuAudioFilters": "Audio Filters…",
+  "@iinaMenuAudioFilters": {
+    "description": "IINA's \"8Zh-hU-Cc4.title\" (MainMenu.strings)."
+  },
+  "iinaMenuSavedAudioFilters": "Saved Audio Filters",
+  "@iinaMenuSavedAudioFilters": {
+    "description": "IINA's \"wgZ-DO-nn3.title\" (MainMenu.strings)."
+  },
+  "iinaOsdFilterAdded": "Added Filter: {name}",
+  "@iinaOsdFilterAdded": {
+    "description": "IINA's \"osd.filter_added\" (Localizable.strings)."
+  },
+  "iinaOsdFilterRemoved": "Removed Filter",
+  "@iinaOsdFilterRemoved": {
+    "description": "IINA's \"osd.filter_removed\" (Localizable.strings)."
+  },
+  "iinaOsdDeinterlace": "Deinterlace: {value}",
+  "@iinaOsdDeinterlace": {
+    "description": "IINA's \"osd.deinterlace\" (Localizable.strings)."
+  },
+  "iinaAlertFilterIncorrect": "Error occurred when setting filters. Please check your parameter format.",
+  "@iinaAlertFilterIncorrect": {
+    "description": "IINA's \"alert.filter.incorrect\" (Localizable.strings)."
+  },
+  "iinaFilterVideoFilters": "Video Filters",
+  "@iinaFilterVideoFilters": {
+    "description": "IINA's \"filter.video_filters\" (Localizable.strings)."
+  },
+  "iinaFilterAudioFilters": "Audio Filters",
+  "@iinaFilterAudioFilters": {
+    "description": "IINA's \"filter.audio_filters\" (Localizable.strings)."
+  },
+  "iinaFilterWindowSave": "Save",
+  "@iinaFilterWindowSave": {
+    "description": "IINA's \"tPs-K2-ZPz.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowFilterString": "Filter String",
+  "@iinaFilterWindowFilterString": {
+    "description": "IINA's \"4g6-LW-373.headerCell.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowSavedFilters": "Saved filters",
+  "@iinaFilterWindowSavedFilters": {
+    "description": "IINA's \"m5X-Zl-aOj.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowAdd": "Add",
+  "@iinaFilterWindowAdd": {
+    "description": "IINA's \"w2g-wR-hPu.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowCancel": "Cancel",
+  "@iinaFilterWindowCancel": {
+    "description": "IINA's \"9Au-ZV-KXN.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowSaveFilter": "Save Filter",
+  "@iinaFilterWindowSaveFilter": {
+    "description": "IINA's \"KGV-G1-A2l.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowSaveFilterMessage": "By saving a filter, you can enable or disable it conveniently and even assign a shortcut key to it.",
+  "@iinaFilterWindowSaveFilterMessage": {
+    "description": "IINA's \"8JN-kb-kGF.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowName": "Name:",
+  "@iinaFilterWindowName": {
+    "description": "IINA's \"IYf-IE-5cL.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowShortcutKey": "Shortcut key:",
+  "@iinaFilterWindowShortcutKey": {
+    "description": "IINA's \"M9z-ss-1Ma.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowPressAnyButton": "Press any button to record",
+  "@iinaFilterWindowPressAnyButton": {
+    "description": "IINA's \"jJk-0R-KQo.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowEditFilter": "Edit Filter",
+  "@iinaFilterWindowEditFilter": {
+    "description": "IINA's \"Dab-w9-6TY.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterWindowFilterStringLabel": "Filter string:",
+  "@iinaFilterWindowFilterStringLabel": {
+    "description": "IINA's \"t9F-EU-fKj.title\" (FilterWindowController.strings)."
+  },
+  "iinaFilterPresetCrop": "Crop",
+  "@iinaFilterPresetCrop": {
+    "description": "IINA's \"crop\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCropW": "Width (default: video width)",
+  "@iinaFilterPresetCropW": {
+    "description": "IINA's \"crop.w\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCropH": "Height (default: video height)",
+  "@iinaFilterPresetCropH": {
+    "description": "IINA's \"crop.h\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCropX": "Origin X (default: center)",
+  "@iinaFilterPresetCropX": {
+    "description": "IINA's \"crop.x\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCropY": "Origin Y (default: center)",
+  "@iinaFilterPresetCropY": {
+    "description": "IINA's \"crop.y\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpand": "Expand",
+  "@iinaFilterPresetExpand": {
+    "description": "IINA's \"expand\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandW": "Width (default: video width)",
+  "@iinaFilterPresetExpandW": {
+    "description": "IINA's \"expand.w\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandH": "Height (default: video height)",
+  "@iinaFilterPresetExpandH": {
+    "description": "IINA's \"expand.h\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandX": "Origin X (default: center)",
+  "@iinaFilterPresetExpandX": {
+    "description": "IINA's \"expand.x\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandY": "Origin Y (default: center)",
+  "@iinaFilterPresetExpandY": {
+    "description": "IINA's \"expand.y\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandAspect": "Expands to fit an aspect (e.g: 4/3)",
+  "@iinaFilterPresetExpandAspect": {
+    "description": "IINA's \"expand.aspect\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetExpandRound": "Rounds up to make divisible by this value",
+  "@iinaFilterPresetExpandRound": {
+    "description": "IINA's \"expand.round\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetSharpen": "Sharpen",
+  "@iinaFilterPresetSharpen": {
+    "description": "IINA's \"sharpen\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetSharpenMsize": "Matrix size",
+  "@iinaFilterPresetSharpenMsize": {
+    "description": "IINA's \"sharpen.msize\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetSharpenAmount": "Amount",
+  "@iinaFilterPresetSharpenAmount": {
+    "description": "IINA's \"sharpen.amount\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetBlur": "Blur",
+  "@iinaFilterPresetBlur": {
+    "description": "IINA's \"blur\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetBlurMsize": "Matrix size",
+  "@iinaFilterPresetBlurMsize": {
+    "description": "IINA's \"blur.msize\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetBlurAmount": "Amount",
+  "@iinaFilterPresetBlurAmount": {
+    "description": "IINA's \"blur.amount\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetDelogo": "Delogo",
+  "@iinaFilterPresetDelogo": {
+    "description": "IINA's \"delogo\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetDelogoW": "Width",
+  "@iinaFilterPresetDelogoW": {
+    "description": "IINA's \"delogo.w\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetDelogoH": "Height",
+  "@iinaFilterPresetDelogoH": {
+    "description": "IINA's \"delogo.h\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetDelogoX": "Origin X",
+  "@iinaFilterPresetDelogoX": {
+    "description": "IINA's \"delogo.x\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetDelogoY": "Origin Y",
+  "@iinaFilterPresetDelogoY": {
+    "description": "IINA's \"delogo.y\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetNegative": "Negative",
+  "@iinaFilterPresetNegative": {
+    "description": "IINA's \"negative\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetVflip": "Flip",
+  "@iinaFilterPresetVflip": {
+    "description": "IINA's \"vflip\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetHflip": "Mirror",
+  "@iinaFilterPresetHflip": {
+    "description": "IINA's \"hflip\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetLut3d": "3D LUT",
+  "@iinaFilterPresetLut3d": {
+    "description": "IINA's \"lut3d\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetLut3dFile": "File path (you can also drag & drop the file into the input box)",
+  "@iinaFilterPresetLut3dFile": {
+    "description": "IINA's \"lut3d.file\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetLut3dInterp": "Interpolation mode",
+  "@iinaFilterPresetLut3dInterp": {
+    "description": "IINA's \"lut3d.interp\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomMpv": "Custom (mpv)",
+  "@iinaFilterPresetCustomMpv": {
+    "description": "IINA's \"custom_mpv\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomMpvName": "Filter name",
+  "@iinaFilterPresetCustomMpvName": {
+    "description": "IINA's \"custom_mpv.name\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomMpvString": "Filter value",
+  "@iinaFilterPresetCustomMpvString": {
+    "description": "IINA's \"custom_mpv.string\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomFfmpeg": "Custom (FFmpeg)",
+  "@iinaFilterPresetCustomFfmpeg": {
+    "description": "IINA's \"custom_ffmpeg\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomFfmpegName": "Filter name",
+  "@iinaFilterPresetCustomFfmpegName": {
+    "description": "IINA's \"custom_ffmpeg.name\" (FilterPresets.strings)."
+  },
+  "iinaFilterPresetCustomFfmpegString": "Filter value",
+  "@iinaFilterPresetCustomFfmpegString": {
+    "description": "IINA's \"custom_ffmpeg.string\" (FilterPresets.strings)."
   }
 }

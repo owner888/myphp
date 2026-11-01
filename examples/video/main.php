@@ -22,7 +22,7 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\{PlayerSettings, Subtitles};
 use MyPHP\Plugins\Updater\{Options, Updater};
-use MyPHP\UI\{Content, Context, TextState, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
+use MyPHP\UI\{Content, Context, TextState, MediaPlayerFilters, MediaPlayerInspector, MediaPlayerMenus, MediaPlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
 require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
@@ -337,7 +337,7 @@ final class Players
     private static function front(): ?MediaPlayerState
     {
         $w = Window::focused();
-        if ($w !== null && $w === MediaPlayerInspector::window()) { return self::$lastActive?->get() ?? self::active()[1] ?? null; } // IINA's Inspector, a utility panel: the player stays the main window
+        if ($w !== null && ($w === MediaPlayerInspector::window() || in_array($w, MediaPlayerFilters::windows(), true))) { return self::$lastActive?->get() ?? self::active()[1] ?? null; } // IINA's Inspector, a utility panel, and its filters' windows: the player stays the main window
         return $w !== null && isset(self::$players[$w->id]) ? self::$players[$w->id][1] : null;
     }
 
@@ -366,7 +366,7 @@ final class Players
                 new MenuItem(role: 'close'),
             ]),
             new MenuItem(role: 'editMenu'), // Cmd+V, Cmd+C and the rest in the URL's field: a menu's key equivalents, as macOS has them
-            ...MediaPlayerMenus::menus($s), // Playback, Video, Audio, Subtitles
+            ...MediaPlayerMenus::menus($s, fn() => self::$lastActive?->get() ?? self::active()[1] ?? null), // Playback, Video, Audio, Subtitles; the filters' windows of the player last in front
             new MenuItem(role: 'window', submenu: [
                 new MenuItem(role: 'minimize'), new MenuItem(role: 'zoom'), MenuItem::separator(),
                 MediaPlayerMenus::inspector(fn() => self::$lastActive?->get() ?? self::active()[1] ?? null), // the first player's before one came in front, as IINA's lastActive MediaPlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),

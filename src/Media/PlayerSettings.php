@@ -206,6 +206,8 @@ final class PlayerSettings
         'openSubUsername' => '',
         'assrtToken' => '',
         'subLang' => [],
+        'savedVideoFilters' => [], // IINA's: {name, filterString, shortcutKey, shortcutKeyModifiers} each
+        'savedAudioFilters' => [],
     ];
 
     private static ?self $default = null;

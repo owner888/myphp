@@ -7196,6 +7196,47 @@ succeeds are told of, an empty line is none.
   IINA's help button (its wiki's page), nothing of shooter.cn's (IINA's
   SubtitleSourceView).
 
+## Video and audio filters (v1.140)
+
+- IINA's Video Filters and Audio Filters windows (`UI\MediaPlayerFilters`,
+  Video > Video Filters…, Shift+Cmd+F; Audio > Audio Filters…,
+  Shift+Cmd+G): 640 by 382 as IINA's xib, the filters on (#, the string,
+  edited by a double click, Save) over a bar of + and −, the saved filters
+  under them (a checkbox on while the filter is, name, string, key, edit
+  and delete). Their sheets are native sheets (child windows, modal):
+  New Filter (IINA's presets, `Media\FilterPresets`, each its parameters
+  as a field, a slider or a pop-up), Save Filter (a name and a key
+  recorded, IINA's KeyRecordView through `Context::takeKeys`), Edit
+  Filter. They show the player last in front (`MediaPlayerMenus::menus`'
+  `$lastActive`) and leave it the menus, as the Inspector.
+- A filter is mpv's string (`Media\Filter`, IINA's MPVFilter: a label,
+  a name, parameters by place or by name, a lavfi's graph; the same
+  whatever its parameters' order). The player's lists
+  (`MediaPlayerState::filters`, `setFilters`, `addFilter`, `removeFilter`,
+  `toggleFilter`, `filterOn`) stay as films change, as mpv's vf and af;
+  the key bindings' `vf` and `af` (set, add, pre, remove, toggle, clr) set
+  them. Saved filters are the settings' `savedVideoFilters` and
+  `savedAudioFilters`, IINA's dictionaries; each is an item of Saved Video
+  Filters or Saved Audio Filters, its key the one saved, checked while it
+  is on.
+- MyPHP has no mpv nor FFmpeg: `Media\VideoFilters` does the video's of
+  IINA's presets, by mpv's and FFmpeg's names. crop and expand (pad) give
+  the part of the decoded picture shown (`$part`), which `Picture::fit`
+  lays the layer out by (the decoded picture about what shows, turned
+  with it) and `Player::filteredSize` sizes the window by; vflip and
+  hflip reverse it with Video > Flip's; unsharp, lutrgb of negval
+  (negate), lut3d of a .cube (`Media\Lut3d`) and delogo are Core Image's
+  filters of the layer after the video equalizer's
+  (`Renderers::setPictureFilters`: CIUnsharpMask, CIColorInvert,
+  CIColorCube, CIMaskedVariableBlur of the logo's rectangle), in the
+  layer's points (`Player::layerShown`). `Media\AudioFilters` does the
+  audio's: volume, equalizer, bass and treble, highpass and lowpass
+  (af_biquads.c's biquads, `Native\Biquads`, which IINA's equalizer runs
+  on now), pan; `Native\AudioChain` runs them over the PCM after the
+  equalizer and the gain, as the equalizer's audio is decoded. A filter
+  of another name or of an expression throws; the window shows IINA's
+  "Error occurred when setting filters", the list left as it was.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
