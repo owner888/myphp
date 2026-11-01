@@ -346,7 +346,7 @@ final class MoviePlayer
         return $drawn["$name/$size/$weight/$rgb/{$c->scale}"] ??= Image::symbol($name, $size, $rgb, $weight, $c->scale);
     }
 
-    /** SF Symbol $name, white (or $rgb) at $alpha. @internal MoviePlayerMusic */
+    /** SF Symbol $name, white (or $rgb) at $alpha. @internal MoviePlayerMusic, MoviePlayerInspector */
     public static function sf(Context $c, string $name, float $size, float $alpha = 1.0, float $weight = 0.0, ?int $rgb = null): Node
     {
         $img = self::symbol($c, $name, $size, $weight, $rgb);

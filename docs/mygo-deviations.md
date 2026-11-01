@@ -1732,9 +1732,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   `MenuItem::setSubmenu` are myphp's; mygo has no film player, and its
   menu items neither alternates nor a call as they open. Of IINA's items,
   left out so far: Video's Lock Window Aspect Ratio, Deinterlace,
-  Delogo, Crop's Custom and the video filters; Audio's Audio Device and
-  the audio filters; Window's Inspector; Find Online Subtitles from has
-  OpenSubtitles alone. The film's picture is its one track, shown always:
+  Delogo, Crop's Custom and the video filters; the audio filters; Find
+  Online Subtitles from has OpenSubtitles alone. The film's picture is its one track, shown always:
   Cycle Video Tracks and Video Track's <None> are disabled, as is <None>
   of the sound. IINA's hidden menu of a second key of an item's is left
   out: the window's keys carry out every binding. A key without Command
@@ -1752,6 +1751,21 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   switch shows for a film its container says is PQ or HLG (mpv reads the
   decoder's). mpv's video-zoom and video-pan, of no IINA menu or panel,
   are left out.
+- **The Inspector and the audio device** (v1.137):
+  `UI\MoviePlayerInspector` (and its `window()`), `MoviePlayerMenus::inspector`,
+  `MoviePlayerCommands::propertyValue`, `Player::bitrate`, `fileFormat`,
+  `fileSize`, `MoviePlayerState::setAudioDevice` and `$audioDevice` are
+  myphp's, as IINA's Inspector and Audio > Audio Device; mygo has no film
+  player. The Inspector is a window of the HUD's material, not IINA's
+  utility panel: it does not float, nor hide as the app does (the menus
+  stay the player's while it is in front, as the panel's). mpv's
+  statistics the player has no means to know are N/A: the A/V sync,
+  dropped and mistimed frames, the estimated frame rates, the pixel
+  format, the audio's decoded format, a file's comment and editions, the
+  colorspace beyond whether it is HDR; Forced is never on (no track says
+  it). The watch table takes the mpv properties the player gives
+  (`propertyValue`), Error of the rest. The codecs' long names are
+  FFmpeg's, as mpv gives them, of the codecs the player plays.
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

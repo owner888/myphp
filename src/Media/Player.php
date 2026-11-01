@@ -1585,6 +1585,7 @@ final class Player
                 break;
             }
             if ($p->track === $this->video || $p->track === $this->audio) {
+                $this->counted($p->track === $this->video ? 'video' : 'audio', $p);
                 $this->readFrom ??= $p->time;
                 $this->readTo = max($this->readTo, $p->time + $p->duration);
             }
@@ -1602,6 +1603,60 @@ final class Player
         $this->out->pump($this->drained); // at the end, what the software decoder holds
         $this->give('video');
         $this->give('audio');
+    }
+
+    /** @var array{video: list<array{0: float, 1: int}>, audio: list<array{0: float, 1: int}>} the packets read of the last BITRATE_SPAN seconds, their times and sizes */
+    private array $read = ['video' => [], 'audio' => []];
+    private const BITRATE_SPAN = 1.5;
+
+    /** Counts packet $p, of the $k shown, in its bitrate: those of the span before it kept, a seek's earlier ones gone. */
+    private function counted(string $k, Packet $p): void
+    {
+        $bytes = $p->data !== '' ? strlen($p->data) : ($p->sample === null ? 0 : \MyPHP\Native\CoreMedia::size($p->sample->buffer));
+        $kept = [];
+        foreach ($this->read[$k] as $r) {
+            if ($r[0] < $p->time && $r[0] >= $p->time - self::BITRATE_SPAN) { $kept[] = $r; }
+        }
+        $kept[] = [$p->time, $bytes];
+        $this->read[$k] = $kept;
+    }
+
+    /**
+     * The bitrate of the video or the audio shown ($kind 'video', 'audio'),
+     * bits a second, of the packets read in the last second and a half of
+     * the film (mpv's video-bitrate and audio-bitrate, of the packets
+     * demuxed); null before two of them.
+     */
+    public function bitrate(string $kind): ?float
+    {
+        $r = $this->read[$kind] ?? [];
+        if (count($r) < 2) { return null; }
+        $span = $r[count($r) - 1][0] - $r[0][0];
+        return $span > 0 ? array_sum(array_column(array_slice($r, 0, -1), 1)) * 8 / $span : null;
+    }
+
+    /** The container's format as mpv's file-format names it (FFmpeg's demuxer's): "matroska,webm", "mov,mp4,m4a,3gp,3g2,mj2", "mpegts", "hls"; of a file AVFoundation reads, its extension's. */
+    public function fileFormat(): string
+    {
+        return match (true) {
+            $this->source instanceof Matroska => 'matroska,webm',
+            $this->source instanceof Mp4, $this->source instanceof Merged => 'mov,mp4,m4a,3gp,3g2,mj2',
+            $this->source instanceof Ts => 'mpegts',
+            $this->source instanceof Hls => 'hls',
+            default => match ($ext = strtolower(pathinfo($this->path, PATHINFO_EXTENSION))) {
+                'mp4', 'm4v', 'm4a', 'mov', '3gp' => 'mov,mp4,m4a,3gp,3g2,mj2',
+                'mp3' => 'mp3', 'flac' => 'flac', 'ogg', 'oga', 'opus' => 'ogg', 'wav' => 'wav', 'aac' => 'aac', 'aif', 'aiff' => 'aiff',
+                default => $ext,
+            },
+        };
+    }
+
+    /** The size of the file it plays in bytes (mpv's file-size), null of one over the network. */
+    public function fileSize(): ?int
+    {
+        if ($this->remote()) { return null; }
+        $n = @filesize($this->path);
+        return $n === false ? null : $n;
     }
 
     /** Gives the renderer of the $k queued ('video', 'audio') its packets while it takes them. */

@@ -1452,6 +1452,17 @@ final class MoviePlayerState
         if ($p !== null) { $this->say(self::clock($p->time()) . ' / ' . self::clock($p->duration())); }
     }
 
+    /** Audio > Audio Device's choice, mpv's name of it (auto, coreaudio/<its unique ID>); null till one is made, the settings' (IINA's audio-device of the player, which the settings' starts as). */
+    public ?string $audioDevice = null;
+
+    /** Audio > Audio Device: the sound of this player on device $name, mpv's name of it (IINA's setAudioDevice). */
+    public function setAudioDevice(string $name): void
+    {
+        $this->audioDevice = $name;
+        if ($this->player !== null) { $this->applyAudio($this->player); }
+        $this->changed();
+    }
+
     /** The volume's most, 1 to 10: IINA's maximum volume (100% to 1000%), the sliders' end. */
     public function maxVolume(): float
     {
@@ -1462,7 +1473,7 @@ final class MoviePlayerState
     private function applyAudio(Player $p): void
     {
         $set = $this->settings();
-        $device = $set->get('audioDevice');
+        $device = $this->audioDevice ?? $set->get('audioDevice');
         $p->setAudioDevice($device === 'auto' ? null : preg_replace('~^coreaudio/~', '', $device)); // mpv's names of IINA's setting, the system's unique ID after its driver
         $p->setReplayGain($set->get('replayGain'), (float)$set->get('replayGainPreamp'), $set->get('replayGainClip'), (float)$set->get('replayGainFallback'));
     }

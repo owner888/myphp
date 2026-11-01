@@ -498,6 +498,14 @@ final class CoreMedia
         return $v === null || ObjC::addr($v) !== ObjC::addr($c->kCFBooleanTrue);
     }
 
+    /** How many bytes sample buffer $sb holds, as stored. */
+    public static function size(CData $sb): int
+    {
+        $c = self::c();
+        $bb = $c->CMSampleBufferGetDataBuffer($sb);
+        return $bb === null ? 0 : (int)$c->CMBlockBufferGetDataLength($bb);
+    }
+
     /** The bytes of sample buffer $sb, as stored. */
     public static function bytes(CData $sb): string
     {

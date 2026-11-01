@@ -22,7 +22,7 @@ declare(strict_types=1);
 use MyPHP\{App, Dialog, FileDropEvent, Menu, MenuItem, OpenDialogOptions, Theme, ThemeSource, Window, WindowOptions};
 use MyPHP\Media\{PlayerSettings, Subtitles};
 use MyPHP\Plugins\Updater\{Options, Updater};
-use MyPHP\UI\{Content, Context, TextState, MoviePlayerMenus, MoviePlayerState};
+use MyPHP\UI\{Content, Context, TextState, MoviePlayerInspector, MoviePlayerMenus, MoviePlayerState};
 
 // MyPHP from inside the built app, else from this checkout.
 require_once is_dir(__DIR__ . '/myphp') ? __DIR__ . '/myphp/src/autoload.php' : __DIR__ . '/../../src/autoload.php';
@@ -157,7 +157,7 @@ final class Players
         $w->on('fileDrop', fn(FileDropEvent $e) => self::drop($s, $e->paths));
         $id = $w->id;
         $w->on('closed', function () use ($id, $s): void { $s->player?->pause(); unset(self::$players[$id]); self::syncMenu(); });
-        $w->on('focus', fn() => self::syncMenu());
+        $w->on('focus', function () use ($s): void { self::$lastActive = \WeakReference::create($s); self::syncMenu(); });
         $w->on('blur', fn() => App::later(fn() => self::syncMenu())); // the window in front then
         return self::$players[$id] = [$w, $s];
     }
@@ -330,10 +330,14 @@ final class Players
         if (MoviePlayerMenus::key(self::front()) !== self::$menuKey) { self::menu(); }
     }
 
+    /** The player whose window was last in front (IINA's PlayerCore.lastActive): the Inspector's. */
+    private static ?\WeakReference $lastActive = null;
+
     /** The player of the window in front, null for another window. */
     private static function front(): ?MoviePlayerState
     {
         $w = Window::focused();
+        if ($w !== null && $w === MoviePlayerInspector::window()) { return self::$lastActive?->get() ?? self::active()[1] ?? null; } // IINA's Inspector, a utility panel: the player stays the main window
         return $w !== null && isset(self::$players[$w->id]) ? self::$players[$w->id][1] : null;
     }
 
@@ -364,7 +368,8 @@ final class Players
             new MenuItem(role: 'editMenu'), // Cmd+V, Cmd+C and the rest in the URL's field: a menu's key equivalents, as macOS has them
             ...MoviePlayerMenus::menus($s), // Playback, Video, Audio, Subtitles
             new MenuItem(role: 'window', submenu: [
-                new MenuItem(role: 'minimize'), new MenuItem(role: 'zoom'), MenuItem::separator(), MoviePlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),
+                new MenuItem(role: 'minimize'), new MenuItem(role: 'zoom'), MenuItem::separator(),
+                MoviePlayerMenus::inspector(fn() => self::$lastActive?->get() ?? self::active()[1] ?? null), // the first player's before one came in front, as IINA's lastActive MoviePlayerMenus::logViewer(), MenuItem::separator(), new MenuItem(role: 'front'),
             ]),
         ]));
     }

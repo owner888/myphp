@@ -126,6 +126,7 @@ final class PlayerSettings
         'hardwareDecoder' => 1, // 0 disabled, 1 auto
         'enableLiveText' => false,
         'enableHdrSupport' => true,
+        'watchProperties' => [], // the Inspector's table of mpv's properties watched (IINA's)
         // Audio
         'audioDevice' => 'auto', // mpv's name of it: auto, or coreaudio/<its unique ID>
         'audioDeviceDesc' => 'Autoselect device', // and its description, shown where it is missing

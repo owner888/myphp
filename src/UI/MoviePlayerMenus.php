@@ -14,7 +14,7 @@ use MyPHP\Window;
 
 /**
  * IINA's menus of the player (MenuController): Playback, Video, Audio and
- * Subtitles, File's items of the film and Window's Log Viewer, of the
+ * Subtitles, File's items of the film and Window's Inspector and Log Viewer, of the
  * player $s, which the app puts in its menu bar, built again for another
  * player or other key bindings (key()). Their titles, checks and lists
  * follow the player as they open (IINA's menuWillOpen); the items IINA
@@ -23,8 +23,7 @@ use MyPHP\Window;
  * Of no player (null) they are disabled.
  *
  * Not here yet: Video's Lock Window Aspect Ratio, Deinterlace,
- * Delogo, Crop's Custom and the filters; Audio's Audio Device and filters;
- * Window's Inspector.
+ * Delogo, Crop's Custom and the filters; Audio's filters.
  */
 final class MoviePlayerMenus
 {
@@ -310,6 +309,8 @@ final class MoviePlayerMenus
             $delay('decreaseAudioDelay', 'iinaMenuAudioDelayDown'),
             $delay('decreaseAudioDelaySlightly', 'iinaMenuAudioDelayDown'),
             $it('resetAudioDelay', self::t('iinaMenuResetAudioDelay'), fn() => $s->setAudioDelay(0.0)),
+            $sep(),
+            self::list($s, 'audioDevice', self::t('iinaMenuAudioDevice'), fn() => self::audioDevices($s)),
         ];
     }
 
@@ -418,6 +419,30 @@ final class MoviePlayerMenus
                 disabled: $type === Track::VIDEO || ($type === Track::AUDIO && !\MyPHP\Media\Player::playable($t)), checked: $t === $shown);
         }
         return $items;
+    }
+
+    /**
+     * Audio > Audio Device: mpv's "auto" and the system's outputs, as IINA
+     * titles them ("[description] name"), the one the player plays on
+     * checked (IINA's updateAudioDevice).
+     * @return list<MenuItem>
+     */
+    private static function audioDevices(MoviePlayerState $s): array
+    {
+        $now = $s->audioDevice ?? $s->settings()->get('audioDevice');
+        $devices = ['auto' => 'Autoselect device'];
+        foreach (\MyPHP\Native\AudioDevices::outputs() as $uid => $name) { $devices["coreaudio/$uid"] = $name; }
+        $items = [];
+        foreach ($devices as $name => $desc) {
+            $items[] = new MenuItem("[$desc] $name", fn() => $s->setAudioDevice($name), type: MenuItem::CHECKBOX, checked: $name === $now);
+        }
+        return $items;
+    }
+
+    /** Window's Inspector (Cmd+I), of the player $player gives (MoviePlayerInspector::open). @param Closure(): ?MoviePlayerState $player */
+    public static function inspector(Closure $player): MenuItem
+    {
+        return new MenuItem(self::t('iinaMenuInspector'), fn() => MoviePlayerInspector::open($player), 'Cmd+I', id: 'iina.inspector');
     }
 
     /** Video > Aspect Ratio (Default and IINA's ratios) or Crop (None and them), the one set checked. @return list<MenuItem> */

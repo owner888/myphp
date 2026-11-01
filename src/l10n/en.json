@@ -4920,5 +4920,225 @@
   "iinaQuicksettingHdr": "HDR",
   "@iinaQuicksettingHdr": {
     "description": "IINA's \"quicksetting.hdr\"."
+  },
+  "iinaInspectorVideo": "VIDEO",
+  "@iinaInspectorVideo": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorFormat": "Format:",
+  "@iinaInspectorFormat": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorCodec": "Codec:",
+  "@iinaInspectorCodec": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorHwDecoder": "Hw Decoder:",
+  "@iinaInspectorHwDecoder": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorPrimaries": "Primaries:",
+  "@iinaInspectorPrimaries": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorColorspace": "Colorspace:",
+  "@iinaInspectorColorspace": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorPixelFormat": "Pixel Format:",
+  "@iinaInspectorPixelFormat": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDriver": "Driver:",
+  "@iinaInspectorDriver": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorSize": "Size:",
+  "@iinaInspectorSize": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorBitRate": "Bit Rate:",
+  "@iinaInspectorBitRate": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorFPS": "FPS:",
+  "@iinaInspectorFPS": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorAudio": "AUDIO",
+  "@iinaInspectorAudio": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorChannels": "Channels:",
+  "@iinaInspectorChannels": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorSampleRate": "Sample Rate:",
+  "@iinaInspectorSampleRate": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTrack": "Track:",
+  "@iinaInspectorTrack": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorID": "ID:",
+  "@iinaInspectorID": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorProperties": "Properties:",
+  "@iinaInspectorProperties": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDefault": "Default",
+  "@iinaInspectorDefault": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorForced": "Forced",
+  "@iinaInspectorForced": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorSelected": "Selected",
+  "@iinaInspectorSelected": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorExternal": "External",
+  "@iinaInspectorExternal": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorSourceID": "Source ID:",
+  "@iinaInspectorSourceID": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTitle": "Title:",
+  "@iinaInspectorTitle": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorLanguage": "Language:",
+  "@iinaInspectorLanguage": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTrackFilePath": "File Path:",
+  "@iinaInspectorTrackFilePath": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDecoder": "Decoder:",
+  "@iinaInspectorDecoder": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorFilePath": "File path:",
+  "@iinaInspectorFilePath": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorComment": "Comment:",
+  "@iinaInspectorComment": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDuration": "Duration:",
+  "@iinaInspectorDuration": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorChapters": "Chapters:",
+  "@iinaInspectorChapters": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorEditions": "Editions:",
+  "@iinaInspectorEditions": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorAVSyncDiff": "A/V Sync Diff:",
+  "@iinaInspectorAVSyncDiff": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTotalAVSync": "Total A/V Sync:",
+  "@iinaInspectorTotalAVSync": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDroppedFrames": "Dropped Frames:",
+  "@iinaInspectorDroppedFrames": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorMistimedFrames": "Mistimed Frames:",
+  "@iinaInspectorMistimedFrames": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorDisplayFPS": "Display FPS:",
+  "@iinaInspectorDisplayFPS": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorEstimatedOutputFPS": "Estimated Output FPS:",
+  "@iinaInspectorEstimatedOutputFPS": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorEstimatedDispFPS": "Estimated Disp FPS",
+  "@iinaInspectorEstimatedDispFPS": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorWatch": "Watch",
+  "@iinaInspectorWatch": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorName": "Name",
+  "@iinaInspectorName": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorValue": "Value",
+  "@iinaInspectorValue": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTabGeneral": "General",
+  "@iinaInspectorTabGeneral": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTabTracks": "Tracks",
+  "@iinaInspectorTabTracks": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTabFile": "File",
+  "@iinaInspectorTabFile": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorTabStatus": "Status",
+  "@iinaInspectorTabStatus": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaInspectorWindowTitle": "Inspector",
+  "@iinaInspectorWindowTitle": {
+    "description": "IINA's Inspector window, as IINA says it."
+  },
+  "iinaGeneralNa": "N/A",
+  "@iinaGeneralNa": {
+    "description": "IINA's \"general.na\"."
+  },
+  "iinaInspectorError": "Error",
+  "@iinaInspectorError": {
+    "description": "IINA's \"inspector.error\"."
+  },
+  "iinaTrackVideo": "Video",
+  "@iinaTrackVideo": {
+    "description": "IINA's \"track.video\"."
+  },
+  "iinaTrackAudio": "Audio",
+  "@iinaTrackAudio": {
+    "description": "IINA's \"track.audio\"."
+  },
+  "iinaTrackSub": "Subtitle",
+  "@iinaTrackSub": {
+    "description": "IINA's \"track.sub\"."
+  },
+  "iinaAlertAddWatchTitle": "Add Watch Property",
+  "@iinaAlertAddWatchTitle": {
+    "description": "IINA's \"alert.add_watch.title\"."
+  },
+  "iinaAlertAddWatchMessage": "Please enter a valid mpv property name.",
+  "@iinaAlertAddWatchMessage": {
+    "description": "IINA's \"alert.add_watch.message\"."
+  },
+  "iinaMenuInspector": "Inspector",
+  "@iinaMenuInspector": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuAudioDevice": "Audio Device",
+  "@iinaMenuAudioDevice": {
+    "description": "An item of IINA's menus, as IINA says it."
   }
 }

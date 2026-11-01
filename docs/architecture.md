@@ -7075,6 +7075,38 @@ succeeds are told of, an empty line is none.
   window as large as the screen's visible frame takes, larger as well as
   smaller, as IINA's `shrink(toSize:)` fits; until v1.136 it only shrank.
 
+## IINA's Inspector and the audio device (v1.137)
+
+- `UI\MoviePlayerInspector` is IINA's Inspector, Window > Inspector
+  (Cmd+I): a window of the HUD's material (`vibrancy: 'hud'`, its
+  content `themed(Theme::dark())`) of 456 by 481 under a compact bar of
+  its title and the tabs General, Tracks, File and Status, each laid out
+  at the xib's places (labels 11 bold, values 11, N/A in the disabled
+  text's color where nothing is known, IINA's setLabelColor). It shows
+  the player whose window was last in front (examples/video's
+  `$lastActive`, IINA's PlayerCore.lastActive, the first player's before
+  one came in front), built again each second (`Context::after(1)`,
+  IINA's timer). In front, it leaves the menus the player's
+  (`MoviePlayerInspector::window()`), as IINA's utility panel leaves the
+  player the main window.
+- What it shows is mpv's: codecs by mpv's short names and FFmpeg's long
+  ones; `hwdec-current` videotoolbox or no; the primaries and gamma of
+  the container's H.273 codes, mpv's guess of a picture that says none;
+  the drivers avfoundation (mpv's vo and ao of the AVSampleBuffer layer
+  and renderer the player uses); channel layouts by mpv's names;
+  `Player::bitrate` (the packets read in the last 1.5 s of the film, mpv's
+  video-bitrate and audio-bitrate), `fileFormat` (FFmpeg's demuxers'
+  names) and `fileSize`; the display's frame rate the screen's
+  `maximumFramesPerSecond`.
+- The watch table: the settings' `watchProperties`, added by name (IINA's
+  prompt) and removed when one is chosen; a value is
+  `MoviePlayerCommands::propertyValue`, mpv's getString of the properties
+  the player gives (yes/no, numbers of six decimals), Error of the rest.
+- Audio > Audio Device: "[Autoselect device] auto" and each output as IINA
+  titles mpv's devices, the player's checked; a choice is the player's
+  (`MoviePlayerState::$audioDevice`, mpv's audio-device), the settings'
+  preferred device until then.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

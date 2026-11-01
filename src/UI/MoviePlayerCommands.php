@@ -105,6 +105,58 @@ final class MoviePlayerCommands
         };
     }
 
+    /**
+     * mpv's property $prop of player $s as mpv's getString gives it (the
+     * Inspector's watch table): yes or no, a number of six decimals, a
+     * string; null for one the player has no means to give (IINA's Error).
+     * @internal MoviePlayerInspector
+     */
+    public static function propertyValue(MoviePlayerState $s, string $prop): ?string
+    {
+        $p = $s->player;
+        if ($p === null) { return null; }
+        $yes = fn(bool $b): string => $b ? 'yes' : 'no';
+        $num = fn(float $v): string => sprintf('%.6f', $v);
+        $l = $s->playlist;
+        return match ($prop) {
+            'path' => $p->path(),
+            'filename' => basename($p->path()),
+            'media-title' => $p->title(),
+            'file-format' => $p->fileFormat(),
+            'file-size' => ($n = $p->fileSize()) === null ? null : (string)$n,
+            'duration' => $num($p->duration()),
+            'time-pos' => $num($p->time()),
+            'time-remaining' => $num(max(0.0, $p->duration() - $p->time())),
+            'percent-pos' => $p->duration() > 0 ? $num($p->time() / $p->duration() * 100) : null,
+            'pause' => $yes(!$p->playing()),
+            'speed' => $num($p->rate()),
+            'volume' => $num($s->volume * 100),
+            'mute' => $yes($p->muted()),
+            'audio-delay' => $num($p->audioDelay()),
+            'sub-delay' => $num($p->subtitleDelay()),
+            'sub-scale' => $num($s->subScale),
+            'sub-visibility' => $yes($s->subtitlesVisible),
+            'secondary-sub-visibility' => $yes($s->secondarySubtitlesVisible),
+            'width' => $p->videoTrack() === null ? null : (string)$p->size()[0],
+            'height' => $p->videoTrack() === null ? null : (string)$p->size()[1],
+            'chapter' => $p->chapters() === [] ? null : (string)$p->chapter(),
+            'chapters' => (string)count($p->chapters()),
+            'playlist-pos' => $l === null ? '-1' : (string)$l->index(),
+            'playlist-count' => (string)($l?->count() ?? 0),
+            'loop-file' => $s->loop === 'file' ? 'inf' : 'no',
+            'loop-playlist' => $s->loop === 'playlist' ? 'inf' : 'no',
+            'ontop' => $yes($s->onTop),
+            'fullscreen' => $yes($s->fullScreen()),
+            'hwdec-current' => $p->videoTrack() === null ? null : ($p->hardwareDecoding() ? 'videotoolbox' : 'no'),
+            'video-rotate' => (string)$p->rotation(),
+            'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
+            'video-bitrate' => ($b = $p->bitrate('video')) === null ? null : (string)(int)round($b),
+            'audio-bitrate' => ($b = $p->bitrate('audio')) === null ? null : (string)(int)round($b),
+            'current-vo', 'current-ao' => 'avfoundation',
+            default => null,
+        };
+    }
+
     /** The window's scale: its width over the film's. */
     private static function windowScale(Context $c, Player $p): float
     {
