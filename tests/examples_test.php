@@ -803,3 +803,17 @@ $a->step(60);
 $t->frame();
 [$r, $limit] = $cgEnd();
 check($r[1] + $r[3] <= $limit, 'chat-glow: the reply that came at once in view at once: ' . json_encode([$r, $limit]));
+
+// wavelength (mygo's examples/video): the background plays behind the content, and the button pauses it and plays it again; on macOS, which decodes the GIF.
+if (PHP_OS_FAMILY === 'Darwin') {
+    [$view, $s] = Headless::load('wavelength');
+    same([192, 108], $s->waves->size(), 'the clip is 192 by 108');
+    $t = new Headless($view, 640, 360);
+    $t->frame();
+    check($t->byText('Wavelength') !== null && $s->waves->playing() && $s->waves->loop(), 'the title over the clip, playing, looping');
+    $t->clickText('Pause'); $t->frame();
+    check(!$s->waves->playing(), 'Pause holds the clip');
+    $t->clickText('Play'); $t->frame();
+    check($s->waves->playing(), 'Play goes on');
+    $s->waves->close();
+}

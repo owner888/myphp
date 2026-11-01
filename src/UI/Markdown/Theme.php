@@ -42,6 +42,8 @@ final class Theme
         public ?array $strong = null,
         /** The weight of strong text: 600. */
         public int $strongWeight = 0,
+        /** The least weight of link text, so links stand out among prose without bringing strong text down to it: 0 for none (mygo's LinkWeight). */
+        public int $linkWeight = 0,
         /** Code spans' color, with $codeBackground behind them; $codeSize their size in ems: 0.875. */
         public ?array $code = null,
         public ?array $codeBackground = null,

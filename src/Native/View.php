@@ -23,6 +23,9 @@ use MyPHP\UI\{TextInputRange, Input, Key, TextState};
  */
 final class View
 {
+    /** The selectors of the editing roles, by the names the runtime takes them by (mygo's contextSelectors). */
+    private const EDIT_SELECTORS = ['cut:' => 'cut', 'copy:' => 'copy', 'paste:' => 'paste', 'pasteAsPlainText:' => 'pasteAndMatchStyle',
+        'delete:' => 'delete', 'selectAll:' => 'selectAll', 'undo:' => 'undo', 'redo:' => 'redo'];
     private const TRACKING = 0x01 | 0x02 | 0x40 | 0x200; // enter/exit, moved, while the app is active, visible rect: as mygo's surface tracks, an inactive app's hover staying where the last event left it
     private const NOT_FOUND = PHP_INT_MAX; // NSNotFound
     /** @var array<int, Input> by view address */
@@ -218,13 +221,22 @@ final class View
             'copy:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'copy')],
             'cut:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'cut')],
             'paste:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'paste')],
+            'pasteAsPlainText:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'pasteAndMatchStyle')],
             'undo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'undo')],
             'redo:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'redo')],
             'delete:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'delete')],
             // A frame some time from now (caret blink): see wake().
             'wake:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) { Metal::requestFrame($self, 1, self::$wakeRepaints[ObjC::addr($self)] ?? false); }],
             'selectAll:' => ['v@:@', 'v(ppp)', fn($self, $cmd, $sender) => self::command($self, 'selectAll')],
-            'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => true],
+            // An editing role's item is enabled while the focus would act on it (mygo's SurfaceCommandEnabled); native UI does not speak.
+            'validateMenuItem:' => ['B@:@', 'b(ppp)', function ($self, $cmd, $item): bool {
+                $action = ObjC::selName(ObjC::msg('p:', $item, 'action'));
+                if ($action === 'startSpeaking:' || $action === 'stopSpeaking:') { return false; }
+                $name = self::EDIT_SELECTORS[$action] ?? null;
+                if ($name === null) { return true; }
+                $enabled = self::$inputs[ObjC::addr($self)]->commandEnabled ?? null;
+                return $enabled !== null && $enabled($name);
+            }],
             // NSTextInputClient
             'hasMarkedText' => ['B@:', 'b(pp)', function ($self, $cmd) {
                 $input = self::$inputs[ObjC::addr($self)];

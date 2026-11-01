@@ -114,9 +114,16 @@ final class Dialog
             ObjC::msg('v:p', $box, 'setTitle:', ObjC::str($o->checkboxLabel));
             ObjC::msg('v:l', $box, 'setState:', $o->checkboxChecked ? 1 : 0);
         }
-        $code = self::runAlert($alert, $o->parent, $o->cancelButton >= 0 ? $o->cancelButton : self::cancelOf($buttons));
+        $code = self::runAlert($alert, $o->parent, self::cancelFor($o->cancelButton, $buttons));
         $checked = $o->checkboxLabel !== '' && ObjC::msg('l:', ObjC::msg('p:', $alert, 'suppressionButton'), 'state') === 1;
         return new MessageResult($code - self::FIRST_BUTTON, $checked);
+    }
+
+    /** @internal the button Escape activates for MessageOptions' $cancel: it, or for -1 the first labeled Cancel or No, else the first; -1 for none (NO_CANCEL) (mygo's Message). @param string[] $buttons */
+    public static function cancelFor(int $cancel, array $buttons): int
+    {
+        if ($cancel === MessageOptions::NO_CANCEL) { return -1; }
+        return $cancel >= 0 ? $cancel : max(self::cancelOf($buttons), 0);
     }
 
     /** @internal the first of $buttons labeled Cancel or No, in English or the app's language, or -1 (mygo's Message). @param string[] $buttons */

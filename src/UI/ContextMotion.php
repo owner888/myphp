@@ -578,4 +578,10 @@ trait ContextMotion
             $this->runtime->instantFrame = $this->runtime->frameNumber;
         }
     }
+
+    /** Whether this frame shows animated values at once (disableAnimations): a view that animates a value of its own shows its change settled in the same frames (mygo's Instant). */
+    public function instant(): bool
+    {
+        return $this->runtime?->instant() ?? false;
+    }
 }

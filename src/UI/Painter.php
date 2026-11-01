@@ -1184,7 +1184,7 @@ final class Painter
         if ($n->scroll !== null) {
             $list->popClip();
             // The thumbs show while the pointer is over the container or drags one.
-            if ($rt !== null && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
+            if ($rt !== null && !$n->hideScrollbars && (($dragging = $rt->dragging($n->scroll)) || $rt->hovered($n->id))) {
                 $r = Scrollbar::track([$n->x, $n->y, $n->w, $n->h], $n->barInsets);
                 $thumb = $n->scrollY ? Scrollbar::thumbOf($r, $n->scroll->extent(), $t->scrollbarWidth, false, $n->rtl) : null;
                 if ($thumb !== null) { self::thumbFill($list, $thumb, false, $dragging, $t->scrollbar, $t->scrollbarAlpha); }
@@ -1838,14 +1838,14 @@ final class Painter
             return [$spans[$k]->color ?? $color, ($spans[$k]->alpha ?? 1.0) * $nodeAlpha];
         }, 0.0, $ts?->outline === null ? $blur : 0.0);
         $sys = $text->textSystem(); $scale = $text->scale();
-        $base = [$ts?->underline ?? false, $ts?->wavy ?? false, $ts?->strike ?? false, $ts?->decoColor, $ts?->decoThick ?? 0.0];
+        $base = [$ts?->underline ?? false, $ts?->wavy ?? false, $ts?->strike ?? false, $ts?->decoColor, $ts?->decoThick ?? 0.0, $ts?->dotted ?? false];
         foreach ($l->lines as $li => $line) {
             foreach ($runs($line) as [$k, $i, $j]) {
                 if ($k < 0 || $spans[$k]->ghost) {
                     continue;
                 }
                 $sp = $spans[$k];
-                $d = [$sp->underline || $sp->wavyUnderline, $sp->wavyUnderline, $sp->strikethrough, $sp->decorationColor ?? $base[3], $sp->decorationThickness ?? $base[4]];
+                $d = [$sp->underline || $sp->wavyUnderline || $sp->dottedUnderline, $sp->wavyUnderline, $sp->strikethrough, $sp->decorationColor ?? $base[3], $sp->decorationThickness ?? $base[4], $sp->dottedUnderline];
                 if ($d[0] || $d[2]) {
                     self::decorationRun($list, $sys, $l, $li, $i, $j, $x, $y, $scale, $d, $sp->color ?? $color, ($sp->alpha ?? 1.0) * $nodeAlpha);
                 }
@@ -1858,11 +1858,11 @@ final class Painter
 
     /**
      * The underline and strikethrough of $d (underline, wavy, strike,
-     * color, thickness) along glyphs [i, j) of line $li of $l from (x, y),
-     * where the fonts place them, in $d's color or $rgb (mygo's
+     * color, thickness, dotted) along glyphs [i, j) of line $li of $l from
+     * (x, y), where the fonts place them, in $d's color or $rgb (mygo's
      * decorationRun); a wavy underline follows the underline, at least a
-     * pixel thick.
-     * @param array{0: bool, 1: bool, 2: bool, 3: ?int, 4: float} $d
+     * pixel thick, and a dotted one is dots as thick as it.
+     * @param array{0: bool, 1: bool, 2: bool, 3: ?int, 4: float, 5: bool} $d
      */
     private static function decorationRun(DisplayList $list, \MyPHP\Text\System $sys, \MyPHP\Text\Layout $l, int $li, int $i, int $j, float $x, float $y, float $scale, array $d, int $rgb, float $alpha): void
     {
@@ -1877,6 +1877,10 @@ final class Painter
                 }
                 if ($kind === \MyPHP\Text\System::UNDERLINE && $d[1]) {
                     self::wave($list, $x0, $x1, ($top + $bottom) / 2, max($bottom - $top, 1 / $scale), $rgb, $alpha);
+                    continue;
+                }
+                if ($kind === \MyPHP\Text\System::UNDERLINE && $d[5]) {
+                    self::dots($list, $x0, $x1, $bottom, $bottom - $top, $scale, $rgb, $alpha);
                     continue;
                 }
                 $list->rect($x0, $top, $x1 - $x0, $bottom - $top, $rgb, $alpha);
@@ -1897,6 +1901,22 @@ final class Painter
             $path->lineTo($px, $y - $amp * sin(($px - $x0) / $length * 2 * M_PI));
         }
         $list->path($path, $rgb, $alpha, $thick);
+    }
+
+    /** The width of $n's caret, its caretWidth() on whole device pixels, one at least (mygo's). */
+    private static function caretWidthOf(Node $n, TextPainter $text): float
+    {
+        $s = $text->scale();
+        return max(round($n->caretWidth * $s), 1.0) / $s;
+    }
+
+    /** Square dots as thick as the underline's stroke, which ends at $bottom, whole pixels, every three points or two dots' widths apart when they are thicker, as links mark hover (mygo's dots). */
+    private static function dots(DisplayList $list, float $x0, float $x1, float $bottom, float $thick, float $scale, int $rgb, float $alpha): void
+    {
+        $size = max(round($thick * $scale), 1.0) / $scale;
+        for ($x = $x0; $x < $x1; $x += max(3.0, 2 * $size)) {
+            $list->rect($x, $bottom - $size, $size, $size, $rgb, $alpha);
+        }
     }
 
     /** The focus rings of the text inside a paragraph, around their words, and of the text inside that (mygo's paintInline). */
@@ -1966,7 +1986,8 @@ final class Painter
         $list->pushClip($n->x + $b + $n->insetL, $n->y + $b, $n->w - 2 * $b - $n->insetL - $n->insetR, $n->h - 2 * $b);
         if ($display === '') {
             if ($n->text !== null && $n->text !== '') {
-                $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize, $s->style)[0]), $ty, $t->textMuted, 1.0, $s->style);
+                [$prgb, $palpha] = $n->placeholderColor ?? [$t->textMuted, 1.0];
+                $text->paint($list, $n->text, $n->fontSize, $tx - $at(0.0) + $at($text->measure($n->text, $n->fontSize, $s->style)[0]), $ty, $prgb, $palpha, $s->style);
             }
         } else {
             $ts = $n->textStyle();
@@ -1991,7 +2012,7 @@ final class Painter
             }
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) { // read-only: selected and copied, without a caret
-            $list->rect($tx + $caretX, $ty, 1.0, $lh, $t->accent); // in the accent, over all (mygo's caret)
+            if ($n->caretWidth > 0) { $list->rect($tx + $caretX, $ty, self::caretWidthOf($n, $text), $lh, $t->accent); } // in the accent, over all (mygo's caret)
         }
         $list->popClip();
     }
@@ -2030,7 +2051,8 @@ final class Painter
         $list->pushClip($n->x + $in, $n->y + $in, $n->w - 2 * $in, $n->h - 2 * $in);
         if ($display === '' && $n->text !== null && $n->text !== '') { // the placeholder wraps as the text would (mygo's)
             $ph = FieldLayout::wrap($text, $n->text, $n->fontSize, $innerW, null, $s->style);
-            for ($i = 0; $i < $ph->count(); $i++) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $t->textMuted, 1.0, $s->style); }
+            [$prgb, $palpha] = $n->placeholderColor ?? [$t->textMuted, 1.0];
+            for ($i = 0; $i < $ph->count(); $i++) { $text->paint($list, $ph->lineText($i), $n->fontSize, $tx, $ty + $i * $ph->lineHeight, $prgb, $palpha, $s->style); }
         }
         [$selA, $selB] = $n->focused && $s->hasSelection() && $s->marked === null ? $s->selection() : [0, 0];
         $ts = $n->textStyle(); $selColor = self::selectionColor($ts, $t);
@@ -2061,7 +2083,7 @@ final class Painter
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) {
             [$cx, $cy] = $layout->caret($text, $s->displayCaret());
-            $list->rect($tx + $cx, $ty + $cy, 1.0, $lh, $t->accent);
+            if ($n->caretWidth > 0) { $list->rect($tx + $cx, $ty + $cy, self::caretWidthOf($n, $text), $lh, $t->accent); }
         }
         $list->popClip();
     }

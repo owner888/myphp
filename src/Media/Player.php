@@ -5,7 +5,7 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, Equalizer, MediaTicker, Renderers, SoftAudio, SoftVideo, VideoDecoder};
+use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, Equalizer, MediaTicker, Renderers, SoftAudio, SoftVideo, ThumbnailDecoder};
 use RuntimeException;
 
 /**
@@ -110,7 +110,7 @@ final class Player
     private ?float $landed = null;
     /** A reader of the file and a decoder of its video of their own, for thumbnails (thumbnail()), made at the first. */
     private ?Source $thumbSource = null;
-    private ?VideoDecoder $thumbDecoder = null;
+    private ?ThumbnailDecoder $thumbDecoder = null;
     /** @var list<Packet> what a seek to a keyframe read past to find it, which the source's next packets come after */
     private array $ahead = [];
     private bool $playing = false, $ended = false, $muted = false;
@@ -1047,7 +1047,7 @@ final class Player
             return null;
         }
         $this->thumbSource ??= self::source($this->path);
-        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new VideoDecoder($this->video, $width, $this->hardware); }
+        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new ThumbnailDecoder($this->video, $width, $this->hardware); }
         $p = $this->thumbSource->keyframe(max(0.0, min($seconds, $this->duration)));
         if ($p === null) {
             return null;

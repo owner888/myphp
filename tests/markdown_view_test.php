@@ -303,3 +303,51 @@ check(in_array('Costs $5, so ￼', $h->texts(), true), 'shows ' . json_encode($h
 
 [, $st] = $mv("Let \$x_i\$ be.\n", new Options(extensions: \MyPHP\UI\Markdown\Parser\Extensions::DEFAULT | \MyPHP\UI\Markdown\Parser\Extensions::DOLLAR_MATH));
 same('Let x_i be.', $paraText($st, 1), 'without inlineMath, math as TeX');
+
+// Options::$anchor (mygo's Anchor): the view scrolls to the heading when the document first shows, again when $anchorVersion changes, and when another document replaces it; not every frame.
+$anchorView = function (string &$source, Options $o, ?\MyPHP\UI\ScrollState &$scroll): Headless {
+    return new Headless(function (Context $c) use (&$source, $o, &$scroll): void {
+        $c->disableAnimations();
+        $n = $c->scroll()->fill();
+        $scroll = $n->scroll;
+          Markdown::view($c, $source, $o);
+        $c->end();
+    }, 400, 160);
+};
+$scroll = null;
+$o = new Options(anchor: '#target');
+$source = "# Intro\n\n" . str_repeat("A paragraph before the destination.\n\n", 30) . "# Target\n\nDestination.\n";
+$h = $anchorView($source, $o, $scroll); $h->frame(3);
+check($scroll->y > 0, 'the anchor shows its heading as the document first shows');
+$scroll->y = 0; $h->frame(3);
+same(0.0, $scroll->y, 'an anchor unchanged does not scroll again');
+$o->anchorVersion++; $h->frame(3);
+check($scroll->y > 0, 'a new version scrolls to the same anchor again');
+$scroll->y = 0;
+$source = "# Another document\n\n" . str_repeat("Different text before the target.\n\n", 20) . "# Target\n\nNew destination.\n";
+$h->frame(3);
+check($scroll->y > 0, 'another document scrolls to the anchor');
+
+// onLink keeps getting #a-heading links, and scrolls to the heading by setting $anchor.
+$clicked = []; $opened = [];
+$o = new Options();
+$o->onLink = function (string $dest) use (&$clicked, $o): void { $clicked[] = $dest; if (str_starts_with($dest, '#')) { $o->anchor = $dest; } };
+$source = "[Jump](#target) [File](next.md)\n\n" . str_repeat("A paragraph before the destination.\n\n", 30) . "# Target\n\nDestination.\n";
+$h = $anchorView($source, $o, $scroll); $h->rt->openURL = function (string $url) use (&$opened) { $opened[] = $url; }; $h->frame(3);
+$h->clickText('File'); $h->frame();
+$h->clickText('Jump'); $h->frame(3);
+same([['next.md', '#target'], []], [$clicked, $opened], 'onLink gets both, nothing opens');
+check($scroll->y > 0, 'the anchor onLink set shows its heading');
+
+// Theme::$linkWeight (mygo's LinkWeight): link text no lighter than it, code in a link too, which keeps the code face and wash; code outside links its own weight.
+$o = new Options(theme: new Theme(linkWeight: 500));
+$root = null;
+$h = new Headless(function (Context $c) use ($o, &$root) { $root = Markdown::view($c, 'Read [the `x.go` docs](https://example.com) and `y.go`.', $o); }, 400, 100);
+$h->frame();
+$st = $h->rt->local($root->id, fn() => null);
+$found = [];
+foreach ($st->paras as $p) { foreach ($p['p']->pieces as $pc) { foreach ($pc[1] as $sp) { $found[$sp->text] = $sp; } } }
+$th = $st->th;
+same(500, $found['the ']->weight ?? null, 'link text weighs the link weight');
+same([$th->codeFont, $th->codeBackground, 500], [$found['x.go']->font ?? null, [$found['x.go']->background ?? null, $found['x.go']->backgroundAlpha ?? null], $found['x.go']->weight ?? null], 'code in a link: the code face and wash, at the link weight');
+check(($found['y.go']->font ?? null) === $th->codeFont && ($found['y.go']->weight ?? null) !== 500, 'code outside a link: its own weight');

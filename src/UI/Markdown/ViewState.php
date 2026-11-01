@@ -30,6 +30,9 @@ final class ViewState
     public array $tables = [];
     /** A block to scroll into view, -1 for none. */
     public int $scrollTo = -1;
+    /** The anchor and its version the last frame asked for (Options::$anchor). */
+    private string $anchor = '';
+    private int $anchorVersion = 0;
     /** @var array<string, int> the footnotes' numbers, by their normalized labels */
     public array $notes = [];
     public SpanBuilder $sb;
@@ -53,7 +56,8 @@ final class ViewState
         $st->c = $c;
         $st->o = $o;
         $ext = $o->ext();
-        if ($st->doc === null || $st->ext !== $ext) {
+        $replaced = $st->doc === null || $st->ext !== $ext;
+        if ($replaced) {
             $st->doc = new Document($ext); $st->ext = $ext;
             $st->paras = [];
         }
@@ -64,8 +68,13 @@ final class ViewState
         $st->doc->setStreaming($streaming || $revealing);
         if (!str_starts_with(substr($src, 0, $shown), $st->doc->source())) {
             $st->forget(); // another text, not more of it: blocks where blocks were may show other text
+            $replaced = true;
         }
         $st->doc->set(substr($src, 0, $shown));
+        if ($o->anchor !== '' && ($replaced || $st->anchor !== $o->anchor || $st->anchorVersion !== $o->anchorVersion)) {
+            $st->scrollTo = $st->headingNamed(str_starts_with($o->anchor, "#") ? substr($o->anchor, 1) : $o->anchor);
+        }
+        [$st->anchor, $st->anchorVersion] = [$o->anchor, $o->anchorVersion];
         $st->fade = $st->reveal->fadeAt($now, $c->runtime?->reduceMotion ?? false, $o->reveal);
 
         $root->fontSize($th->fontSize)->lineHeight($th->lineHeight)->textColor($th->text[0], $th->text[1]);

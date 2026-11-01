@@ -349,6 +349,9 @@ trait RuntimeMenu
     /** An editing command of a menu on text input or selectable text $id: Copy and Select All on selectable text; Cut, Copy, Paste, Delete, Select All, Undo and Redo on a field. */
     private function editCommand(int $id, string $name): void
     {
+        if (isset($this->disabledIds[$id])) {
+            return; // a disabled input or paragraph takes no command
+        }
         if (isset($this->textIndex[$id])) {
             $this->textSelectionCommand($name, $this->texts[$this->textIndex[$id]]);
             return;
@@ -364,7 +367,7 @@ trait RuntimeMenu
             case 'selectAll': $state->selectAll(); break;
             case 'undo': $state->undo(); break;
             case 'redo': $state->redo(); break;
-            case 'paste':
+            case 'paste': case 'pasteAndMatchStyle': // plain text: pasted as it is
                 $s = str_replace(["\r\n", "\r"], "\n", ($this->readClipboard)());
                 if ($state->onPaste === null || !($state->onPaste)($s)) { // the app may take the paste
                     $state->insert($state->multiline ? $s : str_replace("\n", ' ', $s));
@@ -396,17 +399,83 @@ trait RuntimeMenu
         $t = L10n::in(App::locale());
         $separator = ['', '', false];
         if (isset($this->textIndex[$id])) {
-            $n = $this->texts[$this->textIndex[$id]];
-            $bounds = $this->selectionBounds();
-            $selected = $this->selection->scope === $n->textScope && $bounds !== null && $bounds[2];
-            return [[$t->get('menuCopy'), 'copy', $selected], $separator, [$t->get('menuSelectAll'), 'selectAll', self::runeCount($n) > 0]];
+            return [[$t->get('menuCopy'), 'copy', $this->editCommandOn($id, 'copy')], $separator, [$t->get('menuSelectAll'), 'selectAll', $this->editCommandOn($id, 'selectAll')]];
         }
-        $state = $this->fields[$id][0] ?? null;
-        if ($state === null) {
+        if (!isset($this->fields[$id])) {
             return [];
         }
-        return [[$t->get('menuCut'), 'cut', $state->copyable() && !$state->readOnly], [$t->get('menuCopy'), 'copy', $state->copyable()], [$t->get('menuPaste'), 'paste', !$state->readOnly],
-            $separator, [$t->get('menuSelectAll'), 'selectAll', $state->text !== '']];
+        return [[$t->get('menuCut'), 'cut', $this->editCommandOn($id, 'cut')], [$t->get('menuCopy'), 'copy', $this->editCommandOn($id, 'copy')], [$t->get('menuPaste'), 'paste', $this->editCommandOn($id, 'paste')],
+            $separator, [$t->get('menuSelectAll'), 'selectAll', $this->editCommandOn($id, 'selectAll')]];
+    }
+
+    /**
+     * Whether the editing command $name (undo, redo, cut, copy, paste,
+     * pasteAndMatchStyle, delete, selectAll) would act on text input or
+     * selectable text $id, as it does it (mygo's editCommandOn): none on
+     * one disabled, only Copy and Select All on one read only, no Cut nor
+     * Copy of a password; any while input waits for the next frame, which
+     * the command goes behind.
+     */
+    private function editCommandOn(int $id, string $name): bool
+    {
+        $text = isset($this->textIndex[$id]) ? $this->texts[$this->textIndex[$id]] : null;
+        $state = $text === null ? ($this->fields[$id][0] ?? null) : null;
+        if ($text === null && $state === null) {
+            return false;
+        }
+        if (isset($this->disabledIds[$id]) || ($text !== null ? !in_array($name, ['copy', 'selectAll'], true) : ($state->readOnly && $name !== 'copy' && $name !== 'selectAll') || ($state->password && ($name === 'cut' || $name === 'copy')))) {
+            return false;
+        }
+        if ($this->input->events !== []) {
+            return true; // behind the input the next frame takes, which changes what it acts on
+        }
+        if ($text !== null) {
+            if ($name === 'copy') {
+                $bounds = $this->selectionBounds();
+                return $this->selection->scope === $text->textScope && $bounds !== null && $bounds[2];
+            }
+            $paragraphs = 0; // Select All selects the newlines between the paragraphs too
+            foreach ($this->texts as $p) {
+                if ($p->textScope !== $text->textScope) { continue; }
+                if (self::runeCount($p) > 0) { return true; }
+                $paragraphs++;
+            }
+            return $paragraphs > 1;
+        }
+        return match ($name) {
+            'undo' => $state->canUndo(),
+            'redo' => $state->canRedo(),
+            'cut', 'copy', 'delete' => $state->hasSelection(),
+            'paste', 'pasteAndMatchStyle' => true,
+            'selectAll' => $state->text !== '',
+            default => false,
+        };
+    }
+
+    /**
+     * Whether the Edit menu's command $name would act now, for its item to
+     * be enabled (mygo's commandEnabled), as the 'edit' event routes it: a
+     * node taking its input as it comes takes every command; a text input
+     * or selectable text with the focus as editCommandOn says; else, and
+     * for what a read-only input leaves, whether a shortcut of the
+     * command's key asked for last frame would take it (commandKey).
+     */
+    public function commandEnabled(string $name): bool
+    {
+        $f = $this->focus;
+        if ($f !== null && isset($this->inputs[$f]) && !isset($this->fields[$f])) {
+            return true; // it tells what it does with a command only by doing it
+        }
+        if ($f !== null && isset($this->fields[$f])) {
+            if ($this->fields[$f][0]->readOnly && in_array($name, ['paste', 'pasteAndMatchStyle', 'cut', 'undo', 'redo'], true)) {
+                return $this->commandShortcut($name);
+            }
+            return $this->editCommandOn($f, $name);
+        }
+        if ($f !== null && isset($this->textIndex[$f])) {
+            return in_array($name, ['copy', 'selectAll'], true) ? $this->editCommandOn($f, $name) : $this->commandShortcut($name);
+        }
+        return $this->commandShortcut($name);
     }
 
     /** A key with modifiers written as menus take it, as "Super+Shift+z" (mygo's accelerator); "" for a key menus cannot show. */

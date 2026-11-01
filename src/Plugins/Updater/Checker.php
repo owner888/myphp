@@ -68,6 +68,8 @@ final class Checker
     /** The check in progress, and the update installed while the app runs, which runs at the next launch. */
     public ?Session $session = null;
     public ?Release $installed = null;
+    /** The newer version the last check found (Updater::availableVersion), "" for none, after a failed check, and for a skipped one; an installed update keeps it until the app relaunches. */
+    public string $available = '';
 
     public readonly Options $opts;
 
@@ -177,9 +179,10 @@ final class Checker
     {
         $this->load();
         $before = $this->state;
+        $beforeAvailable = $this->available;
         $this->state = $fn($this->state);
         $this->save();
-        if ($this->state != $before) {
+        if ($this->state != $before || $this->available !== $beforeAvailable) {
             foreach ($this->changes as $f) {
                 $f();
             }
@@ -268,16 +271,20 @@ final class Checker
         return (float)$t->format('U.u');
     }
 
-    /** Records the outcome of a check. */
-    private function checked(?Throwable $err): void
+    /** Records the outcome of a check: its error, or the version it found ("" for none), which an automatic check does not report when the user skipped it. @internal tests */
+    public function checked(?Throwable $err, string $version = '', bool $user = false): void
     {
         if ($err !== null) {
             $this->failed = ($this->now)();
+            $this->update(function (array $s): array { $this->available = ''; return $s; });
             return;
         }
         $this->failed = null;
         $t = ($this->now)();
-        $this->update(fn(array $s): array => ['lastCheck' => $t] + $s);
+        $this->update(function (array $s) use ($t, $version, $user): array {
+            $this->available = !$user && $s['skippedVersion'] === $version ? '' : $version;
+            return ['lastCheck' => $t] + $s;
+        });
     }
 
     /** Starts a check, or makes the one under way show its window when the user asked for it. Runs in a fiber of its own. */
@@ -318,6 +325,7 @@ final class Checker
     {
         $t = $s->t;
         if (!($this->enabled)()) {
+            $this->update(function (array $st): array { $this->available = ''; return $st; });
             $s->set($this->unavailableView($t));
             $s->show();
             $s->wait();
@@ -341,7 +349,7 @@ final class Checker
         if ($s->canceled) {
             return; // canceled
         }
-        $this->checked($err);
+        $this->checked($err, $err === null && $r !== null ? $r->version : '', $s->user);
         if ($err !== null) {
             if ($s->user) {
                 $s->set($this->errorView($t, $t->s->checkError, $err));
@@ -377,6 +385,7 @@ final class Checker
             $st['automaticDownloads'] = $auto;
             if ($action === 'skip') {
                 $st['skippedVersion'] = $r->version;
+                $this->available = '';
             }
             return $st;
         });

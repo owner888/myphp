@@ -5,10 +5,13 @@ namespace MyPHP;
 
 final class MessageOptions
 {
+    /** A $cancelButton of no button: Escape and Cmd+. do nothing (mygo's -1). */
+    public const NO_CANCEL = -2;
+
     /**
      * @param string[] $buttons the first is the default unless $defaultButton says otherwise
      * @param int $defaultButton the button Enter activates, or -1 for none
-     * @param int $cancelButton the button Escape and Cmd+. activate, also when it is the default; -1 for the first labeled Cancel or No
+     * @param int $cancelButton the button Escape and Cmd+. activate, also when it is the default; -1 for the first labeled Cancel or No, else the first, even a destructive one: for Delete / Keep, 1 has Escape keep; NO_CANCEL for none
      * @param int[] $destructiveButtons the buttons whose actions delete data or can't be undone, which macOS sets apart and may keep Enter from activating, even as the default (mygo's DestructiveButtons)
      */
     public function __construct(

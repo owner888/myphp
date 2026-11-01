@@ -272,3 +272,24 @@ if (PHP_OS_FAMILY === 'Darwin') { // what an AXValue is set to may be a number, 
     same('héllo', $O::textOf($O::msg('p:p', $O::alloc('NSAttributedString'), 'initWithString:', $O::str('héllo'))), 'an attributed string: its string');
     same('', $O::textOf($O::msg('p:', $O::cls('NSArray'), 'array')), 'anything else: none');
 }
+
+require_once __DIR__ . '/PrimitiveClient.php';
+// A text client of its own, without an editor (mygo's TestAccessibilityEditsCustomTextInputClient): setting its value replaces its whole text, inserting text its UTF-16 selection, and it takes the focus; disabled, neither.
+$client = new PrimitiveClient('A😀bc', new \MyPHP\UI\TextInputSelection(new \MyPHP\UI\TextInputRange(0, 0)));
+$disabled = false;
+$t = new Headless(function (Context $c) use ($client, &$disabled) {
+    $c->column()->size(250, 80)->role(Role::TEXT_FIELD)->label('Custom editor')->focusable()->handleTextInput($client)->disabled($disabled);
+    $c->end();
+}, 300, 100);
+$t->frame();
+accessSend($t, ['accessOn']);
+$field = accessNode($t->rt->accessTree, Role::TEXT_FIELD, 'Custom editor');
+check($field !== null && ($field->actions & AccessNode::ACTION_SET_VALUE) !== 0, 'a text client of its own takes a value');
+accessSend($t, ['access', $field->id, AccessNode::SET_VALUE, '你😀']);
+same(['你😀', $field->id], [$client->text, $t->rt->accessTree->focus], 'its value set, its whole text replaced, and focused');
+$client->sel = new \MyPHP\UI\TextInputSelection(new \MyPHP\UI\TextInputRange(1, 3));
+accessSend($t, ['access', $field->id, AccessNode::INSERT_TEXT, 'X']);
+same('你X', $client->text, 'text inserted in place of its UTF-16 selection');
+$disabled = true; $t->frame();
+accessSend($t, ['access', $field->id, AccessNode::SET_VALUE, 'blocked']);
+same('你X', $client->text, 'disabled: not set');

@@ -70,7 +70,7 @@ final class MenuItem
     {
         $this->disabled = !$enabled;
         if ($this->native !== null) {
-            ObjC::msg('v:b', $this->native, 'setEnabled:', $enabled);
+            Menu::applyEnabled($this);
         }
     }
 

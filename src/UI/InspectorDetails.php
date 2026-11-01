@@ -170,7 +170,7 @@ final class InspectorDetails
         if (isset($set['features'])) { $add('font-feature-settings', $ts->features); }
         if (isset($set['lang'])) { $add('lang', $ts->lang); }
         $deco = [];
-        if ($ts->underline) { $deco[] = $ts->wavy ? 'underline wavy' : 'underline'; }
+        if ($ts->underline) { $deco[] = $ts->wavy ? 'underline wavy' : ($ts->dotted ? 'underline dotted' : 'underline'); }
         if ($ts->strike) { $deco[] = 'line-through'; }
         if ($deco !== []) { $add('text-decoration', implode(' ', $deco)); }
         if (isset($set['background'])) { $add('background-color', Inspector::color($ts->background), $ts->background); }

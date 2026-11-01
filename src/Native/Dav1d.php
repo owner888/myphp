@@ -15,7 +15,7 @@ use RuntimeException;
  * (Contents/Resources, where bin/myphp build puts it beside the plugins'
  * libraries), else Homebrew's (libdav1d.so.7 off macOS, for the tests).
  *
- * @internal Native\Renderers, Native\VideoDecoder
+ * @internal Native\Renderers, Native\ThumbnailDecoder
  */
 final class Dav1d
 {

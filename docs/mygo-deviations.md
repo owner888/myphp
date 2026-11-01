@@ -926,7 +926,8 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: `Notification.Show` waits for the system and returns
     `ErrNotificationsDenied` when the user does not allow them.
   - myphp: `show()` returns at once and tells no denial; `onClick`,
-    `clear()` (pending ones too) are mygo's.
+    `clear()` (pending ones too) are mygo's. mygo's `ShowContext` (its
+    #952), which stops waiting for the answer, has none: nothing waits.
   - Why: UNUserNotificationCenter answers on a background queue, where
     PHP cannot run.
 - **Windows**
@@ -2194,7 +2195,9 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 - **No cancel button named**
   - mygo: a `CancelButton` of zero is the first button labeled Cancel or
     No.
-  - myphp: a `cancelButton` of -1, the default, is; 0 is the first button.
+  - myphp: a `cancelButton` of -1, the default, is (else the first
+    button, as mygo's since its 0b9ed5b says); 0 is the first button;
+    `MessageOptions::NO_CANCEL` is mygo's -1, none.
   - Why: the first button can be named the cancel whatever its label,
     which mygo's zero cannot; myphp's -1 came before the label search.
 
@@ -2249,3 +2252,26 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: `switch($label, …)` shows its label after the track; `''`
     shows none, the track alone, and `label()` names it.
   - Why: myphp's own since before; the gallery now passes `''`, as mygo's.
+
+## Upstream's October 31 and November 1 (v1.134)
+
+- **The video example**
+  - mygo: `examples/video`, a GIF looping behind the window's content.
+  - myphp: `examples/wavelength`, the same, its GIF decoded by ImageIO
+    (`GifDecoder`, macOS only, as its test runs).
+  - Why: `examples/video` is myphp's film player.
+- **The Edit menu's items**
+  - mygo: a role's item counts as available when a shortcut of the focus
+    chain registered for its key would take it (`routeKey`).
+  - myphp: when a shortcut the last frame asked for would
+    (`Runtime::$askedKeys`), as `shortcut()` is asked while the view
+    builds, a node's `onShortcut` only while it has the focus; a field
+    with input on its way counts any command, as mygo's with its editor's
+    queue.
+  - Why: myphp's shortcuts are asked, not registered.
+- **Placeholder colors and alphas**
+  - mygo: `PlaceholderColor(Color)`, a transparent one hiding it.
+  - myphp: `placeholderColor(int $rgb, float $alpha = 1.0)`, an alpha of
+    0 hiding it.
+  - Why: myphp's colors are 0xRRGGBB with an alpha apart.
+

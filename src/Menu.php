@@ -178,12 +178,16 @@ final class Menu
         ]);
     }
 
+    /** The roles of the editing commands, which native UI answers whether it would take (UI\Runtime::commandEnabled), and the speech roles, which it never takes: a menu holding one has AppKit ask the first responder (mygo's validatesItem). */
+    private const VALIDATED = ['undo', 'redo', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll', 'startSpeaking', 'stopSpeaking'];
+
     /** Builds the NSMenu; called by App::setMenu and popup(). */
     public function build(string $title = '')
     {
         self::$target ??= self::defineTarget();
         $this->native = ObjC::msg('p:p', ObjC::alloc('NSMenu'), 'initWithTitle:', ObjC::str($title));
-        ObjC::msg('v:b', $this->native, 'setAutoenablesItems:', false);
+        // A menu of an editing role's item enables its items as the first responder can act on them, the app's items as the app set them (the target's validateMenuItem:); the others keep theirs.
+        ObjC::msg('v:b', $this->native, 'setAutoenablesItems:', array_filter($this->items, fn(MenuItem $it): bool => in_array($it->role, self::VALIDATED, true)) !== []);
         foreach ($this->items as $it) {
             if ($it->type === MenuItem::HEADER && !ObjC::msg('b:p', ObjC::cls('NSMenuItem'), 'respondsToSelector:', ObjC::sel('sectionHeaderWithTitle:'))) {
                 continue; // macOS 14's; before it menus have no headers, and the item is left out, as IINA leaves it
@@ -244,7 +248,8 @@ final class Menu
             ObjC::msg('v:p', $ns, 'setTarget:', self::$target);
             ObjC::msg('v:l', $ns, 'setTag:', $it->uid);
         }
-        ObjC::msg('v:b', $ns, 'setEnabled:', !$it->disabled);
+        $it->native = $ns;
+        self::applyEnabled($it);
         ObjC::msg('v:b', $ns, 'setHidden:', $it->hidden);
         if ($it->checked && in_array($it->type, [MenuItem::CHECKBOX, MenuItem::RADIO], true)) {
             ObjC::msg('v:l', $ns, 'setState:', 1);
@@ -371,9 +376,28 @@ final class Menu
         return (float)self::ZOOM_STEPS[0];
     }
 
+    /**
+     * @internal MenuItem: enables $it's NSMenuItem as the app set it; a
+     * role's item sent down the responder chain, which the first
+     * responder would enable in a menu that validates its items, targets
+     * the menu target while disabled, which lacks its action, so that its
+     * menu disables it, and nothing again once enabled (mygo's
+     * applyItemState).
+     */
+    public static function applyEnabled(MenuItem $it): void
+    {
+        ObjC::msg('v:b', $it->native, 'setEnabled:', !$it->disabled);
+        if (($it->role !== '' && (self::ROLES[$it->role][2] ?? '') !== '')) {
+            self::$target ??= self::defineTarget();
+            ObjC::msg('v:p', $it->native, 'setTarget:', $it->disabled ? self::$target : null);
+        }
+    }
+
     private static function defineTarget()
     {
         ObjC::defineClass('MyPHPMenuTarget', 'NSObject', [
+            // The app's items keep the state it gave them in a menu that validates its items.
+            'validateMenuItem:' => ['B@:@', 'b(ppp)', fn($self, $cmd, $item) => ObjC::msg('b:', $item, 'isEnabled')],
             'menuClicked:' => ['v@:@', 'v(ppp)', function ($self, $cmd, $sender) {
                 [$it, $click] = self::$byUid[ObjC::msg('l:', $sender, 'tag')] ?? [null, null];
                 if ($it === null) {

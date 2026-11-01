@@ -350,6 +350,7 @@ trait RuntimeAccess
         if ($n->kind === Node::BUTTON || isset($this->clickable[$n->id])) { $node->actions |= AccessNode::ACTION_PRESS; }
         if (($node->role === Role::SLIDER || $node->role === Role::STEPPER) && $keys) { $node->actions |= AccessNode::ACTION_INCREMENT | AccessNode::ACTION_DECREMENT; }
         if ($n->expandable) { $node->actions |= AccessNode::ACTION_EXPAND; }
+        if (self::clientOnly($n) && !$n->ignoresInput() && !$n->isDisabled()) { $node->actions |= AccessNode::ACTION_SET_VALUE; } // a text client of its own, without an editor (mygo's)
         if (($e = $n->edit) !== null && ($n->kind === Node::INPUT || $n->kind === Node::TEXTAREA)) {
             if ($e->readOnly) { $node->states |= AccessNode::READ_ONLY; } else { $node->actions |= AccessNode::ACTION_SET_VALUE; }
             if ($e->multiline) { $node->states |= AccessNode::MULTILINE; }
@@ -425,17 +426,36 @@ trait RuntimeAccess
                 }
                 break;
             case AccessNode::SET_VALUE:
+                if ($n !== null && self::clientOnly($n)) { // its whole text replaced
+                    if ($n->ignoresInput() || $n->isDisabled()) { return; }
+                    $this->accessFocus($id);
+                    [, $all] = $n->textClient->textForRange(new TextInputRange(0, PHP_INT_MAX));
+                    $n->textClient->replaceText($all, $text);
+                    break;
+                }
                 if (($e = $n?->edit) === null || $e->readOnly) { return; }
                 $this->accessFocus($id);
                 $e->selectAll();
                 $e->insert($text);
                 break;
             case AccessNode::INSERT_TEXT:
+                if ($n !== null && self::clientOnly($n)) { // in place of its selection
+                    if ($n->ignoresInput() || $n->isDisabled()) { return; }
+                    $this->accessFocus($id);
+                    $n->textClient->replaceText(null, $text);
+                    break;
+                }
                 if (($e = $n?->edit) === null || $e->readOnly) { return; }
                 $this->accessFocus($id);
                 $e->insert($text);
                 break;
         }
+    }
+
+    /** Whether $n takes text through a text client of its own (Node::handleTextInput) and no editor, as an input or a text area has: assistive technology sets and inserts its text through the client (mygo's). */
+    private static function clientOnly(Node $n): bool
+    {
+        return $n->textClient !== null && ($n->edit === null || ($n->kind !== Node::INPUT && $n->kind !== Node::TEXTAREA));
     }
 
     /** The byte of character $i of $s. */

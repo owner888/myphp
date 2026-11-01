@@ -239,6 +239,11 @@ final class TextState
         $this->lastEditAt = $now;
     }
 
+    /** @internal Runtime (an Edit menu's items): whether undo() and redo() have an edit to go to. */
+    public function canUndo(): bool { return $this->undo !== []; }
+    /** @internal */
+    public function canRedo(): bool { return $this->redo !== []; }
+
     public function undo(): void
     {
         if ($this->undo === [] || $this->readOnly) {

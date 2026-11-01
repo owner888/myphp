@@ -293,7 +293,7 @@ final class SoftVideo
     }
 
     /**
-     * @internal VideoDecoder: a 10-bit plane of dav1d's ($pw by $ph samples
+     * @internal ThumbnailDecoder: a 10-bit plane of dav1d's ($pw by $ph samples
      * at $src, $stride bytes a row) as 8 bits at $dst ($pw a row): a
      * quarter, rounded, through floats.
      */

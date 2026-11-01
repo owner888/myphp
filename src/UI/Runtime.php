@@ -334,6 +334,7 @@ final class Runtime
     {
         $input->metrics = $metrics;
         $input->direct = $this->deliver(...);
+        $input->commandEnabled = $this->commandEnabled(...);
         $this->openURL = fn(string $url) => null;
         $this->preferences = new Preferences();
         $clip = '';
@@ -717,7 +718,7 @@ final class Runtime
                     }
                     break;
                 case 'edit': // an editing command of the menus with no node taking its input: the focused field's, or Copy and Select All on selectable text
-                    if ($this->focus !== null && isset($this->fields[$this->focus]) && !($this->fields[$this->focus][0]->readOnly && in_array($e[1], ['paste', 'cut', 'undo', 'redo'], true))) {
+                    if ($this->focus !== null && isset($this->fields[$this->focus]) && !($this->fields[$this->focus][0]->readOnly && in_array($e[1], ['paste', 'pasteAndMatchStyle', 'cut', 'undo', 'redo'], true))) {
                         $this->editCommand($this->focus, $e[1]);
                     } elseif (!$this->textSelectionCommand($e[1])) {
                         $this->commandKey($e[1]);
@@ -2112,7 +2113,10 @@ final class Runtime
             $this->fields[$n->id] = [$n->edit, $n->x + $ix, $n->y + $iy, $lh, $n->fontSize, $n->w - 2 * $ix];
         }
         if ($n->scroll !== null) {
-            if (($this->drag !== null && $this->drag[0] === $n->scroll) || $this->hovered($n->id)) {
+            if ($n->hideScrollbars && $this->drag !== null && $this->drag[0] === $n->scroll) {
+                $this->drag = null; // its bars hid as one was dragged: it lets go (mygo's)
+            }
+            if (!$n->hideScrollbars && (($this->drag !== null && $this->drag[0] === $n->scroll) || $this->hovered($n->id))) {
                 $this->barsShown[$n->id] = true; // its bars show this frame, as the painter draws them: a press on them is theirs next frame
             }
             $this->scrolls[$n->id] = $n->scroll;
@@ -2538,12 +2542,24 @@ final class Runtime
      */
     private function commandKey(string $command): void
     {
-        [$char, $code, $mods] = match ($command) {
-            'copy' => ['c', Key::C, Key::COMMAND], 'cut' => ['x', Key::X, Key::COMMAND], 'paste' => ['v', Key::V, Key::COMMAND],
-            'selectAll' => ['a', Key::A, Key::COMMAND], 'undo' => ['z', Key::Z, Key::COMMAND], 'redo' => ['z', Key::Z, Key::COMMAND | Key::SHIFT],
-            default => [null, 0, 0],
-        };
+        [$char, $code, $mods] = self::COMMAND_KEYS[$command] ?? [null, 0, 0];
         if ($char !== null) { $this->keys[] = [$char, $code, $mods, false, $char]; }
+    }
+
+    /** The keys of the Edit menu's commands: character, key code, modifiers (mygo's commandKeys). */
+    private const COMMAND_KEYS = [
+        'copy' => ['c', Key::C, Key::COMMAND], 'cut' => ['x', Key::X, Key::COMMAND], 'paste' => ['v', Key::V, Key::COMMAND],
+        'selectAll' => ['a', Key::A, Key::COMMAND], 'undo' => ['z', Key::Z, Key::COMMAND], 'redo' => ['z', Key::Z, Key::COMMAND | Key::SHIFT],
+    ];
+
+    /** @var array<string, int> the shortcuts asked for ("c|mods", or "#code|mods"), by the frame that last asked: what the Edit menu's items go by (commandShortcut) */
+    private array $askedKeys = [];
+
+    /** Whether a shortcut the last frame asked for would take the key of the Edit menu's command $name, as commandKey gives it (mygo's commandShortcut). */
+    private function commandShortcut(string $name): bool
+    {
+        [$char, $code, $mods] = self::COMMAND_KEYS[$name] ?? [null, 0, 0];
+        return $char !== null && (($this->askedKeys["$char|$mods"] ?? -1) === $this->frameNumber || ($this->askedKeys["#$code|$mods"] ?? -1) === $this->frameNumber);
     }
 
     private function command(string $selector): bool
@@ -3138,6 +3154,7 @@ final class Runtime
     public function shortcut(int|string $key, int $mods = 0): bool
     {
         $this->readsKeys = true; // a memo reading them is built again when keys come
+        $this->askedKeys[(is_int($key) ? "#$key" : strtolower($key)) . "|$mods"] = $this->frameNumber; // for the Edit menu's items (commandShortcut)
         $field = $this->focus !== null && isset($this->fields[$this->focus]);
         $free = $field && $this->fields[$this->focus][0]->multiline ? [Key::ESCAPE, Key::BACK, Key::FORWARD] : [Key::ESCAPE, Key::UP, Key::DOWN, Key::BACK, Key::FORWARD]; // what a focused field leaves: a single line has no use for Up and Down
         if ($field && $this->fields[$this->focus][0]->leaveEmptyBackspace && $this->fields[$this->focus][0]->text === '') { $free[] = Key::DELETE; }

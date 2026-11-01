@@ -27,6 +27,8 @@ final class TextStyle
     public ?int $align = null;
     public ?bool $underline = null;
     public ?bool $wavy = null;
+    /** An underline of dots (Node::dottedUnderline). */
+    public ?bool $dotted = null;
     public ?bool $strike = null;
     public ?float $spacing = null;
     public ?string $features = null;
@@ -71,7 +73,7 @@ final class TextStyle
     {
         return ($this->family !== null && $this->family !== 'monospace' && $this->family !== 'system-ui')
             || ($this->weight !== null && $this->weight !== 400 && $this->weight !== 700)
-            || $this->lineHeight !== null || ($this->align ?? 0) !== 0 || $this->wavy || $this->strike
+            || $this->lineHeight !== null || ($this->align ?? 0) !== 0 || $this->wavy || $this->dotted || $this->strike
             || ($this->spacing ?? 0.0) != 0 || ($this->features ?? '') !== '' || $this->lang !== null
             || $this->decoColor !== null || $this->decoThick !== null || $this->background !== null || $this->outline !== null || $this->textShadow !== null || $this->blur !== null || $this->cutOut !== null;
     }

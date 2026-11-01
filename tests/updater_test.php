@@ -519,3 +519,57 @@ function updRelease(string $version, ?\Closure $install = null): Release
         Session::$app = null;
     }
 })();
+
+(function () {
+    // The version a check found (Updater::availableVersion, mygo's AvailableVersion): onChange tells each change, a failed check clears it, as an up-to-date one does.
+    $h = new UpdHarness;
+    same('', $h->u->available, 'none before a check');
+    $seen = [];
+    $off = $h->u->onChange(function () use ($h, &$seen): void { $seen[] = $h->u->available; });
+    $h->u->checked(null, '2.0.0');
+    $h->u->checked(new \RuntimeException('offline'));
+    $h->u->checked(null, '2.0.0'); // the last check's time as it was: the version still tells
+    $h->u->checked(null, '');
+    $off();
+    same(['2.0.0', '', '2.0.0', ''], $seen, 'each change of the version told');
+})();
+
+(function () {
+    // Skip This Version clears it, and an automatic check does not report it again; Remind Me Later keeps it; an up-to-date check clears it.
+    $h = new UpdHarness;
+    $h->result = fn() => updRelease('2.0.0');
+    $done = $h->begin(true);
+    $s = $h->shown();
+    $v = updView($s, 'A new version of');
+    same('2.0.0', $h->u->available, 'a version found');
+    $s->respond($v['prompt'], 'skip', false);
+    updDone($done);
+    same('', $h->u->available, 'skipped: none');
+    updDone($h->begin(false));
+    $h->noWindow();
+    same('', $h->u->available, 'an automatic check: the skipped version not reported');
+    $h->result = fn() => updRelease('3.0.0');
+    $done = $h->begin(false);
+    $s = $h->shown();
+    $v = updView($s, 'A new version of');
+    $s->respond($v['prompt'], 'later', false);
+    updDone($done);
+    same('3.0.0', $h->u->available, 'later: kept');
+    $h->result = fn() => null;
+    updDone($h->begin(false));
+    same('', $h->u->available, 'up to date: none');
+})();
+
+(function () {
+    // An update installed keeps its version until the app relaunches.
+    $h = new UpdHarness;
+    $h->result = fn() => updRelease('2.0.0');
+    $done = $h->begin(true);
+    $s = $h->shown();
+    $v = updView($s, 'A new version of');
+    $s->respond($v['prompt'], 'install', false);
+    $v = updView($s, 'Ready to Relaunch');
+    $s->respond($v['prompt'], 'later', false);
+    updDone($done);
+    same('2.0.0', $h->u->available, 'installed: kept until the relaunch');
+})();

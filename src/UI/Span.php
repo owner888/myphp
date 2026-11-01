@@ -33,6 +33,8 @@ final class Span
         /** Rounds the corners of the background, which then hugs the span's glyphs, a little wider than them, rather than filling the line, as code within text shows. */
         public float $radius = 0,
         public bool $wavyUnderline = false,
+        /** An underline of dots, as links mark hover (mygo's DottedUnderline). */
+        public bool $dottedUnderline = false,
         /** Those of the span's underline and strikethrough, as Node::decorationColor(). */
         public ?int $decorationColor = null,
         public ?float $decorationThickness = null,
@@ -81,6 +83,7 @@ final class Span
         $s->italic = $s->italic || $base->italic;
         $s->underline = $s->underline || $base->underline;
         $s->wavyUnderline = $s->wavyUnderline || $base->wavyUnderline;
+        $s->dottedUnderline = $s->dottedUnderline || $base->dottedUnderline;
         $s->strikethrough = $s->strikethrough || $base->strikethrough;
         return $s;
     }

@@ -6944,6 +6944,58 @@ succeeds are told of, an empty line is none.
   Overlays' row of buttons no longer wraps, its card shrinking and its
   label wrapping, as mygo's.
 
+## Upstream's October 31 and November 1, and the Wavelength example (v1.134)
+
+- Text: `Node::dottedUnderline()` and `Span::$dottedUnderline` (mygo's
+  DottedUnderline), square dots as thick as the underline every three
+  points, or two dots' widths apart (`Painter::dots`), in the decoration's
+  color and thickness; the inspector says `underline dotted`.
+- Inputs: `placeholderColor($rgb, $alpha)` colors a text input's or a
+  text area's placeholder for the frames that ask, an alpha of 0 hiding
+  it; `caretWidth($w)` paints the caret that wide on whole pixels, one
+  at least, 0 none (`Painter::caretWidthOf`), the layout and the input
+  method's place as they were.
+- `Node::scrollbars(false)` (mygo's Scrollbars): a scroll container or a
+  list that shows no bars, which take no press (`Runtime::$barsShown`
+  leaves it out); a thumb dragged as they hide lets go.
+- `Context::instant()` (mygo's Instant): whether this frame settles what
+  animates (`disableAnimations`).
+- Markdown: `Options::$anchor` and `$anchorVersion` scroll the view to a
+  heading's slug when the document first shows, when another replaces
+  it, and when either changes; `onLink` still gets `#a-heading` links,
+  and sets the anchor to route them. `Theme::$linkWeight` is the least
+  weight of link text, code in a link too, which keeps the code's face.
+- The Edit menu (mygo's f69ccfc): a menu holding an editing role's item,
+  or a speech one, enables its items as the first responder answers
+  (`setAutoenablesItems:`); the view answers for the editing roles
+  through `Input::$commandEnabled`, `Runtime::commandEnabled`, which
+  routes as the `edit` event does: a node taking its input takes all of
+  them, a text input or selectable text as `editCommandOn` says (its
+  context menu's items go by it too), else whether a shortcut of the
+  command's key that the last frame asked for would take it
+  (`Runtime::$askedKeys`); the speech items are disabled, as native UI
+  does not speak. The menu target answers for the app's items as the app
+  set them; a role's item the app disabled targets it, which lacks the
+  action (`Menu::applyEnabled`). Paste and Match Style reaches the view
+  (`pasteAsPlainText:`) and pastes into a field; a disabled field or
+  paragraph takes no command.
+- Assistive technology sets the value of a node with a text client of
+  its own and no editor (`handleTextInput`), its whole text, and inserts
+  text in place of its selection, focusing it; disabled, neither
+  (`RuntimeAccess::clientOnly`).
+- The updater's `availableVersion()` (mygo's AvailableVersion): the
+  version the last check found, cleared by a failed or up-to-date check
+  and by Skip This Version, kept by Remind Me Later and by an update
+  installed until the relaunch; `onChange` tells it.
+- A message's Escape: for a `cancelButton` of -1, the first button
+  labeled Cancel or No, else the first (`Dialog::cancelFor`);
+  `MessageOptions::NO_CANCEL` for none.
+- `examples/wavelength` is mygo's examples/video: a GIF looping behind
+  the window's content, paused and played by a button.
+- `Native\VideoDecoder`, which decodes a film's keyframes into
+  thumbnails, is `Native\ThumbnailDecoder`, apart from `UI\VideoDecoder`,
+  mygo's interface of videos' frames.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

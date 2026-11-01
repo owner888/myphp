@@ -1,5 +1,5 @@
 #!/bin/sh
-# ./run.sh inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | chart-streaming [polyline|path|raw] | shaders | wind | blackhole | chat-glow | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | automation | gen [out.ts]
+# ./run.sh inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | chart-streaming [polyline|path|raw] | shaders | wind | blackhole | chat-glow | piano | hello | counter-native | wavelength | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | automation | gen [out.ts]
 cd "$(dirname "$0")"
 PHP="${PHP:-php}"
 $PHP -m | grep -qi '^ffi$' || { echo "php needs the FFI extension (php -m)"; exit 1; }
@@ -45,6 +45,7 @@ case "$1" in
   updater) exec $PHP $OPTS examples/updater/main.php "${@:2}" ;;
   hello)   exec $PHP $OPTS examples/hello/main.php ;;
   counter-native) exec $PHP $OPTS examples/counter-native/main.php ;;
+  wavelength) exec $PHP $OPTS examples/wavelength/main.php ;;
   text-buffer) exec $PHP $OPTS examples/text-buffer/main.php ${2:+"$2"} ;;
   text-input) exec $PHP $OPTS examples/text-input/main.php ;;
   frameless) exec $PHP $OPTS examples/frameless/main.php ;;
@@ -64,5 +65,5 @@ case "$1" in
   gallery) exec $PHP $OPTS examples/gallery/main.php ;;
   automation) exec $PHP $OPTS examples/automation/main.php ;;
   gen)     MYPHP_GENERATE="${2:-examples/webview/myphp.ts}" exec $PHP $OPTS examples/webview/main.php ;;
-  *) echo "usage: $0 inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | chart-streaming [polyline|path|raw] | shaders | wind | blackhole | chat-glow | piano | hello | counter-native | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | automation | gen [out.ts]"; exit 1 ;;
+  *) echo "usage: $0 inbox [rows] | native | webview | desktop | form | logview [file] | markdown-notes [folder] | notes | drag-drop | glass | widgets | photos [folder] | video [file] | http | titlebar [hidden|hiddenInset] [x,y] | files [folder] | code-editor | flyout | router | drag | transfer | richtext | terminal | sqlite | watch [folder] | websocket [url] | updater [--demo] [--native] | game | services | documents [file.md…] | protocol | charts | chart-streaming [polyline|path|raw] | shaders | wind | blackhole | chat-glow | piano | hello | counter-native | wavelength | text-buffer [lines] | text-input | frameless | clipboard | timeline | markdown-chat | embed-webview | menubar-flyout | menubar-native | launcher | vibrancy | todo | confetti | effort-slider | farm | mayoi | gallery | automation | gen [out.ts]"; exit 1 ;;
 esac

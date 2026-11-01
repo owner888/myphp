@@ -178,6 +178,12 @@ final class Node
     public bool $belowMaterials = false;
     /** The corners' radii where they differ (radius() of four): top left, top right, bottom right, bottom left; null for $radius at each. @var ?array{0: float, 1: float, 2: float, 3: float} */
     public ?array $radii = null;
+    /** placeholderColor()'s: the placeholder's color and alpha, null for the theme's muted text. @var ?array{0: int, 1: float} */
+    public ?array $placeholderColor = null;
+    /** caretWidth()'s: the width of an input's caret in points, 0 for none. */
+    public float $caretWidth = 1.0;
+    /** scrollbars(false)'s: a scroll container that shows no bars, which take no press. */
+    public bool $hideScrollbars = false;
     /** A gradient filling the node in place of its color (gradient, linearGradient, radialGradient, conicGradient), or stripes over its color (stripes): [color, alpha, width, gap, angle]. */
     public LinearGradient|RadialGradient|ConicGradient|null $gradient = null;
     /** The gradient painting the node's border in place of its color (borderLinearGradient, borderConicGradient), or null. */
@@ -869,6 +875,20 @@ final class Node
         return $this;
     }
 
+    /**
+     * Shows this scroll container's bars while the pointer is over it, as
+     * by default, or with false never, nor do they take a press (mygo's
+     * Scrollbars): the wheel, scrollTo, the keys and assistive technology
+     * still scroll it. For Context::scroll and its kin and lists, not the
+     * bars a control draws itself, as a code editor's; not inherited. A
+     * bar dragged as it hides lets go.
+     */
+    public function scrollbars(bool $visible): static
+    {
+        $this->hideScrollbars = !$visible;
+        return $this;
+    }
+
     /** Moves a scroll container's bars in from its edges, as padding() takes its sides: the vertical bar from top points below its top to bottom above its bottom, right in from its right, the horizontal from left to right in, bottom up; clear of what floats over the content (mygo's ScrollbarInsets). */
     public function scrollbarInsets(float ...$v): static
     {
@@ -1144,10 +1164,13 @@ final class Node
     public function textAlign(int $a): static { $this->ts()->align = $a; return $this; }
 
     /** Underlines text. */
-    public function underline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = false; return $this; }
+    public function underline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = $t->dotted = false; return $this; }
 
     /** Underlines text with a wave, as spell checkers mark words. */
-    public function wavyUnderline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = true; return $this; }
+    public function wavyUnderline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = true; $t->dotted = false; return $this; }
+
+    /** Underlines text with a line of dots, as links mark hover (mygo's DottedUnderline). */
+    public function dottedUnderline(): static { $t = $this->ts(); $t->underline = true; $t->wavy = false; $t->dotted = true; return $this; }
 
     /** Sets the color of underlines and strikethroughs, the text's otherwise. */
     public function decorationColor(int $rgb): static { $this->ts()->decoColor = $rgb; return $this; }
@@ -1339,6 +1362,34 @@ final class Node
      * nothing to a text area: as on every platform, only single-line fields
      * hide their text.
      */
+    /**
+     * Colors this input's placeholder, for this build (mygo's
+     * PlaceholderColor): the theme's muted text color otherwise. The text
+     * typed, other inputs and the theme keep theirs; an alpha of 0 hides
+     * the placeholder. It does nothing to what is no text input.
+     */
+    public function placeholderColor(int $rgb, float $alpha = 1.0): static
+    {
+        if ($this->kind === self::INPUT || $this->kind === self::TEXTAREA) {
+            $this->placeholderColor = [$rgb, $alpha];
+        }
+        return $this;
+    }
+
+    /**
+     * Paints this input's caret $width points wide, for this build
+     * (mygo's CaretWidth): one by default, on whole device pixels, one at
+     * least; 0 or less hides it. The text's layout, the input method's
+     * place and the blinking stay; what is no text input is left alone.
+     */
+    public function caretWidth(float $width): static
+    {
+        if ($this->kind === self::INPUT || $this->kind === self::TEXTAREA) {
+            $this->caretWidth = max($width, 0.0);
+        }
+        return $this;
+    }
+
     public function password(): static
     {
         if ($this->edit !== null && !$this->edit->multiline) {
@@ -1593,7 +1644,7 @@ final class Node
     {
         $t = $this->ts ?? new TextStyle();
         $s = new Span('', $t->size, 0, $t->color, $t->underline ?? false, $t->strike ?? false, $t->background, $t->family, $t->weight, $t->italic ?? false, $t->alpha,
-            wavyUnderline: $t->wavy ?? false, decorationColor: $t->decoColor, decorationThickness: $t->decoThick, letterSpacing: $t->spacing, features: $t->features, lang: $t->lang);
+            wavyUnderline: $t->wavy ?? false, dottedUnderline: $t->dotted ?? false, decorationColor: $t->decoColor, decorationThickness: $t->decoThick, letterSpacing: $t->spacing, features: $t->features, lang: $t->lang);
         if ($this->kind === self::TEXT || $this->kind === self::RICH) { // what text() or a link was given, as a link's color
             $s = $s->over($this->given(''));
         }

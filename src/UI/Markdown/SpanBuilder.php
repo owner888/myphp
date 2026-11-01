@@ -135,6 +135,7 @@ final class SpanBuilder
             $sp->radius = max(3, $sp->size / 4);
             if (!$s->inLink) { $color = $th->code; }
         }
+        if ($s->inLink && $th->linkWeight > $s->weight) { $sp->weight = $th->linkWeight; }
         if ($s->sub) { $sp->size *= 0.75; }
         if ($s->mark) { $bg = $th->mark; }
         if ($s->color !== null && $s->color[1] > 0) { $color = $s->color; }

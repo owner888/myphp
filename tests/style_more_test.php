@@ -22,6 +22,17 @@ function smBoxes(\Closure $view, int $w, int $h, string ...$labels): array
     return $out;
 }
 
+/** The boxes of every quad of $list that shows. @return list<array{0: float, 1: float, 2: float, 3: float}> */
+function smAll(DisplayList $list): array
+{
+    $out = [];
+    for ($i = 0; $i < $list->n; $i++) {
+        $b = $list->buf; $k = $i * DisplayList::FLOATS_PER_RECT;
+        if ($b[$k + 7] > 0) { $out[] = [$b[$k], $b[$k + 1], $b[$k + 2], $b[$k + 3]]; }
+    }
+    return $out;
+}
+
 /** Whether boxes $a and $b are within a hundredth of a point. */
 function smNear(array $a, array $b): bool
 {
@@ -165,6 +176,8 @@ foreach ([
     'underline' => [fn(Context $c) => $c->text('Hello')->underline()->decorationColor(0xff0000), fn(array $q) => count($q) >= 1 && $q[0][3] <= 2],
     'thick strikethrough' => [fn(Context $c) => $c->text('Hello')->strikethrough()->decorationColor(0xff0000)->decorationThickness(3), fn(array $q) => count($q) >= 1 && abs($q[0][3] - 3) < 0.01],
     'wavy underline' => [fn(Context $c) => $c->text('Hello world')->wavyUnderline()->decorationColor(0xff0000), fn(array $q) => count($q) >= 1],
+    'dotted underline' => [fn(Context $c) => $c->text('Hello world')->dottedUnderline()->decorationColor(0xff0000), fn(array $q) => count($q) >= 5 && $q[0][2] == $q[0][3] && abs($q[1][0] - $q[0][0] - 3) < 0.01], // square dots, three points apart (mygo's dots)
+    'dotted spans' => [fn(Context $c) => $c->richText([new Span('plain '), new Span('link', dottedUnderline: true, decorationColor: 0xff0000)]), fn(array $q) => count($q) >= 2 && $q[0][2] == $q[0][3]],
     'background' => [fn(Context $c) => $c->text('Hello')->textBackground(0xff0000), fn(array $q) => count($q) >= 1 && $q[0][2] >= 30],
     'spans' => [fn(Context $c) => $c->richText([new Span('plain '), new Span('found', background: 0xff0000), new Span(' typo', wavyUnderline: true, decorationColor: 0xff0000)]), fn(array $q) => count($q) >= 2],
 ] as $name => [$view, $ok]) {
@@ -243,3 +256,59 @@ $h->frame();
 $err = null;
 try { $h->paint(); } catch (\LogicException $e) { $err = $e->getMessage(); }
 same(null, $err, 'a clip mask inside a rounded clip takes its place');
+
+// An input's placeholder in a color of its own (mygo's PlaceholderColor), for the frames that ask: the theme's muted text otherwise; an alpha of 0 hides it.
+foreach ([[0xff0000, 1.0, true], [0xff0000, 0.0, false]] as [$rgb, $alpha, $shows]) {
+    $st = new \MyPHP\UI\TextState('');
+    $h = new Headless(function (Context $c) use ($st, $rgb, $alpha): void { $c->input($st, 'Search')->placeholderColor($rgb, $alpha); }, 300, 60);
+    $h->frame();
+    same($shows, smQuads($h->paint(), $rgb) !== [], "a placeholder at alpha $alpha " . ($shows ? 'shows' : 'is hidden') . ' in its color');
+}
+$st = new \MyPHP\UI\TextState('');
+$h = new Headless(function (Context $c) use ($st): void { $c->textarea($st, 'Notes')->placeholderColor(0xff0000); }, 300, 200);
+$h->frame();
+check(smQuads($h->paint(), 0xff0000) !== [], "a text area's placeholder in its color");
+$h = new Headless(function (Context $c) use ($st): void { $c->input($st, 'Search'); }, 300, 60);
+$h->frame();
+check(smQuads($h->paint(), 0xff0000) === [] && smQuads($h->paint(), \MyPHP\UI\Theme::dark()->textMuted) !== [], 'without it, the theme\'s muted text');
+
+// Context::instant (mygo's Instant): the frames disableAnimations settles, not the others.
+$seen = [];
+$settle = true;
+$h = new Headless(function (Context $c) use (&$seen, &$settle): void {
+    if ($settle) { $c->disableAnimations(); }
+    $seen[] = $c->instant();
+    $c->text('x');
+}, 100, 40);
+$h->frame(1);
+$settle = false;
+$h->frame(1);
+same([true, false], $seen, 'instant in the frame that settles, not after');
+
+// An input's caret as wide as caretWidth() (mygo's CaretWidth), on whole pixels, none at 0; a text area's too.
+$accent = \MyPHP\UI\Theme::dark()->accent;
+foreach ([[2.0, 2.0], [0.4, 1.0], [0.0, null]] as [$width, $want]) {
+    foreach (['input', 'textarea'] as $kind) {
+        $st = new \MyPHP\UI\TextState('hi');
+        $h = new Headless(function (Context $c) use ($st, $width, $kind): void {
+            ($kind === 'input' ? $c->input($st)->label('f') : $c->textarea($st)->label('f'))->caretWidth($width);
+        }, 400, 200);
+        $h->frame();
+        $h->clickLabel('f'); $h->frame();
+        $carets = array_values(array_filter(smQuads($h->paint(), $accent), fn(array $q): bool => $q[2] < 5 && $q[3] > 8));
+        same($want, $carets[0][2] ?? null, "a $kind's caret at caretWidth($width)");
+    }
+}
+
+// scrollbars(false) (mygo's Scrollbars): no bars while hovered.
+foreach ([true, false] as $visible) {
+    $h = new Headless(function (Context $c) use ($visible): void {
+        $c->scroll()->size(200, 100)->scrollbars($visible);
+          for ($i = 0; $i < 20; $i++) { $c->text("Row $i")->height(20); }
+        $c->end();
+    }, 200, 100);
+    $h->frame();
+    $h->hover(100, 50);
+    $thumbs = array_filter(smAll($h->paint()), fn(array $q): bool => $q[0] > 190 && $q[2] <= 8 && $q[3] > 10);
+    same($visible, $thumbs !== [], 'scrollbars(' . var_export($visible, true) . '): ' . ($visible ? 'its bar shows while hovered' : 'no bar'));
+}

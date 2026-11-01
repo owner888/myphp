@@ -130,8 +130,19 @@ final class Updater
     }
 
     /**
-     * Calls $fn after the choices of the user or the time of the last
-     * check changed: a check succeeded, the user answered the window (its
+     * The newer version the last check found, or "": "" before a check,
+     * after a failed one, and for a version the user skipped; an update
+     * downloaded keeps its version until the app relaunches. onChange
+     * tells when it changes.
+     */
+    public static function availableVersion(): string
+    {
+        return self::used()->available;
+    }
+
+    /**
+     * Calls $fn after the choices of the user, the time of the last check
+     * or availableVersion() changed: a check succeeded, the user answered the window (its
      * checkbox, Skip This Version), or the app called setAutomaticChecks()
      * or setAutomaticDownloads(). Returns a function that removes it.
      */

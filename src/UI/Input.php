@@ -21,6 +21,8 @@ final class Input
     public float $zoom = 1.0;
     /** @var list<array> ['down'|'up'|'move'|'drag'|'scroll'|'key'|'command'|'insert'|'accessOn'|'access', ...] in arrival order; down and up carry x, y, button, click count, modifier flags; access an action of assistive technology: id, AccessNode action, text, from, to */
     public array $events = [];
+    /** @var ?\Closure(string): bool whether the Edit menu's command would act now, which a menu asks before it shows (Runtime::commandEnabled): set by the runtime */
+    public ?\Closure $commandEnabled = null;
 
     /** The focused text field's state, or null when no field has the keyboard. */
     public ?TextState $focus = null;
