@@ -368,7 +368,10 @@ final class MoviePlayerState
         $p->setVolume($this->volume);
         $this->applyAudio($p);
         $p->setEqualizer($this->equalizer);
-        $p->setHdr($this->settings()->get('enableHdrSupport')); // IINA's HDR mode: HDR as HDR, else tone mapped
+        $this->hdr = $this->settings()->get('enableHdrSupport'); // IINA's HDR mode, each film: HDR as HDR, else tone mapped
+        $p->setHdr($this->hdr);
+        foreach ($this->videoEq as $option => $v) { if ($v !== 0) { $p->setVideoEqualizer($option, $v); } } // as mpv's options and filters, the next film's too
+        $p->setFlip($this->flip); $p->setMirror($this->mirror);
         if ($this->hardwareDecoding !== null) { $p->setHardwareDecoding($this->hardwareDecoding); } // the quick setting's, of this player and the next (mpv's hwdec stays as films change)
         $this->moved = microtime(true);
         $noted = 0.0;
@@ -1563,6 +1566,54 @@ final class MoviePlayerState
     {
         if ($this->pip === null) { return; }
         if ($this->pip->active()) { $this->pip->stop(); } elseif ($this->pip->possible()) { $this->pip->start(); }
+    }
+
+    /** Whether an HDR film shows in HDR (the video tab's switch, IINA's info.hdrEnabled): the settings' as each film opens. */
+    public bool $hdr = true;
+
+    /** The video tab's HDR switch: the film in HDR, else tone mapped. */
+    public function setHdr(bool $on): void
+    {
+        $this->hdr = $on;
+        $this->player?->setHdr($on);
+        $this->changed();
+    }
+
+    /** Whether the HDR switch shows: an HDR film, on a screen of extended dynamic range (IINA's hdrAvailable), the one of the window in front. */
+    public function hdrAvailable(): bool
+    {
+        if (!($this->player?->hdr() ?? false)) { return false; }
+        $screen = \MyPHP\Native\ObjC::msg('p:', \MyPHP\Native\ObjC::cls('NSScreen'), 'mainScreen');
+        return $screen !== null && \MyPHP\Native\ObjC::msg('d:', $screen, 'maximumPotentialExtendedDynamicRangeColorComponentValue') > 1.0;
+    }
+
+    /** @var array{brightness: int, contrast: int, saturation: int, gamma: int, hue: int} the video equalizer's, kept from film to film (mpv's options) */
+    public array $videoEq = ['brightness' => 0, 'contrast' => 0, 'saturation' => 0, 'gamma' => 0, 'hue' => 0];
+
+    /** Sets $option of the video equalizer (Player::VIDEO_EQUALIZER) to $value, -100 to 100, told with a bar of it, as IINA's (setVideoEqualizer and its OSD). */
+    public function setVideoEqualizer(string $option, int $value): void
+    {
+        $value = max(-100, min(100, $value));
+        $this->videoEq[$option] = $value;
+        $this->player?->setVideoEqualizer($option, $value);
+        $this->say($this->t('iinaOsdVideoEq' . ucfirst($option), ['value' => (string)$value]), "eq:$option");
+    }
+
+    /** Whether the picture is upside down (Video > Flip > Vertical, IINA's flip) and mirrored (Horizontal), kept from film to film (mpv's filters). */
+    public bool $flip = false, $mirror = false;
+
+    public function setFlip(bool $on): void
+    {
+        $this->flip = $on;
+        $this->player?->setFlip($on);
+        $this->changed();
+    }
+
+    public function setMirror(bool $on): void
+    {
+        $this->mirror = $on;
+        $this->player?->setMirror($on);
+        $this->changed();
     }
 
     /** Whether the player's window is full screen. */

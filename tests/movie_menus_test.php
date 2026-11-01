@@ -47,7 +47,7 @@ $enabled = function (array $items) use (&$enabled): array {
     }
     return $on;
 };
-same(['iina.playback', 'iina.video', 'iina.audio', 'iina.subtitles', 'iina.onlineSubSource'], $enabled([...$none, ...MoviePlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus');
+same(['iina.playback', 'iina.video', 'iina.flipMenu', 'iina.audio', 'iina.subtitles', 'iina.onlineSubSource'], $enabled([...$none, ...MoviePlayerMenus::fileItems(null)]), 'of no player, the items disabled, but the menus');
 
 $s = new MoviePlayerState();
 $menus = MoviePlayerMenus::menus($s);

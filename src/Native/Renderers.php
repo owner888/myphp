@@ -130,6 +130,46 @@ final class Renderers
         ObjC::msg('v:p', $this->layer, 'setPreferredDynamicRange:', ObjC::import($high ? $qc->CADynamicRangeAutomatic : $qc->CADynamicRangeStandard));
     }
 
+    /**
+     * The picture's colors as mpv's video equalizer sets them, each -100 to
+     * 100 (IINA's sliders), filtered by Core Image in the layer (CALayer's
+     * filters, its view's layerUsesCoreImageFilters): brightness, contrast
+     * and saturation CIColorControls' (mpv's brightness / 100, 1 + contrast
+     * / 100, 1 + saturation / 100), gamma CIGammaAdjust's power (mpv's
+     * 8^(gamma / 100), the colors raised to its inverse), hue CIHueAdjust's
+     * angle (hue / 100 × π); none of them set, no filter of these: the
+     * layer's own (AVSampleBufferDisplayLayer has some) kept before them.
+     * @param array{brightness: int, contrast: int, saturation: int, gamma: int, hue: int} $eq
+     */
+    public function setPictureFilters(array $eq): void
+    {
+        ObjC::boot(['CoreImage']);
+        $own = ObjC::msg('p:', $this->layer, 'filters'); // the layer's own, which stay first
+        if ($this->ownFilters === false) { $this->ownFilters = $own === null ? null : ObjC::msg('p:', $own, 'retain'); }
+        $filters = $this->ownFilters === null ? ObjC::msg('p:', ObjC::cls('NSMutableArray'), 'array') : ObjC::msg('p:p', ObjC::cls('NSMutableArray'), 'arrayWithArray:', $this->ownFilters);
+        $filter = function (string $name, array $values) use ($filters): void {
+            $f = ObjC::msg('p:p', ObjC::cls('CIFilter'), 'filterWithName:', ObjC::str($name));
+            ObjC::msg('v:', $f, 'setDefaults');
+            foreach ($values as $key => $v) {
+                ObjC::msg('v:pp', $f, 'setValue:forKey:', ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', $v), ObjC::str($key));
+            }
+            ObjC::msg('v:p', $filters, 'addObject:', $f);
+        };
+        if ($eq['brightness'] !== 0 || $eq['contrast'] !== 0 || $eq['saturation'] !== 0) {
+            $filter('CIColorControls', ['inputBrightness' => $eq['brightness'] / 100, 'inputContrast' => 1 + $eq['contrast'] / 100, 'inputSaturation' => 1 + $eq['saturation'] / 100]);
+        }
+        if ($eq['gamma'] !== 0) {
+            $filter('CIGammaAdjust', ['inputPower' => 8 ** (-$eq['gamma'] / 100)]);
+        }
+        if ($eq['hue'] !== 0) {
+            $filter('CIHueAdjust', ['inputAngle' => $eq['hue'] / 100 * M_PI]);
+        }
+        ObjC::msg('v:p', $this->layer, 'setFilters:', ObjC::msg('L:', $filters, 'count') === 0 ? null : $filters);
+    }
+
+    /** The filters the display layer had before setPictureFilters (an NSArray, null for none), false till it is first called. */
+    private mixed $ownFilters = false;
+
     /** Whether the renderer of $t's packets takes more now. */
     public function ready(Track $t): bool
     {
@@ -514,6 +554,7 @@ final class Renderers
             ObjC::msg('v:', $this->queue, 'release');
         }
         if ($this->queued !== null) { ObjC::msg('v:', $this->queued, 'release'); }
+        if ($this->ownFilters !== false && $this->ownFilters !== null) { ObjC::msg('v:', $this->ownFilters, 'release'); }
         ObjC::msg('v:f', $this->sync, 'setRate:', 0.0);
         foreach ([...$this->formats, ...$this->pcmFormats] as $f) {
             CoreMedia::c()->CFRelease($f);

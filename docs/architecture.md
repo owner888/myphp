@@ -7042,6 +7042,39 @@ succeeds are told of, an empty line is none.
   says), `fullScreen()`; the window sizes take the settings'
   `usePhysicalResolution`.
 
+## The picture's adjustments (v1.136)
+
+- IINA's video equalizer (SidebarVideoPane's EqualizerView): a row an
+  option of mpv's brightness, contrast, saturation, gamma and hue, its
+  small slider -100 to 100 filled from 0, a button back to 0. Set by
+  `MoviePlayerState::setVideoEqualizer`, told as IINA's OSD with a bar of
+  it (`say(…, 'eq:brightness')`), by key bindings' set, add, cycle and
+  cycle-values of the five properties too, and kept from film to film,
+  as mpv keeps its options.
+- `Player::setVideoEqualizer` gives `Renderers::setPictureFilters` the
+  five, which sets the display layer's `filters`: CIColorControls
+  (brightness / 100, 1 + contrast / 100, 1 + saturation / 100),
+  CIGammaAdjust (power 8^(-gamma / 100): mpv's gamma 8^(gamma / 100), the
+  colors raised to its inverse), CIHueAdjust (hue / 100 × π); none when
+  all are 0, so the picture, HDR too, is as it was. The view hosting the
+  layer says `layerUsesCoreImageFilters`, which AppKit asks of a view
+  whose layer has filters.
+- Flip and mirror (Video > Flip, IINA's flip and mirror commands): the
+  window's crop view, which holds the picture's view, reverses it with
+  its layer's sublayer transform (`Window::reverse`), about the middle of
+  its bounds from the anchor point AppKit gave it (a CATransform3D,
+  `ObjC::MAP`'s `M`). mpv flips before it rotates, so a quarter turn
+  swaps the two (`Player::reversed`); a reversed picture is not plain,
+  so the window lays it out.
+- The HDR switch under hardware decoding, as IINA's: shown for an HDR
+  film (`Player::hdr`: PQ or HLG in BT.2020's or P3's primaries, as the
+  container says) on a screen of extended dynamic range (NSScreen's
+  `maximumPotentialExtendedDynamicRangeColorComponentValue`), the
+  settings' HDR mode as each film opens, switched for the film playing.
+- Fit to Screen (and the settings' fit screen as a film opens) makes the
+  window as large as the screen's visible frame takes, larger as well as
+  smaller, as IINA's `shrink(toSize:)` fits; until v1.136 it only shrank.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

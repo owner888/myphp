@@ -941,6 +941,13 @@ final class Player
         $this->out->setAudioDevice($uid);
     }
 
+    /** Whether the film is HDR, as IINA tells it: its picture of PQ or HLG (H.273's 16 and 18) in BT.2020's or P3's primaries (9 and 12), as its container says. */
+    public function hdr(): bool
+    {
+        $c = $this->videoTrack()?->colors ?? [];
+        return in_array($c['transfer'] ?? 2, [16, 18], true) && in_array($c['primaries'] ?? 2, [9, 12], true);
+    }
+
     /** @internal UI\MoviePlayerState: whether an HDR film shows in HDR (the system's high dynamic range), else tone mapped to the standard range: IINA's HDR mode. */
     public function setHdr(bool $on): void
     {
@@ -1289,6 +1296,63 @@ final class Player
         return $this->rotation;
     }
 
+    /** mpv's video equalizer's options, IINA's sliders of the picture's colors. */
+    public const VIDEO_EQUALIZER = ['brightness', 'contrast', 'saturation', 'gamma', 'hue'];
+
+    /** @var array{brightness: int, contrast: int, saturation: int, gamma: int, hue: int} */
+    private array $videoEq = ['brightness' => 0, 'contrast' => 0, 'saturation' => 0, 'gamma' => 0, 'hue' => 0];
+
+    /** Sets $option of VIDEO_EQUALIZER to $value, -100 to 100, 0 its own (mpv's, IINA's setVideoEqualizer): Renderers::setPictureFilters. */
+    public function setVideoEqualizer(string $option, int $value): void
+    {
+        if (!isset($this->videoEq[$option])) {
+            throw new RuntimeException("myphp: no video equalizer option \"$option\"");
+        }
+        $this->videoEq[$option] = max(-100, min(100, $value));
+        $this->out->setPictureFilters($this->videoEq);
+    }
+
+    public function videoEqualizer(string $option): int
+    {
+        return $this->videoEq[$option] ?? throw new RuntimeException("myphp: no video equalizer option \"$option\"");
+    }
+
+    private bool $flip = false, $mirror = false;
+
+    /** Turns the picture upside down (IINA's flip, mpv's vflip filter), before it is rotated. */
+    public function setFlip(bool $on): void
+    {
+        $this->flip = $on;
+    }
+
+    public function flipped(): bool
+    {
+        return $this->flip;
+    }
+
+    /** Shows the picture as in a mirror, left for right (IINA's mirror, mpv's hflip filter), before it is rotated. */
+    public function setMirror(bool $on): void
+    {
+        $this->mirror = $on;
+    }
+
+    public function mirrored(): bool
+    {
+        return $this->mirror;
+    }
+
+    /**
+     * @internal the window: whether the picture as it shows, turned, is
+     * reversed left for right and upside down: a quarter turn makes a
+     * mirror upside down and a flip left for right.
+     * @return array{0: bool, 1: bool}
+     */
+    public function reversed(): array
+    {
+        $turned = $this->rotation === 90 || $this->rotation === 270;
+        return $turned ? [$this->flip, $this->mirror] : [$this->mirror, $this->flip];
+    }
+
     /**
      * Where the picture shows in a box $w by $h, as setAspectRatio,
      * setCrop and setRotation lay it out: see Picture::fit.
@@ -1301,10 +1365,10 @@ final class Player
         return Picture::fit($w, $h, $this->aspect ?? ($vh > 0 ? $vw / $vh : 16 / 9), $this->crop, $this->rotation);
     }
 
-    /** Whether the picture shows as the file has it: its own aspect, uncut, upright. */
+    /** Whether the picture shows as the file has it: its own aspect, uncut, upright, neither flipped nor mirrored. */
     public function plainPicture(): bool
     {
-        return $this->aspect === null && $this->crop === null && $this->rotation === 0;
+        return $this->aspect === null && $this->crop === null && $this->rotation === 0 && !$this->flip && !$this->mirror;
     }
 
     /** Plays the sound $seconds later than the picture (earlier when negative), from where it is. */

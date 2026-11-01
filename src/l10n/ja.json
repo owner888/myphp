@@ -293,5 +293,19 @@
   "iinaAlertJumpToMessage": "ジャンプ位置の時間を入力してください。例: 20:35",
   "iinaAlertSubNoSelected": "ダウンロードした字幕を最初に選択してください。",
   "iinaAlertSubSaveDownloadedTitle": "ダウンロードした字幕を保存",
-  "iinaOsdSubSaved": "字幕を保存しました"
+  "iinaOsdSubSaved": "字幕を保存しました",
+  "iinaMenuFlip": "反転",
+  "iinaMenuMirror": "水平 (左右反転)",
+  "iinaMenuFlipVertical": "垂直（上下反転）",
+  "iinaSidebarBrightness": "輝度",
+  "iinaSidebarContrast": "コントラスト",
+  "iinaSidebarSaturation": "彩度",
+  "iinaSidebarGamma": "ガンマ",
+  "iinaSidebarHue": "色相",
+  "iinaOsdVideoEqBrightness": "輝度: {value}",
+  "iinaOsdVideoEqContrast": "コントラスト: {value}",
+  "iinaOsdVideoEqSaturation": "彩度: {value}",
+  "iinaOsdVideoEqGamma": "ガンマ: {value}",
+  "iinaOsdVideoEqHue": "色相: {value}",
+  "iinaQuicksettingHdr": "HDR"
 }

@@ -22,7 +22,7 @@ use MyPHP\Window;
  * do, a step's size and its title the binding's (updateKeyEquivalentsFrom).
  * Of no player (null) they are disabled.
  *
- * Not here yet: Video's Lock Window Aspect Ratio, Flip, Deinterlace,
+ * Not here yet: Video's Lock Window Aspect Ratio, Deinterlace,
  * Delogo, Crop's Custom and the filters; Audio's Audio Device and filters;
  * Window's Inspector.
  */
@@ -54,6 +54,8 @@ final class MoviePlayerMenus
         'miniPlayer' => [true, ['toggle-music-mode'], false, null],
         'liveText' => [true, ['live-text'], false, null],
         'pictureInPicture' => [true, ['toggle-pip'], false, null],
+        'flip' => [true, ['flip'], false, null],
+        'mirror' => [true, ['mirror'], false, null],
         'cycleVideoTracks' => [false, ['cycle', 'video'], false, null],
         'cycleAudioTracks' => [false, ['cycle', 'audio'], false, null],
         'cycleSubtitles' => [false, ['cycle', 'sub'], false, null],
@@ -268,6 +270,10 @@ final class MoviePlayerMenus
             self::list($s, 'aspect', self::t('iinaMenuAspectRatio'), fn() => self::ratios($s, false)),
             self::list($s, 'crop', self::t('iinaMenuCrop'), fn() => self::ratios($s, true)),
             self::list($s, 'rotation', self::t('iinaMenuRotation'), fn() => self::rotations($s)),
+            new MenuItem(self::t('iinaMenuFlip'), id: 'iina.flipMenu', submenu: [
+                $it('mirror', self::t('iinaMenuMirror'), fn() => $s->setMirror(!$s->mirror), checked: $s?->mirror ?? false),
+                $it('flip', self::t('iinaMenuFlipVertical'), fn() => $s->setFlip(!$s->flip), checked: $s?->flip ?? false),
+            ]),
         ];
     }
 

@@ -4884,5 +4884,41 @@
   "iinaOsdSubSaved": "Subtitle saved",
   "@iinaOsdSubSaved": {
     "description": "IINA's \"osd.sub_saved\"."
+  },
+  "iinaMenuFlip": "Flip",
+  "@iinaMenuFlip": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuMirror": "Horizontal (Mirror)",
+  "@iinaMenuMirror": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaMenuFlipVertical": "Vertical (Flip)",
+  "@iinaMenuFlipVertical": {
+    "description": "An item of IINA's menus, as IINA says it."
+  },
+  "iinaOsdVideoEqBrightness": "Brightness: {value}",
+  "@iinaOsdVideoEqBrightness": {
+    "description": "IINA's \"osd.video_eq.brightness\"."
+  },
+  "iinaOsdVideoEqContrast": "Contrast: {value}",
+  "@iinaOsdVideoEqContrast": {
+    "description": "IINA's \"osd.video_eq.contrast\"."
+  },
+  "iinaOsdVideoEqSaturation": "Saturation: {value}",
+  "@iinaOsdVideoEqSaturation": {
+    "description": "IINA's \"osd.video_eq.saturation\"."
+  },
+  "iinaOsdVideoEqGamma": "Gamma: {value}",
+  "@iinaOsdVideoEqGamma": {
+    "description": "IINA's \"osd.video_eq.gamma\"."
+  },
+  "iinaOsdVideoEqHue": "Hue: {value}",
+  "@iinaOsdVideoEqHue": {
+    "description": "IINA's \"osd.video_eq.hue\"."
+  },
+  "iinaQuicksettingHdr": "HDR",
+  "@iinaQuicksettingHdr": {
+    "description": "IINA's \"quicksetting.hdr\"."
   }
 }

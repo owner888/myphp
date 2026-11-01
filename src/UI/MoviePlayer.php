@@ -766,8 +766,9 @@ final class MoviePlayer
           $c->text($text, $size, self::$ink);
           if ($under === 'time') {
               $c->text(MoviePlayerState::clock($p->time()) . ' / ' . MoviePlayerState::clock($p->duration()), $small, self::$ink)->fontFeatures('tnum')->opacity(0.7);
-          } elseif ($under === 'volume') {
-              $level = ($p->muted() ? 0.0 : $s->volume) / $s->maxVolume(); // of the maximum volume, as IINA's
+          } elseif ($under === 'volume' || str_starts_with($under, 'eq:')) {
+              $level = $under === 'volume' ? ($p->muted() ? 0.0 : $s->volume) / $s->maxVolume() // of the maximum volume, as IINA's
+                  : ($p->videoEqualizer(substr($under, 3)) + 100) / 200; // a video equalizer's, -100 to 100
               $c->row()->height(5)->fillWidth()->minWidth(90)->draw(static function (Painter $p, array $r) use ($level): void {
                   $p->fill($r, self::$ink, 2.5, 0.25);
                   $p->fill([$r[0], $r[1], $r[2] * $level, $r[3]], $p->theme()->accent, 2.5); // the system's accent
@@ -1727,7 +1728,47 @@ final class MoviePlayer
               $hw = $p->hardwareDecoding();
               if (self::toggleSwitch($c, self::t($c, 'videoHardwareDecoding'), $hw, $p->decodingSwitchable())) { $s->setHardwareDecoding(!$hw); }
           });
+          if ($s->hdrAvailable()) { // an HDR film on a screen that shows HDR (IINA's hdrRow)
+              self::heading($c, 'sun.max', self::t($c, 'iinaQuicksettingHdr'), function () use ($c, $s): void {
+                  if (self::toggleSwitch($c, self::t($c, 'iinaQuicksettingHdr'), $s->hdr)) { $s->setHdr(!$s->hdr); }
+              });
+          }
         $c->end();
+        self::card($c);
+          self::videoEqualizer($c, $s);
+        $c->end();
+    }
+
+    /**
+     * IINA's video equalizer (SidebarVideoPane's EqualizerView): a row an
+     * option, its name, a small slider of -100 to 100 filled from 0 to its
+     * knob, and a button that sets it back to 0; the names as wide as the
+     * widest.
+     */
+    private static function videoEqualizer(Context $c, MoviePlayerState $s): void
+    {
+        $labels = [];
+        foreach (Player::VIDEO_EQUALIZER as $option) { $labels[$option] = self::t($c, 'iinaSidebar' . ucfirst($option)); }
+        $w = max(array_map(fn(string $l) => $c->measureText(0, new Span($l, 11))[0], $labels));
+        foreach ($labels as $option => $label) {
+            $c->row(0, 8)->alignItems(Node::CENTER)->fillWidth();
+              $c->text($label, 11, self::$ink)->opacity(0.9)->width(ceil($w))->noWrap();
+              $v = (float)$s->videoEq[$option];
+              $sl = $c->sliderBase($v, -100, 100, 1)->grow(1)->height(18)->label($label);
+              $sl->draw(static function (Painter $p, array $r) use ($sl): void { // a track, filled from its middle (0, the neutral value) to the knob, a white pill
+                  $x0 = $r[0] + 4; $w = $r[2] - 8; $cy = $r[1] + $r[3] / 2;
+                  $p->fill([$r[0], $cy - 2, $r[2], 4], self::$ink, 2, 0.15);
+                  $mid = $x0 + $w / 2; $at = $x0 + $w * $sl->fraction;
+                  $p->fill([min($mid, $at), $cy - 2, abs($at - $mid), 4], $p->theme()->accent, 2);
+                  $p->fill([$at - 4, $cy - 7, 8, 14], 0xffffff, 4);
+              });
+              if ($c->changed($sl)) { $s->setVideoEqualizer($option, (int)round($v)); }
+              $reset = $c->column()->size(16, 16)->center()->role(Role::BUTTON)->label($label);
+                self::sf($c, 'arrow.counterclockwise.circle.fill', 13, $c->hovered($reset) ? 0.9 : 0.6);
+              $c->end();
+              if ($c->clicked($reset)) { $s->setVideoEqualizer($option, 0); }
+            $c->end();
+        }
     }
 
     private static function audioTab(Context $c, MoviePlayerState $s, Player $p): void

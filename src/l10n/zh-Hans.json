@@ -1178,5 +1178,14 @@
   "iinaAlertJumpToMessage": "请输入所要跳转的时间。例如: 20:35",
   "iinaAlertSubNoSelected": "请先选择一个已下载字幕。",
   "iinaAlertSubSaveDownloadedTitle": "保存已下载字幕",
-  "iinaOsdSubSaved": "字幕已保存"
+  "iinaOsdSubSaved": "字幕已保存",
+  "iinaMenuFlip": "翻转",
+  "iinaMenuMirror": "水平（镜像）",
+  "iinaMenuFlipVertical": "垂直（翻转）",
+  "iinaOsdVideoEqBrightness": "亮度：{value}",
+  "iinaOsdVideoEqContrast": "对比度：{value}",
+  "iinaOsdVideoEqSaturation": "饱和度：{value}",
+  "iinaOsdVideoEqGamma": "伽玛: {value}",
+  "iinaOsdVideoEqHue": "色调：{value}",
+  "iinaQuicksettingHdr": "HDR"
 }

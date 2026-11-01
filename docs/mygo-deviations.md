@@ -1731,7 +1731,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   menuWillOpen:, as IINA brings its menus up to date) and
   `MenuItem::setSubmenu` are myphp's; mygo has no film player, and its
   menu items neither alternates nor a call as they open. Of IINA's items,
-  left out so far: Video's Lock Window Aspect Ratio, Flip, Deinterlace,
+  left out so far: Video's Lock Window Aspect Ratio, Deinterlace,
   Delogo, Crop's Custom and the video filters; Audio's Audio Device and
   the audio filters; Window's Inspector; Find Online Subtitles from has
   OpenSubtitles alone. The film's picture is its one track, shown always:
@@ -1740,6 +1740,18 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   out: the window's keys carry out every binding. A key without Command
   or Control goes to a focused field before the menus take it (IINA
   favors the arrows only).
+- **The picture's adjustments** (v1.136): `Player::setVideoEqualizer`,
+  `VIDEO_EQUALIZER`, `setFlip`, `setMirror`, `reversed`, `hdr`,
+  `Renderers::setPictureFilters` and `MoviePlayerState::setVideoEqualizer`,
+  `setFlip`, `setMirror`, `setHdr`, `hdrAvailable` are myphp's, as IINA's
+  sidebar and Video > Flip; mygo has no film player. Core Image's filters
+  stand for mpv's equalizer: its colors close to mpv's, not the same
+  arithmetic (mpv's brightness, contrast, saturation and hue are of its
+  YUV to RGB matrix). A screenshot and picture in picture show the
+  picture as the file has it, neither filtered nor reversed. The HDR
+  switch shows for a film its container says is PQ or HLG (mpv reads the
+  decoder's). mpv's video-zoom and video-pan, of no IINA menu or panel,
+  are left out.
 - **Menu headers** (v1.41): `UI\Menu::header` and `MenuItem::HEADER`
   are myphp's, for the playlist's sort menu as IINA's; mygo's menus have
   items, separators and submenus only.

@@ -1178,5 +1178,14 @@
   "iinaAlertJumpToMessage": "請輸入您想要跳至的位置，例如：20:35",
   "iinaAlertSubNoSelected": "請先選取一個已下載的字幕檔",
   "iinaAlertSubSaveDownloadedTitle": "儲存已下載的字幕",
-  "iinaOsdSubSaved": "字幕已保存"
+  "iinaOsdSubSaved": "字幕已保存",
+  "iinaMenuFlip": "翻轉",
+  "iinaMenuMirror": "水平（鏡像）",
+  "iinaMenuFlipVertical": "垂直",
+  "iinaOsdVideoEqBrightness": "亮度：{value}",
+  "iinaOsdVideoEqContrast": "對比度：{value}",
+  "iinaOsdVideoEqSaturation": "飽和度：{value}",
+  "iinaOsdVideoEqGamma": "Gamma：{value}",
+  "iinaOsdVideoEqHue": "色相：{value}",
+  "iinaQuicksettingHdr": "高動態範圍成效"
 }

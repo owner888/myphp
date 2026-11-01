@@ -50,7 +50,7 @@ final class ObjC
         'p' => 'void*', 'd' => 'double', 'f' => 'float', 'l' => 'long', 'L' => 'unsigned long',
         'i' => 'int', 'S' => 'unsigned short', 'b' => 'bool', 'r' => 'NSRect', 'q' => 'NSPoint', 'z' => 'CGSize',
         'k' => 'MTLClearColor', 'R' => 'MTLRegion', 'n' => 'NSRange', 'o' => 'MTLOrigin', 'Z' => 'MTLSize',
-        's' => 'const char*', 'v' => 'void', 'T' => 'CMTime', 'X' => 'CMTimeRange', 'F' => 'CAFrameRateRange',
+        's' => 'const char*', 'v' => 'void', 'T' => 'CMTime', 'X' => 'CMTimeRange', 'F' => 'CAFrameRateRange', 'M' => 'CATransform3D',
     ];
 
     /**
@@ -80,6 +80,7 @@ final class ObjC
             typedef struct { long long value; int timescale; unsigned int flags; long long epoch; } CMTime;
             typedef struct { CMTime start, duration; } CMTimeRange;
             typedef struct { float minimum, maximum, preferred; } CAFrameRateRange;
+            typedef struct { double m11, m12, m13, m14, m21, m22, m23, m24, m31, m32, m33, m34, m41, m42, m43, m44; } CATransform3D;
             typedef struct { void* isa; int flags; int reserved; void* invoke; void* descriptor; } BlockLiteral;
             typedef struct { unsigned long reserved, size; const char* signature; } BlockDescriptor;
             typedef struct { void* receiver; void* super_class; } objc_super;

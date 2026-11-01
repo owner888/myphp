@@ -1563,7 +1563,7 @@ final class Window
         if ($o['resize']) {
             if ($o['physical']) { $k = ObjC::msg('d:', $this->ns, 'backingScaleFactor'); [$w, $h] = [$w / $k, $h / $k]; }
             if ($o['ratio'] < 0) {
-                $k = min(1.0, $sf->w / $w, $sf->h / $h); [$w, $h] = [$w * $k, $h * $k]; // shrunk to the screen
+                $k = min($sf->w / $w, $sf->h / $h); [$w, $h] = [$w * $k, $h * $k]; // as large as the screen takes, larger or smaller (IINA's shrink(toSize:), which fits)
             } else {
                 [$w, $h] = [$w * $o['ratio'], $h * $o['ratio']];
             }
@@ -2027,6 +2027,7 @@ final class Window
                 ObjC::msg('v:p', $video, 'setLayer:', $p['view']->out->layer);
                 $p['view']->out->view = $video;
                 ObjC::msg('v:b', $video, 'setWantsLayer:', true); // after setLayer: a layer hosting view, the layer the player's
+                ObjC::msg('v:b', $video, 'setLayerUsesCoreImageFilters:', true); // the video equalizer's filters (Renderers::setPictureFilters)
                 ObjC::msg('v:p', $crop, 'addSubview:', $video);
                 ObjC::msg('v:', $video, 'release');
                 $this->videoHosts[$k] = ['player' => \WeakReference::create($p['view']), 'clip' => $clip, 'crop' => $crop, 'video' => $video];
@@ -2078,10 +2079,30 @@ final class Window
                 ObjC::msg('v:r', $video, 'setFrame:', ObjC::rect(($vw - $pw) / 2, ($vh - $ph) / 2, $pw, $ph));
                 ObjC::msg('v:d', $video, 'setFrameCenterRotation:', -(float)$player->rotation()); // clockwise: AppKit turns counterclockwise
             }
+            self::reverse($crop, $player->reversed());
             ObjC::msg('v:b', $clip, 'setHidden:', false);
         }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');
         return $added; // a view of a video made: right under the native view, over the materials, which go back over it
+    }
+
+    /**
+     * The picture in the crop view $crop reversed as it shows, left for
+     * right and upside down ($reversed, Player::reversed: its flip and
+     * mirror): the layer's sublayer transform, about the middle of its
+     * bounds, from the anchor point AppKit gave it.
+     * @param array{0: bool, 1: bool} $reversed
+     */
+    private static function reverse($crop, array $reversed): void
+    {
+        $layer = ObjC::msg('p:', $crop, 'layer');
+        $b = ObjC::msg('r:', $layer, 'bounds');
+        $a = ObjC::msg('q:', $layer, 'anchorPoint');
+        $t = ObjC::$c->new('CATransform3D');
+        [$t->m11, $t->m22, $t->m33, $t->m44] = [$reversed[0] ? -1.0 : 1.0, $reversed[1] ? -1.0 : 1.0, 1.0, 1.0];
+        $t->m41 = $reversed[0] ? $b->w * (1 - 2 * $a->x) : 0.0; // the middle kept where it is
+        $t->m42 = $reversed[1] ? $b->h * (1 - 2 * $a->y) : 0.0;
+        ObjC::msg('v:M', $layer, 'setSublayerTransform:', $t);
     }
 
     /**

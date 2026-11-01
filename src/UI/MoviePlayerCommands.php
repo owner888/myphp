@@ -16,7 +16,7 @@ use MyPHP\Window;
  * cycle-values, multiply of its properties, frame-step, ab-loop,
  * playlist-next…) and IINA's own (its panels, picture in picture, music
  * mode, the window's size…). A property or command the player has no
- * means for is logged and does nothing (contrast, video-zoom, edition…).
+ * means for is logged and does nothing (video-zoom, deinterlace, edition…).
  *
  * @internal MoviePlayer
  */
@@ -99,6 +99,7 @@ final class MoviePlayerCommands
             'window-scale' => MoviePlayerState::number(self::windowScale($c, $p)),
             'video-aspect-override' => ($a = $p->aspectRatio()) === null ? '-1' : (string)$a,
             'hwdec' => $p->hardwareDecoding() ? 'auto' : 'no',
+            'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
             'sub-ass-override' => ['yes', 'force', 'strip', 'scale', 'no'][$s->assOverride ?? $s->settings()->get('subOverrideLevel')],
             default => null,
         };
@@ -175,6 +176,9 @@ final class MoviePlayerCommands
                 $s->setHardwareDecoding($on);
                 $s->say($c->texts()->get('videoHwdecTo', ['state' => $c->texts()->get($on ? 'videoOn' : 'videoOff')]));
                 return;
+            case 'brightness': case 'contrast': case 'saturation': case 'gamma': case 'hue': // mpv's video equalizer, cycle going up by 1
+                $s->setVideoEqualizer($prop, (int)round($op === 'cycle' ? $p->videoEqualizer($prop) + ($arg === 'down' ? -1 : 1) : $num((float)$p->videoEqualizer($prop))));
+                return;
             case 'sub-ass-override':
                 $levels = ['yes', 'force', 'strip', 'scale', 'no'];
                 $now = $s->assOverride ?? $s->settings()->get('subOverrideLevel');
@@ -208,6 +212,8 @@ final class MoviePlayerCommands
                 $s->sidebar = $s->sidebar === 'playlist' && $s->playlistTab === $tab ? null : 'playlist'; $s->playlistTab = $tab;
                 return;
             case 'toggle-pip': $s->togglePictureInPicture(); return;
+            case 'flip': $s->setFlip(!$s->flip); return; // IINA's menuToggleFlip
+            case 'mirror': $s->setMirror(!$s->mirror); return;
             case 'toggle-music-mode': $s->toggleMusicMode(); return;
             case 'bigger-window': case 'smaller-window': $c->runtime?->askWindow('magnify', ($cmd === 'bigger-window' ? 25 : -25) / max(1.0, $c->width)); return; // IINA's: 25 points wider or narrower
             case 'fit-to-screen': $s->windowScale(-1.0); return;
