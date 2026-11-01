@@ -29,10 +29,10 @@ use MyPHP\Window;
  * wheel up and down for the volume and across to seek. The
  * controls show while the pointer moves and fade, the traffic lights and
  * the pointer with them; what the player has no means for yet (the
- * layout tab, online
- * subtitles, plugins) shows, held. The playlist's sidebar (its films,
+ * layout tab) shows, held. The playlist's sidebar (its films,
  * their loop, shuffle and sort; the film's chapters) slides in from the
- * left; picture in picture from the control bar. Icons are SF Symbols.
+ * left, as the plugins' sidebar does; the plugins' overlays show over the
+ * picture; picture in picture from the control bar. Icons are SF Symbols.
  *
  * @internal Context::mediaPlayer
  */
@@ -78,7 +78,7 @@ final class MediaPlayer
         $width = $c->width;
         $chooser = null; // the list of the subtitles found online, built below
         $picture->handleInput(function (InputEvent $e) use ($s, $width, $c, $picture, &$chooser): bool { // the wheel over the picture: up and down the volume, across where it plays, as IINA's
-            $onSide = $s->sidebar === 'playlist' ? $e->x < self::SIDEBAR : $s->sidebar !== null && $e->x >= $width - self::SIDEBAR;
+            $onSide = $s->sidebar === 'playlist' || $s->sidebar === 'plugins' ? $e->x < self::SIDEBAR : $s->sidebar !== null && $e->x >= $width - self::SIDEBAR;
             if ($e->kind !== InputEvent::SCROLL && !$onSide && MediaPlayerLiveText::input($s, $e, ...$c->localToWindow($picture, $e->x, $e->y))) { return true; } // a drag over Live Text's words chooses them
             if ($e->kind !== InputEvent::SCROLL || $onSide || ($chooser !== null && self::over($c, $chooser, ...$c->localToWindow($picture, $e->x, $e->y)))) {
                 return false; // the rest goes on to the frame (a press, a click), the wheel over a sidebar or the list of subtitles found to its scroll
@@ -112,9 +112,10 @@ final class MediaPlayer
         $now = microtime(true);
         if ([$px, $py] !== $s->pointer) { $s->pointer = [$px, $py]; $s->moved = $now; }
         // The quick settings slide in from the right, the playlist from the left, as IINA's.
-        $slide = $c->animate($box, 'sidebar', $o->sidebar && $s->sidebar !== null && $s->sidebar !== 'playlist' ? 1 : 0, 0.25);
+        $slide = $c->animate($box, 'sidebar', $o->sidebar && $s->sidebar !== null && $s->sidebar !== 'playlist' && $s->sidebar !== 'plugins' ? 1 : 0, 0.25);
         $slideList = $c->animate($box, 'playlist', $o->sidebar && $s->sidebar === 'playlist' ? 1 : 0, 0.25);
-        [$left, $right] = [self::SIDEBAR * $slideList, self::SIDEBAR * $slide];
+        $slidePlugins = $c->animate($box, 'plugins', $o->sidebar && $s->sidebar === 'plugins' ? 1 : 0, 0.25); // IINA's plugins' sidebar, at the leading side as its sidebarPluginsDisplayAtLeading says by default
+        [$left, $right] = [self::SIDEBAR * max($slideList, $slidePlugins), self::SIDEBAR * $slide];
         $area = $c->width - $left - $right; // the controls center over what the sidebars leave
         $c->runtime?->askWindow('aspect', self::shownAspect($p)); // the window keeps the picture's shape, as IINA's
 
@@ -155,6 +156,7 @@ final class MediaPlayer
             $c->end();
         }
         MediaPlayerLiveText::build($c, $s, $p, $px, $py, $pw, $ph); // over the picture and its subtitles, under the bars
+        self::pluginOverlays($c, $s); // the plugins' overlays: over the picture, under the controls
 
         // The title bar and the control bar show while the pointer moves and while it is on them, and fade.
         // Each built and closed before the next: an open node takes the next as its child. The control bar floats (draggable),
@@ -225,6 +227,7 @@ final class MediaPlayer
         $sides = [];
         if ($slide > 0) { $sides[] = self::sidebar($c, $s, $p, $slide); }
         if ($slideList > 0) { $sides[] = self::playlistSidebar($c, $s, $slideList); }
+        if ($slidePlugins > 0) { $sides[] = self::pluginsSidebar($c, $s, $slidePlugins); }
         if ($sides !== [] && $s->sidebar !== null) {
             $outside = true;
             foreach ($sides as $n) { $outside = $outside && $c->pressedOutside($n); }
@@ -644,9 +647,8 @@ final class MediaPlayer
     private static function toolbarButton(Context $c, MediaPlayerState $s, MediaPlayerOptions $o, int $b): Node
     {
         [$symbols, $onSymbols, $key] = MediaPlayerSettings::TOOLBAR[$b];
-        $on = match ($b) { 0 => $s->sidebar !== null && $s->sidebar !== 'playlist', 1 => $s->sidebar === 'playlist', 2 => $s->pictureInPicture, 3 => $c->runtime?->fullScreen ?? false, 8 => $s->settings()->get('enableLiveText'), default => false };
+        $on = match ($b) { 0 => $s->sidebar !== null && $s->sidebar !== 'playlist' && $s->sidebar !== 'plugins', 1 => $s->sidebar === 'playlist', 7 => $s->sidebar === 'plugins', 2 => $s->pictureInPicture, 3 => $c->runtime?->fullScreen ?? false, 8 => $s->settings()->get('enableLiveText'), default => false };
         $tip = $c->texts()->get('iinaOscToolbar' . implode('', array_map('ucfirst', explode('_', $key))));
-        if ($b === 7) { $tip .= ' (' . self::t($c, 'videoNotYet') . ')'; }
         $n = $c->column()->size(24, 24)->center()->role(Role::BUTTON)->label($tip)->tooltip($tip);
           $name = self::firstSymbol($on && $onSymbols !== [] ? $onSymbols : $symbols);
           self::sf($c, $name, 14, $c->hovered($n) ? 0.95 : 0.75);
@@ -663,14 +665,15 @@ final class MediaPlayer
         }
         if ($c->clicked($n)) {
             match ($b) {
-                0 => $o->sidebar ? $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' ? $s->tab : null : null,
+                0 => $o->sidebar ? $s->sidebar = $s->sidebar === null || $s->sidebar === 'playlist' || $s->sidebar === 'plugins' ? $s->tab : null : null,
                 1 => $o->sidebar ? $s->sidebar = $s->sidebar === 'playlist' ? null : 'playlist' : null,
                 2 => $s->togglePictureInPicture(),
                 3 => $c->runtime?->askWindow('fullScreen', !($c->runtime->fullScreen)),
                 4 => $s->toggleMusicMode(),
                 6 => $s->screenshot(),
+                7 => $o->sidebar ? $s->sidebar = $s->sidebar === 'plugins' ? null : 'plugins' : null, // IINA's plugins' sidebar
                 8 => $s->setSetting('enableLiveText', !$s->settings()->get('enableLiveText')),
-                default => null, // the plugins: myphp's player has none
+                default => null,
             };
         }
         return $n;
@@ -1358,6 +1361,62 @@ final class MediaPlayer
                 'subtitles' => self::subtitleTab($c, $s, $p),
                 default => self::layoutTab($c),
             };
+          $c->end();
+        $c->end();
+        $c->clicked($side); // a click on the sidebar is its own, not the picture's
+        return $side;
+    }
+
+    /**
+     * The plugins' overlays (IINA's PluginOverlayView), each over the
+     * window while its plugin shows it: the pointer through it but where
+     * it lets its page's clickable elements take it.
+     */
+    private static function pluginOverlays(Context $c, MediaPlayerState $s): void
+    {
+        foreach ($s->plugins() as $i) {
+            $o = $i->iina->overlay;
+            if ($o === null || $o->pane === null || !$o->shown) { continue; }
+            $c->key('plugin overlay ' . $i->plugin->identifier)->webView($o->pane->view)->absolute()->left(0)->top(0)->right(0)->bottom(0)->hitAreas($o->clickable ? $o->pane->clickable : []);
+        }
+    }
+
+    /**
+     * IINA's plugins' sidebar (PluginViewController), 360 points wide over
+     * the left of the window, sliding in by $slide: the tab shown, IINA's
+     * placeholder or a plugin's (its sidebarTab), its name over a chevron
+     * whose menu chooses another, and the back button; the plugin's web
+     * view (SidebarApi), or the placeholder's text.
+     */
+    private static function pluginsSidebar(Context $c, MediaPlayerState $s, float $slide): Node
+    {
+        $tabs = [];
+        foreach ($s->plugins() as $i) {
+            if ($i->plugin->sidebarTabName !== null) { $tabs[$i->plugin->identifier] = $i; }
+        }
+        $current = $tabs[$s->pluginTab ?? ''] ?? null; // a plugin unloaded: the placeholder, as IINA's removePluginTab
+        $side = $c->key('plugins sidebar')->column()->absolute()->top(0)->left(0)->bottom(0)->width(self::SIDEBAR)->systemMaterial(self::glass($s, 'Sidebar'))->translate(-self::SIDEBAR * (1 - $slide), 0)->keepFocus();
+          $pill = $c->row(6, 0)->absolute()->left(96)->right(56)->top(9)->height(36)->alignItems(Node::CENTER)->systemMaterial(self::glass($s, 'Sidebar'))->radius(18)->paddingX(12)->role(Role::POP_UP_BUTTON);
+            self::sf($c, 'puzzlepiece.extension.fill', 14, 0.95);
+            $c->text($current === null ? self::t($c, 'iinaSidebarPlugins') : (string)$current->plugin->sidebarTabName, 13, self::$ink)->fontWeight(500)->opacity(0.95)->singleLine()->ellipsis('…')->grow(1);
+            self::sf($c, 'chevron.down', 11, 0.7);
+          $c->end();
+          $pill->label($current === null ? self::t($c, 'iinaSidebarPlugins') : (string)$current->plugin->sidebarTabName)->menu(function (Menu $m) use ($tabs, $s): void {
+              foreach ($tabs as $id => $i) {
+                  if ($m->item((string)$i->plugin->sidebarTabName)->checked($s->pluginTab === $id)->chosen()) { $s->pluginTab = $id; }
+              }
+          });
+          $hide = $c->column()->absolute()->right(9)->top(7)->size(38, 38)->center()->systemMaterial(self::glass($s, 'Sidebar'))->radius(19)->tooltip(self::t($c, 'videoHide'));
+            self::sf($c, 'chevron.left', 14, $c->hovered($hide) ? 0.9 : 0.6, 0.2);
+          $c->end();
+          if ($c->clicked($hide)) { $s->sidebar = null; }
+          $c->column()->absolute()->top(53)->left(0)->right(0)->bottom(0);
+            $pane = $current?->iina->sidebar?->pane;
+            if ($pane !== null) {
+                $c->key('plugin sidebar ' . $current->plugin->identifier)->webView($pane->view)->grow(1);
+            } else {
+                $c->text(self::t($c, 'iinaSidebarPluginsPlaceholder'), 11, self::$ink)->opacity(0.6)->padding(16, 16, 16, 16)->fillWidth();
+            }
           $c->end();
         $c->end();
         $c->clicked($side); // a click on the sidebar is its own, not the picture's

@@ -165,7 +165,7 @@ final class MediaPlayerMenus
 
     /**
      * IINA's Plugin menu (MenuController.updatePluginMenu) of player $s:
-     * Manage Plugins…; each plugin's items (its global instance's, then
+     * Manage Plugins…, Show or Hide Plugins Panel; each plugin's items (its global instance's, then
      * the player's) under its name, the first five, the rest under More…,
      * a key taken by a key binding of the player's left off and the plugins
      * so keyed listed under Conflicting key shortcuts… at the top; Reload
@@ -177,7 +177,11 @@ final class MediaPlayerMenus
         $taken = [];
         foreach ($s === null ? [] : MediaPlayerKeys::current($s->settings()) as $m) { $taken[$m['normal']] = true; }
         $conflicts = [];
-        $out = [new MenuItem(self::t('iinaMenuManagePlugins'), fn() => (self::$showSettings)?->__invoke('plugins'), id: 'iina.managePlugins'), MenuItem::separator()];
+        $out = [
+            new MenuItem(self::t('iinaMenuManagePlugins'), fn() => (self::$showSettings)?->__invoke('plugins'), id: 'iina.managePlugins'),
+            new MenuItem(self::t($s?->sidebar === 'plugins' ? 'iinaMenuHidePluginsPanel' : 'iinaMenuShowPluginsPanel'), fn() => $s?->showPluginsSidebar($s->sidebar === 'plugins' ? null : $s->pluginTab ?? ''), disabled: $s === null, id: 'iina.pluginsPanel'),
+            MenuItem::separator(),
+        ];
         $first = true;
         foreach ($s?->plugins() ?? [] as $instance) {
             $items = [...($instance->plugin->globalInstance?->menuItems ?? []), ...$instance->menuItems];

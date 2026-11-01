@@ -7376,6 +7376,51 @@ developer tool the third.
   playlist.add and move. `Https` sends PUT, PATCH and DELETE with a body
   as those verbs.
 
+## The plugins' views (v1.144)
+
+The second of the plugins' three parts: the web views a plugin shows, and
+the pages of its settings and help.
+
+- `PlayerPlugins\WebPane` is such a view: a `WebView` whose page has
+  IINA's bridge (`window.iina`: onMessage, postMessage, and simple
+  mode's style and content), a file of the plugin's folder loaded in it
+  (its folder the page's to read), or IINA's simple mode's page. What
+  the page posts goes to the plugin's listeners (a `MessageHub`,
+  cleared as another page loads), what the plugin posts to the page's.
+  A link to one of the plugin's allowedDomains is not followed, another
+  is (IINA's decidePolicyFor, as it is).
+  The page's messages to the app are a new kind of `Page`'s: a page
+  posting `{"t":"post","n":name,"d":data}` gives its 'message' event.
+- `iina.overlay` (`OverlayApi`, the video-overlay permission): a page
+  over the whole player window, over the picture and under the
+  controls (`MediaPlayer::pluginOverlays`), shown, hidden, faded
+  (`WebView::setAlpha`). It takes no clicks unless setClickable(true),
+  and then only on its elements of `data-clickable`, whose rectangles
+  its page reports as they change (`Node::hitAreas`: a node takes the
+  pointer only there). iina.plugin-overlay-loaded is told as a page
+  loads.
+- `iina.sidebar` (`SidebarApi`): a page in the player's plugins panel,
+  the Info.json's sidebarTab its name. The panel
+  (`MediaPlayer::pluginsSidebar`, the toolbar's puzzle button, Plugin >
+  Show/Hide Plugins Panel) shows the tab chosen in its pop-up of the
+  plugins' tabs, else IINA's placeholder; `sidebar.show()` chooses the
+  plugin's.
+- `iina.standaloneWindow` (`StandaloneWindowApi`): a window of its own,
+  600 by 400, "Window — <plugin>", its page a file or simple mode's;
+  closed, it is hidden, its page kept. setProperty sets its title,
+  resizing, full-size content (`Window::setFullSizeContentView`) and
+  hidden title bar (`Window::setTitleBarHidden`); setFrame its frame.
+- The plugin's details sheet (Settings > Plugins, its info button) has
+  IINA's tabs: Settings, its preferencesPage with IINA's preferences
+  bridge and its sync of the inputs of `data-pref-key` (a page of the
+  plugin's folder alone; an https link opens in the browser), else
+  IINA's message; About; Help, its helpPage (a file of its folder, or
+  a web page).
+- `Window` stacks the materials and the web views in the order the
+  frame painted them (`Runtime`'s places noting it, seq): a sidebar's
+  page over the sidebar's material, the material over the overlay's
+  page under it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

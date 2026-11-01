@@ -101,16 +101,40 @@ $iina = $GLOBALS['pluginIina'];
 
 // The Plugin menu: Manage Plugins…, under the plugin's name its first five items and More…, Reload All Plugins.
 $menu = MediaPlayerMenus::plugin($s);
-same(['Manage Plugins…', '', 'Alpha', 'Say', 'More', 'Item 1', 'Item 2', 'Item 3', 'More…', '', 'Reload All Plugins'], array_map(fn(MenuItem $m) => $m->label, $menu), 'the Plugin menu');
-same(['Cmd+y', true, true], [$menu[3]->accelerator, $menu[5]->checked, $menu[6]->disabled], 'an item\'s key, check, enabled');
-($menu[4]->submenu[0]->click)();
+same(['Manage Plugins…', 'Show Plugins Panel', '', 'Alpha', 'Say', 'More', 'Item 1', 'Item 2', 'Item 3', 'More…', '', 'Reload All Plugins'], array_map(fn(MenuItem $m) => $m->label, $menu), 'the Plugin menu');
+same(['Cmd+y', true, true], [$menu[4]->accelerator, $menu[6]->checked, $menu[7]->disabled], 'an item\'s key, check, enabled');
+($menu[1]->click)();
+same(['plugins', 'Hide Plugins Panel'], [$s->sidebar, MediaPlayerMenus::plugin($s)[1]->label], 'Show Plugins Panel: the plugins\' sidebar, then Hide');
+$s->sidebar = null;
+($menu[5]->submenu[0]->click)();
 same('Inner', end($GLOBALS['pluginEvents']), 'a submenu\'s item, its action called with it');
-($menu[3]->click)();
+($menu[4]->click)();
 same(['said', 'From plugin Alpha'], [$s->message[0], $s->message[1]], 'core.osd: the message, from the plugin');
 $iina->menu->items()[0]->keyBinding = 'Meta+s';
 $conflicted = MediaPlayerMenus::plugin($s);
-same(['Conflicting key shortcuts…', ['Alpha: Meta+s'], ''], [$conflicted[0]->label, array_map(fn(MenuItem $m) => $m->label, $conflicted[0]->submenu), $conflicted[4]->accelerator], 'a key a binding has: left off, listed');
+same(['Conflicting key shortcuts…', ['Alpha: Meta+s'], ''], [$conflicted[0]->label, array_map(fn(MenuItem $m) => $m->label, $conflicted[0]->submenu), $conflicted[5]->accelerator], 'a key a binding has: left off, listed');
 $iina->menu->items()[0]->keyBinding = 'Meta+y';
+
+// The views: an overlay of the video-overlay permission, none before the window is there; a page's clickable parts alone taking the pointer.
+$threw = '';
+try { $iina->overlay->loadFile('overlay.html'); } catch (PluginError $e) { $threw = $e->getMessage(); }
+check(str_contains($threw, 'must declare permission "video-overlay"'), 'overlay: of its permission');
+$threw = '';
+try { $iina->sidebar->loadFile('side.html'); } catch (PluginError $e) { $threw = $e->getMessage(); }
+check(str_contains($threw, 'window is not available'), 'sidebar: once the window is there');
+$web = (new \ReflectionClass(\MyPHP\WebView::class))->newInstanceWithoutConstructor();
+$areas = [];
+$hv = new Headless(function (Context $c) use ($web, &$areas): void {
+    $c->column(0, 0, 1)->size(400, 300);
+      $c->button('Under')->absolute()->at(0, 0)->size(400, 300);
+      $c->webView($web)->absolute()->left(0)->top(0)->right(0)->bottom(0)->hitAreas($areas);
+    $c->end();
+}, 400, 300);
+$hv->frame(); $hv->paint();
+same(null, $hv->rt->webViewAt(200, 150), 'an overlay of nothing clickable: the pointer through it');
+$areas = [[10, 10, 50, 20]];
+$hv->frame(); $hv->paint();
+check($hv->rt->webViewAt(20, 15) === $web && $hv->rt->webViewAt(200, 150) === null, 'its clickable part alone the page\'s');
 
 // mpv: a property MyPHP gives (none of a player without a film); a command beyond IINA's safe ones of the file system's permission; hooks none.
 same([null, false], [$iina->mpv->getString('pause'), $iina->mpv->getFlag('pause')], 'no film: no property');

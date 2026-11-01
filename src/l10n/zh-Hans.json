@@ -1342,5 +1342,7 @@
   "iinaAlertPluginReinstallMessage": "您希望重新安装此插件吗？",
   "iinaAlertDuplicatedPluginId": "检测到重复的插件标识符。两个或多个插件具有相同的标识符“{id}”，这可能会导致异常行为。 请在首选项 - 插件中找到它们，并向插件作者报告。 如果插件是本地安装的，您也可以手动更改插件的 Info.json 文件中的标识符。",
   "iinaAlertPluginPermission": "此插件需要以下权限，请在继续之前检查。",
-  "iinaMenuPlugin": "插件"
+  "iinaMenuPlugin": "插件",
+  "iinaMenuShowPluginsPanel": "显示插件面板",
+  "iinaMenuHidePluginsPanel": "隐藏插件面板"
 }

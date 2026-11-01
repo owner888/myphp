@@ -192,6 +192,12 @@ final class WebView
         }
     }
 
+    /** Shows the web view at $alpha, 0 to 1 (NSView's alphaValue): a player's plugin's overlay's opacity. */
+    public function setAlpha(float $alpha): void
+    {
+        ObjC::msg('v:d', $this->clip, 'setAlphaValue:', max(0.0, min(1.0, $alpha)));
+    }
+
     /** @internal the clip view, which the window stacks in paint order */
     public function clipView()
     {

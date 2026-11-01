@@ -730,6 +730,22 @@ final class Node
         return $this;
     }
 
+    /** @var ?list<array{0: float, 1: float, 2: float, 3: float}> where in its box it takes the pointer (hitAreas), null for all of it */
+    public ?array $hitAreas = null;
+
+    /**
+     * Has the node take the pointer only within $rects, [x, y, w, h] from
+     * its box's top left, passing it through elsewhere as passThrough()
+     * does (none: nowhere): a web view over a picture whose page says
+     * which of its elements take clicks (a player's plugin's overlay).
+     * @param list<array{0: float, 1: float, 2: float, 3: float}> $rects
+     */
+    public function hitAreas(array $rects): static
+    {
+        $this->hitAreas = array_values($rects);
+        return $this;
+    }
+
     /** Lets the pointer reach what is under the node (mygo's PassThrough). */
     public function passThrough(): static
     {

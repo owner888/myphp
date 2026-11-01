@@ -24,9 +24,13 @@ use RuntimeException;
  * (a DownloadEvent, to choose where a download goes or prevent it),
  * downloadDone (a Download), themeColorChanged (themeColor()'s, null for
  * none), audibleChanged (isAudible()'s), captureStateChanged (a
- * CaptureKind and its CaptureState), and contextMenu (a ContextMenuEvent,
+ * CaptureKind and its CaptureState), contextMenu (a ContextMenuEvent,
  * as the page's context menu is about to open, mygo's OnContextMenu: what
- * was right-clicked, and the web view's menu to change or replace).
+ * was right-clicked, and the web view's menu to change or replace), and
+ * message (a name and a JSON value the page posted to the app,
+ * webkit.messageHandlers.myphp.postMessage(JSON.stringify({t: "post", n:
+ * name, d: value})), of any page, trusted or not: myphp's, for the
+ * player's plugins' web views, as IINA's messages of theirs).
  *
  *     $page->on('contextMenu', function (ContextMenuEvent $e) {
  *         $e->menu->remove(ContextMenuEvent::RELOAD, ContextMenuEvent::BACK, ContextMenuEvent::FORWARD);
@@ -44,7 +48,7 @@ use RuntimeException;
  */
 final class Page
 {
-    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone', 'themeColorChanged', 'audibleChanged', 'captureStateChanged', 'contextMenu'];
+    public const EVENTS = ['pageTitleUpdated', 'willNavigate', 'didNavigate', 'domReady', 'didFinishLoad', 'didFailLoad', 'renderProcessGone', 'willDownload', 'downloadDone', 'themeColorChanged', 'audibleChanged', 'captureStateChanged', 'contextMenu', 'message'];
     /** How many events wait for a page that never gets ready, as an image (mygo's maxHeldEvents). */
     private const MAX_HELD = 1024;
     /** The forms Page::eval tries, an expression first: one that does not compile is no expression (mygo's evalExpr, evalBody). */
@@ -382,13 +386,15 @@ final class Page
      * Loads a local HTML file (mygo's LoadFile): a relative path is
      * resolved against the working directory, then the directory of the
      * script the app runs, then the bundle's Resources. Throws when none
-     * has it.
+     * has it. The page reads the files of its folder, or of $readAccess
+     * where given (a folder it is in: a plugin's, its pages in folders of
+     * it reading the rest).
      */
-    public function loadFile(string $path): void
+    public function loadFile(string $path, string $readAccess = ''): void
     {
         $abs = self::resolveFile($path);
         $this->html = null;
-        $this->web->loadFile($abs, dirname($abs));
+        $this->web->loadFile($abs, $readAccess !== '' ? $readAccess : dirname($abs));
     }
 
     /** Loads $html, whose relative URLs resolve against $baseURL; the page is at $baseURL, or about:blank. Reloading it, by reload() or from the page, loads $html again (mygo's LoadHTML). */
@@ -844,6 +850,11 @@ final class Page
         if (str_starts_with($raw, '{"t":"content-size",')) {
             $c = ($fit = $this->fitContent()) === null ? null : Native\FitContent::told((array)json_decode($raw, true));
             if ($c !== null) { $this->window->fitContentSize($c, $this->zoomNow()); }
+            return;
+        }
+        if (str_starts_with($raw, '{"t":"post",')) { // a message the page posted to the app, its listeners' alone
+            $m = json_decode($raw, true);
+            if (is_array($m) && is_string($m['n'] ?? null)) { $this->emit('message', $m['n'], $m['d'] ?? null); }
             return;
         }
         if (str_starts_with($raw, '{"t":"theme-color","v":"#')) {

@@ -5540,5 +5540,13 @@
   "iinaMenuPlugin": "Plugin",
   "@iinaMenuPlugin": {
     "description": "IINA's \"Y6q-cI-vfM.title\" (MainMenu.strings)."
+  },
+  "iinaMenuShowPluginsPanel": "Show Plugins Panel",
+  "@iinaMenuShowPluginsPanel": {
+    "description": "IINA's \"menu.show_plugins_panel\" (Localizable.strings)."
+  },
+  "iinaMenuHidePluginsPanel": "Hide Plugins Panel",
+  "@iinaMenuHidePluginsPanel": {
+    "description": "IINA's \"menu.hide_plugins_panel\" (Localizable.strings)."
   }
 }

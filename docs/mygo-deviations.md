@@ -1787,6 +1787,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   text). A shooter.cn subtitle's file is named by the server's
   Content-Disposition, else the link asked (IINA's, by Just, the link
   after redirects).
+- **The plugins' views** (v1.144): `PlayerPlugins\WebPane`,
+  `OverlayApi`, `SidebarApi`, `StandaloneWindowApi`, the player's
+  plugins panel and the details sheet's Settings and Help tabs are
+  myphp's, as IINA's; mygo has no film player. Added to the framework:
+  `Page`'s 'message' event (a page posting to the app), `Page::loadFile`'s
+  folder to read, `Node::hitAreas`, `WebView::setAlpha`,
+  `Window::setFullSizeContentView` and `setTitleBarHidden`, and the
+  window stacking its materials with its web views as painted (mygo's
+  stackWebViews stacks the web views alone). An overlay's clickable parts
+  are its elements of data-clickable as its page reports their
+  rectangles (IINA hit-tests the page at each click). The pages of the
+  overlay, the sidebar and the standalone window go where they link but
+  to the plugin's allowed domains, as IINA's decidePolicyFor does; the
+  settings page alone stays in the plugin's folder. The plugins panel is on the window's left, as
+  IINA's leading sidebar; the About tab is native, as myphp's About
+  sheet of v1.143.
 - **Player plugins** (v1.143): `PlayerPlugins\*` (`Plugins`, `Plugin`,
   `Instance`, `Iina` and its APIs), `UI\MediaPlayerPluginsPage`,
   `MediaPlayerMenus::plugin`, `MediaPlayerSettings::$showPage`,
@@ -1807,9 +1823,7 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   disableUI to the argument). utils.exec finds a program on the PATH.
   The permissions to agree to are the alert's text, not a list beside
   it; Conflicting key shortcuts… lists the plugins and keys under it.
-  Not yet: the views (overlay, sidebar, standalone windows, the plugin's
-  settings and help pages, the plugins panel), the playlist's menu items
-  of registerMenuItemBuilder, input, websockets, GitHub, the store,
+  Not yet: the playlist's menu items of registerMenuItemBuilder, input, websockets, GitHub, the store,
   updates and the developer tool.
 - **The interactive mode** (v1.142): `UI\MediaPlayerInteractive`,
   `MediaPlayerState::enterInteractive`, `exitInteractive`,

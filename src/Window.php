@@ -1698,6 +1698,15 @@ final class Window
     public function isResizable(): bool { return $this->hasStyle(self::RESIZABLE); }
     public function setMovable(bool $on): void { ObjC::msg('v:b', $this->ns, 'setMovable:', $on); }
     public function isMovable(): bool { return ObjC::msg('b:', $this->ns, 'isMovable'); }
+    /** Whether the view fills the window under its title bar (NSWindow's fullSizeContentView): a player's plugin's standalone window's property. */
+    public function setFullSizeContentView(bool $on): void { $this->setStyle(self::FULL_SIZE_CONTENT, $on); }
+    /** Hides the title bar's look and title, the window moved by its background, or shows them again (IINA's hideTitleBar of a plugin's standalone window). */
+    public function setTitleBarHidden(bool $on): void
+    {
+        ObjC::msg('v:b', $this->ns, 'setTitlebarAppearsTransparent:', $on);
+        ObjC::msg('v:l', $this->ns, 'setTitleVisibility:', $on ? 1 : 0); // NSWindowTitleHidden, Visible
+        ObjC::msg('v:b', $this->ns, 'setMovableByWindowBackground:', $on);
+    }
     public function setMinimizable(bool $on): void { $this->setStyle(self::MINIATURIZABLE, $on); }
     public function isMinimizable(): bool { return $this->hasStyle(self::MINIATURIZABLE); }
     /** Whether the zoom button can maximize the window. */
@@ -1990,7 +1999,7 @@ final class Window
     private function placeWebViews(float $height): void
     {
         $added = $this->placeVideos($height);
-        $this->placeMaterials($height, $added);
+        $materials = $this->placeMaterials($height, $added);
         if ($this->under !== null && ($added || $this->underNew)) {
             $this->stackUnder();
         }
@@ -2006,9 +2015,9 @@ final class Window
             $v->place($p === null ? null : $this->runtime->windowRect($p['frame']), $p === null ? null : $this->runtime->windowRect($p['clip']), $height); // in the window's points: zoomed, the content's times the zoom
         }
         foreach ($places as $p) {
-            if (in_array($p['view'], $this->webViews, true)) { $shown[] = $p['view']; }
+            if (in_array($p['view'], $this->webViews, true)) { $shown[] = [$p['seq'], $p['view']->clipView()]; }
         }
-        $this->stackWebViews($shown);
+        $this->stackPlaced($shown, $added || $materials);
         $focus = $this->runtime->focus;
         $node = null;
         foreach ($places as $p) {
@@ -2139,9 +2148,11 @@ final class Window
      * over the videos (it blurs them, blending within the window), made
      * the first frame it shows and removed the first it does not. A
      * material of another kind than its view's makes it anew. $restack:
-     * a view of a video was put right under the native view.
+     * a view of a video was put right under the native view. Returns
+     * whether they are to be put in order again (a view made, or
+     * $restack): stackPlaced does, with the web views.
      */
-    private function placeMaterials(float $height, bool $restack): void
+    private function placeMaterials(float $height, bool $restack): bool
     {
         $shown = [];
         $added = $restack;
@@ -2181,15 +2192,8 @@ final class Window
                 unset($this->materials[$id]);
             }
         }
-        if ($added) { // the materials over the videos, in the order the frame painted them
-            foreach ($this->runtime->materialPlaces as $p) {
-                $v = ObjC::msg('p:', $this->materials[$p['id']]['view'], 'retain');
-                ObjC::msg('v:', $v, 'removeFromSuperview');
-                ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $v, -1, $this->view); // NSWindowBelow: right under the native view
-                ObjC::msg('v:', $v, 'release');
-            }
-        }
         ObjC::msg('v:', ObjC::cls('CATransaction'), 'commit');
+        return $added;
     }
 
     /** A view of system material $material, blending within the window: an NSGlassEffectView for glass (macOS 26), else an NSVisualEffectView. */
@@ -2217,26 +2221,41 @@ final class Window
         return $v;
     }
 
-    /** Puts the clip views of the web views shown in the order the frame painted them, under the native view, unless they are (mygo's stackWebViews). @param list<WebView> $shown */
-    private function stackWebViews(array $shown): void
+    /**
+     * Puts the materials and the clip views of the web views shown in the
+     * order the frame painted them, right under the native view, unless
+     * they are (mygo's stackWebViews, the materials with them: a sidebar's
+     * page over its material, the material over an overlay's page under
+     * it); $added: a video's or a material's view was put under the native
+     * view, over them. @param list<array{0: int, 1: mixed}> $shown the web
+     * views', where they were painted
+     */
+    private function stackPlaced(array $shown, bool $added): void
     {
-        if (count($shown) < 2) {
+        $order = $shown;
+        foreach ($this->runtime->materialPlaces as $p) {
+            $order[] = [$p['seq'], $this->materials[$p['id']]['view']];
+        }
+        if ($order === [] || (count($order) < 2 && !$added)) {
             return;
         }
-        $subs = ObjC::msg('p:', $this->container, 'subviews');
-        $at = 0;
-        for ($i = 0, $n = ObjC::msg('L:', $subs, 'count'); $i < $n && $at < count($shown); $i++) {
-            if (ObjC::addr(ObjC::msg('p:L', $subs, 'objectAtIndex:', $i)) === ObjC::addr($shown[$at]->clipView())) { $at++; }
-        }
-        if ($at === count($shown)) {
-            return;
+        usort($order, fn($a, $b) => $a[0] <=> $b[0]);
+        if (!$added) {
+            $subs = ObjC::msg('p:', $this->container, 'subviews');
+            $at = 0;
+            for ($i = 0, $n = ObjC::msg('L:', $subs, 'count'); $i < $n && $at < count($order); $i++) {
+                if (ObjC::addr(ObjC::msg('p:L', $subs, 'objectAtIndex:', $i)) === ObjC::addr($order[$at][1])) { $at++; }
+            }
+            if ($at === count($order)) {
+                return;
+            }
         }
         $first = ObjC::msg('p:', $this->ns, 'firstResponder'); // moving a view out of its superview takes the keyboard from it
-        foreach ($shown as $v) {
-            $clip = ObjC::msg('p:', $v->clipView(), 'retain');
-            ObjC::msg('v:', $clip, 'removeFromSuperview');
-            ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $clip, -1, $this->view);
-            ObjC::msg('v:', $clip, 'release');
+        foreach ($order as [, $v]) {
+            $v = ObjC::msg('p:', $v, 'retain');
+            ObjC::msg('v:', $v, 'removeFromSuperview');
+            ObjC::msg('v:plp', $this->container, 'addSubview:positioned:relativeTo:', $v, -1, $this->view); // NSWindowBelow: right under the native view
+            ObjC::msg('v:', $v, 'release');
         }
         if ($first !== null && ObjC::addr($first) !== ObjC::addr(ObjC::msg('p:', $this->ns, 'firstResponder'))) {
             ObjC::msg('b:p', $this->ns, 'makeFirstResponder:', $first);

@@ -1069,7 +1069,7 @@ final class Runtime
      * Where the last frame showed web views, in the order it painted them
      * (mygo's webPlaces): the view, its node, its frame and the part of it
      * that shows, in the window's points. The painter notes them.
-     * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}}>
+     * @var list<array{view: object, id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, seq: int}>
      */
     public array $webPlaces = [];
     /**
@@ -1082,8 +1082,9 @@ final class Runtime
     /**
      * Where the last frame showed system materials (Node::systemMaterial):
      * the node, its frame and the part of it that shows, the material, its
-     * appearance, corner radius and opacity, for the window to place them.
-     * @var list<array{id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, material: string, dark: ?bool, radius: float, alpha: float}>
+     * appearance, corner radius and opacity, for the window to place them;
+     * seq: where it was painted among the web views and the materials.
+     * @var list<array{id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, material: string, dark: ?bool, radius: float, alpha: float, seq: int}>
      */
     public array $materialPlaces = [];
     /** @internal Window: whether it paints the nodes belowMaterials() in a layer of their own, under its materials (else they paint where they are) */
@@ -1987,6 +1988,10 @@ final class Runtime
         $hidden = $hidden || $n->invisible; // in its room, but showing nothing and taking neither the pointer nor the focus (mygo's Invisible)
         $this->rects[$n->id] = [$n->x, $n->y, $n->w, $n->h];
         if ($n->frags !== []) { $this->frags[$n->id] = $n->frags; } // text inside a paragraph: its words are its area
+        if ($n->hitAreas !== null) { // only where it says (Node::hitAreas), nowhere for none
+            if ($n->hitAreas === []) { $this->passing[$n->id] = true; }
+            else { $this->frags[$n->id] = array_map(fn(array $r) => [$n->x + $r[0], $n->y + $r[1], $r[2], $r[3]], $n->hitAreas); }
+        }
         $this->parents[$n->id] = $parent?->id ?? 0;
         $this->pageOf[$n->id] = $page;
         $inert = $inert || $n->inert || $hidden;

@@ -51,3 +51,17 @@ $u->rt->underLayer = true;
 $list = $u->paint();
 same([1, $under->id, 0.5], [count($u->rt->underPaints), $u->rt->underPaints[0]['node']->id ?? null, $u->rt->underPaints[0]['opacity'] ?? null], 'left for the layer, at the opacity it was met at');
 check($list->n < $inPlace, "not painted with the rest: {$list->n} quads, $inPlace in place");
+
+// The web views and the materials noted in the order painted (seq): a page under a material, a page over another (the window stacks them so).
+$web = (new \ReflectionClass(\MyPHP\WebView::class))->newInstanceWithoutConstructor();
+$web2 = (new \ReflectionClass(\MyPHP\WebView::class))->newInstanceWithoutConstructor();
+$o = new Headless(function (Context $c) use ($web, $web2): void {
+    $c->column(0, 0, 1)->size(400, 300);
+      $c->webView($web)->absolute()->left(0)->top(0)->right(0)->bottom(0);
+      $c->column()->absolute()->left(0)->top(0)->bottom(0)->width(200)->systemMaterial('sidebar');
+        $c->webView($web2)->grow(1);
+      $c->end();
+    $c->end();
+}, 400, 300);
+$o->frame(); $o->paint();
+same([0, 2, 1], [$o->rt->webPlaces[0]['seq'] ?? null, $o->rt->webPlaces[1]['seq'] ?? null, $o->rt->materialPlaces[0]['seq'] ?? null], 'the overlay\'s page, the sidebar\'s material over it, its page over that');

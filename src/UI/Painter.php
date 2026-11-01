@@ -971,13 +971,14 @@ final class Painter
         }
         $inner = [max(0.0, $radii[0] - max($bt, $bl)), max(0.0, $radii[1] - max($bt, $br)), max(0.0, $radii[2] - max($bb, $br)), max(0.0, $radii[3] - max($bb, $bl))];
         $list->hole($x, $y, $w, $h, $inner);
-        $place = ['view' => $n->webView ?? $n->movie, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch]];
+        $seq = count($rt->webPlaces) + count($rt->materialPlaces); // the web views' and materials' order, painted
+        $place = ['view' => $n->webView ?? $n->movie, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'seq' => $seq];
         if ($n->webView !== null) {
             $rt->webPlaces[] = $place;
         } elseif ($n->movie !== null) {
             $rt->videoPlaces[] = $place;
         } else {
-            $rt->materialPlaces[] = ['id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'material' => $n->systemMaterial[0], 'dark' => $n->systemMaterial[1], 'radius' => max($inner), 'alpha' => $list->opacity()];
+            $rt->materialPlaces[] = ['id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'material' => $n->systemMaterial[0], 'dark' => $n->systemMaterial[1], 'radius' => max($inner), 'alpha' => $list->opacity(), 'seq' => $seq];
         }
     }
 

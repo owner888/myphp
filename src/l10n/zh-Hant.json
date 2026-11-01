@@ -1342,5 +1342,7 @@
   "iinaAlertPluginReinstallMessage": "您是否希望重新安裝此插件？",
   "iinaAlertDuplicatedPluginId": "偵測到重複的外掛程式識別碼，有兩個或更多外掛程式使用的相同的識別碼「{id}」，這將造成不正常的行為。請在「偏好設定 - 外掛程式」中找到它們，並回報給外掛程式的作者。如果外掛程式安裝於本機，你可以手動在外掛程式的 Info.json 檔案中手動變更該外掛的識別碼。",
   "iinaAlertPluginPermission": "本外掛程式需要以下權限，請在繼續之前先審核這些權限。",
-  "iinaMenuPlugin": "外掛程式"
+  "iinaMenuPlugin": "外掛程式",
+  "iinaMenuShowPluginsPanel": "顯示外掛面板",
+  "iinaMenuHidePluginsPanel": "隱藏外掛面板"
 }

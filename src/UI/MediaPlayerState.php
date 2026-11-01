@@ -2254,6 +2254,33 @@ final class MediaPlayerState
     /** Whether a plugin hid the player's controls for good (IINA's disableUI). @internal MediaPlayer */
     public bool $uiDisabled = false;
 
+    /** The plugin whose tab of the plugins' sidebar shows (its identifier), null for none: IINA's placeholder. @internal MediaPlayer */
+    public ?string $pluginTab = null;
+
+    /** Shows the plugins' sidebar at plugin $id's tab (IINA's sidebar.show), or hides it (null). @internal PlayerPlugins */
+    public function showPluginsSidebar(?string $id): void
+    {
+        if ($id === null) {
+            if ($this->sidebar === 'plugins') { $this->sidebar = null; }
+        } elseif ($this->interactive === null) {
+            $this->pluginTab = $id;
+            $this->sidebar = 'plugins';
+        }
+        $this->changed();
+    }
+
+    /** Asks for a frame: what a plugin changed shows. @internal PlayerPlugins */
+    public function refresh(): void
+    {
+        $this->changed();
+    }
+
+    /** Emits $name to its plugins (iina.plugin-overlay-loaded). @internal PlayerPlugins */
+    public function emitForPlugins(string $name, mixed ...$data): void
+    {
+        $this->emit($name, ...$data);
+    }
+
     /** Its events, which plugins listen to. @internal PlayerPlugins */
     public function events(): Events
     {
