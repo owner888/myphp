@@ -333,6 +333,18 @@ php tests/bench.php                    # the cost of a frame, headless: build, l
 ./run.sh loading          # loading.dev's 29 indicators, their size, color, easing and caps
 ```
 
+### Documentation
+
+[Getting started](docs/getting-started.md), then [native UI](docs/ui/README.md): every widget, layout, input,
+styling, motion and drawing, with examples that run (`tests/docs_examples_test.php` builds them). The app's
+side: [the app](docs/app.md), [windows](docs/windows.md), [menus](docs/menus.md), [desktop APIs](docs/native.md),
+[bindings](docs/bindings.md), [the frontend](docs/frontend.md), [clipboard and drag data](docs/data-transfer.md),
+[languages](docs/i18n.md), [the CLI](docs/cli.md), [configuration](docs/configuration.md),
+[building and distributing](docs/distribution.md). Plugins: [fetch](docs/plugins/fetch.md),
+[SQLite](docs/plugins/sqlite.md), [watch](docs/plugins/watch.md), [WebSocket](docs/plugins/websocket.md),
+[updater](docs/plugins/updater.md), [loading](docs/plugins/loading.md), [glass](docs/plugins/glass.md),
+[game](docs/plugins/game.md), [terminal](docs/plugins/terminal.md), [automation](docs/automation.md).
+
 ### Layout
 
 ```
@@ -341,7 +353,7 @@ src/          App, Window, WindowOptions, Menu, Dialog, Ipc, TypeScript
 src/Native/   OS bridges: ObjC runtime, Metal, CoreText, the event view
 src/UI/       the toolkit: Context (tree building), Layout (flex), Text, Runtime (input), Painter
 examples/     runnable apps
-docs/         design notes
+docs/         the guides (start with docs/getting-started.md; native UI: docs/ui/README.md) and design notes
 AGENTS.md     entry point for coding agents and contributors
 ```
 
@@ -673,6 +685,17 @@ php tests/bench.php                    # 无窗口压测：一帧的 build / lay
 ./run.sh loading          # loading.dev 的 29 个加载指示器，可调尺寸、颜色、缓动、线端
 ```
 
+### 文档
+
+先看[入门](docs/getting-started.md)，再看[原生 UI](docs/ui/README.md)：每个控件、布局、输入、样式、动效和绘制，
+示例都能运行（`tests/docs_examples_test.php` 会构建它们）。应用侧：[应用](docs/app.md)、[窗口](docs/windows.md)、
+[菜单](docs/menus.md)、[桌面 API](docs/native.md)、[绑定](docs/bindings.md)、[前端](docs/frontend.md)、
+[剪贴板与拖拽数据](docs/data-transfer.md)、[多语言](docs/i18n.md)、[命令行](docs/cli.md)、[配置](docs/configuration.md)、
+[构建与分发](docs/distribution.md)。插件：[fetch](docs/plugins/fetch.md)、[SQLite](docs/plugins/sqlite.md)、
+[watch](docs/plugins/watch.md)、[WebSocket](docs/plugins/websocket.md)、[updater](docs/plugins/updater.md)、
+[loading](docs/plugins/loading.md)、[glass](docs/plugins/glass.md)、[game](docs/plugins/game.md)、
+[terminal](docs/plugins/terminal.md)、[automation](docs/automation.md)。
+
 ### 目录
 
 ```
@@ -681,7 +704,7 @@ src/          App、Window、WindowOptions、Menu、Dialog、Ipc、TypeScript
 src/Native/   操作系统桥接：ObjC 运行时、Metal、CoreText、事件视图
 src/UI/       工具包：Context（建树）、Layout（flex）、Text、Runtime（输入）、Painter
 examples/     可运行的示例
-docs/         设计笔记
+docs/         使用指南（从 docs/getting-started.md 开始；原生 UI 见 docs/ui/README.md）和设计笔记
 AGENTS.md     编码代理与贡献者的入口
 ```
 
