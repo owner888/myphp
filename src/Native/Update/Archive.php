@@ -84,8 +84,8 @@ final class Archive
         }
     }
 
-    /** The header of an entry, after a PAX header when its names don't fit ustar's. */
-    private static function header(string $name, string $type, int $mode, int $size, int $mtime, string $link): string
+    /** The header of an entry, after a PAX header when its names don't fit ustar's (the Debian package's tar too, Build\Deb). */
+    public static function header(string $name, string $type, int $mode, int $size, int $mtime, string $link): string
     {
         $pax = '';
         [$prefix, $short] = self::split($name);

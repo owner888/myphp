@@ -45,7 +45,7 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 ## Layout
 
 ```
-bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app), micro; bin/cldr-tables
+bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app; Linux .deb), micro; bin/cldr-tables
 src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
                    documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
                    WindowState(+Store), newWebView), Page (+ PageOptions, on(event), eval, find, PDF, downloads, permissions),
@@ -63,7 +63,7 @@ src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callB
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:
                    events into UI\Input, NSTextInputClient), WebView + bridge.js (window.myphp), Appearance
                    (dark/light, accent), Pasteboard, CoreImage (images off the main thread), ImageIO (icons), Mem (calloc/free, address memcpy),
-                   Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/, CoreMedia/Renderers/AssetReader/MediaTicker (Media\Player)
+                   Curl/Zlib (system libs), Fibers (App::go), Update/ (Updater: Ed25519, tar, bsdiff, Publish), FileWatch/, CoreMedia/Renderers/AssetReader/MediaTicker (Media\Player; Linux: Av*, Pcm)
 src/Text/          the text system (mygo's internal/text): System, Layout, Engine (Native\TextEngine, StubEngine); src/Audio/ mygo's audio (Mixer, Stream, Output → Native\AudioQueue, Wav, Vorbis/ in PHP, SystemDecoder); src/Media/ video (Player; Matroska, Mp4, Ts, Hls in PHP; Context::video)
 src/UI/Markdown/   Parser (mygo's ui/markdown/parser) and the views: Markdown::view/stream, ViewState, SpanBuilder, Theme, Reveal
 src/Plugins/Terminal/ mygo's plugins/terminal: Terminal (+ Options, Theme, Keybind, View), Vt (libghostty-vt over FFI, mygo's
@@ -164,9 +164,9 @@ Measured on an M-series Mac: 9 000 nodes rebuilt, laid out and painted in ~4–6
 `bin/myphp` is mygo's CLI (`myphp help`; templates, skills in `bin/`);
 myphp.json or myphp.config.ts take mygo.json's fields. `build` makes
 `<out>/darwin-<arch>/<name>.app` (a C launcher that execs this php, or
-`-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; `dev`
-runs "<name> Dev" from .myphp/dev. Work in `src/Native/Build/`
-(`tests/build_test.php`). Pages import `packages/runtime` (myphp-runtime,
+`-launcher micro`: phpmicro from static-php-cli), signed, and a .dmg; on Linux
+`<out>/linux-<arch>`: the app, its .tar.gz, a .deb, a PKGBUILD (`Build\Linux`); `dev` runs "<name> Dev"
+from .myphp/dev. Work in `src/Native/Build/` (`tests/build_test.php`). Pages import `packages/runtime` (myphp-runtime,
 TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `php scripts/version.php <v>`, commit, tag `v<v>` (release.yml publishes npm). Slugs' pinyin: `php scripts/gen-pinyin.php` (Unihan).
 
 ## Working on it

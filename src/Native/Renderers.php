@@ -30,7 +30,7 @@ use RuntimeException;
  *
  * @internal
  */
-final class Renderers
+final class Renderers implements \MyPHP\Platform\Renderers
 {
     /** The display layer, the audio renderer and the synchronizer, retained. */
     public $layer, $audio, $sync;
@@ -576,6 +576,12 @@ final class Renderers
     public function setMuted(bool $m): void
     {
         ObjC::msg('v:b', $this->audio, 'setMuted:', $m);
+    }
+
+    /** None: the display layer shows the picture, under the window's content (Window::placeVideos). */
+    public function frame(): ?\MyPHP\UI\Image
+    {
+        return null;
     }
 
     /** What failed, a renderer's error, or null. */

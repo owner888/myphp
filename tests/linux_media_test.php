@@ -1,0 +1,77 @@
+<?php
+// The player's system on Linux (Platform\Linux\Media, over FFmpeg): what
+// libavformat reads (an MP4, an Ogg), its tracks named as Matroska names
+// them; a picture and a film not named as one refused, as AVFoundation
+// refuses them; a keyframe decoded into a thumbnail of its size; the
+// renderers, paused at a seek's time, decoding its frames from the
+// keyframe, the ones before the time dropped, the first after it shown
+// as the image the window draws; the thumbnails' JPEGs (GdkPixbuf's).
+declare(strict_types=1);
+
+namespace MyPHP\Tests;
+
+use MyPHP\Media\{Matroska, Track};
+use MyPHP\Native\{Av, AvReader};
+use MyPHP\Platform\Linux\{Media, Renderers, Thumbnails};
+
+if (PHP_OS_FAMILY !== 'Linux') {
+    echo "  skipped: Linux's\n";
+    return;
+}
+try {
+    Av::ffi();
+} catch (\RuntimeException $e) {
+    echo "  skipped: {$e->getMessage()}\n";
+    return;
+}
+
+$r = new AvReader(__DIR__ . '/testdata/clip.mp4');
+same([[Track::VIDEO, 'V_MPEG4/ISO/AVC', 160, 90], [Track::AUDIO, 'A_AAC', 0, 0]], array_map(fn(Track $t) => [$t->type, $t->codec, $t->width, $t->height], $r->tracks()),
+    'an MP4 read by libavformat: its tracks, their codecs named as Matroska names them');
+check(abs($r->duration() - 2.04) < 0.05 && str_starts_with($r->tracks()[0]->private, "\x01"), 'its duration, and its video\'s avcC as CodecPrivate: ' . $r->duration());
+$key = $r->keyframe(1.0);
+check($key !== null && $key->keyframe && $key->track->type === Track::VIDEO && $key->time <= 1.0, 'the keyframe at or before a time: ' . ($key?->time ?? 'none'));
+same(['A_VORBIS', 'audio'], [(new AvReader(__DIR__ . '/testdata/tone.ogg'))->tracks()[0]->codec, (new AvReader(__DIR__ . '/testdata/tone.ogg'))->tracks()[0]->type], 'an Ogg\'s Vorbis');
+$refused = function (string $path): string {
+    try {
+        new AvReader($path);
+        return '';
+    } catch (\RuntimeException $e) {
+        return $e->getMessage();
+    }
+};
+$notes = sys_get_temp_dir() . '/myphp-linux-media-' . getmypid() . '.txt';
+copy(__DIR__ . '/testdata/clip.mkv', $notes);
+check(str_contains($refused(__DIR__ . '/testdata/upright.jpg'), 'is a picture') && str_contains($refused($notes), 'is not named as'), 'a picture is no film, nor a film named notes.txt');
+unlink($notes);
+
+$video = $r->tracks()[0];
+$thumbs = new Thumbnails($video, 80);
+$rgba = $thumbs->frame($key);
+same([80, 45, 80 * 45 * 4], [$thumbs->width, $thumbs->height, strlen($rgba)], 'a thumbnail 80 wide, of the track\'s shape');
+check(count(array_unique(str_split($rgba, 4))) > 8, 'of the frame\'s colors');
+check(strlen($thumbs->frame($r->keyframe(0.0))) === 80 * 45 * 4, 'and another, the decoder flushed after each');
+
+$m = new Matroska(__DIR__ . '/testdata/clip.mkv');
+$out = new Renderers();
+$out->setRate(0.0, 1.3);
+$m->seek(1.3); // from the keyframe at 1 s
+$given = 0; $hidden = 0;
+while ($out->frame() === null && ($p = $m->next()) !== null) {
+    if ($p->track->type !== Track::VIDEO) { continue; }
+    $show = $p->time + $p->duration > 1.3;
+    $hidden += $show ? 0 : 1;
+    $out->enqueue($p, $show);
+    $given++;
+}
+check($out->frame() !== null && $out->frame()->size() === [160, 90], "paused at a seek's time, the first frame after it shows, the image of the picture: $given packets given, $hidden of them hidden");
+check($hidden > 0, 'the frames before the time decoded, not shown');
+same([1.3, null], [$out->time(), $out->failure()], 'the clock stays where the seek went, nothing failed');
+$png = $out->snapshot();
+check($png !== null && str_starts_with($png, "\x89PNG") && unpack('N2', $png, 16) === [1 => 160, 2 => 90], 'a snapshot of it, a PNG of its size');
+
+$media = new Media(\MyPHP\App::backend());
+$jpeg = $media->jpeg($rgba, 80, 45, 0.85);
+check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
+same(80 * 45 * 4, strlen($media->jpegPixels($jpeg, 80)), 'and its pixels again');
+check($media->playable($video) && !$media->playable(new Track(9, Track::AUDIO, 'A_NONE', '', 'und', '', false, 0, 0, 0, 0, 0)), 'what FFmpeg decodes plays, not what it knows not');

@@ -85,4 +85,10 @@ interface AppController
 
     /** The user's regional formats: their locale, first weekday (-1 unknown) and hour cycle (0 unknown) (mygo's Region). */
     public function region(): \MyPHP\Region;
+
+    /** Tells the system $path (absolute) is a document the app opened (mygo's AddRecentDocument): AppKit's recent documents, GTK's recent files. */
+    public function addRecentDocument(string $path): void;
+
+    /** Removes the app's recent documents the system keeps, those of earlier runs too (mygo's ClearRecentDocuments). */
+    public function clearRecentDocuments(): void;
 }

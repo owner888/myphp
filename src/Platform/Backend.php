@@ -96,6 +96,9 @@ interface Backend
 
     public function nowPlaying(): NowPlaying;
 
+    /** What Media\Player reads, decodes and plays films with. May be called before init. */
+    public function media(): Media;
+
     /** May be called before init. */
     public function secrets(): Secrets;
 

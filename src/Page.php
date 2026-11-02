@@ -1067,8 +1067,8 @@ final class Page
             return $path;
         }
         $dirs = [(string)getcwd(), dirname((string)realpath($_SERVER['argv'][0] ?? '.'))];
-        if (($app = Native\Bundle::path()) !== null) {
-            $dirs[] = "$app/Contents/Resources";
+        if (($res = Native\Bundle::resources()) !== null) {
+            $dirs[] = $res;
         }
         foreach ($dirs as $d) {
             if (file_exists("$d/$path")) {

@@ -32,7 +32,6 @@ use MyPHP\PlayerPlugins\Events;
 use MyPHP\PlayerPlugins\Instance;
 use MyPHP\PlayerPlugins\Plugin;
 use MyPHP\PlayerPlugins\Plugins;
-use MyPHP\Native\NowPlaying;
 use MyPHP\Native\PictureInPicture;
 use RuntimeException;
 
@@ -440,22 +439,20 @@ final class MediaPlayerState
         $this->pictureInPicture = false;
         $this->player = $p;
         $this->fresh = true;
-        if (PictureInPicture::supported()) {
-            $this->pip = new PictureInPicture($p, function (bool $on): void { // the window hides, or goes to the Dock, or stays, while the film plays in the system's, as IINA's settings say, and comes back with it
-                if ($on === $this->pictureInPicture) { return; }
-                $this->pictureInPicture = $on;
-                $this->emit('iina.pip.changed', $on);
-                $set = $this->settings();
-                $rt = $this->runtime?->get();
-                match ($set->get('windowBehaviorWhenPip')) {
-                    1 => ($rt?->showWindow)?->__invoke(!$on),
-                    2 => ($rt?->minimizeWindow)?->__invoke($on),
-                    default => null,
-                };
-                if ($on && $set->get('pauseWhenPip') && $this->player?->playing()) { $this->player->pause(); $this->played(); } // IINA's "Automatically pause playback"
-                $this->changed();
-            });
-        }
+        $this->pip = \MyPHP\App::backend()->media()->pictureInPicture($p, function (bool $on): void { // the window hides, or goes to the Dock, or stays, while the film plays in the system's, as IINA's settings say, and comes back with it
+            if ($on === $this->pictureInPicture) { return; }
+            $this->pictureInPicture = $on;
+            $this->emit('iina.pip.changed', $on);
+            $set = $this->settings();
+            $rt = $this->runtime?->get();
+            match ($set->get('windowBehaviorWhenPip')) {
+                1 => ($rt?->showWindow)?->__invoke(!$on),
+                2 => ($rt?->minimizeWindow)?->__invoke($on),
+                default => null,
+            };
+            if ($on && $set->get('pauseWhenPip') && $this->player?->playing()) { $this->player->pause(); $this->played(); } // IINA's "Automatically pause playback"
+            $this->changed();
+        });
         $this->error = '';
         $this->autoMusicMode($p);
         $this->speedAt = log($p->rate() / 0.25, 64);
@@ -492,7 +489,7 @@ final class MediaPlayerState
                 if ($this->resume) { $this->positions()->forget($this->player->path()); } // watched to the end: from the start next time
                 if ($this->loop === 'file') { $this->player->play(); $this->played(); return; } // from its start again
                 if (($this->settings()->get('playlistAutoPlayNext') || $this->loop === 'playlist') && $this->next()) { return; } // the next film plays (IINA's "Play next item automatically")
-                NowPlaying::end($this);
+                \MyPHP\App::backend()->media()->endNowPlaying($this);
                 if (!$this->settings()->get('keepOpenOnFileEnd')) { $this->ask('close', true); } // IINA's: the window goes, unless kept open
                 $this->changed();
             }),
@@ -607,7 +604,7 @@ final class MediaPlayerState
         $nowPlaying = $o->nowPlaying && $set->get('useMediaKeys'); // and as the settings say: IINA's "Use system media control"
         if ($nowPlaying !== $this->nowPlaying) {
             $this->nowPlaying = $nowPlaying;
-            $nowPlaying ? $this->showNowPlaying() : NowPlaying::end($this);
+            $nowPlaying ? $this->showNowPlaying() : \MyPHP\App::backend()->media()->endNowPlaying($this);
         }
         if (!$this->fresh || $p === null) {
             return;
@@ -792,7 +789,7 @@ final class MediaPlayerState
         if ($p === null) { return; }
         $this->shownChapter = $p->chapter();
         $l = $this->playlist;
-        NowPlaying::show($this, [ // of the state given, not this one held
+        \MyPHP\App::backend()->media()->showNowPlaying($this, [ // of the state given, not this one held
             'play' => static function (self $s): void { if (!$s->player?->playing()) { $s->togglePause(); } },
             'pause' => static function (self $s): void { if ($s->player?->playing()) { $s->togglePause(); } },
             'toggle' => static fn(self $s) => $s->togglePause(),
@@ -809,7 +806,7 @@ final class MediaPlayerState
 
     public function __destruct()
     {
-        NowPlaying::end($this);
+        \MyPHP\App::backend()->media()->endNowPlaying($this);
     }
 
     /** Asks the window for a frame. */

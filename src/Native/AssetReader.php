@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Native;
 
-use MyPHP\Media\{Chapter, Packet, Source, Track};
+use MyPHP\Media\{Chapter, Packet, Track};
 use RuntimeException;
 
 /**
@@ -18,7 +18,7 @@ use RuntimeException;
  *
  * @internal
  */
-final class AssetReader implements Source
+final class AssetReader implements \MyPHP\Platform\MediaReader
 {
     /** Matroska's codec ids of the FourCCs AVFoundation's tracks have. */
     private const CODECS = ['avc1' => 'V_MPEG4/ISO/AVC', 'avc3' => 'V_MPEG4/ISO/AVC', 'hvc1' => 'V_MPEGH/ISO/HEVC', 'hev1' => 'V_MPEGH/ISO/HEVC', 'vp09' => 'V_VP9', 'av01' => 'V_AV1',

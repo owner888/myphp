@@ -9,8 +9,9 @@ use RuntimeException;
 /**
  * The recent documents (mygo's recent_docs.go): those the app opened
  * lately, newest first, kept in recent-documents.json in the user data
- * directory, and noted with NSDocumentController too, whose list the
- * Dock menu shows.
+ * directory, and told the system too (Platform\AppController::
+ * addRecentDocument: NSDocumentController's list, which the Dock menu
+ * shows; GTK's recent files).
  *
  * @internal
  */
@@ -52,8 +53,7 @@ final class RecentDocuments
         self::$paths = array_slice($paths, 0, self::MAX);
         self::save();
         if (self::$system) {
-            $url = ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path));
-            ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'noteNewRecentDocumentURL:', $url);
+            App::backend()->app()->addRecentDocument($path);
         }
         App::relabelMenus(); // the Open Recent menus list it
     }
@@ -63,7 +63,7 @@ final class RecentDocuments
         self::$paths = [];
         self::save();
         if (self::$system) {
-            ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'clearRecentDocuments:', null);
+            App::backend()->app()->clearRecentDocuments();
         }
         App::relabelMenus();
     }

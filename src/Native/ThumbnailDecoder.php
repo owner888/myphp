@@ -22,7 +22,7 @@ use RuntimeException;
  *
  * @internal Media\Player
  */
-final class ThumbnailDecoder
+final class ThumbnailDecoder implements \MyPHP\Platform\Thumbnails
 {
     private static ?FFI $vt = null;
     /** The session and the format it decodes, owned; null before the first frame. */

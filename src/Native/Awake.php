@@ -11,7 +11,7 @@ namespace MyPHP\Native;
  *
  * @internal Media\Player
  */
-final class Awake
+final class Awake implements \MyPHP\Platform\Awake
 {
     /** NSActivityIdleDisplaySleepDisabled, NSActivityIdleSystemSleepDisabled. */
     private const IDLE_DISPLAY_SLEEP_DISABLED = 1 << 40, IDLE_SYSTEM_SLEEP_DISABLED = 1 << 20;

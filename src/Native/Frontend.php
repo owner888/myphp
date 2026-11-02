@@ -58,8 +58,8 @@ final class Frontend
         if ($dist !== '') {
             return $dist;
         }
-        $app = Bundle::path(); // the frontend myphp build put in the bundle, a -debug build's too
-        return $app !== null && is_dir("$app/Contents/Resources/frontend") ? "$app/Contents/Resources/frontend" : null;
+        $res = Bundle::resources(); // the frontend myphp build put in the bundle, a -debug build's too
+        return $res !== null && is_dir("$res/frontend") ? "$res/frontend" : null;
     }
 
     /** What serves myphp:// when the app handles it not itself: the frontend's files, or a page saying how to get some. */

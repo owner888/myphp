@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.146.0';
+const VERSION = '1.122.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -24,7 +24,7 @@ Commands:
 	                     and the accessors of the app's catalogs of messages
 	i18n check [dir]     check the app's catalogs of messages
 	dev                  run the app in development, restarting it on changes
-	build                build production apps (a .app and a .dmg)
+	build                build production apps (a .app and a .dmg, Linux packages)
 	micro                build the static PHP that apps built with -launcher micro run on
 	keygen               create the key pair that signs updates
 	doctor               check that the development environment is ready
@@ -36,7 +36,7 @@ TXT;
 
 require FRAMEWORK . '/src/autoload.php';
 
-use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Dmg, Icns, MachO, Resources, Slug, Strings, Upload};
+use MyPHP\Native\Build\{Bundle, Cmd, Codesign, Deb, Dmg, Icns, Linux, MachO, Pkgbuild, Resources, Slug, Strings, Upload};
 
 /** What a command failed of: main prints it and exits with 1; myphp dev reports a failed build and goes on. */
 final class Failure extends RuntimeException {}
@@ -213,7 +213,10 @@ function nodeTypeScriptFlags(string $node): ?array
  * minimumSystemVersion (12.0), signingIdentity ("-", ad hoc),
  * entitlements, provisioningProfile (embedded before signing),
  * helperEntitlements, infoPlist, dmgTitle (the name) and notarize
- * ({"keychainProfile": …, "keychain": …}).
+ * ({"keychainProfile": …, "keychain": …}); linux (mygo's): maintainer
+ * (package.json's author, else the name), comment, categories, depends,
+ * webview (a bool, else whether the app shows pages, Linux::usesPages) and
+ * command (a name or a list of them, kept as a list).
  *
  * @return array{dir: string, config: array}
  */
@@ -267,6 +270,21 @@ function project(array $args): array
         $bad("macos.icon {$m['icon']} is an Assets.car, an Icon Composer .icon or an .icns");
     }
     $c['macos'] = $m;
+    $l = $c['linux'] ?? [];
+    is_array($l) && ($l === [] || !array_is_list($l)) || $bad('linux is an object');
+    $l['maintainer'] = orElse(orElse(trim((string)($l['maintainer'] ?? '')), packageAuthor($dir)), $c['name']);
+    $l['comment'] = (string)($l['comment'] ?? '');
+    foreach (['categories', 'depends'] as $k) {
+        $l[$k] ??= [];
+        is_array($l[$k]) && array_is_list($l[$k]) && array_filter($l[$k], fn($v) => !is_string($v) || $v === '') === [] || $bad("linux.$k is a list of names");
+    }
+    !isset($l['webview']) || is_bool($l['webview']) || $bad('linux.webview is true or false');
+    try {
+        $l['command'] = Linux::commands($l['command'] ?? null);
+    } catch (RuntimeException $e) {
+        $bad($e->getMessage());
+    }
+    $c['linux'] = $l;
     $c['resources'] ??= [];
     is_array($c['resources']) && array_is_list($c['resources']) || $bad('resources is a list of files and directories');
     foreach ($c['urlSchemes'] ?? [] as $scheme) {
@@ -290,6 +308,23 @@ function project(array $args): array
         }
     }
     return ['dir' => $dir, 'config' => $c];
+}
+
+/** The author of the project's package.json, "Name <email>", or '' (mygo's packageAuthor). */
+function packageAuthor(string $dir): string
+{
+    $data = @file_get_contents("$dir/package.json");
+    $author = $data === false ? null : (json_decode($data, true)['author'] ?? null);
+    [$name, $email] = ['', ''];
+    if (is_string($author)) {
+        $name = explode('(', $author)[0];
+        [$name, $email] = array_pad(explode('<', $name, 2), 2, '');
+        $email = explode('>', $email)[0];
+    } elseif (is_array($author)) {
+        [$name, $email] = [(string)($author['name'] ?? ''), (string)($author['email'] ?? '')];
+    }
+    $name = implode(' ', preg_split('/\s+/', trim($name), -1, PREG_SPLIT_NO_EMPTY)); $email = trim($email);
+    return $name === '' ? '' : ($email === '' ? $name : "$name <$email>");
 }
 
 function sh(array $cmd, ?string $cwd = null): int
@@ -809,6 +844,18 @@ macos.signingIdentity (ad hoc by default), and "<name> <version> <arch>.dmg",
 without the arch for darwin/universal, whose window invites dragging the app
 to Applications. The programs among the resources are signed with the app.
 
+For linux/amd64 and linux/arm64 it makes <out>/linux-<arch>: the launcher,
+named after the slug, with the app's PHP files and the framework's in app/,
+the frontend in frontend/, the resources (resources/linux, resources/linux-
+<arch>), a desktop entry and the icon next to it; the app as
+<slug>-<version>-linux-<arch>.tar.gz; a Debian package, which installs it in
+/opt/<slug> with its desktop entry, its icons in the hicolor theme and, with
+linux.command, its commands in /usr/bin; and a PKGBUILD, from which
+makepkg -si packages the archive for Arch Linux and installs it. The
+packages depend on GTK 3, libsecret, WebKitGTK when the app shows pages,
+the app indicator when it has a tray icon, the PHP of the exec launcher
+(php<version>-cli and the extensions MyPHP uses) and linux.depends.
+
 Set macos.signingIdentity in myphp.json (or -sign) to a Developer ID to ship
 outside the Mac App Store, and macos.notarize to notarize the disk image.
 
@@ -818,7 +865,7 @@ delta updates from the last versions published (updates.deltas), and
 update-<platform>.json: publish them where updates point to, or with -upload.
 
 Flags:
-  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal (default: this Mac's)
+  -platform list        comma separated targets: darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64 (default: this machine's)
   -launcher exec|micro  exec runs the PHP that built the app; micro makes one static binary (see myphp micro)
   -php version          the PHP version of micro.sfx, when myphp micro builds it
   -debug                keep development features such as the inspector
@@ -830,7 +877,7 @@ Flags:
   -upload               upload the disk images and updates to the GitHub release of this version (updates.github), as a draft, or to the bucket of updates.s3
 TXT;
 
-/** This Mac's architecture, as the targets name it. */
+/** This machine's architecture, as the targets name it. */
 function hostArch(): string
 {
     return in_array(strtolower(php_uname('m')), ['arm64', 'aarch64'], true) ? 'arm64' : 'amd64';
@@ -839,7 +886,7 @@ function hostArch(): string
 function build(array $args): void
 {
     help($args, BUILD_USAGE);
-    $platforms = option($args, 'platform', 'darwin/' . hostArch());
+    $platforms = option($args, 'platform', (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch());
     $launcher = option($args, 'launcher', 'exec');
     $php = option($args, 'php');
     $sign = option($args, 'sign', '');
@@ -855,9 +902,11 @@ function build(array $args): void
     $targets = [];
     foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
         [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
-        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || fail("myphp builds macOS apps: the platform is darwin/arm64, darwin/amd64 or darwin/universal, not $p");
-        $launcher !== 'micro' || $arch === hostArch() || fail("-launcher micro builds for this Mac, darwin/" . hostArch() . ": micro.sfx is of its architecture");
-        $targets[] = $arch;
+        $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch])
+            || fail("myphp builds macOS and Linux apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, linux/amd64 or linux/arm64, not $p");
+        $host = (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch();
+        $launcher !== 'micro' || "$os/$arch" === $host || fail("-launcher micro builds for this machine, $host: micro.sfx is of its system and architecture");
+        $targets[] = [$os, $arch];
     }
     $targets !== [] || fail('-platform names no platform');
     if ($upload) {
@@ -871,12 +920,18 @@ function build(array $args): void
     if (isset($c['macos']['notarize']) && !$opts['skipNotarize'] && $opts['sign'] === '-') {
         fail('notarization needs a Developer ID signing identity: set macos.signingIdentity or pass -sign');
     }
-    if ($c['macos']['provisioningProfile'] !== '' && $opts['sign'] === '-') {
+    if ($c['macos']['provisioningProfile'] !== '' && $opts['sign'] === '-' && in_array('darwin', array_column($targets, 0), true)) {
         fail(PROFILE_AD_HOC); // before building anything, as codesign would
     }
     // Check what the launcher needs before touching the output, so a failed build leaves the last one.
     if ($launcher === 'exec') {
-        trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
+        foreach ($targets as [$os, $arch]) {
+            if ($os === 'darwin') {
+                trim((string)shell_exec('command -v cc')) !== '' || fail('no C compiler for the launcher: xcode-select --install');
+            } else {
+                linuxCompiler($arch);
+            }
+        }
     } else {
         [, $opts['micro']] = ensureMicro($php);
     }
@@ -898,9 +953,9 @@ function build(array $args): void
         str_starts_with($out, rtrim($dist, '/') . '/') && fail("out {$c['out']} is inside frontendDist {$c['frontendDist']}, which the app copies: set out in myphp.json, as \"build\"");
     }
     $built = [];
-    foreach ($targets as $arch) {
+    foreach ($targets as [$os, $arch]) {
         try {
-            array_push($built, ...buildPlatform($dir, $c, $arch, $opts));
+            array_push($built, ...($os === 'linux' ? buildLinux($dir, $c, $arch, $opts) : buildPlatform($dir, $c, $arch, $opts)));
         } catch (RuntimeException $e) {
             fail($e->getMessage());
         }
@@ -1030,6 +1085,167 @@ function buildPlatform(string $dir, array $c, string $arch, array $opts): array
     }
 }
 
+/**
+ * Builds and packages the app for linux/$arch into <out>/linux-$arch and
+ * returns the artifacts (mygo's buildPlatform for linux): the app as it is
+ * installed, the launcher named after the slug with app/, frontend/,
+ * info.json (Linux::info), the desktop entry, the icon, the MIME package
+ * and the resources next to it, in a staging directory that replaces the
+ * platform directory; then the Debian package, the archive and the
+ * PKGBUILD of it.
+ *
+ * @return list<string>
+ */
+function buildLinux(string $dir, array $c, string $arch, array $opts): array
+{
+    $out = path($dir, $c['out']);
+    is_dir($out) || mkdir($out, 0755, true) || fail("cannot create $out");
+    $stage = "$out/.staging-linux-$arch-" . getmypid();
+    mkdir($stage, 0755);
+    try {
+        $framework = frameworkOf($c);
+        $slug = Slug::ofConfig($c);
+        $res = Resources::collect($dir, $c['configFile'], $c['resources'], 'linux', $arch, natives($dir, $framework, $arch, 'linux'), Linux::reserved($slug));
+        if (($other = Resources::otherArch($dir, 'linux', $arch)) !== '') {
+            warnf('No ' . Resources::DIR . "/linux-$arch for linux/$arch, though there is " . Resources::DIR . "/$other");
+        }
+        if (!$opts['debug'] && getenv('MYPHP_INSPECTOR') === '1') {
+            logf('Keeping the inspector of native UI (MYPHP_INSPECTOR=1)');
+        }
+        logf("Making linux/$arch");
+        // The app's files and the framework's src, as app/; its resources, its build output and its hidden files stay out, as in the .app.
+        $frontend = ($c['frontendDist'] ?? '') !== '' && !str_starts_with($c['frontendDist'], '/') ? [explode('/', ltrim($c['frontendDist'], './'))[0]] : [];
+        copyTree($dir, "$stage/app", [basename($out), 'vendor', 'node_modules', 'myphp', Resources::DIR, ...$frontend], false);
+        copyTree("$framework/src", "$stage/app/myphp/src", []);
+        if (($c['frontendDist'] ?? '') !== '') {
+            copyTree(path($dir, $c['frontendDist']), "$stage/frontend", ['.DS_Store']);
+        }
+        $php = '';
+        if ($opts['launcher'] === 'exec') {
+            $php = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+            $bin = (string)realpath(PHP_BINARY);
+            if ($bin !== "/usr/bin/php$php") {
+                warnf("The packages depend on php$php-cli, whose php is /usr/bin/php$php, but the launcher runs $bin, the php building the app");
+            }
+            buildLinuxExecLauncher("$stage/$slug", $bin, $c['entry'], $arch);
+        } else {
+            buildLinuxMicroLauncher("$stage/$slug", "$stage/app", $c['entry'], $opts['micro']);
+        }
+        file_put_contents("$stage/" . Linux::INFO, json_encode(Linux::info($c, $slug, !$opts['debug']), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+        // The desktop entry, the icon and the MIME package (mygo's writeLinuxDesktop), which the packages install where desktops look for them.
+        $langs = linuxLanguages($dir, $c);
+        $artifacts = ["$stage/$slug"];
+        $png = null;
+        if (($c['icon'] ?? '') !== '') {
+            $png = @file_get_contents(path($dir, $c['icon']));
+            $png !== false || fail("icon {$c['icon']}: cannot read it");
+            file_put_contents("$stage/$slug.png", $png);
+            $artifacts[] = "$stage/$slug.png";
+        }
+        if (($xml = Linux::mimePackage($c)) !== '') {
+            file_put_contents("$stage/$slug.xml", $xml);
+            $artifacts[] = "$stage/$slug.xml";
+        }
+        file_put_contents("$stage/$slug.desktop", Linux::desktopEntry($c, $slug, $png !== null ? $slug : '', $langs));
+        $artifacts[] = "$stage/$slug.desktop";
+        Resources::copy($res, $stage);
+        // The app as installed: everything next to the launcher. Packages hold it.
+        $installed = array_values(array_diff(scandir($stage) ?: [], ['.', '..']));
+        try {
+            $icons = $png === null ? [] : Linux::icons($png);
+        } catch (RuntimeException $e) {
+            fail("icon {$c['icon']}: {$e->getMessage()}");
+        }
+        $sources = appSources($dir, $c);
+        $depends = Linux::debDepends($c['linux'], Linux::usesPages($c, $sources), Linux::usesTray($sources), $php);
+        $artifacts[] = Deb::write($c, $stage, $slug, $arch, $installed, $depends, $icons, $langs);
+        logf('Packaged ' . basename(end($artifacts)));
+        // The app's archive, which the PKGBUILD packages (mygo's writeArchive, without updates).
+        $archive = "$stage/$slug-{$c['version']}-linux-$arch.tar.gz";
+        MyPHP\Native\Update\Archive::write($archive, $stage, $installed);
+        $artifacts[] = $archive;
+        array_push($artifacts, ...Pkgbuild::write($dir, $c, $stage, $slug, $arch, $installed, $archive, $depends, $icons, $langs, warnf(...)));
+        if (isset($c['updates'])) {
+            warnf("Not writing an update for linux/$arch: Linux apps do not update themselves yet");
+        }
+        $final = "$out/linux-$arch";
+        replacePath($stage, $final);
+        $top = count(array_filter($res, fn(array $r) => !str_contains($r['name'], '/')));
+        if ($top > 0) {
+            logf("Copied $top resources next to the launcher");
+        }
+        return array_map(fn(string $a) => "$final/" . basename($a), $artifacts);
+    } finally {
+        if (is_dir($stage)) {
+            sh(['rm', '-rf', $stage]);
+        }
+    }
+}
+
+/** The app's PHP, as one string, which says what it uses (natives, Linux::usesPages). */
+function appSources(string $dir, array $c): string
+{
+    $sources = '';
+    foreach (phpFiles($dir, [basename(path($dir, $c['out'])), 'dist', 'vendor', 'node_modules', '.git', 'myphp']) as $f) {
+        $sources .= file_get_contents($f) . "\n";
+    }
+    return $sources;
+}
+
+/** The languages of the app's catalogs, the source first, with its name and description in each (myphp.appName, myphp.appDescription), for the desktop entry (mygo's languages). @return list<array{0: string, 1: string, 2: string}> */
+function linuxLanguages(string $dir, array $c): array
+{
+    if (($i = i18nConfig($dir, $c)) === null) {
+        return [];
+    }
+    $files = glob("{$i['path']}/*.json") ?: [];
+    sort($files, SORT_STRING);
+    $langs = [];
+    foreach ($files as $f) {
+        $catalog = json_decode((string)file_get_contents($f), true);
+        is_array($catalog) || fail("$f is not a catalog");
+        $name = $catalog['myphp.appName'] ?? ''; $description = $catalog['myphp.appDescription'] ?? '';
+        is_string($name) && is_string($description) && !preg_match('/[\r\n]/', $name . $description) || fail("$f: the app's name and description are strings that do not break the line");
+        $l = [basename($f, '.json'), $name, $description];
+        $l[0] === $i['source'] ? array_unshift($langs, $l) : $langs[] = $l;
+    }
+    return $langs;
+}
+
+/** The C compiler that makes the launcher of linux/$arch: cc for this machine's, else the GNU cross compiler of $arch (Linux::TRIPLE). */
+function linuxCompiler(string $arch): string
+{
+    PHP_OS_FAMILY === 'Linux' || fail("-launcher exec runs the php that builds the app: build linux/$arch on Linux");
+    if ($arch === hostArch()) {
+        Cmd::look('cc') !== '' || fail('no C compiler for the launcher: install gcc (Debian, Ubuntu: apt install gcc)');
+        return 'cc';
+    }
+    $cc = Linux::TRIPLE[$arch] . '-gcc';
+    Cmd::look($cc) !== '' || fail("no C compiler for the launcher of linux/$arch: install $cc (Debian, Ubuntu: apt install gcc-" . Linux::TRIPLE[$arch] . ')');
+    return $cc;
+}
+
+/** The exec launcher of a Linux app (Linux::launcherSource), running the php at $php, compiled for $arch. */
+function buildLinuxExecLauncher(string $out, string $php, string $entry, string $arch): void
+{
+    $tmp = tempnam(sys_get_temp_dir(), 'myphp');
+    $cFile = "$tmp.c";
+    rename($tmp, $cFile);
+    file_put_contents($cFile, Linux::launcherSource($php, PHP_FLAGS, $entry));
+    $code = sh([linuxCompiler($arch), '-O2', '-Wall', '-o', $out, $cFile]);
+    unlink($cFile);
+    $code === 0 || fail('compiling the launcher failed');
+}
+
+/** The Linux app's launcher as one static binary: micro.sfx, then the INI the app needs and the app as a phar, which phpmicro reads after itself. */
+function buildLinuxMicroLauncher(string $out, string $appDir, string $entry, string $micro): void
+{
+    $sfx = @file_get_contents($micro);
+    $sfx !== false || fail("cannot read $micro");
+    file_put_contents($out, $sfx . MachO::microPayload(implode("\n", MICRO_INI), appPhar($appDir, $entry))) !== false || fail("cannot write $out");
+    chmod($out, 0755);
+}
+
 /** Moves $src to $dst, replacing what $dst held; the old one is renamed away before it is removed, so a running app keeps its files (mygo's replacePath). */
 function replacePath(string $src, string $dst): void
 {
@@ -1138,11 +1354,12 @@ function appCatalog(string $dir, array $c): array
  * path], and for a universal app the darwin-amd64 build's path, which
  * combine into one file (mygo's natives). A plugin is used when the app's
  * PHP files name its namespace (MyPHP\Plugins\<Name>), as mygo's are the
- * packages the app imports.
+ * packages the app imports. $goos is the system the app is for: libdav1d
+ * ships with macOS apps alone, as Linux has it from its packages.
  *
  * @return list<array{0: string, 1: string, 2?: string}>
  */
-function natives(string $appDir, string $framework, string $arch): array
+function natives(string $appDir, string $framework, string $arch, string $goos = 'darwin'): array
 {
     $sources = '';
     foreach (phpFiles($appDir, ['dist', 'vendor', 'node_modules', '.git', 'myphp']) as $f) {
@@ -1165,11 +1382,11 @@ function natives(string $appDir, string $framework, string $arch): array
                 $out[] = [$armFile['name'], fetchNative($armFile), fetchNative($amdFile)];
                 continue;
             }
-            $f = $pick("darwin-$arch");
+            $f = $pick("$goos-$arch");
             $out[] = [$f['name'], fetchNative($f)];
         }
     }
-    if (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer')) {
+    if ($goos === 'darwin' && (str_contains($sources, 'MyPHP\\Media') || str_contains($sources, 'MediaPlayer'))) {
         array_push($out, ...dav1d($arch));
     }
     return $out;
@@ -1213,7 +1430,8 @@ function phpFiles(string $dir, array $skip): array
 /**
  * The path of a native library in the user's cache, downloaded there with
  * curl first when it is missing and its SHA-256 checked:
- * ~/Library/Caches/mygo/natives/<sha256>/<name>, where mygo's CLI keeps it
+ * ~/Library/Caches/mygo/natives/<sha256>/<name> (on Linux under
+ * $XDG_CACHE_HOME, else ~/.cache), where mygo's CLI keeps it
  * and the plugins look too when they run outside a built app (mygo's
  * fetchNative).
  *
@@ -1226,7 +1444,8 @@ function fetchNative(array $f): string
     if ($url === '' || preg_match('/^[0-9a-f]{64}$/', $sum) !== 1 || $name === '' || $name === '.' || $name === '..' || strpbrk($name, '/\\') !== false) {
         fail('invalid native library ' . json_encode($f));
     }
-    $dir = getenv('HOME') . "/Library/Caches/mygo/natives/$sum";
+    $xdg = (string)getenv('XDG_CACHE_HOME');
+    $dir = (PHP_OS_FAMILY === 'Linux' ? ($xdg !== '' ? $xdg : getenv('HOME') . '/.cache') : getenv('HOME') . '/Library/Caches') . "/mygo/natives/$sum";
     $path = "$dir/$name";
     if (is_file($path) && hash_file('sha256', $path) === $sum) {
         return $path;
@@ -1331,6 +1550,20 @@ function buildExecLauncher(string $out, string $entry, string $arch, ?string $pr
  */
 function buildMicroLauncher(string $out, string $appDir, string $entry, string $micro): void
 {
+    $phar = appPhar($appDir, $entry);
+    $sfx = @file_get_contents($micro);
+    $sfx !== false || fail("cannot read $micro");
+    try {
+        MachO::embed($sfx, MachO::microPayload(implode("\n", MICRO_INI), $phar), $out);
+    } catch (RuntimeException $e) {
+        fail("$micro: " . $e->getMessage());
+    }
+    chmod($out, 0755);
+}
+
+/** The app in $appDir packed as a phar whose stub runs $entry (or the terminal plugin's spawn.php), for phpmicro. */
+function appPhar(string $appDir, string $entry): string
+{
     $phar = sys_get_temp_dir() . '/myphp-' . getmypid() . '.phar';
     @unlink($phar);
     $code = sh([PHP_BINARY, '-d', 'phar.readonly=0', '-r', <<<PHP
@@ -1338,16 +1571,11 @@ function buildMicroLauncher(string $out, string $appDir, string $entry, string $
     \$p->setStub("<?php Phar::mapPhar('app.phar'); if ((\\\$argv[1] ?? '') === '--myphp-pty-spawn') { require 'phar://app.phar/myphp/src/Plugins/Terminal/Pty/spawn.php'; exit(127); } require 'phar://app.phar/$entry'; __HALT_COMPILER();");
     PHP]);
     $code === 0 || fail('building the phar failed');
-    $sfx = @file_get_contents($micro);
-    $sfx !== false || fail("cannot read $micro");
     try {
-        MachO::embed($sfx, MachO::microPayload(implode("\n", MICRO_INI), (string)file_get_contents($phar)), $out);
-    } catch (RuntimeException $e) {
-        fail("$micro: " . $e->getMessage());
+        return (string)file_get_contents($phar);
     } finally {
         unlink($phar);
     }
-    chmod($out, 0755);
 }
 
 // ---- micro --------------------------------------------------------------
@@ -1394,8 +1622,8 @@ function ensureSpc(): string
         return $spc;
     }
     @mkdir($home, 0755, true);
-    $arch = php_uname('m') === 'arm64' ? 'aarch64' : 'x86_64';
-    $url = SPC_NIGHTLY . "spc-macos-$arch";
+    $arch = hostArch() === 'arm64' ? 'aarch64' : 'x86_64';
+    $url = SPC_NIGHTLY . 'spc-' . (PHP_OS_FAMILY === 'Linux' ? 'linux' : 'macos') . "-$arch";
     echo "myphp: downloading static-php-cli from $url\n";
     sh(['curl', '-fsSL', '-o', $spc, $url]) === 0 || fail("downloading spc failed; see `myphp micro --manual`");
     chmod($spc, 0755);
@@ -1428,8 +1656,14 @@ function ensureMicro(?string $phpVersion = null): array
     sh([$spc, 'doctor', '--auto-fix'], $build) === 0 || fail('spc doctor found problems it could not fix');
     echo "myphp: building phpmicro $php with " . MICRO_EXTENSIONS . " in $build (once; this compiles PHP and takes a while)\n";
     sh([$spc, 'download', '--for-extensions=' . MICRO_EXTENSIONS, "--with-php=$php"], $build) === 0 || fail('spc download failed');
-    file_put_contents("$build/myphp-micro-patch.php", MICRO_PATCH) !== false || fail("cannot write $build/myphp-micro-patch.php");
-    sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro', '-P', "$build/myphp-micro-patch.php"], $build) === 0 || fail('spc build failed');
+    if (PHP_OS_FAMILY === 'Linux') {
+        // Against glibc, not musl: a fully static PHP cannot dlopen GTK through FFI. The patch is for macOS's signature alone.
+        putenv('SPC_LIBC=glibc');
+        sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro'], $build) === 0 || fail('spc build failed');
+    } else {
+        file_put_contents("$build/myphp-micro-patch.php", MICRO_PATCH) !== false || fail("cannot write $build/myphp-micro-patch.php");
+        sh([$spc, 'build', MICRO_EXTENSIONS, '--build-micro', '-P', "$build/myphp-micro-patch.php"], $build) === 0 || fail('spc build failed');
+    }
     $built = "$build/buildroot/bin/micro.sfx";
     is_file($built) || fail("spc built nothing at $built");
     ($lacks = microLacks($built)) === '' || fail("spc built $built, which $lacks");
@@ -1441,20 +1675,29 @@ function ensureMicro(?string $phpVersion = null): array
 
 /**
  * What the micro.sfx at $path lacks that MyPHP's apps need, '' for
- * nothing: the section MICRO_PATCH adds, which a signed app needs, and
- * MICRO_EXTENSIONS, which it reports run with a script after it.
+ * nothing: on macOS the section MICRO_PATCH adds, which a signed app
+ * needs; on Linux loading libraries through FFI, which a PHP linked
+ * statically with musl cannot; and MICRO_EXTENSIONS, which it reports run
+ * with a script after it.
  */
 function microLacks(string $path): string
 {
-    if (!MachO::hasMicroSection($path)) {
+    if (PHP_OS_FAMILY !== 'Linux' && !MachO::hasMicroSection($path)) {
         return 'has no __DATA,' . MachO::MICRO_SECTION . ' section, which a signed app needs';
     }
     $probe = tempnam(sys_get_temp_dir(), 'myphp-micro');
-    copy($path, $probe) && file_put_contents($probe, '<?php echo implode(",", get_loaded_extensions());', FILE_APPEND) || fail("cannot write $probe");
+    $script = '<?php echo implode(",", get_loaded_extensions());';
+    if (PHP_OS_FAMILY === 'Linux') {
+        $script = MachO::microPayload('ffi.enable=1', $script . ' try { FFI::cdef("int getpid(void);", "libc.so.6"); echo ",dlopen"; } catch (Throwable) {}');
+    }
+    copy($path, $probe) && file_put_contents($probe, $script, FILE_APPEND) || fail("cannot write $probe");
     chmod($probe, 0755);
     $loaded = array_map('strtolower', explode(',', (string)shell_exec(escapeshellarg($probe) . ' 2>/dev/null')));
     unlink($probe);
     $missing = array_diff(explode(',', MICRO_EXTENSIONS), $loaded);
+    if ($missing === [] && PHP_OS_FAMILY === 'Linux' && !in_array('dlopen', $loaded, true)) {
+        return 'cannot load libraries through FFI (a PHP linked statically with musl): build it against glibc, SPC_LIBC=glibc';
+    }
     return $missing === [] ? '' : 'has no ' . implode(', ', $missing);
 }
 

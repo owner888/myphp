@@ -8,8 +8,9 @@ use MyPHP\App;
 
 /**
  * Opens the device while anything plays, and mixes into it (mygo's
- * output.go): an Audio Queue on the default output, which follows it,
- * calling back on the main thread's run loop, so that the mixing is in
+ * output.go): the system's (Platform\Media::audioDevice: an Audio Queue on
+ * the default output on macOS, which follows it, PulseAudio or ALSA on
+ * Linux), taking frames on the main thread, so that the mixing is in
  * PHP; a device that does not open is stood in for by one that plays
  * nothing, on time, and tries the device again after a while. It closes
  * five seconds after everything stopped, so that an app that plays
@@ -48,7 +49,7 @@ final class Output
     {
         self::$idle = 0.0; self::$closing = false;
         try {
-            self::$dev = (self::$open ?? fn(): Device => new \MyPHP\Native\AudioQueue())();
+            self::$dev = (self::$open ?? fn(): Device => App::backend()->media()->audioDevice())();
             Audio::setErr(null);
         } catch (\Throwable $e) {
             Audio::setErr($e);

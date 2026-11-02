@@ -7641,7 +7641,25 @@ llvmpipe (GL 4.5 core).
   notification server, their default action the click, an ID shown again
   replacing its notification. Global shortcuts grab their keys on X11's
   root window (with Caps Lock and Num Lock either way), the presses
-  arriving through a GDK event filter; Wayland's portal is still to come.
+  arriving through a GDK event filter. Without an X server (Wayland) the
+  desktop binds them through the portal's GlobalShortcuts
+  (`Linux\PortalShortcuts`, `Portal`, mygo's hotkey_portal.go and
+  portal.go): a session binds its shortcuts once, so a change closes it
+  and binds them all in a new one (CreateSession, then BindShortcuts, each
+  answered by its Request's Response); a change while one is on its way
+  marks it stale and rebinds after it. Each shortcut's id is its canonical
+  accelerator, its preferred trigger the XDG one (`Accelerator::xdgTrigger`,
+  "CTRL+SHIFT+space"); Activated of the current session calls
+  `hotkeyPressed`, with its activation token set on a Wayland display
+  meanwhile. Every portal call registers the app first
+  (`org.freedesktop.host.portal.Registry`, its desktop entry's name), which
+  the portal takes only before any other call, so `Power`'s Inhibit goes
+  through `Portal::call` too. A Response is routed by the request object's
+  path, which `DBus::subscribe` hands its handler as a third argument. In
+  GVariant's text format an empty a{sv} needs its type (`@a{sv} {}`).
+  `Hotkeys::testUsePortalShortcuts(true)` (mygo's TestUsePortalShortcuts)
+  takes the portal on X11 too; tested against a fake portal on a private
+  session bus (dbus-run-session, Python's Gio).
   What plays is an MPRIS player exported on the session bus, its bus name
   owned only while something shows; its values go out as GVariant text.
 - **The tray is AppIndicator's** (`Linux\Tray`): a StatusNotifierItem
@@ -7660,8 +7678,8 @@ llvmpipe (GL 4.5 core).
   core keeps it in the file `locale` of `App::path(UserData)`, which is
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
-- **Not there yet** (each throws `Platform\Unsupported`, or logs): global
-  shortcuts on Wayland, and video; of web pages, picture in picture.
+- **Not there yet** (each throws `Platform\Unsupported`, or logs): video;
+  of web pages, picture in picture.
 
 ## Linux backend: web pages (v1.148)
 
@@ -7799,6 +7817,126 @@ releases as the block returns, and `CookieStore` kept the bare pointer
 and read it after. Its `await` now retains what the block gets, as
 `ContentRuleStore`'s did, and the caller releases it once read (for a
 delete, after the matching cookie was deleted, the array holding it).
+
+## Linux packages (v1.151)
+
+`myphp build -platform linux/amd64` (or arm64; the default is this
+machine's) makes `<out>/linux-<arch>` as mygo's build.go, deb.go and
+pkgbuild.go do, in `Native\Build\Linux`, `Deb`, `Pkgbuild` and `Png`: the
+app as installed (the launcher `<slug>`, `app/` with the app's PHP and
+`app/myphp/src`, `frontend/`, `info.json`, `<slug>.desktop`, `<slug>.png`,
+`<slug>.xml` and the resources next to it), `<slug>-<version>-linux-<arch>.tar.gz`
+of it (`Update\Archive`), `<slug>_<debversion>_<arch>.deb` written by hand
+(an ar of debian-binary, control.tar.gz and data.tar.gz, entries under
+"./" owned by root, `Archive::header` making the tar headers) with the app
+in /opt/<slug>, a /usr/bin link per `linux.command`, the desktop entry
+running /opt/<slug>/<slug>, the icons in the hicolor theme at 256 and 512
+pixels and the MIME package, and a PKGBUILD with the icons as its sources.
+
+The runtime finds a Linux app as it finds a bundle: the launcher names its
+directory in MYPHP_BUNDLE (phpmicro's phar is the launcher), and
+`Native\Bundle` reads `info.json` where macOS reads Info.plist, by the same
+keys (MyPHPProduction, CFBundleIdentifier, CFBundleExecutable…), so
+`App::isDev`, `isPackaged`, `version`, single instance and secrets work
+unchanged; `Bundle::resources()` is the bundle's Contents/Resources on
+macOS and the app's directory on Linux, which the frontend, `Page`'s files,
+plugins' libraries, the updater's icon and `App::path(Resources)` use.
+
+The exec launcher is the macOS one for Linux (`Linux::launcherSource`): its
+directory from /proc/self/exe, which follows the /usr/bin link, then execv
+of the php that built the app (`realpath(PHP_BINARY)`, or $MYPHP_PHP) with
+`PHP_FLAGS` on `app/<entry>` in `app/`; cc compiles it, `<triple>-gcc` for
+the other architecture. A launcher that runs a php by its path is what the
+package must declare, so the Debian package depends on
+`php<major.minor>-cli`, `-intl`, `-mbstring`, `-xml` and `-curl` (FFI is in
+php-common), and the build warns when the php is not Debian's
+/usr/bin/php<major.minor>. The libraries the backend dlopens are declared
+too: GTK and libsecret always, WebKitGTK when the app shows pages
+(`linux.webview`, else a frontend or a page in its PHP), the app indicator
+when it has a tray icon (`Linux::usesPages`, `usesTray`). `-launcher micro`
+on Linux appends the INI and the phar to micro.sfx, as phpmicro reads them
+on ELF (macOS's goes inside __LINKEDIT for codesign); spc must build it
+against glibc (`SPC_LIBC=glibc`), as a PHP linked statically with musl
+cannot dlopen GTK, which `microLacks` checks with an FFI call.
+
+GTK names the window class and the themed icon after the program name,
+which was the app's name ("Counter") while the package installs
+counter.desktop and the counter icon: a packaged app now sets its program
+name, and the desktop id the portal is told, to its launcher's
+(`CFBundleExecutable` of info.json), as mygo's executable is.
+
+The build test's macOS checks that left `-platform` out built darwin/<arch>
+by default; on Linux the default is now linux, so they name darwin/arm64.
+
+## The media player on Linux (Linux, step 4)
+
+`Media\Player` reaches the system only through `Platform\Media`
+(`Backend::media()`): the reader of what PHP does not read (`reader`, a
+`Platform\MediaReader`: a Source with tags, ReplayGain and cover), the
+`Platform\Renderers` that decode and play the packets on one clock
+(`output`), the thumbnails' decoder (`Platform\Thumbnails`), the ticker,
+what keeps the display awake (`Platform\Awake`), picture in picture, the
+player's Now Playing, the thumbnails' JPEGs and the app's own sound
+(`Audio\Output`'s device). macOS's code moved as it was into `Darwin\Media`
+over the same Native classes (AssetReader, Renderers, ThumbnailDecoder,
+Awake now implement the interfaces; `Renderers::frame()` is null there).
+Recent documents' system note went behind `AppController::addRecentDocument`
+/ `clearRecentDocuments`, as mygo's: AppKit's on macOS, GtkRecentManager on
+Linux (the player's open path called NSDocumentController directly).
+
+On Linux it is FFmpeg 6 (libavcodec 60, libavutil 58), its five libraries
+dlopened RTLD_GLOBAL so that one FFI instance (`Native\Av`) has all their
+functions and structs; the structs are declared as far as they are read at
+FFmpeg 6.1's layout, each offset checked with offsetof against its headers
+(gcc) and FFI's own offsets, so another major version (other sonames, other
+layouts) refuses to load rather than read wrong fields. `Native\AvReader`
+(libavformat) reads MP4, MOV, MP3, Ogg… as AssetReader does, the tracks
+named as Matroska names codecs and their extradata as CodecPrivate, so
+`Native\AvDecoder` decodes Matroska's, MP4's (PHP's) and FFmpeg's packets
+alike. libavformat reads by content where AVFoundation reads by type: a
+JPEG became a one-frame film and a Matroska file named notes.txt a film
+(examples_test, mediaplayer_test); the reader refuses still-picture
+demuxers (image2, *_pipe) and a file whose extension is not one of its
+demuxer's (av_match_ext). FFmpeg's log is off (its threads would call PHP);
+return codes are thrown or logged.
+
+`Linux\Renderers` decodes on the main thread as the packets are given, the
+video's give limited to a 10 ms slice (as Native\Renderers): libavcodec's
+frame threads decode while packets are sent, the frames received later; at
+most 8 decoded frames wait, ready() false beyond. A packet given not to be
+shown leaves its time (microseconds) to drop its frame by. The clock is the
+sound's: a 10 ms GLib timeout writes what the device takes then and sets
+the clock to what was written less the device's latency, running on the
+system clock between ticks and where no sound plays (no audio, no device,
+a rate but 1, and once the last sound is written: PulseAudio kept a
+latency at the end that held the clock 30 ms short of the end, so the
+player never ended). The end of stream is sent to the video decoder once
+the player gave all its packets (nothing given or refused since the pump
+before): sent at the first `pump(true)`, the packets still queued failed
+with EOF. A paused seek shows its first frame as it is decoded. The
+picture is libswscale's RGBA (the frame's matrix and range), at most 2048
+on a side (an image atlas page), in a `UI\Image` updated in place; the
+windows whose last frame showed the player (their `videoPlaces`) are asked
+to repaint, and `Painter::nativeHole` draws `Renderers::frame()` where macOS
+opens a hole: black, the picture as `Player::picture` lays it out, from the
+image's own slot (a level of it would be halved in PHP each frame).
+
+The sound goes through `Native\Pcm`: PulseAudio, else ALSA's default device
+opened non-blocking. mygo uses PulseAudio's simple API from a goroutine
+that waits in its writes; with one thread that wait is the UI's: writing
+what `AHEAD - latency` allowed still blocked 80 ms a tick (the latency
+counts the sink's, the write waits on the stream's own buffer). It is the
+asynchronous API on a threaded main loop with no callback (PHP never runs
+on its thread): states polled under the loop's lock, `pa_stream_writable_size`
+the room, ADJUST_LATENCY, a prebuffer of 10 ms (a short end after a seek
+would otherwise never start). A write now takes under 0.1 ms. The app's own
+sound (`Linux\AudioOutput`) mixes from a 10 ms timer what the device takes.
+
+Measured here (Xvfb, PulseAudio's null sink, its monitor recorded): an
+H.264/AAC MP4, a VP9/Opus WebM, an AV1/Vorbis MKV and an MP3 play, the
+frame's burnt-in time within a frame of the clock; the sound's RMS 0.062
+while playing, 0 while paused; pause, exact seeks paused and playing, the
+end; a thumbnail of 96 pixels in 5 ms.
 
 ## Open items
 

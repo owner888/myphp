@@ -122,8 +122,8 @@ final class Checker
         if ($this->opts->icon !== null) {
             return $this->opts->icon;
         }
-        $app = Bundle::path();
-        $png = $app === null ? false : @file_get_contents("$app/Contents/Resources/app/icon.png");
+        $res = Bundle::resources();
+        $png = $res === null ? false : @file_get_contents("$res/app/icon.png");
         return $png === false ? null : $png;
     }
 

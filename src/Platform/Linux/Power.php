@@ -16,7 +16,6 @@ use MyPHP\Platform\AppHandler;
  */
 final class Power implements Platform\Power
 {
-    private const PORTAL = 'org.freedesktop.portal.Desktop', PORTAL_PATH = '/org/freedesktop/portal/desktop';
     private const SAVER = 'org.freedesktop.ScreenSaver', SAVER_PATH = '/org/freedesktop/ScreenSaver';
 
     public function __construct(private readonly AppHandler $h) {}
@@ -38,13 +37,13 @@ final class Power implements Platform\Power
     {
         $f = Gtk::ffi();
         $flags = 4 | ($display ? 8 : 0); // suspend, idle
-        $res = DBus::call(DBus::SESSION, self::PORTAL, self::PORTAL_PATH, 'org.freedesktop.portal.Inhibit', 'Inhibit',
+        $res = Portal::call(Portal::PATH, 'org.freedesktop.portal.Inhibit', 'Inhibit',
             "('', uint32 $flags, {'reason': <" . DBus::str($reason) . '>})', '(o)', $why);
         if ($res !== null) {
             $handle = DBus::child($res, 0, 'g_variant_get_string');
             $f->g_variant_unref($res);
             return function () use ($handle, $f): void {
-                $r = DBus::call(DBus::SESSION, self::PORTAL, $handle, 'org.freedesktop.portal.Request', 'Close');
+                $r = Portal::call($handle, 'org.freedesktop.portal.Request', 'Close');
                 if ($r !== null) { $f->g_variant_unref($r); }
             };
         }

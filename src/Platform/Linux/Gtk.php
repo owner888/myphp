@@ -278,6 +278,9 @@ final class Gtk
             gboolean g_variant_get_boolean(void*); unsigned int g_variant_get_uint32(void*); unsigned long g_variant_get_uint64(void*);
             const char* g_variant_get_string(void*, size_t*);
             void* g_variant_type_new(const char*); void g_variant_type_free(void*);
+            void* g_variant_lookup_value(void*, const char*, void*); const char* g_variant_get_type_string(void*);
+            size_t g_variant_n_children(void*); void* g_variant_get_variant(void*);
+            const char* g_dbus_connection_get_unique_name(void*);
             unsigned int g_dbus_connection_signal_subscribe(void*, const char*, const char*, const char*, const char*, const char*, int, CbSignal, void*, void*);
             void* g_network_monitor_get_default(void);
             gboolean g_network_monitor_get_network_available(void*); gboolean g_network_monitor_get_network_metered(void*);

@@ -5,15 +5,18 @@ namespace MyPHP\Media;
 
 use Closure;
 use MyPHP\App;
-use MyPHP\Native\{AssetReader, Awake, CoreMedia, CurlLoop, Equalizer, MediaTicker, Renderers, SoftAudio, SoftVideo, ThumbnailDecoder};
+use MyPHP\Native\{CurlLoop, Equalizer, MediaTicker};
+use MyPHP\Platform;
 use RuntimeException;
 
 /**
- * Plays a video file, or an audio one, on macOS: Context::movie shows it.
+ * Plays a video file, or an audio one: Context::movie shows it.
  * PHP reads the file's packets (Matroska and WebM in PHP; MP4, MOV and
- * M4V through AVFoundation's reader) and the system decodes and plays
- * them, the video shown straight by the window server, on threads of its
- * own: a timer on the main thread keeps two seconds ahead of the clock.
+ * M4V through the system's reader: Platform\Media) and the system decodes
+ * and plays them: on macOS AVFoundation, the video shown straight by the
+ * window server, on threads of its own; on Linux FFmpeg, PulseAudio (or
+ * ALSA) and the window's renderer (Platform\Linux\Renderers). A timer on
+ * the main thread keeps two seconds ahead of the clock.
  * Codecs: H.264 and HEVC (VP9 and AV1 where decoded in hardware); AAC,
  * AC-3, E-AC-3, MP3, Opus and FLAC. It opens paused on
  * its first frame. While it plays the display stays awake, its screen
@@ -62,7 +65,7 @@ final class Player
 
     private Source $source;
     /** The source of a local file, its tags and cover read from it (music mode's); null for one over the network. */
-    private Matroska|AssetReader|Ts|null $file = null;
+    private Matroska|Platform\MediaReader|Ts|null $file = null;
     /** Whether this film's video decodes on the system's decoders (self::$hardwareDecoding as it opened, then setHardwareDecoding's). */
     private bool $hardware;
     /** What reads a film over HTTP ahead (its bytes, or HLS's segments), null for a file's. */
@@ -85,7 +88,7 @@ final class Player
     private bool $seeking = false;
     private ?string $readError = null;
     /** @internal the renderers, whose layer the window shows */
-    public readonly Renderers $out;
+    public readonly Platform\Renderers $out;
     private ?Track $video = null, $audio = null;
     private float $duration;
     /**
@@ -110,7 +113,7 @@ final class Player
     private ?float $landed = null;
     /** A reader of the file and a decoder of its video of their own, for thumbnails (thumbnail()), made at the first. */
     private ?Source $thumbSource = null;
-    private ?ThumbnailDecoder $thumbDecoder = null;
+    private ?Platform\Thumbnails $thumbDecoder = null;
     /** @var list<Packet> what a seek to a keyframe read past to find it, which the source's next packets come after */
     private array $ahead = [];
     private bool $playing = false, $ended = false, $muted = false;
@@ -142,7 +145,7 @@ final class Player
     /** The boundary the player wakes for, once (wakeForBoundary). */
     private ?float $boundaryWake = null;
     /** What keeps the display awake while it plays, and whether it does (setKeepAwake). */
-    private Awake $awake;
+    private Platform\Awake $awake;
     private bool $keepAwake = true;
     /** @var array<int, Ass> the headers of the ASS tracks, by track (its object id): their styles */
     private array $assHeaders = [];
@@ -214,7 +217,7 @@ final class Player
         }
         $this->source->choose($this->video, $this->audio);
         $this->frameTime = $this->video?->frameDuration ?? 0.0;
-        $this->out = new Renderers($this->hardware);
+        $this->out = App::backend()->media()->output($this->hardware);
         $self = \WeakReference::create($this); // the renderers hold no cycle to the player
         $this->out->videoWanted = static function () use ($self): void { // the layer taking more between ticks, a software decoder's slice spent, a seek's flush done off the main thread
             $p = $self->get();
@@ -222,7 +225,7 @@ final class Player
             $p?->give('audio');
             $p?->landPending();
         };
-        $this->awake = new Awake('Playing ' . basename($path));
+        $this->awake = App::backend()->media()->awake('Playing ' . basename($path));
         if ($this->net === null) { $this->loadSubtitleFiles($path); }
         $this->feed();
     }
@@ -537,7 +540,7 @@ final class Player
     /** Whether the system decodes track $t, or libdav1d does (AV1): the player plays a track only if so. */
     public static function playable(Track $t): bool
     {
-        return CoreMedia::playable($t) || SoftVideo::wanted($t, false) || SoftAudio::wanted($t);
+        return App::backend()->media()->playable($t);
     }
 
     /** The file's audio tracks, playable or not, in its order. @return list<Track> */
@@ -874,13 +877,13 @@ final class Player
         foreach ($cues as [$start, $end, $text]) { $all->add($start, $end, $text); }
     }
 
-    /** The reader of the file at $path: Matroska's and MPEG-TS's in PHP, AVFoundation's for the rest. */
+    /** The reader of the file at $path: Matroska's and MPEG-TS's in PHP, the system's for the rest (Platform\Media::reader). */
     private static function source(string $path): Source
     {
         return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
             'mkv', 'mka', 'webm' => new Matroska($path),
             'ts', 'm2ts', 'mts', 'm2t' => new Ts($path),
-            default => new AssetReader($path),
+            default => App::backend()->media()->reader($path),
         };
     }
 
@@ -1013,7 +1016,7 @@ final class Player
         if ($this->keepAwake) { $this->awake->hold(); }
         $this->out->setRate($this->rate);
         $this->feed();
-        MediaTicker::add($this, $this->tick(...));
+        App::backend()->media()->addTicker($this, $this->tick(...));
         $this->wakeForCue();
         $this->passedTo = $this->time(); $this->boundaryWake = null; $this->wakeForBoundary();
         $this->emit('play');
@@ -1027,7 +1030,7 @@ final class Player
         $this->playing = false;
         $this->awake->release(); // paused, ended or failed: the display may sleep
         $this->out->setRate(0);
-        MediaTicker::remove($this);
+        App::backend()->media()->removeTicker($this);
         $this->emit('pause');
         $this->cache(); // no wait for the network while paused
     }
@@ -1111,7 +1114,7 @@ final class Player
             return null;
         }
         $this->thumbSource ??= self::source($this->path);
-        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = new ThumbnailDecoder($this->video, $width, $this->hardware); }
+        if ($this->thumbDecoder?->width !== $width) { $this->thumbDecoder = App::backend()->media()->thumbnails($this->video, $width, $this->hardware); }
         $p = $this->thumbSource->keyframe(max(0.0, min($seconds, $this->duration)));
         if ($p === null) {
             return null;
@@ -1195,13 +1198,13 @@ final class Player
     /** @internal UI\MediaPlayer: whether its video decodes on the system's decoders (what only they decode, whatever was asked; AV1 without them, in software). */
     public function hardwareDecoding(): bool
     {
-        return $this->video !== null && !\MyPHP\Native\SoftVideo::wanted($this->video, $this->hardware);
+        return $this->video !== null && App::backend()->media()->hardwareDecodes($this->video, $this->hardware);
     }
 
     /** @internal UI\MediaPlayer: whether its video decodes either way, and so is switched (AV1, with libdav1d and the system's decoder). */
     public function decodingSwitchable(): bool
     {
-        return $this->video !== null && \MyPHP\Native\SoftVideo::wanted($this->video, false) && \MyPHP\Native\CoreMedia::playable($this->video);
+        return $this->video !== null && App::backend()->media()->decodingSwitchable($this->video);
     }
 
     /** Plays at $rate times the speed (0.5 to 2 sound best). */
@@ -1781,7 +1784,7 @@ final class Player
     /**
      * The container and what reads it (the Inspector's format): MyPHP's
      * readers "Matroska", "MP4", "MPEG-TS", "HLS", yt-dlp's formats read
-     * apart, else AVFoundation's and the file's kind ("AVFoundation (MP3)").
+     * apart, else the system's reader and the file's kind ("AVFoundation (MP3)", "FFmpeg (MP3)").
      */
     public function fileFormat(): string
     {
@@ -1791,20 +1794,20 @@ final class Player
             $this->source instanceof Merged => 'yt-dlp (video and audio apart)',
             $this->source instanceof Ts => 'MPEG-TS',
             $this->source instanceof Hls => 'HLS',
-            default => 'AVFoundation (' . strtoupper(pathinfo($this->path, PATHINFO_EXTENSION)) . ')',
+            default => App::backend()->media()->readerName() . ' (' . strtoupper(pathinfo($this->path, PATHINFO_EXTENSION)) . ')',
         };
     }
 
-    /** What decodes the video shown: the system's VideoToolbox (the display layer's), or libdav1d here (AV1 in software); null without video. */
+    /** What decodes the video shown (Platform\Media::videoDecoder): on macOS the system's VideoToolbox (the display layer's), or libdav1d here (AV1 in software); null without video. */
     public function videoDecoder(): ?string
     {
-        return $this->video === null ? null : ($this->hardwareDecoding() ? 'VideoToolbox' : 'libdav1d');
+        return $this->video === null ? null : App::backend()->media()->videoDecoder($this->video, $this->hardware);
     }
 
-    /** What decodes the audio played: MyPHP's Vorbis decoder (Audio\Vorbis), or the system's AudioToolbox (the audio renderer's); null without audio. */
+    /** What decodes the audio played (Platform\Media::audioDecoder): on macOS MyPHP's Vorbis decoder (Audio\Vorbis), or the system's AudioToolbox (the audio renderer's); null without audio. */
     public function audioDecoder(): ?string
     {
-        return $this->audio === null ? null : (SoftAudio::wanted($this->audio) ? 'MyPHP Vorbis' : 'AudioToolbox');
+        return $this->audio === null ? null : App::backend()->media()->audioDecoder($this->audio);
     }
 
     /** What shows the picture and what plays the sound: AVFoundation's display layer and audio renderer. */
@@ -1832,6 +1835,6 @@ final class Player
 
     public function __destruct()
     {
-        MediaTicker::remove($this);
+        App::backend()->media()->removeTicker($this);
     }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP\Media;
 
 use MyPHP\App;
-use MyPHP\Native\{ImageIO, Mem};
 use MyPHP\PathName;
 use RuntimeException;
 
@@ -92,12 +91,7 @@ final class ThumbnailCache
                 @unlink($file);
                 return null;
             }
-            $out[] = new Thumbnail($t, $tw, $th, static function () use ($jpeg, $tw, $th): string {
-                $img = ImageIO::decode($jpeg, max($tw, $th));
-                $rgba = \FFI::string($img['pix'], $img['w'] * $img['h'] * 4);
-                Mem::free($img['pix']);
-                return $rgba;
-            });
+            $out[] = new Thumbnail($t, $tw, $th, static fn(): string => App::backend()->media()->jpegPixels($jpeg, max($tw, $th)));
             $p += 16 + $len;
         }
         return $out;
@@ -106,7 +100,7 @@ final class ThumbnailCache
     /** $t as the cache keeps it: a JPEG, of a fraction of a millisecond, made as each thumbnail is (put() writes them at once). */
     public static function jpeg(Thumbnail $t): string
     {
-        return ImageIO::jpeg($t->rgba(), $t->width, $t->height, self::QUALITY);
+        return App::backend()->media()->jpeg($t->rgba(), $t->width, $t->height, self::QUALITY);
     }
 
     /**

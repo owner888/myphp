@@ -970,7 +970,12 @@ final class Painter
             return;
         }
         $inner = [max(0.0, $radii[0] - max($bt, $bl)), max(0.0, $radii[1] - max($bt, $br)), max(0.0, $radii[2] - max($bb, $br)), max(0.0, $radii[3] - max($bb, $bl))];
-        $list->hole($x, $y, $w, $h, $inner);
+        $picture = $n->movie?->out->frame(); // the renderers' picture as an image (Linux), else none: the system shows it under the hole (macOS)
+        if ($picture === null) {
+            $list->hole($x, $y, $w, $h, $inner);
+        } else {
+            self::moviePicture($list, $text, $n->movie, $picture, $x, $y, $w, $h, $inner);
+        }
         $seq = count($rt->webPlaces) + count($rt->materialPlaces); // the web views' and materials' order, painted
         $place = ['view' => $n->webView ?? $n->movie, 'id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'seq' => $seq];
         if ($n->webView !== null) {
@@ -980,6 +985,29 @@ final class Painter
         } else {
             $rt->materialPlaces[] = ['id' => $n->id, 'frame' => [$x, $y, $w, $h], 'clip' => [$cx, $cy, $cw, $ch], 'material' => $n->systemMaterial[0], 'dark' => $n->systemMaterial[1], 'radius' => max($inner), 'alpha' => $list->opacity(), 'seq' => $seq];
         }
+    }
+
+    /**
+     * A player's picture its renderers give as an image (Platform\Renderers::
+     * frame: Linux's), drawn where the system's layer would show through
+     * the hole (macOS): the box black, the picture where Player::picture
+     * lays it out (its aspect, crop and the video filters' crop and
+     * expand), cut to what of it shows. Its rotation, flip and mirror are
+     * not drawn yet. The image's own slot: a frame a level of its own,
+     * halved in PHP, would cost each frame what the GPU's sampling does not.
+     * @param array{0: float, 1: float, 2: float, 3: float} $radii
+     */
+    private static function moviePicture(DisplayList $list, TextPainter $text, \MyPHP\Media\Player $p, Image $img, float $x, float $y, float $w, float $h, array $radii): void
+    {
+        $list->box($x, $y, $w, $h, $radii, 0x000000, 1.0);
+        [[$vx, $vy, $vw, $vh], , [$dw, $dh, $dx, $dy]] = $p->picture($w, $h);
+        if ($vw <= 0 || $vh <= 0 || $dw <= 0 || $dh <= 0) {
+            return;
+        }
+        $s = $text->imageSlot($img);
+        $list->pushClip($x + $vx, $y + $vy, $vw, $vh);
+        $list->image($x + $vx + ($vw - $dw) / 2 + $dx, $y + $vy + ($vh - $dh) / 2 + $dy, $dw, $dh, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], 1.0, max($radii));
+        $list->popClip();
     }
 
     private static function node(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void

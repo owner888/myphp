@@ -46,6 +46,7 @@ final class Backend implements Platform\Backend
     private ?Power $power = null;
     private ?Network $network = null;
     private ?NowPlaying $nowPlaying = null;
+    private ?Media $media = null;
     private ?Secrets $secrets = null;
     private ?Notifications $notifications = null;
     /** @var array<int, int> Carbon's hot key ids by the core's */
@@ -212,6 +213,8 @@ final class Backend implements Platform\Backend
     public function network(): Platform\Network { return $this->network ??= new Network($this); }
 
     public function nowPlaying(): Platform\NowPlaying { return $this->nowPlaying ??= new NowPlaying($this); }
+
+    public function media(): Platform\Media { return $this->media ??= new Media; }
 
     public function secrets(): Platform\Secrets { return $this->secrets ??= new Secrets; }
 

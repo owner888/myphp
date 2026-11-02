@@ -285,6 +285,18 @@ final class App implements Platform\AppController
         return ContentRuleStore::compile($identifier, $rules, fn(string $name): bool => \MyPHP\ContentRules::stale($id, $identifier, $name));
     }
 
+    /** The shared document controller's, as Electron does: AppKit lists them in the Dock menu (mygo's). */
+    public function addRecentDocument(string $path): void
+    {
+        $url = ObjC::msg('p:p', ObjC::cls('NSURL'), 'fileURLWithPath:', ObjC::str($path));
+        ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'noteNewRecentDocumentURL:', $url);
+    }
+
+    public function clearRecentDocuments(): void
+    {
+        ObjC::msg('v:p', ObjC::msg('p:', ObjC::cls('NSDocumentController'), 'sharedDocumentController'), 'clearRecentDocuments:', null);
+    }
+
     public function showAboutPanel(AboutPanelOptions $opts): void
     {
         $app = $this->ns();

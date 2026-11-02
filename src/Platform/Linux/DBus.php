@@ -63,7 +63,7 @@ final class DBus
         return $reply;
     }
 
-    /** Calls $fn($signal, $params) on each signal of $iface ($member, null for any) from $sender on $bus. */
+    /** Calls $fn($signal, $params, $path) on each signal of $iface ($member, null for any) from $sender on $bus. */
     public static function subscribe(int $bus, ?string $sender, string $iface, ?string $member, ?string $path, Closure $fn): void
     {
         $conn = self::bus($bus);
@@ -73,7 +73,7 @@ final class DBus
         $f = Gtk::ffi();
         $h = $f->new('HSignal', false);
         $h->fn = function ($conn, $sender, $path, $iface, $signal, $params, $data) use ($fn): void {
-            $fn((string)$signal, $params);
+            $fn((string)$signal, $params, (string)$path);
         };
         self::$handlers[] = $h;
         $f->g_dbus_connection_signal_subscribe($conn, $sender, $iface, $member, $path, null, 0, $h->fn, null, null);

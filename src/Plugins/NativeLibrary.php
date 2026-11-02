@@ -77,11 +77,10 @@ final class NativeLibrary
         return $cached;
     }
 
-    /** The Resources of the .app the app runs from (Native\Bundle), or null when it runs from no bundle. */
+    /** The Resources of the .app the app runs from (Native\Bundle), the directory of a Linux one, or null when it runs from no bundle. */
     private static function resources(): ?string
     {
-        $app = \MyPHP\Native\Bundle::path();
-        return $app === null ? null : "$app/Contents/Resources";
+        return \MyPHP\Native\Bundle::resources();
     }
 
     /** Where mygo's CLI and this keep a downloaded library (Go's os.UserCacheDir). @param array{name: string, sha256: string} $f */

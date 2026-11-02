@@ -5,12 +5,13 @@
 // lists as Python's plistlib lays them out; the arguments of codesign and
 // hdiutil; Mach-O files and universal binaries; the resources of each
 // platform, merged and combined; the icon; S3's signatures and uploads;
-// and the commands of bin/myphp that run anywhere.
+// the commands of bin/myphp that run anywhere; and the Linux packages
+// (deb_test.go, pkgbuild_test.go): desktop entry, .deb, PKGBUILD.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\Native\Build\{Codesign, Dmg, DsStore, Icns, MachO, Resources, S3, Upload};
+use MyPHP\Native\Build\{Codesign, Deb, Dmg, DsStore, Icns, Linux, MachO, Pkgbuild, Png, Resources, S3, Upload};
 
 function bldDir(): string
 {
@@ -474,9 +475,9 @@ $cfg['macos']['provisioningProfile'] = 'app.provisionprofile';
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
 file_put_contents("$root/b/app.provisionprofile", 'profile');
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'macos.provisioningProfile needs a signing identity, not ad-hoc signing: set macos.signingIdentity or pass -sign') && !is_dir("$root/b/build"), 'a profile with ad-hoc signing: refused, nothing built: ' . $out);
-[$code, $out] = $myphp('build', '-skip-dmg', '-sign', 'Developer ID Application: X', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', '-sign', 'Developer ID Application: X', "$root/b");
 same([0, 'profile'], [$code, @file_get_contents(glob("$root/b/build/darwin-*/b.app/Contents/embedded.provisionprofile")[0] ?? '')], 'signed with an identity: the profile in Contents/embedded.provisionprofile: ' . $out);
 // macos.icon an .icns (mygo's 8820ebb): the app's as it is, in place of the one rendered from icon, and no asset catalog; one that is no .icns refused.
 $cfg = json_decode(file_get_contents("$root/b/myphp.json"), true);
@@ -485,11 +486,11 @@ $cfg['macos']['icon'] = 'App.icns';
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
 file_put_contents("$root/b/App.icns", 'icns drawn per size');
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 $app = glob("$root/b/build/darwin-*/b.app/Contents")[0] ?? '';
 same([0, 'icns drawn per size', false], [$code, @file_get_contents("$app/Resources/AppIcon.icns"), file_exists("$app/Resources/Assets.car")], 'macos.icon an .icns: bundled as it is, no catalog: ' . $out);
 file_put_contents("$root/b/App.icns", 'png');
-[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'macos.icon App.icns: not an .icns file'), 'one that is no .icns: refused: ' . $out);
 unset($cfg['macos']['icon']);
 file_put_contents("$root/b/myphp.json", json_encode($cfg));
@@ -502,14 +503,14 @@ bldWrite("$root/b", ['locales/en.json' => '{}', 'locales/zh-Hans.json' => '{"myp
     'resources/zh-Hans.lproj/InfoPlist.strings' => "/* 中文 */\n\"NSMicrophoneUsageDescription\" = \"录音\";\n",
     'resources/fr.lproj/InfoPlist.strings' => "\xFF\xFE" . mb_convert_encoding("\"CFBundleName\" = \"Bé à moi\";\n", 'UTF-16LE', 'UTF-8')]);
 exec('rm -rf ' . escapeshellarg("$root/b/build"));
-[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 $lp = glob("$root/b/build/darwin-*/b.app/Contents/Resources")[0] ?? '';
 same([0, ['CFBundleDisplayName' => '乙', 'CFBundleName' => '乙', 'NSMicrophoneUsageDescription' => '录音'], ['CFBundleDisplayName' => 'Bé', 'CFBundleName' => 'Bé à moi']], // the keys in order, as the plist writes them
     [$code, \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/zh-Hans.lproj/InfoPlist.strings")), \MyPHP\Native\Plist::parse((string)@file_get_contents("$lp/fr.lproj/InfoPlist.strings"))],
     'the app\'s strings kept, the name added where they give none: ' . $out);
 same('/* 中文 */', substr(file_get_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings"), 0, 12), 'the resources\' own file untouched');
 file_put_contents("$root/b/resources/zh-Hans.lproj/InfoPlist.strings", '"a" = "b"');
-[$code, $out] = $myphp('build', '-skip-dmg', "$root/b");
+[$code, $out] = $myphp('build', '-skip-dmg', '-platform', 'darwin/arm64', "$root/b");
 check($code !== 0 && str_contains($out, 'zh-Hans.lproj/InfoPlist.strings of the resources: line 1: want a ; after "a"'), 'one it cannot read stops the build, naming it: ' . $out);
 putenv("PATH=$path");
 
@@ -562,3 +563,185 @@ check($code === 1 && str_contains($out, 'myphp.config.ts:') && str_contains($out
 file_put_contents("$p/myphp.json", '{}');
 [$code, $out] = $myphp('generate', $p);
 check($code === 1 && str_contains($out, 'myphp.json configures the project too'), 'one of the two');
+
+// Linux (mygo's build.go for linux, deb_test.go and pkgbuild_test.go): the desktop entry, the MIME package, the Debian package and the PKGBUILD.
+/** The entries of a tar archive, by name: [type, mode, contents or link target]; PAX paths followed. @return array<string, array{string, int, string}> */
+function bldTar(string $tar): array
+{
+    $out = []; $path = null;
+    for ($at = 0; $at + 512 <= strlen($tar) && trim(substr($tar, $at, 512), "\0") !== ''; ) {
+        $h = substr($tar, $at, 512);
+        $size = octdec(trim(substr($h, 124, 12), "\0 "));
+        $type = $h[156];
+        $body = substr($tar, $at + 512, $size);
+        $at += 512 + intdiv($size + 511, 512) * 512;
+        if ($type === 'x') {
+            preg_match('/\d+ path=([^\n]*)\n/', $body, $m) && $path = $m[1];
+            continue;
+        }
+        $prefix = rtrim(substr($h, 345, 155), "\0");
+        $name = $path ?? ($prefix !== '' ? "$prefix/" : '') . rtrim(substr($h, 0, 100), "\0");
+        $path = null;
+        $out[$name] = [$type, octdec(trim(substr($h, 100, 8), "\0 ")), $type === '2' ? rtrim(substr($h, 157, 100), "\0") : $body];
+    }
+    return $out;
+}
+
+/** The members of an ar archive, by name. @return array<string, string> */
+function bldAr(string $ar): array
+{
+    $out = [];
+    for ($at = 8; $at + 60 <= strlen($ar); ) {
+        $size = (int)trim(substr($ar, $at + 48, 10));
+        $out[trim(substr($ar, $at, 16))] = substr($ar, $at + 60, $size);
+        $at += 60 + $size + $size % 2;
+    }
+    return $out;
+}
+
+$lc = ['name' => 'My App', 'slug' => 'my-app', 'identifier' => 'com.example.myapp', 'version' => '1.2.0-beta.1', 'urlSchemes' => ['myapp'],
+    'fileAssociations' => [['ext' => ['myd', 'MYDOC'], 'name' => 'My <Doc>'], ['ext' => ['md'], 'mimeType' => 'text/markdown']],
+    'linux' => ['maintainer' => 'Jane Doe <jane@example.com>', 'comment' => 'Take notes', 'categories' => ['Office'], 'depends' => ['libnotify4', 'libfoo1'], 'command' => ['my-app', 'ma']]];
+$langs = [['en', '', ''], ['de', 'Meine App', 'Notizen machen'], ['pt-BR', 'Meu App', 'Take notes'], ['zh-Hans', '我的应用', ''], ['zh-Hant', '我的應用', '']];
+same("[Desktop Entry]\nType=Application\nName=My App\nName[de]=Meine App\nName[pt_BR]=Meu App\nName[zh_CN]=我的应用\nName[zh_TW]=我的應用\nComment=Take notes\nComment[de]=Notizen machen\n"
+    . "Exec=/opt/my-app/my-app %U\nIcon=my-app\nCategories=Office;\nTerminal=false\nMimeType=application/x-my-app-myd;text/markdown;x-scheme-handler/myapp;\n",
+    Linux::desktopEntry($lc, '/opt/my-app/my-app', 'my-app', $langs), 'the desktop entry: localized where it differs, files and links take %U');
+same("[Desktop Entry]\nType=Application\nName=B\nExec=b\nIcon=\nCategories=Utility;\nTerminal=false\n", Linux::desktopEntry(['name' => 'B', 'slug' => 'b'], 'b', ''), 'one of nothing but a name');
+same(['pt_BR', 'sr@latin', 'sr', 'zh_CN', 'zh_TW', 'zh_HK', 'es', 'uz', 'uz@cyrillic'], array_map(Linux::desktopTag(...), ['pt-BR', 'sr-Latn', 'sr', 'zh-Hans', 'zh-Hant', 'zh-HK', 'es-419', 'uz-Latn', 'uz-Cyrl']), 'POSIX locales of tags');
+same("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n  <mime-type type=\"application/x-my-app-myd\">\n    <comment>My &lt;Doc&gt;</comment>\n    <glob pattern=\"*.myd\"/>\n    <glob pattern=\"*.MYDOC\"/>\n  </mime-type>\n</mime-info>\n",
+    Linux::mimePackage($lc), 'the MIME package defines the types of the app alone');
+same('', Linux::mimePackage(['name' => 'B', 'fileAssociations' => [['ext' => ['md'], 'mimeType' => 'text/markdown']]]), 'none when the system knows them all');
+same(['1.2.0~beta.1', '1.2.0', '1.0.0~5', '2.0.0~rc.1~b7'], array_map(Linux::debVersion(...), ['1.2.0-beta.1', 'v1.2.0', '1.0.0+5', '2.0.0-rc-1+b7']), 'Debian versions sort pre-releases first');
+same(['my-app', 'ma'], Linux::commands(['my-app', 'ma']), 'commands');
+same([[], ['x']], [Linux::commands(''), Linux::commands('x')], 'none, or one name');
+check(str_contains(bldThrows(fn() => Linux::commands(['a b'])), 'is not a command name') && str_contains(bldThrows(fn() => Linux::commands(['a', 'a'])), 'names "a" twice') && bldThrows(fn() => Linux::commands(3)) !== '', 'bad commands refused');
+same(['my-app', 'app', 'frontend', 'info.json'], array_values(array_intersect(Linux::reserved('my-app'), ['my-app', 'app', 'frontend', 'info.json'])), 'the names packaging takes');
+
+// What the packages depend on: GTK, libsecret, WebKitGTK for pages, the app indicator for a tray, the PHP of the exec launcher, then linux.depends.
+same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'php8.3-cli', 'php8.3-intl', 'php8.3-mbstring', 'php8.3-xml', 'php8.3-curl'], Linux::debDepends([], false, false, '8.3'), 'an app of native UI on the php that built it');
+same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'libwebkit2gtk-4.1-0', 'libayatana-appindicator3-1', 'libnotify4', 'libfoo1'], Linux::debDepends(['depends' => ['libnotify4', 'libsecret-1-0', 'libfoo1']], true, true, ''), 'pages, a tray, the static launcher, its own and none twice');
+$native = file_get_contents(dirname(__DIR__) . '/examples/counter-native/main.php');
+$web = file_get_contents(dirname(__DIR__) . '/examples/webview/main.php');
+$tray = file_get_contents(dirname(__DIR__) . '/examples/desktop/main.php');
+same([false, true, true, false, true], [Linux::usesPages([], $native), Linux::usesPages([], $web), Linux::usesPages(['frontendDist' => 'dist'], $native), Linux::usesPages(['linux' => ['webview' => false]], $web), Linux::usesPages(['linux' => ['webview' => true]], $native)], 'pages: linux.webview, else a frontend or a page in the app');
+same([false, false, true], [Linux::usesTray($native), Linux::usesTray($web), Linux::usesTray($tray)], 'a tray icon');
+same([['gtk3', 'libsecret', 'webkit2gtk-4.1', 'php', 'libnotify'], ['libfoo1']], Pkgbuild::depends(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'libwebkit2gtk-4.1-0', 'php8.3-cli', 'php8.3-intl', 'libnotify4 (>= 0.7)', 'libfoo1']), 'the Arch Linux packages of the Debian ones, php once');
+same(['my-app', 'app', 'a.b'], array_map(Pkgbuild::pkgname(...), ['My-App', '-.', '.A.B']), 'Arch Linux package names');
+same(['1.2.0beta.1', '1.2.0pre1', '1.2.0_build.5', '1.2.0rc.1_7', '0'], array_map(Pkgbuild::version(...), ['1.2.0-beta.1', '1.2.0-1', '1.2.0+build.5', 'v1.2.0-rc.1+7', '']), 'pkgvers');
+same("Package: my-app\nVersion: 1.2.0~beta.1\nArchitecture: arm64\nMaintainer: Jane Doe <jane@example.com>\nInstalled-Size: 2\nDepends: libgtk-3-0 | libgtk-3-0t64, libsecret-1-0\nSection: utils\nPriority: optional\nDescription: Take notes\n My App is a desktop application.\n",
+    Deb::control($lc, 'my-app', 'arm64', 1025, ['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0']), 'the control file');
+
+// What the runtime reads of the app, and the launcher, which execs the php with the flags on app/<entry>.
+$info = Linux::info($lc, 'my-app', true);
+same(['My App', 'com.example.myapp', '1.2.0-beta.1', 'my-app', true, ['myapp'], ['application/x-my-app-myd']], [$info['CFBundleName'], $info['CFBundleIdentifier'], $info['CFBundleShortVersionString'], $info['CFBundleExecutable'], $info['MyPHPProduction'], $info['CFBundleURLTypes'][0]['CFBundleURLSchemes'], $info['CFBundleDocumentTypes'][0]['CFBundleTypeMIMETypes']], 'info.json, by the keys of Info.plist');
+check(!isset(Linux::info($lc, 'my-app', false)['MyPHPProduction']), 'a -debug build is no production build');
+$src = Linux::launcherSource('/usr/bin/php8.3', ['-d', 'ffi.enable=1'], 'app "x".php');
+foreach (['readlink("/proc/self/exe"', '"%s/app", dir', '"app \"x\".php"', 'php = "/usr/bin/php8.3"', 'getenv("MYPHP_PHP")', 'setenv("MYPHP_BUNDLE", dir, 1)', '{"-d", "ffi.enable=1"}', 'chdir(app)', 'execv(php, args)'] as $want) {
+    check(str_contains($src, $want), "the launcher has $want");
+}
+
+// The icons: PNGs decoded in PHP, every color type and filter; the hicolor sizes scaled as the .icns's.
+$pngOf = function (int $w, int $h, int $depth, int $color, array $rows, string $extra = ''): string {
+    $chunk = fn(string $type, string $data): string => pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+    return "\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', $w, $h, $depth, $color, 0, 0, 0)) . $extra . $chunk('IDAT', \MyPHP\Native\Zlib::deflate(implode('', $rows), 15)) . $chunk('IEND', '');
+};
+// Two RGBA rows of two pixels, the second filtered by each filter in turn against the first.
+$row0 = [200, 100, 50, 255, 10, 20, 30, 128]; $row1 = [60, 70, 80, 255, 0, 0, 0, 0];
+$filtered = function (int $f) use ($row0, $row1): string {
+    $out = [];
+    foreach ($row1 as $i => $v) {
+        $a = $i >= 4 ? $row1[$i - 4] : 0; $b = $row0[$i]; $c = $i >= 4 ? $row0[$i - 4] : 0;
+        $p = $a + $b - $c; [$pa, $pb, $pc] = [abs($p - $a), abs($p - $b), abs($p - $c)];
+        $out[] = ($v - [0, $a, $b, ($a + $b) >> 1, $pa <= $pb && $pa <= $pc ? $a : ($pb <= $pc ? $b : $c)][$f]) & 0xff;
+    }
+    return chr($f) . pack('C*', ...$out);
+};
+$want = [200, 100, 50, 255, 10 * 128 / 255, 20 * 128 / 255, 30 * 128 / 255, 128, 60, 70, 80, 255, 0, 0, 0, 0];
+foreach ([0, 1, 2, 3, 4] as $f) {
+    same([2, 2, $want], Png::decode($pngOf(2, 2, 8, 6, ["\0" . pack('C*', ...$row0), $filtered($f)])), "RGBA, filter $f");
+}
+same([2, 1, [0, 0, 0, 0, 255, 0, 0, 255]], Png::decode($pngOf(2, 1, 1, 3, ["\0\x40"], pack('N', 6) . 'PLTE' . "\0\0\0\xff\0\0" . pack('N', crc32("PLTE\0\0\0\xff\0\0")) . pack('N', 1) . 'tRNS' . "\0" . pack('N', crc32("tRNS\0")))), 'a palette of 1 bit, the first entry transparent');
+same([1, 1, [85, 85, 85, 255]], Png::decode($pngOf(1, 1, 2, 0, ["\0\x40"])), 'grayscale of 2 bits');
+$gray = Png::decode($pngOf(1, 1, 16, 4, ["\0" . pack('n2', 128 * 257, 128 * 257)]));
+same([1, 1, [64.25, 64.25, 64.25, 128.0]], [$gray[0], $gray[1], array_map(fn($v) => round($v, 2), $gray[2])], 'gray and alpha of 16 bits');
+check(str_contains(bldThrows(fn() => Png::decode('GIF89a')), 'not a PNG') && str_contains(bldThrows(fn() => Png::decode(substr($pngOf(1, 1, 8, 6, ["\0\0\0\0\0"]), 0, 33) . "\0\0\0\0IEND")), 'without IHDR or IDAT'), 'what is no PNG');
+$icons = Linux::icons(Icns::defaultIcon());
+same([256, 512], array_keys($icons), 'the hicolor sizes');
+foreach ($icons as $px => $png) {
+    same(["\x89PNG\r\n\x1a\n", $px, $px], [substr($png, 0, 8), unpack('N', $png, 16)[1], unpack('N', $png, 20)[1]], "the icon at $px pixels");
+}
+same(Icns::png(256, str_repeat("\xff", 256 * 256 * 4)), Linux::icons($pngOf(2, 2, 8, 6, array_fill(0, 2, "\0" . str_repeat("\xff", 8))))[256], 'a white icon scales to white');
+
+// The Debian package: an ar archive of debian-binary, the control and the data, the app in /opt, its commands, entry, icons and types.
+$stage = bldDir();
+bldWrite($stage, ['my-app' => "\x7fELF", 'app/main.php' => '<?php', 'info.json' => '{}', 'my-app.desktop' => 'entry', 'my-app.png' => 'png', 'my-app.xml' => 'xml', 'lib/data.txt' => 'data']);
+chmod("$stage/my-app", 0755);
+symlink('data.txt', "$stage/lib/alias");
+$debPath = Deb::write($lc, $stage, 'my-app', 'amd64', ['app', 'info.json', 'lib', 'my-app', 'my-app.desktop', 'my-app.png', 'my-app.xml'], ['libgtk-3-0 | libgtk-3-0t64'], [256 => 'icon256'], $langs);
+same("$stage/my-app_1.2.0~beta.1_amd64.deb", $debPath, 'named as Debian names packages');
+$members = bldAr(file_get_contents($debPath));
+same(['debian-binary', 'control.tar.gz', 'data.tar.gz'], array_keys($members), 'its members, in order');
+same("2.0\n", $members['debian-binary'], 'format 2.0');
+$ctl = bldTar(\MyPHP\Native\Zlib::inflate($members['control.tar.gz'], 31));
+same(['./control', './md5sums'], array_keys($ctl), 'control and md5sums');
+check(str_contains($ctl['./control'][2], "Installed-Size: 1\n") && str_contains($ctl['./control'][2], "Depends: libgtk-3-0 | libgtk-3-0t64\n"), 'the control: ' . $ctl['./control'][2]);
+check(str_contains($ctl['./md5sums'][2], md5("\x7fELF") . "  opt/my-app/my-app\n") && str_contains($ctl['./md5sums'][2], md5('icon256') . "  usr/share/icons/hicolor/256x256/apps/my-app.png\n"), 'the sums of the files');
+$data = bldTar(\MyPHP\Native\Zlib::inflate($members['data.tar.gz'], 31));
+same(['0', 0755, "\x7fELF"], $data['./opt/my-app/my-app'], 'the launcher, executable');
+same(['0', 0644, 'data'], $data['./opt/my-app/lib/data.txt'], 'the files, 644');
+same(['2', 0777, 'data.txt'], $data['./opt/my-app/lib/alias'], 'links kept');
+same([['2', 0777, '../../opt/my-app/my-app'], ['2', 0777, '../../opt/my-app/my-app']], [$data['./usr/bin/my-app'], $data['./usr/bin/ma']], 'a link in /usr/bin for each command');
+same(Linux::desktopEntry($lc, '/opt/my-app/my-app', 'my-app', $langs), $data['./usr/share/applications/my-app.desktop'][2], 'the entry runs the app by its path');
+same([Linux::mimePackage($lc), 'icon256'], [$data['./usr/share/mime/packages/my-app.xml'][2], $data['./usr/share/icons/hicolor/256x256/apps/my-app.png'][2]], 'its types and icons where desktops look');
+check(!isset($data['./opt/my-app/my-app.desktop']) && !isset($data['./opt/my-app/my-app.png']) && !isset($data['./opt/my-app/my-app.xml']), 'the entry, icon and types not in /opt');
+same('5', $data['./opt/my-app/']['0'], 'directories as directories');
+
+// The PKGBUILD: the archive and the icons as sources, checked, the files of the Debian package.
+file_put_contents("$stage/my-app-1.2.0-beta.1-linux-amd64.tar.gz", 'archive');
+bldWrite($stage, ['package.json' => '{"license": "(MIT OR Apache-2.0)", "homepage": "https://example.com/my-app"}']);
+$warned = [];
+$written = Pkgbuild::write($stage, $lc, $stage, 'my-app', 'amd64', ['app', 'info.json', 'lib', 'my-app', 'my-app.desktop', 'my-app.png', 'my-app.xml'], "$stage/my-app-1.2.0-beta.1-linux-amd64.tar.gz",
+    ['libgtk-3-0 | libgtk-3-0t64', 'libfoo1'], [256 => 'icon256', 512 => 'icon512'], $langs, function (string $w) use (&$warned) { $warned[] = $w; });
+same(["$stage/my-app-256x256.png", "$stage/my-app-512x512.png", "$stage/PKGBUILD"], $written, 'the icons and the PKGBUILD');
+same(["Leaving libfoo1 out of the PKGBUILD's dependencies: it is a Debian package with no Arch Linux package known for it"], $warned, 'a Debian package it knows none for, said');
+$pkg = file_get_contents("$stage/PKGBUILD");
+foreach (["# Maintainer: Jane Doe <jane@example.com>\n", "pkgname='my-app'\npkgver='1.2.0beta.1'\npkgrel=1\npkgdesc='Take notes'\narch=('x86_64')\nurl='https://example.com/my-app'\nlicense=('MIT OR Apache-2.0')\ndepends=('gtk3')\n",
+    "source=('my-app-1.2.0-beta.1-linux-amd64.tar.gz' 'my-app-256x256.png' 'my-app-512x512.png')\nsha256sums=('" . hash('sha256', 'archive') . "' '" . hash('sha256', 'icon256') . "' '" . hash('sha256', 'icon512') . "')\n",
+    "\tcp -dR -- app info.json lib my-app \"\$pkgdir\"/opt/my-app/\n", "\tln -s ../../opt/my-app/my-app \"\$pkgdir\"/usr/bin/ma\n", "\tinstall -Dm644 my-app.xml \"\$pkgdir\"/usr/share/mime/packages/my-app.xml\n",
+    "Exec=/opt/my-app/my-app %U\n", "\tinstall -Dm644 my-app-512x512.png \"\$pkgdir\"/usr/share/icons/hicolor/512x512/apps/my-app.png\n}\n"] as $want) {
+    check(str_contains($pkg, $want), 'the PKGBUILD has ' . json_encode($want));
+}
+same(['LicenseRef-custom', ''], [Pkgbuild::license(bldDir()), Pkgbuild::url(bldDir(), [])], 'no license or home page: the app\'s own');
+same("'it'\\''s'", Pkgbuild::quote("it's"), 'shell quoting');
+
+// myphp build -platform linux/<arch>, on Linux: the app as installed, its archive, the package and the PKGBUILD in build/linux-<arch>.
+if (PHP_OS_FAMILY === 'Linux') {
+    $stub = bldDir();
+    file_put_contents("$stub/cc", "#!/bin/sh\necho \"cc \$*\" >> \"$stub/log\"\nwhile [ \$# -gt 0 ]; do [ \"\$1\" = -o ] && printf launcher > \"\$2\"; shift; done\n");
+    chmod("$stub/cc", 0755);
+    $root = bldDir();
+    $myphp('init', '-name', 'Linux Demo', "$root/l");
+    bldWrite("$root/l", ['resources/linux/notes.txt' => 'notes', 'resources/darwin/mac.txt' => 'mac']);
+    $cfg = json_decode(file_get_contents("$root/l/myphp.json"), true);
+    $cfg['linux'] = ['command' => 'linux-demo'];
+    file_put_contents("$root/l/myphp.json", json_encode($cfg));
+    $p = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/bin/myphp', 'build', '-platform', 'linux/' . (php_uname('m') === 'aarch64' ? 'arm64' : 'amd64'), "$root/l"], [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, null, ['PATH' => "$stub:" . getenv('PATH')] + getenv());
+    $out = stream_get_contents($pipes[1]);
+    same(0, proc_close($p), 'myphp build linux: ' . $out);
+    $arch = php_uname('m') === 'aarch64' ? 'arm64' : 'amd64';
+    $dir = "$root/l/build/linux-$arch";
+    $files = array_values(array_diff(scandir($dir), ['.', '..']));
+    sort($files);
+    same(['PKGBUILD', 'app', 'icon.png', 'info.json', 'linux-demo', "linux-demo-0.1.0-linux-$arch.tar.gz", 'linux-demo-256x256.png', 'linux-demo-512x512.png', 'linux-demo.desktop', 'linux-demo.png', "linux-demo_0.1.0_$arch.deb", 'notes.txt'], $files, 'the app, its archive, package and PKGBUILD');
+    same(['launcher', 'notes', true, true], [file_get_contents("$dir/linux-demo"), file_get_contents("$dir/notes.txt"), is_file("$dir/app/app.php"), is_file("$dir/app/myphp/src/App.php")], 'the launcher, the resources of linux, the app and the framework');
+    check(!file_exists("$dir/app/resources") && !file_exists("$dir/app/.agents") && !file_exists("$dir/mac.txt"), 'without the resources directory, hidden files, nor macOS\'s resources');
+    same(['Linux Demo', true], [json_decode(file_get_contents("$dir/info.json"), true)['CFBundleName'], json_decode(file_get_contents("$dir/info.json"), true)['MyPHPProduction']], 'info.json');
+    $tarFiles = array_keys(bldTar(\MyPHP\Native\Zlib::inflate(file_get_contents("$dir/linux-demo-0.1.0-linux-$arch.tar.gz"), 31)));
+    check(in_array('linux-demo', $tarFiles, true) && in_array('linux-demo.desktop', $tarFiles, true) && in_array('app/app.php', $tarFiles, true) && !in_array('PKGBUILD', $tarFiles, true), 'the archive holds the app as installed');
+    $dctl = bldTar(\MyPHP\Native\Zlib::inflate(bldAr(file_get_contents("$dir/linux-demo_0.1.0_$arch.deb"))['control.tar.gz'], 31))['./control'][2];
+    check(str_contains($dctl, 'Depends: libgtk-3-0 | libgtk-3-0t64, libsecret-1-0, php' . PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . "-cli, "), 'a native app depends on GTK, libsecret and its php: ' . $dctl);
+    check(str_contains(file_get_contents("$stub/log"), "cc -O2 -Wall -o $root/l/build/.staging-linux-$arch-"), 'the launcher compiled with cc');
+    same(['linux-' . $arch], array_values(array_diff(scandir("$root/l/build"), ['.', '..'])), 'no staging left');
+    [$code, $out] = $myphp('build', '-platform', 'linux/riscv64', "$root/l");
+    check($code !== 0 && str_contains($out, 'linux/amd64 or linux/arm64, not linux/riscv64'), 'a platform it does not build: ' . $out);
+}

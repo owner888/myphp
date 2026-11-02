@@ -107,6 +107,61 @@ final class App implements Platform\AppController
         return WebsiteData::compileContentRules($id, $identifier, $rules);
     }
 
+    /** GTK's shared recent files, the item recorded under the application's name (mygo's: GTK writes the list later, its failure unseen). */
+    public function addRecentDocument(string $path): void
+    {
+        $g = self::recent();
+        $uri = $g->g_filename_to_uri($path, null, null) ?? throw new \RuntimeException("myphp: cannot record $path as a recent document");
+        try {
+            if (!$g->gtk_recent_manager_add_item($g->gtk_recent_manager_get_default(), $uri)) {
+                throw new \RuntimeException("myphp: the recent files list refused $path");
+            }
+        } finally {
+            $g->g_free($uri);
+        }
+    }
+
+    /** Removes the items of GTK's shared list the application recorded, those of earlier runs too, the other applications' left (mygo's). */
+    public function clearRecentDocuments(): void
+    {
+        $g = self::recent();
+        $m = $g->gtk_recent_manager_get_default();
+        $name = $g->g_get_application_name();
+        if ($name === null) {
+            return;
+        }
+        $uris = [];
+        $list = $g->gtk_recent_manager_get_items($m);
+        for ($node = $list; $node !== null; $node = $node->next) {
+            $info = $node->data;
+            if ($g->gtk_recent_info_has_application($info, $name)) { $uris[] = $g->gtk_recent_info_get_uri($info); }
+            $g->gtk_recent_info_unref($info);
+        }
+        $g->g_list_free($list);
+        foreach ($uris as $uri) { $g->gtk_recent_manager_remove_item($m, $uri, null); }
+    }
+
+    private static ?\FFI $recent = null;
+
+    /** GTK's recent manager, an FFI of its own (Gtk's is the backend's). */
+    private static function recent(): \FFI
+    {
+        return self::$recent ??= \FFI::cdef('
+            typedef struct GList { void *data; struct GList *next, *prev; } GList;
+            void* gtk_recent_manager_get_default(void);
+            int gtk_recent_manager_add_item(void*, const char*);
+            int gtk_recent_manager_remove_item(void*, const char*, void**);
+            GList* gtk_recent_manager_get_items(void*);
+            int gtk_recent_info_has_application(void*, const char*);
+            const char* gtk_recent_info_get_uri(void*);
+            void gtk_recent_info_unref(void*);
+            void g_list_free(GList*);
+            const char* g_get_application_name(void);
+            char* g_filename_to_uri(const char*, const char*, void**);
+            void g_free(void*);
+        ', 'libgtk-3.so.0');
+    }
+
     public function showAboutPanel(AboutPanelOptions $opts): void
     {
         throw new Unsupported('myphp: the about panel is not on Linux yet');

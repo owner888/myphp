@@ -5,36 +5,55 @@ namespace MyPHP\Platform\Linux;
 
 use FFI;
 use FFI\CData;
-use MyPHP\Platform\{Accelerator, AppHandler, Unsupported};
+use MyPHP\Platform\{Accelerator, AppHandler};
 use RuntimeException;
 
 /**
  * Global shortcuts on X11 (mygo's linux hotkey.go): each grabs its key on
  * the root window, with Caps Lock and Num Lock either way, and the presses
- * arrive through a GDK event filter. Elsewhere (Wayland) they need the
- * desktop portal's GlobalShortcuts, which is not here yet.
+ * arrive through a GDK event filter. Elsewhere (Wayland) the desktop binds
+ * them through its portal (PortalShortcuts).
  */
 final class Hotkeys
 {
     private const SHIFT = 1 << 0, LOCK = 1 << 1, CONTROL = 1 << 2, MOD1 = 1 << 3, MOD2 = 1 << 4, MOD4 = 1 << 6; // X's masks: Caps Lock LOCK, Alt MOD1, Num Lock MOD2, Super MOD4
     private const LOCKS = [0, self::LOCK, self::MOD2, self::LOCK | self::MOD2];
 
+    /** Makes X11 sessions bind global shortcuts through the portal too (mygo's portalShortcutsOnly, for tests). */
+    private static bool $portalOnly = false;
+
     private ?FFI $x = null;
+    private bool $x11Known = false;
+    private ?PortalShortcuts $portal = null;
     private ?CData $filter = null;
     /** @var array<int, array{0: int, 1: int}> the keycode and modifiers grabbed, by the shortcut's id */
     private array $grabs = [];
 
     public function __construct(private readonly AppHandler $h) {}
 
-    /** libX11, and the filter of the grabbed keys' presses, once GDK is known to run on an X server. */
-    private function x11(): FFI
+    /**
+     * Makes global shortcuts bind through the XDG desktop portal, as on
+     * Wayland, and tells whether the desktop offers it (mygo's
+     * TestUsePortalShortcuts).
+     *
+     * @internal for tests
+     */
+    public static function testUsePortalShortcuts(bool $on): bool
     {
-        if ($this->x !== null) {
+        self::$portalOnly = $on;
+        return !$on || PortalShortcuts::offered();
+    }
+
+    /** libX11, and the filter of the grabbed keys' presses, once GDK is known to run on an X server; null where it does not. */
+    private function x11(): ?FFI
+    {
+        if ($this->x11Known) {
             return $this->x;
         }
+        $this->x11Known = true;
         $f = Gtk::ffi();
         if (!$f->g_type_check_instance_is_a($f->gdk_display_get_default(), $f->gdk_x11_display_get_type())) {
-            throw new Unsupported('myphp: global shortcuts need an X server; the desktop portal\'s are not on Linux yet');
+            return null;
         }
         $this->x = FFI::cdef('
             unsigned long XStringToKeysym(const char*); unsigned char XKeysymToKeycode(void*, unsigned long);
@@ -63,7 +82,11 @@ final class Hotkeys
     public function register(int $id, string $accelerator): void
     {
         $a = Accelerator::parse($accelerator, 'Linux');
-        $x = $this->x11();
+        $x = self::$portalOnly ? null : $this->x11();
+        if ($x === null) {
+            ($this->portal ??= new PortalShortcuts($this->h))->bind($id, $a);
+            return;
+        }
         $f = Gtk::ffi();
         $display = $f->gdk_display_get_default();
         $dpy = $x->cast('void*', $f->gdk_x11_display_get_xdisplay($display));
@@ -94,11 +117,12 @@ final class Hotkeys
             unset($this->grabs[$id]);
             $this->ungrab($code, $mods);
         }
+        $this->portal?->unbind($id);
     }
 
     private function ungrab(int $code, int $mods): void
     {
-        $x = $this->x11();
+        $x = $this->x11() ?? throw new \LogicException('myphp: a key was grabbed without an X server');
         $f = Gtk::ffi();
         $display = $f->gdk_display_get_default();
         $dpy = $x->cast('void*', $f->gdk_x11_display_get_xdisplay($display));

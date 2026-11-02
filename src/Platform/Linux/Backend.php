@@ -29,6 +29,7 @@ final class Backend implements Platform\Backend
     private ?Notifications $notifications = null;
     private ?Hotkeys $hotkeys = null;
     private ?NowPlaying $nowPlaying = null;
+    private ?Media $media = null;
     private bool $running = false;
     private bool $signaled = false;
 
@@ -45,7 +46,8 @@ final class Backend implements Platform\Backend
     public function init(\MyPHP\ActivationPolicy $policy): void
     {
         $f = Gtk::ffi();
-        $f->g_set_prgname(\MyPHP\App::name());
+        // A packaged app's program name is its launcher's, which its desktop entry and icon are named after (myphp build), as mygo's is its executable's.
+        $f->g_set_prgname(\MyPHP\Native\Bundle::info('CFBundleExecutable') ?? \MyPHP\App::name());
         $f->g_set_application_name(\MyPHP\App::name());
         if (!$f->gtk_init_check(null, null)) {
             throw new \RuntimeException('myphp: cannot open display (is DISPLAY or WAYLAND_DISPLAY set?)');
@@ -220,6 +222,11 @@ final class Backend implements Platform\Backend
     public function nowPlaying(): Platform\NowPlaying
     {
         return $this->nowPlaying ??= new NowPlaying($this->h);
+    }
+
+    public function media(): Platform\Media
+    {
+        return $this->media ??= new Media($this);
     }
 
     public function secrets(): Platform\Secrets

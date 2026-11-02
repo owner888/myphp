@@ -7,7 +7,9 @@ namespace MyPHP\Native;
  * The .app bundle the app runs from, as `myphp build` lays it out: the phar
  * of a static app's Contents/MacOS/<Name>, or the framework under
  * Contents/Resources/app/myphp/src; and what its Info.plist says (mygo's
- * packageInfo).
+ * packageInfo). On Linux, the directory of the app's launcher, with app/,
+ * the resources and info.json, which says what Info.plist does
+ * (Build\Linux).
  *
  * @internal
  */
@@ -31,12 +33,22 @@ final class Bundle
         if ($phar !== '' && preg_match('~^(.*\.app)/Contents/MacOS/[^/]+$~', $phar, $m) === 1) {
             return $m[1];
         }
+        if ($phar !== '' && PHP_OS_FAMILY === 'Linux' && PHP_SAPI === 'micro') {
+            return dirname($phar);
+        }
         if (self::$launched === null) {
             $env = getenv('MYPHP_BUNDLE');
             self::$launched = is_string($env) && $env !== '' ? $env : false;
             putenv('MYPHP_BUNDLE');
         }
         return self::$launched === false ? null : self::$launched;
+    }
+
+    /** Where the bundle's resources are (App::path('resources')): Contents/Resources, on Linux the app's directory; null without a bundle. */
+    public static function resources(): ?string
+    {
+        $app = self::path();
+        return $app === null ? null : (PHP_OS_FAMILY === 'Linux' ? $app : "$app/Contents/Resources");
     }
 
     /** The string $key of the bundle's Info.plist, as `myphp build` writes it, or null. */
@@ -51,6 +63,11 @@ final class Bundle
     {
         if (self::$info === null) {
             $app = self::path();
+            if ($app !== null && PHP_OS_FAMILY === 'Linux') {
+                $json = @file_get_contents("$app/" . Build\Linux::INFO);
+                $info = $json === false ? throw new \RuntimeException("myphp: $app has no " . Build\Linux::INFO . ': build the app with myphp build') : json_decode($json, true);
+                return self::$info = is_array($info) ? $info : throw new \RuntimeException("$app/" . Build\Linux::INFO . ' is no object');
+            }
             $xml = $app === null ? false : @file_get_contents("$app/Contents/Info.plist");
             $plist = $xml === false ? [] : Plist::parse($xml);
             self::$info = is_array($plist) ? $plist : throw new \RuntimeException("$app/Contents/Info.plist is no dictionary");
@@ -77,7 +94,7 @@ final class Bundle
         $app = self::path();
         $exe = $app === null ? null : self::info('CFBundleExecutable');
         if ($app !== null && $exe !== null) {
-            return ["$app/Contents/MacOS/$exe"];
+            return [PHP_OS_FAMILY === 'Linux' ? "$app/$exe" : "$app/Contents/MacOS/$exe"];
         }
         return [PHP_BINARY, '-d', 'ffi.enable=1', ...array_slice($_SERVER['argv'] ?? [], 0)];
     }

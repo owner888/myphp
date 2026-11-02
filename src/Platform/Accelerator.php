@@ -90,6 +90,17 @@ final class Accelerator
         return $this->key; // letters, digits and F1-F24
     }
 
+    /** The accelerator as a trigger of the XDG shortcuts specification, as "CTRL+SHIFT+k", which desktop portals take (mygo's XDGTrigger). */
+    public function xdgTrigger(): string
+    {
+        $parts = [];
+        foreach ([self::CTRL => 'CTRL', self::ALT => 'ALT', self::SHIFT => 'SHIFT', self::SUPER => 'LOGO'] as $m => $name) {
+            if ($this->has($m)) { $parts[] = $name; }
+        }
+        $parts[] = $this->keysym();
+        return implode('+', $parts);
+    }
+
     /** Parses $s for the system $os (PHP_OS_FAMILY's): "CmdOrCtrl" is Super (Command) on macOS, Ctrl elsewhere. */
     public static function parse(string $s, string $os = PHP_OS_FAMILY): self
     {

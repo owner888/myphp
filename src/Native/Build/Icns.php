@@ -54,6 +54,18 @@ final class Icns
     }
 
     /**
+     * $w by $h premultiplied pixels (Png::decode's: colors times alpha over
+     * 255, alpha) scaled to $size by $size, as a PNG (mygo's resize, then
+     * png.Encode): the Linux icons.
+     *
+     * @param list<float|int> $src
+     */
+    public static function resize(int $w, int $h, array $src, int $size): string
+    {
+        return self::png($size, self::pack(self::sums($src, $w, $h, $size), $size));
+    }
+
+    /**
      * Premultiplied sums of the source pixels that each pixel of $size by
      * $size takes: [r·a, g·a, b·a, a, n] each, as mygo's resize adds them
      * (area averaging when shrinking, bilinear weights when enlarging); the

@@ -2547,3 +2547,92 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: the same, the atlases' dirty rows shared out among them
     (`Gl::$pending`), as myphp's atlases tell one range.
   - Why: myphp's atlases were Metal's, of one device.
+- **The app's desktop entry, without one it was launched from**
+  - mygo: named after the executable (`desktopEntryID`), which the portal
+    is told and global shortcuts' session is named after.
+  - myphp: named after the app (`App::name()`, its program name), in
+    `Portal::desktopEntryId`.
+  - Why: the executable is php.
+
+## Linux packages (v1.151)
+
+- **What a Linux app is made of**
+  - mygo: one executable, `<slug>`, with the resources, the desktop
+    entry, the icon and the MIME package next to it; what mygo.json says
+    of the app is linked into it (`-X` ldflags).
+  - myphp: the launcher `<slug>` (a C program that execs php, or
+    phpmicro with the app as a phar), `app/` (the app's PHP and the
+    framework's src), `frontend/`, and `info.json`, which holds what the
+    app's Info.plist would, by the same keys (`Build\Linux::info`,
+    `Native\Bundle::plist`); `app`, `frontend` and `info.json` are
+    reserved names among the resources.
+  - Why: a PHP app is its sources and an interpreter; the runtime reads
+    one dictionary of the app on both systems.
+- **Linux targets need a Linux machine**
+  - mygo: any platform builds from any machine (no cgo).
+  - myphp: linux/amd64 and linux/arm64 build on Linux alone: the exec
+    launcher runs the php that built the app, and is compiled with cc,
+    or `<triple>-gcc` for the other architecture; `-launcher micro`
+    builds for this machine's system and architecture, as on macOS.
+  - Why: the launcher is compiled C and names a php of this machine.
+- **The packages' dependencies are worked out**
+  - mygo: GTK, then WebKitGTK unless `linux.webview` is false, then
+    `linux.depends`.
+  - myphp: GTK, libsecret (App's secrets), WebKitGTK when `linux.webview`
+    says so or, unset, when the app has a frontend or its PHP makes a
+    page (`html:`, `url:`, `PageOptions`, a web view), the app indicator
+    when its PHP makes a tray icon, `php<version>-cli`, `-intl`,
+    `-mbstring`, `-xml` and `-curl` of the php the exec launcher runs (none
+    for `-launcher micro`), then `linux.depends`; the PKGBUILD makes
+    Debian's PHP packages Arch Linux's `php`.
+  - Why: mygo links what it uses into its executable; myphp's app needs
+    an interpreter and loads every library at run time over FFI, which
+    the packages must declare.
+- **No install.sh, no signed update on Linux**
+  - mygo: every Linux build gets `install.sh` (an install in
+    `~/.local/<slug>.app` that updates itself), and with updates the
+    archive is signed and a manifest written.
+  - myphp: neither: the archive is written unsigned, and a build with
+    updates warns that Linux apps do not update themselves yet.
+  - Why: myphp's updater replaces a macOS bundle alone so far.
+- **The Linux icons are decoded in PHP**
+  - mygo: Go's image/png decodes any PNG.
+  - myphp: `Build\Png` reads PNGs of every color type and depth that are
+    not interlaced; an interlaced icon stops the build, saying so.
+  - Why: no ImageIO on Linux, and Adam7 is rare in app icons.
+- **A packaged app's program name**
+  - mygo: GTK names the program after the executable, `<slug>`.
+  - myphp: a packaged app sets its program name (`g_set_prgname`) and its
+    desktop entry's id (`Portal::desktopEntryId`) to its launcher's,
+    `<slug>`, so the window, the themed icon and the portal match the
+    installed entry; an app run with php keeps its name (the entry above).
+  - Why: the process is php's; the launcher is the executable mygo's
+    would be.
+## The media player on Linux (Linux, step 4)
+
+- **Linux's sound output**
+  - mygo: PulseAudio's simple API (else ALSA), written from a goroutine
+    that waits in `pa_simple_write` while the device holds enough.
+  - myphp: PulseAudio's asynchronous API on a threaded main loop of its
+    own, no callback, polled under its lock (`Native\Pcm`), written from a
+    10 ms timer only what `pa_stream_writable_size` takes; ALSA opened
+    non-blocking. The app's sound (`Audio\Output`) and the player's go
+    through it.
+  - Why: PHP has one thread, so a wait in a write is the UI's; the simple
+    API tells no room, and its writes waited 80 ms a tick.
+- **The player on Linux** (myphp's own: mygo has no player)
+  - Not there yet, each logged as it is asked (MyPHP\Logger, "media"):
+    hardware decoding (VA-API: every track decodes in software, the
+    switch off and fixed), the equalizer and audio filters, the video
+    equalizer, the video filters' effects and deinterlacing, the sound at a
+    speed but 1 (it plays silent, on the system's clock), choosing the
+    audio device, the film in the system's media controls (MPRIS); the
+    picture's rotation, flip and mirror are not drawn.
+  - The IINA window (`Context::mediaPlayer`, examples/video) draws its
+    icons as SF Symbols (`Image::symbol`, macOS's), so it does not build on
+    Linux yet; `Context::movie` and the Player do. Which icons stand for
+    them on Linux is the developer's to choose.
+  - The Inspector's and mpv's `current-vo`/`current-ao` still name
+    AVFoundation's outputs (`Player::VIDEO_OUTPUT`, `AUDIO_OUTPUT`).
+  - FFmpeg 6 (libavcodec 60) alone: another major version has other
+    struct layouts and does not load.

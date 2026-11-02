@@ -675,8 +675,8 @@ final class App
             PathName::Cache => ["$cache/" . self::name(), true],
             PathName::Logs => ["$config/" . self::name() . '/logs', true],
             PathName::Temp => [rtrim(sys_get_temp_dir(), '/'), false],
-            PathName::Resources => [dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
-            PathName::Exe => [(string)realpath('/proc/self/exe'), false],
+            PathName::Resources => [Native\Bundle::resources() ?? dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
+            PathName::Exe => [Native\Bundle::path() !== null ? Native\Bundle::command()[0] : (string)realpath('/proc/self/exe'), false],
             PathName::Desktop => [$userDir('XDG_DESKTOP_DIR', 'Desktop'), false],
             PathName::Documents => [$userDir('XDG_DOCUMENTS_DIR', 'Documents'), false],
             PathName::Downloads => [$userDir('XDG_DOWNLOAD_DIR', 'Downloads'), false],
@@ -831,7 +831,7 @@ final class App
         }
         $bundle = Native\Bundle::path();
         $rest = array_slice($_SERVER['argv'] ?? [], 1);
-        if ($bundle !== null) { // through Launch Services, as the Dock (mygo's openBundle): a child of this process stays in its coalition, whose other processes loginwindow ends with an app the new one started
+        if ($bundle !== null && PHP_OS_FAMILY === 'Darwin') { // through Launch Services, as the Dock (mygo's openBundle): a child of this process stays in its coalition, whose other processes loginwindow ends with an app the new one started
             exec('/usr/bin/open -n ' . escapeshellarg($bundle) . ($rest !== [] ? ' --args ' . implode(' ', array_map('escapeshellarg', $rest)) : ''), $out, $code);
             if ($code === 0) { return; }
             Logger::warn("open -n $bundle failed ($code): starting its executable", 'app');
