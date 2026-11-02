@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace MyPHP\PlayerPlugins;
 
 use Closure;
+use MyPHP\App;
 use MyPHP\CloseEvent;
 use MyPHP\Rectangle;
 use MyPHP\UI\Content;
@@ -79,7 +80,10 @@ HTML;
                 $c->end();
             })));
         $w->center();
-        $w->on('close', function (CloseEvent $e) use ($w): void { $e->cancel(); $w->hide(); }); // hidden, not gone: its page kept (IINA's isReleasedWhenClosed false)
+        $w->on('close', function (CloseEvent $e) use ($w): void { // hidden, not gone: its page kept (IINA's isReleasedWhenClosed false); a quit closes it, as AppKit's terminate does not ask such a window
+            if (App::quitting()) { return; }
+            $e->cancel(); $w->hide();
+        });
         $this->window = $w;
         $pane = $this->pane = new WebPane($this->instance, $this->hub, $w, self::SIMPLE);
         $w->invalidate();
