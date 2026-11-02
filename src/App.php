@@ -543,7 +543,7 @@ final class App
         }
     }
 
-    /** The menu bar; Menu::default() unless set. Can be set before or after run(). */
+    /** The menu bar; Menu::default() unless set (none off macOS, but for an app with documents). Can be set before or after run(). */
     public static function setMenu(Menu $menu): void
     {
         self::$menu = $menu;
@@ -582,9 +582,9 @@ final class App
         return self::$installed;
     }
 
-    private static function installMenu(Menu $menu): void
+    private static function installMenu(?Menu $menu): void
     {
-        self::backend()->setApplicationMenu($menu->snapshot());
+        self::backend()->setApplicationMenu($menu?->snapshot());
         self::$installed = $menu;
         Native\Docs\Registry::refreshMenus();
     }

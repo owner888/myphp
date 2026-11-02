@@ -11,7 +11,7 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
 /**
  * The Linux backend: GTK 3 over FFI (mygo's internal/linux), native UI
  * drawn with OpenGL in a GtkGLArea and text with Pango. Web pages
- * (WebKitGTK), menus, dialogs, the tray and the system's services come
+ * (WebKitGTK), the tray and the system's services come
  * after the native UI: what is not here yet throws Unsupported, or, where
  * every app reaches it (the application menu), is logged.
  */
@@ -21,6 +21,8 @@ final class Backend implements Platform\Backend
     private ?Theme $theme = null;
     private ?Screen $screen = null;
     private ?Clipboard $clipboard = null;
+    private ?Menus $menus = null;
+    private ?Dialogs $dialogs = null;
     private bool $running = false;
     private bool $signaled = false;
 
@@ -90,19 +92,44 @@ final class Backend implements Platform\Backend
         return $this->app ??= new App;
     }
 
+    /** @internal the menus of the windows' menu bars and the context menus */
+    public function menus(): Menus
+    {
+        return $this->menus ??= new Menus($this->h);
+    }
+
+    /** Shows $m in the menu bar of every window that shows the application menu, and of those to come (mygo's SetApplicationMenu). */
     public function setApplicationMenu(?Menu $m): void
     {
-        Logger::debug('the application menu has no menu bar on Linux yet', 'linux');
+        $this->menus()->appMenu = $m;
+        foreach (Window::all() as $w) {
+            if ($w->hasAppMenu()) { $w->installMenu($m); }
+        }
     }
 
+    /** Shows a context menu over $w, else the active window, and returns as it closes (mygo's PopupMenu); without a window there is nowhere to show it. */
     public function popupMenu(Menu $m, ?\MyPHP\Window $w, ?array $at): void
     {
-        Logger::warn('menus do not pop up on Linux yet', 'linux');
+        $native = $w?->native();
+        if (!$native instanceof Window || !$native->isVisible()) {
+            $native = \MyPHP\Platform\Linux\Window::active()?->native();
+        }
+        if (!$native instanceof Window) {
+            Logger::warn('a context menu has no window to show over', 'linux');
+            return;
+        }
+        $this->menus()->popup($m, $native, $at);
     }
 
-    public function updateMenuItem(MenuItem $it): void {}
+    public function updateMenuItem(MenuItem $it): void
+    {
+        $this->menus()->update($it);
+    }
 
-    public function replaceSubmenu(int $id, Menu $m): void {}
+    public function replaceSubmenu(int $id, Menu $m): void
+    {
+        $this->menus()->replaceSubmenu($id, $m);
+    }
 
     public function newWindow(\MyPHP\Window $w, \MyPHP\WindowOptions $o, bool $panel): Platform\Window
     {
@@ -147,7 +174,7 @@ final class Backend implements Platform\Backend
 
     public function dialogs(): Platform\Dialogs
     {
-        throw new Unsupported('myphp: dialogs are not on Linux yet');
+        return $this->dialogs ??= new Dialogs;
     }
 
     public function clipboard(): Platform\Clipboard

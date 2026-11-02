@@ -156,6 +156,69 @@ final class Gtk
             void gtk_grab_add(void*); void gtk_grab_remove(void*);
             int gdk_window_get_origin(void*, int*, int*);
             void gdk_window_get_frame_extents(void*, GdkRectangle*);
+            void gdk_window_get_device_position(void*, void*, int*, int*, void*);
+            void* gdk_event_copy(void*); void gdk_event_free(void*);
+
+            typedef struct _GList { void* data; struct _GList* next; struct _GList* prev; } GList;
+            GList* gtk_container_get_children(void*); void g_list_free(GList*);
+            void gtk_container_remove(void*, void*); void gtk_container_check_resize(void*);
+            void* gtk_box_new(int, int); void gtk_box_pack_start(void*, void*, gboolean, gboolean, guint); void gtk_box_reorder_child(void*, void*, int);
+            void gtk_widget_set_size_request(void*, int, int);
+            void gtk_widget_set_sensitive(void*, gboolean); gboolean gtk_widget_is_sensitive(void*);
+            void gtk_widget_set_no_show_all(void*, gboolean); void gtk_widget_set_visible(void*, gboolean);
+            void gtk_widget_set_tooltip_text(void*, const char*); void gtk_widget_set_direction(void*, int);
+            void gtk_widget_get_preferred_height(void*, int*, int*);
+            gboolean gtk_widget_translate_coordinates(void*, void*, int, int, int*, int*);
+            gboolean gtk_widget_mnemonic_activate(void*, gboolean);
+            void* gtk_menu_bar_new(void); void* gtk_menu_new(void);
+            void* gtk_menu_item_new_with_label(const char*); void* gtk_separator_menu_item_new(void);
+            void* gtk_check_menu_item_new_with_label(const char*);
+            void gtk_check_menu_item_set_draw_as_radio(void*, gboolean); void gtk_check_menu_item_set_active(void*, gboolean);
+            void gtk_menu_item_set_submenu(void*, void*); void* gtk_menu_item_get_submenu(void*);
+            void gtk_menu_item_set_label(void*, const char*);
+            void gtk_menu_shell_append(void*, void*);
+            void gtk_menu_popup_at_rect(void*, void*, GdkRectangle*, int, int, void*);
+            void gtk_menu_popup_at_pointer(void*, void*);
+            void* gtk_accel_group_new(void);
+            void gtk_window_add_accel_group(void*, void*); void gtk_window_remove_accel_group(void*, void*);
+            void gtk_widget_add_accelerator(void*, const char*, void*, guint, int, int);
+            gboolean gtk_window_propagate_key_event(void*, void*);
+            guint gdk_keyval_from_name(const char*); guint gdk_unicode_to_keyval(guint); guint gdk_keyval_to_lower(guint);
+            void* gdk_keymap_get_for_display(void*);
+            gboolean gdk_keymap_get_entries_for_keyval(void*, guint, void**, int*);
+            gboolean gdk_keymap_translate_keyboard_state(void*, guint, int, int, guint*, int*, int*, int*);
+            void* g_main_loop_new(void*, gboolean); void g_main_loop_run(void*); void g_main_loop_quit(void*); void g_main_loop_unref(void*);
+            void* gtk_bin_get_child(void*); void* gtk_image_new(void); void gtk_image_set_from_surface(void*, void*);
+            void gtk_label_set_label(void*, const char*);
+            void* gdk_pixbuf_loader_new(void);
+            gboolean gdk_pixbuf_loader_write(void*, const char*, size_t, void*); gboolean gdk_pixbuf_loader_close(void*, void*);
+            void* gdk_pixbuf_loader_get_pixbuf(void*);
+            void* gdk_pixbuf_scale_simple(void*, int, int, int); int gdk_pixbuf_get_width(void*); int gdk_pixbuf_get_height(void*);
+            void* gdk_cairo_surface_create_from_pixbuf(void*, int, void*);
+
+            typedef struct _GSList { void* data; struct _GSList* next; } GSList;
+            void g_slist_free(GSList*);
+            void* gtk_file_chooser_native_new(const char*, void*, int, const char*, const char*);
+            int gtk_native_dialog_run(void*);
+            void gtk_file_chooser_set_select_multiple(void*, gboolean); void gtk_file_chooser_set_show_hidden(void*, gboolean);
+            void gtk_file_chooser_set_create_folders(void*, gboolean); void gtk_file_chooser_set_do_overwrite_confirmation(void*, gboolean);
+            gboolean gtk_file_chooser_set_current_folder(void*, const char*); void gtk_file_chooser_set_current_name(void*, const char*);
+            void* gtk_file_filter_new(void); void gtk_file_filter_set_name(void*, const char*); void gtk_file_filter_add_pattern(void*, const char*);
+            void gtk_file_chooser_add_filter(void*, void*);
+            GSList* gtk_file_chooser_get_filenames(void*); char* gtk_file_chooser_get_filename(void*);
+            void* gtk_message_dialog_new(void*, int, int, int, const char*, ...);
+            void gtk_message_dialog_format_secondary_text(void*, const char*, ...);
+            void* gtk_message_dialog_get_message_area(void*);
+            void* gtk_dialog_add_button(void*, const char*, int); void gtk_dialog_set_default_response(void*, int);
+            void* gtk_dialog_get_widget_for_response(void*, int);
+            int gtk_dialog_run(void*);
+            void* gtk_widget_get_style_context(void*); void gtk_style_context_add_class(void*, const char*);
+            void* gtk_check_button_new_with_label(const char*);
+            void gtk_toggle_button_set_active(void*, gboolean); gboolean gtk_toggle_button_get_active(void*);
+            void* gtk_entry_new(void); void gtk_entry_set_text(void*, const char*); const char* gtk_entry_get_text(void*);
+            void gtk_entry_set_activates_default(void*, gboolean); void gtk_entry_set_visibility(void*, gboolean);
+            void gtk_entry_set_placeholder_text(void*, const char*);
+            void* gtk_label_new(const char*); void gtk_label_set_xalign(void*, float);
         ', 'libgtk-3.so.0');
         self::$slot = self::$f->new('void*[1]');
         self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
@@ -190,6 +253,18 @@ final class Gtk
         $f->g_signal_connect_data($obj, $signal, $f->cast('void*', $h->fn), null, null, 0);
     }
 
+
+    /**
+     * Connects the C function of holder $fn, made once and kept by its
+     * caller, to $signal of $obj with $data: for the handlers of many
+     * objects (menu items) told apart by their data, which would each
+     * leave a thunk behind if each had a closure of its own.
+     */
+    public static function connectShared(CData $obj, string $signal, CData $fn, int $data): void
+    {
+        $f = self::ffi();
+        $f->g_signal_connect_data($obj, $signal, $f->cast('void*', $fn), $f->cast('void*', $data), null, 0);
+    }
 
     /**
      * The one C function every source made here calls, its data the key of

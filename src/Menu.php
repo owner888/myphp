@@ -57,6 +57,22 @@ final class Menu
         'revert' => ['menuRevertToSaved', ''],
     ];
 
+    /** The roles' defaults off macOS where they differ from ROLES' (mygo's roleDefaults): role => [label key, accelerator] */
+    private const OTHER_ROLES = [
+        'togglefullscreen' => ['menuToggleFullScreen', 'F11'],
+        'toggleDevTools' => ['menuToggleDevTools', 'Ctrl+Shift+I'],
+        'quit' => ['menuQuit', 'Ctrl+Q'],
+        'saveAs' => ['menuSaveAs', 'Ctrl+Shift+S'],
+        'duplicate' => ['menuDuplicate', ''],
+        'revert' => ['menuRevert', ''],
+        'alignLeft' => ['menuAlignLeft', 'Ctrl+L'],
+        'alignCenter' => ['menuCenter', 'Ctrl+E'],
+        'alignRight' => ['menuAlignRight', 'Ctrl+R'],
+    ];
+
+    /** The roles only macOS has, whose items are hidden elsewhere (mygo's macOnlyRoles). */
+    private const MAC_ONLY_ROLES = ['about', 'hide', 'hideOthers', 'unhide', 'front', 'services', 'startSpeaking', 'stopSpeaking', 'appMenu', 'pasteAndMatchStyle', 'window', 'help'];
+
     /** The page's zoom steps the zoom roles go through (mygo's zoomSteps). */
     private const ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 
@@ -153,9 +169,17 @@ final class Menu
         return null;
     }
 
-    /** The standard menu bar: app, File, Edit and Window menus. */
-    public static function default(): self
+    /**
+     * The menu bar installed when the app sets none (mygo's defaultMenu):
+     * on macOS the app, File, Edit, View and Window menus, which host the
+     * standard shortcuts; elsewhere File and Edit for an app with
+     * documents, whose File menu saves them, and none otherwise.
+     */
+    public static function default(): ?self
     {
+        if (PHP_OS_FAMILY !== 'Darwin') {
+            return Native\Docs\Registry::has() ? new self([new MenuItem(role: 'fileMenu'), new MenuItem(role: 'editMenu')]) : null;
+        }
         return new self([
             new MenuItem(role: 'appMenu'),
             new MenuItem(role: 'fileMenu'),
@@ -192,13 +216,14 @@ final class Menu
                 foreach ($it->submenu as $child) { $child->parent = $it; }
             }
             if (isset(self::ROLES[$it->role])) {
-                [$key, $ra] = self::ROLES[$it->role];
+                [$key, $ra] = PHP_OS_FAMILY !== 'Darwin' ? self::OTHER_ROLES[$it->role] ?? self::ROLES[$it->role] : self::ROLES[$it->role];
                 $key = $it->role === 'close' && Native\Docs\Registry::has() ? 'menuClose' : $key; // a document's window closes the document
                 $label = $label !== '' ? $label : L10n::in(App::locale())->get($key, ['app' => App::name()]);
                 $accel = $accel !== '' ? $accel : $ra;
             }
         }
-        $p = new Platform\MenuItem($it->uid, $it->kind(), $label, $it->role, $accel, !$it->disabled, !$it->hidden, $it->checked, $it->toolTip,
+        $hidden = $it->hidden || (PHP_OS_FAMILY !== 'Darwin' && in_array($it->role, self::MAC_ONLY_ROLES, true));
+        $p = new Platform\MenuItem($it->uid, $it->kind(), $label, $it->role, $accel, !$it->disabled, !$hidden, $it->checked, $it->toolTip,
             $it->type === MenuItem::SEPARATOR ? null : $it->icon, alternate: $it->alternate, opens: $it->onOpen !== null);
         if ($it->webKit !== 0 && $it->click === null) { // a web view's item does what the web view does, unless the app gave it a click of its own
             [$p->native, $p->name] = [$it->webKit, $it->id];
@@ -214,6 +239,7 @@ final class Menu
     {
         $r = fn(string $role) => new MenuItem(role: $role);
         $t = L10n::in(App::locale());
+        $mac = PHP_OS_FAMILY === 'Darwin';
         return match ($role) {
             'appMenu' => [$label !== '' ? $label : App::name(), $submenu ?: [
                 $r('about'), MenuItem::separator(), $r('services'), MenuItem::separator(), $r('hide'), $r('hideOthers'), $r('unhide'), MenuItem::separator(), $r('quit')]],
@@ -224,12 +250,13 @@ final class Menu
                 $r('reload'), $r('forceReload'), $r('toggleDevTools'), MenuItem::separator(), $r('resetZoom'), $r('zoomIn'), $r('zoomOut'), MenuItem::separator(), $r('togglefullscreen')]],
             'formatMenu' => [$label !== '' ? $label : $t->get('menuFormat'), $submenu ?: [
                 $r('bold'), $r('italic'), $r('underline'), $r('strikethrough'), MenuItem::separator(), $r('alignLeft'), $r('alignCenter'), $r('alignRight')]],
-            'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: (Native\Docs\Registry::has() ? Native\Docs\Registry::fileMenu() : [$r('close')])],
+            'fileMenu' => [$label !== '' ? $label : $t->get('menuFile'), $submenu ?: (Native\Docs\Registry::has() ? Native\Docs\Registry::fileMenu() : [$r($mac ? 'close' : 'quit')])],
             'openRecent' => [$label !== '' ? $label : $t->get('menuOpenRecent'), Native\Docs\Registry::recentItems()], // the recent documents as the menu is built
-            'editMenu' => [$label !== '' ? $label : $t->get('menuEdit'), $submenu ?: [
+            'editMenu' => [$label !== '' ? $label : $t->get('menuEdit'), $submenu ?: (!$mac ? [
+                $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('delete'), MenuItem::separator(), $r('selectAll')] : [
                 $r('undo'), $r('redo'), MenuItem::separator(), $r('cut'), $r('copy'), $r('paste'), $r('pasteAndMatchStyle'), $r('delete'), $r('selectAll'),
-                MenuItem::separator(), new MenuItem($t->get('menuSpeech'), submenu: [$r('startSpeaking'), $r('stopSpeaking')])]],
-            'windowMenu' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu ?: [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')]],
+                MenuItem::separator(), new MenuItem($t->get('menuSpeech'), submenu: [$r('startSpeaking'), $r('stopSpeaking')])])],
+            'windowMenu' => [$label !== '' ? $label : $t->get('menuWindow'), $submenu ?: ($mac ? [$r('minimize'), $r('zoom'), MenuItem::separator(), $r('front')] : [$r('minimize'), $r('close')])],
             default => [$label, $submenu],
         };
     }

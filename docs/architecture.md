@@ -7556,12 +7556,18 @@ llvmpipe (GL 4.5 core).
   textures of the atlases. The atlases tell one dirty range of rows, which
   the first renderer to upload clears: it keeps what it took for the
   others (`Gl::$pending`).
-- **Frames**: `requestFrame` queues a render of the area, which GTK's
-  frame clock paces. GTK drops a render queued from the render signal
-  itself, so what a frame asks for meanwhile is queued from an idle once it
-  is done; a closure would leak a thunk a source, so every source made
-  from PHP goes through one C function, its data the key of its closure
-  (`Gtk::idle`, `Gtk::timeout`).
+- **Frames are built outside the render signal**: `requestFrame` asks an
+  idle to build the frame and draw it into the area's framebuffer
+  (`gtk_gl_area_attach_buffers`), which GTK shows as it paints next. Built
+  in the render signal, a menu or a dialog the build ran (a click's) never
+  showed: GTK paints nothing while the window's frame clock paints, and
+  their nested main loops ran inside it. What a frame asks for meanwhile
+  (an animation) is built at the frame clock's next tick, from an idle the
+  tick callback adds; the render signal, which GTK sends as it made the
+  framebuffer anew (realized, resized), draws the last list again and
+  builds nothing. A closure would leak a thunk a source, so every source
+  made from PHP goes through one C function, its data the key of its
+  closure (`Gtk::idle`, `Gtk::timeout`).
 - **A window closed by its own frame** (a choice in a flyout): GtkGLArea
   goes on drawing that frame after its render signal, from buffers its
   unrealize frees, so the window is destroyed from an idle once the frame
@@ -7574,8 +7580,8 @@ llvmpipe (GL 4.5 core).
   function keys AppKit's private-use characters, and binds the keys that
   type nothing to the text system's selectors as GTK's entries do.
   Control is the shortcut modifier, reported as Command, and Super as
-  Control. With no menu bar yet, Control and X, C, V, A, Z (Y) are the Edit
-  menu's commands. Typing goes through a GtkIMContext (commit,
+  Control. Control and X, C, V, A, Z (Y) are the content's editing
+  commands, as the Edit menu's items would be. Typing goes through a GtkIMContext (commit,
   preedit-changed), whose caret is placed after each frame. GDK counts no
   clicks of its own the core can use: they are counted from the presses
   and GTK's double-click time.
@@ -7591,13 +7597,30 @@ llvmpipe (GL 4.5 core).
   keyboard only by grabbing the seat, which a focusable one does as it
   shows, and a press outside it dismisses it, as GtkMenu (X11; Wayland's
   xdg_popup positioning is still to do).
+- **Menus are GTK's** (`Linux\Menus`, mygo's menu.go): each window but a
+  flyout or a panel has a menu bar of the application menu above its
+  content, in a vertical box, with the items' shortcuts in its accel group;
+  the content's bounds leave it out. Off macOS the core's roles take
+  mygo's defaults (Ctrl+Q Quit, F11 full screen, the shorter Edit and
+  Window menus, the macOS-only roles hidden) and there is no default menu
+  bar but for an app with documents. One C handler serves every item's
+  activate, its data the item's id: a closure an item would leave a thunk
+  behind each time a menu is rebuilt. An editing role's item goes to its
+  window's content (`Window::command`); the editing roles' shortcuts reach
+  the content first (`gtk_window_propagate_key_event`), so a terminal gets
+  its Control+C. A context menu runs a nested main loop until it closes.
+- **Dialogs are GTK's** (`Linux\Dialogs`, mygo's dialog.go): the file
+  chooser is a GtkFileChooserNative (the desktop portal's where there is
+  one), the messages GtkMessageDialogs modal to their parent, each run in
+  a nested main loop until it closes; IINA's prompt and login are message
+  dialogs with entries, a prompt's check shown under its field as it is
+  typed, OK insensitive meanwhile.
 - **Where the system keeps the app's language**: nowhere on Linux, so the
   core keeps it in the file `locale` of `App::path(UserData)`, which is
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  pages and web views (WebKitGTK), the menu bar and context menus,
-  dialogs, the tray, notifications, global shortcuts, Shell, Power,
+  pages and web views (WebKitGTK), the tray, notifications, global shortcuts, Shell, Power,
   Network, Secrets, the clipboard beyond text, drags, and video.
 
 ## Open items

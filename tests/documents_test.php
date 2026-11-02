@@ -437,7 +437,8 @@ same([], Watches::paths(), 'closed, nothing is watched');
 
 // The File menu.
 $ds = $testDocs(new DocumentsOptions(autosave: Autosave::Off));
-same(['new', 'open', 'openRecent', '', 'close', 'save', 'duplicate', 'rename', 'moveTo', 'revert'], array_map(fn($it) => $it->role, Registry::fileMenu()), 'DocumentGroup\'s File menu');
+same(PHP_OS_FAMILY === 'Darwin' ? ['new', 'open', 'openRecent', '', 'close', 'save', 'duplicate', 'rename', 'moveTo', 'revert']
+    : ['new', 'open', 'openRecent', '', 'save', 'saveAs', 'revert', '', 'close', '', 'quit'], array_map(fn($it) => $it->role, Registry::fileMenu()), 'the File menu: DocumentGroup\'s on macOS, KStandardAction\'s elsewhere');
 $path = $tmp('menu.txt', '1');
 $d = $ds->open($path);
 $d->set('2');

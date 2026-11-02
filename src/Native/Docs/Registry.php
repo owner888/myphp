@@ -361,6 +361,9 @@ final class Registry
     public static function fileMenu(): array
     {
         $r = fn(string $role) => new MenuItem(role: $role);
+        if (PHP_OS_FAMILY !== 'Darwin') { // KStandardAction's and Notepad's (mygo's roleSubmenu)
+            return [$r('new'), $r('open'), $r('openRecent'), MenuItem::separator(), $r('save'), $r('saveAs'), $r('revert'), MenuItem::separator(), $r('close'), MenuItem::separator(), $r('quit')];
+        }
         return [$r('new'), $r('open'), $r('openRecent'), MenuItem::separator(), $r('close'), $r('save'), $r('duplicate'), $r('rename'), $r('moveTo'), $r('revert')];
     }
 

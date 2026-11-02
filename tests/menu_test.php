@@ -40,7 +40,7 @@ $h->rightClick(...$h->middle($n['row']));
 same(['# Report', 'Open', 'Pinned', '-', 'Move to', 'Delete'], $h->menuLabels(), 'the menu, under its header');
 check(!$h->chooseMenuItem('Report') && $h->menu !== null, 'a header is chosen by none');
 $items = array_slice($h->menu['items'], 1);
-same('Super+o', $items[0]->accelerator, 'Open shows its shortcut');
+same(PHP_OS_FAMILY === 'Darwin' ? 'Super+o' : 'Ctrl+o', $items[0]->accelerator, 'Open shows its shortcut');
 same([\MyPHP\MenuItem::CHECKBOX, false], [$items[1]->type, $items[1]->checked], 'Pinned is an unchecked check box item');
 check($items[4]->disabled, 'Delete is disabled while locked');
 check(!$h->chooseMenuItem('Delete'), 'a disabled item cannot be chosen');
@@ -120,10 +120,10 @@ $h->key(Key::CONTEXT_MENU, '');
 $h->chooseMenuItem('Paste');
 same('bye', $value->text, 'the menu key, then Paste over the selection');
 
-same(['Super+c', 'Ctrl+Shift+z', 'Alt+F4', 'Delete', 'Ctrl+,', ''], [
+same(PHP_OS_FAMILY === 'Darwin' ? ['Super+c', 'Ctrl+Shift+z', 'Alt+F4', 'Delete', 'Ctrl+,', ''] : ['Ctrl+c', 'Super+Shift+z', 'Alt+F4', 'Delete', 'Super+,', ''], [
     Runtime::accelerator(Key::COMMAND, Key::C), Runtime::accelerator(Key::CONTROL | Key::SHIFT, Key::Z), Runtime::accelerator(Key::OPTION, Key::F4),
     Runtime::accelerator(0, Key::FORWARD_DELETE), Runtime::accelerator(Key::CONTROL, Key::COMMA), Runtime::accelerator(Key::CONTROL, Key::CONTEXT_MENU),
-], 'accelerators as menus take them');
+], 'accelerators as menus take them (Command is Control off macOS, as the keys come)');
 
 // A menu button: its menu opens as it goes down, below it; Enter, Space and Down open it; a disabled one does not.
 $sort = 'Name'; $disabled = false; $n = [];

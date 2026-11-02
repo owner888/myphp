@@ -355,7 +355,7 @@ final class DrawnMenu
         }
     }
 
-    /** An accelerator ("Super+Shift+z", Runtime::accelerator) as a menu shows it by its item, with macOS's symbols, as "⇧⌘Z" (mygo's shortcutText). */
+    /** An accelerator ("Super+Shift+z", Runtime::accelerator) as a menu shows it by its item: with macOS's symbols there, as "⇧⌘Z", elsewhere written out, as "Ctrl+Shift+Z" (mygo's shortcutText). */
     public static function shortcutText(string $a): string
     {
         if ($a === '') {
@@ -365,6 +365,9 @@ final class DrawnMenu
         $key = array_pop($parts);
         if ($key === '') { $key = '+'; array_pop($parts); } // "Super++"
         if (mb_strlen($key) === 1) { $key = mb_strtoupper($key); }
+        if (PHP_OS_FAMILY !== 'Darwin') {
+            return implode('', array_map(fn(string $m): string => ($m === 'Super' && PHP_OS_FAMILY === 'Windows' ? 'Win' : $m) . '+', $parts)) . $key;
+        }
         $out = '';
         foreach ([['Ctrl', '⌃'], ['Alt', '⌥'], ['Shift', '⇧'], ['Super', '⌘']] as [$m, $s]) { // in the order of macOS's menus
             if (in_array($m, $parts, true)) { $out .= $s; }

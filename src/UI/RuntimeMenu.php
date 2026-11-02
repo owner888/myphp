@@ -491,7 +491,8 @@ trait RuntimeMenu
             return '';
         }
         $out = '';
-        foreach ([[Key::COMMAND, 'Super'], [Key::CONTROL, 'Ctrl'], [Key::OPTION, 'Alt'], [Key::SHIFT, 'Shift']] as [$m, $s]) {
+        $mac = PHP_OS_FAMILY === 'Darwin'; // elsewhere Control comes as Command, the shortcut modifier, and Super as Control (Platform\Linux\Keys)
+        foreach ([[Key::COMMAND, $mac ? 'Super' : 'Ctrl'], [Key::CONTROL, $mac ? 'Ctrl' : 'Super'], [Key::OPTION, 'Alt'], [Key::SHIFT, 'Shift']] as [$m, $s]) {
             if (($mods & $m) !== 0) { $out .= $s . '+'; }
         }
         return $out . $name;

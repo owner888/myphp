@@ -2502,12 +2502,22 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     modifier), Alt as Option, Super as Control, and binds the editing keys
     to AppKit's selectors.
   - Why: myphp's input was macOS's alone; mapping at the edge keeps the
-    core's shortcuts and text system as they are.
+    core's shortcuts and text system as they are. A shortcut of native UI
+    written for a menu (`Runtime::accelerator`) is so Command as Ctrl off
+    macOS, Control as Super.
 - **The Edit menu's keys**
-  - mygo: the application menu's items, in a menu bar of each window.
-  - myphp: until the menu bar comes, the window takes Control and X, C, V,
-    A, Z (Y) as the Edit menu's commands.
-  - Why: no menu bar on Linux yet.
+  - mygo: the application menu's items, in a menu bar of each window; the
+    shortcuts of every item with a role reach the content first.
+  - myphp: the content takes Control and X, C, V, A, Z (Y) as editing
+    commands itself, menu bar or not, and only the editing roles'
+    shortcuts reach it before the menu bar's.
+  - Why: myphp's content tells GTK it took every key, so Quit's Control+Q
+    and the like would never reach their items.
+- **Menu items macOS alone has**
+  - mygo: no alternate items; a header item is an ordinary item.
+  - myphp: alternate items (myphp's, shown while Option is held) are left
+    out, and a header is an item that cannot be chosen.
+  - Why: GTK has neither.
 - **A renderer a window**
   - mygo: a GL renderer a surface too.
   - myphp: the same, the atlases' dirty rows shared out among them

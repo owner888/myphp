@@ -38,6 +38,13 @@ final class Window implements Platform\Window
     public ?CData $win = null;
     /** The GtkGLArea native UI draws in, its renderer, and the IM context typing goes through. */
     private ?CData $area = null, $im = null;
+    /** The box the menu bar and the content are in, the window's accelerators, its menu bar, the last press or key that could bring up a context menu (a copy). */
+    private CData $box, $accel;
+    private ?CData $menubar = null, $trigger = null;
+    /** The owner of the menu bar's items (Menus). */
+    private int $menuOwner = 0;
+    /** Alt is down and nothing else was pressed since: its release reveals a menu bar that hides. */
+    private bool $altAlone = false;
     private ?Gl $gl = null;
     private ?\Closure $frame = null, $afterPresent = null;
     private bool $panel, $transparent = false;
@@ -45,6 +52,8 @@ final class Window implements Platform\Window
     private bool $asked = false, $repaintOnly = true, $repaintNow = false;
     /** Whether a frame draws now, and whether one was asked for meanwhile: GTK drops a render queued from its render signal, so it is queued once the frame is done. */
     private bool $rendering = false, $again = false;
+    /** The tick callback that draws the frame a frame asked for at the frame clock's next tick, from an idle. */
+    private CData $onTick;
     private int $wakeSource = 0;
     private int $state = 0;
     /** Where the window was and its size, as the last configure event told them, to tell moves from resizes. */
@@ -88,6 +97,18 @@ final class Window implements Platform\Window
             if ($w->isModal()) { $f->gtk_window_set_modal($this->win, 1); }
         }
         self::$open[Gtk::addr($this->win)] = $this;
+        $this->box = $f->gtk_box_new(1, 0); // vertical: the menu bar, then the content
+        $f->gtk_widget_set_size_request($this->box, 1, 1); // a window the user cannot resize is never smaller than its child's natural size
+        $f->gtk_container_add($this->win, $this->box);
+        $f->gtk_widget_show($this->box);
+        $this->accel = $f->gtk_accel_group_new();
+        $f->gtk_window_add_accel_group($this->win, $this->accel);
+        if ($this->hasAppMenu() && $b->menus()->appMenu !== null) {
+            $this->installMenu($b->menus()->appMenu);
+        }
+        foreach (['key-press-event', 'key-release-event'] as $signal) {
+            Gtk::connect($this->win, $signal, 'event', fn($widget, $event, $data): int => $this->menuKey($f->cast('GdkEventKey*', $event), $event));
+        }
         Gtk::connect($this->win, 'delete-event', 'event', fn($widget, $event, $data): int => $this->w->shouldClose() ? 0 : 1); // TRUE keeps it
         Gtk::connect($this->win, 'destroy', 'widget', function ($widget, $data): void {
             $this->dead = true;
@@ -111,7 +132,10 @@ final class Window implements Platform\Window
             $this->state = $e->new_window_state;
             $changed = $was ^ $this->state;
             if ($changed & self::STATE_ICONIFIED) { $this->w->nativeEvent($this->state & self::STATE_ICONIFIED ? 'minimize' : 'restore'); }
-            if ($changed & self::STATE_FULLSCREEN) { $this->w->nativeEvent($this->state & self::STATE_FULLSCREEN ? 'enterFullScreen' : 'leaveFullScreen'); }
+            if ($changed & self::STATE_FULLSCREEN) {
+                if ($this->menubar !== null) { Gtk::ffi()->gtk_widget_set_visible($this->menubar, $this->menuHides() ? 0 : 1); }
+                $this->w->nativeEvent($this->state & self::STATE_FULLSCREEN ? 'enterFullScreen' : 'leaveFullScreen');
+            }
             if ($changed & self::STATE_MAXIMIZED) { $this->w->nativeEvent('resize'); }
             return 0;
         });
@@ -147,6 +171,12 @@ final class Window implements Platform\Window
                 return 0;
             });
         }
+    }
+
+    /** @internal the windows open @return list<self> */
+    public static function all(): array
+    {
+        return array_values(self::$open);
     }
 
     /** The core window of the window that has the keyboard, or null. */
@@ -215,6 +245,11 @@ final class Window implements Platform\Window
         $this->afterPresent = $afterPresent;
         $this->transparent = $o->transparent;
         $this->area = $f->g_object_ref($f->gtk_gl_area_new()); // held as the window is (release())
+        $this->onTick = $f->new('HTick', false);
+        $this->onTick->fn = function ($widget, $clock, $data): int {
+            Gtk::idle(fn() => $this->frameNow());
+            return 0; // G_SOURCE_REMOVE
+        };
         $f->gtk_gl_area_set_required_version($this->area, 3, 3);
         $f->gtk_gl_area_set_auto_render($this->area, 0); // frames when asked for
         if ($o->transparent) {
@@ -223,7 +258,7 @@ final class Window implements Platform\Window
         }
         $f->gtk_widget_set_can_focus($this->area, 1);
         $f->gtk_widget_add_events($this->area, self::EVENTS);
-        $f->gtk_container_add($this->win, $this->area);
+        $f->gtk_box_pack_start($this->box, $this->area, 1, 1, 0);
         $f->gtk_widget_show($this->area);
         Gtk::connect($this->area, 'realize', 'widget', fn($widget, $data) => $this->realized());
         Gtk::connect($this->area, 'unrealize', 'widget', function ($widget, $data): void {
@@ -256,27 +291,58 @@ final class Window implements Platform\Window
         $this->gl->attachAtlas($text->atlas, $text->scale());
         $this->gl->attachImages($text->images);
         $f->gtk_im_context_set_client_window($this->im, $f->gtk_widget_get_window($this->area));
+        $this->requestFrame();
     }
 
-    /** The render signal: a frame drawn into the framebuffer GTK bound, which GTK shows. */
-    private function render(): int
+    /**
+     * A frame built and drawn into the area's framebuffer, from the main
+     * loop, which GTK shows as it paints next. Not in the render signal:
+     * the frame clock is painting there, and a menu or a dialog the build
+     * runs (a click's) would never paint.
+     */
+    private function frameNow(): void
     {
         $this->asked = false;
         $this->repaintNow = $this->repaintOnly;
         $this->repaintOnly = true;
         if ($this->gl === null || $this->dead) {
-            return 1;
+            return;
         }
+        $f = Gtk::ffi();
+        $f->gtk_gl_area_make_current($this->area);
+        $f->gtk_gl_area_attach_buffers($this->area); // the area's framebuffer, at its size now
         $this->rendering = true;
         try {
             $this->drawFrame();
         } finally {
             $this->rendering = false;
         }
-        if ($this->again) {
-            $this->again = false;
-            Gtk::idle(fn() => $this->requestFrame(1, $this->repaintOnly));
+        if ($this->dead) {
+            return;
         }
+        $f->gtk_widget_queue_draw($this->area);
+        if ($this->again) { // asked for by the frame, as an animation does: at the frame clock's next tick
+            $this->again = false;
+            $this->asked = true;
+            $f->gtk_widget_add_tick_callback($this->area, $this->onTick->fn, null, null);
+        }
+    }
+
+    /**
+     * The render signal, as GTK paints a framebuffer it made anew (the
+     * area realized or resized): the last frame drawn again at the size
+     * now, its build to follow from the resize; nothing is built here.
+     */
+    private function render(): int
+    {
+        if ($this->gl === null || $this->dead || $this->drawn[0] === 0) {
+            return 0;
+        }
+        $f = Gtk::ffi();
+        $scale = $this->backingScale();
+        $pw = (int)round($f->gtk_widget_get_allocated_width($this->area) * $scale);
+        $ph = (int)round($f->gtk_widget_get_allocated_height($this->area) * $scale);
+        $this->gl->draw($this->gl->lastList(), max(1, $pw), max(1, $ph), $this->drawn[2], $this->clearColor());
         return 1;
     }
 
@@ -356,6 +422,7 @@ final class Window implements Platform\Window
                 }
                 if ($e->type === self::BUTTON_PRESS) {
                     $f->gtk_widget_grab_focus($this->area);
+                    $this->keepTrigger($event);
                 }
                 $time = hrtime(true);
                 if ($e->button === 8 || $e->button === 9) { // a mouse's back and forward buttons are keys (mygo's KeyBack, KeyForward)
@@ -398,6 +465,7 @@ final class Window implements Platform\Window
                 $input->push(['scroll', $e->x, $e->y, $dx, $dy, $precise, false]);
                 break;
             case 'key-press-event':
+                $this->keepTrigger($event);
                 $this->keyDown($f->cast('GdkEventKey*', $event), $event);
                 break;
             case 'key-release-event':
@@ -419,7 +487,7 @@ final class Window implements Platform\Window
     /**
      * A key pressed (as View::keyDown): to the field's key hook, then the
      * node taking its input as it comes, then the Edit menu's commands
-     * (there is no menu bar yet: Control and C, X, V, A, Z), then the input
+     * (Control and C, X, V, A, Z: the menu bar leaves them to the content), then the input
      * method, then the text system's command of the key.
      */
     private function keyDown(CData $e, CData $event): void
@@ -559,6 +627,10 @@ final class Window implements Platform\Window
     {
         if ($this->wakeSource !== 0) { Gtk::cancel($this->wakeSource); }
         $this->wakeSource = 0; // the handlers stay held: GTK still sends the destroyed window's last signals
+        if ($this->trigger !== null) { Gtk::ffi()->gdk_event_free($this->trigger); }
+        $this->trigger = null;
+        $this->b->menus()->dropOwner($this->menuOwner);
+        unset($this->b->menus()->roleKeys[Gtk::addr($this->accel)]);
         [$win, $area] = [$this->win, $this->area];
         Gtk::idle(function () use ($win, $area): void { // once the core is done with them
             if ($area !== null) { Gtk::ffi()->g_object_unref($area); }
@@ -617,7 +689,7 @@ final class Window implements Platform\Window
     public function close(): void
     {
         $this->ungrab();
-        if ($this->rendering) { // closed by its own frame: GtkGLArea goes on drawing the frame after its render signal, so it goes once that is done
+        if ($this->rendering) { // closed by its own frame, which goes on drawing after: it goes once that is done
             $f = Gtk::ffi();
             $f->gtk_widget_hide($this->win);
             Gtk::idle(fn() => $f->gtk_widget_destroy($this->win));
@@ -664,7 +736,7 @@ final class Window implements Platform\Window
             return;
         }
         $this->asked = true;
-        Gtk::ffi()->gtk_gl_area_queue_render($this->area);
+        Gtk::idle(fn() => $this->frameNow());
     }
 
     public function wake(float $seconds, bool $repaint): void
@@ -706,6 +778,134 @@ final class Window implements Platform\Window
     public function setAcceptsFirstMouse(bool $on): void {}
 
     public function setDropFormats(array $formats): void {}
+
+    /** Whether the window shows the application menu in its menu bar: flyouts and panels show none (mygo's hasAppMenu). */
+    public function hasAppMenu(): bool
+    {
+        return $this->w->flyoutState() === null && !$this->panel;
+    }
+
+    /** Replaces the menu bar at the top of the window with one of $m, none for null (mygo's installMenu). */
+    public function installMenu(?\MyPHP\Platform\Menu $m): void
+    {
+        $f = Gtk::ffi();
+        $menus = $this->b->menus();
+        if ($this->menubar !== null) {
+            $f->gtk_widget_destroy($this->menubar);
+            $this->menubar = null;
+            $menus->dropOwner($this->menuOwner);
+            // the accelerators live in the group: a fresh one
+            $f->gtk_window_remove_accel_group($this->win, $this->accel);
+            unset($menus->roleKeys[Gtk::addr($this->accel)]);
+            $f->g_object_unref($this->accel);
+            $this->accel = $f->gtk_accel_group_new();
+            $f->gtk_window_add_accel_group($this->win, $this->accel);
+        }
+        if ($m === null || $m->items === []) {
+            return;
+        }
+        $this->menuOwner = $menus->newOwner();
+        $this->menubar = $f->gtk_menu_bar_new();
+        $menus->fill($this->menubar, $m->items, $this->accel, $this->menuOwner, $this, true);
+        $f->gtk_box_pack_start($this->box, $this->menubar, 0, 0, 0);
+        $f->gtk_box_reorder_child($this->box, $this->menubar, 0);
+        $f->gtk_widget_show_all($this->menubar);
+        $f->gtk_widget_set_no_show_all($this->menubar, 1); // shown as menuHides() says, whatever shows the window
+        $f->gtk_widget_set_visible($this->menubar, $this->menuHides() ? 0 : 1);
+        Gtk::connect($this->menubar, 'deactivate', 'widget', function ($shell, $data): void {
+            if ($this->menuHides()) { Gtk::ffi()->gtk_widget_hide($shell); }
+        });
+    }
+
+    /** Whether the menu bar shows only while its menus are open: in full screen, which leaves the content the whole screen (mygo's menuHides). */
+    private function menuHides(): bool
+    {
+        return ($this->state & self::STATE_FULLSCREEN) !== 0;
+    }
+
+    /**
+     * A key on the window, before GTK's accelerators and the content
+     * (mygo's cbMenuKey): the editing roles' shortcuts are the content's
+     * keys too (Ctrl+C, which interrupts in a terminal), so it gets them
+     * first and GTK runs those it leaves; Alt pressed and released alone,
+     * or F10, show a menu bar that hides.
+     */
+    private function menuKey(CData $e, CData $event): int
+    {
+        $f = Gtk::ffi();
+        $press = $e->type === 8; // GDK_KEY_PRESS
+        if ($press && isset($this->b->menus()->roleKeys[Gtk::addr($this->accel)][$f->gdk_keyval_to_lower($e->keyval) . ':' . ($e->state & Menus::MODIFIER_MASK)])
+            && $f->gtk_window_propagate_key_event($this->win, $event)) {
+            return 1;
+        }
+        if (!$this->menuHides() || $this->menubar === null || $f->gtk_widget_get_visible($this->menubar)) {
+            $this->altAlone = false;
+            return 0;
+        }
+        $alt = $e->keyval === 0xffe9 || $e->keyval === 0xffea; // Alt_L, Alt_R
+        if ($press && $e->keyval === 0xffc7 && ($e->state & Menus::MODIFIER_MASK) === 0) { // F10
+            $this->revealMenu();
+            return 1;
+        }
+        if ($press) {
+            $this->altAlone = $alt && ($e->state & Menus::MODIFIER_MASK) === 0;
+        } elseif ($alt && $this->altAlone) {
+            $this->altAlone = false;
+            $this->revealMenu();
+        } else {
+            $this->altAlone = false;
+        }
+        return 0;
+    }
+
+    /** Shows a menu bar that hides and opens its first menu, as F10 does in GTK; it hides again as its menus close (mygo's revealMenu). */
+    private function revealMenu(): void
+    {
+        $f = Gtk::ffi();
+        $f->gtk_widget_show($this->menubar);
+        $f->gtk_container_check_resize($this->win); // the menu opens under its item: the bar laid out now
+        $list = $f->gtk_container_get_children($this->menubar);
+        $first = null;
+        for ($node = $list; $node !== null; $node = $node->next) {
+            if ($f->gtk_widget_get_visible($node->data) && $f->gtk_widget_is_sensitive($node->data)) { $first = $node->data; break; }
+        }
+        $f->g_list_free($list);
+        if ($first !== null) {
+            $f->gtk_widget_mnemonic_activate($first, 0);
+        } else {
+            $f->gtk_widget_hide($this->menubar); // nothing to open, so no deactivate to come
+        }
+    }
+
+    /** Keeps a copy of a press or key that could bring up a context menu, which GTK positions and grabs by. */
+    private function keepTrigger(CData $event): void
+    {
+        $f = Gtk::ffi();
+        if ($this->trigger !== null) { $f->gdk_event_free($this->trigger); }
+        $this->trigger = $f->gdk_event_copy($event);
+    }
+
+    /** @internal the last press or key on the content, for a context menu (mygo's popupTrigger) */
+    public function popupTrigger(): ?CData
+    {
+        return $this->trigger;
+    }
+
+    /** @internal the GdkWindow of the content and where the content is in it, which context menus are placed in (mygo's contentWindow) @return array{0: ?CData, 1: int, 2: int} */
+    public function contentWindow(): array
+    {
+        $f = Gtk::ffi();
+        if ($this->area === null) {
+            return [$f->gtk_widget_get_window($this->win), 0, 0];
+        }
+        $gw = $f->gtk_widget_get_window($this->area);
+        if (Gtk::addr($gw) !== Gtk::addr($f->gtk_widget_get_window($this->win))) {
+            return [$gw, 0, 0]; // a window of the area's own
+        }
+        $x = $f->new('int[1]'); $y = $f->new('int[1]');
+        $f->gtk_widget_translate_coordinates($this->area, $this->win, 0, 0, $x, $y); // below the menu bar
+        return [$gw, $x[0], $y[0]];
+    }
 
     /** A command of an editing role, to the runtime (View::command). */
     public function command(string $cmd): void
@@ -943,7 +1143,19 @@ final class Window implements Platform\Window
 
     public function setContentBounds(Rectangle $r): void
     {
-        $this->setBounds($r);
+        $this->setBounds(new Rectangle($r->x, $r->y, $r->width, $r->height + $this->contentInset()));
+    }
+
+    /** The height of the menu bar above the content while it shows (mygo's contentInsets). */
+    private function contentInset(): int
+    {
+        $f = Gtk::ffi();
+        if ($this->menubar === null || !$f->gtk_widget_get_visible($this->menubar)) {
+            return 0;
+        }
+        $min = $f->new('int[1]'); $natural = $f->new('int[1]');
+        $f->gtk_widget_get_preferred_height($this->menubar, $min, $natural);
+        return $natural[0];
     }
 
     /** Where the window's content is on the screen, and its size (mygo's contentOrigin). */
@@ -957,7 +1169,8 @@ final class Window implements Platform\Window
         }
         $x = $f->new('int[1]'); $y = $f->new('int[1]');
         $f->gdk_window_get_origin($gw, $x, $y);
-        return new Rectangle($x[0], $y[0], (int)$w, (int)$h);
+        $top = $this->contentInset();
+        return new Rectangle($x[0], $y[0] + $top, (int)$w, (int)$h - $top);
     }
 
     public function magnify(float $by): void {}

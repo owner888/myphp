@@ -80,7 +80,7 @@ check($open[0] >= $x && $open[1] >= $y && $open[0] <= $x + 20 && $open[1] <= $y 
 same(Role::MENU, $h->find($h->rt->focus)?->role, 'the menu has the focus');
 $h->frame();
 check(shown($h, 'Open') !== null && shown($h, 'Pinned') !== null && shown($h, 'Move to') !== null && shown($h, 'Delete') !== null, 'it stays, all its items');
-check(shown($h, '⌘O') !== null, 'Open shows its shortcut as macOS writes it');
+check(shown($h, PHP_OS_FAMILY === 'Darwin' ? '⌘O' : 'Ctrl+O') !== null, 'Open shows its shortcut as the system writes it');
 $h->rightClick($x + 250, $y);
 $open = $h->rect($h->byText('Open'));
 check($open[0] + $open[2] <= $x + 250, 'a right-click near the right edge flips it before the click: ' . json_encode($open));
@@ -217,7 +217,7 @@ $h->frame();
 $h->rightClick(...$h->middle($a->n['row']));
 $item = fn(string $label) => labeled($h->root, $label)[0];
 [$open, $openIn] = labeled($h->root, 'Open');
-same([Role::MENU_ITEM, 1, 5, '⌘O', Role::MENU], [$open->role, $open->setPos, $open->setSize, $open->description, $openIn?->role], 'Open: a menu item, its place, its shortcut, in the menu');
+same([Role::MENU_ITEM, 1, 5, PHP_OS_FAMILY === 'Darwin' ? '⌘O' : 'Ctrl+O', Role::MENU], [$open->role, $open->setPos, $open->setSize, $open->description, $openIn?->role], 'Open: a menu item, its place, its shortcut, in the menu');
 check($item('Pinned')->role === Role::MENU_ITEM_CHECK_BOX && $item('Pinned')->checked === 2, 'Pinned: a check box item, checked');
 check($item('Delete')->disabled, 'Delete disabled');
 check($item('Sort by')->expandable && !$item('Sort by')->expanded, 'Sort by: expandable, closed');
@@ -317,4 +317,5 @@ $items = $h->menu['items'];
 check($items[0]->type === \MyPHP\MenuItem::RADIO && !$items[0]->checked && $items[1]->checked, 'radio items, Date checked');
 check($h->chooseMenuItem('Name') && $sort === 'Name', 'Name chosen');
 
-same(['⇧⌘Z', '⌃⌥↩', 'F5', '⌘,'], [DrawnMenu::shortcutText('Super+Shift+z'), DrawnMenu::shortcutText('Ctrl+Alt+Enter'), DrawnMenu::shortcutText('F5'), DrawnMenu::shortcutText('Super+,')], 'shortcuts as macOS writes them');
+same(PHP_OS_FAMILY === 'Darwin' ? ['⇧⌘Z', '⌃⌥↩', 'F5', '⌘,'] : ['Super+Shift+Z', 'Ctrl+Alt+Enter', 'F5', 'Super+,'],
+    [DrawnMenu::shortcutText('Super+Shift+z'), DrawnMenu::shortcutText('Ctrl+Alt+Enter'), DrawnMenu::shortcutText('F5'), DrawnMenu::shortcutText('Super+,')], 'shortcuts as the system writes them');
