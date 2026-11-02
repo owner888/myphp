@@ -39,6 +39,16 @@ final class Gtk
             typedef struct { const char* target; unsigned int flags; unsigned int info; } GtkTargetEntry;
             typedef void (*CbSignal)(void*, const char*, const char*, const char*, const char*, void*, void*);
             typedef struct { CbSignal fn; } HSignal;
+            typedef int (*CbDragAt)(void*, void*, int, int, unsigned int, void*);
+            typedef void (*CbDragLeave)(void*, void*, unsigned int, void*);
+            typedef void (*CbDragReceived)(void*, void*, int, int, void*, unsigned int, unsigned int, void*);
+            typedef void (*CbDragGet)(void*, void*, void*, unsigned int, unsigned int, void*);
+            typedef int (*CbDragFailed)(void*, void*, int, void*);
+            typedef struct { CbDragAt fn; } HDragAt; typedef struct { CbDragLeave fn; } HDragLeave; typedef struct { CbDragReceived fn; } HDragReceived;
+            typedef struct { CbDragGet fn; } HDragGet; typedef struct { CbDragFailed fn; } HDragFailed;
+            typedef void (*CbMethod)(void*, const char*, const char*, const char*, const char*, void*, void*, void*);
+            typedef void* (*CbProperty)(void*, const char*, const char*, const char*, const char*, void*, void*);
+            typedef struct { CbMethod method_call; CbProperty get_property; void* set_property; void* padding[8]; } GDBusInterfaceVTable;
             typedef struct { CbEvent fn; } HEvent; typedef struct { CbWidget fn; } HWidget; typedef struct { CbSize fn; } HSize;
             typedef struct { CbString fn; } HString; typedef struct { CbSource fn; } HSource; typedef struct { CbTick fn; } HTick;
             typedef struct { int x, y, width, height; } GdkRectangle;
@@ -271,6 +281,32 @@ final class Gtk
             unsigned int g_dbus_connection_signal_subscribe(void*, const char*, const char*, const char*, const char*, const char*, int, CbSignal, void*, void*);
             void* g_network_monitor_get_default(void);
             gboolean g_network_monitor_get_network_available(void*); gboolean g_network_monitor_get_network_metered(void*);
+            unsigned long gdk_x11_display_get_type(void); void* gdk_x11_display_get_xdisplay(void*);
+            void gdk_x11_display_error_trap_push(void*); int gdk_x11_display_error_trap_pop(void*);
+            void gdk_window_add_filter(void*, CbEvent, void*);
+            gboolean g_type_check_instance_is_a(void*, unsigned long);
+            void gtk_drag_dest_set(void*, int, GtkTargetEntry*, int, int);
+            void gtk_drag_get_data(void*, void*, void*, unsigned int);
+            void gtk_drag_finish(void*, gboolean, gboolean, unsigned int);
+            void gdk_drag_status(void*, int, unsigned int);
+            GList* gdk_drag_context_list_targets(void*);
+            int gdk_drag_context_get_actions(void*); int gdk_drag_context_get_suggested_action(void*); int gdk_drag_context_get_selected_action(void*);
+            void* gtk_drag_get_source_widget(void*);
+            void* gtk_target_list_new(GtkTargetEntry*, unsigned int); void gtk_target_list_unref(void*);
+            void* gtk_drag_begin_with_coordinates(void*, void*, int, int, void*, int, int);
+            void gtk_drag_cancel(void*);
+            void gtk_drag_set_icon_pixbuf(void*, void*, int, int);
+            void* gdk_pixbuf_get_from_surface(void*, int, int, int, int);
+            void* g_dbus_node_info_new_for_xml(const char*, void**);
+            void* g_dbus_node_info_lookup_interface(void*, const char*);
+            unsigned int g_dbus_connection_register_object(void*, const char*, void*, GDBusInterfaceVTable*, void*, void*, void**);
+            unsigned int g_bus_own_name_on_connection(void*, const char*, int, void*, void*, void*, void*);
+            void g_bus_unown_name(unsigned int);
+            void g_dbus_method_invocation_return_value(void*, void*);
+            void g_dbus_method_invocation_return_dbus_error(void*, const char*, const char*);
+            long g_variant_get_int64(void*);
+            void* g_variant_ref_sink(void*); char* g_variant_print(void*, gboolean);
+            gboolean g_dbus_connection_emit_signal(void*, const char*, const char*, const char*, const char*, void*, void**);
         ', 'libgtk-3.so.0');
         self::$slot = self::$f->new('void*[1]');
         self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
@@ -303,7 +339,12 @@ final class Gtk
     /**
      * Connects $fn to $signal of $obj: $kind says its C signature, 'event'
      * (widget, event, data) → gboolean, 'widget' (object, data), 'size'
-     * (widget, int, int, data), 'string' (object, const char*, data).
+     * (widget, int, int, data), 'string' (object, const char*, data), and
+     * the drags': 'dragAt' (widget, context, x, y, time, data) → gboolean,
+     * 'dragLeave' (widget, context, time, data), 'dragReceived' (widget,
+     * context, x, y, selection, info, time, data), 'dragGet' (widget,
+     * context, selection, info, time, data), 'dragFailed' (widget,
+     * context, result, data) → gboolean.
      */
     public static function connect(CData $obj, string $signal, string $kind, Closure $fn): void
     {
@@ -311,6 +352,8 @@ final class Gtk
         $h = match ($kind) {
             'event' => $f->new('HEvent', false), 'widget' => $f->new('HWidget', false),
             'size' => $f->new('HSize', false), 'string' => $f->new('HString', false),
+            'dragAt' => $f->new('HDragAt', false), 'dragLeave' => $f->new('HDragLeave', false), 'dragReceived' => $f->new('HDragReceived', false),
+            'dragGet' => $f->new('HDragGet', false), 'dragFailed' => $f->new('HDragFailed', false),
         };
         $h->fn = $fn;
         self::$kept[self::addr($obj)][] = $h;

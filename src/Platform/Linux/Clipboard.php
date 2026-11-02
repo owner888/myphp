@@ -72,13 +72,45 @@ final class Clipboard implements Platform\Clipboard
         return $this->board;
     }
 
+    /**
+     * GTK's targets of $formats (mygo's gtkTargets): text as UTF8_STRING
+     * too, files as a URI list; the entries and their number, their names
+     * held by the entries' array.
+     * @param list<string> $formats @return array{0: CData, 1: int}
+     */
+    public static function entries(array $formats): array
+    {
+        $f = Gtk::ffi();
+        $names = [];
+        foreach ($formats as $format) {
+            $names[] = $format === Format::FILE_LIST ? Format::URI_LIST : $format;
+            if ($format === Format::TEXT) { array_push($names, 'UTF8_STRING', 'text/plain;charset=utf-8'); }
+        }
+        $names = array_values(array_unique($names));
+        $size = 0;
+        foreach ($names as $name) { $size += strlen($name) + 1; }
+        $block = $f->new('struct { GtkTargetEntry e[' . max(1, count($names)) . ']; char s[' . max(1, $size) . ']; }'); // the names in the entries' own memory
+        $at = 0;
+        foreach ($names as $i => $name) {
+            \FFI::memcpy(\FFI::addr($block->s[$at]), $name . "\0", strlen($name) + 1);
+            $block->e[$i]->target = \FFI::addr($block->s[$at]);
+            $block->e[$i]->info = $i;
+            $at += strlen($name) + 1;
+        }
+        self::$held = $block;
+        return [$block->e, count($names)];
+    }
+
+    /** The last targets made, held while GTK copies them. */
+    private static ?CData $held = null;
+
     /** The transfer format of a GTK target (mygo's gtkFormat). */
-    private static function format(string $target): string
+    public static function format(string $target): string
     {
         return $target === 'UTF8_STRING' || $target === 'text/plain;charset=utf-8' ? Format::TEXT : $target;
     }
 
-    private static function atomName(CData $atom): string
+    public static function atomName(CData $atom): string
     {
         $f = Gtk::ffi();
         $p = $f->gdk_atom_name($atom);
@@ -98,23 +130,10 @@ final class Clipboard implements Platform\Clipboard
             return;
         }
         $f = Gtk::ffi();
-        $names = [];
-        foreach ($data->formats() as $format) { // mygo's gtkTargets
-            $names[] = $format === Format::FILE_LIST ? Format::URI_LIST : $format;
-            if ($format === Format::TEXT) { array_push($names, 'UTF8_STRING', 'text/plain;charset=utf-8'); }
-        }
-        $names = array_values(array_unique($names));
-        $targets = $f->new('GtkTargetEntry[' . count($names) . ']');
-        $strings = [];
-        foreach ($names as $i => $name) {
-            $strings[$i] = $f->new('char[' . (strlen($name) + 1) . ']');
-            \FFI::memcpy($strings[$i], $name . "\0", strlen($name) + 1);
-            $targets[$i]->target = $f->cast('char*', $strings[$i]);
-            $targets[$i]->info = $i;
-        }
+        [$targets, $n] = self::entries($data->formats());
         $key = ++$this->nextKey;
         $this->sources[$key] = [$data, $released];
-        if (!$f->gtk_clipboard_set_with_data($this->board(), $targets, count($names), $this->onGet->fn, $this->onClear->fn, $f->cast('void*', $key))) {
+        if (!$f->gtk_clipboard_set_with_data($this->board(), $targets, $n, $this->onGet->fn, $this->onClear->fn, $f->cast('void*', $key))) {
             unset($this->sources[$key]);
             throw new \RuntimeException('myphp: cannot own the clipboard selection');
         }

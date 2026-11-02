@@ -9,7 +9,8 @@ use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\Gl;
 use MyPHP\Platform;
 use MyPHP\Platform\Unsupported;
-use MyPHP\UI\{DisplayList, Image, Key, TextInputRange, TextState};
+use MyPHP\UI\{DataDragEvent, DisplayList, Image, Key, TextInputRange, TextState};
+use MyPHP\Transfer\{Data, Format, Item, Offer, Operation, Representation, Result};
 
 /**
  * A GtkWindow (mygo's linux window): native UI draws in a GtkGLArea filling
@@ -41,6 +42,12 @@ final class Window implements Platform\Window
     /** The box the menu bar and the content are in, the window's accelerators, its menu bar, the last press or key that could bring up a context menu (a copy). */
     private CData $box, $accel;
     private ?CData $menubar = null, $trigger = null;
+    /** The last press on the content, which a drag out of it starts from (a copy). */
+    private ?CData $pressed = null;
+    /** @var ?array{context: CData, event: DataDragEvent, x: float, y: float, time: int, pending: array<int, array{0: CData, 1: list<string>}>, reps: list<Representation>, failed: bool} a drop whose data GTK is fetching */
+    private ?array $drop = null;
+    /** @var ?array{data: Data, session: string, done: \Closure, context: ?CData, error: ?\Throwable, canceled: bool, escaped: bool} the drag out of the content on */
+    private ?array $drag = null;
     /** The owner of the menu bar's items (Menus). */
     private int $menuOwner = 0;
     /** Alt is down and nothing else was pressed since: its release reveals a menu bar that hides. */
@@ -270,6 +277,7 @@ final class Window implements Platform\Window
         foreach (['button-press-event', 'button-release-event', 'motion-notify-event', 'scroll-event', 'key-press-event', 'key-release-event', 'leave-notify-event'] as $signal) {
             Gtk::connect($this->area, $signal, 'event', fn($widget, $event, $data): int => $this->event($signal, $event));
         }
+        $this->connectDrags();
         $this->im = $f->gtk_im_multicontext_new();
         Gtk::connect($this->im, 'commit', 'string', fn($im, $text, $data) => $this->commit((string)$text));
         Gtk::connect($this->im, 'preedit-changed', 'widget', fn($im, $data) => $this->preedit());
@@ -423,6 +431,8 @@ final class Window implements Platform\Window
                 if ($e->type === self::BUTTON_PRESS) {
                     $f->gtk_widget_grab_focus($this->area);
                     $this->keepTrigger($event);
+                    if ($this->pressed !== null) { $f->gdk_event_free($this->pressed); }
+                    $this->pressed = $f->gdk_event_copy($event);
                 }
                 $time = hrtime(true);
                 if ($e->button === 8 || $e->button === 9) { // a mouse's back and forward buttons are keys (mygo's KeyBack, KeyForward)
@@ -629,6 +639,8 @@ final class Window implements Platform\Window
         $this->wakeSource = 0; // the handlers stay held: GTK still sends the destroyed window's last signals
         if ($this->trigger !== null) { Gtk::ffi()->gdk_event_free($this->trigger); }
         $this->trigger = null;
+        if ($this->pressed !== null) { Gtk::ffi()->gdk_event_free($this->pressed); }
+        $this->pressed = null;
         $this->b->menus()->dropOwner($this->menuOwner);
         unset($this->b->menus()->roleKeys[Gtk::addr($this->accel)]);
         [$win, $area] = [$this->win, $this->area];
@@ -777,7 +789,196 @@ final class Window implements Platform\Window
 
     public function setAcceptsFirstMouse(bool $on): void {}
 
-    public function setDropFormats(array $formats): void {}
+    /** Takes drops of $formats on the content (mygo's SetDropFormats). @param list<string> $formats */
+    public function setDropFormats(array $formats): void
+    {
+        if ($this->area === null || $formats === []) {
+            return;
+        }
+        [$targets, $n] = Clipboard::entries($formats);
+        Gtk::ffi()->gtk_drag_dest_set($this->area, 0, $targets, $n, self::COPY | self::MOVE);
+    }
+
+    private const COPY = 1 << 1, MOVE = 1 << 2; // GDK_ACTION_*
+
+    /**
+     * The content as a drag destination and source (mygo's
+     * surface_drop.go): it offers what the targets say, unread, and reads
+     * the formats the content took once it is dropped, each GTK delivers
+     * as it comes; it takes files from the start.
+     */
+    private function connectDrags(): void
+    {
+        $this->setDropFormats([Format::URI_LIST]);
+        Gtk::connect($this->area, 'drag-motion', 'dragAt', function ($widget, $context, $x, $y, $time, $data): int {
+            [$d] = $this->offer($context);
+            $taken = $this->w->dataEvent('over', $d, (float)$x, (float)$y);
+            Gtk::ffi()->gdk_drag_status($context, self::gdkOperations($d->operation), $time);
+            return $taken ? 1 : 0;
+        });
+        Gtk::connect($this->area, 'drag-leave', 'dragLeave', fn($widget, $context, $time, $data) => $this->w->dataEvent('leave', new DataDragEvent(new Offer), 0.0, 0.0));
+        Gtk::connect($this->area, 'drag-drop', 'dragAt', fn($widget, $context, $x, $y, $time, $data): int => $this->dropped($context, (float)$x, (float)$y, $time));
+        Gtk::connect($this->area, 'drag-data-received', 'dragReceived', fn($widget, $context, $x, $y, $sel, $info, $time, $data) => $this->received($context, $sel));
+        Gtk::connect($this->area, 'drag-data-get', 'dragGet', function ($widget, $context, $sel, $info, $time, $data): void {
+            if ($this->drag === null) {
+                return;
+            }
+            $f = Gtk::ffi();
+            $atom = $f->gtk_selection_data_get_target($sel);
+            $format = Clipboard::format(Clipboard::atomName($atom));
+            try {
+                $b = $format === Format::DRAG_SESSION ? $this->drag['session'] : $this->drag['data']->read($format);
+            } catch (\Throwable $e) {
+                $this->drag['error'] = $e;
+                return;
+            }
+            $f->gtk_selection_data_set($sel, $atom, 8, $b, strlen($b));
+        });
+        Gtk::connect($this->area, 'drag-failed', 'dragFailed', function ($widget, $context, $result, $data): int {
+            if ($this->drag === null) {
+                return 0;
+            }
+            // GTK_NO_TARGET 1 and USER_CANCELLED 2 are drops on nothing; one this cancelled stays a cancellation, released at once, without GTK's snap back holding the grab
+            $explicit = $this->drag['canceled'];
+            $this->drag['canceled'] = true;
+            $this->drag['escaped'] = $this->drag['escaped'] || $result === 2;
+            if (!$explicit && $result > 2) { $this->drag['error'] = new \RuntimeException('myphp: GTK drag failed'); }
+            return $explicit ? 1 : 0;
+        });
+        Gtk::connect($this->area, 'drag-end', 'event', function ($widget, $context, $data): int {
+            if ($this->drag === null) {
+                return 0;
+            }
+            $r = $this->drag;
+            $this->drag = null;
+            $op = $r['canceled'] || $r['error'] !== null ? Operation::NONE : self::operations(Gtk::ffi()->gdk_drag_context_get_selected_action($context));
+            $canceled = $op === Operation::NONE && $r['error'] === null;
+            ($r['done'])(new Result($op, $canceled, $r['error'], $canceled && $r['escaped'], \MyPHP\Screen::cursorScreenPoint()));
+            return 0;
+        });
+        Gtk::connect($this->area, 'drag-data-delete', 'event', fn($widget, $context, $data): int => 0); // the app's done removes what moved
+    }
+
+    /** What a drag offers, and the atom of each format (mygo's gtkOffer). @return array{0: DataDragEvent, 1: array<string, CData>} */
+    private function offer(CData $context): array
+    {
+        $f = Gtk::ffi();
+        $formats = []; $targets = []; $hasFiles = false;
+        for ($l = $f->gdk_drag_context_list_targets($context); $l !== null; $l = $l->next) {
+            $format = Clipboard::format(Clipboard::atomName($l->data));
+            if ($format === Format::DRAG_SESSION) {
+                continue;
+            }
+            if (!in_array($format, $formats, true)) { $formats[] = $format; }
+            $targets[$format] = $l->data;
+            if ($format === Format::URI_LIST) { // a file drop offers a URI list
+                $hasFiles = true;
+                if (!in_array(Format::FILE_LIST, $formats, true)) { $formats[] = Format::FILE_LIST; }
+                $targets[Format::FILE_LIST] = $l->data;
+            }
+        }
+        $session = '';
+        $source = $f->gtk_drag_get_source_widget($context);
+        foreach (self::$open as $w) {
+            if ($source !== null && $w->area !== null && Gtk::addr($w->area) === Gtk::addr($source) && $w->drag !== null) { $session = $w->drag['session']; }
+        }
+        $offer = new Offer($formats, self::operations($f->gdk_drag_context_get_actions($context)), self::operations($f->gdk_drag_context_get_suggested_action($context)));
+        return [new DataDragEvent($offer, $session, $hasFiles), $targets];
+    }
+
+    /** A drop: to the content at once when its data is the app's own, else once GTK delivered the formats it took. */
+    private function dropped(CData $context, float $x, float $y, int $time): int
+    {
+        $f = Gtk::ffi();
+        [$d, $targets] = $this->offer($context);
+        if (!$this->w->dataEvent('over', $d, $x, $y)) {
+            return 0;
+        }
+        if ($d->data !== null && $d->data->formats() !== []) { // the app's own drag: its items and values as they are
+            $taken = $this->w->dataEvent('drop', $d, $x, $y);
+            $f->gtk_drag_finish($context, $taken ? 1 : 0, $taken && $d->operation === Operation::MOVE ? 1 : 0, $time);
+            return 1;
+        }
+        $this->cancelPendingDrop();
+        $pending = [];
+        foreach ($d->formats as $format) {
+            if (isset($targets[$format])) {
+                $a = Gtk::addr($targets[$format]);
+                $pending[$a] ??= [$targets[$format], []];
+                $pending[$a][1][] = $format;
+            }
+        }
+        if ($pending === []) {
+            $f->gtk_drag_finish($context, 0, 0, $time);
+            return 1;
+        }
+        $this->drop = ['context' => $f->g_object_ref($context), 'event' => $d, 'x' => $x, 'y' => $y, 'time' => $time, 'pending' => $pending, 'reps' => [], 'failed' => false];
+        foreach ($pending as [$atom]) {
+            $f->gtk_drag_get_data($this->area, $context, $atom, $time);
+        }
+        return 1;
+    }
+
+    /** A format of the drop GTK delivered; once all are, the drop goes to the content. */
+    private function received(CData $context, CData $sel): void
+    {
+        $drop = &$this->drop;
+        if ($drop === null || Gtk::addr($drop['context']) !== Gtk::addr($context)) {
+            return;
+        }
+        $f = Gtk::ffi();
+        $a = Gtk::addr($f->gtk_selection_data_get_target($sel));
+        if (!isset($drop['pending'][$a])) {
+            return;
+        }
+        $formats = $drop['pending'][$a][1];
+        unset($drop['pending'][$a]);
+        $n = $f->gtk_selection_data_get_length($sel);
+        $p = $f->gtk_selection_data_get_data($sel);
+        if ($n < 0 || $n > 64 << 20 || ($n > 0 && $p === null)) {
+            $drop['failed'] = true;
+        } else {
+            $b = $n > 0 ? \FFI::string($p, $n) : '';
+            foreach ($formats as $format) {
+                if ($format === Format::FILE_LIST && (new Data(new Item(Representation::bytes(Format::URI_LIST, $b))))->paths() === []) {
+                    continue;
+                }
+                $drop['reps'][] = Representation::bytes($format, $b);
+            }
+        }
+        if ($drop['pending'] !== []) {
+            return;
+        }
+        $done = $drop;
+        $this->drop = null;
+        $taken = false;
+        if (!$done['failed'] && $done['reps'] !== []) {
+            $done['event']->data = new Data(new Item(...$done['reps']));
+            $taken = $this->w->dataEvent('drop', $done['event'], $done['x'], $done['y']);
+        }
+        $f->gtk_drag_finish($context, $taken ? 1 : 0, $taken && $done['event']->operation === Operation::MOVE ? 1 : 0, $done['time']);
+        $f->g_object_unref($done['context']);
+    }
+
+    private function cancelPendingDrop(): void
+    {
+        if ($this->drop !== null) {
+            $f = Gtk::ffi();
+            $f->gtk_drag_finish($this->drop['context'], 0, 0, $this->drop['time']);
+            $f->g_object_unref($this->drop['context']);
+            $this->drop = null;
+        }
+    }
+
+    private static function gdkOperations(int $o): int
+    {
+        return (($o & Operation::COPY) !== 0 ? self::COPY : 0) | (($o & Operation::MOVE) !== 0 ? self::MOVE : 0);
+    }
+
+    private static function operations(int $n): int
+    {
+        return (($n & self::COPY) !== 0 ? Operation::COPY : 0) | (($n & self::MOVE) !== 0 ? Operation::MOVE : 0);
+    }
 
     /** Whether the window shows the application menu in its menu bar: flyouts and panels show none (mygo's hasAppMenu). */
     public function hasAppMenu(): bool
@@ -982,12 +1183,49 @@ final class Window implements Platform\Window
         return [(float)$w[0], (float)$h[0]];
     }
 
+    /**
+     * Starts GTK's drag of $o's data from the last press on the content
+     * (mygo's StartDataDrag): each format a target, the session's among
+     * them, given as a destination asks; the preview its icon.
+     */
     public function startDrag(array $o): void
     {
-        throw new Unsupported('myphp: dragging data out is not on Linux yet');
+        if ($this->drag !== null || $this->pressed === null || $this->area === null) {
+            ($o['done'])(new Result(error: new \RuntimeException('myphp: GTK drag needs a pointer gesture')));
+            return;
+        }
+        $f = Gtk::ffi();
+        [$targets, $n] = Clipboard::entries([...$o['data']->formats(), Format::DRAG_SESSION]);
+        $list = $f->gtk_target_list_new($targets, $n);
+        $this->drag = ['data' => $o['data'], 'session' => $o['session'], 'done' => $o['done'], 'context' => null, 'error' => null, 'canceled' => false, 'escaped' => false];
+        $context = $f->gtk_drag_begin_with_coordinates($this->area, $list, self::gdkOperations($o['operations']), 1, $this->pressed, (int)$o['x'], (int)$o['y']);
+        $f->gtk_target_list_unref($list);
+        if ($context === null) {
+            $this->drag = null;
+            ($o['done'])(new Result(error: new \RuntimeException('myphp: GTK failed to start drag')));
+            return;
+        }
+        $this->drag['context'] = $context;
+        if ($o['preview'] !== null) { // premultiplied BGRA: cairo's ARGB32
+            $buf = $f->new('unsigned char[' . strlen($o['preview']) . ']');
+            \FFI::memcpy($buf, $o['preview'], strlen($o['preview']));
+            $surface = $f->cairo_image_surface_create_for_data($buf, 0, $o['width'], $o['height'], $o['width'] * 4); // CAIRO_FORMAT_ARGB32
+            $pix = $f->gdk_pixbuf_get_from_surface($surface, 0, 0, $o['width'], $o['height']);
+            $f->cairo_surface_destroy($surface);
+            if ($pix !== null) {
+                $f->gtk_drag_set_icon_pixbuf($context, $pix, (int)$o['hotX'], (int)$o['hotY']);
+                $f->g_object_unref($pix);
+            }
+        }
     }
 
-    public function cancelDrag(): void {}
+    public function cancelDrag(): void
+    {
+        if ($this->drag !== null && $this->drag['context'] !== null) {
+            [$this->drag['canceled'], $this->drag['escaped']] = [true, true];
+            Gtk::ffi()->gtk_drag_cancel($this->drag['context']);
+        }
+    }
 
     public function titleBar(): array
     {

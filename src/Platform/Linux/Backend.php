@@ -26,6 +26,9 @@ final class Backend implements Platform\Backend
     private ?Shell $shell = null;
     private ?Power $power = null;
     private ?Network $network = null;
+    private ?Notifications $notifications = null;
+    private ?Hotkeys $hotkeys = null;
+    private ?NowPlaying $nowPlaying = null;
     private bool $running = false;
     private bool $signaled = false;
 
@@ -212,7 +215,7 @@ final class Backend implements Platform\Backend
 
     public function nowPlaying(): Platform\NowPlaying
     {
-        throw new Unsupported('myphp: NowPlaying is not on Linux yet');
+        return $this->nowPlaying ??= new NowPlaying($this->h);
     }
 
     public function secrets(): Platform\Secrets
@@ -227,24 +230,43 @@ final class Backend implements Platform\Backend
 
     public function registerHotkey(int $id, string $accelerator): void
     {
-        throw new Unsupported('myphp: global shortcuts are not on Linux yet');
+        $this->hotkeys()->register($id, $accelerator);
     }
 
-    public function unregisterHotkey(int $id): void {}
+    public function unregisterHotkey(int $id): void
+    {
+        $this->hotkeys()->unregister($id);
+    }
+
+    private function hotkeys(): Hotkeys
+    {
+        return $this->hotkeys ??= new Hotkeys($this->h);
+    }
 
     public function notificationsSupported(): bool
     {
-        return false;
+        return $this->notifications()->supported();
     }
 
     public function showNotification(\MyPHP\Notification $n): void
     {
-        throw new Unsupported('myphp: notifications are not on Linux yet');
+        $this->notifications()->show($n);
     }
 
-    public function removeNotification(string $id): void {}
+    public function removeNotification(string $id): void
+    {
+        $this->notifications()->remove($id);
+    }
 
-    public function removeAllNotifications(): void {}
+    public function removeAllNotifications(): void
+    {
+        $this->notifications()->removeAll();
+    }
+
+    private function notifications(): Notifications
+    {
+        return $this->notifications ??= new Notifications($this->h);
+    }
 
     public function webViewAvailable(): bool
     {

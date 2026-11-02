@@ -55,6 +55,41 @@ final class Accelerator
         return implode('+', $parts);
     }
 
+    /** X11's keysym names of the keys that are not their own (mygo's keysyms). */
+    private const KEYSYMS = [
+        '!' => 'exclam', '"' => 'quotedbl', '#' => 'numbersign', '$' => 'dollar', '%' => 'percent',
+        '&' => 'ampersand', "'" => 'apostrophe', '(' => 'parenleft', ')' => 'parenright', '*' => 'asterisk',
+        '+' => 'plus', ',' => 'comma', '-' => 'minus', '.' => 'period', '/' => 'slash', ':' => 'colon',
+        ';' => 'semicolon', '<' => 'less', '=' => 'equal', '>' => 'greater', '?' => 'question', '@' => 'at',
+        '[' => 'bracketleft', '\\' => 'backslash', ']' => 'bracketright', '^' => 'asciicircum',
+        '_' => 'underscore', '`' => 'grave', '{' => 'braceleft', '|' => 'bar', '}' => 'braceright', '~' => 'asciitilde',
+        'Enter' => 'Return', 'Tab' => 'Tab', 'Space' => 'space', 'Backspace' => 'BackSpace',
+        'Delete' => 'Delete', 'Insert' => 'Insert', 'Escape' => 'Escape',
+        'Up' => 'Up', 'Down' => 'Down', 'Left' => 'Left', 'Right' => 'Right',
+        'Home' => 'Home', 'End' => 'End', 'PageUp' => 'Page_Up', 'PageDown' => 'Page_Down',
+        'VolumeUp' => 'XF86AudioRaiseVolume', 'VolumeDown' => 'XF86AudioLowerVolume', 'VolumeMute' => 'XF86AudioMute',
+        'MediaNextTrack' => 'XF86AudioNext', 'MediaPreviousTrack' => 'XF86AudioPrev',
+        'MediaStop' => 'XF86AudioStop', 'MediaPlayPause' => 'XF86AudioPlay',
+        'PrintScreen' => 'Print', 'CapsLock' => 'Caps_Lock', 'NumLock' => 'Num_Lock', 'ScrollLock' => 'Scroll_Lock',
+        'NumDec' => 'KP_Decimal', 'NumAdd' => 'KP_Add', 'NumSub' => 'KP_Subtract',
+        'NumMult' => 'KP_Multiply', 'NumDiv' => 'KP_Divide',
+    ];
+
+    /** The key's X11 keysym name, as XStringToKeysym takes it (mygo's Keysym). */
+    public function keysym(): string
+    {
+        if (isset(self::KEYSYMS[$this->key])) {
+            return self::KEYSYMS[$this->key];
+        }
+        if (preg_match('/^Num(\d)$/', $this->key, $m) === 1) {
+            return 'KP_' . $m[1];
+        }
+        if (mb_strlen($this->key) === 1 && mb_ord($this->key) > 0x7e) {
+            return sprintf('U%04X', mb_ord($this->key));
+        }
+        return $this->key; // letters, digits and F1-F24
+    }
+
     /** Parses $s for the system $os (PHP_OS_FAMILY's): "CmdOrCtrl" is Super (Command) on macOS, Ctrl elsewhere. */
     public static function parse(string $s, string $os = PHP_OS_FAMILY): self
     {

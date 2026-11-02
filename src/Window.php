@@ -1197,8 +1197,10 @@ final class Window
      * (mygo's SurfaceEvent): files it does not take as data go to a node
      * taking files (Context::droppedFiles), then to the 'fileDrop'
      * listeners, when it has some. Whether it took it.
+     *
+     * @internal the backend reports the drags over the view
      */
-    private function dataEvent(string $kind, DataDragEvent $d, float $x, float $y): bool
+    public function dataEvent(string $kind, DataDragEvent $d, float $x, float $y): bool
     {
         DataDrag::resolve($d);
         $rt = $this->runtime;

@@ -7636,13 +7636,28 @@ llvmpipe (GL 4.5 core).
   are libsecret's with keytar's schema, through its variadic calls (the
   attributes service and account); no session bus, or no Secret Service
   on it, is `Unsupported`.
+- **Notifications, global shortcuts, Now Playing** (`Linux\Notifications`,
+  `Hotkeys`, `NowPlaying`): notifications go to the freedesktop
+  notification server, their default action the click, an ID shown again
+  replacing its notification. Global shortcuts grab their keys on X11's
+  root window (with Caps Lock and Num Lock either way), the presses
+  arriving through a GDK event filter; Wayland's portal is still to come.
+  What plays is an MPRIS player exported on the session bus, its bus name
+  owned only while something shows; its values go out as GVariant text.
+- **Drags are GTK's** (in `Linux\Window`, mygo's surface_drop.go): the
+  content is a drag destination of the formats the core asks for (files
+  from the start), offered by targets without reading them; a drop asks
+  GTK for the formats the content took and goes to it once all arrived,
+  the app's own data at once. A drag out starts from the last press, its
+  formats targets given as asked, its preview (premultiplied BGRA, cairo's
+  ARGB32) the icon.
 - **Where the system keeps the app's language**: nowhere on Linux, so the
   core keeps it in the file `locale` of `App::path(UserData)`, which is
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  pages and web views (WebKitGTK), the tray, notifications, global
-  shortcuts, Now Playing, drags, and video.
+  pages and web views (WebKitGTK), the tray, global shortcuts on Wayland,
+  and video.
 
 ## Open items
 
