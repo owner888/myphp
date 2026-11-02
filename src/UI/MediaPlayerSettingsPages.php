@@ -6,7 +6,6 @@ namespace MyPHP\UI;
 use Closure;
 use MyPHP\Dialog;
 use MyPHP\Media\PlayerSettings;
-use MyPHP\Native\AudioDevices;
 use MyPHP\MessageOptions;
 use MyPHP\OpenDialogOptions;
 use MyPHP\Window;
@@ -826,16 +825,16 @@ final class MediaPlayerSettingsPages
         return $this->page('audio', MediaPlayerSettings::iina($c, 'sidebar.audio'), 'waveform', [
             $this->section('$Hardware', [[
                 $this->item('preferredAudioDevice.label', symbol: 'hifispeaker.and.homepod', id: 'audioDevice', detail: function (): void {
-                    $this->v->audioDevices ??= \MyPHP\App::running() ? AudioDevices::outputs() : []; // listed as the page opens, as IINA's pop-up
+                    $this->v->audioDevices ??= \MyPHP\App::running() ? \MyPHP\App::backend()->media()->audioOutputs() : []; // listed as the page opens, as IINA's pop-up
                     $options = ['auto' => '[Autoselect device] auto']; // mpv's
-                    foreach ($this->v->audioDevices as $uid => $name) { $options["coreaudio/$uid"] = "[$name] coreaudio/$uid"; }
+                    foreach ($this->v->audioDevices as $device => $name) { $options[$device] = "[$name] $device"; }
                     $chosen = $this->set->get('audioDevice');
                     if (!isset($options[$chosen])) { $options[$chosen] = '[' . $this->set->get('audioDeviceDesc') . " (missing)] $chosen"; } // as IINA's: not connected now
                     $this->c->column()->padding(0, 8, 8, MediaPlayerSettings::INDENT)->fillWidth();
                       $picked = MediaPlayerSettings::popUp($this->c, $options, $chosen, fill: true);
                     $this->c->end();
                     if ($picked !== null && $picked !== $chosen) {
-                        $this->s->setSetting('audioDeviceDesc', $picked === 'auto' ? 'Autoselect device' : $this->v->audioDevices[substr((string)$picked, strlen('coreaudio/'))] ?? $this->set->get('audioDeviceDesc'));
+                        $this->s->setSetting('audioDeviceDesc', $picked === 'auto' ? 'Autoselect device' : $this->v->audioDevices[(string)$picked] ?? $this->set->get('audioDeviceDesc'));
                         $this->s->setSetting('audioDevice', (string)$picked);
                     }
                 }),

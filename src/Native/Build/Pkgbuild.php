@@ -29,6 +29,8 @@ final class Pkgbuild
         'libayatana-appindicator3-1' => 'libayatana-appindicator',
         'libnotify4' => 'libnotify',
         'libsecret-1-0' => 'libsecret',
+        'adwaita-icon-theme' => 'adwaita-icon-theme',
+        'librsvg2-common' => 'librsvg',
         'libsoup-3.0-0' => 'libsoup3',
         'libglib2.0-0' => 'glib2',
         'libasound2' => 'alsa-lib',

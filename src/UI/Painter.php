@@ -992,8 +992,8 @@ final class Painter
      * frame: Linux's), drawn where the system's layer would show through
      * the hole (macOS): the box black, the picture where Player::picture
      * lays it out (its aspect, crop and the video filters' crop and
-     * expand), cut to what of it shows. Its rotation, flip and mirror are
-     * not drawn yet. The image's own slot: a frame a level of its own,
+     * expand), cut to what of it shows, turned and reversed as
+     * Player::rotation and reversed() say. The image's own slot: a frame a level of its own,
      * halved in PHP, would cost each frame what the GPU's sampling does not.
      * @param array{0: float, 1: float, 2: float, 3: float} $radii
      */
@@ -1005,8 +1005,19 @@ final class Painter
             return;
         }
         $s = $text->imageSlot($img);
+        // As the window lays out macOS's layer (Darwin\Window::placeVideoViews): the decoded picture about the middle of what shows, its offset
+        // turned as it is, turned clockwise about its own middle, the whole reversed left for right and upside down about the middle of what shows.
+        [$cx, $cy] = [$x + $vx + $vw / 2, $y + $vy + $vh / 2];
+        $rotation = $p->rotation();
+        [$ox, $oy] = match ($rotation) { 90 => [-$dy, $dx], 180 => [-$dx, -$dy], 270 => [$dy, -$dx], default => [$dx, $dy] };
+        [$ix, $iy] = [$cx + $ox, $cy + $oy];
+        [$mirror, $flip] = $p->reversed();
         $list->pushClip($x + $vx, $y + $vy, $vw, $vh);
-        $list->image($x + $vx + ($vw - $dw) / 2 + $dx, $y + $vy + ($vh - $dh) / 2 + $dy, $dw, $dh, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], 1.0, max($radii));
+        $list->transform(Transform::scaling($mirror ? -1.0 : 1.0, $flip ? -1.0 : 1.0), $cx, $cy, static function () use ($list, $rotation, $ix, $iy, $dw, $dh, $s, $radii): void {
+            $list->transform(Transform::rotation((float)$rotation), $ix, $iy, static function () use ($list, $ix, $iy, $dw, $dh, $s, $radii): void {
+                $list->image($ix - $dw / 2, $iy - $dh / 2, $dw, $dh, $s['u'], $s['v'], $s['w'], $s['h'], $s['page'], 1.0, max($radii));
+            });
+        });
         $list->popClip();
     }
 

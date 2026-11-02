@@ -6,15 +6,16 @@ namespace MyPHP\Platform\Linux;
 use Closure;
 use MyPHP\Audio\Device;
 use MyPHP\Media\{Player, Track};
-use MyPHP\Native\{Av, AvReader, MediaTicker};
+use MyPHP\Native\{Av, AvDecoder, AvReader, MediaTicker, Pcm};
 use MyPHP\Platform;
 
 /**
  * The player's system on Linux: FFmpeg (libavformat reads what the core
  * does not, libavcodec decodes, libswscale and libswresample convert), the
  * sound through PulseAudio or ALSA, the picture drawn by the window's own
- * renderer (Linux\Renderers). Every track decodes in software:
- * hardware decoding (VA-API) is not here.
+ * renderer (Linux\Renderers). Video decodes with VA-API where it can and
+ * hardware decoding is asked (its frames copied to memory), else in
+ * software.
  */
 final class Media implements Platform\Media
 {
@@ -54,20 +55,22 @@ final class Media implements Platform\Media
         return new Thumbnails($video, $width);
     }
 
+    /** With VA-API where it is asked, the codec has it and a device opens (Native\AvDecoder::vaapiFor). */
     public function hardwareDecodes(Track $video, bool $hardware): bool
     {
-        return false;
+        return $hardware && AvDecoder::vaapiFor($video)[0];
     }
 
+    /** Where VA-API decodes it: either way, as software decodes every track. */
     public function decodingSwitchable(Track $video): bool
     {
-        return false;
+        return AvDecoder::vaapiFor($video)[0];
     }
 
-    /** FFmpeg's decoder of the track, by its name ("FFmpeg h264", "FFmpeg libdav1d"). */
+    /** FFmpeg's decoder of the track, by its name ("FFmpeg h264", "FFmpeg h264 (VA-API)"). */
     public function videoDecoder(Track $video, bool $hardware): string
     {
-        return $this->decoderName($video);
+        return $this->decoderName($video) . ($this->hardwareDecodes($video, $hardware) ? ' (VA-API)' : '');
     }
 
     public function audioDecoder(Track $audio): string
@@ -121,18 +124,46 @@ final class Media implements Platform\Media
         return null;
     }
 
-    /** Not on Linux yet (MPRIS through Linux\NowPlaying takes the app's, MyPHP\NowPlaying's): told once. */
+    /** MediaCommand's bits of the handlers' names (Native\NowPlaying's MEDIA, a position a seek); MPRIS has no skips, rates nor loop. */
+    private const COMMANDS = ['play' => 1, 'pause' => 2, 'toggle' => 4, 'stop' => 8, 'next' => 16, 'previous' => 32, 'position' => 64];
+
+    /** What showed the player's state last, by its id. */
+    private int $nowPlayingOwner = 0;
+
+    /**
+     * The film in the desktop's media controls: the MPRIS player
+     * (Linux\NowPlaying) shows its name, duration, position, rate and
+     * state, and its commands call $handlers with $owner (held weakly), as
+     * Native\NowPlaying's do: Play, Pause, PlayPause, Stop, Next, Previous,
+     * and Seek and SetPosition as the position's.
+     */
     public function showNowPlaying(object $owner, array $handlers, string $path, float $duration, float $time, float $rate, bool $paused, int $index, int $count, int $chapter, int $chapters): void
     {
-        if (!$this->nowPlayingTold) {
-            $this->nowPlayingTold = true;
-            \MyPHP\Logger::warn("the player's film is not shown in the system's media controls (MPRIS) on Linux yet", 'media');
+        $bits = 0;
+        foreach (self::COMMANDS as $name => $bit) {
+            if (isset($handlers[$name])) { $bits |= $bit; }
         }
+        $this->nowPlayingOwner = spl_object_id($owner);
+        $ref = \WeakReference::create($owner);
+        $this->b->nowPlaying()->show(['title' => pathinfo($path, PATHINFO_FILENAME), 'artist' => '', 'album' => '', 'artwork' => '', 'duration' => $duration, 'position' => $time,
+            'rate' => $rate, 'state' => $paused ? 'paused' : 'playing', 'commands' => $bits], static function (int $cmd, float $at) use ($ref, $handlers): void {
+            $o = $ref->get();
+            $name = array_search($cmd, self::COMMANDS, true);
+            if ($o === null || $name === false || !isset($handlers[$name])) {
+                return;
+            }
+            $name === 'position' ? $handlers[$name]($o, $at) : $handlers[$name]($o);
+        });
     }
 
-    private bool $nowPlayingTold = false;
-
-    public function endNowPlaying(object $owner): void {}
+    public function endNowPlaying(object $owner): void
+    {
+        if ($this->nowPlayingOwner !== spl_object_id($owner)) {
+            return;
+        }
+        $this->nowPlayingOwner = 0;
+        $this->b->nowPlaying()->show(null, null);
+    }
 
     /** GdkPixbuf's JPEG, its alpha left out. */
     public function jpeg(string $rgba, int $w, int $h, float $quality): string
@@ -222,6 +253,18 @@ final class Media implements Platform\Media
         $c = $g->new('char[' . (strlen($s) + 1) . ']');
         \FFI::memcpy($c, $s, strlen($s));
         return $c;
+    }
+
+    /** FFmpeg's (libswscale's pictures the window's renderer draws), the sound's system (PulseAudio, else ALSA: the last opened), VA-API's. */
+    public function names(): array
+    {
+        return ['video' => 'FFmpeg', 'audio' => Pcm::$opened ?? 'PulseAudio', 'hwdec' => 'vaapi'];
+    }
+
+    /** PulseAudio's sinks, else ALSA's devices (Native\Pcm::outputs). */
+    public function audioOutputs(): array
+    {
+        return Pcm::outputs(\MyPHP\App::name());
     }
 
     public function audioDevice(): Device

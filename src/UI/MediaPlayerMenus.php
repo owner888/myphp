@@ -549,7 +549,7 @@ final class MediaPlayerMenus
     {
         $now = $s->audioDevice ?? $s->settings()->get('audioDevice');
         $devices = ['auto' => 'Autoselect device'];
-        foreach (\MyPHP\Native\AudioDevices::outputs() as $uid => $name) { $devices["coreaudio/$uid"] = $name; }
+        foreach (\MyPHP\App::backend()->media()->audioOutputs() as $device => $name) { $devices[$device] = $name; }
         $items = [];
         foreach ($devices as $name => $desc) {
             $items[] = new MenuItem("[$desc] $name", fn() => $s->setAudioDevice($name), type: MenuItem::CHECKBOX, checked: $name === $now);

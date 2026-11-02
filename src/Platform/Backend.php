@@ -99,6 +99,9 @@ interface Backend
     /** What Media\Player reads, decodes and plays films with. May be called before init. */
     public function media(): Media;
 
+    /** The system's icons by name, which UI\Image::symbol draws. */
+    public function symbols(): Symbols;
+
     /** May be called before init. */
     public function secrets(): Secrets;
 

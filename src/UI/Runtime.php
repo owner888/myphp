@@ -1096,6 +1096,8 @@ final class Runtime
      * @var list<array{id: int, frame: array{0: float, 1: float, 2: float, 3: float}, clip: array{0: float, 1: float, 2: float, 3: float}, material: string, dark: ?bool, radius: float, alpha: float, seq: int}>
      */
     public array $materialPlaces = [];
+    /** Whether the window's system draws Node::systemMaterial's materials (Platform\Window::hasSystemMaterials, set as each frame builds); false: myphp's own stand in, told once in the log ($ownMaterialsTold). */
+    public bool $systemMaterials = true, $ownMaterialsTold = false;
     /** @internal Window: whether it paints the nodes belowMaterials() in a layer of their own, under its materials (else they paint where they are) */
     public bool $underLayer = false;
     /**

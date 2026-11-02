@@ -1157,7 +1157,7 @@ function buildLinux(string $dir, array $c, string $arch, array $opts): array
             fail("icon {$c['icon']}: {$e->getMessage()}");
         }
         $sources = appSources($dir, $c);
-        $depends = Linux::debDepends($c['linux'], Linux::usesPages($c, $sources), Linux::usesTray($sources), $php);
+        $depends = Linux::debDepends($c['linux'], Linux::usesPages($c, $sources), Linux::usesTray($sources), Linux::usesSymbols($sources), $php);
         $artifacts[] = Deb::write($c, $stage, $slug, $arch, $installed, $depends, $icons, $langs);
         logf('Packaged ' . basename(end($artifacts)));
         // The app's archive, which the PKGBUILD packages (mygo's writeArchive, without updates).

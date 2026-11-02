@@ -8,7 +8,6 @@ use FFI\CData;
 use MyPHP\{App, Logger, Rectangle, WindowOptions};
 use MyPHP\Native\Gl;
 use MyPHP\Platform;
-use MyPHP\Platform\Unsupported;
 use MyPHP\UI\{DataDragEvent, DisplayList, Image, Key, TextInputRange, TextState};
 use MyPHP\Transfer\{Data, Format, Item, Offer, Operation, Representation, Result};
 
@@ -922,6 +921,12 @@ final class Window implements Platform\Window
         return false;
     }
 
+    /** None: GTK has no materials to show under the content, which myphp's own stand in for (Node::systemMaterial). */
+    public function hasSystemMaterials(): bool
+    {
+        return false;
+    }
+
     /** Asks for a frame at the frame clock's next tick; $repaint: one that only paints the last frame's nodes again, while every ask says so. */
     public function requestFrame(int $every = 1, bool $repaint = false): void
     {
@@ -1599,9 +1604,87 @@ final class Window implements Platform\Window
 
     public function magnify(float $by): void {}
 
+    /**
+     * The window sized to a film as it opens, as Darwin\Window::fitVideo
+     * does (IINA's settings): its content $o['w'] by $o['h'], in physical
+     * pixels where $o['physical'], times $o['ratio'] (negative: as large as
+     * the work area takes), no larger than the monitor's work area nor
+     * smaller than the window may be; placed by mpv's geometry where
+     * given, else centered where it was (on the work area for a fit). Its
+     * size is the content's, the menu bar over it; GTK's resize is not
+     * animated.
+     * @param array{w: float, h: float, physical: bool, ratio: float, resize: bool, geometry: ?string, animate: bool} $o
+     */
     public function fitVideo(array $o): void
     {
-        throw new Unsupported('myphp: video is not on Linux yet');
+        if ($o['w'] <= 0 || $o['h'] <= 0) { return; }
+        $f = Gtk::ffi();
+        $display = $f->gdk_display_get_default();
+        $gw = $f->gtk_widget_get_window($this->win);
+        $m = $display === null ? null : (($gw === null ? null : $f->gdk_display_get_monitor_at_window($display, $gw)) ?? $f->gdk_display_get_primary_monitor($display) ?? $f->gdk_display_get_monitor($display, 0));
+        if ($m === null) {
+            Logger::warn('no monitor to fit the window to the film on', 'linux');
+            return;
+        }
+        $wa = $f->new('GdkRectangle');
+        $f->gdk_monitor_get_workarea($m, FFI::addr($wa));
+        $sf = [(float)$wa->x, (float)$wa->y, (float)$wa->width, (float)$wa->height - $this->contentInset()];
+        $cur = $this->contentBounds();
+        [$w, $h] = [(float)$o['w'], (float)$o['h']];
+        $geometry = $o['geometry'] === null || $o['geometry'] === '' ? null : $o['geometry'];
+        if ($o['resize']) {
+            if ($o['physical']) { $k = $this->backingScale(); [$w, $h] = [$w / $k, $h / $k]; }
+            if ($o['ratio'] < 0) {
+                $k = min($sf[2] / $w, $sf[3] / $h); [$w, $h] = [$w * $k, $h * $k];
+            } else {
+                [$w, $h] = [$w * $o['ratio'], $h * $o['ratio']];
+            }
+        }
+        $k = min(1.0, $sf[2] / $w, $sf[3] / $h); [$w, $h] = [$w * $k, $h * $k]; // no larger than the work area
+        $k = max(1.0, $this->minSize[0] / $w, $this->minSize[1] / $h); [$w, $h] = [$w * $k, $h * $k]; // no smaller than the window may be
+        if ($geometry !== null) {
+            $r = self::geometryFrame($geometry, $w, $h, $sf);
+        } elseif (!$o['resize']) {
+            return;
+        } elseif ($o['ratio'] < 0) {
+            $r = [$sf[0] + ($sf[2] - $w) / 2, $sf[1] + ($sf[3] - $h) / 2, $w, $h];
+        } else {
+            $r = [$cur->x + ($cur->width - $w) / 2, $cur->y + ($cur->height - $h) / 2, $w, $h];
+        }
+        $r[0] = max($sf[0], min($sf[0] + $sf[2] - $r[2], $r[0])); // kept in the work area
+        $r[1] = max($sf[1], min($sf[1] + $sf[3] - $r[3], $r[1]));
+        $this->setContentBounds(new Rectangle((int)round($r[0]), (int)round($r[1]), (int)round($r[2]), (int)round($r[3])));
+    }
+
+    /**
+     * The frame mpv's geometry $g gives content of $w by $h in work area
+     * $sf ([x, y, w, h], y down), as Darwin\Window::geometryFrame reads it
+     * (IINA's windowFrameFromGeometry): a width ("1280", "50%") or a height
+     * ("x720") keeping its shape; the left ("+x") or right ("-x"), the
+     * bottom ("+y") or top ("-y") at a distance, a "%" placing its center;
+     * the middle of the work area for a size alone. @param array{0: float, 1: float, 2: float, 3: float} $sf @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private static function geometryFrame(string $g, float $w, float $h, array $sf): array
+    {
+        if (preg_match('/^(?:(x?)(\d+)(%?))?(?:([+-])(\d+)(%?)([+-])(\d+)(%?))?$/', $g, $m) !== 1) {
+            throw new \InvalidArgumentException("myphp: no geometry \"$g\"");
+        }
+        $aspect = $w / $h;
+        $sized = ($m[2] ?? '') !== '';
+        if ($sized && $m[1] === '') {
+            $w = $m[3] === '%' ? (float)$m[2] / 100 * $sf[2] : (float)$m[2]; $h = $w / $aspect;
+        } elseif ($sized) {
+            $h = $m[3] === '%' ? (float)$m[2] / 100 * $sf[3] : (float)$m[2]; $w = $h * $aspect;
+        }
+        $x = ($sf[2] - $w) / 2; $up = ($sf[3] - $h) / 2; // from the left, and from the bottom as IINA's
+        if (($m[4] ?? '') !== '') {
+            $off = fn(string $v, bool $pct, float $span, float $size): float => $pct ? (float)$v / 100 * $span - $size / 2 : (float)$v;
+            $ox = $off($m[5], $m[6] === '%', $sf[2], $w);
+            $x = $m[4] === '+' ? $ox : $sf[2] - $ox - $w;
+            $oy = $off($m[8], $m[9] === '%', $sf[3], $h);
+            $up = $m[7] === '+' ? $oy : $sf[3] - $oy - $h;
+        }
+        return [$sf[0] + $x, $sf[1] + $sf[3] - $up - $h, $w, $h]; // y down
     }
 
     public function setMinimumSize(int $width, int $height): void

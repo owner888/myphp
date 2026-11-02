@@ -512,6 +512,12 @@ final class Window implements Platform\Window
         }
     }
 
+    /** NSGlassEffectView's and NSVisualEffectView's, placed under the holes (placeMaterials). */
+    public function hasSystemMaterials(): bool
+    {
+        return true;
+    }
+
     /** Whether a material shows behind the content (setVibrancy, or a popover's): native UI leaves it room. */
     public function hasVibrancy(): bool
     {

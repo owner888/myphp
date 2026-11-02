@@ -7938,6 +7938,102 @@ frame's burnt-in time within a frame of the clock; the sound's RMS 0.062
 while playing, 0 while paused; pause, exact seeks paused and playing, the
 end; a thumbnail of 96 pixels in 5 ms.
 
+## The system's symbols on Linux (Linux, step 4)
+
+`UI\Image::symbol` draws through `Platform\Symbols` (`Backend::symbols()`:
+`exists`, `draw`), as the player's views ask whether a symbol is there
+(`MediaPlayer::firstSymbol`, `MediaPlayerSettings::has`); macOS's
+`Darwin\Symbols` calls `Native\Symbols` as before. `Linux\Symbols` maps the
+SF names to freedesktop icon names (`NAMES`, from every name the core's
+views pass: the literals of MediaPlayer*.php and LogViewer.php, their
+"base+badge" pairs split) and draws the theme's symbolic icon with
+GTK_ICON_LOOKUP_FORCE_SIZE | FORCE_SYMBOLIC, recolored by
+`gtk_icon_info_load_symbolic`, premultiplied. Two things showed here: the
+lookup must name the "-symbolic" icon (by the plain name GTK found its own
+colored 16-pixel PNGs first, which the color does not change), and without
+GdkPixbuf's SVG loader (librsvg2-common, missing in this container) every
+symbolic icon of Adwaita fails to load; a lookup or a load that fails
+draws the empty square and says why in the log, so the packages now
+depend on the loader. examples/video also needed `Linux\Window::fitVideo`
+(it threw Unsupported): the window sized to the film as Darwin's does, in
+the monitor's work area, mpv's geometry read as Darwin's reads it.
+
+## The media player on Linux, part two (Linux, step 4)
+
+The film's media controls: `Linux\Media::showNowPlaying` shows it through
+the MPRIS player (`Linux\NowPlaying::show`, which set() now calls), its
+commands going to the player's handlers rather than the app's
+MyPHP\NowPlaying while it shows, as macOS's Now Playing keeps one owner.
+The audio outputs: `Media::audioOutputs` by mpv's names ("pulse/<sink>",
+"alsa/<device>"; "coreaudio/<uid>" on macOS, which the settings and the
+menu built before); PulseAudio's sinks are listed on a pa_mainloop of
+their own, iterated on the main thread, so that its callback runs where PHP
+does (the stream's threaded loop never calls PHP), else ALSA's device
+hints. A device chosen opens the stream on it anew (pa_stream_connect_playback
+to the sink), the sound from the clock written there.
+
+PulseAudio's latency before its first timing update was taken as all that
+was written, which held the clock still for the second a suspended sink
+takes to wake (a device switch, a film opened on an idle null sink); now
+it is unknown (null) and the clock runs on the system's until the device
+tells. The sound goes through a libavfilter graph (`Native\AvFilter`, FFmpeg
+6's libavfilter.so.9 or 7's .10, one graph string per track: abuffer, the
+equalizer's bands as Native\Equalizer's, volume of the gain, Media\AudioFilters'
+stages as the FFmpeg filters they were read from, aformat to 48 kHz stereo
+floats), which replaced libswresample's context: made again when its text
+changes (the settings, the frames' format). The sound is kept at the film's
+speed; at a rate but 1 what is written goes through atempo (chained past
+0.5–2), the clock the device's frames heard times the rate. The picture's
+graph (bwdif, eq, hue, unsharp, negate, lut3d from a .cube written of the
+Lut3d, delogo) runs on the decoded frames; each frame is kept as decoded (a
+reference) till its picture passes, so that a change of the filters while
+paused filters the picture shown again. Rotation, flip and mirror are
+drawn as macOS lays its layer out (`Painter::moviePicture` through
+DisplayList transforms). Measured: equalizer +12 dB at 500 and 1000 Hz took
+a 440 Hz tone's RMS from 0.088 to 0.393, lowpass=f=200 to 0.018; at 1.5× and
+0.75× the clock ran at the rate and the tone stayed at 440 Hz; brightness
+60 took the frame's mean from 0.47 to 0.77; an interlaced clip lost its
+combing.
+
+FFmpeg 7: the sonames of 7 are looked for first, each alone (RTLD_LOCAL,
+closed), then the whole set loaded globally, else 6's: one version half
+loaded globally would clash with the other's. Its struct layouts were taken
+from FFmpeg 7.1's headers (a clone of its n7.1 tag) and checked as 6.1's
+were, gcc's offsetof against FFI's: AVFrame keeps key_frame but loses its
+deprecated fields after the time base, AVCodecParameters moved its side
+data and frame rate up and lost the old channel layout, AVFormatContext
+gained stream groups and moved its chapters up; AVPacket, AVStream,
+AVChapter are the same. A minimal shared build of 7.1 played H.264/AAC,
+VP9/Opus and MP3 with their sound here.
+
+VA-API: AvDecoder sets AVCodecContext's hw_device_ctx (offset 864 in 6.1,
+560 in 7.1) to a device opened once (av_hwdevice_ctx_create; the render
+node $MYPHP_VAAPI_DEVICE, else libva's), where the codec has a VA-API
+configuration; libavcodec's default get_format then picks VA-API's surfaces
+(a get_format of PHP would run on its frame threads) and falls back to
+software where the driver cannot. Surfaces are copied to memory
+(av_hwframe_transfer_data) and go on as software's frames. Which path a
+film takes is logged at debug ("video: … decodes with VA-API" or "in
+software: why"); the Inspector's hwdec and decoder show it. Here, with no
+/dev/dri, the device does not open and every film decodes in software.
+
+## System materials off macOS (Linux, step 4)
+
+`Node::systemMaterial` opened a hole and noted a material place, which the
+Darwin window fills with NSGlassEffectView or NSVisualEffectView; on Linux
+nothing was under the hole, and the player's control bar, title bar and
+sidebars showed black. The platform now says whether it has the materials
+(`Platform\Window::hasSystemMaterials`, true on Darwin, false on Linux),
+which the core window sets on the runtime as each frame builds
+(`Runtime::$systemMaterials`; `hasVibrancy` says something else: a window
+material behind the content). Where it has none, `systemMaterial` fills the
+node with myphp's own material instead (Node::material: Glass, Glass Clear,
+or `Plugins\Glass\Vibrancy`, a Blur veiled in the theme's tint), no hole
+and no material place; the Painter is as it was. As the picture is the
+renderer's own texture there, the glass blurs it as it blurs anything
+painted before it: the control bar over a playing film shows the film
+through it.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

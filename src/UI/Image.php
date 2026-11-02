@@ -102,12 +102,16 @@ final class Image
      * system's icon of that name, at $size points in $rgb, of $weight
      * (NSFontWeight: -0.8 ultra-light, 0 regular, 0.23 semibold, 0.4 bold,
      * 0.62 black), in $scale pixels a point (2 for a Retina screen, which
-     * Context::image shows it at its size on): macOS only. Throws for a
-     * name the system has no symbol of.
+     * Context::image shows it at its size on), as the system draws it
+     * (Platform\Symbols): on macOS the SF Symbol, which throws for a name
+     * the system has no symbol of; on Linux the GTK icon theme's symbolic
+     * icon Linux\Symbols maps the name to, its weight not drawn, and a
+     * transparent square of the size, told once in the log, for a name
+     * with none.
      */
     public static function symbol(string $name, float $size, int $rgb = 0xffffff, float $weight = 0.0, float $scale = 2.0): self
     {
-        [$w, $h, $rgba] = \MyPHP\Native\Symbols::draw($name, $size, $weight, $rgb, $scale);
+        [$w, $h, $rgba] = \MyPHP\App::backend()->symbols()->draw($name, $size, $weight, $rgb, $scale);
         return self::fromPixels($w, $h, $rgba);
     }
 

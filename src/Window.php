@@ -256,6 +256,7 @@ final class Window
                 $c = new Context($text, $this->runtime, $in?->contentWidth($w) ?? $w, $h, App::theme(), App::scale());
                 $c->titleBar = array_map(fn(float $v): float => $v / $z, $this->titleBar()); // the room the controls take, in the content's points
                 $c->vibrancy = $this->native->hasVibrancy(); // a popover draws its material
+                $this->runtime->systemMaterials = $this->native->hasSystemMaterials(); // else Node::systemMaterial draws myphp's
                 ($content->view)($c);
                 $c->toasts(); // over everything the view built
                 if ($in !== null && $in->open) { UI\InspectorPanel::build($c, $this->runtime, $in, $w, $h); $in->lap(0); } // beside the content

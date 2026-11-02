@@ -152,13 +152,13 @@ final class MediaPlayerCommands
             'loop-playlist' => $s->loop === 'playlist' ? 'inf' : 'no',
             'ontop' => $yes($s->onTop),
             'fullscreen' => $yes($s->fullScreen()),
-            'hwdec-current' => $p->videoTrack() === null ? null : ($p->hardwareDecoding() ? 'VideoToolbox' : 'no'), // MyPHP's names, as the Inspector's
+            'hwdec-current' => $p->videoTrack() === null ? null : ($p->hardwareDecoding() ? \MyPHP\App::backend()->media()->names()['hwdec'] : 'no'), // MyPHP's names, as the Inspector's
             'video-rotate' => (string)$p->rotation(),
             'brightness', 'contrast', 'saturation', 'gamma', 'hue' => (string)$p->videoEqualizer($prop),
             'video-bitrate' => ($b = $p->bitrate('video')) === null ? null : (string)(int)round($b),
             'audio-bitrate' => ($b = $p->bitrate('audio')) === null ? null : (string)(int)round($b),
-            'current-vo' => Player::VIDEO_OUTPUT,
-            'current-ao' => Player::AUDIO_OUTPUT,
+            'current-vo' => \MyPHP\App::backend()->media()->names()['video'],
+            'current-ao' => \MyPHP\App::backend()->media()->names()['audio'],
             default => null,
         };
     }

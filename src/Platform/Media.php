@@ -70,6 +70,12 @@ interface Media
     /** The RGBA pixels of JPEG $bytes, at most $max on a side, top row first (the thumbnails' cache's). */
     public function jpegPixels(string $bytes, int $max): string;
 
+    /** What shows the picture, what plays the sound and what decodes in hardware, by their names (mpv's current-vo, current-ao, hwdec-current: the Inspector's). @return array{video: string, audio: string, hwdec: string} */
+    public function names(): array;
+
+    /** The system's audio outputs, by mpv's names of them ("coreaudio/<unique ID>", "pulse/<sink>", "alsa/<device>"), with their names; Player::setAudioDevice takes the name after the driver on macOS ("coreaudio/" off), the whole on Linux. @return array<string, string> */
+    public function audioOutputs(): array;
+
     /** The audio output of the app's own sound (Audio\Output: Audio\Mixer's frames, 48 kHz stereo floats). */
     public function audioDevice(): \MyPHP\Audio\Device;
 }

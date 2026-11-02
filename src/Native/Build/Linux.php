@@ -45,13 +45,15 @@ final class Linux
     /**
      * The Debian packages the app depends on (mygo's debDepends): GTK, the
      * Secret Service's library (App's Secrets), WebKitGTK for an app that
-     * shows pages, the app indicator for one with a tray icon, the PHP the
-     * exec launcher runs ($php: "8.3", '' for none, the static launcher's),
-     * then linux.depends.
+     * shows pages, the app indicator for one with a tray icon, the icon
+     * theme and GdkPixbuf's SVG loader for one that draws the system's
+     * symbols ($symbols: Image::symbol's symbolic icons are Adwaita's SVGs),
+     * the PHP the exec launcher runs ($php: "8.3", '' for none, the static
+     * launcher's), then linux.depends.
      *
      * @return list<string>
      */
-    public static function debDepends(array $linux, bool $pages, bool $tray, string $php): array
+    public static function debDepends(array $linux, bool $pages, bool $tray, bool $symbols, string $php): array
     {
         $depends = ['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0'];
         if ($pages) {
@@ -59,6 +61,10 @@ final class Linux
         }
         if ($tray) {
             $depends[] = 'libayatana-appindicator3-1';
+        }
+        if ($symbols) {
+            $depends[] = 'adwaita-icon-theme';
+            $depends[] = 'librsvg2-common';
         }
         if ($php !== '') {
             foreach (self::PHP_PACKAGES as $p) {
@@ -85,6 +91,16 @@ final class Linux
         }
         return ($c['frontendDist'] ?? '') !== ''
             || preg_match('/\b(html|url)\s*:|\bPageOptions\b|->(newWebView|webView|loadURL|loadHTML)\s*\(/', $sources) === 1;
+    }
+
+    /**
+     * Whether the app's PHP ($sources) draws the system's symbols, which
+     * need the icon theme on Linux: Image::symbol itself, or the views of
+     * MyPHP's that draw them (the video player's windows, the log viewer).
+     */
+    public static function usesSymbols(string $sources): bool
+    {
+        return preg_match('/\bImage::symbol\s*\(|->(mediaPlayer\w*|logViewer)\s*\(/', $sources) === 1;
     }
 
     /** Whether the app's PHP ($sources) puts an icon in the tray, which needs the app indicator library. */

@@ -55,10 +55,27 @@ final class NowPlaying implements Platform\NowPlaying
     /** The artwork's file, whose URL the metadata gives. */
     private string $art = '';
 
+    /** Where the commands go (cmd, position) while a player's state shows (show()), else the app's MyPHP\NowPlaying (AppHandler::mediaCommand). */
+    private ?\Closure $command = null;
+
     public function __construct(private readonly AppHandler $h) {}
 
     public function set(?array $info): void
     {
+        $this->show($info, null);
+    }
+
+    /**
+     * Shows $info as set() does, its commands sent to $command (MediaCommand's
+     * bit and a seek's position) rather than the app's MyPHP\NowPlaying:
+     * the video player's (Linux\Media::showNowPlaying), the last to show
+     * taking them, as on macOS.
+     * @internal Linux\Media
+     * @param ?array<string, mixed> $info
+     */
+    public function show(?array $info, ?\Closure $command): void
+    {
+        $this->command = $info === null ? null : $command;
         if (!$this->register()) {
             return;
         }
@@ -217,7 +234,7 @@ final class NowPlaying implements Platform\NowPlaying
         }
         $f->g_dbus_method_invocation_return_value($inv, null);
         if ($cmd !== 0 && $this->info !== null) {
-            $this->h->mediaCommand($cmd, $pos);
+            $this->command !== null ? ($this->command)($cmd, $pos) : $this->h->mediaCommand($cmd, $pos);
         }
     }
 

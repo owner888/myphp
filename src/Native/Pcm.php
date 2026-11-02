@@ -39,25 +39,39 @@ final class Pcm
     /** Why each did not load, once tried. */
     private static ?string $paFailed = null, $alsaFailed = null;
 
+    /** The system the last output opened plays through (the Inspector's current-ao), null before one. */
+    public static ?string $opened = null;
     /** The system it plays through: 'PulseAudio' or 'ALSA'. */
     public readonly string $system;
     /** PulseAudio's main loop, context and stream; ALSA's snd_pcm_t*. */
     private ?CData $loop = null, $context = null, $h = null;
     /** The frames it holds at most; the bytes of a frame. */
     private int $ahead, $frame;
-    /** PulseAudio's: the frames written since it was opened or flushed, which it holds while it has told no latency yet. */
-    private int $written = 0;
     private bool $closed = false;
 
     private function __construct(string $system, private readonly int $rate, int $channels, int $ahead)
     {
         [$this->system, $this->ahead, $this->frame] = [$system, $ahead, $channels * 4];
+        self::$opened = $system;
     }
 
-    /** An output of $channels channels at $rate holding $ahead seconds, named $name for the system's mixer: PulseAudio's, else ALSA's; throws why neither opened. */
-    public static function open(int $rate, int $channels, float $ahead, string $name): self
+    /**
+     * An output of $channels channels at $rate holding $ahead seconds, named
+     * $name for the system's mixer: PulseAudio's, else ALSA's; throws why
+     * neither opened. $device, mpv's name of one of outputs() ("pulse/<sink>",
+     * "alsa/<pcm>"), opens that one alone; null the default.
+     */
+    public static function open(int $rate, int $channels, float $ahead, string $name, ?string $device = null): self
     {
         $frames = (int)round($ahead * $rate);
+        if ($device !== null) {
+            [$driver, $id] = explode('/', $device, 2) + [1 => ''];
+            return match ($driver) {
+                'pulse' => self::pulse($rate, $channels, $frames, $name, $id),
+                'alsa' => self::alsa($rate, $channels, $frames, $id),
+                default => throw new RuntimeException("audio: no output \"$device\" (pulse/<sink> or alsa/<device>)"),
+            };
+        }
         try {
             return self::pulse($rate, $channels, $frames, $name);
         } catch (RuntimeException $pulse) {
@@ -69,7 +83,84 @@ final class Pcm
         }
     }
 
-    private static function pulse(int $rate, int $channels, int $frames, string $name): self
+    /**
+     * The outputs there are, by mpv's names of them ("pulse/<sink>",
+     * "alsa/<pcm>") with their descriptions: PulseAudio's sinks, else ALSA's
+     * PCM devices that play. PulseAudio is asked on a main loop of its own
+     * iterated here (its callbacks run on this thread, as PHP must); the
+     * player's stream keeps its threaded loop, which never calls PHP.
+     * @return array<string, string>
+     */
+    public static function outputs(string $name): array
+    {
+        try {
+            return self::pulseOutputs($name);
+        } catch (RuntimeException $pulse) {
+            try {
+                return self::alsaOutputs();
+            } catch (RuntimeException $alsa) {
+                throw new RuntimeException('audio: ' . $pulse->getMessage() . '; ' . $alsa->getMessage());
+            }
+        }
+    }
+
+    /** @return array<string, string> */
+    private static function pulseOutputs(string $name): array
+    {
+        $pa = self::pa() ?? throw new RuntimeException('PulseAudio: ' . self::$paFailed);
+        $ml = $pa->pa_mainloop_new();
+        $ctx = $pa->pa_context_new($pa->pa_mainloop_get_api($ml), $name);
+        $out = [];
+        try {
+            if ($pa->pa_context_connect($ctx, null, self::PA_NOAUTOSPAWN, null) < 0) {
+                throw new RuntimeException('PulseAudio: ' . $pa->pa_strerror($pa->pa_context_errno($ctx)));
+            }
+            $until = microtime(true) + self::PA_WAIT;
+            while (($st = $pa->pa_context_get_state($ctx)) !== self::PA_CONTEXT_READY) {
+                if ($st >= self::PA_CONTEXT_FAILED || microtime(true) > $until) {
+                    throw new RuntimeException('PulseAudio: connecting: ' . ($st >= self::PA_CONTEXT_FAILED ? $pa->pa_strerror($pa->pa_context_errno($ctx)) : 'no answer in ' . self::PA_WAIT . ' s'));
+                }
+                $pa->pa_mainloop_iterate($ml, 0, null);
+                usleep(1000);
+            }
+            $cb = function ($c, $info, int $eol, $data) use (&$out): void {
+                if ($eol === 0 && $info !== null) { $out['pulse/' . FFI::string($info->name)] = FFI::string($info->description); }
+            };
+            $op = $pa->pa_context_get_sink_info_list($ctx, $cb, null);
+            while ($op !== null && $pa->pa_operation_get_state($op) === 0) { // PA_OPERATION_RUNNING
+                $pa->pa_mainloop_iterate($ml, 1, null);
+            }
+            if ($op !== null) { $pa->pa_operation_unref($op); }
+        } finally {
+            $pa->pa_context_disconnect($ctx);
+            $pa->pa_context_unref($ctx);
+            $pa->pa_mainloop_free($ml);
+        }
+        return $out;
+    }
+
+    /** ALSA's PCM devices that play (snd_device_name_hint's, IOID none or Output), by mpv's names. @return array<string, string> */
+    private static function alsaOutputs(): array
+    {
+        $a = self::alsaFfi() ?? throw new RuntimeException('ALSA: ' . self::$alsaFailed);
+        $hints = $a->new('void**');
+        if (($e = $a->snd_device_name_hint(-1, 'pcm', FFI::addr($hints))) < 0) {
+            throw new RuntimeException('ALSA: ' . $a->snd_strerror($e));
+        }
+        $hint = fn($h, string $id): ?string => ($p = $a->snd_device_name_get_hint($h, $id)) === null ? null : (function () use ($a, $p): string { $s = FFI::string($p); $a->free($p); return $s; })();
+        $out = [];
+        for ($i = 0; $hints[$i] !== null; $i++) {
+            $io = $hint($hints[$i], 'IOID');
+            $name = $hint($hints[$i], 'NAME');
+            if ($name !== null && ($io === null || $io === 'Output')) {
+                $out["alsa/$name"] = str_replace("\n", ' ', $hint($hints[$i], 'DESC') ?? $name);
+            }
+        }
+        $a->snd_device_name_free_hint($hints);
+        return $out;
+    }
+
+    private static function pa(): ?FFI
     {
         if (self::$pa === null && self::$paFailed === null) {
             try {
@@ -100,15 +191,25 @@ final class Pcm
                     void pa_stream_disconnect(void*);
                     void pa_stream_unref(void*);
                     const char* pa_strerror(int);
+                    void* pa_mainloop_new(void);
+                    void* pa_mainloop_get_api(void*);
+                    int pa_mainloop_iterate(void*, int, int*);
+                    void pa_mainloop_free(void*);
+                    typedef struct { const char *name; uint32_t index; const char *description; } pa_sink_info;
+                    void* pa_context_get_sink_info_list(void*, void (*)(void*, const pa_sink_info*, int, void*), void*);
+                    int pa_operation_get_state(void*);
                 ', 'libpulse.so.0');
             } catch (FFI\Exception $e) {
                 self::$paFailed = $e->getMessage();
             }
         }
-        if (self::$pa === null) {
-            throw new RuntimeException('PulseAudio: ' . self::$paFailed);
-        }
-        $pa = self::$pa;
+        return self::$pa;
+    }
+
+    /** PulseAudio's stream on sink $sink ('' its default). */
+    private static function pulse(int $rate, int $channels, int $frames, string $name, string $sink = ''): self
+    {
+        $pa = self::pa() ?? throw new RuntimeException('PulseAudio: ' . self::$paFailed);
         $out = new self('PulseAudio', $rate, $channels, $frames);
         $out->loop = $pa->pa_threaded_mainloop_new();
         $out->context = $pa->pa_context_new($pa->pa_threaded_mainloop_get_api($out->loop), $name);
@@ -125,7 +226,7 @@ final class Pcm
             // $frames ahead in all, asked for more every 10 ms (mygo's); it starts once 10 ms are written, not once it holds all (a short end of a film after a seek would never start).
             [$attr->maxlength, $attr->tlength, $attr->prebuf, $attr->minreq, $attr->fragsize] = [0xFFFFFFFF, $frames * $frame, intdiv($rate, 100) * $frame, intdiv($rate, 100) * $frame, 0xFFFFFFFF];
             $out->h = $pa->pa_stream_new($out->context, $name, FFI::addr($spec), null);
-            if ($out->h === null || $pa->pa_stream_connect_playback($out->h, null, FFI::addr($attr), self::PA_FLAGS, null, null) < 0) {
+            if ($out->h === null || $pa->pa_stream_connect_playback($out->h, $sink === '' ? null : $sink, FFI::addr($attr), self::PA_FLAGS, null, null) < 0) {
                 throw new RuntimeException('PulseAudio: ' . $pa->pa_strerror($pa->pa_context_errno($out->context)));
             }
             $out->await(fn(): int => $pa->pa_stream_get_state($out->h), self::PA_STREAM_READY, self::PA_STREAM_FAILED, 'opening the stream');
@@ -153,7 +254,24 @@ final class Pcm
         }
     }
 
-    private static function alsa(int $rate, int $channels, int $frames): self
+    /** ALSA's PCM $device ('' its default). */
+    private static function alsa(int $rate, int $channels, int $frames, string $device = ''): self
+    {
+        $a = self::alsaFfi() ?? throw new RuntimeException('ALSA: ' . self::$alsaFailed);
+        $pcm = $a->new('void*');
+        if (($e = $a->snd_pcm_open(FFI::addr($pcm), $device === '' ? 'default' : $device, self::SND_PLAYBACK, self::SND_NONBLOCK)) < 0) {
+            throw new RuntimeException('ALSA: ' . $a->snd_strerror($e));
+        }
+        if (($e = $a->snd_pcm_set_params($pcm, self::SND_FLOAT_LE, self::SND_INTERLEAVED, $channels, $rate, 1, (int)round($frames * 1e6 / $rate))) < 0) {
+            $a->snd_pcm_close($pcm);
+            throw new RuntimeException('ALSA: ' . $a->snd_strerror($e));
+        }
+        $out = new self('ALSA', $rate, $channels, $frames);
+        $out->h = $pcm;
+        return $out;
+    }
+
+    private static function alsaFfi(): ?FFI
     {
         if (self::$alsa === null && self::$alsaFailed === null) {
             try {
@@ -168,26 +286,16 @@ final class Pcm
                     int snd_pcm_recover(void*, int, int);
                     int snd_pcm_close(void*);
                     const char* snd_strerror(int);
+                    int snd_device_name_hint(int, const char*, void***);
+                    char* snd_device_name_get_hint(const void*, const char*);
+                    int snd_device_name_free_hint(void**);
+                    void free(void*);
                 ', 'libasound.so.2');
             } catch (FFI\Exception $e) {
                 self::$alsaFailed = $e->getMessage();
             }
         }
-        if (self::$alsa === null) {
-            throw new RuntimeException('ALSA: ' . self::$alsaFailed);
-        }
-        $a = self::$alsa;
-        $pcm = $a->new('void*');
-        if (($e = $a->snd_pcm_open(FFI::addr($pcm), 'default', self::SND_PLAYBACK, self::SND_NONBLOCK)) < 0) {
-            throw new RuntimeException('ALSA: ' . $a->snd_strerror($e));
-        }
-        if (($e = $a->snd_pcm_set_params($pcm, self::SND_FLOAT_LE, self::SND_INTERLEAVED, $channels, $rate, 1, (int)round($frames * 1e6 / $rate))) < 0) {
-            $a->snd_pcm_close($pcm);
-            throw new RuntimeException('ALSA: ' . $a->snd_strerror($e));
-        }
-        $out = new self('ALSA', $rate, $channels, $frames);
-        $out->h = $pcm;
-        return $out;
+        return self::$alsa;
     }
 
     /** The frames it takes now without waiting. */
@@ -219,7 +327,6 @@ final class Pcm
             if ($st < 0) {
                 throw new RuntimeException('audio: PulseAudio: ' . $pa->pa_strerror($pa->pa_context_errno($this->context)));
             }
-            $this->written += intdiv(strlen($pcm), $this->frame);
             return;
         }
         $a = self::$alsa;
@@ -238,8 +345,8 @@ final class Pcm
         }
     }
 
-    /** The frames written that are not heard yet. */
-    public function delay(): int
+    /** The frames written not heard yet; null while the device has not told (PulseAudio's first timing, a stream just opened or flushed). */
+    public function delay(): ?int
     {
         if ($this->system === 'PulseAudio') {
             $pa = self::$pa;
@@ -247,8 +354,8 @@ final class Pcm
             $pa->pa_threaded_mainloop_lock($this->loop);
             $st = $pa->pa_stream_get_latency($this->h, FFI::addr($us), FFI::addr($negative));
             $pa->pa_threaded_mainloop_unlock($this->loop);
-            if ($st < 0) { // no timing yet (PA_ERR_NODATA): all it was written
-                return $this->written;
+            if ($st < 0) { // no timing yet (PA_ERR_NODATA)
+                return null;
             }
             return $negative->cdata !== 0 ? 0 : (int)round($us->cdata * $this->rate / 1e6);
         }
@@ -265,7 +372,6 @@ final class Pcm
             $op = $pa->pa_stream_flush($this->h, null, null);
             if ($op !== null) { $pa->pa_operation_unref($op); }
             $pa->pa_threaded_mainloop_unlock($this->loop);
-            $this->written = 0;
             return;
         }
         self::$alsa->snd_pcm_drop($this->h);

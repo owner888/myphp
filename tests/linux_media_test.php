@@ -75,3 +75,21 @@ $jpeg = $media->jpeg($rgba, 80, 45, 0.85);
 check(str_starts_with($jpeg, "\xFF\xD8"), 'a thumbnail as a JPEG, as the cache keeps it');
 same(80 * 45 * 4, strlen($media->jpegPixels($jpeg, 80)), 'and its pixels again');
 check($media->playable($video) && !$media->playable(new Track(9, Track::AUDIO, 'A_NONE', '', 'und', '', false, 0, 0, 0, 0, 0)), 'what FFmpeg decodes plays, not what it knows not');
+
+// libavfilter (Native\AvFilter): a second of sound through atempo at 1.5 is two thirds of one, its pitch kept by atempo.
+$g = new \MyPHP\Native\AvFilter('abuffer@in=time_base=1/48000:sample_rate=48000:sample_fmt=flt:channel_layout=stereo,atempo=1.5,aformat=sample_fmts=flt:sample_rates=48000:channel_layouts=stereo,abuffersink@out');
+$ffi = Av::ffi();
+$out = 0;
+for ($i = 0; $i < 48; $i++) {
+    $fr = $ffi->av_frame_alloc();
+    [$fr->nb_samples, $fr->format, $fr->sample_rate, $fr->pts] = [1000, Av::FLT, 48000, $i * 1000];
+    $ffi->av_channel_layout_default(\FFI::addr($fr->ch_layout), 2);
+    $ffi->av_frame_get_buffer($fr, 0);
+    $g->push($fr);
+    \MyPHP\Native\AvDecoder::release($fr);
+    while (($o = $g->pull()) !== null) { $out += $o->nb_samples; \MyPHP\Native\AvDecoder::release($o); }
+}
+$g->push(null);
+while (($o = $g->pull()) !== null) { $out += $o->nb_samples; \MyPHP\Native\AvDecoder::release($o); }
+check(abs($out - 32000) < 600, "atempo 1.5: 48000 frames in, $out out");
+check(in_array(Av::$major, [60, 61], true), 'FFmpeg 6 or 7 loaded: libavcodec ' . Av::$major);

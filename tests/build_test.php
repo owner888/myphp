@@ -618,13 +618,16 @@ check(str_contains(bldThrows(fn() => Linux::commands(['a b'])), 'is not a comman
 same(['my-app', 'app', 'frontend', 'info.json'], array_values(array_intersect(Linux::reserved('my-app'), ['my-app', 'app', 'frontend', 'info.json'])), 'the names packaging takes');
 
 // What the packages depend on: GTK, libsecret, WebKitGTK for pages, the app indicator for a tray, the PHP of the exec launcher, then linux.depends.
-same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'php8.3-cli', 'php8.3-intl', 'php8.3-mbstring', 'php8.3-xml', 'php8.3-curl'], Linux::debDepends([], false, false, '8.3'), 'an app of native UI on the php that built it');
-same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'libwebkit2gtk-4.1-0', 'libayatana-appindicator3-1', 'libnotify4', 'libfoo1'], Linux::debDepends(['depends' => ['libnotify4', 'libsecret-1-0', 'libfoo1']], true, true, ''), 'pages, a tray, the static launcher, its own and none twice');
+same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'php8.3-cli', 'php8.3-intl', 'php8.3-mbstring', 'php8.3-xml', 'php8.3-curl'], Linux::debDepends([], false, false, false, '8.3'), 'an app of native UI on the php that built it');
+same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'libwebkit2gtk-4.1-0', 'libayatana-appindicator3-1', 'libnotify4', 'libfoo1'], Linux::debDepends(['depends' => ['libnotify4', 'libsecret-1-0', 'libfoo1']], true, true, false, ''), 'pages, a tray, the static launcher, its own and none twice');
+same(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'adwaita-icon-theme', 'librsvg2-common'], Linux::debDepends([], false, false, true, ''), 'the system\'s symbols: the icon theme and the SVG loader of its symbolic icons');
 $native = file_get_contents(dirname(__DIR__) . '/examples/counter-native/main.php');
 $web = file_get_contents(dirname(__DIR__) . '/examples/webview/main.php');
 $tray = file_get_contents(dirname(__DIR__) . '/examples/desktop/main.php');
 same([false, true, true, false, true], [Linux::usesPages([], $native), Linux::usesPages([], $web), Linux::usesPages(['frontendDist' => 'dist'], $native), Linux::usesPages(['linux' => ['webview' => false]], $web), Linux::usesPages(['linux' => ['webview' => true]], $native)], 'pages: linux.webview, else a frontend or a page in the app');
 same([false, false, true], [Linux::usesTray($native), Linux::usesTray($web), Linux::usesTray($tray)], 'a tray icon');
+same([false, true, true, true], [Linux::usesSymbols($native), Linux::usesSymbols(file_get_contents(dirname(__DIR__) . '/examples/video/main.php')), Linux::usesSymbols('$img = Image::symbol(\'play.fill\', 16);'), Linux::usesSymbols('$c->logViewer();')], 'the system\'s symbols: drawn, or by the player\'s and the log viewer\'s views');
+same([['gtk3', 'adwaita-icon-theme', 'librsvg'], []], Pkgbuild::depends(['libgtk-3-0 | libgtk-3-0t64', 'adwaita-icon-theme', 'librsvg2-common']), 'their Arch Linux packages');
 same([['gtk3', 'libsecret', 'webkit2gtk-4.1', 'php', 'libnotify'], ['libfoo1']], Pkgbuild::depends(['libgtk-3-0 | libgtk-3-0t64', 'libsecret-1-0', 'libwebkit2gtk-4.1-0', 'php8.3-cli', 'php8.3-intl', 'libnotify4 (>= 0.7)', 'libfoo1']), 'the Arch Linux packages of the Debian ones, php once');
 same(['my-app', 'app', 'a.b'], array_map(Pkgbuild::pkgname(...), ['My-App', '-.', '.A.B']), 'Arch Linux package names');
 same(['1.2.0beta.1', '1.2.0pre1', '1.2.0_build.5', '1.2.0rc.1_7', '0'], array_map(Pkgbuild::version(...), ['1.2.0-beta.1', '1.2.0-1', '1.2.0+build.5', 'v1.2.0-rc.1+7', '']), 'pkgvers');

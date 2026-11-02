@@ -30,6 +30,7 @@ final class Backend implements Platform\Backend
     private ?Hotkeys $hotkeys = null;
     private ?NowPlaying $nowPlaying = null;
     private ?Media $media = null;
+    private ?Symbols $symbols = null;
     private bool $running = false;
     private bool $signaled = false;
 
@@ -227,6 +228,11 @@ final class Backend implements Platform\Backend
     public function media(): Platform\Media
     {
         return $this->media ??= new Media($this);
+    }
+
+    public function symbols(): Platform\Symbols
+    {
+        return $this->symbols ??= new Symbols;
     }
 
     public function secrets(): Platform\Secrets

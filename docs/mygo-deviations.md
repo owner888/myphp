@@ -2621,18 +2621,96 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - Why: PHP has one thread, so a wait in a write is the UI's; the simple
     API tells no room, and its writes waited 80 ms a tick.
 - **The player on Linux** (myphp's own: mygo has no player)
-  - Not there yet, each logged as it is asked (MyPHP\Logger, "media"):
-    hardware decoding (VA-API: every track decodes in software, the
-    switch off and fixed), the equalizer and audio filters, the video
-    equalizer, the video filters' effects and deinterlacing, the sound at a
-    speed but 1 (it plays silent, on the system's clock), choosing the
-    audio device, the film in the system's media controls (MPRIS); the
-    picture's rotation, flip and mirror are not drawn.
-  - The IINA window (`Context::mediaPlayer`, examples/video) draws its
-    icons as SF Symbols (`Image::symbol`, macOS's), so it does not build on
-    Linux yet; `Context::movie` and the Player do. Which icons stand for
-    them on Linux is the developer's to choose.
-  - The Inspector's and mpv's `current-vo`/`current-ao` still name
-    AVFoundation's outputs (`Player::VIDEO_OUTPUT`, `AUDIO_OUTPUT`).
-  - FFmpeg 6 (libavcodec 60) alone: another major version has other
-    struct layouts and does not load.
+  - VA-API decodes into surfaces copied to memory (av_hwframe_transfer_data)
+    and converted by libswscale, not drawn zero-copy (DRM PRIME into EGL
+    images): GTK 3's GL area is GLX on X11, and the EGL path, Wayland's
+    alone, is not written; no GPU here tested either.
+  - The video filters' effects and the video equalizer work on the frames
+    as they are decoded (libavfilter's eq, hue, unsharp, negate, lut3d,
+    delogo, mpv's own), not on the shown layer as Core Image's do: frames
+    decoded before a change keep the old look (a third of a second), the
+    picture shown while paused filtered again at once. unsharp's size is
+    the decoded picture's pixels, as mpv's, not the layer's points.
+  - Deinterlacing is bwdif, a frame a frame (macOS: Native\Deinterlacer).
+  - The film's media controls (MPRIS) offer play, pause, play/pause, stop,
+    next, previous and the position; MPRIS has no skips, rates or loop,
+    which macOS's Now Playing has.
+  - The app's own sound (Audio\Output) plays on the default device: it
+    takes none, as mygo's does not.
+  - FFmpeg 7 (libavcodec 61) is taken where it is, else 6 (60); another
+    major version does not load. 7 was tested with a minimal build of 7.1
+    here, not a distribution's.
+
+## The system's symbols on Linux (Linux, step 4)
+
+- **Image::symbol on Linux** (myphp's: mygo draws no system icons)
+  - myphp: the SF Symbol names the core draws (the video player's, the log
+    viewer's) map to the GTK icon theme's symbolic icons, the freedesktop
+    Icon Naming Spec's names in Adwaita's set (`Linux\Symbols::NAMES`: a
+    name, and a second where the first may be missing), recolored to the
+    color asked; SF Symbols' weight is not drawn (GTK has none); an icon
+    is a square of the size in pixels, where an SF Symbol is as wide as
+    its glyph.
+  - A name of no freedesktop meaning, or whose icons the theme lacks,
+    draws as a transparent square of its size, told once in the log
+    (warn, "linux"): a gap that shows, not another icon. Not mapped:
+    `playpause`, `playpause.circle`, `chevron.forward.2`,
+    `chevron.up.chevron.down`, `chevron.left.forwardslash.chevron.right`,
+    `pip.enter`, `pip.exit`, `pip.swap`, `doc.viewfinder`,
+    `doc.text.viewfinder`, `document.viewfinder`, `text.viewfinder`,
+    `viewfinder.circle.fill`, `cpu`, `crop`, `aspectratio`,
+    `slider.vertical.3`,
+    `slider.horizontal.below.square.and.square.filled`,
+    `sun.lefthalf.filled`, `moonphase.first.quarter`, `pencil.slash`,
+    `paintbrush.pointed.fill`, `shadow`,
+    `textformat.characters.arrow.left.and.right`,
+    `character.textbox.badge.sparkles`, `sparkles`, `book.and.wrench`,
+    `macwindow`, `macwindow.on.rectangle`, `macwindow.and.cursorarrow`,
+    `macwindow.and.pointer.arrow`, `menubar.rectangle`,
+    `menubar.dock.rectangle`, `filemenu.and.selection`,
+    `cursorarrow.click`, `pointer.arrow.click`, `app.badge`,
+    `app.badge.checkmark.fill`, `bolt.badge.a`, `bolt.badge.automatic`,
+    `circle.fill`, `rectangle.fill`, `square.stack.3d.up`,
+    `square.2.layers.3d.top.filled`, `square.dashed`,
+    `square.dashed.inset.filled`, `square.dotted`,
+    `circle.dashed.inset.fill`, `circle.dashed.inset.filled`,
+    `inset.filled.circle.dashed`, `inset.filled.bottomthird.rectangle`,
+    `inset.filled.topleft.rectangle`,
+    `inset.filled.topthird.middlethird.bottomthird.rectangle`,
+    `rectangle.bottomthird.inset.fill`,
+    `rectangle.bottomthird.inset.filled`,
+    `rectangle.connected.to.line.below`, `capsule.on.rectangle`,
+    `capsule.on.rectangle.liquid.glass`, `liquid.glass`, `geometry.size`,
+    `text.below.photo`, `list.and.film`, `list.clipboard`,
+    `point.3.filled.connected.trianglepath.dotted`,
+    `arrow.up.left.circle`, `arrow.up.left.circle.fill`,
+    `arrow.up.and.down`, `arrow.up.and.down.and.arrow.left.and.right`,
+    `arrow.right.and.line.vertical.and.arrow.left`,
+    `arrow.up.left.bottomright.rectangle`,
+    `arrow.up.left.and.down.right.and.arrow.up.right.and.down.left`.
+  - Why: Linux has no SF Symbols; the theme's icons are the system's, as
+    SF Symbols are on macOS; an icon of another meaning in their place
+    would say something else.
+- **Packages of an app that draws symbols**
+  - myphp: `Build\Linux::usesSymbols` (Image::symbol, or the player's and
+    the log viewer's views in the app's PHP) adds `adwaita-icon-theme` and
+    `librsvg2-common` to the .deb's Depends (`adwaita-icon-theme` and
+    `librsvg` to the PKGBUILD's): the symbolic icons are SVGs, which
+    GdkPixbuf reads only with librsvg's loader.
+
+## System materials off macOS (Linux, step 4)
+
+- **Node::systemMaterial where the system has none**
+  - mygo: the node opens a hole the system's material shows through
+    (macOS's NSGlassEffectView and NSVisualEffectView); elsewhere nothing
+    is under it.
+  - myphp: where the window's system has no materials
+    (`Platform\Window::hasSystemMaterials`: Linux), myphp's own stand in,
+    told once a window in the log (debug, "ui"): glass is
+    `Plugins\Glass\Glass`, clear-glass its Clear style, the vibrancy
+    materials `Plugins\Glass\Vibrancy` (a Blur of 20 points veiled light
+    or dark as the theme, or $dark, says; HUD and full screen UI always
+    dark). They blur what the window painted under them, a video's picture
+    as well; macOS keeps the hole and the system's views.
+  - Why: a hole with nothing under it shows black; the player's bars and
+    the log viewer's buttons stand on the system's glass.

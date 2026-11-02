@@ -61,6 +61,9 @@ interface Window
 
     public function hasVibrancy(): bool;
 
+    /** Whether the system draws Node::systemMaterial's materials under the content's holes; else myphp's own draws them (Node::systemMaterial). */
+    public function hasSystemMaterials(): bool;
+
     public function requestFrame(int $every = 1, bool $repaint = false): void;
 
     public function wake(float $seconds, bool $repaint): void;

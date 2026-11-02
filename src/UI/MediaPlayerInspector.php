@@ -113,11 +113,11 @@ final class MediaPlayerInspector
         $rows = [
             ['iinaInspectorFormat', $vt === null ? null : MediaPlayer::codecName($vt->codec)],
             ['iinaInspectorCodec', $vt === null ? null : self::CODECS[MediaPlayer::codecName($vt->codec)] ?? null],
-            ['iinaInspectorHwDecoder', $p->hardwareDecoding() ? 'VideoToolbox' : null], // none of AV1 in software (libdav1d)
+            ['iinaInspectorHwDecoder', $p->hardwareDecoding() ? \MyPHP\App::backend()->media()->names()['hwdec'] : null], // none of AV1 in software (libdav1d)
             ['iinaInspectorPrimaries', $vt === null ? null : self::primaries($vt)],
             ['iinaInspectorColorspace', $vt === null ? null : 'Unspecified (' . ($p->hdr() && $s->hdr && $s->hdrAvailable() ? 'H' : 'S') . 'DR)'], // the layer's, which AVFoundation chooses: none set
             ['iinaInspectorPixelFormat', null],
-            ['iinaInspectorDriver', $vt === null ? null : Player::VIDEO_OUTPUT],
+            ['iinaInspectorDriver', $vt === null ? null : \MyPHP\App::backend()->media()->names()['video']],
             ['iinaInspectorSize', "{$w}×{$h}"],
             ['iinaInspectorBitRate', self::bitrate($p->bitrate('video'))],
             ['iinaInspectorFPS', $vt === null || $vt->frameDuration <= 0 ? null : sprintf('%.6f', 1 / $vt->frameDuration)],
@@ -128,7 +128,7 @@ final class MediaPlayerInspector
         $rows = [
             ['iinaInspectorFormat', null], // the decoded samples', which the system's renderer decodes
             ['iinaInspectorCodec', $at === null ? null : self::CODECS[MediaPlayer::codecName($at->codec)] ?? null],
-            ['iinaInspectorDriver', $at === null ? null : Player::AUDIO_OUTPUT],
+            ['iinaInspectorDriver', $at === null ? null : \MyPHP\App::backend()->media()->names()['audio']],
             ['iinaInspectorChannels', $at === null || $at->channels <= 0 ? null : self::LAYOUTS[$at->channels] ?? "{$at->channels}ch"],
             ['iinaInspectorBitRate', self::bitrate($p->bitrate('audio'))],
             ['iinaInspectorSampleRate', $at === null || $at->sampleRate <= 0 ? null : (string)(int)$at->sampleRate],

@@ -6,7 +6,7 @@ namespace MyPHP\Platform\Darwin;
 use Closure;
 use MyPHP\Audio\Device;
 use MyPHP\Media\{Player, Track};
-use MyPHP\Native\{AssetReader, AudioQueue, Awake, CoreMedia, ImageIO, MediaTicker, Mem, NowPlaying, PictureInPicture, Renderers, SoftAudio, SoftVideo, ThumbnailDecoder};
+use MyPHP\Native\{AssetReader, AudioDevices, AudioQueue, Awake, CoreMedia, ImageIO, MediaTicker, Mem, NowPlaying, PictureInPicture, Renderers, SoftAudio, SoftVideo, ThumbnailDecoder};
 use MyPHP\Platform;
 
 /**
@@ -103,6 +103,18 @@ final class Media implements Platform\Media
         $rgba = \FFI::string($img['pix'], $img['w'] * $img['h'] * 4);
         Mem::free($img['pix']);
         return $rgba;
+    }
+
+    public function names(): array
+    {
+        return ['video' => Player::VIDEO_OUTPUT, 'audio' => Player::AUDIO_OUTPUT, 'hwdec' => 'VideoToolbox'];
+    }
+
+    public function audioOutputs(): array
+    {
+        $out = [];
+        foreach (AudioDevices::outputs() as $uid => $name) { $out["coreaudio/$uid"] = $name; }
+        return $out;
     }
 
     public function audioDevice(): Device

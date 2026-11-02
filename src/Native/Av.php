@@ -25,8 +25,71 @@ use RuntimeException;
  */
 final class Av
 {
-    /** The sonames of FFmpeg 6, the libraries loaded globally, the others first. */
-    public const LIBRARIES = ['libavutil.so.58', 'libswresample.so.4', 'libswscale.so.7', 'libavcodec.so.60', 'libavformat.so.60'];
+    /**
+     * The sonames of FFmpeg 7 and 6 by libavcodec's major version (61, 60),
+     * the first whose libraries are all there loaded globally, libavutil
+     * first: 7 where both are.
+     */
+    public const LIBRARIES = [
+        61 => ['libavutil.so.59', 'libswresample.so.5', 'libswscale.so.8', 'libavcodec.so.61', 'libavformat.so.61', 'libavfilter.so.10'],
+        60 => ['libavutil.so.58', 'libswresample.so.4', 'libswscale.so.7', 'libavcodec.so.60', 'libavformat.so.60', 'libavfilter.so.9'],
+    ];
+    /**
+     * The structs whose layouts the major versions change, as far as they
+     * are read (FFmpeg 6.1's and 7.1's headers, offsets checked with gcc's
+     * offsetof against FFI's: docs/architecture.md): FFmpeg 7 dropped
+     * AVFrame's deprecated fields after its time base, moved
+     * AVCodecParameters' side data and frame rate up and dropped its old
+     * channel layout, and gave AVFormatContext stream groups, its chapters
+     * moved up.
+     */
+    private const LAYOUTS = [
+        61 => <<<'C'
+            typedef struct AVFrame {
+                uint8_t *data[8]; int linesize[8]; uint8_t **extended_data; int width, height, nb_samples, format;
+                int key_frame, pict_type; AVRational sample_aspect_ratio; int64_t pts, pkt_dts; AVRational time_base;
+                char _a[32]; int sample_rate; char _b[96]; int flags, color_range, color_primaries, color_trc, colorspace;
+                char _c[8]; int64_t best_effort_timestamp; char _d[80]; AVChannelLayout ch_layout; int64_t duration;
+            } AVFrame;
+            typedef struct AVCodecParameters {
+                int codec_type, codec_id; uint32_t codec_tag; uint8_t *extradata; int extradata_size; void *coded_side_data; int nb_coded_side_data, format;
+                int64_t bit_rate; int bits_per_coded_sample, bits_per_raw_sample, profile, level, width, height; AVRational sample_aspect_ratio, framerate;
+                int field_order, color_range, color_primaries, color_trc, color_space, chroma_location, video_delay;
+                AVChannelLayout ch_layout; int sample_rate, block_align, frame_size, initial_padding, trailing_padding, seek_preroll;
+            } AVCodecParameters;
+            typedef struct AVFormatContext {
+                void *av_class; const AVInputFormat *iformat; void *oformat, *priv_data, *pb; int ctx_flags; unsigned int nb_streams;
+                AVStream **streams; unsigned int nb_stream_groups; void **stream_groups; unsigned int nb_chapters; AVChapter **chapters;
+                char *url; int64_t start_time, duration, bit_rate; unsigned int packet_size; int max_delay, flags;
+                int64_t probesize, max_analyze_duration; const uint8_t *key; int keylen; unsigned int nb_programs; void **programs;
+                int video_codec_id, audio_codec_id, subtitle_codec_id, data_codec_id; void *metadata;
+            } AVFormatContext;
+            C,
+        60 => <<<'C'
+            typedef struct AVFrame {
+                uint8_t *data[8]; int linesize[8]; uint8_t **extended_data; int width, height, nb_samples, format;
+                int key_frame, pict_type; AVRational sample_aspect_ratio; int64_t pts, pkt_dts; AVRational time_base;
+                char _a[48]; int sample_rate; char _b[104]; int flags, color_range, color_primaries, color_trc, colorspace;
+                char _c[8]; int64_t best_effort_timestamp; char _d[96]; AVChannelLayout ch_layout; int64_t duration;
+            } AVFrame;
+            typedef struct AVCodecParameters {
+                int codec_type, codec_id; uint32_t codec_tag; uint8_t *extradata; int extradata_size, format; int64_t bit_rate;
+                int bits_per_coded_sample, bits_per_raw_sample, profile, level, width, height; AVRational sample_aspect_ratio;
+                int field_order, color_range, color_primaries, color_trc, color_space, chroma_location, video_delay;
+                uint64_t channel_layout; int channels, sample_rate, block_align, frame_size, initial_padding, trailing_padding, seek_preroll;
+                AVChannelLayout ch_layout; AVRational framerate; void *coded_side_data; int nb_coded_side_data;
+            } AVCodecParameters;
+            typedef struct AVFormatContext {
+                void *av_class; const AVInputFormat *iformat; void *oformat, *priv_data, *pb; int ctx_flags; unsigned int nb_streams;
+                AVStream **streams; char *url; int64_t start_time, duration, bit_rate; unsigned int packet_size; int max_delay, flags;
+                int64_t probesize, max_analyze_duration; const uint8_t *key; int keylen; unsigned int nb_programs; void **programs;
+                int video_codec_id, audio_codec_id, subtitle_codec_id; unsigned int max_index_size, max_picture_buffer, nb_chapters;
+                AVChapter **chapters; void *metadata;
+            } AVFormatContext;
+            C,
+    ];
+    /** The major version of libavcodec loaded (61: FFmpeg 7, 60: FFmpeg 6). */
+    public static int $major = 0;
     /** Matroska's codec ids (the core names codecs so) and FFmpeg's codec names of them. */
     public const CODECS = [
         'V_MPEG4/ISO/AVC' => 'h264', 'V_MPEGH/ISO/HEVC' => 'hevc', 'V_VP9' => 'vp9', 'V_VP8' => 'vp8', 'V_AV1' => 'av1',
@@ -48,46 +111,44 @@ final class Av
         if (self::$f !== null) {
             return self::$f;
         }
-        $dl = FFI::cdef('void* dlopen(const char*, int); char* dlerror(void);', 'libc.so.6');
-        foreach (self::LIBRARIES as $lib) {
-            if ($dl->dlopen($lib, 2 | 0x100 | 0x1000) === null) { // RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE: its threads may outlive PHP's shutdown
-                throw new RuntimeException("myphp: FFmpeg 6's $lib does not load (" . FFI::string($dl->dlerror()) . '): the player on Linux decodes with it (apt install ffmpeg)');
+        $dl = FFI::cdef('void* dlopen(const char*, int); int dlclose(void*); char* dlerror(void);', 'libc.so.6');
+        $missing = [];
+        foreach (self::LIBRARIES as $major => $libs) {
+            foreach ($libs as $lib) { // looked for first, each alone (RTLD_LAZY | RTLD_LOCAL): one version's half loaded globally would clash with the other's
+                $h = $dl->dlopen($lib, 1);
+                if ($h === null) {
+                    $missing[] = $lib;
+                    continue 2;
+                }
+                $dl->dlclose($h);
             }
+            foreach ($libs as $lib) {
+                if ($dl->dlopen($lib, 2 | 0x100 | 0x1000) === null) { // RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE: its threads may outlive PHP's shutdown
+                    throw new RuntimeException("myphp: FFmpeg's $lib does not load: " . FFI::string($dl->dlerror()));
+                }
+            }
+            self::$major = $major;
+            break;
+        }
+        if (self::$major === 0) {
+            throw new RuntimeException('myphp: neither FFmpeg 7 nor 6 is there (' . implode(', ', $missing) . ' missing): the player on Linux decodes with it (apt install ffmpeg)');
         }
         $f = FFI::cdef(<<<'C'
             typedef struct { int num, den; } AVRational;
             typedef struct { int order; int nb_channels; uint64_t mask; void *opaque; } AVChannelLayout;
             typedef struct { const char *key; char *value; } AVDictionaryEntry;
             typedef struct AVPacket { void *buf; int64_t pts, dts; uint8_t *data; int size, stream_index, flags; void *side_data; int side_data_elems; int64_t duration, pos; void *opaque, *opaque_ref; AVRational time_base; } AVPacket;
-            typedef struct AVFrame {
-                uint8_t *data[8]; int linesize[8]; uint8_t **extended_data; int width, height, nb_samples, format;
-                int key_frame, pict_type; AVRational sample_aspect_ratio; int64_t pts, pkt_dts; AVRational time_base;
-                char _a[48]; int sample_rate; char _b[104]; int flags, color_range, color_primaries, color_trc, colorspace;
-                char _c[8]; int64_t best_effort_timestamp; char _d[96]; AVChannelLayout ch_layout; int64_t duration;
-            } AVFrame;
-            typedef struct AVCodecParameters {
-                int codec_type, codec_id; uint32_t codec_tag; uint8_t *extradata; int extradata_size, format; int64_t bit_rate;
-                int bits_per_coded_sample, bits_per_raw_sample, profile, level, width, height; AVRational sample_aspect_ratio;
-                int field_order, color_range, color_primaries, color_trc, color_space, chroma_location, video_delay;
-                uint64_t channel_layout; int channels, sample_rate, block_align, frame_size, initial_padding, trailing_padding, seek_preroll;
-                AVChannelLayout ch_layout; AVRational framerate; void *coded_side_data; int nb_coded_side_data;
-            } AVCodecParameters;
             typedef struct AVCodec { const char *name; const char *long_name; int type, id; } AVCodec;
             typedef struct AVCodecDescriptor { int id, type; const char *name; const char *long_name; } AVCodecDescriptor;
             typedef struct AVInputFormat { const char *name; const char *long_name; int flags; const char *extensions; } AVInputFormat;
             typedef struct AVStream {
-                void *av_class; int index, id; AVCodecParameters *codecpar; void *priv_data; AVRational time_base;
+                void *av_class; int index, id; struct AVCodecParameters *codecpar; void *priv_data; AVRational time_base;
                 int64_t start_time, duration, nb_frames; int disposition, discard; AVRational sample_aspect_ratio;
                 void *metadata; AVRational avg_frame_rate; AVPacket attached_pic;
             } AVStream;
             typedef struct AVChapter { int64_t id; AVRational time_base; int64_t start, end; void *metadata; } AVChapter;
-            typedef struct AVFormatContext {
-                void *av_class; const AVInputFormat *iformat; void *oformat, *priv_data, *pb; int ctx_flags; unsigned int nb_streams;
-                AVStream **streams; char *url; int64_t start_time, duration, bit_rate; unsigned int packet_size; int max_delay, flags;
-                int64_t probesize, max_analyze_duration; const uint8_t *key; int keylen; unsigned int nb_programs; void **programs;
-                int video_codec_id, audio_codec_id, subtitle_codec_id; unsigned int max_index_size, max_picture_buffer, nb_chapters;
-                AVChapter **chapters; void *metadata;
-            } AVFormatContext;
+
+            C . self::LAYOUTS[self::$major] . <<<'C'
 
             void av_log_set_level(int);
             int av_strerror(int, char*, size_t);
@@ -99,6 +160,7 @@ final class Av
             int av_opt_set_int(void*, const char*, int64_t, int);
             int av_opt_set_q(void*, const char*, AVRational, int);
             AVFrame *av_frame_alloc(void);
+            AVFrame *av_frame_clone(const AVFrame*);
             void av_frame_free(AVFrame**);
             AVPacket *av_packet_alloc(void);
             void av_packet_free(AVPacket**);
@@ -136,6 +198,28 @@ final class Av
             int swr_get_out_samples(void*, int);
             int swr_convert(void*, uint8_t **, int, uint8_t **, int);
             void swr_free(void**);
+
+            const char *av_get_sample_fmt_name(int);
+            const char *av_get_pix_fmt_name(int);
+            int av_channel_layout_describe(const AVChannelLayout*, char*, size_t);
+            int av_frame_get_buffer(AVFrame*, int);
+            void av_frame_unref(AVFrame*);
+            void *avfilter_graph_alloc(void);
+            void avfilter_graph_free(void**);
+            int avfilter_graph_parse_ptr(void*, const char*, void**, void**, void*);
+            int avfilter_graph_config(void*, void*);
+            void *avfilter_graph_get_filter(void*, const char*);
+            int av_buffersrc_add_frame_flags(void*, AVFrame*, int);
+            int av_buffersink_get_frame(void*, AVFrame*);
+            AVRational av_buffersink_get_time_base(const void*);
+            typedef struct { int pix_fmt, methods, device_type; } AVCodecHWConfig;
+            const AVCodecHWConfig *avcodec_get_hw_config(const AVCodec*, int);
+            int av_hwdevice_ctx_create(void**, int, const char*, void*, int);
+            void *av_buffer_ref(const void*);
+            void av_buffer_unref(void**);
+            int av_hwframe_transfer_data(AVFrame*, const AVFrame*, int);
+            int av_frame_copy_props(AVFrame*, const AVFrame*);
+            int av_get_pix_fmt(const char*);
             C);
         $f->av_log_set_level(-8); // AV_LOG_QUIET: on stderr, from its threads, else
         return self::$f = $f;

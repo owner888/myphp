@@ -745,7 +745,7 @@ final class MediaPlayerSettings
     private static function has(string $name): bool
     {
         static $known = [];
-        return $known[$name] ??= \MyPHP\Native\Symbols::exists($name);
+        return $known[$name] ??= \MyPHP\App::backend()->symbols()->exists($name);
     }
 
     /** SF Symbol $name at $size points in $rgb, of $weight: drawn once a window's scale. */

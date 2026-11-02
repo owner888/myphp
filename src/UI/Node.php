@@ -498,12 +498,31 @@ final class Node
      * (NSGlassEffectView). $dark sets its appearance, null the app's. The
      * node paints a hole through the window's content where the window
      * places the material, inside its border and rounded by its radius
-     * (the largest of its corners'); its children draw over it. macOS only.
+     * (the largest of its corners'); its children draw over it. Where the
+     * window's system has no materials (Platform\Window::hasSystemMaterials:
+     * Linux), myphp's own stand in, which blur what the window painted
+     * under them, a video's picture too: glass and clear-glass are
+     * Plugins\Glass\Glass, Regular and Clear; the others a Blur tinted as
+     * the theme, or $dark, implies (Plugins\Glass\Vibrancy); told once a
+     * window in the log.
      */
     public function systemMaterial(string $material, ?bool $dark = null): static
     {
         if ($material !== 'glass' && $material !== 'clear-glass' && !isset(\MyPHP\Window::MATERIALS[$material])) {
             throw new \InvalidArgumentException("no system material \"$material\"");
+        }
+        $rt = $this->context?->runtime;
+        if ($rt !== null && !$rt->systemMaterials) {
+            if (!$rt->ownMaterialsTold) {
+                $rt->ownMaterialsTold = true;
+                \MyPHP\Logger::debug("the system has no materials: myphp's own draw \"$material\" and the others (Glass, Blur)", 'ui');
+            }
+            $this->color = null;
+            return $this->material(match ($material) {
+                'glass' => new \MyPHP\Plugins\Glass\Glass(),
+                'clear-glass' => new \MyPHP\Plugins\Glass\Glass(\MyPHP\Plugins\Glass\Style::Clear),
+                default => new \MyPHP\Plugins\Glass\Vibrancy($material, $dark ?? $this->context->theme->dark),
+            });
         }
         $this->systemMaterial = [$material, $dark];
         $this->color = null;

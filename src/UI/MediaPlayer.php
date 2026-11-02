@@ -710,7 +710,7 @@ final class MediaPlayer
     /** The first of $names the system has. @param list<string> $names */
     private static function firstSymbol(array $names): string
     {
-        foreach ($names as $name) { if (\MyPHP\Native\Symbols::exists($name)) { return $name; } }
+        foreach ($names as $name) { if (\MyPHP\App::backend()->symbols()->exists($name)) { return $name; } }
         return $names[0];
     }
 
