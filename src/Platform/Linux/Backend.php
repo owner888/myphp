@@ -23,6 +23,9 @@ final class Backend implements Platform\Backend
     private ?Clipboard $clipboard = null;
     private ?Menus $menus = null;
     private ?Dialogs $dialogs = null;
+    private ?Shell $shell = null;
+    private ?Power $power = null;
+    private ?Network $network = null;
     private bool $running = false;
     private bool $signaled = false;
 
@@ -184,7 +187,7 @@ final class Backend implements Platform\Backend
 
     public function shell(): Platform\Shell
     {
-        throw new Unsupported('myphp: Shell is not on Linux yet');
+        return $this->shell ??= new Shell;
     }
 
     public function screen(): Platform\Screen
@@ -199,12 +202,12 @@ final class Backend implements Platform\Backend
 
     public function power(): Platform\Power
     {
-        throw new Unsupported('myphp: Power is not on Linux yet');
+        return $this->power ??= new Power($this->h);
     }
 
     public function network(): Platform\Network
     {
-        throw new Unsupported('myphp: Network is not on Linux yet');
+        return $this->network ??= new Network($this->h);
     }
 
     public function nowPlaying(): Platform\NowPlaying
@@ -214,12 +217,12 @@ final class Backend implements Platform\Backend
 
     public function secrets(): Platform\Secrets
     {
-        throw new Unsupported('myphp: Secrets are not on Linux yet');
+        return new Secrets;
     }
 
     public function applications(): array
     {
-        return [];
+        return Shell::installedApps();
     }
 
     public function registerHotkey(int $id, string $accelerator): void

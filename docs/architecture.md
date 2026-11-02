@@ -7615,13 +7615,34 @@ llvmpipe (GL 4.5 core).
   a nested main loop until it closes; IINA's prompt and login are message
   dialogs with entries, a prompt's check shown under its field as it is
   typed, OK insensitive meanwhile.
+- **The clipboard offers the app's data by format** (`Linux\Clipboard`,
+  mygo's clipboard.go): `gtk_clipboard_set_with_data` with a target a
+  format (text as UTF8_STRING too, files as a URI list), read only as an
+  app pastes; another app's data is read by target, an image of any type
+  as PNG, and a read gives up if the clipboard changes owner meanwhile.
+  `flush` hands a clipboard manager the bytes, and warns where there is
+  none (Xvfb, a bare X server): the data then goes with the app.
+- **Shell is GIO's** (`Linux\Shell`): URIs open in their default
+  application, files go to the trash, the file manager shows a file by
+  D-Bus (FileManager1, its folder opened otherwise), icons are the icon
+  theme's, applications the desktop entries a launcher shows.
+- **Power, Network and Secrets** (`Linux\Power`, `Network`, `Secrets`,
+  `DBus`): logind's PrepareForSleep and the screen savers' ActiveChanged
+  are the power events; the desktop portal's Inhibit, else the screen
+  saver's, keeps the system awake (a warning where neither answers); the
+  batteries are /sys/class/power_supply's; GNetworkMonitor is the network.
+  D-Bus calls take their parameters in GVariant's text format
+  (`g_variant_parse`), so no variadic GVariant builder is called. Secrets
+  are libsecret's with keytar's schema, through its variadic calls (the
+  attributes service and account); no session bus, or no Secret Service
+  on it, is `Unsupported`.
 - **Where the system keeps the app's language**: nowhere on Linux, so the
   core keeps it in the file `locale` of `App::path(UserData)`, which is
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  pages and web views (WebKitGTK), the tray, notifications, global shortcuts, Shell, Power,
-  Network, Secrets, the clipboard beyond text, drags, and video.
+  pages and web views (WebKitGTK), the tray, notifications, global
+  shortcuts, Now Playing, drags, and video.
 
 ## Open items
 

@@ -34,6 +34,11 @@ final class Gtk
             typedef void (*CbString)(void*, const char*, void*);
             typedef int (*CbSource)(void*);
             typedef int (*CbTick)(void*, void*, void*);
+            typedef void (*CbGet)(void*, void*, unsigned int, void*);
+            typedef struct { CbGet fn; } HGet;
+            typedef struct { const char* target; unsigned int flags; unsigned int info; } GtkTargetEntry;
+            typedef void (*CbSignal)(void*, const char*, const char*, const char*, const char*, void*, void*);
+            typedef struct { CbSignal fn; } HSignal;
             typedef struct { CbEvent fn; } HEvent; typedef struct { CbWidget fn; } HWidget; typedef struct { CbSize fn; } HSize;
             typedef struct { CbString fn; } HString; typedef struct { CbSource fn; } HSource; typedef struct { CbTick fn; } HTick;
             typedef struct { int x, y, width, height; } GdkRectangle;
@@ -219,10 +224,69 @@ final class Gtk
             void gtk_entry_set_activates_default(void*, gboolean); void gtk_entry_set_visibility(void*, gboolean);
             void gtk_entry_set_placeholder_text(void*, const char*);
             void* gtk_label_new(const char*); void gtk_label_set_xalign(void*, float);
+
+            gboolean gtk_clipboard_set_with_data(void*, GtkTargetEntry*, unsigned int, CbGet, CbWidget, void*);
+            void gtk_clipboard_set_can_store(void*, GtkTargetEntry*, int);
+            gboolean gtk_clipboard_wait_for_targets(void*, void***, int*);
+            void* gtk_clipboard_wait_for_contents(void*, void*);
+            void* gtk_clipboard_wait_for_image(void*);
+            gboolean gdk_display_supports_clipboard_persistence(void*);
+            void gtk_selection_data_set(void*, void*, int, const char*, int);
+            void* gtk_selection_data_get_target(void*);
+            int gtk_selection_data_get_length(void*); void* gtk_selection_data_get_data(void*);
+            void gtk_selection_data_free(void*);
+            char* gdk_atom_name(void*);
+            gboolean gdk_pixbuf_save_to_bufferv(void*, char**, size_t*, const char*, char**, char**, void**);
+
+            void* g_file_new_for_path(const char*); char* g_file_get_uri(void*);
+            gboolean g_file_trash(void*, void*, void**);
+            gboolean g_app_info_launch_default_for_uri(const char*, void*, void**);
+            typedef struct { unsigned int domain; int code; char* message; } GError;
+            void g_error_free(GError*);
+            void* g_file_query_info(void*, const char*, int, void*, void**);
+            void* g_file_query_filesystem_info(void*, const char*, void*, void**);
+            void* g_file_info_get_icon(void*);
+            gboolean g_file_info_get_attribute_boolean(void*, const char*);
+            void* g_desktop_app_info_new_from_filename(const char*);
+            void* g_app_info_get_icon(void*);
+            gboolean g_app_info_launch(void*, void*, void*, void**);
+            GList* g_app_info_get_all(void);
+            gboolean g_app_info_should_show(void*);
+            const char* g_app_info_get_display_name(void*); const char* g_app_info_get_id(void*);
+            const char* g_desktop_app_info_get_filename(void*);
+            void* gdk_display_get_app_launch_context(void*);
+            void* g_themed_icon_new(const char*);
+            const char* g_get_prgname(void);
+            void* gtk_icon_theme_get_default(void);
+            void* gtk_icon_theme_lookup_by_gicon(void*, void*, int, int);
+            void* gtk_icon_info_load_icon(void*, void**);
+            void* g_bus_get_sync(int, void*, void**);
+            void* g_variant_parse(void*, const char*, void*, void*, void**);
+            void* g_dbus_connection_call_sync(void*, const char*, const char*, const char*, const char*, void*, void*, int, int, void*, void**);
+            void g_variant_unref(void*);
+            void* g_variant_get_child_value(void*, size_t);
+            gboolean g_variant_get_boolean(void*); unsigned int g_variant_get_uint32(void*); unsigned long g_variant_get_uint64(void*);
+            const char* g_variant_get_string(void*, size_t*);
+            void* g_variant_type_new(const char*); void g_variant_type_free(void*);
+            unsigned int g_dbus_connection_signal_subscribe(void*, const char*, const char*, const char*, const char*, const char*, int, CbSignal, void*, void*);
+            void* g_network_monitor_get_default(void);
+            gboolean g_network_monitor_get_network_available(void*); gboolean g_network_monitor_get_network_metered(void*);
         ', 'libgtk-3.so.0');
         self::$slot = self::$f->new('void*[1]');
         self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
         return self::$f;
+    }
+
+    /**
+     * Throws the GError of a call that failed, which it frees, as a
+     * RuntimeException: $what, then GLib's message.
+     */
+    public static function fail(CData $error, string $what): never
+    {
+        $e = self::ffi()->cast('GError*', $error[0]);
+        $message = $e === null ? 'failed' : \FFI::string($e->message);
+        if ($e !== null) { self::ffi()->g_error_free($e); }
+        throw new RuntimeException("myphp: $what: $message");
     }
 
     /** The integer address of a pointer. */
