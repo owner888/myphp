@@ -36,4 +36,16 @@ interface AppController
     public function setDockMenu(?Menu $menu): void;
 
     public function showAboutPanel(\MyPHP\AboutPanelOptions $opts): void;
+
+    /** The languages the user reads, most preferred first (mygo's PreferredLanguages). @return list<string> */
+    public function preferredLanguages(): array;
+
+    /** The language the app chose in an earlier run where the system keeps it, '' for none; null where the system keeps none, which the core's file then does (mygo's SavedLocale). */
+    public function savedLocale(): ?string;
+
+    /** Keeps the language the app chose where the system keeps it ('' forgets it); false where the system keeps none (mygo's SaveLocale). */
+    public function saveLocale(string $tag): bool;
+
+    /** The user's regional formats: their locale, first weekday (-1 unknown) and hour cycle (0 unknown) (mygo's Region). */
+    public function region(): \MyPHP\Region;
 }

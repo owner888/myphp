@@ -42,9 +42,13 @@ func Fragment(dst vec4, pos vec2) vec4 {
 }
 KAGE);
 
-// The library Metal compiles: the shader's code, then the renderer's tail.
+// The library Metal compiles: the shader's code, then the renderer's tail; off macOS the GLSL the OpenGL renderer puts its own tail around.
 $src = $waves->code->source;
-check(str_contains($src, 'float4 shaderFragment(constant Uniforms& uniforms') && str_contains($src, 'fragment float4 shader_fragment(') && str_contains($src, 'vertex MyphpV shader_vertex('), 'shader: the library, the shader then the tail');
+if ($waves->code->glsl) {
+    check(str_contains($src, 'vec4 shaderFragment(vec4 position') && str_contains($src, 'layout(std140) uniform Uniforms {') && str_contains($src, 'uniform ivec4 myphpFlipRows;'), 'shader: the GLSL library, its uniforms a std140 block');
+} else {
+    check(str_contains($src, 'float4 shaderFragment(constant Uniforms& uniforms') && str_contains($src, 'fragment float4 shader_fragment(') && str_contains($src, 'vertex MyphpV shader_vertex('), 'shader: the library, the shader then the tail');
+}
 same(count($waves->code->lanes), 23 + 1 + 4 + 1 + 1 + 1 + 4, 'shader: a lane a word, the bridge\'s first');
 
 // Drawing: a quad of kind 16 whose u names the draw, its uniforms in their lanes.

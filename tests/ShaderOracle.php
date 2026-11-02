@@ -3,16 +3,17 @@
 // internal/shaderir and shaderir/msl, run under Go) made of the sources its
 // own tests compile, in testdata/shader/oracle.json.gz: whether Go's
 // parser took each, the compiler's error or its program (as plain data,
-// constants as [kind, exact value]) and the program's MSL. The shader tests
-// compare the PHP port with it, and load its programs as the MSL tests'
-// input.
+// constants as [kind, exact value]) and the program's MSL, and, from
+// shaderir/glsl, its GLSL fragment library (with ui/shader's options) and
+// std140 lanes. The shader tests compare the PHP port with it, and load its
+// programs as the MSL and GLSL tests' input.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
 use MyPHP\UI\Shader\Ir\{Block, Constant, Expr, Func, Program, Stmt, Type};
 
-/** The oracle's cases: src, vertex, fragment, textures, and syntax (Go's parser's error), error, ir and msl where there are. @return list<array<string, mixed>> */
+/** The oracle's cases: src, vertex, fragment, textures, and syntax (Go's parser's error), error, ir, msl, fragment_glsl and glsl_lanes where there are. @return list<array<string, mixed>> */
 function shaderOracle(): array
 {
     static $cases = null;

@@ -57,7 +57,7 @@ src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenUR
                    Message, Catalog, L10n (MyPHP's own strings, src/l10n: a library catalog "myphp"), Native/I18nGen (accessors);
                    the core calls the system only through App::backend() (Platform\Backend, by PHP_OS_FAMILY)
 src/Platform/      the interfaces of mygo's internal/platform (Backend, Window, Page, WebView, Dialogs, Fonts, Tray, ...);
-                   Darwin/ their macOS side (mygo's internal/darwin) over src/Native/; Linux next, docs/architecture.md "Platform layer"
+                   Darwin/ (mygo's internal/darwin), Linux/ (GTK 3 + GL + Pango, native UI so far) over src/Native/
 src/Native/        ObjC (runtime bridge: msg, defineClass, block/noopBlock/callBlock, addr/import), SystemLocale (AppleLanguages,
                    the locale's formats), Carbon (hot keys), Drop (NSDraggingDestination methods for file drops), Metal (MTKView, one quad pipeline,
                    buffer ring, atlas texture), CoreText (shaping, glyph bitmaps, caret x), View (MTKView subclass:

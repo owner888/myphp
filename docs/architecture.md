@@ -7407,7 +7407,10 @@ the pages of its settings and help.
   plugin's.
 - `iina.standaloneWindow` (`StandaloneWindowApi`): a window of its own,
   600 by 400, "Window — <plugin>", its page a file or simple mode's;
-  closed, it is hidden, its page kept. setProperty sets its title,
+  closed, it is hidden, its page kept — but not while the app quits
+  (`App::quitting`): its close listener cancelling made `App::shouldQuit`
+  give up, so Cmd+Q and the Dock's Quit did nothing once a plugin had
+  made one (User Scripts does at launch). setProperty sets its title,
   resizing, full-size content (`Window::setFullSizeContentView`) and
   hidden title bar (`Window::setTitleBarHidden`); setFrame its frame.
 - The plugin's details sheet (Settings > Plugins, its info button) has
@@ -7528,6 +7531,74 @@ layout, painting, the state stores, flyouts' placement, IPC.
   instance, recent documents, login items, the bundle, the system
   locale): their interfaces are drawn once WebKitGTK and GTK's are there
   to draw them from, two sides rather than one.
+
+## Linux backend: native UI (v1.147)
+
+src/Platform/Linux is mygo's internal/linux over FFI: GTK 3, GDK, GLib
+and GObject from one FFI instance (`Linux\Gtk`), whose signal handlers
+and sources are PHP closures. Native UI draws in a GtkGLArea filling a
+GtkWindow, with `Native\Gl`, and text comes from Pango (`Native\Pango`,
+`Native\PangoEngine`). It runs, and is tested, under Xvfb with Mesa's
+llvmpipe (GL 4.5 core).
+
+- **The renderer is Metal's, in GLSL 3.30** (`Native\GlShader`): the
+  quads' instances and their slots after them are read from a buffer
+  texture (RGBA32F, four texels a quad), the transforms from another; the
+  glyph atlas is R8, the image atlas a texture array. gl_FragCoord counts
+  rows from the bottom, so the pixel Metal's shader gets is
+  `uTargetH - y` in a window's framebuffer; a target read back as a
+  texture (a canvas's, `readBack`) is drawn upside down (`uFlip` -1), so
+  its first row is the top one, as the atlases' are. A backdrop copied
+  from a window's framebuffer has its rows bottom up: the glass samples
+  it flipped.
+- **A renderer a window**: each GtkGLArea has a context of its own, which
+  shares nothing with another's, so each window has its renderer and its
+  textures of the atlases. The atlases tell one dirty range of rows, which
+  the first renderer to upload clears: it keeps what it took for the
+  others (`Gl::$pending`).
+- **Frames**: `requestFrame` queues a render of the area, which GTK's
+  frame clock paces. GTK drops a render queued from the render signal
+  itself, so what a frame asks for meanwhile is queued from an idle once it
+  is done; a closure would leak a thunk a source, so every source made
+  from PHP goes through one C function, its data the key of its closure
+  (`Gtk::idle`, `Gtk::timeout`).
+- **A window closed by its own frame** (a choice in a flyout): GtkGLArea
+  goes on drawing that frame after its render signal, from buffers its
+  unrealize frees, so the window is destroyed from an idle once the frame
+  is done (it crashed in gdk_cairo_draw_from_gl). The GtkWindow and its
+  area are held past their destroy, which the core hears of and still asks
+  things of (its state), and let go from an idle after `release()`.
+- **Keys as macOS's view gives them**: the core's input speaks macOS's key
+  codes and AppKit's selectors, so `Linux\Keys` maps the X key code (or,
+  for keys that type nothing, the keyval) to the macOS code, gives the
+  function keys AppKit's private-use characters, and binds the keys that
+  type nothing to the text system's selectors as GTK's entries do.
+  Control is the shortcut modifier, reported as Command, and Super as
+  Control. With no menu bar yet, Control and X, C, V, A, Z (Y) are the Edit
+  menu's commands. Typing goes through a GtkIMContext (commit,
+  preedit-changed), whose caret is placed after each frame. GDK counts no
+  clicks of its own the core can use: they are counted from the presses
+  and GTK's double-click time.
+- **Shaders in GLSL**: off macOS a shader's `Code` is
+  `UI\Shader\Glsl`'s library (mygo's glsl.Fragment, its output the same
+  as Go's for the 434 programs of the oracle), its uniforms a std140
+  block, where a bool takes a word; the renderer puts its tail around it
+  (`GlShader::SHADER_*`, Code's MSL tail as GLSL) and builds a program a
+  shader. The backdrop it reads is copied from a window's framebuffer,
+  whose rows go up: its texel reads flip them (`myphpFlipRows`), and
+  `uFlip` negates dFdy where GL's y counts up.
+- **Flyouts are popups** (GTK_WINDOW_POPUP, as GTK's menus): they get the
+  keyboard only by grabbing the seat, which a focusable one does as it
+  shows, and a press outside it dismisses it, as GtkMenu (X11; Wayland's
+  xdg_popup positioning is still to do).
+- **Where the system keeps the app's language**: nowhere on Linux, so the
+  core keeps it in the file `locale` of `App::path(UserData)`, which is
+  XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
+  the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
+- **Not there yet** (each throws `Platform\Unsupported`, or logs): web
+  pages and web views (WebKitGTK), the menu bar and context menus,
+  dialogs, the tray, notifications, global shortcuts, Shell, Power,
+  Network, Secrets, the clipboard beyond text, drags, and video.
 
 ## Open items
 

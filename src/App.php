@@ -629,7 +629,7 @@ final class App
         }
         $home = (string)getenv('HOME');
         $lib = "$home/Library";
-        [$dir, $make] = match ($name) {
+        [$dir, $make] = PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : match ($name) {
             PathName::Home => [$home, false],
             PathName::AppData => ["$lib/Application Support", false],
             PathName::UserData => ["$lib/Application Support/" . self::name(), true],
@@ -649,6 +649,42 @@ final class App
             throw new RuntimeException("myphp: cannot create $dir");
         }
         return $dir;
+    }
+
+    /**
+     * A well-known directory on Linux, as XDG has them (mygo's defaultPath
+     * there): the user's configuration directory holds the app's data and
+     * logs, the user dirs of user-dirs.dirs the folders. @return array{0: string, 1: bool} the path, and whether path() makes it
+     */
+    private static function xdgPath(PathName $name, string $home): array
+    {
+        $config = (string)(getenv('XDG_CONFIG_HOME') ?: "$home/.config");
+        $cache = (string)(getenv('XDG_CACHE_HOME') ?: "$home/.cache");
+        $userDir = function (string $key, string $folder) use ($config, $home): string {
+            foreach (is_file("$config/user-dirs.dirs") ? (array)file("$config/user-dirs.dirs", FILE_IGNORE_NEW_LINES) : [] as $line) {
+                [$k, $v] = array_pad(explode('=', trim($line), 2), 2, null);
+                if ($k === $key && $v !== null) {
+                    return str_replace('$HOME', $home, trim($v, '"'));
+                }
+            }
+            return "$home/$folder";
+        };
+        return match ($name) {
+            PathName::Home => [$home, false],
+            PathName::AppData => [$config, false],
+            PathName::UserData => ["$config/" . self::name(), true],
+            PathName::Cache => ["$cache/" . self::name(), true],
+            PathName::Logs => ["$config/" . self::name() . '/logs', true],
+            PathName::Temp => [rtrim(sys_get_temp_dir(), '/'), false],
+            PathName::Resources => [dirname((string)realpath($_SERVER['argv'][0] ?? '.')) . '/resources', false],
+            PathName::Exe => [(string)realpath('/proc/self/exe'), false],
+            PathName::Desktop => [$userDir('XDG_DESKTOP_DIR', 'Desktop'), false],
+            PathName::Documents => [$userDir('XDG_DOCUMENTS_DIR', 'Documents'), false],
+            PathName::Downloads => [$userDir('XDG_DOWNLOAD_DIR', 'Downloads'), false],
+            PathName::Music => [$userDir('XDG_MUSIC_DIR', 'Music'), false],
+            PathName::Pictures => [$userDir('XDG_PICTURES_DIR', 'Pictures'), false],
+            PathName::Videos => [$userDir('XDG_VIDEOS_DIR', 'Videos'), false],
+        };
     }
 
     /** Overrides a directory path() returns (mygo's SetPath). */
@@ -969,13 +1005,14 @@ final class App
     }
 
     /**
-     * @internal the platform's backend (mygo's backend()): Cocoa on macOS.
+     * @internal the platform's backend (mygo's backend()): Cocoa on macOS, GTK on Linux.
      * Made on first use, before App::run too, as Secrets need it.
      */
     public static function backend(): Platform\Backend
     {
         return self::$backend ??= match (PHP_OS_FAMILY) {
             'Darwin' => new Platform\Darwin\Backend(new AppHandler),
+            'Linux' => new Platform\Linux\Backend(new AppHandler),
             default => throw new Platform\Unsupported('myphp: ' . PHP_OS_FAMILY . ' has no backend yet'),
         };
     }

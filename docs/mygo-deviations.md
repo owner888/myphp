@@ -2093,8 +2093,11 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 - **No CPU renderer**: mygo interprets a shader on the CPU where no GPU
   draws (its CPU renderer, ui.Tester); myphp draws only with Metal, so
-  the interpreter (shaderir/interp) is not ported, nor the GLSL and HLSL
-  backends, which myphp's renderers would need on Linux and Windows.
+  the interpreter (shaderir/interp) is not ported, nor the HLSL backend,
+  which a renderer on Windows would need. Of the GLSL backend only what
+  `glsl.Fragment` reaches is ported (`Glsl\Glsl::fragment`,
+  `uniformLanes`), not `glsl.Compile`, a whole program with its entry
+  points, which mygo's renderers do not draw with.
 - **Compiling**: `Shader::compile` throws `Compiler\ParseError` (or
   InvalidArgumentException) where mygo returns an error, so there is no
   MustCompile. It takes tens of milliseconds in PHP, where mygo takes
@@ -2487,3 +2490,26 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Fonts::engine()` is the `Text\Engine` laying out paragraphs.
   - Why: myphp's line cache shapes single lines with Core Text apart
     from the paragraph engine.
+
+## The Linux backend (v1.147)
+
+- **Keys and modifiers**
+  - mygo: the surface sends platform keys (KeyLeft, KeyEnter…) and
+    modifiers (ModCtrl, ModAlt, ModSuper, ModShift), the shortcut
+    modifier being Control off macOS.
+  - myphp: the core's input speaks macOS's key codes, modifier flags and
+    AppKit's selectors, so Linux reports Control as Command (the shortcut
+    modifier), Alt as Option, Super as Control, and binds the editing keys
+    to AppKit's selectors.
+  - Why: myphp's input was macOS's alone; mapping at the edge keeps the
+    core's shortcuts and text system as they are.
+- **The Edit menu's keys**
+  - mygo: the application menu's items, in a menu bar of each window.
+  - myphp: until the menu bar comes, the window takes Control and X, C, V,
+    A, Z (Y) as the Edit menu's commands.
+  - Why: no menu bar on Linux yet.
+- **A renderer a window**
+  - mygo: a GL renderer a surface too.
+  - myphp: the same, the atlases' dirty rows shared out among them
+    (`Gl::$pending`), as myphp's atlases tell one range.
+  - Why: myphp's atlases were Metal's, of one device.

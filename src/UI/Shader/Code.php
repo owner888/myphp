@@ -4,15 +4,18 @@ declare(strict_types=1);
 namespace MyPHP\UI\Shader;
 
 use MyPHP\UI\Shader\Ir\{BasicType, Program};
+use MyPHP\UI\Shader\Glsl\Glsl;
 use MyPHP\UI\Shader\Msl\Msl;
 
 /**
- * A compiled shader as Metal draws it (mygo's scene.Effect with its
- * Metal code and ShaderLayout): the library's source, the shader's code
- * then the renderer's tail, which draws its rectangles and fills glyphs'
- * masks with it, and where its uniforms' words go in the buffer the
- * library reads them from. Metal builds its pipelines the first time it
- * draws it, and keeps them here.
+ * A compiled shader as the renderer draws it (mygo's scene.Effect with its
+ * Metal or GL code and ShaderLayout): the library's source, the shader's
+ * code then, for Metal, the renderer's tail, which draws its rectangles and
+ * fills glyphs' masks with it; and where its uniforms' words go in the
+ * buffer the library reads them from, Metal's layout or GLSL's std140
+ * block's (where a bool takes a word). Metal builds its pipelines the
+ * first time it draws it, and keeps them here; the OpenGL renderer
+ * (Native\Gl) puts its own tail around the GLSL.
  *
  * @internal
  */
@@ -31,12 +34,22 @@ final class Code
     /** @var array<int, mixed> Metal's pipelines of it, by the pixel format they draw to and whether they keep alpha premultiplied (a canvas's) */
     public array $pipelines = [];
 
+    /** Whether the source is GLSL, the OpenGL renderer's (off macOS), not MSL. */
+    public readonly bool $glsl;
+
     public function __construct(Program $p, public readonly bool $backdrop)
     {
-        $this->source = Msl::fragment($p, 'shaderFragment') . "\n" . self::TAIL;
-        [$this->lanes, $this->size] = Msl::uniformLanes($p);
+        $this->glsl = PHP_OS_FAMILY !== 'Darwin';
+        if ($this->glsl) {
+            // The renderer's flip (uFlip, 1 drawing to a window, whose rows go up) negates dFdy; the rows of the textures that go up, the backdrop's, flip their texel reads.
+            $this->source = Glsl::fragment($p, 'shaderFragment', ['flipY' => '(uFlip > 0.0)', 'block' => 'Uniforms', 'flipRows' => 'myphpFlipRows']);
+            [$this->lanes, $this->size] = Glsl::uniformLanes($p);
+        } else {
+            $this->source = Msl::fragment($p, 'shaderFragment') . "\n" . self::TAIL;
+            [$this->lanes, $this->size] = Msl::uniformLanes($p);
+        }
         $bools = []; $word = 0;
-        foreach ($p->uniforms as $t) {
+        foreach ($this->glsl ? [] : $p->uniforms as $t) { // std140 gives a bool a word
             $n = $t->dwordCount();
             $scalar = $t->main === BasicType::ARRAY ? $t->sub[0]->main : $t->main;
             if ($scalar === BasicType::BOOL) {

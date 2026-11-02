@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\SystemLocale;
 use RuntimeException;
 
 /**
@@ -83,7 +82,7 @@ final class Locales
         self::load();
         if (self::$fromEnv && !App::isReady()) { return; } // MYPHP_LOCALE wins over the language the app starts with
         self::$override = $normalized; self::$chosen = true;
-        if (!self::$fromEnv && App::isReady()) { SystemLocale::saveLocale($normalized); }
+        if (!self::$fromEnv && App::isReady()) { self::saveLocale($normalized); }
         self::update(true);
     }
 
@@ -126,13 +125,38 @@ final class Locales
         return self::$shown;
     }
 
+    /** The language the app saved, where the system keeps it or in the file "locale" of App::path(UserData) (mygo's savedLocale). */
+    private static function savedLocale(): string
+    {
+        $tag = App::backend()->app()->savedLocale();
+        if ($tag !== null) {
+            return $tag;
+        }
+        $path = App::path(PathName::UserData) . '/locale';
+        return is_file($path) ? trim((string)file_get_contents($path)) : '';
+    }
+
+    /** Keeps the language the app chose, '' for none, where the system keeps it or in the file; a failure to write keeps what was saved (mygo's saveLocale, writeLocaleFile). */
+    private static function saveLocale(string $tag): void
+    {
+        if (App::backend()->app()->saveLocale($tag)) {
+            return;
+        }
+        $path = App::path(PathName::UserData) . '/locale';
+        if ($tag === '') {
+            @unlink($path);
+        } elseif (@file_put_contents("$path.tmp", "$tag\n") !== false) {
+            @rename("$path.tmp", $path);
+        }
+    }
+
     /** Reads the language the app chose in an earlier run, or MYPHP_LOCALE, which wins and is never saved, once. */
     private static function load(): void
     {
         if (self::$loaded) { return; }
         self::$loaded = true;
         $tag = getenv('MYPHP_LOCALE') ?: ''; $fromEnv = true;
-        if (trim($tag) === '') { $tag = App::isReady() ? SystemLocale::savedLocale() : ''; $fromEnv = false; }
+        if (trim($tag) === '') { $tag = App::isReady() ? self::savedLocale() : ''; $fromEnv = false; }
         self::$override = I18n::normalize($tag);
         self::$fromEnv = $fromEnv && self::$override !== '';
     }
@@ -142,9 +166,9 @@ final class Locales
     {
         self::load();
         $ready = App::isReady();
-        $preferred = self::normalizeTags($ready ? SystemLocale::preferredLanguages() : []);
+        $preferred = self::normalizeTags($ready ? App::backend()->app()->preferredLanguages() : []);
         $locale = self::resolve(self::$override, $preferred, self::languages());
-        $region = $ready ? self::regionOf(SystemLocale::region(), $preferred) : new Region; // the zero Region without an app: the controls take CLDR's formats for the language
+        $region = $ready ? self::regionOf(App::backend()->app()->region(), $preferred) : new Region; // the zero Region without an app: the controls take CLDR's formats for the language
         $before = self::$shown;
         self::$shown = [$locale, $preferred, $region];
         if ($before === null || !$tell) { return; }

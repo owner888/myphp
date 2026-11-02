@@ -245,4 +245,25 @@ final class App implements Platform\AppController
         ObjC::msg('v:b', $app, 'activateIgnoringOtherApps:', true);
         ObjC::msg('v:p', $app, 'orderFrontStandardAboutPanelWithOptions:', $dict);
     }
+
+    public function preferredLanguages(): array
+    {
+        return \MyPHP\Native\SystemLocale::preferredLanguages();
+    }
+
+    public function savedLocale(): ?string
+    {
+        return \MyPHP\Native\SystemLocale::savedLocale();
+    }
+
+    public function saveLocale(string $tag): bool
+    {
+        \MyPHP\Native\SystemLocale::saveLocale($tag);
+        return true;
+    }
+
+    public function region(): \MyPHP\Region
+    {
+        return \MyPHP\Native\SystemLocale::region();
+    }
 }
