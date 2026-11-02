@@ -8080,6 +8080,15 @@ through it.
   Metal's B G R A bytes as big-endian ARGB whatever its little-endian
   flag. `ImageIO::pngFromBGRA` makes the PNG through Core Graphics,
   which takes the byte order (`kCGBitmapByteOrder32Little`).
+- Chosen rows and cells as mygo's `Selected`: filled with the accent,
+  focused or not, where they had been a band of the translucent
+  selection color. mygo styles the row before its children, which
+  inherit `AccentText`; a myphp row is what the row closure builds, so
+  `Context::list` gives the list's own text style the accent's text color
+  while a chosen row builds, and a chosen cell's box takes it before its
+  content.
+- `myphp screenshot file.php` runs a script as the entry of the project in
+  its folder, as the examples' `main.php`, which name no config.
 - `-theme light|dark` sets `MYPHP_THEME`, which `App::run` applies with
   `Theme::setSource` before the backend starts (so before `whenReady`),
   under the plugin's condition: development, not packaged. `-data dir`

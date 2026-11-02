@@ -42,11 +42,10 @@ disagree, the docs of the checkout win: it may have grown since.
 - **`Key::COMMAND` is Control on Linux.** Shortcuts written with
   `Key::COMMAND` are ⌘ on macOS and Ctrl on Linux, as `CmdOrCtrl` in
   menus; `Key::CONTROL` is Control on macOS and Super on Linux.
-- **Selected rows.** A list's chosen row is a pale band of the theme's
-  `selection` color, focused or not, and keeps the row's own text color:
-  white text on it disappears. For a solid band, style the row yourself
-  by `$state->focusWithin($c)` (`docs/ui/list.md`, "How the chosen row
-  looks").
+- **Chosen rows.** A list's chosen row is filled with the accent and its
+  text inherits `accentText`. A color the row's text sets itself (as
+  `textMuted` for a secondary line) stays, and may not read on the
+  accent: color it by whether the row is chosen.
 - **Primary and plain buttons differ by 2pt.** The primary has no
   border, so it is shorter; in a row of mixed buttons and fields,
   `alignItems(Node::STRETCH)` makes them one height.

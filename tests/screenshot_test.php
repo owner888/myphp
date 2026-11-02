@@ -30,7 +30,7 @@ namespace MyPHP\Tests;
         return strlen($b) > 24 && str_starts_with($b, "\x89PNG\r\n\x1a\n") ? array_values(unpack('Nw/Nh', $b, 16)) + [2 => strlen($b)] : [0, 0, 0];
     };
     try {
-        [$code, $out, $err] = $run(['examples/counter-native', '-out', "$tmp/s.png", '-tree', "$tmp/t.json", '-timeout', '60']);
+        [$code, $out, $err] = $run(['examples/counter-native/main.php', '-out', "$tmp/s.png", '-tree', "$tmp/t.json", '-timeout', '60']);
         same(0, $code, "the counter's screenshot: $err");
         [$w, $h, $bytes] = $png("$tmp/s.png");
         check($w === 360 && $h === 260 && $bytes > 1000, "a PNG of its 360×260 window: {$w}×{$h}, $bytes bytes");
@@ -40,7 +40,7 @@ namespace MyPHP\Tests;
         check(str_contains($out, 'button "Reset" key="reset" (disabled)'), 'the summary lists the elements: ' . $out);
         check(!str_contains($err, 'killed'), 'the app quit at SIGTERM, as Quit');
 
-        [$code, , $err] = $run(['examples/counter-native', '-out', "$tmp/big.png", '-size', '480x320', '-timeout', '60']);
+        [$code, , $err] = $run(['examples/counter-native/main.php', '-out', "$tmp/big.png", '-size', '480x320', '-timeout', '60']);
         same(0, $code, "-size: $err");
         [$w, $h] = $png("$tmp/big.png");
         check($w === 480 && $h === 320, "-size 480x320 resizes the content before the capture: {$w}×{$h}");
@@ -52,7 +52,7 @@ namespace MyPHP\Tests;
         check(str_contains($err, 'the app exited') && str_contains($err, 'broken on purpose'), 'and its output says why: ' . $err);
         check(!file_exists("$tmp/b.png"), 'no PNG then');
 
-        [$code, , $err] = $run(['examples/counter-native', '-size', '480']);
+        [$code, , $err] = $run(['examples/counter-native/main.php', '-size', '480']);
         same(1, $code, 'a size that is not WxH fails');
         check(str_contains($err, 'is not WxH'), 'saying so');
 

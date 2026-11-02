@@ -918,7 +918,11 @@ final class Context
             $this->row = [$node, self::rowBase($node, $state, $i), 0]; // the row's nodes are numbered under its item's key, else its index
             $k = count($node->kids);
             $this->listRow = [$state, $i, $node];
+            // A chosen row is filled with the accent and its text takes the accent's text color (mygo's Selected): what the row builds inherits it.
+            $onAccent = $state->selected !== null && !$state->isHeader($i) && !$state->choosesCells() && $state->chosen($i);
+            if ($onAccent) { $ts = $node->ts; $node->ts = ($ts !== null ? clone $ts : new TextStyle()); $node->ts->color = $this->theme->accentText; $node->ts->alpha = 1.0; }
             $row($i);
+            if ($onAccent) { $node->ts = $ts; }
             $this->listRow = $savedRow;
             if (isset($node->kids[$k])) { $node->rowStarts[$k] = $i; } // assistive technology sees row $i around its nodes
             $y += $state->step($i);
@@ -3970,6 +3974,9 @@ final class Context
                     $box->size($w, 0)->shrink(0);
                 }
                 $box->role = $role;
+                if ($row !== null && $cellSel && $state->chosen($row[1]) && $k >= $lo && $k <= $hi && (!$col->rowHeader || $state->cells->all) && !$this->focusWithin($box)) {
+                    $box->textColor($t->accentText); // on the accent, as a chosen row's
+                }
                   $fill($j);
                 $this->end();
                 if ($row !== null && $state->cellMenu !== null) { // the cell's context menu, over the whole cell (mygo's CellMenu)

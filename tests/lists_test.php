@@ -238,3 +238,26 @@ check(!$s->atEnd(), 'not at its end');
 $s->scrollToEnd(); $h->frame(3);
 same([90, 99], $s->visible(), 'scrolled to its end: the last rows');
 check($s->atEnd(), 'at its end');
+
+// The chosen row as mygo's Selected shows it: filled with the accent, focused or not, its text in the accent's text color;
+// a color the row's content gives itself stays (mygo's TextColor over the inherited).
+$s = new ListState(); $s->selected = 1;
+$h = new Headless(function (Context $c) use ($s) {
+    $c->list($s, 3, function (int $i) use ($c) {
+        $c->row(6, 8);
+          $c->text("name $i");
+          $c->text("note $i")->textColor(0x123456);
+        $c->end();
+    })->grow(1);
+}, 300, 200);
+$h->frame();
+$t = $h->theme;
+check($h->byText('name 1')->fg === $t->accentText && $h->byText('name 0')->fg !== $t->accentText, 'the chosen row\'s text in the accent\'s text color, the others not');
+same(0x123456, $h->byText('note 1')->fg, 'a color of its own stays');
+$list = $h->paint(); $accent = false;
+for ($k = 0; $k < $list->n; $k++) {
+    $b = $k * 16;
+    $rgb = ((int)round($list->buf[$b + 4] * 255) << 16) | ((int)round($list->buf[$b + 5] * 255) << 8) | (int)round($list->buf[$b + 6] * 255);
+    $accent = $accent || ($rgb === $t->accent && $list->buf[$b + 7] >= 0.999 && $list->buf[$b + 2] > 200);
+}
+check($accent, 'the row filled with the accent, opaque');

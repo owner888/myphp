@@ -109,12 +109,13 @@ production build. See [Building and distributing](distribution.md).
 ## myphp screenshot
 
 ```sh
-myphp screenshot [dir] [-out shot.png] [-tree tree.json] [-window N] [-size WxH] [-theme light|dark] [-data dir] [-timeout seconds]
+myphp screenshot [dir | file.php] [-out shot.png] [-tree tree.json] [-window N] [-size WxH] [-theme light|dark] [-data dir] [-timeout seconds]
 ```
 
 Lets a coding agent, or a script, see an app: it runs the app of the
 project in `dir` (default `.`, its `entry` from the configuration) once,
-from its files, waits until its window shows and has settled (the
+from its files, or the script `file.php` as the entry of the project in
+its folder (`myphp screenshot examples/counter-native/main.php`), waits until its window shows and has settled (the
 automation plugin's `idle`), saves the window's capture as a PNG
 (default `<dir>/.myphp/screenshot.png`), prints the roles, labels and keys
 of the elements it shows, and quits the app as Quit does (SIGTERM). The

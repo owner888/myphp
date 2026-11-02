@@ -2017,9 +2017,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 ## Choosing by dragging over rows, blocks of cells (v1.73)
 
-- **How chosen cells look**: the block's cells are drawn as myphp's
-  chosen rows are, under the theme's selection color, where mygo fills
-  them with the accent and its text color, as its chosen rows.
 - **The row a drag began on**: mygo keeps building it while it is
   scrolled away, to keep the press; myphp's press stays the runtime's,
   so the row is built only when in view.

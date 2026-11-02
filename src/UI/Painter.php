@@ -1141,8 +1141,8 @@ final class Painter
         if (($n->webView !== null || $n->movie !== null || $n->systemMaterial !== null) && $rt !== null) {
             self::nativeHole($n, $list, $text, $radii, $rt);
         }
-        if ($n->selected) {
-            if ($n->radii !== null) { $list->box($n->x, $n->y, $n->w, $n->h, $radii, $t->selection, $t->selectionAlpha); } else { $list->rect($n->x, $n->y, $n->w, $n->h, $t->selection, $t->selectionAlpha, $n->radius); } // corners each its own: rows chosen together, one block
+        if ($n->selected) { // filled with the accent, as mygo's Selected; its text in accentText (Context::list)
+            if ($n->radii !== null) { $list->box($n->x, $n->y, $n->w, $n->h, $radii, $t->accent, $n->alpha); } else { $list->rect($n->x, $n->y, $n->w, $n->h, $t->accent, $n->alpha, $n->radius); } // corners each its own: rows chosen together, one block
         }
         if ($n->kind === Node::RICH) {
             self::paintRich($n, $list, $text, $t, $rt); // over its box (a background, a border, a radius), the text inside it with it

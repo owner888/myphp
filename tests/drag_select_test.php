@@ -184,6 +184,7 @@ $h->press($x, $y); $h->drag($x, $y + 3); $h->drag($x2, $y2); $h->release($x2, $y
 wantBlock($s, $sel, 'drag r0c2 to r2c1', [0, 1, 2], new ColumnRange('A', 'B'), ['A', 'B']);
 check(!$h->byText('r1c1')->selected && dsCell($h, 'r1c1')->selected && dsCell($h, 'r1c2')->selected && !dsCell($h, 'r1c3')->selected && !dsCell($h, 'r3c1')->selected, 'the cells of the block show chosen, those outside not');
 check(dsCell($h, 'r1c1')->role === \MyPHP\UI\Role::CELL, 'a cell');
+check($h->byText('r1c1')->fg === $h->theme->accentText && $h->byText('r3c1')->fg !== $h->theme->accentText, "the block's text in the accent's text color, as a chosen row's (mygo's cellselect_test)");
 check($s->cellSelected(1, 1) && $s->cellSelected(2, 2) && !$s->cellSelected(1, 3) && !$s->cellSelected(4, 1) && !$s->cellSelected(1, 0), 'cellSelected tells the block');
 
 /** The cell holding $text. */
@@ -226,7 +227,7 @@ wantBlock($s, $sel, 'Left from B right to left', [1], new ColumnRange('C', 'C'),
 [$h, $s, $sel] = cellTable(6, 3, 0);
 $h->clickText('r2c0');
 wantBlock($s, $sel, 'click the row header of row 2', [2], new ColumnRange('A', 'A', true), ['A', 'B', 'C']);
-check(dsCell($h, 'r2c0')->selected, 'the row header of a whole row chosen shows chosen');
+check(dsCell($h, 'r2c0')->selected && $h->byText('r2c0')->fg === $h->theme->accentText, 'the row header of a whole row chosen shows chosen, its text on the accent');
 $h->clickOn($h->byText('r4c0'), Key::SHIFT);
 wantBlock($s, $sel, 'Shift-click the row header of row 4', [2, 3, 4], new ColumnRange('A', 'A', true), ['A', 'B', 'C']);
 $h->clickText('r1c2');

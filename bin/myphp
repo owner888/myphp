@@ -1948,9 +1948,10 @@ function keygen(array $args): void
 
 // ---- screenshot -----------------------------------------------------------
 const SCREENSHOT_USAGE = <<<'TXT'
-screenshot [flags] [dir]
+screenshot [flags] [dir | file.php]
 
-Runs the app of the project in dir (default .) once, from its files, and
+Runs the app of the project in dir (default .) once, from its files, or
+the script file.php as the entry of the project in its folder, and
 saves a PNG of its window once it is drawn and has settled, so that a
 coding agent or a script sees what the app shows; then quits it. The app
 needs no change: run from its project in development with MYPHP_AUTOMATION
@@ -1997,9 +1998,11 @@ function screenshot(array $args): void
         preg_match('/^(\d+)x(\d+)$/', $size, $m) === 1 && (int)$m[1] > 0 && (int)$m[2] > 0 || fail("-size \"$size\" is not WxH in points, as 800x600");
         $wh = [(int)$m[1], (int)$m[2]];
     }
-    count($args) <= 1 || fail('expected at most one project directory');
-    ['dir' => $dir, 'config' => $c] = project($args);
-    $entry = path($dir, $c['entry']);
+    count($args) <= 1 || fail('expected at most one project directory or PHP file');
+    $file = isset($args[0]) && is_file($args[0]) ? $args[0] : null; // a script: its folder the project, it the entry, whatever the config names
+    $file === null || str_ends_with($file, '.php') || fail("$file is not a PHP file");
+    ['dir' => $dir, 'config' => $c] = project($file === null ? $args : [dirname($file)]);
+    $entry = $file === null ? path($dir, $c['entry']) : (string)realpath($file);
     is_file($entry) || fail("$entry does not exist: name the app's entry with \"entry\" in {$c['configFile']}");
     $out = $out === null ? "$dir/.myphp/screenshot.png" : path((string)getcwd(), $out);
     $treeOut = $treeOut === null ? null : path((string)getcwd(), $treeOut);
