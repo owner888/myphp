@@ -1127,6 +1127,43 @@ final class Runtime
         return null;
     }
 
+    /**
+     * The boxes, within $clip, of the nodes built after the web view's node
+     * $id last frame that take the pointer, which paint over its page
+     * (mygo's webPlace.covers): a host that cannot ask webViewAt() as the
+     * pointer moves (GTK's input shapes) lets the page have the rest of
+     * the clip. Boxes inside one found already add nothing.
+     * @param array{0: float, 1: float, 2: float, 3: float} $clip
+     * @return list<array{0: float, 1: float, 2: float, 3: float}>
+     */
+    public function webViewCovers(int $id, array $clip): array
+    {
+        $at = $this->order[$id] ?? -1;
+        [$cx, $cy, $cw, $ch] = $clip;
+        $ids = [];
+        foreach ([array_keys($this->clickable), $this->focusables, array_keys($this->draggables), array_keys($this->dragSources), array_keys($this->dataSources), array_keys($this->fields), $this->links, array_keys($this->sliders)] as $set) {
+            foreach ($set as $n) {
+                if ($n !== $id && ($this->order[$n] ?? -1) > $at && isset($this->rects[$n]) && !isset($this->passing[$n]) && $this->reachable($n)) {
+                    $ids[$n] = $this->order[$n];
+                }
+            }
+        }
+        asort($ids);
+        $out = [];
+        foreach (array_keys($ids) as $n) {
+            $r = $this->rects[$n];
+            if (isset($this->worlds[$n])) { $r = $this->worlds[$n]->bounds(...$r); }
+            $x0 = max($r[0], $cx); $y0 = max($r[1], $cy);
+            $x1 = min($r[0] + $r[2], $cx + $cw); $y1 = min($r[1] + $r[3], $cy + $ch);
+            if ($x1 <= $x0 || $y1 <= $y0) { continue; }
+            foreach ($out as [$ox, $oy, $ow, $oh]) {
+                if ($x0 >= $ox && $y0 >= $oy && $x1 <= $ox + $ow && $y1 <= $oy + $oh) { continue 2; }
+            }
+            $out[] = [$x0, $y0, $x1 - $x0, $y1 - $y0];
+        }
+        return $out;
+    }
+
     /** The innermost node under ($x, $y) last frame that takes the pointer (mygo's interactive): clickable, focusable, draggable, a field, a link or a slider; null for none. */
     private function pressTarget(float $x, float $y): ?int
     {

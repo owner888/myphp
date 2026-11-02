@@ -1050,6 +1050,12 @@ final class WebView implements \MyPHP\Platform\Page
         ObjC::msg('v:pp', $this->ns, 'evaluateJavaScript:completionHandler:', ObjC::str($js), $completion);
     }
 
+    /** WebKit's NSMenu $menu, about to open from $event, as the page's listeners change it (ContextMenus::show). */
+    public function showContextMenu($menu, $event, Closure $listen): void
+    {
+        ContextMenus::show($this->ns, $menu, $event, $listen);
+    }
+
     /** Hands a bridge message (reply or event) to the page. */
     public function deliver(array $message): void
     {

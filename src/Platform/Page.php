@@ -103,4 +103,14 @@ interface Page
 
     /** Hands a bridge message (reply or event) to the page. */
     public function deliver(array $message): void;
+
+    /**
+     * Shows the context menu $menu the web view is about to open, from
+     * $event, as $listen's listeners change it: $listen gets the menu as
+     * MenuItems and where the pointer opened it (points of the web view,
+     * null for the keyboard), and returns the event its listeners made of
+     * it. The page's onContextMenu calls it when it has listeners.
+     * @param \Closure(\MyPHP\Menu, ?array{0: float, 1: float}): \MyPHP\ContextMenuEvent $listen
+     */
+    public function showContextMenu($menu, $event, \Closure $listen): void;
 }

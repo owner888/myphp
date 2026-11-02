@@ -95,6 +95,17 @@ final class WebKit
         typedef struct { CbPlain fn; } HPlain; typedef struct { CbDecide fn; } HDecide; typedef struct { CbCreate fn; } HCreate;
         typedef struct { CbGone fn; } HGone; typedef struct { CbScheme fn; } HScheme; typedef struct { CbHeader fn; } HHeader;
         typedef struct { CbFd fn; } HFd;
+        typedef int (*CbBool)(void*, void*, void*);
+        typedef int (*CbDestination)(void*, const char*, void*);
+        typedef int (*CbTls)(void*, const char*, void*, unsigned int, void*);
+        typedef int (*CbMenu)(void*, void*, void*, void*, void*);
+        typedef void (*CbPng)(void*, void*);
+        typedef struct { CbBool fn; } HBool; typedef struct { CbDestination fn; } HDestination; typedef struct { CbTls fn; } HTls;
+        typedef struct { CbMenu fn; } HMenu;
+        typedef struct { unsigned char* data; unsigned int len; } GByteArray;
+        typedef struct { unsigned long g_type; } GTypeClass;
+        typedef struct { int value; const char* value_name; const char* value_nick; } GEnumValue;
+        typedef struct _GList { void* data; struct _GList* next; struct _GList* prev; } GList;
 
         gulong g_signal_connect_data(void*, const char*, void*, void*, void*, int);
         void* g_object_ref(void*); void g_object_unref(void*); void g_free(void*);
@@ -113,6 +124,99 @@ final class WebKit
         void* g_file_new_for_path(const char*); char* g_file_get_uri(void*);
         long write(int, const char*, size_t); int close(int); int* __errno_location(void);
         void gtk_event_controller_set_propagation_phase(void*, int);
+        gboolean g_type_check_instance_is_a(void*, unsigned long);
+        void* g_type_class_ref(unsigned long);
+        GEnumValue* g_enum_get_value(void*, int);
+        void g_object_get(void*, const char*, ...);
+        void g_byte_array_unref(GByteArray*);
+        void* g_bytes_new(const char*, size_t); void* g_bytes_get_data(void*, size_t*); void g_bytes_unref(void*);
+        void* g_simple_action_new(const char*, void*); void* g_simple_action_new_stateful(const char*, void*, void*);
+        void g_simple_action_set_enabled(void*, gboolean); void g_simple_action_set_state(void*, void*);
+        unsigned long g_simple_action_get_type(void);
+        gboolean g_action_get_enabled(void*); void* g_action_get_state(void*);
+        void* g_variant_new_boolean(gboolean); gboolean g_variant_get_boolean(void*); const char* g_variant_get_type_string(void*); void g_variant_unref(void*);
+        const char* gtk_action_get_label(void*);
+        void* gtk_print_settings_new(void); void gtk_print_settings_set(void*, const char*, const char*);
+        void* gtk_page_setup_new(void); void gtk_page_setup_set_paper_size(void*, void*); void gtk_page_setup_set_orientation(void*, int);
+        void gtk_page_setup_set_top_margin(void*, double, int); void gtk_page_setup_set_bottom_margin(void*, double, int);
+        void gtk_page_setup_set_left_margin(void*, double, int); void gtk_page_setup_set_right_margin(void*, double, int);
+        void* gtk_paper_size_new_custom(const char*, const char*, double, double, int); void gtk_paper_size_free(void*);
+        int cairo_surface_write_to_png(void*, const char*); void cairo_surface_destroy(void*);
+        gboolean gtk_widget_has_focus(void*);
+
+        void* webkit_web_view_get_context(void*);
+        void webkit_web_context_allow_tls_certificate_for_host(void*, void*, const char*);
+        const char* webkit_authentication_request_get_host(void*);
+        unsigned int webkit_authentication_request_get_port(void*);
+        const char* webkit_authentication_request_get_realm(void*);
+        int webkit_authentication_request_get_scheme(void*);
+        gboolean webkit_authentication_request_is_for_proxy(void*);
+        void webkit_authentication_request_authenticate(void*, void*);
+        void* webkit_credential_new(const char*, const char*, int); void webkit_credential_free(void*);
+
+        void* webkit_download_get_web_view(void*); void* webkit_download_get_request(void*);
+        void webkit_download_cancel(void*); void webkit_download_set_allow_overwrite(void*, gboolean);
+        void webkit_download_set_destination(void*, const char*);
+        void* webkit_response_policy_decision_get_response(void*);
+        gboolean webkit_response_policy_decision_is_mime_type_supported(void*);
+        void webkit_policy_decision_download(void*);
+        const char* webkit_uri_response_get_uri(void*); void* webkit_uri_response_get_http_headers(void*);
+        const char* soup_message_headers_get_one(void*, const char*);
+
+        unsigned long webkit_user_media_permission_request_get_type(void);
+        unsigned long webkit_geolocation_permission_request_get_type(void);
+        unsigned long webkit_notification_permission_request_get_type(void);
+        gboolean webkit_user_media_permission_is_for_audio_device(void*);
+        gboolean webkit_user_media_permission_is_for_video_device(void*);
+        void webkit_permission_request_allow(void*); void webkit_permission_request_deny(void*);
+
+        int webkit_script_dialog_get_dialog_type(void*);
+        const char* webkit_script_dialog_get_message(void*);
+        void webkit_script_dialog_confirm_set_confirmed(void*, gboolean);
+        const char* webkit_script_dialog_prompt_get_default_text(void*);
+        void webkit_script_dialog_prompt_set_text(void*, const char*);
+        gboolean webkit_file_chooser_request_get_select_multiple(void*);
+        void webkit_file_chooser_request_select_files(void*, const char**);
+        void webkit_file_chooser_request_cancel(void*);
+
+        void* webkit_web_view_get_inspector(void*);
+        void webkit_web_inspector_show(void*); void webkit_web_inspector_close(void*);
+        void* webkit_web_inspector_get_web_view(void*);
+
+        void webkit_web_view_get_snapshot(void*, int, int, void*, CbNotify, void*);
+        void* webkit_web_view_get_snapshot_finish(void*, void*, void**);
+        void* webkit_print_operation_new(void*);
+        int webkit_print_operation_run_dialog(void*, void*);
+        void webkit_print_operation_set_print_settings(void*, void*);
+        void webkit_print_operation_set_page_setup(void*, void*);
+        void webkit_print_operation_print(void*);
+        gboolean webkit_settings_get_print_backgrounds(void*); void webkit_settings_set_print_backgrounds(void*, gboolean);
+
+        void* webkit_web_view_get_session_state(void*);
+        void webkit_web_view_restore_session_state(void*, void*);
+        void* webkit_web_view_session_state_new(void*);
+        void* webkit_web_view_session_state_serialize(void*);
+        void webkit_web_view_session_state_unref(void*);
+        void* webkit_web_view_get_back_forward_list(void*);
+        void* webkit_back_forward_list_get_current_item(void*);
+        void webkit_web_view_go_to_back_forward_list_item(void*, void*);
+
+        void* webkit_context_menu_new(void);
+        GList* webkit_context_menu_get_items(void*);
+        void webkit_context_menu_append(void*, void*);
+        void webkit_context_menu_remove_all(void*);
+        gboolean webkit_context_menu_item_is_separator(void*);
+        int webkit_context_menu_item_get_stock_action(void*);
+        void* webkit_context_menu_item_get_submenu(void*);
+        void* webkit_context_menu_item_get_action(void*);
+        void* webkit_context_menu_item_get_gaction(void*);
+        void* webkit_context_menu_item_new_from_stock_action_with_label(int, const char*);
+        void* webkit_context_menu_item_new_from_gaction(void*, const char*, void*);
+        void* webkit_context_menu_item_new_separator(void);
+        void* webkit_context_menu_item_new_with_submenu(const char*, void*);
+        unsigned long webkit_context_menu_action_get_type(void);
+        void webkit_web_view_execute_editing_command(void*, const char*);
+        void webkit_web_view_set_background_color(void*, void*);
 
         void* webkit_web_context_get_default(void);
         void webkit_web_context_register_uri_scheme(void*, const char*, CbScheme, void*, void*);

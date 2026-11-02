@@ -29,6 +29,8 @@ check($h->rt->webViewAt(200, 100) === $docs, 'the pointer is the page\'s');
 check($h->rt->webViewAt(50, 100) === null, 'not beside it');
 $cover = true; $h->frame(); $h->paint();
 check($h->rt->webViewAt(160, 50) === null && $h->rt->webViewAt(300, 200) === $docs, 'a button painted over it takes the pointer there');
+$p = $h->rt->webPlaces[0];
+same([[150.0, 40.0, 80.0, 30.0]], $h->rt->webViewCovers($p['id'], $p['clip']), 'what is painted over it and takes the pointer, for a host that shapes the pointer (Linux)');
 $show = false; $h->frame(); $list = $h->paint();
 same([[], []], [$list->holes, $h->rt->webPlaces], 'not built: no hole, nowhere to show');
 

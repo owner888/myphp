@@ -2524,17 +2524,21 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: no error page: didFailLoad alone, as on macOS.
   - Why: the core's events stay what macOS's WKWebView tells.
 - **What web pages do not have on Linux yet**
-  - mygo: downloads, sign-ins, certificates, permissions, content rules,
-    cookies and sessions, session state, printing and PDF, capturing a
-    page, dev tools, context menus, JavaScript panels as GTK dialogs, file
-    drops on pages, drag regions, web views in native UI.
-  - myphp: those throw `Platform\Unsupported` where called; the handlers
-    the core sets on every page (downloads, sign-ins, certificates,
-    permissions, panels, context menus) are never called, WebKitGTK
-    handling them its own way. Picture in picture is mygo's: none
-    (a warning when asked for).
-  - Why: the first slice of Linux pages is the page, its bridge, its
-    navigation and its schemes.
+  - mygo: sessions with their own data (cookies.go, session.go), the
+    cookie API, content rules (content_rules.go).
+  - myphp: none of them: the core's `Session`, `Cookies` and
+    `ContentRules` call macOS's stores (Native\CookieStore,
+    ContentRuleStore) directly, which fail off macOS; Linux's newPage
+    throws `Platform\Unsupported` for a data store and setContentRules
+    throws it too. They wait for an interface of the platform layer. Picture in picture is mygo's: none, WebKitGTK having
+    none (its calls throw, the option warns).
+  - Why: those modules have no platform interface in myphp yet.
+- **JavaScript panels on Linux**
+  - mygo: WebKitGTK shows alert(), confirm() and prompt() its own way,
+    inside the page, and its own file chooser.
+  - myphp: the app's GTK dialogs, through the page's onPanel, as macOS's
+    sheets; a file input chooses no folder (WebKitGTK tells none).
+  - Why: the page's panels stay the core's on every platform.
 - **A renderer a window**
   - mygo: a GL renderer a surface too.
   - myphp: the same, the atlases' dirty rows shared out among them

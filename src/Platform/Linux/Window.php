@@ -41,6 +41,14 @@ final class Window implements Platform\Window
     private ?CData $area = null, $im = null;
     /** The WebKitWebView of a window whose content is a page, which the page holds. */
     private ?CData $web = null;
+    /** The overlay the area is in once it has web views, over the layout holding them (mygo's surface layers). */
+    private ?CData $layers = null, $webLayout = null;
+    /** @var list<SurfaceWebView> the web views of the native UI */
+    private array $webViews = [];
+    /** The node of the web view the content's focus went to last, whose page took the keyboard. */
+    private ?int $webFocus = null;
+    /** The Tab press (a copy) the frame being built answers, which a web view tabbed into gets too (mygo's pressing). */
+    private ?CData $tabPress = null;
     /** The box the menu bar and the content are in, the window's accelerators, its menu bar, the last press or key that could bring up a context menu (a copy). */
     private CData $box, $accel;
     private ?CData $menubar = null, $trigger = null;
@@ -482,6 +490,10 @@ final class Window implements Platform\Window
                 break;
             case 'key-press-event':
                 $this->keepTrigger($event);
+                if (in_array($f->cast('GdkEventKey*', $event)->keyval, [0xff09, 0xfe20, 0xff89], true)) { // GDK_KEY_Tab, ISO_Left_Tab, KP_Tab
+                    if ($this->tabPress !== null) { $f->gdk_event_free($this->tabPress); }
+                    $this->tabPress = $f->gdk_event_copy($event);
+                }
                 $this->keyDown($f->cast('GdkEventKey*', $event), $event);
                 break;
             case 'key-release-event':
@@ -625,13 +637,181 @@ final class Window implements Platform\Window
         return false;
     }
 
-    public function placeWebViews(): void {}
+    /**
+     * Shows the web views where the frame placed them and hides the others
+     * (mygo's PlaceWebViews), the area shaped so that the pointer reaches
+     * them there; a web view's node the focus went to gives its page the
+     * keyboard, as macOS's.
+     */
+    public function placeWebViews(): void
+    {
+        if ($this->webViews === []) {
+            return;
+        }
+        $rt = $this->w->runtime;
+        $places = [];
+        foreach ($rt->webPlaces as $p) {
+            $places[spl_object_id($p['view'])] = $p; // a web view built twice shows where it was built last
+        }
+        $holes = [];
+        foreach ($this->w->webViewList() as $v) {
+            $p = $places[spl_object_id($v)] ?? null;
+            $v->place($p === null ? null : $rt->windowRect($p['frame']), $p === null ? null : $rt->windowRect($p['clip']), 0.0);
+            if ($p !== null) {
+                $holes[] = [$rt->windowRect($p['clip']), array_map($rt->windowRect(...), $rt->webViewCovers($p['id'], $p['clip']))];
+            }
+        }
+        $this->shapeWebLayer($holes);
+        $focus = $rt->focus;
+        $node = null;
+        foreach ($places as $p) {
+            if ($p['id'] === $focus) { $node = $p; }
+        }
+        if ($node !== null && $focus !== $this->webFocus) { // tabbed into, or focused: the page takes the keyboard
+            $rt->focusFromKeyboard() ? $node['view']->tabInto(($this->w->input->mods & Key::SHIFT) !== 0) : $node['view']->focus();
+        }
+        $this->webFocus = $node === null ? null : $focus;
+        if ($this->tabPress !== null) {
+            Gtk::ffi()->gdk_event_free($this->tabPress);
+            $this->tabPress = null;
+        }
+    }
+
+    /**
+     * @internal the Tab that moved the content's focus onto a web view's
+     * node, which the web view then gets, as WebKitGTK focuses no element
+     * of the page as the view takes the keyboard: its first, or its last
+     * going back (mygo's TabInto)
+     */
+    public function passTab(CData $web): void
+    {
+        if ($this->tabPress !== null) { Gtk::ffi()->gtk_widget_event($web, $this->tabPress); }
+    }
+
+    /**
+     * Lets the pointer through the area where the web views take it: in
+     * their clips but where the content painted over them (mygo's shape).
+     * A GtkGLArea draws in its parent's window, the overlay's, whose input
+     * shape this is; no web view shown, no shape.
+     * @param list<array{0: array{0: float, 1: float, 2: float, 3: float}, 1: list<array{0: float, 1: float, 2: float, 3: float}>}> $holes
+     */
+    private function shapeWebLayer(array $holes): void
+    {
+        $f = Gtk::ffi();
+        $win = $f->gtk_widget_get_parent_window($this->area);
+        if ($win === null || Gtk::addr($win) === Gtk::addr($f->gtk_widget_get_window($this->win))) {
+            return;
+        }
+        if ($holes === []) {
+            $f->gdk_window_input_shape_combine_region($win, null, 0, 0);
+            return;
+        }
+        $r = $f->new('GdkRectangle');
+        [$r->x, $r->y, $r->width, $r->height] = [0, 0, $f->gtk_widget_get_allocated_width($this->area), $f->gtk_widget_get_allocated_height($this->area)];
+        $region = $f->cairo_region_create_rectangle(\FFI::addr($r));
+        foreach ($holes as [$clip, $covers]) {
+            [$x, $y, $w, $h] = $clip; // the pixels it covers wholly
+            [$r->x, $r->y] = [(int)ceil($x), (int)ceil($y)];
+            [$r->width, $r->height] = [max((int)floor($x + $w) - $r->x, 0), max((int)floor($y + $h) - $r->y, 0)];
+            $f->cairo_region_subtract_rectangle($region, \FFI::addr($r));
+            foreach ($covers as [$x, $y, $w, $h]) { // the pixels they cover at all
+                [$r->x, $r->y] = [(int)floor($x), (int)floor($y)];
+                [$r->width, $r->height] = [max((int)ceil($x + $w) - $r->x, 0), max((int)ceil($y + $h) - $r->y, 0)];
+                $f->cairo_region_union_rectangle($region, \FFI::addr($r));
+            }
+        }
+        $f->gdk_window_input_shape_combine_region($win, $region, 0, 0);
+        $f->cairo_region_destroy($region);
+    }
+
+    /**
+     * The layout holding the web views, made with the first (mygo's
+     * makeLayers): the area goes into an overlay where it was, over the
+     * layout, with an alpha channel whose holes show the pages. GTK
+     * realizes the area again, with a new GL context, which frees the
+     * renderer's lists: a web view made by a frame's build is layered once
+     * that frame is done.
+     */
+    public function webLayer(): CData
+    {
+        if ($this->webLayout !== null) {
+            return $this->webLayout;
+        }
+        $f = Gtk::ffi();
+        $this->layers = $f->gtk_overlay_new();
+        $this->webLayout = $f->gtk_layout_new(null, null);
+        $f->gtk_container_add($this->layers, $this->webLayout);
+        $this->rendering ? Gtk::idle(fn() => $this->layer()) : $this->layer();
+        return $this->webLayout;
+    }
+
+    private function layer(): void
+    {
+        if ($this->dead) {
+            return;
+        }
+        $f = Gtk::ffi();
+        $focused = $f->gtk_widget_has_focus($this->area);
+        $f->gtk_container_remove($this->box, $this->area); // held: createSurface took a reference
+        $f->gtk_gl_area_set_has_alpha($this->area, 1);
+        $f->gtk_overlay_add_overlay($this->layers, $this->area);
+        $f->gtk_box_pack_start($this->box, $this->layers, 1, 1, 0);
+        if ($this->menubar !== null) { $f->gtk_box_reorder_child($this->box, $this->layers, 1); } // under the menu bar
+        $f->gtk_widget_show_all($this->layers);
+        if ($focused) { $f->gtk_widget_grab_focus($this->area); }
+        $this->requestFrame(); // which places the web views
+    }
+
+    /** @internal Tab left the page of a web view past its last element, or Shift+Tab its first: the content takes the keyboard, and the Tab (mygo's tabOut). */
+    public function tabOut(bool $back): void
+    {
+        $this->focusContent();
+        $this->w->input?->push(['command', $back ? 'insertBacktab:' : 'insertTab:']); // the focus moves on from the web view's node
+        $this->requestFrame();
+    }
+
+    /** @internal gives the content the keyboard back from a web view */
+    public function focusContent(): void
+    {
+        if ($this->area !== null) { Gtk::ffi()->gtk_widget_grab_focus($this->area); }
+    }
+
+    /** @internal the wheel over web view $web, which gives it to the content (mygo's cbWebViewScroll): the event is in its window, at its allocation in the layout, which is where the area is */
+    public function scrollFrom(CData $web, CData $event): bool
+    {
+        if ($this->dead || $this->area === null) {
+            return false;
+        }
+        $f = Gtk::ffi();
+        $copy = $f->gdk_event_copy($event);
+        $e = $f->cast('GdkEventScroll*', $copy);
+        $x = $f->new('int[1]'); $y = $f->new('int[1]');
+        $f->gtk_widget_translate_coordinates($web, $this->area, 0, 0, $x, $y);
+        $e->x += $x[0];
+        $e->y += $y[0];
+        $this->event('scroll-event', $copy);
+        $f->gdk_event_free($copy);
+        return true;
+    }
+
+    /** @internal a web view of the native UI closed */
+    public function forget(SurfaceWebView $v): void
+    {
+        $this->webViews = array_values(array_filter($this->webViews, fn(SurfaceWebView $x) => $x !== $v));
+    }
 
     public function placeVideos(): void {}
 
+    /** A web view of native UI showing $page, under the area (mygo's Surface.NewWebView). */
     public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
     {
-        throw new Unsupported('myphp: web views need WebKitGTK, which the Linux backend does not drive yet');
+        if ($this->area === null) {
+            throw new \RuntimeException('myphp: web views go in windows showing native UI');
+        }
+        if (!$page instanceof WebView) {
+            throw new \InvalidArgumentException('myphp: a web view of native UI shows a WebKitGTK page');
+        }
+        return $this->webViews[] = new SurfaceWebView($this, $page, $scrollToContainer, $transparent);
     }
 
     public function contentView(): mixed

@@ -194,7 +194,7 @@ final class Page
     public function sessionState(): string
     {
         if ($this->destroyed) { throw new RuntimeException('myphp: session state: the page is closed'); }
-        return self::encodeSessionState('darwin', $this->web->url(), $this->web->sessionState());
+        return self::encodeSessionState(self::goos(), $this->web->url(), $this->web->sessionState());
     }
 
     /**
@@ -352,7 +352,7 @@ final class Page
     {
         if ($state !== null && ($s = self::decodeSessionState($state)) !== null) {
             [$os, $u, $native] = $s;
-            if ($os === 'darwin' && $native !== '' && $this->web->restoreSessionState($native)) { return; }
+            if ($os === self::goos() && $native !== '' && $this->web->restoreSessionState($native)) { return; } // only the system that saved it reads WebKit's own
             if ($u !== '') { $url = $u; }
         }
         if ($url !== '') { $this->loadURL($url); }
@@ -800,7 +800,13 @@ final class Page
     /** The system the page tells it runs on, in Node.js' process.platform names (mygo's jsPlatform). */
     private static function jsPlatform(): string
     {
-        return PHP_OS_FAMILY === 'Windows' ? 'win32' : strtolower(PHP_OS_FAMILY);
+        return PHP_OS_FAMILY === 'Windows' ? 'win32' : self::goos();
+    }
+
+    /** The system as Go's GOOS names it, which session states carry (mygo's runtime.GOOS): darwin, linux, windows. */
+    private static function goos(): string
+    {
+        return strtolower(PHP_OS_FAMILY);
     }
 
     /** @return array{locale: string, dir: string} */
@@ -997,7 +1003,7 @@ final class Page
                 $this->contextTarget = null;
                 return; // WebKit's menu as it is
             }
-            Native\ContextMenus::show($w->ns, $menu, $event, function (Menu $m, ?array $at): ContextMenuEvent {
+            $w->showContextMenu($menu, $event, function (Menu $m, ?array $at): ContextMenuEvent {
                 $r = $this->contextTarget;
                 $this->contextTarget = null;
                 if ($r !== null && !Native\ContextMenus::recordOf((float)($r['x'] ?? 0), (float)($r['y'] ?? 0), $at !== null, $at[0] ?? 0.0, $at[1] ?? 0.0, $this->zoomNow())) {

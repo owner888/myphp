@@ -307,6 +307,17 @@ final class Gtk
             long g_variant_get_int64(void*);
             void* g_variant_ref_sink(void*); char* g_variant_print(void*, gboolean);
             gboolean g_dbus_connection_emit_signal(void*, const char*, const char*, const char*, const char*, void*, void**);
+            typedef int (*CbFocus)(void*, int, void*); typedef struct { CbFocus fn; } HFocus;
+            void* gtk_overlay_new(void); void gtk_overlay_add_overlay(void*, void*);
+            void* gtk_layout_new(void*, void*); void gtk_layout_put(void*, void*, int, int); void gtk_layout_move(void*, void*, int, int);
+            void* gtk_widget_get_parent(void*); void* gtk_widget_get_parent_window(void*);
+            gboolean gtk_widget_has_focus(void*); gboolean gtk_widget_get_has_window(void*);
+            void* gtk_container_get_focus_child(void*); gboolean gtk_widget_event(void*, void*);
+            void gdk_window_input_shape_combine_region(void*, void*, int, int);
+            void gdk_window_shape_combine_region(void*, void*, int, int);
+            void* cairo_region_create_rectangle(GdkRectangle*);
+            int cairo_region_subtract_rectangle(void*, GdkRectangle*); int cairo_region_union_rectangle(void*, GdkRectangle*);
+            void cairo_region_destroy(void*);
         ', 'libgtk-3.so.0');
         self::$slot = self::$f->new('void*[1]');
         self::$slotInt = self::$f->cast('unsigned long[1]', self::$slot);
@@ -344,7 +355,8 @@ final class Gtk
      * 'dragLeave' (widget, context, time, data), 'dragReceived' (widget,
      * context, x, y, selection, info, time, data), 'dragGet' (widget,
      * context, selection, info, time, data), 'dragFailed' (widget,
-     * context, result, data) → gboolean.
+     * context, result, data) → gboolean; 'focus' (widget, direction,
+     * data) → gboolean.
      */
     public static function connect(CData $obj, string $signal, string $kind, Closure $fn): void
     {
@@ -354,6 +366,7 @@ final class Gtk
             'size' => $f->new('HSize', false), 'string' => $f->new('HString', false),
             'dragAt' => $f->new('HDragAt', false), 'dragLeave' => $f->new('HDragLeave', false), 'dragReceived' => $f->new('HDragReceived', false),
             'dragGet' => $f->new('HDragGet', false), 'dragFailed' => $f->new('HDragFailed', false),
+            'focus' => $f->new('HFocus', false),
         };
         $h->fn = $fn;
         self::$kept[self::addr($obj)][] = $h;

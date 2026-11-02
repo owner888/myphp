@@ -53,6 +53,10 @@ final class WebView implements \MyPHP\Platform\Page
     /** @var array<int, Closure(?CData, ?string): void> callAsync's callbacks, by key */
     private static array $pending = [];
     private static int $nextCall = 0;
+    /** @var array<int, array{0: int, 1: string, 2: string, 3: ?string}> the downloads under way by WebKitDownload address: their view's id, URL, path and error */
+    private static array $downloads = [];
+    /** @var array<int, Closure(?string): void> the print operations to PDF under way, by address: called with the error, or null once done */
+    private static array $printJobs = [];
 
     /** The WebKitWebView and its user content manager. */
     public CData $web;
@@ -88,15 +92,30 @@ final class WebView implements \MyPHP\Platform\Page
     public ?Closure $onClosedByPage = null;
     /** Serves a request of a custom scheme (Protocol): (the request's [method, URL, headers, body], its task). @var ?Closure(array, \MyPHP\Native\SchemeTask): void */
     public ?Closure $onScheme = null;
-    /**
-     * The core sets these on every page; WebKitGTK's own handling stays
-     * until downloads, sign-ins, certificates, permissions, JavaScript
-     * panels and context menus come to Linux, so they are never called.
-     */
-    public ?Closure $onDownload = null, $onDownloadDone = null, $onSchemeDownload = null, $onAuth = null, $onCertificate = null,
-        $onPermission = null, $onPanel = null, $onContextMenu = null;
-    /** The view the wheel over the page goes to instead (a web view of native UI's), which Linux has no web views of yet. */
+    /** Asked where a download goes: (url, suggested file name) → path, or null to cancel; told when it ended: (url, path, ?error). @var ?Closure(string, string): ?string */
+    public ?Closure $onDownload = null;
+    /** @var ?Closure(string, string, ?string): void */
+    public ?Closure $onDownloadDone = null;
+    /** Serves a URL of a custom scheme into a download, which WebKit can't make of what a scheme handler serves. @var ?Closure(string): void */
+    public ?Closure $onSchemeDownload = null;
+    /** An HTTP sign-in challenge (host, port, realm, scheme, a proxy's?) → [user, password], [] to cancel; null: WebKit's handling. @var ?Closure(string, int, string, string, bool): ?array */
+    public ?Closure $onAuth = null;
+    /** A server certificate that does not verify (URL, host, the error, the DER certificate) → whether to load it; null: the load fails. @var ?Closure(string, string, string, string): bool */
+    public ?Closure $onCertificate = null;
+    /** Asked whether the page may use devices: (list of "camera", "microphone", "geolocation", "notifications", the page's origin) → granted. @var ?Closure(list<string>, string): bool */
+    public ?Closure $onPermission = null;
+    /** Shows alert() ('alert', message), confirm() ('confirm', message) → bool, prompt() ('prompt', prompt, default) → ?string and a file input ('files', several, folders) → ?list<string>. @var ?Closure(string, mixed...): mixed */
+    public ?Closure $onPanel = null;
+    /** WebKit's context menu is about to open: fn(WebKitContextMenu, GdkEvent) calls showContextMenu() when the page's listeners would change it. @var ?Closure(mixed, mixed): void */
+    public ?Closure $onContextMenu = null;
+    /** The view the wheel over the page goes to instead (a web view of native UI's with WebViewOptions::$scrollToContainer). */
     public mixed $scrollTo = null;
+    /** Whether the page was made with developer tools (PageOptions::$devTools), which openDevTools() needs. */
+    private bool $devTools = false;
+    /** The URL a certificate the app allowed failed at, loaded again once WebKit is done failing it (mygo's tlsRetry). */
+    private string $tlsRetry = '';
+    /** What showContextMenu() decided of the menu WebKit is about to show: true shows none. */
+    private bool $noMenu = false;
 
     private function __construct(private Closure $onMessage) {}
 
@@ -125,6 +144,7 @@ final class WebView implements \MyPHP\Platform\Page
         $self->id = ++self::$nextId;
         $self->suffix = $suffix;
         $self->autoplay = $autoplay;
+        $self->devTools = $devTools;
         $self->ucm = $f->webkit_user_content_manager_new();
         $self->web = $f->g_object_ref($f->webkit_web_view_new_with_user_content_manager($self->ucm)); // held past its destroy, until close() lets it go
         $data = $f->cast('void*', $self->id);
@@ -154,7 +174,9 @@ final class WebView implements \MyPHP\Platform\Page
             $f->gtk_event_controller_set_propagation_phase($g, 0); // GTK_PHASE_NONE: pinches no longer magnify (mygo's stopPinchZoom)
         }
         foreach (['load-changed' => 'load', 'load-failed' => 'failed', 'notify::title' => 'title', 'decide-policy' => 'decide', 'create' => 'create',
-            'close' => 'close', 'web-process-terminated' => 'gone', 'notify::is-playing-audio' => 'change'] as $signal => $hook) {
+            'close' => 'close', 'web-process-terminated' => 'gone', 'notify::is-playing-audio' => 'change', 'permission-request' => 'permission',
+            'authenticate' => 'auth', 'load-failed-with-tls-errors' => 'tls', 'script-dialog' => 'dialog', 'run-file-chooser' => 'files',
+            'context-menu' => 'menu', 'scroll-event' => 'scroll'] as $signal => $hook) {
             self::on($self->web, $signal, $hook, $data);
         }
         foreach (self::CAPTURE_PROPERTIES as $p) {
@@ -238,7 +260,7 @@ final class WebView implements \MyPHP\Platform\Page
         });
         self::$hooks['decide'] = $h('HDecide', function ($web, $decision, int $type, $data): int {
             $v = self::view($data);
-            return $v === null || $type !== self::POLICY_NAVIGATION ? 0 : $v->decide($decision);
+            return match (true) { $v === null => 0, $type === self::POLICY_NAVIGATION => $v->decide($decision), $type === self::POLICY_RESPONSE => $v->decideResponse($decision), default => 0 };
         });
         // WebKitGTK makes a related view share the opener's content manager, which would send the new window's messages to the opener:
         // the window opened gets the navigation action as its configuration, whose URL its own view loads, its page without an opener
@@ -267,6 +289,76 @@ final class WebView implements \MyPHP\Platform\Page
             $value = $f->webkit_web_view_call_async_javascript_function_finish($source, $res, $err);
             $done($err[0] === null ? $value : null, $err[0] === null ? null : WebKit::errorMessage($err[0]));
         });
+        self::$hooks['permission'] = $h('HBool', fn($web, $req, $data): int => self::view($data)?->permission($req) ?? 0);
+        // Returning false leaves the request to WebKit, which signs in with nothing: the server's refusal (mygo's cbAuthenticate).
+        self::$hooks['auth'] = $h('HBool', fn($web, $req, $data): int => self::view($data)?->authenticate($req) ?? 0);
+        self::$hooks['tls'] = $h('HTls', fn($web, $uri, $cert, int $flags, $data): int => self::view($data)?->tlsError((string)$uri, $cert, $flags) ?? 0);
+        self::$hooks['dialog'] = $h('HBool', fn($web, $dialog, $data): int => self::view($data)?->scriptDialog($dialog) ?? 0);
+        self::$hooks['files'] = $h('HBool', fn($web, $req, $data): int => self::view($data)?->chooseFiles($req) ?? 0);
+        self::$hooks['menu'] = $h('HMenu', function ($web, $menu, $event, $hit, $data): int {
+            $v = self::view($data);
+            if ($v?->onContextMenu === null) { return 0; }
+            $v->noMenu = false;
+            ($v->onContextMenu)($menu, $event);
+            return $v->noMenu ? 1 : 0;
+        });
+        self::$hooks['scroll'] = $h('HBool', fn($web, $event, $data): int => (self::view($data)?->scrollTo)?->__invoke($event) ? 1 : 0);
+        // Downloads: the web context tells each, which asks where it goes and tells how it ended, "failed" before "finished" (mygo's download.go).
+        self::$hooks['download'] = $h('HNotify', function ($ctx, $d, $data): void {
+            $f = WebKit::ffi();
+            $id = self::$byWeb[WebKit::addr($f->webkit_download_get_web_view($d))] ?? 0;
+            if (!isset(self::$views[$id])) { return; }
+            self::$downloads[WebKit::addr($d)] = [$id, (string)$f->webkit_uri_request_get_uri($f->webkit_download_get_request($d)), '', null];
+            $f->g_signal_connect_data($d, 'decide-destination', $f->cast('void*', self::$hooks['destination']->fn), null, null, 0);
+            $f->g_signal_connect_data($d, 'failed', $f->cast('void*', self::$hooks['downloadFailed']->fn), null, null, 0);
+            $f->g_signal_connect_data($d, 'finished', $f->cast('void*', self::$hooks['downloadFinished']->fn), null, null, 0);
+        });
+        self::$hooks['destination'] = $h('HDestination', function ($d, $suggested, $data): int {
+            $k = WebKit::addr($d);
+            [$id, $url] = self::$downloads[$k] ?? [0, ''];
+            $v = self::$views[$id] ?? null;
+            $f = WebKit::ffi();
+            $path = $v?->onDownload === null ? null : ($v->onDownload)($url, (string)$suggested);
+            if ($path === null) {
+                unset(self::$downloads[$k]);
+                $f->webkit_download_cancel($d);
+                return 1;
+            }
+            self::$downloads[$k][2] = $path;
+            $file = $f->g_file_new_for_path($path);
+            $f->webkit_download_set_allow_overwrite($d, 1);
+            $f->webkit_download_set_destination($d, WebKit::take($f->g_file_get_uri($file)));
+            $f->g_object_unref($file);
+            return 1;
+        });
+        self::$hooks['downloadFailed'] = $h('HNotify', function ($d, $error, $data): void {
+            $k = WebKit::addr($d);
+            if (isset(self::$downloads[$k])) { self::$downloads[$k][3] = \FFI::string(WebKit::ffi()->cast('GError*', $error)->message); }
+        });
+        self::$hooks['downloadFinished'] = $h('HPlain', function ($d, $data): void {
+            $k = WebKit::addr($d);
+            [$id, $url, $path, $error] = self::$downloads[$k] ?? [0, '', '', null];
+            unset(self::$downloads[$k]);
+            $v = self::$views[$id] ?? null;
+            if ($path !== '' && $v?->onDownloadDone !== null) { ($v->onDownloadDone)($url, $path, $error); }
+        });
+        self::$hooks['snapshot'] = $h('HNotify', function ($source, $res, $data): void {
+            $key = WebKit::addr($data);
+            $done = self::$pending[$key] ?? null;
+            unset(self::$pending[$key]);
+            if ($done === null) { return; }
+            $f = WebKit::ffi();
+            $err = $f->new('void*[1]');
+            $surface = $f->webkit_web_view_get_snapshot_finish($source, $res, $err);
+            $done($err[0] === null ? $surface : null, $err[0] === null ? null : WebKit::errorMessage($err[0]));
+        });
+        self::$hooks['printed'] = $h('HPlain', function ($op, $data): void {
+            (self::$printJobs[WebKit::addr($op)] ?? null)?->__invoke(null);
+        });
+        self::$hooks['printFailed'] = $h('HNotify', function ($op, $error, $data): void {
+            (self::$printJobs[WebKit::addr($op)] ?? null)?->__invoke(\FFI::string(WebKit::ffi()->cast('GError*', $error)->message));
+        });
+        WebKit::ffi()->g_signal_connect_data(WebKit::ffi()->webkit_web_context_get_default(), 'download-started', WebKit::ffi()->cast('void*', self::$hooks['download']->fn), null, null, 0);
         // Requests of the schemes PHP serves (mygo's serveScheme); one of a view gone gets a 503, as macOS's.
         self::$hooks['scheme'] = $h('HScheme', function ($req, $data): void {
             $f = WebKit::ffi();
@@ -279,6 +371,176 @@ final class WebView implements \MyPHP\Platform\Page
             }
             ($v->onScheme)(SchemeTask::request($req), $task);
         });
+    }
+
+    /** WebKitPolicyDecisionType's response. */
+    private const POLICY_RESPONSE = 2;
+
+    /**
+     * Makes attachments, and what WebKit cannot show, downloads; one of a
+     * scheme PHP serves is served again into a download, as WebKit makes
+     * none of what a scheme handler serves (mygo's decideResponse).
+     */
+    private function decideResponse(CData $decision): int
+    {
+        $f = WebKit::ffi();
+        $resp = $f->webkit_response_policy_decision_get_response($decision);
+        $url = (string)$f->webkit_uri_response_get_uri($resp);
+        $custom = array_key_exists($url, \MyPHP\Native\Scheme::$dispositions); // served by PHP
+        $disposition = $custom ? \MyPHP\Native\Scheme::$dispositions[$url] : '';
+        if (!$custom && ($h = $f->webkit_uri_response_get_http_headers($resp)) !== null) {
+            $disposition = (string)$f->soup_message_headers_get_one($h, 'Content-Disposition');
+        }
+        $attachment = str_starts_with(strtolower(trim($disposition)), 'attachment');
+        if (!$attachment && $f->webkit_response_policy_decision_is_mime_type_supported($decision)) {
+            return 0;
+        }
+        if ($custom && $this->onSchemeDownload !== null) {
+            $f->webkit_policy_decision_ignore($decision);
+            ($this->onSchemeDownload)($url);
+            return 1;
+        }
+        $f->webkit_policy_decision_download($decision);
+        return 1;
+    }
+
+    /** Camera, microphone, location and notifications go to onPermission; other requests get WebKit's answer (mygo's cbPermission). */
+    private function permission(CData $req): int
+    {
+        $f = WebKit::ffi();
+        $kinds = [];
+        if ($f->g_type_check_instance_is_a($req, $f->webkit_user_media_permission_request_get_type())) {
+            if ($f->webkit_user_media_permission_is_for_video_device($req)) { $kinds[] = 'camera'; }
+            if ($f->webkit_user_media_permission_is_for_audio_device($req)) { $kinds[] = 'microphone'; }
+        } elseif ($f->g_type_check_instance_is_a($req, $f->webkit_geolocation_permission_request_get_type())) {
+            $kinds = ['geolocation'];
+        } elseif ($f->g_type_check_instance_is_a($req, $f->webkit_notification_permission_request_get_type())) {
+            $kinds = ['notifications'];
+        }
+        if ($kinds === [] || $this->onPermission === null) {
+            return 0;
+        }
+        $u = parse_url($this->url());
+        $origin = ($u['scheme'] ?? '') . '://' . ($u['host'] ?? '') . (isset($u['port']) ? ":{$u['port']}" : '');
+        ($this->onPermission)($kinds, $origin) ? $f->webkit_permission_request_allow($req) : $f->webkit_permission_request_deny($req);
+        return 1;
+    }
+
+    /** WebKitAuthenticationScheme's HTTP schemes by their names; others, client certificates among them, get WebKit's handling (mygo's authScheme). */
+    private const AUTH_SCHEMES = [1 => 'basic', 2 => 'basic', 3 => 'digest', 5 => 'ntlm', 6 => 'negotiate'];
+
+    /** An HTTP sign-in (mygo's cbAuthenticate): onAuth's credentials, for the session, or none, the server's refusal. */
+    private function authenticate(CData $req): int
+    {
+        $f = WebKit::ffi();
+        $scheme = self::AUTH_SCHEMES[$f->webkit_authentication_request_get_scheme($req)] ?? null;
+        if ($scheme === null || $this->onAuth === null) {
+            return 0;
+        }
+        $r = ($this->onAuth)((string)$f->webkit_authentication_request_get_host($req), $f->webkit_authentication_request_get_port($req),
+            (string)$f->webkit_authentication_request_get_realm($req), $scheme, (bool)$f->webkit_authentication_request_is_for_proxy($req));
+        if ($r === null) {
+            return 0;
+        }
+        if ($r === [] || $r === ['', '']) {
+            $f->webkit_authentication_request_authenticate($req, null); // without credentials: the server's refusal
+            return 1;
+        }
+        $c = $f->webkit_credential_new($r[0], $r[1], 1); // WEBKIT_CREDENTIAL_PERSISTENCE_FOR_SESSION
+        $f->webkit_authentication_request_authenticate($req, $c);
+        $f->webkit_credential_free($c);
+        return 1;
+    }
+
+    /** GTlsCertificateFlags' errors, worded, by bit (mygo's tlsErrors). */
+    private const TLS_ERRORS = ["the certificate's issuer is not known", 'the certificate does not match the host', 'the certificate is not valid yet',
+        'the certificate expired', 'the certificate was revoked', "the certificate's algorithm is insecure", 'the certificate is invalid'];
+
+    /**
+     * A server certificate that does not verify (mygo's cbTLSErrors): one
+     * onCertificate allows is allowed for its host, and the page loaded
+     * again once WebKit finished failing it; otherwise the load fails.
+     */
+    private function tlsError(string $url, ?CData $cert, int $flags): int
+    {
+        $host = (string)parse_url($url, PHP_URL_HOST);
+        if ($cert === null || $this->onCertificate === null || $host === '') {
+            return 0;
+        }
+        $f = WebKit::ffi();
+        $error = 'the certificate does not verify';
+        foreach (self::TLS_ERRORS as $bit => $text) {
+            if ($flags & (1 << $bit)) { $error = $text; break; }
+        }
+        $der = '';
+        $slot = $f->new('GByteArray*[1]');
+        $f->g_object_get($cert, 'certificate', \FFI::addr($slot[0]), null); // variadic: a pointer, not the array
+        if ($slot[0] !== null) {
+            $der = \FFI::string($slot[0]->data, $slot[0]->len);
+            $f->g_byte_array_unref($slot[0]);
+        }
+        if (!($this->onCertificate)($url, trim($host, '[]'), $error, $der)) {
+            return 0;
+        }
+        $f->webkit_web_context_allow_tls_certificate_for_host($f->webkit_web_view_get_context($this->web), $cert, trim($host, '[]'));
+        $this->failed = true; // WebKit finishes the failed load after the signal, which is no page's load
+        $this->tlsRetry = $url;
+        Gtk::idle(function (): void {
+            if ($this->tlsRetry !== '' && $this->ucm !== null) {
+                $url = $this->tlsRetry;
+                $this->tlsRetry = '';
+                $this->loadURL($url);
+            }
+        });
+        return 1;
+    }
+
+    /** WebKitScriptDialogType's. */
+    private const DIALOG_ALERT = 0, DIALOG_CONFIRM = 1, DIALOG_PROMPT = 2;
+
+    /** alert(), confirm() and prompt() as the app's dialogs, through onPanel (macOS's panels); WebKit's own for before-unload. */
+    private function scriptDialog(CData $dialog): int
+    {
+        $f = WebKit::ffi();
+        $type = $f->webkit_script_dialog_get_dialog_type($dialog);
+        if ($this->onPanel === null || $type > self::DIALOG_PROMPT) {
+            return 0;
+        }
+        $message = (string)$f->webkit_script_dialog_get_message($dialog);
+        match ($type) {
+            self::DIALOG_ALERT => ($this->onPanel)('alert', $message),
+            self::DIALOG_CONFIRM => $f->webkit_script_dialog_confirm_set_confirmed($dialog, ($this->onPanel)('confirm', $message) ? 1 : 0),
+            self::DIALOG_PROMPT => (function () use ($f, $dialog, $message): void {
+                $text = ($this->onPanel)('prompt', $message, (string)$f->webkit_script_dialog_prompt_get_default_text($dialog));
+                if ($text !== null) { $f->webkit_script_dialog_prompt_set_text($dialog, $text); } // none set: prompt() returns null
+            })(),
+        };
+        return 1;
+    }
+
+    /** A file input's chooser, through onPanel; WebKitGTK tells no folder input. */
+    private function chooseFiles(CData $req): int
+    {
+        if ($this->onPanel === null) {
+            return 0;
+        }
+        $f = WebKit::ffi();
+        $paths = ($this->onPanel)('files', (bool)$f->webkit_file_chooser_request_get_select_multiple($req), false);
+        if ($paths === null || $paths === []) {
+            $f->webkit_file_chooser_request_cancel($req);
+            return 1;
+        }
+        $list = $f->new('const char*[' . (count($paths) + 1) . ']');
+        $keep = [];
+        foreach (array_values($paths) as $i => $p) {
+            $keep[$i] = $f->new('char[' . (strlen($p) + 1) . ']', false);
+            \FFI::memcpy($keep[$i], $p . "\0", strlen($p) + 1);
+            $list[$i] = $f->cast('const char*', $keep[$i]);
+        }
+        $list[count($paths)] = null;
+        $f->webkit_file_chooser_request_select_files($req, $list);
+        foreach ($keep as $k) { \FFI::free($k); }
+        return 1;
     }
 
     /** Decides a navigation of the page (mygo's cbDecidePolicy): the main frame's go to onNavigate, the app's own and back/forward and reloads told so. */
@@ -312,19 +574,21 @@ final class WebView implements \MyPHP\Platform\Page
         return $this->web;
     }
 
+    /** Shows WebKit's inspector, in a window of its own, for a page made with developer tools (mygo's OpenDevTools). */
     public function openDevTools(): void
     {
-        throw new Unsupported('myphp: developer tools are not on Linux yet');
+        if ($this->devTools) { WebKit::ffi()->webkit_web_inspector_show(WebKit::ffi()->webkit_web_view_get_inspector($this->web)); }
     }
 
     public function closeDevTools(): void
     {
-        throw new Unsupported('myphp: developer tools are not on Linux yet');
+        WebKit::ffi()->webkit_web_inspector_close(WebKit::ffi()->webkit_web_view_get_inspector($this->web));
     }
 
+    /** Whether the inspector has its web view, which it has while it shows (mygo's IsDevToolsOpened). */
     public function isDevToolsOpened(): bool
     {
-        throw new Unsupported('myphp: developer tools are not on Linux yet');
+        return WebKit::ffi()->webkit_web_inspector_get_web_view(WebKit::ffi()->webkit_web_view_get_inspector($this->web)) !== null;
     }
 
     /** Replaces the scripts pages get at document start, all of them, as the content manager removes them so (mygo's SetUserScripts). */
@@ -381,14 +645,45 @@ final class WebView implements \MyPHP\Platform\Page
         return 0;
     }
 
+    /** WebKitGTK's serialized session state: the back/forward list, in its own versioned encoding (mygo's SessionState). */
     public function sessionState(): string
     {
-        throw new Unsupported('myphp: session state is not on Linux yet');
+        $f = WebKit::ffi();
+        $state = $f->webkit_web_view_get_session_state($this->web);
+        $bytes = $f->webkit_web_view_session_state_serialize($state);
+        $f->webkit_web_view_session_state_unref($state);
+        $n = $f->new('size_t[1]');
+        $p = $f->g_bytes_get_data($bytes, $n);
+        $out = $n[0] === 0 ? '' : \FFI::string($p, $n[0]);
+        $f->g_bytes_unref($bytes);
+        return $out;
     }
 
+    /**
+     * Puts back the back/forward list, which WebKitGTK does without loading
+     * anything, then goes to its current item, as Epiphany does; a state it
+     * can't read is none (mygo's RestoreSessionState).
+     */
     public function restoreSessionState(string $state): bool
     {
-        throw new Unsupported('myphp: session state is not on Linux yet');
+        if ($state === '') {
+            return false;
+        }
+        $f = WebKit::ffi();
+        $bytes = $f->g_bytes_new($state, strlen($state));
+        $s = $f->webkit_web_view_session_state_new($bytes);
+        $f->g_bytes_unref($bytes);
+        if ($s === null) {
+            return false;
+        }
+        $f->webkit_web_view_restore_session_state($this->web, $s);
+        $f->webkit_web_view_session_state_unref($s);
+        $item = $f->webkit_back_forward_list_get_current_item($f->webkit_web_view_get_back_forward_list($this->web));
+        if ($item === null) {
+            return false;
+        }
+        $f->webkit_web_view_go_to_back_forward_list_item($this->web, $item);
+        return true;
     }
 
     /** Lets the web view go: its handler and scripts, its page stopped; the view itself once GTK is done with it (mygo's cleanup). */
@@ -494,9 +789,25 @@ final class WebView implements \MyPHP\Platform\Page
         $f->webkit_web_view_call_async_javascript_function($this->web, $body, strlen($body), null, null, null, null, self::$hooks['async']->fn, $f->cast('void*', $key));
     }
 
+    /** A PNG of the visible part of the page (webkit_web_view_get_snapshot, mygo's CapturePage); $done gets it or the error. @param Closure(?string, ?string): void $done */
     public function capture(Closure $done): void
     {
-        throw new Unsupported('myphp: capturing a page is not on Linux yet');
+        $f = WebKit::ffi();
+        $key = ++self::$nextCall;
+        self::$pending[$key] = function (?CData $surface, ?string $error) use ($done): void {
+            if ($surface === null) {
+                $done(null, $error);
+                return;
+            }
+            $f = WebKit::ffi();
+            $path = tempnam(sys_get_temp_dir(), 'myphp-capture');
+            $ok = $f->cairo_surface_write_to_png($surface, $path) === 0; // CAIRO_STATUS_SUCCESS
+            $f->cairo_surface_destroy($surface);
+            $png = $ok ? (string)file_get_contents($path) : '';
+            unlink($path);
+            $png === '' ? $done(null, 'myphp: the snapshot is no image') : $done($png, null);
+        };
+        $f->webkit_web_view_get_snapshot($this->web, 0, 0, null, self::$hooks['snapshot']->fn, $f->cast('void*', $key)); // WEBKIT_SNAPSHOT_REGION_VISIBLE, no options
     }
 
     public function loadHTML(string $html, string $baseURL = ''): void
@@ -517,29 +828,105 @@ final class WebView implements \MyPHP\Platform\Page
         WebKit::ffi()->webkit_web_view_load_uri($this->web, $url);
     }
 
+    /** Shows GTK's print dialog for the page over $window, the GtkWindow (mygo's Print). */
     public function print($window): void
     {
-        throw new Unsupported('myphp: printing is not on Linux yet');
+        $f = WebKit::ffi();
+        $op = $f->webkit_print_operation_new($this->web);
+        $f->webkit_print_operation_run_dialog($op, $window);
+        $f->g_object_unref($op);
     }
 
+    /**
+     * Prints the page into a PDF through GTK's "Print to File" printer,
+     * which writes it to a temporary file (mygo's PrintToPDF): paper of
+     * $width × $height inches, margins in inches; $done gets the bytes or
+     * the error.
+     * @param Closure(?string, ?string): void $done
+     */
     public function printToPDF($window, float $width, float $height, bool $landscape, array $margins, bool $background, Closure $done): void
     {
-        throw new Unsupported('myphp: printing to PDF is not on Linux yet');
+        if ($this->url() === '') { // WebKitGTK crashes printing a view that never loaded anything
+            $done(null, 'myphp: printing to PDF: the page has loaded nothing');
+            return;
+        }
+        $f = WebKit::ffi();
+        $path = tempnam(sys_get_temp_dir(), 'myphp-') . '.pdf';
+        $file = $f->g_file_new_for_path($path);
+        $uri = WebKit::take($f->g_file_get_uri($file));
+        $f->g_object_unref($file);
+        $settings = $f->gtk_print_settings_new();
+        foreach (['printer' => 'Print to File', 'output-file-format' => 'pdf', 'output-uri' => $uri] as $k => $v) {
+            $f->gtk_print_settings_set($settings, $k, $v);
+        }
+        $inch = 2; // GTK_UNIT_INCH
+        $setup = $f->gtk_page_setup_new();
+        $paper = $f->gtk_paper_size_new_custom('myphp', 'MyPHP', $width, $height, $inch);
+        $f->gtk_page_setup_set_paper_size($setup, $paper);
+        $f->gtk_paper_size_free($paper);
+        if ($landscape) { $f->gtk_page_setup_set_orientation($setup, 1); } // GTK_PAGE_ORIENTATION_LANDSCAPE
+        [$top, $right, $bottom, $left] = $margins;
+        $f->gtk_page_setup_set_top_margin($setup, $top, $inch);
+        $f->gtk_page_setup_set_right_margin($setup, $right, $inch);
+        $f->gtk_page_setup_set_bottom_margin($setup, $bottom, $inch);
+        $f->gtk_page_setup_set_left_margin($setup, $left, $inch);
+        $web = $f->webkit_web_view_get_settings($this->web);
+        $printed = $f->webkit_settings_get_print_backgrounds($web);
+        $f->webkit_settings_set_print_backgrounds($web, $background ? 1 : 0);
+        $op = $f->webkit_print_operation_new($this->web);
+        $f->webkit_print_operation_set_print_settings($op, $settings);
+        $f->webkit_print_operation_set_page_setup($op, $setup);
+        $f->g_object_unref($settings);
+        $f->g_object_unref($setup);
+        $k = WebKit::addr($op);
+        $failed = null;
+        self::$printJobs[$k] = function (?string $error) use ($k, $op, $web, $printed, $path, $done, &$failed): void {
+            if ($error !== null) { // "failed" comes before "finished"
+                $failed = $error;
+                return;
+            }
+            unset(self::$printJobs[$k]);
+            $f = WebKit::ffi();
+            $f->webkit_settings_set_print_backgrounds($web, $printed);
+            $f->g_object_unref($op);
+            $pdf = is_file($path) ? (string)file_get_contents($path) : '';
+            if (is_file($path)) { unlink($path); }
+            if (is_file(substr($path, 0, -4))) { unlink(substr($path, 0, -4)); }
+            if ($failed !== null || $pdf === '') {
+                $done(null, $failed !== null ? "myphp: printing to PDF: $failed" : 'myphp: printing to PDF produced no file');
+                return;
+            }
+            $done($pdf, null);
+        };
+        $f->g_signal_connect_data($op, 'finished', $f->cast('void*', self::$hooks['printed']->fn), null, null, 0);
+        $f->g_signal_connect_data($op, 'failed', $f->cast('void*', self::$hooks['printFailed']->fn), null, null, 0);
+        $f->webkit_print_operation_print($op);
     }
 
     public function allowsPictureInPicture(): ?bool
     {
-        throw new Unsupported('myphp: picture in picture is not on Linux');
+        throw new Unsupported('myphp: picture in picture is not on Linux: WebKitGTK has none');
     }
 
     public function togglePictureInPicture(string $script): void
     {
-        throw new Unsupported('myphp: picture in picture is not on Linux');
+        throw new Unsupported('myphp: picture in picture is not on Linux: WebKitGTK has none');
     }
 
     public function pictureInPictureActive(): bool
     {
-        throw new Unsupported('myphp: picture in picture is not on Linux');
+        throw new Unsupported('myphp: picture in picture is not on Linux: WebKitGTK has none');
+    }
+
+    /**
+     * Asks $listen about WebKit's context menu $menu, opened by $event,
+     * and changes it as the page's listeners answer (mygo's linux
+     * contextMenu): see ContextMenus.
+     * @param \Closure(\MyPHP\Menu, ?array{0: float, 1: float}): \MyPHP\ContextMenuEvent $listen
+     */
+    public function showContextMenu($menu, $event, Closure $listen): void
+    {
+        $this->noMenu = ContextMenus::show($this, $menu, $event, $listen);
     }
 
     /** Nothing: WebKitGTK has no picture in picture whose page its back/forward cache would keep. */

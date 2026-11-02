@@ -7660,9 +7660,9 @@ llvmpipe (GL 4.5 core).
   core keeps it in the file `locale` of `App::path(UserData)`, which is
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
-- **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  views in native UI, global shortcuts on Wayland, and video; of web
-  pages, what the next section leaves out.
+- **Not there yet** (each throws `Platform\Unsupported`, or logs): global
+  shortcuts on Wayland, and video; of web pages, sessions, cookies, content
+  rules and picture in picture (mygo-deviations.md).
 
 ## Linux backend: web pages (v1.148)
 
@@ -7715,6 +7715,59 @@ garbage collector takes SIGUSR1) and Mesa's DRI3 warnings are harmless.
   SIGPIPE): the task stopped. WebKitGTK tells no stop of a request, and
   goes on reading a body after its page went: an endless generator runs
   until its view goes.
+
+## Linux backend: web pages, part two (v1.149)
+
+What macOS's page does by its delegates comes on Linux from WebKitWebView's
+signals, each one C function for every view (`Linux\WebView`), to the same
+hooks of the core's Page.
+
+- **Downloads** (mygo's download.go): the default web context's
+  download-started tells each; its decide-destination asks onDownload,
+  "failed" comes before "finished". decide-policy's response decisions
+  make attachments and what WebKit cannot show downloads, one of a scheme
+  PHP serves served again into one (`Native\Scheme::download`), as macOS's.
+- **Sign-ins and certificates** (mygo's auth.go): authenticate asks onAuth;
+  load-failed-with-tls-errors asks onCertificate with the certificate's
+  DER (the GTlsCertificate's "certificate", read by the variadic
+  g_object_get, which takes a pointer, never an FFI array), allows it for
+  its host and loads the URL again from an idle. WebKit finishes the
+  failed load after the signal: that finish is no page's load, so it is
+  not told (didFinishLoad would name the page before).
+- **JavaScript panels and file inputs** go to onPanel, the app's GTK
+  dialogs, from script-dialog and run-file-chooser, as macOS's sheets
+  (mygo leaves WebKitGTK's own). A script that asks the page something
+  while a panel shows (eval) waits until the panel closes: the page's
+  JavaScript waits on it.
+- **Context menus** (mygo's linux context_menu.go): context-menu hands
+  the WebKitContextMenu over, which `Linux\ContextMenus` describes as
+  MenuItems (WebKit's numbered, named by their stock action) and fills
+  again as the listeners left it, with `Native\ContextMenus`'s shared
+  steps (same, onceEach, tidy). The app's items are GSimpleActions whose
+  one activate handler, its data the item's id, clicks them; WebKitGTK
+  renames none of its items, so a renamed one is a new item of the same
+  stock action. The core reaches it through `Platform\Page::showContextMenu`.
+- **The rest of a page's API**: the inspector shows in a window of its
+  own; capture is webkit_web_view_get_snapshot written as a PNG by cairo;
+  printToPDF prints to GTK's "Print to File" printer; session state is
+  WebKitGTK's serialized one, which the core marks "linux" (GOOS, as
+  mygo's), so a state saved on macOS opens its URL here.
+- **Web views in native UI** (mygo's linux webview.go, `SurfaceWebView`):
+  the first one moves the GtkGLArea into a GtkOverlay over a GtkLayout
+  holding the WebKitWebViews, the area with an alpha channel, so its
+  frames' holes show the pages. GTK realizes the area again, with a new GL
+  context, which frees the renderer and its lists: a web view made while
+  a frame is built (in the view function) is layered from an idle once
+  that frame is done (it failed with "Use after free" in DisplayList).
+  The overlay's window gets an input shape: the web views' clips but what
+  the content painted over them and takes the pointer, which
+  `Runtime::webViewCovers` gives (mygo's covers), as GTK cannot ask the
+  content point by point as AppKit's hitTest does. WebKitGTK focuses no
+  element as its view takes the keyboard, so the Tab that moved the
+  content's focus onto the web view's node is sent on to the view; its
+  focus signal gives the keyboard back as Tab leaves the page. The wheel
+  of a view with scrollToContainer goes to the content, moved to the
+  area's coordinates.
 
 ## Open items
 

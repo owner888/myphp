@@ -6,7 +6,6 @@ namespace MyPHP\Platform\Linux;
 use FFI\CData;
 use MyPHP\{App, L10n, MessageOptions, MessageResult, OpenDialogOptions, SaveDialogOptions};
 use MyPHP\Platform;
-use MyPHP\Platform\Unsupported;
 
 /**
  * GTK's dialogs (mygo's linux dialog.go): the file chooser through
@@ -177,9 +176,11 @@ final class Dialogs implements Platform\Dialogs
         return $got;
     }
 
+    /** A page's file input: the file chooser over its window, null when canceled. @return ?list<string> */
     public function chooseForPage(\MyPHP\Window $window, bool $multiple, bool $dirs): ?array
     {
-        throw new Unsupported('myphp: web pages need WebKitGTK, which the Linux backend does not drive yet');
+        $paths = $this->open(new OpenDialogOptions($window, directory: $dirs, multiple: $multiple));
+        return $paths === [] ? null : $paths;
     }
 
     /** A message dialog with Cancel and OK, OK the default. */
