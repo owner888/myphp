@@ -16,6 +16,10 @@ final class Android
     public const EVENT_TOUCH = 4;
     public const EVENT_CHOREOGRAPHER = 5;
     public const EVENT_SIGNAL = 6;
+    public const EVENT_IME_COMMIT = 7;
+    public const EVENT_IME_COMPOSE = 8;
+    public const EVENT_IME_DELETE = 9;
+    public const EVENT_KEY = 10;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -59,6 +63,7 @@ final class Android
                 int32_t width;
                 int32_t height;
                 int64_t time_ms;
+                char text[256];
             } MyphpEvent;
 
             void* myphp_get_native_window(void);
@@ -68,6 +73,8 @@ final class Android
             int myphp_read_event(MyphpEvent *ev, int timeout_ms);
             void myphp_signal_backend(void);
             void myphp_request_frame(void);
+            void myphp_show_keyboard(void);
+            void myphp_hide_keyboard(void);
             int myphp_shape_text(const char *text, float size, int style, float *out_buffer, int max_floats);
             int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels);
         ', 'libmyphp.so');

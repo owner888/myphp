@@ -29,6 +29,10 @@ enum MyphpEventType {
     MYPHP_EVENT_TOUCH = 4,
     MYPHP_EVENT_CHOREOGRAPHER = 5,
     MYPHP_EVENT_SIGNAL = 6,
+    MYPHP_EVENT_IME_COMMIT = 7,
+    MYPHP_EVENT_IME_COMPOSE = 8,
+    MYPHP_EVENT_IME_DELETE = 9,
+    MYPHP_EVENT_KEY = 10,
 };
 
 typedef struct {
@@ -39,6 +43,7 @@ typedef struct {
     int32_t width;
     int32_t height;
     int64_t time_ms;
+    char text[256];
 } MyphpEvent;
 
 static char g_files_dir[1024] = {0};
@@ -152,6 +157,8 @@ void myphp_request_frame(void) {
 // JNI font shaping & rasterizing helpers
 static jmethodID g_mid_shape = NULL;
 static jmethodID g_mid_rasterize = NULL;
+static jmethodID g_mid_show_keyboard = NULL;
+static jmethodID g_mid_hide_keyboard = NULL;
 
 static JNIEnv* get_jni_env(void) {
     JNIEnv *env = NULL;
@@ -283,6 +290,8 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_activity_class = (jclass)(*env)->NewGlobalRef(env, clazz);
     g_mid_shape = (*env)->GetStaticMethodID(env, clazz, "shapeText", "(Ljava/lang/String;FI)[F");
     g_mid_rasterize = (*env)->GetStaticMethodID(env, clazz, "rasterizeGlyph", "(IFI[I)[B");
+    g_mid_show_keyboard = (*env)->GetStaticMethodID(env, clazz, "showSoftKeyboard", "()V");
+    g_mid_hide_keyboard = (*env)->GetStaticMethodID(env, clazz, "hideSoftKeyboard", "()V");
 
     if (pipe(g_event_pipe) == 0) {
         fcntl(g_event_pipe[0], F_SETFL, O_NONBLOCK);
@@ -316,10 +325,16 @@ Java_com_owner888_myphp_MyphpActivity_nativeSurfaceCreated(JNIEnv *env, jclass c
 }
 
 JNIEXPORT void JNICALL
-Java_com_owner888_myphp_MyphpActivity_nativeSurfaceChanged(JNIEnv *env, jclass clazz, jint width, jint height) {
+Java_com_owner888_myphp_MyphpActivity_nativeSurfaceChanged(JNIEnv *env, jclass clazz, jobject surface, jint width, jint height) {
     g_surface_width = width;
     g_surface_height = height;
-    LOGI("nativeSurfaceChanged: %dx%d", width, height);
+    if (surface) {
+        if (g_native_window) {
+            ANativeWindow_release(g_native_window);
+        }
+        g_native_window = ANativeWindow_fromSurface(env, surface);
+    }
+    LOGI("nativeSurfaceChanged: %dx%d, ANativeWindow=%p", width, height, g_native_window);
 
     if (g_event_pipe[1] >= 0) {
         MyphpEvent ev = {
@@ -356,4 +371,64 @@ Java_com_owner888_myphp_MyphpActivity_nativeTouchEvent(JNIEnv *env, jclass clazz
         };
         write(g_event_pipe[1], &ev, sizeof(ev));
     }
+}
+
+void myphp_show_keyboard(void) {
+    JNIEnv *env = get_jni_env();
+    if (env && g_activity_class && g_mid_show_keyboard) {
+        (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_show_keyboard);
+    }
+}
+
+void myphp_hide_keyboard(void) {
+    JNIEnv *env = get_jni_env();
+    if (env && g_activity_class && g_mid_hide_keyboard) {
+        (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_hide_keyboard);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeImeCommit(JNIEnv *env, jclass clazz, jstring jtext) {
+    if (g_event_pipe[1] < 0 || !jtext) return;
+    const char *chars = (*env)->GetStringUTFChars(env, jtext, NULL);
+    if (!chars) return;
+
+    MyphpEvent ev = {.type = MYPHP_EVENT_IME_COMMIT};
+    strncpy(ev.text, chars, sizeof(ev.text) - 1);
+    (*env)->ReleaseStringUTFChars(env, jtext, chars);
+
+    write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeImeCompose(JNIEnv *env, jclass clazz, jstring jtext) {
+    if (g_event_pipe[1] < 0) return;
+    MyphpEvent ev = {.type = MYPHP_EVENT_IME_COMPOSE};
+    if (jtext) {
+        const char *chars = (*env)->GetStringUTFChars(env, jtext, NULL);
+        if (chars) {
+            strncpy(ev.text, chars, sizeof(ev.text) - 1);
+            (*env)->ReleaseStringUTFChars(env, jtext, chars);
+        }
+    }
+    write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeImeDelete(JNIEnv *env, jclass clazz) {
+    if (g_event_pipe[1] < 0) return;
+    MyphpEvent ev = {.type = MYPHP_EVENT_IME_DELETE};
+    write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeKeyEvent(JNIEnv *env, jclass clazz, jint keyCode, jint action, jint unicodeChar) {
+    if (g_event_pipe[1] < 0) return;
+    MyphpEvent ev = {
+        .type = MYPHP_EVENT_KEY,
+        .action = action,
+        .width = keyCode,
+        .height = unicodeChar
+    };
+    write(g_event_pipe[1], &ev, sizeof(ev));
 }

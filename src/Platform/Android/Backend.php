@@ -84,14 +84,25 @@ final class Backend implements Platform\Backend
                     $win?->requestFrame();
                     break;
                 case Android::EVENT_SURFACE_CHANGED:
-                    $win?->initEgl();
-                    $win?->requestFrame();
+                    $win?->onSurfaceChanged();
                     break;
                 case Android::EVENT_SURFACE_DESTROYED:
                     $win?->destroySurface();
                     break;
                 case Android::EVENT_TOUCH:
                     $win?->onTouch((int)$ev->action, (float)$ev->x, (float)$ev->y, (int)$ev->time_ms);
+                    break;
+                case Android::EVENT_IME_COMMIT:
+                    $win?->onImeCommit(\FFI::string($ev->text));
+                    break;
+                case Android::EVENT_IME_COMPOSE:
+                    $win?->onImeCompose(\FFI::string($ev->text));
+                    break;
+                case Android::EVENT_IME_DELETE:
+                    $win?->onImeDelete();
+                    break;
+                case Android::EVENT_KEY:
+                    $win?->onKeyEvent((int)$ev->width, (int)$ev->action, (int)$ev->height);
                     break;
                 case Android::EVENT_CHOREOGRAPHER:
                     $win?->drawFrame();
