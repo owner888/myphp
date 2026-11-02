@@ -156,6 +156,13 @@ final class Protocol
                 }
                 $d->menu($p['window'], $p['path']);
                 return new stdClass;
+            case 'resize':
+                $p = self::fields("params of $method", $params, ['window' => 'int', 'width' => 'int', 'height' => 'int']);
+                if ($p['width'] <= 0 || $p['height'] <= 0) {
+                    throw new Failure(Failure::INVALID, 'resize needs a width and a height of at least 1 point');
+                }
+                $d->resize($p['window'], $p['width'], $p['height']);
+                return new stdClass;
             case 'capture':
                 $p = self::fields("params of $method", $params, ['window' => 'int']);
                 $png = $d->capture($p['window']);
@@ -438,14 +445,21 @@ final class Protocol
         return $out;
     }
 
-    /** Key's masks of modifiers by name; CmdOrCtrl is Command, as on macOS. */
+    /**
+     * Key's masks of modifiers by name, as the keyboard's keys give them:
+     * on Linux, Control is Key::COMMAND, the shortcuts' modifier, and Super
+     * Key::CONTROL (Platform\Linux\Window); CmdOrCtrl is Key::COMMAND,
+     * Command on macOS and Control elsewhere.
+     */
     private static function modifier(string $name): ?int
     {
+        $mac = PHP_OS_FAMILY === 'Darwin';
         return match (strtolower($name)) {
             'shift' => Key::SHIFT,
-            'ctrl', 'control' => Key::CONTROL,
+            'ctrl', 'control' => $mac ? Key::CONTROL : Key::COMMAND,
             'alt', 'option' => Key::OPTION,
-            'super', 'cmd', 'command', 'meta', 'cmdorctrl', 'commandorcontrol' => Key::COMMAND,
+            'super', 'cmd', 'command', 'meta' => $mac ? Key::COMMAND : Key::CONTROL,
+            'cmdorctrl', 'commandorcontrol' => Key::COMMAND,
             default => null,
         };
     }

@@ -321,19 +321,26 @@ if (PHP_OS_FAMILY === 'Darwin') {
         $h6 = new Headless(fn(Context $c) => $c->mediaPlayer($s6), 960, 900);
         $h6->rt->reduceMotion = true;
         $h6->frame();
+        // The switch itself: byLabel takes the first in tree order, the row's text before it.
+        $hw = function (?Node $n = null) use (&$hw, $h6): ?Node {
+            $n ??= $h6->root;
+            if ($n->role === \MyPHP\UI\Role::SWITCH && $n->label === 'Hardware Decoding') { return $n; }
+            foreach ($n->kids as $k) { if (($r = $hw($k)) !== null) { return $r; } }
+            return null;
+        };
         $was = $p6->hardwareDecoding();
-        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        $h6->clickOn($hw());
         same([!$was, !$was], [$p6->hardwareDecoding(), $s6->hardwareDecoding], 'switched: the film decodes the other way');
         $p6->play(); $run(0.5); $p6->pause();
         check($p6->out->failure() === null && $p6->time() > 0.2, 'it plays on so: ' . ($p6->out->failure() ?? round($p6->time(), 2) . ' s'));
-        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        $h6->clickOn($hw());
         same($was, $p6->hardwareDecoding(), 'and back');
-        $h6->clickOn($h6->byLabel('Hardware Decoding'));
+        $h6->clickOn($hw());
         $p7 = new Player(__DIR__ . '/testdata/clip-av1.mp4'); $s6->setPlayer($p7);
         same(!$was, $p7->hardwareDecoding(), 'the next film takes it');
         $p8 = new Player(__DIR__ . '/testdata/clip.mkv'); $s6->setPlayer($p8); $h6->frame();
-        $h6->clickOn($h6->byLabel('Hardware Decoding'));
-        check(!$p8->decodingSwitchable() && $p8->hardwareDecoding() && $h6->byLabel('Hardware Decoding')?->checked === 2, 'an H.264 film, which the system alone decodes here: the switch on, fixed');
+        $h6->clickOn($hw());
+        check(!$p8->decodingSwitchable() && $p8->hardwareDecoding() && $hw()?->checked === 2, 'an H.264 film, which the system alone decodes here: the switch on, fixed');
     }
     // Online subtitles (IINA's Find Online Subtitles): Search Online disabled of no key (''); the list of those found, a row each,
     // a click choosing one, Command another, Cancel taking it away (no request made: OpenSubtitles' own in opensubtitles_test, offline).

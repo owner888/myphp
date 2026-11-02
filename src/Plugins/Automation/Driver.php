@@ -34,6 +34,9 @@ interface Driver
     /** @param list<string> $path the titles of the item of the application menu and of the menus it is in */
     public function menu(int $window, array $path): void;
 
+    /** Resizes the window so that its content is $width × $height points, as Window::setContentSize (myphp's: mygo's protocol has no resize). */
+    public function resize(int $window, int $width, int $height): void;
+
     /** A PNG of what the window shows. */
     public function capture(int $window): string;
 

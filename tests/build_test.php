@@ -385,6 +385,7 @@ same(['My "Demo" App', 'com.example.mydemoapp', '0.1.0', 'app.php', 'build'], [$
 check(str_contains(file_get_contents("$root/demo/app.php"), "App::setName('My \"Demo\" App');"), 'its name in the PHP it writes');
 same("\x89PNG", substr(file_get_contents("$root/demo/resources/icon.png"), 0, 4), 'its icon');
 check(is_file("$root/demo/.agents/skills/myphp-maintenance/SKILL.md"), 'its skills');
+check(is_file("$root/demo/.agents/skills/myphp-app/SKILL.md") && is_file("$root/demo/.agents/skills/myphp-app/references/pitfalls.md"), 'the app-writing skill, with its references');
 [$code, $out] = $myphp('init', "$root/demo");
 check($code !== 0 && str_contains($out, 'is not empty'), 'not into a project');
 unlink("$root/demo/.agents/skills/myphp-maintenance/SKILL.md");

@@ -106,6 +106,63 @@ archive, delta updates from the last versions published, and
 `MYPHP_INSPECTOR=1` keeps the [inspector](inspector.md) of native UI in a
 production build. See [Building and distributing](distribution.md).
 
+## myphp screenshot
+
+```sh
+myphp screenshot [dir] [-out shot.png] [-tree tree.json] [-window N] [-size WxH] [-theme light|dark] [-data dir] [-timeout seconds]
+```
+
+Lets a coding agent, or a script, see an app: it runs the app of the
+project in `dir` (default `.`, its `entry` from the configuration) once,
+from its files, waits until its window shows and has settled (the
+automation plugin's `idle`), saves the window's capture as a PNG
+(default `<dir>/.myphp/screenshot.png`), prints the roles, labels and keys
+of the elements it shows, and quits the app as Quit does (SIGTERM). The
+app needs no change: run from its project in development with
+`MYPHP_AUTOMATION` set, it is driven by the [automation
+plugin](automation.md#turning-it-on), here on a socket of its own.
+
+`-tree` writes the elements as JSON too, the `tree` request's answer, for
+agents that read no images; a window showing a web page has none. On Linux
+without a display (`DISPLAY` and `WAYLAND_DISPLAY` unset), the app runs on
+an X server the command starts, Xvfb (`apt install xvfb`). A frontend shows
+from `frontendDist`, built: `devCommand` and `devUrl` are left alone. It
+exits with status 1, saying why, when the app exits before it is captured
+(its output is shown), shows no window, or does not settle in time.
+
+| Flag | |
+|---|---|
+| `-out file` | the PNG (default `<dir>/.myphp/screenshot.png`) |
+| `-tree file` | write the window's elements as JSON too |
+| `-window N` | the window, by the ID the automation plugin lists (default: the focused window, else the first that shows) |
+| `-size WxH` | resize the window's content to W×H points before capturing |
+| `-theme light\|dark` | show the app in that appearance, whatever the system's |
+| `-data dir` | keep the app's data in `dir` (made if missing), apart from the user's |
+| `-timeout s` | seconds to wait for the window and for it to settle (default 30) |
+
+`-theme` sets `MYPHP_THEME`, which `App::run` applies as
+`Theme::setSource(ThemeSource::Light)` or `Dark` would, before the app's
+own code runs; an app that fixes its UI theme with `App::setTheme()` keeps
+it. `-data` gives the app a data directory of its own, so that what it
+saves as it starts, or a window's state, goes there and not into the
+user's: on Linux the command sets `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
+`XDG_DATA_HOME` and `XDG_STATE_HOME` to `dir/config`, `dir/cache`,
+`dir/data` and `dir/state`, so `App::path(PathName::UserData)` is
+`dir/config/<name>` (`<name>` is `App::name()`, what `App::setName()` set);
+on the Mac it sets `MYPHP_DATA_HOME`, which `App::path` reads in place of
+`~/Library`: UserData is `dir/Application Support/<name>`, Cache
+`dir/Caches/<name>`, Logs `dir/Logs/<name>`. The Keychain (`Secrets`) and
+the system's own preferences stay the user's. Put files the app should
+find there before the run, as a sample document:
+
+```sh
+mkdir -p /tmp/shots/config/Notes && cp sample.json /tmp/shots/config/Notes/notes.json
+myphp screenshot -data /tmp/shots -theme dark -out dark.png
+```
+
+Both variables count only where the automation plugin does: in a run from
+the project's files in development (`App::isDev()`, not packaged).
+
 ## myphp micro
 
 Builds the static PHP (phpmicro of static-php-cli) that apps built with
@@ -151,4 +208,6 @@ Prints the MyPHP version.
 | `MYPHP_GENERATE=path` | makes `App::run()` write the TypeScript client and return |
 | `MYPHP_INSPECTOR=1` | keeps the inspector in a production build |
 | `MYPHP_UPDATER_PRIVATE_KEY` | the private key that signs updates |
-| `MYPHP_AUTOMATION` | lets another process drive the app, with the [automation plugin](automation.md) |
+| `MYPHP_AUTOMATION` | lets another process drive the app, with the [automation plugin](automation.md); a run from the project's files in development listens without adding it |
+| `MYPHP_THEME=light\|dark` | in a run from the project's files in development, the appearance the app shows (`myphp screenshot -theme`) |
+| `MYPHP_DATA_HOME=dir` | in a run from the project's files in development on the Mac, where `App::path` looks in place of `~/Library` (`myphp screenshot -data`) |

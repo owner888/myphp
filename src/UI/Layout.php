@@ -488,6 +488,7 @@ final class Layout
         } else {
             self::arrangeFlex($n, $kids, $x, $y, $w, $h);
         }
+        if ($n->baselines) { self::alignBaselines($n); }
         foreach ($absolute ?? [] as $k) {
             self::arrangeAbsolute($n, $k);
         }
@@ -702,7 +703,7 @@ final class Layout
             } elseif ($k->aspect > 0 && $k->fh <= 0) {
                 $kh = ($main[$i] - $mx) / $k->aspect + $my;
             } else {
-                $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
+                $kh = $autoCross || ($a === Node::STRETCH && ($k->fh <= 0 || ($k->kind === Node::BUTTON && !$k->sizedH))) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched); a button's measured one is not its own
             }
             return [$kw, self::clampH($k, $kh, $ch)];
         }) : [];
@@ -731,7 +732,7 @@ final class Layout
                 } elseif ($k->aspect > 0 && $k->fh <= 0) {
                     $kh = ($main[$i] - $mx) / $k->aspect + $my;
                 } else {
-                    $kh = $autoCross || ($a === Node::STRETCH && $k->fh <= 0) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched)
+                    $kh = $autoCross || ($a === Node::STRETCH && ($k->fh <= 0 || ($k->kind === Node::BUTTON && !$k->sizedH))) ? $ch : $k->mh; // a size of its own is kept (mygo: an explicit size is not stretched); a button's measured one is not its own
                 }
                 $kh = self::clampH($k, $kh, $ch); // as $rowSize, inline: a closure call a child was a hot spot
                 // Reversed, or right to left (not both), the same place counted from the right.
@@ -1329,6 +1330,96 @@ final class Layout
             $style = $n->kind === Node::INPUT && $n->edit !== null ? $n->edit->style : $n->style;
             [, $th] = $m->measure($n->kind === Node::BUTTON ? $n->text : ($n->edit?->shown() ?: 'X'), $n->fontSize, $style);
             return ($h - $th) / 2 + $m->ascent($n->fontSize, $style);
+        }
+        return null;
+    }
+
+    /**
+     * Lines up the first lines of text of a row's children, as a field in a form does its label's and its control's,
+     * moving down those whose first line is higher; a child without text, as a switch, takes the baseline a line of
+     * the others' text centered on it would have (mygo's alignBaselines).
+     */
+    private static function alignBaselines(Node $n): void
+    {
+        $line = null;
+        foreach ($n->kids as $k) {
+            if (!$k->absolute && ($line = self::firstLine($k)) !== null) { break; }
+        }
+        if ($line === null) { return; }
+        [$ascent, $descent] = $line;
+        $top = -INF; $at = [];
+        foreach ($n->kids as $i => $k) {
+            if ($k->absolute || ($b = self::anchor($k, $ascent, $descent)) === null) { continue; }
+            $at[$i] = $b[0];
+            $top = max($top, $k->y + $b[0]);
+        }
+        foreach ($at as $i => $b) {
+            $k = $n->kids[$i];
+            if (($dy = $top - $b - $k->y) != 0) { self::move($k, 0.0, $dy); }
+        }
+    }
+
+    /**
+     * How far below $e's top the baseline its row lines up on is, and whether it is a text's: its first line of text's,
+     * or, where a control comes first, a line of the row's text centered on it, so that a control without text lines
+     * up with its label rather than with a description under it; in a row, text comes before what is drawn beside it
+     * (mygo's anchor). @return ?array{0: float, 1: bool}
+     */
+    private static function anchor(Node $e, float $ascent, float $descent): ?array
+    {
+        if ($e->invisible || $e->hidden) { return null; }
+        if ($e->kind === Node::TEXT || $e->kind === Node::RICH || $e->kind === Node::INPUT || $e->kind === Node::TEXTAREA) {
+            $b = self::firstBaseline($e);
+            return $b === null ? null : [$b, true];
+        }
+        if ($e->kind !== Node::CONTAINER || $e->kids === [] || $e->focusable || $e->focusGroup !== 0) { // a control, or a leaf
+            if (($b = self::firstBaseline($e)) !== null) { return [$b, true]; }
+            return $e->h > 0 ? [$e->h / 2 + ($ascent - $descent) / 2, false] : null;
+        }
+        $row = $e->dir === Node::ROW && $e->gridCols === null;
+        $first = null;
+        foreach ($e->kids as $k) {
+            if ($k->absolute || $k->invisible) { continue; }
+            if (($b = self::anchor($k, $ascent, $descent)) === null) { continue; }
+            if ($b[1] || !$row) { return [$k->y - $e->y + $b[0], $b[1]]; }
+            $first ??= [$k->y - $e->y + $b[0], false];
+        }
+        return $first;
+    }
+
+    /** The ascent and descent of the first line of text in $e, as laid out, or null (mygo's firstLine). @return ?array{0: float, 1: float} */
+    private static function firstLine(Node $e): ?array
+    {
+        if ($e->invisible || $e->hidden) { return null; }
+        $m = self::$metrics;
+        if ($e->kind === Node::RICH) {
+            $l = $e->textLayout();
+            return $l->lines === [] ? null : [$l->lines[0]->baseline, $l->lines[0]->height - $l->lines[0]->baseline];
+        }
+        if ($e->kind === Node::TEXT || $e->kind === Node::INPUT || $e->kind === Node::TEXTAREA) {
+            if ($m === null || ($e->kind === Node::TEXT && ($e->text === null || $e->text === ''))) { return null; }
+            $style = $e->edit !== null ? $e->edit->style : $e->style;
+            $asc = $m->ascent($e->fontSize, $style);
+            return [$asc, $m->measure('X', $e->fontSize, $style)[1] - $asc];
+        }
+        foreach ($e->kids as $k) {
+            if (!$k->absolute && ($l = self::firstLine($k)) !== null) { return $l; }
+        }
+        return null;
+    }
+
+    /** How far below $e's top the baseline of its first line of text is, as laid out, or null for one without text (mygo's firstBaseline). */
+    private static function firstBaseline(Node $e): ?float
+    {
+        if ($e->invisible || $e->hidden) { return null; }
+        if ($e->kind === Node::TEXTAREA) { // its first line, inside its padding
+            $m = self::$metrics;
+            return $m === null || $e->edit === null ? null : $e->areaInsets()[0] + $m->ascent($e->fontSize, $e->edit->style);
+        }
+        if ($e->kind !== Node::CONTAINER) { return self::textBaseline($e, $e->h); }
+        foreach ($e->kids as $k) {
+            if ($k->absolute || $k->invisible) { continue; }
+            if (($b = self::firstBaseline($k)) !== null) { return $k->y - $e->y + $b; }
         }
         return null;
     }

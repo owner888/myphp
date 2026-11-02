@@ -66,6 +66,9 @@ final class Gtk
             void gtk_main(void); void gtk_main_quit(void); guint gtk_main_level(void);
             guint g_idle_add_full(int, CbSource, void*, void*);
             guint g_timeout_add_full(int, guint, CbSource, void*, void*);
+            guint g_unix_signal_add_full(int, int, CbSource, void*, void*);
+            struct sigaction { uintptr_t handler; unsigned long mask[16]; int flags; void* restorer; };
+            int sigaction(int, const struct sigaction*, struct sigaction*);
             gboolean g_source_remove(guint);
             gboolean g_main_context_iteration(void*, gboolean);
             void g_main_context_wakeup(void*);
@@ -190,7 +193,7 @@ final class Gtk
             void* gtk_check_menu_item_new_with_label(const char*);
             void gtk_check_menu_item_set_draw_as_radio(void*, gboolean); void gtk_check_menu_item_set_active(void*, gboolean);
             void gtk_menu_item_set_submenu(void*, void*); void* gtk_menu_item_get_submenu(void*);
-            void gtk_menu_item_set_label(void*, const char*);
+            void gtk_menu_item_set_label(void*, const char*); const char* gtk_menu_item_get_label(void*); void gtk_menu_item_activate(void*); const char* gtk_label_get_label(void*);
             void gtk_menu_shell_append(void*, void*);
             void gtk_menu_popup_at_rect(void*, void*, GdkRectangle*, int, int, void*);
             void gtk_menu_popup_at_pointer(void*, void*);
@@ -445,6 +448,31 @@ final class Gtk
             unset(self::$sources[$key], self::$ids[$key]);
         }
     }
+
+    /**
+     * Calls $fn from the main loop each time the process gets signal $sig
+     * (g_unix_signal_add), unless its parent left it ignored, as SIGINT
+     * for a background job: then it stays so.
+     */
+    public static function onSignal(int $sig, Closure $fn): void
+    {
+        $f = self::ffi();
+        $old = $f->new('struct sigaction');
+        $f->sigaction($sig, null, FFI::addr($old));
+        if ($old->handler === 1) { // SIG_IGN
+            return;
+        }
+        $h = $f->new('HSource', false);
+        $h->fn = function ($data) use ($fn): int {
+            $fn();
+            return 1; // G_SOURCE_CONTINUE
+        };
+        self::$signals[] = $h;
+        $f->g_unix_signal_add_full(0, $sig, $h->fn, null, null); // G_PRIORITY_DEFAULT
+    }
+
+    /** @var list<CData> the handlers of signals, which live as long as the app */
+    private static array $signals = [];
 
     /** Calls $fn at each tick of $widget's frame clock while it returns true (gtk_widget_add_tick_callback). */
     public static function tick(CData $widget, Closure $fn): int

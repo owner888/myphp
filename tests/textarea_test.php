@@ -296,3 +296,66 @@ for ($i = 0; $i < $list->n; $i++) {
     if (fmod($list->buf[$k + 9], DisplayList::KIND_STRIDE) == 1.0 && $list->buf[$k + 1] >= $by && $list->buf[$k + 1] < $by + $bh) { $clips[] = [$list->buf[$k + 12], $list->buf[$k + 14]]; }
 }
 check($clips !== [] && $clips[0] == [$bx, $bw], 'without padding or border, clipped at its edges, the first letter whole: ' . json_encode($clips[0] ?? null));
+
+// A text area's padding, border and background are textarea()'s until a call after it changes them (mygo's textInput): no border, its own padding and face.
+$plain = new TextState('Line'); $styled = new TextState('Line');
+$h = new Headless(function (Context $c) use ($plain, $styled): void {
+    $c->column(10, 10);
+      $c->textarea($plain, '', 200, 80)->label('Plain');
+      $c->textarea($styled, '', 200, 80)->label('Styled')->borderWidth(0)->padding(16, 20)->background(0x123456)->radius(0);
+    $c->end();
+}, 400, 300);
+$h->frame();
+$list = $h->paint();
+$quadsIn = function (array $r) use ($list): array {
+    $out = [];
+    for ($i = 0; $i < $list->n; $i++) {
+        $k = $i * DisplayList::FLOATS_PER_RECT;
+        if ((int)round(fmod($list->buf[$k + 9], DisplayList::KIND_STRIDE)) !== 0 || abs($list->buf[$k] - $r[0]) > 0.01 || abs($list->buf[$k + 1] - $r[1]) > 0.01) { continue; }
+        $out[] = [$list->buf[$k + 2], $list->buf[$k + 3], ((int)round($list->buf[$k + 4] * 255) << 16) | ((int)round($list->buf[$k + 5] * 255) << 8) | (int)round($list->buf[$k + 6] * 255)];
+    }
+    return $out;
+};
+$pr = $h->rect($h->byLabel('Plain')); $sr = $h->rect($h->byLabel('Styled'));
+same([[200.0, 80.0, $h->theme->border]], array_slice($quadsIn($pr), 0, 1), 'a text area: the theme\'s border at its edge');
+same([[200.0, 80.0, 0x123456]], $quadsIn($sr), 'borderWidth(0) and background(): its face to its edge, no border');
+$firstGlyph = function (array $r) use ($list): ?array {
+    for ($i = 0; $i < $list->n; $i++) {
+        $k = $i * DisplayList::FLOATS_PER_RECT;
+        if ((int)round(fmod($list->buf[$k + 9], DisplayList::KIND_STRIDE)) === 1 && $list->buf[$k + 1] >= $r[1] && $list->buf[$k + 1] < $r[1] + $r[3]) { return [$list->buf[$k], $list->buf[$k + 1]]; }
+    }
+    return null;
+};
+same([$pr[0] + 11, $pr[1] + 7], $firstGlyph($pr), 'textarea(): the text inside its border and Padding(Space(1.5), Space(2.5))');
+same([$sr[0] + 20, $sr[1] + 16], $firstGlyph($sr), 'padding(16, 20) with no border: the first letter 20 in and 16 down');
+$h->click($sr[0] + 20 + 7 * 2, $sr[1] + 16 + 4);
+same(2, $styled->cursor, 'a click goes by its padding: after the second letter');
+
+// borderWidth() replaces border()'s, as mygo's one border: an input's own goes with borderWidth(0).
+$f = new TextState('x');
+$h = new Headless(function (Context $c) use ($f): void {
+    $c->column(10, 10);
+      $c->input($f, '', 120)->label('Flat')->borderWidth(0);
+    $c->end();
+}, 300, 100);
+$h->frame();
+$list = $h->paint();
+$fr = $h->rect($h->byLabel('Flat'));
+$colors = [];
+for ($i = 0; $i < $list->n; $i++) {
+    $k = $i * DisplayList::FLOATS_PER_RECT;
+    if ((int)round(fmod($list->buf[$k + 9], DisplayList::KIND_STRIDE)) === 0 && abs($list->buf[$k] - $fr[0]) < 0.01 && abs($list->buf[$k + 1] - $fr[1]) < 0.01) { $colors[] = ((int)round($list->buf[$k + 4] * 255) << 16) | ((int)round($list->buf[$k + 5] * 255) << 8) | (int)round($list->buf[$k + 6] * 255); }
+}
+same([$h->theme->surface], $colors, 'its face at its edge, no border under it');
+
+// textAreaBase() has no padding of its own; one given it places the text, as mygo's.
+$bare = new TextState('Line');
+$h = new Headless(function (Context $c) use ($bare): void {
+    $c->column(0, 0, 1);
+      $c->textAreaBase($bare)->label('Bare')->paddingX(24)->paddingY(16);
+    $c->end();
+}, 300, 200);
+$h->frame();
+$list = $h->paint();
+$br = $h->rect($h->byLabel('Bare'));
+same($br[0] + 24, taGlyphs($list, [$br[0], $br[1] + 16, $br[2], 1])[0][0] ?? null, 'its first line 16 down, its text 24 in: inside the padding given it');

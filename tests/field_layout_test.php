@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, FieldLayout, TextState};
+use MyPHP\UI\{Context, FieldLayout, Node, TextState};
 
 $m = new Metrics(); // 7 points a character, 16 a line
 $doc = '';
@@ -70,3 +70,15 @@ $h3->frame();
 same(\MyPHP\UI\Font::MONO, $mono->style, 'the text area in the fixed-pitch font');
 same(\MyPHP\UI\Font::MONO, $mono->lastLayout()?->style, 'and wrapped in it');
 same(\MyPHP\UI\Font::BOLD, $boldField->style, 'the input bold');
+
+// A row stretching its children across makes a primary button, 2 points shorter than a field without a border, as high as the field (mygo's AlignItems(Stretch): a button's height is its content's, not its own); one given a height keeps it.
+$name = new TextState('');
+$h = new Headless(function (Context $c) use ($name): void {
+    $c->row(gap: 8)->alignItems(Node::STRETCH);
+      $c->input($name, 'Name', 0)->label('Name');
+      $c->primaryButton('Add');
+      $c->primaryButton('Own')->height(20);
+    $c->end();
+}, 400, 100);
+$h->frame();
+same([30.0, 30.0, 20.0], [$h->rect($h->byLabel('Name'))[3], $h->rect($h->byText('Add'))[3], $h->rect($h->byText('Own'))[3]], 'the button stretched to the field, one with a height of its own kept');

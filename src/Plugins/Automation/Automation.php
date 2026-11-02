@@ -21,8 +21,10 @@ use MyPHP\{App, Plugin};
  *     MYPHP_AUTOMATION=/tmp/app.sock php app.php
  *
  * It listens only when MYPHP_AUTOMATION names the path of the socket, and
- * does nothing otherwise; the app removes the socket when it quits. The
- * protocol is docs/automation.md's.
+ * does nothing otherwise; the app removes the socket when it quits. An app
+ * run from its project's files in development gets it from App::run when
+ * the variable is set (myphp screenshot); a bundle only if it added it.
+ * The protocol is docs/automation.md's.
  */
 final class Automation
 {

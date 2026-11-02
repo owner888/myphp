@@ -100,3 +100,21 @@ $sw = $box(Role::SWITCH, 'Express'); $l = $h->rect($h->byText('Express'));
 check(abs($l[1] + $l[3] / 2 - ($sw[1] + $sw[3] / 2)) <= 1.5, 'centered on the switch');
 $d = $h->rect($h->byText('For receipts.'));
 check($near($d[0], $emailIn[0]) && $d[1] >= $emailIn[1] + $emailIn[3], 'the description below its input');
+
+// Level from the first frame, as laid out (mygo's alignBaselines), a control inside a box too: a number input's field in its row with its buttons.
+$focus = 5; $note = new TextState('first');
+$h = new Headless(function (Context $c) use (&$focus, $note): void {
+    $c->form(function () use ($c, &$focus, $note): void {
+        $c->field('Focus', fn() => $c->numberInput($focus, 1, 9, 1));
+        $c->field('Notes', fn() => $c->textarea($note, '', 300, 100));
+    });
+}, 500, 300);
+$h->frame(1);
+$form = $h->root->kids[0];
+$fl = $h->rect($h->byText('Focus')); $fi = $h->rect($form->kids[0]->kids[1]->kids[0]->kids[0]); // the field's content, the number input's row, its text field
+same($fi[1] + 7, $fl[1], 'the first frame: the label on the number input\'s line');
+$nl = $h->rect($h->byText('Notes')); $ni = $h->rect($form->kids[1]->kids[1]->kids[0]);
+same($ni[1] + 7, $nl[1], 'on the first line of a text area');
+// byLabel() goes in the order of the tree, as mygo's Tester.Find: the label first, then the control it names; under the field's content, the control.
+same(\MyPHP\UI\Node::TEXT, $h->byLabel('Notes')->kind, 'byLabel(): the label, which comes first');
+same(\MyPHP\UI\Node::TEXTAREA, $h->byLabel('Notes', $form->kids[1]->kids[1])->kind, 'and under the field\'s content, the text area the field names');

@@ -3630,15 +3630,14 @@ final class Context
      * A column of the fields $fn builds (field, fieldset), gap Space(3),
      * whose labels sit in a column of their own beside the controls, as
      * macOS's forms: aligned to the right, as wide as the widest, and
-     * centered on their control, or on the first line of a text area, as
-     * mygo levels them.
+     * level with the first line of text of their control (mygo's).
      */
     public function form(Closure $fn): Node
     {
         $f = $this->column(0, $this->theme->space(3));
         $saved = $this->form; $this->form = (object)['labels' => [], 'width' => 0.0];
           $fn();
-          foreach ($this->form->labels as $box) { $box->size($this->form->width, $box->fh); } // as wide as the widest, measured as they were built
+          foreach ($this->form->labels as $box) { $box->size($this->form->width, 0); } // as wide as the widest, measured as they were built
         $this->form = $saved;
         $this->end();
         return $f;
@@ -3659,6 +3658,7 @@ final class Context
         $rt = $this->runtime;
         $inForm = $this->form !== null;
         $f = $inForm ? $this->row(0, $t->space(3))->alignItems(Node::START) : $this->column(0, $t->space(1.5));
+        $f->baselines = $inForm; // the label level with the first line of text of its control, as laid out (mygo's)
           if ($inForm) {
               [$lw] = $this->metrics->measure($label, $t->fontSize);
               $this->form->width = max($this->form->width, $lw);
@@ -3683,13 +3683,6 @@ final class Context
         if (self::namesItself($ctrl)) { $f->role(Role::GROUP)->label($label); } elseif ($ctrl->nameFrom === null || $ctrl->nameFrom->label === '') { $ctrl->nameFrom = $l; }
         if ($error !== '' || $description !== '') { $ctrl->description = implode("\n", array_filter([$error, $ctrl->description ?? '', $description], fn(string $s) => $s !== '')); } // the error first, as what to read first; a control's own error (fieldError) before the description
         if ($error !== '') { $ctrl->invalid = true; }
-        if ($inForm && $ctrl->kind === Node::TEXTAREA) { // level with the first line of a text area (mygo's)
-            [, $lh] = $this->metrics->measure('X', $ctrl->fontSize);
-            $box->fh = $lh + ($ctrl->bare ? 0.0 : 2 * Runtime::FIELD_INSET_Y);
-        } elseif ($inForm) { // level with the control's middle, where it was last frame: a control inside a box (a time input's fields) lower down in it
-            $r = $rt?->rectOf($ctrl->id); $cr = $rt?->rectOf($content->id);
-            $box->fh = $r === null || $cr === null ? 0.0 : max(0.0, 2 * ($r[1] + $r[3] / 2 - $cr[1]));
-        }
         if ($error !== '' && $ctrl->kind === Node::INPUT) { $ctrl->borderColor = $t->danger; }
         $l->cursor = Cursor::Default;
         if ($this->clicked($l) && $rt !== null) {
@@ -4690,6 +4683,7 @@ final class Context
             $height = max($height, max($minLines, min($maxLines, $lines->count())) * $lines->lineHeight + 2 * Runtime::FIELD_INSET_Y);
         }
         $n = $this->add(new Node(Node::TEXTAREA, 0, 0, 0, $width, $height, $this->growsAlong($width, $height), $placeholder, $t->surface, $size, $t->text));
+        $n->padding($t->space(1.5), $t->space(2.5))->radius($t->radius)->border(); // mygo's textInput: a call after these styles it differently
         $n->edit = $state;
         $n->changed = $state->editedSinceBuilt(); // typed, deleted, pasted or undone in since the last build (mygo's Changed)
         $n->metrics = $this->metrics; // a style of its own (fontSize()) measures its line again in layout

@@ -24,7 +24,21 @@ $view = function (Context $c) use ($app) {
 ```
 
 The button is padded `$t->space(1.5)` by `$t->space(3.5)`, a bordered
-surface face, or the accent without a border when primary.
+surface face, or the accent without a border when primary. The border takes
+room inside the button, as mygo's does, so a primary button is 2 points
+shorter than a plain one or a text input (29 against 31 at 13 points): in a
+row, which centers its children across, it is a point in from each edge.
+To give a row of mixed buttons and inputs one height, stretch them across it:
+
+```php
+$name = new TextState('');
+$view = function (Context $c) use ($name) {
+    $c->row(gap: 8)->alignItems(Node::STRETCH); // every child as high as the highest
+      $c->input($name, 'Name', 0);
+      $c->primaryButton('Add');
+    $c->end();
+};
+```
 
 ## Content
 

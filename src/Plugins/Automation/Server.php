@@ -74,6 +74,9 @@ final class Server
         foreach ($this->conns as $i => &$c) {
             $this->read($c);
             $this->answer($c, $d);
+            if ($this->server === null) {
+                return false; // a request quit the app, which closed the socket (Linux's quit returns, AppKit's terminate: exits)
+            }
             $this->write($c);
             if ($c['eof'] && $c['lines'] === [] && $c['waiting'] === null && $c['out'] === '' || $c['conn'] === null) {
                 if ($c['conn'] !== null) { fclose($c['conn']); }

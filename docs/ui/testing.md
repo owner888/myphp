@@ -27,6 +27,16 @@ Nodes are found by their text, or by their `label()` for those without, as
 an icon button: `$h->byText('Close')`, `$h->byLabel('Volume')`;
 `$h->focused()` is the node with the focus.
 
+`byLabel()` and `clickLabel()` take the first node in the order of the
+tree whose `label()`, or the name its [field](form.md) gives it, or its
+text, is the one asked, as mygo's `Tester.Find`: a text or a table's
+header that shows "Amount" above a form comes before the field, and a
+field's label comes before the control it names. A click on a field's
+label focuses its control, so `clickLabel('Amount')` on a form gives its
+field the keyboard; to reach the control itself, look under the field
+(`$h->byLabel('Amount', $field)`, the node `field()` returned), or give it a
+`label()` of its own that nothing else shows.
+
 Two nodes given the same key under one parent share one state, so that a
 click or the focus meant for one goes to the other: with
 `$h->rt->strict = true` the runtime throws where the second key was given,
@@ -39,11 +49,34 @@ as apps only log it.
   `hover()`, `wheel($x, $y, $dx, $dy)` and `rightClick()`; `rect($node)`
   and `middle($node)` give where a node is in the window.
 - **Keyboard.** `key($code, $selector, $mods, $chars)` presses a key as
-  the view sends it, `shortcut($char, $mods)` a shortcut, and `type()`
-  types text into the focused node; `tab()`, `enter()`, `escape()`,
-  `up()`, `down()`, `left()`, `right()`, `home()`, `end()`, `pageDown()`
-  and `space()` press those keys. `compose()` shows the composition of an
-  input method.
+  the view sends it: the key event, then what the text system makes of it,
+  the AppKit selector a focused field takes (`'moveLeft:'`,
+  `'deleteBackward:'`, `'insertNewline:'`), `''` for a key it makes nothing
+  of. `shortcut($char, $mods)` presses the key that types `$char` with
+  `$mods`, as the window sends it, so that `$c->shortcut('n', Key::COMMAND)`
+  and `$c->shortcut(Key::N, Key::COMMAND)` both take `$h->shortcut('n',
+  Key::COMMAND)`; Command with A, C, X, V, Z or Y goes as the Edit menu's
+  command (Select All, Copy, …), which a focused field takes. `type()` types
+  text into the focused node. Rather than `key()` with its selector,
+  `tab()`, `enter()`, `escape()`, `up()`, `down()`, `left()`, `right()`,
+  `home()`, `end()`, `pageDown()` and `space()` press those keys (`up()`
+  and `down()` take `Key::SHIFT` to select). `compose()` shows the
+  composition of an input method. To replace what a field holds, select
+  it all and type over it:
+
+  ```php
+  $name = new TextState('Old name');
+  $h = new Headless(function (Context $c) use ($name) {
+      $c->form(fn() => $c->field('Name', fn() => $c->input($name)));
+  });
+  $h->frame();
+  $h->clickLabel('Name');               // the label focuses its field
+  $h->shortcut('a', Key::COMMAND);      // Select All
+  $h->type('New name');                 // typed over the selection
+  same('New name', $name->text, 'the field holds what was typed');
+  ```
+  Or set it from the test, `$name->text = 'New name'`, when typing is not
+  what is tested.
 - **Menus.** `rightClick()` opens a context menu, which `menuLabels()`
   lists and `chooseMenuItem('Move to', 'Archive')` chooses from.
 - **The window.** `$h->rt->rightToLeft = true` lays it out

@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace MyPHP\Plugins\Automation;
 
-use MyPHP\Native\{Metal, ObjC, View};
 use MyPHP\{EvalError, Rectangle, Window};
 use MyPHP\UI\Key;
+use RuntimeException;
 
 /**
  * The app's windows, as the protocol drives them (mygo's automation.go):
@@ -82,7 +82,7 @@ final class AppDriver implements Driver
         foreach ($t->nodes as $n) {
             if ($n->id === $id) {
                 $w->input->push(['access', $id, $action, $text, $from, $to]);
-                Metal::requestFrame($w->contentView());
+                $w->native()->requestFrame();
                 return;
             }
         }
@@ -93,7 +93,7 @@ final class AppDriver implements Driver
     {
         $w = $this->content($window);
         $in = $w->input;
-        $view = $w->contentView();
+        $native = $w->native();
         foreach ($events as $e) {
             switch ($e[0]) {
                 case 'move':
@@ -115,44 +115,31 @@ final class AppDriver implements Driver
                     break;
                 case 'keyDown':
                 case 'keyUp':
-                    // An event of AppKit's, as the view takes the keyboard's: through the text system, which makes the field's commands; a key types nothing, its text a text event's.
+                    // As the keyboard's, but typing nothing: its text is a text event's.
                     [, $code, $chars, $mods] = $e;
-                    $plain = ($mods & Key::SHIFT) !== 0 ? strtolower($chars) : $chars;
-                    $ev = ObjC::msg('p:LqLdlpppbS', ObjC::cls('NSEvent'), 'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
-                        $e[0] === 'keyDown' ? 10 : 11, ObjC::point(0, 0), $mods, hrtime(true) / 1e9, ObjC::msg('l:', ObjC::msg('p:', $view, 'window'), 'windowNumber'), null,
-                        ObjC::str($chars), ObjC::str($plain), false, $code); // NSEventTypeKeyDown, KeyUp
-                    if ($e[0] === 'keyDown') {
-                        View::automatedKey($view, $ev);
-                    } else {
-                        ObjC::msg('v:p', $view, 'keyUp:', $ev);
-                    }
+                    $native->automatedKey($e[0] === 'keyDown', $code, $chars, ($mods & Key::SHIFT) !== 0 ? strtolower($chars) : $chars, $mods);
                     break;
                 case 'text':
-                    ObjC::msg('v:p', $view, 'insertText:', ObjC::str($e[1]));
+                    $native->automatedText($e[1]);
                     break;
             }
         }
-        Metal::requestFrame($view);
+        $native->requestFrame();
     }
 
     public function menu(int $window, array $path): void
     {
-        $this->window($window);
-        $menu = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'mainMenu');
-        foreach ($path as $i => $title) {
-            if ($menu === null) {
-                throw new Failure(Failure::FAILED, 'menu ' . json_encode($path[$i - 1], JSON_UNESCAPED_UNICODE) . ' has no submenu');
-            }
-            $index = ObjC::msg('l:p', $menu, 'indexOfItemWithTitle:', ObjC::str($title));
-            if ($index < 0) {
-                throw new Failure(Failure::FAILED, 'no menu item ' . json_encode($title, JSON_UNESCAPED_UNICODE));
-            }
-            if ($i === count($path) - 1) {
-                ObjC::msg('v:l', $menu, 'performActionForItemAtIndex:', $index);
-                return;
-            }
-            $menu = ObjC::msg('p:', ObjC::msg('p:l', $menu, 'itemAtIndex:', $index), 'submenu');
+        $w = $this->window($window);
+        try {
+            $w->native()->chooseMenuItem($path);
+        } catch (RuntimeException $e) {
+            throw new Failure(Failure::FAILED, $e->getMessage());
         }
+    }
+
+    public function resize(int $window, int $width, int $height): void
+    {
+        $this->window($window)->setContentSize($width, $height);
     }
 
     public function capture(int $window): string
@@ -160,7 +147,7 @@ final class AppDriver implements Driver
         $w = $this->window($window);
         try {
             return $w->capturePage();
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             throw new Failure(Failure::FAILED, $e->getMessage());
         }
     }
@@ -183,7 +170,7 @@ final class AppDriver implements Driver
     {
         $w = $this->window($window);
         if ($w->runtime !== null) {
-            return [$w->id(), !Metal::framePending($w->contentView())];
+            return [$w->id(), !$w->native()->framePending()];
         }
         $p = $w->page() ?? throw new Failure(Failure::NO_WINDOW, "window {$w->id()} closed");
         if ($p->isLoading()) {

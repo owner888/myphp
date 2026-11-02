@@ -25,6 +25,7 @@ Commands:
 	i18n check [dir]     check the app's catalogs of messages
 	dev                  run the app in development, restarting it on changes
 	build                build production apps (a .app and a .dmg, Linux packages)
+	screenshot [dir]     run the app once and save a PNG of its window, and its elements
 	micro                build the static PHP that apps built with -launcher micro run on
 	keygen               create the key pair that signs updates
 	doctor               check that the development environment is ready
@@ -1945,6 +1946,348 @@ function keygen(array $args): void
     }
 }
 
+// ---- screenshot -----------------------------------------------------------
+const SCREENSHOT_USAGE = <<<'TXT'
+screenshot [flags] [dir]
+
+Runs the app of the project in dir (default .) once, from its files, and
+saves a PNG of its window once it is drawn and has settled, so that a
+coding agent or a script sees what the app shows; then quits it. The app
+needs no change: run from its project in development with MYPHP_AUTOMATION
+set, it is driven by the automation plugin (docs/automation.md), here on a
+socket of its own. The roles and labels of the elements the window shows,
+as assistive technology reads them, are printed; -tree writes them all as
+JSON, the tree request's answer, for agents that read no images.
+
+On Linux without a display (DISPLAY and WAYLAND_DISPLAY unset), the app
+runs on an X server of its own, Xvfb, which this starts. A frontend shows
+from frontendDist, built: devCommand and devUrl are left alone.
+
+It exits with status 1 when the app exits before it is captured (its
+output is shown), shows no window, or does not settle in time.
+
+Flags:
+  -out file      the PNG (default <dir>/.myphp/screenshot.png)
+  -tree file     write the window's elements as JSON too
+  -window N      the window, by the ID the automation plugin lists (default:
+                 the focused window, else the first that shows)
+  -size WxH      resize the window's content to W×H points before capturing
+  -theme t       show the app light or dark, whatever the system's appearance
+  -data dir      keep the app's data in dir (made if missing), not the user's:
+                 App::path's UserData, Cache and Logs; on Linux XDG_CONFIG_HOME,
+                 XDG_CACHE_HOME, XDG_DATA_HOME and XDG_STATE_HOME under it
+  -timeout s     seconds to wait for the window and for it to settle (default 30)
+TXT;
+
+function screenshot(array $args): void
+{
+    help($args, SCREENSHOT_USAGE);
+    $out = option($args, 'out');
+    $treeOut = option($args, 'tree');
+    $want = option($args, 'window', '0');
+    $size = option($args, 'size');
+    $theme = option($args, 'theme');
+    $data = option($args, 'data');
+    $timeout = option($args, 'timeout', '30');
+    $theme === null || in_array($theme, ['light', 'dark'], true) || fail("-theme \"$theme\" is not light or dark");
+    preg_match('/^\d+$/', $want) === 1 || fail("-window \"$want\" is not the ID of a window");
+    is_numeric($timeout) && (float)$timeout > 0 || fail("-timeout \"$timeout\" is not a number of seconds");
+    $wh = null;
+    if ($size !== null) {
+        preg_match('/^(\d+)x(\d+)$/', $size, $m) === 1 && (int)$m[1] > 0 && (int)$m[2] > 0 || fail("-size \"$size\" is not WxH in points, as 800x600");
+        $wh = [(int)$m[1], (int)$m[2]];
+    }
+    count($args) <= 1 || fail('expected at most one project directory');
+    ['dir' => $dir, 'config' => $c] = project($args);
+    $entry = path($dir, $c['entry']);
+    is_file($entry) || fail("$entry does not exist: name the app's entry with \"entry\" in {$c['configFile']}");
+    $out = $out === null ? "$dir/.myphp/screenshot.png" : path((string)getcwd(), $out);
+    $treeOut = $treeOut === null ? null : path((string)getcwd(), $treeOut);
+    generateI18n($dir, $c); // the app loads the accessors of its catalogs
+    $deadline = microtime(true) + (float)$timeout;
+    $tmp = sys_get_temp_dir() . '/myphp-screenshot-' . getmypid(); // short: a socket's path has about 100 bytes
+    @mkdir($tmp, 0700) || fail("cannot create $tmp");
+    $env = ['MYPHP_AUTOMATION' => "$tmp/app.sock", 'MYPHP_ENV' => 'development', 'MYPHP_HOME' => frameworkOf($c)];
+    if ($theme !== null) {
+        $env['MYPHP_THEME'] = $theme; // App::run's Theme::setSource, in a run from the project in development
+    }
+    if ($data !== null) { // the app's data apart from the user's: MYPHP_DATA_HOME stands for ~/Library on the Mac (App::path), XDG's on Linux
+        $data = path((string)getcwd(), $data);
+        is_dir($data) || @mkdir($data, 0755, true) || fail("cannot create $data");
+        $env['MYPHP_DATA_HOME'] = $data;
+        if (PHP_OS_FAMILY === 'Linux') {
+            $env += ['XDG_CONFIG_HOME' => "$data/config", 'XDG_CACHE_HOME' => "$data/cache", 'XDG_DATA_HOME' => "$data/data", 'XDG_STATE_HOME' => "$data/state"];
+        }
+    }
+    if (($c['frontendDist'] ?? '') !== '') {
+        $env['MYPHP_FRONTEND_DIST'] = path($dir, $c['frontendDist']);
+    }
+    $xvfb = $app = null;
+    try {
+        if (PHP_OS_FAMILY === 'Linux' && (string)getenv('DISPLAY') === '' && (string)getenv('WAYLAND_DISPLAY') === '') {
+            [$xvfb, $env['DISPLAY']] = startXvfb($tmp, $deadline);
+        }
+        $log = "$tmp/app.log";
+        $app = proc_open([PHP_BINARY, ...PHP_FLAGS, $entry], [0 => ['file', '/dev/null', 'r'], 1 => ['file', $log, 'a'], 2 => ['file', $log, 'a']], $pipes, $dir, $env + getenv());
+        $app !== false || fail("cannot run $entry");
+        $s = new ScreenshotSession($app, $log, $env['MYPHP_AUTOMATION'], $deadline, (float)$timeout);
+        $s->connect();
+        $w = $s->window((int)$want);
+        $treeOut === null || $w['kind'] === 'content' || fail("window {$w['id']} shows a web page, which has no tree of elements: read it with eval (docs/automation.md)");
+        if ($wh !== null) {
+            $s->resize($w['id'], ...$wh);
+        }
+        [$png, $pw, $ph] = $s->capture($w['id'], $wh);
+        $tree = $w['kind'] === 'content' ? $s->call('tree', ['window' => $w['id']]) : null;
+        is_dir(dirname($out)) || @mkdir(dirname($out), 0755, true) || fail('cannot create ' . dirname($out));
+        file_put_contents($out, $png) !== false || fail("cannot write $out");
+        logf("Saved $out: " . json_encode($w['title'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ", window {$w['id']}, {$pw}×{$ph} pixels");
+        if ($tree !== null) {
+            if ($treeOut !== null) {
+                is_dir(dirname($treeOut)) || @mkdir(dirname($treeOut), 0755, true) || fail('cannot create ' . dirname($treeOut));
+                file_put_contents($treeOut, json_encode($tree, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n") !== false || fail("cannot write $treeOut");
+                logf("Saved $treeOut: " . count($tree['nodes']) . ' elements');
+            }
+            echo treeSummary($tree);
+        }
+        $s->quit();
+        $app = null;
+    } finally {
+        if ($app !== null) { // a run that failed: the app asked to quit too, then killed
+            proc_terminate($app, 15);
+            for ($end = microtime(true) + 2; proc_get_status($app)['running'] && microtime(true) < $end;) {
+                usleep(20_000);
+            }
+            if (proc_get_status($app)['running']) {
+                proc_terminate($app, 9);
+            }
+            proc_close($app);
+        }
+        if ($xvfb !== null) {
+            proc_terminate($xvfb, 15);
+            proc_close($xvfb);
+        }
+        array_map('unlink', glob("$tmp/*")); // the socket, the logs
+        @rmdir($tmp);
+    }
+}
+
+/**
+ * Starts Xvfb on a display it picks (-displayfd): its process and the
+ * display's name, once it takes connections.
+ * @return array{0: resource, 1: string}
+ */
+function startXvfb(string $tmp, float $deadline): array
+{
+    $bin = Cmd::look('Xvfb');
+    $bin !== '' || fail("no display (DISPLAY and WAYLAND_DISPLAY are unset) and no Xvfb to start one: install it (Debian, Ubuntu: apt install xvfb; Fedora: dnf install xorg-x11-server-Xvfb; Arch: pacman -S xorg-server-xvfb), or run where there is a display");
+    $p = proc_open([$bin, '-displayfd', '3', '-screen', '0', '2560x1600x24', '-nolisten', 'tcp'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$tmp/xvfb.log", 'a'], 2 => ['file', "$tmp/xvfb.log", 'a'], 3 => ['pipe', 'w']], $pipes);
+    $p !== false || fail("cannot run $bin");
+    $line = '';
+    while (!str_contains($line, "\n")) {
+        $r = [$pipes[3]]; $w = $e = null;
+        $left = $deadline - microtime(true);
+        if ($left <= 0 || @stream_select($r, $w, $e, (int)$left, (int)(fmod($left, 1) * 1e6)) < 1) {
+            proc_terminate($p, 9);
+            fail("Xvfb did not start:\n" . tail("$tmp/xvfb.log"));
+        }
+        $b = fread($pipes[3], 64);
+        if ($b === '' || $b === false) {
+            fail("Xvfb exited:\n" . tail("$tmp/xvfb.log"));
+        }
+        $line .= $b;
+    }
+    fclose($pipes[3]);
+    return [$p, ':' . trim($line)];
+}
+
+/** The last lines of a log, indented, or a note that it is empty. */
+function tail(string $path, int $lines = 20): string
+{
+    $all = preg_split('/\R/', rtrim((string)@file_get_contents($path)));
+    $all = array_slice($all, -$lines);
+    return $all === [''] ? '  (no output)' : '  ' . implode("\n  ", $all);
+}
+
+/** The roles, labels and keys of a tree's elements, indented as they nest; the first 60. */
+function treeSummary(array $tree): string
+{
+    $depth = [];
+    $lines = [];
+    foreach ($tree['nodes'] as $n) {
+        $d = isset($n['parent']) ? ($depth[$n['parent']] ?? 0) + 1 : 0;
+        $depth[$n['id']] = $d;
+        $what = $n['role'];
+        foreach (['label', 'value'] as $f) {
+            if (isset($n[$f]) && $n[$f] !== '') {
+                $what .= ' ' . json_encode($n[$f], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        }
+        if (isset($n['key'])) {
+            $what .= ' key=' . json_encode($n['key'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        if (in_array('disabled', $n['states'] ?? [], true)) {
+            $what .= ' (disabled)';
+        }
+        $lines[] = str_repeat('  ', $d + 1) . $what;
+    }
+    $more = count($lines) - 60;
+    return "Elements:\n" . implode("\n", array_slice($lines, 0, 60)) . "\n" . ($more > 0 ? "  … and $more more (-tree writes them all)\n" : '');
+}
+
+/**
+ * The app myphp screenshot runs, driven over the automation plugin's
+ * socket (docs/automation.md): each request answered, or the run fails
+ * with why, the app's output when it ended.
+ */
+final class ScreenshotSession
+{
+    /** @var resource|null */
+    private $conn = null;
+    private int $id = 0;
+
+    /** @param resource $app */
+    public function __construct(private $app, private readonly string $log, private readonly string $sock, private readonly float $deadline, private readonly float $timeout) {}
+
+    /** Fails when the app has ended. */
+    private function alive(string $before): void
+    {
+        $st = proc_get_status($this->app);
+        if (!$st['running']) {
+            fail("the app exited (status {$st['exitcode']}) $before:\n" . tail($this->log));
+        }
+    }
+
+    /** Waits for the app to listen, and connects. */
+    public function connect(): void
+    {
+        while (true) {
+            $this->alive('before it listened');
+            if (file_exists($this->sock) && ($c = @stream_socket_client("unix://{$this->sock}", $errno, $err, 1.0)) !== false) {
+                $this->conn = $c;
+                return;
+            }
+            microtime(true) < $this->deadline || fail("the app did not listen for automation in {$this->timeout} s; it calls App::run(), from its project? Its output:\n" . tail($this->log));
+            usleep(50_000);
+        }
+    }
+
+    /** The result of a request; its error's code and message fail the run, but for the codes in $tolerate, which come back as ['error' => code]. */
+    public function call(string $method, array $params = [], array $tolerate = []): array
+    {
+        $line = json_encode(['id' => ++$this->id, 'method' => $method, 'params' => (object)$params], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+        $answer = @fwrite($this->conn, $line) === strlen($line) ? $this->read() : false;
+        if ($answer === false) {
+            $this->alive("as it was asked to $method");
+            fail("the app did not answer $method in {$this->timeout} s");
+        }
+        $m = json_decode($answer, true);
+        if (isset($m['error'])) {
+            if (in_array($m['error']['code'], $tolerate, true)) {
+                return ['error' => $m['error']['code']];
+            }
+            fail("$method: {$m['error']['message']} ({$m['error']['code']})");
+        }
+        return (array)$m['result'];
+    }
+
+    /** A line of the answer, while the app runs, for up to the timeout: the waits that take long (idle) are given less. */
+    private function read(): string|false
+    {
+        $line = '';
+        $end = microtime(true) + $this->timeout;
+        while (!str_ends_with($line, "\n")) {
+            $r = [$this->conn]; $w = $e = null;
+            if (microtime(true) > $end || @stream_select($r, $w, $e, 0, 200_000) === false) {
+                return false;
+            }
+            if ($r === []) {
+                if (!proc_get_status($this->app)['running']) { return false; }
+                continue;
+            }
+            $b = fread($this->conn, 1 << 16);
+            if ($b === '' || $b === false) {
+                return false;
+            }
+            $line .= $b;
+        }
+        return $line;
+    }
+
+    /** The window $id once the app lists it, or for 0 the focused one that shows, else the first that shows. */
+    public function window(int $id): array
+    {
+        while (true) {
+            $late = microtime(true) >= $this->deadline;
+            $all = $this->call('windows')['windows'];
+            $shown = array_values(array_filter($all, fn(array $w) => $w['visible']));
+            $w = $id !== 0 ? (array_column($all, null, 'id')[$id] ?? null) : (array_values(array_filter($shown, fn(array $w) => $w['focused']))[0] ?? $shown[0] ?? null);
+            if ($w !== null) {
+                return $w;
+            }
+            if ($late) {
+                $ids = implode(', ', array_map(fn(array $w) => $w['id'] . ' ' . json_encode($w['title'], JSON_UNESCAPED_UNICODE), $all));
+                fail(($id !== 0 ? "no window $id" : 'no window shows') . " after {$this->timeout} s" . ($all !== [] ? " (the app's windows: $ids)" : '') . "; its output:\n" . tail($this->log));
+            }
+            usleep(100_000);
+        }
+    }
+
+    /** Resizes the window's content, and waits until its bounds say so. */
+    public function resize(int $id, int $width, int $height): void
+    {
+        $this->call('resize', ['window' => $id, 'width' => $width, 'height' => $height]);
+        while (true) {
+            $late = microtime(true) >= $this->deadline;
+            $w = array_column($this->call('windows')['windows'], null, 'id')[$id] ?? fail("window $id closed");
+            $b = $w['contentBounds'];
+            if ((int)round($b['width']) === $width && (int)round($b['height']) === $height) {
+                return;
+            }
+            !$late || fail("window $id did not take the size {$width}x$height in {$this->timeout} s: its content is " . round($b['width']) . 'x' . round($b['height']) . ' (its limits, or the screen, may keep it)');
+            usleep(50_000);
+        }
+    }
+
+    /**
+     * A PNG of the window once it has settled, and its size in pixels;
+     * with $size, once the frame captured is of that size in points.
+     * @return array{0: string, 1: int, 2: int}
+     */
+    public function capture(int $id, ?array $size): array
+    {
+        while (true) {
+            $late = microtime(true) >= $this->deadline;
+            $left = (int)(($this->deadline - microtime(true)) * 1000);
+            $left > 0 && !isset($this->call('idle', ['window' => $id, 'timeout' => $left], ['timeout'])['error'])
+                || fail("window $id still draws after {$this->timeout} s (an animation that never ends?)");
+            $r = $this->call('capture', ['window' => $id]);
+            $png = base64_decode($r['png'], true);
+            ($png !== false && $r['width'] > 0) || fail("capture: window $id gave no image");
+            if ($size === null || abs($r['height'] - $size[1] * $r['width'] / $size[0]) < 2 * $r['width'] / $size[0]) {
+                return [$png, $r['width'], $r['height']];
+            }
+            !$late || fail("window $id did not draw at {$size[0]}x{$size[1]} in {$this->timeout} s: its frame is {$r['width']}×{$r['height']} pixels");
+            usleep(50_000);
+        }
+    }
+
+    /** Asks the app to quit, as Quit (SIGTERM), and waits for it; kills it after 5 seconds. */
+    public function quit(): void
+    {
+        fclose($this->conn);
+        proc_terminate($this->app, 15);
+        for ($end = microtime(true) + 5; proc_get_status($this->app)['running'] && microtime(true) < $end;) {
+            usleep(20_000);
+        }
+        if (proc_get_status($this->app)['running']) {
+            warnf("the app did not quit within 5 seconds of SIGTERM: killed it");
+            proc_terminate($this->app, 9);
+        }
+        proc_close($this->app);
+    }
+}
+
 // ---- doctor, skills -----------------------------------------------------
 /** Checks the tools MyPHP needs (mygo's doctor): failed checks exit with status 1. */
 function doctor(array $args): void
@@ -2024,6 +2367,7 @@ function run(string $cmd, array $args): void
         'generate', 'gen' => generate($args),
         'i18n' => i18nCheck($args),
         'build' => build($args),
+        'screenshot' => screenshot($args),
         'micro' => micro($args),
         'keygen' => keygen($args),
         'doctor' => doctor($args),

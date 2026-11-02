@@ -8034,6 +8034,95 @@ renderer's own texture there, the glass blurs it as it blurs anything
 painted before it: the control bar over a playing film shows the film
 through it.
 
+## myphp screenshot, automation on Linux
+
+- `myphp screenshot [dir]` runs the project's entry with `PHP_BINARY`, in
+  the project, with `MYPHP_AUTOMATION` on a socket in a temporary
+  directory of its own (mode 0700, a short path: a socket's has about 100
+  bytes), `MYPHP_ENV=development`; output and errors go to a log there,
+  whose tail is shown when the app exits early. `App::run` adds the
+  plugin itself when the variable is set, the app is in development and
+  not in a bundle, and it did not add it (`Ipc::pluginUsed`): no app
+  needs a change, and a bundle `myphp build` made never listens unless it
+  added it. The command waits for a window that shows (`windows`), its
+  `idle`, then `capture` and `tree`, and quits the app with SIGTERM, which
+  quits as Quit. Each request is given the whole `-timeout` to answer;
+  the loops that wait (a window, a size) the time left. On Linux without
+  DISPLAY nor WAYLAND_DISPLAY it starts `Xvfb -displayfd 3` (a display it
+  picks, written on fd 3 once it takes connections), 2560×1600×24.
+- The automation plugin reaches the platform through `Platform\Window`:
+  `framePending` (Darwin: `Metal::framePending`; Linux: a frame asked or
+  drawing, or a shown window whose GL area has no context yet, which
+  realize asks for: frameNow drops the asks made before it),
+  `automatedKey` (Darwin: the NSEvent through `View::automatedKey`, as
+  before; Linux: keyDown's path, `press`, without the input method, which
+  types), `automatedText` (`insertText:`; Linux's IM commit) and
+  `chooseMenuItem` (the main menu's titles; Linux: the window's menu bar
+  by its items' labels, `Menus::activate`, an item with an icon holding
+  its label in a box). Darwin's code moved as it was.
+- Linux quits on SIGINT and SIGTERM as Quit, a second exiting at once,
+  those the parent ignores left so (mygo's quitOnSignals): GLib's
+  `g_unix_signal_add` runs the handler from the main loop; `sigaction`
+  reads whether the parent ignored it.
+- Found there: GTK's quit returns, where AppKit's `terminate:` exits, so
+  a `menu` request that quit the app came back to `Server::poll` with the
+  socket closed (onQuit) and wrote to a closed stream, a throw in an FFI
+  callback, fatal; `poll` stops once the server is closed. The protocol's
+  `ctrl` and `cmd` follow the keyboard's: on Linux, Control is
+  `Key::COMMAND` and Super `Key::CONTROL`, as `Linux\Window::mods`.
+- Linux captures came out with speckled, gray-fringed text: blending
+  leaves the GL frame's alpha below 1 under glyphs and translucent fills,
+  which an opaque window's GL area never shows, but cairo's ARGB32 read
+  it as premultiplied. `Linux\Window::capture` writes RGB24 unless the
+  window is transparent.
+- macOS captures came out with every channel moved (a dark window as a
+  pale, nearly clear wash, the blue accent purple): NSBitmapImageRep read
+  Metal's B G R A bytes as big-endian ARGB whatever its little-endian
+  flag. `ImageIO::pngFromBGRA` makes the PNG through Core Graphics,
+  which takes the byte order (`kCGBitmapByteOrder32Little`).
+- `-theme light|dark` sets `MYPHP_THEME`, which `App::run` applies with
+  `Theme::setSource` before the backend starts (so before `whenReady`),
+  under the plugin's condition: development, not packaged. `-data dir`
+  sets `MYPHP_DATA_HOME`, which `App::path` reads in place of `~/Library`
+  on the Mac under the same condition, and on Linux the XDG variables
+  (`config`, `cache`, `data`, `state` under it), which `xdgPath` and GTK
+  and WebKitGTK read; nothing reads HOME differently.
+
+## What building three apps turned up
+
+- A text area drew its border, padding and face itself, ignoring what
+  the app set after `textarea()` (`borderWidth(0)`, `padding(16, 20)`,
+  `background()`), where mygo's `TextArea` is `TextAreaBase` with
+  `Padding(Space(1.5), Space(2.5)).Radius().Background(Surface).Border(1)`
+  that a later call replaces. `textarea()` now sets them on the node and
+  `paintArea`, the runtime's caret and hit geometry (`Node::areaInsets`)
+  and a form's levelling read them; `textAreaBase()` takes the padding
+  given it. And `borderWidth()` never took away `border()`'s: the two were
+  kept apart (`borderSide` prefers the per-side width only when above 0),
+  so `borderWidth(0)` on an input left its border. As mygo has one border,
+  `borderWidth()` on a bordered node now replaces it (uniform widths into
+  `borderWidth`, others per side) and `border()` clears the per-side ones.
+- A form's label was levelled with its control from last frame's rects
+  (`fh` of the label's box set to the control's middle), so the first
+  frame, which a screenshot may be, showed it at the top. Fields in a form
+  now set `Node::$baselines`, and `Layout::arrange` runs mygo's
+  `alignBaselines` on that row after laying it out: the first lines of
+  text of the label and of the control (an input's line inside its
+  padding, a text area's first line, a control without text centered on a
+  line of the label's), moving down the higher. Same frame, any control.
+- A row with `alignItems(Node::STRETCH)` kept buttons at their measured
+  height (`fh > 0` read as a size of their own), where mygo stretches them;
+  `Node::$sizedH` (height(), size()) tells one given apart, as `sizedW`
+  did across a column. A primary button is 2 points shorter than a plain
+  one as in mygo (no border inside it); stretching evens a row.
+- The headless harness sent every `shortcut()` with key code 0, which is
+  `Key::A`: `$c->shortcut(Key::N, …)` never fired and `Key::A` fired for
+  any letter. It now sends the US key code of the character, and Command
+  with A, C, X, V, Z, Y as the Edit menu's command, as the Linux window
+  and the Mac's menu do. `byLabel()` searched every node's `label()`
+  before any text; it now goes in tree order with the name a field gives
+  its control, as mygo's `Tester.Find` over the runtime's labels.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

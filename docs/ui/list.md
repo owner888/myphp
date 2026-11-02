@@ -106,10 +106,10 @@ building the list.
 ## Choosing rows
 
 - `selected`, set to -1 (or a row), lets a click, or Up, Down, Home and End
-  while the list has the keyboard focus, choose a row, which shows in the
-  accent color; the list's `$c->changed()` reports a new choice, and
-  `$c->submitted()` a double click or Enter. Null, the default, chooses
-  none.
+  while the list has the keyboard focus, choose a row, which shows under the
+  theme's `selection` color (the accent, translucent at `selectionAlpha`);
+  the list's `$c->changed()` reports a new choice, and `$c->submitted()` a
+  double click or Enter. Null, the default, chooses none.
 - `selection` lets the user choose several rows, held in a `Selection` by
   the keys of their items (`key`), or by their indices without one: a
   click chooses one, Cmd-click adds a row or takes it out, and Shift-click
@@ -276,6 +276,18 @@ reorder too: a press on a row's button drags the row once the pointer
 moves, and clicks the button if it does not.
 
 See [drag and drop](drag-and-drop.md).
+
+## How the chosen row looks
+
+The chosen row is drawn the same whether the list has the focus or not: a
+pale band of the theme's `selection` color over the row, its text in the
+color the row gives it (mygo fills it with the accent and the accent's
+text color; see [the deviations](../mygo-deviations.md)). A list that
+should show where the keyboard is styles its row itself, with
+`focusWithin()`, which is true while the list or something in its rows has
+the focus: the row's text in the accent then, as in the example below, or
+the row's own `background()` and `textColor($t->accentText)` for a solid
+band.
 
 ## The focus
 

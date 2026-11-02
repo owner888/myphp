@@ -2315,8 +2315,32 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     builds without the inspector leave it out; it listens when
     `MYGO_AUTOMATION` is set.
   - myphp: `App::use(Automation::plugin())`, which the app calls in the
-    runs it is driven in; it listens when `MYPHP_AUTOMATION` is set.
-  - Why: PHP has no build tags nor imports that run code.
+    runs it is driven in; it listens when `MYPHP_AUTOMATION` is set. An
+    app run from its project's files in development (`App::isDev()`, not
+    `App::isPackaged()`) with the variable set gets the plugin from
+    `App::run` without adding it, so that `myphp screenshot` drives any
+    app; a bundle `myphp build` made, `-debug` or not, only if the app
+    added it.
+  - Why: PHP has no build tags nor imports that run code; a run from the
+    project's files is a development run, as a build with the inspector.
+- **resize**
+  - mygo: the protocol has no request that resizes a window.
+  - myphp: `resize` {window, width, height} sets the content's size, as
+    `Window::setContentSize`, for `myphp screenshot -size`.
+  - Why: mygo's CLI has no screenshot command; an agent checks a layout
+    at other sizes.
+- **myphp screenshot**
+  - mygo: no such command.
+  - myphp: runs the app once from its files with the plugin on a socket of
+    its own, captures its window once idle, writes its tree, quits it; on
+    Linux without a display, under an Xvfb it starts. `-theme light|dark`
+    sets `MYPHP_THEME`, which `App::run` applies as `Theme::setSource` in a
+    run from the project's files in development (as the plugin above);
+    `-data dir` sets `MYPHP_DATA_HOME`, which `App::path` reads in place of
+    `~/Library` in such a run on the Mac, and on Linux `XDG_CONFIG_HOME`,
+    `XDG_CACHE_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` under it.
+  - Why: coding agents see the app they wrote from the command line, in
+    either appearance, without touching the user's data.
 - **Serving**
   - mygo: a goroutine a connection, each request served as it comes.
   - myphp: the socket polled on the run loop every 5 ms; `idle` waits
@@ -2327,10 +2351,6 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - mygo: a key event's `mods` are ignored; its accelerator gives them.
   - myphp: they join the accelerator's.
   - Why: an event's fields are not dropped silently.
-- **CmdOrCtrl**
-  - mygo: Command on macOS, Control elsewhere.
-  - myphp: Command.
-  - Why: myphp runs on macOS.
 
 ## The media player (v1.118)
 

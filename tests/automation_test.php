@@ -17,7 +17,7 @@ $fake = fn() => new class implements Driver {
     public AccessTree $access;
     /** @var array<int, string|int> */
     public array $keys = [];
-    public array $acted = [], $sent = [], $menus = [];
+    public array $acted = [], $sent = [], $menus = [], $sizes = [];
     public string $png = '';
     public ?\Closure $evalFn = null;
     /** How many times idle answers that the window draws, before it is idle. */
@@ -36,6 +36,7 @@ $fake = fn() => new class implements Driver {
     public function act(int $window, int $id, int $action, string $text, int $from, int $to): void { $this->acted[] = [$id, $action, $text, $from, $to]; }
     public function input(int $window, array $events): void { array_push($this->sent, ...$events); }
     public function menu(int $window, array $path): void { $this->menus[] = $path; }
+    public function resize(int $window, int $width, int $height): void { $this->sizes[] = [$window, $width, $height]; }
     public function capture(int $window): string { return $this->png; }
     public function eval(int $window, string $script): mixed { return ($this->evalFn)($script); }
     public function idle(int $window): array { return [1, $this->busy-- <= 0]; }
@@ -63,6 +64,8 @@ foreach ([
     ['{"id": 1, "method": "menu", "params": {"path": []}}', Failure::INVALID],
     ['{"id": 1, "method": "menu", "params": {"path": ["File", 2]}}', Failure::INVALID],
     ['{"id": 1, "method": "idle", "params": {"timeout": -1}}', Failure::INVALID],
+    ['{"id": 1, "method": "resize", "params": {"width": 0, "height": 200}}', Failure::INVALID],
+    ['{"id": 1, "method": "resize", "params": {"width": 300}}', Failure::INVALID],
 ] as [$line, $want]) {
     $m = $do($d, $line);
     same($want, $code($m), "$line: the error's code");
@@ -71,6 +74,10 @@ foreach ([
 same('a-7', $do($d, '{"id": "a-7", "method": "fly"}')['id'], 'the ID comes back as it went');
 check(str_contains(Protocol::encode(Protocol::handle($d, '{')), '"id":null'), 'an unreadable line is answered with the ID null');
 same("{\"id\":3,\"result\":{}}\n", Protocol::encode(Protocol::handle($d, '{"id": 3, "method": "menu", "params": {"path": ["File"]}}')), 'a request answering nothing but success has the result {}');
+
+// resize: the content's size, in points (myphp's)
+same(['result' => []], array_diff_key($do($d, '{"id": 1, "method": "resize", "params": {"window": 1, "width": 640, "height": 480}}'), ['id' => 0]), 'resize answers {}');
+same([[1, 640, 480]], $d->sizes, 'resize resizes the window');
 
 // windows
 $w = $do($d, '{"id": 1, "method": "windows"}')['result']['windows'][0];
@@ -136,6 +143,7 @@ foreach ([
 
 // input: the events, as the window takes them.
 $d = $fake();
+$ctrl = PHP_OS_FAMILY === 'Darwin' ? Key::CONTROL : Key::COMMAND; // Control, as the keyboard's: Linux's is the shortcuts' modifier
 same(null, $do($d, '{"id": 1, "method": "input", "params": {"events": [
     {"type": "click", "x": 5, "y": 6, "clicks": 2},
     {"type": "pointerDown", "x": 1, "y": 2, "button": "right", "mods": ["shift"]},
@@ -154,7 +162,7 @@ same([
     ['down', 1.0, 2.0, 1, 1, Key::SHIFT],
     ['move', 3.0, 4.0, 0],
     ['scroll', 1.0, 2.0, 0.0, 40.0, true, 0],
-    ['keyDown', Key::Z, 'Z', Key::CONTROL | Key::SHIFT], ['keyUp', Key::Z, 'Z', Key::CONTROL | Key::SHIFT],
+    ['keyDown', Key::Z, 'Z', $ctrl | Key::SHIFT], ['keyUp', Key::Z, 'Z', $ctrl | Key::SHIFT],
     ['keyDown', Key::RETURN, "\r", 0],
     ['keyUp', Key::F5, "\u{F708}", 0],
     ['keyDown', Key::DELETE, "\x7f", Key::COMMAND], ['keyUp', Key::DELETE, "\x7f", Key::COMMAND],
@@ -286,3 +294,83 @@ $t->rt->automationTree();
 $t->input->push(['access', (int)$byKey['7'], AccessNode::SET_VALUE, 'Ada', 0, 0]);
 $t->frame();
 same('Ada', $name->text, "setting the field's value types it");
+
+// Linux's side, against examples/automation in a window of GTK on an X server of its own (Xvfb): the
+// frames idle waits for (Window::framePending), keys and text into native UI, the menu bar's items by
+// their labels, a capture, and quitting from a menu item while answering it.
+(function (): void {
+    $xvfb = \MyPHP\Native\Build\Cmd::look('Xvfb');
+    if (PHP_OS_FAMILY !== 'Linux' || $xvfb === '') {
+        echo "  skipped: Linux's, under Xvfb\n";
+        return;
+    }
+    $dir = sys_get_temp_dir() . '/myphp-automation-x-' . getmypid();
+    @mkdir($dir, 0700);
+    $x = proc_open([$xvfb, '-displayfd', '3', '-screen', '0', '1280x1024x24', '-nolisten', 'tcp'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w'], 3 => ['pipe', 'w']], $xp);
+    $display = trim((string)fgets($xp[3]));
+    $sock = "$dir/s";
+    $app = proc_open([PHP_BINARY, '-d', 'ffi.enable=1', dirname(__DIR__) . '/examples/automation/main.php'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$dir/log", 'w'], 2 => ['file', "$dir/log", 'w']], $ap, $dir,
+        ['DISPLAY' => ":$display", 'MYPHP_AUTOMATION' => $sock] + getenv());
+    try {
+        for ($i = 0; $i < 200 && !file_exists($sock); $i++) { usleep(50_000); }
+        $c = @stream_socket_client("unix://$sock", $errno, $err, 5.0);
+        if ($c === false) {
+            check(false, 'examples/automation listens under Xvfb: ' . file_get_contents("$dir/log"));
+            return;
+        }
+        stream_set_timeout($c, 20);
+        $id = 0;
+        $call = function (string $method, array $params = []) use ($c, &$id): array {
+            fwrite($c, json_encode(['id' => ++$id, 'method' => $method, 'params' => (object)$params]) . "\n");
+            $line = fgets($c);
+            return $line === false ? ['error' => ['code' => 'gone']] : json_decode($line, true);
+        };
+        $main = 0;
+        for ($i = 0; $i < 100 && $main === 0; $i++) {
+            $main = array_column($call('windows')['result']['windows'] ?? [], 'id', 'title')['Automation'] ?? 0;
+            if ($main === 0) { usleep(50_000); }
+        }
+        check($main !== 0, 'the window of native UI is listed');
+        $idle = fn() => $call('idle', ['window' => $main, 'timeout' => 10000]);
+        same([], $idle()['result'] ?? null, 'idle answers once the first frame is drawn');
+        $value = function () use ($call, $main): ?string {
+            foreach ($call('tree', ['window' => $main])['result']['nodes'] ?? [] as $n) {
+                if (($n['key'] ?? null) === 'name') { return $n['value'] ?? ''; }
+            }
+            return null;
+        };
+        $call('act', ['window' => $main, 'key' => 'name', 'action' => 'focus']);
+        $idle();
+        $call('input', ['window' => $main, 'events' => [['type' => 'text', 'text' => 'Ada'], ['type' => 'key', 'key' => 'Backspace'], ['type' => 'key', 'key' => 'x']]]);
+        $idle();
+        same('Ad', $value(), 'typed Ada, Backspace took the a, a key typed nothing');
+        $call('act', ['window' => $main, 'key' => 'add', 'action' => 'press']);
+        $idle();
+        $count = function () use ($call, $main): string {
+            foreach ($call('tree', ['window' => $main])['result']['nodes'] ?? [] as $n) {
+                if (str_starts_with($n['label'] ?? '', 'Count: ')) { return $n['label']; }
+            }
+            return '';
+        };
+        same('Count: 1', $count(), 'a press counts');
+        same([], $call('menu', ['window' => $main, 'path' => ['Actions', 'Reset']])['result'] ?? null, 'Actions > Reset, by the labels of the menu bar');
+        $idle();
+        same('Count: 0', $count(), 'which the item did');
+        same('failed', $call('menu', ['window' => $main, 'path' => ['Actions', 'Nope']])['error']['code'] ?? '', 'a menu item that is not there fails');
+        same('failed', $call('menu', ['window' => $main, 'path' => ['Actions', 'Reset', 'More']])['error']['code'] ?? '', 'an item that has no submenu fails');
+        $shot = $call('capture', ['window' => $main])['result'] ?? [];
+        check(($shot['width'] ?? 0) === 420 && str_starts_with((string)base64_decode($shot['png'] ?? ''), "\x89PNG"), 'capture: a PNG of the window, 420 points wide');
+        fwrite($c, json_encode(['id' => 99, 'method' => 'menu', 'params' => ['window' => $main, 'path' => ['Actions', 'Quit']]]) . "\n");
+        for ($i = 0; $i < 100 && proc_get_status($app)['running']; $i++) { usleep(50_000); }
+        $st = proc_get_status($app);
+        check(!$st['running'] && $st['exitcode'] === 0, 'Actions > Quit ends the app, its socket closed as it answers: ' . file_get_contents("$dir/log"));
+        check(!file_exists($sock), 'and its socket is gone');
+        fclose($c);
+    } finally {
+        if (proc_get_status($app)['running']) { proc_terminate($app, 9); }
+        proc_close($app);
+        proc_terminate($x);
+        proc_close($x);
+        @unlink("$dir/log"); @unlink($sock); @rmdir($dir);
+    }
+})();

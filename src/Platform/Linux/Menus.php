@@ -183,6 +183,48 @@ final class Menus
         $this->h->menuItemClicked($id);
     }
 
+    /**
+     * Activates the item of menu bar $bar at the end of $path, the labels
+     * along it, as a click does (mygo's TestActivateMenuItem).
+     * @param list<string> $path
+     */
+    public function activate(CData $bar, array $path): void
+    {
+        $f = Gtk::ffi();
+        $shell = $bar;
+        foreach ($path as $i => $label) {
+            $item = $this->child($shell, $label) ?? throw new \RuntimeException('no menu item ' . json_encode($label, JSON_UNESCAPED_UNICODE));
+            if ($i === count($path) - 1) {
+                $f->gtk_menu_item_activate($item);
+                return;
+            }
+            $shell = $f->gtk_menu_item_get_submenu($item) ?? throw new \RuntimeException('menu ' . json_encode($label, JSON_UNESCAPED_UNICODE) . ' has no submenu');
+        }
+    }
+
+    /** The item of $shell labeled $label: an item with an icon holds its label in a box with the image (setIcon). */
+    private function child(CData $shell, string $label): ?CData
+    {
+        $f = Gtk::ffi();
+        $list = $f->gtk_container_get_children($shell);
+        $found = null;
+        for ($node = $list; $node !== null && $found === null; $node = $node->next) {
+            $item = $node->data;
+            $own = null;
+            foreach ($this->items as $ns) {
+                foreach ($ns as $n) {
+                    if ($n['label'] !== null && Gtk::addr($n['item']) === Gtk::addr($item)) { $own = $n['label']; }
+                }
+            }
+            $text = $own !== null ? $f->gtk_label_get_label($own) : $f->gtk_menu_item_get_label($item);
+            if ($text === $label) {
+                $found = $item;
+            }
+        }
+        if ($list !== null) { $f->g_list_free($list); }
+        return $found;
+    }
+
     /** Gives every native item of $it's id its state (mygo's UpdateMenuItem). */
     public function update(MenuItem $it): void
     {

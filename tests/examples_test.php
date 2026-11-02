@@ -6,7 +6,7 @@ declare(strict_types=1);
 
 namespace MyPHP\Tests;
 
-use MyPHP\UI\{Context, Key};
+use MyPHP\UI\{Context, Key, Node};
 
 // counter-native: the buttons and the arrow keys count.
 [$view, $s] = Headless::load('counter-native');
@@ -123,7 +123,8 @@ same('', $s->text->text, 'Clear empties the note');
 $t = new Headless($view, 280, 230);
 $t->frame();
 check($t->byText('Sessions of 25 minutes') !== null, 'the session length');
-$t->clickLabel('Focus mode'); $t->frame();
+$switches = []; $walk = function (Node $n) use (&$walk, &$switches) { if ($n->kind === Node::SWITCH) { $switches[] = $n; } foreach ($n->kids as $k) { $walk($k); } }; $walk($t->root);
+$t->clickOn($switches[0]); $t->frame(); // the switch labeled Focus mode, after the text that shows it: clickLabel() finds the first in the tree, as mygo's Tester.Click
 check($s->focus, 'the switch turns focus mode on');
 
 // flyout: the window's buttons, and the list of colors chosen from the keys and the mouse.

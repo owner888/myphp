@@ -215,4 +215,27 @@ interface Window
     public function placePopover(): void;
 
     public function snapshot(float $x, float $y, int $w, int $h): Image;
+
+    /** Whether native UI asked for a frame it has not drawn (mygo's frameAsked, which plugins/automation's idle reads). */
+    public function framePending(): bool;
+
+    /**
+     * A key of the automation plugin pressed ($down) or released, as the
+     * keyboard's go to native UI but typing nothing: its text comes in
+     * automatedText (mygo's key events, whose text comes in text events).
+     * $code is the macOS key code, $plain the characters without Shift,
+     * $mods UI\Key's.
+     */
+    public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void;
+
+    /** Text of the automation plugin, as an input method commits it. */
+    public function automatedText(string $text): void;
+
+    /**
+     * Chooses the item of the application menu at the end of $path, the
+     * titles along it, as the menu bar does (mygo's TestPerformMenuItem,
+     * TestActivateMenuItem); throws a RuntimeException when there is none.
+     * @param list<string> $path
+     */
+    public function chooseMenuItem(array $path): void;
 }

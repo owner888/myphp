@@ -33,6 +33,8 @@ final class Backend implements Platform\Backend
     private ?Symbols $symbols = null;
     private bool $running = false;
     private bool $signaled = false;
+    /** Whether SIGINT or SIGTERM asked the app to quit already. */
+    private bool $signalQuit = false;
 
     public function __construct(
         /** @internal what the backend reports to */
@@ -52,6 +54,16 @@ final class Backend implements Platform\Backend
         $f->g_set_application_name(\MyPHP\App::name());
         if (!$f->gtk_init_check(null, null)) {
             throw new \RuntimeException('myphp: cannot open display (is DISPLAY or WAYLAND_DISPLAY set?)');
+        }
+        // SIGINT and SIGTERM quit as Quit does, so the quit listeners run; a second exits right away (mygo's quitOnSignals).
+        foreach ([2, 15] as $sig) {
+            Gtk::onSignal($sig, function () use ($sig): void {
+                if ($this->signalQuit) {
+                    exit(128 + $sig);
+                }
+                $this->signalQuit = true;
+                \MyPHP\App::quit();
+            });
         }
     }
 

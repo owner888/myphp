@@ -52,3 +52,18 @@ $h->input->mods = Key::COMMAND; $h->frame(); // as the view's flagsChanged sets 
 check($h->byText('Shortcuts') !== null, 'Cmd held');
 $h->rt->setWindowFocus(false); $h->frame();
 check($h->byText('Shortcuts') === null && end($seen) === 0, 'the window losing the keyboard lets go of Cmd');
+
+// Headless::shortcut() sends the key's code with its character, as the window does (mygo's Tester.Key): shortcut(Key::N) takes Cmd+N; Cmd+A goes as the Edit menu's Select All, which a focused field takes.
+$hits = 0; $field = new TextState('hello');
+$h = new Headless(function (Context $c) use (&$hits, $field): void {
+    $c->input($field)->label('Field');
+    if ($c->shortcut(Key::N, Key::COMMAND)) { $hits++; }
+}, 300, 100);
+$h->frame();
+$h->shortcut('n', Key::COMMAND);
+same(1, $hits, 'Cmd+N by its key code');
+$h->shortcut('a', Key::COMMAND);
+same(1, $hits, 'Cmd+A is not N (the code of A was what every shortcut sent)');
+$h->clickLabel('Field'); $field->setCursor(2);
+$h->shortcut('a', Key::COMMAND);
+same([0, 5], $field->selection(), 'Cmd+A selects the focused field\'s text');

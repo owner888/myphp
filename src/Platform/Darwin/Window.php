@@ -605,13 +605,51 @@ final class Window implements Platform\Window
     /** A PNG of native UI as it is. */
     public function capture(): string
     {
-        [$frame, $w, $h] = $this->lastFrame(); // BGRA, premultiplied: 32-bit little-endian words with alpha first
-        $rep = ObjC::msg('p:pllllbbpLll', ObjC::alloc('NSBitmapImageRep'), 'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bitmapFormat:bytesPerRow:bitsPerPixel:',
-            null, $w, $h, 8, 4, true, false, ObjC::str('NSDeviceRGBColorSpace'), 1 | 1 << 9, $w * 4, 32) ?? throw new RuntimeException('myphp: capturePage: no bitmap');
-        \FFI::memcpy(ObjC::$c->cast('char*', ObjC::msg('p:', $rep, 'bitmapData')), $frame, strlen($frame));
-        $png = ObjC::msg('p:Lp', $rep, 'representationUsingType:properties:', 4, ObjC::msg('p:', ObjC::cls('NSDictionary'), 'dictionary')); // NSBitmapImageFileTypePNG
-        ObjC::msg('v:', $rep, 'release');
-        return $png === null ? throw new RuntimeException('myphp: capturePage: no PNG') : \MyPHP\Native\Drag::bytes($png);
+        [$frame, $w, $h] = $this->lastFrame(); // BGRA, premultiplied, rows top down
+        return \MyPHP\Native\ImageIO::pngFromBGRA($frame, $w, $h);
+    }
+
+    public function framePending(): bool
+    {
+        return Metal::framePending($this->view);
+    }
+
+    /** An event of AppKit's, as the view takes the keyboard's: through the text system, which makes the field's commands; a key types nothing, its text a text event's. */
+    public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void
+    {
+        $ev = ObjC::msg('p:LqLdlpppbS', ObjC::cls('NSEvent'), 'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
+            $down ? 10 : 11, ObjC::point(0, 0), $mods, hrtime(true) / 1e9, ObjC::msg('l:', ObjC::msg('p:', $this->view, 'window'), 'windowNumber'), null,
+            ObjC::str($chars), ObjC::str($plain), false, $code); // NSEventTypeKeyDown, KeyUp
+        if ($down) {
+            View::automatedKey($this->view, $ev);
+        } else {
+            ObjC::msg('v:p', $this->view, 'keyUp:', $ev);
+        }
+    }
+
+    public function automatedText(string $text): void
+    {
+        ObjC::msg('v:p', $this->view, 'insertText:', ObjC::str($text));
+    }
+
+    /** The main menu's item, performed by its titles (mygo's darwin TestPerformMenuItem): the menu bar is the app's, whatever the window. */
+    public function chooseMenuItem(array $path): void
+    {
+        $menu = ObjC::msg('p:', ObjC::msg('p:', ObjC::cls('NSApplication'), 'sharedApplication'), 'mainMenu');
+        foreach ($path as $i => $title) {
+            if ($menu === null) {
+                throw new RuntimeException('menu ' . json_encode($path[$i - 1], JSON_UNESCAPED_UNICODE) . ' has no submenu');
+            }
+            $index = ObjC::msg('l:p', $menu, 'indexOfItemWithTitle:', ObjC::str($title));
+            if ($index < 0) {
+                throw new RuntimeException('no menu item ' . json_encode($title, JSON_UNESCAPED_UNICODE));
+            }
+            if ($i === count($path) - 1) {
+                ObjC::msg('v:l', $menu, 'performActionForItemAtIndex:', $index);
+                return;
+            }
+            $menu = ObjC::msg('p:', ObjC::msg('p:l', $menu, 'itemAtIndex:', $index), 'submenu');
+        }
     }
 
     /** The layer under the materials drawn again, offscreen: premultiplied BGRA, its size in pixels, and pixels a point; null while it shows nothing (a player's subtitles, for its screenshots). @return ?array{0: string, 1: int, 2: int, 3: float} */

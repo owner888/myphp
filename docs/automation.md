@@ -31,7 +31,11 @@ MYPHP_AUTOMATION=/tmp/app.sock php app.php
 ```
 
 It listens only when `MYPHP_AUTOMATION` names the path of the socket, and
-does nothing otherwise. A socket left at the path by an app that ended
+does nothing otherwise. An app run from its project's files in
+development (not from a bundle `myphp build` or `myphp dev` made, nor with
+`MYPHP_ENV=production`) listens when the variable is set without adding
+the plugin: `myphp screenshot` ([the CLI](cli.md#myphp-screenshot)) runs
+any app so, to save a PNG of its window and its elements. A socket left at the path by an app that ended
 without removing it is replaced; one another app listens on is not, nor a
 file that is no socket (the app says so on its standard error and runs
 without automation). The app removes its socket when it quits.
@@ -79,6 +83,7 @@ in points, relative to the window's content, as the elements' bounds are.
 | `act` | `window`, `id` or `key`, `action`, `text?`, `from?`, `to?` | `{}` |
 | `input` | `window`, `events` | `{}` |
 | `menu` | `window`, `path` | `{}` |
+| `resize` | `window`, `width`, `height` | `{}` |
 | `capture` | `window` | `{png, width, height}` |
 | `eval` | `window`, `script` | `{value}` |
 | `idle` | `window`, `timeout?` | `{}` |
@@ -174,7 +179,7 @@ in order:
 
 `button` is `left` (the default), `right` or `middle`; `clicks` counts
 the presses of a double or triple click; `mods` lists `shift`, `ctrl`,
-`alt`, `cmd` and `cmdOrCtrl` (Command). A key event types no text: send
+`alt`, `cmd` and `cmdOrCtrl` (Command on macOS, Control elsewhere). A key event types no text: send
 the text with a `text` event. Keys go through the text system as the
 keyboard's do, so Backspace, the arrows, Enter and the bindings with
 Control or Command edit the focused field.
@@ -189,7 +194,8 @@ native UI; pages answer `unsupported`, and clients drive them with
 ### menu
 
 Chooses an item of the application menu by the titles along its path, as
-the menu bar does, and answers once its action returned:
+the menu bar does (on Linux, the window's menu bar, which shows the
+application menu), and answers once its action returned:
 
 ```json
 {"id": 6, "method": "menu", "params": {"path": ["File", "New Window"]}}
@@ -198,6 +204,13 @@ the menu bar does, and answers once its action returned:
 The menus of the Dock and of tray icons, and open context menus, are
 left out: the system shows a context menu in a loop of its own, so don't
 open one with a right click through `input`.
+
+### resize
+
+Resizes the window so that its content is `width` × `height` points, as
+`Window::setContentSize` does, and answers at once: the window takes the
+size as the system gives it, which `windows` then reports; wait with
+`idle` for the frame at that size. mygo's protocol has no such request.
 
 ### capture
 
@@ -257,7 +270,8 @@ echo '{"id": 1, "method": "windows"}' | socat - UNIX-CONNECT:/tmp/app.sock
 
 Whoever opens the socket drives the app as its user would, and runs
 scripts in its pages: keep the plugin out of the builds you ship. It is
-opt-in twice: the app adds it with `App::use`, and it listens only when
-`MYPHP_AUTOMATION` is set. The socket is the user's alone, made with mode
+opt-in twice: the app adds it with `App::use`, or runs from its project's
+files in development, and it listens only when `MYPHP_AUTOMATION` is set;
+a bundle `myphp build` made listens only if the app added the plugin. The socket is the user's alone, made with mode
 `0600`; put it in a directory only the user can write to, not one shared
 with others.

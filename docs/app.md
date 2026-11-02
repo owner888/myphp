@@ -210,11 +210,17 @@ new Window(new WindowOptions(url: '/', hidden: App::wasOpenedAtLogin()));
 | `PathName::Desktop`, `Documents`, `Downloads`, `Music`, `Pictures`, `Videos` | the user's folders |
 
 ```php
+use MyPHP\{App, PathName};
+
 $db = App::path(PathName::UserData) . '/notes.db';
 ```
 
-`App::setPath()` overrides a directory, for example to keep test data
-apart.
+`<Name>` is `App::name()`: what `App::setName()` set, else the script's
+file name; not the `identifier` of the configuration, as mygo's
+`Path` joins the application's name. Call `App::setName()` before the first
+`App::path()`, which makes the directory. `App::setPath()` overrides a
+directory, for example to keep test data apart; `myphp screenshot -data`
+moves them all for a run (see [the CLI](cli.md#myphp-screenshot)).
 
 ## Name and version
 

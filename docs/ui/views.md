@@ -235,6 +235,43 @@ of the run loop. Within the view, `$c->animationFrame()` asks for another
 frame as soon as the display can show it, and `$c->after($seconds)` for one
 after a delay, such as a clock's next second.
 
+## Something that changes with time
+
+Neither the view nor `App` has a repeating timer, as mygo has none: a view
+that changes with time asks for its next frame each time it builds, with
+`$c->after()`, and works out what changed from the time, at the top of the
+view. Frames come for other reasons too (the pointer moving, a key), and
+`after()` may wake it a little late, so the work goes by the clock, not by
+counting frames, and does nothing when nothing is due. A countdown that
+ends on its own:
+
+```php
+$app = new class {
+    public bool $running = true;
+    public float $endsAt;
+    public function __construct() { $this->endsAt = microtime(true) + 25 * 60; }
+    /** Idempotent: what the clock says now, however many frames came. */
+    public function tick(): void
+    {
+        if ($this->running && microtime(true) >= $this->endsAt) {
+            $this->running = false; // done once, whichever frame sees it first
+        }
+    }
+};
+$view = function (Context $c) use ($app) {
+    $app->tick();
+    $left = max(0, (int)ceil($app->endsAt - microtime(true)));
+    $c->text(sprintf('%02d:%02d', intdiv($left, 60), $left % 60));
+    if ($app->running) {
+        $c->after(1 - fmod(microtime(true), 1)); // the next second, while it runs
+    }
+};
+```
+
+For motion, `$c->animationFrame()` in every frame while it moves; for work
+outside the view, `App::after($seconds, $fn)` once, which can call itself
+again, with `Window::update()` to change the state and draw.
+
 ## State of a node
 
 A node keeps state of its own from frame to frame with

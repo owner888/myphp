@@ -2063,13 +2063,20 @@ final class Painter
     private static function paintArea(Node $n, DisplayList $list, TextPainter $text, Theme $t, ?Runtime $rt): void
     {
         $s = $n->edit;
-        [$inset, $insetY] = $n->bare ? [0.0, 0.0] : [Runtime::FIELD_INSET, Runtime::FIELD_INSET_Y]; // an area without a look: no padding, no face
-        if (!$n->bare) {
-            $list->rect($n->x, $n->y, $n->w, $n->h, self::inputBorder($n, $t, $rt), 1.0, $t->radius);
-            $list->rect($n->x + 1, $n->y + 1, $n->w - 2, $n->h - 2, $n->color ?? $t->surface, 1.0, $t->radius - 1);
+        // Its padding, radius, background and border as textarea() set them, or a call after it (mygo's textInput); textAreaBase() has none of them.
+        [$insetT, $insetR, $insetB, $inset] = $n->areaInsets();
+        $bw = $n->bordered ? $n->borderWidth : 0.0;
+        foreach ($n->shadows as $sh) { // outside the box, under it
+            if (!$sh[6]) { self::boxShadow($list, [$n->x, $n->y, $n->w, $n->h], [$n->radius, $n->radius, $n->radius, $n->radius], $sh); }
+        }
+        if ($bw > 0) {
+            $list->rect($n->x, $n->y, $n->w, $n->h, $n->borderColor ?? self::inputBorder($n, $t, $rt), 1.0, $n->radius);
+        }
+        if ($n->color !== null) {
+            $list->rect($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw, $n->color, $n->bgAlpha, max($n->radius - $bw, 0.0));
         }
         $display = $s->display();
-        $innerW = $n->w - 2 * $inset; $innerH = $n->h - 2 * $insetY;
+        $innerW = $n->w - $inset - $insetR; $innerH = $n->h - $insetT - $insetB;
         $layout = $s->layout($text, $n->fontSize, $innerW);
         $lh = $layout->lineHeight;
         // Never scroll past the text; bring the caret into view when it moved (not while the wheel scrolls away from it).
@@ -2088,9 +2095,8 @@ final class Painter
             }
         }
         $s->scrollFraction = $range > 0 ? $s->scrollY / $range : 0.0;
-        $tx = $n->x + $inset; $ty = $n->y + $insetY - $s->scrollY;
-        $in = $n->bare ? 0.0 : 2.0; // inside the border
-        $list->pushClip($n->x + $in, $n->y + $in, $n->w - 2 * $in, $n->h - 2 * $in);
+        $tx = $n->x + $inset; $ty = $n->y + $insetT - $s->scrollY;
+        $list->pushClip($n->x + $bw, $n->y + $bw, $n->w - 2 * $bw, $n->h - 2 * $bw); // inside the border
         if ($display === '' && $n->text !== null && $n->text !== '') { // the placeholder wraps as the text would (mygo's)
             $ph = FieldLayout::wrap($text, $n->text, $n->fontSize, $innerW, null, $s->style);
             [$prgb, $palpha] = $n->placeholderColor ?? [$t->textMuted, 1.0];

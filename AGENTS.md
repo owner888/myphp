@@ -45,7 +45,8 @@ mygo's version and keeping its semantics; rename to PHP, do not redesign.
 ## Layout
 
 ```
-bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app; Linux .deb), micro; bin/cldr-tables
+bin/myphp          CLI: init, dev (restart on change, TS client, --lang), generate, i18n check, build (.app; Linux .deb), micro,
+                   screenshot (runs the app once: a PNG of its window, its elements; Xvfb without a display); bin/cldr-tables
 src/               App (whenReady/run/quit/theme/menu/path/later/after; onOpenURL/File, single instance, recent
                    documents, open at login), Dock, Shell, Screen, Theme, Window (+ on(event), CloseEvent, FileDropEvent,
                    WindowState(+Store), newWebView), Page (+ PageOptions, on(event), eval, find, PDF, downloads, permissions),
@@ -171,8 +172,7 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 
 ## Working on it
 
-- PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set
-  `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
+- PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
 - Before handing back: `php -l` on every changed file; pure-PHP checks
   where they exist; ask the developer to run GUI examples. php tests/run.php
   runs the headless tests (Layout, Runtime, Context, Painter: no window):

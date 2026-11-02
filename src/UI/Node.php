@@ -101,6 +101,8 @@ final class Node
     public bool $wrapLast = false;
     /** That the app gave the node its width (width(), size()), which a column's stretch keeps: a button's own is its label's. */
     public bool $sizedW = false;
+    /** That the app gave the node its height (height(), size()), which a row's stretch keeps: a button's own is its label's. */
+    public bool $sizedH = false;
     /** @internal a button's own padding, [top, right, bottom, left], and the size it made, [w, h]: padding() makes it as much bigger or smaller, as mygo's Padding on a button (Layout::repad). @var ?array{0: list<float>, 1: array{0: float, 1: float}} */
     public ?array $madePad = null;
     /** That $wrapWidth is the width layout gave the text, narrower than its lines (Layout::wrapTexts, mygo's text wrapping at its width). */
@@ -142,6 +144,8 @@ final class Node
     public bool $wraps = false;
     /** Whether this node takes the keyboard focus (Tab, a click): see focusable(). */
     public bool $focusable = false;
+    /** @internal A field's row in a form: its label and its control lined up by their first lines of text once laid out (mygo's baselines, alignBaselines). */
+    public bool $baselines = false;
     /** A focusable node Tab goes past, into what is inside it, which takes the focus from code alone (a router's page, mygo's focus target). */
     public bool $focusTarget = false;
     /** A router's page (mygo's flagPage), whose nodes' state lives while the router keeps the page; inert, what is in it takes neither the pointer nor the keyboard, and assistive technology does not see it (a page going away). */
@@ -439,7 +443,7 @@ final class Node
 
     /** Sets the width and the height, in points (mygo's Width, Height); 0 leaves one to the content. */
     public function width(float $v): static { $this->fw = $v; $this->wPct = null; $this->sizedW = $v > 0; return $this; }
-    public function height(float $v): static { $this->fh = $v; $this->hPct = null; return $this; }
+    public function height(float $v): static { $this->fh = $v; $this->hPct = null; $this->sizedH = $v > 0; return $this; }
     /** Sets the width or height as a percentage of the parent's content box (mygo's WidthPercent, HeightPercent); fill() is both at 100, fillWidth() and fillHeight() one. */
     public function widthPercent(float $p): static { $this->wPct = $p / 100; return $this; }
     public function heightPercent(float $p): static { $this->hPct = $p / 100; return $this; }
@@ -1782,6 +1786,7 @@ final class Node
     public function border(float $width = 1.0, ?int $color = null): static
     {
         $this->bordered = true; $this->borderColor = $color; $this->borderWidth = $width;
+        $this->borders = [0.0, 0.0, 0.0, 0.0]; // one border all round, in place of borderWidth()'s (mygo's one border)
         return $this;
     }
 
@@ -1920,7 +1925,12 @@ final class Node
     public function padB(): float { return ($this->pads[2] ?? $this->padY ?? $this->pad) + $this->borderSide(2); }
     public function padL(): float { return ($this->pads[3] ?? $this->padX ?? $this->pad) + $this->borderSide(3); }
 
-    /** The border on side $i: borderWidth()'s, else border()'s all round. */
+    /** @internal A text area's room between its edge and its lines, its padding and border: textarea()'s, or what the app set (mygo's on a TextArea); none for textAreaBase(). @return array{0: float, 1: float, 2: float, 3: float} top, right, bottom, left */
+    public function areaInsets(): array
+    {
+        return [$this->padT(), $this->padR(), $this->padB(), $this->padL()];
+    }
+
     /** @internal The padding and border across and down, padL() + padR() and padT() + padB() at once: Layout measures them for every node. @return array{0: float, 1: float} */
     public function padSums(): array
     {
@@ -1970,6 +1980,11 @@ final class Node
     {
         $this->logical &= ~self::LOG_BORDER;
         $this->borders = self::edges($v);
+        if ($this->bordered) { // these widths replace border()'s, a control's own included (mygo's one border): borderWidth(0) takes a field's away
+            [$a, $b, $c, $d] = $this->borders;
+            $this->borderWidth = $a === $b && $b === $c && $c === $d ? $a : 0.0;
+            if ($a === $b && $b === $c && $c === $d) { $this->borders = [0.0, 0.0, 0.0, 0.0]; }
+        }
         return $this;
     }
 
@@ -2060,7 +2075,7 @@ final class Node
         $measured = $this->kind === self::TEXT || $this->kind === self::RICH || $this->kind === self::BUTTON;
         if ($w > 0 || !$measured) { $this->fw = $w; }
         if ($h > 0 || !$measured) { $this->fh = $h; }
-        $this->sizedW = $w > 0;
+        $this->sizedW = $w > 0; $this->sizedH = $h > 0;
         return $this;
     }
 

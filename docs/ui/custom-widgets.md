@@ -29,7 +29,36 @@ A base that returns a node opens a container, built in until `end()`; one
 that returns parts (`TabsParts`, `SegmentedParts`, `CollapsibleParts`,
 `SelectParts`, `ComboboxParts`, `ToastParts`) opens the container its
 first part is, and each part that is a container is closed with `end()`
-too. Give stateful bases a key with `$c->key()` before construction.
+too. `textInputBase()` and `textAreaBase()` are the exception: a text input
+is a leaf, which opens nothing, so no `end()` follows it. Give stateful
+bases a key with `$c->key()` before construction.
+
+A text area without a look, as a notes app's editor that fills its pane:
+the base has no padding, so the padding goes on it (`padding()`, or
+`paddingX()` and `paddingY()`, which take one value each), and a
+placeholder of your own shows while it is empty:
+
+```php
+$app = new class { public TextState $note; public function __construct() { $this->note = new TextState(''); } };
+$view = function (Context $c) use ($app) {
+    $t = $c->theme;
+    $c->column(0, 0, 1, $t->background)->fill();
+      $area = $c->key('editor')->textAreaBase($app->note)->label('Note')
+          ->paddingX($t->space(6))->paddingY($t->space(4))->fontSize(15)->grow(1);
+      if ($app->note->text === '') {
+          $c->text('Start writing…', 15, $t->textMuted)->absolute()->top($t->space(4))->left($t->space(6));
+      }
+    $c->end(); // the column's: textAreaBase() opened nothing
+    if ($c->changed($area)) {
+        // save $app->note->text
+    }
+};
+```
+
+`textarea()` and `input()` are the same nodes with the theme's padding,
+face, border and corners, which calls after them replace:
+`$c->textarea($s, '', 0, 0)->borderWidth(0)->padding(16, 20)` keeps the face
+and drops the border.
 
 A segmented control on `segmentedBase()`, and a select on `selectBase()`:
 

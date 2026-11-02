@@ -369,6 +369,15 @@ final class App
             file_put_contents($out, TypeScript::generate());
             return;
         }
+        // Run from its project in development with MYPHP_AUTOMATION set (myphp screenshot), the app is driven
+        // without adding the plugin; an app bundle only when it added it (mygo: linked, outside production builds).
+        if ((string)getenv('MYPHP_AUTOMATION') !== '' && self::isDev() && !self::isPackaged() && !Ipc::pluginUsed('automation')) {
+            self::use(Plugins\Automation\Automation::plugin());
+        }
+        // myphp screenshot -theme: a run from the project in development shows the appearance MYPHP_THEME names (light, dark), as Theme::setSource.
+        if (($forced = (string)getenv('MYPHP_THEME')) !== '' && self::isDev() && !self::isPackaged()) {
+            \MyPHP\Theme::setSource(ThemeSource::tryFrom($forced) ?? throw new RuntimeException("myphp: MYPHP_THEME=\"$forced\" is not light, dark or system"));
+        }
         $b = self::backend();
         $b->init(self::$policy);
         self::$initialized = true;
@@ -627,7 +636,7 @@ final class App
             return self::$paths[$name->value];
         }
         $home = (string)getenv('HOME');
-        $lib = "$home/Library";
+        $lib = self::devDataHome() ?? "$home/Library";
         [$dir, $make] = PHP_OS_FAMILY === 'Linux' ? self::xdgPath($name, $home) : match ($name) {
             PathName::Home => [$home, false],
             PathName::AppData => ["$lib/Application Support", false],
@@ -684,6 +693,17 @@ final class App
             PathName::Pictures => [$userDir('XDG_PICTURES_DIR', 'Pictures'), false],
             PathName::Videos => [$userDir('XDG_VIDEOS_DIR', 'Videos'), false],
         };
+    }
+
+    /**
+     * myphp screenshot -data: in a run from the project in development, MYPHP_DATA_HOME stands for ~/Library on the
+     * Mac, where AppData, UserData, Cache and Logs are (on Linux the command sets XDG_CONFIG_HOME and XDG_CACHE_HOME,
+     * which xdgPath() reads); null otherwise.
+     */
+    private static function devDataHome(): ?string
+    {
+        $dir = (string)getenv('MYPHP_DATA_HOME');
+        return $dir !== '' && self::isDev() && !self::isPackaged() ? rtrim($dir, '/') : null;
     }
 
     /** Overrides a directory path() returns (mygo's SetPath). */

@@ -2161,12 +2161,13 @@ final class Runtime
         }
         if ($n->kind === Node::INPUT && $n->edit !== null) {
             [, $lh] = $this->metrics?->measure('X', $n->fontSize, $n->edit->style) ?? [0, $n->h];
-            $this->fields[$n->id] = [$n->edit, $n->x + self::FIELD_INSET + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - 2 * self::FIELD_INSET - $n->insetL - $n->insetR];
+            [$il, $ir] = $n->pads !== null ? [$n->padL(), $n->padR()] : [self::FIELD_INSET, self::FIELD_INSET]; // as paintField: the app's padding, else the theme's
+            $this->fields[$n->id] = [$n->edit, $n->x + $il + $n->insetL, $n->y + ($n->h - $lh) / 2, $lh, $n->fontSize, $n->w - $il - $ir - $n->insetL - $n->insetR];
         } elseif ($n->kind === Node::TEXTAREA && $n->edit !== null) {
             $this->areas[$n->id] = $n->edit;
             [, $lh] = $this->metrics?->measure('X', $n->fontSize, $n->edit->style) ?? [0, $n->h];
-            [$ix, $iy] = $n->bare ? [0.0, 0.0] : [self::FIELD_INSET, self::FIELD_INSET_Y];
-            $this->fields[$n->id] = [$n->edit, $n->x + $ix, $n->y + $iy, $lh, $n->fontSize, $n->w - 2 * $ix];
+            [$it, $ir, $ib, $il] = $n->areaInsets();
+            $this->fields[$n->id] = [$n->edit, $n->x + $il, $n->y + $it, $lh, $n->fontSize, $n->w - $il - $ir, $n->h - $it - $ib];
         }
         if ($n->scroll !== null) {
             if ($n->hideScrollbars && $this->drag !== null && $this->drag[0] === $n->scroll) {
@@ -2553,7 +2554,7 @@ final class Runtime
             return false;
         }
         [$state, , , $lh, $size, $width] = $this->fields[$this->focus];
-        if (!$state->multiline) {
+        if (!$state->multiline || !isset($this->fields[$this->focus][6])) {
             return false;
         }
         $extend = str_ends_with($selector, 'AndModifySelection:');
@@ -2566,7 +2567,7 @@ final class Runtime
         $line = $layout->lineOf($state->cursor);
         [$a, $b] = $layout->line($line);
         $end = $b > $a && $state->text[$b - 1] === "\n" ? $b - 1 : $b;
-        $page = max(1, (int)(($this->rects[$this->focus][3] - 2 * self::FIELD_INSET_Y) / $lh) - 1);
+        $page = max(1, (int)($this->fields[$this->focus][6] / $lh) - 1); // the lines inside its padding
         $toLine = function (int $l) use ($state, $layout, $m, $extend) {
             [$x, ] = $layout->caret($m, $state->cursor);
             $state->setCursor($layout->hit($m, $x, ($l + 0.5) * $layout->lineHeight), $extend);

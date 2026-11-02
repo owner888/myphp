@@ -520,7 +520,6 @@ final class Window implements Platform\Window
     private function keyDown(CData $e, CData $event): void
     {
         $input = $this->w->input;
-        $f = Gtk::ffi();
         [$code, $chars] = Keys::of($e->keyval, $e->hardware_keycode);
         $mods = self::mods($e->state);
         $repeat = isset($this->held[$e->hardware_keycode]);
@@ -529,6 +528,18 @@ final class Window implements Platform\Window
             $input->mods = self::mods($e->state ^ Keys::modifierMask($e->keyval)) & Key::MODIFIERS;
             return;
         }
+        $this->press($code, $chars, $chars, $mods, $repeat, $event);
+    }
+
+    /**
+     * A key past the modifiers, as keyDown takes it; $event is GDK's,
+     * which the input method types with, or null for the automation
+     * plugin's, which types nothing (View::automatedKey).
+     */
+    private function press(int $code, string $chars, string $plain, int $mods, bool $repeat, ?CData $event): void
+    {
+        $input = $this->w->input;
+        $f = Gtk::ffi();
         if ($input->textKey($code, $chars, $mods)) {
             return;
         }
@@ -537,14 +548,14 @@ final class Window implements Platform\Window
             $input->push(['edit', $edit]);
             return;
         }
-        if ($input->push(['key', $chars, $code, $mods, $repeat, $chars])) {
+        if ($input->push(['key', $chars, $code, $mods, $repeat, $plain])) {
             return; // a node taking its input as it comes took it
         }
         if ($input->client !== null && !$input->inputMethod) {
-            if (Keys::types($chars) && ($mods & (Key::COMMAND | Key::CONTROL)) === 0) { $input->client->replaceText(null, $chars); }
+            if ($event !== null && Keys::types($chars) && ($mods & (Key::COMMAND | Key::CONTROL)) === 0) { $input->client->replaceText(null, $chars); }
             return;
         }
-        if ($this->im !== null && $f->gtk_im_context_filter_keypress($this->im, $event)) {
+        if ($event !== null && $this->im !== null && $f->gtk_im_context_filter_keypress($this->im, $event)) {
             return; // typed, or composing
         }
         $selector = Keys::selector($code, $mods);
@@ -1329,7 +1340,9 @@ final class Window implements Platform\Window
         $f = Gtk::ffi();
         $data = $f->new('unsigned char[' . strlen($bgra) . ']');
         FFI::memcpy($data, $bgra, strlen($bgra));
-        $surface = $f->cairo_image_surface_create_for_data($data, 0, $w, $h, $w * 4); // CAIRO_FORMAT_ARGB32
+        // Blending leaves the frame's alpha below 1 under text and translucent fills, which an opaque window's
+        // GL area never shows: only a transparent window's alpha is its own (CAIRO_FORMAT_ARGB32, else RGB24).
+        $surface = $f->cairo_image_surface_create_for_data($data, $this->transparent ? 0 : 1, $w, $h, $w * 4);
         $path = tempnam(sys_get_temp_dir(), 'myphp-capture');
         try {
             if ($f->cairo_surface_write_to_png($surface, $path) !== 0) {
@@ -1340,6 +1353,43 @@ final class Window implements Platform\Window
             $f->cairo_surface_destroy($surface);
             @unlink($path);
         }
+    }
+
+    /** A frame asked for and not drawn yet; or the first, of a window that shows, while GTK has not made the area's context (realize asks for it). */
+    public function framePending(): bool
+    {
+        return $this->asked || $this->rendering || ($this->area !== null && $this->gl === null && !$this->dead && $this->isVisible());
+    }
+
+    /** The automation plugin's key, as keyDown and the release take GDK's, without the input method: it types nothing. */
+    public function automatedKey(bool $down, int $code, string $chars, string $plain, int $mods): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($down) {
+            $this->press($code, $chars, $plain, $mods, false, null);
+        } else {
+            $input->mods = $mods & Key::MODIFIERS;
+            $input->push(['keyup', $chars, $code, $mods, $plain]);
+        }
+        $this->requestFrame();
+    }
+
+    /** The automation plugin's text, as the input method commits it. */
+    public function automatedText(string $text): void
+    {
+        $this->commit($text);
+    }
+
+    /** The item of the window's menu bar, which shows the application menu, activated by the labels along its path (mygo's linux TestActivateMenuItem). */
+    public function chooseMenuItem(array $path): void
+    {
+        if ($this->menubar === null) {
+            throw new \RuntimeException('the window has no menu bar');
+        }
+        $this->b->menus()->activate($this->menubar, $path);
     }
 
     /** BGRA pixels as RGBA. */

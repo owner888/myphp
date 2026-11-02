@@ -93,7 +93,7 @@ $h = new Headless(function (Context $c) use (&$n, &$ev, &$open, $q, &$cur, $name
     $c->end();
 }, 600, 500);
 $h->frame(); check($n['bar'] === null, 'a closed find bar builds nothing');
-$l1 = $h->rect($n['f1']->kids[0]); $l2 = $h->rect($n['f2']->kids[0]); same($l1[2], $l2[2], 'the labels of a form are as wide as the widest'); same(30.0, $l1[3], 'and as high as their control, its border in');
+$l1 = $h->rect($n['f1']->kids[0]); $l2 = $h->rect($n['f2']->kids[0]); same($l1[2], $l2[2], 'the labels of a form are as wide as the widest'); same($h->rect($n['f1']->kids[1]->kids[0])[1] + 7, $h->rect($n['f1']->kids[0]->kids[0])[1], 'and level with the line of their control, inside its border and padding (mygo\'s alignBaselines)');
 same('Required', $n['f2']->kids[1]->kids[1]->text, 'the error below the control'); same($h->theme->danger, $n['f2']->kids[1]->kids[1]->fg, 'in the danger color');
 $h->clickOn($n['f1']->kids[0]->kids[0]); same($n['f1']->kids[1]->kids[0]->id, $h->rt->focus, 'a click on the label focuses the input');
 $h->clickOn($n['f2']->kids[0]->kids[0]); check($agree, 'a click on a check box label checks it');

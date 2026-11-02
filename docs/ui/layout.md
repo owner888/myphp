@@ -54,9 +54,10 @@ as a call on the node after; `$c->end()` closes the container.
 ## Spacing
 
 `gap()` spaces the children, `gapX()` and `gapY()` horizontally and
-vertically apart; `padding()` and `margin()` take one, two or four values,
-as in CSS, and `paddingX()`, `paddingY()`, `marginX()` and `marginY()` two
-sides. A margin of `Node::AUTO` takes the free space on its side, as in
+vertically apart; `padding()` and `margin()` take one, two, three or four
+values, as in CSS, and `paddingX()`, `paddingY()`, `marginX()` and
+`marginY()` one value, for the two sides of their axis: `paddingX(12)` is
+12 left and right. A margin of `Node::AUTO` takes the free space on its side, as in
 CSS: `margin(0, Node::AUTO)` centers a node in a column, and
 `margin(0, 0, 0, Node::AUTO)` sends a row's child, and those after it, to
 the right.

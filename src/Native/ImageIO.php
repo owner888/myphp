@@ -190,6 +190,40 @@ final class ImageIO
         return $out;
     }
 
+    /**
+     * $w by $h pixels $bgra (premultiplied, the bytes B G R A, top row
+     * first: Metal's BGRA8) as a PNG. NSBitmapImageRep reads such words as
+     * big-endian ARGB whatever its little-endian flag, which swapped the
+     * channels of window captures; Core Graphics takes the byte order.
+     */
+    public static function pngFromBGRA(string $bgra, int $w, int $h): string
+    {
+        $c = self::c();
+        ObjC::boot(['Foundation']);
+        if (strlen($bgra) !== $w * $h * 4) {
+            throw new RuntimeException("myphp: $w by $h pixels are not " . strlen($bgra) . ' bytes');
+        }
+        $ctx = $c->CGBitmapContextCreate(null, $w, $h, 8, $w * 4, self::$colorSpace, self::BGRA_PREMULTIPLIED_LITTLE)
+            ?? throw new RuntimeException('CGBitmapContextCreate');
+        FFI::memcpy($c->cast('char*', $c->CGBitmapContextGetData($ctx)), $bgra, $w * $h * 4);
+        $image = $c->CGBitmapContextCreateImage($ctx);
+        $c->CGContextRelease($ctx);
+        $data = $c->CFDataCreateMutable(null, 0);
+        $dest = $c->CGImageDestinationCreateWithData($data, $c->cast('void*', ObjC::addr(ObjC::str('public.png'))), 1, null);
+        $ok = false;
+        if ($dest !== null) {
+            $c->CGImageDestinationAddImage($dest, $image, null);
+            $ok = $c->CGImageDestinationFinalize($dest);
+            $c->CFRelease($dest);
+        }
+        $out = $ok ? FFI::string($c->CFDataGetBytePtr($data), $c->CFDataGetLength($data)) : '';
+        $c->CFRelease($data); $c->CGImageRelease($image);
+        if (!$ok) {
+            throw new RuntimeException('myphp: the PNG could not be made');
+        }
+        return $out;
+    }
+
     /** The types of image ImageIO writes on this system, by their UTIs (public.png, public.jpeg, org.webmproject.webp…). @return list<string> */
     public static function writable(): array
     {

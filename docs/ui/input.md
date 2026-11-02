@@ -198,7 +198,12 @@ $view = function (Context $c) use ($app) {
 Keys are `Key` constants, by the key's place on a US keyboard (`Key::S`,
 `Key::RETURN`, `Key::LEFT`, `Key::F2`), or a character as a string;
 modifiers are `Key::COMMAND`, `Key::SHIFT`, `Key::OPTION` and
-`Key::CONTROL`, or'd together. `Key::BACK` and `Key::FORWARD` are the back
+`Key::CONTROL`, or'd together. `Key::COMMAND` is the platform's command
+key, as mygo's `Cmd` and Electron's CmdOrCtrl: Command on macOS, Control on
+Linux, so one `$c->shortcut(Key::S, Key::COMMAND)` is Cmd+S on a Mac and
+Ctrl+S on Linux. There `Key::OPTION` is Alt and `Key::CONTROL` the Super
+(Windows) key.
+`Key::BACK` and `Key::FORWARD` are the back
 and forward buttons of a mouse, which a [router](navigation.md) takes.
 Shortcuts of [menus](../menus.md) still work, and the Edit menu's roles
 (cut, copy, paste, select all, undo, redo) act on the focused text input.

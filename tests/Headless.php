@@ -348,11 +348,30 @@ final class Headless
         return $this->frame();
     }
 
-    /** A shortcut's key with modifiers (Cmd+G): the key event alone, which no selector follows. */
+    /**
+     * A shortcut's key with modifiers (Cmd+G), as the window sends it: the key event with the code of the key that
+     * types $char on a US keyboard, so that shortcut(Key::G, …) and shortcut('g', …) both take it; Command and one of
+     * the Edit menu's keys (A, C, X, V, Z, Y) its command instead, as the Edit menu and the Linux window send them, which
+     * a focused field takes (Cmd+A selects its text) and the rest turn back into the key (mygo's Tester.Key).
+     */
     public function shortcut(string $char, int $mods): Node
     {
-        $this->input->push(['key', $char, 0, $mods]);
+        $code = self::usCode($char);
+        if (($mods & Key::COMMAND) !== 0 && $code !== null && ($edit = \MyPHP\Platform\Linux\Keys::editCommand($code, $mods)) !== null) {
+            $this->input->push(['edit', $edit]);
+            return $this->frame();
+        }
+        $this->input->push(['key', $char, $code ?? -1, $mods]);
         return $this->frame();
+    }
+
+    /** The code of the key that types $char on a US keyboard (Key::usChar's), or null. */
+    private static function usCode(string $char): ?int
+    {
+        $char = strtolower($char);
+        if ($char === ' ') { return Key::SPACE; }
+        for ($code = 0; $code < 128; $code++) { if (Key::usChar($code) === $char) { return $code; } }
+        return null;
     }
 
     /** Text typed: into the focused field's TextState, as the view does, else inserted at the focused control. */
@@ -436,14 +455,21 @@ final class Headless
         return $this->clickOn($this->byText($text) ?? throw new \RuntimeException("no $text in " . json_encode($this->texts(), JSON_UNESCAPED_UNICODE)));
     }
 
-    /** The first node labeled $label for assistive technology, or showing it, or null. */
+    /**
+     * The first node, in the order of the tree, labeled $label for assistive technology or showing it, or null
+     * (mygo's Tester.Find): its label(), else the name its field gives it (a control in field() is named by the
+     * label, which comes before it), else its text. Under $from, what is inside it only.
+     */
     public function byLabel(string $label, ?Node $from = null): ?Node
     {
         $from ??= $this->root;
         if ($from === null || $from->inert) { return null; }
-        if ($from->label === $label) { return $from; }
+        $f = $from->nameFrom;
+        $name = $from->label !== '' ? $from->label : ($f !== null ? ($f->label !== '' ? $f->label : ($f->kind === Node::RICH ? $f->plainText() : (string)$f->text)) : '');
+        if ($name === '') { $name = $from->kind === Node::RICH ? $from->plainText() : (string)$from->text; }
+        if ($name === $label) { return $from; }
         foreach ($from->kids as $k) { if (($r = $this->byLabel($label, $k)) !== null) { return $r; } }
-        return $from === $this->root ? $this->byText($label) : null;
+        return null;
     }
 
     /** A click in the middle of the node labeled $label (byLabel), which must be there. */
