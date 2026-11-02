@@ -40,8 +40,9 @@ $CC -shared -fPIC -O2 \
     -I"${PHP_DIR}/TSRM" \
     -I"${SYSROOT}/include" \
     "${ROOT_DIR}/src/Platform/Android/launcher/myphp_launcher.c" \
+    "${ROOT_DIR}/src/Platform/Android/launcher/gl_bridge.c" \
     -L"${PHP_DIR}/libs" -lphp \
-    -llog -landroid \
+    -llog -landroid -lEGL -lGLESv3 \
     -Wl,-rpath,'$ORIGIN' \
     -o "${OUT_DIR}/libmyphp.so"
 

@@ -173,12 +173,10 @@ TS sources; tsconfig.json `paths`); `packages/cli` is myphp-cli. To release: `ph
 ## Working on it
 
 - PHP ≥ 8.3 with `ext-ffi`; `./run.sh <example>` and `bin/myphp dev` set `ffi.enable=1` and OPcache JIT. `bin/myphp` stays dependency-free PHP.
-- Before handing back: `php -l` on every changed file; pure-PHP checks
-  where they exist; ask the developer to run GUI examples. php tests/run.php
-  runs the headless tests (Layout, Runtime, Context, Painter: no window):
-  run them after changing src/UI, and add a check when fixing a bug there;
-  php tests/bench.php after a change that could cost per frame, against
-  the numbers in docs/architecture.md.
+- Before handing back: `php -l` on every changed file; run only relevant
+  checks: `php tests/run.php [name]` (e.g. text, layout) when changing src/UI;
+  full test suite only for final milestones; ask the developer to run GUI examples;
+  php tests/bench.php after a change that could cost per frame.
 - New ObjC calls: selector and types from Apple's headers, signature letters
   in `ObjC::MAP`, structs made by `ObjC::$c->new`/`ObjC::rect`, variadic
   methods (`arrayWithObjects:`) avoided.

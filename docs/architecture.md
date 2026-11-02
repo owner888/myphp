@@ -8197,6 +8197,23 @@ base APK, `javac` and `d8` produce `classes.dex` for `MyphpActivity`, and
 `zipalign -p 4` with `apksigner` outputs the signed APK (`resources.arsc` and
 shared libraries stored uncompressed per API 30+ requirements).
 
+## Android backend: native GPU rendering (P1)
+
+Native UI renders directly onto an Activity's `SurfaceView` via EGL and
+OpenGL ES 3.2. The desktop GLSL 3.30 shader (`Native\GlShader`) is adapted
+on Android (`GlShader::adapt`) to `#version 320 es` with highp precision,
+reusing the single buffer texture quad pipeline and instanced draws.
+`libmyphp.so` provides function pointer slots for the GL entry points,
+allowing `Native\Gl` to run unchanged between Linux and Android. The frame
+cadence is paced by `AChoreographer64` dispatched on the PHP worker thread's
+`ALooper`: frames are rendered only on demand (clicks, animations), running at
+60/120 fps without idle repaints. Touch events from `MyphpActivity.onTouchEvent`
+are passed through an atomic pipe to the PHP event loop and translated into
+pointer down/move/up events in the window's `UI\Input`. Text shaping uses
+Android 12's `TextRunShaper`, and uncached glyphs are rasterized on demand into
+`Bitmap.Config.ALPHA_8` via `Canvas.drawGlyphs` through JNI into the shared
+glyph atlas (`Native\Gl::attachAtlas`).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

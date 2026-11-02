@@ -11,6 +11,8 @@ use IntlDatePatternGenerator;
 use Locale;
 use MyPHP\Native\CldrTables;
 
+require_once __DIR__ . '/Native/LocalePolyfill.php';
+
 /**
  * Languages and regional formats, as mygo's package i18n, over ICU
  * (ext-intl) and CLDR's tables of mygo: tags normalized and matched, their
