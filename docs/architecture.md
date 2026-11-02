@@ -7644,6 +7644,11 @@ llvmpipe (GL 4.5 core).
   arriving through a GDK event filter; Wayland's portal is still to come.
   What plays is an MPRIS player exported on the session bus, its bus name
   owned only while something shows; its values go out as GVariant text.
+- **The tray is AppIndicator's** (`Linux\Tray`): a StatusNotifierItem
+  whose menu libdbusmenu exports, the panel drawing it; an item's icon is
+  its exported "icon-data" PNG (`Menus::exportIcons`), the icon a file of a
+  new name in a folder of the app's, which makes the host load it again.
+  Without libayatana-appindicator3 a tray is `Unsupported`.
 - **Drags are GTK's** (in `Linux\Window`, mygo's surface_drop.go): the
   content is a drag destination of the formats the core asks for (files
   from the start), offered by targets without reading them; a drop asks
@@ -7656,8 +7661,8 @@ llvmpipe (GL 4.5 core).
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  pages and web views (WebKitGTK), the tray, global shortcuts on Wayland,
-  and video.
+  pages and web views (WebKitGTK), global shortcuts on Wayland, and
+  video.
 
 ## Open items
 

@@ -161,7 +161,7 @@ final class Backend implements Platform\Backend
 
     public function newTray(TrayHandler $h): Platform\Tray
     {
-        throw new Unsupported('myphp: the tray is not on Linux yet');
+        return new Tray($this->menus(), $h);
     }
 
     /** Pango's fonts at the primary monitor's scale. */

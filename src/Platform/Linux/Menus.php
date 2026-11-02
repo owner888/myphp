@@ -138,7 +138,7 @@ final class Menus
         $n = ['owner' => $owner, 'item' => $item, 'check' => $check, 'window' => $window, 'bar' => $bar, 'icon' => null, 'image' => null, 'label' => null];
         if ($it->icon !== null && $it->type !== MenuItem::SEPARATOR && !$bar) {
             $n['icon'] = $it->icon;
-            $this->setIcon($n, $it->icon);
+            if ($window !== null) { $this->setIcon($n, $it->icon); } // a tray's once its menu is exported (exportIcons)
         }
         $this->items[$it->id][] = $n;
         return $item;
@@ -342,6 +342,10 @@ final class Menus
      */
     private function setIcon(array &$n, ?MenuIcon $ic): void
     {
+        if ($n['window'] === null) {
+            self::trayIcon($n['item'], $ic);
+            return;
+        }
         $f = Gtk::ffi();
         if ($ic === null && $n['image'] === null) {
             return;
@@ -379,7 +383,63 @@ final class Menus
         }
     }
 
-    /** $ic's image fit to a box of $box pixels, decoded once with the sizes asked for kept as long as the icon (mygo's iconPixbuf); null for an image GDK cannot read. */
+    /** Gives the items of $owner, a tray's menu just exported, their icons. */
+    public function exportIcons(int $owner): void
+    {
+        foreach ($this->items as $list) {
+            foreach ($list as $n) {
+                if ($n['owner'] === $owner && $n['icon'] !== null) { self::trayIcon($n['item'], $n['icon']); }
+            }
+        }
+    }
+
+    private static ?\FFI $dbusmenu = null;
+
+    /**
+     * Gives the item a tray's menu exports for a GTK menu item an icon,
+     * null for none (mygo's setTrayItemIcon): the panel draws a tray's menu,
+     * which libdbusmenu exports, from the PNG of the item's "icon-data",
+     * the image at most twice the size the panel draws it at.
+     */
+    private static function trayIcon(CData $item, ?MenuIcon $ic): void
+    {
+        try {
+            self::$dbusmenu ??= \FFI::cdef('void* dbusmenu_gtk_parse_get_cached_item(void*);
+                int dbusmenu_menuitem_property_set_byte_array(void*, const char*, const char*, size_t); void dbusmenu_menuitem_property_remove(void*, const char*);', 'libdbusmenu-gtk3.so.4');
+        } catch (\FFI\Exception $e) {
+            Logger::warn('the tray\'s menu shows no icons without libdbusmenu-gtk3: ' . $e->getMessage(), 'linux');
+            return;
+        }
+        $d = self::$dbusmenu;
+        $mi = $d->dbusmenu_gtk_parse_get_cached_item($d->cast('void*', Gtk::addr($item)));
+        if ($mi === null) {
+            return;
+        }
+        $png = $ic === null ? '' : self::trayPNG($ic);
+        if ($png === '') {
+            $d->dbusmenu_menuitem_property_remove($mi, 'icon-data');
+            return;
+        }
+        $d->dbusmenu_menuitem_property_set_byte_array($mi, 'icon-data', $png, strlen($png));
+    }
+
+    /** The PNG a tray's menu exports of an icon: the image, shrunk to twice the size the panel draws it at (mygo's trayIconPNG). */
+    private static function trayPNG(MenuIcon $ic): string
+    {
+        $f = Gtk::ffi();
+        $box = 2 * MenuIcon::SIZE;
+        $full = self::pixbuf($ic, 0);
+        if ($full === null) {
+            return '';
+        }
+        if ($f->gdk_pixbuf_get_width($full) <= $box && $f->gdk_pixbuf_get_height($full) <= $box) {
+            return $ic->png;
+        }
+        $sized = self::pixbuf($ic, $box);
+        return $sized === null ? $ic->png : (Clipboard::png($sized) ?: $ic->png);
+    }
+
+    /** $ic's image fit to a box of $box pixels (0: as it is), decoded once with the sizes asked for kept as long as the icon (mygo's iconPixbuf); null for an image GDK cannot read. */
     private static function pixbuf(MenuIcon $ic, int $box): ?CData
     {
         $f = Gtk::ffi();
@@ -400,6 +460,9 @@ final class Menus
         });
         if ($p === null) {
             return null;
+        }
+        if ($box === 0) {
+            return $p['image'];
         }
         if (!isset($p['sized'][$box])) {
             [$w, $h] = [$f->gdk_pixbuf_get_width($p['image']), $f->gdk_pixbuf_get_height($p['image'])];
