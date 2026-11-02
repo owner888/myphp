@@ -1,0 +1,135 @@
+#!/bin/bash
+set -euo pipefail
+
+# Package Android APK without Gradle.
+# Uses aapt2, javac, d8, zipalign, apksigner.
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+BUILD_DIR="${ROOT_DIR}/build/android"
+TEMPLATE_DIR="${ROOT_DIR}/bin/template/android"
+
+SDK_DIR="${ANDROID_HOME:-/Users/kaka/Library/Android/sdk}"
+BUILD_TOOLS_DIR="${SDK_DIR}/build-tools/35.0.0"
+PLATFORM_JAR="${SDK_DIR}/platforms/android-34/android.jar"
+if [ ! -f "$PLATFORM_JAR" ]; then
+    PLATFORM_JAR=$(ls -1 "${SDK_DIR}/platforms/"*/android.jar | sort -V | tail -n 1)
+fi
+
+JAVAC="/opt/homebrew/opt/openjdk@17/bin/javac"
+KEYTOOL="/opt/homebrew/opt/openjdk@17/bin/keytool"
+AAPT2="${BUILD_TOOLS_DIR}/aapt2"
+D8="${BUILD_TOOLS_DIR}/d8"
+ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
+APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
+
+echo "==> Using SDK: $SDK_DIR"
+echo "==> Using Build Tools: $BUILD_TOOLS_DIR"
+echo "==> Using Platform JAR: $PLATFORM_JAR"
+
+# Ensure native libraries exist
+if [ ! -f "${BUILD_DIR}/libs/arm64-v8a/libmyphp.so" ] || [ ! -f "${BUILD_DIR}/libs/arm64-v8a/libphp.so" ]; then
+    echo "==> Native libraries missing, building them now..."
+    "${ROOT_DIR}/scripts/build-android-launcher.sh"
+fi
+
+WORK_DIR="${BUILD_DIR}/pkg_work"
+rm -rf "$WORK_DIR"
+mkdir -p "${WORK_DIR}/gen" "${WORK_DIR}/classes" "${WORK_DIR}/dex" "${WORK_DIR}/staging"
+
+# 1. Compile resources
+echo "==> Compiling resources with aapt2..."
+"$AAPT2" compile --dir "${TEMPLATE_DIR}/res" -o "${WORK_DIR}/res.zip"
+
+# 2. Link resources and generate R.java
+echo "==> Linking APK and generating R.java..."
+"$AAPT2" link \
+    -I "$PLATFORM_JAR" \
+    --manifest "${TEMPLATE_DIR}/AndroidManifest.xml" \
+    --java "${WORK_DIR}/gen" \
+    -o "${WORK_DIR}/base.apk" \
+    "${WORK_DIR}/res.zip" \
+    --auto-add-overlay
+
+# 3. Compile Java code
+echo "==> Compiling Java sources with javac..."
+"$JAVAC" -source 17 -target 17 \
+    -d "${WORK_DIR}/classes" \
+    -cp "$PLATFORM_JAR" \
+    $(find "${WORK_DIR}/gen" -name "*.java") \
+    $(find "${TEMPLATE_DIR}/src" -name "*.java")
+
+# 4. Dex with d8
+echo "==> Converting .class to classes.dex with d8..."
+CLASS_FILES=$(find "${WORK_DIR}/classes" -name "*.class")
+"$D8" --min-api 31 --output "${WORK_DIR}/dex" --lib "$PLATFORM_JAR" $CLASS_FILES
+
+# 5. Assemble staging directory
+echo "==> Assembling APK contents..."
+cd "${WORK_DIR}/staging"
+unzip -q "${WORK_DIR}/base.apk"
+cp "${WORK_DIR}/dex/classes.dex" .
+
+mkdir -p "lib/arm64-v8a"
+cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
+
+if [ -d "${TEMPLATE_DIR}/assets" ]; then
+    cp -r "${TEMPLATE_DIR}/assets" .
+fi
+
+# 6. Zip into unaligned APK:
+# Android 30+ requires resources.arsc to be stored uncompressed (-0).
+# Shared libraries (.so) should also be uncompressed for page-aligned mmap.
+rm -f "${WORK_DIR}/unaligned.apk"
+if [ -f "resources.arsc" ]; then
+    zip -q -0 "${WORK_DIR}/unaligned.apk" "resources.arsc"
+fi
+if [ -d "lib" ]; then
+    zip -q -0 -r "${WORK_DIR}/unaligned.apk" "lib"
+fi
+zip -q -r "${WORK_DIR}/unaligned.apk" AndroidManifest.xml classes.dex
+if [ -d "assets" ]; then
+    zip -q -r "${WORK_DIR}/unaligned.apk" "assets"
+fi
+if [ -d "res" ]; then
+    zip -q -r "${WORK_DIR}/unaligned.apk" "res"
+fi
+
+# 7. Zipalign (4-byte alignment, page-align uncompressed so files)
+echo "==> Aligning APK with zipalign..."
+rm -f "${WORK_DIR}/aligned.apk"
+"$ZIPALIGN" -v -p 4 "${WORK_DIR}/unaligned.apk" "${WORK_DIR}/aligned.apk" > /dev/null
+
+# Check alignment
+"$ZIPALIGN" -c -v 4 "${WORK_DIR}/aligned.apk" | grep -i "resources.arsc" || true
+
+# 8. Create debug keystore if not exists
+KEYSTORE="${BUILD_DIR}/debug.keystore"
+if [ ! -f "$KEYSTORE" ]; then
+    echo "==> Generating debug.keystore..."
+    "$KEYTOOL" -genkeypair -v \
+        -keystore "$KEYSTORE" \
+        -storepass android \
+        -alias androiddebugkey \
+        -keypass android \
+        -keyalg RSA \
+        -keysize 2048 \
+        -validity 10000 \
+        -dname "CN=Android Debug,O=Android,C=US"
+fi
+
+# 9. Sign APK
+FINAL_APK="${BUILD_DIR}/myphp-debug.apk"
+echo "==> Signing APK with apksigner..."
+"$APKSIGNER" sign \
+    --ks "$KEYSTORE" \
+    --ks-pass pass:android \
+    --ks-key-alias androiddebugkey \
+    --key-pass pass:android \
+    --out "$FINAL_APK" \
+    "${WORK_DIR}/aligned.apk"
+
+echo "==> Verifying signature..."
+"$APKSIGNER" verify "$FINAL_APK"
+
+echo "==> APK packaged successfully: $FINAL_APK"
+ls -lh "$FINAL_APK"

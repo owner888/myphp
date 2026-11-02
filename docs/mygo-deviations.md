@@ -2764,3 +2764,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     as well; macOS keeps the hole and the system's views.
   - Why: a hole with nothing under it shows black; the player's bars and
     the log viewer's buttons stand on the system's glass.
+
+## Android platform (v1.148)
+
+- **Android platform backend**
+  - mygo: has macOS, Linux, and Windows desktop backends; no mobile or
+    touch platform support.
+  - myphp: adds Android as a first-class GPU-rendered platform backend
+    (`src/Platform/Android/`, target `aarch64-linux-android`, minSdk 31).
+    A thin Java wrapper (`MyphpActivity` with `SurfaceView`) hosts a C
+    launcher (`libmyphp.so`) running embedded `libphp.so` (cross-compiled via
+    NDK with `ext-ffi`, `opcache`, `mbstring`, `zlib`). All rendering and
+    event handling will happen on a dedicated PHP worker thread driven by
+    `ALooper` and `AChoreographer`.
+  - Why: mobile support extends myphp's immediate-mode GPU UI to portable
+    devices while maintaining the same `Platform\Backend` interface contract.
+
