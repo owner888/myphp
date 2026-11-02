@@ -181,7 +181,7 @@ final class Gl
             GLenum (*epoxy_glCheckFramebufferStatus)(GLenum);
             void (*epoxy_glDeleteFramebuffers)(GLsizei, const GLuint*);
             void (*epoxy_glFinish)(void);
-        ', 'libepoxy.so.0');
+        ', \MyPHP\App::isAndroid() ? 'libmyphp.so' : 'libepoxy.so.0');
     }
 
     /** A program of the two shaders, compiled and linked; a failure throws, with GL's log. */
@@ -190,6 +190,7 @@ final class Gl
         $g = self::$f;
         $p = ($g->epoxy_glCreateProgram)();
         foreach ([[self::VERTEX_SHADER, $vertex], [self::FRAGMENT_SHADER, $fragment]] as [$type, $src]) {
+            $src = GlShader::adapt($src);
             $s = ($g->epoxy_glCreateShader)($type);
             $str = $g->new('char[' . (strlen($src) + 1) . ']', false);
             FFI::memcpy($str, $src, strlen($src));

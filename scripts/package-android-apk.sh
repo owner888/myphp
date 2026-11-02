@@ -72,8 +72,10 @@ cp "${WORK_DIR}/dex/classes.dex" .
 mkdir -p "lib/arm64-v8a"
 cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
 
+mkdir -p "assets/src"
+cp -r "${ROOT_DIR}/src/"* "assets/src/"
 if [ -d "${TEMPLATE_DIR}/assets" ]; then
-    cp -r "${TEMPLATE_DIR}/assets" .
+    cp -r "${TEMPLATE_DIR}/assets/"* "assets/"
 fi
 
 # 6. Zip into unaligned APK:

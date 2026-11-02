@@ -73,7 +73,7 @@ final class Logger
         if (count(self::$entries) > self::KEEP) { array_shift(self::$entries); }
         self::$count++;
         $line = self::line($e);
-        if (self::$console ??= App::isDev()) { fwrite(STDERR, $line); }
+        if (self::$console ??= App::isDev()) { fwrite(defined('STDERR') ? STDERR : (defined('STDOUT') ? STDOUT : fopen('php://stderr', 'w')), $line); }
         if (self::$toFile) {
             self::$file ??= fopen($path = self::directory() . '/' . App::name() . '.log', 'a') ?: throw new RuntimeException("Logger: cannot write $path");
             fwrite(self::$file, $line);

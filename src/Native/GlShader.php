@@ -16,6 +16,21 @@ namespace MyPHP\Native;
  */
 final class GlShader
 {
+    /** Adapts desktop GLSL 3.30 to GLES 3.2 on Android */
+    public static function adapt(string $glsl): string
+    {
+        if (!\MyPHP\App::isAndroid()) {
+            return $glsl;
+        }
+        $header = "#version 320 es\n"
+            . "precision highp float;\n"
+            . "precision highp int;\n"
+            . "precision highp sampler2D;\n"
+            . "precision highp sampler2DArray;\n"
+            . "precision highp samplerBuffer;\n";
+        return preg_replace('/^\s*#version\s+330\s+core\s*/m', $header, $glsl);
+    }
+
     public const COMMON = <<<'GLSL'
     #version 330 core
     #define saturate(x) clamp(x, 0.0, 1.0)
