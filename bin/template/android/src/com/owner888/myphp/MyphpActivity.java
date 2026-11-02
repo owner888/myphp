@@ -1,6 +1,10 @@
 package com.owner888.myphp;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -10,12 +14,19 @@ import android.graphics.fonts.Font;
 import android.graphics.text.PositionedGlyphs;
 import android.graphics.text.TextRunShaper;
 import android.os.Bundle;
+import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputMethodManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -28,6 +39,7 @@ import java.util.Map;
 
 public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static final String TAG = "MyPHP_Java";
+    private static MyphpActivity sInstance = null;
 
     static {
         try {
@@ -46,10 +58,38 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        sInstance = this;
 
-        surfaceView = new SurfaceView(this);
+        getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+
+        surfaceView = new SurfaceView(this) {
+            @Override
+            public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+                Log.i(TAG, "onCreateInputConnection called!");
+                outAttrs.inputType = InputType.TYPE_CLASS_TEXT;
+                outAttrs.imeOptions = EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+                return new MyphpInputConnection(this, false);
+            }
+
+            @Override
+            public boolean onCheckIsTextEditor() {
+                return true;
+            }
+        };
+        surfaceView.setFocusable(true);
+        surfaceView.setFocusableInTouchMode(true);
         surfaceView.getHolder().addCallback(this);
         setContentView(surfaceView);
+
+        registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String text = intent.getStringExtra("text");
+                if (text != null) {
+                    nativeImeCommit(text);
+                }
+            }
+        }, new IntentFilter("com.owner888.myphp.IME_COMMIT"), Context.RECEIVER_EXPORTED);
 
         copyAssetsToFilesDir();
 
@@ -124,7 +164,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
         Log.i(TAG, "surfaceChanged: " + width + "x" + height);
-        nativeSurfaceChanged(width, height);
+        nativeSurfaceChanged(holder.getSurface(), width, height);
     }
 
     @Override
@@ -245,9 +285,101 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         return pixels;
     }
 
+    public static void showSoftKeyboard() {
+        if (sInstance != null && sInstance.surfaceView != null) {
+            sInstance.runOnUiThread(() -> {
+                sInstance.surfaceView.requestFocus();
+                InputMethodManager imm = (InputMethodManager) sInstance.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.restartInput(sInstance.surfaceView);
+                    imm.showSoftInput(sInstance.surfaceView, InputMethodManager.SHOW_IMPLICIT);
+                }
+            });
+        }
+    }
+
+    public static void hideSoftKeyboard() {
+        if (sInstance != null && sInstance.surfaceView != null) {
+            sInstance.runOnUiThread(() -> {
+                InputMethodManager imm = (InputMethodManager) sInstance.getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.hideSoftInputFromWindow(sInstance.surfaceView.getWindowToken(), 0);
+                }
+            });
+        }
+    }
+
+    private static class MyphpInputConnection extends BaseInputConnection {
+        public MyphpInputConnection(View targetView, boolean fullEditor) {
+            super(targetView, fullEditor);
+        }
+
+        @Override
+        public boolean commitText(CharSequence text, int newCursorPosition) {
+            Log.i(TAG, "commitText: " + text);
+            if (text != null && text.length() > 0) {
+                nativeImeCommit(text.toString());
+            }
+            return true;
+        }
+
+        @Override
+        public boolean setComposingText(CharSequence text, int newCursorPosition) {
+            Log.i(TAG, "setComposingText: " + text);
+            nativeImeCompose(text != null ? text.toString() : "");
+            return true;
+        }
+
+        @Override
+        public boolean finishComposingText() {
+            Log.i(TAG, "finishComposingText");
+            nativeImeCompose("");
+            return true;
+        }
+
+        @Override
+        public boolean deleteSurroundingText(int beforeLength, int afterLength) {
+            Log.i(TAG, "deleteSurroundingText: before=" + beforeLength + " after=" + afterLength);
+            for (int i = 0; i < beforeLength; i++) {
+                nativeImeDelete();
+            }
+            return true;
+        }
+
+        @Override
+        public boolean sendKeyEvent(KeyEvent event) {
+            Log.i(TAG, "sendKeyEvent: action=" + event.getAction() + " code=" + event.getKeyCode());
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DEL) {
+                    nativeImeDelete();
+                    return true;
+                } else if (event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                    nativeKeyEvent(event.getKeyCode(), event.getAction(), '\n');
+                    return true;
+                }
+                int unicode = event.getUnicodeChar();
+                if (unicode > 0) {
+                    nativeImeCommit(String.valueOf((char) unicode));
+                    return true;
+                }
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                int unicode = event.getUnicodeChar();
+                if (unicode > 0 && event.getKeyCode() != KeyEvent.KEYCODE_DEL && event.getKeyCode() != KeyEvent.KEYCODE_ENTER) {
+                    nativeImeCommit(String.valueOf((char) unicode));
+                    return true;
+                }
+            }
+            return super.sendKeyEvent(event);
+        }
+    }
+
     private static native void nativeInit(String filesDir, String cacheDir, float density);
     private static native void nativeSurfaceCreated(Surface surface);
-    private static native void nativeSurfaceChanged(int width, int height);
+    private static native void nativeSurfaceChanged(Surface surface, int width, int height);
     private static native void nativeSurfaceDestroyed();
     private static native void nativeTouchEvent(int action, float x, float y, long time);
+    private static native void nativeImeCommit(String text);
+    private static native void nativeImeCompose(String text);
+    private static native void nativeImeDelete();
+    private static native void nativeKeyEvent(int keyCode, int action, int unicodeChar);
 }

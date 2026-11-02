@@ -8214,6 +8214,21 @@ Android 12's `TextRunShaper`, and uncached glyphs are rasterized on demand into
 `Bitmap.Config.ALPHA_8` via `Canvas.drawGlyphs` through JNI into the shared
 glyph atlas (`Native\Gl::attachAtlas`).
 
+## Android backend: touch gestures, fling inertia and IME (P2)
+
+Touch interaction is classified into tap, scroll and inertial fling.
+Touch slop (8 pt) discriminates between stationary taps and dragging:
+movements exceeding the slop enter a scrolling state that pushes incremental
+`['scroll', $x, $y, $dx, $dy, true, false]` events directly into `UI\Input`,
+enabling native pan on lists and horizontal strips. On finger release with
+sufficient velocity, an exponential velocity decay driver (`drawFrame`)
+delivers momentum scroll frames until stopped by friction or a subsequent tap.
+Text input integrates through Android's `InputConnection` (`BaseInputConnection`)
+on `SurfaceView`: text fields acquiring focus in `UI\Input` automatically
+request soft keyboard display via JNI `InputMethodManager.showSoftInput`,
+passing committed characters, composing pre-edit text, and backspace deletions
+through the event pipe into `TextState` and `TextInputClient`.
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is

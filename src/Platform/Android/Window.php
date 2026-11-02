@@ -149,6 +149,8 @@ final class Window implements Platform\Window
         $this->eglConfig = $config;
         $this->eglContext = $ctx;
         $this->eglSurface = $surface;
+        $this->surfaceWidth = $f->myphp_get_surface_width();
+        $this->surfaceHeight = $f->myphp_get_surface_height();
         $this->gl = new Gl();
 
         $text = App::text();
@@ -159,6 +161,52 @@ final class Window implements Platform\Window
 
         Logger::debug('EGL initialized successfully on Android Surface', 'android');
         return true;
+    }
+
+    public function onSurfaceChanged(): void
+    {
+        if ($this->eglDisplay === null || $this->eglContext === null) {
+            $this->initEgl();
+            $this->requestFrame();
+            return;
+        }
+
+        $f = Android::ffi();
+        $nativeWin = $f->myphp_get_native_window();
+        if ($nativeWin === null) {
+            return;
+        }
+
+        $wPx = $f->myphp_get_surface_width();
+        $hPx = $f->myphp_get_surface_height();
+        if ($wPx === $this->surfaceWidth && $hPx === $this->surfaceHeight && $this->eglSurface !== null) {
+            $this->requestFrame();
+            return;
+        }
+
+        $egl = Android::egl();
+        if ($this->eglSurface !== null) {
+            $egl->eglMakeCurrent($this->eglDisplay, null, null, null);
+            $egl->eglDestroySurface($this->eglDisplay, $this->eglSurface);
+            $this->eglSurface = null;
+        }
+
+        $surface = $egl->eglCreateWindowSurface($this->eglDisplay, $this->eglConfig, $nativeWin, null);
+        if ($surface === null || \FFI::isNull($surface)) {
+            Logger::error('Failed to recreate eglCreateWindowSurface in onSurfaceChanged', 'android');
+            return;
+        }
+
+        if (!$egl->eglMakeCurrent($this->eglDisplay, $surface, $surface, $this->eglContext)) {
+            Logger::error('Failed eglMakeCurrent in onSurfaceChanged', 'android');
+            return;
+        }
+
+        $this->eglSurface = $surface;
+        $this->surfaceWidth = $wPx;
+        $this->surfaceHeight = $hPx;
+        Logger::debug("Surface recreated on size change: {$wPx}x{$hPx}", 'android');
+        $this->requestFrame();
     }
 
     public function destroySurface(): void
@@ -180,8 +228,59 @@ final class Window implements Platform\Window
         Android::ffi()->myphp_request_frame();
     }
 
+    // Touch gesture state
+    private bool $touchActive = false;
+    private float $touchStartX = 0.0;
+    private float $touchStartY = 0.0;
+    private float $touchLastX = 0.0;
+    private float $touchLastY = 0.0;
+    private int $touchStartTime = 0;
+    private int $touchLastTime = 0;
+    private bool $touchIsScrolling = false;
+    private bool $touchLongPressed = false;
+    private int $longPressId = 0;
+    /** @var list<array{0: int, 1: float, 2: float}> [timeNs, x, y] */
+    private array $touchHistory = [];
+
+    // Fling momentum state
+    private bool $flingActive = false;
+    private float $flingVx = 0.0;
+    private float $flingVy = 0.0;
+    private int $flingLastTime = 0;
+
+    // Keyboard state
+    private bool $keyboardVisible = false;
+
     public function drawFrame(): void
     {
+        // Handle ongoing fling inertial scrolling
+        if ($this->flingActive) {
+            $now = hrtime(true);
+            $dt = ($now - $this->flingLastTime) / 1e9;
+            $this->flingLastTime = $now;
+
+            if ($dt > 0.0 && $dt < 0.1) {
+                $dx = $this->flingVx * $dt;
+                $dy = $this->flingVy * $dt;
+                $input = $this->w->input;
+                if ($input !== null) {
+                    $input->push(['scroll', $this->touchLastX, $this->touchLastY, $dx, $dy, true, true]);
+                }
+                // Exponential velocity decay
+                $decay = exp(-8.0 * $dt);
+                $this->flingVx *= $decay;
+                $this->flingVy *= $decay;
+
+                if (hypot($this->flingVx, $this->flingVy) < 20.0) {
+                    $this->flingActive = false;
+                } else {
+                    $this->requestFrame();
+                }
+            } else {
+                $this->flingActive = false;
+            }
+        }
+
         if (!$this->asked || $this->frame === null) {
             return;
         }
@@ -207,16 +306,36 @@ final class Window implements Platform\Window
         $list = $this->gl->nextList();
         $this->gl->setDark(App::theme()->dark);
 
-        ($this->frame)($list, (float)$widthPts, (float)$heightPts);
+        try {
+            ($this->frame)($list, (float)$widthPts, (float)$heightPts);
 
-        $clear = [0.0, 0.0, 0.0, 1.0];
-        $this->gl->draw($list, max(1, $wPx), max(1, $hPx), $density * $list->zoom, $clear);
+            $clear = [0.0, 0.0, 0.0, 1.0];
+            $this->gl->draw($list, max(1, $wPx), max(1, $hPx), $density * $list->zoom, $clear);
 
-        $egl = Android::egl();
-        $egl->eglSwapBuffers($this->eglDisplay, $this->eglSurface);
+            $egl = Android::egl();
+            $ret = $egl->eglSwapBuffers($this->eglDisplay, $this->eglSurface);
+            if (!$ret) {
+                Logger::error("eglSwapBuffers failed: " . $egl->eglGetError(), "android");
+            } else {
+                Logger::debug("eglSwapBuffers OK", "android");
+            }
 
-        $this->afterPresent?->__invoke();
-        $this->w->runtime?->framePresented();
+            $this->afterPresent?->__invoke();
+            $this->w->runtime?->framePresented();
+        } catch (\Throwable $e) {
+            Logger::error("drawFrame exception: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
+            throw $e;
+        }
+
+        // Check if soft keyboard should be shown or hidden based on text focus
+        $hasInputFocus = ($this->w->input?->focus !== null || $this->w->input?->client !== null);
+        if ($hasInputFocus && !$this->keyboardVisible) {
+            $this->keyboardVisible = true;
+            Android::ffi()->myphp_show_keyboard();
+        } elseif (!$hasInputFocus && $this->keyboardVisible) {
+            $this->keyboardVisible = false;
+            Android::ffi()->myphp_hide_keyboard();
+        }
     }
 
     public function onTouch(int $action, float $x, float $y, int $timeMs): void
@@ -234,21 +353,155 @@ final class Window implements Platform\Window
         $input->mouse($ptX, $ptY);
         $input->mods = 0;
 
-        Logger::debug("onTouch: action={$action}, raw=({$x}, {$y}), pt=({$ptX}, {$ptY})", 'touch');
+        Logger::debug("onTouch: action={$action}, pt=({$ptX}, {$ptY})", 'touch');
 
         switch ($action) {
             case Android::ACTION_DOWN:
-                $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
+                $this->flingActive = false;
+                $this->touchActive = true;
+                $this->touchStartX = $ptX;
+                $this->touchStartY = $ptY;
+                $this->touchLastX = $ptX;
+                $this->touchLastY = $ptY;
+                $this->touchStartTime = $time;
+                $this->touchLastTime = $time;
+                $this->touchIsScrolling = false;
+                $this->touchLongPressed = false;
+                $this->touchHistory = [[$time, $ptX, $ptY]];
+
+                $pressId = ++$this->longPressId;
+                \MyPHP\App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
+                    if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
+                        $this->touchLongPressed = true;
+                    }
+                });
                 break;
+
             case Android::ACTION_MOVE:
-                $input->push(['drag', $ptX, $ptY, $time]);
+                if (!$this->touchActive) {
+                    break;
+                }
+                $this->touchHistory[] = [$time, $ptX, $ptY];
+                if (count($this->touchHistory) > 8) {
+                    array_shift($this->touchHistory);
+                }
+
+                $dist = hypot($ptX - $this->touchStartX, $ptY - $this->touchStartY);
+                if ($dist > 8.0) {
+                    $this->touchIsScrolling = true;
+                    $dx = $ptX - $this->touchLastX;
+                    $dy = $ptY - $this->touchLastY;
+                    $this->touchLastX = $ptX;
+                    $this->touchLastY = $ptY;
+                    $this->touchLastTime = $time;
+
+                    $input->push(['scroll', $ptX, $ptY, $dx, $dy, true, false]);
+                    $this->requestFrame();
+                }
                 break;
+
             case Android::ACTION_UP:
-                $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
+                if (!$this->touchActive) {
+                    break;
+                }
+                $this->touchActive = false;
+
+                if ($this->touchIsScrolling) {
+                    // Calculate fling velocity from touch history
+                    if (count($this->touchHistory) >= 2) {
+                        $first = $this->touchHistory[0];
+                        $last = $this->touchHistory[count($this->touchHistory) - 1];
+                        $dt = ($last[0] - $first[0]) / 1e9;
+                        if ($dt > 0.005 && $dt < 0.2) {
+                            $vx = ($last[1] - $first[1]) / $dt;
+                            $vy = ($last[2] - $first[2]) / $dt;
+                            if (hypot($vx, $vy) > 80.0) {
+                                $this->flingActive = true;
+                                $this->flingVx = $vx;
+                                $this->flingVy = $vy;
+                                $this->flingLastTime = hrtime(true);
+                                $this->requestFrame();
+                            }
+                        }
+                    }
+                } else {
+                    // Tap: short click
+                    $input->push(['down', $ptX, $ptY, 0, 1, 0, $this->touchStartTime]);
+                    $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
+                    $this->requestFrame();
+                }
                 break;
         }
+    }
 
+    public function onImeCommit(string $text): void
+    {
+        $input = $this->w->input;
+        if ($input === null || $text === '') {
+            return;
+        }
+        if ($input->client !== null) {
+            $input->client->replaceText(null, $text);
+        } elseif ($input->focus !== null) {
+            $input->focus->insert($text);
+        } else {
+            $input->push(['insert', $text]);
+        }
         $this->requestFrame();
+    }
+
+    public function onImeCompose(string $text): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($input->client !== null) {
+            $u = TextState::utf16Index($text, strlen($text));
+            $input->client->setMarkedText(null, $text, new TextInputRange($u, $u));
+        } elseif ($input->focus !== null) {
+            if ($text === '') {
+                $input->focus->setMarked('', 0);
+            } else {
+                $input->focus->setMarked($text, strlen($text));
+            }
+        }
+        $this->requestFrame();
+    }
+
+    public function onImeDelete(): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        if ($input->focus !== null) {
+            $input->focus->deleteBack();
+        } elseif ($input->client !== null) {
+            $input->push(['key', Key::BACKSPACE, '', 0, hrtime(true)]);
+        }
+        $this->requestFrame();
+    }
+
+    public function onKeyEvent(int $keyCode, int $action, int $unicodeChar): void
+    {
+        $input = $this->w->input;
+        if ($input === null) {
+            return;
+        }
+        $time = hrtime(true);
+        if ($unicodeChar === 10) { // Enter / newline
+            if ($input->focus !== null) {
+                if ($input->focus->multiline) {
+                    $input->focus->insert("\n");
+                } else {
+                    $input->push(['key', Key::ENTER, "\n", 0, $time]);
+                }
+            } else {
+                $input->push(['key', Key::ENTER, "\n", 0, $time]);
+            }
+            $this->requestFrame();
+        }
     }
 
     public function restoreFrame(Rectangle $r, bool $onDisplay): void {}
@@ -275,9 +528,16 @@ final class Window implements Platform\Window
     public function themeChanged(): void {}
     public function hasVibrancy(): bool { return false; }
     public function hasSystemMaterials(): bool { return false; }
+    private int $wakeId = 0;
+
     public function wake(float $seconds, bool $repaint): void
     {
-        $this->requestFrame(repaint: $repaint);
+        $id = ++$this->wakeId;
+        \MyPHP\App::after($seconds, function () use ($id, $repaint): void {
+            if ($this->wakeId === $id) {
+                $this->requestFrame(repaint: $repaint);
+            }
+        });
     }
     public function repaintAsked(): bool { return $this->asked; }
     public function displayRate(): float { return 60.0; }

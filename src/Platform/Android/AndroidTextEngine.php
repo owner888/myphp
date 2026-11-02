@@ -40,7 +40,7 @@ final class AndroidTextEngine implements Engine
     public function font(Style $style): ?Font
     {
         $size = $style->fontSize();
-        $fontStyle = ($style->bold() ? 1 : 0) | ($style->italic() ? 2 : 0);
+        $fontStyle = ($style->weight() >= 700 ? 1 : 0) | ($style->italic ? 2 : 0);
         $key = "{$size}:{$fontStyle}";
         if (isset($this->fonts[$key])) {
             return $this->fonts[$key];
