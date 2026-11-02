@@ -34,6 +34,7 @@ final class WebKit
             // running as the process exits, crashed in code unmapped under them.
             FFI::cdef('void* dlopen(const char*, int);', 'libc.so.6')->dlopen(self::LIBRARY, 2 | 0x1000);
             self::$f = FFI::cdef(self::CDEF, self::LIBRARY);
+            WebsiteData::persistCookies();
         } catch (FFI\Exception $e) {
             self::$error = 'myphp: web pages need WebKitGTK 4.1 (libwebkit2gtk-4.1-0 on Debian/Ubuntu, webkit2gtk4.1 on Fedora): ' . $e->getMessage();
             throw new Unsupported(self::$error);
@@ -217,6 +218,44 @@ final class WebKit
         unsigned long webkit_context_menu_action_get_type(void);
         void webkit_web_view_execute_editing_command(void*, const char*);
         void webkit_web_view_set_background_color(void*, void*);
+
+        unsigned long webkit_web_view_get_type(void);
+        void* g_object_new(unsigned long, const char*, ...);
+        void g_list_free(GList*); void g_strfreev(char**);
+        void* webkit_website_data_manager_new(const char*, ...);
+        void* webkit_website_data_manager_new_ephemeral(void);
+        void* webkit_web_context_new_with_website_data_manager(void*);
+        void* webkit_web_context_get_website_data_manager(void*);
+        void webkit_website_data_manager_clear(void*, unsigned int, long, void*, CbNotify, void*);
+        gboolean webkit_website_data_manager_clear_finish(void*, void*, void**);
+        void* webkit_web_context_get_cookie_manager(void*);
+        void webkit_cookie_manager_set_persistent_storage(void*, const char*, int);
+        void webkit_cookie_manager_get_all_cookies(void*, void*, CbNotify, void*);
+        GList* webkit_cookie_manager_get_all_cookies_finish(void*, void*, void**);
+        void webkit_cookie_manager_add_cookie(void*, void*, void*, CbNotify, void*);
+        gboolean webkit_cookie_manager_add_cookie_finish(void*, void*, void**);
+        void webkit_cookie_manager_delete_cookie(void*, void*, void*, CbNotify, void*);
+        gboolean webkit_cookie_manager_delete_cookie_finish(void*, void*, void**);
+        void* soup_cookie_new(const char*, const char*, const char*, const char*, int);
+        void soup_cookie_free(void*); void* soup_cookie_copy(void*);
+        const char* soup_cookie_get_name(void*); const char* soup_cookie_get_value(void*);
+        const char* soup_cookie_get_domain(void*); const char* soup_cookie_get_path(void*);
+        void* soup_cookie_get_expires(void*);
+        gboolean soup_cookie_get_secure(void*); gboolean soup_cookie_get_http_only(void*); int soup_cookie_get_same_site_policy(void*);
+        void soup_cookie_set_secure(void*, gboolean); void soup_cookie_set_http_only(void*, gboolean); void soup_cookie_set_same_site_policy(void*, int);
+        void soup_cookie_set_expires(void*, void*);
+        void* g_date_time_new_from_unix_utc(long); long g_date_time_to_unix(void*); void g_date_time_unref(void*);
+        void* webkit_user_content_filter_store_new(const char*);
+        void webkit_user_content_filter_store_save(void*, const char*, void*, void*, CbNotify, void*);
+        void* webkit_user_content_filter_store_save_finish(void*, void*, void**);
+        void webkit_user_content_filter_store_load(void*, const char*, void*, CbNotify, void*);
+        void* webkit_user_content_filter_store_load_finish(void*, void*, void**);
+        void webkit_user_content_filter_store_remove(void*, const char*, void*, CbNotify, void*);
+        gboolean webkit_user_content_filter_store_remove_finish(void*, void*, void**);
+        void webkit_user_content_filter_store_fetch_identifiers(void*, void*, CbNotify, void*);
+        char** webkit_user_content_filter_store_fetch_identifiers_finish(void*, void*);
+        void webkit_user_content_manager_add_filter(void*, void*);
+        void webkit_user_content_manager_remove_all_filters(void*);
 
         void* webkit_web_context_get_default(void);
         void webkit_web_context_register_uri_scheme(void*, const char*, CbScheme, void*, void*);

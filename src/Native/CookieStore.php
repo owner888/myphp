@@ -59,11 +59,19 @@ final class CookieStore
         self::await('', fn($block) => ObjC::msg('v:ppp', $data, 'removeDataOfTypes:modifiedSince:completionHandler:', $set, ObjC::msg('p:', ObjC::cls('NSDate'), 'distantPast'), $block));
     }
 
-    /** Runs $start with a block's arguments' receiver, and waits until the block was called. @return list<mixed> what the block got */
+    /**
+     * Runs $start with a block's arguments' receiver, and waits until the
+     * block was called: what it got, the objects retained, which the
+     * caller releases (WebKit lets go of them as the block returns, and
+     * the cookies' array read after it was gone crashed).
+     * @return list<mixed>
+     */
     private static function await(string $args, \Closure $start): array
     {
         $got = null;
-        $start(ObjC::block($args, function (...$a) use (&$got): void { $got = $a; }));
+        $start(ObjC::block($args, function (...$a) use (&$got): void {
+            $got = array_map(fn($o) => $o === null ? null : ObjC::msg('p:', $o, 'retain'), $a);
+        }));
         App::wait(function () use (&$got): bool { return $got !== null; });
         return $got;
     }
@@ -101,7 +109,11 @@ final class CookieStore
     {
         $store = self::store($data);
         [$array] = self::await('p', fn($block) => ObjC::msg('v:p', $store, 'getAllCookies:', $block));
-        return array_map(self::read(...), self::items($array));
+        try {
+            return array_map(self::read(...), self::items($array));
+        } finally {
+            ObjC::msg('v:', $array, 'release');
+        }
     }
 
     public static function set(Cookie $c, $data): void
@@ -151,16 +163,20 @@ final class CookieStore
         $store = self::store($data);
         [$array] = self::await('p', fn($block) => ObjC::msg('v:p', $store, 'getAllCookies:', $block));
         $match = null;
-        foreach (self::items($array) as $c) {
-            if (self::str(ObjC::msg('p:', $c, 'name')) === $name && strtolower(self::str(ObjC::msg('p:', $c, 'domain'))) === $domain && self::str(ObjC::msg('p:', $c, 'path')) === $path) {
-                if ($match !== null) {
-                    throw new RuntimeException('myphp: cookies: ambiguous cookie key');
+        try { // the array holds the cookies
+            foreach (self::items($array) as $c) {
+                if (self::str(ObjC::msg('p:', $c, 'name')) === $name && strtolower(self::str(ObjC::msg('p:', $c, 'domain'))) === $domain && self::str(ObjC::msg('p:', $c, 'path')) === $path) {
+                    if ($match !== null) {
+                        throw new RuntimeException('myphp: cookies: ambiguous cookie key');
+                    }
+                    $match = $c;
                 }
-                $match = $c;
             }
-        }
-        if ($match !== null) {
-            self::await('', fn($block) => ObjC::msg('v:pp', $store, 'deleteCookie:completionHandler:', $match, $block));
+            if ($match !== null) {
+                self::await('', fn($block) => ObjC::msg('v:pp', $store, 'deleteCookie:completionHandler:', $match, $block));
+            }
+        } finally {
+            ObjC::msg('v:', $array, 'release');
         }
     }
 

@@ -5,7 +5,6 @@ namespace MyPHP;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
-use MyPHP\Native\CookieStore;
 
 /**
  * The cookies of a session's pages, HttpOnly ones included (mygo's
@@ -34,7 +33,7 @@ final class CookiesModule
         }
         $domain = strtolower(str_starts_with($f->domain, '.') ? substr($f->domain, 1) : $f->domain);
         $out = [];
-        foreach (CookieStore::all($this->session->dataStore()) as $c) {
+        foreach (Session::controller()->listCookies($this->session->dataStore()) as $c) {
             $c->domain = strtolower($c->domain);
             $host = str_starts_with($c->domain, '.') ? substr($c->domain, 1) : $c->domain;
             if ($f->name !== '' && $c->name !== $f->name || $f->path !== '' && $c->path !== $f->path
@@ -56,19 +55,19 @@ final class CookiesModule
             $this->delete($c);
             return;
         }
-        CookieStore::set($c, $this->session->dataStore());
+        Session::controller()->setCookie($this->session->dataStore(), $c);
     }
 
     /** Deletes the cookie of $c's name, domain and path (mygo's Delete), as Cookies::delete says. */
     public function delete(Cookie $c): void
     {
         [$name, $domain, $path] = Cookies::key($c->name, $c->domain, $c->path);
-        CookieStore::delete($name, $domain, $path, $this->session->dataStore());
+        Session::controller()->deleteCookie($this->session->dataStore(), $name, $domain, $path);
     }
 
     /** Deletes every cookie of the session, and nothing else its pages stored (mygo's Clear). */
     public function clear(): void
     {
-        CookieStore::clear($this->session->dataStore());
+        Session::controller()->clearCookies($this->session->dataStore());
     }
 }

@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace MyPHP;
 
-use MyPHP\Native\{CookieStore, ObjC};
 
 /**
  * A website data store of pages (mygo's Session): their cookies, local and
@@ -29,15 +28,14 @@ final class Session
 {
     /** Reads and changes the session's cookies, as Cookies does those of the default session. */
     public readonly CookiesModule $cookies;
-    /** The WKWebsiteDataStore, retained, made when a page of the session or a call first needs it; null for the default session's. */
-    private $store = null;
+    /** The backend's store, made when a page of the session or a call first needs it; null for the default session's. */
+    private ?Platform\DataStore $store = null;
     /** How many pages use it: the last of an ephemeral session's takes its data with it. */
     private int $pages = 0;
 
     private static ?self $default = null;
     /** @var array<string, self> the sessions newSession made, by name */
     private static array $named = [];
-    private static bool $warned = false;
 
     private function __construct(private readonly string $name, private readonly bool $ephemeral)
     {
@@ -99,7 +97,7 @@ final class Session
     public function clearData(int $types): void
     {
         if ($types !== 0) {
-            CookieStore::removeData($this->dataStore(), $types);
+            self::controller()->clearBrowsingData($this->dataStore(), $types);
         }
     }
 
@@ -118,27 +116,33 @@ final class Session
         return substr($h, 0, 8) . '-' . substr($h, 8, 4) . '-' . substr($h, 12, 4) . '-' . substr($h, 16, 4) . '-' . substr($h, 20);
     }
 
-    /** @internal the WKWebsiteDataStore of the session, made if needed: +dataStoreForIdentifier: of its UUID (macOS 14), else, and for an ephemeral one, +nonPersistentDataStore; the default one's for the default session */
-    public function dataStore()
+    /**
+     * @internal the backend's store of the session, made if needed: null
+     * for the default session; a persistent one's identified by its UUID,
+     * and on Linux kept in directories of its own (mygo's openSessionStore)
+     */
+    public function dataStore(): ?Platform\DataStore
     {
         if ($this === self::$default) {
-            return CookieStore::defaultData();
+            self::controller();
+            return null;
         }
         if ($this->store === null) {
-            $cls = ObjC::cls('WKWebsiteDataStore');
-            if (!$this->ephemeral && ObjC::msg('b:p', $cls, 'respondsToSelector:', ObjC::sel('dataStoreForIdentifier:'))) {
-                $uuid = ObjC::msg('p:p', ObjC::alloc('NSUUID'), 'initWithUUIDString:', ObjC::str(self::id($this->name)));
-                $this->store = ObjC::msg('p:', ObjC::msg('p:p', $cls, 'dataStoreForIdentifier:', $uuid), 'retain');
-                ObjC::msg('v:', $uuid, 'release');
-            } else {
-                if (!$this->ephemeral && !self::$warned) {
-                    self::$warned = true;
-                    Logger::warn('sessions keep their data in memory until the app quits before macOS 14', 'session');
-                }
-                $this->store = ObjC::msg('p:', ObjC::msg('p:', $cls, 'nonPersistentDataStore'), 'retain');
+            $dataDir = $cacheDir = '';
+            if (!$this->ephemeral && PHP_OS_FAMILY === 'Linux') {
+                $dataDir = App::path(PathName::UserData) . '/Sessions/' . self::id($this->name);
+                $cacheDir = App::path(PathName::Cache) . '/Sessions/' . self::id($this->name);
             }
+            $this->store = self::controller()->newDataStore(new Platform\DataStoreOptions($this->ephemeral ? '' : self::id($this->name), $this->ephemeral, $dataDir, $cacheDir));
         }
         return $this->store;
+    }
+
+    /** @internal the backend's controller of the stores, which needs the running app */
+    public static function controller(): Platform\AppController
+    {
+        App::running() || throw new \RuntimeException('myphp: sessions and cookies need the running app (call them from App::whenReady)');
+        return App::backend()->app();
     }
 
     /** @internal a page uses the session: the store its web view's configuration names, null for the default session */
@@ -159,7 +163,7 @@ final class Session
             return;
         }
         if (--$this->pages === 0 && $this->ephemeral && $this->store !== null) {
-            ObjC::msg('v:', $this->store, 'release');
+            $this->store->close();
             $this->store = null;
         }
     }

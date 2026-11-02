@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use Closure;
-use MyPHP\Native\ObjC;
 use MyPHP\UI\{Atlas, Text, Theme, ImageAtlas};
 use RuntimeException;
 
@@ -924,12 +923,7 @@ final class App
      */
     public static function clearBrowsingData(): void
     {
-        self::controller('clearBrowsingData');
-        $cls = ObjC::cls('WKWebsiteDataStore');
-        $done = false;
-        ObjC::msg('v:ppp', ObjC::msg('p:', $cls, 'defaultDataStore'), 'removeDataOfTypes:modifiedSince:completionHandler:', ObjC::msg('p:', $cls, 'allWebsiteDataTypes'),
-            ObjC::msg('p:', ObjC::cls('NSDate'), 'distantPast'), ObjC::block('', function () use (&$done): void { $done = true; }));
-        self::wait(function () use (&$done): bool { return $done; });
+        self::controller('clearBrowsingData')->clearBrowsingData(null, SiteData::ALL);
     }
 
     /** The backend's controller of the app, for $call, which needs the running app. */

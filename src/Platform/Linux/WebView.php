@@ -46,7 +46,7 @@ final class WebView implements \MyPHP\Platform\Page
     /** @var array<int, int> their ids by WebKitWebView address */
     private static array $byWeb = [];
     private static int $nextId = 0;
-    /** @var array<string, true> the schemes registered on the default context */
+    /** @var array<int, array<string, true>> the schemes registered on each web context, by its address */
     private static array $schemes = [];
     /** @var array<string, CData> the holders of the C functions serving the signals, by signal */
     private static array $hooks = [];
@@ -86,7 +86,7 @@ final class WebView implements \MyPHP\Platform\Page
     public ?Closure $onTitle = null;
     /** The page's sound or capture changed: the key macOS's WebView tells. @var ?Closure(string): void */
     public ?Closure $onChange = null;
-    /** window.open(), or a target=_blank link: (URL, '', 0, 0, the WebKitNavigationAction, a user's gesture), which makes the window opened with it as its configuration (create()); what it returns goes unused. @var ?Closure(string, string, int, int, mixed, bool): mixed */
+    /** window.open(), or a target=_blank link: (URL, '', 0, 0, [the WebKitNavigationAction, the opener's DataStore], a user's gesture), which makes the window opened with it as its configuration (Backend::newPage); what it returns goes unused. @var ?Closure(string, string, int, int, mixed, bool): mixed */
     public ?Closure $onOpen = null;
     /** The page called window.close(). @var ?Closure(): void */
     public ?Closure $onClosedByPage = null;
@@ -110,6 +110,8 @@ final class WebView implements \MyPHP\Platform\Page
     public ?Closure $onContextMenu = null;
     /** The view the wheel over the page goes to instead (a web view of native UI's with WebViewOptions::$scrollToContainer). */
     public mixed $scrollTo = null;
+    /** The session's store the view's context is, null for the default one. */
+    private ?DataStore $store = null;
     /** Whether the page was made with developer tools (PageOptions::$devTools), which openDevTools() needs. */
     private bool $devTools = false;
     /** The URL a certificate the app allowed failed at, loaded again once WebKit is done failing it (mygo's tlsRetry). */
@@ -127,14 +129,15 @@ final class WebView implements \MyPHP\Platform\Page
      * action's URL, as WebKit loads it in macOS's view.
      * @param list<string|array{0: string, 1: bool}> $scripts
      */
-    public static function create(array $scripts, Closure $onMessage, bool $devTools, string $userAgent, float $zoom, string $suffix, bool $swipe, bool $pinch, bool $autoplay, bool $throttle, ?CData $opened = null): self
+    public static function create(array $scripts, Closure $onMessage, bool $devTools, string $userAgent, float $zoom, string $suffix, bool $swipe, bool $pinch, bool $autoplay, bool $throttle, ?CData $opened = null, ?DataStore $store = null): self
     {
         $f = WebKit::ffi();
         self::hooks();
-        $ctx = $f->webkit_web_context_get_default();
-        foreach (\MyPHP\Protocol::schemes() as $scheme) { // before the view loads anything (mygo's registerScheme)
-            if (isset(self::$schemes[$scheme])) { continue; }
-            self::$schemes[$scheme] = true;
+        $ctx = WebsiteData::context($store);
+        $k = WebKit::addr($ctx);
+        foreach (\MyPHP\Protocol::schemes() as $scheme) { // on the view's context, before the view loads anything (mygo's registerScheme)
+            if (isset(self::$schemes[$k][$scheme])) { continue; }
+            self::$schemes[$k][$scheme] = true;
             $f->webkit_web_context_register_uri_scheme($ctx, $scheme, self::$hooks['scheme']->fn, null, null);
             $sec = $f->webkit_web_context_get_security_manager($ctx);
             $f->webkit_security_manager_register_uri_scheme_as_secure($sec, $scheme);
@@ -145,8 +148,10 @@ final class WebView implements \MyPHP\Platform\Page
         $self->suffix = $suffix;
         $self->autoplay = $autoplay;
         $self->devTools = $devTools;
+        $self->store = $store;
         $self->ucm = $f->webkit_user_content_manager_new();
-        $self->web = $f->g_object_ref($f->webkit_web_view_new_with_user_content_manager($self->ucm)); // held past its destroy, until close() lets it go
+        $self->web = $f->g_object_ref($store === null ? $f->webkit_web_view_new_with_user_content_manager($self->ucm) // held past its destroy, until close() lets it go
+            : $f->g_object_new($f->webkit_web_view_get_type(), 'web-context', $ctx, 'user-content-manager', $self->ucm, null)); // a session's (mygo's newWebView)
         $data = $f->cast('void*', $self->id);
         $f->webkit_user_content_manager_register_script_message_handler($self->ucm, 'myphp');
         self::on($self->ucm, 'script-message-received::myphp', 'message', $data);
@@ -270,7 +275,7 @@ final class WebView implements \MyPHP\Platform\Page
             if ($v?->onOpen === null) { return null; }
             $f = WebKit::ffi();
             $url = (string)$f->webkit_uri_request_get_uri($f->webkit_navigation_action_get_request($action));
-            ($v->onOpen)($url, '', 0, 0, $action, (bool)$f->webkit_navigation_action_is_user_gesture($action));
+            ($v->onOpen)($url, '', 0, 0, [$action, $v->store], (bool)$f->webkit_navigation_action_is_user_gesture($action)); // in the opener's session (mygo's)
             return null;
         });
         self::$hooks['close'] = $h('HPlain', function ($web, $data): void {
@@ -358,7 +363,7 @@ final class WebView implements \MyPHP\Platform\Page
         self::$hooks['printFailed'] = $h('HNotify', function ($op, $error, $data): void {
             (self::$printJobs[WebKit::addr($op)] ?? null)?->__invoke(\FFI::string(WebKit::ffi()->cast('GError*', $error)->message));
         });
-        WebKit::ffi()->g_signal_connect_data(WebKit::ffi()->webkit_web_context_get_default(), 'download-started', WebKit::ffi()->cast('void*', self::$hooks['download']->fn), null, null, 0);
+        self::contextMade(WebKit::ffi()->webkit_web_context_get_default());
         // Requests of the schemes PHP serves (mygo's serveScheme); one of a view gone gets a 503, as macOS's.
         self::$hooks['scheme'] = $h('HScheme', function ($req, $data): void {
             $f = WebKit::ffi();
@@ -543,6 +548,13 @@ final class WebView implements \MyPHP\Platform\Page
         return 1;
     }
 
+    /** @internal a web context was made, the default or a session's (WebsiteData::newStore): its downloads are the pages' */
+    public static function contextMade(CData $ctx): void
+    {
+        self::hooks();
+        WebKit::ffi()->g_signal_connect_data($ctx, 'download-started', WebKit::ffi()->cast('void*', self::$hooks['download']->fn), null, null, 0);
+    }
+
     /** Decides a navigation of the page (mygo's cbDecidePolicy): the main frame's go to onNavigate, the app's own and back/forward and reloads told so. */
     private function decide(CData $decision): int
     {
@@ -607,9 +619,15 @@ final class WebView implements \MyPHP\Platform\Page
         }
     }
 
+    /** Replaces the content manager's filters (WebKitUserContentFilters of WebsiteData::compileContentRules), which apply to the loads from then on (mygo's setContentRules). */
     public function setContentRules(array $lists): void
     {
-        throw new Unsupported('myphp: content rules are not on Linux yet');
+        if ($this->ucm === null) {
+            return;
+        }
+        $f = WebKit::ffi();
+        $f->webkit_user_content_manager_remove_all_filters($this->ucm);
+        foreach ($lists as $l) { $f->webkit_user_content_manager_add_filter($this->ucm, $l); }
     }
 
     public function isAudible(): bool

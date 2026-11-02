@@ -7661,8 +7661,7 @@ llvmpipe (GL 4.5 core).
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): global
-  shortcuts on Wayland, and video; of web pages, sessions, cookies, content
-  rules and picture in picture (mygo-deviations.md).
+  shortcuts on Wayland, and video; of web pages, picture in picture.
 
 ## Linux backend: web pages (v1.148)
 
@@ -7768,6 +7767,38 @@ hooks of the core's Page.
   focus signal gives the keyboard back as Tab leaves the page. The wheel
   of a view with scrollToContainer goes to the content, moved to the
   area's coordinates.
+
+## Sessions, cookies and content rules behind the platform (v1.150)
+
+The core's `Session`, `CookiesModule`, `ContentRules` and
+`App::clearBrowsingData` reach the engine only through
+`Platform\AppController` (mygo's NewDataStore, ClearBrowsingData,
+ListCookies, SetCookie, DeleteCookie, ClearCookies, CompileContentRules)
+and a `Platform\DataStore` (close()), the default store being null. They
+return once the engine is done, the run loop turning (App::wait), where
+mygo's take a function they call then. macOS's code moved as it was into
+`Darwin\App`, over `Native\CookieStore` and `ContentRuleStore`, a
+session's WKWebsiteDataStore in `Darwin\DataStore`. On Linux
+(`Linux\WebsiteData`, mygo's linux session.go, cookies.go and
+content_rules.go) a session is a WebKitWebContext with a
+WebKitWebsiteDataManager of its own, in `App::path(UserData)/Sessions/<id>`
+and the cache's (the core gives the directories on Linux alone, as mygo's);
+its views are made by g_object_new with "web-context", its schemes and
+downloads set up on it as on the default one. WebKitGTK keeps cookies in
+memory unless told where: the default context's go in cookies.sqlite of
+the user data directory, a session's in its directory; cookies without an
+expiry are a session's alone and go with the app, as in a browser. Cookies
+are the cookie manager's SoupCookies; a GAsyncResult lives only in its
+callback, so each call finishes there (`WebsiteData::await`). Content
+rules are WebKitUserContentFilters a WebKitUserContentFilterStore keeps in
+`App::path(UserData)/content-rules`.
+
+On macOS reading cookies crashed (a segfault in the first `list()`, from
+before this move): `getAllCookies:` hands its block an NSArray that WebKit
+releases as the block returns, and `CookieStore` kept the bare pointer
+and read it after. Its `await` now retains what the block gets, as
+`ContentRuleStore`'s did, and the caller releases it once read (for a
+delete, after the matching cookie was deleted, the array holding it).
 
 ## Open items
 

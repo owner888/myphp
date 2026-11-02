@@ -2523,16 +2523,19 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     and a finished load of it after the failure.
   - myphp: no error page: didFailLoad alone, as on macOS.
   - Why: the core's events stay what macOS's WKWebView tells.
-- **What web pages do not have on Linux yet**
-  - mygo: sessions with their own data (cookies.go, session.go), the
-    cookie API, content rules (content_rules.go).
-  - myphp: none of them: the core's `Session`, `Cookies` and
-    `ContentRules` call macOS's stores (Native\CookieStore,
-    ContentRuleStore) directly, which fail off macOS; Linux's newPage
-    throws `Platform\Unsupported` for a data store and setContentRules
-    throws it too. They wait for an interface of the platform layer. Picture in picture is mygo's: none, WebKitGTK having
-    none (its calls throw, the option warns).
-  - Why: those modules have no platform interface in myphp yet.
+- **Picture in picture on Linux**
+  - mygo: none, WebKitGTK having none.
+  - myphp: the same; its calls throw `Platform\Unsupported`, the option
+    warns.
+  - Why: as mygo.
+- **The stores' calls wait**
+  - mygo: AppController's NewDataStore, ClearBrowsingData, ListCookies,
+    SetCookie, DeleteCookie, ClearCookies and CompileContentRules take a
+    done function; ListCookies takes a URL whose cookies it lists.
+  - myphp: they return once the engine is done (App::wait), as the core's
+    calls did before; listCookies lists them all and the core filters by
+    URL (Cookies::matchesURL), as it did.
+  - Why: the core's API waits anyway; the move kept macOS's code as it was.
 - **JavaScript panels on Linux**
   - mygo: WebKitGTK shows alert(), confirm() and prompt() its own way,
     inside the page, and its own file chooser.

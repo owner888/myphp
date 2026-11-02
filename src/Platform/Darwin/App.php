@@ -5,7 +5,7 @@ namespace MyPHP\Platform\Darwin;
 
 use Closure;
 use MyPHP\{AboutPanelOptions, ActivationPolicy};
-use MyPHP\Native\{Login, ObjC, Signals};
+use MyPHP\Native\{ContentRuleStore, CookieStore, Login, ObjC, Signals};
 use MyPHP\Platform;
 use MyPHP\Platform\{AppHandler, Menu};
 use RuntimeException;
@@ -228,6 +228,61 @@ final class App implements Platform\AppController
     public function setDockMenu(?Menu $menu): void
     {
         $this->b->menus()->setDockMenu($menu);
+    }
+
+    private static bool $warned = false;
+
+    /** +dataStoreForIdentifier: of the session's UUID (macOS 14), else, and for an ephemeral one, +nonPersistentDataStore (mygo's darwin NewDataStore). */
+    public function newDataStore(Platform\DataStoreOptions $opts): Platform\DataStore
+    {
+        $cls = ObjC::cls('WKWebsiteDataStore');
+        if (!$opts->ephemeral && ObjC::msg('b:p', $cls, 'respondsToSelector:', ObjC::sel('dataStoreForIdentifier:'))) {
+            $uuid = ObjC::msg('p:p', ObjC::alloc('NSUUID'), 'initWithUUIDString:', ObjC::str($opts->id));
+            $store = ObjC::msg('p:', ObjC::msg('p:p', $cls, 'dataStoreForIdentifier:', $uuid), 'retain');
+            ObjC::msg('v:', $uuid, 'release');
+            return new DataStore($store);
+        }
+        if (!$opts->ephemeral && !self::$warned) {
+            self::$warned = true;
+            \MyPHP\Logger::warn('sessions keep their data in memory until the app quits before macOS 14', 'session');
+        }
+        return new DataStore(ObjC::msg('p:', ObjC::msg('p:', $cls, 'nonPersistentDataStore'), 'retain'));
+    }
+
+    /** The WKWebsiteDataStore of $store, the default one for null. */
+    private static function data(?Platform\DataStore $store)
+    {
+        return $store instanceof DataStore ? $store->ns : CookieStore::defaultData();
+    }
+
+    public function clearBrowsingData(?Platform\DataStore $store, int $types): void
+    {
+        CookieStore::removeData(self::data($store), $types);
+    }
+
+    public function listCookies(?Platform\DataStore $store): array
+    {
+        return CookieStore::all(self::data($store));
+    }
+
+    public function setCookie(?Platform\DataStore $store, \MyPHP\Cookie $cookie): void
+    {
+        CookieStore::set($cookie, self::data($store));
+    }
+
+    public function deleteCookie(?Platform\DataStore $store, string $name, string $domain, string $path): void
+    {
+        CookieStore::delete($name, $domain, $path, self::data($store));
+    }
+
+    public function clearCookies(?Platform\DataStore $store): void
+    {
+        CookieStore::clear(self::data($store));
+    }
+
+    public function compileContentRules(string $id, string $identifier, string $rules): mixed
+    {
+        return ContentRuleStore::compile($identifier, $rules, fn(string $name): bool => \MyPHP\ContentRules::stale($id, $identifier, $name));
     }
 
     public function showAboutPanel(AboutPanelOptions $opts): void

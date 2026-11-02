@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace MyPHP;
 
 use InvalidArgumentException;
-use MyPHP\Native\ContentRuleStore;
 use RuntimeException;
 
 /**
@@ -18,7 +17,7 @@ final class ContentRules
     /** How many hexadecimal digits of the rules' hash identifier() puts after the id. */
     private const HASH = 16;
 
-    /** @param mixed $list the compiled WKContentRuleList, @internal */
+    /** @param mixed $list the backend's compiled list (a WKContentRuleList, a WebKitUserContentFilter), @internal */
     private function __construct(private readonly string $id, public readonly mixed $list) {}
 
     /** The id the rules were compiled under. */
@@ -70,7 +69,8 @@ final class ContentRules
         }
         $identifier = self::identifier($id, $rules);
         try {
-            $list = ContentRuleStore::compile($identifier, $rules, fn(string $name): bool => self::stale($id, $identifier, $name));
+            App::running() || throw new RuntimeException('myphp: content rules need the running app (call ContentRules::compile from App::whenReady)');
+            $list = App::backend()->app()->compileContentRules($id, $identifier, $rules);
         } catch (RuntimeException $e) {
             throw new RuntimeException("myphp: content rules $id: " . $e->getMessage(), 0, $e);
         }

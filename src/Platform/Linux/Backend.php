@@ -6,7 +6,7 @@ namespace MyPHP\Platform\Linux;
 use MyPHP\Logger;
 use MyPHP\Native\Pango;
 use MyPHP\Platform;
-use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
+use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler};
 
 /**
  * The Linux backend: GTK 3 over FFI (mygo's internal/linux), native UI
@@ -144,13 +144,11 @@ final class Backend implements Platform\Backend
 
     public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        if ($dataStore !== null) {
-            throw new Unsupported('myphp: sessions (data stores) are not on Linux yet');
-        }
         if ($pip) {
             Logger::warn('picture in picture is not on Linux: the page goes without it', 'linux');
         }
-        return WebView::create($scripts, $onMessage, $devTools, $userAgent, $zoom, $suffix, $swipe, $pinch, $autoplay, $throttle, $configuration); // a window.open()'s navigation action (WebView::$onOpen)
+        [$opened, $openerStore] = $configuration ?? [null, null]; // a window.open()'s navigation action and its opener's store (WebView::$onOpen)
+        return WebView::create($scripts, $onMessage, $devTools, $userAgent, $zoom, $suffix, $swipe, $pinch, $autoplay, $throttle, $opened, $dataStore ?? $openerStore);
     }
 
     public function focusedWindow(): ?\MyPHP\Window

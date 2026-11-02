@@ -70,6 +70,43 @@ final class App implements Platform\AppController
 
     public function setDockMenu(?Menu $menu): void {}
 
+    /** A web context with a website data manager of its own (mygo's linux NewDataStore). */
+    public function newDataStore(Platform\DataStoreOptions $opts): Platform\DataStore
+    {
+        return WebsiteData::newStore($opts);
+    }
+
+    public function clearBrowsingData(?Platform\DataStore $store, int $types): void
+    {
+        WebsiteData::clear($store, $types);
+    }
+
+    public function listCookies(?Platform\DataStore $store): array
+    {
+        return WebsiteData::cookies($store);
+    }
+
+    public function setCookie(?Platform\DataStore $store, \MyPHP\Cookie $cookie): void
+    {
+        WebsiteData::setCookie($store, $cookie);
+    }
+
+    public function deleteCookie(?Platform\DataStore $store, string $name, string $domain, string $path): void
+    {
+        WebsiteData::deleteCookie($store, $name, $domain, $path);
+    }
+
+    /** The cookies of the store's website data, its other data kept (mygo's ClearCookies). */
+    public function clearCookies(?Platform\DataStore $store): void
+    {
+        WebsiteData::clear($store, \MyPHP\SiteData::COOKIES);
+    }
+
+    public function compileContentRules(string $id, string $identifier, string $rules): mixed
+    {
+        return WebsiteData::compileContentRules($id, $identifier, $rules);
+    }
+
     public function showAboutPanel(AboutPanelOptions $opts): void
     {
         throw new Unsupported('myphp: the about panel is not on Linux yet');
