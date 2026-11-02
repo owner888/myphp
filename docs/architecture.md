@@ -8181,6 +8181,22 @@ through it.
   captured once those calls are answered and two frames drawn
   (`window.__myphp.calls()` in bridge.js).
 
+## Android backend: toolchain & runtime (v1.147)
+
+Android is the third implementation of `Platform\Backend` (target
+`aarch64-linux-android`, API 31+). `scripts/build-android-php.sh` builds
+`libphp.so` (PHP 8.3 embed SAPI) using NDK Clang against a static `libffi`
+(`ext-ffi`), with `opcache`, `mbstring`, and `zlib`. Bionic differences
+(lack of `getdtablesize`, incomplete `resolv.h` symbols) are patched at
+configuration. The launcher (`src/Platform/Android/launcher/myphp_launcher.c`,
+compiled to `libmyphp.so`) starts an attached `pthread` with an `ALooper`,
+initializes PHP embed with `ffi.enable=1`, and pipes standard IO to
+`__android_log_print` under the `MyPHP` tag. Packaging runs without Gradle
+(`scripts/package-android-apk.sh`): `aapt2` compiles resources and links the
+base APK, `javac` and `d8` produce `classes.dex` for `MyphpActivity`, and
+`zipalign -p 4` with `apksigner` outputs the signed APK (`resources.arsc` and
+shared libraries stored uncompressed per API 30+ requirements).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
