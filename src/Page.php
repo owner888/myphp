@@ -751,7 +751,7 @@ final class Page
     /** The scripts pages get at document start: the bridge, the preferences, the room of the title bar, the preload script (mygo's pageScripts). @return list<string> */
     private function scripts(): array
     {
-        $config = ['platform' => 'darwin', 'windowId' => $this->window->id, 'version' => App::VERSION, 'secret' => $this->secret] + self::locale();
+        $config = ['platform' => self::jsPlatform(), 'windowId' => $this->window->id, 'version' => App::VERSION, 'secret' => $this->secret] + self::locale();
         if ($this->pip) {
             $config['pip'] = true; // the bridge tells whether the document has a video in picture in picture
         }
@@ -795,6 +795,12 @@ final class Page
     private function fitContent(): ?Native\FitContent
     {
         return $this->webView === null ? $this->window->fitContent() : null;
+    }
+
+    /** The system the page tells it runs on, in Node.js' process.platform names (mygo's jsPlatform). */
+    private static function jsPlatform(): string
+    {
+        return PHP_OS_FAMILY === 'Windows' ? 'win32' : strtolower(PHP_OS_FAMILY);
     }
 
     /** @return array{locale: string, dir: string} */

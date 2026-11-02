@@ -7661,8 +7661,60 @@ llvmpipe (GL 4.5 core).
   XDG's (`~/.config/<name>`), as mygo's; the languages and the formats are
   the environment's (LANGUAGE, LC_MESSAGES, LC_TIME).
 - **Not there yet** (each throws `Platform\Unsupported`, or logs): web
-  pages and web views (WebKitGTK), global shortcuts on Wayland, and
-  video.
+  views in native UI, global shortcuts on Wayland, and video; of web
+  pages, what the next section leaves out.
+
+## Linux backend: web pages (v1.148)
+
+A window whose content is a page shows a WebKitWebView (WebKitGTK 4.1,
+`Linux\WebView`, mygo's createWebView and scheme.go) in the window's box,
+under the menu bar. The page talks to PHP as on macOS: WebKitGTK has the
+same `window.webkit.messageHandlers.<name>`, so bridge.js is unchanged.
+Tested under Xvfb as root: WebKitGTK 2.52 runs there without turning its
+sandbox off; its "Overriding existing handler for signal 10" (JSC's
+garbage collector takes SIGUSR1) and Mesa's DRI3 warnings are harmless.
+
+- **An FFI instance of WebKit's own** (`Linux\WebKit`): dlsym searches a
+  library and its dependencies, so GTK's instance cannot reach WebKit;
+  WebKit's can reach GLib's, GIO's and libc's, which it needs too.
+  Pointers pass between the two as void*. PHP closes an FFI's library as
+  it shuts down, and WebKit's threads, still running as the process
+  exits, crashed one exit in five in code unmapped under them: the
+  library is opened once more with RTLD_NODELETE first, so it stays.
+- **One C function a signal**: every view's load-changed, load-failed,
+  decide-policy, notify::title, create, close, web-process-terminated and
+  script message go to one closure each, the view told by its id in the
+  signal's data, as a closure a view would leave its thunks behind.
+- **The bridge**: the scripts at document start are WebKitUserScripts of
+  a content manager a view, its handler "myphp" giving the posted JSON
+  (jsc_value_to_string); replies and events go back by
+  webkit_web_view_evaluate_javascript, eval by
+  call_async_javascript_function, whose value is the string the core's
+  wrapper returns ('' for undefined and null, as macOS's). A syntax error
+  comes back as "SyntaxError: …", which the core's fallback to a body
+  needs.
+- **Failed loads are handled**: load-failed returns TRUE, so WebKit loads
+  no error page of its own, which would tell a navigation and a load of
+  it after the failure; a failed load's last load-changed (finished) is
+  not told either. That is what macOS's view does. Cancelled loads (302)
+  and navigations a policy stopped (102) are no failures (mygo's).
+- **Navigations** are mygo's: the app's own loads (`programmatic`), back
+  and forward and reloads are the core's unasked ones; a frame's (a frame
+  name) are WebKit's to decide; autoplay is a website policy of the main
+  frame's decision.
+- **window.open()**: WebKitGTK would make the new view share the opener's
+  content manager, sending its messages to the opener, so `create`
+  returns no view (mygo's): the core's window opened gets the navigation
+  action as its configuration, and its own view loads the action's URL.
+- **Scheme responses through a pipe** (`Linux\SchemeTask`): WebKit reads
+  a GUnixInputStream of the read end. mygo writes from a goroutine that
+  blocks while the pipe is full; PHP writes on the main loop WebKit reads
+  on, so the write end is non-blocking, what it does not take waits in
+  the task, and a GLib watch of the fd writes it as the pipe takes more.
+  A write the page no longer reads fails with EPIPE (PHP's CLI ignores
+  SIGPIPE): the task stopped. WebKitGTK tells no stop of a request, and
+  goes on reading a body after its page went: an endless generator runs
+  until its view goes.
 
 ## Open items
 

@@ -2518,6 +2518,23 @@ Format: **area — short name** (version found), then mygo / myphp / why.
   - myphp: alternate items (myphp's, shown while Option is held) are left
     out, and a header is an item that cannot be chosen.
   - Why: GTK has neither.
+- **A page's failed load**
+  - mygo: WebKitGTK's error page shows, and the page tells a navigation
+    and a finished load of it after the failure.
+  - myphp: no error page: didFailLoad alone, as on macOS.
+  - Why: the core's events stay what macOS's WKWebView tells.
+- **What web pages do not have on Linux yet**
+  - mygo: downloads, sign-ins, certificates, permissions, content rules,
+    cookies and sessions, session state, printing and PDF, capturing a
+    page, dev tools, context menus, JavaScript panels as GTK dialogs, file
+    drops on pages, drag regions, web views in native UI.
+  - myphp: those throw `Platform\Unsupported` where called; the handlers
+    the core sets on every page (downloads, sign-ins, certificates,
+    permissions, panels, context menus) are never called, WebKitGTK
+    handling them its own way. Picture in picture is mygo's: none
+    (a warning when asked for).
+  - Why: the first slice of Linux pages is the page, its bridge, its
+    navigation and its schemes.
 - **A renderer a window**
   - mygo: a GL renderer a surface too.
   - myphp: the same, the atlases' dirty rows shared out among them

@@ -39,6 +39,8 @@ final class Window implements Platform\Window
     public ?CData $win = null;
     /** The GtkGLArea native UI draws in, its renderer, and the IM context typing goes through. */
     private ?CData $area = null, $im = null;
+    /** The WebKitWebView of a window whose content is a page, which the page holds. */
+    private ?CData $web = null;
     /** The box the menu bar and the content are in, the window's accelerators, its menu bar, the last press or key that could bring up a context menu (a copy). */
     private CData $box, $accel;
     private ?CData $menubar = null, $trigger = null;
@@ -234,9 +236,13 @@ final class Window implements Platform\Window
         return $this->win;
     }
 
+    /** Shows the page's WebKitWebView as the window's content, under the menu bar (mygo's createWebView packs it so). */
     public function setContent(Platform\Page $page, WindowOptions $o): void
     {
-        throw new Unsupported('myphp: web pages need WebKitGTK, which the Linux backend does not drive yet');
+        $f = Gtk::ffi();
+        $this->web = $page->handle();
+        $f->gtk_box_pack_start($this->box, $this->web, 1, 1, 0);
+        $f->gtk_widget_show($this->web);
     }
 
     /**
@@ -630,7 +636,7 @@ final class Window implements Platform\Window
 
     public function contentView(): mixed
     {
-        return $this->area;
+        return $this->area ?? $this->web;
     }
 
     public function release(): void
@@ -668,7 +674,7 @@ final class Window implements Platform\Window
         }
         $f->gtk_widget_show($this->win);
         $f->gtk_window_present($this->win);
-        if ($this->area !== null) { $f->gtk_widget_grab_focus($this->area); }
+        if (($content = $this->area ?? $this->web) !== null) { $f->gtk_widget_grab_focus($content); }
     }
 
     /** Lets a focusable flyout's grab go. */

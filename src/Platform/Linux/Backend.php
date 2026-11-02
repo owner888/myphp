@@ -10,10 +10,10 @@ use MyPHP\Platform\{AppHandler, Menu, MenuItem, TrayHandler, Unsupported};
 
 /**
  * The Linux backend: GTK 3 over FFI (mygo's internal/linux), native UI
- * drawn with OpenGL in a GtkGLArea and text with Pango. Web pages
- * (WebKitGTK), the tray and the system's services come
- * after the native UI: what is not here yet throws Unsupported, or, where
- * every app reaches it (the application menu), is logged.
+ * drawn with OpenGL in a GtkGLArea and text with Pango, web pages with
+ * WebKitGTK 4.1 (Linux\WebView). What is not here yet throws
+ * Unsupported, or, where every app reaches it (the application menu), is
+ * logged.
  */
 final class Backend implements Platform\Backend
 {
@@ -144,7 +144,13 @@ final class Backend implements Platform\Backend
 
     public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        throw new Unsupported('myphp: web pages need WebKitGTK, which the Linux backend does not drive yet');
+        if ($dataStore !== null) {
+            throw new Unsupported('myphp: sessions (data stores) are not on Linux yet');
+        }
+        if ($pip) {
+            Logger::warn('picture in picture is not on Linux: the page goes without it', 'linux');
+        }
+        return WebView::create($scripts, $onMessage, $devTools, $userAgent, $zoom, $suffix, $swipe, $pinch, $autoplay, $throttle, $configuration); // a window.open()'s navigation action (WebView::$onOpen)
     }
 
     public function focusedWindow(): ?\MyPHP\Window
@@ -268,8 +274,9 @@ final class Backend implements Platform\Backend
         return $this->notifications ??= new Notifications($this->h);
     }
 
+    /** Whether WebKitGTK 4.1 loads (mygo's WebViewAvailable). */
     public function webViewAvailable(): bool
     {
-        return false;
+        return WebKit::available();
     }
 }
