@@ -51,6 +51,7 @@ final class Gtk
             typedef struct { CbMethod method_call; CbProperty get_property; void* set_property; void* padding[8]; } GDBusInterfaceVTable;
             typedef struct { CbEvent fn; } HEvent; typedef struct { CbWidget fn; } HWidget; typedef struct { CbSize fn; } HSize;
             typedef struct { CbString fn; } HString; typedef struct { CbSource fn; } HSource; typedef struct { CbTick fn; } HTick;
+            typedef int (*CbFd)(int, int, void*); typedef struct { CbFd fn; } HFd;
             typedef struct { int x, y, width, height; } GdkRectangle;
             typedef struct { int min_width, min_height, max_width, max_height, base_width, base_height, width_inc, height_inc; double min_aspect, max_aspect; int win_gravity; } GdkGeometry;
             typedef struct { int type; void* window; signed char send_event; unsigned int time; double x; double y; double* axes; unsigned int state; unsigned int button; void* device; double x_root, y_root; } GdkEventButton;
@@ -66,6 +67,7 @@ final class Gtk
             void gtk_main(void); void gtk_main_quit(void); guint gtk_main_level(void);
             guint g_idle_add_full(int, CbSource, void*, void*);
             guint g_timeout_add_full(int, guint, CbSource, void*, void*);
+            guint g_unix_fd_add_full(int, int, int, CbFd, void*, void*);
             guint g_unix_signal_add_full(int, int, CbSource, void*, void*);
             struct sigaction { uintptr_t handler; unsigned long mask[16]; int flags; void* restorer; };
             int sigaction(int, const struct sigaction*, struct sigaction*);
@@ -75,6 +77,7 @@ final class Gtk
             gulong g_signal_connect_data(void*, const char*, void*, void*, void*, int);
             void* g_object_ref(void*); void g_object_unref(void*); void g_free(void*);
             void g_object_get(void*, const char*, ...);
+            void g_object_set(void*, const char*, ...); void gtk_settings_reset_property(void*, const char*);
             void g_set_prgname(const char*); void g_set_application_name(const char*);
 
             void* gtk_window_new(int);

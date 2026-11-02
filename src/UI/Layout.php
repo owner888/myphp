@@ -69,15 +69,15 @@ final class Layout
     {
         if ($n->memo === 2) { return false; }
         if ($n->wrapsAtWidth() && $n->w > 0 && $n->w + 0.5 < max($n->mw, $n->natW)) { // narrower than its lines, also by its maxWidth()
+            // Its width stays the one it asked unwrapped (its max-content width, its flex base size in a row, as mygo's
+            // leafWidths), so the second pass shares the room as the first did and gives it the width it wraps at; only
+            // its height follows its lines.
             if ($n->kind === Node::TEXT) {
-                [$ow, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it: a size given to it stays
+                [, $oh] = $n->metrics->measure($n->text ?? '', $n->fontSize, $n->style); // as text() measured it: a size given to it stays
                 $n->toRich();
-                if ($n->fw == $ow) { $n->fw = 0.0; }
                 if ($n->fh == $oh) { $n->fh = 0.0; }
             } else {
-                $l = $n->textLayout();
-                if ($n->fw == $l->width) { $n->fw = 0.0; }
-                if ($n->fh == $l->height) { $n->fh = 0.0; }
+                if ($n->fh == $n->textLayout()->height) { $n->fh = 0.0; }
             }
             $n->wrapWidth = $n->w - $n->padL() - $n->padR(); $n->autoWrap = true; $n->layout = null; // inside its padding
             return true;
@@ -298,13 +298,13 @@ final class Layout
         [$padMain, $padCross] = $n->dir === Node::ROW ? [$n->padW, $n->padH] : [$n->padH, $n->padW];
         $main += $gap * max(0, $cnt - 1) + $padMain;
         $cross += $padCross;
-        if ($n->wraps && $n->wrapWidth > 0) { // a wrapping row: as wide as its widest line, as high as its lines
-            $main = 0.0; $cross = $padCross;
+        if ($n->wraps && $n->wrapWidth > 0) { // a wrapping row: as high as its lines; as wide as its children in one line (its max-content width, mygo's measureIntrinsic), so its width never follows where it wrapped
+            $cross = $padCross;
             foreach (self::lines($n, $n->wrapWidth - $padMain) as $i => $line) {
-                $lw = $gap * (count($line) - 1); $lh = 0.0;
-                foreach (self::lineMain($n, $line, $n->wrapWidth - $padMain) as $j => $kw) { $lw += $kw; $lh = max($lh, self::lineHeight($line[$j], $kw)); } // within the largest each takes, its height following its width
+                $lh = 0.0;
+                foreach (self::lineMain($n, $line, $n->wrapWidth - $padMain) as $j => $kw) { $lh = max($lh, self::lineHeight($line[$j], $kw)); } // within the largest each takes, its height following its width
                 $lh = max($lh, self::baselineCross($n, $line));
-                $main = max($main, $lw + $padMain); $cross += $lh + ($i > 0 ? $n->crossGap() : 0);
+                $cross += $lh + ($i > 0 ? $n->crossGap() : 0);
             }
         }
         if ($n->scroll instanceof ListState && $n->dir === Node::COLUMN && ($n->maxH < INF || $n->sizedByRows)) {

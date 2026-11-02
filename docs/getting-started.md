@@ -132,6 +132,12 @@ const greeting = await Greeter.greet("world"); // Promise<string>
 events.tick.on((time) => console.log(time)); // time: number
 ```
 
+`app.php` calls `App::setName()` first, before it makes its services:
+`App::path()` names the app's data folder (`PathName::UserData`, …) after
+the name, and keeps the folder it found, so a service made before the name
+was set, as `new Notes(App::path(PathName::UserData) . '/notes.json')`,
+would keep its data under the wrong folder.
+
 Add a method to `Greeter`, save, and it is there to call once the app has
 restarted. [Calling PHP from the frontend](bindings.md) covers what methods
 can take and return, errors, events and security.

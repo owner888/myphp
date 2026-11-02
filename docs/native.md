@@ -240,13 +240,44 @@ Network::onChanged(function (NetworkStatus $s) {
 
 ### Proxies
 
-MyPHP's own requests (the updater's, those of the fetch and WebSocket
-plugins) go through the proxy the user set in the system's settings, as
+MyPHP's own requests (`MyPHP\Http`'s, the updater's, those of the fetch
+and WebSocket plugins) go through the proxy the user set in the system's settings, as
 the app's pages do, with its exceptions and setup scripts. Loopback hosts
 are reached directly. When any of `HTTP_PROXY`, `HTTPS_PROXY`,
 `ALL_PROXY` or `NO_PROXY` (or its lowercase name) is set, the environment
 decides instead, as curl reads it. The system's answer is kept for 5
 seconds, so a change of the settings applies without restarting the app.
+
+## Processes
+
+`MyPHP\Process` runs a program without blocking the app: its output is
+read as it comes, polled on the run loop, and a function gets all of
+stdout, stderr and the exit code once it ends.
+
+<!-- no-test -->
+```php
+use MyPHP\Process;
+
+$p = Process::run(['git', 'log', '--oneline', '-20'], '', function (string $out, string $err, int $code) use ($app, $win) {
+    $win->update(function () use ($app, $out, $err, $code) {
+        $app->log = $code === 0 ? explode("\n", trim($out)) : ["git failed: $err"];
+    });
+});
+// later, to stop it: $done is then not called
+$p->kill();
+```
+
+- `Process::run($argv, $stdin, $done)`: `$argv` is the program and its
+  arguments, not a shell line (no quoting, no globbing); `$stdin` is
+  written to its standard input, then closed (`''` for none); `$done(string
+  $stdout, string $stderr, int $exitCode)` runs on the main thread once it
+  ended. A program that cannot be started throws a `RuntimeException`.
+- `$p->ended()` tells whether it ended and `$done` ran; `$p->kill()` ends
+  it now (SIGTERM) without calling `$done`.
+- The output is handed over whole at the end: for progress as it runs,
+  have the program write to a file and read that, or use the APIs made for
+  the job, as `MyPHP\Http` for HTTP requests
+  ([from PHP or native UI](plugins/fetch.md#from-php-or-native-ui)).
 
 ## Secrets
 

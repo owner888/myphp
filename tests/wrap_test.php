@@ -107,3 +107,32 @@ $h = new Headless(function (Context $c) use (&$n) {
 }, 900, 600);
 $h->frame();
 check($n->w <= 260 && $n->h > 16 && $n->wrapWidth !== null, 'a text past its maxWidth wraps there: ' . json_encode([$n->w, $n->h]));
+
+// In a split's second pane, a wrapping text, an image paragraph of Markdown and a row that wraps (wrap(0)) settle: the
+// second pass of layout shares the room as the first did (their widths are what they ask unwrapped, mygo's max-content),
+// so they are shown at the width they wrapped at, and no frame follows (a feedback loop drew 60 frames a second).
+foreach (['text', 'row'] as $what) {
+    $side = 200.0; $t = null; $r = null;
+    $h = new Headless(function (Context $c) use (&$side, &$t, &$r, $what): void {
+        $c->split($side, fn() => $c->text('left'), function () use ($c, &$t, &$r, $what): void {
+            $c->column(20)->fill();
+              if ($what === 'text') {
+                  $t = $c->text('A description long enough to wrap onto a second line in this pane.');
+                  $c->scroll()->grow(1);
+                    \MyPHP\UI\Markdown\Markdown::view($c, "![build](https://example.com/badge.svg)\n", new \MyPHP\UI\Markdown\Options());
+                  $c->end();
+              } else {
+                  $r = $c->row(0, 16)->wrap(0);
+                    $c->text('★ 49,120 stars')->shrink(0);
+                    $c->text('⑂ 5,457 forks')->shrink(0);
+                    $c->text('Updated 2026-10-01')->shrink(0);
+                  $c->end();
+              }
+            $c->end();
+        })->fill();
+    }, $what === 'text' ? 500 : 460, 300);
+    for ($i = 0; $i < 3; $i++) { $h->windowFrame(false); }
+    same(null, $h->rt->pace(60), "$what: idle after three frames, no frame asked for");
+    $n = $what === 'text' ? $t : $r;
+    check(abs($n->w - $n->wrapWidth) <= 0.5 && ($what === 'row' || count($n->textLayout()->lines) >= 2), "$what: wrapped at the width it shows at: " . json_encode([$n->w, $n->wrapWidth]));
+}

@@ -132,6 +132,70 @@ try {
   webview's `fetch`. Relative URLs resolve against the page's: during
   `myphp dev` they are those of the dev server, which PHP fetches.
 
+## From PHP or native UI
+
+The plugin is the page's `fetch`. PHP, and so native UI, makes HTTP
+requests with `MyPHP\Http` (a mygo app uses Go's `net/http` in a
+goroutine; there is no plugin to use): libcurl's, driven by the run loop as
+the plugin's are, through the system's proxy, redirects followed and what
+the server compresses undone.
+
+- `Http::get($url, $headers = [])` and
+  `Http::request($method, $url, $headers = [], $body = null, $timeout = 0)`
+  return an `HttpResponse`: `status`, `body`, `headers` (by their names in
+  lower case), `ok()` for a 2xx status, `json()` for the body decoded.
+  `$headers` is `['Name' => 'value']`; `$timeout` is in seconds, 0 for no
+  limit.
+- A response of any status is returned. What keeps the request from being
+  made or answered (a name that does not resolve, a refused connection,
+  TLS, the timeout) throws a `RuntimeException` with curl's reason.
+- Called in a fiber of `App::go()`, the request suspends the fiber until
+  the response came, and the app goes on drawing and taking events. Called
+  on the main thread outside a fiber, it turns the run loop until the
+  response came (`App::wait()`): the view is built meanwhile, but the code
+  after the call waits, so make requests in a fiber. Before `App::run()`
+  it simply blocks.
+
+A view that loads what it shows, a runnable app:
+
+<!-- no-test -->
+```php
+<?php
+require 'vendor/autoload.php'; // or the framework's src/autoload.php
+use MyPHP\{App, Http, Window, WindowOptions};
+use MyPHP\UI\{Content, Context};
+
+$repo = ['state' => 'loading', 'stars' => 0, 'error' => ''];
+App::whenReady(function () use (&$repo) {
+    $win = new Window(new WindowOptions(title: 'Stars', width: 360, height: 120,
+        content: Content::view(function (Context $c) use (&$repo) {
+            $c->column(20, 8);
+              match ($repo['state']) {
+                  'loading' => $c->spinner(),
+                  'done' => $c->text("egoist/mygo has {$repo['stars']} stars"),
+                  'failed' => $c->text("Could not load it: {$repo['error']}"),
+              };
+            $c->end();
+        })));
+    App::go(function () use (&$repo, $win) {
+        try {
+            $r = Http::get('https://api.github.com/repos/egoist/mygo', ['Accept' => 'application/vnd.github+json']);
+            $next = $r->ok() ? ['state' => 'done', 'stars' => $r->json()['stargazers_count'], 'error' => '']
+                : ['state' => 'failed', 'stars' => 0, 'error' => "HTTP {$r->status}"];
+        } catch (RuntimeException $e) {
+            $next = ['state' => 'failed', 'stars' => 0, 'error' => $e->getMessage()];
+        }
+        $win->update(function () use (&$repo, $next) { $repo = $next; }); // changes the state, then draws
+    });
+});
+App::run();
+```
+
+Several requests at once each run in a fiber of their own; their
+transfers go on together. A response is read whole into `body`: for a
+download to show progress, or one too large to hold, use the page's
+`fetch` of this plugin, or a `MyPHP\Process` running curl.
+
 ## Options
 
 `Fetch::plugin()` makes requests through the system's proxy settings, as

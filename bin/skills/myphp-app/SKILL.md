@@ -1,6 +1,6 @@
 ---
 name: myphp-app
-description: Write new PHP desktop apps, windows and screens with MyPHP's native UI (MyPHP\UI), from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page or widget to one, or turning a design into MyPHP code.
+description: Write new PHP desktop apps, windows and screens with MyPHP, native UI (MyPHP\UI) or a web frontend, from a blank project to a tested, packaged app. Use when creating a MyPHP app, adding a window, page, widget or service to one, or turning a design into MyPHP code.
 ---
 
 # Writing MyPHP apps
@@ -23,6 +23,10 @@ Everything below is in that checkout:
 - `docs/app.md`, `docs/windows.md`, `docs/menus.md`, `docs/native.md`
   (dialogs, notifications, tray, clipboard), `docs/plugins/` (fetch,
   sqlite, watch, websocket, updater…).
+- This skill's `references/`: `pitfalls.md` (read it before you write),
+  `async.md` (HTTP, SQLite, child processes, stale answers),
+  `windows.md` (several windows, menus, asking before closing) and
+  `web.md` (the web template: PHP services and a TypeScript page).
 - `examples/`: whole apps (`counter-native`, `todo`, `notes`, `widgets`,
   `gallery`, `inbox`, `photos`…). Find the closest one and follow it.
 - Before calling a method you have not seen in the docs, confirm it in
@@ -142,8 +146,9 @@ framework's `bin/myphp`), then reshape it as above.
   `$c->after($seconds)`. There is no repeating timer
   (`docs/ui/views.md`, "Something that changes with time").
 - One thread: never block the view with I/O. Do slow work in
-  `App::go(fn() => ...)` (fibers; the fetch, sqlite and watch plugins
-  wait there), then publish with `$window->update(fn() => ...)`.
+  `App::go(fn() => ...)`, a fiber, where `MyPHP\Http` waits without
+  stopping the window, then publish with `$window->update(fn() => ...)`.
+  SQLite is synchronous: small queries only. See `references/async.md`.
 - Prefer the framework's widgets over hand-built ones: they carry focus,
   keyboard, disabled, accessibility and theme behavior. Give icon-only
   buttons a `->label('…')` for screen readers and tests.

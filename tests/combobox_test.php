@@ -246,3 +246,18 @@ same('Gr', $f->edit->text, 'typing reaches it');
 $inputs = []; $walk = function (\MyPHP\UI\Node $n) use (&$walk, &$inputs) { if ($n->kind === \MyPHP\UI\Node::INPUT) { $inputs[] = $n->text; } foreach ($n->kids as $k) { $walk($k); } };
 $walk($h->root);
 same(['Pick a color', 'Add a tag'], $inputs, 'each input with its placeholder');
+
+// A search field growing in a row: its clear button at its end in the first frame, and at once after a resize (it was placed from the last frame's width).
+$query = new TextState('limit');
+$h = new Headless(function (Context $c) use ($query): void {
+    $c->row(12, 12);
+      $c->text('Repositories');
+      $c->searchField($query, 0)->grow(1);
+    $c->end();
+}, 1040, 200);
+$h->frame(1);
+$end = fn() => $h->rect($h->byLabel('Search'))[0] + $h->rect($h->byLabel('Search'))[2];
+$clear = fn() => $h->rect($h->byLabel('Clear'));
+check(abs($end() - ($clear()[0] + $clear()[2])) <= 10 && $clear()[0] > 900, 'the clear button at the field\'s end in the first frame: ' . json_encode([$end(), $clear()]));
+$h->w = 700; $h->frame(1);
+check(abs($end() - ($clear()[0] + $clear()[2])) <= 10 && $clear()[0] < 700, 'and in the frame of a resize: ' . json_encode([$end(), $clear()]));

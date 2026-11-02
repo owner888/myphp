@@ -40,10 +40,17 @@ PHP runs the app on one thread, the main one, which also draws the UI:
   item clicks, global shortcuts and the methods pages call run on it: keep
   them short.
 - Work that waits, as a download, runs in a fiber of its own with
-  `App::go()`: what waits in it (the fetch plugin, `App::wait()`, an image
-  decoding) suspends the fiber and lets the app draw and take events until
-  it resumes. A bound method that returns a `Generator` streams each value
-  a turn of the run loop apart.
+  `App::go()`: what waits in it (an HTTP request of `MyPHP\Http`, see
+  [from PHP or native UI](plugins/fetch.md#from-php-or-native-ui); an
+  image decoding) suspends the fiber and lets the app draw and take events
+  until it resumes. Outside a fiber, `App::wait($until)` turns the run loop
+  until `$until()` is true, asking it again at least every 50 ms, so a
+  condition only time makes true ends in time. The fetch plugin's requests
+  are the page's and do not wait in PHP: a bound method that returns a
+  `Generator` streams each value a turn of the run loop apart. SQLite
+  (`Sqlite::open()`) is synchronous: a query runs to its end on the main
+  thread. `MyPHP\Process` runs a program without waiting (see
+  [processes](native.md#processes)).
 - `App::later($fn)` runs a function on the next turn of the run loop, and
   `App::after($seconds, $fn)` after a delay.
 

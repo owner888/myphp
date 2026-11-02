@@ -4,7 +4,10 @@
 // a display, under an Xvfb it starts. examples/counter-native as it is (it
 // adds no plugin), at its size and at one asked for; an app that fails as it
 // starts, reported with its output; -theme forcing the appearance, -data the
-// app's data apart from the user's.
+// app's data apart from the user's; a web page captured once what its calls
+// answered shows, -tree on it a warning; App::wait on a time and MyPHP\Http
+// in a running app on Linux; a run stopped or failing leaves no Xvfb or app
+// behind.
 declare(strict_types=1);
 
 namespace MyPHP\Tests;
@@ -87,14 +90,118 @@ App::run();
         [$code, , $err] = $run(["$tmp/where", '-theme', 'blue']);
         same(1, $code, 'a theme that is not light or dark fails');
         check(str_contains($err, 'is not light or dark'), 'saying so: ' . $err);
+
+        // A web page: captured once the reply to its call of a slow PHP method has been rendered (its background turns red);
+        // -tree saves the PNG alone, with a warning. The pixel at (0, 0) is read from the PNG's first row, which no filter changes.
+        mkdir("$tmp/page");
+        file_put_contents("$tmp/page/app.php", '<?php
+declare(strict_types=1);
+require ' . var_export("$root/src/autoload.php", true) . ';
+use MyPHP\{App, Channel, Ipc, Window, WindowOptions};
+final class Slow { public function color(): \Generator { yield Channel::wait(1.0); return "rgb(255, 0, 0)"; } }
+App::setName("Page");
+Ipc::bind(new Slow());
+App::whenReady(function () {
+    new Window(new WindowOptions(title: "Page", width: 200, height: 100, html: "<body style=\"margin:0;background:#fff\"><script>myphp.call(\"Slow.color\").then((c) => { document.body.style.background = c; });</script></body>"));
+});
+App::run();
+');
+        $first = function (string $path): ?array {
+            $b = (string)@file_get_contents($path);
+            if (strlen($b) < 33 || !str_starts_with($b, "\x89PNG")) { return null; }
+            $color = ord($b[25]); $idat = ''; $at = 8;
+            while ($at < strlen($b)) {
+                ['n' => $n] = unpack('Nn', $b, $at); $type = substr($b, $at + 4, 4);
+                if ($type === 'IDAT') { $idat .= substr($b, $at + 8, $n); }
+                $at += 12 + $n;
+            }
+            $raw = @gzuncompress($idat);
+            return $raw === false ? null : [ord($raw[1]), ord($raw[2]), ord($raw[3]), $color];
+        };
+        [$code, , $err] = $run(["$tmp/page", '-out', "$tmp/p.png", '-tree', "$tmp/p.json", '-timeout', '60']);
+        same(0, $code, "a web page with -tree: $err");
+        check(str_contains($err, 'has no tree of elements') && !file_exists("$tmp/p.json"), '-tree on a page warns and writes no tree: ' . $err);
+        same([255, 0, 0], array_slice($first("$tmp/p.png") ?? [], 0, 3), 'the page captured once the reply of its call was rendered');
+
+        // App::wait on a condition only time makes true returns in time on Linux too: its turn of the main loop waits 50 ms at most.
+        mkdir("$tmp/waits");
+        file_put_contents("$tmp/waits/app.php", '<?php
+declare(strict_types=1);
+require ' . var_export("$root/src/autoload.php", true) . ';
+use MyPHP\{App, Window, WindowOptions};
+use MyPHP\UI\{Content, Context};
+App::setName("Waits");
+App::whenReady(function () {
+    $t = microtime(true);
+    App::wait(fn() => microtime(true) - $t > 0.3);
+    new Window(new WindowOptions(title: "Waits", width: 200, height: 80, content: Content::view(fn(Context $c) => $c->key("waited")->text("waited"))));
+});
+App::run();
+');
+        [$code, , $err] = $run(["$tmp/waits", '-out', "$tmp/w.png", '-tree', "$tmp/w.json", '-timeout', '20']);
+        same(0, $code, "App::wait on a time: $err");
+        same('waited', $shown("$tmp/w.json")['waited'] ?? null, 'the window shows after the wait');
+
+        // MyPHP\Http in a fiber of a running app on Linux: GLib's main loop drives the transfer (CurlLoop), the window shows what came.
+        mkdir("$tmp/net");
+        file_put_contents("$tmp/net/repo.json", '{"stars": 42}');
+        [$base, $stop] = rangeServer("$tmp/net");
+        file_put_contents("$tmp/net/app.php", '<?php
+declare(strict_types=1);
+require ' . var_export("$root/src/autoload.php", true) . ';
+use MyPHP\{App, Http, Window, WindowOptions};
+use MyPHP\UI\{Content, Context};
+App::setName("Net");
+App::whenReady(function () {
+    App::go(function () {
+        $r = Http::get(' . var_export("$base/repo.json", true) . ');
+        $shown = $r->status . " " . $r->json()["stars"];
+        new Window(new WindowOptions(title: "Net", width: 200, height: 80, content: Content::view(fn(Context $c) => $c->key("got")->text($shown))));
+    });
+});
+App::run();
+');
+        try {
+            [$code, , $err] = $run(["$tmp/net", '-out', "$tmp/w.png", '-tree', "$tmp/w.json", '-timeout', '20']);
+        } finally {
+            $stop();
+        }
+        same(0, $code, "Http in a running app: $err");
+        same('200 42', $shown("$tmp/w.json")['got'] ?? null, 'the response came in the fiber, the app running');
+
+        // Stopped by a signal, or failing, it leaves neither the app nor Xvfb behind.
+        $children = function (int $pid): array { // the processes whose parent is $pid
+            $out = [];
+            foreach (glob('/proc/[0-9]*/stat') as $f) {
+                $st = (string)@file_get_contents($f);
+                if (preg_match('/^(\d+) \(.*\) (\S) (\d+)/s', $st, $m) === 1 && (int)$m[3] === $pid && $m[2] !== 'Z') { $out[] = (int)$m[1]; }
+            }
+            return $out;
+        };
+        mkdir("$tmp/sleepy");
+        file_put_contents("$tmp/sleepy/app.php", "<?php\nsleep(60);\n");
+        $p = proc_open([PHP_BINARY, "$root/bin/myphp", 'screenshot', "$tmp/sleepy", '-timeout', '60'], [0 => ['file', '/dev/null', 'r'], 1 => ['file', "$tmp/out", 'w'], 2 => ['file', "$tmp/err", 'w']], $pipes, $root, $env);
+        $pid = proc_get_status($p)['pid'];
+        for ($end = microtime(true) + 20; count($children($pid)) < 2 && microtime(true) < $end;) { usleep(50_000); }
+        $kids = $children($pid);
+        same(2, count($kids), 'the command runs Xvfb and the app');
+        proc_terminate($p, 15);
+        same(1, proc_close($p), 'SIGTERM fails the command');
+        usleep(200_000);
+        $left = array_values(array_filter($kids, fn(int $k) => is_dir("/proc/$k") && !str_contains((string)@file_get_contents("/proc/$k/stat"), ') Z ')));
+        same([], $left, 'and it ended them first: ' . file_get_contents("$tmp/err"));
+        array_map(fn(int $k) => posix_kill($k, 9), $left);
+        [$code, , $err] = $run(["$tmp/sleepy", '-timeout', '3']);
+        same(1, $code, 'an app that never listens fails the command');
+        check(str_contains($err, 'did not listen'), 'saying so: ' . $err);
     } finally {
-        foreach (["$tmp/broken/app.php", "$tmp/where/app.php", "$tmp/s.png", "$tmp/t.json", "$tmp/big.png", "$tmp/w.png", "$tmp/w.json", "$tmp/out", "$tmp/err"] as $f) { @unlink($f); }
+        foreach (["$tmp/broken/app.php", "$tmp/where/app.php", "$tmp/page/app.php", "$tmp/sleepy/app.php", "$tmp/waits/app.php", "$tmp/net/app.php", "$tmp/net/repo.json", "$tmp/p.png", "$tmp/p.json", "$tmp/s.png", "$tmp/t.json", "$tmp/big.png", "$tmp/w.png", "$tmp/w.json", "$tmp/out", "$tmp/err"] as $f) { @unlink($f); }
         if (is_dir("$tmp/data")) { // what the app and its toolkit wrote under -data
             $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator("$tmp/data", \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
             foreach ($it as $f) { $f->isDir() ? @rmdir((string)$f) : @unlink((string)$f); }
             @rmdir("$tmp/data");
         }
-        @rmdir("$tmp/broken"); @rmdir("$tmp/where");
+        @rmdir("$tmp/broken"); @rmdir("$tmp/where"); @rmdir("$tmp/page"); @rmdir("$tmp/sleepy"); @rmdir("$tmp/waits"); @rmdir("$tmp/net");
         @rmdir($tmp);
     }
 })();

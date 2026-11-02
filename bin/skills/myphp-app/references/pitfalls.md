@@ -49,6 +49,15 @@ disagree, the docs of the checkout win: it may have grown since.
 - **Primary and plain buttons differ by 2pt.** The primary has no
   border, so it is shorter; in a row of mixed buttons and fields,
   `alignItems(Node::STRETCH)` makes them one height.
+- **Choosing a row of new data.** `ListState::choose($row)` checks the
+  row against the count the list was last built with; right after the
+  data changes, set `$list->selected = $row` instead.
+- **An app that sets its own appearance.** `Theme::setSource()` called by
+  the app wins over `myphp screenshot -theme`: read the setting from your
+  own state so the screenshot run can start in either.
+- **Asserting sizes in headless tests.** `Headless` measures text as fixed
+  7×16 cells, so font sizes and exact text widths cannot be asserted
+  there; check them in a screenshot.
 - **Select and switch.** `$c->select($labels, $index)` binds an int
   index into an array of labels; `$c->switch($label, $on)` takes its
   label first.

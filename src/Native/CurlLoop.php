@@ -13,16 +13,18 @@ use MyPHP\App;
  * Transfers of libcurl the run loop drives as their sockets are ready, on
  * the main thread: one multi handle for the process, its sockets watched
  * by CFFileDescriptors of the main run loop (CURLMOPT_SOCKETFUNCTION; one
- * a socket number, kept: see $descriptors) and
- * its timeouts by timers (CURLMOPT_TIMERFUNCTION), so that nothing waits
- * and nothing is polled. Off macOS (a test's Linux) there is no run loop:
- * pump() drives it, curl_multi_poll and curl_multi_perform.
+ * a socket number, kept: see $descriptors), on Linux in a running app by
+ * GLib's fd sources of the main loop (g_unix_fd_add), and its timeouts by
+ * timers (CURLMOPT_TIMERFUNCTION), so that nothing waits and nothing is
+ * polled. On Linux without the app running (a test, a tool) there is no
+ * loop: pump() drives a multi handle of its own, curl_multi_poll and
+ * curl_multi_perform.
  *
  * waitUntil() waits for what a transfer brings: in a fiber of the app's, the
  * fiber waits (App::go), resumed once what it waits for came, looked at as
  * each socket's data is read; outside one, the run loop turns meanwhile.
  *
- * @internal Media\HttpBytes
+ * @internal Media\HttpBytes, MyPHP\Http
  */
 final class CurlLoop
 {
@@ -34,9 +36,14 @@ final class CurlLoop
     private const CF_READ = 1, CF_WRITE = 2;
 
     private static ?FFI $cf = null;
-    private static ?CData $multi = null;
-    /** @var array<int, Closure(int): void> what is told when each transfer ends, with its CURLcode, by its handle's address */
+    /** The multi handle the loop drives, and on Linux the one pump() drives while the app does not run. */
+    private static ?CData $multi = null, $pumped = null;
+    /** @var array<int, array{0: Closure(int): void, 1: CData}> what is told when each transfer ends, with its CURLcode, and its multi handle, by its handle's address */
     private static array $done = [];
+    /** @var array<int, int> GLib's source watching each socket (Linux), by the socket */
+    private static array $sources = [];
+    /** G_IO_IN, G_IO_OUT, G_IO_ERR, G_IO_HUP; CURL_CSELECT_ERR. */
+    private const G_IN = 1, G_OUT = 4, G_ERR = 8, G_HUP = 16, CSELECT_ERR = 4;
     /** @var array<int, int> what curl waits for of each socket it watches (CURL_POLL_*), by the socket */
     private static array $sockets = [];
     /**
@@ -52,36 +59,38 @@ final class CurlLoop
     /** @var list<array{0: Closure(): bool, 1: Fiber}> the fibers waiting, each for what it waits for */
     private static array $waiters = [];
 
-    /** Whether the run loop drives the transfers (macOS), else pump(). */
+    /** Whether the run loop drives the transfers (macOS; Linux's main loop in a running app), else pump(). */
     private static function driven(): bool
     {
-        return PHP_OS_FAMILY === 'Darwin';
+        return PHP_OS_FAMILY === 'Darwin' || App::running();
     }
 
+    /** The multi handle of transfers started now: the loop's, or pump()'s. */
     private static function multi(): CData
     {
+        if (!self::driven()) {
+            return self::$pumped ??= Curl::ffi()->curl_multi_init();
+        }
         if (self::$multi !== null) {
             return self::$multi;
         }
         $f = Curl::ffi();
         self::$multi = $f->curl_multi_init();
-        if (self::driven()) {
-            self::$holders = $f->new('struct { int (*socket)(void*, int, int, void*, void*); int (*timer)(void*, long, void*); }');
-            self::$holders->socket = static function ($easy, int $fd, int $what, $user, $socketp): int {
-                self::watch($fd, $what);
-                return 0;
-            };
-            self::$holders->timer = static function ($multi, int $ms, $user): int {
-                $id = ++self::$timer;
-                if ($ms >= 0) {
-                    $run = static function () use ($id): void { if (self::$timer === $id) { self::act(self::SOCKET_TIMEOUT, 0); } };
-                    $ms === 0 ? App::later($run) : App::after($ms / 1000, $run);
-                }
-                return 0;
-            };
-            $f->curl_multi_setopt(self::$multi, self::MOPT_SOCKETFUNCTION, self::$holders->socket);
-            $f->curl_multi_setopt(self::$multi, self::MOPT_TIMERFUNCTION, self::$holders->timer);
-        }
+        self::$holders = $f->new('struct { int (*socket)(void*, int, int, void*, void*); int (*timer)(void*, long, void*); }');
+        self::$holders->socket = static function ($easy, int $fd, int $what, $user, $socketp): int {
+            self::watch($fd, $what);
+            return 0;
+        };
+        self::$holders->timer = static function ($multi, int $ms, $user): int {
+            $id = ++self::$timer;
+            if ($ms >= 0) {
+                $run = static function () use ($id): void { if (self::$timer === $id) { self::act(self::SOCKET_TIMEOUT, 0); } };
+                $ms === 0 ? App::later($run) : App::after($ms / 1000, $run);
+            }
+            return 0;
+        };
+        $f->curl_multi_setopt(self::$multi, self::MOPT_SOCKETFUNCTION, self::$holders->socket);
+        $f->curl_multi_setopt(self::$multi, self::MOPT_TIMERFUNCTION, self::$holders->timer);
         return self::$multi;
     }
 
@@ -89,22 +98,27 @@ final class CurlLoop
     public static function start(CData $easy, Closure $done): void
     {
         $m = self::multi();
-        self::$done[Mem::addr($easy)] = $done;
-        Curl::ffi()->curl_multi_add_handle($m, $easy); // the timer callback starts it
+        self::$done[Mem::addr($easy)] = [$done, $m];
+        Curl::ffi()->curl_multi_add_handle($m, $easy); // the timer callback starts it, or pump()
     }
 
     /** Stops the transfer of $easy, untold; the caller cleans the handle up. */
     public static function stop(CData $easy): void
     {
         if (isset(self::$done[$key = Mem::addr($easy)])) {
+            $m = self::$done[$key][1];
             unset(self::$done[$key]);
-            Curl::ffi()->curl_multi_remove_handle(self::multi(), $easy);
+            Curl::ffi()->curl_multi_remove_handle($m, $easy);
         }
     }
 
     /** Watches socket $fd for what curl waits for ($what, CURL_POLL_*), or lets it go. */
     private static function watch(int $fd, int $what): void
     {
+        if (PHP_OS_FAMILY !== 'Darwin') {
+            self::watchGlib($fd, $what);
+            return;
+        }
         $cf = self::cf();
         if ($what === self::POLL_REMOVE) {
             if (isset(self::$descriptors[$fd])) { $cf->CFFileDescriptorDisableCallBacks(self::$descriptors[$fd], self::CF_READ | self::CF_WRITE); }
@@ -120,6 +134,39 @@ final class CurlLoop
         }
         self::$sockets[$fd] = $what;
         self::arm($fd);
+    }
+
+    private static ?CData $glibCallback = null;
+
+    /**
+     * Watches socket $fd with a source of GLib's main loop for what curl
+     * waits for, in place of the one before, or lets it go (Linux). The
+     * source fires while the socket is ready, as poll() tells: no draining.
+     */
+    private static function watchGlib(int $fd, int $what): void
+    {
+        $g = \MyPHP\Platform\Linux\Gtk::ffi();
+        if (isset(self::$sources[$fd])) {
+            $g->g_source_remove(self::$sources[$fd]);
+            unset(self::$sources[$fd]);
+        }
+        if ($what === self::POLL_REMOVE) {
+            unset(self::$sockets[$fd]);
+            return;
+        }
+        self::$sockets[$fd] = $what;
+        if (self::$glibCallback === null) {
+            $h = $g->new('HFd', false); // for the process
+            $h->fn = static function (int $fd, int $cond, $data): int {
+                $id = self::$sources[$fd] ?? null;
+                if ($id === null) { return 0; }
+                self::act($fd, (($cond & (self::G_IN | self::G_HUP)) ? self::CSELECT_IN : 0) | (($cond & self::G_OUT) ? self::CSELECT_OUT : 0) | (($cond & self::G_ERR) ? self::CSELECT_ERR : 0));
+                return (self::$sources[$fd] ?? null) === $id ? 1 : 0; // G_SOURCE_CONTINUE, unless curl let it go or watches it anew
+            };
+            self::$glibCallback = $h;
+        }
+        $cond = (($what & self::POLL_IN) ? self::G_IN | self::G_HUP | self::G_ERR : 0) | (($what & self::POLL_OUT) ? self::G_OUT | self::G_ERR : 0);
+        self::$sources[$fd] = $g->g_unix_fd_add_full(0, $fd, $cond, self::$glibCallback->fn, null, null); // G_PRIORITY_DEFAULT
     }
 
     /** Enables the callbacks of $fd's descriptor for what curl waits for: they fire once each. */
@@ -213,9 +260,9 @@ final class CurlLoop
     {
         $f = Curl::ffi();
         $running = $f->new('int');
-        $f->curl_multi_socket_action(self::multi(), $fd, $events, FFI::addr($running));
+        $f->curl_multi_socket_action(self::$multi, $fd, $events, FFI::addr($running));
         self::$running = $running->cdata;
-        self::finished();
+        self::finished(self::$multi);
         self::wake();
     }
 
@@ -253,19 +300,19 @@ final class CurlLoop
         }
     }
 
-    /** Tells the transfers that ended, each once it left the loop. */
-    private static function finished(): void
+    /** Tells the transfers of multi handle $m that ended, each once it left it. */
+    private static function finished(CData $m): void
     {
         $f = Curl::ffi();
         $left = $f->new('int');
         $ended = [];
-        while (($msg = $f->curl_multi_info_read(self::multi(), FFI::addr($left))) !== null && !FFI::isNull($msg)) {
+        while (($msg = $f->curl_multi_info_read($m, FFI::addr($left))) !== null && !FFI::isNull($msg)) {
             if ($msg->msg === Curl::MSG_DONE) { $ended[] = [$msg->easy_handle, $msg->data->result]; }
         }
         foreach ($ended as [$easy, $result]) {
-            $fn = self::$done[$key = Mem::addr($easy)] ?? null;
+            $fn = self::$done[$key = Mem::addr($easy)][0] ?? null;
             unset(self::$done[$key]);
-            $f->curl_multi_remove_handle(self::multi(), $easy);
+            $f->curl_multi_remove_handle($m, $easy);
             $fn?->__invoke($result);
         }
     }
@@ -283,9 +330,14 @@ final class CurlLoop
         self::$later[] = [microtime(true) + $seconds, $fn];
     }
 
-    /** Drives the transfers for up to $seconds where no run loop does (off macOS): waits for their sockets, then reads and writes. */
+    /** Drives the transfers for up to $seconds where no run loop does (Linux without the app running): waits for their sockets, then reads and writes; else turns the loop that drives them. */
     public static function pump(float $seconds): void
     {
+        if (PHP_OS_FAMILY !== 'Darwin' && App::running()) {
+            $at = microtime(true) + $seconds;
+            App::wait(fn(): bool => microtime(true) >= $at);
+            return;
+        }
         if (self::driven()) {
             ObjC::boot(['Foundation']); // before anything booted it: a tool's wait for yt-dlp, the first thing it does
             $until = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', $seconds);
@@ -298,11 +350,12 @@ final class CurlLoop
         }
         $f = Curl::ffi();
         $n = $f->new('int');
-        $f->curl_multi_poll(self::multi(), null, 0, (int)($seconds * 1000), FFI::addr($n));
+        $m = self::multi();
+        $f->curl_multi_poll($m, null, 0, (int)($seconds * 1000), FFI::addr($n));
         $running = $f->new('int');
-        $f->curl_multi_perform(self::multi(), FFI::addr($running));
+        $f->curl_multi_perform($m, FFI::addr($running));
         self::$running = $running->cdata;
-        self::finished();
+        self::finished($m);
     }
 
     /**

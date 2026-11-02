@@ -258,7 +258,9 @@
     range.startContainer.parentElement?.scrollIntoView({ block: "center", inline: "nearest" });
     return { matches: n, active: findState.active + 1 };
   };
-  Object.defineProperty(window, "__myphp", { value: Object.freeze({ find, stopFind }) });
+  // calls(): the calls of PHP methods waiting for their reply, those streaming through a channel left out, which `myphp screenshot` waits for.
+  const calls = () => [...pending.values()].filter((p) => p.chans.length === 0).length;
+  Object.defineProperty(window, "__myphp", { value: Object.freeze({ find, stopFind, calls }) });
   window.myphp.on("myphp:title-bar", (t) => setVars({ "--myphp-titlebar-height": `${t.height}px`, "--myphp-titlebar-inset-left": `${t.left}px`, "--myphp-titlebar-inset-right": `${t.right}px` }));
   window.myphp.on("myphp:preferences", (p) => setVars({ "--myphp-accent": p.accent, "--myphp-text-scale": String(p.textScale) }));
   // The page's theme color (Page::themeColor, mygo's theme-color.ts): the content of the first <meta name="theme-color"> in the head whose

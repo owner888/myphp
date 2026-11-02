@@ -48,6 +48,9 @@ final class EchoService
     same(['x', 5, [6, 7]], $m->invokeArgs($svc, $args), 'the call');
     same($ctx, $svc->seen, 'the method sees the context');
     same([$ctx, 'y'], Ipc::arguments($m, ['y'], $ctx, fn(int $id) => throw new \LogicException('no channel')), 'defaults for what the page leaves out');
+    $args = Ipc::arguments($m, ['y', null], $ctx, fn(int $id) => throw new \LogicException('no channel'));
+    same([$ctx, 'y', 2], $args, 'a null for an optional parameter that takes none (an argument the client\'s caller left out, undefined in JSON) is its default');
+    same(['y', 2, []], $m->invokeArgs($svc, $args), 'and the call goes through, no TypeError');
 
     // The context ends once: what waits for it runs, at once when it already ended.
     $runs = [];

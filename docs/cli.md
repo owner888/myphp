@@ -116,7 +116,10 @@ Lets a coding agent, or a script, see an app: it runs the app of the
 project in `dir` (default `.`, its `entry` from the configuration) once,
 from its files, or the script `file.php` as the entry of the project in
 its folder (`myphp screenshot examples/counter-native/main.php`), waits until its window shows and has settled (the
-automation plugin's `idle`), saves the window's capture as a PNG
+automation plugin's `idle`: native UI asks for no frame; a web page has
+loaded, and then the calls of PHP methods it made were answered and it drew
+two frames more, twice in a row, so what it renders from their replies
+shows), saves the window's capture as a PNG
 (default `<dir>/.myphp/screenshot.png`), prints the roles, labels and keys
 of the elements it shows, and quits the app as Quit does (SIGTERM). The
 app needs no change: run from its project in development with
@@ -124,17 +127,22 @@ app needs no change: run from its project in development with
 plugin](automation.md#turning-it-on), here on a socket of its own.
 
 `-tree` writes the elements as JSON too, the `tree` request's answer, for
-agents that read no images; a window showing a web page has none. On Linux
+agents that read no images. A window showing a web page has none: the PNG
+is saved alone, with a warning, and the page is read with the automation
+plugin's `eval` (docs/automation.md). On Linux
 without a display (`DISPLAY` and `WAYLAND_DISPLAY` unset), the app runs on
 an X server the command starts, Xvfb (`apt install xvfb`). A frontend shows
 from `frontendDist`, built: `devCommand` and `devUrl` are left alone. It
 exits with status 1, saying why, when the app exits before it is captured
 (its output is shown), shows no window, or does not settle in time.
+Stopped by a signal (Ctrl-C, the SIGTERM of a tool's timeout), it ends the
+app and its Xvfb first, as on a failure; only a SIGKILL leaves them
+running.
 
 | Flag | |
 |---|---|
 | `-out file` | the PNG (default `<dir>/.myphp/screenshot.png`) |
-| `-tree file` | write the window's elements as JSON too |
+| `-tree file` | write the window's elements as JSON too (a web page: none, a warning) |
 | `-window N` | the window, by the ID the automation plugin lists (default: the focused window, else the first that shows) |
 | `-size WxH` | resize the window's content to W×H points before capturing |
 | `-theme light\|dark` | show the app in that appearance, whatever the system's |
@@ -142,9 +150,15 @@ exits with status 1, saying why, when the app exits before it is captured
 | `-timeout s` | seconds to wait for the window and for it to settle (default 30) |
 
 `-theme` sets `MYPHP_THEME`, which `App::run` applies as
-`Theme::setSource(ThemeSource::Light)` or `Dark` would, before the app's
-own code runs; an app that fixes its UI theme with `App::setTheme()` keeps
-it. `-data` gives the app a data directory of its own, so that what it
+`Theme::setSource(ThemeSource::Light)` or `Dark` would, as it starts: over
+a `Theme::setSource()` the app called before `App::run()`, but under one
+it calls later, from `whenReady()` or a saved preference applied then,
+which wins, as it would for the user. An app that fixes its UI theme with
+`App::setTheme()` keeps it too. To capture such an app in the other
+appearance, have it read its preference from its data and give it one with
+`-data`. On Linux the appearance reaches GTK and WebKitGTK as it does
+outside the command (`gtk-application-prefer-dark-theme`), so a web page's
+`prefers-color-scheme` follows `-theme`. `-data` gives the app a data directory of its own, so that what it
 saves as it starts, or a window's state, goes there and not into the
 user's: on Linux the command sets `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
 `XDG_DATA_HOME` and `XDG_STATE_HOME` to `dir/config`, `dir/cache`,

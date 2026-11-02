@@ -81,6 +81,26 @@ there. `wrap($width)` wraps a row onto more lines, which `wrapReverse()`
 stacks upward, and `alignContent()` places those lines (as `justify()`
 places children, or `STRETCH`).
 
+`$width` is the width the row is measured at before the layout knows its
+own (mygo's `Wrap()` takes none: its layout measures the lines at the
+width it gives the row). Pass `0`, the usual choice: the row is laid out
+on one line, then its lines are made at the width it got and its height
+follows them, in the same frame. A width of your own, as the row's width
+last frame (`$c->runtime->widthOf($id)`), only measures its height ahead;
+either way its lines are made at the width it shows at. As a wrapping text,
+a row that wraps asks for the width of its children on one line, its
+max-content width (CSS's), so what shares the room with it, as a split
+view's panes, shrinks as it would beside that, and its lines then fit what
+it got:
+
+```php
+$c->row(0, 16)->wrap(0);
+  $c->text('★ 49,120 stars')->shrink(0);
+  $c->text('⑂ 5,457 forks')->shrink(0);
+  $c->text('Updated 2026-10-01')->shrink(0);
+$c->end();
+```
+
 `BASELINE` lines up the first lines of text of a row's children, as a large
 price beside its small unit, and the row is as high as that takes. The
 baseline of a box is that of its first child (in a row, of its first child

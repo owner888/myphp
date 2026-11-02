@@ -1952,7 +1952,8 @@ screenshot [flags] [dir | file.php]
 
 Runs the app of the project in dir (default .) once, from its files, or
 the script file.php as the entry of the project in its folder, and
-saves a PNG of its window once it is drawn and has settled, so that a
+saves a PNG of its window once it is drawn and has settled (a web page:
+loaded, its calls of PHP methods answered, two frames drawn), so that a
 coding agent or a script sees what the app shows; then quits it. The app
 needs no change: run from its project in development with MYPHP_AUTOMATION
 set, it is driven by the automation plugin (docs/automation.md), here on a
@@ -1965,11 +1966,13 @@ runs on an X server of its own, Xvfb, which this starts. A frontend shows
 from frontendDist, built: devCommand and devUrl are left alone.
 
 It exits with status 1 when the app exits before it is captured (its
-output is shown), shows no window, or does not settle in time.
+output is shown), shows no window, or does not settle in time; stopped by
+a signal (Ctrl-C, a timeout's SIGTERM), it ends the app and Xvfb first.
 
 Flags:
   -out file      the PNG (default <dir>/.myphp/screenshot.png)
-  -tree file     write the window's elements as JSON too
+  -tree file     write the window's elements as JSON too (a web page has
+                 none: its PNG alone, with a warning)
   -window N      the window, by the ID the automation plugin lists (default:
                  the focused window, else the first that shows)
   -size WxH      resize the window's content to W×H points before capturing
@@ -2026,6 +2029,14 @@ function screenshot(array $args): void
         $env['MYPHP_FRONTEND_DIST'] = path($dir, $c['frontendDist']);
     }
     $xvfb = $app = null;
+    // Stopped by a signal (Ctrl-C, a tool's timeout), it fails as on an error, so that the finally below ends the app and
+    // Xvfb rather than leave them running; SIGKILL alone cannot be caught.
+    if (function_exists('pcntl_async_signals')) {
+        pcntl_async_signals(true);
+        foreach ([SIGTERM, SIGINT, SIGHUP] as $sig) {
+            pcntl_signal($sig, fn(int $n) => fail("stopped by signal $n"));
+        }
+    }
     try {
         if (PHP_OS_FAMILY === 'Linux' && (string)getenv('DISPLAY') === '' && (string)getenv('WAYLAND_DISPLAY') === '') {
             [$xvfb, $env['DISPLAY']] = startXvfb($tmp, $deadline);
@@ -2036,11 +2047,14 @@ function screenshot(array $args): void
         $s = new ScreenshotSession($app, $log, $env['MYPHP_AUTOMATION'], $deadline, (float)$timeout);
         $s->connect();
         $w = $s->window((int)$want);
-        $treeOut === null || $w['kind'] === 'content' || fail("window {$w['id']} shows a web page, which has no tree of elements: read it with eval (docs/automation.md)");
+        if ($treeOut !== null && $w['kind'] !== 'content') {
+            warnf("window {$w['id']} shows a web page, which has no tree of elements: saving its PNG alone; read the page with eval (docs/automation.md)");
+            $treeOut = null;
+        }
         if ($wh !== null) {
             $s->resize($w['id'], ...$wh);
         }
-        [$png, $pw, $ph] = $s->capture($w['id'], $wh);
+        [$png, $pw, $ph] = $s->capture($w['id'], $wh, $w['kind'] !== 'content');
         $tree = $w['kind'] === 'content' ? $s->call('tree', ['window' => $w['id']]) : null;
         is_dir(dirname($out)) || @mkdir(dirname($out), 0755, true) || fail('cannot create ' . dirname($out));
         file_put_contents($out, $png) !== false || fail("cannot write $out");
@@ -2072,6 +2086,9 @@ function screenshot(array $args): void
         }
         array_map('unlink', glob("$tmp/*")); // the socket, the logs
         @rmdir($tmp);
+        if (function_exists('pcntl_signal')) {
+            foreach ([SIGTERM, SIGINT, SIGHUP] as $sig) { pcntl_signal($sig, SIG_DFL); }
+        }
     }
 }
 
@@ -2254,16 +2271,23 @@ final class ScreenshotSession
 
     /**
      * A PNG of the window once it has settled, and its size in pixels;
-     * with $size, once the frame captured is of that size in points.
+     * with $size, once the frame captured is of that size in points. A
+     * $page settles once it loaded (idle, mygo's) and then its calls of PHP
+     * methods were answered and it drew two frames more, twice in a row: what
+     * it renders from their replies shows.
      * @return array{0: string, 1: int, 2: int}
      */
-    public function capture(int $id, ?array $size): array
+    public function capture(int $id, ?array $size, bool $page = false): array
     {
         while (true) {
             $late = microtime(true) >= $this->deadline;
             $left = (int)(($this->deadline - microtime(true)) * 1000);
             $left > 0 && !isset($this->call('idle', ['window' => $id, 'timeout' => $left], ['timeout'])['error'])
                 || fail("window $id still draws after {$this->timeout} s (an animation that never ends?)");
+            if ($page) {
+                $waiting = $this->call('eval', ['window' => $id, 'script' => self::settle($left)])['value'] ?? 0;
+                $waiting === 0 || warnf("window $id: $waiting calls of PHP methods still unanswered after {$this->timeout} s; captured as it is");
+            }
             $r = $this->call('capture', ['window' => $id]);
             $png = base64_decode($r['png'], true);
             ($png !== false && $r['width'] > 0) || fail("capture: window $id gave no image");
@@ -2273,6 +2297,16 @@ final class ScreenshotSession
             !$late || fail("window $id did not draw at {$size[0]}x{$size[1]} in {$this->timeout} s: its frame is {$r['width']}×{$r['height']} pixels");
             usleep(50_000);
         }
+    }
+
+    /** The script that waits, for up to $ms milliseconds, until the page has no call of a PHP method waiting for its reply over two frames, twice in a row; it returns how many still wait. */
+    private static function settle(int $ms): string
+    {
+        return 'const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));'
+            . ' const calls = () => window.__myphp?.calls?.() ?? 0;'
+            . " const end = Date.now() + $ms; let quiet = 0;"
+            . ' while (quiet < 2 && Date.now() < end) { await frames(); quiet = calls() === 0 ? quiet + 1 : 0; }'
+            . ' return calls();';
     }
 
     /** Asks the app to quit, as Quit (SIGTERM), and waits for it; kills it after 5 seconds. */

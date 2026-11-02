@@ -5,6 +5,9 @@ use MyPHP\{App, Event, Ipc, Window, WindowOptions};
 
 require __DIR__ . '/boot.php';
 
+// The name first: App::path() names the app's data folder after it, and a service that keeps its data there finds it as it is made.
+App::setName({{php:name}});
+
 /** SystemInfo describes the machine the app runs on. */
 final class SystemInfo
 {
@@ -32,7 +35,6 @@ $tick = new Event('tick', 'int');
 
 Ipc::bind(new Greeter());
 
-App::setName({{php:name}});
 App::whenReady(function () use ($tick) {
     $win = new Window(new WindowOptions(
         title: {{php:name}},

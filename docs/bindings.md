@@ -128,6 +128,16 @@ export const Notes = {
 Parameters keep their PHP names, and doc comments become TSDoc. The client
 imports `myphp-runtime`, which the frontend depends on.
 
+A parameter with a default is optional in the client: `string $date = ''`
+is `date?: string`. JSON has no `undefined`, so an argument left out
+arrives as `null` when one after it is given, or as the client always
+passes every parameter: PHP then takes the parameter's default when its
+type takes no `null` (`''` for `$date`), as mygo's Go side takes the zero
+value of a parameter left out or `null`. A nullable parameter
+(`?string $date = 'today'`) takes the `null`: give it `null` as its
+default, or test for `null` in the method, so that leaving it out and
+passing `null` mean the same.
+
 To generate the client, `myphp generate` runs the app with
 `MYPHP_GENERATE` set: `App::run()` then writes the client and returns
 without opening a window. So the script runs up to `App::run()`; keep work

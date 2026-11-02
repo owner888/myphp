@@ -217,14 +217,18 @@ its own.
 The view reads your state on the main thread, and PHP runs the app on one
 thread. Work that waits, as a download, runs in a fiber of its own with
 `App::go()`, which lets the app draw and take events while the fiber
-waits. `Window::update()` runs a function that changes the state and then
-draws a new frame:
+waits: an HTTP request with `MyPHP\Http` (see
+[from PHP or native UI](../plugins/fetch.md#from-php-or-native-ui)),
+`App::wait()`. A SQLite query does not wait in a fiber:
+it is synchronous (see [SQLite](../plugins/sqlite.md#from-php-or-native-ui)).
+`Window::update()` runs a function that changes the state and then draws a
+new frame:
 
 <!-- no-test -->
 ```php
 $win = new Window(new WindowOptions(content: Content::view($view)));
 App::go(function () use ($win, $app) {
-    $items = fetchItems(); // waits in the fiber, as the Fetch plugin does
+    $items = Http::get('https://example.com/items.json')->json(); // waits in the fiber, the app going on (MyPHP\Http)
     $win->update(function () use ($app, $items) { $app->items = $items; });
 });
 ```

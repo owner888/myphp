@@ -170,6 +170,20 @@ waits for the release, so a drag of the choice keeps it.
 for work that follows the choice, as a sum of the rows chosen, to wait
 until it ends. A list cannot both `dragSelect` and `reorder`.
 
+To choose a row from your code, set `selected` (mygo's way: the list
+shows it as it is next built, whatever rows it had before), or call
+`choose($row)`, which also brings the row into view and, with a
+`selection`, chooses it alone. `choose()` clamps `$row` to the rows the
+list had when it was last built, so right after you give it new rows (the
+results of a search that just came) it would drop a row past the old
+count: set `selected` then, and `scrollTo()` it if it must show.
+
+<!-- no-test -->
+```php
+$app->results = $found;          // new rows; the list was built with none
+$app->list->selected = 0;        // chosen as the list is next built
+```
+
 `extendTo($row)` chooses the rows from the one Shift extends from to
 `$row`, as a Shift-click on it does, for keys of your own, as one that
 extends the choice to the last row:

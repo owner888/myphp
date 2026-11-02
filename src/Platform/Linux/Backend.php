@@ -103,9 +103,12 @@ final class Backend implements Platform\Backend
         Gtk::timeout($seconds, $fn);
     }
 
+    /** One turn of the main loop, waiting 50 ms at most for an event, as the Mac's (nextEventMatchingMask:untilDate:): App::wait's condition is asked again then, also one that only time makes true. */
     public function step(): void
     {
+        $key = Gtk::timeout(0.05, static function (): void {}); // a source that wakes the iteration
         Gtk::ffi()->g_main_context_iteration(null, 1);
+        Gtk::cancel($key);
     }
 
     public function app(): Platform\AppController

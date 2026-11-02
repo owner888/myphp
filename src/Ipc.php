@@ -162,7 +162,10 @@ final class Ipc
     /**
      * @internal the arguments of a call of $m: the page's, in order, with a
      * Channel made for each Channel parameter from the id the page passed,
-     * and $ctx for a CallContext parameter, for which the page passes none
+     * and $ctx for a CallContext parameter, for which the page passes none;
+     * a null for an optional parameter that takes none is its default (an
+     * argument the generated client's caller left out), and the parameters
+     * after the last argument take theirs
      * @param list<mixed> $args
      * @param \Closure(int): Channel $channel
      * @return list<mixed>
@@ -183,6 +186,12 @@ final class Ipc
                 $j = count($args);
             } elseif ($j < count($args)) {
                 $v = $args[$j++];
+                if ($v === null && $p->isDefaultValueAvailable() && $pt !== null && !$pt->allowsNull()) {
+                    // An optional argument the page left out comes as null (JSON has no undefined): it takes its default, as mygo's
+                    // takes the zero value for a null or a missing argument.
+                    $out[] = $p->getDefaultValue();
+                    continue;
+                }
                 // A backed enum comes as its value, as it goes (mygo decodes typed constants so): one not among its cases fails the call.
                 $out[] = $pt instanceof ReflectionNamedType && !$pt->isBuiltin() && is_subclass_of($type, \BackedEnum::class) && (is_int($v) || is_string($v)) ? $type::from($v) : $v;
             } else {

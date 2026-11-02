@@ -3536,10 +3536,9 @@ final class Context
         $this->row(0, 0, $width <= 0 && $parent->dir === Node::ROW ? 1 : 0); // 0: fills what the parent has across (a column stretches it; a row needs it to grow)
           $n = $this->input($state, $this->texts()->get('search'), $width, $size)->inset($pad + $glass + $gap - Runtime::FIELD_INSET, $state->text === '' ? $pad - Runtime::FIELD_INSET : $pad + $clear + $gap - Runtime::FIELD_INSET);
           $n->search = true;
-          $w = $width > 0 ? $width : ($this->runtime?->rectOf($n->id)[2] ?? 0.0); // as laid out last frame, for the clear button's place
           $this->icon(self::magnifier(), $glass, $t->textMuted)->at($pad, ($n->fh - $glass) / 2);
           if ($state->text !== '') { // the button clearing it: a disc in the muted color at half, with a cross in the background's
-              $x = $this->column(0, 0, 0, $t->textMuted)->radius($clear / 2)->size($clear, $clear)->at($w - $pad - $clear, ($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
+              $x = $this->column(0, 0, 0, $t->textMuted)->radius($clear / 2)->size($clear, $clear)->absolute()->right($pad)->top(($n->fh - $clear) / 2)->cursor(Cursor::Pointer)->role(Role::BUTTON)->label($this->texts()->get('clear'))->keepFocus()
                   ->draw(function (Painter $p, array $r) {
                       [$x, $y, $w, $h] = $r; $k = $w * 0.3; $c = $p->theme()->background; $list = $p->displayList();
                       $list->line($x + $k, $y + $k, $x + $w - $k, $y + $h - $k, $c, 1.0, 1.5);

@@ -8087,6 +8087,10 @@ through it.
   `Context::list` gives the list's own text style the accent's text color
   while a chosen row builds, and a chosen cell's box takes it before its
   content.
+- `App::wait()` before the app runs (a test's) turned on macOS only once
+  NSApp existed; `Darwin\App::step` now runs the NSRunLoop alone until then,
+  where `App::after`'s performs and CurlLoop's timers fire, as Linux's
+  GLib loop does.
 - `myphp screenshot file.php` runs a script as the entry of the project in
   its folder, as the examples' `main.php`, which name no config.
 - `-theme light|dark` sets `MYPHP_THEME`, which `App::run` applies with
@@ -8131,6 +8135,51 @@ through it.
   and the Mac's menu do. `byLabel()` searched every node's `label()`
   before any text; it now goes in tree order with the name a field gives
   its control, as mygo's `Tester.Find` over the runtime's labels.
+
+## What three harder apps turned up
+
+- A split view's second pane with a wrapping text, or a `wrap(0)` row,
+  drew 60 frames a second forever, and the text overflowed its padding.
+  The second layout pass (`Layout::wrapTexts`) measured a wrapped text as
+  wide as the width it wrapped at, and a wrapping row as its widest line,
+  so the panes' flex base sizes changed between the passes: the row's
+  shrink, weighted by them, gave the pane another width than the one it
+  wrapped at (348 then 317 points), `Runtime::record` saw a wrap width
+  that was not the node's and asked for a frame, and the next frame did
+  the same. As mygo's intrinsic sizes (`leafWidths`, `measureIntrinsic`
+  with max-content), a wrapped text keeps the width it asks unwrapped and
+  a wrapping row the width of its children on one line; only their
+  heights follow their lines, so the second pass gives them the first's
+  widths. A split's first pane gives way to a wide second's content as in
+  mygo (CSS's shrink by base size).
+- A search field's clear button was placed `at()` the field's width last
+  frame, wrong on the first frame and after a resize, with no frame to
+  correct it; it is placed with `absolute()->right()` from this frame's
+  layout.
+- A page left out an optional argument (`date?` of `string $date = ''`):
+  JSON turned `undefined` into `null` and PHP threw a TypeError. Mygo's Go
+  side takes the zero value for `null`; `Ipc::arguments` gives the
+  parameter's default for a `null` when its type takes none.
+- Linux: `Theme::setSource()` only flagged the app dark, so GTK's widgets
+  and WebKitGTK's `prefers-color-scheme` stayed light. As mygo's linux
+  theme, it sets `gtk-application-prefer-dark-theme` (the portal's color
+  scheme for System), and for Light takes a "-dark" theme's light variant.
+- Linux: `App::wait()` on a condition only time makes true blocked: a
+  turn of the main loop (`g_main_context_iteration(…, TRUE)`) waits for an
+  event that never comes. `Backend::step` adds a 50 ms timeout source
+  first, the Mac's `nextEventMatchingMask:untilDate:` wait.
+- Linux: `CurlLoop` drove transfers only on the Mac's run loop and in
+  `pump()`, so a request in a running app (the player's web APIs, and
+  `MyPHP\Http`, made public now) never moved. In a running app on Linux
+  its sockets are GLib fd sources (`g_unix_fd_add_full`, level-triggered:
+  no draining) and its timeouts the main loop's timers; without the app,
+  `pump()` drives a multi handle of its own.
+- `myphp screenshot`: a SIGTERM (a tool's timeout) killed the command
+  without its `finally`, leaving Xvfb and the app running; signals now
+  fail the run as an error does. A web page was captured as soon as it
+  loaded, before what its calls of PHP fetched rendered; it is now
+  captured once those calls are answered and two frames drawn
+  (`window.__myphp.calls()` in bridge.js).
 
 ## Open items
 

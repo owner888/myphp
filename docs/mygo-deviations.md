@@ -333,6 +333,16 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `Channel::wait()` between them while nothing came.
   - Why: one thread (the developer's choice of the mechanism).
 
+- **HTTP from PHP** (v1.152)
+  - mygo: a Go app, its native UI too, makes requests with Go's
+    `net/http` in a goroutine; the plugin has no Go-side API.
+  - myphp: `MyPHP\Http::get()` / `request()`, returning an
+    `HttpResponse` (status, body, headers, `ok()`, `json()`): libcurl's,
+    driven by the run loop (`Native\CurlLoop`), suspending a fiber of
+    `App::go()` while it waits, the run loop turning outside one.
+  - Why: PHP has neither goroutines nor a non-blocking HTTP client of its
+    own; native UI needs one that leaves the app drawing.
+
 ## File watches
 
 - **Waiting** (v0.93)
@@ -625,6 +635,13 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     leave a server it started behind; macOS only, no WebView2 origins.
     The web template loads "/".
   - Why: myphp's names; PHP files are not compiled into anything.
+- **Arguments left out** (v1.152)
+  - mygo: a missing argument, or a `null`, is the parameter's zero value.
+  - myphp: a missing argument takes the parameter's default; a `null`
+    (an optional argument the client's caller left out: JSON has no
+    `undefined`) takes it too when the type takes no `null`; Go has no
+    defaults, PHP no zero values.
+  - Why: PHP's parameters have defaults where Go's have zero values.
 - **Trusted pages** (v1.02)
   - mygo: trust is decided as a page's navigation commits;
     `PageOptions.TrustedOrigins`.
@@ -1476,7 +1493,17 @@ Format: **area — short name** (version found), then mygo / myphp / why.
 
 - **Two layouts a frame where text wraps** (see Text wraps at the room it
   has, v0.81): mygo finds a text's height at its width as it lays out;
-  myphp lays out again once the texts that need it wrap.
+  myphp lays out again once the texts that need it wrap. The second
+  layout gives them the widths of the first: a wrapped text, and a row
+  that wraps, ask for their max-content width as mygo's intrinsic sizes
+  do, their height alone following their lines.
+- **A row's wrap width** (v1.152)
+  - mygo: `Wrap()` takes no width: the layout measures the lines at the
+    width it gives the row.
+  - myphp: `wrap($width)` takes the width the row is measured at before
+    its own is known (0: on one line, then wrapped at the width it got in
+    the second layout).
+  - Why: the two layouts above; the first knows no width yet.
 
 ## Wide colors (v1.25)
 
@@ -2338,6 +2365,12 @@ Format: **area — short name** (version found), then mygo / myphp / why.
     `XDG_CACHE_HOME`, `XDG_DATA_HOME` and `XDG_STATE_HOME` under it.
   - Why: coding agents see the app they wrote from the command line, in
     either appearance, without touching the user's data.
+  - A web page is captured once `idle` (mygo's: loaded, answering a
+    script) and then its calls of PHP methods are answered and two frames
+    drawn, twice in a row (`window.__myphp.calls()`, the calls waiting
+    without a channel), so that what renders from their replies shows;
+    `-tree` on a page saves the PNG alone with a warning; SIGTERM, SIGINT
+    and SIGHUP end the app and Xvfb before the command exits.
 - **Serving**
   - mygo: a goroutine a connection, each request served as it comes.
   - myphp: the socket polled on the run loop every 5 ms; `idle` waits

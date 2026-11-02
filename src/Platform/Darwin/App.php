@@ -150,8 +150,13 @@ final class App implements Platform\AppController
     /** NSRunLoop alone does not dispatch AppKit's events (NSApp's run does), so pull and send them here, as a modal session would. */
     public function step(): void
     {
-        $ns = $this->ns();
         $date = ObjC::msg('p:d', ObjC::cls('NSDate'), 'dateWithTimeIntervalSinceNow:', 0.05);
+        if ($this->ns === null) { // before the app runs (a test's App::wait): the run loop's timers and performs, with no events to pull
+            ObjC::boot(['Foundation']);
+            ObjC::msg('b:pp', ObjC::msg('p:', ObjC::cls('NSRunLoop'), 'currentRunLoop'), 'runMode:beforeDate:', ObjC::str('kCFRunLoopDefaultMode'), $date);
+            return;
+        }
+        $ns = $this->ns;
         $event = ObjC::msg('p:Lppb', $ns, 'nextEventMatchingMask:untilDate:inMode:dequeue:', PHP_INT_MAX, $date, ObjC::str('kCFRunLoopDefaultMode'), true);
         if ($event !== null) {
             ObjC::msg('v:p', $ns, 'sendEvent:', $event);

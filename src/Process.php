@@ -10,8 +10,8 @@ use RuntimeException;
  * A child process run without blocking the UI: its output is read as it
  * comes, polled on the run loop (App::after), and $done gets the whole of
  * stdout and stderr with the exit code once it ends. PHP has no threads
- * here, so this is how an app does network and other slow work: curl,
- * ffmpeg, git, a script.
+ * here, so this is how an app runs slow programs: ffmpeg, git, a script
+ * (HTTP requests: MyPHP\Http).
  */
 final class Process
 {

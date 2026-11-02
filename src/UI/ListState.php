@@ -493,7 +493,7 @@ final class ListState implements Scrollable
         return -1;
     }
 
-    /** Chooses row $row (clamped; -1 for none) and brings it into view; with a selection, alone. A header is passed over, toward where the choice moves. */
+    /** Chooses row $row (clamped to the rows the list had when last built; -1 for none) and brings it into view; with a selection, alone. A header is passed over, toward where the choice moves. Rows the list was not built with yet: set $selected (mygo's way). */
     public function choose(int $row): void
     {
         $row = max(-1, min($this->count - 1, $row));

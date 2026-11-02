@@ -135,6 +135,17 @@ try {
 ```
 
 `Sqlite::open()` accepts a path directly; its parent directory must exist.
+It returns a `DB` (`MyPHP\Plugins\Sqlite\DB`): `execute()` returns a
+`Result` (`changes`, `lastInsertId`), `query()` a `Rows` (`columns`, the
+column names, and `values`, a list of rows, each a list of cells in column
+order), `transaction()` a list of `Result`s, one per `Statement`.
+
+The PHP API is synchronous: each call runs to its end on the calling
+thread, which in an app is the main one, the UI waiting meanwhile, and
+waits for another connection's lock up to `OpenOptions::$busyTimeout`. It
+does not suspend a fiber of `App::go()` (unlike `MyPHP\Http`): keep
+queries short, page large results with `LIMIT`, and batch writes in a
+`transaction()`, which is much faster than separate statements.
 `execute()` and `query()` take the parameters after the SQL, as
 `$db->query('SELECT * FROM notes WHERE id = ?', $id)`. The connection's
 lifetime belongs to the caller, who must call `close()`. `Error` exposes
