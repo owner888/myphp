@@ -8241,6 +8241,24 @@ re-upload. Non-blocking `poll()` on the event pipe prevents looper deadlocks whe
 `AChoreographer` is paused. System insets (status bars, notch cutout, navigation bars)
 and dark mode configuration are tracked via `WindowInsets` and synced to `Platform\Android\Window`.
 
+## Network sensing and macOS status bar typography (Tray dual-line & SF Symbols)
+
+MyPHP extends `NetworkStatus` beyond upstream mygo's boolean flags by querying
+Apple's `Network.framework` C API (`nw_path_uses_interface_type`) directly via FFI,
+exposing standard interface types (`wifi`, `cellular`, `wired`, `none`, `other`)
+and convenience predicates (`isWifi()`, `isCellular()`, `isWired()`).
+`Network::onChanged` fires instantly on interface switches (e.g. Wi-Fi dropping to a 4G/5G
+hotspot) without waiting for polling, enabling zero-latency reconnects in network utilities.
+For menu bar status monitoring, hand-rasterized bitmap icons and single-line titles suffer
+from jagged edges, wrong metrics, and inconsistent baselines compared to macOS native apps.
+`MyPHP\Tray` provides first-class support for Apple SF Symbols (`setSystemIcon`, e.g.
+`dot.radiowaves.left.and.right`) and compact dual-line titles (`setDualLineTitle`).
+On macOS, dual-line status buttons require an exact typography formula: `monospacedDigitSystemFontOfSize:10.0 weight:0.0`
+(Regular), a tight paragraph style (`lineSpacing: -1.5`, `maximumLineHeight: 10.5`), and a negative
+baseline offset (`NSBaselineOffset: -5.5pt`). This breaks `NSStatusBarButton`'s default top-heavy
+alignment and achieves 1:1 vertical centering and pixel-identical glyph heights with native
+system accessories (like iStatistica and macOS Battery/Wi-Fi icons).
+
 ## Open items
 
 Where myphp is not mygo's yet is listed in `mygo-deviations.md`; what is
