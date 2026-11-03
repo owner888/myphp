@@ -257,6 +257,7 @@ final class Window implements Platform\Window
     private int $touchLastTime = 0;
     private bool $touchIsScrolling = false;
     private bool $touchLongPressed = false;
+    private bool $touchInField = false;
     private int $longPressId = 0;
     /** @var list<array{0: int, 1: float, 2: float}> [timeNs, x, y] */
     private array $touchHistory = [];
@@ -304,47 +305,17 @@ final class Window implements Platform\Window
 
     public function onFrame(): void
     {
-        if ($this->flingActive) {
-            $now = hrtime(true);
-            $dt = ($now - $this->flingLastTime) / 1e9;
-            $this->flingLastTime = $now;
-
-            if ($dt > 0.001 && $dt < 0.05) {
-                $dx = $this->flingVx * $dt;
-                $dy = $this->flingVy * $dt;
-
-                $input = $this->w->input;
-                if ($input !== null) {
-                    $input->push(['scroll', $this->touchLastX, $this->touchLastY, $dx, $dy, true, true]);
-                }
-
-                // Natural friction decay
-                $decay = exp(-7.0 * $dt);
-                $this->flingVx *= $decay;
-                $this->flingVy *= $decay;
-
-                $this->asked = true;
-
-                if (hypot($this->flingVx, $this->flingVy) < 25.0) {
-                    $this->flingActive = false;
-                } else {
-                    $this->requestFrame();
-                }
-            } else {
-                $this->flingActive = false;
-                $this->asked = true;
-            }
-        }
-
         $this->drawFrame();
     }
 
     public function drawFrame(): void
     {
-        if ($this->paused || !$this->asked || $this->frame === null) {
+        if ($this->paused || $this->frame === null) {
             return;
         }
         $this->asked = false;
+        $repaint = $this->repaintOnly;
+        $this->repaintOnly = false;
 
         if (!$this->initEgl()) {
             return;
@@ -368,6 +339,8 @@ final class Window implements Platform\Window
 
         try {
             ($this->frame)($list, (float)$widthPts, (float)$heightPts);
+
+            Logger::debug("drawFrame: list->n=" . $list->n, "android");
 
             $clear = [0.0, 0.0, 0.0, 1.0];
             $this->gl->draw($list, max(1, $wPx), max(1, $hPx), $density * $list->zoom, $clear);
@@ -429,10 +402,29 @@ final class Window implements Platform\Window
                 $this->touchLongPressed = false;
                 $this->touchHistory = [[$time, $ptX, $ptY]];
 
+                // Check if touch begins inside the focused text field box
+                $this->touchInField = false;
+                $rt = $this->w->runtime;
+                if ($input->focus !== null && $rt !== null && $rt->focus !== null) {
+                    $r = $rt->rectOf($rt->focus);
+                    if ($r !== null && $ptX >= $r[0] && $ptX < $r[0] + $r[2] && $ptY >= $r[1] && $ptY < $r[1] + $r[3]) {
+                        $this->touchInField = true;
+                        $input->push(['down', $ptX, $ptY, 0, 1, 0, $time]);
+                    }
+                }
+
                 $pressId = ++$this->longPressId;
                 \MyPHP\App::after(0.5, function () use ($pressId, $ptX, $ptY, $time) {
                     if ($this->touchActive && !$this->touchIsScrolling && $this->longPressId === $pressId) {
                         $this->touchLongPressed = true;
+                        $input = $this->w->input;
+                        if ($input !== null) {
+                            $input->mouse($ptX, $ptY);
+                            // Word select on long press
+                            $input->push(['down', $ptX, $ptY, 0, 2, 0, $time]);
+                            $this->requestFrame();
+                        }
+                        Logger::debug("longPress triggered at ($ptX, $ptY)", "touch");
                     }
                 });
                 break;
@@ -441,6 +433,15 @@ final class Window implements Platform\Window
                 if (!$this->touchActive) {
                     break;
                 }
+                if ($this->touchInField) {
+                    // Dragging across text field to move cursor
+                    $input->mouse($ptX, $ptY);
+                    $input->push(['drag', $ptX, $ptY, $time]);
+                    Logger::debug("onTouch MOVE inField: pt=($ptX, $ptY)", "touch");
+                    $this->requestFrame();
+                    break;
+                }
+
                 $now = hrtime(true);
                 $this->touchHistory[] = [$now, $ptX, $ptY];
                 while (count($this->touchHistory) > 1 && ($now - $this->touchHistory[0][0]) > 120_000_000) {
@@ -461,6 +462,7 @@ final class Window implements Platform\Window
                     $this->touchLastY = $ptY;
 
                     $input->push(['scroll', $ptX, $ptY, $dx, $dy, true, false]);
+                    Logger::debug("onTouch MOVE scroll: pt=($ptX, $ptY), delta=($dx, $dy)", "touch");
                     $this->requestFrame();
                 }
                 break;
@@ -471,7 +473,17 @@ final class Window implements Platform\Window
                 }
                 $this->touchActive = false;
 
+                if ($this->touchInField) {
+                    $input->mouse($ptX, $ptY);
+                    $input->push(['up', $ptX, $ptY, 0, 1, 0, $time]);
+                    Logger::debug("onTouch UP inField: pt=($ptX, $ptY)", "touch");
+                    $this->touchInField = false;
+                    $this->requestFrame();
+                    break;
+                }
+
                 if ($this->touchIsScrolling) {
+                    $this->touchIsScrolling = false;
                     if (count($this->touchHistory) >= 2) {
                         $first = $this->touchHistory[0];
                         $last = $this->touchHistory[count($this->touchHistory) - 1];
@@ -480,17 +492,11 @@ final class Window implements Platform\Window
                             $vx = ($last[1] - $first[1]) / $dt;
                             $vy = ($last[2] - $first[2]) / $dt;
                             $speed = hypot($vx, $vy);
-                            if ($speed > 100.0) {
-                                $maxSpeed = 1200.0;
-                                if ($speed > $maxSpeed) {
-                                    $scale = $maxSpeed / $speed;
-                                    $vx *= $scale;
-                                    $vy *= $scale;
-                                }
-                                $this->flingActive = true;
-                                $this->flingVx = $vx;
-                                $this->flingVy = $vy;
-                                $this->flingLastTime = hrtime(true);
+                            if ($speed > 60.0) {
+                                // Hand over fling momentum to MyPHP internal MotionChannel smoother (precise=false)
+                                $flingDistanceX = max(-400.0, min(400.0, $vx * 0.22));
+                                $flingDistanceY = max(-400.0, min(400.0, $vy * 0.22));
+                                $input->push(['scroll', $this->touchLastX, $this->touchLastY, $flingDistanceX, $flingDistanceY, false, true]);
                                 $this->requestFrame();
                             }
                         }
@@ -611,7 +617,7 @@ final class Window implements Platform\Window
             }
         });
     }
-    public function repaintAsked(): bool { return $this->asked; }
+    public function repaintAsked(): bool { return $this->repaintOnly; }
     public function displayRate(): float { return 60.0; }
     public function setProgressBar(string $state, float $value): void {}
     public function lastDraw(): string { return ''; }
