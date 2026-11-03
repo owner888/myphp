@@ -591,7 +591,10 @@ final class Window implements Platform\Window
     public function placeVideos(): void {}
     public function newWebView(Platform\Page $page, bool $scrollToContainer, bool $transparent): Platform\WebView
     {
-        throw new Platform\Unsupported('WebView not implemented on Android yet');
+        if (!$page instanceof Page) {
+            throw new \InvalidArgumentException('Expected Android Page');
+        }
+        return new WebView($this, $page, $scrollToContainer, $transparent);
     }
     public function contentView(): mixed { return null; }
     public function release(): void {}

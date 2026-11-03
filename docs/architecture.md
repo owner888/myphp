@@ -8251,6 +8251,18 @@ Standard system platform services are bridged to Android APIs through JNI and FF
 - `Notifications`: system notifications with channel management (`NotificationManager`);
 - `Network`: connection state inspection through Android's `ConnectivityManager`.
 
+## Android backend: web pages and embedded WebView (P5)
+
+Embedded web capabilities are backed by `android.webkit.WebView` stacked over the
+activity's root `FrameLayout`. Web pages (`Platform\Android\Page`) run full DOM/CSS
+with JavaScript enabled, communicating with the PHP thread via a two-way IPC bridge:
+- Page to PHP: `window.myphp.__send` via `@JavascriptInterface` (`__myphp_native`),
+  delivering messages over the native event pipe into `Page::onMessage`;
+- PHP to Page: `Page::deliver` evaluates `window.myphp.__deliver(...)` preserving
+  the standard bridge.js messaging protocol across platforms;
+- Embedded layout: `Platform\Android\WebView::place` dynamically updates the view's
+  `FrameLayout.LayoutParams` according to the quad holes emitted by `Context::webView`.
+
 ## Network sensing and macOS status bar typography (Tray dual-line & SF Symbols)
 
 MyPHP extends `NetworkStatus` beyond upstream mygo's boolean flags by querying

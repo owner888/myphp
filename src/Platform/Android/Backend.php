@@ -130,6 +130,9 @@ final class Backend implements Platform\Backend
                     case Android::EVENT_DIALOG_RESULT:
                         Dialogs::onDialogResult((int)$ev->width, (int)$ev->action);
                         break;
+                    case Android::EVENT_WEB_MESSAGE:
+                        Page::onWebMessage((int)$ev->action, \FFI::string($ev->text));
+                        break;
                     case Android::EVENT_SIGNAL:
                         $this->h->dispatch();
                         break;
@@ -175,7 +178,7 @@ final class Backend implements Platform\Backend
 
     public function newPage(int $width, int $height, array $scripts, \Closure $onMessage, bool $devTools = false, $configuration = null, string $userAgent = '', float $zoom = 1.0, string $suffix = '', bool $swipe = false, bool $pinch = false, bool $autoplay = false, bool $throttle = true, bool $pip = false, $dataStore = null): Platform\Page
     {
-        throw new Platform\Unsupported('Page not implemented on Android yet');
+        return new Page($onMessage);
     }
 
     public function focusedWindow(): ?\MyPHP\Window
@@ -288,7 +291,7 @@ final class Backend implements Platform\Backend
 
     public function webViewAvailable(): bool
     {
-        return false;
+        return true;
     }
 
     public function destroySession(string $id): void {}

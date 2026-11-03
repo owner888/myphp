@@ -34,8 +34,14 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -65,6 +71,8 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     }
 
     private SurfaceView surfaceView;
+    private FrameLayout mRootLayout;
+    private static final Map<Integer, WebView> sWebViews = new HashMap<>();
     private static final Paint sTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private static final Map<Integer, Font> sGlyphFontCache = new HashMap<>();
 
@@ -104,7 +112,13 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             notifyConfiguration(windowInsets);
             return windowInsets;
         });
-        setContentView(surfaceView);
+
+        mRootLayout = new FrameLayout(this);
+        mRootLayout.addView(surfaceView, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        setContentView(mRootLayout);
 
         registerReceiver(new BroadcastReceiver() {
             @Override
@@ -527,6 +541,110 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         }
     }
 
+    public static void createWebView(int pageId) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                WebView wv = new WebView(sInstance);
+                WebSettings settings = wv.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setAllowFileAccess(true);
+
+                wv.addJavascriptInterface(new Object() {
+                    @JavascriptInterface
+                    public void postMessage(String message) {
+                        nativeOnWebMessage(pageId, message);
+                    }
+                }, "__myphp_native");
+
+                wv.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        String bridgeJs = "if(!window.myphp){"
+                            + "window.myphp={"
+                            + "  __send:function(m){window.__myphp_native.postMessage(JSON.stringify(m));},"
+                            + "  __deliver:function(m){window.dispatchEvent(new CustomEvent('myphp-message',{detail:m}));}"
+                            + "};"
+                            + "}";
+                        view.evaluateJavascript(bridgeJs, null);
+                    }
+                });
+
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, 0);
+                wv.setVisibility(View.GONE);
+                sInstance.mRootLayout.addView(wv, lp);
+                sWebViews.put(pageId, wv);
+            } catch (Exception e) {
+                Log.e(TAG, "createWebView error", e);
+            }
+        });
+    }
+
+    public static void destroyWebView(int pageId) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            WebView wv = sWebViews.remove(pageId);
+            if (wv != null) {
+                sInstance.mRootLayout.removeView(wv);
+                wv.destroy();
+            }
+        });
+    }
+
+    public static void loadUrl(int pageId, String url) {
+        if (sInstance == null || url == null) return;
+        sInstance.runOnUiThread(() -> {
+            WebView wv = sWebViews.get(pageId);
+            if (wv != null) {
+                wv.loadUrl(url);
+            }
+        });
+    }
+
+    public static void loadHtml(int pageId, String html, String baseUrl) {
+        if (sInstance == null || html == null) return;
+        sInstance.runOnUiThread(() -> {
+            WebView wv = sWebViews.get(pageId);
+            if (wv != null) {
+                wv.loadDataWithBaseURL(baseUrl != null && !baseUrl.isEmpty() ? baseUrl : null, html, "text/html", "UTF-8", null);
+            }
+        });
+    }
+
+    public static void evalJs(int pageId, String script) {
+        if (sInstance == null || script == null) return;
+        sInstance.runOnUiThread(() -> {
+            WebView wv = sWebViews.get(pageId);
+            if (wv != null) {
+                wv.evaluateJavascript(script, null);
+            }
+        });
+    }
+
+    public static void placeWebView(int pageId, int x, int y, int w, int h, boolean visible) {
+        if (sInstance == null) return;
+        sInstance.runOnUiThread(() -> {
+            WebView wv = sWebViews.get(pageId);
+            if (wv != null) {
+                if (!visible || w <= 0 || h <= 0) {
+                    wv.setVisibility(View.GONE);
+                } else {
+                    FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) wv.getLayoutParams();
+                    if (lp == null) {
+                        lp = new FrameLayout.LayoutParams(w, h);
+                    }
+                    lp.width = w;
+                    lp.height = h;
+                    lp.leftMargin = x;
+                    lp.topMargin = y;
+                    wv.setLayoutParams(lp);
+                    wv.setVisibility(View.VISIBLE);
+                }
+            }
+        });
+    }
+
     private static class MyphpInputConnection extends BaseInputConnection {
         public MyphpInputConnection(View targetView, boolean fullEditor) {
             super(targetView, fullEditor);
@@ -604,4 +722,5 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeResume();
     private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight);
     private static native void nativeDialogResult(int callbackId, int buttonIndex);
+    private static native void nativeOnWebMessage(int pageId, String message);
 }
