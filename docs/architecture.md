@@ -8263,6 +8263,17 @@ with JavaScript enabled, communicating with the PHP thread via a two-way IPC bri
 - Embedded layout: `Platform\Android\WebView::place` dynamically updates the view's
   `FrameLayout.LayoutParams` according to the quad holes emitted by `Context::webView`.
 
+## Android backend: command-line packaging without Gradle (P6)
+
+`bin/myphp build -platform android/arm64` packages projects directly into production-ready,
+page-aligned, signed APKs (`<out>/<name>.apk`) in 2–3 seconds without Gradle:
+- Assets staging: copies the project's entry script (`main.php` to `app.php`) and MyPHP framework `src/`;
+- Resource compilation: `aapt2 compile` and `aapt2 link` against `android.jar`;
+- Dexing: `javac` compiling Java bridge classes and `d8` converting `.class` into `classes.dex`;
+- Assembly & Alignment: uncompressed packaging of `resources.arsc` and native `.so` libraries,
+  followed by 4-byte/4KB page-alignment via `zipalign`;
+- Signing: V1/V2 APK signing through `apksigner` with debug or release keystores.
+
 ## Network sensing and macOS status bar typography (Tray dual-line & SF Symbols)
 
 MyPHP extends `NetworkStatus` beyond upstream mygo's boolean flags by querying

@@ -8,6 +8,10 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/build/android"
 TEMPLATE_DIR="${ROOT_DIR}/bin/template/android"
 
+PROJECT_DIR="${1:-}"
+OUTPUT_APK="${2:-${BUILD_DIR}/myphp-debug.apk}"
+APP_NAME="${3:-}"
+
 SDK_DIR="${ANDROID_HOME:-/Users/kaka/Library/Android/sdk}"
 BUILD_TOOLS_DIR="${SDK_DIR}/build-tools/35.0.0"
 PLATFORM_JAR="${SDK_DIR}/platforms/android-34/android.jar"
@@ -74,7 +78,14 @@ cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
 
 mkdir -p "assets/src"
 cp -r "${ROOT_DIR}/src/"* "assets/src/"
-if [ -d "${TEMPLATE_DIR}/assets" ]; then
+if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
+    if [ -f "${PROJECT_DIR}/main.php" ]; then
+        cp "${PROJECT_DIR}/main.php" "assets/app.php"
+    fi
+    if [ -d "${PROJECT_DIR}/src" ]; then
+        cp -r "${PROJECT_DIR}/src/"* "assets/src/"
+    fi
+elif [ -d "${TEMPLATE_DIR}/assets" ]; then
     cp -r "${TEMPLATE_DIR}/assets/"* "assets/"
 fi
 
@@ -120,7 +131,8 @@ if [ ! -f "$KEYSTORE" ]; then
 fi
 
 # 9. Sign APK
-FINAL_APK="${BUILD_DIR}/myphp-debug.apk"
+FINAL_APK="$OUTPUT_APK"
+mkdir -p "$(dirname "$FINAL_APK")"
 echo "==> Signing APK with apksigner..."
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
