@@ -78,6 +78,7 @@ final class Backend implements Platform\Backend
         $f = Android::ffi();
         $ev = $this->event ??= $f->new('MyphpEvent');
         $timeout = 16;
+        $needsRender = false;
         while ($f->myphp_read_event(FFI::addr($ev), $timeout) > 0) {
             $timeout = 0; // drain remaining queued events without waiting
             $win = Window::instance();
@@ -109,7 +110,7 @@ final class Backend implements Platform\Backend
                         $win?->onKeyEvent((int)$ev->width, (int)$ev->action, (int)$ev->height);
                         break;
                     case Android::EVENT_CHOREOGRAPHER:
-                        $win?->onFrame();
+                        $needsRender = true;
                         break;
                     case Android::EVENT_PAUSE:
                         $win?->onPause();
@@ -118,7 +119,7 @@ final class Backend implements Platform\Backend
                         $win?->onResume();
                         break;
                     case Android::EVENT_CONFIGURATION:
-                        \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\Theme::dark() : \MyPHP\Theme::light());
+                        \MyPHP\App::setTheme($ev->night_mode ? \MyPHP\UI\Theme::dark() : \MyPHP\UI\Theme::light());
                         $win?->setInsets((int)$ev->insets[0], (int)$ev->insets[1], (int)$ev->insets[2], (int)$ev->insets[3]);
                         break;
                     case Android::EVENT_SIGNAL:
@@ -127,6 +128,16 @@ final class Backend implements Platform\Backend
                 }
             } catch (\Throwable $e) {
                 \MyPHP\Logger::error("Exception in event dispatch: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
+            }
+        }
+
+        // Render at most one frame per step, after all input and lifecycle events have been consumed
+        if ($needsRender) {
+            try {
+                $win = Window::instance();
+                $win?->onFrame();
+            } catch (\Throwable $e) {
+                \MyPHP\Logger::error("Exception in onFrame: " . $e->getMessage() . "\n" . $e->getTraceAsString(), "android");
             }
         }
     }

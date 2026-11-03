@@ -6,7 +6,7 @@ Entry point for coding agents and contributors. `docs/architecture.md` has the r
 
 1. **This file stays under 200 lines** (`wc -l AGENTS.md`): near the limit, condense what is here first; only then move detail to `docs/`.
 2. No third-party packages without asking the developer; small things are written here (`composer.json`: `php`, `ext-ffi`).
-3. Git is the developer's: no commit, push, branch, tag or patch export; change files, run checks, report which changed.
+3. Git is the developer's: commit/push/tag only when the developer explicitly requests a release; change files, run checks, report which changed.
 4. Files in git never carry the developer's name: "the developer" / 「开发者」 when one is needed.
 5. GUI examples run only on the developer's Mac (ask for the output); `php -l` and pure-PHP checks run anywhere.
 6. Small and literal: no speculative abstractions, no silent fallbacks, no magic numbers that make a symptom go away. Unclear? Ask before changing.

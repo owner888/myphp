@@ -298,7 +298,9 @@ final class Painter
         if (max($inner) <= 0) {
             return false;
         }
-        $list->setMask(DisplayList::roundedMask($n->x + $bl, $n->y + $bt, $n->w - $bl - $br, $n->h - $bt - $bb, $inner));
+        [$x0, $y0] = $n->world->point($n->x + $bl, $n->y + $bt);
+        [$x1, $y1] = $n->world->point($n->x + $n->w - $br, $n->y + $n->h - $bb);
+        $list->setMask(DisplayList::roundedMask(min($x0, $x1), min($y0, $y1), abs($x1 - $x0), abs($y1 - $y0), $inner));
         return true;
     }
 
@@ -2054,7 +2056,10 @@ final class Painter
             }
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) { // read-only: selected and copied, without a caret
-            if ($n->caretWidth > 0) { $list->rect($tx + $caretX, $ty, self::caretWidthOf($n, $text), $lh, $t->accent); } // in the accent, over all (mygo's caret)
+            $cw = max(2.0, self::caretWidthOf($n, $text));
+            if ($n->caretWidth > 0) {
+                $list->rect($tx + $caretX, $ty, $cw, $lh, $t->accent);
+            }
         }
         $list->popClip();
     }
@@ -2131,7 +2136,10 @@ final class Painter
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) {
             [$cx, $cy] = $layout->caret($text, $s->displayCaret());
-            if ($n->caretWidth > 0) { $list->rect($tx + $cx, $ty + $cy, self::caretWidthOf($n, $text), $lh, $t->accent); }
+            $cw = max(2.0, self::caretWidthOf($n, $text));
+            if ($n->caretWidth > 0) {
+                $list->rect($tx + $cx, $ty + $cy, $cw, $lh, $t->accent);
+            }
         }
         $list->popClip();
     }

@@ -81,6 +81,14 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         };
         surfaceView.setFocusable(true);
         surfaceView.setFocusableInTouchMode(true);
+        surfaceView.setOnTouchListener((v, event) -> {
+            int action = event.getActionMasked();
+            float x = event.getX();
+            float y = event.getY();
+            long time = event.getEventTime();
+            nativeTouchEvent(action, x, y, time);
+            return true;
+        });
         surfaceView.getHolder().addCallback(this);
         surfaceView.setOnApplyWindowInsetsListener((v, windowInsets) -> {
             notifyConfiguration(windowInsets);
@@ -130,17 +138,29 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         notifyConfiguration(null);
     }
 
+    @Override
+    public void onBackPressed() {
+        if (surfaceView != null) {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null && imm.isAcceptingText()) {
+                imm.hideSoftInputFromWindow(surfaceView.getWindowToken(), 0);
+                return;
+            }
+        }
+        super.onBackPressed();
+    }
+
     private void notifyConfiguration(WindowInsets windowInsets) {
         boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         int top = 0, bottom = 0, left = 0, right = 0;
         if (windowInsets != null) {
-            Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
             top = insets.top;
             bottom = insets.bottom;
             left = insets.left;
             right = insets.right;
         } else if (surfaceView != null && surfaceView.getRootWindowInsets() != null) {
-            Insets insets = surfaceView.getRootWindowInsets().getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            Insets insets = surfaceView.getRootWindowInsets().getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
             top = insets.top;
             bottom = insets.bottom;
             left = insets.left;
@@ -227,6 +247,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         float x = event.getX();
         float y = event.getY();
         long time = event.getEventTime();
+        Log.i(TAG, "onTouchEvent: action=" + action + ", x=" + x + ", y=" + y);
         nativeTouchEvent(action, x, y, time);
         return true;
     }

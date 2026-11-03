@@ -340,6 +340,7 @@ final class Gl
         $this->prepareShaders($list); // its images' textures, canvases' copied, before the target is bound
         ($g->epoxy_glBindFramebuffer)(self::FRAMEBUFFER, $target);
         $this->target = [$pw / $scale, $ph / $scale, $scale, 1.0, (float)$ph];
+        Logger::debug("Gl::draw target=$target, size={$pw}x{$ph}, scale=$scale, list_n={$list->n}", "gl_diag");
         $this->drawList($list, $target, $pw, $ph, $clear);
         $err = ($g->epoxy_glGetError)();
         if ($err !== 0) {
@@ -651,6 +652,10 @@ final class Gl
             $start = $at;
         }
         $this->drawRuns($list, $start, $list->n - $start);
+
+        $pix = $g->new('uint8_t[4]');
+        ($g->epoxy_glReadPixels)($pw / 2, $ph / 2, 1, 1, self::RGBA, self::UNSIGNED_BYTE, $pix);
+        Logger::debug("drawList glReadPixels center: R={$pix[0]} G={$pix[1]} B={$pix[2]} A={$pix[3]}", "gl_diag");
     }
 
     /** Draws quads [$from, $from + $count): blended, but the web views' holes, which take away what is there, and the runs shaders draw, which are left out for now. */
@@ -691,6 +696,10 @@ final class Gl
         };
         ($g->epoxy_glUniform1i)($this->current['uFrom'], $at);
         ($g->epoxy_glDrawArraysInstanced)(self::TRIANGLE_STRIP, 0, 4, $n);
+        $err = ($g->epoxy_glGetError)();
+        if ($err !== 0) {
+            Logger::error("GL error in drawQuads at=$at, n=$n: 0x" . dechex($err), "opengl");
+        }
     }
 
     /** Copies $fbo's pixels so far and blurs them, at half size, into the backdrop the glass reads. */
