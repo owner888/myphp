@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <poll.h>
 
 #include <main/php.h>
 #include <sapi/embed/php_embed.h>
@@ -33,6 +34,9 @@ enum MyphpEventType {
     MYPHP_EVENT_IME_COMPOSE = 8,
     MYPHP_EVENT_IME_DELETE = 9,
     MYPHP_EVENT_KEY = 10,
+    MYPHP_EVENT_PAUSE = 11,
+    MYPHP_EVENT_RESUME = 12,
+    MYPHP_EVENT_CONFIGURATION = 13,
 };
 
 typedef struct {
@@ -43,6 +47,8 @@ typedef struct {
     int32_t width;
     int32_t height;
     int64_t time_ms;
+    int32_t insets[4];
+    int32_t night_mode;
     char text[256];
 } MyphpEvent;
 
@@ -116,12 +122,22 @@ float myphp_get_density(void) {
 int myphp_read_event(MyphpEvent *ev, int timeout_ms) {
     if (g_event_pipe[0] < 0) return 0;
 
-    // Poll ALooper so that AChoreographer callbacks are dispatched on this thread
-    ALooper_pollOnce(timeout_ms > 0 ? timeout_ms : 0, NULL, NULL, NULL);
+    // Dispatch pending AChoreographer vsync callbacks without blocking
+    ALooper_pollOnce(0, NULL, NULL, NULL);
 
-    ssize_t n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
-    if (n == sizeof(MyphpEvent)) {
-        return 1;
+    // Wait on event pipe with standard poll()
+    struct pollfd pfd = {
+        .fd = g_event_pipe[0],
+        .events = POLLIN,
+        .revents = 0
+    };
+    int ret = poll(&pfd, 1, timeout_ms > 0 ? timeout_ms : 0);
+    if (ret > 0 && (pfd.revents & POLLIN)) {
+        ssize_t n = read(g_event_pipe[0], ev, sizeof(MyphpEvent));
+        if (n == sizeof(MyphpEvent)) {
+            LOGI("myphp_read_event: got event type=%d", ev->type);
+            return 1;
+        }
     }
     return 0;
 }
@@ -431,4 +447,35 @@ Java_com_owner888_myphp_MyphpActivity_nativeKeyEvent(JNIEnv *env, jclass clazz, 
         .height = unicodeChar
     };
     write(g_event_pipe[1], &ev, sizeof(ev));
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativePause(JNIEnv *env, jclass clazz) {
+    LOGI("nativePause");
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = {.type = MYPHP_EVENT_PAUSE};
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeResume(JNIEnv *env, jclass clazz) {
+    LOGI("nativeResume");
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = {.type = MYPHP_EVENT_RESUME};
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_owner888_myphp_MyphpActivity_nativeConfigurationChanged(JNIEnv *env, jclass clazz, jboolean isDark, jint insetTop, jint insetBottom, jint insetLeft, jint insetRight) {
+    LOGI("nativeConfigurationChanged: dark=%d insets=[%d, %d, %d, %d]", isDark, insetTop, insetBottom, insetLeft, insetRight);
+    if (g_event_pipe[1] >= 0) {
+        MyphpEvent ev = {
+            .type = MYPHP_EVENT_CONFIGURATION,
+            .night_mode = isDark ? 1 : 0,
+            .insets = {insetTop, insetBottom, insetLeft, insetRight}
+        };
+        write(g_event_pipe[1], &ev, sizeof(ev));
+    }
 }

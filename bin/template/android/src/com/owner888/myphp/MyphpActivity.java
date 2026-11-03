@@ -5,8 +5,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Insets;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -23,6 +25,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -79,6 +82,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         surfaceView.setFocusable(true);
         surfaceView.setFocusableInTouchMode(true);
         surfaceView.getHolder().addCallback(this);
+        surfaceView.setOnApplyWindowInsetsListener((v, windowInsets) -> {
+            notifyConfiguration(windowInsets);
+            return windowInsets;
+        });
         setContentView(surfaceView);
 
         registerReceiver(new BroadcastReceiver() {
@@ -99,6 +106,47 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         File filesDir = getFilesDir();
         File cacheDir = getCacheDir();
         nativeInit(filesDir.getAbsolutePath(), cacheDir.getAbsolutePath(), density);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Log.i(TAG, "onPause");
+        nativePause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.i(TAG, "onResume");
+        notifyConfiguration(null);
+        nativeResume();
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        Log.i(TAG, "onConfigurationChanged");
+        notifyConfiguration(null);
+    }
+
+    private void notifyConfiguration(WindowInsets windowInsets) {
+        boolean isDark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        int top = 0, bottom = 0, left = 0, right = 0;
+        if (windowInsets != null) {
+            Insets insets = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            top = insets.top;
+            bottom = insets.bottom;
+            left = insets.left;
+            right = insets.right;
+        } else if (surfaceView != null && surfaceView.getRootWindowInsets() != null) {
+            Insets insets = surfaceView.getRootWindowInsets().getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            top = insets.top;
+            bottom = insets.bottom;
+            left = insets.left;
+            right = insets.right;
+        }
+        nativeConfigurationChanged(isDark, top, bottom, left, right);
     }
 
     private void copyAssetsToFilesDir() {
@@ -382,4 +430,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeImeCompose(String text);
     private static native void nativeImeDelete();
     private static native void nativeKeyEvent(int keyCode, int action, int unicodeChar);
+    private static native void nativePause();
+    private static native void nativeResume();
+    private static native void nativeConfigurationChanged(boolean isDark, int insetTop, int insetBottom, int insetLeft, int insetRight);
 }

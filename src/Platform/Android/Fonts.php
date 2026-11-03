@@ -87,18 +87,28 @@ final class Fonts implements Platform\Fonts
             $fontId = $this->fontMap[$fontKey];
         }
 
+        // Map each rune to its UTF-16 code unit index
+        $u16 = []; $u = 0;
+        $runes = \MyPHP\Text\System::runes($text);
+        foreach ($runes as $r) {
+            $u16[] = $u;
+            $u += ($r >= 0x10000) ? 2 : 1;
+        }
+        $totalU16 = $u;
+
         $glyphs = [];
-        $carets = [0.0];
+        $carets = [0 => 0.0];
 
         for ($i = 0; $i < $count; $i++) {
             $gid = (int)$buf[4 + $i * 3];
             $x = (float)$buf[4 + $i * 3 + 1];
             $y = (float)$buf[4 + $i * 3 + 2];
-            $glyphs[] = ['font' => $fontId, 'glyph' => $gid, 'x' => $x, 'y' => $y, 'index' => $i];
-            $carets[] = $x;
+            $uIdx = $u16[$i] ?? $i;
+            $glyphs[] = ['font' => $fontId, 'glyph' => $gid, 'x' => $x, 'y' => $y, 'index' => $uIdx];
+            $carets[$uIdx] = $x;
         }
 
-        $carets[] = $width;
+        $carets[$totalU16] = $width;
 
         return [
             'width' => $width,

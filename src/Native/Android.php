@@ -20,6 +20,9 @@ final class Android
     public const EVENT_IME_COMPOSE = 8;
     public const EVENT_IME_DELETE = 9;
     public const EVENT_KEY = 10;
+    public const EVENT_PAUSE = 11;
+    public const EVENT_RESUME = 12;
+    public const EVENT_CONFIGURATION = 13;
 
     // MotionEvent action constants
     public const ACTION_DOWN = 0;
@@ -63,6 +66,8 @@ final class Android
                 int32_t width;
                 int32_t height;
                 int64_t time_ms;
+                int32_t insets[4];
+                int32_t night_mode;
                 char text[256];
             } MyphpEvent;
 
