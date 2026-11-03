@@ -15,6 +15,15 @@ namespace MyPHP\Tests;
 use MyPHP\Media\{Matroska, Track};
 use MyPHP\Native\SoftAudio;
 
+if (PHP_OS_FAMILY === 'Linux') {
+    try {
+        \MyPHP\Native\Av::ffi();
+    } catch (\RuntimeException $e) {
+        echo "  skipped: {$e->getMessage()}\n";
+        return;
+    }
+}
+
 $audio = fn(Matroska $m): Track => array_values(array_filter($m->tracks(), fn(Track $t) => $t->type === Track::AUDIO))[0];
 $m = new Matroska(__DIR__ . '/testdata/clip-vorbis.mkv');
 $a = $audio($m);

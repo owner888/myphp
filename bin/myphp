@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const FRAMEWORK = __DIR__ . '/..';
-const VERSION = '1.157.0';
+const VERSION = '1.158.0';
 const CONFIG = 'myphp.json';
 const PHP_FLAGS = ['-d', 'ffi.enable=1', '-d', 'opcache.enable_cli=1', '-d', 'opcache.jit_buffer_size=64M', '-d', 'opcache.jit=1255', '-d', 'memory_limit=512M'];
 const USAGE = <<<'TXT'
@@ -904,7 +904,7 @@ function build(array $args): void
     foreach (array_filter(array_map('trim', explode(',', $platforms))) as $p) {
         [$os, $arch] = array_pad(explode('/', $p, 2), 2, '');
         $os === 'darwin' && in_array($arch, ['arm64', 'amd64', 'universal'], true) || $os === 'linux' && isset(Linux::DEB_ARCH[$arch]) || ($os === 'android' && in_array($arch, ['arm64', 'aarch64'], true))
-            || fail("myphp builds macOS, Linux and Android apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, linux/amd64, linux/arm64 or android/arm64, not $p");
+            || fail("myphp builds macOS, Linux and Android apps: the platform is darwin/arm64, darwin/amd64, darwin/universal, android/arm64, linux/amd64 or linux/arm64, not $p");
         $host = (PHP_OS_FAMILY === 'Linux' ? 'linux/' : 'darwin/') . hostArch();
         $launcher !== 'micro' || "$os/$arch" === $host || fail("-launcher micro builds for this machine, $host: micro.sfx is of its system and architecture");
         $targets[] = [$os, $arch];

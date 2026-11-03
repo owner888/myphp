@@ -118,10 +118,12 @@ App::run();
             $raw = @gzuncompress($idat);
             return $raw === false ? null : [ord($raw[1]), ord($raw[2]), ord($raw[3]), $color];
         };
-        [$code, , $err] = $run(["$tmp/page", '-out', "$tmp/p.png", '-tree', "$tmp/p.json", '-timeout', '60']);
-        same(0, $code, "a web page with -tree: $err");
-        check(str_contains($err, 'has no tree of elements') && !file_exists("$tmp/p.json"), '-tree on a page warns and writes no tree: ' . $err);
-        same([255, 0, 0], array_slice($first("$tmp/p.png") ?? [], 0, 3), 'the page captured once the reply of its call was rendered');
+        if (\MyPHP\Platform\Linux\WebKit::available()) {
+            [$code, , $err] = $run(["$tmp/page", '-out', "$tmp/p.png", '-tree', "$tmp/p.json", '-timeout', '60']);
+            same(0, $code, "a web page with -tree: $err");
+            check(str_contains($err, 'has no tree of elements') && !file_exists("$tmp/p.json"), '-tree on a page warns and writes no tree: ' . $err);
+            same([255, 0, 0], array_slice($first("$tmp/p.png") ?? [], 0, 3), 'the page captured once the reply of its call was rendered');
+        }
 
         // App::wait on a condition only time makes true returns in time on Linux too: its turn of the main loop waits 50 ms at most.
         mkdir("$tmp/waits");

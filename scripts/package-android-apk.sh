@@ -79,9 +79,14 @@ cp "${BUILD_DIR}/libs/arm64-v8a/"*.so "lib/arm64-v8a/"
 mkdir -p "assets/src"
 cp -r "${ROOT_DIR}/src/"* "assets/src/"
 if [ -n "$PROJECT_DIR" ] && [ -d "$PROJECT_DIR" ]; then
-    if [ -f "${PROJECT_DIR}/main.php" ]; then
-        cp "${PROJECT_DIR}/main.php" "assets/app.php"
-    fi
+    for php_file in "${PROJECT_DIR}/"*.php; do
+        [ -f "$php_file" ] || continue
+        if [ "$(basename "$php_file")" = "main.php" ]; then
+            cp "$php_file" "assets/app.php"
+        else
+            cp "$php_file" "assets/"
+        fi
+    done
     if [ -d "${PROJECT_DIR}/src" ]; then
         cp -r "${PROJECT_DIR}/src/"* "assets/src/"
     fi
@@ -115,15 +120,19 @@ rm -f "${WORK_DIR}/aligned.apk"
 # Check alignment
 "$ZIPALIGN" -c -v 4 "${WORK_DIR}/aligned.apk" | grep -i "resources.arsc" || true
 
-# 8. Create debug keystore if not exists
-KEYSTORE="${BUILD_DIR}/debug.keystore"
+# 8. Setup Keystore (supports production release keystore via env vars)
+KEYSTORE="${ANDROID_KEYSTORE_PATH:-${BUILD_DIR}/debug.keystore}"
+KEYSTORE_PASS="${ANDROID_KEYSTORE_PASS:-android}"
+KEY_ALIAS="${ANDROID_KEY_ALIAS:-androiddebugkey}"
+KEY_PASS="${ANDROID_KEY_PASS:-android}"
+
 if [ ! -f "$KEYSTORE" ]; then
     echo "==> Generating debug.keystore..."
     "$KEYTOOL" -genkeypair -v \
         -keystore "$KEYSTORE" \
-        -storepass android \
-        -alias androiddebugkey \
-        -keypass android \
+        -storepass "$KEYSTORE_PASS" \
+        -alias "$KEY_ALIAS" \
+        -keypass "$KEY_PASS" \
         -keyalg RSA \
         -keysize 2048 \
         -validity 10000 \
@@ -136,9 +145,9 @@ mkdir -p "$(dirname "$FINAL_APK")"
 echo "==> Signing APK with apksigner..."
 "$APKSIGNER" sign \
     --ks "$KEYSTORE" \
-    --ks-pass pass:android \
-    --ks-key-alias androiddebugkey \
-    --key-pass pass:android \
+    --ks-pass "pass:$KEYSTORE_PASS" \
+    --ks-key-alias "$KEY_ALIAS" \
+    --key-pass "pass:$KEY_PASS" \
     --out "$FINAL_APK" \
     "${WORK_DIR}/aligned.apk"
 
