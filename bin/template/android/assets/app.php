@@ -85,6 +85,28 @@ function form(Context $c, array &$s): void
             }
             $s['greeting'] = '';
         }
+        if ($c->clicked($c->button('Open mygo on GitHub'))) {
+            \MyPHP\Shell::openExternal('https://github.com/egoist/mygo');
+        }
+      $c->end();
+
+      $c->row(0, 12);
+        if ($c->clicked($c->button('Copy Text'))) {
+            \MyPHP\Clipboard::writeText("剪贴板测试成功！Ada from 北京");
+            $s['greeting'] = "Copied to clipboard!";
+        }
+        if ($c->clicked($c->button('Paste Text'))) {
+            $clip = \MyPHP\Clipboard::readText();
+            $s['greeting'] = "Pasted: " . ($clip !== '' ? $clip : '(empty)');
+        }
+        if ($c->clicked($c->button('Show Dialog'))) {
+            $res = \MyPHP\Dialog::message(new \MyPHP\MessageOptions(
+                title: '系统提示',
+                message: '这是 Android 原生 AlertDialog 对话框！',
+                buttons: ['确定', '取消']
+            ));
+            $s['greeting'] = "Dialog result: button #{$res->response}";
+        }
       $c->end();
 
       if ($s['greeting'] !== '') {
