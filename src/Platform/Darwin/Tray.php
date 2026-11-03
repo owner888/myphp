@@ -141,6 +141,35 @@ final class Tray implements Platform\Tray
         ObjC::msg('v:p', $this->button(), 'setTitle:', ObjC::str($title));
     }
 
+    public function setSystemIcon(string $name): void
+    {
+        $img = ObjC::msg('p:pp', ObjC::cls('NSImage'), 'imageWithSystemSymbolName:accessibilityDescription:', ObjC::str($name), null);
+        if ($img !== null) {
+            ObjC::msg('v:p', $this->button(), 'setImage:', $img);
+            ObjC::msg('v:L', $this->button(), 'setImagePosition:', 2); // NSImageLeft = 2
+        }
+    }
+
+    public function setDualLineTitle(string $top, string $bottom): void
+    {
+        $font = ObjC::msg('p:dd', ObjC::cls('NSFont'), 'monospacedDigitSystemFontOfSize:weight:', 10.0, 0.0);
+        $para = ObjC::msg('p:', ObjC::alloc('NSMutableParagraphStyle'), 'init');
+        ObjC::msg('v:d', $para, 'setLineSpacing:', -1.5);
+        ObjC::msg('v:d', $para, 'setMaximumLineHeight:', 10.5);
+        ObjC::msg('v:d', $para, 'setMinimumLineHeight:', 10.5);
+
+        $baseline = ObjC::msg('p:d', ObjC::cls('NSNumber'), 'numberWithDouble:', -5.5);
+
+        $attrs = ObjC::msg('p:', ObjC::alloc('NSMutableDictionary'), 'init');
+        ObjC::msg('v:pp', $attrs, 'setObject:forKey:', $font, ObjC::str('NSFont'));
+        ObjC::msg('v:pp', $attrs, 'setObject:forKey:', $para, ObjC::str('NSParagraphStyle'));
+        ObjC::msg('v:pp', $attrs, 'setObject:forKey:', $baseline, ObjC::str('NSBaselineOffset'));
+
+        $text = "{$top}\n{$bottom}";
+        $attrStr = ObjC::msg('p:pp', ObjC::alloc('NSAttributedString'), 'initWithString:attributes:', ObjC::str($text), $attrs);
+        ObjC::msg('v:p', $this->button(), 'setAttributedTitle:', $attrStr);
+    }
+
     public function setMenu(?Menu $menu): void
     {
         [$old, $oldOwner] = [$this->menu, $this->owner];

@@ -36,6 +36,7 @@ final class NetworkMonitor
             int nw_path_get_status(void* path);
             bool nw_path_is_expensive(void* path);
             bool nw_path_is_constrained(void* path);
+            bool nw_path_uses_interface_type(void* path, int type);
             extern char _dispatch_main_q;
         ', '/System/Library/Frameworks/Network.framework/Network');
         $m = $c->nw_path_monitor_create();
@@ -44,7 +45,19 @@ final class NetworkMonitor
             return;
         }
         $block = ObjC::block('p', function ($path) use ($c): void {
-            $s = new NetworkStatus($c->nw_path_get_status($path) === self::SATISFIED, $c->nw_path_is_expensive($path) || $c->nw_path_is_constrained($path));
+            $online = $c->nw_path_get_status($path) === self::SATISFIED;
+            $metered = $c->nw_path_is_expensive($path) || $c->nw_path_is_constrained($path);
+            $type = 'other';
+            if (!$online) {
+                $type = 'none';
+            } elseif ($c->nw_path_uses_interface_type($path, 1)) {
+                $type = 'wifi';
+            } elseif ($c->nw_path_uses_interface_type($path, 2)) {
+                $type = 'cellular';
+            } elseif ($c->nw_path_uses_interface_type($path, 3)) {
+                $type = 'wired';
+            }
+            $s = new NetworkStatus($online, $metered, $type);
             $first = self::$status === null;
             self::$status = $s;
             if (!$first && self::$onPath !== null) {

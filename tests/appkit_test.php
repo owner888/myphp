@@ -64,13 +64,18 @@ Clipboard::$providing = false;
 // The network: listeners hear changes only.
 $heard = [];
 $off = Network::onChanged(function (NetworkStatus $s) use (&$heard): void { $heard[] = $s->jsonSerialize(); });
-Network::changed(new NetworkStatus(true, false));
-Network::changed(new NetworkStatus(true, false));
-Network::changed(new NetworkStatus(true, true));
+Network::changed(new NetworkStatus(true, false, 'wifi'));
+Network::changed(new NetworkStatus(true, false, 'wifi'));
+Network::changed(new NetworkStatus(true, false, 'cellular'));
+Network::changed(new NetworkStatus(true, true, 'cellular'));
 $off();
-Network::changed(new NetworkStatus(false, false));
-same([['online' => true, 'metered' => false], ['online' => true, 'metered' => true]], $heard, 'changes, once each, until removed');
-same('{"online":true,"metered":false}', json_encode(new NetworkStatus(true)), 'as pages get it');
+Network::changed(new NetworkStatus(false, false, 'none'));
+same([
+    ['online' => true, 'metered' => false, 'type' => 'wifi'],
+    ['online' => true, 'metered' => false, 'type' => 'cellular'],
+    ['online' => true, 'metered' => true, 'type' => 'cellular'],
+], $heard, 'changes, once each, until removed');
+same('{"online":true,"metered":false,"type":"other"}', json_encode(new NetworkStatus(true)), 'as pages get it');
 
 // Started at login: the launch agent's argument leaves the command line.
 $argv0 = $_SERVER['argv'];
