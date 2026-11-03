@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
+#include <sys/system_properties.h>
 
 #include <main/php.h>
 #include <sapi/embed/php_embed.h>
@@ -191,6 +192,8 @@ static jmethodID g_mid_load_html = NULL;
 static jmethodID g_mid_eval_js = NULL;
 static jmethodID g_mid_place_web_view = NULL;
 static jmethodID g_mid_bt_req_perm = NULL;
+static jmethodID g_mid_bt_start_pairing = NULL;
+static jmethodID g_mid_bt_set_audio = NULL;
 static jmethodID g_mid_bt_get_status = NULL;
 static jmethodID g_mid_bt_scan_ble = NULL;
 static jmethodID g_mid_bt_connect_l2cap = NULL;
@@ -346,9 +349,11 @@ Java_com_owner888_myphp_MyphpActivity_nativeInit(JNIEnv *env, jclass clazz, jstr
     g_mid_eval_js = (*env)->GetStaticMethodID(env, clazz, "evalJs", "(ILjava/lang/String;)V");
     g_mid_place_web_view = (*env)->GetStaticMethodID(env, clazz, "placeWebView", "(IIIIIZ)V");
     g_mid_bt_req_perm = (*env)->GetStaticMethodID(env, clazz, "btRequestPermissions", "()V");
+    g_mid_bt_start_pairing = (*env)->GetStaticMethodID(env, clazz, "btStartPairing", "()V");
+    g_mid_bt_set_audio = (*env)->GetStaticMethodID(env, clazz, "btSetAudioConnected", "(Ljava/lang/String;Z)V");
     g_mid_bt_get_status = (*env)->GetStaticMethodID(env, clazz, "btGetStatus", "()Ljava/lang/String;");
     g_mid_bt_scan_ble = (*env)->GetStaticMethodID(env, clazz, "btScanBle", "()[B");
-    g_mid_bt_connect_l2cap = (*env)->GetStaticMethodID(env, clazz, "btConnectL2cap", "(Ljava/lang/String;I)Z");
+    g_mid_bt_connect_l2cap = (*env)->GetStaticMethodID(env, clazz, "btConnectL2capSocket", "(Ljava/lang/Object;)Z");
     g_mid_bt_disconnect = (*env)->GetStaticMethodID(env, clazz, "btDisconnect", "()V");
     g_mid_bt_is_connected = (*env)->GetStaticMethodID(env, clazz, "btIsConnected", "()Z");
     g_mid_bt_send = (*env)->GetStaticMethodID(env, clazz, "btSend", "([B)Z");
@@ -705,54 +710,70 @@ Java_com_owner888_myphp_MyphpActivity_nativeSignal(JNIEnv *env, jclass clazz) {
     myphp_signal_backend();
 }
 
-// Probes which BluetoothSocket L2CAP constructor signature exists in ART via JNI
-JNIEXPORT jstring JNICALL
-Java_com_owner888_myphp_MyphpActivity_nativeProbeL2capConstructor(JNIEnv *env, jclass clazz) {
+// Probes which BluetoothSocket L2CAP constructor signature exists in ART via JNI.
+// Must be called directly from the C pthread (0 Java frames on stack) so ART's
+// Hidden API check treats the caller as native trusted code.
+static const char* probe_l2cap_ctor_from_c(JNIEnv *env) {
     jclass sockCls = (*env)->FindClass(env, "android/bluetooth/BluetoothSocket");
     if (!sockCls) {
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-        return (*env)->NewStringUTF(env, "missing_class");
+        return "missing_class";
     }
 
-    // 1. Android 16 QPR3 / Android 17 signature: (BluetoothAdapter, BluetoothDevice, int, boolean, boolean, int, ParcelUuid)
-    jmethodID mid1 = (*env)->GetMethodID(env, sockCls, "<init>",
-        "(Landroid/bluetooth/BluetoothAdapter;Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
-    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-    if (mid1) {
-        (*env)->DeleteLocalRef(env, sockCls);
-        return (*env)->NewStringUTF(env, "A16QPR3_A17(Adapter,Device,type,auth,enc,psm,uuid)");
+    static const struct {
+        const char *name;
+        const char *sig;
+    } specs[] = {
+        {"A16QPR3_A17(Adapter,Device,type,auth,enc,psm,uuid)", "(Landroid/bluetooth/BluetoothAdapter;Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V"},
+        {"A15_16(Device,type,auth,enc,psm,uuid)", "(Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V"},
+        {"A14(Device,type,fd,auth,enc,psm,uuid)", "(Landroid/bluetooth/BluetoothDevice;IIZZILandroid/os/ParcelUuid;)V"},
+        {"A12_13(type,fd,auth,enc,Device,psm,uuid)", "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V"},
+        {"Legacy(type,auth,enc,Device,psm,uuid)", "(IZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V"},
+    };
+
+    for (size_t i = 0; i < sizeof(specs) / sizeof(specs[0]); i++) {
+        jmethodID mid = (*env)->GetMethodID(env, sockCls, "<init>", specs[i].sig);
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        if (mid) {
+            (*env)->DeleteLocalRef(env, sockCls);
+            return specs[i].name;
+        }
     }
 
-    // 2. Android 14-16 signature: (BluetoothDevice, int, boolean, boolean, int, ParcelUuid)
-    jmethodID mid2 = (*env)->GetMethodID(env, sockCls, "<init>",
-        "(Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
-    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
-    if (mid2) {
-        (*env)->DeleteLocalRef(env, sockCls);
-        return (*env)->NewStringUTF(env, "A14_16(Device,type,auth,enc,psm,uuid)");
-    }
-
-    // 3. Android 12-13 signature: (int, int, boolean, boolean, BluetoothDevice, int, ParcelUuid)
-    jmethodID mid3 = (*env)->GetMethodID(env, sockCls, "<init>",
-        "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
-    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     (*env)->DeleteLocalRef(env, sockCls);
-    if (mid3) {
-        return (*env)->NewStringUTF(env, "A12_13(type,fd,auth,enc,Device,psm,uuid)");
-    }
-    return (*env)->NewStringUTF(env, "unknown_ctor");
+    return "blocked_by_hidden_api";
 }
 
-// Instantiates BluetoothSocket for Classic L2CAP (type = 3) directly from JNI
-JNIEXPORT jobject JNICALL
-Java_com_owner888_myphp_MyphpActivity_nativeCreateL2capSocket(
-    JNIEnv *env, jclass clazz, jobject adapter, jobject device, jint psm, jobject uuid
-) {
+// Instantiates BluetoothSocket for Classic L2CAP (type = 3) directly from the C pthread (0 Java frames)
+static jobject create_l2cap_socket_from_c(JNIEnv *env, const char *mac, jint psm) {
+    jclass adapterCls = (*env)->FindClass(env, "android/bluetooth/BluetoothAdapter");
     jclass sockCls = (*env)->FindClass(env, "android/bluetooth/BluetoothSocket");
-    if (!sockCls) {
+    jclass uuidCls = (*env)->FindClass(env, "android/os/ParcelUuid");
+    if (!adapterCls || !sockCls || !uuidCls) {
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
         return NULL;
     }
+
+    jmethodID getDefMid = (*env)->GetStaticMethodID(env, adapterCls, "getDefaultAdapter", "()Landroid/bluetooth/BluetoothAdapter;");
+    jobject adapter = getDefMid ? (*env)->CallStaticObjectMethod(env, adapterCls, getDefMid) : NULL;
+    if (!adapter) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        return NULL;
+    }
+
+    jmethodID getDevMid = (*env)->GetMethodID(env, adapterCls, "getRemoteDevice", "(Ljava/lang/String;)Landroid/bluetooth/BluetoothDevice;");
+    jstring jmac = (*env)->NewStringUTF(env, mac);
+    jobject device = getDevMid ? (*env)->CallObjectMethod(env, adapter, getDevMid, jmac) : NULL;
+    (*env)->DeleteLocalRef(env, jmac);
+    if (!device) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        return NULL;
+    }
+
+    jmethodID fromStrMid = (*env)->GetStaticMethodID(env, uuidCls, "fromString", "(Ljava/lang/String;)Landroid/os/ParcelUuid;");
+    jstring juuidStr = (*env)->NewStringUTF(env, "74ec2172-0bad-4d01-8f77-997b2be0722a");
+    jobject uuid = fromStrMid ? (*env)->CallStaticObjectMethod(env, uuidCls, fromStrMid, juuidStr) : NULL;
+    (*env)->DeleteLocalRef(env, juuidStr);
 
     const jint TYPE_L2CAP = 3;
     jobject sock = NULL;
@@ -763,40 +784,48 @@ Java_com_owner888_myphp_MyphpActivity_nativeCreateL2capSocket(
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (mid1) {
         sock = (*env)->NewObject(env, sockCls, mid1, adapter, device, TYPE_L2CAP, JNI_TRUE, JNI_TRUE, psm, uuid);
-        if ((*env)->ExceptionCheck(env)) {
-            (*env)->ExceptionClear(env);
-            sock = NULL;
-        }
-        (*env)->DeleteLocalRef(env, sockCls);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); sock = NULL; }
         return sock;
     }
 
-    // 2. Android 14-16 signature
+    // 2. Android 15-16 signature
     jmethodID mid2 = (*env)->GetMethodID(env, sockCls, "<init>",
         "(Landroid/bluetooth/BluetoothDevice;IZZILandroid/os/ParcelUuid;)V");
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (mid2) {
         sock = (*env)->NewObject(env, sockCls, mid2, device, TYPE_L2CAP, JNI_TRUE, JNI_TRUE, psm, uuid);
-        if ((*env)->ExceptionCheck(env)) {
-            (*env)->ExceptionClear(env);
-            sock = NULL;
-        }
-        (*env)->DeleteLocalRef(env, sockCls);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); sock = NULL; }
         return sock;
     }
 
-    // 3. Android 12-13 signature
+    // 3. Android 14 signature
     jmethodID mid3 = (*env)->GetMethodID(env, sockCls, "<init>",
-        "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
+        "(Landroid/bluetooth/BluetoothDevice;IIZZILandroid/os/ParcelUuid;)V");
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (mid3) {
-        sock = (*env)->NewObject(env, sockCls, mid3, TYPE_L2CAP, -1, JNI_TRUE, JNI_TRUE, device, psm, uuid);
-        if ((*env)->ExceptionCheck(env)) {
-            (*env)->ExceptionClear(env);
-            sock = NULL;
-        }
+        sock = (*env)->NewObject(env, sockCls, mid3, device, TYPE_L2CAP, 1, JNI_TRUE, JNI_TRUE, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); sock = NULL; }
+        return sock;
     }
-    (*env)->DeleteLocalRef(env, sockCls);
+
+    // 4. Android 12-13 signature
+    jmethodID mid4 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(IIZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid4) {
+        sock = (*env)->NewObject(env, sockCls, mid4, TYPE_L2CAP, 1, JNI_TRUE, JNI_TRUE, device, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); sock = NULL; }
+        return sock;
+    }
+
+    // 5. Legacy signature
+    jmethodID mid5 = (*env)->GetMethodID(env, sockCls, "<init>",
+        "(IZZLandroid/bluetooth/BluetoothDevice;ILandroid/os/ParcelUuid;)V");
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (mid5) {
+        sock = (*env)->NewObject(env, sockCls, mid5, TYPE_L2CAP, JNI_TRUE, JNI_TRUE, device, psm, uuid);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); sock = NULL; }
+    }
     return sock;
 }
 
@@ -806,11 +835,31 @@ void myphp_bt_request_permissions(void) {
     (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_bt_req_perm);
 }
 
+void myphp_bt_start_pairing(void) {
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_start_pairing) return;
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_bt_start_pairing);
+}
+
+void myphp_bt_set_audio_connected(const char *mac, int connect) {
+    if (!mac) return;
+    JNIEnv *env = get_jni_env();
+    if (!env || !g_activity_class || !g_mid_bt_set_audio) return;
+    jstring jmac = (*env)->NewStringUTF(env, mac);
+    (*env)->CallStaticVoidMethod(env, g_activity_class, g_mid_bt_set_audio, jmac, (jboolean)(connect ? JNI_TRUE : JNI_FALSE));
+    (*env)->DeleteLocalRef(env, jmac);
+}
+
 int myphp_bt_get_status(char *out, int max_len) {
     if (!out || max_len <= 0) return 0;
     out[0] = 0;
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_bt_get_status) return 0;
+
+    // Probe BluetoothSocket constructor directly from C pthread (0 Java frames on stack)
+    const char *ctor_sig = probe_l2cap_ctor_from_c(env);
+    char vendor_id[PROP_VALUE_MAX] = {0};
+    __system_property_get("bluetooth.device_id.vendor_id", vendor_id);
 
     jstring jstr = (jstring)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_get_status);
     if (!jstr) return 0;
@@ -819,8 +868,7 @@ int myphp_bt_get_status(char *out, int max_len) {
         (*env)->DeleteLocalRef(env, jstr);
         return 0;
     }
-    strncpy(out, chars, max_len - 1);
-    out[max_len - 1] = 0;
+    snprintf(out, max_len, "ctor=%s|vendorId=%s|%s", ctor_sig, vendor_id, chars);
     int len = (int)strlen(out);
     (*env)->ReleaseStringUTFChars(env, jstr, chars);
     (*env)->DeleteLocalRef(env, jstr);
@@ -847,9 +895,17 @@ int myphp_bt_connect_l2cap(const char *mac, int psm, char *err_out, int err_max)
     JNIEnv *env = get_jni_env();
     if (!env || !g_activity_class || !g_mid_bt_connect_l2cap) return 0;
 
-    jstring jmac = (*env)->NewStringUTF(env, mac);
-    jboolean ok = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_bt_connect_l2cap, jmac, psm);
-    (*env)->DeleteLocalRef(env, jmac);
+    // Instantiate BluetoothSocket directly from C pthread (0 Java frames on stack)
+    jobject sock = create_l2cap_socket_from_c(env, mac, psm);
+    if (!sock) {
+        if (err_out && err_max > 0) {
+            snprintf(err_out, err_max, "Failed to instantiate BluetoothSocket for L2CAP PSM %d from JNI", psm);
+        }
+        return 0;
+    }
+
+    jboolean ok = (*env)->CallStaticBooleanMethod(env, g_activity_class, g_mid_bt_connect_l2cap, sock);
+    (*env)->DeleteLocalRef(env, sock);
 
     if (!ok && err_out && err_max > 0 && g_mid_bt_last_error) {
         jstring jerr = (jstring)(*env)->CallStaticObjectMethod(env, g_activity_class, g_mid_bt_last_error);

@@ -98,6 +98,8 @@ final class Android
             int myphp_shape_text(const char *text, float size, int style, float *out_buffer, int max_floats);
             int myphp_rasterize_glyph(int glyph_id, float size, int style, int *out_metrics, uint8_t *out_pixels, int max_pixels);
             void myphp_bt_request_permissions(void);
+            void myphp_bt_start_pairing(void);
+            void myphp_bt_set_audio_connected(const char *mac, int connect);
             int myphp_bt_get_status(char *out, int max_len);
             int myphp_bt_scan_ble(uint8_t *out, int max_len);
             int myphp_bt_connect_l2cap(const char *mac, int psm, char *err_out, int err_max);

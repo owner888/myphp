@@ -6,8 +6,10 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothSocket;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
@@ -731,7 +733,10 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static volatile Thread sBtReaderThread = null;
     private static volatile String sLastBtError = "";
     private static volatile byte[] sLastAppleBlePayload = null;
+    private static volatile int sLastBleRssi = -100;
+    private static volatile String sPairState = "idle";
     private static volatile boolean sBleScanning = false;
+    private static volatile boolean sBtReceiverRegistered = false;
     private static final ConcurrentLinkedQueue<byte[]> sBtRxQueue = new ConcurrentLinkedQueue<>();
 
     private static final ScanCallback sBleScanCallback = new ScanCallback() {
@@ -741,12 +746,136 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             ScanRecord record = result.getScanRecord();
             if (record == null) return;
             byte[] appleData = record.getManufacturerSpecificData(0x004C);
-            if (appleData != null && appleData.length >= 27 && (appleData[0] & 0xFF) == 0x07) {
+            if (appleData != null && appleData.length >= 27 && (appleData[0] & 0xFF) == 0x07 && (appleData[1] & 0xFF) == 0x19) {
                 sLastAppleBlePayload = Arrays.copyOf(appleData, 27);
+                sLastBleRssi = result.getRssi();
                 nativeSignal();
             }
         }
     };
+
+    private static final BroadcastReceiver sBtReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent == null || intent.getAction() == null) return;
+            String action = intent.getAction();
+            BluetoothDevice dev = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            if (dev == null) return;
+
+            try {
+                if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+                    String name = dev.getName() != null ? dev.getName() : "";
+                    short rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, (short) -100);
+                    BluetoothClass btClass = dev.getBluetoothClass();
+                    int devClass = btClass != null ? btClass.getDeviceClass() : 0;
+                    boolean isAudioHeadphone = (devClass == BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET
+                        || devClass == BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES
+                        || devClass == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE);
+                    boolean looksLikeAirPods = name.toLowerCase().contains("airpods")
+                        || (isAudioHeadphone && rssi >= -68);
+
+                    Log.i(TAG, "ACTION_FOUND: name=" + name + " addr=" + dev.getAddress() + " rssi=" + rssi + " class=" + devClass);
+                    if ("searching".equals(sPairState) && looksLikeAirPods) {
+                        sPairState = "bonding:" + (name.isEmpty() ? dev.getAddress() : name);
+                        BluetoothManager bm = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+                        BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+                        if (adapter != null && adapter.isDiscovering()) {
+                            adapter.cancelDiscovery();
+                        }
+                        if (dev.getBondState() == BluetoothDevice.BOND_NONE) {
+                            dev.createBond();
+                        } else if (dev.getBondState() == BluetoothDevice.BOND_BONDED) {
+                            sPairState = "bonded:" + dev.getAddress();
+                            connectAudioProfiles(context, dev);
+                        }
+                        nativeSignal();
+                    }
+                } else if (BluetoothDevice.ACTION_BOND_STATE_CHANGED.equals(action)) {
+                    int state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE);
+                    Log.i(TAG, "ACTION_BOND_STATE_CHANGED: addr=" + dev.getAddress() + " state=" + state);
+                    if (state == BluetoothDevice.BOND_BONDING) {
+                        sPairState = "bonding:" + dev.getAddress();
+                    } else if (state == BluetoothDevice.BOND_BONDED) {
+                        sPairState = "bonded:" + dev.getAddress();
+                        dev.fetchUuidsWithSdp();
+                        connectAudioProfiles(context, dev);
+                    } else if (state == BluetoothDevice.BOND_NONE && sPairState.startsWith("bonding")) {
+                        sPairState = "failed";
+                    }
+                    nativeSignal();
+                } else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action) || BluetoothDevice.ACTION_UUID.equals(action)) {
+                    nativeSignal();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "sBtReceiver error", e);
+            }
+        }
+    };
+
+    private static void ensureBtReceiverRegistered() {
+        if (sInstance == null || sBtReceiverRegistered) return;
+        try {
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(BluetoothDevice.ACTION_FOUND);
+            filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+            filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+            filter.addAction(BluetoothDevice.ACTION_UUID);
+            sInstance.registerReceiver(sBtReceiver, filter, Context.RECEIVER_EXPORTED);
+            sBtReceiverRegistered = true;
+        } catch (Exception e) {
+            Log.e(TAG, "ensureBtReceiverRegistered error", e);
+        }
+    }
+
+    private static void setAudioProfilesConnected(Context context, BluetoothDevice device, boolean connect) {
+        try {
+            BluetoothManager bm = (BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+            if (adapter == null || device == null) return;
+            String methodName = connect ? "connect" : "disconnect";
+            int[] profiles = new int[]{BluetoothProfile.A2DP, BluetoothProfile.HEADSET};
+            for (int prof : profiles) {
+                adapter.getProfileProxy(context, new BluetoothProfile.ServiceListener() {
+                    @Override
+                    public void onServiceConnected(int profile, BluetoothProfile proxy) {
+                        try {
+                            java.lang.reflect.Method m = proxy.getClass().getDeclaredMethod(methodName, BluetoothDevice.class);
+                            m.setAccessible(true);
+                            m.invoke(proxy, device);
+                            Log.i(TAG, "Profile " + profile + " " + methodName + "(" + device.getAddress() + ") OK");
+                        } catch (Exception e) {
+                            Log.w(TAG, "Profile " + profile + " " + methodName + " reflection: " + e.getMessage());
+                        }
+                        adapter.closeProfileProxy(profile, proxy);
+                        nativeSignal();
+                    }
+                    @Override
+                    public void onServiceDisconnected(int profile) {}
+                }, prof);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "setAudioProfilesConnected error", e);
+        }
+    }
+
+    private static void connectAudioProfiles(Context context, BluetoothDevice device) {
+        setAudioProfilesConnected(context, device, true);
+    }
+
+    public static void btSetAudioConnected(String mac, boolean connect) {
+        if (sInstance == null || mac == null || mac.isEmpty() || !hasBluetoothPermissions()) return;
+        sInstance.runOnUiThread(() -> {
+            try {
+                BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+                if (adapter == null || !adapter.isEnabled()) return;
+                BluetoothDevice device = adapter.getRemoteDevice(mac);
+                setAudioProfilesConnected(sInstance, device, connect);
+            } catch (Exception e) {
+                Log.e(TAG, "btSetAudioConnected error", e);
+            }
+        });
+    }
 
     public static boolean hasBluetoothPermissions() {
         if (sInstance == null) return false;
@@ -758,10 +887,13 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         if (sInstance == null) return;
         sInstance.runOnUiThread(() -> {
             try {
-                if (!hasBluetoothPermissions()) {
+                if (!hasBluetoothPermissions()
+                    || sInstance.checkSelfPermission("android.permission.ACCESS_FINE_LOCATION") != PackageManager.PERMISSION_GRANTED) {
                     sInstance.requestPermissions(new String[]{
                         "android.permission.BLUETOOTH_CONNECT",
-                        "android.permission.BLUETOOTH_SCAN"
+                        "android.permission.BLUETOOTH_SCAN",
+                        "android.permission.ACCESS_FINE_LOCATION",
+                        "android.permission.ACCESS_COARSE_LOCATION"
                     }, 1001);
                 }
                 BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
@@ -776,6 +908,57 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         });
     }
 
+    public static void btStartPairing() {
+        if (sInstance == null) return;
+        if (!hasBluetoothPermissions()) {
+            btRequestPermissions();
+            return;
+        }
+        ensureBtReceiverRegistered();
+        sInstance.runOnUiThread(() -> {
+            try {
+                BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
+                if (adapter == null || !adapter.isEnabled()) {
+                    sPairState = "bt_off";
+                    nativeSignal();
+                    return;
+                }
+                // Check if already bonded
+                ParcelUuid aacpUuid = ParcelUuid.fromString(AACP_UUID_STR);
+                Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+                if (bonded != null) {
+                    for (BluetoothDevice dev : bonded) {
+                        String dName = dev.getName() != null ? dev.getName() : "";
+                        boolean hasAacp = false;
+                        ParcelUuid[] uuids = dev.getUuids();
+                        if (uuids != null) {
+                            for (ParcelUuid u : uuids) {
+                                if (aacpUuid.equals(u)) { hasAacp = true; break; }
+                            }
+                        }
+                        if (hasAacp || dName.toLowerCase().contains("airpods")) {
+                            sPairState = "bonded:" + dev.getAddress();
+                            connectAudioProfiles(sInstance, dev);
+                            nativeSignal();
+                            return;
+                        }
+                    }
+                }
+                if (adapter.isDiscovering()) {
+                    adapter.cancelDiscovery();
+                }
+                sPairState = "searching";
+                adapter.startDiscovery();
+                nativeSignal();
+            } catch (Exception e) {
+                Log.e(TAG, "btStartPairing error", e);
+                sPairState = "error:" + e.getMessage();
+                nativeSignal();
+            }
+        });
+    }
+
     public static String btGetStatus() {
         int sdk = Build.VERSION.SDK_INT;
         String release = Build.VERSION.RELEASE != null ? Build.VERSION.RELEASE : "";
@@ -784,9 +967,16 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         boolean btOn = false;
         String bondedMac = "";
         String bondedName = "";
-        String ctorStatus = nativeProbeL2capConstructor();
+        String localMac = "";
 
         if (sInstance != null) {
+            ensureBtReceiverRegistered();
+            try {
+                String secMac = android.provider.Settings.Secure.getString(sInstance.getContentResolver(), "bluetooth_address");
+                if (secMac != null && !secMac.isEmpty() && !"02:00:00:00:00:00".equals(secMac)) {
+                    localMac = secMac.toUpperCase();
+                }
+            } catch (Exception ignored) {}
             try {
                 BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
                 BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
@@ -828,9 +1018,11 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             + "|build=" + buildId
             + "|perm=" + (perm ? "1" : "0")
             + "|btOn=" + (btOn ? "1" : "0")
-            + "|ctor=" + ctorStatus
+            + "|localMac=" + localMac
             + "|mac=" + bondedMac
             + "|name=" + bondedName.replace("|", " ")
+            + "|rssi=" + sLastBleRssi
+            + "|pair=" + sPairState.replace("|", " ")
             + "|err=" + sLastBtError.replace("|", " ");
     }
 
@@ -855,41 +1047,21 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
         return sLastAppleBlePayload;
     }
 
-    public static boolean btConnectL2cap(String mac, int psm) {
+    public static boolean btConnectL2capSocket(Object sockObj) {
         btDisconnect();
         sLastBtError = "";
-        if (sInstance == null) {
-            sLastBtError = "No Activity instance";
-            return false;
-        }
-        if (!hasBluetoothPermissions()) {
-            btRequestPermissions();
-            sLastBtError = "BLUETOOTH_CONNECT permission not granted yet";
+        if (!(sockObj instanceof BluetoothSocket)) {
+            sLastBtError = "Invalid BluetoothSocket instance";
             return false;
         }
         try {
-            BluetoothManager bm = (BluetoothManager) sInstance.getSystemService(Context.BLUETOOTH_SERVICE);
-            BluetoothAdapter adapter = bm != null ? bm.getAdapter() : null;
-            if (adapter == null || !adapter.isEnabled()) {
-                sLastBtError = "Bluetooth is turned OFF on Xiaomi 14 Ultra";
-                return false;
-            }
-            BluetoothDevice device = adapter.getRemoteDevice(mac);
-            ParcelUuid uuid = ParcelUuid.fromString(AACP_UUID_STR);
-
-            // Create Classic L2CAP (type = 3) socket via JNI constructor lookup first
-            Object sockObj = nativeCreateL2capSocket(adapter, device, psm, uuid);
-            if (!(sockObj instanceof BluetoothSocket)) {
-                sLastBtError = "Failed to instantiate BluetoothSocket for L2CAP PSM " + psm;
-                return false;
-            }
             BluetoothSocket socket = (BluetoothSocket) sockObj;
             socket.connect();
             sBtSocket = socket;
             sBtRxQueue.clear();
 
             sBtReaderThread = new Thread(() -> {
-                byte[] buf = new byte[1024];
+                byte[] buf = new byte[4096];
                 try {
                     InputStream in = socket.getInputStream();
                     while (sBtSocket == socket && socket.isConnected()) {
@@ -906,7 +1078,7 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
             sBtReaderThread.start();
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "btConnectL2cap error", e);
+            Log.e(TAG, "btConnectL2capSocket error", e);
             sLastBtError = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connect failed");
             return false;
         }
@@ -965,6 +1137,4 @@ public class MyphpActivity extends Activity implements SurfaceHolder.Callback {
     private static native void nativeDialogResult(int callbackId, int buttonIndex);
     private static native void nativeOnWebMessage(int pageId, String message);
     private static native void nativeSignal();
-    private static native String nativeProbeL2capConstructor();
-    private static native Object nativeCreateL2capSocket(BluetoothAdapter adapter, BluetoothDevice device, int psm, ParcelUuid uuid);
 }

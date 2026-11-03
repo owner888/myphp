@@ -2056,9 +2056,8 @@ final class Painter
             }
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) { // read-only: selected and copied, without a caret
-            $cw = max(2.0, self::caretWidthOf($n, $text));
             if ($n->caretWidth > 0) {
-                $list->rect($tx + $caretX, $ty, $cw, $lh, $t->accent);
+                $list->rect($tx + $caretX, $ty, self::caretWidthOf($n, $text), $lh, $t->accent);
             }
         }
         $list->popClip();
@@ -2136,9 +2135,8 @@ final class Painter
         }
         if ($n->focused && !$s->readOnly && ($rt === null || $rt->caretVisible())) {
             [$cx, $cy] = $layout->caret($text, $s->displayCaret());
-            $cw = max(2.0, self::caretWidthOf($n, $text));
             if ($n->caretWidth > 0) {
-                $list->rect($tx + $cx, $ty + $cy, $cw, $lh, $t->accent);
+                $list->rect($tx + $cx, $ty + $cy, self::caretWidthOf($n, $text), $lh, $t->accent);
             }
         }
         $list->popClip();

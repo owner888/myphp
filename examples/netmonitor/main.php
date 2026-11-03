@@ -46,6 +46,11 @@ final class I18n
             'dns_error'       => '异常',
             'report_title'    => '=== MyPHP 网络实时诊断报告 ===',
             'time'            => '时间',
+            'aws_server'      => 'AWS (DE): %s (%s · $%s/月)',
+            'aws_cost'        => '本月费用: $%s (%s)',
+            'aws_traffic'     => '网络消耗: %s / %s',
+            'aws_free_tier'   => '免费试用中',
+            'aws_billed'      => '正常计费',
         ],
         'en' => [
             'probing'         => 'Probing…',
@@ -75,6 +80,11 @@ final class I18n
             'dns_error'       => 'Error',
             'report_title'    => '=== MyPHP Network Diagnostics Report ===',
             'time'            => 'Time',
+            'aws_server'      => 'AWS (DE): %s (%s · $%s/mo)',
+            'aws_cost'        => 'Monthly Cost: $%s (%s)',
+            'aws_traffic'     => 'Data Transfer: %s / %s',
+            'aws_free_tier'   => 'Free Tier',
+            'aws_billed'      => 'Standard',
         ],
     ];
 
@@ -111,9 +121,19 @@ final class NetMonitor
         'dns_ms'     => 0,
         'dns_ok'     => false,
         'gw_ping'    => 0,
-        'gw_ip'      => '172.26.151.213',
+        'gw_ip'      => '',
         'updated'    => '',
+        'aws'        => null,
     ];
+
+    public static function hasAwsConfig(): bool
+    {
+        $home = getenv('HOME') ?: getenv('USERPROFILE');
+        if (!$home) {
+            return false;
+        }
+        return file_exists("{$home}/.aws/credentials") && file_exists("{$home}/.aws/config");
+    }
 
     public function __construct()
     {
@@ -147,7 +167,7 @@ final class NetMonitor
         $this->probe();
     }
 
-    public function probe(): void
+    public function probe(bool $forceAws = false): void
     {
         if ($this->probing) {
             return;
@@ -157,6 +177,8 @@ final class NetMonitor
         $probeCode = <<<'PHP'
         error_reporting(0);
         ini_set('display_errors', '0');
+
+        $forceAws = ($argv[1] ?? '0') === '1';
 
         $res = [
             'ts_ping'     => 0,
@@ -168,8 +190,9 @@ final class NetMonitor
             'dns_ms'      => 0,
             'dns_ok'      => false,
             'gw_ping'     => 0,
-            'gw_ip'       => '172.26.151.213',
+            'gw_ip'       => '',
             'updated'     => date('H:i:s'),
+            'aws'         => null,
         ];
 
         // 1. 探测 Tailscale Mac mini (macOS ping -W 单位为毫秒)
@@ -197,12 +220,17 @@ final class NetMonitor
             }
         }
 
-        // 3. 探测本地热点延迟 (-W 1000 毫秒)
-        exec("ping -c 1 -W 1000 172.26.151.213 2>&1", $gwOut, $gwCode);
-        if ($gwCode === 0) {
-            foreach ($gwOut as $l) {
-                if (preg_match('/time=([0-9\.]+)\s*ms/', $l, $m)) {
-                    $res['gw_ping'] = (int)round((float)$m[1]);
+        // 3. 探测本地默认网关延迟 (-W 1000 毫秒)
+        exec("route -n get default 2>/dev/null | grep gateway", $gwRoute);
+        if (!empty($gwRoute[0]) && preg_match('/gateway:\s*([0-9\.]+)/', $gwRoute[0], $gm)) {
+            $gwIp = $gm[1];
+            $res['gw_ip'] = $gwIp;
+            exec("ping -c 1 -W 1000 {$gwIp} 2>&1", $gwOut, $gwCode);
+            if ($gwCode === 0) {
+                foreach ($gwOut as $l) {
+                    if (preg_match('/time=([0-9\.]+)\s*ms/', $l, $m)) {
+                        $res['gw_ping'] = (int)round((float)$m[1]);
+                    }
                 }
             }
         }
@@ -231,10 +259,136 @@ final class NetMonitor
             }
         }
 
+        // 6. 探测 AWS 凭证与服务器套餐/消耗
+        $home = getenv('HOME') ?: getenv('USERPROFILE');
+        if ($home && file_exists("{$home}/.aws/credentials") && file_exists("{$home}/.aws/config")) {
+            $credFile = "{$home}/.aws/credentials";
+            $configFile = "{$home}/.aws/config";
+            $cacheFile = sys_get_temp_dir() . '/netmonitor_aws_cache.json';
+            $awsData = null;
+            if (!$forceAws && file_exists($cacheFile)) {
+                $c = json_decode((string)@file_get_contents($cacheFile), true);
+                if (is_array($c) && (time() - ($c['_cached_at'] ?? 0) < 600)) {
+                    $awsData = $c;
+                }
+            }
+
+            if ($awsData === null) {
+                try {
+                    $ini = parse_ini_file($credFile, true);
+                    $ak = $ini['default']['aws_access_key_id'] ?? '';
+                    $sk = $ini['default']['aws_secret_access_key'] ?? '';
+                    $conf = parse_ini_file($configFile, true);
+                    $region = $conf['default']['region'] ?? 'eu-central-1';
+
+                    if ($ak && $sk) {
+                        $sign = function(string $service, string $host, string $target, string $payload, string $targetRegion) use ($ak, $sk) {
+                            $now = new DateTime('now', new DateTimeZone('UTC'));
+                            $amzDate = $now->format('Ymd\THis\Z');
+                            $dateStamp = $now->format('Ymd');
+                            $payloadHash = hash('sha256', $payload);
+
+                            $canonicalHeaders = "content-type:application/x-amz-json-1.1\nhost:$host\nx-amz-date:$amzDate\nx-amz-target:$target\n";
+                            $signedHeaders = "content-type;host;x-amz-date;x-amz-target";
+                            $canonicalRequest = "POST\n/\n\n$canonicalHeaders\n$signedHeaders\n$payloadHash";
+
+                            $credentialScope = "$dateStamp/$targetRegion/$service/aws4_request";
+                            $stringToSign = "AWS4-HMAC-SHA256\n$amzDate\n$credentialScope\n" . hash('sha256', $canonicalRequest);
+
+                            $kDate = hash_hmac('sha256', $dateStamp, "AWS4" . $sk, true);
+                            $kRegion = hash_hmac('sha256', $targetRegion, $kDate, true);
+                            $kService = hash_hmac('sha256', $service, $kRegion, true);
+                            $kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+
+                            $signature = hash_hmac('sha256', $stringToSign, $kSigning);
+                            $auth = "AWS4-HMAC-SHA256 Credential=$ak/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature";
+
+                            $ch = curl_init("https://$host/");
+                            curl_setopt($ch, CURLOPT_POST, true);
+                            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+                            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                                'Content-Type: application/x-amz-json-1.1',
+                                "Host: $host",
+                                "X-Amz-Date: $amzDate",
+                                "X-Amz-Target: $target",
+                                "Authorization: $auth",
+                            ]);
+                            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+                            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                            $out = curl_exec($ch);
+                            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                            return $code === 200 ? json_decode((string)$out, true) : null;
+                        };
+
+                        $lsData = $sign('lightsail', "lightsail.$region.amazonaws.com", 'Lightsail_20161128.GetInstances', '{}', $region);
+                        $instance = $lsData['instances'][0] ?? null;
+                        if ($instance) {
+                            $instName = $instance['name'] ?? 'DE-Server';
+                            $bundleId = $instance['bundleId'] ?? 'nano';
+                            $bundleName = ucfirst(explode('_', $bundleId)[0] ?? 'Nano');
+
+                            $startMonth = strtotime(date('Y-m-01 00:00:00'));
+                            $metricData = $sign('lightsail', "lightsail.$region.amazonaws.com", 'Lightsail_20161128.GetInstanceMetricData', json_encode([
+                                'instanceName' => $instName,
+                                'metricName'   => 'NetworkOut',
+                                'period'       => 86400 * 31,
+                                'unit'         => 'Bytes',
+                                'statistics'   => ['Sum'],
+                                'startTime'    => $startMonth,
+                                'endTime'      => time(),
+                            ]), $region);
+
+                            $outBytes = 0;
+                            if (!empty($metricData['metricData'])) {
+                                foreach ($metricData['metricData'] as $pt) {
+                                    $outBytes += ($pt['sum'] ?? 0);
+                                }
+                            }
+                            $outGb = round($outBytes / (1024 * 1024 * 1024), 2);
+
+                            $startStr = date('Y-m-01');
+                            $endStr = date('Y-m-d', strtotime('+1 day'));
+                            $ceData = $sign('ce', 'ce.us-east-1.amazonaws.com', 'AWSInsightsIndexService.GetCostAndUsage', json_encode([
+                                'TimePeriod' => ['Start' => $startStr, 'End' => $endStr],
+                                'Granularity' => 'MONTHLY',
+                                'Filter' => [
+                                    'Dimensions' => [
+                                        'Key' => 'SERVICE',
+                                        'Values' => ['Amazon Lightsail']
+                                    ]
+                                ],
+                                'Metrics' => ['UnblendedCost']
+                            ]), 'us-east-1');
+
+                            $costAmount = '0.00';
+                            if (!empty($ceData['ResultsByTime'][0]['Total']['UnblendedCost']['Amount'])) {
+                                $costAmount = number_format((float)$ceData['ResultsByTime'][0]['Total']['UnblendedCost']['Amount'], 2);
+                            }
+
+                            $awsData = [
+                                'instance_name'  => $instName,
+                                'bundle_name'    => $bundleName,
+                                'monthly_plan'   => 5,
+                                'bandwidth_limit'=> '1 TB',
+                                'used_gb'        => $outGb,
+                                'cost'           => $costAmount,
+                                'currency'       => 'USD',
+                                'is_free_tier'   => ((float)$costAmount == 0.0),
+                                '_cached_at'     => time(),
+                            ];
+                            @file_put_contents($cacheFile, json_encode($awsData, JSON_PRETTY_PRINT));
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+            $res['aws'] = $awsData;
+        }
+
         echo json_encode($res, JSON_UNESCAPED_UNICODE);
         PHP;
 
-        Process::run([PHP_BINARY, '-r', $probeCode], '', function (string $out, string $err, int $code) {
+        Process::run([PHP_BINARY, '-r', $probeCode, $forceAws ? '1' : '0'], '', function (string $out, string $err, int $code) {
             $this->probing = false;
             $clean = trim($out);
             if (preg_match('/\{.*\}/s', $clean, $m)) {
@@ -253,14 +407,16 @@ final class NetMonitor
     private function updateUI(): void
     {
         $ms = $this->data['ts_ping'];
-        $geo = $this->data['egress_geo'] ?: 'DE';
-        $code = 'DE';
-        if (str_contains($geo, 'DE') || str_contains($geo, 'Germany')) {
-            $code = 'DE';
-        } elseif (str_contains($geo, 'AE') || str_contains($geo, 'Dubai')) {
-            $code = 'DXB';
-        } elseif (str_contains($geo, 'SG')) {
-            $code = 'SG';
+        $geo = $this->data['egress_geo'];
+        $code = '--';
+        if ($geo !== '') {
+            $parts = explode(',', $geo);
+            $country = strtoupper(trim(end($parts)));
+            if (strlen($country) === 2) {
+                $code = $country;
+            } elseif (preg_match('/\b([A-Z]{2})\b/', $geo, $m)) {
+                $code = $m[1];
+            }
         }
 
         if ($ms <= 0) {
@@ -303,9 +459,9 @@ final class NetMonitor
             $dnsStr = $this->i18n->t('dns_error');
         }
 
-        // 热点网关
+        // 本地网关
         $gwPingStr = $this->data['gw_ping'] > 0 ? "{$this->data['gw_ping']} ms" : $this->i18n->t('timeout');
-        $gwIp = $this->data['gw_ip'];
+        $gwIp = $this->data['gw_ip'] ?: '-';
 
         // 系统当前底层连接接口 (Flutter-like)
         $status = Network::status();
@@ -317,32 +473,61 @@ final class NetMonitor
             default    => $this->i18n->t('net_other'),
         };
 
-        return new Menu([
-            new MenuItem($this->i18n->t('title_panel', $timeStr), disabled: true),
+        $items = [
+            new MenuItem($this->i18n->t('title_panel', $timeStr), fn() => Clipboard::writeText($timeStr)),
             MenuItem::separator(),
-            new MenuItem($this->i18n->t('net_type', $netTypeStr), disabled: true),
-            new MenuItem($this->i18n->t('mac_mini', $tsPingStr, $modeStr), disabled: true),
-            new MenuItem($this->i18n->t('egress_ip', $egressIp, $egressGeo), disabled: true),
-            new MenuItem($this->i18n->t('dns_status', $dnsStr), disabled: true),
-            new MenuItem($this->i18n->t('hotspot', $gwPingStr, $gwIp), disabled: true),
-            MenuItem::separator(),
-            new MenuItem($this->i18n->t('refresh_now'), fn() => $this->probe(), 'CmdOrCtrl+R'),
-            new MenuItem($this->i18n->t('restart_ts'), function () {
-                $this->tray?->setDualLineTitle('...', 'TS');
-                Process::run(['bash', '-c', 'tailscale down && tailscale up'], '', fn() => $this->probe());
-            }, 'CmdOrCtrl+T'),
-            new MenuItem($this->i18n->t('copy_log'), function () use ($tsPingStr, $modeStr, $egressIp, $egressGeo, $dnsStr, $gwPingStr, $gwIp) {
-                $report = $this->i18n->t('report_title') . "\n" .
-                    $this->i18n->t('time') . ": " . date('Y-m-d H:i:s') . "\n" .
-                    "Mac mini: {$tsPingStr} ({$modeStr})\n" .
-                    "Egress:   {$egressIp} ({$egressGeo})\n" .
-                    "DNS:      {$dnsStr}\n" .
-                    "Hotspot:  {$gwPingStr} ({$gwIp})\n";
-                Clipboard::writeText($report);
-            }, 'CmdOrCtrl+Shift+C'),
-            MenuItem::separator(),
-            new MenuItem($this->i18n->t('quit'), fn() => App::quit(), role: 'quit'),
-        ]);
+            new MenuItem($this->i18n->t('net_type', $netTypeStr), fn() => Clipboard::writeText($netTypeStr)),
+            new MenuItem($this->i18n->t('mac_mini', $tsPingStr, $modeStr), fn() => Clipboard::writeText("Mac mini: {$tsPingStr} ({$modeStr})"), disabled: $this->data['ts_ping'] <= 0),
+            new MenuItem($this->i18n->t('egress_ip', $egressIp, $egressGeo), fn() => Clipboard::writeText($egressIp)),
+            new MenuItem($this->i18n->t('dns_status', $dnsStr), fn() => Clipboard::writeText($dnsStr), disabled: !$this->data['dns_ok']),
+            new MenuItem($this->i18n->t('hotspot', $gwPingStr, $gwIp), fn() => Clipboard::writeText($gwIp), disabled: $this->data['gw_ping'] <= 0),
+        ];
+
+        // 仅当 ~/.aws/credentials 与 ~/.aws/config 存在且有数据时，作为一个独立分组展示
+        $awsReportPart = '';
+        if (self::hasAwsConfig() && !empty($this->data['aws'])) {
+            $aws = $this->data['aws'];
+            $inst = $aws['instance_name'] ?? 'Server';
+            $bundle = $aws['bundle_name'] ?? 'Nano';
+            $plan = (string)($aws['monthly_plan'] ?? 5);
+            $cost = (string)($aws['cost'] ?? '0.00');
+            $isFree = !empty($aws['is_free_tier']);
+            $usedGb = $aws['used_gb'] ?? 0;
+            $limit = $aws['bandwidth_limit'] ?? '1 TB';
+
+            $serverLine = $this->i18n->t('aws_server', $inst, $bundle, $plan);
+            $costStatus = $isFree ? $this->i18n->t('aws_free_tier') : $this->i18n->t('aws_billed');
+            $costLine   = $this->i18n->t('aws_cost', $cost, $costStatus);
+            $trafficLine= $this->i18n->t('aws_traffic', "{$usedGb} GB", $limit);
+
+            $items[] = MenuItem::separator();
+            $items[] = new MenuItem($serverLine, fn() => Clipboard::writeText($serverLine));
+            $items[] = new MenuItem($costLine, fn() => Clipboard::writeText($costLine));
+            $items[] = new MenuItem($trafficLine, fn() => Clipboard::writeText($trafficLine));
+
+            $awsReportPart = "{$serverLine}\n{$costLine}\n{$trafficLine}\n";
+        }
+
+        $items[] = MenuItem::separator();
+        $items[] = new MenuItem($this->i18n->t('refresh_now'), fn() => $this->probe(true), 'CmdOrCtrl+R');
+        $items[] = new MenuItem($this->i18n->t('restart_ts'), function () {
+            $this->tray?->setDualLineTitle('...', 'TS');
+            Process::run(['bash', '-c', 'tailscale down && tailscale up'], '', fn() => $this->probe());
+        }, 'CmdOrCtrl+T');
+        $items[] = new MenuItem($this->i18n->t('copy_log'), function () use ($tsPingStr, $modeStr, $egressIp, $egressGeo, $dnsStr, $gwPingStr, $gwIp, $awsReportPart) {
+            $report = $this->i18n->t('report_title') . "\n" .
+                $this->i18n->t('time') . ": " . date('Y-m-d H:i:s') . "\n" .
+                "Mac mini: {$tsPingStr} ({$modeStr})\n" .
+                "Egress:   {$egressIp} ({$egressGeo})\n" .
+                "DNS:      {$dnsStr}\n" .
+                "Hotspot:  {$gwPingStr} ({$gwIp})\n" .
+                $awsReportPart;
+            Clipboard::writeText($report);
+        }, 'CmdOrCtrl+Shift+C');
+        $items[] = MenuItem::separator();
+        $items[] = new MenuItem($this->i18n->t('quit'), fn() => App::quit(), role: 'quit');
+
+        return new Menu($items);
     }
 }
 

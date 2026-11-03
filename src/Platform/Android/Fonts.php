@@ -62,8 +62,8 @@ final class Fonts implements Platform\Fonts
         }
 
         $f = Android::ffi();
-        $buf = $f->new('float[1024]');
-        $n = $f->myphp_shape_text($text, $size, $style, $buf, 1024);
+        $buf = $f->new('float[4096]');
+        $n = $f->myphp_shape_text($text, $size, $style, $buf, 4096);
 
         if ($n < 4) {
             $w = mb_strlen($text) * $size * 0.5;
@@ -73,7 +73,7 @@ final class Fonts implements Platform\Fonts
         $width = (float)$buf[0];
         $ascent = (float)$buf[1];
         $descent = (float)$buf[2];
-        $count = (int)$buf[3];
+        $count = min((int)$buf[3], intdiv($n - 4, 3));
 
         $fontKey = sprintf('%.2f:%d', $size, $style);
         if (!isset($this->fontMap[$fontKey])) {
